@@ -17,6 +17,16 @@ afterEach(async () => {
 });
 
 describe("McpServerStore", () => {
+  it("retains the credential identity of two accounts on the same endpoint", async () => {
+    const { store, database } = await setup();
+    const one = `mcpacct-${crypto.randomUUID()}`;
+    const two = `mcpacct-${crypto.randomUUID()}`;
+    const first = store.save({ ...stdioConfig(), id: one, name: "Job 1" });
+    const second = store.save({ ...stdioConfig(), id: two, name: "Job 2" });
+    expect([first.id, second.id]).toEqual([one, two]);
+    expect(store.list().map((config) => config.id)).toEqual([one, two]);
+    database.close();
+  });
   it("keeps the order of args, env, and headers across a restart", async () => {
     const { database, store } = await setup();
     const saved = store.save(

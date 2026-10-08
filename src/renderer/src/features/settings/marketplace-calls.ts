@@ -1,4 +1,4 @@
-import type { AddedAgent, InstallMarketplaceAgentInput } from "@openbot/contracts/ipc";
+import type { AddedAgent, InstallMarketplaceAgentInput, McpServerConfig, McpTestResult } from "@openbot/contracts/ipc";
 import { appPort } from "../../app-port";
 import { type AgentSkillCalls, agentSkillCalls, type SkillsPort, skillsPort } from "../../skills-port";
 
@@ -10,7 +10,10 @@ export interface MarketplaceCalls {
   skills: Pick<SkillsPort["skills"], "get" | "list">;
   agents: Pick<SkillsPort["marketplaceAgents"], "get" | "list">;
   agentSkills: (hostServerId?: string) => AgentSkillCalls;
-  mcp: Pick<SkillsPort["agent"], "listMcpServers" | "removeMcpServer" | "saveMcpServer" | "testMcpServer">;
+  mcp: Pick<SkillsPort["agent"], "listMcpServers" | "removeMcpServer" | "saveMcpServer" | "testMcpServer"> & {
+    supportsRemoteSignIn?: () => boolean;
+    signInMcpServer?: (config: McpServerConfig, serverId: string, signal: AbortSignal) => Promise<McpTestResult>;
+  };
   /** `serverId` absent: this computer, which is also the only place an installed agent is updated. */
   addAgent: (input: InstallMarketplaceAgentInput, serverId: string | undefined) => Promise<AddedAgent>;
   openUrl: (url: string) => Promise<void>;

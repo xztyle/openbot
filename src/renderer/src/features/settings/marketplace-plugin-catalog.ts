@@ -72,7 +72,7 @@ const AAVE: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: true,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/aave",
 };
 
@@ -113,7 +113,7 @@ const CANVA: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: true,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/canva",
 };
 
@@ -154,7 +154,7 @@ const LINEAR: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/linear",
 };
 
@@ -195,7 +195,7 @@ const NOTION: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: true,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/notion",
 };
 
@@ -250,7 +250,7 @@ const FIGMA: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: true,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/figma",
 };
 
@@ -286,7 +286,7 @@ const PAPER: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/paper",
 };
 
@@ -326,7 +326,7 @@ const SENTRY: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/sentry",
 };
 
@@ -361,7 +361,7 @@ const CONTEXT7: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/context7",
 };
 
@@ -401,7 +401,7 @@ const STRIPE: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/stripe",
 };
 
@@ -459,7 +459,7 @@ const POSTHOG: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/posthog",
 };
 
@@ -509,7 +509,7 @@ const AIRTABLE: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/airtable",
 };
 
@@ -567,7 +567,7 @@ const FIRECRAWL: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/firecrawl",
 };
 
@@ -619,7 +619,7 @@ const BRAVE_SEARCH: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/brave-search",
 };
 
@@ -671,7 +671,7 @@ const RESEND: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/resend",
 };
 
@@ -735,8 +735,370 @@ const COMPOSIO: MarketplacePluginDetail = {
   skills: [],
   installs: 0,
   featured: false,
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/composio",
+};
+
+const GITHUB_DIRECT: MarketplacePluginDetail = {
+  id: "plugin-github-direct",
+  slug: "github-direct",
+  name: "GitHub",
+  tagline: "Repositories, issues and pull requests",
+  description:
+    "Connect directly to GitHub with your own token. Read repositories, manage issues and review pull requests. Limit the token to the repositories and permissions you need. Terminal Git authentication is separate.",
+  category: "coding",
+  creatorName: "github.com",
+  iconUrl: "https://github.com/favicon.ico",
+  version: "1.0.0",
+  prompts: [{ id: "prompt-inspect", text: "Show what I can access through GitHub. Do not change anything." }],
+  apps: [
+    {
+      id: "app-github-direct-mcp",
+      name: "GitHub",
+      description:
+        "Connect directly to GitHub with your own token. Read repositories, manage issues and review pull requests. Limit the token to the repositories and permissions you need. Terminal Git authentication is separate.",
+      iconUrl: "https://github.com/favicon.ico",
+      server: {
+        name: "github-direct",
+        transport: "http",
+        url: "https://api.githubcopilot.com/mcp/",
+        auth: [
+          {
+            id: "github-direct-key",
+            kind: "key",
+            label: "API key",
+            fields: [
+              {
+                id: "token",
+                label: "Personal access token",
+                header: "Authorization",
+                prefix: "Bearer ",
+                hint: "GitHub settings → Developer settings → Personal access tokens",
+              },
+            ],
+            docsUrl: "https://github.com/github/github-mcp-server",
+            docsLabel: "Setup instructions",
+          },
+        ],
+      },
+    },
+  ],
+  websiteUrl: "https://github.com/github/github-mcp-server",
+  privacyPolicyUrl: null,
+  termsUrl: null,
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/github-direct",
+};
+
+const SLACK: MarketplacePluginDetail = {
+  id: "plugin-slack",
+  slug: "slack",
+  name: "Slack",
+  tagline: "Workspace conversations and search",
+  description:
+    "A community connection by korotovsky that runs on your own server. Use a Slack user OAuth token from an app you control. Give each workspace a separate connection name and token. Sending messages requires the appropriate Slack permission.",
+  category: "productivity",
+  creatorName: "korotovsky",
+  iconUrl: null,
+  version: "1.0.0",
+  prompts: [{ id: "prompt-inspect", text: "Show what I can access through Slack. Do not change anything." }],
+  apps: [
+    {
+      id: "app-slack-mcp",
+      name: "Slack",
+      description:
+        "A community connection by korotovsky that runs on your own server. Use a Slack user OAuth token from an app you control. Give each workspace a separate connection name and token. Sending messages requires the appropriate Slack permission.",
+      iconUrl: null,
+      server: {
+        name: "slack",
+        transport: "stdio",
+        command: "npx",
+        args: ["-y", "slack-mcp-server@1.3.0", "--transport", "stdio"],
+        auth: [
+          {
+            id: "slack-key",
+            kind: "key",
+            label: "API key",
+            fields: [
+              {
+                id: "token",
+                label: "Slack user OAuth token (xoxp)",
+                env: "SLACK_MCP_XOXP_TOKEN",
+                hint: "Slack app → OAuth & Permissions → User OAuth Token. Use only the scopes you need.",
+              },
+            ],
+            docsUrl: "https://github.com/korotovsky/slack-mcp-server/blob/v1.3.0/README.md",
+            docsLabel: "Setup instructions",
+          },
+        ],
+      },
+    },
+  ],
+  websiteUrl: "https://github.com/korotovsky/slack-mcp-server/blob/v1.3.0/README.md",
+  privacyPolicyUrl: null,
+  termsUrl: null,
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/slack",
+};
+
+const CLOUDFLARE: MarketplacePluginDetail = {
+  id: "plugin-cloudflare",
+  slug: "cloudflare",
+  name: "Cloudflare",
+  tagline: "Manage Cloudflare resources",
+  description:
+    "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
+  category: "coding",
+  creatorName: "cloudflare.com",
+  iconUrl: "https://cloudflare.com/favicon.ico",
+  version: "1.0.0",
+  prompts: [{ id: "prompt-inspect", text: "Show what I can access through Cloudflare. Do not change anything." }],
+  apps: [
+    {
+      id: "app-cloudflare-mcp",
+      name: "Cloudflare",
+      description:
+        "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
+      iconUrl: "https://cloudflare.com/favicon.ico",
+      server: {
+        name: "cloudflare",
+        transport: "http",
+        url: "https://mcp.cloudflare.com/mcp",
+        auth: [
+          {
+            id: "cloudflare-key",
+            kind: "key",
+            label: "API key",
+            fields: [
+              {
+                id: "token",
+                label: "Cloudflare API token",
+                header: "Authorization",
+                prefix: "Bearer ",
+                hint: "Cloudflare → Profile → API tokens. Limit resources and permissions.",
+              },
+            ],
+            docsUrl: "https://github.com/cloudflare/mcp",
+            docsLabel: "Setup instructions",
+          },
+        ],
+      },
+    },
+  ],
+  websiteUrl: "https://github.com/cloudflare/mcp",
+  privacyPolicyUrl: null,
+  termsUrl: null,
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/cloudflare",
+};
+
+const RENDER: MarketplacePluginDetail = {
+  id: "plugin-render",
+  slug: "render",
+  name: "Render",
+  tagline: "Services, deployments and logs",
+  description:
+    "Inspect services, deployments and logs through Render’s official connection. API access uses your Render account permissions.",
+  category: "coding",
+  creatorName: "render.com",
+  iconUrl: "https://render.com/favicon.ico",
+  version: "1.0.0",
+  prompts: [{ id: "prompt-inspect", text: "Show what I can access through Render. Do not change anything." }],
+  apps: [
+    {
+      id: "app-render-mcp",
+      name: "Render",
+      description:
+        "Inspect services, deployments and logs through Render’s official connection. API access uses your Render account permissions.",
+      iconUrl: "https://render.com/favicon.ico",
+      server: {
+        name: "render",
+        transport: "http",
+        url: "https://mcp.render.com/mcp",
+        auth: [
+          {
+            id: "render-key",
+            kind: "key",
+            label: "API key",
+            fields: [
+              {
+                id: "token",
+                label: "Render API key",
+                header: "Authorization",
+                prefix: "Bearer ",
+                hint: "Render dashboard → Account settings → API keys",
+              },
+            ],
+            docsUrl: "https://render.com/docs/mcp-server",
+            docsLabel: "Setup instructions",
+          },
+        ],
+      },
+    },
+  ],
+  websiteUrl: "https://render.com/docs/mcp-server",
+  privacyPolicyUrl: null,
+  termsUrl: null,
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/render",
+};
+
+const SUPABASE: MarketplacePluginDetail = {
+  id: "plugin-supabase",
+  slug: "supabase",
+  name: "Supabase",
+  tagline: "Database and project tools",
+  description:
+    "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
+  category: "coding",
+  creatorName: "supabase.com",
+  iconUrl: "https://supabase.com/favicon.ico",
+  version: "1.0.0",
+  prompts: [{ id: "prompt-inspect", text: "Show what I can access through Supabase. Do not change anything." }],
+  apps: [
+    {
+      id: "app-supabase-mcp",
+      name: "Supabase",
+      description:
+        "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
+      iconUrl: "https://supabase.com/favicon.ico",
+      server: {
+        name: "supabase",
+        transport: "http",
+        url: "https://mcp.supabase.com/mcp",
+        auth: [
+          {
+            id: "supabase-key",
+            kind: "key",
+            label: "API key",
+            fields: [
+              {
+                id: "url",
+                label: "Project MCP URL",
+                url: true,
+                placeholder: "https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT&read_only=true",
+              },
+              {
+                id: "token",
+                label: "Supabase personal access token",
+                header: "Authorization",
+                prefix: "Bearer ",
+                hint: "Supabase dashboard → Account → Access tokens",
+              },
+            ],
+            docsUrl: "https://supabase.com/docs/guides/ai-tools/mcp",
+            docsLabel: "Setup instructions",
+          },
+        ],
+      },
+    },
+  ],
+  websiteUrl: "https://supabase.com/docs/guides/ai-tools/mcp",
+  privacyPolicyUrl: null,
+  termsUrl: null,
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/supabase",
+};
+
+const EXA: MarketplacePluginDetail = {
+  id: "plugin-exa",
+  slug: "exa",
+  name: "Exa",
+  tagline: "Web search and research",
+  description:
+    "Search the web through Exa’s official hosted connection. No key is required to start. Service limits apply.",
+  category: "research",
+  creatorName: "exa.ai",
+  iconUrl: "https://exa.ai/favicon.ico",
+  version: "1.0.0",
+  prompts: [{ id: "prompt-inspect", text: "Show what I can access through Exa. Do not change anything." }],
+  apps: [
+    {
+      id: "app-exa-mcp",
+      name: "Exa",
+      description:
+        "Search the web through Exa’s official hosted connection. No key is required to start. Service limits apply.",
+      iconUrl: "https://exa.ai/favicon.ico",
+      server: { name: "exa", transport: "http", url: "https://mcp.exa.ai/mcp" },
+    },
+  ],
+  websiteUrl: "https://exa.ai/docs/get-started/exa-mcp",
+  privacyPolicyUrl: null,
+  termsUrl: null,
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/exa",
+};
+
+const TAVILY: MarketplacePluginDetail = {
+  id: "plugin-tavily",
+  slug: "tavily",
+  name: "Tavily",
+  tagline: "Web search and page extraction",
+  description:
+    "Search the web and extract page content through Tavily’s official connection. Your API key uses your Tavily account’s usage allowance.",
+  category: "research",
+  creatorName: "tavily.com",
+  iconUrl: "https://tavily.com/favicon.ico",
+  version: "1.0.0",
+  prompts: [{ id: "prompt-inspect", text: "Show what I can access through Tavily. Do not change anything." }],
+  apps: [
+    {
+      id: "app-tavily-mcp",
+      name: "Tavily",
+      description:
+        "Search the web and extract page content through Tavily’s official connection. Your API key uses your Tavily account’s usage allowance.",
+      iconUrl: "https://tavily.com/favicon.ico",
+      server: {
+        name: "tavily",
+        transport: "http",
+        url: "https://mcp.tavily.com/mcp/",
+        auth: [
+          {
+            id: "tavily-key",
+            kind: "key",
+            label: "API key",
+            fields: [
+              {
+                id: "token",
+                label: "Tavily API key",
+                header: "Authorization",
+                prefix: "Bearer ",
+                hint: "Tavily dashboard → API keys",
+              },
+            ],
+            docsUrl: "https://docs.tavily.com/documentation/mcp",
+            docsLabel: "Setup instructions",
+          },
+        ],
+      },
+    },
+  ],
+  websiteUrl: "https://docs.tavily.com/documentation/mcp",
+  privacyPolicyUrl: null,
+  termsUrl: null,
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/tavily",
 };
 
 export const MARKETPLACE_PLUGINS: MarketplacePluginDetail[] = [
@@ -755,4 +1117,11 @@ export const MARKETPLACE_PLUGINS: MarketplacePluginDetail[] = [
   BRAVE_SEARCH,
   RESEND,
   COMPOSIO,
+  GITHUB_DIRECT,
+  SLACK,
+  CLOUDFLARE,
+  RENDER,
+  SUPABASE,
+  EXA,
+  TAVILY,
 ];

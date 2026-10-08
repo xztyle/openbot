@@ -456,6 +456,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   );
 
   const [connecting, setConnecting] = createSignal<PendingConnect | null>(null);
+  let signInController: AbortController | null = null;
   /** The listing the user asked to disconnect, held while the confirmation is on screen. */
   const [uninstalling, setUninstalling] = createSignal<MarketplacePluginDetail | null>(null);
 
@@ -467,6 +468,8 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         subject: { name: app.name, iconUrl: app.iconUrl, config },
         flow,
         settle: (answer) => {
+          signInController?.abort();
+          signInController = null;
           setConnecting(null);
           resolve(answer);
         },
@@ -476,8 +479,18 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
 
   /** Test connects with the dialog-built config; nothing is saved by asking. */
   async function testPluginApp(config: McpServerConfig) {
+    const invalid = Object.values(mcpConfigErrors(config))[0];
+    if (invalid) throw new Error(invalid);
+    if (servers().some((held) => held.id !== config.id && held.name === config.name))
+      throw new Error(t("error.backend.mcpServerNameTaken", { name: config.name }));
     const serverId = props.pluginServerId;
     if (!serverId) throw new Error(t("marketplace.error.connectNoServer"));
+    const signIn = calls().mcp.signInMcpServer;
+    if (props.hostServerId && connecting()?.flow.kind === "link" && signIn) {
+      signInController?.abort();
+      signInController = new AbortController();
+      return signIn(config, serverId, signInController.signal);
+    }
     return calls().mcp.testMcpServer({ config }, serverId);
   }
 
@@ -506,10 +519,11 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       setError(t("marketplace.error.installNoAgent"));
       return false;
     }
-    /* A browser sign-in saves its grant on the computer that finishes it, and a local server
-       answers only on the computer that runs it, so an app that asks for either is installed on
-       the host itself. */
-    const hostOnly = plugin.apps.find((app) => ["link", "local"].includes(app.server.auth?.[0]?.kind ?? ""));
+    const hostOnly = plugin.apps.find(
+      (app) =>
+        app.server.auth?.[0]?.kind === "local" ||
+        (app.server.auth?.[0]?.kind === "link" && !calls().mcp.supportsRemoteSignIn?.()),
+    );
     if (props.hostServerId && hostOnly) {
       const key =
         hostOnly.server.auth?.[0]?.kind === "local"
@@ -532,6 +546,10 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         }
         for (const app of plugin.apps) {
           const config = createPluginAppConfig(app);
+          config.id = `mcpacct-${crypto.randomUUID()}`;
+          let accountNumber = 1;
+          while (servers().some((held) => held.name === `${app.name} — ${accountNumber}`)) accountNumber += 1;
+          config.name = `${app.name} — ${accountNumber}`;
           const invalid = Object.values(mcpConfigErrors(config))[0];
           if (invalid) throw new Error(t("marketplace.error.appInvalid", { name: app.name, reason: invalid }));
           /* What is saved is the configuration that connected, not the one the listing describes:
@@ -575,7 +593,11 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   function uninstallPlan(plugin: MarketplacePluginDetail): PluginUninstallPlan {
     return {
       pluginName: plugin.name,
-      appNames: plugin.apps.map((app) => heldApp(app)?.name).filter((name): name is string => Boolean(name)),
+      appNames: plugin.apps.flatMap((app) =>
+        servers()
+          .filter((config) => isPluginAppConfig(config, app))
+          .map((config) => config.name),
+      ),
       skillSlugs: plugin.skills.filter((skill) => pluginSkillHeld(skill.id)).map((skill) => skill.slug),
       agentName: agentName(pluginAgentId()),
     };
@@ -600,12 +622,12 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     const analytics = desktopAnalytics.scope();
     const failures: string[] = [];
     for (const app of plugin.apps) {
-      const config = heldApp(app);
-      if (!config) continue;
-      try {
-        setServers(await calls().mcp.removeMcpServer({ mcpServerId: config.id }, serverId));
-      } catch (cause) {
-        failures.push(`${app.name}: ${marketplaceErrorMessage(cause)}`);
+      for (const config of servers().filter((held) => isPluginAppConfig(held, app))) {
+        try {
+          setServers(await calls().mcp.removeMcpServer({ mcpServerId: config.id }, serverId));
+        } catch (cause) {
+          failures.push(`${config.name}: ${marketplaceErrorMessage(cause)}`);
+        }
       }
     }
     if (agentId) {
@@ -719,6 +741,12 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       if (app.kind === "github") props.githubConnector?.connect();
       return false;
     },
+    appConnections: (app) =>
+      app.kind === "plugin"
+        ? servers()
+            .filter((config) => app.plugin.apps.some((listing) => isPluginAppConfig(config, listing)))
+            .map(({ id, name }) => ({ id, name }))
+        : [],
     disconnectApp: (app) => {
       if (app.kind === "plugin") setUninstalling(app.plugin);
       if (app.kind === "github") props.githubConnector?.disconnect();

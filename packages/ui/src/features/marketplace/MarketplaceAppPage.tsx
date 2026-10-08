@@ -70,6 +70,15 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
               {t("plugin.copyLink")}
             </Button>
             <AppAction scope={props.scope} app={props.app} />
+            <Show when={props.app.status === "connected" && model().canConnectApps()}>
+              <Button
+                type="button"
+                loading={model().appBusy(props.app.id)}
+                onClick={() => void model().connectApp(props.app)}
+              >
+                {t("marketplace.app.addAccount")}
+              </Button>
+            </Show>
           </>
         }
       />
@@ -123,6 +132,28 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
           </ItemGroup>
         </SettingsSection>
       </Show>
+      <Show when={model().appConnections?.(props.app).length}>
+        <SettingsSection title={t("mcp.connection.accounts")}>
+          <ItemGroup class="settings-modal-card">
+            <For each={model().appConnections?.(props.app)}>
+              {(connection) => (
+                <Item class="settings-modal-row">
+                  <ItemContent>
+                    <ItemTitle>{connection.name}</ItemTitle>
+                  </ItemContent>
+                  <Button
+                    variant="outline"
+                    disabled={model().appBusy(props.app.id)}
+                    onClick={() => void model().removeServer(connection.id)}
+                  >
+                    {t("mcp.connection.remove")}
+                  </Button>
+                </Item>
+              )}
+            </For>
+          </ItemGroup>
+        </SettingsSection>
+      </Show>
       <AppInformation
         developer={plugin().creatorName}
         category={t(CATEGORY_LABELS[plugin().category])}
@@ -130,7 +161,9 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
         links={links()}
         onOpenUrl={(url) => model().openUrl(url)}
       />
-      <Show when={props.app.status !== "idle" && model().canConnectApps()}>
+      <Show
+        when={props.app.status !== "idle" && model().canConnectApps() && !model().appConnections?.(props.app).length}
+      >
         <DangerZone
           title={t("marketplace.app.disconnect.title")}
           description={t("marketplace.app.disconnect.description", { name: props.app.name })}

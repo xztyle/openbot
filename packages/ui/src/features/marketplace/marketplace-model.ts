@@ -78,6 +78,7 @@ export interface MarketplaceModel {
   trySkill?: ((agentId: string, skill: MarketplaceSkillDetail) => void) | undefined;
 
   apps: () => readonly MarketplaceApp[];
+  appConnections?: (app: MarketplaceApp) => readonly { id: string; name: string }[];
   /** False for a member of a joined server, who browses and connects nothing. */
   canConnectApps: () => boolean;
   appBusy: (id: string) => boolean;

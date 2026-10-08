@@ -407,6 +407,10 @@ export class OpenBotDatabase {
     return this.#sessions.listExternalSessionIds();
   }
 
+  publicThreadForSession(agentId: string, provider: AgentProviderId, externalSessionId: string): string | null {
+    return this.#sessions.publicThreadForSession(agentId, provider, externalSessionId);
+  }
+
   activeProviderSessionThreads(agentId: string): string[] {
     return this.#sessions.activeProviderSessionThreads(agentId);
   }

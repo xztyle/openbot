@@ -39,6 +39,9 @@ interface AuthServiceOptions {
   repository: AuthRepository;
   delivery: EmailCodeDelivery | null;
   exposeDevelopmentCode?: boolean;
+  allowedEmails?: readonly string[];
+  defaultSessionLifetimeMs?: number;
+  durableSourceIps?: readonly string[];
   now?: () => number;
   flushSessionRevocations?: () => Effect.Effect<void, RemoteFailure>;
   profileChanged?: (userId: string) => Effect.Effect<void, RemoteFailure>;
@@ -64,6 +67,9 @@ class AuthDependencies extends Context.Service<
     repository: AuthRepository;
     delivery: EmailCodeDelivery | null;
     exposeDevelopmentCode: boolean;
+    allowedEmails: ReadonlySet<string> | null;
+    defaultSessionLifetimeMs: number | undefined;
+    durableSourceIps: ReadonlySet<string>;
     now: () => number;
     flushSessionRevocations: () => Effect.Effect<void, RemoteFailure>;
     profileChanged: (userId: string) => Effect.Effect<void, RemoteFailure>;
@@ -80,6 +86,9 @@ export class AuthService {
       repository: options.repository,
       delivery: options.delivery,
       exposeDevelopmentCode: options.exposeDevelopmentCode ?? false,
+      allowedEmails: options.allowedEmails ? new Set(options.allowedEmails.map(normalizeEmail)) : null,
+      defaultSessionLifetimeMs: options.defaultSessionLifetimeMs,
+      durableSourceIps: new Set(options.durableSourceIps?.map(normalizeSourceIp)),
       now: options.now ?? Date.now,
       flushSessionRevocations: options.flushSessionRevocations ?? (() => Effect.void),
       profileChanged: options.profileChanged ?? (() => Effect.void),
@@ -106,6 +115,7 @@ export class AuthService {
         );
       }
       const email = yield* authValidate(() => normalizeEmail(emailInput));
+      yield* this.#requireAllowedEmail(email);
       const now = dependencies.now();
       if (idempotencyKey !== undefined && !isUuidV4(idempotencyKey)) {
         return yield* new AuthServiceError(
@@ -249,6 +259,7 @@ export class AuthService {
         challengeId: string;
         code: string;
         sourceIp: string;
+        sessionLifetimeMs?: number;
       },
     ): Effect.fn.Return<{ sessionToken: string; user: AuthUser }, AuthWorkflowFailure, AuthDependencies> {
       const dependencies = yield* AuthDependencies;
@@ -258,6 +269,8 @@ export class AuthService {
         return yield* new AuthServiceError(400, "invalid_sign_in_code", "The sign-in code is invalid.");
       }
       const idHash = yield* sha256(input.challengeId);
+      const challenge = yield* dependencies.repository.findEmailChallenge(idHash);
+      if (challenge) yield* this.#requireAllowedEmail(challenge.email);
       const normalizedCode = yield* authValidate(() => safeNormalizeCode(input.code));
       const codeHash = yield* sha256(normalizedCode);
       const result = yield* dependencies.repository.verifyEmailChallenge({
@@ -267,7 +280,7 @@ export class AuthService {
         session: {
           id: crypto.randomUUID(),
           token: randomToken(),
-          expiresAt: PERSISTENT_SESSION_EXPIRES_AT,
+          expiresAt: yield* this.#sessionExpiresAt(now, input.sourceIp, input.sessionLifetimeMs),
         },
       });
       return yield* authValidate(() => verificationResult(result));
@@ -281,7 +294,8 @@ export class AuthService {
       sessionToken: string,
     ): Effect.fn.Return<AuthUser | null, AuthWorkflowFailure, AuthDependencies> {
       const dependencies = yield* AuthDependencies;
-      return yield* dependencies.repository.authenticate(sessionToken, dependencies.now());
+      const user = yield* dependencies.repository.authenticate(sessionToken, dependencies.now());
+      return this.#allowedUser(user, dependencies.allowedEmails);
     },
     (operation) => operation.pipe(Effect.mapError(authFailure), Effect.provide(this.#layer)),
   ).bind(this);
@@ -292,7 +306,8 @@ export class AuthService {
       sessionToken: string,
     ): Effect.fn.Return<AuthUser | null, AuthWorkflowFailure, AuthDependencies> {
       const dependencies = yield* AuthDependencies;
-      return yield* dependencies.repository.authenticateDesktopSession(sessionToken, dependencies.now());
+      const user = yield* dependencies.repository.authenticateDesktopSession(sessionToken, dependencies.now());
+      return this.#allowedUser(user, dependencies.allowedEmails);
     },
     (operation) => operation.pipe(Effect.mapError(authFailure), Effect.provide(this.#layer)),
   ).bind(this);
@@ -429,11 +444,12 @@ export class AuthService {
       const now = dependencies.now();
       yield* this.#enforceRateLimit(`team-ticket-redeem:ip:${normalizeSourceIp(sourceIp)}`, 120, now);
       const ticketHash = yield* sha256(ticket);
-      return yield* dependencies.repository.redeemTeamAuthTicket({
+      const user = yield* dependencies.repository.redeemTeamAuthTicket({
         ticketHash,
         serverId,
         now,
       });
+      return this.#allowedUser(user, dependencies.allowedEmails);
     },
     (operation) => operation.pipe(Effect.mapError(authFailure), Effect.provide(this.#layer)),
   ).bind(this);
@@ -487,12 +503,12 @@ export class AuthService {
         session: {
           id: crypto.randomUUID(),
           token: randomToken(),
-          expiresAt: PERSISTENT_SESSION_EXPIRES_AT,
+          expiresAt: yield* this.#sessionExpiresAt(now, sourceIp),
         },
         device,
       });
       yield* dependencies.flushSessionRevocations();
-      return redeemed;
+      return redeemed && this.#allowedUser(redeemed.user, dependencies.allowedEmails) ? redeemed : null;
     },
     (operation) => operation.pipe(Effect.mapError(authFailure), Effect.provide(this.#layer)),
   ).bind(this);
@@ -516,7 +532,8 @@ export class AuthService {
       sessionToken: string,
     ): Effect.fn.Return<AuthUser | null, AuthWorkflowFailure, AuthDependencies> {
       const dependencies = yield* AuthDependencies;
-      return yield* dependencies.repository.authenticateMobileSession(sessionToken, dependencies.now());
+      const user = yield* dependencies.repository.authenticateMobileSession(sessionToken, dependencies.now());
+      return this.#allowedUser(user, dependencies.allowedEmails);
     },
     (operation) => operation.pipe(Effect.mapError(authFailure), Effect.provide(this.#layer)),
   ).bind(this);
@@ -601,6 +618,35 @@ export class AuthService {
     },
     (operation) => operation.pipe(Effect.mapError(authFailure), Effect.provide(this.#layer)),
   ).bind(this);
+
+  #allowedUser(user: AuthUser | null, allowedEmails: ReadonlySet<string> | null): AuthUser | null {
+    return user && (allowedEmails === null || allowedEmails.has(user.email)) ? user : null;
+  }
+
+  readonly #sessionExpiresAt = Effect.fn("AuthService.sessionExpiresAt")(function* (
+    this: AuthService,
+    now: number,
+    sourceIp: string,
+    explicitLifetimeMs?: number,
+  ) {
+    const dependencies = yield* AuthDependencies;
+    const lifetime =
+      explicitLifetimeMs ??
+      (dependencies.durableSourceIps.has(normalizeSourceIp(sourceIp))
+        ? undefined
+        : dependencies.defaultSessionLifetimeMs);
+    return lifetime === undefined ? PERSISTENT_SESSION_EXPIRES_AT : now + lifetime;
+  });
+
+  readonly #requireAllowedEmail = Effect.fn("AuthService.requireAllowedEmail")(function* (
+    this: AuthService,
+    email: string,
+  ) {
+    const { allowedEmails } = yield* AuthDependencies;
+    if (allowedEmails !== null && !allowedEmails.has(email)) {
+      return yield* new AuthServiceError(403, "account_not_allowed", "This account is not allowed.");
+    }
+  });
 
   readonly #enforceRateLimit = Effect.fn("AuthService.enforceRateLimit")(function* (
     this: AuthService,

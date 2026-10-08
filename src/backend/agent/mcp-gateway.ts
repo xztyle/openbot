@@ -74,6 +74,7 @@ export interface McpGatewayOptions {
  */
 export class McpGateway {
   readonly #servers: McpServerStore;
+  readonly #scope: ProviderClientContext["mcpScope"];
   readonly #computerUseMcpServer: () => McpServerConfig | null;
   readonly #githubConnector: GitHubConnectorSource | null;
   /**
@@ -105,6 +106,7 @@ export class McpGateway {
   constructor(options: McpGatewayOptions) {
     const { credentials } = options;
     this.#servers = options.servers;
+    this.#scope = credentials.mcpScope;
     this.#computerUseMcpServer = options.computerUseMcpServer;
     this.#githubConnector = options.githubConnector ?? null;
     this.#toolRuntimes = () => credentials.mcpToolRuntimes?.() ?? NO_MCP_TOOL_RUNTIMES;
@@ -126,7 +128,7 @@ export class McpGateway {
 
   readonly authorization = Effect.fnUntraced(function* (this: McpGateway, config: McpServerConfig) {
     const github = this.#githubConnector;
-    const oauth = this.#oauth;
+    const oauth = this.#oauth?.forConnection?.(config.id) ?? this.#oauth;
     const token =
       config.id === GITHUB_CONNECTOR_MCP_SERVER_ID
         ? github
@@ -184,9 +186,16 @@ export class McpGateway {
     if (
       removed &&
       removedResource &&
-      !list.some((config) => config.transport === "http" && normalizeResource(config.url) === removedResource)
+      (removed.id.startsWith("mcpacct-") ||
+        !list.some(
+          (config) =>
+            !config.id.startsWith("mcpacct-") &&
+            config.transport === "http" &&
+            normalizeResource(config.url) === removedResource,
+        ))
     ) {
-      if (this.#oauth) yield* this.#oauth.forget(removed.url).pipe(toMcpGatewayFailed);
+      if (this.#oauth)
+        yield* (this.#oauth.forConnection?.(removed.id) ?? this.#oauth).forget(removed.url).pipe(toMcpGatewayFailed);
     }
     return list;
   }, Effect.uninterruptible);
@@ -247,7 +256,7 @@ export class McpGateway {
     // The stored sign-ins are still spent: without them the probe cannot read or refresh the host's
     // token, and a remote administrator gets a false 401 for a server local agents use. `signIn`
     // stays `null`, so a 401 the stored token cannot fix is reported rather than waited on.
-    const stored = this.#oauth;
+    const stored = this.#oauth?.forConnection?.(config.id) ?? this.#oauth;
     const silent: McpOAuthAuthority | undefined =
       !options.interactive && options.storedCredentials && stored
         ? {
@@ -271,14 +280,15 @@ export class McpGateway {
    * name: a server the user added keeps working as they set it up, and two entries with one name
    * would collide in every provider's configuration.
    */
-  enabled(): McpServerConfig[] {
+  enabled(threadId?: string): McpServerConfig[] {
     const configured = this.#servers.listEnabled();
     const builtIn: McpServerConfig[] = [];
     const computerUse = this.#computerUseMcpServer();
     if (computerUse) builtIn.push(computerUse);
     const github = this.#githubConnector?.mcpServer() ?? null;
     if (github && !configured.some((config) => config.name === github.name)) builtIn.push(github);
-    return this.#handoff.record([...configured, ...builtIn]);
+    const configs = [...configured, ...builtIn];
+    return this.#handoff.record(threadId && this.#scope ? this.#scope(threadId, configs) : configs);
   }
 
   /**

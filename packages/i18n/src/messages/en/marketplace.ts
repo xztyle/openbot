@@ -1,6 +1,7 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("marketplace", {
+  "marketplace.app.addAccount": "Add account",
   // The listing: categories, rows, and the words for each kind of listing.
   "marketplace.category.coding": "Coding",
   "marketplace.category.design": "Design",

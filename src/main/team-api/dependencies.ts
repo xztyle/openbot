@@ -3,11 +3,13 @@ import type { ChannelService } from "../../backend/channel-service";
 import type { AgentAdminSettingsService } from "../agent-admin-settings";
 import type { AgentMarketplaceService } from "../agent-marketplace-service";
 import type { AgentTemplateService } from "../agent-template-service";
+import type { ChatMcpService } from "../chat-mcp-service";
 import type { PeerCustomProviderChanges } from "../custom-provider-changes";
 import type { HostEventsApi } from "../host-events-api";
 import type { HostService } from "../host-service";
 import type { ProviderCredentialStore } from "../provider-credential-store";
 import type { ProviderRuntimeManager } from "../provider-runtime-manager";
+import type { RemoteMcpSignIn } from "../remote-mcp-sign-in";
 import type { RemoteWorkflowError } from "../remote-service-effects";
 import type { RequestedUpdate } from "../requested-update";
 import type { SkillMarketplaceService } from "../skill-marketplace-service";
@@ -234,6 +236,8 @@ export interface TeamApiOptions {
   events?: HostEventsApi;
   channels?: ChannelService;
   mcpServers?: TeamApiMcpServers;
+  mcpOAuth?: RemoteMcpSignIn;
+  chatMcp?: ChatMcpService;
   /** Starts and waits for the managed tool runtimes behind the MCP save, enable, and test routes. */
   mcpToolRuntimePreparation?: McpToolRuntimePreparation;
   storage?: TeamApiStorage;

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AgentAuthState, AgentProviderId } from "@openbot/contracts/ipc";
+import type { AgentAuthState, AgentProviderId, McpServerConfig } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import { AcpAgentClient, type AcpHistoryPersistence } from "./acp-client";
@@ -156,6 +156,7 @@ export interface ProviderClientContext {
    * and converts them itself, because the three providers take three different shapes.
    */
   readonly mcpServers: McpServerSource;
+  readonly mcpScope?: (threadId: string, configs: readonly McpServerConfig[]) => McpServerConfig[];
   /**
    * What a provider could not be given, reported once per spawn. Optional, so the test call sites
    * and `NO_PROVIDER_CREDENTIALS` stay valid: a driver with no reporter drops silently, exactly as

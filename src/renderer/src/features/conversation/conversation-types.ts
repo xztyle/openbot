@@ -50,6 +50,7 @@ export interface ConversationTarget {
 }
 
 export interface ConversationProps {
+  headerActions?: JSX.Element;
   runtime?: ConversationRuntime;
   notice?: JSX.Element;
   onOpenUsage?: (trigger: HTMLButtonElement) => void;

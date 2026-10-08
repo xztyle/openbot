@@ -13,6 +13,7 @@ import { HostedSiteInputError, requireIdempotencyKey } from "./hosted-site-contr
 import type { HostedSiteService } from "./hosted-site-service";
 import { readJsonObject } from "./json-body";
 import { type RemoteControlPlane, RemoteControlPlaneError } from "./remote-control-plane";
+import { BROWSER_SESSION_LIFETIME_MS } from "./session-policy";
 import { sendTeamInviteEmail } from "./team-invite-email";
 import type { AuthUser, TeamInviteEmailDelivery } from "./types";
 
@@ -167,6 +168,7 @@ const handleBrowserOperation = Effect.fn("BrowserApi.handleOperation")(function*
       challengeId: yield* requiredString(body, "challengeId"),
       code: yield* requiredString(body, "code"),
       sourceIp: services.sourceIp(request),
+      sessionLifetimeMs: BROWSER_SESSION_LIFETIME_MS,
     });
     const previous = browserSessionToken(request);
     if (previous) {
@@ -174,7 +176,10 @@ const handleBrowserOperation = Effect.fn("BrowserApi.handleOperation")(function*
       if (user) yield* services.remote.endAccountSession(user.id, yield* sha256(previous));
     }
     const response = json({ user: result.user });
-    response.headers.set("Set-Cookie", `${COOKIE}=${result.sessionToken}; ${COOKIE_ATTRIBUTES}; Max-Age=34560000`);
+    response.headers.set(
+      "Set-Cookie",
+      `${COOKIE}=${result.sessionToken}; ${COOKIE_ATTRIBUTES}; Max-Age=${BROWSER_SESSION_LIFETIME_MS / 1_000}`,
+    );
     return response;
   }
   const token = browserSessionToken(request);

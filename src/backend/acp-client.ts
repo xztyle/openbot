@@ -166,6 +166,7 @@ interface AcpTurn {
 }
 
 interface AcpThread {
+  mcpChatId: string | undefined;
   id: string;
   cwd: string;
   developerInstructions: string;
@@ -185,7 +186,7 @@ interface AcpThread {
 /** What a closed idle session needs to be loaded again. Completed history lives in storage. */
 type ReleasedAcpThread = Pick<
   AcpThread,
-  "cwd" | "developerInstructions" | "dynamicTools" | "workspaceRoots" | "computerUse"
+  "cwd" | "developerInstructions" | "dynamicTools" | "workspaceRoots" | "computerUse" | "mcpChatId"
 >;
 
 /** Persistence hooks for provider history. The database owns the data; ACP only streams it. */
@@ -347,12 +348,13 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     // An agent that cannot close a session and load it again would keep its MCP servers or lose it.
     canRelease: () =>
       this.#loadsSessions && Boolean(this.#initialization?.agentCapabilities?.sessionCapabilities?.close),
-    snapshot: ({ cwd, developerInstructions, dynamicTools, workspaceRoots, computerUse }) => ({
+    snapshot: ({ cwd, developerInstructions, dynamicTools, workspaceRoots, computerUse, mcpChatId }) => ({
       cwd,
       developerInstructions,
       dynamicTools,
       workspaceRoots,
       computerUse,
+      mcpChatId,
     }),
     dispose: (thread) => this.#closeSession(thread),
     reopen: (threadId, released) =>
@@ -364,6 +366,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
           dynamicTools: released.dynamicTools,
           runtimeWorkspaceRoots: released.workspaceRoots,
           computerUse: released.computerUse,
+          mcpChatId: released.mcpChatId,
         },
         true,
       ),
@@ -1129,7 +1132,12 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     const held = this.#threads.get(requestedThreadId);
     // The MCP servers are fixed when a session opens, so a changed Computer Use switch loads the
     // session again. A session with a turn keeps its servers until a later resume.
-    if (held && !held.activeTurn && held.computerUse !== computerUseParam(params)) {
+    if (
+      held &&
+      !held.activeTurn &&
+      (held.computerUse !== computerUseParam(params) ||
+        held.mcpChatId !== (getString(params, "mcpChatId") ?? undefined))
+    ) {
       yield* this.#threads.close(held).pipe(toProviderClientOperationError);
     }
     // A thread this client already holds takes the caller's settings even though no session is
@@ -1193,7 +1201,10 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
               providerResult(
                 yield* Effect.result(
                   usableMcpServers(
-                    agentMcpServers(this.options.mcpServers?.() ?? [], computerUse),
+                    agentMcpServers(
+                      this.options.mcpServers?.(getString(params, "mcpChatId") ?? undefined) ?? [],
+                      computerUse,
+                    ),
                     this.options.mcpToolRuntimes?.(),
                     this.options.mcpAuthorization,
                   ).pipe(toProviderClientOperationError),
@@ -1247,6 +1258,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
               dynamicTools,
               workspaceRoots: additionalDirectories,
               computerUse,
+              mcpChatId: getString(params, "mcpChatId") ?? undefined,
               idleRelease: null,
               idleSince: 0,
             };

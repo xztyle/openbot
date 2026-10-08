@@ -1,0 +1,46 @@
+{
+  "slug": "cloudflare",
+  "name": "Cloudflare",
+  "tagline": "Manage Cloudflare resources",
+  "description": "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
+  "category": "coding",
+  "creatorName": "cloudflare.com",
+  "iconUrl": "https://cloudflare.com/favicon.ico",
+  "version": "1.0.0",
+  "prompts": [{ "id": "prompt-inspect", "text": "Show what I can access through Cloudflare. Do not change anything." }],
+  "apps": [
+    {
+      "id": "app-cloudflare-mcp",
+      "name": "Cloudflare",
+      "description": "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
+      "iconUrl": "https://cloudflare.com/favicon.ico",
+      "server": {
+        "name": "cloudflare",
+        "transport": "http",
+        "url": "https://mcp.cloudflare.com/mcp",
+        "auth": [
+          {
+            "id": "cloudflare-key",
+            "kind": "key",
+            "label": "API key",
+            "fields": [
+              {
+                "id": "token",
+                "label": "Cloudflare API token",
+                "header": "Authorization",
+                "prefix": "Bearer ",
+                "hint": "Cloudflare → Profile → API tokens. Limit resources and permissions."
+              }
+            ],
+            "docsUrl": "https://github.com/cloudflare/mcp",
+            "docsLabel": "Setup instructions"
+          }
+        ]
+      }
+    }
+  ],
+  "websiteUrl": "https://github.com/cloudflare/mcp",
+  "privacyPolicyUrl": null,
+  "termsUrl": null,
+  "skills": []
+}

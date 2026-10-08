@@ -32,6 +32,7 @@ import {
   RemoteControlPlaneError,
   verifyRemoteServiceSignature,
 } from "./remote-control-plane";
+import { BROWSER_SESSION_LIFETIME_MS } from "./session-policy";
 import { SkillMarketplace, SkillMarketplaceError } from "./skill-marketplace";
 import { SlackAppError, SlackAppService } from "./slack-app";
 import { requireWorkerBindings, type TeamInviteEmailDelivery } from "./types";
@@ -43,6 +44,9 @@ export function requestAuthService(): AuthService {
     repository: new D1AuthRepository(bindings.DB),
     delivery: exposeDevelopmentCode ? null : createEmailCodeDelivery(bindings),
     exposeDevelopmentCode,
+    allowedEmails: bindings.AUTH_ALLOWED_EMAILS?.split(","),
+    defaultSessionLifetimeMs: BROWSER_SESSION_LIFETIME_MS,
+    durableSourceIps: bindings.AUTH_DURABLE_SOURCE_IPS?.split(","),
     // The revocation is already written and the cron redelivers it, so the answer does not wait.
     flushSessionRevocations: () => Effect.sync(() => schedule(deliverPendingRemoteAuthEvents(bindings, Date.now()))),
     profileChanged: (userId) => notifyAccountProfileChanged(bindings, userId, schedule),
@@ -51,6 +55,9 @@ export function requestAuthService(): AuthService {
 
 export function requestAvatarBucket(): R2Bucket {
   const bindings = requireWorkerBindings(env);
+  if (bindings.OBJECT_STORAGE_ENABLED === "false") {
+    throw new AuthServiceError(503, "storage_not_configured", "This feature is unavailable.");
+  }
   return bindings.AVATARS;
 }
 

@@ -21,11 +21,12 @@ export type McpSignInDialogProps = McpConnectBaseProps;
 
 export function McpSignInDialog(props: McpSignInDialogProps) {
   const { t } = useText();
-  const { state, busy, attempt } = createConnectRun(props);
+  const { state, busy, attempt, setName } = createConnectRun(props);
 
   return (
     <McpConnectShell
       {...props}
+      onNameChange={setName}
       state={state}
       busy={busy}
       description={t("mcp.signIn.description", { name: props.subject.name })}

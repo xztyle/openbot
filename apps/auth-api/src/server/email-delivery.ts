@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { type RenderedEmail, renderSignInCodeEmail, renderTeamInviteEmail } from "./email-templates";
 import {
   RATE_LIMITED_DELIVERY_ERROR,
   type SmtpEmailConfig,
@@ -13,6 +14,7 @@ export class EmailDeliveryError extends Schema.TaggedError<EmailDeliveryError>()
 
 type EmailDeliveryBindings = Pick<
   WorkerBindings,
+  | "EMAIL"
   | "EMAIL_SMTP_HOST"
   | "EMAIL_SMTP_PORT"
   | "EMAIL_SMTP_USERNAME"
@@ -23,6 +25,18 @@ type EmailDeliveryBindings = Pick<
 >;
 
 export function createEmailCodeDelivery(bindings: EmailDeliveryBindings): EmailCodeDelivery | null {
+  const native = nativeEmailDelivery(bindings);
+  if (native)
+    return {
+      send: (message) =>
+        native(
+          message.email,
+          renderSignInCodeEmail({
+            code: message.code,
+            expiresInMinutes: Math.max(1, Math.ceil((message.expiresAt - Date.now()) / 60_000)),
+          }),
+        ),
+    };
   const smtp = readSmtpConfig(bindings);
   if (smtp) {
     return {
@@ -55,8 +69,23 @@ export function createEmailCodeDelivery(bindings: EmailDeliveryBindings): EmailC
 }
 
 export function createTeamInviteEmailDelivery(bindings: EmailDeliveryBindings): TeamInviteEmailDelivery | null {
+  const native = nativeEmailDelivery(bindings);
+  if (native) return { send: (message) => native(message.email, renderTeamInviteEmail(message)) };
   const smtp = readSmtpConfig(bindings);
   return smtp ? { send: (message) => sendPrivateTeamInvite(smtp, message) } : null;
+}
+
+function nativeEmailDelivery(bindings: EmailDeliveryBindings) {
+  const sender = bindings.EMAIL;
+  if (!sender) return null;
+  const from = bindings.EMAIL_FROM?.trim();
+  if (!from) throw new Error("Cloudflare email sender is missing.");
+  return Effect.fn("EmailDelivery.sendNative")(function* (email: string, content: RenderedEmail) {
+    yield* Effect.tryPromise({
+      try: () => sender.send({ from, to: email, subject: content.subject, text: content.text, html: content.html }),
+      catch: () => new EmailDeliveryError({ message: "email_delivery_unknown" }),
+    });
+  });
 }
 
 function readSmtpConfig(bindings: EmailDeliveryBindings): SmtpEmailConfig | null {

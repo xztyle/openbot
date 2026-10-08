@@ -74,6 +74,8 @@ type ForwardedApiOptions = ConstructorParameters<typeof TeamApiServer>[0];
 interface HostServiceOptions {
   channels?: ChannelService;
   mcpServers?: ForwardedApiOptions["mcpServers"];
+  mcpOAuth?: ForwardedApiOptions["mcpOAuth"];
+  chatMcp?: ForwardedApiOptions["chatMcp"];
   mcpToolRuntimePreparation?: ForwardedApiOptions["mcpToolRuntimePreparation"];
   storage?: ForwardedApiOptions["storage"];
   hostedSites?: ForwardedApiOptions["hostedSites"];
@@ -288,6 +290,8 @@ export class HostService extends EventEmitter<HostEvents> {
       agents: options.agents,
       channels: options.channels,
       mcpServers: options.mcpServers,
+      mcpOAuth: options.mcpOAuth,
+      chatMcp: options.chatMcp,
       mcpToolRuntimePreparation: options.mcpToolRuntimePreparation,
       storage: options.storage,
       hostedSites: options.hostedSites,

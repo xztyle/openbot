@@ -131,7 +131,7 @@ describe("browser account boundary", () => {
     );
     expect(await response.json()).toEqual({ user });
     expect(response.headers.get("Set-Cookie")).toBe(
-      `__Host-openbot-web=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=34560000`,
+      `__Host-openbot-web=${token}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=2592000`,
     );
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });

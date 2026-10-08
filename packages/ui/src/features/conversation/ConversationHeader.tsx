@@ -5,10 +5,11 @@ import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { agentAccessLockLabel } from "@openbot/ui/features/agents/agent-access";
 import { ComputerIcon, RemoteDesktopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
 import { useText } from "@openbot/ui/text";
-import type { ComponentProps } from "@solidjs/web";
+import type { ComponentProps, JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
 export interface ConversationHeaderProps {
+  actions?: JSX.Element;
   agent: AgentProfile | null | undefined;
   modelPicker: ComponentProps<typeof ProviderModelPicker>;
   onSettingsIntent: () => void;
@@ -68,6 +69,7 @@ export function ConversationHeader(props: ConversationHeaderProps) {
         </Show>
       </div>
       <div class="conversation-header-actions no-drag">
+        {props.actions}
         <Show when={props.agent}>
           <ProviderModelPicker {...props.modelPicker} />
         </Show>

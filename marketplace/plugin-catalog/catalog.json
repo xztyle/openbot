@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "catalogVersion": "v1",
-  "updatedAt": "2026-09-30T00:00:00.000Z",
+  "updatedAt": "2026-10-08T00:00:00.000Z",
   "order": [
     "aave",
     "canva",
@@ -17,7 +17,14 @@
     "firecrawl",
     "brave-search",
     "resend",
-    "composio"
+    "composio",
+    "github-direct",
+    "slack",
+    "cloudflare",
+    "render",
+    "supabase",
+    "exa",
+    "tavily"
   ],
   "featured": ["aave", "canva", "notion", "figma"]
 }

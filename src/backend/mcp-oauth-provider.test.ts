@@ -327,6 +327,33 @@ async function fakeServer(options: FakeServerOptions = {}): Promise<FakeServer> 
 }
 
 describe("signing in to an http MCP server", () => {
+  it("keeps credentials and native callback states separate for accounts on one URL", async () => {
+    const storage = memoryStorage();
+    const oauth = createOAuth({ storage, redirectUrl: "openbot://mcp-auth", openExternal: async () => {} });
+    const url = "https://mcp.example.com/mcp";
+    const one = `mcpacct-${crypto.randomUUID()}`;
+    const two = `mcpacct-${crypto.randomUUID()}`;
+    storage.records.set(`${one}:${url}`, {
+      tokens: { access_token: "one", token_type: "Bearer" },
+      obtainedAt: Date.now(),
+    });
+    storage.records.set(`${two}:${url}`, {
+      tokens: { access_token: "two", token_type: "Bearer" },
+      obtainedAt: Date.now(),
+    });
+    expect(await runMcp(oauth.forConnection(one).accessToken(url))).toBe("one");
+    expect(await runMcp(oauth.forConnection(two).accessToken(url))).toBe("two");
+    expect(await runMcp(oauth.accessToken(url))).toBeNull();
+    const signIn = oauth.forConnection(one).signIn(url);
+    const state = await signIn?.provider.state?.();
+    expect(state).toBeTruthy();
+    expect(oauth.receiveAuthorizationCode(state ?? "", "native-code")).toBe(true);
+    expect(oauth.receiveAuthorizationCode(state ?? "", "replayed-code")).toBe(false);
+    signIn?.abandon();
+    await runMcp(oauth.forConnection(one).forget(url));
+    expect(await runMcp(oauth.forConnection(one).accessToken(url))).toBeNull();
+    expect(await runMcp(oauth.forConnection(two).accessToken(url))).toBe("two");
+  });
   it("registers, gets a grant from the browser, and connects with the token", async () => {
     const server = await fakeServer();
     const storage = memoryStorage();

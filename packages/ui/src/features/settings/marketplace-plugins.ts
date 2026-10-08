@@ -64,7 +64,8 @@ interface MarketplacePluginServerBase {
  */
 export function isPluginAppConfig(config: McpServerConfig, app: MarketplacePluginApp): boolean {
   const server = app.server;
-  if (config.name !== server.name || config.transport !== server.transport) return false;
+  if ((config.name !== server.name && !config.id.startsWith("mcpacct-")) || config.transport !== server.transport)
+    return false;
   if (server.transport === "http") {
     // A listing that asks for the user's own link cannot know the address, only its host.
     const userLink = (server.auth ?? []).some((flow) => mcpFlowFields(flow).some((field) => field.url));

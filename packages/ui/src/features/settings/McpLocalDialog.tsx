@@ -22,7 +22,7 @@ export interface McpLocalDialogProps extends McpConnectBaseProps {
 
 export function McpLocalDialog(props: McpLocalDialogProps) {
   const { t } = useText();
-  const { state, busy, attempt } = createConnectRun(props);
+  const { state, busy, attempt, setName } = createConnectRun(props);
   const docs = createMemo(() => {
     const url = props.flow.docsUrl;
     return url && props.onOpenUrl ? { url, label: props.flow.docsLabel ?? t("mcp.local.docs") } : null;
@@ -31,6 +31,7 @@ export function McpLocalDialog(props: McpLocalDialogProps) {
   return (
     <McpConnectShell
       {...props}
+      onNameChange={setName}
       state={state}
       busy={busy}
       description={t("mcp.local.description", { name: props.subject.name })}

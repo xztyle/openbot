@@ -60,7 +60,7 @@ import { codexSandboxConfig, codexSandboxMode, workspaceWritableRoots } from "./
  * downloading is replaced once its servers can actually start, 5 is the plan tool below, and 6 is
  * server names in the form Codex accepts.
  */
-const CODEX_MCP_ADAPTER_VERSION = 6;
+const CODEX_MCP_ADAPTER_VERSION = 7;
 
 /**
  * Codex offers `update_plan` only when this is on, and without it a turn sends no
@@ -384,7 +384,7 @@ export class ThreadLifecycle {
     // One reading of the MCP set for the request and for the manifest below. Read twice, a change
     // that lands while the provider answers would be recorded as what this session was given, and
     // `hasCurrentTools` would then accept a session that never got it.
-    const mcpServers = this.#agentMcpServers(agent);
+    const mcpServers = this.#agentMcpServers(agent, publicThreadId);
     // The runtimes join that single reading for the same reason: a download that finishes while
     // the provider answers must not be recorded as what resolved this session's servers.
     const toolRuntimes = this.#toolRuntimes();
@@ -399,6 +399,7 @@ export class ThreadLifecycle {
         "thread/start",
         {
           ...config,
+          mcpChatId: publicThreadId,
           model: agent.model,
           effort: agent.reasoningEffort,
           cwd: agent.workspacePath,
@@ -639,9 +640,15 @@ export class ThreadLifecycle {
       .digest("hex");
   }
 
+  #publicThread(agent: AgentSummary, externalThreadId: string): string {
+    return (
+      this.#store.database.publicThreadForSession(agent.id, agent.provider, externalThreadId) ?? agent.threadId ?? ""
+    );
+  }
+
   /** The enabled servers this agent is given. Without Computer Use the fingerprint changes, so Codex replaces the session. */
-  #agentMcpServers(agent: AgentSummary): readonly McpServerConfig[] {
-    return agentMcpServers(this.#mcpServers(), agentComputerUseEnabled(agent));
+  #agentMcpServers(agent: AgentSummary, threadId = agent.threadId): readonly McpServerConfig[] {
+    return agentMcpServers(this.#mcpServers(threadId ?? undefined), agentComputerUseEnabled(agent));
   }
 
   /**
@@ -671,11 +678,14 @@ export class ThreadLifecycle {
       if (missingSessionFile(stored.failure.cause)) return false;
       return yield* stored.failure;
     }
-    const disabled = yield* this.codexOwnServersEffect(client, this.#agentMcpServers(agent));
+    const disabled = yield* this.codexOwnServersEffect(
+      client,
+      this.#agentMcpServers(agent, this.#publicThread(agent, sessionId)),
+    );
     const fingerprint = yield* threadStep(() =>
       this.toolFingerprint(
         agent,
-        this.#agentMcpServers(agent),
+        this.#agentMcpServers(agent, this.#publicThread(agent, sessionId)),
         disabled,
         this.#toolRuntimes(),
         this.#agentEnvironment(),
@@ -709,6 +719,7 @@ export class ThreadLifecycle {
   ): Effect.fn.Return<DynamicRecord, ThreadOperationFailed> {
     return {
       threadId: externalThreadId,
+      mcpChatId: this.#publicThread(agent, externalThreadId),
       model: agent.model,
       effort: agent.reasoningEffort,
       cwd: agent.workspacePath,
@@ -722,8 +733,11 @@ export class ThreadLifecycle {
       ...(yield* this.codexConfigEffect(
         agent,
         client,
-        this.#agentMcpServers(agent),
-        yield* this.codexOwnServersEffect(client, this.#agentMcpServers(agent)),
+        this.#agentMcpServers(agent, this.#publicThread(agent, externalThreadId)),
+        yield* this.codexOwnServersEffect(
+          client,
+          this.#agentMcpServers(agent, this.#publicThread(agent, externalThreadId)),
+        ),
         this.#toolRuntimes(),
         this.#agentEnvironment(),
       )),

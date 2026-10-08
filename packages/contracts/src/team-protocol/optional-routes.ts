@@ -13,6 +13,8 @@ import { HOST_ADMIN_CODECS } from "./host-admin-v1";
 import { HOST_UPDATE_CODECS } from "./host-update-v1";
 import { HOSTED_SITES_CODECS } from "./hosted-sites-v1";
 import { LIVE_ACTIVITY_PUSH_CODECS } from "./live-activity-push-v1";
+import { MCP_CHAT_CODECS } from "./mcp-chat-v1";
+import { MCP_OAUTH_CODECS } from "./mcp-oauth-v1";
 import { PROVIDERS_ADMIN_CODECS } from "./providers-v1";
 import { PROVIDERS_RUNTIMES_V2_CODECS } from "./providers-v2";
 import { PROVIDERS_SIGN_IN_V3_CODECS } from "./providers-v3";
@@ -24,6 +26,8 @@ import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
 export type { OptionalRouteCodec } from "./admin-wire";
 
 const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
+  ...MCP_CHAT_CODECS,
+  ...MCP_OAUTH_CODECS,
   ...AGENT_ADMIN_CODECS,
   ...SKILLS_ADMIN_CODECS,
   ...SHARED_TABLES_CODECS,

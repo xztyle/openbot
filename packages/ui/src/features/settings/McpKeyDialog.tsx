@@ -20,7 +20,7 @@ export interface McpKeyDialogProps extends McpConnectBaseProps {
 
 export function McpKeyDialog(props: McpKeyDialogProps) {
   const { t } = useText();
-  const { state, busy, forget, attempt } = createConnectRun(props);
+  const { state, busy, forget, attempt, setName } = createConnectRun(props);
   /* The form, which only this way in has: what is typed, and whether the user has tried to connect
      with it yet. The second gates the "fill this in" copy, so an untouched dialog asks rather than
      complains. */
@@ -54,6 +54,7 @@ export function McpKeyDialog(props: McpKeyDialogProps) {
   return (
     <McpConnectShell
       {...props}
+      onNameChange={setName}
       state={state}
       busy={busy}
       description={

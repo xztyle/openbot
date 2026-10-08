@@ -42,6 +42,25 @@ const channelFixture = {
 };
 
 describe("browser remote peer recovery", () => {
+  it("keeps Firefox end-of-candidates markers off the Signal wire", async () => {
+    const network = await setupNetwork();
+    await network.connect();
+    const send = vi.spyOn(network.socket(), "send");
+    const candidate = {
+      candidate: "candidate:1 1 udp 2122260223 192.0.2.1 50000 typ host",
+      sdpMid: "0",
+      sdpMLineIndex: 0,
+    };
+    network.connection().onicecandidate?.({ candidate });
+    network.connection().onicecandidate?.({ candidate: { ...candidate, candidate: "" } });
+    network.connection().onicecandidate?.({ candidate: null });
+    expect(send.mock.calls.map(([data]) => JSON.parse(data))).toEqual([
+      { type: "ice-candidate", version: 1, connectionId: "connection-1", channel: "team", ...candidate },
+    ]);
+    expect(network.updates.at(-1)).toMatchObject({ state: "online" });
+    await network.runtime.dispose();
+  });
+
   it("delivers browser-view frames only while the host connection is authenticated", async () => {
     const received = deferred();
     const onHostStreamData = vi.fn(() => {
@@ -1132,6 +1151,7 @@ async function setupNetwork(
     localDescription: RTCSessionDescriptionInit | null = null;
     remoteDescription: RTCSessionDescriptionInit | null = null;
     onconnectionstatechange: (() => void) | null = null;
+    onicecandidate: ((event: { candidate: RTCIceCandidateInit | null }) => void) | null = null;
     readonly channels = new Map<string, TestChannel>();
     constructor() {
       connections.push(this);

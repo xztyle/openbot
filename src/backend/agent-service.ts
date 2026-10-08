@@ -532,7 +532,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         // Every MCP set that leaves for a provider is remembered, so its secrets stay redactable
         // after the user edits them. This is the second of the two ways one leaves; the other is
         // `enabledMcpServers`, which the Codex thread configuration reads.
-        mcpServers: () => this.#mcp.record(credentials.mcpServers()),
+        mcpServers: (threadId) => this.#mcp.record(credentials.mcpServers(threadId)),
         reportMcpDrops: (provider, drops) => this.#mcp.reportDrops(provider, drops),
         mcpAuthorization: (config) => this.#mcp.authorization(config).pipe(toMcpOperationError),
       },
@@ -655,7 +655,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       conversation: this.#conversation,
       memories: this.#memories,
       compaction: this.#compaction,
-      mcpServers: () => this.#mcp.enabled(),
+      mcpServers: (threadId) => this.#mcp.enabled(threadId),
       mcpToolRuntimes: () => this.#mcp.toolRuntimes(),
       mcpAuthorization: (config) => this.#mcp.authorization(config).pipe(toMcpOperationError),
       ...(credentials.agentEnvironment ? { agentEnvironment: credentials.agentEnvironment } : {}),
@@ -1349,8 +1349,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
   }
 
-  enabledMcpServers(): McpServerConfig[] {
-    return this.#mcp.enabled();
+  enabledMcpServers(threadId?: string): McpServerConfig[] {
+    return this.#mcp.enabled(threadId);
   }
 
   /**

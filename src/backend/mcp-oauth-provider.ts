@@ -14,8 +14,8 @@ import { type McpOperationError, mcpCall, mcpFailure, mcpSync } from "./mcp-effe
  * and `McpOAuth` is the one place that builds it, so the pending sign-ins have a single home the
  * deep link can answer.
  *
- * A server is keyed by its URL and nothing else. Two rows naming the same URL are the same account
- * to the server, so they are the same account here.
+ * Released rows keep URL-scoped credentials. New account connections use their immutable ID
+ * as a storage namespace, so accounts on the same service cannot exchange credentials.
  */
 
 import { randomUUID } from "node:crypto";
@@ -70,6 +70,8 @@ export interface McpOAuthStorage {
 }
 
 export interface McpOAuthOptions {
+  /** Internal scope of a named account; absent for legacy URL-scoped credentials. */
+  connectionId?: string;
   storage: McpOAuthStorage;
   /** Opens the authorization page in the user's own browser, never in a window of this app. */
   openExternal: (url: string) => Promise<void>;
@@ -130,6 +132,8 @@ export interface McpSignIn {
  * What a hand-off and a test ask of OAuth. `AgentService` holds one of these and nothing else does.
  */
 export interface McpOAuthAuthority {
+  /** New account rows have isolated registrations and tokens. Older rows keep their released URL scope. */
+  forConnection?: (id: string) => McpOAuthAuthority;
   accessToken: (url: string) => Effect.Effect<string | null, McpOperationError>;
   signIn: (url: string) => McpSignIn | null;
   forget: (url: string) => Effect.Effect<void, McpOperationError>;
@@ -154,11 +158,32 @@ export class McpOAuth implements McpOAuthAuthority {
    * removal reads complete before credentials can return to disk.
    */
   readonly #generations = new Map<string, number>();
+  readonly #connections = new Map<string, McpOAuth>();
 
   constructor(options: McpOAuthOptions) {
     const refusal = describeUnusableRedirectUrl(options.redirectUrl);
     if (refusal) throw new Error(refusal);
     this.#options = options;
+  }
+
+  forConnection(id: string): McpOAuth {
+    if (this.#options.connectionId === id) return this;
+    if (!id.startsWith("mcpacct-") || id.length > 128) return this;
+    const held = this.#connections.get(id);
+    if (held) return held;
+    const storage = this.#options.storage;
+    const key = (resource: string) => `${id}:${resource}`;
+    const scoped = new McpOAuth({
+      ...this.#options,
+      connectionId: id,
+      storage: {
+        read: (resource) => storage.read(key(resource)),
+        write: (resource, record) => storage.write(key(resource), record),
+        clear: (resource) => storage.clear(key(resource)),
+      },
+    });
+    this.#connections.set(id, scoped);
+    return scoped;
   }
 
   /**
@@ -240,12 +265,32 @@ export class McpOAuth implements McpOAuthAuthority {
     ),
   );
 
-  readonly close = Effect.fn("McpOAuth.close")(() =>
-    Scope.close(this.#scope, Exit.void).pipe(Effect.ensuring(Effect.sync(() => this.#waiting.clear()))),
+  readonly close: () => Effect.Effect<void> = Effect.fn("McpOAuth.close")(() =>
+    Effect.forEach(this.#connections.values(), (connection) => connection.close()).pipe(
+      Effect.andThen(Scope.close(this.#scope, Exit.void)),
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#waiting.clear();
+          this.#connections.clear();
+        }),
+      ),
+    ),
   );
 
   /** A sign-in the user asked for, or `null` when the URL is not one this can sign in to. */
   signIn(url: string): McpSignIn | null {
+    return this.#signIn(url);
+  }
+
+  /** The caller must pin this HTTPS callback to its configured account origin. Native validation stays unchanged. */
+  remoteSignIn(url: string, browser: Pick<McpOAuthOptions, "redirectUrl" | "openExternal">): McpSignIn | null {
+    const redirect = new URL(browser.redirectUrl);
+    if (redirect.protocol !== "https:" || redirect.username || redirect.password || redirect.search || redirect.hash)
+      throw new Error("Invalid remote MCP sign-in callback.");
+    return this.#signIn(url, browser);
+  }
+
+  #signIn(url: string, browser?: Pick<McpOAuthOptions, "redirectUrl" | "openExternal">): McpSignIn | null {
     const resource = normalizeResource(url);
     if (!resource) return null;
     const state = randomUUID();
@@ -256,7 +301,7 @@ export class McpOAuth implements McpOAuthAuthority {
     // Set when the probe moves on: a discovery slow enough to outlast it must neither open a
     // browser afterwards nor wait out a grant nobody will answer.
     let abandoned = false;
-    const provider = this.#provider(resource, state, () => abandoned);
+    const provider = this.#provider(resource, state, () => abandoned, browser);
     const abandon = () => {
       abandoned = true;
       this.#waiting.delete(state);
@@ -317,7 +362,8 @@ export class McpOAuth implements McpOAuthAuthority {
    */
   receiveAuthorizationCode(state: string, code: string): boolean {
     const deliver = this.#waiting.get(state);
-    if (!deliver) return false;
+    if (!deliver)
+      return [...this.#connections.values()].some((connection) => connection.receiveAuthorizationCode(state, code));
     this.#waiting.delete(state);
     deliver(code);
     return true;
@@ -332,7 +378,12 @@ export class McpOAuth implements McpOAuthAuthority {
   }).bind(this);
 
   /** A `state` makes the provider interactive; `null` keeps it silent. */
-  #provider(resource: string, state: string | null, isAbandoned: () => boolean = () => false): McpOAuthClientProvider {
+  #provider(
+    resource: string,
+    state: string | null,
+    isAbandoned: () => boolean = () => false,
+    browser?: Pick<McpOAuthOptions, "redirectUrl" | "openExternal">,
+  ): McpOAuthClientProvider {
     const generation = this.#generations.get(resource) ?? 0;
     const storage = this.#options.storage;
     const stored = storage.read(resource);
@@ -364,8 +415,8 @@ export class McpOAuth implements McpOAuthAuthority {
       resource,
       state,
       storage: guarded,
-      redirectUrl: this.#options.redirectUrl,
-      openExternal: this.#options.openExternal,
+      redirectUrl: browser?.redirectUrl ?? this.#options.redirectUrl,
+      openExternal: browser?.openExternal ?? this.#options.openExternal,
       isAbandoned,
       legacyIssuer: legacyIssuer(stored),
       hasUnboundCredentials: hasUnboundCredentials(stored),

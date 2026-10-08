@@ -93,6 +93,18 @@ export class ProviderSessions {
    * change - cannot read `agent.threadId` alone, because a channel turn runs on a thread that field
    * never names.
    */
+  publicThreadForSession(agentId: string, provider: AgentProviderId, externalSessionId: string): string | null {
+    const row = databaseRow(
+      this.#core.connection
+        .prepare(`SELECT session.thread_id FROM projection_provider_sessions session
+      JOIN projection_threads thread ON thread.thread_id = session.thread_id
+      WHERE thread.agent_id = ? AND session.provider = ? AND session.external_session_id = ?
+      ORDER BY session.created_at DESC LIMIT 1`)
+        .get(agentId, provider, externalSessionId),
+    );
+    return row ? requiredStringColumn(row, "thread_id") : null;
+  }
+
   activeProviderSessionThreads(agentId: string): string[] {
     return databaseRows(
       this.#core.connection

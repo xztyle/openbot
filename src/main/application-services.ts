@@ -1,4 +1,5 @@
 import { isManagedRuntimeProvider } from "@openbot/contracts/agent-providers";
+import { GITHUB_CONNECTOR_MCP_SERVER_ID } from "@openbot/contracts/ipc";
 import { openPanelTransport, ReportQueue } from "@openbot/telemetry";
 import { fileReportStorage } from "@openbot/telemetry/node";
 import { Effect, Fiber } from "effect";
@@ -6,13 +7,16 @@ import { toAgentRemovalFailed } from "../backend/agent/agent-removal";
 import { toHostedSiteOperationFailed } from "../backend/agent/hosted-site-coordinator";
 import { AgentDatabaseSupervisor } from "../backend/agent-data/agent-database-supervisor";
 import { AgentTables } from "../backend/agent-data/agent-tables";
+import { toMcpOperationError } from "../backend/mcp-effects";
 import { DiscordConnectFailed, toDiscordConnectFailed } from "../backend/messaging/discord/discord-connect";
 import { SlackConnectFailed, toSlackConnectFailed } from "../backend/messaging/slack/slack-connect";
 import { type AgentAdminSettingsService, createAgentAdminSettings } from "./agent-admin-settings";
 import { spawnAgentDatabaseHost } from "./agent-database-host-process";
+import { createChatMcp } from "./create-chat-mcp";
 import { LocalSkillLibrary } from "./local-skill-library";
 import { localSkillTools } from "./local-skill-tools";
 import { MAC_PERMISSION_URLS } from "./mac-permission-urls";
+import { RemoteMcpSignIn } from "./remote-mcp-sign-in";
 import { RemoteWorkflowError, toRemoteWorkflowError } from "./remote-service-effects";
 /**
  * The composition root. Every long-lived service the desktop app owns is built here, in one
@@ -936,6 +940,15 @@ export async function createApplicationServices({
     redirectUrl: mcpOAuthRedirect?.redirectUrl ?? MCP_OAUTH_REDIRECT_URL,
   });
   mcpOAuthAuthority = mcpOAuth;
+  const remoteMcpSignIn = process.env.OPENBOT_MCP_REMOTE_CALLBACK_URL
+    ? new RemoteMcpSignIn({
+        oauth: mcpOAuth,
+        redirectUrl: process.env.OPENBOT_MCP_REMOTE_CALLBACK_URL,
+        isSaved: (id) => service.listMcpServers().some((config) => config.id === id),
+      })
+    : undefined;
+  if (remoteMcpSignIn)
+    teardown.push(TEARDOWN_ORDER.mcpOAuth, "remote MCP sign-ins", () => Effect.runPromise(remoteMcpSignIn.close()));
   teardown.push(TEARDOWN_ORDER.mcpOAuth, "MCP token refresh", () => Effect.runPromise(mcpOAuth.close()));
   /*
    * The built-in GitHub connection. Loaded before the agent service, because the first spawn reads
@@ -1104,6 +1117,21 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.computerUsePermissionHelp, "the Computer Use permission help", () => {
     computerUsePermissionHelp.close();
   });
+  const chatMcp =
+    process.env.OPENBOT_MCP_CHAT_PERMISSIONS === "true"
+      ? await Effect.runPromise(
+          createChatMcp({
+            path: app.getPath("userData"),
+            service: () => service,
+            runtimes: () => providerRuntimes.mcpToolRuntimes(),
+            authorization: (config) =>
+              config.id === GITHUB_CONNECTOR_MCP_SERVER_ID
+                ? githubConnector.mcpAuthorization().pipe(toMcpOperationError)
+                : mcpOAuth.forConnection(config.id).accessToken(config.url),
+          }),
+        )
+      : undefined;
+  if (chatMcp) teardown.push(TEARDOWN_ORDER.mcpOAuth, "chat app connections", () => Effect.runPromise(chatMcp.close()));
   const service: AgentService = new AgentService({
     store,
     mailbox,
@@ -1137,15 +1165,10 @@ export async function createApplicationServices({
       customProviders: () => customProviders.configs(),
       // The same rule: `configs()`, with the environment values, goes to the agent process only.
       customAgents: () => customAgents.configs(),
-      // The enabled MCP servers, read at each spawn. The service owns the store, so this reads back
-      // into the object being constructed; nothing calls it before the constructor returns.
-      mcpServers: () => service.enabledMcpServers(),
-      // The floor under those servers: the `bin` of every managed tool runtime, appended after the
-      // user's own `PATH`, so a machine with no Node can still start `npx some-server` and a machine
-      // that has one keeps the build it installed.
+      // App permissions use a stable chat thread. Missing context gives no apps when enabled.
+      mcpServers: (threadId) => (!threadId && chatMcp ? [] : service.enabledMcpServers(threadId)),
+      mcpScope: chatMcp?.scope,
       mcpToolRuntimes: () => providerRuntimes.mcpToolRuntimes(),
-      // The bearer token for an http server, minted here and spent by the provider process. The
-      // service asks for one at each hand-off; only a test the user pressed may open a browser.
       mcpOAuth,
       providerStateDirectory: join(app.getPath("userData"), "provider-state"),
       // Paths only: `gh` and `git` read the token from the files the connection keeps current.
@@ -1440,6 +1463,8 @@ export async function createApplicationServices({
     channels: service.channels,
     // Present, so the host advertises `mcp-servers-v1`. The routes are admin-only.
     mcpServers: service,
+    mcpOAuth: remoteMcpSignIn,
+    chatMcp: chatMcp?.api,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.

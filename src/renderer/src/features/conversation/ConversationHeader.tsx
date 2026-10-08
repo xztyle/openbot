@@ -59,6 +59,7 @@ export function ConversationHeader() {
   return (
     <>
       <SharedConversationHeader
+        actions={props.headerActions}
         agent={props.agent}
         onSettingsIntent={() => void loadAgentSettingsPanel()}
         onOpenSettings={() => setActiveRightPanel("settings")}

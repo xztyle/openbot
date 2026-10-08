@@ -14,8 +14,6 @@ export const messages = defineMessages("mcp", {
   "mcp.chat.limit":
     "These controls apply to app tools. Terminal, browser, and other chats follow their own access settings.",
   "mcp.chat.failed": "The chat app settings could not be saved.",
-  "mcp.chat.unreachable": "This app could not be reached.",
-  "mcp.chat.denied": "This chat does not allow this app action.",
   "mcp.connect.unreachable": "That server could not be reached.",
   "mcp.connect.title": "Connect {name}",
   "mcp.connect.notConnected": "Not connected",

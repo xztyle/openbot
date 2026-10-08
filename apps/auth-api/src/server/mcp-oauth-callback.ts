@@ -4,7 +4,8 @@ import { createTranslate, en } from "@openbot/i18n";
 /** No request values reach server text, logs, storage or HTML. Only the browser reads the grant. */
 export function mcpOAuthCallbackResponse(): Response {
   const nonce = crypto.randomUUID();
-  const message = createTranslate({ source: en, locale: "en", sourceLocale: "en" })("mcp.remote.returned");
+  const t = createTranslate({ source: en, locale: "en", sourceLocale: "en" });
+  const message = t("mcp.remote.returned");
   const prefix = JSON.stringify(MCP_OAUTH_CHANNEL_PREFIX);
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>OpenBot</title></head><body><p>${message}</p><script nonce="${nonce}">
     const params = new URL(location.href).searchParams;

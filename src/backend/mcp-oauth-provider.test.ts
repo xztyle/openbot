@@ -1170,3 +1170,23 @@ describe("the address a returning grant is sent to", () => {
     expect(describeUnusableRedirectUrl("openbot://mcp-auth")).toBeNull();
   });
 });
+
+it("labels a remote client with its own private website", async () => {
+  const oauth = createOAuth({
+    storage: memoryStorage(),
+    redirectUrl: "openbot://mcp-auth",
+    openExternal: async () => {},
+  });
+  const signIn = oauth.remoteSignIn("https://mcp.example.com/mcp", {
+    redirectUrl: "https://private.example.com/mcp-auth",
+    openExternal: async () => {},
+  });
+  if (!signIn) throw new Error("No remote sign-in.");
+  expect(signIn.provider.clientMetadata).toMatchObject({
+    client_name: "Private OpenBot",
+    client_uri: "https://private.example.com/app",
+    redirect_uris: ["https://private.example.com/mcp-auth"],
+  });
+  signIn.abandon();
+  await runMcp(oauth.close());
+});

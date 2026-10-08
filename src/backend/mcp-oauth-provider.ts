@@ -418,6 +418,7 @@ export class McpOAuth implements McpOAuthAuthority {
       redirectUrl: browser?.redirectUrl ?? this.#options.redirectUrl,
       openExternal: browser?.openExternal ?? this.#options.openExternal,
       isAbandoned,
+      clientWebsite: browser ? `${new URL(browser.redirectUrl).origin}/app` : undefined,
       legacyIssuer: legacyIssuer(stored),
       hasUnboundCredentials: hasUnboundCredentials(stored),
     });
@@ -425,6 +426,7 @@ export class McpOAuth implements McpOAuthAuthority {
 }
 
 interface ClientProviderOptions {
+  clientWebsite?: string;
   resource: string;
   state: string | null;
   storage: McpOAuthStorage;
@@ -487,8 +489,8 @@ class McpOAuthClientProvider implements OAuthClientProvider {
    */
   get clientMetadata(): OAuthClientMetadata {
     return {
-      client_name: "OpenBot",
-      client_uri: "https://openbot.run",
+      client_name: this.#options.clientWebsite ? "Private OpenBot" : "OpenBot",
+      client_uri: this.#options.clientWebsite ?? "https://openbot.run",
       redirect_uris: [this.#options.redirectUrl],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],

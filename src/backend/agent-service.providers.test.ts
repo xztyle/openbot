@@ -71,10 +71,22 @@ afterEach(async () => {
 
 describe.sequential("AgentService: providers", () => {
   it("runs a channel turn in a separate session and returns to the unchanged normal conversation", async () => {
-    const { service: agentService, store } = await startService(root, {
+    const scopes: string[] = [];
+    const {
+      service: agentService,
+      store,
+      client,
+    } = await startService(root, {
       provider: "codex",
       output: "CODEX_DONE",
       preferredProvider: "codex",
+      credentials: {
+        ...NO_PROVIDER_CREDENTIALS,
+        mcpScope: (threadId) => {
+          scopes.push(threadId);
+          return [];
+        },
+      },
     });
     service = agentService;
     await runCauseEffect(service.sendMessage({ agentId: "chief", text: "This is my normal conversation." }));
@@ -134,6 +146,13 @@ describe.sequential("AgentService: providers", () => {
     await runCauseEffect(service.sendMessage({ agentId: agent.id, text: "Continue in the normal conversation." }));
     await waitFor(() => service?.listQueue(agent.id).deliveries.every((delivery) => delivery.status === "completed"));
     expect(store.activeProviderSession(agent.id)?.externalSessionId).toBe(normalSession);
+    expect(scopes).toContain(agent.threadId);
+    expect(scopes).toContain(execution.threadId);
+    const starts = client.requests.filter((request) => request.method === "thread/start");
+    expect(starts.map((request) => paramsRecord(request.params)?.mcpChatId)).toEqual([
+      agent.threadId,
+      execution.threadId,
+    ]);
   });
 
   it("carries a change to the profile or the memories of the agent to its channel session", async () => {

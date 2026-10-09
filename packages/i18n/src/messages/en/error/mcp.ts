@@ -1,6 +1,10 @@
 import { defineMessages } from "../../../message";
 
 export const messages = defineMessages("error.mcp", {
+  "error.mcp.chatUnknown": "This chat is no longer available.",
+  "error.mcp.chatConnectionGone": "An app account is unavailable or selected twice. Reload the choices.",
+  "error.mcp.chatUnreachable": "This app could not be reached.",
+  "error.mcp.chatDenied": "This chat does not allow this app action.",
   // MCP sign-in errors, and the sign-in page in the browser.
   "error.mcp.redirectByName": "This address is not reachable by name.",
   "error.mcp.redirectGetOnly": "This address answers GET only.",

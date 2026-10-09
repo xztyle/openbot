@@ -32,6 +32,7 @@ import { Context, Effect, Layer, Result, Schema } from "effect";
 import { importJWK, type JWK, SignJWT } from "jose";
 import { getServerEntitlement } from "./billing-entitlement";
 import { decodeBase64Url, hmacSha256, importHmacSha256Key, randomToken, sha256 } from "./crypto";
+import { readSessionMembership } from "./remote-session-membership";
 import { PERSISTENT_SESSION_EXPIRES_AT } from "./session-policy";
 import type { AuthUser, WorkerBindings } from "./types";
 
@@ -1157,36 +1158,20 @@ export class RemoteControlPlane {
       const dependencies = yield* RemoteDependencies;
       const now = dependencies.now();
       // The role check and the reusable session are one row, so the common answer costs one read.
-      const membership = yield* Effect.gen({ self: this }, function* () {
-        const roleArgument0 = yield* remoteCall(() =>
-          dependencies.database
-            .prepare(
-              `SELECT m.membership_id, m.host_id, m.user_id, m.role, m.status,
-                  s.session_id AS active_session_id, s.expires_at AS active_expires_at
-           FROM remote_memberships m
-           LEFT JOIN remote_sessions s
-             ON s.host_id = m.host_id AND s.user_id = m.user_id AND s.membership_id = m.membership_id
-            AND s.ended_at IS NULL AND s.expires_at > ? AND s.auth_session_hash = ?
-            AND EXISTS(
-              SELECT 1 FROM auth_sessions
-               WHERE token_hash = ? AND user_id = ? AND revoked_at IS NULL AND expires_at > ?
-            )
-           WHERE m.host_id = ? AND m.user_id = ? AND m.status = 'active'
-           ORDER BY s.started_at DESC LIMIT 1`,
-            )
-            .bind(now, authSessionHash, authSessionHash, userId, now, hostId, userId)
-            .first<RemoteMembershipRow & { active_session_id: string | null; active_expires_at: number | null }>(),
-        );
-        const roleArgument1: RemoteMemberRole[] = ["owner", "admin", "member"];
-        return yield* remoteValidate(() => this.#assertRole(roleArgument0, roleArgument1));
-      });
+      const row = yield* remoteCall(() =>
+        readSessionMembership(dependencies.database, userId, hostId, authSessionHash, now),
+      );
+      const membership = yield* remoteValidate(() => this.#assertRole(row, ["owner", "admin", "member"]));
+      if (membership.auth_expires_at === null) {
+        return yield* new RemoteControlPlaneError(401, "auth_session_revoked", "The account session has ended.");
+      }
       if (membership.active_session_id !== null && membership.active_expires_at !== null) {
         return { sessionId: membership.active_session_id, hostId, expiresAt: membership.active_expires_at };
       }
       const sessionId = crypto.randomUUID();
-      // Deliberate product policy: device sessions do not expire with time. Logout
-      // or explicit revocation ends only this credential's sessions, not other phones.
-      const expiresAt = PERSISTENT_SESSION_EXPIRES_AT;
+      // A browser's remote connection ends with its account session. Native credentials
+      // retain their existing durable deadline.
+      const expiresAt = membership.auth_expires_at;
       // The sweep frees the one-active-session slot, so it has to run before the insert.
       const [, insert] = yield* remoteCall(() =>
         dependencies.database.batch([

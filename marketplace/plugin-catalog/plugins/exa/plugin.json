@@ -1,0 +1,33 @@
+{
+  "slug": "exa",
+  "name": "Exa",
+  "tagline": "Web search and research",
+  "description": "Search the web through Exa\u2019s official hosted connection. No key is required to start. Service limits apply.",
+  "category": "research",
+  "creatorName": "exa.ai",
+  "iconUrl": "https://exa.ai/favicon.ico",
+  "version": "1.0.0",
+  "prompts": [
+    {
+      "id": "prompt-inspect",
+      "text": "Show what I can access through Exa. Do not change anything."
+    }
+  ],
+  "apps": [
+    {
+      "id": "app-exa-mcp",
+      "name": "Exa",
+      "description": "Search the web through Exa\u2019s official hosted connection. No key is required to start. Service limits apply.",
+      "iconUrl": "https://exa.ai/favicon.ico",
+      "server": {
+        "name": "exa",
+        "transport": "http",
+        "url": "https://mcp.exa.ai/mcp"
+      }
+    }
+  ],
+  "skills": [],
+  "websiteUrl": "https://exa.ai/docs/get-started/exa-mcp",
+  "privacyPolicyUrl": null,
+  "termsUrl": null
+}

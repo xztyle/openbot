@@ -1,6 +1,7 @@
 import { pluginLinkText } from "@openbot/contracts/plugin-links";
 import {
   Button,
+  ConfirmDialog,
   ExternalLink,
   Item,
   ItemContent,
@@ -34,6 +35,54 @@ const STATUS_LABEL = {
   attention: "marketplace.app.attention",
   idle: "marketplace.app.notConnected",
 } as const satisfies Record<MarketplaceAppStatus, string>;
+
+interface AccountRemovalProps {
+  scope: MarketplaceScope;
+  connection: { id: string; name: string };
+}
+
+function AccountRemovalConfirmation(props: AccountRemovalProps & { onCancel: () => void }) {
+  const { t } = useText();
+  const model = () => props.scope.model;
+  const remove = async () => {
+    if (await model().removeServer(props.connection.id)) props.onCancel();
+  };
+  return (
+    <ConfirmDialog
+      open
+      initialFocus="cancel"
+      title={t("mcp.panel.removeTitle", { name: props.connection.name })}
+      description={t("mcp.panel.removeDescription")}
+      confirmLabel={t("mcp.connection.remove")}
+      error={model().error()}
+      onCancel={props.onCancel}
+      onConfirm={remove}
+    />
+  );
+}
+
+function DisconnectAccount(props: AccountRemovalProps & { disabled: boolean }) {
+  const { t } = useText();
+  const [open, setOpen] = createSignal(false);
+  const model = () => props.scope.model;
+  return (
+    <>
+      <Button
+        variant="outline"
+        disabled={props.disabled}
+        onClick={() => {
+          model().clearError();
+          setOpen(true);
+        }}
+      >
+        {t("mcp.connection.remove")}
+      </Button>
+      <Show when={open()}>
+        <AccountRemovalConfirmation scope={props.scope} connection={props.connection} onCancel={() => setOpen(false)} />
+      </Show>
+    </>
+  );
+}
 
 function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
   const { t } = useText();
@@ -70,6 +119,15 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
               {t("plugin.copyLink")}
             </Button>
             <AppAction scope={props.scope} app={props.app} />
+            <Show when={props.app.status === "connected" && model().canConnectApps()}>
+              <Button
+                type="button"
+                loading={model().appBusy(props.app.id)}
+                onClick={() => void model().connectApp(props.app)}
+              >
+                {t("marketplace.app.addAccount")}
+              </Button>
+            </Show>
           </>
         }
       />
@@ -117,6 +175,26 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
                     <ItemTitle>{skill.slug}</ItemTitle>
                     <ItemDescription>{skill.description}</ItemDescription>
                   </ItemContent>
+                </Item>
+              )}
+            </For>
+          </ItemGroup>
+        </SettingsSection>
+      </Show>
+      <Show when={model().appConnections?.(props.app).length}>
+        <SettingsSection title={t("mcp.connection.accounts")}>
+          <ItemGroup class="settings-modal-card">
+            <For each={model().appConnections?.(props.app)}>
+              {(connection) => (
+                <Item class="settings-modal-row" role="group" aria-label={connection.name}>
+                  <ItemContent>
+                    <ItemTitle>{connection.name}</ItemTitle>
+                  </ItemContent>
+                  <DisconnectAccount
+                    scope={props.scope}
+                    connection={connection}
+                    disabled={model().appBusy(props.app.id)}
+                  />
                 </Item>
               )}
             </For>

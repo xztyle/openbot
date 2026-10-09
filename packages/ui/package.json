@@ -311,7 +311,9 @@
     "./features/files/files.css": "./src/features/files/files.css",
     "./features/import/agent-import.css": "./src/features/import/agent-import.css",
     "./features/conversation/AgentSettingsPanel": "./src/features/conversation/AgentSettingsPanel.tsx",
-    "./features/conversation/ConversationHeader": "./src/features/conversation/ConversationHeader.tsx"
+    "./features/conversation/ConversationHeader": "./src/features/conversation/ConversationHeader.tsx",
+    "./features/settings/ChatAppsDialog": "./src/features/settings/ChatAppsDialog.tsx",
+    "./features/conversation/EventChecksSettings": "./src/features/conversation/EventChecksSettings.tsx"
   },
   "dependencies": {
     "@openbot/contracts": "workspace:*",

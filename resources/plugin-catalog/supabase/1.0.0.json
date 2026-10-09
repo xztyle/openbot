@@ -1,0 +1,52 @@
+{
+  "slug": "supabase",
+  "name": "Supabase",
+  "tagline": "Database and project tools",
+  "description": "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
+  "category": "coding",
+  "creatorName": "supabase.com",
+  "iconUrl": "https://supabase.com/favicon.ico",
+  "version": "1.0.0",
+  "prompts": [{ "id": "prompt-inspect", "text": "Show what I can access through Supabase. Do not change anything." }],
+  "apps": [
+    {
+      "id": "app-supabase-mcp",
+      "name": "Supabase",
+      "description": "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
+      "iconUrl": "https://supabase.com/favicon.ico",
+      "server": {
+        "name": "supabase",
+        "transport": "http",
+        "url": "https://mcp.supabase.com/mcp",
+        "auth": [
+          {
+            "id": "supabase-key",
+            "kind": "key",
+            "label": "API key",
+            "fields": [
+              {
+                "id": "url",
+                "label": "Project MCP URL",
+                "url": true,
+                "placeholder": "https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT&read_only=true"
+              },
+              {
+                "id": "token",
+                "label": "Supabase personal access token",
+                "header": "Authorization",
+                "prefix": "Bearer ",
+                "hint": "Supabase dashboard → Account → Access tokens"
+              }
+            ],
+            "docsUrl": "https://supabase.com/docs/guides/ai-tools/mcp",
+            "docsLabel": "Setup instructions"
+          }
+        ]
+      }
+    }
+  ],
+  "websiteUrl": "https://supabase.com/docs/guides/ai-tools/mcp",
+  "privacyPolicyUrl": null,
+  "termsUrl": null,
+  "skills": []
+}

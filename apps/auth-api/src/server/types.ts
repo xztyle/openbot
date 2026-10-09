@@ -2,6 +2,7 @@ import type { AccountSession } from "@openbot/contracts/mobile-connect";
 import { isDynamicRecord, isFunction } from "@openbot/contracts/runtime-values";
 import type { Effect } from "effect";
 import type { AuthStoreError } from "./d1-auth-repository";
+import { disabledObjectStorage } from "./disabled-object-storage";
 import type { EmailDeliveryError } from "./email-delivery";
 import type { SmtpFailure } from "./smtp-email-delivery";
 
@@ -18,6 +19,10 @@ export interface WorkerBindings {
   /** Checked by the Live Activity relay only, so a Worker without it keeps its other routes. */
   LIVE_ACTIVITY_RATE_LIMITER?: RateLimit;
   AUTH_EXPOSE_DEVELOPMENT_CODE?: string;
+  AUTH_ALLOWED_EMAILS?: string;
+  AUTH_DURABLE_SOURCE_IPS?: string;
+  OBJECT_STORAGE_ENABLED?: string;
+  EMAIL?: SendEmail;
   EMAIL_SMTP_HOST?: string;
   EMAIL_SMTP_PORT?: string;
   EMAIL_SMTP_USERNAME?: string;
@@ -129,10 +134,14 @@ function isWorkerBindings(value: unknown): value is WorkerBindings {
 }
 
 export function requireWorkerBindings(value: unknown): WorkerBindings {
-  if (!isWorkerBindings(value)) {
+  const candidate =
+    isDynamicRecord(value) && value.OBJECT_STORAGE_ENABLED === "false"
+      ? { ...value, AVATARS: disabledObjectStorage, SKILLS: disabledObjectStorage, SITES: disabledObjectStorage }
+      : value;
+  if (!isWorkerBindings(candidate)) {
     throw new Error("Cloudflare worker bindings are unavailable.");
   }
-  return value;
+  return candidate;
 }
 
 export interface MobileAuthSessionResult {

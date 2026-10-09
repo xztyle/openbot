@@ -1,5 +1,6 @@
 import { CHAT_VISUAL_ITEM_TYPE_PREFIX } from "@openbot/contracts/chat-visual";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
+import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import type {
   ConversationFileSearchPage,
   ConversationFileSearchResult,
@@ -217,6 +218,7 @@ export class ConversationQueries {
       excludeRoutineEvents?: boolean;
       excludeRoutineRunEvents?: boolean;
       excludeHostedSiteEvents?: boolean;
+      excludeEventCheckEvents?: boolean;
     } = {},
   ): ConversationPage {
     if (!threadId) {
@@ -246,6 +248,7 @@ export class ConversationQueries {
       options.excludeRoutineEvents === true,
       options.excludeRoutineRunEvents === true,
       options.excludeHostedSiteEvents === true,
+      options.excludeEventCheckEvents === true,
     );
     // The rows come in the shown order, which a cursor follows. A page of a split turn is not sorted
     // again: it does not hold the turn's first input, which the shared order needs to find a steer.
@@ -269,6 +272,7 @@ export class ConversationQueries {
                options.excludeRoutineEvents === true,
                options.excludeRoutineRunEvents === true,
                options.excludeHostedSiteEvents === true,
+               options.excludeEventCheckEvents === true,
              )}`,
           )
           .all(threadId, ...referenceIds),
@@ -287,6 +291,7 @@ export class ConversationQueries {
           options.excludeRoutineEvents === true,
           options.excludeRoutineRunEvents === true,
           options.excludeHostedSiteEvents === true,
+          options.excludeEventCheckEvents === true,
         )
       : { count: 0, oldestAt: null };
     const hasOlder = older.count > 0;
@@ -313,6 +318,7 @@ export class ConversationQueries {
       excludeRoutineEvents?: boolean;
       excludeRoutineRunEvents?: boolean;
       excludeHostedSiteEvents?: boolean;
+      excludeEventCheckEvents?: boolean;
     } = {},
   ): string | null {
     if (!throughMessageId) return null;
@@ -335,6 +341,7 @@ export class ConversationQueries {
                options.excludeRoutineEvents === true,
                options.excludeRoutineRunEvents === true,
                options.excludeHostedSiteEvents === true,
+               options.excludeEventCheckEvents === true,
              )}
            ORDER BY ${ORDER_KEY_DESC}
            LIMIT 1`,
@@ -378,7 +385,7 @@ export class ConversationQueries {
              AND COALESCE(json_extract(message.message_json, '$.delivery.status'), '') NOT IN ('queued', 'cancelled')
              AND COALESCE(message.item_type, '') != 'commentary'
              AND COALESCE(message.item_type, '') NOT LIKE '${SKILL_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_EVENT_ITEM_TYPE_PREFIX}%'
-             AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%'
+             AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(message.item_type, '') NOT LIKE '${EVENT_CHECK_ITEM_TYPE_PREFIX}%'
              AND COALESCE(message.item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'
              AND COALESCE(message.item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'
              AND json_extract(message.message_json, '$.routine') IS NULL
@@ -398,7 +405,7 @@ export class ConversationQueries {
              AND COALESCE(json_extract(message.message_json, '$.delivery.status'), '') NOT IN ('queued', 'cancelled')
              AND COALESCE(message.item_type, '') != 'commentary'
              AND COALESCE(message.item_type, '') NOT LIKE '${SKILL_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_EVENT_ITEM_TYPE_PREFIX}%'
-             AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%'
+             AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(message.item_type, '') NOT LIKE '${EVENT_CHECK_ITEM_TYPE_PREFIX}%'
              AND COALESCE(message.item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'
              AND COALESCE(message.item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'
              AND json_extract(message.message_json, '$.routine') IS NULL
@@ -478,6 +485,7 @@ export class ConversationQueries {
     excludeRoutineEvents: boolean,
     excludeRoutineRunEvents: boolean,
     excludeHostedSiteEvents: boolean,
+    excludeEventCheckEvents: boolean,
   ): DynamicRecord[] {
     const rows = this.#conversationPageKeys(
       threadId,
@@ -486,6 +494,7 @@ export class ConversationQueries {
       excludeRoutineEvents,
       excludeRoutineRunEvents,
       excludeHostedSiteEvents,
+      excludeEventCheckEvents,
     );
     if (rows.length === 0) return [];
     // The group order sorts every row of the thread, so it carries only the keys. The page's
@@ -510,11 +519,13 @@ export class ConversationQueries {
     excludeRoutineEvents: boolean,
     excludeRoutineRunEvents: boolean,
     excludeHostedSiteEvents: boolean,
+    excludeEventCheckEvents: boolean,
   ): DynamicRecord[] {
     const routineFilter = conversationMarkerSqlFilter(
       excludeRoutineEvents,
       excludeRoutineRunEvents,
       excludeHostedSiteEvents,
+      excludeEventCheckEvents,
     );
     if (anchor.type === "latest") {
       const rows = databaseRows(
@@ -619,11 +630,13 @@ export class ConversationQueries {
     excludeRoutineEvents: boolean,
     excludeRoutineRunEvents: boolean,
     excludeHostedSiteEvents: boolean,
+    excludeEventCheckEvents: boolean,
   ): { count: number; oldestAt: string | null } {
     const routineFilter = conversationMarkerSqlFilter(
       excludeRoutineEvents,
       excludeRoutineRunEvents,
       excludeHostedSiteEvents,
+      excludeEventCheckEvents,
     );
     // The oldest time is the first row in the time index, not a minimum over every older row.
     const row = databaseRow(
@@ -760,12 +773,14 @@ function conversationMarkerSqlFilter(
   excludeRoutineEvents: boolean,
   excludeRoutineRunEvents: boolean,
   excludeHostedSiteEvents: boolean,
+  excludeEventCheckEvents: boolean,
 ): string {
   return [
     excludeRoutineEvents
       ? `AND COALESCE(item_type, '') NOT LIKE '${SKILL_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'`
       : "",
     excludeRoutineRunEvents ? `AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%'` : "",
+    excludeEventCheckEvents ? `AND COALESCE(item_type, '') NOT LIKE '${EVENT_CHECK_ITEM_TYPE_PREFIX}%'` : "",
     excludeHostedSiteEvents ? `AND COALESCE(item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'` : "",
   ]
     .filter(Boolean)

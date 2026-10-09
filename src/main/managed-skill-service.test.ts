@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { AgentSummary } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
+import { createApplicationManagedSkills } from "./application-managed-skills";
 import { listManagedSkillsForChat, ManagedSkillService } from "./managed-skill-service";
 
 const roots: string[] = [];
@@ -13,6 +14,25 @@ afterEach(async () => {
 });
 
 describe("managed site hosting skill", () => {
+  it("installs the event-check procedure in both provider folders through the application collection", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openbot-event-skill-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    await mkdir(workspace);
+    const skills = createApplicationManagedSkills(join(process.cwd(), "resources/managed-skills"));
+    await Effect.runPromise(skills.syncAll([agent(workspace)]));
+    await Effect.runPromise(skills.syncAgent(agent(workspace)));
+    for (const provider of ["codex", "claude"] as const) {
+      const installed = await Effect.runPromise(listManagedSkillsForChat({ ...agent(workspace), provider }));
+      expect(installed).toContainEqual(
+        expect.objectContaining({ skillId: "openbot-event-checks", origin: "managed", enabled: true }),
+      );
+    }
+    const content = await readFile(join(workspace, ".agents/skills/openbot-event-checks/SKILL.md"), "utf8");
+    expect(content).toContain("30 seconds");
+    expect(content).toContain("person who made each change");
+  });
+
   it("installs the skill creation guide beside the hosting guide", async () => {
     const root = await mkdtemp(join(tmpdir(), "openbot-skill-creator-"));
     roots.push(root);

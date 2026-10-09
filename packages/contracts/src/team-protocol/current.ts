@@ -14,6 +14,8 @@ import {
   TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY,
 } from "./browser-view-v1";
 import { CONTEXT_RESET_CAPABILITY } from "./context-reset-v1";
+import { EVENT_CHECK_API_CAPABILITY } from "./event-check-api-v1";
+import { EVENT_CHECKS_CAPABILITY } from "./event-checks-v1";
 import { EVENTS_CAPABILITY } from "./events-v1";
 import { HOST_ADMIN_CAPABILITY } from "./host-admin-v1";
 import { HOST_MEMBER_UPDATE_CAPABILITY } from "./host-member-update-v1";
@@ -21,6 +23,8 @@ import { HOST_RELEASE_CAPABILITY } from "./host-release-v1";
 import { HOST_UPDATE_CAPABILITY } from "./host-update-v1";
 import { HOSTED_SITES_CAPABILITY } from "./hosted-sites-v1";
 import { LIVE_ACTIVITY_PUSH_CAPABILITY } from "./live-activity-push-v1";
+import { MCP_CHAT_CAPABILITY } from "./mcp-chat-v1";
+import { MCP_OAUTH_CAPABILITY } from "./mcp-oauth-v1";
 import { TEAM_MESSAGE_CLIENT_ID_CAPABILITY } from "./message-client-id-v1";
 import { PROVIDERS_ADMIN_CAPABILITY } from "./providers-v1";
 import { PROVIDERS_RUNTIMES_V2_CAPABILITY } from "./providers-v2";
@@ -108,6 +112,10 @@ export const TEAM_CURRENT_CAPABILITIES = [
   CHANNEL_DELETE_CAPABILITY,
   MCP_SERVERS_CAPABILITY,
   STORAGE_CAPABILITY,
+  EVENT_CHECKS_CAPABILITY,
+  EVENT_CHECK_API_CAPABILITY,
+  MCP_CHAT_CAPABILITY,
+  MCP_OAUTH_CAPABILITY,
   AGENT_ADMIN_CAPABILITY,
   SKILLS_ADMIN_CAPABILITY,
   SKILLS_EVENTS_CAPABILITY,

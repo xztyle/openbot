@@ -13,9 +13,12 @@ import {
 } from "@openbot/contracts/ipc";
 import { AGENT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-import-v1";
 import { CONTEXT_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/context-reset-v1";
+import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
+import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
 import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOSTED_SITES_CAPABILITY } from "@openbot/contracts/team-protocol/hosted-sites-v1";
+import { MCP_CHAT_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-chat-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import {
   cancelHostUpdate,
@@ -35,7 +38,7 @@ import {
 } from "@openbot/team-client/team-admin-requests";
 import { clearAgentContext, type TeamApiRequest } from "@openbot/team-client/team-api-requests";
 import { classifyFailure } from "@openbot/telemetry";
-import { hasVisibleToasts, toast } from "@openbot/ui";
+import { Button, hasVisibleToasts, toast } from "@openbot/ui";
 import { AccountDock } from "@openbot/ui/features/account/AccountDock";
 import { AppLoadingScreen } from "@openbot/ui/features/account/AppLoadingScreen";
 import { computeAgentAvatarMoods } from "@openbot/ui/features/agents/agent-avatar-mood";
@@ -44,6 +47,7 @@ import { BillingDialog } from "@openbot/ui/features/billing/BillingDialog";
 import { createBillingStore } from "@openbot/ui/features/billing/billing-store";
 import { LeaveServerDialog } from "@openbot/ui/features/servers/LeaveServerDialog";
 import { ServerRail } from "@openbot/ui/features/servers/ServerRail";
+import { ChatAppsDialog } from "@openbot/ui/features/settings/ChatAppsDialog";
 import { createSettingsHostedServersStore } from "@openbot/ui/features/settings/stores/hosted-servers-store";
 import { Sidebar } from "@openbot/ui/features/sidebar/Sidebar";
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
@@ -96,6 +100,7 @@ import { createWebAgentImportCalls } from "./web-agent-import";
 import { openWebLink } from "./web-attachments";
 import { createWebBillingCalls } from "./web-billing";
 import { createWebChannelsPort } from "./web-channels-runtime";
+import { createWebChatApps } from "./web-chat-apps";
 import { createWebWorkspace, type WebRuntimeFactory } from "./web-client-context";
 import { createWebConversationRuntime } from "./web-conversation-runtime";
 import { createWebConversationView } from "./web-conversation-view";
@@ -497,7 +502,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     const current = untrack(server);
     if (!admin || !current || (serverId !== undefined && serverId !== current.id))
       throw new Error(t("webClient.error.connectServerFirst"));
-    return admin.request;
+    const pinnedId = current.id;
+    return (method, path, decode, body) => {
+      if (untrack(server)?.id !== pinnedId) throw new Error(t("webClient.error.connectServerFirst"));
+      return admin.request(method, path, decode, body);
+    };
   }
   // The events routes answer only an owner or admin. A member keeps the released routine routes.
   const eventsEnabled = () =>
@@ -516,6 +525,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     workspace.runtime.admin ? () => hostRequest() : undefined,
     workspace.onHostEvent,
     eventsEnabled,
+    () => eventsEnabled() && workspace.state.capabilities.includes(EVENT_CHECKS_CAPABILITY),
+    () => workspace.state.capabilities.includes(EVENT_CHECK_API_CAPABILITY),
   );
   const remoteAgentAdmin = createRemoteAgentAdmin(
     () => {
@@ -546,7 +557,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     presence: () => workspace.state.presence,
     refreshHosts: () => workspace.refreshHosts(),
   });
-  const marketplaceCalls = createWebMarketplaceCalls(props.accountFetch, hostRequest);
+  const chatApps = createWebChatApps(hostRequest);
+  const chatAppsSupported = () =>
+    workspace.runtime.admin !== undefined && workspace.state.capabilities.includes(MCP_CHAT_CAPABILITY);
+  const marketplaceCalls = createWebMarketplaceCalls(
+    props.accountFetch,
+    hostRequest,
+    () => workspace.state.capabilities,
+  );
   const agentTemplateCalls = createWebAgentTemplateCalls(props.accountFetch, hostRequest);
   const [marketplaceOpen, setMarketplaceOpen] = createSignal(false);
   // A link opens its overlay once it has arrived, which can be after sign-in.
@@ -987,6 +1005,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   };
   return (
     <ConversationControllerProvider controller={controller}>
+      <ChatAppsDialog
+        {...chatApps.state}
+        onMode={chatApps.onMode}
+        onSave={() => void chatApps.save()}
+        onClose={chatApps.close}
+      />
       <ChannelsControllerProvider controller={channels}>
         <WorkspaceFrame
           class="web-app-frame"
@@ -1411,6 +1435,19 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           </Show>
           <Show when={!agentFormOpen() && channelOpen()}>
             <ChannelConversation
+              headerActions={
+                <Show when={chatAppsSupported()}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      const id = channels.state.selectedId;
+                      if (id) void chatApps.open({ kind: "channel", id });
+                    }}
+                  >
+                    {t("mcp.chat.title")}
+                  </Button>
+                </Show>
+              }
               isOwnMessage={(authorId) =>
                 isReaderAuthor(authorId, {
                   memberId: workspace.state.memberId,
@@ -1463,6 +1500,19 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           </Show>
           <Show when={!agentFormOpen() && !channelOpen() && !noHost() && !hostOffline()}>
             <Conversation
+              headerActions={
+                <Show when={chatAppsSupported()}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      const id = workspace.state.selectedId;
+                      if (id) void chatApps.open({ kind: "agent", id });
+                    }}
+                  >
+                    {t("mcp.chat.title")}
+                  </Button>
+                </Show>
+              }
               runtime={runtime}
               onOpenMarketplace={() => setMarketplaceOpen(true)}
               agentStatus={workspace.state.status === "online" ? status() : CONNECTING_STATUS}

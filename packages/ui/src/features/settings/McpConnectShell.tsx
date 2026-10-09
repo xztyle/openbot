@@ -28,12 +28,14 @@ import {
   AlertIcon,
   AlertTitle,
   Dialog,
+  Field,
   IconButton,
+  Input,
   OctagonX,
   X,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { createStore, Show } from "solid-js";
+import { createStore, onSettled, Show } from "solid-js";
 import { useText } from "../../text";
 import { PluginIcon } from "../marketplace/PluginIcon";
 
@@ -54,6 +56,7 @@ export interface McpConnectBaseProps {
   /** The connection worked, with the configuration that made it work. The dialog is done here. */
   onConnected: (config: McpServerConfig) => void;
   onCancel: () => void;
+  allowCancelWhileBusy?: boolean;
 }
 
 /**
@@ -64,6 +67,7 @@ export interface McpConnectBaseProps {
  * holds what every way in has, which is an attempt and what it came back with.
  */
 export interface ConnectState {
+  connectionName?: string;
   phase: "idle" | "connecting" | "failed";
   error: string;
 }
@@ -77,10 +81,17 @@ export interface ConnectState {
  * answer that arrives after the user changed the credential is dropped: it describes what was sent,
  * not what is on screen.
  */
-export function createConnectRun(props: Pick<McpConnectBaseProps, "onTest" | "onConnected">) {
+export function createConnectRun(props: Pick<McpConnectBaseProps, "onTest" | "onConnected" | "subject">) {
   const { t, errorMessage, sourceText } = useText();
-  const [state, setState] = createStore<ConnectState>({ phase: "idle", error: "" });
+  const [state, setState] = createStore<ConnectState>({
+    phase: "idle",
+    error: "",
+    connectionName: props.subject.config.name,
+  });
   let run = 0;
+  onSettled(() => () => {
+    ++run;
+  });
   const busy = () => state.phase === "connecting";
 
   function forget() {
@@ -99,7 +110,8 @@ export function createConnectRun(props: Pick<McpConnectBaseProps, "onTest" | "on
       current.error = "";
     });
     try {
-      const authorized = await authorize();
+      const built = await authorize();
+      const authorized = { ...built, name: (state.connectionName ?? built.name).trim() };
       if (started !== run) return;
       const result = await props.onTest(authorized);
       if (started !== run) return;
@@ -120,10 +132,20 @@ export function createConnectRun(props: Pick<McpConnectBaseProps, "onTest" | "on
     }
   }
 
-  return { state, busy, forget, attempt };
+  return {
+    state,
+    busy,
+    forget,
+    attempt,
+    setName: (name: string) =>
+      setState((draft) => {
+        draft.connectionName = name;
+      }),
+  };
 }
 
-export interface McpConnectShellProps extends Pick<McpConnectBaseProps, "open" | "subject" | "onCancel"> {
+export interface McpConnectShellProps
+  extends Pick<McpConnectBaseProps, "open" | "subject" | "onCancel" | "allowCancelWhileBusy"> {
   state: ConnectState;
   busy: () => boolean;
   /** The line under the name: what this way in is about to do. One sentence. */
@@ -133,6 +155,7 @@ export interface McpConnectShellProps extends Pick<McpConnectBaseProps, "open" |
   /** The submit. */
   action: JSX.Element;
   onSubmit: () => void;
+  onNameChange?: (name: string) => void;
 }
 
 /** The parts both dialogs show: the two ends of the connection, the header, the failure, the button. */
@@ -142,7 +165,7 @@ export function McpConnectShell(props: McpConnectShellProps) {
     <Dialog.Root
       open={props.open}
       onOpenChange={(open) => {
-        if (!open && !props.busy()) props.onCancel();
+        if (!open && (!props.busy() || props.allowCancelWhileBusy)) props.onCancel();
       }}
     >
       <Dialog.Portal>
@@ -174,6 +197,15 @@ export function McpConnectShell(props: McpConnectShellProps) {
                 props.onSubmit();
               }}
             >
+              <Show when={props.onNameChange}>
+                <Field label={t("mcp.connection.name")}>
+                  <Input
+                    value={props.state.connectionName}
+                    disabled={props.busy()}
+                    onInput={(event) => props.onNameChange?.(event.currentTarget.value)}
+                  />
+                </Field>
+              </Show>
               {props.children}
 
               {/* Only what the user can act on: the connection that worked has closed the dialog. */}
@@ -200,7 +232,7 @@ export function McpConnectShell(props: McpConnectShellProps) {
               class="mcp-connect-close"
               label={t("mcp.connect.close", { name: props.subject.name })}
               variant="ghost"
-              disabled={props.busy()}
+              disabled={props.busy() && !props.allowCancelWhileBusy}
               onClick={props.onCancel}
             >
               <X />

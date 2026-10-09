@@ -1,9 +1,11 @@
+import type { EventCheckApi } from "@openbot/contracts/event-checks";
 import type { AttachmentSummary, FilePreview, OpenBotDesktopApi } from "@openbot/contracts/ipc";
 import type { AgentSkillCalls } from "../../skills-port";
 import type { AgentTemplatePublishCalls } from "../agent-templates/agent-templates-port";
 import type { SharedTableCalls } from "./conversation-port";
 import type { ConversationProps } from "./conversation-types";
 import type { EventRoutinesApi } from "./routine-webhooks-api";
+import type { RoutinesPort } from "./routines-port";
 
 export interface ConversationRuntime {
   agent: Pick<
@@ -46,6 +48,8 @@ export interface ConversationRuntime {
         sharedTables: SharedTableCalls;
         agentTemplates: AgentTemplatePublishCalls;
         eventRoutines?: EventRoutinesApi | undefined;
+        routines?: ((agentId: string) => RoutinesPort) | undefined;
+        eventChecks?: EventCheckApi | undefined;
       }
     | undefined;
 }

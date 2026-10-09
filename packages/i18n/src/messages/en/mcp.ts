@@ -1,6 +1,19 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("mcp", {
+  "mcp.connection.accounts": "Accounts",
+  "mcp.connection.remove": "Disconnect account",
+  "mcp.chat.title": "Apps for this chat",
+  "mcp.chat.description": "Choose the accounts this chat can use. These choices also apply to its scheduled work.",
+  "mcp.chat.off": "Off",
+  "mcp.chat.read": "Read only",
+  "mcp.chat.write": "Allow changes",
+  "mcp.chat.empty": "Connect an app in Marketplace first, then select its account here.",
+  "mcp.chat.readHint":
+    "Read only hides and blocks tools that can send, edit, or delete. Tools with no trusted read classification stay blocked.",
+  "mcp.chat.limit":
+    "These controls apply to app tools. Terminal, browser, and other chats follow their own access settings.",
+  "mcp.chat.failed": "The chat app settings could not be saved.",
   "mcp.connect.unreachable": "That server could not be reached.",
   "mcp.connect.title": "Connect {name}",
   "mcp.connect.notConnected": "Not connected",
@@ -51,6 +64,11 @@ export const messages = defineMessages("mcp", {
   "mcp.panel.editTitle": "Edit MCP server",
   "mcp.panel.changesNotSaved": "Changes not saved",
   "mcp.panel.title": "MCP servers",
+  "mcp.connection.name": "Connection name",
+  "mcp.remote.returned": "Return to OpenBot to finish connecting. You can close this tab.",
+  "mcp.remote.popupBlocked": "Allow pop-ups for OpenBot, then try connecting again.",
+  "mcp.remote.denied": "The app sign-in was cancelled or refused.",
+  "mcp.remote.cancelled": "The app sign-in was cancelled.",
   "mcp.panel.description":
     "Model Context Protocol servers give this server’s agents extra tools. Claude and Codex agents get only the servers in this list; OpenCode and Grok agents can also start servers from their own configuration files.",
   "mcp.panel.connectCustom": "Connect a custom MCP",

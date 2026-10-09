@@ -188,7 +188,7 @@ function SwitchMotionControl(props: SwitchMotionControlProps): JSX.Element {
     (element) => {
       if (!element) return;
       element.addEventListener("click", suppressDraggedClick, true);
-      onCleanup(() => element.removeEventListener("click", suppressDraggedClick, true));
+      return () => element.removeEventListener("click", suppressDraggedClick, true);
     },
   );
 

@@ -98,6 +98,7 @@ interface ClientEvents {
 }
 
 interface ThreadConfig {
+  mcpChatId?: string;
   cwd: string;
   model?: string;
   effort?: string;
@@ -657,7 +658,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       ? null
       : claudeMcpServers(
           yield* usableMcpServers(
-            agentMcpServers(this.#mcpServers(), config.computerUse),
+            agentMcpServers(this.#mcpServers(config.mcpChatId), config.computerUse),
             this.#mcpToolRuntimes?.(),
             this.#mcpAuthorization,
           ).pipe(toProviderClientOperationError),
@@ -1587,6 +1588,7 @@ function readThreadConfig(params: unknown): ThreadConfig {
   const cwd = requiredString(params, "cwd");
   return {
     cwd,
+    mcpChatId: getString(params, "mcpChatId") ?? undefined,
     model: getString(params, "model") ?? undefined,
     effort: getString(params, "effort") ?? undefined,
     developerInstructions: getString(params, "developerInstructions") ?? "",

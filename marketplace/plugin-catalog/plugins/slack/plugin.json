@@ -1,0 +1,51 @@
+{
+  "slug": "slack",
+  "name": "Slack",
+  "tagline": "Workspace conversations and search",
+  "description": "A community connection by korotovsky that runs on your own server. Use a Slack user OAuth token from an app you control. Give each workspace a separate connection name and token. Sending messages requires the appropriate Slack permission.",
+  "category": "productivity",
+  "creatorName": "korotovsky",
+  "iconUrl": null,
+  "version": "1.0.0",
+  "prompts": [
+    {
+      "id": "prompt-inspect",
+      "text": "Show what I can access through Slack. Do not change anything."
+    }
+  ],
+  "apps": [
+    {
+      "id": "app-slack-mcp",
+      "name": "Slack",
+      "description": "A community connection by korotovsky that runs on your own server. Use a Slack user OAuth token from an app you control. Give each workspace a separate connection name and token. Sending messages requires the appropriate Slack permission.",
+      "iconUrl": null,
+      "server": {
+        "name": "slack",
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "slack-mcp-server@1.3.0", "--transport", "stdio"],
+        "auth": [
+          {
+            "id": "slack-key",
+            "kind": "key",
+            "label": "API key",
+            "fields": [
+              {
+                "id": "token",
+                "label": "Slack user OAuth token (xoxp)",
+                "env": "SLACK_MCP_XOXP_TOKEN",
+                "hint": "Slack app \u2192 OAuth & Permissions \u2192 User OAuth Token. Use only the scopes you need."
+              }
+            ],
+            "docsUrl": "https://github.com/korotovsky/slack-mcp-server/blob/v1.3.0/README.md",
+            "docsLabel": "Setup instructions"
+          }
+        ]
+      }
+    }
+  ],
+  "skills": [],
+  "websiteUrl": "https://github.com/korotovsky/slack-mcp-server/blob/v1.3.0/README.md",
+  "privacyPolicyUrl": null,
+  "termsUrl": null
+}

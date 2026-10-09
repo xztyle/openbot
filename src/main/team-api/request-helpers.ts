@@ -1,3 +1,5 @@
+import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
+import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 // Reading a Team API request: the parsers, the validators and the capability filters that every
 // route module needs and none of them owns.
 //
@@ -106,15 +108,18 @@ export function markerExclusionsForCapabilities(capabilities: ReadonlySet<string
   excludeRoutineEvents: boolean;
   excludeRoutineRunEvents: boolean;
   excludeHostedSiteEvents: boolean;
+  excludeEventCheckEvents: boolean;
 } {
   return {
     excludeRoutineEvents: !capabilities.has("routine-event-markers"),
     excludeRoutineRunEvents: !capabilities.has("routine-run-event-markers"),
     excludeHostedSiteEvents: !capabilities.has("hosted-site-event-markers"),
+    excludeEventCheckEvents: !capabilities.has(EVENT_CHECKS_CAPABILITY),
   };
 }
 
 function markerSupported(itemType: string | undefined, capabilities: ReadonlySet<string>): boolean {
+  if (itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX)) return capabilities.has(EVENT_CHECKS_CAPABILITY);
   if (itemType?.startsWith(ROUTINE_EVENT_ITEM_TYPE_PREFIX)) return capabilities.has("routine-event-markers");
   // Paged history drops suggestions with routine events, so live events drop them the same way.
   if (itemType?.startsWith(MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX)) return capabilities.has("routine-event-markers");

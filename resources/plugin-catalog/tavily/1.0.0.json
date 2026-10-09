@@ -1,0 +1,46 @@
+{
+  "slug": "tavily",
+  "name": "Tavily",
+  "tagline": "Web search and page extraction",
+  "description": "Search the web and extract page content through Tavily’s official connection. Your API key uses your Tavily account’s usage allowance.",
+  "category": "research",
+  "creatorName": "tavily.com",
+  "iconUrl": "https://tavily.com/favicon.ico",
+  "version": "1.0.0",
+  "prompts": [{ "id": "prompt-inspect", "text": "Show what I can access through Tavily. Do not change anything." }],
+  "apps": [
+    {
+      "id": "app-tavily-mcp",
+      "name": "Tavily",
+      "description": "Search the web and extract page content through Tavily’s official connection. Your API key uses your Tavily account’s usage allowance.",
+      "iconUrl": "https://tavily.com/favicon.ico",
+      "server": {
+        "name": "tavily",
+        "transport": "http",
+        "url": "https://mcp.tavily.com/mcp/",
+        "auth": [
+          {
+            "id": "tavily-key",
+            "kind": "key",
+            "label": "API key",
+            "fields": [
+              {
+                "id": "token",
+                "label": "Tavily API key",
+                "header": "Authorization",
+                "prefix": "Bearer ",
+                "hint": "Tavily dashboard → API keys"
+              }
+            ],
+            "docsUrl": "https://docs.tavily.com/documentation/mcp",
+            "docsLabel": "Setup instructions"
+          }
+        ]
+      }
+    }
+  ],
+  "websiteUrl": "https://docs.tavily.com/documentation/mcp",
+  "privacyPolicyUrl": null,
+  "termsUrl": null,
+  "skills": []
+}

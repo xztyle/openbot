@@ -1,0 +1,51 @@
+{
+  "slug": "render",
+  "name": "Render",
+  "tagline": "Services, deployments and logs",
+  "description": "Inspect services, deployments and logs through Render\u2019s official connection. API access uses your Render account permissions.",
+  "category": "coding",
+  "creatorName": "render.com",
+  "iconUrl": "https://render.com/favicon.ico",
+  "version": "1.0.0",
+  "prompts": [
+    {
+      "id": "prompt-inspect",
+      "text": "Show what I can access through Render. Do not change anything."
+    }
+  ],
+  "apps": [
+    {
+      "id": "app-render-mcp",
+      "name": "Render",
+      "description": "Inspect services, deployments and logs through Render\u2019s official connection. API access uses your Render account permissions.",
+      "iconUrl": "https://render.com/favicon.ico",
+      "server": {
+        "name": "render",
+        "transport": "http",
+        "url": "https://mcp.render.com/mcp",
+        "auth": [
+          {
+            "id": "render-key",
+            "kind": "key",
+            "label": "API key",
+            "fields": [
+              {
+                "id": "token",
+                "label": "Render API key",
+                "header": "Authorization",
+                "prefix": "Bearer ",
+                "hint": "Render dashboard \u2192 Account settings \u2192 API keys"
+              }
+            ],
+            "docsUrl": "https://render.com/docs/mcp-server",
+            "docsLabel": "Setup instructions"
+          }
+        ]
+      }
+    }
+  ],
+  "skills": [],
+  "websiteUrl": "https://render.com/docs/mcp-server",
+  "privacyPolicyUrl": null,
+  "termsUrl": null
+}

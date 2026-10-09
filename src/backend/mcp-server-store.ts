@@ -88,7 +88,9 @@ export class McpServerStore {
     db.exec("BEGIN IMMEDIATE");
     try {
       const existing = normalized.id ? this.get(normalized.id) : null;
-      if (normalized.id && !existing) throw new McpServerError(sourceText("error.backend.mcpServerGone"));
+      const newAccount = /^mcpacct-[a-f0-9-]{36}$/.test(normalized.id);
+      if (normalized.id && !existing && !newAccount)
+        throw new McpServerError(sourceText("error.backend.mcpServerGone"));
       if (!existing && this.count() >= INPUT_LIMITS.mcpServers)
         throw new McpServerError(sourceText("error.backend.mcpServerLimit", { limit: INPUT_LIMITS.mcpServers }));
       // Reported here rather than left to the unique index, so the user reads a sentence.
@@ -96,7 +98,10 @@ export class McpServerStore {
         throw new McpServerError(sourceText("error.backend.mcpServerNameTaken", { name: normalized.name }));
 
       // A draft carries an empty id, which is not nullish - `??` would store the empty string.
-      const stored: McpServerConfig = { ...normalized, id: existing?.id || createMcpServerId() };
+      const stored: McpServerConfig = {
+        ...normalized,
+        id: existing?.id || (newAccount ? normalized.id : createMcpServerId()),
+      };
       db.prepare(
         `INSERT INTO projection_mcp_servers (
            mcp_server_id, name, transport, enabled, command, args_json, env_json, env_passthrough_json,

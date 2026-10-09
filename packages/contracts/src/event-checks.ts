@@ -1,0 +1,343 @@
+import { isRoutineSchedule, type RoutineSchedule } from "./ipc-routines";
+import { isDynamicRecord } from "./runtime-values";
+
+export const EVENT_CHECK_HISTORY_LIMIT = 10;
+export const EVENT_CHECK_ITEM_TYPE_PREFIX = "event-check-event:triggered:";
+export const EVENT_CHECK_DEFAULT_INTERVAL_SECONDS = 30;
+export type EventCheckSchedule =
+  | RoutineSchedule
+  | { kind: "interval"; amount: number; unit: "seconds"; anchorAt: string };
+export interface EventCheckSelfEvents {
+  connectionId: string;
+  mode: "exclude" | "include";
+  actorPointer: string;
+  accountActorIds: string[];
+}
+export function defaultEventCheckSchedule(now = new Date()): EventCheckSchedule {
+  return {
+    kind: "interval",
+    amount: EVENT_CHECK_DEFAULT_INTERVAL_SECONDS,
+    unit: "seconds",
+    anchorAt: now.toISOString(),
+  };
+}
+export function isEventCheckSchedule(value: unknown): value is EventCheckSchedule {
+  if (isRoutineSchedule(value)) return true;
+  return (
+    isDynamicRecord(value) &&
+    value.kind === "interval" &&
+    value.unit === "seconds" &&
+    typeof value.amount === "number" &&
+    Number.isSafeInteger(value.amount) &&
+    value.amount >= 30 &&
+    value.amount <= 8_640_000_000 &&
+    typeof value.anchorAt === "string" &&
+    Number.isFinite(Date.parse(value.anchorAt))
+  );
+}
+export interface EventCheckSelection {
+  itemsPointer: string;
+  idPointer: string;
+  revisionPointer: string;
+}
+export interface EventCheckMcpSource {
+  kind: "mcp";
+  connectionId: string;
+  toolName: string;
+  argumentsJson: string;
+  cursorArgument: string;
+  nextCursorPointer: string;
+}
+export interface EventCheckConfiguration {
+  name: string;
+  label: string;
+  description: string;
+  value: string;
+}
+export interface EventCheckApiSource extends Omit<EventCheckMcpSource, "kind"> {
+  kind: "api";
+  variables: string[];
+  configuration: EventCheckConfiguration[];
+  programDigest?: string;
+}
+export type EventCheckSource = EventCheckMcpSource | EventCheckApiSource;
+export interface EventCheckEnvironmentStatus {
+  name: string;
+  configured: boolean;
+}
+export interface EventCheckEnvironmentInput {
+  agentId: string;
+  id: string;
+  name: string;
+  value: string | null;
+}
+export interface EventCheckInput {
+  id?: string;
+  agentId: string;
+  name: string;
+  instruction: string;
+  active: boolean;
+  timezone: string;
+  schedule: EventCheckSchedule;
+  selfEvents: EventCheckSelfEvents;
+  source: EventCheckSource;
+  selection: EventCheckSelection;
+}
+export interface EventCheck extends Omit<EventCheckInput, "id"> {
+  id: string;
+  revision: string;
+  nextCheckAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface EventCheckExecution {
+  id: string;
+  checkId: string;
+  startedAt: string;
+  finishedAt: string;
+  status: "baseline" | "unchanged" | "triggered" | "error" | "cancelled";
+  itemCount: number;
+  eventCount: number;
+  skippedSelfCount: number;
+  durationMs: number;
+  error: string | null;
+}
+export interface EventCheckAccount {
+  id: string;
+  name: string;
+}
+export interface EventCheckTool {
+  name: string;
+  description: string;
+  inputSchemaJson: string;
+}
+/** Host-only delivery metadata. App data stays in the framed provider input, not this marker. */
+export interface EventCheckOrigin {
+  checkId: string;
+  executionId: string;
+  name: string;
+}
+export interface EventCheckApi {
+  environment?(input: { agentId: string; id: string }): Promise<EventCheckEnvironmentStatus[]>;
+  setEnvironment?(input: EventCheckEnvironmentInput): Promise<EventCheckEnvironmentStatus[]>;
+  test?(input: { agentId: string; id: string }): Promise<EventCheckExecution>;
+  list(input: { agentId: string }): Promise<EventCheck[]>;
+  save(input: EventCheckInput): Promise<EventCheck>;
+  remove(input: { agentId: string; id: string }): Promise<void>;
+  checkNow(input: { agentId: string; id: string }): Promise<EventCheckExecution>;
+  history(input: { agentId: string; id: string }): Promise<EventCheckExecution[]>;
+  accounts(input: { agentId: string }): Promise<EventCheckAccount[]>;
+  tools(input: { agentId: string; connectionId: string }): Promise<EventCheckTool[]>;
+}
+
+function text(value: unknown, maximum: number, required = false): string {
+  if (typeof value !== "string" || value.length > maximum || (required && !value.trim()))
+    throw new Error("Invalid event check text.");
+  return value;
+}
+export function decodeEventCheckTarget(value: unknown): { agentId: string; id: string } {
+  if (!isDynamicRecord(value)) throw new Error("Invalid event check target.");
+  return { agentId: text(value.agentId, 128, true), id: text(value.id, 128, true) };
+}
+export function decodeEventCheckInput(value: unknown): EventCheckInput {
+  if (!isDynamicRecord(value) || typeof value.active !== "boolean") throw new Error("Invalid event check.");
+  const schedule = value.schedule === undefined ? defaultEventCheckSchedule() : value.schedule;
+  if (!isEventCheckSchedule(schedule) || JSON.stringify(schedule).length > 4096)
+    throw new Error("Invalid event check schedule.");
+  return {
+    ...(value.id === undefined ? {} : { id: text(value.id, 128, true) }),
+    agentId: text(value.agentId, 128, true),
+    name: text(value.name, 256, true),
+    instruction: text(value.instruction, 16000, true),
+    active: value.active,
+    timezone: text(value.timezone, 128, true),
+    schedule,
+    selfEvents: decodeSelfEvents(value.selfEvents),
+    source: decodeSource(value.source),
+    selection: decodeSelection(value.selection),
+  };
+}
+function decodeSelfEvents(value: unknown): EventCheckSelfEvents {
+  if (value === undefined) return { mode: "exclude", connectionId: "", actorPointer: "", accountActorIds: [] };
+  if (
+    !isDynamicRecord(value) ||
+    (value.mode !== "exclude" && value.mode !== "include") ||
+    !Array.isArray(value.accountActorIds) ||
+    value.accountActorIds.length > 20
+  )
+    throw new Error("Invalid self-event filter.");
+  return {
+    mode: value.mode,
+    connectionId: value.connectionId === undefined ? "" : text(value.connectionId, 128),
+    actorPointer: pointer(value.actorPointer),
+    accountActorIds: value.accountActorIds.map((id) => text(id, 512, true)),
+  };
+}
+function decodeSource(value: unknown): EventCheckSource {
+  if (!isDynamicRecord(value) || (value.kind !== "mcp" && value.kind !== "api"))
+    throw new Error("Invalid event check source.");
+  const argumentsJson = text(value.argumentsJson, 16000, true);
+  if (!isDynamicRecord(JSON.parse(argumentsJson))) throw new Error("Invalid event check arguments.");
+  if (value.kind === "api") {
+    if (
+      !Array.isArray(value.variables) ||
+      value.variables.length > 20 ||
+      !Array.isArray(value.configuration) ||
+      value.configuration.length > 30
+    )
+      throw new Error("Invalid program configuration.");
+    const variables = value.variables.map(environmentName);
+    const configuration = value.configuration.map(decodeConfiguration);
+    const argumentsValue = JSON.parse(argumentsJson);
+    if (configuration.some((field) => Object.hasOwn(argumentsValue, field.name) || field.name === value.cursorArgument))
+      throw new Error("Configuration conflicts with program arguments.");
+    if (
+      new Set(variables).size !== variables.length ||
+      new Set(configuration.map((field) => field.name)).size !== configuration.length
+    )
+      throw new Error("Duplicate variable.");
+    if (
+      configuration.some(
+        (field) =>
+          variables.includes(field.name) || /(?:token|password|secret|api_?key|authorization)/i.test(field.name),
+      )
+    )
+      throw new Error("Private variables cannot be ordinary configuration.");
+    const programDigest = value.programDigest === undefined ? undefined : text(value.programDigest, 64, true);
+    if (programDigest && !/^[a-f0-9]{64}$/.test(programDigest)) throw new Error("Invalid program digest.");
+    return {
+      kind: "api",
+      connectionId: text(value.connectionId, 128, true),
+      variables,
+      configuration,
+      ...(programDigest ? { programDigest } : {}),
+      toolName: text(value.toolName, 256, true),
+      argumentsJson,
+      cursorArgument: text(value.cursorArgument, 128),
+      nextCursorPointer: pointer(value.nextCursorPointer),
+    };
+  }
+  return {
+    kind: "mcp",
+    connectionId: text(value.connectionId, 128, true),
+    toolName: text(value.toolName, 256, true),
+    argumentsJson,
+    cursorArgument: text(value.cursorArgument, 128),
+    nextCursorPointer: pointer(value.nextCursorPointer),
+  };
+}
+function pointer(value: unknown): string {
+  const parsed = text(value, 512);
+  if (parsed && (!parsed.startsWith("/") || /~(?![01])/.test(parsed))) throw new Error("Invalid JSON pointer.");
+  return parsed;
+}
+function decodeSelection(value: unknown): EventCheckSelection {
+  if (!isDynamicRecord(value)) throw new Error("Invalid event check selection.");
+  return {
+    itemsPointer: pointer(value.itemsPointer),
+    idPointer: pointer(value.idPointer),
+    revisionPointer: pointer(value.revisionPointer),
+  };
+}
+export function decodeEventCheck(value: unknown): EventCheck {
+  const input = decodeEventCheckInput(value);
+  if (!isDynamicRecord(value)) throw new Error("Invalid event check.");
+  return {
+    ...input,
+    id: text(value.id, 128, true),
+    revision: text(value.revision, 128, true),
+    nextCheckAt: text(value.nextCheckAt, 128, true),
+    createdAt: text(value.createdAt, 128, true),
+    updatedAt: text(value.updatedAt, 128, true),
+  };
+}
+function count(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error("Invalid check count.");
+  return value;
+}
+export function decodeEventCheckExecution(value: unknown): EventCheckExecution {
+  if (!isDynamicRecord(value)) throw new Error("Invalid check execution.");
+  const status = value.status;
+  if (
+    status !== "baseline" &&
+    status !== "unchanged" &&
+    status !== "triggered" &&
+    status !== "error" &&
+    status !== "cancelled"
+  )
+    throw new Error("Invalid check status.");
+  return {
+    id: text(value.id, 128, true),
+    checkId: text(value.checkId, 128, true),
+    startedAt: text(value.startedAt, 128, true),
+    finishedAt: text(value.finishedAt, 128, true),
+    status,
+    itemCount: count(value.itemCount),
+    eventCount: count(value.eventCount),
+    skippedSelfCount: value.skippedSelfCount === undefined ? 0 : count(value.skippedSelfCount),
+    durationMs: count(value.durationMs),
+    error: value.error === null ? null : text(value.error, 2048),
+  };
+}
+export function decodeEventCheckAccount(value: unknown): EventCheckAccount {
+  if (!isDynamicRecord(value)) throw new Error("Invalid check account.");
+  return { id: text(value.id, 128, true), name: text(value.name, 256) };
+}
+export function decodeEventCheckTool(value: unknown): EventCheckTool {
+  if (!isDynamicRecord(value)) throw new Error("Invalid check tool.");
+  return {
+    name: text(value.name, 256, true),
+    description: text(value.description, 4096),
+    inputSchemaJson: text(value.inputSchemaJson, 16000),
+  };
+}
+export function decodeEventCheckList<A>(value: unknown, decode: (entry: unknown) => A, maximum = 100): A[] {
+  if (!Array.isArray(value) || value.length > maximum) throw new Error("Invalid check list.");
+  return value.map(decode);
+}
+
+export function environmentName(value: unknown): string {
+  const name = text(value, 128, true);
+  if (
+    !/^[A-Z][A-Z0-9_]*$/.test(name) ||
+    /^(PATH|HOME|SHELL|LANG|NODE_.*|PYTHON.*|BASH_ENV|ENV|LD_.*|DYLD_.*|ELECTRON_.*|OPENBOT_.*|BUN_.*|RUBY.*|PERL.*)$/.test(
+      name,
+    )
+  )
+    throw new Error("Invalid variable name.");
+  return name;
+}
+export function decodeEventCheckEnvironmentInput(value: unknown): EventCheckEnvironmentInput {
+  const target = decodeEventCheckTarget(value);
+  if (!isDynamicRecord(value)) throw new Error("Invalid environment input.");
+  const secret = value.value === null ? null : text(value.value, 8192, true);
+  if (secret !== null && (secret.length < 4 || /[\r\n\0]/.test(secret))) throw new Error("Invalid variable value.");
+  return { ...target, name: environmentName(value.name), value: secret };
+}
+export function decodeEventCheckEnvironmentStatus(value: unknown): EventCheckEnvironmentStatus {
+  if (!isDynamicRecord(value) || typeof value.configured !== "boolean") throw new Error("Invalid variable status.");
+  return { name: environmentName(value.name), configured: value.configured };
+}
+export function decodeMcpEventCheckInput(value: unknown): EventCheckInput {
+  const input = decodeEventCheckInput(value);
+  if (input.source.kind !== "mcp") throw new Error("Unsupported v1 source.");
+  return input;
+}
+export function decodeMcpEventCheck(value: unknown): EventCheck {
+  const check = decodeEventCheck(value);
+  if (check.source.kind !== "mcp") throw new Error("Unsupported v1 source.");
+  return check;
+}
+
+function decodeConfiguration(value: unknown): EventCheckConfiguration {
+  if (!isDynamicRecord(value)) throw new Error("Invalid configuration field.");
+  const name = text(value.name, 128, true);
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || ["__proto__", "constructor", "prototype"].includes(name))
+    throw new Error("Invalid configuration name.");
+  return {
+    name,
+    label: text(value.label, 256, true),
+    description: text(value.description, 2048),
+    value: text(value.value, 8192),
+  };
+}

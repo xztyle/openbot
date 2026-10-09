@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { rewriteAttachmentReferences } from "@openbot/contracts/attachment-references";
+import type { EventCheckOrigin } from "@openbot/contracts/event-checks";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentRuntimeWorkItem,
@@ -43,6 +44,7 @@ import {
   type StoredGeneratedAttachment,
   toAttachmentSummary,
 } from "./attachment-files";
+import { eventCheckMarker, isEventCheckOrigin } from "./event-check-marker";
 import { StoredStateFailure, storedIO, storedSync, toStoredStateFailure } from "./stored-state-effects";
 
 export type { ExportedAttachmentFile, GeneratedAttachmentSource } from "./attachment-files";
@@ -65,6 +67,7 @@ export interface MessagingOrigin {
 }
 
 interface StoredMessage {
+  eventCheck?: EventCheckOrigin;
   channelId?: string;
   messaging?: MessagingOrigin;
   /**
@@ -139,6 +142,8 @@ interface StoredReaction {
 }
 
 interface EnqueueInput {
+  eventCheck?: EventCheckOrigin;
+  validateBeforeCommit?: () => void;
   channelId?: string;
   messaging?: MessagingOrigin;
   messagingReturn?: MessagingOrigin;
@@ -168,6 +173,7 @@ export interface MailboxStoredFile {
 }
 
 export interface DeliveryContext {
+  eventCheck?: EventCheckOrigin;
   delivery: QueueDelivery;
   managedAttachments: Array<AttachmentSummary & { path: string }>;
 }
@@ -442,6 +448,7 @@ export class MailboxStore {
         .pipe(Effect.mapError(({ cause }) => new StoredStateFailure({ cause })));
       try {
         validateRecipients();
+        input.validateBeforeCommit?.();
       } catch (error) {
         yield* this.#files
           .remove(this.#files.transferRoot(messageId))
@@ -456,6 +463,7 @@ export class MailboxStore {
         ...(input.messagingReturn ? { messagingReturn: input.messagingReturn } : {}),
         id: messageId,
         sender: input.sender,
+        ...(input.eventCheck ? { eventCheck: input.eventCheck } : {}),
         ...(input.sender.kind === "user" && input.senderMember ? { senderMember: input.senderMember } : {}),
         text: rewriteAttachmentReferences(text, (reference) => {
           const attachment = committedByDraftId.get(reference.attachmentId);
@@ -799,6 +807,7 @@ export class MailboxStore {
               : message.sender.kind === "routine"
                 ? "routine"
                 : undefined,
+          ...eventCheckMarker(message.eventCheck),
         });
       }
     }
@@ -2008,6 +2017,7 @@ export class MailboxStore {
     const message = this.#requireMessage(delivery.messageId);
     return {
       delivery: this.#publicDelivery(delivery),
+      ...(message.eventCheck ? { eventCheck: message.eventCheck } : {}),
       managedAttachments: message.attachments.map((attachment) => ({
         ...toAttachmentSummary(attachment),
         path: attachment.path,
@@ -2322,6 +2332,7 @@ function isMessagingOrigin(value: unknown): value is MessagingOrigin {
 function isStoredMessage(value: unknown): value is StoredMessage {
   return (
     isRecord(value) &&
+    (value.eventCheck === undefined || isEventCheckOrigin(value.eventCheck)) &&
     (value.channelId === undefined || isString(value.channelId)) &&
     (value.messaging === undefined || isMessagingOrigin(value.messaging)) &&
     (value.messagingReturn === undefined || isMessagingOrigin(value.messagingReturn)) &&

@@ -738,6 +738,7 @@ const SKILL_ACTION_LABELS = {
 } as const satisfies Record<Extract<ChatActionMarkerModel, { kind: "skill-lifecycle" }>["action"], AppTextKey>;
 
 function markerLabel(marker: SingleChatActionMarkerModel, t: AppTranslate): string {
+  if (marker.kind === "event-check") return t("chat.marker.eventCheck", { name: marker.name });
   if (marker.kind === "unavailable") return marker.label;
   if (marker.kind === "context-reset") return t("chat.marker.contextReset");
   if (marker.kind === "marketplace-suggestion") return t("chat.marker.marketplaceSuggestion");
@@ -802,6 +803,7 @@ function agentTargetsStyle(agents: Array<AgentProfile | undefined>): string | un
 
 function markerAccessibleLabel(marker: SingleChatActionMarkerModel, agents: AgentProfile[], t: AppTranslate): string {
   const label = markerLabel(marker, t);
+  if (marker.kind === "event-check") return label;
   if (marker.kind === "unavailable" || marker.kind === "context-reset" || marker.kind === "marketplace-suggestion")
     return label;
   if (marker.kind === "skill-lifecycle") return t("chat.marker.accessible.named", { label, name: marker.skillName });

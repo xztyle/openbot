@@ -1,6 +1,19 @@
 import { defineMessages } from "../../../message";
 
 export const messages = defineMessages("error.backend", {
+  "error.backend.eventCheckProgram": "Choose an existing .mjs, .js, .py or .sh program inside OpenBot/Shared/Watchers.",
+  "error.backend.eventCheckMissingVariable":
+    "Add the required private variable in this event check’s Private variables (.env) settings before enabling it.",
+  "error.backend.eventCheckDelivery":
+    "An event was found. Delivery is waiting and will retry; the saved event remains on this host.",
+  "error.backend.eventCheckSelfEvents":
+    "To skip self-events, set the connected account user IDs and the actual change-author path. If the app does not provide change authors, keep the check paused.",
+  "error.backend.eventCheckSchedule":
+    "Event checks must be at least 30 seconds apart. Use a valid time zone and schedule.",
+  "error.backend.eventCheckBusy": "This event check is already running.",
+  "error.backend.eventCheckFailed":
+    "The app check failed. Check the selected account, read tool, result paths, pagination, change authors, and access. No baseline was changed.",
+  "error.backend.eventCheckUnsupported": "This host does not support event checks.",
   "error.backend.eventsUnavailable": "Events are not available on this host.",
   "error.backend.webhookRouteLimit": "A host can have at most {limit} webhook routines.",
   "error.backend.webhookSettingsInvalid": "Check the webhook settings and try again.",

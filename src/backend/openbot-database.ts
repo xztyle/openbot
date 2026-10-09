@@ -219,6 +219,7 @@ export class OpenBotDatabase {
       excludeRoutineEvents?: boolean;
       excludeRoutineRunEvents?: boolean;
       excludeHostedSiteEvents?: boolean;
+      excludeEventCheckEvents?: boolean;
     } = {},
   ): ConversationPage {
     return this.#conversations.readConversationPage(agentId, threadId, anchor, requestedLimit, options);
@@ -231,6 +232,7 @@ export class OpenBotDatabase {
       excludeRoutineEvents?: boolean;
       excludeRoutineRunEvents?: boolean;
       excludeHostedSiteEvents?: boolean;
+      excludeEventCheckEvents?: boolean;
     } = {},
   ): string | null {
     return this.#conversations.supportedConversationCursor(threadId, throughMessageId, options);
@@ -409,6 +411,10 @@ export class OpenBotDatabase {
 
   listExternalSessionIds(): string[] {
     return this.#sessions.listExternalSessionIds();
+  }
+
+  publicThreadForSession(agentId: string, provider: AgentProviderId, externalSessionId: string): string | null {
+    return this.#sessions.publicThreadForSession(agentId, provider, externalSessionId);
   }
 
   activeProviderSessionThreads(agentId: string): string[] {

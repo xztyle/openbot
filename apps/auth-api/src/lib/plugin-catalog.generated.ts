@@ -16,7 +16,7 @@ export interface PluginCatalogIndex {
 export const PLUGIN_CATALOG_INDEX: PluginCatalogIndex = {
   schemaVersion: 1,
   catalogVersion: "v1",
-  updatedAt: "2026-09-30T00:00:00.000Z",
+  updatedAt: "2026-10-08T00:00:00.000Z",
   plugins: [
     {
       slug: "aave",
@@ -107,6 +107,48 @@ export const PLUGIN_CATALOG_INDEX: PluginCatalogIndex = {
       version: "1.0.0",
       featured: false,
       detailSha256: "f3833ad73221b264a3611761dadaadfd978832c8431106ce92e6a7a45ee9b49c",
+    },
+    {
+      slug: "github-direct",
+      version: "1.0.0",
+      featured: false,
+      detailSha256: "ee30bb840f1cd288346143aae8889575bd18d369b2b7cabcc9ec265ce398e951",
+    },
+    {
+      slug: "slack",
+      version: "1.0.0",
+      featured: false,
+      detailSha256: "e636c66e4701a603158e8bb091372d7ecc8aef55e9b7b0fd6d5d9a5d6f44ef4d",
+    },
+    {
+      slug: "cloudflare",
+      version: "1.0.0",
+      featured: false,
+      detailSha256: "6e41465cfb26f7ffa3b52fea93b1d5de3645ec949924848d1bc6eaf2cc49370c",
+    },
+    {
+      slug: "render",
+      version: "1.0.0",
+      featured: false,
+      detailSha256: "c66c077fe91fc2c516476591b20f37bae2ff336414cab6497a7c7b0d337198d0",
+    },
+    {
+      slug: "supabase",
+      version: "1.0.0",
+      featured: false,
+      detailSha256: "9531d1dd9413c48ede50fec9ec3492ee3b45089061bbeedcef78c5b3c7291223",
+    },
+    {
+      slug: "exa",
+      version: "1.0.0",
+      featured: false,
+      detailSha256: "22c62f3c199f70e16463d8dfb24f362dd2472a45865825a73cc6bfa2bb6044f8",
+    },
+    {
+      slug: "tavily",
+      version: "1.0.0",
+      featured: false,
+      detailSha256: "e3bff360d4c7142ddbd6045f9f04b4335df4697968299cbde3cd5077697aae91",
     },
   ],
 };
@@ -766,6 +808,326 @@ export const PLUGIN_CATALOG_DETAILS: Record<string, PluginCatalogDetail> = {
     websiteUrl: "https://composio.dev",
     privacyPolicyUrl: "https://composio.dev/privacy-policy",
     termsUrl: "https://composio.dev/terms-of-service",
+    skills: [],
+  },
+  "github-direct": {
+    slug: "github-direct",
+    name: "GitHub",
+    tagline: "Repositories, issues and pull requests",
+    description:
+      "Connect directly to GitHub with your own token. Read repositories, manage issues and review pull requests. Limit the token to the repositories and permissions you need. Terminal Git authentication is separate.",
+    category: "coding",
+    creatorName: "github.com",
+    iconUrl: "https://github.com/favicon.ico",
+    version: "1.0.0",
+    prompts: [{ id: "prompt-inspect", text: "Show what I can access through GitHub. Do not change anything." }],
+    apps: [
+      {
+        id: "app-github-direct-mcp",
+        name: "GitHub",
+        description:
+          "Connect directly to GitHub with your own token. Read repositories, manage issues and review pull requests. Limit the token to the repositories and permissions you need. Terminal Git authentication is separate.",
+        iconUrl: "https://github.com/favicon.ico",
+        server: {
+          name: "github-direct",
+          transport: "http",
+          url: "https://api.githubcopilot.com/mcp/",
+          auth: [
+            {
+              id: "github-direct-key",
+              kind: "key",
+              label: "API key",
+              fields: [
+                {
+                  id: "token",
+                  label: "Personal access token",
+                  header: "Authorization",
+                  prefix: "Bearer ",
+                  hint: "GitHub settings → Developer settings → Personal access tokens",
+                },
+              ],
+              docsUrl: "https://github.com/github/github-mcp-server",
+              docsLabel: "Setup instructions",
+            },
+          ],
+        },
+      },
+    ],
+    websiteUrl: "https://github.com/github/github-mcp-server",
+    privacyPolicyUrl: null,
+    termsUrl: null,
+    skills: [],
+  },
+  slack: {
+    slug: "slack",
+    name: "Slack",
+    tagline: "Workspace conversations and search",
+    description:
+      "A community connection by korotovsky that runs on your own server. Use a Slack user OAuth token from an app you control. Give each workspace a separate connection name and token. Sending messages requires the appropriate Slack permission.",
+    category: "productivity",
+    creatorName: "korotovsky",
+    iconUrl: null,
+    version: "1.0.0",
+    prompts: [{ id: "prompt-inspect", text: "Show what I can access through Slack. Do not change anything." }],
+    apps: [
+      {
+        id: "app-slack-mcp",
+        name: "Slack",
+        description:
+          "A community connection by korotovsky that runs on your own server. Use a Slack user OAuth token from an app you control. Give each workspace a separate connection name and token. Sending messages requires the appropriate Slack permission.",
+        iconUrl: null,
+        server: {
+          name: "slack",
+          transport: "stdio",
+          command: "npx",
+          args: ["-y", "slack-mcp-server@1.3.0", "--transport", "stdio"],
+          auth: [
+            {
+              id: "slack-key",
+              kind: "key",
+              label: "API key",
+              fields: [
+                {
+                  id: "token",
+                  label: "Slack user OAuth token (xoxp)",
+                  env: "SLACK_MCP_XOXP_TOKEN",
+                  hint: "Slack app → OAuth & Permissions → User OAuth Token. Use only the scopes you need.",
+                },
+              ],
+              docsUrl: "https://github.com/korotovsky/slack-mcp-server/blob/v1.3.0/README.md",
+              docsLabel: "Setup instructions",
+            },
+          ],
+        },
+      },
+    ],
+    websiteUrl: "https://github.com/korotovsky/slack-mcp-server/blob/v1.3.0/README.md",
+    privacyPolicyUrl: null,
+    termsUrl: null,
+    skills: [],
+  },
+  cloudflare: {
+    slug: "cloudflare",
+    name: "Cloudflare",
+    tagline: "Manage Cloudflare resources",
+    description:
+      "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
+    category: "coding",
+    creatorName: "cloudflare.com",
+    iconUrl: "https://cloudflare.com/favicon.ico",
+    version: "1.0.0",
+    prompts: [{ id: "prompt-inspect", text: "Show what I can access through Cloudflare. Do not change anything." }],
+    apps: [
+      {
+        id: "app-cloudflare-mcp",
+        name: "Cloudflare",
+        description:
+          "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
+        iconUrl: "https://cloudflare.com/favicon.ico",
+        server: {
+          name: "cloudflare",
+          transport: "http",
+          url: "https://mcp.cloudflare.com/mcp",
+          auth: [
+            {
+              id: "cloudflare-key",
+              kind: "key",
+              label: "API key",
+              fields: [
+                {
+                  id: "token",
+                  label: "Cloudflare API token",
+                  header: "Authorization",
+                  prefix: "Bearer ",
+                  hint: "Cloudflare → Profile → API tokens. Limit resources and permissions.",
+                },
+              ],
+              docsUrl: "https://github.com/cloudflare/mcp",
+              docsLabel: "Setup instructions",
+            },
+          ],
+        },
+      },
+    ],
+    websiteUrl: "https://github.com/cloudflare/mcp",
+    privacyPolicyUrl: null,
+    termsUrl: null,
+    skills: [],
+  },
+  render: {
+    slug: "render",
+    name: "Render",
+    tagline: "Services, deployments and logs",
+    description:
+      "Inspect services, deployments and logs through Render’s official connection. API access uses your Render account permissions.",
+    category: "coding",
+    creatorName: "render.com",
+    iconUrl: "https://render.com/favicon.ico",
+    version: "1.0.0",
+    prompts: [{ id: "prompt-inspect", text: "Show what I can access through Render. Do not change anything." }],
+    apps: [
+      {
+        id: "app-render-mcp",
+        name: "Render",
+        description:
+          "Inspect services, deployments and logs through Render’s official connection. API access uses your Render account permissions.",
+        iconUrl: "https://render.com/favicon.ico",
+        server: {
+          name: "render",
+          transport: "http",
+          url: "https://mcp.render.com/mcp",
+          auth: [
+            {
+              id: "render-key",
+              kind: "key",
+              label: "API key",
+              fields: [
+                {
+                  id: "token",
+                  label: "Render API key",
+                  header: "Authorization",
+                  prefix: "Bearer ",
+                  hint: "Render dashboard → Account settings → API keys",
+                },
+              ],
+              docsUrl: "https://render.com/docs/mcp-server",
+              docsLabel: "Setup instructions",
+            },
+          ],
+        },
+      },
+    ],
+    websiteUrl: "https://render.com/docs/mcp-server",
+    privacyPolicyUrl: null,
+    termsUrl: null,
+    skills: [],
+  },
+  supabase: {
+    slug: "supabase",
+    name: "Supabase",
+    tagline: "Database and project tools",
+    description:
+      "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
+    category: "coding",
+    creatorName: "supabase.com",
+    iconUrl: "https://supabase.com/favicon.ico",
+    version: "1.0.0",
+    prompts: [{ id: "prompt-inspect", text: "Show what I can access through Supabase. Do not change anything." }],
+    apps: [
+      {
+        id: "app-supabase-mcp",
+        name: "Supabase",
+        description:
+          "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
+        iconUrl: "https://supabase.com/favicon.ico",
+        server: {
+          name: "supabase",
+          transport: "http",
+          url: "https://mcp.supabase.com/mcp",
+          auth: [
+            {
+              id: "supabase-key",
+              kind: "key",
+              label: "API key",
+              fields: [
+                {
+                  id: "url",
+                  label: "Project MCP URL",
+                  url: true,
+                  placeholder: "https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT&read_only=true",
+                },
+                {
+                  id: "token",
+                  label: "Supabase personal access token",
+                  header: "Authorization",
+                  prefix: "Bearer ",
+                  hint: "Supabase dashboard → Account → Access tokens",
+                },
+              ],
+              docsUrl: "https://supabase.com/docs/guides/ai-tools/mcp",
+              docsLabel: "Setup instructions",
+            },
+          ],
+        },
+      },
+    ],
+    websiteUrl: "https://supabase.com/docs/guides/ai-tools/mcp",
+    privacyPolicyUrl: null,
+    termsUrl: null,
+    skills: [],
+  },
+  exa: {
+    slug: "exa",
+    name: "Exa",
+    tagline: "Web search and research",
+    description:
+      "Search the web through Exa’s official hosted connection. No key is required to start. Service limits apply.",
+    category: "research",
+    creatorName: "exa.ai",
+    iconUrl: "https://exa.ai/favicon.ico",
+    version: "1.0.0",
+    prompts: [{ id: "prompt-inspect", text: "Show what I can access through Exa. Do not change anything." }],
+    apps: [
+      {
+        id: "app-exa-mcp",
+        name: "Exa",
+        description:
+          "Search the web through Exa’s official hosted connection. No key is required to start. Service limits apply.",
+        iconUrl: "https://exa.ai/favicon.ico",
+        server: { name: "exa", transport: "http", url: "https://mcp.exa.ai/mcp" },
+      },
+    ],
+    websiteUrl: "https://exa.ai/docs/get-started/exa-mcp",
+    privacyPolicyUrl: null,
+    termsUrl: null,
+    skills: [],
+  },
+  tavily: {
+    slug: "tavily",
+    name: "Tavily",
+    tagline: "Web search and page extraction",
+    description:
+      "Search the web and extract page content through Tavily’s official connection. Your API key uses your Tavily account’s usage allowance.",
+    category: "research",
+    creatorName: "tavily.com",
+    iconUrl: "https://tavily.com/favicon.ico",
+    version: "1.0.0",
+    prompts: [{ id: "prompt-inspect", text: "Show what I can access through Tavily. Do not change anything." }],
+    apps: [
+      {
+        id: "app-tavily-mcp",
+        name: "Tavily",
+        description:
+          "Search the web and extract page content through Tavily’s official connection. Your API key uses your Tavily account’s usage allowance.",
+        iconUrl: "https://tavily.com/favicon.ico",
+        server: {
+          name: "tavily",
+          transport: "http",
+          url: "https://mcp.tavily.com/mcp/",
+          auth: [
+            {
+              id: "tavily-key",
+              kind: "key",
+              label: "API key",
+              fields: [
+                {
+                  id: "token",
+                  label: "Tavily API key",
+                  header: "Authorization",
+                  prefix: "Bearer ",
+                  hint: "Tavily dashboard → API keys",
+                },
+              ],
+              docsUrl: "https://docs.tavily.com/documentation/mcp",
+              docsLabel: "Setup instructions",
+            },
+          ],
+        },
+      },
+    ],
+    websiteUrl: "https://docs.tavily.com/documentation/mcp",
+    privacyPolicyUrl: null,
+    termsUrl: null,
     skills: [],
   },
 };

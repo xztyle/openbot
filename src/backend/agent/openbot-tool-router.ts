@@ -30,6 +30,7 @@ import type { AgentTables } from "../agent-data/agent-tables";
 import type { AgentStore } from "../agent-store";
 import { OPENBOT_BROWSER_NAMESPACE } from "../browser-tools";
 import type { ChannelService } from "../channel-service";
+import type { EventCheckScheduler } from "../event-check-scheduler";
 import type { MailboxStore } from "../mailbox-store";
 import { agentMcpServers } from "../mcp-provider-shapes";
 import { CHAT_VISUAL_PREVIEW_DEFAULT_WIDTH, htmlPreviewToolSchema, htmlRenderToolSchema } from "../openbot-tools";
@@ -48,6 +49,7 @@ import type { ConversationRuntime } from "./conversation-runtime";
 import { handleDataTool } from "./data-tools";
 import { responseAttachmentMessageId, visualReplyFileName, visualReplyMessageId } from "./delivery-content";
 import type { DrainScheduler } from "./drain-scheduler";
+import { handleEventCheckTool } from "./event-check-tools";
 import type { HostedSiteCoordinator } from "./hosted-site-coordinator";
 import { isHostedSiteMutationTool } from "./hosted-site-events";
 import type { MailboxSync } from "./mailbox-sync";
@@ -113,6 +115,7 @@ export interface OpenBotToolRouterOptions {
   channels: ChannelService;
   hostedSites: HostedSiteCoordinator;
   routines: RoutineScheduler;
+  eventChecks: EventCheckScheduler;
   memories: AgentMemories;
   drain: DrainScheduler;
   tables: AgentTables | null;
@@ -144,6 +147,7 @@ export class OpenBotToolRouter {
   readonly #channels: ChannelService;
   readonly #hostedSites: HostedSiteCoordinator;
   readonly #routines: RoutineScheduler;
+  readonly #eventChecks: EventCheckScheduler;
   readonly #memories: AgentMemories;
   readonly #drain: DrainScheduler;
   readonly #tables: AgentTables | null;
@@ -167,6 +171,7 @@ export class OpenBotToolRouter {
     this.#channels = options.channels;
     this.#hostedSites = options.hostedSites;
     this.#routines = options.routines;
+    this.#eventChecks = options.eventChecks;
     this.#memories = options.memories;
     this.#drain = options.drain;
     this.#tables = options.tables;
@@ -602,6 +607,8 @@ export class OpenBotToolRouter {
     );
     if (sidebarResult) return sidebarResult;
 
+    const checkResult = yield* handleEventCheckTool(params, senderAgentId, this.#eventChecks);
+    if (checkResult) return checkResult;
     const routineResult = yield* this.#routines.handleTool(params, senderAgentId);
     if (routineResult) return routineResult;
 

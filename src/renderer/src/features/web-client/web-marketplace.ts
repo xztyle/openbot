@@ -1,4 +1,4 @@
-import { sourceText } from "@openbot/i18n";
+import { MCP_OAUTH_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-oauth-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import { createMarketplaceCatalog } from "@openbot/team-client/marketplace-catalog";
 import {
@@ -18,6 +18,7 @@ import { currentText } from "@openbot/ui/text";
 import { Effect } from "effect";
 import type { AgentTemplateInstallCalls } from "../agent-templates/agent-templates-port";
 import type { MarketplaceCalls } from "../settings/marketplace-calls";
+import { signInWebMcp } from "./web-mcp-sign-in";
 
 /** No server id: the account is a member, or the host runs an OpenBot without agent-install-v1. */
 const noAgentInstall = () => currentText().t("webClient.error.agentInstallNotAllowed");
@@ -33,6 +34,7 @@ const noAgentInstall = () => currentText().t("webClient.error.agentInstallNotAll
 export function createWebMarketplaceCalls(
   accountFetch: typeof fetch,
   request: (serverId?: string) => TeamApiRequest,
+  capabilities: () => readonly string[] = () => [],
 ): MarketplaceCalls {
   const catalog = createMarketplaceCatalog(accountFetch);
   return {
@@ -55,6 +57,9 @@ export function createWebMarketplaceCalls(
         runTeamEffect(setAgentSkillEnabled(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     }),
     mcp: {
+      supportsRemoteSignIn: () => capabilities().includes(MCP_OAUTH_CAPABILITY),
+      signInMcpServer: ({ config }, serverId, signal) =>
+        signInWebMcp(config, request(serverId), signal ?? new AbortController().signal),
       listMcpServers: async (serverId) =>
         runTeamEffect(listMcpServers(request(serverId)).pipe(Effect.mapError((error) => error.cause))),
       testMcpServer: async (input, serverId) =>
@@ -63,10 +68,6 @@ export function createWebMarketplaceCalls(
         runTeamEffect(saveMcpServer(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
       removeMcpServer: async (input, serverId) =>
         runTeamEffect(removeMcpServer(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
-      // A sign-in opens the browser of the computer that runs OpenBot; the Team API has no route for it.
-      signInMcpServer: async () => {
-        throw new Error(sourceText("error.mcp.signInOnHost"));
-      },
     },
     addAgent: async (input, serverId) => {
       if (!serverId) throw new Error(noAgentInstall());

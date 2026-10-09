@@ -4,6 +4,7 @@ import type {
   MarketplaceAgentDetail,
   MarketplaceSkillPage,
   McpServerConfig,
+  McpTestResult,
   OpenBotDesktopApi,
 } from "@openbot/contracts/ipc";
 import type { MarketplacePluginDetail } from "@openbot/ui/features/settings/marketplace-plugins";
@@ -12,6 +13,7 @@ import { type ComponentProps, createSignal } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type AnalyticsEventName, type DesktopAnalyticsEvents, desktopAnalytics } from "../../analytics";
 import { MarketplaceModal } from "./MarketplaceModal";
+import { desktopMarketplaceCalls, type MarketplaceCalls } from "./marketplace-calls";
 import type { MarketplaceAgentRow } from "./marketplace-controller";
 import { MARKETPLACE_PLUGINS } from "./marketplace-plugin-catalog";
 
@@ -414,6 +416,10 @@ describe("MarketplaceModal", () => {
       ],
     };
     const writer = { agents: [agentRow("writer", "Writer")], activeAgentId: "writer", pluginServerId: "local" };
+    const withLink: MarketplacePluginDetail = {
+      ...plugin,
+      apps: [{ ...app, server: { ...app.server, auth: [{ id: "sign-in", kind: "link", label: "Sign in" }] } }],
+    };
 
     /** The host row an installed app leaves behind, as `listMcpServers` answers it. */
     function hostApp(): McpServerConfig {
@@ -451,10 +457,16 @@ describe("MarketplaceModal", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Connect Aave" }));
 
       await waitFor(() => expect(saveMcpServer).toHaveBeenCalled());
-      // The id is empty because the store mints one. An id it does not hold reads as an edit of a
-      // removed row, and the save is refused.
+      // Each connection has its own account ID and numbered name.
       expect(saveMcpServer).toHaveBeenCalledWith(
-        { config: expect.objectContaining({ id: "", name: appName, transport: "http", url: appUrl }) },
+        {
+          config: expect.objectContaining({
+            id: expect.stringMatching(/^mcpacct-[a-f0-9-]{36}$/),
+            name: `${app.name} — 1`,
+            transport: "http",
+            url: appUrl,
+          }),
+        },
         "local",
       );
       expect(await screen.findByRole("button", { name: "Disconnect" })).toBeInTheDocument();
@@ -516,9 +528,66 @@ describe("MarketplaceModal", () => {
 
       await waitFor(() => expect(saveMcpServer).toHaveBeenCalled());
       expect(saveMcpServer).toHaveBeenCalledWith(
-        { config: expect.objectContaining({ name: "composio", url, headers: [] }) },
+        { config: expect.objectContaining({ name: "Composio — 1", url, headers: [] }) },
         "local",
       );
+    });
+
+    it.each([undefined, "remote"])("signs in on %s before saving the account", async (hostServerId) => {
+      const serverId = hostServerId ?? "local";
+      const signInMcpServer = vi.fn<MarketplaceCalls["mcp"]["signInMcpServer"]>(async () => ({
+        toolCount: 4,
+        error: null,
+      }));
+      const saveMcpServer = vi.fn<MarketplaceCalls["mcp"]["saveMcpServer"]>(async ({ config }) => [config]);
+      const calls = desktopMarketplaceCalls();
+      calls.mcp = {
+        ...calls.mcp,
+        supportsRemoteSignIn: () => true,
+        listMcpServers: async () => [],
+        signInMcpServer,
+        saveMcpServer,
+      };
+      renderMarketplace({ ...writer, pluginServerId: serverId, hostServerId, plugins: [withLink], calls });
+      await openAppPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Connect Aave" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue to Aave" }));
+
+      await waitFor(() => expect(saveMcpServer).toHaveBeenCalled());
+      const attempt = signInMcpServer.mock.lastCall;
+      expect(attempt?.[0].config.url).toBe(appUrl);
+      expect(attempt?.[1]).toBe(serverId);
+      expect(attempt?.[2]).toEqual(hostServerId ? expect.any(AbortSignal) : undefined);
+      expect(saveMcpServer.mock.lastCall?.[0]).toEqual(attempt?.[0]);
+    });
+
+    it("cancels remote sign-in without saving its account", async () => {
+      const signInMcpServer = vi.fn<MarketplaceCalls["mcp"]["signInMcpServer"]>(
+        async (_input, _serverId, signal) =>
+          new Promise<McpTestResult>((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(new Error("Cancelled")), { once: true });
+          }),
+      );
+      const calls = desktopMarketplaceCalls();
+      const saveMcpServer = vi.fn<MarketplaceCalls["mcp"]["saveMcpServer"]>(async ({ config }) => [config]);
+      calls.mcp = {
+        ...calls.mcp,
+        supportsRemoteSignIn: () => true,
+        listMcpServers: async () => [],
+        signInMcpServer,
+        saveMcpServer,
+      };
+      renderMarketplace({ ...writer, pluginServerId: "remote", hostServerId: "remote", plugins: [withLink], calls });
+      await openAppPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Connect Aave" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue to Aave" }));
+      await waitFor(() => expect(signInMcpServer).toHaveBeenCalled());
+      fireEvent.click(screen.getByRole("button", { name: "Close connect Aave" }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Connect Aave" })).toBeNull());
+      expect(signInMcpServer.mock.lastCall?.[2]?.aborted).toBe(true);
+      expect(saveMcpServer).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByRole("button", { name: "Connect Aave" })).toBeEnabled());
     });
 
     it("saves nothing when the connect dialog is closed", async () => {
@@ -616,29 +685,30 @@ describe("MarketplaceModal", () => {
       expect(window.openbot.skills.uninstall).not.toHaveBeenCalled();
     });
 
-    it("removes the host's app row and the agent's skill when the disconnect is confirmed", async () => {
+    it("removes all app accounts before the agent's skill when the disconnect is confirmed", async () => {
       const order: string[] = [];
-      const removeMcpServer: OpenBotDesktopApi["agent"]["removeMcpServer"] = vi.fn(async () => {
-        order.push("app");
-        return [];
+      let hostRows: McpServerConfig[] = [hostApp(), { ...hostApp(), id: "mcpacct-account-two", name: "Aave — 2" }];
+      const removeMcpServer: OpenBotDesktopApi["agent"]["removeMcpServer"] = vi.fn(async ({ mcpServerId }) => {
+        order.push(mcpServerId);
+        hostRows = hostRows.filter((row) => row.id !== mcpServerId);
+        return hostRows;
       });
       const uninstall = vi.fn(async () => {
         order.push("skill");
       });
       let held: InstalledSkill[] = [installedYield];
       window.openbot.skills = { ...window.openbot.skills, listInstalled: vi.fn(async () => held), uninstall };
-      let hostRows: McpServerConfig[] = [hostApp()];
       window.openbot.agent = { ...window.openbot.agent, listMcpServers: vi.fn(async () => hostRows), removeMcpServer };
       renderMarketplace({ ...writer, plugins: [withSkill] });
       const confirm = await askToDisconnect();
-      hostRows = [];
       held = [];
       fireEvent.click(within(confirm).getByRole("button", { name: "Disconnect" }));
 
       await waitFor(() => expect(uninstall).toHaveBeenCalledWith({ agentId: "writer", skillId: "skill-yield" }));
       expect(removeMcpServer).toHaveBeenCalledWith({ mcpServerId: "mcp-1" }, "local");
+      expect(removeMcpServer).toHaveBeenCalledWith({ mcpServerId: "mcpacct-account-two" }, "local");
       // The app stops answering before the instructions that drive it are taken away.
-      expect(order).toEqual(["app", "skill"]);
+      expect(order).toEqual(["mcp-1", "mcpacct-account-two", "skill"]);
       expect(await screen.findByRole("button", { name: "Connect Aave" })).toBeInTheDocument();
     });
 
@@ -658,6 +728,44 @@ describe("MarketplaceModal", () => {
       expect(window.openbot.skills.uninstall).not.toHaveBeenCalled();
       expect(screen.getByRole("button", { name: "Disconnect" })).toBeInTheDocument();
     });
+
+    it.each([false, true])(
+      "confirms one account's removal and keeps the other accounts and skills: %s",
+      async (remove) => {
+        const accountTwo = { ...hostApp(), id: "mcpacct-account-two", name: "Aave — 2" };
+        let hostRows: McpServerConfig[] = [hostApp(), accountTwo];
+        const removeMcpServer: OpenBotDesktopApi["agent"]["removeMcpServer"] = vi.fn(async ({ mcpServerId }) => {
+          hostRows = hostRows.filter((row) => row.id !== mcpServerId);
+          return hostRows;
+        });
+        const uninstall = vi.fn(async () => undefined);
+        window.openbot.skills = {
+          ...window.openbot.skills,
+          listInstalled: vi.fn(async () => [installedYield]),
+          uninstall,
+        };
+        window.openbot.agent = {
+          ...window.openbot.agent,
+          listMcpServers: vi.fn(async () => hostRows),
+          removeMcpServer,
+        };
+        renderMarketplace({ ...writer, plugins: [withSkill] });
+        await openAppPage();
+        const account = await screen.findByRole("group", { name: appName });
+        fireEvent.click(within(account).getByRole("button", { name: "Disconnect account" }));
+        const confirm = await screen.findByRole("alertdialog", { name: `Remove ${appName}?` });
+        expect(removeMcpServer).not.toHaveBeenCalled();
+        fireEvent.click(within(confirm).getByRole("button", { name: remove ? "Disconnect account" : "Cancel" }));
+
+        await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+        if (remove) {
+          expect(removeMcpServer).toHaveBeenCalledExactlyOnceWith({ mcpServerId: "mcp-1" }, "local");
+          expect(screen.queryByRole("group", { name: appName })).toBeNull();
+        } else expect(removeMcpServer).not.toHaveBeenCalled();
+        expect(screen.getByRole("group", { name: accountTwo.name })).toBeInTheDocument();
+        expect(uninstall).not.toHaveBeenCalled();
+      },
+    );
 
     /**
      * A cleanup that half works. The skill must still go even though the app row refused, and the

@@ -89,7 +89,12 @@ function service(send: (push: LiveActivityRelayPush) => Promise<"sent" | "gone">
 const viewer = {
   memberId: "member-1",
   hiddenAgentIds: () => new Set(["hidden"]),
-  readOptions: { excludeRoutineEvents: false, excludeRoutineRunEvents: false, excludeHostedSiteEvents: false },
+  readOptions: {
+    excludeRoutineEvents: false,
+    excludeRoutineRunEvents: false,
+    excludeHostedSiteEvents: false,
+    excludeEventCheckEvents: false,
+  },
 };
 
 describe("LiveActivityPushService", () => {

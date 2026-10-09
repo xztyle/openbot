@@ -1,8 +1,7 @@
 import { basename } from "node:path";
 import { type OAuthClientProvider, UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { AccessDeniedError, UnauthorizedClientError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import type { FetchLike, Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
@@ -12,18 +11,17 @@ import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect, Result, Schema } from "effect";
 import { causeHelpers } from "./effect-boundary";
-import { type McpOAuthAuthority, type McpSignIn, normalizeResource, secureOAuthFetch } from "./mcp-oauth-provider";
+import { type McpOAuthAuthority, type McpSignIn, normalizeResource } from "./mcp-oauth-provider";
 import {
   clearMcpCommandCache,
   type McpToolRuntimes,
-  mcpHandoffHeaders,
-  mcpLaunchEnvironment,
   NO_MCP_TOOL_RUNTIMES,
   type ResolvedMcpServer,
   type UsableMcpServer,
   usableMcpServer,
 } from "./mcp-provider-shapes";
 import { redactMcpSecrets, redactMcpValues } from "./mcp-redaction";
+import { createMcpTransport } from "./mcp-transport";
 
 export const MCP_PROBE_TIMEOUT_MS = 10_000;
 
@@ -59,18 +57,19 @@ export const testMcpServer = Effect.fnUntraced(function* (
   config: McpServerConfig,
   timeoutMs = MCP_PROBE_TIMEOUT_MS,
   tools: McpToolRuntimes = NO_MCP_TOOL_RUNTIMES,
-  oauth?: Pick<McpOAuthAuthority, "accessToken" | "signIn">,
+  oauth?: Pick<McpOAuthAuthority, "accessToken" | "signIn" | "forConnection">,
   signInPlace: McpSignInPlace | null = null,
 ) {
   clearMcpCommandCache();
+  const authority = oauth?.forConnection?.(config.id) ?? oauth;
   return yield* Effect.acquireUseRelease(
-    Effect.sync(() => (config.transport === "http" ? (oauth?.signIn(config.url) ?? null) : null)),
+    Effect.sync(() => (config.transport === "http" ? (authority?.signIn(config.url) ?? null) : null)),
     (signIn) =>
       Effect.gen(function* () {
         const server = yield* usableMcpServer(
           config,
           tools,
-          oauth ? (subject) => oauth.accessToken(subject.url) : undefined,
+          authority ? (subject) => authority.accessToken(subject.url) : undefined,
         );
         return yield* probeMcpServerEffect(server, timeoutMs, signIn, signInPlace);
       }),
@@ -209,7 +208,7 @@ const connectAndCountEffect = Effect.fnUntraced(function* (
     Effect.try({
       try: () => ({
         client: new Client({ name: "openbot-probe", version: "1" }, { capabilities: {} }),
-        transport: createTransport(server, authProvider, onChallenge),
+        transport: createMcpTransport(server, authProvider, challengeRecordingFetch(onChallenge)),
       }),
       catch: (cause) => new McpProbeFailure({ cause }),
     }),
@@ -254,59 +253,6 @@ const countToolsEffect = Effect.fnUntraced(function* (client: Client) {
 function boundedError(text: string): string {
   if (text.length <= INPUT_LIMITS.mcpErrorText) return text;
   return `${text.slice(0, INPUT_LIMITS.mcpErrorText - 1)}…`;
-}
-
-function createTransport(
-  server: ResolvedMcpServer,
-  authProvider: OAuthClientProvider | undefined,
-  onChallenge: (challenge: McpChallenge) => void,
-): Transport {
-  const { config } = server;
-  if (config.transport === "http") {
-    /*
-     * The `authProvider` is what turns a 401 into a sign-in instead of a sentence. Without one the
-     * transport reports the refusal, which is what a server with a pasted key should do.
-     *
-     * With one, the stored token is left out of `requestInit`: a header written there wins over the
-     * one the provider adds, so a token the provider has just refreshed would lose to the value this
-     * probe read a moment before the refusal.
-     */
-    const headers = authProvider
-      ? Object.fromEntries(config.headers.map(({ key, value }) => [key, value]))
-      : mcpHandoffHeaders(server);
-    /*
-     * The transport does OAuth of its own: a 401 on a token this probe believed was still valid
-     * makes it call `auth()` through its own fetch, which spends the refresh token and the client
-     * secret at the discovered endpoint. That is the same exchange the explicit paths guard, so it
-     * gets the same fetch - without it a discovery document could name a plain-text token endpoint
-     * and this one request would still honour it. A provider is only attached to a URL that already
-     * passed `normalizeResource`, so the guard refuses nothing this probe could otherwise reach.
-     */
-    return new StreamableHTTPClientTransport(new URL(config.url), {
-      fetch: authProvider ? secureOAuthFetch() : challengeRecordingFetch(onChallenge),
-      ...(authProvider ? { authProvider } : {}),
-      requestInit: { headers },
-    });
-  }
-  return new StdioClientTransport({
-    command: server.command ?? config.command,
-    args: config.args,
-    // The resolved directory, not the stored one: process creation does not expand a leading `~`,
-    // which the form's own example uses.
-    ...(server.workingDirectory ? { cwd: server.workingDirectory } : {}),
-    // The SDK default first, then this user's own `PATH`, the names the user asked to pass through,
-    // and the user's own pairs. `envPassthrough` has no other meaning anywhere in OpenBot; this is
-    // where it is spent. The launch environment is the providers' as well, so what the panel tests
-    // is what an agent starts.
-    env: {
-      ...getDefaultEnvironment(),
-      ...mcpLaunchEnvironment(server),
-    },
-    // Discarded, not piped. Nothing here reads that pipe, so a server that writes its startup log to
-    // stderr - which a Rust or Python server does with a blocking write - fills the 64 KB buffer and
-    // stops before it answers the handshake. The probe would report a timeout for a working server.
-    stderr: "ignore",
-  });
 }
 
 /**

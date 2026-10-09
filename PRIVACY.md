@@ -918,3 +918,18 @@ release manifest from GitHub for its operating system and architecture. The requ
 account data, chats, files, commands, or credentials. GitHub receives the host IP address as part
 of the connection. Connected administrators receive the installed version, release version,
 check status, and installation method.
+## API event checks
+
+A check can run an agent-authored API program from the host's shared Watchers folder. Programs can
+be reused by separate check instances. Each instance keeps its own ordinary configuration,
+private variables, baseline, and ten execution logs on the host. Settings send private values to
+the authenticated host connection. They are encrypted in a private per-instance environment file;
+settings and agent tools return names and configured flags, never saved values. The account Worker
+does not store these variables. The host passes only declared values to the program's environment,
+not inherited provider credentials. Program output is bounded and secret-redacted before event delivery.
+
+The scheduler makes no model request for a check or test. A matching event can start the agent and
+send its selected app data to the configured AI provider. Programs use the agents' existing full
+computer access. File permissions and encryption do not isolate them from other files under the
+same OS account, and arbitrary authored code is not an enforced read-only network sandbox. The
+creation skill requires direct API reads, read-only tokens where available, and no MCP or model calls.

@@ -78,6 +78,7 @@ export interface McpGatewayOptions {
  */
 export class McpGateway {
   readonly #servers: McpServerStore;
+  readonly #scope: ProviderClientContext["mcpScope"];
   readonly #computerUseMcpServer: () => McpServerConfig | null;
   readonly #githubConnector: GitHubConnectorSource | null;
   /**
@@ -109,6 +110,7 @@ export class McpGateway {
   constructor(options: McpGatewayOptions) {
     const { credentials } = options;
     this.#servers = options.servers;
+    this.#scope = credentials.mcpScope;
     this.#computerUseMcpServer = options.computerUseMcpServer;
     this.#githubConnector = options.githubConnector ?? null;
     this.#toolRuntimes = () => credentials.mcpToolRuntimes?.() ?? NO_MCP_TOOL_RUNTIMES;
@@ -130,7 +132,7 @@ export class McpGateway {
 
   readonly authorization = Effect.fnUntraced(function* (this: McpGateway, config: McpServerConfig) {
     const github = this.#githubConnector;
-    const oauth = this.#oauth;
+    const oauth = this.#authority(config.id);
     const token =
       config.id === GITHUB_CONNECTOR_MCP_SERVER_ID
         ? github
@@ -179,18 +181,26 @@ export class McpGateway {
     const list = yield* this.changed();
     /*
      * A row that goes takes its sign-in with it: a refresh token nothing can reach again is a secret
-     * kept for no reason. Only when no row is left naming the same account, because two rows on one
-     * URL are one account to the server and dropping it would sign the other one out too. Compared
-     * normalized, as the store keys it: `https://mcp.stripe.com` and `https://mcp.stripe.com/` share
-     * one credential, and removing either row must keep the other's.
+     * kept for no reason. Legacy rows on one normalized URL share a credential; named account
+     * rows have their own credential and are removed independently.
      */
     const removedResource = removed?.transport === "http" ? normalizeResource(removed.url) : null;
     if (
       removed &&
       removedResource &&
-      !list.some((config) => config.transport === "http" && normalizeResource(config.url) === removedResource)
+      (removed.id.startsWith("mcpacct-") ||
+        !list.some(
+          (config) =>
+            !config.id.startsWith("mcpacct-") &&
+            config.transport === "http" &&
+            normalizeResource(config.url) === removedResource,
+        ))
     ) {
-      if (this.#oauth) yield* this.#oauth.forget(removed.url).pipe(toMcpGatewayFailed);
+      const oauth = this.#authority(removed.id);
+      if (oauth) {
+        oauth.cancelSignIn(removed.url);
+        yield* oauth.forget(removed.url).pipe(toMcpGatewayFailed);
+      }
     }
     return list;
   }, Effect.uninterruptible);
@@ -251,7 +261,7 @@ export class McpGateway {
     // The stored sign-ins are still spent: without them the probe cannot read or refresh the host's
     // token, and a remote administrator gets a false 401 for a server local agents use. `signIn`
     // stays `null`, so a 401 the stored token cannot fix is reported rather than waited on.
-    const stored = this.#oauth;
+    const stored = this.#authority(config.id);
     const silent: Pick<McpOAuthAuthority, "accessToken" | "signIn"> | undefined =
       !options.interactive && options.storedCredentials && stored
         ? { accessToken: (url) => stored.accessToken(url), signIn: () => null }
@@ -282,19 +292,21 @@ export class McpGateway {
 
   /** Stops the sign-in waiting for this address's browser. Nothing happens when none is waiting. */
   cancelSignIn(url: string): void {
-    this.#oauth?.cancelSignIn(url);
+    if (this.#oauth?.cancelSignInsForUrl) this.#oauth.cancelSignInsForUrl(url);
+    else this.#oauth?.cancelSignIn(url);
   }
 
   /**
    * Forgets the sign-in of one http row, and every agent's session is refreshed so the old bearer
-   * stops being handed out. Rows with the same address share that account, so they are signed out
-   * too; the answer says so, row by row.
+   * stops being handed out. Legacy rows with the same address share that account. Named account
+   * rows are signed out independently. The answer says so, row by row.
    */
   readonly signOut = Effect.fn("McpGateway.signOut")(function* (this: McpGateway, input: SignOutMcpServerInput) {
     const config = this.#servers.list().find((row) => row.id === input.mcpServerId && row.transport === "http");
-    if (config && this.#oauth) {
-      this.#oauth.cancelSignIn(config.url);
-      yield* this.#oauth.forget(config.url).pipe(toMcpGatewayFailed);
+    const oauth = config ? this.#authority(config.id) : null;
+    if (config && oauth) {
+      oauth.cancelSignIn(config.url);
+      yield* oauth.forget(config.url).pipe(toMcpGatewayFailed);
       yield* this.#hooks.refreshAllAgentRuntimes();
     }
     return this.signIns();
@@ -302,11 +314,17 @@ export class McpGateway {
 
   /** Whether each http row has a sign-in on this computer. Yes or no only, never a token. */
   signIns(): McpSignInState[] {
-    const oauth = this.#oauth;
     return this.#servers
       .list()
       .filter((config) => config.transport === "http")
-      .map((config) => ({ mcpServerId: config.id, signedIn: oauth?.signedIn(config.url) ?? false }));
+      .map((config) => ({
+        mcpServerId: config.id,
+        signedIn: this.#authority(config.id)?.signedIn(config.url) ?? false,
+      }));
+  }
+
+  #authority(id: string): McpOAuthAuthority | null {
+    return this.#oauth?.forConnection?.(id) ?? this.#oauth;
   }
 
   /**
@@ -320,14 +338,15 @@ export class McpGateway {
    * name: a server the user added keeps working as they set it up, and two entries with one name
    * would collide in every provider's configuration.
    */
-  enabled(): McpServerConfig[] {
+  enabled(threadId?: string): McpServerConfig[] {
     const configured = this.#servers.listEnabled();
     const builtIn: McpServerConfig[] = [];
     const computerUse = this.#computerUseMcpServer();
     if (computerUse) builtIn.push(computerUse);
     const github = this.#githubConnector?.mcpServer() ?? null;
     if (github && !configured.some((config) => config.name === github.name)) builtIn.push(github);
-    return this.#handoff.record([...configured, ...builtIn]);
+    const configs = [...configured, ...builtIn];
+    return this.#handoff.record(threadId && this.#scope ? this.#scope(threadId, configs) : configs);
   }
 
   /**

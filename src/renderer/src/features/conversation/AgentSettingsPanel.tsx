@@ -1,10 +1,11 @@
 import { agentAutomationAllowed, type MarketplaceSkillDetail } from "@openbot/contracts/ipc";
-import { BookMarked, CalendarClock, Folder, Gauge, Puzzle, Table2, Upload } from "@openbot/ui";
+import { Bell, BookMarked, CalendarClock, Folder, Gauge, Puzzle, Table2, Upload } from "@openbot/ui";
 import { SettingsLinkGroup, SettingsLinkRow } from "@openbot/ui/components/SettingsPanel";
 import type { AgentProfile } from "@openbot/ui/data";
 import SharedAgentSettingsPanel, {
   type AgentSettingsPanelProps as SharedAgentSettingsPanelProps,
 } from "@openbot/ui/features/conversation/AgentSettingsPanel";
+import { EventChecksSettings } from "@openbot/ui/features/conversation/EventChecksSettings";
 import { agentFilesLinkValue } from "@openbot/ui/features/files/AgentFilesView";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createStore, Show, untrack } from "solid-js";
@@ -47,6 +48,8 @@ interface AgentSettingsPanelProps
   agents?: readonly AgentProfile[];
   /** Event routine calls for a host that advertises `events-v1`; absent keeps the released schedule API. */
   eventRoutines?: EventRoutinesApi;
+  eventChecksAvailable?: boolean;
+  apiEventChecksAvailable?: boolean;
   onCreateSkill?: () => void;
   onTrySkill?: (skill: MarketplaceSkillDetail) => void;
   onAddFromMarketplace?: (agentId: string) => void;
@@ -63,6 +66,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     tables: { count: 0, open: false },
     memories: { count: 0, open: false },
     routines: { count: 0, open: false },
+    checks: { count: 0, open: false },
     files: { open: false },
     skills: { count: 0, open: false, reopenAfterMarketplace: false },
   });
@@ -75,7 +79,15 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       props.automationEditable === true,
     ),
   );
+  const checksApi = () =>
+    props.remoteClient
+      ? props.adminCalls?.eventChecks
+      : props.eventChecksAvailable !== false
+        ? window.openbot.eventChecks
+        : undefined;
+  const routinesVisible = () => !props.remoteClient || Boolean(props.adminCalls?.routines);
   const routinesPort = createMemo(() => {
+    if (props.adminCalls?.routines) return props.adminCalls.routines(props.agent.id);
     const eventApi = props.eventRoutines ?? props.adminCalls?.eventRoutines;
     return eventApi
       ? eventRoutinesPort({ kind: "agent", id: props.agent.id }, eventApi, legacyRoutinesPort())
@@ -104,6 +116,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
         state.tables.open = false;
         state.memories.open = false;
         state.routines.open = false;
+        state.checks.open = false;
         state.files.open = false;
         state.skills.open = false;
         state.skills.reopenAfterMarketplace = false;
@@ -119,6 +132,25 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
           });
       }
       void untrack(() => loadSkillsCount(agentId));
+      const checks = checksApi();
+      if (checks)
+        void checks
+          .list({ agentId })
+          .then((items) =>
+            setDraft((draft) => {
+              draft.checks.count = items.length;
+            }),
+          )
+          .catch(() => {});
+      if (routinesVisible())
+        void routinesPort()
+          .list()
+          .then((items) =>
+            setDraft((draft) => {
+              draft.routines.count = items.length;
+            }),
+          )
+          .catch(() => {});
       if (!props.remoteClient) {
         void conversationPort()
           .agent.listMemories(agentId)
@@ -126,14 +158,6 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
           .then((items) => {
             setDraft((state) => {
               state.memories.count = items.length;
-            });
-          });
-        void routinesPort()
-          .list()
-          .catch(() => [])
-          .then((items) => {
-            setDraft((state) => {
-              state.routines.count = items.length;
             });
           });
       }
@@ -213,7 +237,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       width={panelWidth()}
       onResize={setPanelWidth}
       onResizeEnd={saveSettingsPanelWidth}
-      detailOpen={draft.routines.open || draft.files.open}
+      detailOpen={draft.routines.open || draft.files.open || draft.checks.open}
       links={
         <>
           <Show when={!props.remoteClient || skillsMode() !== "hidden" || props.tablesVisible !== false || props.files}>
@@ -268,9 +292,11 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
               </Show>
             </SettingsLinkGroup>
           </Show>
-          <Show when={!props.remoteClient || props.onPublish}>
+          <Show
+            when={routinesVisible() || checksApi() || (!props.remoteClient && props.onOpenUsage) || props.onPublish}
+          >
             <SettingsLinkGroup inset title={t("agentSettings.groups.does")}>
-              <Show when={!props.remoteClient}>
+              <Show when={routinesVisible()}>
                 <SettingsLinkRow
                   icon={<CalendarClock aria-hidden="true" />}
                   label={t("agentSettings.links.routines")}
@@ -278,6 +304,18 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   onClick={() =>
                     setDraft((state) => {
                       state.routines.open = true;
+                    })
+                  }
+                />
+              </Show>
+              <Show when={checksApi()}>
+                <SettingsLinkRow
+                  icon={<Bell aria-hidden="true" />}
+                  label={t("agentSettings.links.eventChecks")}
+                  value={t("agentSettings.links.eventChecksCount", { count: draft.checks.count })}
+                  onClick={() =>
+                    setDraft((state) => {
+                      state.checks.open = true;
                     })
                   }
                 />
@@ -314,6 +352,30 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
             }
             onClose={props.onClose}
           />
+        )}
+      </Show>
+      <Show when={draft.checks.open && checksApi()}>
+        {(api) => (
+          <div class="agent-routines-overlay">
+            <EventChecksSettings
+              api={api()}
+              apiProgramsAvailable={
+                props.remoteClient ? Boolean(api().environment) : (props.apiEventChecksAvailable ?? true)
+              }
+              agentId={props.agent.id}
+              onCountChange={(count) =>
+                setDraft((draft) => {
+                  draft.checks.count = count;
+                })
+              }
+              onBack={() =>
+                setDraft((draft) => {
+                  draft.checks.open = false;
+                })
+              }
+              onClose={props.onClose}
+            />
+          </div>
         )}
       </Show>
       <Show when={draft.routines.open}>

@@ -327,6 +327,98 @@ async function fakeServer(options: FakeServerOptions = {}): Promise<FakeServer> 
 }
 
 describe("signing in to an http MCP server", () => {
+  it("keeps credentials and native callback states separate for accounts on one URL", async () => {
+    const storage = memoryStorage();
+    const oauth = createOAuth({ storage, redirectUrl: "openbot://mcp-auth", openExternal: async () => {} });
+    const url = "https://mcp.example.com/mcp";
+    const one = `mcpacct-${crypto.randomUUID()}`;
+    const two = `mcpacct-${crypto.randomUUID()}`;
+    storage.records.set(`${one}:${url}`, {
+      tokens: { access_token: "one", token_type: "Bearer" },
+      obtainedAt: Date.now(),
+    });
+    storage.records.set(`${two}:${url}`, {
+      tokens: { access_token: "two", token_type: "Bearer" },
+      obtainedAt: Date.now(),
+    });
+    expect(await runMcp(oauth.forConnection(one).accessToken(url))).toBe("one");
+    expect(await runMcp(oauth.forConnection(two).accessToken(url))).toBe("two");
+    expect(await runMcp(oauth.accessToken(url))).toBeNull();
+    expect(oauth.forConnection(one).signedIn(url)).toBe(true);
+    expect(oauth.forConnection(two).signedIn(url)).toBe(true);
+    expect(oauth.signedIn(url)).toBe(false);
+    const signIn = oauth.forConnection(one).signIn(url);
+    const state = await signIn?.provider.state?.();
+    expect(state).toBeTruthy();
+    expect(oauth.receiveAuthorizationCode(state ?? "", "native-code")).toBe(true);
+    expect(oauth.receiveAuthorizationCode(state ?? "", "replayed-code")).toBe(false);
+    signIn?.abandon();
+    await runMcp(oauth.forConnection(one).forget(url));
+    expect(await runMcp(oauth.forConnection(one).accessToken(url))).toBeNull();
+    expect(await runMcp(oauth.forConnection(two).accessToken(url))).toBe("two");
+    expect(oauth.forConnection(one).signedIn(url)).toBe(false);
+    expect(oauth.forConnection(two).signedIn(url)).toBe(true);
+  });
+
+  it("cancels only the chosen account and rejects its later browser callback", async () => {
+    const oauth = createOAuth({
+      storage: memoryStorage(),
+      redirectUrl: "openbot://mcp-auth",
+      openExternal: async () => {},
+    });
+    const url = "https://mcp.example.com/mcp";
+    const one = oauth.forConnection(`mcpacct-${crypto.randomUUID()}`);
+    const two = oauth.forConnection(`mcpacct-${crypto.randomUUID()}`);
+    const first = one.signIn(url);
+    const second = two.signIn(url);
+    if (!first || !second) throw new Error("The account sign-ins did not start.");
+    const state = await first.provider.state?.();
+    const pending = runMcp(first.complete());
+
+    expect(one.cancelSignIn(url)).toBe(true);
+    await expect(pending).rejects.toThrow("The sign-in was cancelled.");
+    expect(oauth.receiveAuthorizationCode(state ?? "", "stale-code")).toBe(false);
+    expect(second.cancelled()).toBe(false);
+    second.abandon();
+  });
+
+  it("reaches unsaved account drafts with the released URL-only cancel request", async () => {
+    const oauth = createOAuth({
+      storage: memoryStorage(),
+      redirectUrl: "openbot://mcp-auth",
+      openExternal: async () => {},
+    });
+    const url = "https://mcp.example.com/mcp";
+    const first = oauth.forConnection(`mcpacct-${crypto.randomUUID()}`).signIn(url);
+    const second = oauth.forConnection(`mcpacct-${crypto.randomUUID()}`).signIn(url);
+    const other = oauth.forConnection(`mcpacct-${crypto.randomUUID()}`).signIn("https://other.example.com/mcp");
+    if (!first || !second || !other) throw new Error("The account sign-ins did not start.");
+    const pending = [runMcp(first.complete()), runMcp(second.complete())];
+
+    expect(oauth.cancelSignInsForUrl(url)).toBe(true);
+    await Promise.all(pending.map((completion) => expect(completion).rejects.toThrow("The sign-in was cancelled.")));
+    expect(other.cancelled()).toBe(false);
+    expect(oauth.cancelSignInsForUrl(url)).toBe(false);
+    other.abandon();
+  });
+
+  it("ends account sign-ins at shutdown and rejects their later browser callbacks", async () => {
+    const oauth = createOAuth({
+      storage: memoryStorage(),
+      redirectUrl: "openbot://mcp-auth",
+      openExternal: async () => {},
+    });
+    const signIn = oauth.forConnection(`mcpacct-${crypto.randomUUID()}`).signIn("https://mcp.example.com/mcp");
+    if (!signIn) throw new Error("The account sign-in did not start.");
+    const state = await signIn.provider.state?.();
+    const pending = expect(runMcp(signIn.complete())).rejects.toThrow("The sign-in was cancelled.");
+
+    await runMcp(oauth.close());
+
+    await pending;
+    expect(oauth.receiveAuthorizationCode(state ?? "", "stale-code")).toBe(false);
+  });
+
   it("registers, gets a grant from the browser, and connects with the token", async () => {
     const server = await fakeServer();
     const storage = memoryStorage();
@@ -1218,4 +1310,24 @@ describe("the address a returning grant is sent to", () => {
     expect(describeUnusableRedirectUrl(LOOPBACK)).toBeNull();
     expect(describeUnusableRedirectUrl("openbot://mcp-auth")).toBeNull();
   });
+});
+
+it("labels a remote client with its own private website", async () => {
+  const oauth = createOAuth({
+    storage: memoryStorage(),
+    redirectUrl: "openbot://mcp-auth",
+    openExternal: async () => {},
+  });
+  const signIn = oauth.remoteSignIn("https://mcp.example.com/mcp", {
+    redirectUrl: "https://private.example.com/mcp-auth",
+    openExternal: async () => {},
+  });
+  if (!signIn) throw new Error("No remote sign-in.");
+  expect(signIn.provider.clientMetadata).toMatchObject({
+    client_name: "Private OpenBot",
+    client_uri: "https://private.example.com/app",
+    redirect_uris: ["https://private.example.com/mcp-auth"],
+  });
+  signIn.abandon();
+  await runMcp(oauth.close());
 });

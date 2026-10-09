@@ -15,6 +15,7 @@ import { Route as AppPreviewRouteImport } from './routes/app-preview'
 import { Route as ChangelogRouteImport } from './routes/changelog'
 import { Route as JoinRouteImport } from './routes/join'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
+import { Route as McpAuthRouteImport } from './routes/mcp-auth'
 import { Route as ReportSiteRouteImport } from './routes/report-site'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as DotwellKnownAppleAppSiteAssociationRouteImport } from './routes/[.]well-known/apple-app-site-association'
@@ -167,6 +168,11 @@ const JoinRoute = JoinRouteImport.update({
 const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
   id: '/llms.txt',
   path: '/llms.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpAuthRoute = McpAuthRouteImport.update({
+  id: '/mcp-auth',
+  path: '/mcp-auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReportSiteRoute = ReportSiteRouteImport.update({
@@ -837,6 +843,7 @@ export interface FileRoutesByFullPath {
   '/changelog': typeof ChangelogRoute
   '/join': typeof JoinRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/mcp-auth': typeof McpAuthRoute
   '/report-site': typeof ReportSiteRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
@@ -968,6 +975,7 @@ export interface FileRoutesByTo {
   '/changelog': typeof ChangelogRoute
   '/join': typeof JoinRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/mcp-auth': typeof McpAuthRoute
   '/report-site': typeof ReportSiteRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
@@ -1100,6 +1108,7 @@ export interface FileRoutesById {
   '/changelog': typeof ChangelogRoute
   '/join': typeof JoinRoute
   '/llms.txt': typeof LlmsDottxtRoute
+  '/mcp-auth': typeof McpAuthRoute
   '/report-site': typeof ReportSiteRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
@@ -1233,6 +1242,7 @@ export interface FileRouteTypes {
     | '/changelog'
     | '/join'
     | '/llms.txt'
+    | '/mcp-auth'
     | '/report-site'
     | '/sitemap.xml'
     | '/.well-known/apple-app-site-association'
@@ -1364,6 +1374,7 @@ export interface FileRouteTypes {
     | '/changelog'
     | '/join'
     | '/llms.txt'
+    | '/mcp-auth'
     | '/report-site'
     | '/sitemap.xml'
     | '/.well-known/apple-app-site-association'
@@ -1495,6 +1506,7 @@ export interface FileRouteTypes {
     | '/changelog'
     | '/join'
     | '/llms.txt'
+    | '/mcp-auth'
     | '/report-site'
     | '/sitemap.xml'
     | '/.well-known/apple-app-site-association'
@@ -1627,6 +1639,7 @@ export interface RootRouteChildren {
   ChangelogRoute: typeof ChangelogRoute
   JoinRoute: typeof JoinRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
+  McpAuthRoute: typeof McpAuthRoute
   ReportSiteRoute: typeof ReportSiteRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   DotwellKnownAppleAppSiteAssociationRoute: typeof DotwellKnownAppleAppSiteAssociationRoute
@@ -1778,6 +1791,13 @@ declare module '@tanstack/solid-router' {
       path: '/llms.txt'
       fullPath: '/llms.txt'
       preLoaderRoute: typeof LlmsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp-auth': {
+      id: '/mcp-auth'
+      path: '/mcp-auth'
+      fullPath: '/mcp-auth'
+      preLoaderRoute: typeof McpAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/report-site': {
@@ -2777,6 +2797,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChangelogRoute: ChangelogRoute,
   JoinRoute: JoinRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
+  McpAuthRoute: McpAuthRoute,
   ReportSiteRoute: ReportSiteRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   DotwellKnownAppleAppSiteAssociationRoute:

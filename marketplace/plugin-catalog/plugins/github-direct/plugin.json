@@ -1,0 +1,51 @@
+{
+  "slug": "github-direct",
+  "name": "GitHub",
+  "tagline": "Repositories, issues and pull requests",
+  "description": "Connect directly to GitHub with your own token. Read repositories, manage issues and review pull requests. Limit the token to the repositories and permissions you need. Terminal Git authentication is separate.",
+  "category": "coding",
+  "creatorName": "github.com",
+  "iconUrl": "https://github.com/favicon.ico",
+  "version": "1.0.0",
+  "prompts": [
+    {
+      "id": "prompt-inspect",
+      "text": "Show what I can access through GitHub. Do not change anything."
+    }
+  ],
+  "apps": [
+    {
+      "id": "app-github-direct-mcp",
+      "name": "GitHub",
+      "description": "Connect directly to GitHub with your own token. Read repositories, manage issues and review pull requests. Limit the token to the repositories and permissions you need. Terminal Git authentication is separate.",
+      "iconUrl": "https://github.com/favicon.ico",
+      "server": {
+        "name": "github-direct",
+        "transport": "http",
+        "url": "https://api.githubcopilot.com/mcp/",
+        "auth": [
+          {
+            "id": "github-direct-key",
+            "kind": "key",
+            "label": "API key",
+            "fields": [
+              {
+                "id": "token",
+                "label": "Personal access token",
+                "header": "Authorization",
+                "prefix": "Bearer ",
+                "hint": "GitHub settings \u2192 Developer settings \u2192 Personal access tokens"
+              }
+            ],
+            "docsUrl": "https://github.com/github/github-mcp-server",
+            "docsLabel": "Setup instructions"
+          }
+        ]
+      }
+    }
+  ],
+  "skills": [],
+  "websiteUrl": "https://github.com/github/github-mcp-server",
+  "privacyPolicyUrl": null,
+  "termsUrl": null
+}

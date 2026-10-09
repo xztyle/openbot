@@ -1,4 +1,12 @@
 import {
+  decodeEventCheck,
+  decodeEventCheckAccount,
+  decodeEventCheckEnvironmentStatus,
+  decodeEventCheckExecution,
+  decodeEventCheckList,
+  decodeEventCheckTool,
+} from "@openbot/contracts/event-checks";
+import {
   type AgentIpcRequest,
   type AttachmentImportEvent,
   decodeAddedAgent,
@@ -880,6 +888,18 @@ const openbotApi: OpenBotDesktopApi = {
   }),
   // The shared strict contract decoders, as MCP does: main decodes a remote answer with the same
   // decoder before it reaches this point.
+  eventChecks: bridgeGroup(IPC_ENDPOINTS.eventChecks, {
+    environment: (v) => decodeEventCheckList(v, decodeEventCheckEnvironmentStatus, 20),
+    setEnvironment: (v) => decodeEventCheckList(v, decodeEventCheckEnvironmentStatus, 20),
+    test: decodeEventCheckExecution,
+    list: (v) => decodeEventCheckList(v, decodeEventCheck),
+    save: decodeEventCheck,
+    remove: decodeVoid,
+    checkNow: decodeEventCheckExecution,
+    history: (v) => decodeEventCheckList(v, decodeEventCheckExecution, 10),
+    accounts: (v) => decodeEventCheckList(v, decodeEventCheckAccount),
+    tools: (v) => decodeEventCheckList(v, decodeEventCheckTool, 500),
+  }),
   events: bridgeGroup(IPC_ENDPOINTS.events, {
     getStatus: decodeEventStatus,
     listRoutines: decodeEventRoutines,

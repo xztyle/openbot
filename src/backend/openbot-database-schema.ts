@@ -5,6 +5,7 @@ import { isGeneratedAgentId } from "@openbot/contracts/validation";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { CHANNEL_SCHEMA_SQL, CHANNEL_SETTINGS_SCHEMA_SQL } from "./channel-schema";
 import { PROVIDER_HISTORY_SCHEMA_SQL } from "./database/provider-history-schema";
+import { EVENT_CHECK_SCHEMA_SQL } from "./event-check-schema";
 import { MCP_SERVERS_SCHEMA_SQL } from "./mcp-schema";
 import { MESSAGING_SCHEMA_SQL } from "./messaging/messaging-schema";
 import { ROUTINE_FLOW_SCHEMA_SQL } from "./routine-flows/routine-flow-schema";
@@ -465,7 +466,8 @@ const LATEST_SCHEMA_SQL =
   MESSAGING_SCHEMA_SQL +
   PROVIDER_HISTORY_SCHEMA_SQL +
   WEBHOOK_SCHEMA_SQL +
-  ROUTINE_FLOW_SCHEMA_SQL;
+  ROUTINE_FLOW_SCHEMA_SQL +
+  EVENT_CHECK_SCHEMA_SQL;
 
 /** The end of a routine table with the migration 27 column after its last one. */
 function withRoutineLimitPolicy(tableEnd: string): string {
@@ -624,6 +626,12 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
     // Only creates tables, so no foreign-key pause and no vacuum. Existing routines have no links,
     // so every routine keeps running only its own agent, which is what it did before.
     up: (db) => db.exec(ROUTINE_FLOW_SCHEMA_SQL),
+  },
+  {
+    version: 32,
+    // Main shipped routine flows at 31; the deployed fork shipped event checks at 31.
+    // Both are additive and idempotent, so either source keeps its rows and receives the missing tables.
+    up: (db) => db.exec(ROUTINE_FLOW_SCHEMA_SQL + EVENT_CHECK_SCHEMA_SQL),
   },
 ];
 

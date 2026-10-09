@@ -52,12 +52,15 @@ import {
   TEAM_CURRENT_CAPABILITIES,
   type TeamCurrentCapability,
 } from "@openbot/contracts/team-protocol/current";
+import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import {
   HOST_RESTART_EVENT,
   type HostRestartEvent,
   type HostRestartState,
 } from "@openbot/contracts/team-protocol/host-update-v1";
 import { teamHttpCodec } from "@openbot/contracts/team-protocol/http-codecs";
+import { MCP_CHAT_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-chat-v1";
+import { MCP_OAUTH_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-oauth-v1";
 import { optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import {
@@ -88,6 +91,7 @@ import { StoredStateFailure } from "../backend/stored-state-effects";
 import type { TeamChatStore } from "../backend/team-chat-store";
 import { LifecycleGate } from "./lifecycle-gate";
 import { listenLoopback } from "./listen-loopback";
+import { RemoteMcpSignInError } from "./remote-mcp-sign-in";
 import { RemoteScreenError } from "./remote-screen-gateway";
 import { RemoteWorkflowError, remoteCall, toRemoteWorkflowError } from "./remote-service-effects";
 import { isClientUse } from "./team-api/client-use";
@@ -120,6 +124,7 @@ import { routeBrowser } from "./team-api/route-browser";
 import { routeChannels } from "./team-api/route-channels";
 import { routeContextReset } from "./team-api/route-context-reset";
 import { routeDirect } from "./team-api/route-direct";
+import { eventCheckCapability, routeEventChecks } from "./team-api/route-event-checks";
 import { routeEvents } from "./team-api/route-events";
 import { routeFiles } from "./team-api/route-files";
 import { routeHostAdmin } from "./team-api/route-host-admin";
@@ -127,6 +132,8 @@ import { routeHostUpdate } from "./team-api/route-host-update";
 import { routeHostedSites } from "./team-api/route-hosted-sites";
 import { routeLiveActivityPush } from "./team-api/route-live-activity-push";
 import { routeMcpServers } from "./team-api/route-mcp";
+import { routeMcpChat } from "./team-api/route-mcp-chat";
+import { routeMcpOAuth } from "./team-api/route-mcp-oauth";
 import { routeProviders } from "./team-api/route-providers";
 import { routeRemoteScreen } from "./team-api/route-remote-screen";
 import { routeSharedTables } from "./team-api/route-shared-tables";
@@ -709,7 +716,9 @@ export class TeamApiServer {
         return;
       if ((await this.#routeAgents(context)) === "handled") return;
 
-      // The only 404 in the Team API.
+      if ((await routeEventChecks(context, this.#options.eventChecks)) === "handled") return;
+      if ((await routeMcpChat(context, this.#options.chatMcp)) === "handled") return;
+      if ((await routeMcpOAuth(context, this.#options.mcpOAuth)) === "handled") return;
       return this.#json(response, 404, { error: sourceText("error.team.routeNotFound") });
     } catch (error) {
       // The only catch, too. A module with its own would cut an unexpected error off from the
@@ -719,6 +728,7 @@ export class TeamApiServer {
         error instanceof RemoteScreenError ||
         error instanceof TeamStoreError ||
         error instanceof McpServerError ||
+        error instanceof RemoteMcpSignInError ||
         error instanceof AnalyticsInputError;
       const status =
         error instanceof HttpError || error instanceof RemoteScreenError ? error.status : expected ? 400 : 500;
@@ -983,9 +993,10 @@ export class TeamApiServer {
         event.type === "conversation" &&
         (!connection.capabilities.has("routine-event-markers") ||
           !connection.capabilities.has("routine-run-event-markers") ||
-          !connection.capabilities.has("hosted-site-event-markers"))
+          !connection.capabilities.has("hosted-site-event-markers") ||
+          !connection.capabilities.has(EVENT_CHECKS_CAPABILITY))
       ) {
-        const key = `${eventProtocol(connection.capabilities)}:${connection.capabilities.has("opencode")}:${connection.capabilities.has("routine-event-markers")}:${connection.capabilities.has("routine-run-event-markers")}:${connection.capabilities.has("hosted-site-event-markers")}:${encodingOptions.preserveSemanticTags}`;
+        const key = `${eventProtocol(connection.capabilities)}:${connection.capabilities.has("opencode")}:${connection.capabilities.has("routine-event-markers")}:${connection.capabilities.has("routine-run-event-markers")}:${connection.capabilities.has("hosted-site-event-markers")}:${encodingOptions.preserveSemanticTags}:${connection.capabilities.has(EVENT_CHECKS_CAPABILITY)}`;
         let filtered = filteredConversationPayloads.get(key);
         if (!filtered) {
           filtered =
@@ -1420,7 +1431,11 @@ export class TeamApiServer {
         // and one that did not never shows the panel.
         if (capability === "remote-desktop-setup")
           return this.#options.remoteScreen?.checkSetup !== undefined && this.#options.remoteScreen?.test !== undefined;
+        const checkCapability = eventCheckCapability(capability, this.#options.eventChecks);
+        if (checkCapability !== undefined) return checkCapability;
         if (capability === MCP_SERVERS_CAPABILITY) return this.#options.mcpServers !== undefined;
+        if (capability === MCP_CHAT_CAPABILITY) return this.#options.chatMcp !== undefined;
+        if (capability === MCP_OAUTH_CAPABILITY) return this.#options.mcpOAuth !== undefined;
         if (capability === STORAGE_CAPABILITY) return this.#options.storage !== undefined;
         if (capability === HOSTED_SITES_CAPABILITY) return this.#options.hostedSites !== undefined;
         if (capability === AGENT_ADMIN_CAPABILITY) return this.#options.admin?.agents !== undefined;

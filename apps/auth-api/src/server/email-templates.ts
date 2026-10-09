@@ -1,5 +1,3 @@
-import { OPENBOT_LINKS } from "../lib/landing-links";
-
 // HTML and plain-text bodies for account email. Mail clients render HTML very differently, so the
 // markup keeps to what all of them share:
 // - Tables and inline styles only. Gmail and Outlook drop or limit `<style>`, so that block holds
@@ -32,13 +30,8 @@ export interface TeamInviteEmailInput {
   role: "admin" | "member";
 }
 
-const SITE_URL = "https://openbot.run";
-const LOGO_URL = `${SITE_URL}/icon-192x192.png`;
-const FOOTER_LINKS = [
-  { label: "openbot.run", href: SITE_URL },
-  { label: "X", href: OPENBOT_LINKS.contact },
-  { label: "GitHub", href: OPENBOT_LINKS.repository },
-] as const;
+const SITE_URL = "https://bots.delynith.com/app";
+const FOOTER_LINKS = [{ label: "bots.delynith.com", href: SITE_URL }] as const;
 const FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Helvetica, Arial, sans-serif";
 const MONO_STACK = "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace";
 // Filler after the preheader, so a client's inbox preview does not continue into the body text.
@@ -198,7 +191,7 @@ function renderLayout(input: LayoutInput): string {
         <tr>
           <td style="padding:0 4px 20px;">
             <a href="${SITE_URL}" style="text-decoration:none;">
-              <img src="${LOGO_URL}" width="32" height="32" alt="OpenBot" style="display:block;border:0;outline:none;border-radius:8px;font-family:${FONT_STACK};font-size:15px;font-weight:600;line-height:32px;color:${COLOR.text};">
+              OpenBot
             </a>
           </td>
         </tr>

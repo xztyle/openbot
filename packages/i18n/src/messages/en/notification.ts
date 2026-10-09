@@ -7,6 +7,10 @@ export const messages = defineMessages("notification", {
   "notification.needsApproval": "Needs your approval.",
   "notification.finished": "Finished working.",
   "notification.failed": "Stopped with an error.",
+  "notification.unattendedRunFailed": "A scheduled run stopped with an error.",
+  "notification.eventCheckFailing": "An event check keeps failing.",
+  "notification.eventCheckTurnFailed": "An event check turn stopped with an error.",
+  "notification.eventCheckDeliveryFailed": "An event check could not give an event to the agent.",
   "notification.usageLimit.title": "{provider} account reached its limit",
   "notification.usageLimit.body": {
     one: "{count} agent waits. OpenBot will try again later.",

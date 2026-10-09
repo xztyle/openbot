@@ -2,13 +2,14 @@
   "slug": "linear-assigned-intake",
   "name": "Linear assigned work",
   "tagline": "Wake an agent when issues or projects assigned to you change",
-  "description": "Checks Linear every minute for the issues assigned to one person in one team, and for the projects that person leads. It runs as a normal program with no AI, reads Linear's API directly with a personal API key, and never changes anything in Linear. A new item, or a change to an issue's title or description, wakes the agent once. Changes you made yourself are skipped when the author can be told from Linear's history; when it cannot, the change is delivered. Linear's rate limits are honored with a saved cooldown for each check. Install it again for another workspace, team or person: every install has its own settings, API key, schedule and history.",
-  "version": "1.0.0",
+  "description": "Checks Linear every minute for the issues assigned to one person in one team, and for the projects that person leads. It runs as a normal program with no AI, reads Linear's API directly with a personal API key, and never changes anything in Linear. A new item, or a change to an issue's title or description, wakes the agent once. Optional settings narrow the issues by workflow state or label, add the issues delegated to a Linear agent user, and watch comments. A state filter or a label filter also makes a change of state or labels wake the agent, and comments make a new or edited comment wake it. With none of these settings the check watches what version 1.0.0 watched. Changes you made yourself are skipped when the author can be told from Linear's history; when it cannot, the change is delivered. Linear's rate limits are honored with a saved cooldown for each check. Install it again for another workspace, team or person: every install has its own settings, API key, schedule and history.",
+  "version": "1.1.0",
   "creatorName": "OpenBot",
   "iconUrl": "https://linear.app/favicon.ico",
   "websiteUrl": "https://linear.app",
   "app": "linear",
-  "program": "program.mjs",
+  "program": "program-1.1.0.mjs",
+  "earlierPrograms": [{ "version": "1.0.0", "program": "program.mjs" }],
   "accountLabelHint": "The Linear workspace, for example Work",
   "variables": [
     {
@@ -67,6 +68,43 @@
       "description": "The short key of that team, such as ENG. It is checked against the team ID.",
       "value": "",
       "required": true
+    },
+    {
+      "name": "stateFilter",
+      "label": "Workflow states (optional)",
+      "description": "Watch only issues in these workflow states, with names separated by commas, such as Todo, In Progress. A move between these states wakes the agent. Leave empty to watch every state.",
+      "value": "",
+      "required": false
+    },
+    {
+      "name": "labelFilter",
+      "label": "Labels (optional)",
+      "description": "Watch only issues that have at least one of these labels, with names separated by commas. A label change wakes the agent. Leave empty to watch every issue.",
+      "value": "",
+      "required": false
+    },
+    {
+      "name": "delegateId",
+      "label": "Delegate user ID (optional)",
+      "description": "Also watch the issues that are delegated to this Linear user, such as an agent user. Leave empty to watch assigned issues only.",
+      "value": "",
+      "required": false
+    },
+    {
+      "name": "includeComments",
+      "label": "Watch comments",
+      "description": "Wake the agent when a recent comment on an issue is new or edited. The check then asks for at most 25 issues in each request.",
+      "value": "false",
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "name": "includeProjects",
+      "label": "Watch projects you lead",
+      "description": "Also watch the projects that this user leads.",
+      "value": "true",
+      "required": false,
+      "type": "boolean"
     },
     {
       "name": "pageSize",

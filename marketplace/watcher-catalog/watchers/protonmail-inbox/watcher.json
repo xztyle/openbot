@@ -3,7 +3,7 @@
   "name": "Proton Mail inbox",
   "tagline": "Wake an agent when new mail arrives in your Proton Mail inbox",
   "description": "Checks your Proton Mail inbox every minute and wakes the agent once for each new message. Proton Mail has no public API, so this works through Proton Mail Bridge, a free app from Proton that gives your computer a local IMAP server. Proton Mail Bridge must be installed, signed in to your Proton account and reachable from the machine that runs OpenBot. Inside the OpenBot container, 127.0.0.1 means the container itself, not your computer, so you may need to change the IMAP server setting to an address that reaches Bridge. If Bridge is not reachable, the check fails with a clear error and wakes nobody. The check uses the user name and the mailbox password that Bridge shows for your account, not your Proton login password. Bridge uses a self-signed certificate, so this check accepts a self-signed certificate only when the server is 127.0.0.1, ::1 or localhost; for any other server the certificate must be valid. By default it looks only at unread mail. It runs as a normal program with no AI. It reads only the sender, recipients, subject, date and the first few lines of each message, never attachments or whole messages. It never marks mail as read and never changes, moves or deletes anything. Mail you sent from your own address is skipped when you enter that address as your account ID. A message that looks like it is from you can still be forged, so do not treat the sender as proof. Install it again for another mailbox: every install has its own settings, password, schedule and history.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "creatorName": "OpenBot",
   "iconUrl": null,
   "websiteUrl": "https://proton.me/mail/bridge",

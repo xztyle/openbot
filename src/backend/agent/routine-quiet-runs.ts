@@ -17,6 +17,26 @@ export function isNoUpdateAnswer(text: string): boolean {
   return text.trim() === ROUTINE_NO_UPDATE_MARKER;
 }
 
+/** The lines that start the event block in the instruction of a run that a webhook or a local script started. */
+const EVENT_BLOCK_STARTS = ["\n--- external event input ---\n", "\n--- event from a local script ---\n"];
+
+/** Whether a webhook or a local script started this run, not a person who pressed Test. */
+export function isEventStartedRun(run: { kind: "scheduled" | "manual"; instruction: string }): boolean {
+  return run.kind === "manual" && EVENT_BLOCK_STARTS.some((start) => run.instruction.includes(start));
+}
+
+/**
+ * Whether the run may end quiet. A scheduled run may. A run that an event started may when the
+ * routine task, the text before the event block, names the no-update marker: the user opts in by
+ * asking for the marker there. The event data cannot opt a run in. A Test run waits for its result.
+ */
+export function runMayEndQuiet(run: { kind: "scheduled" | "manual"; instruction: string }): boolean {
+  if (run.kind === "scheduled") return true;
+  const starts = EVENT_BLOCK_STARTS.map((start) => run.instruction.indexOf(start)).filter((index) => index >= 0);
+  if (starts.length === 0) return false;
+  return run.instruction.slice(0, Math.min(...starts)).includes(ROUTINE_NO_UPDATE_MARKER);
+}
+
 /**
  * Settles the answers of a completed turn that ran only scheduled routine runs. Each answer that is only
  * the marker goes: the user never needs to see it. When nothing else in the turn tells the user

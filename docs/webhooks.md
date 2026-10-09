@@ -114,6 +114,17 @@ A `202` response does not mean that the run is complete. Look at the routine his
 result. The relay does not keep requests while the host is offline. If you do not retry, the event
 is lost.
 
+GitHub and Linear sign their requests in their own way, so they cannot post to this URL. Use the
+[forwarder](webhooks-forwarder.md) on the host computer for them.
+
+### Quiet runs and the hourly limit
+
+A webhook run can end without a message. Write `[[no-update]]` in the routine task as the answer for
+"nothing needs me". If the agent then answers only that marker, the run leaves no message and no
+notification. Only the routine task counts: the event data cannot turn this on. A routine starts at most
+20 runs an hour from events. A later event waits, and the waiting events go out as one run when a place
+frees. The run history shows the waiting runs as combined.
+
 ### Retries and duplicates
 
 The delivery ID is the deduplication key for each routine. To retry, send the same delivery ID and the

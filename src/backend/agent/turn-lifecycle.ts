@@ -600,15 +600,27 @@ export class TurnLifecycle {
     if (deliveries.some((delivery) => delivery.delivery.sender.kind === "agent")) {
       dropPlaceholderAnswers(snapshot, turnId);
     }
-    // Only a turn that ran nothing but scheduled routine runs: a person who wrote in the same turn,
-    // or who started a Test, script or webhook run, waits for the answer.
+    // Nobody watches an event check turn, so a failed one tells the user once, with the cause.
+    if (outcome === "failed" && deliveries.length > 0 && deliveries.every((context) => context.eventCheck)) {
+      this.#hooks.emit({
+        type: "error",
+        agentId,
+        code: "event_check_turn_failed",
+        message: this.#hooks.redactMcp(
+          sourceText("error.backend.eventCheckTurnFailed", {
+            reason: failure ?? sourceText("error.backend.eventCheckTurnUnknown"),
+          }),
+        ),
+      });
+    }
+    // Only a turn that ran nothing but unattended work: scheduled routine runs, routine runs that an
+    // event started and that opted in, and event check deliveries. A person who wrote in the same
+    // turn, or who started a Test run, waits for the answer.
     const quiet =
       outcome === "completed" &&
       deliveries.length > 0 &&
       !this.#conversation.isExecutionThread(snapshot.threadId) &&
-      deliveries.every(
-        ({ delivery }) => delivery.sender.kind === "routine" && this.#hooks.quietRoutineDelivery(delivery.id),
-      ) &&
+      deliveries.every((context) => this.#mayEndQuiet(context)) &&
       settleQuietRoutineTurn(snapshot, turnId);
     const latestAssistant = latestTurnAnswer(snapshot.messages, turnId);
     if (deliveries.length > 0) {
@@ -640,7 +652,7 @@ export class TurnLifecycle {
     // chat, does not put the marker in the preview.
     const markerAnswer =
       latestAssistant !== undefined &&
-      deliveries.some(({ delivery }) => delivery.sender.kind === "routine") &&
+      deliveries.some(({ delivery, eventCheck }) => delivery.sender.kind === "routine" || eventCheck !== undefined) &&
       isNoUpdateAnswer(latestAssistant.text);
     if (latestAssistant && !markerAnswer && !this.#conversation.isExecutionThread(snapshot.threadId)) {
       yield* this.#store.updatePreview(agentId, latestAssistant.text).pipe(toTurnOperationFailed);
@@ -674,6 +686,16 @@ export class TurnLifecycle {
     if (shouldCompact) yield* this.#compaction.request(agentId, threadId);
     else this.#hooks.scheduleDrain(agentId);
   }, Effect.uninterruptible);
+
+  /**
+   * Whether this delivery may end without a message when the agent answers only the no-update
+   * marker. An event check asks for the marker in its prompt. A routine run asks for it in its task.
+   */
+  #mayEndQuiet({ delivery, eventCheck }: DeliveryContext): boolean {
+    return (
+      eventCheck !== undefined || (delivery.sender.kind === "routine" && this.#hooks.quietRoutineDelivery(delivery.id))
+    );
+  }
 
   /**
    * Queues the deliveries of a turn once more, after the provider refused the session's history.

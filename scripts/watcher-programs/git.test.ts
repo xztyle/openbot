@@ -952,7 +952,9 @@ describe("github-activity", () => {
       const result = await runProgram(directory, JSON.stringify(githubInput()), {});
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toBe("GitHub activity watcher: Missing GITHUB_TOKEN private variable.\n");
+      expect(result.stderr).toBe(
+        "GitHub activity watcher: Missing GITHUB_TOKEN private variable.\nopenbot-error: auth\n",
+      );
     });
     it("prints a safe message and exits 1 for invalid input, without the token", async () => {
       const bad = await runProgram(directory, "{not json", { GITHUB_TOKEN: TOKEN });
@@ -1304,7 +1306,7 @@ describe("git-remote-refs", () => {
       });
       expect(result.code).toBe(1);
       expect(result.stdout).toBe("");
-      expect(result.stderr).toBe("Git remote refs watcher: repoUrl must start with https://.\n");
+      expect(result.stderr).toBe("Git remote refs watcher: repoUrl must start with https://.\nopenbot-error: config\n");
     });
     it("prints a safe message for invalid JSON and for an invalid private variable", async () => {
       const bad = await runProgram(gitDirectory, "[", {});
@@ -1312,7 +1314,9 @@ describe("git-remote-refs", () => {
       expect(bad.code).toBe(1);
       const token = await runProgram(gitDirectory, JSON.stringify(gitInput()), { GIT_ACCESS_TOKEN: "has a space" });
       expect(token.code).toBe(1);
-      expect(token.stderr).toBe("Git remote refs watcher: Invalid GIT_ACCESS_TOKEN private variable.\n");
+      expect(token.stderr).toBe(
+        "Git remote refs watcher: Invalid GIT_ACCESS_TOKEN private variable.\nopenbot-error: auth\n",
+      );
       expect(token.stderr).not.toContain("has a space");
     });
   });

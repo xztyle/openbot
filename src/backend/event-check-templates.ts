@@ -29,8 +29,9 @@ export class EventCheckTemplates {
       JSON.parse(readFileSync(join(this.catalogRoot, "catalog.json"), "utf8")),
     );
     for (const template of templates)
-      if (digestOf(this.#source(template)) !== template.program.digest)
-        throw new Error(sourceText("error.backend.eventCheckTemplateProgram"));
+      for (const program of [template.program, ...(template.earlierPrograms ?? [])])
+        if (digestOf(this.#source(program.file)) !== program.digest)
+          throw new Error(sourceText("error.backend.eventCheckTemplateProgram"));
     this.#templates = templates;
     return templates;
   }
@@ -39,9 +40,9 @@ export class EventCheckTemplates {
     if (!template) throw new Error(sourceText("error.backend.eventCheckTemplateUnknown"));
     return template;
   }
-  #source(template: EventCheckTemplate): string {
+  #source(file: string): string {
     const root = realpathSync(join(this.catalogRoot, "programs"));
-    const path = realpathSync(join(root, template.program.file));
+    const path = realpathSync(join(root, file));
     if (!isPathInside(root, path) || !statSync(path).isFile())
       throw new Error(sourceText("error.backend.eventCheckProgram"));
     return path;
@@ -62,7 +63,7 @@ export class EventCheckTemplates {
     }
     const staged = `${target}.${process.pid}.tmp`;
     try {
-      copyFileSync(this.#source(template), staged);
+      copyFileSync(this.#source(template.program.file), staged);
       if (digestOf(staged) !== template.program.digest)
         throw new Error(sourceText("error.backend.eventCheckTemplateProgram"));
       renameSync(staged, target);
@@ -71,16 +72,26 @@ export class EventCheckTemplates {
     }
     return name;
   }
-  /** Whether the program an existing check runs is byte for byte the template's program. */
-  matches(template: EventCheckTemplate, check: EventCheck): boolean {
-    if (check.source.kind !== "api") return false;
+  /**
+   * The version of the template whose program an existing check runs, byte for byte. That is the
+   * current version or an earlier one that the host still ships. Null when the program is none of them.
+   */
+  matchedVersion(template: EventCheckTemplate, check: EventCheck): string | null {
+    if (check.source.kind !== "api") return null;
     try {
       const root = realpathSync(this.programsRoot);
       const path = realpathSync(join(root, check.source.toolName));
-      return isPathInside(root, path) && statSync(path).isFile() && digestOf(path) === template.program.digest;
+      if (!isPathInside(root, path) || !statSync(path).isFile()) return null;
+      const digest = digestOf(path);
+      if (digest === template.program.digest) return template.version;
+      return template.earlierPrograms?.find((program) => program.digest === digest)?.version ?? null;
     } catch {
-      return false;
+      return null;
     }
+  }
+  /** Whether the program an existing check runs is byte for byte a program of the template. */
+  matches(template: EventCheckTemplate, check: EventCheck): boolean {
+    return this.matchedVersion(template, check) !== null;
   }
   install(template: EventCheckTemplate, request: EventCheckTemplateInstallInput, now: Date): EventCheckInput {
     const known = new Set(template.configuration.map((field) => field.name));
@@ -147,10 +158,14 @@ export class EventCheckTemplates {
     const { programDigest: _stale, ...rest } = next;
     return { ...check, source: rest, selection: template.selection };
   }
-  /** The same check with a template link and nothing else changed, so its baseline stays. */
+  /**
+   * The same check with a template link and nothing else changed, so its baseline stays. The link
+   * names the version whose program the check runs, so Update can then move it to the current one.
+   */
   link(template: EventCheckTemplate, check: EventCheck): EventCheckInput {
-    if (check.source.kind !== "api" || !this.matches(template, check))
+    const version = this.matchedVersion(template, check);
+    if (check.source.kind !== "api" || version === null)
       throw new Error(sourceText("error.backend.eventCheckTemplateProgram"));
-    return { ...check, source: { ...check.source, template: { slug: template.slug, version: template.version } } };
+    return { ...check, source: { ...check.source, template: { slug: template.slug, version } } };
   }
 }

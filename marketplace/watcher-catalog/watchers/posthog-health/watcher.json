@@ -3,7 +3,7 @@
   "name": "PostHog health",
   "tagline": "Wake an agent when your PostHog traffic or errors look very different",
   "description": "A light check for big shifts in one PostHog project. Every five minutes it counts the last hour of events, and compares the count with the same hour one week earlier. If that hour was too quiet to compare with, it uses the hour before instead. It looks at four things: total events, pageviews, unique users, and exceptions, and optionally the custom error events you name. Each one gets a status: ok, low, high, or unknown. The agent wakes only when a status changes, for example from ok to low when pageviews fall by half. It sends one read-only query, runs with no AI, and never changes anything in PostHog. This finds large changes, not subtle ones. A quiet project can show unknown, because there is not enough data to compare with, and the first runs after a quiet week can show unknown too. Create a personal API key with only the query:read and project:read scopes. Install it again for another project: every install has its own settings, API key, schedule and history.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "creatorName": "OpenBot",
   "iconUrl": "https://posthog.com/favicon.ico",
   "websiteUrl": "https://posthog.com",

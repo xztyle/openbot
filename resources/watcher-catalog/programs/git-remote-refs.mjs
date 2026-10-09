@@ -24,10 +24,28 @@ export function hasControl(text) {
   return false;
 }
 
-class WatcherError extends Error {}
+const ERROR_CODES = ["auth", "rate_limited", "config", "upstream"];
 
-function requireCondition(condition, message) {
-  if (!condition) throw new WatcherError(message);
+/** A failure with fixed wording. The optional code is one of ERROR_CODES; OpenBot maps it to its own text. */
+class WatcherError extends Error {
+  constructor(message, code = null) {
+    super(message);
+    this.code = ERROR_CODES.includes(code) ? code : null;
+  }
+}
+
+function requireCondition(condition, message, code = null) {
+  if (!condition) throw new WatcherError(message, code);
+}
+
+/** Runs a reader of settings. A failure without a code gets this code, so each check of a setting needs none. */
+function tagged(code, read) {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof WatcherError && error.code === null) error.code = code;
+    throw error;
+  }
 }
 
 function optionalString(value, name, maxLength) {
@@ -307,8 +325,8 @@ export async function runWatcher(
     testOnlyAllowFileUrl = false,
   } = {},
 ) {
-  const config = readConfiguration(input, { allowFile: testOnlyAllowFileUrl === true });
-  const accessToken = readToken(token);
+  const config = tagged("config", () => readConfiguration(input, { allowFile: testOnlyAllowFileUrl === true }));
+  const accessToken = tagged("auth", () => readToken(token));
   const home = await fs.mkdtemp(path.join(tempRoot, "git-remote-refs-"));
   let result;
   try {
@@ -326,14 +344,14 @@ export async function runWatcher(
       maxBytes: MAX_GIT_OUTPUT_BYTES,
     });
   } catch {
-    throw new WatcherError("git could not be run.");
+    throw new WatcherError("git could not be run.", "upstream");
   } finally {
     await fs.rm(home, { recursive: true, force: true }).catch(() => {});
   }
   // Only these fixed messages may reach stderr. git and server text is never repeated.
-  requireCondition(!result.failedToStart, "git could not be started.");
-  requireCondition(!result.timedOut, "git ls-remote timed out.");
-  requireCondition(!result.tooLarge, "The remote ref list exceeds the safe size limit. Narrow refPrefixes.");
+  requireCondition(!result.failedToStart, "git could not be started.", "upstream");
+  requireCondition(!result.timedOut, "git ls-remote timed out.", "upstream");
+  requireCondition(!result.tooLarge, "The remote ref list exceeds the safe size limit. Narrow refPrefixes.", "config");
   requireCondition(
     result.status === 0,
     "Could not read the repository. Check repoUrl (use the exact address, usually ending in .git), username and the access token.",
@@ -343,11 +361,13 @@ export async function runWatcher(
   requireCondition(
     items.length <= MAX_ITEMS,
     "The repository has more than 2000 matching refs. Narrow refPrefixes or add ignorePatterns.",
+    "config",
   );
   const output = { items, hasNextPage: false, cursor: null };
   requireCondition(
     Buffer.byteLength(JSON.stringify(output)) <= MAX_OUTPUT_BYTES,
     "The ref list exceeds the safe size limit. Narrow refPrefixes or add ignorePatterns.",
+    "config",
   );
   return output;
 }
@@ -370,6 +390,8 @@ async function main() {
     process.stderr.write(
       `Git remote refs watcher: ${error instanceof WatcherError ? error.message : "Watcher failed."}\n`,
     );
+    // One code, no text from git or the server: OpenBot maps it to its own message.
+    if (error instanceof WatcherError && error.code) process.stderr.write(`openbot-error: ${error.code}\n`);
     process.exitCode = 1;
   }
 }

@@ -13,6 +13,18 @@ export const messages = defineMessages("error.backend", {
   "error.backend.eventCheckBusy": "This event check is already running.",
   "error.backend.eventCheckFailed":
     "The app check failed. Check the selected account, read tool, result paths, pagination, change authors, and access. No baseline was changed.",
+  "error.backend.eventCheckAuth":
+    "The app did not accept the saved credentials. Set a new value in this event check’s Private variables (.env) settings.",
+  "error.backend.eventCheckRateLimited": "The app limited the requests. The check waits and tries again.",
+  "error.backend.eventCheckConfig":
+    "The app did not accept the settings of this check. Correct its settings and test it again.",
+  "error.backend.eventCheckUpstream": "The app could not be reached or sent an error. The check tries again later.",
+  "error.backend.eventCheckStreak": "Event check “{name}” failed {count} times in a row. Last error: {reason}",
+  "error.backend.eventCheckDeliveryFailed":
+    "Event check “{name}” found an event but could not give it to the agent. The event is saved. The host tries again.",
+  "error.backend.eventCheckTurnFailed": "An event check turn stopped with an error: {reason}",
+  "error.backend.eventCheckTurnUnknown": "The agent gave no reason.",
+  "error.backend.routineRunMerged": "This event run was combined with other events into one run.",
   "error.backend.eventCheckUnsupported": "This host does not support event checks.",
   "error.backend.eventCheckTemplateUnknown": "This host does not have that event check template.",
   "error.backend.eventCheckTemplateField": "Fill in the required setting “{name}” before you install this event check.",

@@ -3,7 +3,7 @@
   "name": "GitHub activity",
   "tagline": "Wake an agent for GitHub mentions, review requests, pull requests, issues, pushes, failed CI, releases and security alerts",
   "description": "Checks GitHub every five minutes for one account. It can read your GitHub notifications (mentions, review requests, assignments, CI activity on threads you follow) and, for up to ten repositories you list, pull requests, issues, new commits, failed workflow runs, new releases and Dependabot security alerts. Each kind has its own on/off setting. It runs as a normal program with no AI, reads GitHub's REST API directly with your token, and never changes anything on GitHub. A new item, or a change to an item, wakes the agent once. The check stops if the token belongs to another account than the login you enter, and it stops with a clear message if any listed repository cannot be read; it never returns a partial result. GitHub's rate limits are honored with a saved cooldown for each check. Limits: notifications do not say who caused them, and a comment or label change on a pull request or issue cannot be told from other changes, so those items have an unknown author and your own actions on them can wake the agent. New commits and releases do name their author, so your own pushes are skipped when you enter your GitHub login as your user ID at the install. It works with github.com and with GitHub Enterprise Server. Install it again for another account: every install has its own settings, token, schedule and history.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "creatorName": "OpenBot",
   "iconUrl": "https://github.com/favicon.ico",
   "websiteUrl": "https://github.com",

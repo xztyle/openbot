@@ -51,10 +51,28 @@ function controlToSpace(text) {
   return out;
 }
 
-class WatcherError extends Error {}
+const ERROR_CODES = ["auth", "rate_limited", "config", "upstream"];
 
-function requireCondition(condition, message) {
-  if (!condition) throw new WatcherError(message);
+/** A failure with fixed wording. The optional code is one of ERROR_CODES; OpenBot maps it to its own text. */
+class WatcherError extends Error {
+  constructor(message, code = null) {
+    super(message);
+    this.code = ERROR_CODES.includes(code) ? code : null;
+  }
+}
+
+function requireCondition(condition, message, code = null) {
+  if (!condition) throw new WatcherError(message, code);
+}
+
+/** Runs a reader of settings. A failure without a code gets this code, so each check of a setting needs none. */
+function tagged(code, read) {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof WatcherError && error.code === null) error.code = code;
+    throw error;
+  }
 }
 
 const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -167,8 +185,12 @@ function readConfiguration(input) {
 }
 
 function readToken(token) {
-  requireCondition(typeof token === "string" && token.trim().length > 0, "Missing GITHUB_TOKEN private variable.");
-  requireCondition(/^[!-~]{1,1024}$/.test(token.trim()), "Invalid GITHUB_TOKEN private variable.");
+  requireCondition(
+    typeof token === "string" && token.trim().length > 0,
+    "Missing GITHUB_TOKEN private variable.",
+    "auth",
+  );
+  requireCondition(/^[!-~]{1,1024}$/.test(token.trim()), "Invalid GITHUB_TOKEN private variable.", "auth");
   return token.trim();
 }
 
@@ -230,7 +252,7 @@ async function readJson(response) {
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
-    throw new WatcherError("Invalid JSON API response.");
+    throw new WatcherError("Invalid JSON API response.", "upstream");
   }
 }
 
@@ -254,7 +276,7 @@ function createClient({ base, token, fetchImpl, store, instanceId, now, maxReque
   async function coolDown(untilMs) {
     const current = now();
     await store.write(instanceId, Math.min(Math.max(untilMs, current + MIN_COOLDOWN_MS), current + MAX_COOLDOWN_MS));
-    throw new WatcherError("GitHub API rate limit reached; a server-directed cooldown is active.");
+    throw new WatcherError("GitHub API rate limit reached; a server-directed cooldown is active.", "rate_limited");
   }
 
   async function get(pathname, params, { denied, tolerate = [] }) {
@@ -262,11 +284,13 @@ function createClient({ base, token, fetchImpl, store, instanceId, now, maxReque
     requireCondition(
       requests < maxRequests,
       "Request limit (maxRequests) reached. Raise it or watch fewer repositories.",
+      "config",
     );
     const left = RUN_BUDGET_MS - (now() - startedAt);
     requireCondition(
       left >= MIN_REQUEST_MS,
       "The check ran out of time. Watch fewer repositories or turn off some watches.",
+      "config",
     );
     const url = new URL(`${base}${pathname}`);
     for (const [name, value] of Object.entries(params)) url.searchParams.set(name, String(value));
@@ -295,7 +319,7 @@ function createClient({ base, token, fetchImpl, store, instanceId, now, maxReque
       if (response.ok) body = await readJson(response);
     } catch (error) {
       if (error instanceof WatcherError) throw error;
-      throw new WatcherError("GitHub API request failed or timed out.");
+      throw new WatcherError("GitHub API request failed or timed out.", "upstream");
     } finally {
       clearTimeout(timer);
     }
@@ -314,9 +338,10 @@ function createClient({ base, token, fetchImpl, store, instanceId, now, maxReque
       );
     }
     if (tolerate.includes(status)) return { body: null, hasNext: false };
-    requireCondition(status !== 401, "GitHub rejected the token (HTTP 401). Check GITHUB_TOKEN.");
-    requireCondition(status !== 403 && status !== 404 && status !== 422, denied);
-    throw new WatcherError(`GitHub API request failed (HTTP ${status || "error"}).`);
+    requireCondition(status !== 401, "GitHub rejected the token (HTTP 401). Check GITHUB_TOKEN.", "auth");
+    requireCondition(status !== 403, denied, "auth");
+    requireCondition(status !== 404 && status !== 422, denied, "config");
+    throw new WatcherError(`GitHub API request failed (HTTP ${status || "error"}).`, "upstream");
   }
 
   /** All pages of one list, following the Link header. Too many pages is an error, never a cut. */
@@ -326,13 +351,20 @@ function createClient({ base, token, fetchImpl, store, instanceId, now, maxReque
       const { body, hasNext } = await get(pathname, { ...params, per_page: PAGE_SIZE, page }, { denied, tolerate });
       if (body === null) return rows;
       const pageRows = key ? body?.[key] : body;
-      requireCondition(Array.isArray(pageRows) && pageRows.every(isObject), "GitHub returned an unexpected response.");
+      requireCondition(
+        Array.isArray(pageRows) && pageRows.every(isObject),
+        "GitHub returned an unexpected response.",
+        "upstream",
+      );
       rows.push(...pageRows);
       if (!hasNext) return rows;
       // Newest first lists end once a row is older than the window.
       if (stopBefore && pageRows.length > 0 && stopBefore(pageRows[pageRows.length - 1])) return rows;
     }
-    throw new WatcherError(`GitHub returned more than ${MAX_PAGES * PAGE_SIZE} ${label}. Narrow the settings.`);
+    throw new WatcherError(
+      `GitHub returned more than ${MAX_PAGES * PAGE_SIZE} ${label}. Narrow the settings.`,
+      "config",
+    );
   }
 
   return { get, list };
@@ -665,10 +697,11 @@ export async function runWatcher(
   { token = process.env.GITHUB_TOKEN, fetchImpl = fetch, store = cooldownStore, now = () => Date.now() } = {},
 ) {
   const accessToken = readToken(token);
-  const config = readConfiguration(input);
+  const config = tagged("config", () => readConfiguration(input));
   requireCondition(
     (await store.read(config.instanceId)) <= now(),
     "GitHub API cooldown is active; no request was sent.",
+    "rate_limited",
   );
   const sinceMs = readWindow(input, now());
   const client = createClient({
@@ -686,6 +719,7 @@ export async function runWatcher(
   requireCondition(
     isObject(user) && typeof user.login === "string" && user.login.toLowerCase() === config.login.toLowerCase(),
     "The GitHub token does not belong to the configured login.",
+    "config",
   );
 
   const items = [];
@@ -735,6 +769,8 @@ async function main() {
     process.stderr.write(
       `GitHub activity watcher: ${error instanceof WatcherError ? error.message : "Watcher failed."}\n`,
     );
+    // One code, no text from GitHub: OpenBot maps it to its own message.
+    if (error instanceof WatcherError && error.code) process.stderr.write(`openbot-error: ${error.code}\n`);
     process.exitCode = 1;
   }
 }

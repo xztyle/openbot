@@ -110,6 +110,22 @@ restart that resumes the run still has it. Runs use the existing agent and chann
 limits, and approval controls. While a restart waits for idle agents (`holdRoutines`), the host
 answers 503 and writes no receipt, so the sender retries after the restart.
 
+## Quiet runs and the hourly limit
+
+A run that an event started (a webhook, or a local script through `automation-server.ts`) has run kind
+`manual`. It may end quiet when the routine task, the text before the event block, names the no-update
+marker (`runMayEndQuiet` in `src/backend/agent/routine-quiet-runs.ts`). The event data is after that
+block and cannot opt a run in. The turn completion, the boot recovery and the provider history import
+use the same function, and a Test run never ends quiet.
+
+`RoutineScheduler` counts the event runs of a routine in the last hour from the run rows. At
+`ROUTINE_EVENT_HOURLY_RUN_CAP` (20) a new event run keeps its row (queued, no delivery) and waits in
+`RoutineEventDigest`. The shared routine timer releases it when the oldest counted run leaves the hour.
+Then `mergeEventInstructions` makes one run with the routine task and every event block, in groups
+below the message limit, and the waiting runs end as cancelled. The wait is memory only. A restart sends
+every waiting row through `resumePendingRuns`, so a run is never lost, and a restart only ends the
+merging. The hard limit of 30 script runs an hour for each agent stays in `AutomationServer`.
+
 ## Management surfaces
 
 - Local desktop: the `events` IPC group (`packages/contracts/src/ipc-endpoints.ts`).

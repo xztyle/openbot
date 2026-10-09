@@ -64,7 +64,17 @@ heading `--- event from a local script ---`, with a line that tells the agent to
 not as instructions. The run history keeps it, so a run that a restart
 interrupts sends it again.
 
-Answer: `202 { "runId": string, "deliveryId": string | null }`.
+Answer: `202 { "runId": string, "deliveryId": string | null }`. The delivery ID is `null` for a run that waits for a free place.
+
+A run that a script starts can end without a message. Write `[[no-update]]` in the routine task as the
+answer for "nothing needs me". If the agent then answers only that marker, the run leaves no message
+and no notification. Without the marker in the task, the answer stays visible. A Test run always stays
+visible. The same applies to a run that a webhook started.
+
+A routine starts at most 20 runs an hour from scripts and webhooks together. A later event does not
+start a run at once. It waits, and the waiting events go out as one run that has all of them, when
+a place frees. A restart ends the wait, and each waiting run then starts on its own. The limit of 30
+runs an hour for each agent stays as the hard limit.
 
 `202` means that the run is in the queue, not that it ran. When the agent's provider account is at
 its usage limit, the run waits in the queue, with its payload, and starts after the reset. A routine

@@ -28,6 +28,7 @@ export function createMockEventChecks(): EventCheckApi &
       itemCount: 0,
       eventCount: 0,
       skippedSelfCount: 0,
+      filteredCount: 0,
       durationMs: 0,
       error: null,
     };
@@ -92,6 +93,7 @@ export function createMockEventChecks(): EventCheckApi &
         itemCount: 0,
         eventCount: 0,
         skippedSelfCount: 0,
+        filteredCount: 0,
         durationMs: 0,
         error: null,
       };

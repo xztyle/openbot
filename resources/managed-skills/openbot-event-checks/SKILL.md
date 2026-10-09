@@ -14,7 +14,8 @@ Existing MCP checks remain supported. Replace one only when the user asks.
 
 - Check every 30 seconds unless the user specifies another interval or calendar schedule.
 - Create paused. First enabled success saves a silent baseline.
-- Empty, unchanged, failed and self-only checks stay out of chat and notifications.
+- Empty, unchanged and self-only checks stay out of chat and notifications. A failing check shows
+  **Failing** in the list, waits longer between runs, and tells the user once at the fifth error in a row.
 - Skip events made by the connected account unless the user explicitly permits them, such as a test.
 - Preserve the user's event scope, response instruction and notification preferences.
 
@@ -69,6 +70,11 @@ never silently use truncated descriptions. Do not run models, MCP clients, provi
 Do not post messages or make other app changes during a check. No persistent child/background process.
 Checks have a 40-second program deadline, 20-page/2,000-item limits and bounded output. Honor rate limits.
 Use the host's baseline comparison rather than saving your own cursor before a read fully succeeds.
+On failure, exit non-zero and print a fixed message of your own on standard error. When you know why,
+print one more line, `openbot-error: <code>`, with exactly one code: `auth` (the app refused the
+credentials), `rate_limited`, `config` (the check's settings are wrong) or `upstream` (the app is down or
+sent an error). The host shows its own text for the code and never repeats program output. Never print
+text from the app, a token or a header.
 Exact argument strings `$lastSuccessAt` and `$now` expand to host timestamps; the former has a five-minute
 safety overlap. Local state, if needed, must be separate for each instance and contain no credentials.
 
@@ -101,6 +107,10 @@ safety overlap. Local state, if needed, must be separate for each instance and c
    `include`. Include self-events only when the user explicitly permits this scope or a test.
 8. Enable after credentials, successful test and self-event policy are ready. First enabled read
    establishes the baseline silently. Only matching changes start AI work.
+
+A matching change reaches you as a message. When nothing in it needs the user, answer exactly
+`[[no-update]]` and nothing else: the turn then leaves no message or notification. Answer anything else
+when there is a result to report.
 
 Replacing/removing a private value pauses the instance, resets baseline and cancels pending events.
 Test and enable again. Account/query/configuration/selection/self-event changes reset baseline.

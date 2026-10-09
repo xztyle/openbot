@@ -1,4 +1,7 @@
-import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
+import {
+  EVENT_CHECK_API_CAPABILITY,
+  EVENT_CHECK_DELIVERY_CAPABILITY,
+} from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { MCP_OAUTH_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-oauth-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import { eventCheckTemplatesApi } from "@openbot/team-client/event-check-templates-api";
@@ -90,7 +93,11 @@ export function createWebMarketplaceCalls(
       const call: TeamApiRequest = (...args) => request(serverId)(...args);
       return {
         templates: eventCheckTemplatesApi(call),
-        checks: eventChecksApi(call, () => capabilities().includes(EVENT_CHECK_API_CAPABILITY)),
+        checks: eventChecksApi(
+          call,
+          () => capabilities().includes(EVENT_CHECK_API_CAPABILITY),
+          () => capabilities().includes(EVENT_CHECK_DELIVERY_CAPABILITY),
+        ),
       };
     },
   };

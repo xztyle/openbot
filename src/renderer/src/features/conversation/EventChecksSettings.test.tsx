@@ -128,3 +128,32 @@ it("shows agent-defined configuration and masked private values without discardi
   await fireEvent.click(screen.getByRole("button", { name: "Remove value" }));
   await screen.findByLabelText(/LINEAR_API_TOKEN — Missing/);
 });
+
+it("marks a check that keeps failing in the list, and saves its item filters only when they are valid", async () => {
+  const api = createMockEventChecks();
+  const check = await api.save(input);
+  vi.spyOn(api, "list").mockResolvedValue([
+    {
+      ...check,
+      health: { consecutiveErrors: 3, lastError: "The app limited the requests. The check waits and tries again." },
+    },
+  ]);
+  const save = vi.spyOn(api, "save");
+  render(() => (
+    <EventChecksSettings api={api} agentId="chief" onBack={vi.fn()} onClose={vi.fn()} onCountChange={vi.fn()} />
+  ));
+  expect(await screen.findByText("Failing")).toBeInTheDocument();
+  await fireEvent.click(await screen.findByRole("button", { name: /Linear tickets/ }));
+  const filters = await screen.findByRole("textbox", { name: "Only deliver items that match (one per line)" });
+  await fireEvent.input(filters, { target: { value: "state=open" } });
+  await fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Each filter line needs a path");
+  expect(save).not.toHaveBeenCalled();
+  await fireEvent.input(filters, { target: { value: "/state=open" } });
+  await fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  expect(save.mock.calls[0]?.[0].delivery).toEqual({
+    digestSeconds: 0,
+    itemFilters: [{ pointer: "/state", value: "open" }],
+  });
+});

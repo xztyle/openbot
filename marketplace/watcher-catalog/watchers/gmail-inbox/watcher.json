@@ -3,7 +3,7 @@
   "name": "Gmail inbox",
   "tagline": "Wake an agent when new mail arrives in your Gmail inbox",
   "description": "Checks your Gmail inbox every minute over IMAP and wakes the agent once for each new message. By default it looks only at unread mail. It runs as a normal program with no AI. It reads only the sender, recipients, subject, date and the first few lines of each message, never attachments or whole messages. It never marks mail as read and never changes, moves or deletes anything. It uses a Google app password instead of your main password, so you do not need to set up a developer project. Before you install: turn on IMAP in Gmail settings (Forwarding and POP/IMAP) and turn on 2-Step Verification on the Google account, then create an app password. Mail you sent from your own address is skipped when you enter that address as your account ID. A message that looks like it is from you can still be forged, so do not treat the sender as proof. Install it again for another mailbox: every install has its own settings, password, schedule and history.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "creatorName": "OpenBot",
   "iconUrl": null,
   "websiteUrl": "https://mail.google.com",

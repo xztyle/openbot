@@ -42,12 +42,49 @@ const KNOWN_ERRORS = {
   service_unavailable: "Slack is temporarily unavailable.",
 };
 
+// Which of ERROR_CODES each known Slack error code means.
+const KNOWN_ERROR_CODES = {
+  invalid_auth: "auth",
+  not_authed: "auth",
+  token_revoked: "auth",
+  token_expired: "auth",
+  account_inactive: "auth",
+  missing_scope: "auth",
+  no_permission: "auth",
+  access_denied: "auth",
+  team_access_not_granted: "auth",
+  channel_not_found: "config",
+  not_in_channel: "config",
+  is_archived: "config",
+  fatal_error: "upstream",
+  internal_error: "upstream",
+  service_unavailable: "upstream",
+};
+
 export const UNKNOWN_ACTOR = "unknown";
 
-export class WatcherError extends Error {}
+const ERROR_CODES = ["auth", "rate_limited", "config", "upstream"];
 
-function requireCondition(condition, message) {
-  if (!condition) throw new WatcherError(message);
+/** A failure with fixed wording. The optional code is one of ERROR_CODES; OpenBot maps it to its own text. */
+export class WatcherError extends Error {
+  constructor(message, code = null) {
+    super(message);
+    this.code = ERROR_CODES.includes(code) ? code : null;
+  }
+}
+
+function requireCondition(condition, message, code = null) {
+  if (!condition) throw new WatcherError(message, code);
+}
+
+/** Runs a reader of settings. A failure without a code gets this code, so each check of a setting needs none. */
+function tagged(code, read) {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof WatcherError && error.code === null) error.code = code;
+    throw error;
+  }
 }
 
 function isRecord(value) {
@@ -205,7 +242,7 @@ async function readJson(response) {
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
-    throw new WatcherError("Invalid JSON API response.");
+    throw new WatcherError("Invalid JSON API response.", "upstream");
   }
 }
 
@@ -217,6 +254,7 @@ async function saveCooldown(response, ctx) {
   await ctx.store.write(ctx.config.instanceId, ctx.now() + Math.min(wait, MAX_COOLDOWN_MS));
   throw new WatcherError(
     "Slack API rate limit reached; a cooldown is active and no request will be sent until it passes.",
+    "rate_limited",
   );
 }
 
@@ -225,10 +263,12 @@ async function call(ctx, method, params) {
   requireCondition(
     ctx.requests < ctx.config.maxRequests,
     "The check needs more requests than maxRequests allows. Raise maxRequests or watch less.",
+    "config",
   );
   requireCondition(
     ctx.now() - ctx.startedAt < RUN_BUDGET_MS,
     "The check ran out of time before it covered the whole window.",
+    "config",
   );
   ctx.requests += 1;
   const url = new URL(method, API);
@@ -246,24 +286,33 @@ async function call(ctx, method, params) {
       headers: { Authorization: `Bearer ${ctx.token}`, Accept: "application/json" },
     });
     if (response.status === 429) await saveCooldown(response, ctx);
-    if (!response.ok) throw new WatcherError(`Slack API HTTP ${Number(response.status) || "error"} for ${method}.`);
+    if (!response.ok)
+      throw new WatcherError(
+        `Slack API HTTP ${Number(response.status) || "error"} for ${method}.`,
+        response.status === 401 || response.status === 403 ? "auth" : "upstream",
+      );
     body = await readJson(response);
   } catch (error) {
     // Only locally authored messages may reach stderr; never echo fetch or server errors.
     if (error instanceof WatcherError) throw error;
-    throw new WatcherError("Slack API request failed or timed out.");
+    throw new WatcherError("Slack API request failed or timed out.", "upstream");
   } finally {
     clearTimeout(timer);
   }
-  requireCondition(isRecord(body), "Invalid JSON API result.");
+  requireCondition(isRecord(body), "Invalid JSON API result.", "upstream");
   if (body.ok === true) return body;
-  requireCondition(body.ok === false, "Unexpected Slack response.");
+  requireCondition(body.ok === false, "Unexpected Slack response.", "upstream");
   if (body.error === "ratelimited") await saveCooldown(response, ctx);
   const known =
     typeof body.error === "string" && Object.hasOwn(KNOWN_ERRORS, body.error)
       ? KNOWN_ERRORS[body.error]
       : "Slack returned an error.";
-  throw new WatcherError(`${known} (${method})`);
+  throw new WatcherError(
+    `${known} (${method})`,
+    typeof body.error === "string" && Object.hasOwn(KNOWN_ERROR_CODES, body.error)
+      ? KNOWN_ERROR_CODES[body.error]
+      : "upstream",
+  );
 }
 
 function nextCursor(body) {
@@ -479,9 +528,13 @@ export async function runWatcher(
     store = createCooldownStore(cooldownDir),
   } = {},
 ) {
-  requireCondition(typeof token === "string" && token.trim().length > 0, "Missing SLACK_USER_TOKEN private variable.");
-  requireCondition(!/[^\x21-\x7e]/.test(token.trim()), "Invalid SLACK_USER_TOKEN private variable.");
-  const config = readConfiguration(input);
+  requireCondition(
+    typeof token === "string" && token.trim().length > 0,
+    "Missing SLACK_USER_TOKEN private variable.",
+    "auth",
+  );
+  requireCondition(!/[^\x21-\x7e]/.test(token.trim()), "Invalid SLACK_USER_TOKEN private variable.", "auth");
+  const config = tagged("config", () => readConfiguration(input));
   const window = readWindow(input);
   requireCondition(
     (await store.read(config.instanceId)) <= now(),
@@ -512,11 +565,12 @@ export async function runWatcher(
 
   // Oldest first, so the agent reads the conversation in order.
   const items = [...collector.items.values()].sort((a, b) => parseTs(a.id.split(":")[1]) - parseTs(b.id.split(":")[1]));
-  requireCondition(items.length <= MAX_ITEMS, "Too many new messages for one check.");
+  requireCondition(items.length <= MAX_ITEMS, "Too many new messages for one check.", "config");
   const result = { items, hasNextPage: false, cursor: null };
   requireCondition(
     Buffer.byteLength(JSON.stringify(result)) <= MAX_OUTPUT_BYTES,
     "Too many new messages for one check.",
+    "config",
   );
   return result;
 }
@@ -539,6 +593,8 @@ async function main() {
     process.stderr.write(
       `Slack activity watcher: ${error instanceof WatcherError ? error.message : "Watcher failed."}\n`,
     );
+    // One code, no text from Slack: OpenBot maps it to its own message.
+    if (error instanceof WatcherError && error.code) process.stderr.write(`openbot-error: ${error.code}\n`);
     process.exitCode = 1;
   }
 }

@@ -3,7 +3,7 @@
   "name": "Render services",
   "tagline": "Wake an agent when a Render deploy or service changes state",
   "description": "Checks your Render services every two minutes and tells the agent when something changed: a new deploy, a deploy that went live, a failed or canceled deploy, or a service that was suspended or resumed. It can also watch your Postgres and Key Value instances for a change of status. It runs as a normal program with no AI, reads Render's API with an API key, and never deploys, restarts, suspends or changes anything. The first check only saves the current state. After that, each change wakes the agent once, and a service that stays the same is quiet. A deploy that is still building does not wake the agent unless you turn on that setting. If the account has more services than your limit, the check stops with an error instead of watching only some of them. Render's rate limits are honored with a saved cooldown for each check. Install it again for another workspace: every install has its own settings, API key, schedule and history.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "creatorName": "OpenBot",
   "iconUrl": "https://render.com/favicon.ico",
   "websiteUrl": "https://render.com",

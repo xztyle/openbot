@@ -258,10 +258,11 @@ function importCompletedTurn(
 }
 
 /**
- * How a turn that a scheduled routine run started answered: `quiet` when each answer is only the
- * no-update marker, so the turn completion dropped all of them with the turn's thinking, `answered`
- * for any other such turn, and `none` for a turn that no scheduled routine run started. A Test,
- * script or webhook run keeps its answers, as the turn completion does. Decided from the staged
+ * How a turn that unattended work started answered: `quiet` when each answer is only the no-update
+ * marker, so the turn completion dropped all of them with the turn's thinking, `answered` for any
+ * other such turn, and `none` for a turn that no scheduled routine run or event check started. A
+ * Test run keeps its answers, as the turn completion does. A script or webhook run is unattended
+ * only when its routine opted in. Decided from the staged
  * items alone, one bounded page at a time, so it needs no stored state.
  */
 type RoutineTurnAnswers = "none" | "answered" | "quiet";
@@ -282,10 +283,12 @@ function routineTurnAnswers(
       for (const { item } of page) {
         // Every delivery of the turn must be a scheduled run, as at the turn completion: a message
         // steered into the turn waits for the answer.
-        if (routine !== false && item.type === "userMessage" && typeof item.clientId === "string")
+        if (routine !== false && item.type === "userMessage" && typeof item.clientId === "string") {
+          const context = input.findDelivery(item.clientId);
           routine =
-            input.findDelivery(item.clientId)?.delivery.sender.kind === "routine" &&
-            input.quietRoutineDelivery(item.clientId);
+            context?.eventCheck !== undefined ||
+            (context?.delivery.sender.kind === "routine" && input.quietRoutineDelivery(item.clientId));
+        }
         if (item.type === "agentMessage" && typeof item.text === "string" && item.text && item.phase !== "commentary") {
           if (isNoUpdateAnswer(item.text)) markers += 1;
           else reported = true;

@@ -210,3 +210,26 @@ it("opens the agent's conversation when the user clicks the notification", () =>
     threadId: "thread-chief",
   });
 });
+
+it("shows a failed unattended run at the needs-me level, but not an ordinary error", async () => {
+  const fixture = setup();
+  const [local] = fixture.servers;
+  assert(local);
+  local.notificationLevel = "needs-me";
+  fixture.forwardAgentEvent("local", { type: "error", agentId: "chief", code: "agent_error", message: "Oops" });
+  fixture.forwardAgentEvent("local", { ...event, status: "failed", origin: "user" });
+  fixture.forwardAgentEvent("local", {
+    type: "error",
+    agentId: "chief",
+    code: "event_check_failing",
+    message: "Event check “Linear” failed 5 times in a row.",
+  });
+  await vi.waitFor(() => expect(mocks.show).toHaveBeenCalledOnce());
+  expect(mocks.content).toHaveBeenLastCalledWith({ title: "Local Chief", body: "An event check keeps failing." });
+  fixture.forwardAgentEvent("local", { ...event, status: "failed", origin: "routine" });
+  await vi.waitFor(() => expect(mocks.show).toHaveBeenCalledTimes(2));
+  expect(mocks.content).toHaveBeenLastCalledWith({
+    title: "Local Chief",
+    body: "A scheduled run stopped with an error.",
+  });
+});

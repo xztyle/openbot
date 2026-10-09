@@ -1,4 +1,5 @@
 import type { AgentEvent, AgentSummary, ServerNotificationLevel } from "@openbot/contracts/ipc";
+import { UNATTENDED_FAILURE_ERROR_CODES } from "@openbot/team-client/agent-notifications";
 import type { TextValue } from "@openbot/ui/text";
 import { onCleanup, untrack } from "solid-js";
 import { startActionSounds } from "../../action-sounds";
@@ -64,7 +65,13 @@ export function createWebNotificationRouting(options: {
   onCleanup(
     workspace.onHostEvent((event) => {
       const hostId = workspace.state.host?.hostId;
-      if (hostId && (event.type === "turn-completed" || event.type === "prompt" || event.type === "approval"))
+      if (
+        hostId &&
+        (event.type === "turn-completed" ||
+          event.type === "prompt" ||
+          event.type === "approval" ||
+          (event.type === "error" && UNATTENDED_FAILURE_ERROR_CODES.includes(event.code)))
+      )
         notify(hostId, event, workspace.state.agents);
       playAgentEventSound(event);
     }),

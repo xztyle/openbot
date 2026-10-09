@@ -3,6 +3,7 @@ import { expandAttachmentReferences } from "@openbot/contracts/attachment-refere
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
 import type { AgentSummary, ConversationSnapshot, QueueDeliveryStatus, RoutineRun } from "@openbot/contracts/ipc";
 import type { DeliveryContext } from "../mailbox-store";
+import { isEventStartedRun, runMayEndQuiet } from "./routine-quiet-runs";
 
 export function responseAttachmentMessageId(threadId: string, turnId: string, callId: string): string {
   const digest = createHash("sha256").update(`${threadId}\0${turnId}\0${callId}`).digest("hex").slice(0, 32);
@@ -64,7 +65,7 @@ export interface DeliveryPromptSources {
   agentNames: ReadonlyMap<string, string>;
   /** The conversation the delivery joins. A user reply quotes the message it answers from it. */
   snapshot: ConversationSnapshot;
-  routineRun: Pick<RoutineRun, "kind"> | null;
+  routineRun: Pick<RoutineRun, "kind" | "instruction"> | null;
   /** The prompt a channel task or an external message sends in place of the delivery text. */
   executionText?: string;
 }
@@ -208,7 +209,14 @@ export function deliveryPromptInput(context: DeliveryContext, sources: DeliveryP
       .join("\n");
   }
   if (delivery.sender.kind === "routine") {
-    const runKind = sources.routineRun?.kind === "manual" ? "manual Test run" : "scheduled run";
+    const eventRun = sources.routineRun
+      ? isEventStartedRun(sources.routineRun) && runMayEndQuiet(sources.routineRun)
+      : false;
+    const runKind = eventRun
+      ? "event run"
+      : sources.routineRun?.kind === "manual"
+        ? "manual Test run"
+        : "scheduled run";
     text = [
       "Execute one run of an existing OpenBot routine now.",
       `Routine name: ${delivery.sender.routineName}`,
@@ -217,9 +225,11 @@ export function deliveryPromptInput(context: DeliveryContext, sources: DeliveryP
       "The routine already exists, and its schedule is already configured.",
       "Do not create, update, delete, list, or test routines during this run.",
       "Perform the task below now. Do not answer only that the routine or monitoring is active.",
-      sources.routineRun?.kind === "manual"
-        ? "This is a manual Test run. Report the action and result even when a normal scheduled run would suppress a notification because there is no change."
-        : "This is a scheduled run. Follow the notification conditions in the routine task.",
+      eventRun
+        ? "An event started this run. Follow the notification conditions in the routine task."
+        : sources.routineRun?.kind === "manual"
+          ? "This is a manual Test run. Report the action and result even when a normal scheduled run would suppress a notification because there is no change."
+          : "This is a scheduled run. Follow the notification conditions in the routine task.",
       "--- routine task ---",
       displayText,
     ].join("\n");

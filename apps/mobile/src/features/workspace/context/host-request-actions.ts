@@ -1,4 +1,5 @@
 import { isAvatarMimeType } from "@openbot/contracts/avatar-images";
+import type { EventCheck } from "@openbot/contracts/event-checks";
 import {
   assertStorageUsageScope,
   CHANNEL_CHATS_CAPABILITY,
@@ -26,12 +27,14 @@ import {
   TEAM_MEDIA_ATTACHMENTS_CAPABILITY,
   TEAM_SEMANTIC_TAGS_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
+import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
 import { TEAM_QUEUE_EDIT_CAPABILITY } from "@openbot/contracts/team-protocol/queue-edit-v1";
 import { SKILLS_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/skills-admin-v1";
 import { STORAGE_ROUTES } from "@openbot/contracts/team-protocol/storage-v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { readHostAnalytics, runTeamEffect } from "@openbot/team-client";
+import { eventChecksApi } from "@openbot/team-client/event-checks-api";
 import type { RemoteFileUpload } from "@openbot/team-client/remote-peer";
 import { buildRoutineCalendar, type RoutineCalendarSource } from "@openbot/team-client/routine-calendar";
 import {
@@ -79,6 +82,9 @@ type HostRequestActions = Pick<
   | "loadAgentMemories"
   | "loadAgentRoutines"
   | "loadRoutineCalendar"
+  | "loadEventChecks"
+  | "setEventCheckActive"
+  | "runEventCheck"
   | "listEventRoutines"
   | "saveEventRoutine"
   | "deleteEventRoutine"
@@ -140,7 +146,21 @@ export function createHostRequestActions({
       throw new Error(currentText().t("mobile.agent.record.eventsUnsupported"));
     return teamApi(serverId);
   }
+  /** The event check client of one server. An API host answers with every check, a v1 host with the app ones. */
+  function eventChecks(serverId: string) {
+    return eventChecksApi(
+      teamApi(serverId),
+      () => capabilities.get(serverId)?.includes(EVENT_CHECK_API_CAPABILITY) === true,
+    );
+  }
   return {
+    loadEventChecks: (agentId, serverId) => eventChecks(serverId).list({ agentId }),
+    setEventCheckActive: (check: EventCheck, active, serverId) => {
+      // The list answer carries a `health` field that the save route does not take.
+      const { health: _health, ...definition } = check;
+      return eventChecks(serverId).save({ ...definition, active });
+    },
+    runEventCheck: (agentId, id, serverId) => eventChecks(serverId).checkNow({ agentId, id }),
     listEventRoutines: (owner, serverId) => runTeamRequest(listEventRoutines(eventsAdmin(serverId), { owner })),
     saveEventRoutine: (input, serverId) => runTeamRequest(saveEventRoutine(eventsAdmin(serverId), input)),
     deleteEventRoutine: (input, serverId) => runTeamRequest(deleteEventRoutine(eventsAdmin(serverId), input)),

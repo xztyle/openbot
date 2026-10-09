@@ -13,6 +13,13 @@ import { adminRoute, fields, identifier, type OptionalRouteCodec } from "./admin
 import { decodeTeamProtocolV2Json } from "./v2";
 
 export const EVENT_CHECK_API_CAPABILITY = "event-check-api-v1";
+/**
+ * Optional fields on the event check routes above and in `event-checks-v1`: `delivery` on a check
+ * (a digest window and item filters), `health` on a listed check, and `filteredCount` on an execution.
+ * A host that advertises it reads and keeps `delivery`. A client that does not know the fields ignores
+ * them, and a client that does not send `delivery` leaves the saved value as it is.
+ */
+export const EVENT_CHECK_DELIVERY_CAPABILITY = "event-check-delivery-v1";
 export const EVENT_CHECK_API_ROUTES = {
   environment: "/v1/event-check-api/environment",
   setEnvironment: "/v1/event-check-api/set-environment",

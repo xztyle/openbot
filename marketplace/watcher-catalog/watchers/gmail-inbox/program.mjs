@@ -37,10 +37,28 @@ const SURPRISE = "The mail server sent a response this check does not understand
 // Explicit uncertainty marker, never a user identity.
 export const UNKNOWN_ACTOR = "unknown";
 
-class WatcherError extends Error {}
+const ERROR_CODES = ["auth", "rate_limited", "config", "upstream"];
 
-function requireCondition(condition, message) {
-  if (!condition) throw new WatcherError(message);
+/** A failure with fixed wording. The optional code is one of ERROR_CODES; OpenBot maps it to its own text. */
+class WatcherError extends Error {
+  constructor(message, code = null) {
+    super(message);
+    this.code = ERROR_CODES.includes(code) ? code : null;
+  }
+}
+
+function requireCondition(condition, message, code = null) {
+  if (!condition) throw new WatcherError(message, code);
+}
+
+/** Runs a reader of settings. A failure without a code gets this code, so each check of a setting needs none. */
+function tagged(code, read) {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof WatcherError && error.code === null) error.code = code;
+    throw error;
+  }
 }
 
 function isRecord(value) {
@@ -137,13 +155,15 @@ function connectionError(error) {
   if (code === "ECONNREFUSED")
     return new WatcherError(
       "The mail server refused the connection. Check the host and the port, and that the server is running.",
+      "upstream",
     );
-  if (code === "ENOTFOUND" || code === "EAI_AGAIN") return new WatcherError("The mail server host name was not found.");
+  if (code === "ENOTFOUND") return new WatcherError("The mail server host name was not found.", "config");
+  if (code === "EAI_AGAIN") return new WatcherError("The mail server host name was not found.", "upstream");
   if (["ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH"].includes(code))
-    return new WatcherError("Cannot reach the mail server.");
+    return new WatcherError("Cannot reach the mail server.", "upstream");
   if (/CERT|SELF_SIGNED|UNABLE_TO_VERIFY|^ERR_TLS/.test(code))
-    return new WatcherError("The mail server certificate is not trusted.");
-  return new WatcherError("Cannot talk to the mail server.");
+    return new WatcherError("The mail server certificate is not trusted.", "config");
+  return new WatcherError("Cannot talk to the mail server.", "upstream");
 }
 
 function tlsOptions(config) {
@@ -175,14 +195,17 @@ class Connection {
   #timer;
 
   constructor(timeoutMs) {
-    this.#timer = setTimeout(() => this.#fail(new WatcherError("The mail server did not answer in time.")), timeoutMs);
+    this.#timer = setTimeout(
+      () => this.#fail(new WatcherError("The mail server did not answer in time.", "upstream")),
+      timeoutMs,
+    );
   }
 
   attach(socket) {
     this.#socket = socket;
     socket.on("data", (chunk) => {
       this.#bytes += chunk.length;
-      if (this.#bytes > MAX_SESSION_BYTES) return this.#fail(new WatcherError(TOO_LARGE));
+      if (this.#bytes > MAX_SESSION_BYTES) return this.#fail(new WatcherError(TOO_LARGE, "upstream"));
       this.#buffer = Buffer.concat([this.#buffer, chunk]);
       this.#notify();
     });
@@ -254,7 +277,7 @@ class Connection {
       const parts = this.#parse();
       if (parts) return parts;
       requireCondition(this.#buffer.length <= MAX_PENDING_BYTES, TOO_LARGE);
-      if (this.#closed) throw new WatcherError("The mail server closed the connection.");
+      if (this.#closed) throw new WatcherError("The mail server closed the connection.", "upstream");
       await new Promise((resolve) => {
         this.#wake = resolve;
       });
@@ -604,6 +627,7 @@ async function readMailbox(config, password, sinceMs, timeoutMs) {
     requireCondition(
       login === "OK",
       `The mail server refused the login. Check the user name and the ${PASSWORD_VARIABLE} private variable.`,
+      "auth",
     );
     let uidValidity = null;
     const examine = await connection.command(
@@ -613,7 +637,7 @@ async function readMailbox(config, password, sinceMs, timeoutMs) {
         if (match) uidValidity = match[1];
       },
     );
-    requireCondition(examine === "OK", "The mailbox could not be opened. Check the mailbox name.");
+    requireCondition(examine === "OK", "The mailbox could not be opened. Check the mailbox name.", "config");
     requireCondition(uidValidity !== null, SURPRISE);
 
     const found = new Set();
@@ -658,10 +682,11 @@ export async function runWatcher(
   input,
   { password = process.env[PASSWORD_VARIABLE], now = () => Date.now(), timeoutMs = SESSION_TIMEOUT_MS } = {},
 ) {
-  const config = readConfiguration(input);
+  const config = tagged("config", () => readConfiguration(input));
   requireCondition(
     typeof password === "string" && password.length > 0,
     `Missing ${PASSWORD_VARIABLE} private variable.`,
+    "auth",
   );
   quote(config.username, "user name");
   quote(password, "password");
@@ -689,6 +714,7 @@ async function main() {
   } catch (error) {
     // Only locally written messages reach stderr; never server text or the password.
     process.stderr.write(`Mail inbox watcher: ${error instanceof WatcherError ? error.message : "Watcher failed."}\n`);
+    if (error instanceof WatcherError && error.code) process.stderr.write(`openbot-error: ${error.code}\n`);
     process.exitCode = 1;
   }
 }

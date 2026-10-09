@@ -138,6 +138,7 @@ import { ProfileSave, toProfileSaveFailed } from "./agent/profile-save";
 import { isPlanLimitDiagnostic } from "./agent/provider-diagnostics";
 import { type AgentClientFactory, ProviderRuntime, toProviderOperationFailed } from "./agent/provider-runtime";
 import { QueueControls } from "./agent/queue-controls";
+import { runMayEndQuiet } from "./agent/routine-quiet-runs";
 import { type RoutineMutationOptions, RoutineScheduler, toRoutineOperationFailed } from "./agent/routine-scheduler";
 import { buildRuntimeSnapshot } from "./agent/runtime-snapshot";
 import type { AgentSidebar } from "./agent/sidebar-tools";
@@ -725,7 +726,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         // A deleted routine takes its runs with it, so a run without a record counts as scheduled:
         // otherwise the import would bring back the answers that its quiet turns dropped.
-        quietRoutineDelivery: (deliveryId) => this.#routines.runForDelivery(deliveryId)?.kind !== "manual",
+        quietRoutineDelivery: (deliveryId) => {
+          const run = this.#routines.runForDelivery(deliveryId);
+          return run === null || runMayEndQuiet(run);
+        },
         executionThreads: () => [...this.channels.store.executionThreads(), ...this.messaging.store.executionThreads()],
         deliveryThreadId: (deliveryId) => {
           const assignment = this.channels.store.assignmentForDelivery(deliveryId);
@@ -879,6 +883,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         !this.#removal.deleting().has(id) &&
         !this.#duplication.isPending(id),
       running: () => this.#initialized && !this.#stopping && !this.#routineTimer.held,
+      // The agent event "error" with these codes reaches every client without a new protocol field.
+      // It is a notice for the user, not a system failure, so it skips the failure analytics.
+      notify: (agentId, code, message) =>
+        this.#emit({ type: "error", agentId, code, message: this.#mcp.redact(message) }),
       deliver: eventDelivery.send.bind(eventDelivery),
     });
 

@@ -41,10 +41,28 @@ const CHANNEL_KINDS = new Map([
 
 export const UNKNOWN_ACTOR = "unknown";
 
-export class WatcherError extends Error {}
+const ERROR_CODES = ["auth", "rate_limited", "config", "upstream"];
 
-function requireCondition(condition, message) {
-  if (!condition) throw new WatcherError(message);
+/** A failure with fixed wording. The optional code is one of ERROR_CODES; OpenBot maps it to its own text. */
+export class WatcherError extends Error {
+  constructor(message, code = null) {
+    super(message);
+    this.code = ERROR_CODES.includes(code) ? code : null;
+  }
+}
+
+function requireCondition(condition, message, code = null) {
+  if (!condition) throw new WatcherError(message, code);
+}
+
+/** Runs a reader of settings. A failure without a code gets this code, so each check of a setting needs none. */
+function tagged(code, read) {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof WatcherError && error.code === null) error.code = code;
+    throw error;
+  }
 }
 
 function isRecord(value) {
@@ -193,7 +211,7 @@ async function readJson(response) {
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
-    throw new WatcherError("Invalid JSON API response.");
+    throw new WatcherError("Invalid JSON API response.", "upstream");
   }
 }
 
@@ -208,6 +226,7 @@ async function saveCooldown(ctx, waitMs) {
   await ctx.store.write(ctx.config.instanceId, ctx.now() + wait);
   throw new WatcherError(
     "Discord API rate limit reached; a cooldown is active and no request will be sent until it passes.",
+    "rate_limited",
   );
 }
 
@@ -219,6 +238,7 @@ async function call(ctx, route, params, allowed = []) {
   requireCondition(
     ctx.requests < ctx.config.maxRequests,
     "The check needs more requests than maxRequests allows. Raise maxRequests or watch fewer channels.",
+    "config",
   );
   // Wait out a short pause that the last response asked for.
   const pause = ctx.pauseUntil - ctx.now();
@@ -227,6 +247,7 @@ async function call(ctx, route, params, allowed = []) {
   requireCondition(
     ctx.now() - ctx.startedAt < RUN_BUDGET_MS,
     "The check ran out of time before it covered the whole window.",
+    "config",
   );
   ctx.requests += 1;
   const url = new URL(`${API}${route}`);
@@ -257,13 +278,16 @@ async function call(ctx, route, params, allowed = []) {
     }
     if (!response.ok) {
       if (allowed.includes(response.status)) return { status: response.status, body: null };
-      throw new WatcherError(`Discord API HTTP ${Number(response.status) || "error"}.`);
+      throw new WatcherError(
+        `Discord API HTTP ${Number(response.status) || "error"}.`,
+        response.status === 401 || response.status === 403 ? "auth" : "upstream",
+      );
     }
     body = await readJson(response);
   } catch (error) {
     // Only locally authored messages may reach stderr; never echo fetch or server errors.
     if (error instanceof WatcherError) throw error;
-    throw new WatcherError("Discord API request failed or timed out.");
+    throw new WatcherError("Discord API request failed or timed out.", "upstream");
   } finally {
     clearTimeout(timer);
   }
@@ -308,10 +332,11 @@ function matchesYou(message, config) {
 
 async function describeChannel(ctx, id) {
   const { status, body } = await call(ctx, `/channels/${id}`, {}, [401, 403, 404]);
-  requireCondition(status !== 401, "Discord rejected the bot token.");
+  requireCondition(status !== 401, "Discord rejected the bot token.", "auth");
   requireCondition(
     status === 200 && isRecord(body) && body.id === id,
     `Discord channel ${id} is not available to the bot (HTTP ${status}). Check the ID and that the bot is a member.`,
+    "config",
   );
   requireCondition(CHANNEL_KINDS.has(body.type), `Discord channel ${id} is not a channel that holds messages.`);
   const kind = CHANNEL_KINDS.get(body.type);
@@ -339,10 +364,11 @@ async function collectChannel(ctx, collector, window, channel) {
       },
       [401, 403, 404],
     );
-    requireCondition(status !== 401, "Discord rejected the bot token.");
+    requireCondition(status !== 401, "Discord rejected the bot token.", "auth");
     requireCondition(
       status === 200,
       `Discord channel ${channel.id} cannot be read by the bot (HTTP ${status}). Check that the bot may read message history there.`,
+      "config",
     );
     requireCondition(Array.isArray(body) && body.length <= ctx.config.perChannelLimit, "Unexpected Discord response.");
     let newest = null;
@@ -388,26 +414,33 @@ export async function runWatcher(
     store = createCooldownStore(cooldownDir),
   } = {},
 ) {
-  requireCondition(typeof token === "string" && token.trim().length > 0, "Missing DISCORD_BOT_TOKEN private variable.");
+  requireCondition(
+    typeof token === "string" && token.trim().length > 0,
+    "Missing DISCORD_BOT_TOKEN private variable.",
+    "auth",
+  );
   const cleanToken = token.trim().replace(/^Bot\s+/i, "");
   requireCondition(
     cleanToken.length > 0 && !/[^\x21-\x7e]/.test(cleanToken),
     "Invalid DISCORD_BOT_TOKEN private variable.",
+    "auth",
   );
-  const config = readConfiguration(input);
+  const config = tagged("config", () => readConfiguration(input));
   const window = readWindow(input);
   requireCondition(
     (await store.read(config.instanceId)) <= now(),
     "Discord API cooldown is active; no request was sent.",
+    "rate_limited",
   );
   const ctx = { config, token: cleanToken, fetchImpl, now, sleep, store, startedAt: now(), requests: 0, pauseUntil: 0 };
 
   // Only a bot account is accepted. A user token is rejected by Discord with this header.
   const me = await call(ctx, "/users/@me", {}, [401]);
-  requireCondition(me.status !== 401, "Discord rejected the bot token.");
+  requireCondition(me.status !== 401, "Discord rejected the bot token.", "auth");
   requireCondition(
     isRecord(me.body) && isSnowflake(me.body.id) && me.body.bot === true,
     "The token does not belong to a Discord bot.",
+    "auth",
   );
 
   const channels = [];
@@ -420,11 +453,12 @@ export async function runWatcher(
     const [left, right] = [BigInt(a.id.split(":")[1]), BigInt(b.id.split(":")[1])];
     return left < right ? -1 : left > right ? 1 : 0;
   });
-  requireCondition(items.length <= MAX_ITEMS, "Too many new messages for one check.");
+  requireCondition(items.length <= MAX_ITEMS, "Too many new messages for one check.", "config");
   const result = { items, hasNextPage: false, cursor: null };
   requireCondition(
     Buffer.byteLength(JSON.stringify(result)) <= MAX_OUTPUT_BYTES,
     "Too many new messages for one check.",
+    "config",
   );
   return result;
 }
@@ -447,6 +481,8 @@ async function main() {
     process.stderr.write(
       `Discord activity watcher: ${error instanceof WatcherError ? error.message : "Watcher failed."}\n`,
     );
+    // One code, no text from Discord: OpenBot maps it to its own message.
+    if (error instanceof WatcherError && error.code) process.stderr.write(`openbot-error: ${error.code}\n`);
     process.exitCode = 1;
   }
 }

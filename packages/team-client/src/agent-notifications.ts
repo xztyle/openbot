@@ -1,6 +1,9 @@
 import { agentProviderName } from "@openbot/contracts/agent-providers";
 import type { AgentEvent, AgentSummary, ServerNotificationLevel } from "@openbot/contracts/ipc";
 import type { AppFormat, AppTranslate } from "@openbot/i18n";
+import { unattendedFailureSubject } from "./unattended-failure-notification";
+
+export { UNATTENDED_FAILURE_ERROR_CODES } from "./unattended-failure-notification";
 
 export interface AgentNotificationContent {
   title: string;
@@ -72,6 +75,8 @@ function notificationSubject(
     const { agentId, threadId } = event.approval;
     return { body: translate("notification.needsApproval"), agentId, threadId };
   }
+  const unattended = unattendedFailureSubject(event, translate);
+  if (unattended) return unattended;
   // A quiet routine run posted nothing, so there is nothing to look at.
   if (event.type !== "turn-completed" || level !== "all" || event.quiet) return null;
   const { agentId, threadId } = event;

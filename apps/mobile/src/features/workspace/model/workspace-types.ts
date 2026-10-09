@@ -1,4 +1,5 @@
 import type { AttachmentSupport } from "@openbot/contracts/attachment-files";
+import type { EventCheck, EventCheckExecution } from "@openbot/contracts/event-checks";
 import type {
   AddedAgent,
   AgentAdminSettings,
@@ -162,6 +163,14 @@ export interface MobileWorkspaceContextValue {
   updateAgentRoutine: (input: UpdateRoutineInput, serverId: string) => Promise<void>;
   deleteAgentRoutine: (agentId: string, routineId: string, serverId: string) => Promise<void>;
   testAgentRoutine: (agentId: string, routineId: string, serverId: string) => Promise<void>;
+  /** Event checks are available only to owners and admins on hosts with event-checks-v1 or event-check-api-v1. */
+  canManageEventChecks: (serverId: string) => boolean;
+  /** The event checks of one agent, each with its health. */
+  loadEventChecks: (agentId: string, serverId: string) => Promise<EventCheck[]>;
+  /** Pauses or resumes a check. The host refuses to resume one that lacks a private variable. */
+  setEventCheckActive: (check: EventCheck, active: boolean, serverId: string) => Promise<EventCheck>;
+  /** Runs a check now with its saved definition. */
+  runEventCheck: (agentId: string, id: string, serverId: string) => Promise<EventCheckExecution>;
   /** Event administration is available only to owners and admins on hosts with events-v1. */
   canManageEvents: (serverId: string) => boolean;
   listEventRoutines: (owner: EventRoutineOwner, serverId: string) => Promise<EventRoutine[]>;

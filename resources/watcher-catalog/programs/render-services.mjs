@@ -46,10 +46,28 @@ function controlToSpace(text) {
   return out;
 }
 
-class WatcherError extends Error {}
+const ERROR_CODES = ["auth", "rate_limited", "config", "upstream"];
 
-function requireCondition(condition, message) {
-  if (!condition) throw new WatcherError(message);
+/** A failure with fixed wording. The optional code is one of ERROR_CODES; OpenBot maps it to its own text. */
+class WatcherError extends Error {
+  constructor(message, code = null) {
+    super(message);
+    this.code = ERROR_CODES.includes(code) ? code : null;
+  }
+}
+
+function requireCondition(condition, message, code = null) {
+  if (!condition) throw new WatcherError(message, code);
+}
+
+/** Runs a reader of settings. A failure without a code gets this code, so each check of a setting needs none. */
+function tagged(code, read) {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof WatcherError && error.code === null) error.code = code;
+    throw error;
+  }
 }
 
 function cleanText(value, max) {
@@ -120,7 +138,7 @@ async function readResponse(response) {
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
-    throw new WatcherError("Invalid JSON API response.");
+    throw new WatcherError("Invalid JSON API response.", "upstream");
   }
 }
 
@@ -168,16 +186,16 @@ async function saveCooldown(response, instanceId, store, nowMs) {
   const reset = Number(response.headers.get("ratelimit-reset"));
   if (Number.isFinite(reset) && reset > 0 && reset < 3600) until = Math.max(until, nowMs + reset * 1000);
   await store.write(instanceId, until);
-  throw new WatcherError("Render API rate limit reached; server-directed cooldown is active.");
+  throw new WatcherError("Render API rate limit reached; server-directed cooldown is active.", "rate_limited");
 }
 
 function httpFailure(status) {
   const code = Number(status) || 0;
   if (code === 401 || code === 403) {
-    return new WatcherError(`Render rejected the API key (HTTP ${code}). Check RENDER_API_KEY.`);
+    return new WatcherError(`Render rejected the API key (HTTP ${code}). Check RENDER_API_KEY.`, "auth");
   }
-  if (code === 404) return new WatcherError("Render did not find the requested resource (HTTP 404).");
-  return new WatcherError(`Render API HTTP ${code || "error"}.`);
+  if (code === 404) return new WatcherError("Render did not find the requested resource (HTTP 404).", "config");
+  return new WatcherError(`Render API HTTP ${code || "error"}.`, "upstream");
 }
 
 function createClient({ token, fetchImpl, store, now, config }) {
@@ -186,7 +204,7 @@ function createClient({ token, fetchImpl, store, now, config }) {
   /** One read-only GET. Any failure marks the run as failed so that no new request starts. */
   async function get(pathname, query) {
     requireCondition(!failed, "Render check stopped after an earlier failure.");
-    requireCondition(now() - startedAt < RUN_BUDGET_MS, "Render check ran out of time; reduce maxServices.");
+    requireCondition(now() - startedAt < RUN_BUDGET_MS, "Render check ran out of time; reduce maxServices.", "config");
     const url = new URL(`${API}${pathname}`);
     for (const [name, value] of Object.entries(query))
       if (value !== undefined && value !== "") url.searchParams.set(name, String(value));
@@ -200,13 +218,13 @@ function createClient({ token, fetchImpl, store, now, config }) {
       if (response.status === 429) await saveCooldown(response, config.instanceId, store, now());
       if (!response.ok) throw httpFailure(response.status);
       const body = await readResponse(response);
-      requireCondition(Array.isArray(body), "Unexpected Render API response.");
+      requireCondition(Array.isArray(body), "Unexpected Render API response.", "upstream");
       return body;
     } catch (error) {
       failed = true;
       // Only these locally authored messages may reach stderr; never echo fetch/server errors.
       if (error instanceof WatcherError) throw error;
-      throw new WatcherError("Render API request failed or timed out.");
+      throw new WatcherError("Render API request failed or timed out.", "upstream");
     }
   }
   return { get };
@@ -234,7 +252,10 @@ async function listAll(client, pathname, wrapperKey, ownerId) {
     );
     cursor = next;
   }
-  throw new WatcherError("Render account has more entries than the paging limit; set ownerId or serviceNames.");
+  throw new WatcherError(
+    "Render account has more entries than the paging limit; set ownerId or serviceNames.",
+    "config",
+  );
 }
 
 function requireId(value) {
@@ -334,12 +355,17 @@ export async function runWatcher(
   input,
   { token = process.env.RENDER_API_KEY, fetchImpl = fetch, store = cooldownStore, now = () => Date.now() } = {},
 ) {
-  requireCondition(typeof token === "string" && token.trim().length > 0, "Missing RENDER_API_KEY private variable.");
-  requireCondition(!/[\r\n]/.test(token), "Invalid RENDER_API_KEY private variable.");
-  const config = readConfiguration(input);
+  requireCondition(
+    typeof token === "string" && token.trim().length > 0,
+    "Missing RENDER_API_KEY private variable.",
+    "auth",
+  );
+  requireCondition(!/[\r\n]/.test(token), "Invalid RENDER_API_KEY private variable.", "auth");
+  const config = tagged("config", () => readConfiguration(input));
   requireCondition(
     (await store.read(config.instanceId)) <= now(),
     "Render API cooldown is active; no request was sent.",
+    "rate_limited",
   );
   const client = createClient({ token, fetchImpl, store, now, config });
 
@@ -351,6 +377,7 @@ export async function runWatcher(
     requireCondition(
       [...wanted].every((name) => found.has(name)),
       "A name in serviceNames matches no service.",
+      "config",
     );
   }
   capped(services, config, "services");
@@ -391,6 +418,8 @@ async function main() {
     process.stderr.write(
       `Render services watcher: ${error instanceof WatcherError ? error.message : "Watcher failed."}\n`,
     );
+    // One code, no text from Render: OpenBot maps it to its own message.
+    if (error instanceof WatcherError && error.code) process.stderr.write(`openbot-error: ${error.code}\n`);
     process.exitCode = 1;
   }
 }

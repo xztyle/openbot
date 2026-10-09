@@ -50,6 +50,8 @@ interface AgentSettingsPanelProps
   eventRoutines?: EventRoutinesApi;
   eventChecksAvailable?: boolean;
   apiEventChecksAvailable?: boolean;
+  /** Whether the host keeps the delivery setting of a check. */
+  eventCheckDeliveryAvailable?: boolean;
   onCreateSkill?: () => void;
   onTrySkill?: (skill: MarketplaceSkillDetail) => void;
   onAddFromMarketplace?: (agentId: string) => void;
@@ -361,6 +363,11 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
               api={api()}
               apiProgramsAvailable={
                 props.remoteClient ? Boolean(api().environment) : (props.apiEventChecksAvailable ?? true)
+              }
+              deliveryAvailable={
+                props.remoteClient
+                  ? props.adminCalls?.eventChecks?.deliverySettings === true
+                  : (props.eventCheckDeliveryAvailable ?? true)
               }
               agentId={props.agent.id}
               onCountChange={(count) =>

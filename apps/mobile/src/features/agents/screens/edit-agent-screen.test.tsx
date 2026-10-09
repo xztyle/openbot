@@ -1,3 +1,4 @@
+import type { EventCheck, EventCheckExecution } from "@openbot/contracts/event-checks";
 import {
   type AgentAdminSettings,
   type AgentAnalytics,
@@ -237,6 +238,10 @@ const workspace = {
     async () => [],
   ),
   canManageAgentSkills: vi.fn((_serverId: string) => false),
+  canManageEventChecks: vi.fn((_serverId: string) => false),
+  loadEventChecks: vi.fn<(agentId: string, serverId: string) => Promise<EventCheck[]>>(async () => []),
+  setEventCheckActive: vi.fn<(check: EventCheck, active: boolean, serverId: string) => Promise<EventCheck>>(),
+  runEventCheck: vi.fn<(agentId: string, id: string, serverId: string) => Promise<EventCheckExecution>>(),
   canManageEvents: vi.fn((_serverId: string) => false),
   listEventRoutines: vi.fn(async () => []),
   saveEventRoutine: vi.fn(async () => null),
@@ -430,7 +435,9 @@ vi.mock("@/features/settings/components/settings-content", () => ({
     trailing,
     disabled,
     accessibilityLabel,
+    supportingText,
   }: PropsWithChildren<{
+    supportingText?: string;
     onPress?: () => void;
     trailing?: import("react").ReactNode;
     disabled?: boolean;
@@ -446,6 +453,7 @@ vi.mock("@/features/settings/components/settings-content", () => ({
     ) : (
       <div>
         {children}
+        {supportingText ? <small>{supportingText}</small> : null}
         {trailing}
       </div>
     ),
@@ -643,6 +651,7 @@ async function renderSheet(
     | "skills"
     | "files"
     | "routines"
+    | "eventChecks"
     | "runtime"
     | "memory"
     | "routine" = "info",
@@ -689,6 +698,10 @@ beforeEach(() => {
   workspace.loadAgentAnalytics.mockReset().mockResolvedValue(null);
   workspace.loadAgentSkills.mockReset().mockResolvedValue([]);
   workspace.canManageAgentSkills.mockReset().mockReturnValue(false);
+  workspace.canManageEventChecks.mockReset().mockReturnValue(false);
+  workspace.loadEventChecks.mockReset().mockResolvedValue([]);
+  workspace.setEventCheckActive.mockReset();
+  workspace.runEventCheck.mockReset();
   workspace.setAgentSkillEnabled.mockReset();
   workspace.uninstallAgentSkill.mockReset();
   workspace.loadAgentStorage.mockReset().mockResolvedValue(null);
@@ -961,6 +974,115 @@ it("lets an admin turn a skill off and on, and puts the old state back when the 
   await act(() => fireEvent.click(screen.getByRole("switch", { name: "Writer" })));
   await screen.findByText("Sign in to the marketplace on the host.");
   expect(screen.getByRole("switch", { name: "Writer" })).toHaveProperty("checked", false);
+});
+
+it("lists the event checks of an agent for an admin, with the last status, and pauses or runs one", async () => {
+  const check: EventCheck = {
+    id: "check-one",
+    agentId: original.id,
+    name: "Linear tickets",
+    instruction: "Review new tickets.",
+    active: true,
+    timezone: "UTC",
+    schedule: { kind: "interval", amount: 60, unit: "seconds", anchorAt: "2026-10-09T00:00:00.000Z" },
+    selfEvents: { mode: "include", connectionId: "", actorPointer: "", accountActorIds: [] },
+    source: {
+      kind: "api",
+      connectionId: "work",
+      variables: [],
+      configuration: [],
+      toolName: "linear.mjs",
+      argumentsJson: "{}",
+      cursorArgument: "cursor",
+      nextCursorPointer: "/cursor",
+    },
+    selection: { itemsPointer: "/items", idPointer: "/id", revisionPointer: "/revision" },
+    revision: "revision-one",
+    nextCheckAt: "2026-10-09T10:01:00.000Z",
+    createdAt: "2026-10-09T00:00:00.000Z",
+    updatedAt: "2026-10-09T00:00:00.000Z",
+    health: {
+      consecutiveErrors: 0,
+      lastError: null,
+      lastStatus: "unchanged",
+      lastCheckedAt: "2026-10-09T10:00:00.000Z",
+    },
+  };
+  const failing: EventCheck = {
+    ...check,
+    id: "check-two",
+    name: "GitHub alerts",
+    active: false,
+    health: {
+      consecutiveErrors: 6,
+      lastError:
+        "The app did not accept the saved credentials. Set a new value in this event check’s Private variables (.env) settings.",
+      lastStatus: "error",
+      lastCheckedAt: "2026-10-09T10:00:00.000Z",
+    },
+  };
+  workspace.servers = [{ ...host, role: "admin" }];
+  workspace.canManageEventChecks.mockReturnValue(true);
+  workspace.loadEventChecks.mockResolvedValue([check, failing]);
+  let answer: (saved: EventCheck) => void = () => {};
+  workspace.setEventCheckActive.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  );
+  workspace.runEventCheck.mockResolvedValue({
+    id: "execution",
+    checkId: check.id,
+    startedAt: "2026-10-09T10:05:00.000Z",
+    finishedAt: "2026-10-09T10:05:00.000Z",
+    status: "unchanged",
+    itemCount: 1,
+    eventCount: 0,
+    skippedSelfCount: 0,
+    filteredCount: 0,
+    durationMs: 3,
+    error: null,
+  });
+  await renderSheet("eventChecks");
+  const toggle = await screen.findByRole("switch", { name: "Linear tickets" });
+  expect(workspace.loadEventChecks).toHaveBeenCalledWith(original.id, original.serverId);
+  expect(screen.getByText(/Last check .*: no changes/)).toBeTruthy();
+  // A check that keeps failing says why, in words and not in program output.
+  expect(screen.getByText(/Failing\. The app did not accept the saved credentials/)).toBeTruthy();
+  expect(screen.getByRole("switch", { name: "GitHub alerts" })).toHaveProperty("checked", false);
+  // A paused check cannot be checked now.
+  expect(screen.getByRole("button", { name: "Check GitHub alerts now" })).toHaveProperty("disabled", true);
+
+  await click("Check Linear tickets now");
+  expect(workspace.runEventCheck).toHaveBeenCalledWith(original.id, check.id, original.serverId);
+  await waitFor(() => expect(workspace.loadEventChecks).toHaveBeenCalledTimes(2));
+
+  await act(() => fireEvent.click(toggle));
+  expect(workspace.setEventCheckActive).toHaveBeenCalledWith(check, false, original.serverId);
+  await waitFor(() => expect(screen.getByRole("switch", { name: "Linear tickets" })).toHaveProperty("checked", false));
+  await act(async () => answer({ ...check, active: false }));
+  await waitFor(() => expect(screen.getByRole("switch", { name: "Linear tickets" })).toHaveProperty("disabled", false));
+
+  workspace.setEventCheckActive.mockRejectedValue(new Error("Add the required private variable first."));
+  await act(() => fireEvent.click(screen.getByRole("switch", { name: "GitHub alerts" })));
+  await screen.findByText("Add the required private variable first.");
+  expect(screen.getByRole("switch", { name: "GitHub alerts" })).toHaveProperty("checked", false);
+});
+
+it("shows the event checks row in the agent info only to an admin of a host that has them", async () => {
+  await renderSheet("info");
+  expect(screen.queryByRole("button", { name: "Event checks" })).toBeNull();
+  await act(() => root.unmount());
+  root = createRoot(container);
+  client.clear();
+  workspace.canManageEventChecks.mockReturnValue(true);
+  await renderSheet("info");
+  await click("Event checks");
+  expect(mocks.push).toHaveBeenCalledWith({
+    pathname: "/agent-info/[agentId]/event-checks",
+    params: { agentId: original.id, serverId: original.serverId },
+  });
 });
 
 it("lets an admin start a new skill in the agent chat, as on desktop", async () => {

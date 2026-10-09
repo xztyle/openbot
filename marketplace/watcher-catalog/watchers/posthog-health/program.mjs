@@ -12,10 +12,28 @@ const REQUEST_TIMEOUT_MS = 15000;
 export const UNKNOWN_ACTOR = "unknown";
 const EVENT_NAME = /^[A-Za-z0-9_$ .:-]{1,100}$/;
 
-export class WatcherError extends Error {}
+const ERROR_CODES = ["auth", "rate_limited", "config", "upstream"];
 
-function requireCondition(condition, message) {
-  if (!condition) throw new WatcherError(message);
+/** A failure with fixed wording. The optional code is one of ERROR_CODES; OpenBot maps it to its own text. */
+export class WatcherError extends Error {
+  constructor(message, code = null) {
+    super(message);
+    this.code = ERROR_CODES.includes(code) ? code : null;
+  }
+}
+
+function requireCondition(condition, message, code = null) {
+  if (!condition) throw new WatcherError(message, code);
+}
+
+/** Runs a reader of settings. A failure without a code gets this code, so each check of a setting needs none. */
+function tagged(code, read) {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof WatcherError && error.code === null) error.code = code;
+    throw error;
+  }
 }
 
 function readInteger(value, fallback, minimum, maximum, name) {
@@ -123,7 +141,7 @@ async function readResponse(response) {
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
-    throw new WatcherError("Invalid JSON API response.");
+    throw new WatcherError("Invalid JSON API response.", "upstream");
   }
 }
 
@@ -169,7 +187,7 @@ async function saveCooldown(response, instanceId, store, nowMs) {
     if (Number.isFinite(timestamp)) until = Math.max(until, timestamp);
   }
   await store.write(instanceId, until);
-  throw new WatcherError("PostHog API rate limit reached; server-directed cooldown is active.");
+  throw new WatcherError("PostHog API rate limit reached; server-directed cooldown is active.", "rate_limited");
 }
 
 function httpFailure(status) {
@@ -177,10 +195,12 @@ function httpFailure(status) {
   if (code === 401 || code === 403) {
     return new WatcherError(
       `PostHog rejected the API key (HTTP ${code}). Check POSTHOG_PERSONAL_API_KEY and its query:read scope.`,
+      "auth",
     );
   }
-  if (code === 404) return new WatcherError("PostHog did not find the project (HTTP 404). Check host and projectId.");
-  return new WatcherError(`PostHog API HTTP ${code || "error"}.`);
+  if (code === 404)
+    return new WatcherError("PostHog did not find the project (HTTP 404). Check host and projectId.", "config");
+  return new WatcherError(`PostHog API HTTP ${code || "error"}.`, "upstream");
 }
 
 function count(value) {
@@ -188,6 +208,7 @@ function count(value) {
   requireCondition(
     typeof number === "number" && Number.isFinite(number) && number >= 0,
     "Unexpected PostHog query result.",
+    "upstream",
   );
   return number;
 }
@@ -197,6 +218,7 @@ export function parseWindows(body, config) {
   requireCondition(
     body && typeof body === "object" && Array.isArray(body.results) && body.results.length <= 3,
     "Unexpected PostHog query result.",
+    "upstream",
   );
   const names = ["volume", "pageviews", "users", "exceptions", ...(config.errorEvents.length > 0 ? ["errors"] : [])];
   const empty = () => Object.fromEntries(names.map((name) => [name, 0]));
@@ -282,12 +304,14 @@ export async function runWatcher(
   requireCondition(
     typeof token === "string" && token.trim().length > 0,
     "Missing POSTHOG_PERSONAL_API_KEY private variable.",
+    "auth",
   );
-  requireCondition(!/[\r\n]/.test(token), "Invalid POSTHOG_PERSONAL_API_KEY private variable.");
-  const config = readConfiguration(input);
+  requireCondition(!/[\r\n]/.test(token), "Invalid POSTHOG_PERSONAL_API_KEY private variable.", "auth");
+  const config = tagged("config", () => readConfiguration(input));
   requireCondition(
     (await store.read(config.instanceId)) <= now(),
     "PostHog API cooldown is active; no request was sent.",
+    "rate_limited",
   );
   let body;
   try {
@@ -308,7 +332,7 @@ export async function runWatcher(
   } catch (error) {
     // Only these locally authored messages may reach stderr; never echo fetch/server errors.
     if (error instanceof WatcherError) throw error;
-    throw new WatcherError("PostHog API request failed or timed out.");
+    throw new WatcherError("PostHog API request failed or timed out.", "upstream");
   }
   return { items: buildItems(parseWindows(body, config), config), hasNextPage: false, cursor: null };
 }
@@ -331,6 +355,8 @@ async function main() {
     process.stderr.write(
       `PostHog health watcher: ${error instanceof WatcherError ? error.message : "Watcher failed."}\n`,
     );
+    // One code, no text from PostHog: OpenBot maps it to its own message.
+    if (error instanceof WatcherError && error.code) process.stderr.write(`openbot-error: ${error.code}\n`);
     process.exitCode = 1;
   }
 }

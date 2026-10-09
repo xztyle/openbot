@@ -45,6 +45,7 @@ export function serverSupportsCapability(
       capability === "events-v1" ||
       capability === "context-reset-v1" ||
       capability === "event-check-templates-v1" ||
+      capability === "event-check-delivery-v1" ||
       capability === "agent-import-v1") &&
     server?.kind === "remote"
   ) {

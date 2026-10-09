@@ -3,16 +3,23 @@
     "slug": "linear-assigned-intake",
     "name": "Linear assigned work",
     "tagline": "Wake an agent when issues or projects assigned to you change",
-    "description": "Checks Linear every minute for the issues assigned to one person in one team, and for the projects that person leads. It runs as a normal program with no AI, reads Linear's API directly with a personal API key, and never changes anything in Linear. A new item, or a change to an issue's title or description, wakes the agent once. Changes you made yourself are skipped when the author can be told from Linear's history; when it cannot, the change is delivered. Linear's rate limits are honored with a saved cooldown for each check. Install it again for another workspace, team or person: every install has its own settings, API key, schedule and history.",
-    "version": "1.0.0",
+    "description": "Checks Linear every minute for the issues assigned to one person in one team, and for the projects that person leads. It runs as a normal program with no AI, reads Linear's API directly with a personal API key, and never changes anything in Linear. A new item, or a change to an issue's title or description, wakes the agent once. Optional settings narrow the issues by workflow state or label, add the issues delegated to a Linear agent user, and watch comments. A state filter or a label filter also makes a change of state or labels wake the agent, and comments make a new or edited comment wake it. With none of these settings the check watches what version 1.0.0 watched. Changes you made yourself are skipped when the author can be told from Linear's history; when it cannot, the change is delivered. Linear's rate limits are honored with a saved cooldown for each check. Install it again for another workspace, team or person: every install has its own settings, API key, schedule and history.",
+    "version": "1.1.0",
     "creatorName": "OpenBot",
     "iconUrl": "https://linear.app/favicon.ico",
     "websiteUrl": "https://linear.app",
     "app": "linear",
     "program": {
       "file": "linear-assigned-intake.mjs",
-      "digest": "1a5615c5e9e212de528747963595af688276fcb760c49c85c6df6b6bb6b1082b"
+      "digest": "e35bf725afee3c207a3747c4be7aaf1b21a4c151ca9a4d5450aa73e9a4185ba3"
     },
+    "earlierPrograms": [
+      {
+        "version": "1.0.0",
+        "file": "linear-assigned-intake-1.0.0.mjs",
+        "digest": "1a5615c5e9e212de528747963595af688276fcb760c49c85c6df6b6bb6b1082b"
+      }
+    ],
     "accountLabelHint": "The Linear workspace, for example Work",
     "variables": [
       {
@@ -80,6 +87,46 @@
         "type": "text"
       },
       {
+        "name": "stateFilter",
+        "label": "Workflow states (optional)",
+        "description": "Watch only issues in these workflow states, with names separated by commas, such as Todo, In Progress. A move between these states wakes the agent. Leave empty to watch every state.",
+        "value": "",
+        "required": false,
+        "type": "text"
+      },
+      {
+        "name": "labelFilter",
+        "label": "Labels (optional)",
+        "description": "Watch only issues that have at least one of these labels, with names separated by commas. A label change wakes the agent. Leave empty to watch every issue.",
+        "value": "",
+        "required": false,
+        "type": "text"
+      },
+      {
+        "name": "delegateId",
+        "label": "Delegate user ID (optional)",
+        "description": "Also watch the issues that are delegated to this Linear user, such as an agent user. Leave empty to watch assigned issues only.",
+        "value": "",
+        "required": false,
+        "type": "text"
+      },
+      {
+        "name": "includeComments",
+        "label": "Watch comments",
+        "description": "Wake the agent when a recent comment on an issue is new or edited. The check then asks for at most 25 issues in each request.",
+        "value": "false",
+        "required": false,
+        "type": "boolean"
+      },
+      {
+        "name": "includeProjects",
+        "label": "Watch projects you lead",
+        "description": "Also watch the projects that this user leads.",
+        "value": "true",
+        "required": false,
+        "type": "boolean"
+      },
+      {
         "name": "pageSize",
         "label": "Page size",
         "description": "How many items to ask for in each request, from 1 to 100.",
@@ -105,14 +152,14 @@
     "name": "GitHub activity",
     "tagline": "Wake an agent for GitHub mentions, review requests, pull requests, issues, pushes, failed CI, releases and security alerts",
     "description": "Checks GitHub every five minutes for one account. It can read your GitHub notifications (mentions, review requests, assignments, CI activity on threads you follow) and, for up to ten repositories you list, pull requests, issues, new commits, failed workflow runs, new releases and Dependabot security alerts. Each kind has its own on/off setting. It runs as a normal program with no AI, reads GitHub's REST API directly with your token, and never changes anything on GitHub. A new item, or a change to an item, wakes the agent once. The check stops if the token belongs to another account than the login you enter, and it stops with a clear message if any listed repository cannot be read; it never returns a partial result. GitHub's rate limits are honored with a saved cooldown for each check. Limits: notifications do not say who caused them, and a comment or label change on a pull request or issue cannot be told from other changes, so those items have an unknown author and your own actions on them can wake the agent. New commits and releases do name their author, so your own pushes are skipped when you enter your GitHub login as your user ID at the install. It works with github.com and with GitHub Enterprise Server. Install it again for another account: every install has its own settings, token, schedule and history.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "creatorName": "OpenBot",
     "iconUrl": "https://github.com/favicon.ico",
     "websiteUrl": "https://github.com",
     "app": "github-direct",
     "program": {
       "file": "github-activity.mjs",
-      "digest": "d0bc4944e5a6f0f5b2778fc754932f0274fad009d2162a9c448a2727f49cf0f1"
+      "digest": "b32c5c19b25c87f47ae70b1e66b6a8ea1e9791b3ae2bc88136f8661a4f845b83"
     },
     "accountLabelHint": "The GitHub account, for example Work",
     "variables": [
@@ -254,14 +301,14 @@
     "name": "Slack activity",
     "tagline": "Wake an agent when you are mentioned or messaged in Slack",
     "description": "Checks Slack every two minutes for new messages that matter to one person: mentions of that person, optional keywords, direct messages, and messages in channels you pick. It runs as a normal program with no AI, reads Slack's official Web API with a personal (user) token, and never posts or changes anything in Slack. Read-only permissions are enough. A new message, or a message that was edited while it is still recent, wakes the agent once. Messages you wrote yourself are skipped. The check only looks at the last few minutes, so a message that is edited much later is not seen again. If Slack asks the program to slow down, it saves a cooldown and sends no request until the cooldown ends. Use a token from an app that you create in your own workspace. Install it again for another workspace or person: every install has its own settings, token, schedule and history.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "creatorName": "OpenBot",
     "iconUrl": "https://slack.com/favicon.ico",
     "websiteUrl": "https://slack.com",
     "app": "slack",
     "program": {
       "file": "slack-activity.mjs",
-      "digest": "eb7dcad2f6c2ec83df626dbbaa95a733a5bf47ae63743af25bc57eb7abc54bb1"
+      "digest": "8854eff959bc05f10672ee9a002cc73d3222a8ca576ed68254b5baa93184fec9"
     },
     "accountLabelHint": "The Slack workspace, for example Work",
     "variables": [
@@ -379,14 +426,14 @@
     "name": "Gmail inbox",
     "tagline": "Wake an agent when new mail arrives in your Gmail inbox",
     "description": "Checks your Gmail inbox every minute over IMAP and wakes the agent once for each new message. By default it looks only at unread mail. It runs as a normal program with no AI. It reads only the sender, recipients, subject, date and the first few lines of each message, never attachments or whole messages. It never marks mail as read and never changes, moves or deletes anything. It uses a Google app password instead of your main password, so you do not need to set up a developer project. Before you install: turn on IMAP in Gmail settings (Forwarding and POP/IMAP) and turn on 2-Step Verification on the Google account, then create an app password. Mail you sent from your own address is skipped when you enter that address as your account ID. A message that looks like it is from you can still be forged, so do not treat the sender as proof. Install it again for another mailbox: every install has its own settings, password, schedule and history.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "creatorName": "OpenBot",
     "iconUrl": null,
     "websiteUrl": "https://mail.google.com",
     "app": null,
     "program": {
       "file": "gmail-inbox.mjs",
-      "digest": "532e577f3a403e3a1afac5120c05a9b4c42236e399988a22b8364ef88717ee47"
+      "digest": "557b429ed364a01cf11f5f75671d35fc9321f401517c6144aab6ae4fe4671b9d"
     },
     "accountLabelHint": "The Gmail address, for example you@gmail.com",
     "variables": [
@@ -480,14 +527,14 @@
     "name": "Proton Mail inbox",
     "tagline": "Wake an agent when new mail arrives in your Proton Mail inbox",
     "description": "Checks your Proton Mail inbox every minute and wakes the agent once for each new message. Proton Mail has no public API, so this works through Proton Mail Bridge, a free app from Proton that gives your computer a local IMAP server. Proton Mail Bridge must be installed, signed in to your Proton account and reachable from the machine that runs OpenBot. Inside the OpenBot container, 127.0.0.1 means the container itself, not your computer, so you may need to change the IMAP server setting to an address that reaches Bridge. If Bridge is not reachable, the check fails with a clear error and wakes nobody. The check uses the user name and the mailbox password that Bridge shows for your account, not your Proton login password. Bridge uses a self-signed certificate, so this check accepts a self-signed certificate only when the server is 127.0.0.1, ::1 or localhost; for any other server the certificate must be valid. By default it looks only at unread mail. It runs as a normal program with no AI. It reads only the sender, recipients, subject, date and the first few lines of each message, never attachments or whole messages. It never marks mail as read and never changes, moves or deletes anything. Mail you sent from your own address is skipped when you enter that address as your account ID. A message that looks like it is from you can still be forged, so do not treat the sender as proof. Install it again for another mailbox: every install has its own settings, password, schedule and history.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "creatorName": "OpenBot",
     "iconUrl": null,
     "websiteUrl": "https://proton.me/mail/bridge",
     "app": null,
     "program": {
       "file": "protonmail-inbox.mjs",
-      "digest": "260a4abfd940d05b871560499d9033993fbbc26843b22a26fd2b7c080bc5c147"
+      "digest": "ebb98a71540202dec87a86d9bf426473438589b433a2b49611abacf2ee68008e"
     },
     "accountLabelHint": "The Proton Mail address, for example you@proton.me",
     "variables": [
@@ -581,14 +628,14 @@
     "name": "Render services",
     "tagline": "Wake an agent when a Render deploy or service changes state",
     "description": "Checks your Render services every two minutes and tells the agent when something changed: a new deploy, a deploy that went live, a failed or canceled deploy, or a service that was suspended or resumed. It can also watch your Postgres and Key Value instances for a change of status. It runs as a normal program with no AI, reads Render's API with an API key, and never deploys, restarts, suspends or changes anything. The first check only saves the current state. After that, each change wakes the agent once, and a service that stays the same is quiet. A deploy that is still building does not wake the agent unless you turn on that setting. If the account has more services than your limit, the check stops with an error instead of watching only some of them. Render's rate limits are honored with a saved cooldown for each check. Install it again for another workspace: every install has its own settings, API key, schedule and history.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "creatorName": "OpenBot",
     "iconUrl": "https://render.com/favicon.ico",
     "websiteUrl": "https://render.com",
     "app": "render",
     "program": {
       "file": "render-services.mjs",
-      "digest": "2c36c954d53d855af13c0edd3126d641ed8e9fdce36aa5d5387b21b84d276ef0"
+      "digest": "36e9891e3eb3e5072b77e44be0cd72d640041841d9ef4049702e5f0f4fc98b27"
     },
     "accountLabelHint": "The Render workspace, for example Work",
     "variables": [
@@ -666,14 +713,14 @@
     "name": "PostHog health",
     "tagline": "Wake an agent when your PostHog traffic or errors look very different",
     "description": "A light check for big shifts in one PostHog project. Every five minutes it counts the last hour of events, and compares the count with the same hour one week earlier. If that hour was too quiet to compare with, it uses the hour before instead. It looks at four things: total events, pageviews, unique users, and exceptions, and optionally the custom error events you name. Each one gets a status: ok, low, high, or unknown. The agent wakes only when a status changes, for example from ok to low when pageviews fall by half. It sends one read-only query, runs with no AI, and never changes anything in PostHog. This finds large changes, not subtle ones. A quiet project can show unknown, because there is not enough data to compare with, and the first runs after a quiet week can show unknown too. Create a personal API key with only the query:read and project:read scopes. Install it again for another project: every install has its own settings, API key, schedule and history.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "creatorName": "OpenBot",
     "iconUrl": "https://posthog.com/favicon.ico",
     "websiteUrl": "https://posthog.com",
     "app": "posthog",
     "program": {
       "file": "posthog-health.mjs",
-      "digest": "8e1d8bc7e06dffd3ca2cce3dd1d8047e60f679cb3182025db2fa9e05d8da2ca9"
+      "digest": "d7f583d4a9aefb0f7a8c3338de1d30e4e2da00fb81e6d6289ec00570c8f74e25"
     },
     "accountLabelHint": "The PostHog project, for example Production",
     "variables": [
@@ -783,14 +830,14 @@
     "name": "Discord activity",
     "tagline": "Wake an agent when you are mentioned in chosen Discord channels",
     "description": "Checks Discord every minute for new messages in the channels you choose, and can keep only the messages that mention you, mention one of your roles, or reply to you. It runs as a normal program with no AI, reads Discord's official REST API with a BOT token, and never posts or changes anything in Discord. It does not support personal user tokens: using one to automate an account is against Discord's terms, so the check refuses it. A new message, or a message edited while it is still recent, wakes the agent once. Messages you wrote yourself are skipped. The check only looks at the last few minutes, so a message that is edited much later is not seen again. If Discord asks the program to slow down, it saves a cooldown and sends no request until the cooldown ends. Install it again for another server or person: every install has its own settings, token, schedule and history.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "creatorName": "OpenBot",
     "iconUrl": null,
     "websiteUrl": "https://discord.com",
     "app": null,
     "program": {
       "file": "discord-activity.mjs",
-      "digest": "4bff1b92de6cb975992a1c6263133be01806e8839d89b6d8b694b71ae925471d"
+      "digest": "d89f3a7024a3098d3a1c4782f03d4296dcb07914303daf45c2d97a411f575c92"
     },
     "accountLabelHint": "The Discord server, for example My server",
     "variables": [
@@ -884,14 +931,14 @@
     "name": "Git branches and tags",
     "tagline": "Wake an agent when a branch moves or a new branch or tag appears on any Git server",
     "description": "Runs git ls-remote against one repository on any Git server over HTTPS: GitLab, Gitea, Forgejo, Bitbucket, a server you host, or GitHub. It lists the current branches (and tags, if you choose) with their commit IDs. A new branch, a new tag, or a branch that moved to a new commit wakes the agent once. A deleted branch is ignored. It runs as a normal program with no AI, only reads, and never changes anything on the server. Public repositories need no key. For a private one, add an access token in a masked field after the install; it is sent only in a request header to the exact address you entered and never appears in a command line, a log or an item. Be aware of the limit: this finds pushes, new branches and new tags only. It cannot see pull requests, merge requests, issues, reviews or comments, because each provider keeps those behind its own API, not in Git. It also cannot tell who pushed, so the author of every item is unknown and your own pushes are not skipped. For GitHub pull requests, issues and CI, use the GitHub activity check instead. Install it again for another repository: every install has its own settings, key, schedule and history.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "creatorName": "OpenBot",
     "iconUrl": "https://git-scm.com/favicon.ico",
     "websiteUrl": "https://git-scm.com",
     "app": null,
     "program": {
       "file": "git-remote-refs.mjs",
-      "digest": "d0835f214acb58499838bc8143bcc3e9bc5569ba3fb0c1e99a871ef209bcc52b"
+      "digest": "fcfe2be798dbc5f0a73e01c475177293a0746f4ade366b06df83cd72885236ef"
     },
     "accountLabelHint": "The repository, for example work-api",
     "variables": [

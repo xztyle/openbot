@@ -13,6 +13,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { isBoolean, isDynamicRecord, isFunction, isNumber, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { normalizeEmailAddress } from "@openbot/contracts/validation";
+import { UNATTENDED_FAILURE_ERROR_CODES } from "@openbot/team-client/agent-notifications";
 import { classifyFailure, operationForCode, type ReportQueue, safeProperties } from "@openbot/telemetry";
 import { OpenPanelBase, type OpenPanelOptions } from "@openpanel/web";
 import { Effect, Exit, Scope } from "effect";
@@ -351,6 +352,8 @@ export class HostAnalytics {
         return;
       case "error":
         if (this.#reports) return;
+        // A notice for the user about an event check, not a failure of the system.
+        if (UNATTENDED_FAILURE_ERROR_CODES.includes(event.code)) return;
         this.#track("system_operation_failed", {
           ...(event.agentId ? this.#agentProperties(event.agentId) : {}),
           area: "agent",

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { EventCheckTemplate, EventCheckTemplateInstallInput } from "@openbot/contracts/event-check-templates";
 import type {
   EventCheck,
@@ -10,8 +10,9 @@ import type {
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { sourceText } from "@openbot/i18n/source";
 import { nextEventCheckOccurrence } from "@openbot/team-client/event-check-schedule";
-import { Effect, type Scope, Semaphore } from "effect";
+import { Cause, Effect, type Scope, Semaphore } from "effect";
 import type { EventCheckApiReader } from "./event-check-api-reader";
+import { eventCheckProgramError } from "./event-check-program";
 import type {
   EventCheckArguments,
   EventCheckData,
@@ -26,11 +27,21 @@ import {
   eventCheckPrompt,
   observeCheck,
 } from "./event-check-result";
-import type { CheckOutbox, EventCheckStore } from "./event-check-store";
+import { type CheckOutbox, EVENT_CHECK_FAILURE_NOTICE_STREAK, type EventCheckStore } from "./event-check-store";
 import type { EventCheckTemplates } from "./event-check-templates";
 import { mcpFailure, mcpSync } from "./mcp-effects";
 import type { RoutineDueSource, RoutineTimer } from "./routine-timer";
 
+/**
+ * Deliveries to the agent per check in one hour. The cap is soft: it lives in memory, so a restart
+ * starts a new hour. Over the cap, events wait in the outbox and go out as one digest.
+ */
+const EVENT_CHECK_HOURLY_DELIVERY_CAP = 12;
+const HOUR_MS = 3_600_000;
+/** A prompt must stay under the 100,000 character limit of an event batch. */
+const DIGEST_TEXT_LIMIT = 90_000;
+/** The codes of the notices a check raises on its own. The agent event `error` carries them to every client. */
+type EventCheckNoticeCode = "event_check_failing" | "event_check_delivery_failed";
 export interface EventCheckSchedulerOptions {
   store: EventCheckStore;
   reader?: EventCheckReader;
@@ -40,6 +51,10 @@ export interface EventCheckSchedulerOptions {
   timer: RoutineTimer;
   agentExists(id: string): boolean;
   running(): boolean;
+  /** Deliveries per check per hour. Defaults to EVENT_CHECK_HOURLY_DELIVERY_CAP. */
+  deliveryCap?: number;
+  /** One notice for a failure streak or a failed delivery. Optional: a host without it stays silent. */
+  notify?(agentId: string, code: EventCheckNoticeCode, message: string): void;
   deliver(
     check: EventCheck,
     event: CheckOutbox,
@@ -66,6 +81,12 @@ export class EventCheckScheduler implements RoutineDueSource {
   readonly #mutations = Semaphore.makeUnsafe(1);
   readonly #running = new Set<string>();
   readonly #delivering = new Set<string>();
+  /** When each check handed work to its agent in the last hour. Memory only: the cap is soft. */
+  readonly #deliveredAt = new Map<string, number[]>();
+  /** Checks whose events waited for the hourly cap, so they leave as one digest. */
+  readonly #capHeld = new Set<string>();
+  /** Checks with a failed delivery that the user already heard about. A good delivery clears it. */
+  readonly #deliveryNoticed = new Set<string>();
   constructor(readonly options: EventCheckSchedulerOptions) {}
   get supported(): boolean {
     return this.options.reader !== undefined || this.apiSupported;
@@ -132,7 +153,9 @@ export class EventCheckScheduler implements RoutineDueSource {
   list = (input: { agentId: string }) =>
     mcpSync(() => {
       this.#agent(input.agentId);
-      return this.options.store.list(input.agentId);
+      return this.options.store
+        .list(input.agentId)
+        .map((check) => ({ ...check, health: this.options.store.health(check.id) }));
     });
   history = (input: { agentId: string; id: string }) =>
     mcpSync(() => this.options.store.history(input.agentId, input.id));
@@ -257,7 +280,7 @@ export class EventCheckScheduler implements RoutineDueSource {
               const state = yield* mcpSync(() => this.options.store.state(check.id));
               const items = yield* this.#collect(check, session, state.lastSuccessAt);
               const observation = yield* mcpSync(() =>
-                observeCheck(items, check.selection, state.baseline, check.selfEvents),
+                observeCheck(items, check.selection, state.baseline, check.selfEvents, check.delivery?.itemFilters),
               );
               const current = test ? session.valid() : this.#valid(check, session);
               const status = !current
@@ -276,6 +299,7 @@ export class EventCheckScheduler implements RoutineDueSource {
                 current && !test ? observation.changed.length : 0,
                 null,
                 observation.skippedSelfCount,
+                observation.filteredCount,
               );
               yield* mcpSync(() =>
                 this.options.store.finish(check, execution, current && !test ? observation : undefined),
@@ -285,9 +309,10 @@ export class EventCheckScheduler implements RoutineDueSource {
               return yield* this.#flush(check, session).pipe(
                 Effect.as(execution),
                 Effect.catchCause(() =>
-                  mcpSync(() =>
-                    this.options.store.deliveryError(execution, sourceText("error.backend.eventCheckDelivery")),
-                  ),
+                  mcpSync(() => {
+                    this.#noteDeliveryFailure(check);
+                    return this.options.store.deliveryError(execution, sourceText("error.backend.eventCheckDelivery"));
+                  }),
                 ),
               );
             }),
@@ -296,10 +321,14 @@ export class EventCheckScheduler implements RoutineDueSource {
       )
       .pipe(
         Effect.timeout("45 seconds"),
-        Effect.catchCause(() =>
+        Effect.catchCause((cause) =>
           mcpSync(() => {
-            if (committed)
+            if (committed) {
+              this.#noteDeliveryFailure(check);
               return this.options.store.deliveryError(committed, sourceText("error.backend.eventCheckDelivery"));
+            }
+            // A program names why it failed with one allow-listed code. Its own text is never shown.
+            const programError = eventCheckProgramError(Cause.squash(cause));
             const execution = this.#execution(
               id,
               check.id,
@@ -307,14 +336,39 @@ export class EventCheckScheduler implements RoutineDueSource {
               "error",
               0,
               0,
-              sourceText("error.backend.eventCheckFailed"),
+              programError?.message ?? sourceText("error.backend.eventCheckFailed"),
             );
             this.options.store.finish(check, execution);
+            this.#noteFailureStreak(check, execution);
             return execution;
           }),
         ),
       );
   });
+  /** Tells the user once, at the fifth error in a row. A success ends the streak, and the next streak can tell again. */
+  #noteFailureStreak(check: EventCheck, execution: EventCheckExecution): void {
+    if (this.options.store.consecutiveErrors(check.id) !== EVENT_CHECK_FAILURE_NOTICE_STREAK) return;
+    // A paused check that a person runs by hand has told its story in the log already.
+    if (this.options.store.current(check.id, check.revision)?.active !== true) return;
+    this.options.notify?.(
+      check.agentId,
+      "event_check_failing",
+      sourceText("error.backend.eventCheckStreak", {
+        name: check.name,
+        count: EVENT_CHECK_FAILURE_NOTICE_STREAK,
+        reason: execution.error ?? sourceText("error.backend.eventCheckFailed"),
+      }),
+    );
+  }
+  #noteDeliveryFailure(check: EventCheck): void {
+    if (this.#deliveryNoticed.has(check.id)) return;
+    this.#deliveryNoticed.add(check.id);
+    this.options.notify?.(
+      check.agentId,
+      "event_check_delivery_failed",
+      sourceText("error.backend.eventCheckDeliveryFailed", { name: check.name }),
+    );
+  }
   #execution(
     id: string,
     checkId: string,
@@ -324,6 +378,7 @@ export class EventCheckScheduler implements RoutineDueSource {
     eventCount: number,
     error: string | null,
     skippedSelfCount = 0,
+    filteredCount = 0,
   ): EventCheckExecution {
     const finishedAt = new Date().toISOString();
     return {
@@ -335,6 +390,7 @@ export class EventCheckScheduler implements RoutineDueSource {
       itemCount,
       eventCount,
       skippedSelfCount,
+      filteredCount,
       error,
       durationMs: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
     };
@@ -429,23 +485,106 @@ export class EventCheckScheduler implements RoutineDueSource {
         .pending(check.id)
         .filter((event) => event.checkId === check.id && event.revision === check.revision),
     );
-    for (const event of events) {
-      if (this.#delivering.has(event.id) || !this.#valid(check, session)) continue;
-      this.#delivering.add(event.id);
+    for (const batch of this.#batches(check, events, Date.now())) {
+      if (batch.sources.some((event) => this.#delivering.has(event.id)) || !this.#valid(check, session)) continue;
+      if (this.#deliveriesInLastHour(check.id) >= (this.options.deliveryCap ?? EVENT_CHECK_HOURLY_DELIVERY_CAP)) {
+        // Held, not dropped: the events stay in the outbox and leave as one digest when an hour slot frees.
+        this.#capHeld.add(check.id);
+        break;
+      }
+      for (const event of batch.sources) this.#delivering.add(event.id);
       yield* this.options
         .deliver(
           check,
-          { ...event, text: eventCheckPrompt(check, event.items) },
-          { checkId: check.id, executionId: event.executionId, name: check.name },
+          batch.event,
+          { checkId: check.id, executionId: batch.event.executionId, name: check.name },
           () => this.#valid(check, session),
         )
         .pipe(
           Effect.mapError(mcpFailure),
-          Effect.flatMap((deliveryId) => mcpSync(() => this.options.store.delivered(event, deliveryId))),
-          Effect.ensuring(Effect.sync(() => this.#delivering.delete(event.id))),
+          Effect.flatMap((deliveryId) =>
+            mcpSync(() => {
+              for (const event of batch.sources) this.options.store.delivered(event, deliveryId);
+              this.#recordDelivery(check.id);
+              this.#deliveryNoticed.delete(check.id);
+            }),
+          ),
+          Effect.ensuring(
+            Effect.sync(() => {
+              for (const event of batch.sources) this.#delivering.delete(event.id);
+            }),
+          ),
         );
     }
+    if (!(yield* mcpSync(() => this.options.store.pending(check.id).length))) this.#capHeld.delete(check.id);
   });
+  /**
+   * What to hand to the agent now. By default each execution's event goes alone. With a digest window,
+   * or after the hourly cap held events back, everything pending merges into prompts of one digest:
+   * an item that changed twice appears once, with its newest data.
+   */
+  #batches(check: EventCheck, events: CheckOutbox[], now: number): { event: CheckOutbox; sources: CheckOutbox[] }[] {
+    const windowMs = (check.delivery?.digestSeconds ?? 0) * 1000;
+    const [oldest] = events;
+    if (!oldest) return [];
+    if (windowMs > 0 && now < Date.parse(oldest.createdAt ?? "") + windowMs) return [];
+    if (windowMs === 0 && !this.#capHeld.has(check.id))
+      return events.map((event) => ({ event: this.#merged(check, [event]), sources: [event] }));
+    const batches: { event: CheckOutbox; sources: CheckOutbox[] }[] = [];
+    let group: CheckOutbox[] = [];
+    for (const event of events) {
+      const candidate = this.#merged(check, [...group, event]);
+      if (group.length > 0 && candidate.text.length > DIGEST_TEXT_LIMIT) {
+        batches.push({ event: this.#merged(check, group), sources: group });
+        group = [];
+      }
+      group.push(event);
+    }
+    if (group.length > 0) batches.push({ event: this.#merged(check, group), sources: group });
+    return batches;
+  }
+  #merged(check: EventCheck, events: CheckOutbox[]): CheckOutbox {
+    const [first] = events;
+    const last = events.at(-1);
+    if (!first || !last) throw new Error("Missing event.");
+    // The text is rebuilt at delivery, so an instruction edited after the event was queued still applies.
+    if (events.length === 1) return { ...first, text: eventCheckPrompt(check, first.items) };
+    const byId = new Map<string, EventCheckData>();
+    for (const event of events)
+      for (const item of event.items) {
+        let key: string;
+        try {
+          const id = checkPointer(item, check.selection.idPointer);
+          key = `id:${String(id)}`;
+        } catch {
+          key = `json:${JSON.stringify(item)}`;
+        }
+        byId.delete(key);
+        byId.set(key, item);
+      }
+    const items = [...byId.values()];
+    return {
+      id: `check-digest:${createHash("sha256")
+        .update(events.map((event) => event.id).join("\n"))
+        .digest("hex")
+        .slice(0, 32)}`,
+      checkId: check.id,
+      revision: check.revision,
+      executionId: last.executionId,
+      items,
+      text: eventCheckPrompt(check, items),
+    };
+  }
+  #deliveriesInLastHour(checkId: string): number {
+    const cutoff = Date.now() - HOUR_MS;
+    const recent = (this.#deliveredAt.get(checkId) ?? []).filter((time) => time > cutoff);
+    this.#deliveredAt.set(checkId, recent);
+    return recent.length;
+  }
+  #recordDelivery(checkId: string): void {
+    this.#deliveriesInLastHour(checkId);
+    this.#deliveredAt.get(checkId)?.push(Date.now());
+  }
   #agent(id: string): void {
     if (!this.options.agentExists(id)) throw new Error(sourceText("error.agent.unknown", { id }));
   }

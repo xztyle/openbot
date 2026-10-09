@@ -1,5 +1,8 @@
 import type { ServerSummary } from "@openbot/contracts/ipc";
-import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
+import {
+  EVENT_CHECK_API_CAPABILITY,
+  EVENT_CHECK_DELIVERY_CAPABILITY,
+} from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { classifyFailure } from "@openbot/telemetry";
 import { useText } from "@openbot/ui/text";
@@ -368,6 +371,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: (trigger: HTMLBut
                 Boolean(props.runtime?.admin?.eventChecks?.environment) ||
                 serverCanAdminister(props.server, EVENT_CHECK_API_CAPABILITY)
               }
+              eventCheckDeliveryAvailable={serverCanAdminister(props.server, EVENT_CHECK_DELIVERY_CAPABILITY)}
               eventChecksAvailable={
                 Boolean(props.runtime?.admin?.eventChecks) || serverCanAdminister(props.server, EVENT_CHECKS_CAPABILITY)
               }

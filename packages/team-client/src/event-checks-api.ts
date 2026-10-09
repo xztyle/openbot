@@ -11,7 +11,11 @@ import { EVENT_CHECK_API_ROUTES } from "@openbot/contracts/team-protocol/event-c
 import { EVENT_CHECKS_ROUTES } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import type { TeamApiRequest } from "./team-api-requests";
-export function eventChecksApi(request: TeamApiRequest, apiSupported: () => boolean = () => false): EventCheckApi {
+export function eventChecksApi(
+  request: TeamApiRequest,
+  apiSupported: () => boolean = () => false,
+  deliverySupported: () => boolean = () => false,
+): EventCheckApi {
   const call = <A>(path: string, input: unknown, decode: (value: unknown) => A) =>
     request(
       "POST",
@@ -20,6 +24,9 @@ export function eventChecksApi(request: TeamApiRequest, apiSupported: () => bool
       decodeTeamProtocolV2Json(input),
     );
   return {
+    get deliverySettings() {
+      return deliverySupported();
+    },
     get environment() {
       return apiSupported()
         ? (input: { agentId: string; id: string }) =>

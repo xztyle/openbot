@@ -10,6 +10,7 @@ import {
 import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentProvider } from "./agent-client";
+import { AgentRoutineStore } from "./agent-routine-store";
 import type { AgentService } from "./agent-service";
 import {
   callOpenBotTool,
@@ -468,6 +469,71 @@ describe.sequential("AgentService: routines", () => {
     expect(prompt).toContain("Read the build result and tell me what failed.");
     expect(prompt).toContain("build 42 failed: 3 tests");
     expect(run.deliveryId).not.toBeNull();
+  });
+
+  it("holds event runs over the hourly cap and starts them later as one run that carries every event", async () => {
+    const clients = new Map<AgentProvider, FakeAgentClient>();
+    const { store, mailbox } = stores(root);
+    service = createTestService({
+      store,
+      mailbox,
+      preferredProvider: "codex",
+      clientFactory: (provider) => {
+        const client = new FakeAgentClient(provider);
+        clients.set(provider, client);
+        return client;
+      },
+    });
+    await runCauseEffect(service.initialize());
+    const agent = await runCauseEffect(store.getOrCreate("chief"));
+    await runCauseEffect(service.updateAgent({ agentId: agent.id, allowAutomation: true }));
+    const routine = service.createRoutine({
+      agentId: agent.id,
+      name: "Build watcher",
+      instruction: "Read the build result and tell me what failed.",
+      active: false,
+      timezone: "UTC",
+      schedule: { kind: "daily", time: "09:00" },
+    });
+    // The routine already started 20 runs from events, the oldest one almost an hour ago.
+    const routines = new AgentRoutineStore(store.database);
+    for (let index = 0; index < 20; index += 1) {
+      const run = routines.createRun(
+        {
+          ...routine,
+          instruction: `${routine.instruction}\n\n--- event from a local script ---\nold ${index}\n--- end of event ---`,
+        },
+        null,
+        "manual",
+        new Date().toISOString(),
+      );
+      routines.updateRunStatus(run.id, "succeeded");
+      store.database.connection
+        .prepare("UPDATE projection_routine_runs SET created_at = ? WHERE run_id = ?")
+        .run(new Date(Date.now() - 3_600_000 + 1_500 + index).toISOString(), run.id);
+    }
+    const target = { agentId: agent.id, routineId: routine.id };
+    const first = await runCauseEffect(service.runRoutineFromAutomation({ ...target, payload: "build 1 failed" }));
+    const second = await runCauseEffect(service.runRoutineFromAutomation({ ...target, payload: "build 2 failed" }));
+    // Both wait: the run row exists and is queued, and no delivery or turn was made.
+    expect([first.deliveryId, second.deliveryId]).toEqual([null, null]);
+    expect(clients.get("codex")?.requests.some((request) => request.method === "turn/start")).toBe(false);
+    await waitFor(() => clients.get("codex")?.requests.some((request) => request.method === "turn/start") === true);
+    const prompt = firstInputText(
+      clients.get("codex")?.requests.find((request) => request.method === "turn/start")?.params,
+    );
+    expect(prompt).toContain("build 1 failed");
+    expect(prompt).toContain("build 2 failed");
+    expect(prompt?.match(/Read the build result and tell me what failed\./g)).toHaveLength(1);
+    const runs = service
+      .listRoutineRuns({ ...target, limit: 50 })
+      .filter((run) => /build \d failed/.test(run.instruction));
+    expect(runs.map((run) => run.status).sort()).toEqual([
+      "cancelled",
+      "cancelled",
+      expect.stringMatching(/queued|running|succeeded/),
+    ]);
+    expect(runs.filter((run) => run.status === "cancelled").every((run) => run.error?.includes("combined"))).toBe(true);
   });
 
   it("lets an agent react to the current user message without replacing the user's reaction", async () => {

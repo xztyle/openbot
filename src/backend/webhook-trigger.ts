@@ -47,7 +47,7 @@ export function parseEventFilters(value: string): EventFilter[] {
   return parsed;
 }
 
-function readPointer(value: EventJsonValue, pointer: string): EventJsonValue | undefined {
+export function readPointer(value: EventJsonValue, pointer: string): EventJsonValue | undefined {
   if (pointer === "") return value;
   let current: EventJsonValue | undefined = value;
   for (const token of pointer

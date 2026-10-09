@@ -64,6 +64,34 @@ describe("notificationForAgentEvent", () => {
     expect(notificationForAgentEvent(completed("failed"), [agent], translate, "needs-me")).toBeNull();
   });
 
+  it("tells the user at the needs-me level when unattended work failed, and only then", () => {
+    const failedRoutine: AgentEvent = { ...completed("failed"), origin: "routine" };
+    expect(notificationForAgentEvent(failedRoutine, [agent], translate, "needs-me")).toEqual({
+      title: "Chief",
+      body: "A scheduled run stopped with an error.",
+      ...target,
+    });
+    expect(notificationForAgentEvent(failedRoutine, [agent], translate, "all")?.body).toBe(
+      "A scheduled run stopped with an error.",
+    );
+    expect(
+      notificationForAgentEvent({ ...completed("failed"), origin: "user" }, [agent], translate, "needs-me"),
+    ).toBeNull();
+    for (const [code, body] of [
+      ["event_check_failing", "An event check keeps failing."],
+      ["event_check_delivery_failed", "An event check could not give an event to the agent."],
+      ["event_check_turn_failed", "An event check turn stopped with an error."],
+    ] as const) {
+      const event: AgentEvent = { type: "error", agentId: "chief", code, message: "A host message." };
+      expect(notificationForAgentEvent(event, [agent], translate, "needs-me")).toMatchObject({ title: "Chief", body });
+      // The server level and the agent's own switch still apply.
+      expect(notificationForAgentEvent(event, [agent], translate, "nothing")).toBeNull();
+      expect(notificationForAgentEvent(event, [{ ...agent, notifications: false }], translate, "needs-me")).toBeNull();
+    }
+    const other: AgentEvent = { type: "error", agentId: "chief", code: "agent_error", message: "Oops" };
+    expect(notificationForAgentEvent(other, [agent], translate, "all")).toBeNull();
+  });
+
   it("stays quiet at the nothing level, for disabled agents, stopped turns, and unrelated events", () => {
     expect(notificationForAgentEvent(prompt, [agent], translate, "nothing")).toBeNull();
     expect(

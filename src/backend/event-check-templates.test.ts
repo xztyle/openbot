@@ -89,7 +89,7 @@ function cipher() {
     },
   };
 }
-async function boot(shipped: EventCheckTemplate, program = PROGRAM) {
+async function boot(shipped: EventCheckTemplate, program = PROGRAM, earlierFiles: Record<string, string> = {}) {
   const { store, mailbox } = stores(root),
     checks = new EventCheckStore(store.database),
     programs = join(store.sharedRoot, "Watchers"),
@@ -98,6 +98,7 @@ async function boot(shipped: EventCheckTemplate, program = PROGRAM) {
   await mkdir(join(catalog, "programs"), { recursive: true });
   await writeFile(join(catalog, "catalog.json"), JSON.stringify([shipped]));
   await writeFile(join(catalog, "programs", "fixture.mjs"), program);
+  for (const [file, content] of Object.entries(earlierFiles)) await writeFile(join(catalog, "programs", file), content);
   const templates = new EventCheckTemplates(catalog, programs);
   const reader = new EventCheckApiReader(
     new EventCheckEnvironment(join(root, "private-watchers"), cipher(), (check) => templates.reviewed(check)),
@@ -319,6 +320,94 @@ it("keeps private values through an update to the reviewed program and withholds
     { name: "FIXTURE_API_TOKEN", configured: false, reapprove: true },
   ]);
 });
+
+it("links a check that runs an earlier shipped program to that version, keeps its baseline, then updates it", async () => {
+  const earlier = `${PROGRAM}\n// version one`;
+  const next = `${PROGRAM}\n// version two`;
+  const { service, checks, programs } = await boot(
+    {
+      ...template("2.0.0", next),
+      earlierPrograms: [{ version: "1.0.0", file: "fixture-1.0.0.mjs", digest: digest(earlier) }],
+    },
+    next,
+    { "fixture-1.0.0.mjs": earlier },
+  );
+  // The live check of a user: the earlier program under its own name, with no template link.
+  await writeFile(join(programs, "live.mjs"), earlier);
+  const live = await runCauseEffect(
+    service.eventChecks.save(
+      {
+        agentId: "chief",
+        name: "Live",
+        instruction: "Mine",
+        active: true,
+        timezone: "UTC",
+        schedule: { kind: "interval", amount: 120, unit: "seconds", anchorAt: new Date().toISOString() },
+        selfEvents: { mode: "exclude", connectionId: "work", actorPointer: "/actor", accountActorIds: ["me"] },
+        source: {
+          kind: "api",
+          connectionId: "work",
+          variables: [],
+          configuration: [{ name: "workspace", label: "Workspace", description: "Which workspace", value: "alpha" }],
+          toolName: "live.mjs",
+          argumentsJson: "{}",
+          cursorArgument: "cursor",
+          nextCursorPointer: "/cursor",
+        },
+        selection: { itemsPointer: "/items", idPointer: "/id", revisionPointer: "/revision" },
+      },
+      TEST_USER,
+    ),
+  );
+  await runCauseEffect(service.eventChecks.checkNow({ agentId: "chief", id: live.id }));
+  const before = checks.state(live.id);
+  expect(before.baseline).not.toBeNull();
+  const linked = await runCauseEffect(
+    service.eventChecks.templateAdopt({ agentId: "chief", id: live.id, slug: "fixture" }, TEST_USER),
+  );
+  // The link names the version whose program the check runs, so Update has something to move from.
+  expect(linked.source.kind === "api" && linked.source.template).toEqual({ slug: "fixture", version: "1.0.0" });
+  expect(checks.state(live.id)).toEqual(before);
+  const updated = await runCauseEffect(
+    service.eventChecks.templateUpdate({ agentId: "chief", id: live.id }, TEST_USER),
+  );
+  expect(updated.source.kind === "api" && updated.source.template?.version).toBe("2.0.0");
+  expect(updated.source.kind === "api" && updated.source.toolName).toBe("fixture@2.0.0.mjs");
+  expect(readFileSync(join(programs, "fixture@2.0.0.mjs"), "utf8")).toBe(next);
+  expect(readFileSync(join(programs, "live.mjs"), "utf8")).toBe(earlier);
+});
+
+it("maps the one error code a program prints to fixed text, and never repeats the program's own text", async () => {
+  const failing = `let raw=''; for await (const chunk of process.stdin) raw += chunk;
+const config = JSON.parse(raw);
+const codes = { auth: 'auth', limited: 'rate_limited', setup: 'config', down: 'upstream', weird: 'root' };
+process.stderr.write('SECRET-TEXT-FROM-THE-PROGRAM token=abc123\\nopenbot-error: ' + codes[config.workspace] + '\\n');
+process.exit(1);`;
+  const { service } = await boot(template("1.0.0", failing), failing);
+  const text = async (workspace: string) => {
+    const installed = await runCauseEffect(service.eventChecks.templateInstall(request({ workspace }), TEST_USER));
+    const execution = await runCauseEffect(service.eventChecks.checkNow({ agentId: "chief", id: installed.id }));
+    expect(execution.status).toBe("error");
+    expect(execution.error).not.toContain("SECRET-TEXT");
+    expect(execution.error).not.toContain("abc123");
+    return execution.error;
+  };
+  const messages = [
+    await text("auth"),
+    await text("limited"),
+    await text("setup"),
+    await text("down"),
+    await text("weird"),
+  ];
+  expect(new Set(messages).size).toBe(5);
+  expect(messages[0]).toContain("did not accept the saved credentials");
+  expect(messages[1]).toContain("limited the requests");
+  expect(messages[2]).toContain("did not accept the settings");
+  expect(messages[3]).toContain("could not be reached");
+  // A code outside the list is the generic message.
+  expect(messages[4]).toContain("The app check failed.");
+});
+
 it("lets an agent list, install and enable a template, rejects a non-boolean value, and has no field for private values", async () => {
   const shipped = template("1.0.0", PROGRAM);
   const { service, client, store } = await boot({

@@ -5,6 +5,7 @@ import {
   EVENT_CHECK_HISTORY_LIMIT,
   type EventCheck,
   type EventCheckExecution,
+  type EventCheckHealth,
   type EventCheckInput,
 } from "@openbot/contracts/event-checks";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
@@ -16,6 +17,13 @@ import type { CheckBaseline, CheckObservation } from "./event-check-result";
 import { eventCheckPrompt } from "./event-check-result";
 import type { OpenBotDatabase } from "./openbot-database";
 
+/** A check that fails again and again waits longer between runs: twice as long for each error in a row. */
+const EVENT_CHECK_BACKOFF_CEILING_MS = 15 * 60_000;
+/** The longest wait is also bounded by this many intervals, so a long interval is never stretched much. */
+const EVENT_CHECK_BACKOFF_MAX_INTERVALS = 16;
+/** Executions in a row that end in an error before the host tells the user once. */
+export const EVENT_CHECK_FAILURE_NOTICE_STREAK = 5;
+
 export interface CheckOutbox {
   id: string;
   checkId: string;
@@ -23,6 +31,17 @@ export interface CheckOutbox {
   executionId: string;
   items: EventCheckData[];
   text: string;
+  /** When the execution queued the event. Not part of the stored payload. */
+  createdAt?: string;
+}
+/** The wait before the next run, from the normal wait and the errors in a row. Never shorter than the normal wait. */
+export function eventCheckBackoffMs(normalMs: number, consecutiveErrors: number): number {
+  if (consecutiveErrors <= 0 || normalMs <= 0) return normalMs;
+  const ceiling = Math.max(
+    normalMs,
+    Math.min(EVENT_CHECK_BACKOFF_CEILING_MS, normalMs * EVENT_CHECK_BACKOFF_MAX_INTERVALS),
+  );
+  return Math.min(ceiling, normalMs * 2 ** Math.min(consecutiveErrors, 20));
 }
 function jsonColumn(value: unknown, column: string): EventCheckData {
   if (!isDynamicRecord(value) || typeof value[column] !== "string") throw new Error("Invalid stored event check.");
@@ -69,8 +88,13 @@ export class EventCheckStore {
   save(input: EventCheckInput, now: Date, forceReset = false): EventCheck {
     const previous = input.id ? this.get(input.agentId, input.id) : null;
     if (!previous && this.list().length >= 100) throw new Error("Too many event checks.");
+    // A list answer carries `health`. It is never saved with the definition.
+    const definition: EventCheckInput = { ...input };
+    Reflect.deleteProperty(definition, "health");
+    const delivery = input.delivery ?? previous?.delivery;
     const check: EventCheck = {
-      ...input,
+      ...definition,
+      ...(delivery ? { delivery } : {}),
       id: previous?.id ?? randomUUID(),
       revision: randomUUID(),
       nextCheckAt: nextEventCheckOccurrence(input.schedule, input.timezone, now).toISOString(),
@@ -134,8 +158,37 @@ export class EventCheckStore {
       .get();
     return isDynamicRecord(row) && typeof row.next === "string" ? row.next : null;
   }
+  /** Executions that ended in an error since the last success, among the stored history. A cancelled run does not count or end the streak. */
+  consecutiveErrors(checkId: string): number {
+    let errors = 0;
+    for (const row of this.#recentExecutions(checkId)) {
+      if (row.status === "cancelled") continue;
+      if (row.status !== "error") break;
+      errors++;
+    }
+    return errors;
+  }
+  health(checkId: string): EventCheckHealth {
+    const [newest] = this.#recentExecutions(checkId).filter((row) => row.status !== "cancelled");
+    return {
+      consecutiveErrors: this.consecutiveErrors(checkId),
+      lastError: newest?.status === "error" ? newest.error : null,
+      lastStatus: newest?.status ?? null,
+      lastCheckedAt: newest?.finishedAt ?? null,
+    };
+  }
+  #recentExecutions(checkId: string): EventCheckExecution[] {
+    return this.database.connection
+      .prepare(
+        "SELECT result_json FROM projection_event_check_executions WHERE check_id = ? ORDER BY started_at DESC, execution_id DESC LIMIT ?",
+      )
+      .all(checkId, EVENT_CHECK_HISTORY_LIMIT)
+      .map((row) => decodeEventCheckExecution(jsonColumn(row, "result_json")));
+  }
   advance(check: EventCheck, now: Date): void {
-    const next = nextEventCheckOccurrence(check.schedule, check.timezone, now).toISOString();
+    const normal = nextEventCheckOccurrence(check.schedule, check.timezone, now);
+    const wait = eventCheckBackoffMs(normal.getTime() - now.getTime(), this.consecutiveErrors(check.id));
+    const next = new Date(Math.max(normal.getTime(), now.getTime() + wait)).toISOString();
     this.database.connection
       .prepare(
         "UPDATE projection_event_checks SET next_check_at = ?, definition_json = json_set(definition_json, '$.nextCheckAt', ?) WHERE check_id = ? AND revision = ?",
@@ -144,15 +197,11 @@ export class EventCheckStore {
   }
   history(agentId: string, id: string): EventCheckExecution[] {
     this.get(agentId, id);
-    return this.database.connection
-      .prepare(
-        "SELECT result_json FROM projection_event_check_executions WHERE check_id = ? ORDER BY started_at DESC, execution_id DESC LIMIT ?",
-      )
-      .all(id, EVENT_CHECK_HISTORY_LIMIT)
-      .map((row) => decodeEventCheckExecution(jsonColumn(row, "result_json")));
+    return this.#recentExecutions(id);
   }
   finish(check: EventCheck, execution: EventCheckExecution, observation?: CheckObservation): void {
     withDatabaseTransaction(this.database, () => {
+      const hadErrors = this.consecutiveErrors(check.id) > 0;
       const db = this.database.connection;
       if (
         !db
@@ -177,7 +226,17 @@ export class EventCheckStore {
         EVENT_CHECK_HISTORY_LIMIT,
       );
       if (observation && current?.active) this.#commitObservation(check, record, observation);
+      // A success ends the back-off at once, also after a person fixed the cause and ran the check by hand.
+      if (current && hadErrors && record.status !== "error" && record.status !== "cancelled") this.#resetBackoff(check);
     });
+  }
+  #resetBackoff(check: EventCheck): void {
+    const next = nextEventCheckOccurrence(check.schedule, check.timezone, new Date()).toISOString();
+    this.database.connection
+      .prepare(
+        "UPDATE projection_event_checks SET next_check_at = ?, definition_json = json_set(definition_json, '$.nextCheckAt', ?) WHERE check_id = ? AND revision = ?",
+      )
+      .run(next, next, check.id, check.revision);
   }
   #commitObservation(check: EventCheck, execution: EventCheckExecution, observation: CheckObservation): void {
     const db = this.database.connection;
@@ -208,7 +267,7 @@ export class EventCheckStore {
   pending(checkId?: string): CheckOutbox[] {
     return this.database.connection
       .prepare(
-        "SELECT o.payload_json FROM projection_event_check_outbox o JOIN projection_event_checks c ON c.check_id = o.check_id AND c.revision = o.revision WHERE o.delivery_id IS NULL AND c.active = 1 AND (? IS NULL OR o.check_id = ?) ORDER BY o.created_at, o.event_id LIMIT 100",
+        "SELECT o.payload_json, o.created_at FROM projection_event_check_outbox o JOIN projection_event_checks c ON c.check_id = o.check_id AND c.revision = o.revision WHERE o.delivery_id IS NULL AND c.active = 1 AND (? IS NULL OR o.check_id = ?) ORDER BY o.created_at, o.event_id LIMIT 100",
       )
       .all(checkId ?? null, checkId ?? null)
       .map((row) => {
@@ -230,6 +289,7 @@ export class EventCheckStore {
           executionId: value.executionId,
           items: value.items.map(decodeTeamProtocolV2Json),
           text: value.text,
+          ...(isDynamicRecord(row) && typeof row.created_at === "string" ? { createdAt: row.created_at } : {}),
         };
       });
   }

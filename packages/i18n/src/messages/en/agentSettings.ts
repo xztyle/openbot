@@ -55,6 +55,21 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.actor": "Change author ID path",
   "agentSettings.eventCheck.actorIds": "Connected account user IDs (one per line)",
   "agentSettings.eventCheck.skipped": "Self-events skipped: {events}",
+  "agentSettings.eventCheck.filtered": "Filtered out: {events}",
+  "agentSettings.eventCheck.failing": "Failing",
+  "agentSettings.eventCheck.delivery": "Delivery",
+  "agentSettings.eventCheck.digest": "Combine events",
+  "agentSettings.eventCheck.digestOff": "Deliver at once",
+  "agentSettings.eventCheck.digestMinutes": { one: "Combine for {count} minute", other: "Combine for {count} minutes" },
+  "agentSettings.eventCheck.digestHours": { one: "Combine for {count} hour", other: "Combine for {count} hours" },
+  "agentSettings.eventCheck.digestHelp":
+    "Events found in this time reach the agent as one message, and an item that changed twice appears once. Without it, each check that finds changes sends its own message. At most 12 messages an hour reach the agent from one check. Later events wait and go out together.",
+  "agentSettings.eventCheck.filters": "Only deliver items that match (one per line)",
+  "agentSettings.eventCheck.filtersPlaceholder": "/state=open",
+  "agentSettings.eventCheck.filtersHelp":
+    "Write a path and a value on each line, such as /state=open. An item that does not match does not wake the agent. The check still marks it as seen, so it does not come back as new later.",
+  "agentSettings.eventCheck.filtersInvalid":
+    "Each filter line needs a path that starts with / and a value, such as /state=open.",
   "agentSettings.eventCheck.timezone": "Time zone",
   "agentSettings.eventCheck.readOptions": "Read options",
   "agentSettings.eventCheck.arguments": "Tool options (JSON)",

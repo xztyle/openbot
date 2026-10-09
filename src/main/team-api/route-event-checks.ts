@@ -1,6 +1,9 @@
 import { decodeEventCheckInput, decodeEventCheckTarget } from "@openbot/contracts/event-checks";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
-import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
+import {
+  EVENT_CHECK_API_CAPABILITY,
+  EVENT_CHECK_DELIVERY_CAPABILITY,
+} from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECK_TEMPLATES_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-templates-v1";
 import {
   EVENT_CHECKS_CAPABILITY,
@@ -80,6 +83,7 @@ export async function routeEventChecks(
 export function eventCheckCapability(capability: string, checks?: EventCheckScheduler): boolean | undefined {
   if (capability === EVENT_CHECK_API_CAPABILITY) return checks?.apiSupported === true;
   if (capability === EVENT_CHECK_TEMPLATES_CAPABILITY) return checks?.templatesSupported === true;
-  if (capability === EVENT_CHECKS_CAPABILITY) return checks?.supported === true;
+  if (capability === EVENT_CHECKS_CAPABILITY || capability === EVENT_CHECK_DELIVERY_CAPABILITY)
+    return checks?.supported === true;
   return undefined;
 }

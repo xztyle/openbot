@@ -14,7 +14,7 @@ import {
   TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY,
 } from "./browser-view-v1";
 import { CONTEXT_RESET_CAPABILITY } from "./context-reset-v1";
-import { EVENT_CHECK_API_CAPABILITY } from "./event-check-api-v1";
+import { EVENT_CHECK_API_CAPABILITY, EVENT_CHECK_DELIVERY_CAPABILITY } from "./event-check-api-v1";
 import { EVENT_CHECK_TEMPLATES_CAPABILITY } from "./event-check-templates-v1";
 import { EVENT_CHECKS_CAPABILITY } from "./event-checks-v1";
 import { EVENTS_CAPABILITY } from "./events-v1";
@@ -117,6 +117,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   EVENT_CHECKS_CAPABILITY,
   EVENT_CHECK_API_CAPABILITY,
   EVENT_CHECK_TEMPLATES_CAPABILITY,
+  EVENT_CHECK_DELIVERY_CAPABILITY,
   MCP_CHAT_CAPABILITY,
   MCP_OAUTH_CAPABILITY,
   AGENT_ADMIN_CAPABILITY,

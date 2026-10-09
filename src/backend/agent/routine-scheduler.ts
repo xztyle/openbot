@@ -32,6 +32,8 @@ import type { OwnedRoutineRecord, ReceivedWebhookEvent, RoutineHoldWindow, Routi
 import type { RoutineDueSource, RoutineTimer } from "../routine-timer";
 import { type ConversationRuntime, withDatabaseTransaction } from "./conversation-runtime";
 import { routineStatusForDelivery } from "./delivery-content";
+import { mergeEventInstructions, RoutineEventDigest } from "./routine-event-digest";
+import { isEventStartedRun, runMayEndQuiet } from "./routine-quiet-runs";
 import {
   localTimezone,
   type OpenBotToolResponse,
@@ -97,6 +99,8 @@ export interface RoutineSchedulerOptions {
   hooks: RoutineHooks;
   /** Shared with every other routine owner, so one wake time is derived across all of them. */
   timer: RoutineTimer;
+  /** Runs that events may start for one routine in an hour. Defaults to ROUTINE_EVENT_HOURLY_RUN_CAP. */
+  eventRunCap?: number;
 }
 
 /** The agent preview before a routine run, and the routine task the run showed in its place. */
@@ -144,6 +148,8 @@ export class RoutineScheduler implements RoutineDueSource {
    * restart, the preview keeps the task. Past the cap, the oldest entry goes.
    */
   readonly #previewsBeforeRun = new Map<string, RoutinePreviewBeforeRun & { agentId: string }>();
+  /** Event runs over the hourly cap, which wait here and leave as one run. */
+  readonly #events: RoutineEventDigest;
 
   constructor(options: RoutineSchedulerOptions) {
     this.#store = options.store;
@@ -151,6 +157,7 @@ export class RoutineScheduler implements RoutineDueSource {
     this.#conversation = options.conversation;
     this.#hooks = options.hooks;
     this.#timer = options.timer;
+    this.#events = new RoutineEventDigest(options.eventRunCap);
     this.#routines = new AgentRoutineStore(options.store.database);
   }
 
@@ -194,7 +201,8 @@ export class RoutineScheduler implements RoutineDueSource {
   hasActiveRuns(): boolean {
     for (const agent of this.#hooks.listAgents()) {
       for (const routine of this.#routines.listRecords(agent.id)) {
-        if (this.#routines.activeRuns(agent.id, routine.id).length > 0) return true;
+        // A run that waits for a free hour slot has no work yet, and a restart can start it again.
+        if (this.#routines.activeRuns(agent.id, routine.id).some((run) => !this.#events.isHeld(run.id))) return true;
       }
     }
     return false;
@@ -206,11 +214,12 @@ export class RoutineScheduler implements RoutineDueSource {
 
   /**
    * Whether the run of this delivery may end without a message, when the agent answers only the
-   * no-update marker. Only a scheduled run: a Test run and a script or webhook run are started by
-   * someone who waits for the result.
+   * no-update marker. A scheduled run may. A script or webhook run may when its routine task asks
+   * for the marker. A Test run is started by someone who waits for the result.
    */
   quietRunForDelivery(deliveryId: string): boolean {
-    return this.#routines.runForDelivery(deliveryId)?.kind === "scheduled";
+    const run = this.#routines.runForDelivery(deliveryId);
+    return run !== null && runMayEndQuiet(run);
   }
 
   /**
@@ -326,7 +335,9 @@ export class RoutineScheduler implements RoutineDueSource {
   ) {
     if (!this.mayDrain(agentId)) return { kind: "unavailable" } as const;
     const result = yield* routineStep(() => this.#routines.receiveWebhook(agentId, routineId, event));
-    if (result.kind === "started") {
+    if (result.kind === "started" && this.#holdEventRun(result.run)) {
+      this.arm();
+    } else if (result.kind === "started") {
       yield* this.#enqueueRunEffect(result.run).pipe(
         Effect.catch((failure) =>
           Effect.sync(() => this.#hooks.emitError("routine_delivery_failed", failure.cause, agentId)),
@@ -460,10 +471,79 @@ export class RoutineScheduler implements RoutineDueSource {
         new Date().toISOString(),
       );
     });
+    if (this.#holdEventRun(run)) {
+      this.arm();
+      yield* routineStep(() => this.stateChanged(input.agentId));
+      return run;
+    }
     const queued = yield* this.#enqueueRunEffect(run);
     yield* routineStep(() => this.stateChanged(input.agentId));
     return queued;
   }, Effect.uninterruptible);
+
+  /**
+   * Whether this run, which an event started, waits for a free hour slot. The run row exists and is
+   * queued without a delivery, so a restart starts it as before. Nothing is dropped.
+   */
+  #holdEventRun(run: RoutineRun): boolean {
+    if (!isEventStartedRun(run)) return false;
+    try {
+      return this.#events.hold(run, this.#routines.listRuns(run.agentId, run.routineId, 50), Date.now());
+    } catch {
+      // The cap is soft. When the count cannot be read, the run starts as it did before.
+      return false;
+    }
+  }
+
+  /** Merges the runs that waited into one run per size-bounded group, and queues it. */
+  readonly #releaseHeldEvents = Effect.fn("RoutineScheduler.releaseHeldEvents")(function* (
+    this: RoutineScheduler,
+    now: Date,
+  ) {
+    for (const held of this.#events.takeDue(now.getTime())) {
+      if (!this.mayDrain(held.agentId)) {
+        this.#events.defer(held, now.getTime() + 30_000);
+        continue;
+      }
+      const runs = yield* routineStep(() => this.#mergeHeldEvents(held));
+      for (const run of runs)
+        yield* this.#enqueueRunEffect(run).pipe(
+          Effect.catch((failure) =>
+            Effect.sync(() => this.#hooks.emitError("routine_delivery_failed", failure.cause, held.agentId)),
+          ),
+        );
+      yield* routineStep(() => this.stateChanged(held.agentId));
+    }
+  });
+
+  #mergeHeldEvents(held: { agentId: string; routineId: string; runs: RoutineRun[] }): RoutineRun[] {
+    const waiting = new Set(
+      this.#routines
+        .activeRuns(held.agentId, held.routineId)
+        .filter((run) => run.status === "queued" && run.deliveryId === null)
+        .map((run) => run.id),
+    );
+    // A routine delete or a restart can have ended some of them.
+    const runs = held.runs.filter((run) => waiting.has(run.id));
+    const [only] = runs;
+    if (!only) return [];
+    if (runs.length === 1) return [only];
+    // A webhook routine has no schedule, so the record is the one that holds both kinds.
+    const routine = this.#routines.getRecord(held.agentId, held.routineId);
+    const reason = sourceText("error.backend.routineRunMerged");
+    return withDatabaseTransaction(this.#store.database, () => {
+      for (const run of runs) this.#routines.updateRunStatus(run.id, "cancelled", reason);
+      if (!routine) return [];
+      return mergeEventInstructions(routine.instruction, runs, INPUT_LIMITS.messageText).map((instruction) =>
+        this.#routines.createRun(
+          { id: routine.id, agentId: routine.ownerId, name: routine.name, instruction },
+          null,
+          "manual",
+          new Date().toISOString(),
+        ),
+      );
+    });
+  }
 
   listRuns(input: ListRoutineRunsInput): RoutineRun[] {
     this.#conversation.requireKnownAgent(input.agentId);
@@ -688,7 +768,9 @@ export class RoutineScheduler implements RoutineDueSource {
 
   /** The earliest agent routine, for the shared timer to compare against the other owners. */
   nextDueAt(): string | null {
-    return this.#routines.nextDueAt(this.#hooks.excludedAgents());
+    const scheduled = this.#routines.nextDueAt(this.#hooks.excludedAgents());
+    const release = this.#events.nextReleaseAt();
+    return scheduled && release ? (scheduled < release ? scheduled : release) : (scheduled ?? release);
   }
 
   readonly processDue = Effect.fn("RoutineScheduler.processDue")(function* (
@@ -697,6 +779,9 @@ export class RoutineScheduler implements RoutineDueSource {
     active: () => boolean = () => true,
   ) {
     const changedAgents = new Set<string>();
+    yield* this.#releaseHeldEvents(now).pipe(
+      Effect.catch((failure) => Effect.sync(() => this.#hooks.emitError("routine_scheduler_failed", failure.cause))),
+    );
     yield* Effect.gen({ self: this }, function* () {
       const dueRoutines = yield* routineStep(() => this.#routines.due(now, this.#hooks.excludedAgents()));
       for (const due of dueRoutines) {

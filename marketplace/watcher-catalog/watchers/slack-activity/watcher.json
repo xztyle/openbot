@@ -3,7 +3,7 @@
   "name": "Slack activity",
   "tagline": "Wake an agent when you are mentioned or messaged in Slack",
   "description": "Checks Slack every two minutes for new messages that matter to one person: mentions of that person, optional keywords, direct messages, and messages in channels you pick. It runs as a normal program with no AI, reads Slack's official Web API with a personal (user) token, and never posts or changes anything in Slack. Read-only permissions are enough. A new message, or a message that was edited while it is still recent, wakes the agent once. Messages you wrote yourself are skipped. The check only looks at the last few minutes, so a message that is edited much later is not seen again. If Slack asks the program to slow down, it saves a cooldown and sends no request until the cooldown ends. Use a token from an app that you create in your own workspace. Install it again for another workspace or person: every install has its own settings, token, schedule and history.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "creatorName": "OpenBot",
   "iconUrl": "https://slack.com/favicon.ico",
   "websiteUrl": "https://slack.com",

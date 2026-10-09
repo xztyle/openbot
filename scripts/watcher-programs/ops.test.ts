@@ -782,6 +782,7 @@ describe.each(slugs)("%s as a spawned program", (slug) => {
     expect(noKey.status).toBe(1);
     expect(noKey.stdout).toBe("");
     expect(noKey.stderr).toContain(`Missing ${key}`);
+    expect(noKey.stderr).toContain("openbot-error: auth");
     const missing = run(JSON.stringify({}), environment);
     expect(missing.status).toBe(1);
     expect(missing.stdout).toBe("");
@@ -797,6 +798,7 @@ describe.each(slugs)("%s as a spawned program", (slug) => {
     });
     expect(limited.status).toBe(1);
     expect(limited.stderr).toContain("rate limit");
+    expect(limited.stderr).toContain("openbot-error: rate_limited");
     expect(limited.stderr).not.toContain(SERVER_TEXT);
     const folders = (await readdir(dir)).filter((name) => name.endsWith("-cooldowns"));
     expect(folders).toHaveLength(1);

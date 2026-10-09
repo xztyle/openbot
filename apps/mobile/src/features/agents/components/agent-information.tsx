@@ -10,6 +10,7 @@ import { useMobileSession } from "@/features/auth/context/mobile-session-context
 import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { type MobileAgent, useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import { useText } from "@/shared/lib/text";
+import { AgentEventChecks } from "./agent-event-checks";
 import { AgentFiles } from "./agent-files";
 import { MemoryEditor, RoutineEditor } from "./agent-record-editor";
 import { AgentSkills, CreateSkillAction } from "./agent-skills";
@@ -18,7 +19,7 @@ import { UsageLoading } from "./usage-motion";
 import { UsageRangePicker } from "./usage-range-picker";
 import { useEventRoutines } from "./use-event-routines";
 
-type ListKind = "usage" | "memories" | "routines" | "skills" | "files";
+type ListKind = "usage" | "memories" | "routines" | "skills" | "files" | "eventChecks";
 type RecordKind = "memory" | "routine";
 
 const LIST_SECTION_TEXT = {
@@ -49,6 +50,13 @@ const LIST_SECTION_TEXT = {
     reconnect: "mobile.agent.info.skills.reconnect",
     failed: "mobile.agent.info.skills.failed",
     retry: "mobile.agent.info.skills.retry",
+  },
+  eventChecks: {
+    title: "mobile.agent.info.eventChecks.title",
+    loading: "mobile.agent.info.eventChecks.loading",
+    reconnect: "mobile.agent.info.eventChecks.reconnect",
+    failed: "mobile.agent.info.eventChecks.failed",
+    retry: "mobile.agent.info.eventChecks.retry",
   },
   files: {
     title: "mobile.agent.info.files.title",
@@ -88,7 +96,7 @@ export function AgentInformation({
 }: {
   agent: MobileAgent;
   available: boolean;
-  section: "usage" | "memories" | "routines" | "memory" | "routine" | "skills" | "files";
+  section: "usage" | "memories" | "routines" | "memory" | "routine" | "skills" | "files" | "eventChecks";
 }) {
   useEffect(() => {
     if (section === "usage") mobileAnalytics.track("usage_viewed", {});
@@ -131,6 +139,13 @@ export function AgentInformation({
       const installed = await workspace.loadAgentSkills(agent.id, agent.serverId, manageSkills);
       return installed && userAssignedSkills(installed);
     },
+  });
+  const eventChecksKey = [...key, "event-checks"];
+  const eventChecks = useQuery({
+    ...options,
+    enabled: available && section === "eventChecks" && workspace.canManageEventChecks(agent.serverId),
+    queryKey: eventChecksKey,
+    queryFn: () => workspace.loadEventChecks(agent.id, agent.serverId),
   });
   // The host caches a scan. A retry or a deletion measures again, as on desktop.
   const forceStorageScan = useRef(false);
@@ -292,6 +307,21 @@ export function AgentInformation({
           <SettingsNote>
             {t(manageSkills ? "mobile.agent.info.skillsAddOnComputer" : "mobile.agent.info.skillsManaged")}
           </SettingsNote>
+        </>
+      ) : null}
+      {section === "eventChecks" ? (
+        <>
+          <InformationSection
+            kind="eventChecks"
+            list
+            available={available}
+            pending={eventChecks.isPending && eventChecks.fetchStatus !== "idle"}
+            failed={eventChecks.isError}
+            retry={() => void eventChecks.refetch()}
+          >
+            <AgentEventChecks agent={agent} checks={eventChecks.data ?? []} queryKey={eventChecksKey} />
+          </InformationSection>
+          <SettingsNote>{t("mobile.agent.info.eventChecksNote")}</SettingsNote>
         </>
       ) : null}
       {section === "files" ? (

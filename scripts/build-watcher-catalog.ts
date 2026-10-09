@@ -68,10 +68,30 @@ export async function loadWatcherCatalog(
     if (secretPattern.test(program.toString("utf8")))
       throw new Error(`Watcher ${slug} program holds a secret-looking value.`);
     const file = `${slug}${extname(source.program)}`;
-    const { arguments: args, program: _name, ...rest } = source;
+    const digest = createHash("sha256").update(program).digest("hex");
+    const { arguments: args, program: _name, earlierPrograms: earlierSource, ...rest } = source;
+    // Earlier versions stay byte for byte, so a check that still runs one can be linked, then updated.
+    const earlierPrograms: { version: string; file: string; digest: string }[] = [];
+    if (earlierSource !== undefined) {
+      if (!Array.isArray(earlierSource)) throw new Error(`Watcher ${slug} earlierPrograms is invalid.`);
+      for (const earlier of earlierSource) {
+        if (!isDynamicRecord(earlier) || !isString(earlier.version) || !isString(earlier.program))
+          throw new Error(`Watcher ${slug} earlierPrograms is invalid.`);
+        const content = await readFile(join(sourceRoot, "watchers", slug, earlier.program));
+        if (secretPattern.test(content.toString("utf8")))
+          throw new Error(`Watcher ${slug} program holds a secret-looking value.`);
+        const earlierDigest = createHash("sha256").update(content).digest("hex");
+        if (earlier.version === source.version || earlierDigest === digest)
+          throw new Error(`Watcher ${slug} earlier program ${earlier.version} equals the current program.`);
+        const earlierFile = `${slug}-${earlier.version}${extname(earlier.program)}`;
+        earlierPrograms.push({ version: earlier.version, file: earlierFile, digest: earlierDigest });
+        files.push({ path: `programs/${earlierFile}`, content });
+      }
+    }
     raw.push({
       ...rest,
-      program: { file, digest: createHash("sha256").update(program).digest("hex") },
+      program: { file, digest },
+      ...(earlierPrograms.length ? { earlierPrograms } : {}),
       argumentsJson: JSON.stringify(args),
     });
     files.push({ path: `programs/${file}`, content: program });

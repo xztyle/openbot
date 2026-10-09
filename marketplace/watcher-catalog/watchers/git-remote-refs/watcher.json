@@ -3,7 +3,7 @@
   "name": "Git branches and tags",
   "tagline": "Wake an agent when a branch moves or a new branch or tag appears on any Git server",
   "description": "Runs git ls-remote against one repository on any Git server over HTTPS: GitLab, Gitea, Forgejo, Bitbucket, a server you host, or GitHub. It lists the current branches (and tags, if you choose) with their commit IDs. A new branch, a new tag, or a branch that moved to a new commit wakes the agent once. A deleted branch is ignored. It runs as a normal program with no AI, only reads, and never changes anything on the server. Public repositories need no key. For a private one, add an access token in a masked field after the install; it is sent only in a request header to the exact address you entered and never appears in a command line, a log or an item. Be aware of the limit: this finds pushes, new branches and new tags only. It cannot see pull requests, merge requests, issues, reviews or comments, because each provider keeps those behind its own API, not in Git. It also cannot tell who pushed, so the author of every item is unknown and your own pushes are not skipped. For GitHub pull requests, issues and CI, use the GitHub activity check instead. Install it again for another repository: every install has its own settings, key, schedule and history.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "creatorName": "OpenBot",
   "iconUrl": "https://git-scm.com/favicon.ico",
   "websiteUrl": "https://git-scm.com",

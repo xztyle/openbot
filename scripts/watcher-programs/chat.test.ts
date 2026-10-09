@@ -721,7 +721,7 @@ describe("program process contract", () => {
     { name: "discord", file: DISCORD_FILE, variable: "DISCORD_BOT_TOKEN", prefix: "Discord activity watcher: " },
   ];
   for (const { name, file, variable, prefix } of cases) {
-    it(`${name} reports bad input with one safe stderr line, exit code 1 and no stdout`, async () => {
+    it(`${name} reports bad input with a safe message and one error code, exit code 1 and no stdout`, async () => {
       const secret = "SPAWN-SECRET-VALUE-456";
       const badJson = await execute(file, "not json", { [variable]: secret });
       expect(badJson).toMatchObject({ code: 1, stdout: "", stderr: `${prefix}Invalid watcher input JSON.\n` });
@@ -734,7 +734,8 @@ describe("program process contract", () => {
       expect(badConfig.code).toBe(1);
       expect(badConfig.stdout).toBe("");
       expect(badConfig.stderr.startsWith(prefix)).toBe(true);
-      expect(badConfig.stderr.trim().split("\n")).toHaveLength(1);
+      // The message line, then the one code that OpenBot maps to its own text.
+      expect(badConfig.stderr.trim().split("\n")).toEqual([expect.stringContaining(prefix), "openbot-error: config"]);
       for (const run of [badJson, missingToken, badConfig]) expect(run.stderr).not.toContain(secret);
       const oversized = await execute(file, "x".repeat(70_000), { [variable]: secret });
       expect(oversized).toMatchObject({ code: 1, stdout: "" });

@@ -35,6 +35,7 @@ import { createScrollFades } from "../../components/createScrollFades";
 import { SettingsBackIcon, SettingsForwardIcon } from "../../components/SettingsPanel";
 import { useText } from "../../text";
 import { EventCheckEnvironmentSettings } from "./EventCheckEnvironmentSettings";
+import { itemFiltersFromText, itemFiltersToText } from "./event-check-item-filters";
 import { RoutineSchedulePicker } from "./RoutineSchedulePicker";
 import type { RoutineScheduleDraft } from "./routine-schedule-draft";
 import { ROUTINE_SAVED_DRAFT_KINDS, routineScheduleFromDraft, routineScheduleToDraft } from "./routine-schedule-saved";
@@ -43,6 +44,8 @@ import { WatcherProgramFields } from "./WatcherProgramFields";
 interface Props {
   api: EventCheckApi;
   apiProgramsAvailable?: boolean;
+  /** Whether the host keeps the delivery setting. Defaults to what the API says, then to yes. */
+  deliveryAvailable?: boolean;
   agentId: string;
   onBack(): void;
   onClose(): void;
@@ -53,6 +56,9 @@ interface Editor {
   timing: "interval" | "calendar";
   seconds: number;
   calendar: RoutineScheduleDraft;
+  /** Seconds to combine events into one message. Zero delivers each find at once. */
+  digestSeconds: number;
+  filtersText: string;
 }
 interface State {
   checks: EventCheck[];
@@ -65,6 +71,12 @@ interface State {
   busy: boolean;
   error: string;
 }
+/** The list answer carries `health`. It is not part of what the user edits or saves. */
+function withoutHealth(check: EventCheck): EventCheck {
+  const { health: _health, ...rest } = check;
+  return rest;
+}
+const DIGEST_CHOICES = [0, 60, 300, 900, 3600] as const;
 function apiSource(source: EventCheckSource) {
   return source.kind === "api" ? source : undefined;
 }
@@ -82,7 +94,7 @@ function editor(agentId: string, check?: EventCheck, api = false): Editor {
   const schedule = check?.schedule ?? defaultEventCheckSchedule();
   return {
     value: check
-      ? structuredClone(snapshot(check))
+      ? structuredClone(snapshot(withoutHealth(check)))
       : {
           agentId,
           name: "",
@@ -107,6 +119,8 @@ function editor(agentId: string, check?: EventCheck, api = false): Editor {
                 : 86400)
         : 30,
     calendar: routineScheduleToDraft(schedule.kind === "interval" ? { kind: "daily", time: "09:00" } : schedule),
+    digestSeconds: check?.delivery?.digestSeconds ?? 0,
+    filtersText: itemFiltersToText(check?.delivery?.itemFilters ?? []),
   };
 }
 const STATUS_KEYS = {
@@ -174,7 +188,7 @@ function RunStatus(props: { status: EventCheckExecution["status"] }) {
 }
 /** Shared controls only; the host adapter owns authentication, storage and scheduling. */
 export function EventChecksSettings(props: Props) {
-  const { t, errorMessage, format } = useText();
+  const { t, errorMessage, format, sourceText } = useText();
   const [state, setState] = createStore<State>({
     checks: [],
     accounts: [],
@@ -200,6 +214,13 @@ export function EventChecksSettings(props: Props) {
       draft.error = errorMessage(error, t("agentSettings.eventCheck.failed"));
     });
   const time = (value: string) => format.date(new Date(value), { dateStyle: "medium", timeStyle: "short" });
+  const deliveryAvailable = () => props.deliveryAvailable ?? props.api.deliverySettings ?? true;
+  const digestName = (seconds: number) =>
+    seconds === 0
+      ? t("agentSettings.eventCheck.digestOff")
+      : seconds >= 3600
+        ? t("agentSettings.eventCheck.digestHours", { count: seconds / 3600 })
+        : t("agentSettings.eventCheck.digestMinutes", { count: seconds / 60 });
   async function reload() {
     const requested = ++epoch;
     try {
@@ -292,8 +313,21 @@ export function EventChecksSettings(props: Props) {
               current.value.schedule.kind === "interval" ? current.value.schedule.anchorAt : new Date().toISOString(),
           }
         : routineScheduleFromDraft(current.calendar);
+    const filters = itemFiltersFromText(current.filtersText);
+    if (!filters) {
+      setState((draft) => {
+        draft.error = t("agentSettings.eventCheck.filtersInvalid");
+      });
+      return;
+    }
+    // A check that never had delivery settings keeps none until the user sets one. A host that does
+    // not know the setting is not sent one.
+    const delivery =
+      deliveryAvailable() && (current.digestSeconds > 0 || filters.length > 0 || current.value.delivery)
+        ? { delivery: { digestSeconds: current.digestSeconds, itemFilters: filters } }
+        : {};
     await action(async () => {
-      const check = await props.api.save({ ...snapshot(current.value), schedule });
+      const check = await props.api.save({ ...snapshot(current.value), schedule, ...delivery });
       setState((draft) => {
         draft.current = editor(props.agentId, check, props.apiProgramsAvailable ?? Boolean(props.api.environment));
       });
@@ -311,7 +345,12 @@ export function EventChecksSettings(props: Props) {
   const dirty = () => {
     const current = state.current;
     const saved = state.checks.find((check) => check.id === current?.value.id);
-    if (!current || !saved || JSON.stringify(current.value) !== JSON.stringify(saved)) return true;
+    if (!current || !saved || JSON.stringify(current.value) !== JSON.stringify(withoutHealth(saved))) return true;
+    if (
+      current.digestSeconds !== (saved.delivery?.digestSeconds ?? 0) ||
+      current.filtersText.trim() !== itemFiltersToText(saved.delivery?.itemFilters ?? [])
+    )
+      return true;
     if (current.timing === "interval")
       return saved.schedule.kind !== "interval" || current.seconds !== editor(props.agentId, saved).seconds;
     return (
@@ -435,6 +474,13 @@ export function EventChecksSettings(props: Props) {
                                     })}
                                   </>
                                 )}
+                              </Show>
+                              <Show when={(check.health?.consecutiveErrors ?? 0) > 0}>
+                                {" · "}
+                                <span class="event-check-failing" title={sourceText(check.health?.lastError ?? "")}>
+                                  <TriangleAlert aria-hidden="true" />
+                                  {t("agentSettings.eventCheck.failing")}
+                                </span>
                               </Show>
                             </small>
                           </span>
@@ -760,6 +806,44 @@ export function EventChecksSettings(props: Props) {
                   </label>
                 </Show>
               </section>
+              <Show when={deliveryAvailable()}>
+                <section class="event-check-section" aria-labelledby="event-check-delivery-heading">
+                  <h3 id="event-check-delivery-heading">{t("agentSettings.eventCheck.delivery")}</h3>
+                  <Choice
+                    id="event-check-digest-label"
+                    label={t("agentSettings.eventCheck.digest")}
+                    value={String(current().digestSeconds)}
+                    options={DIGEST_CHOICES.map((seconds) => ({
+                      id: String(seconds),
+                      name: digestName(seconds),
+                    }))}
+                    change={(seconds) =>
+                      setState((s) => {
+                        if (s.current) s.current.digestSeconds = Number(seconds);
+                      })
+                    }
+                  />
+                  <Text as="p" variant="caption" tone="muted" class="event-check-help">
+                    {t("agentSettings.eventCheck.digestHelp")}
+                  </Text>
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.filters")}</span>
+                    <Textarea
+                      class="event-check-code"
+                      placeholder={t("agentSettings.eventCheck.filtersPlaceholder")}
+                      value={current().filtersText}
+                      onInput={(e) =>
+                        setState((s) => {
+                          if (s.current) s.current.filtersText = e.currentTarget.value;
+                        })
+                      }
+                    />
+                  </label>
+                  <Text as="p" variant="caption" tone="muted" class="event-check-help">
+                    {t("agentSettings.eventCheck.filtersHelp")}
+                  </Text>
+                </section>
+              </Show>
               <details class="event-check-details">
                 <summary>
                   <ChevronRight aria-hidden="true" />
@@ -894,9 +978,13 @@ export function EventChecksSettings(props: Props) {
                                     {" · "}
                                     {t("agentSettings.eventCheck.skipped", { events: run.skippedSelfCount })}
                                   </Show>
+                                  <Show when={run.filteredCount > 0}>
+                                    {" · "}
+                                    {t("agentSettings.eventCheck.filtered", { events: run.filteredCount })}
+                                  </Show>
                                 </small>
                                 <Show when={run.error}>
-                                  <p class="event-check-log-error">{run.error}</p>
+                                  <p class="event-check-log-error">{sourceText(run.error ?? "")}</p>
                                 </Show>
                               </div>
                             )}

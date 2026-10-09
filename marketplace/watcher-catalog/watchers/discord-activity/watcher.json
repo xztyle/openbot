@@ -3,7 +3,7 @@
   "name": "Discord activity",
   "tagline": "Wake an agent when you are mentioned in chosen Discord channels",
   "description": "Checks Discord every minute for new messages in the channels you choose, and can keep only the messages that mention you, mention one of your roles, or reply to you. It runs as a normal program with no AI, reads Discord's official REST API with a BOT token, and never posts or changes anything in Discord. It does not support personal user tokens: using one to automate an account is against Discord's terms, so the check refuses it. A new message, or a message edited while it is still recent, wakes the agent once. Messages you wrote yourself are skipped. The check only looks at the last few minutes, so a message that is edited much later is not seen again. If Discord asks the program to slow down, it saves a cooldown and sends no request until the cooldown ends. Install it again for another server or person: every install has its own settings, token, schedule and history.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "creatorName": "OpenBot",
   "iconUrl": null,
   "websiteUrl": "https://discord.com",

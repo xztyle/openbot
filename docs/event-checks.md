@@ -17,17 +17,71 @@ Pagination must cover the complete query; configure its cursor fields if the app
 An exact JSON string value `$lastSuccessAt` expands to the last successful read minus five minutes;
 `$now` expands to the current time. The overlap lets the saved baseline remove repeated results.
 
-Empty checks, unchanged checks, and errors do not add chat rows, unread counts, completion messages,
-or notifications. **Last 10 checks** shows start time, duration, result count, event count, and safe
-error information. **Check now** uses the saved definition; save edits first. You can pause a check
-even if its app is disconnected.
+Empty checks, unchanged checks, and single errors do not add chat rows, unread counts, completion
+messages, or notifications. **Last 10 checks** shows start time, duration, result count, event count,
+and safe error information. **Check now** uses the saved definition; save edits first. You can pause a
+check even if its app is disconnected. See [Failures](#failures) for what happens when a check keeps
+failing.
 
 New or changed items add one **Event check: NAME — triggered** marker and one durable agent delivery.
 The agent receives the matching data as untrusted app content and the saved instruction. A pending
 batch survives a restart. The mailbox's idempotency key prevents a retry from making a second turn.
+The agent can answer a check's message with exactly `[[no-update]]` when nothing needs the user. A turn
+that has only event check messages and ends with that answer leaves no message, no unread count and
+no notification. The marker row **Event check: NAME — triggered** stays. Any other answer, or a turn
+that also holds a message from a person, stays visible. The prompt of every event asks for the marker.
 Changing timing or instructions keeps the baseline and pending batch. Changing the account, query,
 or result selection resets the baseline and cancels batches from the old query. Deleting a check
 removes its settings, history, baseline, and pending batches, but does not erase prior chat messages.
+
+## Failures
+
+A check that fails waits longer before it runs again. The wait doubles for each error in a row (among
+the last ten checks), up to 15 minutes or 16 intervals, whichever is shorter. A check whose interval
+is already longer than that waits its normal interval. A success sets the wait back to normal.
+
+A program can say why it failed. It prints one line on standard error, `openbot-error: auth`, and exits
+with a code other than zero. The codes are `auth`, `rate_limited`, `config` and `upstream`. OpenBot
+shows a fixed message for each code in **Last 10 checks**. It never shows the program's own text, which
+could hold a secret. A program that prints no code, or another code, gets the general message.
+
+| Code | Shown message means |
+| --- | --- |
+| `auth` | The app did not accept the saved credentials. |
+| `rate_limited` | The app limited the requests. The check waits. |
+| `config` | The app did not accept the check's settings. |
+| `upstream` | The app could not be reached or sent an error. |
+
+The list of checks marks a check with **Failing** when its last check ended in an error. At the fifth
+error in a row, OpenBot tells the user once: an error notice for the agent, and a desktop or browser
+notification at the levels **All activity** and **Only when it needs me**. The next failure streak,
+after a success, tells again. OpenBot also tells the user once when an event was found but could not
+be handed to the agent, and when an event check turn stops with an error. The same applies to a
+scheduled routine run that fails. The server level **Nothing**, mute, and the agent's own switch turn
+these notices off.
+
+## Delivery
+
+By default each check that finds changes starts its own message to the agent. Two optional settings
+change this. Both are in the check's **Delivery** section.
+
+- **Combine events** collects events for 1, 5, 15 or 60 minutes. They reach the agent as one message,
+  and an item that changed twice appears once with its newest data. The message goes out at the first
+  check after the time passes.
+- **Only deliver items that match** keeps items out of the delivery. Write one filter on each line,
+  a JSON Pointer and a value, such as `/state=open`. All filters must match. An item that does not match
+  does not wake the agent, but the baseline still records it, so it cannot come back as new later.
+  **Last 10 checks** counts these items.
+
+Hosts that keep these settings advertise `event-check-delivery-v1`. It adds three optional fields to the
+existing routes: `delivery` on a check, `health` on a listed check, and `filteredCount` on a check log
+entry. Older clients ignore them. A client that does not send `delivery` when it saves a check leaves
+the saved value as it is. Older hosts do not keep `delivery`, so a client hides the **Delivery**
+section for them. The settings live in the saved definition. SQLite needs no migration.
+
+A check also sends at most 12 messages an hour to its agent. The limit lives in memory, so a restart
+starts a new hour. Over the limit, events wait in the outbox and go out as one combined message when
+a place frees. No event is dropped.
 
 ## Permissions and storage
 
@@ -176,7 +230,9 @@ The link is not part of what the check reads, so adding or removing it keeps the
   settings, schedule, instruction and name stay; new settings take their defaults; removed settings
   go. The check gets a fresh baseline, the same as for any program change. The old file stays.
 - **Link** connects a check that you made before the catalog existed to its template. It works only
-  when the check's program is byte for byte the template's program. The baseline stays.
+  when the check's program is byte for byte a program that the host ships for the template: the
+  current one, or an earlier version that the template keeps. The link names that version, so
+  **Update** can then move the check to the current version. The baseline stays.
 
 Hosts that support this advertise `event-check-templates-v1`. Older clients do not show the tab and
 ignore the link. Installing needs an owner or admin, as for every event check route.
@@ -185,7 +241,7 @@ ignore the link. Installing needs an owner or admin, as for every event check ro
 
 | Template | Reads | Credential (private variable) |
 | --- | --- | --- |
-| `linear-assigned-intake` | Issues assigned to you and projects you lead, in one Linear team | `LINEAR_API_TOKEN` |
+| `linear-assigned-intake` | Issues assigned to you (and optionally delegated to an agent user) and projects you lead, in one Linear team. Optional filters by state and label, and comments | `LINEAR_API_TOKEN` |
 | `github-activity` | GitHub notifications, and pull requests, issues, commits, failed runs, releases and alerts of chosen repos | `GITHUB_TOKEN` |
 | `git-remote-refs` | New and moved branches and tags on any git server over HTTPS | `GIT_ACCESS_TOKEN` |
 | `slack-activity` | Mentions, keywords, direct messages and chosen channels | `SLACK_USER_TOKEN` |
@@ -194,6 +250,11 @@ ignore the link. Installing needs an owner or admin, as for every event check ro
 | `protonmail-inbox` | New mail through Proton Mail Bridge on the same machine | `PROTONMAIL_BRIDGE_PASSWORD` |
 | `render-services` | Service and deploy status, and databases, on Render | `RENDER_API_KEY` |
 | `posthog-health` | Big shifts in event volume, pageviews, users and exceptions | `POSTHOG_PERSONAL_API_KEY` |
+
+The Linear template, version 1.1.0, reads issue state, labels and comments only when a setting asks for
+it. With no optional setting it watches what version 1.0.0 watched: the title and description. Version
+1.1.0 has no account constants, and it reports errors with the codes above. A check that runs the
+1.0.0 program of this template can still be linked to it, and then updated.
 
 Every template uses read-only requests. Each one was tested against recorded or simulated
 responses only, so test a new install with **Check now** before you enable it.

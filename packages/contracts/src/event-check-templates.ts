@@ -25,6 +25,12 @@ export interface EventCheckTemplateField {
   /** `boolean` fields hold the text `true` or `false`, and the install dialog shows a switch. */
   type: "text" | "boolean";
 }
+/** An earlier version of a template's program. The host keeps it so a check that runs it can still be linked. */
+export interface EventCheckTemplateEarlierProgram {
+  version: string;
+  file: string;
+  digest: string;
+}
 /** A reviewed program that ships with the host. A client names it by slug and never sends code. */
 export interface EventCheckTemplate {
   slug: string;
@@ -38,6 +44,8 @@ export interface EventCheckTemplate {
   /** The slug of the Apps listing this template reads from, so the page can say which app pairs with it. */
   app: string | null;
   program: { file: string; digest: string };
+  /** Earlier versions of the program, newest first. Optional: a client that does not know it ignores it. */
+  earlierPrograms?: EventCheckTemplateEarlierProgram[];
   accountLabelHint: string;
   variables: EventCheckTemplateVariable[];
   configuration: EventCheckTemplateField[];
@@ -115,13 +123,20 @@ function decodeField(value: unknown): EventCheckTemplateField {
     type,
   };
 }
+const PROGRAM_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(mjs|js|py|sh)$/;
+function decodeEarlierProgram(value: unknown): EventCheckTemplateEarlierProgram {
+  if (!isDynamicRecord(value)) throw new Error("Invalid template program.");
+  const digest = text(value.digest, 64, true);
+  const file = text(value.file, 256, true);
+  if (!/^[a-f0-9]{64}$/.test(digest) || !PROGRAM_FILE.test(file)) throw new Error("Invalid template program.");
+  return { version: text(value.version, 64, true), file, digest };
+}
 export function decodeEventCheckTemplate(value: unknown): EventCheckTemplate {
   if (!isDynamicRecord(value) || !isDynamicRecord(value.program) || !isDynamicRecord(value.selection))
     throw new Error("Invalid event check template.");
   const digest = text(value.program.digest, 64, true);
   const file = text(value.program.file, 256, true);
-  if (!/^[a-f0-9]{64}$/.test(digest) || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.(mjs|js|py|sh)$/.test(file))
-    throw new Error("Invalid template program.");
+  if (!/^[a-f0-9]{64}$/.test(digest) || !PROGRAM_FILE.test(file)) throw new Error("Invalid template program.");
   const interval = value.intervalSeconds;
   if (typeof interval !== "number" || !Number.isSafeInteger(interval) || interval < 30 || interval > 86_400)
     throw new Error("Invalid template interval.");
@@ -145,6 +160,9 @@ export function decodeEventCheckTemplate(value: unknown): EventCheckTemplate {
     websiteUrl: link(value.websiteUrl),
     app: value.app === null ? null : slug(value.app),
     program: { file, digest },
+    ...(value.earlierPrograms === undefined
+      ? {}
+      : { earlierPrograms: list(value.earlierPrograms, 10, decodeEarlierProgram) }),
     accountLabelHint: text(value.accountLabelHint, 512),
     variables,
     configuration,

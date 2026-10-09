@@ -38,6 +38,7 @@ type AgentPage =
   | "skills"
   | "files"
   | "routines"
+  | "eventChecks"
   | "runtime"
   | "memory"
   | "routine";
@@ -79,7 +80,7 @@ function AgentForm({
   page: AgentPage;
 }) {
   const { t, errorMessage } = useText();
-  const { updateAgent, setAgentAvatar } = useMobileWorkspace();
+  const { updateAgent, setAgentAvatar, canManageEventChecks } = useMobileWorkspace();
   const navigation = useNavigation();
   const [edits, setEdits] = useState<AgentEdits>({});
   const foreground = useThemeColor("foreground");
@@ -292,6 +293,7 @@ function AgentForm({
       page === "skills" ||
       page === "files" ||
       page === "routines" ||
+      page === "eventChecks" ||
       page === "memory" ||
       page === "routine" ? (
         <AgentInformation agent={agent} available={available} section={page} />
@@ -363,6 +365,18 @@ function AgentForm({
             >
               <Typography.Paragraph>{t("mobile.agent.info.routines.title")}</Typography.Paragraph>
             </SettingsRow>
+            {canManageEventChecks(agent.serverId) ? (
+              <SettingsRow
+                onPress={() =>
+                  router.push({
+                    pathname: "/agent-info/[agentId]/event-checks",
+                    params: { agentId: agent.id, serverId: agent.serverId },
+                  })
+                }
+              >
+                <Typography.Paragraph>{t("mobile.agent.info.eventChecks.title")}</Typography.Paragraph>
+              </SettingsRow>
+            ) : null}
           </SettingsSection>
           <SettingsSection>
             <SettingsRow

@@ -132,6 +132,18 @@
   font-size: var(--openbot-text-sm);
 }
 
+.event-check-failing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  color: var(--openbot-danger-text);
+}
+
+.event-check-failing svg {
+  width: 1em;
+  height: 1em;
+}
+
 .event-check-log-error {
   margin: 0;
   color: var(--openbot-danger-text);

@@ -23,7 +23,11 @@ import {
 } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import type { AppFormat, AppTranslate } from "@openbot/i18n";
-import { notificationForAgentEvent, notificationForUsageLimit } from "@openbot/team-client/agent-notifications";
+import {
+  notificationForAgentEvent,
+  notificationForUsageLimit,
+  UNATTENDED_FAILURE_ERROR_CODES,
+} from "@openbot/team-client/agent-notifications";
 import { BrowserWindow, Notification } from "electron";
 import type { AgentService } from "../backend/agent-service";
 import { runCauseEffect } from "../backend/effect-boundary";
@@ -82,7 +86,8 @@ export function createRendererForwarders({
       event.type !== "turn-completed" &&
       event.type !== "prompt" &&
       event.type !== "approval" &&
-      event.type !== "usage-limit-reached"
+      event.type !== "usage-limit-reached" &&
+      !(event.type === "error" && UNATTENDED_FAILURE_ERROR_CODES.includes(event.code))
     )
       return;
     if (event.type === "turn-completed" && event.status !== "completed" && event.status !== "failed") return;
@@ -100,7 +105,13 @@ export function createRendererForwarders({
     const initialLevel = notifyLevel();
     if (!initialLevel || !Notification.isSupported()) return;
     // Skip the remote agent lookup for an event the level already rules out.
-    if (initialLevel === "needs-me" && event.type === "turn-completed") return;
+    // A failed scheduled run is the exception: nobody watches it, so it needs the user.
+    if (
+      initialLevel === "needs-me" &&
+      event.type === "turn-completed" &&
+      !(event.status === "failed" && event.origin === "routine")
+    )
+      return;
     const remoteManager = getRemoteServerManager();
     const agents =
       serverId === LOCAL_SERVER_ID

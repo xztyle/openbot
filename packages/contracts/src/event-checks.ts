@@ -1,3 +1,4 @@
+import { type EventFilter, isEventFilter } from "./ipc-events";
 import { isRoutineSchedule, type RoutineSchedule } from "./ipc-routines";
 import { isDynamicRecord } from "./runtime-values";
 
@@ -90,6 +91,19 @@ export type EventCheckAuthor =
   | { kind: "user" }
   | { kind: "member"; name: string }
   | { kind: "agent"; agentId: string; name: string };
+/**
+ * How a check hands events to its agent. Both fields are optional on the wire. A check without them
+ * delivers every changed item at once, as before. A client that does not know the object leaves it
+ * out when it saves, and the host then keeps the saved value.
+ */
+export interface EventCheckDelivery {
+  /** Seconds to collect events into one prompt. Zero delivers each execution's events at once. */
+  digestSeconds: number;
+  /** A changed item is delivered only when every filter matches it. Skipped items still enter the baseline. */
+  itemFilters: EventFilter[];
+}
+const EVENT_CHECK_DIGEST_MAX_SECONDS = 86_400;
+export const EVENT_CHECK_ITEM_FILTER_LIMIT = 16;
 export interface EventCheckInput {
   id?: string;
   agentId: string;
@@ -108,6 +122,21 @@ export interface EventCheckInput {
    * it is never stored. A host from before it ignores it, and the values stay unusable.
    */
   approveProgram?: boolean;
+  delivery?: EventCheckDelivery;
+}
+/**
+ * What the last executions say about a check. The host adds it to list answers and never saves it.
+ * A client that does not know it ignores it.
+ */
+export interface EventCheckHealth {
+  /** Executions that ended in an error since the last success, among the last ten. */
+  consecutiveErrors: number;
+  /** The safe text of the newest error, or null when the newest execution did not fail. */
+  lastError: string | null;
+  /** The result of the newest execution that was not cancelled, or null before the first one. */
+  lastStatus?: EventCheckExecution["status"] | null;
+  /** When that execution finished. */
+  lastCheckedAt?: string | null;
 }
 export interface EventCheck extends Omit<EventCheckInput, "id" | "approveProgram"> {
   id: string;
@@ -115,6 +144,7 @@ export interface EventCheck extends Omit<EventCheckInput, "id" | "approveProgram
   nextCheckAt: string;
   createdAt: string;
   updatedAt: string;
+  health?: EventCheckHealth;
 }
 export interface EventCheckExecution {
   id: string;
@@ -125,6 +155,8 @@ export interface EventCheckExecution {
   itemCount: number;
   eventCount: number;
   skippedSelfCount: number;
+  /** Changed items that the check's item filters kept out of the delivery. */
+  filteredCount: number;
   durationMs: number;
   error: string | null;
 }
@@ -144,6 +176,8 @@ export interface EventCheckOrigin {
   name: string;
 }
 export interface EventCheckApi {
+  /** True when the host keeps the `delivery` setting of a check (`event-check-delivery-v1`). Absent means unknown. */
+  readonly deliverySettings?: boolean;
   environment?(input: { agentId: string; id: string }): Promise<EventCheckEnvironmentStatus[]>;
   setEnvironment?(input: EventCheckEnvironmentInput): Promise<EventCheckEnvironmentStatus[]>;
   test?(input: { agentId: string; id: string }): Promise<EventCheckExecution>;
@@ -183,6 +217,38 @@ export function decodeEventCheckInput(value: unknown): EventCheckInput {
     selection: decodeSelection(value.selection),
     ...authorField(value.lastSavedBy),
     ...(value.approveProgram === true ? { approveProgram: true } : {}),
+    ...(value.delivery === undefined ? {} : { delivery: decodeDelivery(value.delivery) }),
+  };
+}
+function decodeDelivery(value: unknown): EventCheckDelivery {
+  if (
+    !isDynamicRecord(value) ||
+    typeof value.digestSeconds !== "number" ||
+    !Number.isSafeInteger(value.digestSeconds) ||
+    value.digestSeconds < 0 ||
+    value.digestSeconds > EVENT_CHECK_DIGEST_MAX_SECONDS ||
+    !Array.isArray(value.itemFilters) ||
+    value.itemFilters.length > EVENT_CHECK_ITEM_FILTER_LIMIT ||
+    !value.itemFilters.every(isEventFilter) ||
+    value.itemFilters.some((filter) => JSON.stringify(filter).length > 1024)
+  )
+    throw new Error("Invalid event check delivery.");
+  return {
+    digestSeconds: value.digestSeconds,
+    itemFilters: value.itemFilters.map((filter) => ({ pointer: filter.pointer, value: filter.value })),
+  };
+}
+function decodeHealth(value: unknown): EventCheckHealth {
+  if (!isDynamicRecord(value)) throw new Error("Invalid event check health.");
+  return {
+    consecutiveErrors: count(value.consecutiveErrors),
+    lastError: value.lastError === null ? null : text(value.lastError, 2048),
+    ...(value.lastStatus === undefined
+      ? {}
+      : { lastStatus: value.lastStatus === null ? null : executionStatus(value.lastStatus) }),
+    ...(value.lastCheckedAt === undefined
+      ? {}
+      : { lastCheckedAt: value.lastCheckedAt === null ? null : text(value.lastCheckedAt, 128, true) }),
   };
 }
 function authorField(value: unknown): { lastSavedBy?: EventCheckAuthor } {
@@ -293,15 +359,14 @@ export function decodeEventCheck(value: unknown): EventCheck {
     nextCheckAt: text(value.nextCheckAt, 128, true),
     createdAt: text(value.createdAt, 128, true),
     updatedAt: text(value.updatedAt, 128, true),
+    ...(value.health === undefined ? {} : { health: decodeHealth(value.health) }),
   };
 }
 function count(value: unknown): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new Error("Invalid check count.");
   return value;
 }
-export function decodeEventCheckExecution(value: unknown): EventCheckExecution {
-  if (!isDynamicRecord(value)) throw new Error("Invalid check execution.");
-  const status = value.status;
+function executionStatus(status: unknown): EventCheckExecution["status"] {
   if (
     status !== "baseline" &&
     status !== "unchanged" &&
@@ -310,6 +375,11 @@ export function decodeEventCheckExecution(value: unknown): EventCheckExecution {
     status !== "cancelled"
   )
     throw new Error("Invalid check status.");
+  return status;
+}
+export function decodeEventCheckExecution(value: unknown): EventCheckExecution {
+  if (!isDynamicRecord(value)) throw new Error("Invalid check execution.");
+  const status = executionStatus(value.status);
   return {
     id: text(value.id, 128, true),
     checkId: text(value.checkId, 128, true),
@@ -319,6 +389,7 @@ export function decodeEventCheckExecution(value: unknown): EventCheckExecution {
     itemCount: count(value.itemCount),
     eventCount: count(value.eventCount),
     skippedSelfCount: value.skippedSelfCount === undefined ? 0 : count(value.skippedSelfCount),
+    filteredCount: value.filteredCount === undefined ? 0 : count(value.filteredCount),
     durationMs: count(value.durationMs),
     error: value.error === null ? null : text(value.error, 2048),
   };

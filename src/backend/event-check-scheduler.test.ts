@@ -5,21 +5,25 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import type { EventCheckInput } from "@openbot/contracts/event-checks";
 import { decodeEventCheckInput, EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
+import type { AgentEvent } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { ROUTINE_NO_UPDATE_MARKER } from "./agent/routine-quiet-runs";
 import type { AgentService } from "./agent-service";
 import {
   createTestService,
   FakeAgentClient,
+  firstInputText,
   startAgentTestFixture,
   stopAgentTestFixture,
   stores,
+  waitFor,
   waitForQueue,
 } from "./agent-service-test-harness";
 import { runCauseEffect } from "./effect-boundary";
 import type { EventCheckData, EventCheckReader } from "./event-check-reader";
 import { checkPointer, observeCheck } from "./event-check-result";
-import { EventCheckStore } from "./event-check-store";
+import { EventCheckStore, eventCheckBackoffMs } from "./event-check-store";
 import { mcpSync } from "./mcp-effects";
 import { LOCAL_USER_ACTOR as TEST_USER } from "./security-actor";
 
@@ -71,9 +75,9 @@ function input(): EventCheckInput {
     selection: { itemsPointer: "/items", idPointer: "/id", revisionPointer: "/updatedAt" },
   };
 }
-async function boot() {
+async function boot(output?: string) {
   const { store, mailbox } = stores(root);
-  const client = new FakeAgentClient("codex");
+  const client = new FakeAgentClient("codex", output);
   service = createTestService({ store, mailbox, clientFactory: () => client, eventCheckReader: reader });
   await runCauseEffect(service.initialize());
   await runCauseEffect(store.getOrCreate("chief"));
@@ -221,6 +225,7 @@ it("keeps undelivered events during timing edits and clears them only when the q
       itemCount: 2,
       eventCount: 1,
       skippedSelfCount: 0,
+      filteredCount: 0,
       error: null,
     },
     changed,
@@ -273,6 +278,7 @@ it("retries an interrupted durable event through the same mailbox idempotency ke
       itemCount: 2,
       eventCount: 1,
       skippedSelfCount: 0,
+      filteredCount: 0,
       durationMs: 0,
       error: null,
     },
@@ -378,4 +384,212 @@ it("defaults to 30 seconds, refuses unconfigured self-event exclusion, and expli
   if (!saved) throw new Error("Expected the saved check.");
   check = saved;
   expect(Date.parse(check.nextCheckAt) - due.getTime()).toBe(29999);
+});
+
+function completedTurns(service: AgentService): Extract<AgentEvent, { type: "turn-completed" }>[] {
+  const turns: Extract<AgentEvent, { type: "turn-completed" }>[] = [];
+  service.on("event", (event: AgentEvent) => {
+    if (event.type === "turn-completed") turns.push(event);
+  });
+  return turns;
+}
+
+it("lets an event check turn answer the no-update marker, and leaves it quiet", async () => {
+  const { service, client } = await boot(ROUTINE_NO_UPDATE_MARKER);
+  const turns = completedTurns(service);
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
+  const target = { agentId: "chief", id: check.id };
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  items.push({ id: "new", updatedAt: "1" });
+  expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("triggered");
+  await waitFor(() => turns.length > 0);
+  expect(turns[0]).toMatchObject({ status: "completed", quiet: true });
+  const prompt = client.requests
+    .filter((request) => request.method === "turn/start")
+    .map((request) => firstInputText(request.params));
+  expect(prompt[0]).toContain(`answer exactly ${ROUTINE_NO_UPDATE_MARKER}`);
+  const conversation = await runCauseEffect(service.readConversation("chief"));
+  expect(conversation.messages.some((message) => message.author === "assistant")).toBe(false);
+  // The marker row of the event stays, so the user can see that the check woke the agent.
+  expect(
+    conversation.messages.filter((message) => message.itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX)),
+  ).toHaveLength(1);
+});
+
+it("keeps an event check turn visible when the agent has something to say", async () => {
+  const { service } = await boot("Two tickets need a decision.");
+  const turns = completedTurns(service);
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
+  const target = { agentId: "chief", id: check.id };
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  items.push({ id: "new", updatedAt: "1" });
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  await waitFor(() => turns.length > 0);
+  expect(turns[0]?.quiet).toBeUndefined();
+  const conversation = await runCauseEffect(service.readConversation("chief"));
+  expect(
+    conversation.messages.filter((message) => message.author === "assistant").map((message) => message.text),
+  ).toEqual(["Two tickets need a decision."]);
+});
+
+it("doubles the wait for each error in a row up to a ceiling, and resets after a success", async () => {
+  expect(eventCheckBackoffMs(30_000, 0)).toBe(30_000);
+  expect(eventCheckBackoffMs(30_000, 1)).toBe(60_000);
+  expect(eventCheckBackoffMs(30_000, 3)).toBe(240_000);
+  // 16 intervals is 8 minutes, which is below the 15 minute ceiling.
+  expect(eventCheckBackoffMs(30_000, 9)).toBe(480_000);
+  expect(eventCheckBackoffMs(60_000, 9)).toBe(900_000);
+  // A long interval is never stretched.
+  expect(eventCheckBackoffMs(3_600_000, 5)).toBe(3_600_000);
+  const { service, checks } = await boot();
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
+  const target = { agentId: "chief", id: check.id };
+  const now = new Date();
+  checks.advance(check, now);
+  const normal = Date.parse(checks.get("chief", check.id).nextCheckAt) - now.getTime();
+  fail = true;
+  for (let index = 0; index < 3; index++) await runCauseEffect(service.eventChecks.checkNow(target));
+  expect(checks.consecutiveErrors(check.id)).toBe(3);
+  checks.advance(check, now);
+  expect(Date.parse(checks.get("chief", check.id).nextCheckAt) - now.getTime()).toBe(Math.min(normal * 8, 900_000));
+  fail = false;
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  expect(checks.consecutiveErrors(check.id)).toBe(0);
+  checks.advance(check, now);
+  expect(Date.parse(checks.get("chief", check.id).nextCheckAt) - now.getTime()).toBe(normal);
+});
+
+it("tells the user once at the fifth error in a row, with the check's health in the list", async () => {
+  const { service } = await boot();
+  const notices: Extract<AgentEvent, { type: "error" }>[] = [];
+  service.on("event", (event: AgentEvent) => {
+    if (event.type === "error" && event.code.startsWith("event_check_")) notices.push(event);
+  });
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
+  const target = { agentId: "chief", id: check.id };
+  fail = true;
+  for (let index = 0; index < 7; index++) await runCauseEffect(service.eventChecks.checkNow(target));
+  expect(notices).toHaveLength(1);
+  expect(notices[0]).toMatchObject({ agentId: "chief", code: "event_check_failing" });
+  expect(notices[0]?.message).toContain("Linear tickets");
+  expect(notices[0]?.message).not.toContain("credential");
+  const [listed] = await runCauseEffect(service.eventChecks.list({ agentId: "chief" }));
+  expect(listed?.health?.consecutiveErrors).toBe(7);
+  expect(listed?.health?.lastError).not.toContain("credential");
+  // A success ends the streak, and the next streak tells again.
+  fail = false;
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  fail = true;
+  for (let index = 0; index < 5; index++) await runCauseEffect(service.eventChecks.checkNow(target));
+  expect(notices).toHaveLength(2);
+});
+
+it("keeps changed items that the item filters skip out of later events, because they stay in the baseline", async () => {
+  const { service, client } = await boot();
+  const check = await runCauseEffect(
+    service.eventChecks.save(
+      {
+        ...input(),
+        delivery: { digestSeconds: 0, itemFilters: [{ pointer: "/kind", value: "bug" }] },
+      },
+      TEST_USER,
+    ),
+  );
+  const target = { agentId: "chief", id: check.id };
+  items = [{ id: "existing", updatedAt: "1", kind: "bug" }];
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  items = [...items, { id: "feature", updatedAt: "1", kind: "feature" }];
+  expect(await runCauseEffect(service.eventChecks.checkNow(target))).toMatchObject({
+    status: "unchanged",
+    eventCount: 0,
+    filteredCount: 1,
+  });
+  // The skipped item is known now. Seeing it again does not make it look new.
+  expect(await runCauseEffect(service.eventChecks.checkNow(target))).toMatchObject({
+    status: "unchanged",
+    filteredCount: 0,
+  });
+  items = [...items, { id: "bug-2", updatedAt: "1", kind: "bug" }];
+  expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("triggered");
+  await waitForQueue(service, "chief", (queue) => queue.deliveries[0]?.status === "completed");
+  expect(client.requests.filter((request) => request.method === "turn/start")).toHaveLength(1);
+});
+
+it("keeps a saved delivery setting when a client that does not know it saves the check again", async () => {
+  const { service, checks } = await boot();
+  const delivery = { digestSeconds: 600, itemFilters: [] };
+  const check = await runCauseEffect(service.eventChecks.save({ ...input(), delivery }, TEST_USER));
+  const { delivery: _unknown, ...withoutDelivery } = decodeEventCheckInput({ ...input(), id: check.id });
+  const saved = await runCauseEffect(service.eventChecks.save(withoutDelivery, TEST_USER));
+  expect(saved.delivery).toEqual(delivery);
+  expect(checks.get("chief", check.id).delivery).toEqual(delivery);
+  const cleared = await runCauseEffect(
+    service.eventChecks.save({ ...withoutDelivery, delivery: { digestSeconds: 0, itemFilters: [] } }, TEST_USER),
+  );
+  expect(cleared.delivery).toEqual({ digestSeconds: 0, itemFilters: [] });
+});
+
+it("holds events for the digest window, then hands them over as one prompt with each item once", async () => {
+  const { service, checks, client } = await boot();
+  const check = await runCauseEffect(
+    service.eventChecks.save({ ...input(), delivery: { digestSeconds: 3600, itemFilters: [] } }, TEST_USER),
+  );
+  const target = { agentId: "chief", id: check.id };
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  items = [...items, { id: "a", updatedAt: "1" }];
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  items = [
+    { id: "existing", updatedAt: "1" },
+    { id: "a", updatedAt: "2" },
+    { id: "b", updatedAt: "1" },
+  ];
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  expect(checks.pending()).toHaveLength(2);
+  expect(service.listQueue("chief").deliveries).toHaveLength(0);
+  // The window passes.
+  checks.database.connection
+    .prepare("UPDATE projection_event_check_outbox SET created_at = ?")
+    .run("2020-01-01T00:00:00.000Z");
+  await runCauseEffect(service.eventChecks.resumePending());
+  await waitForQueue(service, "chief", (queue) => queue.deliveries[0]?.status === "completed");
+  expect(checks.pending()).toEqual([]);
+  const prompts = client.requests
+    .filter((request) => request.method === "turn/start")
+    .map((request) => firstInputText(request.params));
+  expect(prompts).toHaveLength(1);
+  expect(prompts[0]?.match(/"id":"a"/g)).toHaveLength(1);
+  expect(prompts[0]).toContain('"updatedAt":"2"');
+  expect(prompts[0]).toContain('"id":"b"');
+});
+
+it("holds events over the hourly cap and delivers them later as one digest, never dropping them", async () => {
+  const { service, checks, client } = await boot();
+  service.eventChecks.options.deliveryCap = 1;
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
+  const target = { agentId: "chief", id: check.id };
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  items = [...items, { id: "one", updatedAt: "1" }];
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  await waitForQueue(service, "chief", (queue) => queue.deliveries[0]?.status === "completed");
+  items = [...items, { id: "two", updatedAt: "1" }];
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  items = [...items, { id: "three", updatedAt: "1" }];
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  expect(checks.pending()).toHaveLength(2);
+  expect(client.requests.filter((request) => request.method === "turn/start")).toHaveLength(1);
+  // An hour slot frees up.
+  service.eventChecks.options.deliveryCap = 2;
+  await runCauseEffect(service.eventChecks.resumePending());
+  await waitForQueue(
+    service,
+    "chief",
+    (queue) => queue.deliveries.filter((delivery) => delivery.status === "completed").length === 2,
+  );
+  expect(checks.pending()).toEqual([]);
+  const prompts = client.requests
+    .filter((request) => request.method === "turn/start")
+    .map((request) => firstInputText(request.params));
+  expect(prompts).toHaveLength(2);
+  expect(prompts[1]).toContain('"id":"two"');
+  expect(prompts[1]).toContain('"id":"three"');
 });

@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
+  SwitchField,
   Textarea,
 } from "@openbot/ui";
 import { createEffect, createStore, For, Show, snapshot } from "solid-js";
@@ -101,6 +102,7 @@ function Choice(props: {
 }) {
   return (
     <Select<string>
+      placeholder={props.label}
       options={props.options.map((item) => item.id)}
       value={props.value || undefined}
       onChange={(value) => {
@@ -449,16 +451,16 @@ export function EventChecksSettings(props: Props) {
                 }
               />
             </label>
-            <Switch
+            <SwitchField
               checked={current().value.selfEvents.mode === "exclude"}
-              aria-label={t("agentSettings.eventCheck.skipSelf")}
+              label={t("agentSettings.eventCheck.skipSelf")}
+              description={t("agentSettings.eventCheck.selfHelp")}
               onChange={(exclude) =>
                 setState((s) => {
                   if (s.current) s.current.value.selfEvents.mode = exclude ? "exclude" : "include";
                 })
               }
             />
-            <p>{t("agentSettings.eventCheck.selfHelp")}</p>
             <Show when={current().value.selfEvents.mode === "exclude"}>
               <label>
                 {t("agentSettings.eventCheck.actor")}
@@ -538,9 +540,9 @@ export function EventChecksSettings(props: Props) {
               </label>
             </details>
             <div class="event-check-actions">
-              <Switch
+              <SwitchField
                 checked={current().value.active}
-                aria-label={t("agentSettings.eventCheck.active")}
+                label={t("agentSettings.eventCheck.active")}
                 onChange={(active) =>
                   setState((s) => {
                     if (s.current) s.current.value.active = active;

@@ -37,7 +37,9 @@
       "!!Shared",
       "!!.worktrees",
       "!!.agents",
-      "!src/renderer/src/vendor"
+      "!src/renderer/src/vendor",
+      "!marketplace/watcher-catalog/watchers/linear-assigned-intake/program.mjs",
+      "!resources/watcher-catalog"
     ]
   },
   "formatter": {

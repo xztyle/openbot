@@ -30,6 +30,7 @@
     "./live-activity-seal": "./src/live-activity-seal.ts",
     "./usage-series": "./src/usage-series.ts",
     "./event-checks-api": "./src/event-checks-api.ts",
+    "./event-check-templates-api": "./src/event-check-templates-api.ts",
     "./event-check-schedule": "./src/event-check-schedule.ts"
   },
   "scripts": {

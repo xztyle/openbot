@@ -9,6 +9,7 @@ import { AGENT_PUBLISH_CODECS } from "./agent-publish-v1";
 import { AGENT_UPDATE_CODECS } from "./agent-update-v1";
 import { CONTEXT_RESET_CODECS } from "./context-reset-v1";
 import { EVENT_CHECK_API_CODECS } from "./event-check-api-v1";
+import { EVENT_CHECK_TEMPLATES_CODECS } from "./event-check-templates-v1";
 import { EVENT_CHECKS_CODECS } from "./event-checks-v1";
 import { EVENTS_CODECS } from "./events-v1";
 import { HOST_ADMIN_CODECS } from "./host-admin-v1";
@@ -32,6 +33,7 @@ export type { OptionalRouteCodec } from "./admin-wire";
 const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...EVENT_CHECKS_CODECS,
   ...EVENT_CHECK_API_CODECS,
+  ...EVENT_CHECK_TEMPLATES_CODECS,
   ...MCP_CHAT_CODECS,
   ...MCP_OAUTH_CODECS,
   ...AGENT_ADMIN_CODECS,

@@ -18,6 +18,14 @@ Existing MCP checks remain supported. Replace one only when the user asks.
 - Skip events made by the connected account unless the user explicitly permits them, such as a test.
 - Preserve the user's event scope, response instruction and notification preferences.
 
+## Templates first
+
+Marketplace → **Event checks** lists reviewed templates (Linear assigned issues, for example). When one
+fits the user's request, tell them to install it there: the install creates a paused, linked check per
+agent and account, and the user adds private variables in masked fields. Write a new program only when
+no template fits. A check from a template shows its template and version; the user updates it from
+Marketplace, which gives it a fresh baseline.
+
 ## Reuse programs, keep accounts separate
 
 Programs live in `OpenBot/Shared/Watchers`, not in one agent's workspace. Before writing a new

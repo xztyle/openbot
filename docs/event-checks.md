@@ -61,3 +61,55 @@ configuration cannot be activated with exclusion enabled. It can be saved paused
 For an explicitly requested test, turn off **Skip my account’s changes**, establish the new quiet
 baseline, then make the test change. Restore exclusion afterward. A filter edit resets the baseline
 and cancels pending events from the previous filter. App rate limits still apply to 30-second reads.
+
+## Templates
+
+Marketplace has an **Event checks** tab. A template is a program that was reviewed in this
+repository (`marketplace/watcher-catalog/`) and ships with the host in `resources/watcher-catalog/`.
+It holds the program, the settings the program reads, the names of its private variables, the result
+paths and a default instruction and interval. It holds no secret and no account data.
+
+**Install** a template for one or more agents. Enter an account label, the settings, the schedule and
+the connected account's verified user IDs. The host copies the program to
+`OpenBot/Shared/Watchers/<name>@<version>.<ext>` and creates a **paused** check for each agent. Then
+add the private variables in masked fields and test the check. Nothing is enabled for you. A client
+names a template by slug and never sends program text. The host refuses a program in the shared folder
+that does not match the reviewed digest, and it never overwrites one.
+
+Install the same template again for another account or agent. Each install is its own check, with its
+own account label, settings, private variables, schedule, baseline and ten-entry history.
+
+A check from a template keeps a link (`source.template`: slug and version) in its saved definition.
+The link is not part of what the check reads, so adding or removing it keeps the baseline.
+
+- **Update** moves a check to the template's current version. The new program gets a new file. Your
+  settings, schedule, instruction and name stay; new settings take their defaults; removed settings
+  go. The check gets a fresh baseline, the same as for any program change. The old file stays.
+- **Link** connects a check that you made before the catalog existed to its template. It works only
+  when the check's program is byte for byte the template's program. The baseline stays.
+
+Hosts that support this advertise `event-check-templates-v1`. Older clients do not show the tab and
+ignore the link. Installing needs an owner or admin, as for every event check route.
+
+### Templates that ship
+
+| Template | Reads | Credential (private variable) |
+| --- | --- | --- |
+| `linear-assigned-intake` | Issues assigned to you and projects you lead, in one Linear team | `LINEAR_API_TOKEN` |
+| `github-activity` | GitHub notifications, and pull requests, issues, commits, failed runs, releases and alerts of chosen repos | `GITHUB_TOKEN` |
+| `git-remote-refs` | New and moved branches and tags on any git server over HTTPS | `GIT_ACCESS_TOKEN` |
+| `slack-activity` | Mentions, keywords, direct messages and chosen channels | `SLACK_USER_TOKEN` |
+| `discord-activity` | Messages in chosen channels, with an optional mentions-only filter, through a bot | `DISCORD_BOT_TOKEN` |
+| `gmail-inbox` | New mail in a Gmail mailbox, through IMAP and an app password | `GMAIL_APP_PASSWORD` |
+| `protonmail-inbox` | New mail through Proton Mail Bridge on the same machine | `PROTONMAIL_BRIDGE_PASSWORD` |
+| `render-services` | Service and deploy status, and databases, on Render | `RENDER_API_KEY` |
+| `posthog-health` | Big shifts in event volume, pageviews, users and exceptions | `POSTHOG_PERSONAL_API_KEY` |
+
+Every template uses read-only requests. Each one was tested against recorded or simulated
+responses only, so test a new install with **Check now** before you enable it.
+
+### Add a template
+
+See `marketplace/watcher-catalog/README.md`. Run `bun run marketplace:build:watchers`. The build
+installs each template into a scratch folder and decodes the saved check, so a template that the host
+would refuse fails the build. `-- --check` fails when the generated files are stale.

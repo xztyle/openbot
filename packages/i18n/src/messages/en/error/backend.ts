@@ -14,6 +14,12 @@ export const messages = defineMessages("error.backend", {
   "error.backend.eventCheckFailed":
     "The app check failed. Check the selected account, read tool, result paths, pagination, change authors, and access. No baseline was changed.",
   "error.backend.eventCheckUnsupported": "This host does not support event checks.",
+  "error.backend.eventCheckTemplateUnknown": "This host does not have that event check template.",
+  "error.backend.eventCheckTemplateField": "Fill in the required setting “{name}” before you install this event check.",
+  "error.backend.eventCheckTemplateProgram":
+    "The program for this template does not match the reviewed version. Nothing was installed.",
+  "error.backend.eventCheckTemplateCurrent": "This event check already uses the latest version of its template.",
+  "error.backend.eventCheckTemplateNotLinked": "This event check did not come from a template.",
   "error.backend.eventsUnavailable": "Events are not available on this host.",
   "error.backend.webhookRouteLimit": "A host can have at most {limit} webhook routines.",
   "error.backend.webhookSettingsInvalid": "Check the webhook settings and try again.",

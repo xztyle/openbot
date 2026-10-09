@@ -1,3 +1,4 @@
+import type { EventCheckTemplate, EventCheckTemplateInstallInput } from "./event-check-templates";
 import type {
   EventCheck,
   EventCheckAccount,
@@ -1030,6 +1031,12 @@ export const IPC_ENDPOINTS = {
     accounts: scopedRequest<{ agentId: string }, EventCheckAccount[]>()("event-checks:accounts"),
     tools: scopedRequest<{ agentId: string; connectionId: string }, EventCheckTool[]>()("event-checks:tools"),
   },
+  eventCheckTemplates: {
+    list: scopedQuery<EventCheckTemplate[]>()("event-check-templates:list"),
+    install: scopedRequest<EventCheckTemplateInstallInput, EventCheck>()("event-check-templates:install"),
+    update: scopedRequest<{ agentId: string; id: string }, EventCheck>()("event-check-templates:update"),
+    adopt: scopedRequest<{ agentId: string; id: string; slug: string }, EventCheck>()("event-check-templates:adopt"),
+  },
   mcpServers: {
     // Every MCP method names its server, because the settings modal can be open for a server the user
     // has not switched to. Each mutation answers with the whole list, so the panel never merges.
@@ -1180,6 +1187,7 @@ export const IPC_GROUP_PATHS = {
   host: "host",
   events: "events",
   eventChecks: "eventChecks",
+  eventCheckTemplates: "eventCheckTemplates",
   remoteDesktop: "remoteDesktop",
 } as const satisfies { readonly [Group in keyof IpcEndpoints]: string | null };
 

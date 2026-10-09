@@ -1,3 +1,4 @@
+import { decodeEventCheckTemplateList } from "@openbot/contracts/event-check-templates";
 import {
   decodeEventCheck,
   decodeEventCheckAccount,
@@ -899,6 +900,12 @@ const openbotApi: OpenBotDesktopApi = {
     history: (v) => decodeEventCheckList(v, decodeEventCheckExecution, 10),
     accounts: (v) => decodeEventCheckList(v, decodeEventCheckAccount),
     tools: (v) => decodeEventCheckList(v, decodeEventCheckTool, 500),
+  }),
+  eventCheckTemplates: bridgeGroup(IPC_ENDPOINTS.eventCheckTemplates, {
+    list: decodeEventCheckTemplateList,
+    install: decodeEventCheck,
+    update: decodeEventCheck,
+    adopt: decodeEventCheck,
   }),
   events: bridgeGroup(IPC_ENDPOINTS.events, {
     getStatus: decodeEventStatus,

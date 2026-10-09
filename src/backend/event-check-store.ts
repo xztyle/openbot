@@ -77,11 +77,13 @@ export class EventCheckStore {
       createdAt: previous?.createdAt ?? now.toISOString(),
       updatedAt: now.toISOString(),
     };
-    const reset =
-      forceReset ||
-      !previous ||
-      JSON.stringify([previous.source, previous.selection, previous.selfEvents]) !==
-        JSON.stringify([input.source, input.selection, input.selfEvents]);
+    // A template link says where a check came from. It does not change what the check reads.
+    const reads = (check: EventCheckInput) => [
+      check.source.kind === "api" ? { ...check.source, template: undefined } : check.source,
+      check.selection,
+      check.selfEvents,
+    ];
+    const reset = forceReset || !previous || JSON.stringify(reads(previous)) !== JSON.stringify(reads(input));
     return withDatabaseTransaction(this.database, () => {
       const db = this.database.connection;
       db.prepare(`INSERT INTO projection_event_checks (check_id, agent_id, definition_json, active, next_check_at, revision)

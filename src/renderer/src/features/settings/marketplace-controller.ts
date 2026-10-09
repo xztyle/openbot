@@ -74,6 +74,11 @@ export interface MarketplaceControllerProps {
   bitwardenConnector?: BitwardenConnectorPanelProps | undefined;
   /** What the Marketplace calls. Absent: this computer's bridge. */
   calls?: MarketplaceCalls | undefined;
+  /**
+   * The host whose event check templates the Marketplace offers: `serverId` is the joined server, or
+   * absent for this computer. Absent here: the host has no templates, and the tab is not shown.
+   */
+  eventChecksHost?: { serverId: string | undefined } | undefined;
 }
 
 /** The connect step of one app. `settle(null)` is a closed dialog. */
@@ -714,6 +719,12 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   );
   onCleanup(() => untrack(connecting)?.settle(null));
 
+  /* One object for as long as the host stays, because a page keys what it reads on it. */
+  const eventChecks = createMemo(() => {
+    const host = props.eventChecksHost;
+    return host ? calls().eventChecks?.(host.serverId) : undefined;
+  });
+
   const model: MarketplaceModel = {
     listAgents: async (query) => {
       const page = await calls().agents.list(query);
@@ -786,6 +797,10 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     get onePassword() {
       const panel = onePasswordPanel();
       return panel ? () => panel : undefined;
+    },
+
+    get eventChecks() {
+      return eventChecks();
     },
 
     error,

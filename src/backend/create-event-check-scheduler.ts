@@ -5,7 +5,7 @@ import type { OpenBotDatabase } from "./openbot-database";
 
 export function createEventCheckScheduler(
   database: OpenBotDatabase,
-  readers: Pick<AgentServiceOptions, "eventCheckReader" | "eventCheckApiReader">,
+  readers: Pick<AgentServiceOptions, "eventCheckReader" | "eventCheckApiReader" | "eventCheckTemplates">,
   options: Omit<EventCheckSchedulerOptions, "store" | "reader" | "apiReader">,
 ) {
   return new EventCheckScheduler({
@@ -13,5 +13,6 @@ export function createEventCheckScheduler(
     store: new EventCheckStore(database),
     reader: readers.eventCheckReader,
     apiReader: readers.eventCheckApiReader,
+    templates: readers.eventCheckTemplates,
   });
 }

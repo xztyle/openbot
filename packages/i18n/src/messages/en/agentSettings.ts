@@ -75,6 +75,7 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.error": "Error",
   "agentSettings.eventCheck.cancelled": "Cancelled",
   "agentSettings.eventCheck.result": "{items} items · {events} events · {ms} ms",
+  "agentSettings.eventCheck.fromTemplate": "From template {name} v{version}",
   "agentSettings.links.eventChecks": "Event checks",
   "agentSettings.links.eventChecksCount": { one: "{count} check", other: "{count} checks" },
   "agentSettings.label": "Agent settings",

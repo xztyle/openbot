@@ -1,5 +1,8 @@
+import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { MCP_OAUTH_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-oauth-v1";
 import { runTeamEffect } from "@openbot/team-client";
+import { eventCheckTemplatesApi } from "@openbot/team-client/event-check-templates-api";
+import { eventChecksApi } from "@openbot/team-client/event-checks-api";
 import { createMarketplaceCatalog } from "@openbot/team-client/marketplace-catalog";
 import {
   installAgentSkill,
@@ -79,6 +82,16 @@ export function createWebMarketplaceCalls(
       const protocol = URL.parse(url)?.protocol;
       if (protocol !== "https:" && protocol !== "http:") throw new Error("This link cannot be opened.");
       window.open(url, "_blank", "noopener");
+    },
+    // The browser talks to one host, which the caller shows the tab for only when it serves the
+    // templates and the check routes. The host answers only an owner or admin.
+    eventChecks: (serverId) => {
+      // The host is read at call time, so a host switch reaches the new host.
+      const call: TeamApiRequest = (...args) => request(serverId)(...args);
+      return {
+        templates: eventCheckTemplatesApi(call),
+        checks: eventChecksApi(call, () => capabilities().includes(EVENT_CHECK_API_CAPABILITY)),
+      };
     },
   };
 }

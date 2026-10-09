@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "v1",
+  "order": [
+    "linear-assigned-intake",
+    "github-activity",
+    "slack-activity",
+    "gmail-inbox",
+    "protonmail-inbox",
+    "render-services",
+    "posthog-health",
+    "discord-activity",
+    "git-remote-refs"
+  ]
+}

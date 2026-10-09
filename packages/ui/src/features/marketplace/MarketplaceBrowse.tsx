@@ -4,6 +4,7 @@ import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, For, Show } from "solid-js";
 import { AgentGrid, AppCard, SkillGrid } from "./MarketplaceCards";
+import { EventCheckGrid, EventCheckPanel, matchesTemplate } from "./MarketplaceEventChecks";
 import { type FilterGroup, MarketplaceFilter } from "./MarketplaceFilter";
 import { skillAgents } from "./MarketplaceInstallSkill";
 import { Block } from "./MarketplaceParts";
@@ -17,30 +18,34 @@ import {
   type OwnedFilter,
 } from "./marketplace-view";
 
-const TABS: readonly MarketplaceTab[] = ["agents", "apps", "skills"];
+const TABS: readonly MarketplaceTab[] = ["agents", "apps", "skills", "eventChecks"];
 
 const TAB_LABEL = {
   agents: "marketplace.tab.agents",
   apps: "marketplace.tab.apps",
   skills: "marketplace.tab.skills",
+  eventChecks: "marketplace.tab.eventChecks",
 } as const;
 
 const NO_MATCH = {
   agents: "marketplace.noMatch.agents",
   apps: "marketplace.noMatch.apps",
   skills: "marketplace.noMatch.skills",
+  eventChecks: "marketplace.noMatch.eventChecks",
 } as const;
 
 const EMPTY = {
   agents: "marketplace.empty.agents",
   apps: "marketplace.empty.apps",
   skills: "marketplace.empty.skills",
+  eventChecks: "marketplace.empty.eventChecks",
 } as const;
 
 const SHOW_TAB = {
   agents: "marketplace.noMatch.showAgents",
   apps: "marketplace.noMatch.showApps",
   skills: "marketplace.noMatch.showSkills",
+  eventChecks: "marketplace.noMatch.showEventChecks",
 } as const;
 
 function ownedOf(value: string | null): OwnedFilter | null {
@@ -186,10 +191,23 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
     model()
       .apps()
       .filter((app) => matchesApp(app, state().query));
+  const eventChecks = () =>
+    model().eventChecks
+      ? props.scope.eventChecks
+          .templates()
+          .filter((template) => matchesTemplate(template, state().query))
+          .filter((template) =>
+            owns(state().eventChecksOwned, props.scope.eventChecks.instances(template.slug).length > 0),
+          )
+      : [];
+  /** The Event checks tab exists only on a host that has the templates. */
+  const tabs = () => (model().eventChecks ? TABS : TABS.filter((tab) => tab !== "eventChecks"));
+  const activeTab = (): MarketplaceTab => (tabs().includes(state().tab) ? state().tab : "agents");
   const counts = (): Record<MarketplaceTab, number> => ({
     agents: agents().length,
     apps: apps().length,
     skills: skills().length,
+    eventChecks: eventChecks().length,
   });
   /** A listing that pages shows "50+" while the server holds more rows than the loaded ones. */
   const countLabel = (tab: MarketplaceTab) => {
@@ -203,6 +221,19 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
     () => state().tab,
     (tab) => {
       if (tab === "skills") model().readSkills();
+    },
+  );
+  /* The templates load with the window, so the count of a search is right. The Installed filter needs each agent's checks. */
+  createEffect(
+    () => model().eventChecks,
+    (source) => {
+      if (source) props.scope.eventChecks.load();
+    },
+  );
+  createEffect(
+    () => activeTab(),
+    (current) => {
+      if (current === "eventChecks") props.scope.eventChecks.readChecks();
     },
   );
 
@@ -263,11 +294,31 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
         }),
     },
   ];
+  const eventCheckGroups = (): FilterGroup[] =>
+    model().agents().length > 0
+      ? [
+          {
+            legend: t("marketplace.filter.status"),
+            options: [
+              { value: "yes", label: t("marketplace.filter.installed") },
+              { value: "no", label: t("marketplace.filter.notInstalled") },
+            ],
+            value: state().eventChecksOwned,
+            set: (value) =>
+              nav().set((draft) => {
+                draft.eventChecksOwned = ownedOf(value);
+              }),
+          },
+        ]
+      : [];
+  const eventChecksFiltered = () => state().eventChecksOwned !== null;
   const agentsFiltered = () => state().agentCategory !== null || state().agentsOwned !== null;
   const skillsFiltered = () => state().skillCategory !== null || state().skillsOwned !== null;
   const clearFilters = (tab: MarketplaceTab) =>
     nav().set((draft) => {
-      if (tab === "agents") {
+      if (tab === "eventChecks") {
+        draft.eventChecksOwned = null;
+      } else if (tab === "agents") {
         draft.agentCategory = null;
         draft.agentsOwned = null;
       } else {
@@ -279,7 +330,7 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
   return (
     <div class="marketplace-view">
       <SlidingTabs.Root
-        value={state().tab}
+        value={activeTab()}
         onChange={(value: string) =>
           nav().set((draft) => {
             draft.tab = isMarketplaceTab(value) ? value : "agents";
@@ -288,7 +339,7 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
       >
         <div class="marketplace-toolbar">
           <SlidingTabs.List aria-label={t("marketplace.kinds")}>
-            <For each={TABS}>
+            <For each={tabs()}>
               {(tab) => (
                 <SlidingTabs.Trigger value={tab}>
                   {t(TAB_LABEL[tab])}
@@ -319,6 +370,9 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
           </Show>
           <Show when={state().tab === "skills"}>
             <MarketplaceFilter groups={skillGroups()} />
+          </Show>
+          <Show when={activeTab() === "eventChecks" && eventCheckGroups().length > 0}>
+            <MarketplaceFilter groups={eventCheckGroups()} />
           </Show>
         </div>
         <SlidingTabs.ContentSlot class="marketplace-tab-slot">
@@ -395,6 +449,25 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
               <SkillGrid scope={props.scope} items={skills()} />
             </ListingPanel>
           </SlidingTabs.Content>
+          <Show when={model().eventChecks}>
+            <SlidingTabs.Content value="eventChecks">
+              <EventCheckPanel
+                scope={props.scope}
+                count={eventChecks().length}
+                empty={
+                  <NoMatch
+                    scope={props.scope}
+                    tab="eventChecks"
+                    counts={counts()}
+                    filtered={eventChecksFiltered()}
+                    onClearFilters={() => clearFilters("eventChecks")}
+                  />
+                }
+              >
+                <EventCheckGrid scope={props.scope} items={eventChecks()} />
+              </EventCheckPanel>
+            </SlidingTabs.Content>
+          </Show>
         </SlidingTabs.ContentSlot>
       </SlidingTabs.Root>
     </div>

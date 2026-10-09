@@ -162,6 +162,7 @@ import type { EventCheckApiReader } from "./event-check-api-reader";
 import { EventCheckDelivery } from "./event-check-delivery";
 import type { EventCheckReader } from "./event-check-reader";
 import type { EventCheckScheduler } from "./event-check-scheduler";
+import type { EventCheckTemplates } from "./event-check-templates";
 import type { HostMemory } from "./host-memory";
 import type { MailboxStore } from "./mailbox-store";
 import { toMcpOperationError } from "./mcp-effects";
@@ -208,6 +209,7 @@ interface AgentServiceEvents {
 export interface AgentServiceOptions {
   eventCheckReader?: EventCheckReader;
   eventCheckApiReader?: EventCheckApiReader;
+  eventCheckTemplates?: EventCheckTemplates;
   store: AgentStore;
   mailbox: MailboxStore;
   browser: AgentBrowserHost;

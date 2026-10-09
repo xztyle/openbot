@@ -106,6 +106,7 @@ import { createMockBilling, previewBillingServers } from "./mock-billing";
 import { createMockBitwardenConnector } from "./mock-bitwarden-connector";
 import { createMockBrowser, type MockBrowserOptions } from "./mock-browser";
 import { createMockChannels } from "./mock-channels";
+import { createMockEventCheckTemplates } from "./mock-event-check-templates";
 import { createMockEventChecks } from "./mock-event-checks";
 import { createMockEvents } from "./mock-events";
 import { createMockGitHubConnector } from "./mock-github-connector";
@@ -455,6 +456,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   const mockBrowser = createMockBrowser(options, runtime, emitAgentEvent);
   const mockTeam = createMockTeam(options, runtime, emitAgentEvent, () => agents);
   const mockEvents = createMockEvents();
+  const mockEventChecks = createMockEventChecks();
   const billingPlans = previewBillingServers();
 
   const api: OpenBotDesktopApi = {
@@ -1746,7 +1748,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     },
     host: mockTeam.host,
     events: mockEvents,
-    eventChecks: createMockEventChecks(),
+    eventChecks: mockEventChecks,
+    eventCheckTemplates: createMockEventCheckTemplates(mockEventChecks),
     // Preview has one host, so every server's name and logo are this computer's.
     hostAdmin: {
       updateIdentity: async (input, serverId) => {

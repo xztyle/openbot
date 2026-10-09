@@ -1,4 +1,9 @@
 import {
+  decodeEventCheckTemplateAdoptInput,
+  decodeEventCheckTemplateInstallInput,
+  decodeEventCheckTemplateList,
+} from "@openbot/contracts/event-check-templates";
+import {
   decodeEventCheck,
   decodeEventCheckAccount,
   decodeEventCheckEnvironmentInput,
@@ -14,13 +19,17 @@ import {
   EVENT_CHECK_API_CAPABILITY,
   EVENT_CHECK_API_ROUTES,
 } from "@openbot/contracts/team-protocol/event-check-api-v1";
+import {
+  EVENT_CHECK_TEMPLATES_CAPABILITY,
+  EVENT_CHECK_TEMPLATES_ROUTES,
+} from "@openbot/contracts/team-protocol/event-check-templates-v1";
 import { EVENT_CHECKS_CAPABILITY, EVENT_CHECKS_ROUTES } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
 import type { RemoteServerManager } from "../remote-server-manager";
 import type { IpcGroupHandlers } from "./define-ipc-group";
-import { scopedHandler } from "./scoped-handler";
+import { scopedHandler, scopedQueryHandler } from "./scoped-handler";
 export function parseCheckAgent(value: unknown): { agentId: string } {
   if (!isDynamicRecord(value) || typeof value.agentId !== "string" || !value.agentId || value.agentId.length > 128)
     throw new Error(sourceText("error.backend.eventCheckFailed"));
@@ -40,7 +49,7 @@ function parseCheckTools(value: unknown): { agentId: string; connectionId: strin
 export function eventCheckIpcHandlers(
   checks: EventCheckScheduler,
   remote: Pick<RemoteServerManager, "request" | "supportsCapability">,
-): Pick<IpcGroupHandlers, "eventChecks"> {
+): Pick<IpcGroupHandlers, "eventChecks" | "eventCheckTemplates"> {
   const request = <A>(id: string, path: string, body: unknown, decode: (value: unknown) => A) => {
     if (!remote.supportsCapability(id, EVENT_CHECKS_CAPABILITY))
       throw new Error(sourceText("error.backend.eventCheckUnsupported"));
@@ -50,7 +59,30 @@ export function eventCheckIpcHandlers(
     const mapped = api ? path.replace("/v1/event-checks/", "/v1/event-check-api/") : path;
     return runCauseEffect(remote.request(id, mapped, decode, { method: "POST", body, timeoutMs: 60_000 }));
   };
+  const templates = <A>(id: string, path: string, body: unknown, decode: (value: unknown) => A) => {
+    if (!remote.supportsCapability(id, EVENT_CHECK_TEMPLATES_CAPABILITY))
+      throw new Error(sourceText("error.backend.eventCheckUnsupported"));
+    return runCauseEffect(remote.request(id, path, decode, { method: "POST", body, timeoutMs: 60_000 }));
+  };
   return {
+    eventCheckTemplates: {
+      list: scopedQueryHandler({
+        local: () => runCauseEffect(checks.templateList()),
+        remote: (id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.list, {}, decodeEventCheckTemplateList),
+      }),
+      install: scopedHandler(decodeEventCheckTemplateInstallInput, {
+        local: (v) => runCauseEffect(checks.templateInstall(v)),
+        remote: (v, id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.install, v, decodeEventCheck),
+      }),
+      update: scopedHandler(decodeEventCheckTarget, {
+        local: (v) => runCauseEffect(checks.templateUpdate(v)),
+        remote: (v, id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.update, v, decodeEventCheck),
+      }),
+      adopt: scopedHandler(decodeEventCheckTemplateAdoptInput, {
+        local: (v) => runCauseEffect(checks.templateAdopt(v)),
+        remote: (v, id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.adopt, v, decodeEventCheck),
+      }),
+    },
     eventChecks: {
       environment: scopedHandler(decodeEventCheckTarget, {
         local: (v) => runCauseEffect(checks.environment(v)),

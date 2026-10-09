@@ -1,6 +1,6 @@
 import type { EventCheck, EventCheckApi, EventCheckEnvironmentStatus } from "@openbot/contracts/event-checks";
 import { Button, Input, Text } from "@openbot/ui";
-import { createEffect, createStore, For, onCleanup, Show } from "solid-js";
+import { createEffect, createStore, createUniqueId, For, onCleanup, Show } from "solid-js";
 import { useText } from "../../text";
 
 interface EnvironmentState {
@@ -17,6 +17,8 @@ export function EventCheckEnvironmentSettings(props: {
   changed(): Promise<void>;
 }) {
   const { t, errorMessage } = useText();
+  // Several checks can show this section at once, so the heading id is its own.
+  const headingId = `event-check-environment-${createUniqueId()}`;
   const [state, setState] = createStore<EnvironmentState>({
     variables: [],
     values: {},
@@ -89,8 +91,8 @@ export function EventCheckEnvironmentSettings(props: {
     }
   }
   return (
-    <section class="event-check-section event-check-card" aria-labelledby="event-check-environment-heading">
-      <h4 id="event-check-environment-heading">{t("agentSettings.eventCheck.environment")}</h4>
+    <section class="event-check-section event-check-card" aria-labelledby={headingId}>
+      <h4 id={headingId}>{t("agentSettings.eventCheck.environment")}</h4>
       <Text as="p" variant="caption" tone="muted" class="event-check-help">
         {t("agentSettings.eventCheck.environmentHelp")}
       </Text>

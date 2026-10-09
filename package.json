@@ -209,6 +209,7 @@
     "marketplace:seed:local": "bun scripts/publish-production-catalog.ts --local --apply",
     "marketplace:build": "bun scripts/build-production-catalog.ts",
     "marketplace:build:plugins": "bun scripts/build-plugin-catalog.ts",
+    "marketplace:build:watchers": "bun scripts/build-watcher-catalog.ts",
     "marketplace:publish:production": "bun scripts/publish-production-catalog.ts",
     "agents:review": "bun scripts/review-agents.ts",
     "agents:seed": "bun scripts/seed-marketplace-agents.ts",

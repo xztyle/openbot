@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { EventCheckTemplate, EventCheckTemplateInstallInput } from "@openbot/contracts/event-check-templates";
 import type {
   EventCheck,
   EventCheckEnvironmentInput,
@@ -26,6 +27,7 @@ import {
   observeCheck,
 } from "./event-check-result";
 import type { CheckOutbox, EventCheckStore } from "./event-check-store";
+import type { EventCheckTemplates } from "./event-check-templates";
 import { mcpFailure, mcpSync } from "./mcp-effects";
 import type { RoutineDueSource, RoutineTimer } from "./routine-timer";
 
@@ -33,6 +35,7 @@ export interface EventCheckSchedulerOptions {
   store: EventCheckStore;
   reader?: EventCheckReader;
   apiReader?: EventCheckApiReader;
+  templates?: EventCheckTemplates;
   scope(): Scope.Scope;
   timer: RoutineTimer;
   agentExists(id: string): boolean;
@@ -70,6 +73,44 @@ export class EventCheckScheduler implements RoutineDueSource {
   get apiSupported(): boolean {
     return this.options.apiReader !== undefined;
   }
+  get templatesSupported(): boolean {
+    return this.options.templates !== undefined && this.apiSupported;
+  }
+  templateList = () => mcpSync((): EventCheckTemplate[] => [...this.#templates().list()]);
+  readonly templateInstall = Effect.fn("EventCheck.templateInstall")(function* (
+    this: EventCheckScheduler,
+    input: EventCheckTemplateInstallInput,
+  ) {
+    const prepared = yield* mcpSync(() => {
+      this.#agent(input.agentId);
+      const templates = this.#templates();
+      return templates.install(templates.get(input.slug), input, new Date());
+    });
+    return yield* this.save(prepared);
+  });
+  readonly templateUpdate = Effect.fn("EventCheck.templateUpdate")(function* (
+    this: EventCheckScheduler,
+    input: { agentId: string; id: string },
+  ) {
+    const prepared = yield* mcpSync(() => {
+      const templates = this.#templates();
+      const check = this.options.store.get(input.agentId, input.id);
+      const link = check.source.kind === "api" ? check.source.template : undefined;
+      if (!link) throw new Error(sourceText("error.backend.eventCheckTemplateNotLinked"));
+      return templates.upgrade(templates.get(link.slug), check);
+    });
+    return yield* this.save(prepared);
+  });
+  readonly templateAdopt = Effect.fn("EventCheck.templateAdopt")(function* (
+    this: EventCheckScheduler,
+    input: { agentId: string; id: string; slug: string },
+  ) {
+    const prepared = yield* mcpSync(() => {
+      const templates = this.#templates();
+      return templates.link(templates.get(input.slug), this.options.store.get(input.agentId, input.id));
+    });
+    return yield* this.save(prepared);
+  });
   environment = (input: { agentId: string; id: string }) =>
     mcpSync(() => this.#apiReader().environment.status(this.options.store.get(input.agentId, input.id)));
   setEnvironment = (input: EventCheckEnvironmentInput) => this.#mutations.withPermit(this.#setEnvironment(input));
@@ -415,6 +456,11 @@ export class EventCheckScheduler implements RoutineDueSource {
     return check.source.kind === "api"
       ? this.#apiReader().read(check, use)
       : this.#reader().read(check.agentId, check.source.connectionId, use);
+  }
+  #templates(): EventCheckTemplates {
+    if (!this.options.templates || !this.options.apiReader)
+      throw new Error(sourceText("error.backend.eventCheckUnsupported"));
+    return this.options.templates;
   }
   #apiReader(): EventCheckApiReader {
     if (!this.options.apiReader) throw new Error(sourceText("error.backend.eventCheckUnsupported"));

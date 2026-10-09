@@ -1,0 +1,86 @@
+{
+  "slug": "linear-assigned-intake",
+  "name": "Linear assigned work",
+  "tagline": "Wake an agent when issues or projects assigned to you change",
+  "description": "Checks Linear every minute for the issues assigned to one person in one team, and for the projects that person leads. It runs as a normal program with no AI, reads Linear's API directly with a personal API key, and never changes anything in Linear. A new item, or a change to an issue's title or description, wakes the agent once. Changes you made yourself are skipped when the author can be told from Linear's history; when it cannot, the change is delivered. Linear's rate limits are honored with a saved cooldown for each check. Install it again for another workspace, team or person: every install has its own settings, API key, schedule and history.",
+  "version": "1.0.0",
+  "creatorName": "OpenBot",
+  "iconUrl": "https://linear.app/favicon.ico",
+  "websiteUrl": "https://linear.app",
+  "app": "linear",
+  "program": "program.mjs",
+  "accountLabelHint": "The Linear workspace, for example Work",
+  "variables": [
+    {
+      "name": "LINEAR_API_TOKEN",
+      "label": "Linear personal API key",
+      "hint": "Create a personal API key in your Linear account settings (Security and access). Read-only access is enough. Paste it here after the install, never in chat.",
+      "docsUrl": "https://linear.app/docs/api-and-webhooks"
+    }
+  ],
+  "configuration": [
+    {
+      "name": "instanceId",
+      "label": "Instance name",
+      "description": "A short name that is unique to this check, such as work-eng. It keeps the rate-limit cooldown of one check apart from another.",
+      "value": "",
+      "required": true
+    },
+    {
+      "name": "workspaceId",
+      "label": "Workspace ID",
+      "description": "The ID of the Linear workspace (organization). The check stops if the API key belongs to another workspace. Ask your agent to look it up with the Linear app.",
+      "value": "",
+      "required": true
+    },
+    {
+      "name": "workspaceSlug",
+      "label": "Workspace URL key",
+      "description": "The part after linear.app/ in your workspace address.",
+      "value": "",
+      "required": true
+    },
+    {
+      "name": "assigneeId",
+      "label": "Your Linear user ID",
+      "description": "The user whose assigned issues and led projects to watch. The API key must belong to this user.",
+      "value": "",
+      "required": true
+    },
+    {
+      "name": "assigneeEmail",
+      "label": "Your Linear email",
+      "description": "The email of that user. It is checked against the API key, so the check cannot read another account.",
+      "value": "",
+      "required": true
+    },
+    {
+      "name": "teamId",
+      "label": "Team ID",
+      "description": "The ID of the one team to watch.",
+      "value": "",
+      "required": true
+    },
+    {
+      "name": "teamKey",
+      "label": "Team key",
+      "description": "The short key of that team, such as ENG. It is checked against the team ID.",
+      "value": "",
+      "required": true
+    },
+    {
+      "name": "pageSize",
+      "label": "Page size",
+      "description": "How many items to ask for in each request, from 1 to 100.",
+      "value": "100",
+      "required": false
+    }
+  ],
+  "arguments": { "since": "$lastSuccessAt", "until": "$now" },
+  "cursorArgument": "cursor",
+  "nextCursorPointer": "/cursor",
+  "selection": { "itemsPointer": "/items", "idPointer": "/id", "revisionPointer": "/revision" },
+  "actorPointer": "/actor",
+  "intervalSeconds": 60,
+  "instruction": "New or changed Linear work that is assigned to me was found. Each item has an ID: i:<id> is an issue and p:<id> is a project I lead. The data holds only IDs, so read each item with the Linear app, work out what is new or changed, and tell me only if it needs my attention or action. Do not change anything in Linear unless I ask."
+}

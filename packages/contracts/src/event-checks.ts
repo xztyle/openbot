@@ -54,11 +54,17 @@ export interface EventCheckConfiguration {
   description: string;
   value: string;
 }
+/** The marketplace template an installed check came from, and the version it was installed at. */
+export interface EventCheckTemplateLink {
+  slug: string;
+  version: string;
+}
 export interface EventCheckApiSource extends Omit<EventCheckMcpSource, "kind"> {
   kind: "api";
   variables: string[];
   configuration: EventCheckConfiguration[];
   programDigest?: string;
+  template?: EventCheckTemplateLink;
 }
 export type EventCheckSource = EventCheckMcpSource | EventCheckApiSource;
 export interface EventCheckEnvironmentStatus {
@@ -211,6 +217,7 @@ function decodeSource(value: unknown): EventCheckSource {
       variables,
       configuration,
       ...(programDigest ? { programDigest } : {}),
+      ...(value.template === undefined ? {} : { template: decodeTemplateLink(value.template) }),
       toolName: text(value.toolName, 256, true),
       argumentsJson,
       cursorArgument: text(value.cursorArgument, 128),
@@ -225,6 +232,12 @@ function decodeSource(value: unknown): EventCheckSource {
     cursorArgument: text(value.cursorArgument, 128),
     nextCursorPointer: pointer(value.nextCursorPointer),
   };
+}
+function decodeTemplateLink(value: unknown): EventCheckTemplateLink {
+  if (!isDynamicRecord(value)) throw new Error("Invalid template link.");
+  const slug = text(value.slug, 64, true);
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) throw new Error("Invalid template link.");
+  return { slug, version: text(value.version, 64, true) };
 }
 function pointer(value: unknown): string {
   const parsed = text(value, 512);
@@ -341,3 +354,5 @@ function decodeConfiguration(value: unknown): EventCheckConfiguration {
     value: text(value.value, 8192),
   };
 }
+
+export { decodeSelfEvents as decodeEventCheckSelfEvents, pointer as eventCheckPointer, text as eventCheckText };

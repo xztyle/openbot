@@ -165,6 +165,7 @@
     "./features/settings/LanguageSelect": "./src/features/settings/LanguageSelect.tsx",
     "./features/marketplace/Marketplace": "./src/features/marketplace/Marketplace.tsx",
     "./features/marketplace/PluginIcon": "./src/features/marketplace/PluginIcon.tsx",
+    "./features/marketplace/marketplace-event-checks": "./src/features/marketplace/marketplace-event-checks.ts",
     "./features/marketplace/marketplace-listing": "./src/features/marketplace/marketplace-listing.ts",
     "./features/marketplace/marketplace-model": "./src/features/marketplace/marketplace-model.ts",
     "./features/marketplace/marketplace-view": "./src/features/marketplace/marketplace-view.ts",

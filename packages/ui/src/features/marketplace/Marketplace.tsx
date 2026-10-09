@@ -5,7 +5,9 @@ import { createEffect, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { MarketplaceAgentPage } from "./MarketplaceAgentPage";
 import { MarketplaceAppPage } from "./MarketplaceAppPage";
 import { MarketplaceBrowse } from "./MarketplaceBrowse";
+import { MarketplaceEventCheckPage } from "./MarketplaceEventCheckPage";
 import { MarketplaceSkillPage } from "./MarketplaceSkillPage";
+import { createEventCheckCatalog } from "./marketplace-event-checks";
 import { createMarketplaceListing } from "./marketplace-listing";
 import type { MarketplaceModel } from "./marketplace-model";
 import type { MarketplaceNavigation, MarketplaceScope, MarketplaceView } from "./marketplace-view";
@@ -27,6 +29,8 @@ function viewTitle(scope: MarketplaceScope, view: MarketplaceView, fallback: str
       return view.listing.name;
     case "app":
       return scope.model.apps().find((app) => app.id === view.id)?.name ?? fallback;
+    case "eventCheck":
+      return scope.eventChecks.template(view.slug)?.name ?? fallback;
   }
 }
 
@@ -65,7 +69,7 @@ function Crumbs(props: { scope: MarketplaceScope }) {
  * is open.
  */
 function MarketplaceWindow(props: MarketplaceProps) {
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const nav = props.nav;
   const scope: MarketplaceScope = {
     get model() {
@@ -83,6 +87,11 @@ function MarketplaceWindow(props: MarketplaceProps) {
       homeCache: props.model.skillHomeCache,
       query: () => nav.state.query,
       category: () => nav.state.skillCategory,
+    }),
+    eventChecks: createEventCheckCatalog({
+      source: () => props.model.eventChecks,
+      agents: () => props.model.agents(),
+      message: (error) => errorMessage(error, t("marketplace.eventCheck.loadFailed")),
     }),
   };
   let body: HTMLDivElement | undefined;
@@ -170,6 +179,9 @@ function MarketplaceWindow(props: MarketplaceProps) {
                 <Match when={view.kind === "app" && view.id} keyed>
                   {(id) => <MarketplaceAppPage scope={scope} id={id} />}
                 </Match>
+                <Match when={view.kind === "eventCheck" && view.slug} keyed>
+                  {(slug) => <MarketplaceEventCheckPage scope={scope} slug={slug} />}
+                </Match>
               </Switch>
             )}
           </Show>
@@ -200,7 +212,7 @@ function MarketplaceWindow(props: MarketplaceProps) {
   );
 }
 
-/** The Marketplace window: agents, apps and skills, and a page for each. */
+/** The Marketplace window: agents, apps, skills and event checks, and a page for each. */
 export function Marketplace(props: MarketplaceProps) {
   // A closed window starts again from the first tab, with no search and no filter.
   createEffect(

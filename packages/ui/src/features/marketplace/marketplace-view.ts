@@ -5,6 +5,7 @@ import type {
   SkillCategory,
 } from "@openbot/contracts/ipc";
 import { createStore, onCleanup, onSettled, untrack } from "solid-js";
+import type { EventCheckCatalog } from "./marketplace-event-checks";
 import type { MarketplaceListing } from "./marketplace-listing";
 import type { MarketplaceApp, MarketplaceModel } from "./marketplace-model";
 
@@ -12,9 +13,10 @@ export type MarketplaceView =
   | { kind: "browse" }
   | { kind: "agent"; listing: MarketplaceAgentSummary }
   | { kind: "skill"; listing: MarketplaceSkillSummary }
-  | { kind: "app"; id: string };
+  | { kind: "app"; id: string }
+  | { kind: "eventCheck"; slug: string };
 
-export type MarketplaceTab = "agents" | "apps" | "skills";
+export type MarketplaceTab = "agents" | "apps" | "skills" | "eventChecks";
 
 /** "yes": only what the user has. "no": only what the user does not have. */
 export type OwnedFilter = "yes" | "no";
@@ -28,6 +30,7 @@ export interface MarketplaceNavigationState {
   agentsOwned: OwnedFilter | null;
   skillCategory: SkillCategory | null;
   skillsOwned: OwnedFilter | null;
+  eventChecksOwned: OwnedFilter | null;
   /** The slug of a link that names no app of this catalog. */
   missingApp: string | null;
 }
@@ -52,16 +55,19 @@ function initialState(): MarketplaceNavigationState {
     agentsOwned: null,
     skillCategory: null,
     skillsOwned: null,
+    eventChecksOwned: null,
     missingApp: null,
   };
 }
 
-/** What each part of the window reads: the data and actions, where the user is, and the two listings. */
+/** What each part of the window reads: the data and actions, where the user is, and the listings. */
 export interface MarketplaceScope {
   model: MarketplaceModel;
   nav: MarketplaceNavigation;
   agents: MarketplaceListing<MarketplaceAgentSummary>;
   skills: MarketplaceListing<MarketplaceSkillSummary>;
+  /** The event check templates of the host, and the checks made from them. */
+  eventChecks: EventCheckCatalog;
 }
 
 export function createMarketplaceNavigation(): MarketplaceNavigation {
@@ -87,7 +93,7 @@ export function createMarketplaceNavigation(): MarketplaceNavigation {
 }
 
 export function isMarketplaceTab(value: string): value is MarketplaceTab {
-  return value === "agents" || value === "apps" || value === "skills";
+  return value === "agents" || value === "apps" || value === "skills" || value === "eventChecks";
 }
 
 /**

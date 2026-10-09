@@ -39,6 +39,8 @@ extraResources:
     to: managed-skills
   - from: resources/plugin-catalog
     to: plugin-catalog
+  - from: resources/watcher-catalog
+    to: watcher-catalog
   - from: resources/agent-import
     to: agent-import
   - from: build/icon-production.png

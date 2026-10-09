@@ -68,6 +68,10 @@ interface State {
 function apiSource(source: EventCheckSource) {
   return source.kind === "api" ? source : undefined;
 }
+/** The marketplace template a check was installed from, when it has one. */
+function templateLink(source: EventCheckSource) {
+  return source.kind === "api" ? source.template : undefined;
+}
 function defaultSource(api: boolean): EventCheckSource {
   const common = { toolName: "", argumentsJson: "{}", cursorArgument: "cursor", nextCursorPointer: "/cursor" };
   return api
@@ -421,6 +425,17 @@ export function EventChecksSettings(props: Props) {
                               {check.active
                                 ? t("agentSettings.eventCheck.next", { time: time(check.nextCheckAt) })
                                 : t("agentSettings.eventCheck.paused")}
+                              <Show when={templateLink(check.source)}>
+                                {(link) => (
+                                  <>
+                                    {" · "}
+                                    {t("agentSettings.eventCheck.fromTemplate", {
+                                      name: link().slug,
+                                      version: link().version,
+                                    })}
+                                  </>
+                                )}
+                              </Show>
                             </small>
                           </span>
                         </Button>
@@ -535,6 +550,13 @@ export function EventChecksSettings(props: Props) {
                   }
                 />
               </label>
+              <Show when={templateLink(current().value.source)}>
+                {(link) => (
+                  <Text as="p" variant="caption" tone="muted" class="event-check-help">
+                    {t("agentSettings.eventCheck.fromTemplate", { name: link().slug, version: link().version })}
+                  </Text>
+                )}
+              </Show>
               <section class="event-check-section" aria-labelledby="event-check-source-heading">
                 <h3 id="event-check-source-heading">{t("agentSettings.eventCheck.source")}</h3>
                 <Show when={current().value.source.kind === "mcp"}>

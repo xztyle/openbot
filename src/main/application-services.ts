@@ -11,6 +11,7 @@ import { AgentRoutineStore } from "../backend/agent-routine-store";
 import { EventCheckApiReader } from "../backend/event-check-api-reader";
 import { EventCheckEnvironment } from "../backend/event-check-environment";
 import { EventCheckStore } from "../backend/event-check-store";
+import { EventCheckTemplates } from "../backend/event-check-templates";
 import { toMcpOperationError } from "../backend/mcp-effects";
 import { DiscordConnectFailed, toDiscordConnectFailed } from "../backend/messaging/discord/discord-connect";
 import { SlackConnectFailed, toSlackConnectFailed } from "../backend/messaging/slack/slack-connect";
@@ -1187,6 +1188,12 @@ export async function createApplicationServices({
       }),
       join(store.sharedRoot, "Watchers"),
       (check) => new EventCheckStore(store.database).current(check.id, check.revision) !== null,
+    ),
+    eventCheckTemplates: new EventCheckTemplates(
+      app.isPackaged
+        ? join(process.resourcesPath, "watcher-catalog")
+        : resolve(__dirname, "../../resources/watcher-catalog"),
+      join(store.sharedRoot, "Watchers"),
     ),
     credentials: {
       apiKey: (provider) => providerCredentials.get(provider),

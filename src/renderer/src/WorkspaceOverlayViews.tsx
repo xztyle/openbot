@@ -1,5 +1,8 @@
 import type { AddedAgent, McpServerConfig, ServerSummary } from "@openbot/contracts/ipc";
 import { MCP_SERVERS_CAPABILITY } from "@openbot/contracts/ipc";
+import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
+import { EVENT_CHECK_TEMPLATES_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-templates-v1";
+import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import type { BitwardenConnectorPanelProps } from "@openbot/ui/features/settings/BitwardenConnectorPanel";
 import type { ComponentProps } from "@solidjs/web";
 import { createMemo, Loading, omit, Show } from "solid-js";
@@ -84,6 +87,17 @@ export function MarketplaceOverlay(props: {
 }) {
   const controller = useConversationController();
   const manage = createMemo(() => serverCanAdminister(props.server, "skills-admin-v1"));
+  /* The Event checks tab: this computer always has the templates. A joined server needs its owner or
+     admin, the templates, and the checks with their private variables. */
+  const eventChecksHost = createMemo(() => {
+    const server = props.server;
+    return manage() &&
+      serverCanAdminister(server, EVENT_CHECKS_CAPABILITY) &&
+      serverCanAdminister(server, EVENT_CHECK_API_CAPABILITY) &&
+      serverCanAdminister(server, EVENT_CHECK_TEMPLATES_CAPABILITY)
+      ? { serverId: server?.kind === "remote" ? server.id : undefined }
+      : undefined;
+  });
   /* What both example controls need: a managed agent whose composer is free to take another line. */
   const composerFree = createMemo(
     () =>
@@ -108,6 +122,7 @@ export function MarketplaceOverlay(props: {
         <MarketplaceModal
           open={true}
           calls={props.calls}
+          eventChecksHost={eventChecksHost()}
           githubConnector={props.githubConnector}
           onePasswordConnector={props.onePasswordConnector}
           bitwardenConnector={props.bitwardenConnector}

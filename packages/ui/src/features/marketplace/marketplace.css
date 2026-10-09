@@ -671,6 +671,153 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   }
 }
 
+/* ---------------------------------------------------------------- event checks */
+
+.marketplace-event-check-description {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.marketplace-need,
+.marketplace-need-group {
+  display: grid;
+  gap: var(--openbot-space-3);
+  min-width: 0;
+}
+
+.marketplace-need-group {
+  gap: var(--openbot-space-1-5);
+}
+
+.marketplace-need-group > h5 {
+  margin: 0;
+}
+
+.marketplace-need-list {
+  display: grid;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.marketplace-need-list > li {
+  display: grid;
+  justify-items: start;
+  gap: var(--openbot-space-0-5);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.marketplace-event-check-row {
+  flex-wrap: wrap;
+}
+
+/* The install dialog opens over the Marketplace window, so it takes the nested step of its layer. */
+.marketplace-install-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--openbot-layer-dialog-host) + 2);
+  display: grid;
+  place-items: center;
+  padding: var(--openbot-space-6);
+}
+
+.marketplace-install-dialog {
+  position: relative;
+  display: grid;
+  gap: var(--openbot-space-4);
+  width: min(520px, 100%);
+  max-height: calc(100dvh - var(--openbot-space-6) * 2);
+  overflow-y: auto;
+  outline: 0;
+  padding: var(--openbot-space-6);
+  border-radius: var(--openbot-radius-xl);
+  background: var(--openbot-bg-sidebar);
+  color: var(--openbot-text-primary);
+}
+
+.marketplace-install-header {
+  display: grid;
+  gap: var(--openbot-space-1);
+  padding-right: var(--openbot-space-8);
+}
+
+.marketplace-install-title {
+  margin: 0;
+  font-size: var(--openbot-text-lg);
+  font-weight: 600;
+}
+
+.marketplace-install-description {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
+.marketplace-install-close {
+  position: absolute;
+  top: var(--openbot-space-3);
+  right: var(--openbot-space-3);
+}
+
+.marketplace-install-body {
+  display: grid;
+  gap: var(--openbot-space-4);
+  min-width: 0;
+}
+
+.marketplace-install-agents {
+  display: grid;
+  gap: var(--openbot-space-1-5);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.marketplace-install-agent {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.marketplace-install-variables {
+  display: grid;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.marketplace-install-variables > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--openbot-space-1) var(--openbot-space-2);
+}
+
+.marketplace-install-created {
+  display: grid;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+}
+
+.marketplace-install-created-name {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.marketplace-install-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--openbot-space-2);
+}
+
 /* Last, because it is the most specific icon rule: every button icon in the window is 16px. */
 .skills-marketplace .ui-button > svg,
 .marketplace-search > svg {

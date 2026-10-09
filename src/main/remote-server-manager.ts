@@ -24,6 +24,7 @@ import type {
   DirectTypingRealtimeEvent,
   DraftAttachment,
   DuplicateAgentResult,
+  HostedServerIssue,
   InvitePreview,
   InviteSummary,
   JoinServerInput,
@@ -47,6 +48,7 @@ import {
   REMOTE_DESKTOP_SETUP_CAPABILITY,
   type RemoteDesktopTestInput,
 } from "@openbot/contracts/ipc";
+import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { AGENT_IMPORT_ROUTES } from "@openbot/contracts/team-protocol/agent-import-v1";
 import { decodeBrowserViewSessionResponse } from "@openbot/contracts/team-protocol/browser-view-v1";
@@ -54,6 +56,7 @@ import { TEAM_MEMBER_LEAVE_CAPABILITY, type TeamCurrentCapability } from "@openb
 import type { HostRestartEvent } from "@openbot/contracts/team-protocol/host-update-v1";
 import { decodeTeamProtocolV1CurrentHttpResponse } from "@openbot/contracts/team-protocol/v1-adapter";
 import { sourceText } from "@openbot/i18n/source";
+import { WAKE_RECONNECT_STATES } from "@openbot/team-client/hosted-server-wake";
 import { Deferred, Effect, Exit, Layer, Result, Scope, Semaphore } from "effect";
 import type { CentralAuthOperationError } from "./central-auth-effects";
 import { contentDispositionFileName } from "./content-disposition";
@@ -135,6 +138,11 @@ interface RemoteServerManagerOptions {
   hostedServers?: HostedServerWakeHooks;
   /** Times each WebRTC connection for the local trace. */
   connectTrace?: RemoteConnectTrace;
+  /**
+   * The account's first load. The host list needs only the saved token, so it can arrive before the
+   * account says who is signed in; the first read of it waits for this.
+   */
+  accountReady?: Effect.Effect<unknown, RemoteWorkflowError>;
 }
 
 export interface HostedServerWakeHooks {
@@ -194,6 +202,9 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   readonly #hostedServers: HostedServerWakeHooks | null;
   /** When each hosted server that starts after a wake request started. */
   readonly #hostedStartAt = new Map<string, number>();
+  readonly #hostedWakePending = new Set<string>();
+  readonly #hostedStartRevision = new Map<string, number>();
+  readonly #hostedStartTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Hosted servers that did not come online in the start time. Only the user's next wake starts them again. */
   readonly #hostedStartExpired = new Set<string>();
   #appFocused = true;
@@ -204,6 +215,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   /** Done when the first read of the account's host list after `initialize` ends, either way. */
   readonly #initialDirectory = Deferred.makeUnsafe<void>();
   readonly #connectTrace: RemoteConnectTrace | null;
+  readonly #accountReady: Effect.Effect<unknown, RemoteWorkflowError>;
   #muteExpiryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -232,6 +244,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#getLocalHostId = options.getLocalHostId ?? (() => null);
     this.#hostedServers = options.hostedServers ?? null;
     this.#connectTrace = options.connectTrace ?? null;
+    this.#accountReady = options.accountReady ?? Effect.void;
     this.#client = new RemoteServerClient({
       appVersion: this.#appVersion,
       servers: this.#store,
@@ -290,7 +303,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#webrtcTransport?.on("connected", (serverId) => {
       this.#events.clearReconnectBackoff(serverId);
       this.#hostRestartAway.delete(serverId);
-      this.#hostedStartAt.delete(serverId);
+      this.#clearHostedStart(serverId);
       this.#hostedStartExpired.delete(serverId);
       this.#connections.markConnected(serverId);
       this.#emitChanged();
@@ -438,7 +451,8 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       const startedAt = performance.now();
       this.#background(
         this.#owned(
-          this.#syncWebRtcHosts().pipe(
+          this.#accountReady.pipe(
+            Effect.andThen(this.#syncWebRtcHosts()),
             Effect.tap(() => Effect.sync(() => this.#initializeConnectionStates())),
             // A host the directory added after the event connections started has no connection yet.
             Effect.tap(() => (this.#events.enabled ? this.startEventConnections() : Effect.void)),
@@ -914,6 +928,14 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       const transport = this.#webrtcTransport;
 
       const server = yield* remoteDecode(() => this.#store.require(serverId));
+      if (
+        this.#connections.hostedSleepFor(serverId) === "sleeping" ||
+        this.#connections.statusFor(serverId).hostedIssue
+      ) {
+        this.#clearHostedStart(serverId);
+        this.#hostedStartExpired.delete(serverId);
+        yield* this.#wakeHostedServer(serverId);
+      }
       const blockedState = this.#connections.hasIssue(serverId)
         ? (this.#connections.stateFor(serverId) ?? "error")
         : "error";
@@ -942,14 +964,17 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
           }
           return yield* remoteDecode(() => requiredServerSummary(this.list(), serverId));
         }
-        yield* this.#client.ensureCompatibility(server, true);
         this.#connections.setState(serverId, "connecting");
         this.#emitChanged();
+        yield* this.#client.ensureCompatibility(server, true);
         yield* this.#events.restart(serverId, true);
       }).pipe(Effect.result);
       if (Result.isFailure(attempt1)) {
         const error = attempt1.failure.cause;
         this.#connections.reportError(serverId, error, blockedState);
+        // A failed check can leave the old event socket open. Replace it so a later
+        // successful connection can restore the state, with the existing backoff.
+        if (!this.#events.isReconnectSuspended(serverId)) yield* this.#events.restart(serverId);
         return yield* new RemoteWorkflowError({ cause: error });
       } else if (attempt1.success !== undefined) return attempt1.success;
       return yield* remoteDecode(() => requiredServerSummary(this.list(), serverId));
@@ -967,13 +992,12 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       if (serverId === LOCAL_SERVER_ID)
         return yield* new RemoteWorkflowError({ cause: new Error(sourceText("error.remote.localServerRemove")) });
       const server = this.#store.find(serverId);
-      // An owner cannot leave their own host, so the account service keeps listing it. Hiding it is
-      // what makes the removal survive the next directory sync.
-      let hideHost = false;
       if (server?.transport === "webrtc-v2") {
         if (!transport)
           return yield* new RemoteWorkflowError({ cause: new Error(sourceText("error.remote.webRtcUnavailable")) });
-        if (server.role === "owner") hideHost = true;
+        // An owner cannot leave their own host. The owner removes it from the account service, so the
+        // next directory sync on each device of each member does not list it again.
+        if (server.role === "owner") yield* transport.removeOwnedHost(serverId);
         else yield* transport.leaveHost(serverId);
         yield* transport.disconnect(serverId).pipe(Effect.catch(() => Effect.void));
       } else if (server && this.#connections.compatibilityFor(serverId)?.negotiatedProtocol) {
@@ -989,7 +1013,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
         yield* this.request(serverId, path, decodeVoid, { method: "POST" }).pipe(Effect.catch(() => Effect.void));
       }
       this.#clearServerConnectionState(serverId);
-      yield* this.#store.remove(serverId, { hideHost });
+      yield* this.#store.remove(serverId);
       this.#emitChanged();
     },
     (operation) => this.#owned(operation),
@@ -1000,21 +1024,63 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
    * until it answers. The account client calls it for each wake, also one from settings.
    */
   hostedServerStarting(serverId: string): void {
-    if (!this.#store.has(serverId) || this.#connections.stateFor(serverId) === "online") return;
+    if (this.#stopping || !this.#store.has(serverId) || this.#connections.stateFor(serverId) === "online") return;
+    this.#hostedStartRevision.set(serverId, (this.#hostedStartRevision.get(serverId) ?? 0) + 1);
+    if (this.#connections.statusFor(serverId).hostedIssue === "plan_ended") this.#events.resumeReconnect(serverId);
     // Automatic wakes stop after an expired start, so this wake came from the user.
     this.#hostedStartExpired.delete(serverId);
-    this.#hostedStartAt.set(serverId, Date.now());
+    this.#connections.setHostedIssue(serverId, null);
+    if (!this.#hostedStartAt.has(serverId)) {
+      this.#hostedStartAt.set(serverId, Date.now());
+      this.#hostedStartTimers.set(
+        serverId,
+        setTimeout(() => this.#expireHostedStart(serverId), HOSTED_SERVER_START_MS),
+      );
+    }
     this.#events.setHostStarting(serverId, true);
     if (this.#connections.setHostedSleep(serverId, "waking")) this.#emitChanged();
   }
 
   #wakeHostedServer(serverId: string): Effect.Effect<void> {
     const hosted = this.#hostedServers;
-    return hosted
-      ? Effect.forkIn(this.#owned(hosted.wake(serverId).pipe(Effect.catch(() => Effect.void))), this.#scope).pipe(
-          Effect.asVoid,
-        )
-      : Effect.void;
+    if (!hosted || this.#stopping || this.#hostedWakePending.has(serverId)) return Effect.void;
+    this.#hostedWakePending.add(serverId);
+    const revision = this.#hostedStartRevision.get(serverId) ?? 0;
+    const failed = (issue: HostedServerIssue = "wake_failed") => {
+      if (
+        this.#stopping ||
+        !this.#store.has(serverId) ||
+        this.#connections.stateFor(serverId) === "online" ||
+        (this.#hostedStartRevision.get(serverId) ?? 0) !== revision
+      )
+        return;
+      this.#clearHostedStart(serverId);
+      this.#connections.setHostedSleep(serverId, null);
+      this.#connections.setHostedIssue(serverId, issue);
+      if (issue === "plan_ended") this.#events.suspendReconnect(serverId);
+      this.#emitChanged();
+    };
+    this.#connections.setHostedSleep(serverId, "waking");
+    this.#emitChanged();
+    return Effect.forkIn(
+      this.#owned(
+        hosted.wake(serverId).pipe(
+          Effect.tap((server) =>
+            Effect.sync(() => {
+              if (WAKE_RECONNECT_STATES.has(server.state)) this.hostedServerStarting(serverId);
+              else failed();
+            }),
+          ),
+          Effect.catch((failure) =>
+            Effect.sync(() =>
+              failed(isDynamicRecord(failure.cause) && failure.cause.status === 402 ? "plan_ended" : "wake_failed"),
+            ),
+          ),
+          Effect.ensuring(Effect.sync(() => this.#hostedWakePending.delete(serverId))),
+        ),
+      ),
+      this.#scope,
+    ).pipe(Effect.asVoid);
   }
 
   #checkHostedServer(serverId: string, wake: boolean): Effect.Effect<void> {
@@ -1031,12 +1097,23 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   ) {
     const hosted = this.#hostedServers;
     if (!hosted) return;
+    const revision = this.#hostedStartRevision.get(serverId) ?? 0;
     const availability = yield* hosted.unavailable(serverId, wake);
+    if (
+      this.#stopping ||
+      this.#hostedWakePending.has(serverId) ||
+      (this.#hostedStartRevision.get(serverId) ?? 0) !== revision
+    )
+      return;
     // A later wake or connection owns the current state.
     if (availability === "waking" || this.#hostedStartAt.has(serverId) || !this.#store.has(serverId)) return;
     if (this.#connections.stateFor(serverId) === "online") return;
-    if (this.#connections.setHostedSleep(serverId, availability === "sleeping" ? "sleeping" : null))
-      this.#emitChanged();
+    this.#connections.setHostedSleep(serverId, availability === "sleeping" ? "sleeping" : null);
+    if (availability === "ended") {
+      this.#connections.setHostedIssue(serverId, "plan_ended");
+      this.#events.suspendReconnect(serverId);
+    }
+    this.#emitChanged();
   });
 
   /** A hosted server starts after a wake request, so a missed connection is not news until the start time ends. */
@@ -1044,15 +1121,29 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     const since = this.#hostedStartAt.get(serverId);
     if (since === undefined) return false;
     if (Date.now() - since < HOSTED_SERVER_START_MS) return true;
-    this.#hostedStartAt.delete(serverId);
-    this.#hostedStartExpired.add(serverId);
-    this.#events.setHostStarting(serverId, false);
-    if (this.#connections.setHostedSleep(serverId, null)) this.#emitChanged();
+    this.#expireHostedStart(serverId);
     return false;
   }
 
-  #clearServerConnectionState(serverId: string): void {
+  #clearHostedStart(serverId: string): void {
+    clearTimeout(this.#hostedStartTimers.get(serverId));
+    this.#hostedStartTimers.delete(serverId);
     this.#hostedStartAt.delete(serverId);
+  }
+
+  #expireHostedStart(serverId: string): void {
+    this.#clearHostedStart(serverId);
+    if (!this.#store.has(serverId) || this.#connections.stateFor(serverId) === "online") return;
+    this.#hostedStartExpired.add(serverId);
+    this.#events.setHostStarting(serverId, false);
+    this.#connections.setHostedSleep(serverId, null);
+    this.#connections.setHostedIssue(serverId, "start_timeout");
+    this.#emitChanged();
+  }
+
+  #clearServerConnectionState(serverId: string): void {
+    this.#hostedStartRevision.set(serverId, (this.#hostedStartRevision.get(serverId) ?? 0) + 1);
+    this.#clearHostedStart(serverId);
     this.#hostedStartExpired.delete(serverId);
     this.#events.forget(serverId);
     this.#refresh.forget(serverId);
@@ -1630,6 +1721,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     const done = Deferred.makeUnsafe<void, RemoteWorkflowError>();
     this.#stopping = done;
     return yield* Effect.gen({ self: this }, function* () {
+      for (const serverId of this.#hostedStartTimers.keys()) this.#clearHostedStart(serverId);
       yield* this.#events.stop();
       this.#refresh.clear();
       this.#client.clear();
@@ -1680,6 +1772,8 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     transport: TeamWebRtcClientTransport,
   ): Effect.fn.Return<void, RemoteWorkflowError, RemoteRequest> {
     const hosts = yield* transport.listHosts();
+    // The account can be signed out or not loaded yet; that is a failed read, not a defect.
+    const email = yield* remoteDecode(() => this.#centralAccount.getEmail());
     const localHostId = this.#getLocalHostId();
     this.#localMemberLimit = hosts.find((host) => host.hostId === localHostId)?.memberLimit ?? null;
     const { servers, removedHostIds, staleTransportHostIds, pinnedKeys } = reconcileWebRtcHosts({
@@ -1689,7 +1783,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       preservedIdentities: this.#store.preservedIdentities,
       localHostId,
       isHiddenHost: (hostId) => this.#store.isHiddenHost(hostId),
-      username: this.#centralAccount.getEmail().trim().toLowerCase(),
+      username: email.trim().toLowerCase(),
       keepOtherTransports: this.#allowLocalDevelopmentInvites,
     });
     for (const { hostId, publicKey } of pinnedKeys) transport.pinHostKey(hostId, publicKey);

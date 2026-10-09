@@ -37,4 +37,11 @@ export const messages = defineMessages("status.messaging", {
   // The page a development Slack install ends on.
   "status.messaging.signInReceived": "OpenBot received the Slack install. You can close this tab.",
   "status.messaging.signInUnknown": "OpenBot did not start this Slack install. Start it again in OpenBot.",
+  // Text that OpenBot posts in a Telegram chat, and the Telegram Orchestrator agent. Telegram users
+  // read the posts. The user can rename the agent.
+  "status.messaging.telegramNoAgent": "No agent can answer here yet. Add the Telegram Orchestrator in OpenBot.",
+  "status.messaging.telegramLinked":
+    "OpenBot is connected to this chat. Mention {bot} or reply to a message of OpenBot to ask the agents.",
+  "status.messaging.telegramOrchestratorName": "Telegram Orchestrator",
+  "status.messaging.telegramOrchestratorTitle": "Answers in Telegram and asks the team",
 });

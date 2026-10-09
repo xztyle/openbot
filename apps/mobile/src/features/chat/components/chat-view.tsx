@@ -16,6 +16,7 @@ import { getBloubAvatarColor } from "@/features/agents/model/bloub-activity";
 import { MobileConversationAnalytics } from "@/features/analytics/conversation";
 import { reportMobileNotification } from "@/features/analytics/failure-reports";
 import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
+import { useBrowserFeature } from "@/features/browser/components/use-browser-feature";
 import { ChatComposer, VOICE_BUTTON_SIZE } from "@/features/chat/components/chat-composer";
 import { ChatGlassIconButton } from "@/features/chat/components/chat-glass-icon-button";
 import { ChatHeader } from "@/features/chat/components/chat-header";
@@ -31,6 +32,7 @@ import { useBrowserRequests } from "@/features/workspace/components/use-live-wor
 import type { MobileAgent } from "@/features/workspace/context/mobile-workspace-context";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
 import type { MobileAgentActivity } from "@/features/workspace/model/agent-activity";
+import type { PendingApproval } from "@/features/workspace/model/pending-approvals";
 import { haptics } from "@/shared/lib/haptics";
 import { isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
@@ -68,6 +70,8 @@ export interface ChatViewProps {
   stopTurn?: (turnId: string) => Promise<void>;
   questionForm?: QuestionPromptController;
   onSelectQuestion?: (messageId: string) => void;
+  /** The approvals of this chat's agents, from the caller that knows which thread is this chat's. */
+  approvals?: readonly PendingApproval[];
   readBoundary: string | null;
   markRead: () => void;
   fetchHistory: () => void;
@@ -114,6 +118,7 @@ export function ChatView({
   stopTurn,
   questionForm,
   onSelectQuestion,
+  approvals,
   readBoundary,
   markRead,
   fetchHistory,
@@ -126,8 +131,10 @@ export function ChatView({
   notice,
 }: ChatViewProps) {
   const { t, errorMessage } = useText();
-  const { respondToBrowserSecret, respondToBrowserTakeover, attachmentSupport } = useMobileWorkspace();
+  const { respondToApproval, respondToBrowserSecret, respondToBrowserTakeover, attachmentSupport, browserViewSupport } =
+    useMobileWorkspace();
   const browserRequests = useBrowserRequests(target.serverId);
+  const browserAllowed = useBrowserFeature();
   const isFocused = useIsFocused();
   const foregroundVisit = useAppForeground();
   const [conversationAnalytics] = useState(() => new MobileConversationAnalytics(mobileAnalytics));
@@ -593,6 +600,11 @@ export function ChatView({
               activeTurnId={activeTurnId}
               questionForm={questionForm}
               onSelectQuestion={onSelectQuestion}
+              approvals={readOnly ? undefined : approvals}
+              serverName={server?.name ?? ""}
+              onRespondApproval={(approval, decision) =>
+                respondToApproval(target.serverId, { requestId: approval.requestId, decision })
+              }
               fieldBackground={fieldBackground}
               foreground={foreground}
               messages={messages}
@@ -683,6 +695,19 @@ export function ChatView({
                         respond={(input) => respondToBrowserSecret(target.serverId, input)}
                         respondToTakeover={(decision) =>
                           respondToBrowserTakeover(target.serverId, { requestId: request.requestId, decision })
+                        }
+                        openBrowser={
+                          browserAllowed && browserViewSupport(target.serverId).view
+                            ? () =>
+                                router.push({
+                                  pathname: "/browser/[agentId]",
+                                  params: {
+                                    agentId: request.agentId,
+                                    serverId: target.serverId,
+                                    tabId: request.tabId,
+                                  },
+                                })
+                            : undefined
                         }
                       />
                     ))

@@ -73,13 +73,12 @@ export const messages = {
   "server.rail.notificationSettings": "通知の設定",
   "server.rail.usage": "使用量",
   "server.rail.settings": "サーバーの設定",
+  "server.rail.remove": "サーバーを削除",
   "server.rail.leave": "サーバーから退出",
   "server.rail.delete": "サーバーを削除",
   "server.select.failedTitle": "サーバーを選択できませんでした",
   "server.select.failedDescription": "サーバーを切り替えられませんでした。もう一度お試しください。",
   "server.select.openAgentFailed": "{name} を開けませんでした。サイドバーで探してください。",
-  "server.scope.agentsLoadFailed":
-    "エージェントを読み込めませんでした。サーバーの接続を確認して、もう一度お試しください。",
   "server.settings.unavailable": "このサーバーは利用できません。",
   "server.settings.identityRefreshFailed": "サーバーの ID を更新できませんでした。",
   "server.settings.loadFailed": "サーバーの設定を読み込めませんでした。",
@@ -165,6 +164,14 @@ export const messages = {
   "server.settings.saveIdentityFirst": "公開する前にサーバーの ID を保存してください。",
   "server.settings.reachable": "オンラインでアクセスできます。招待されたユーザーのみがサインインできます。",
   "server.settings.notReachable": "オンラインでアクセスできません。既存のメンバーと招待はそのまま残ります。",
+  "server.settings.removeTitle": "サーバーを削除",
+  "server.settings.removeDescription":
+    "すべてのメンバーについて、このサーバーをアカウントサービスから削除します。サーバーのコンピューターが使えなくなったときに使います。",
+  "server.settings.removeConfirmTitle": "{name} を削除しますか？",
+  "server.settings.removeConfirmDescription":
+    "すべてのメンバーについてサーバーをアカウントサービスから削除し、リモートアクセスを終了します。そのコンピューター上のファイルとチャットはそのまま残ります。再び使うには、そのコンピューターから登録してください。",
+  "server.settings.removing": "削除中…",
+  "server.settings.removedTitle": "{name} を削除しました",
   "server.settings.leaveTitle": "サーバーから退出",
   "server.settings.leaveDescription":
     "サーバーリストからこのサーバーを削除します。サーバーと他のメンバーはそのまま残ります。",

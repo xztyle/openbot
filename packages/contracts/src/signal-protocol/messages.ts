@@ -6,9 +6,11 @@
 // The one exception is Slack: the OpenBot Slack app posts every workspace's events to Signal.
 // Signal checks the Slack signature, reads only the workspace ID, and passes the request body to
 // the `ingress` socket of the host that the workspace is linked to, without storing or logging it.
-// Discord is the other: Signal holds the OpenBot Discord bot's Gateway connection, passes each
+// Discord is the second: Signal holds the OpenBot Discord bot's Gateway connection, passes each
 // guild's mentions of OpenBot to the guild's host, and makes the host's Discord calls
 // (`./discord-api.ts`).
+// Telegram is the third: the OpenBot bot's updates come to Signal, which passes each to the host of
+// its chat, and the host calls the Bot API through Signal, which holds the token (`./telegram-route.ts`).
 //
 // Three parties speak this and none of them ships together: the service
 // (`remote/api/src/signal-service.ts`), the shared client that mobile and the future web client run
@@ -29,6 +31,7 @@
 // negotiated on the data channels is a different number entirely.
 
 import type { DiscordDelivery } from "./discord-api";
+import type { TelegramCallFailure, TelegramCallMethod, TelegramCallParams, TelegramCallResult } from "./telegram-route";
 import type { RemoteMemberRole } from "./ticket";
 
 export const SIGNAL_PROTOCOL_VERSION = 1;
@@ -137,6 +140,20 @@ export type SignalClientMessage =
       // `ingress` only: the generic webhook route ticket (`./webhook-route.ts`) that names the
       // opaque webhook routes whose requests this socket receives.
       webhookRoute?: string;
+      // `ingress` only, and optional: the Telegram route ticket (`./telegram-route.ts`) that names
+      // the Telegram chats whose updates this socket receives.
+      telegramRoute?: string;
+    }
+  // An `ingress` socket's Bot API call, sent only to a Signal whose `ready` named the `telegram`
+  // capability. Signal answers with one `telegram-call-result` of the same `requestId`.
+  | {
+      type: "telegram-call";
+      version: SignalProtocolVersion;
+      requestId: string;
+      // The production and development bots can share a chat, so a call names its bot.
+      botId: string;
+      method: TelegramCallMethod;
+      params: TelegramCallParams[TelegramCallMethod];
     }
   // An `ingress` socket's answer to one `slack-delivery`. Signal returns it to Slack as the HTTP
   // response, so `body` is only the `url_verification` challenge or an interactivity reply.
@@ -170,6 +187,9 @@ export type SignalServerMessage =
       connectionId: string | null;
       resumeToken: string;
       iceServers: IceServer[];
+      // `ingress` only, and optional: what this Signal can do beyond Slack, such as `telegram`. An
+      // older Signal sends none.
+      capabilities?: string[];
     }
   // A client attached to a multiplexing host. `resumed` distinguishes a reconnect of a session the
   // host already has from a new one it must set up from scratch.
@@ -201,6 +221,25 @@ export type SignalServerMessage =
       retryReason: string | null;
       bodyBase64: string;
     }
+  // One Telegram update for a chat routed to this host, sent only to an `ingress` socket. Signal has
+  // checked Telegram's secret header, which no host has. It needs no answer: Telegram does not send
+  // an update again, so a host that is offline loses it.
+  | {
+      type: "telegram-delivery";
+      version: SignalProtocolVersion;
+      botId: string;
+      chatId: string;
+      bodyBase64: string;
+      // Only on the `/start <code>` update that the account service just linked to this host. A host
+      // links a chat only on this flag: anyone in a routed chat can send a `/start` with any code.
+      linked?: true;
+    }
+  // The answer to one `telegram-call`.
+  | ({
+      type: "telegram-call-result";
+      version: SignalProtocolVersion;
+      requestId: string;
+    } & ({ ok: true; result: TelegramCallResult } | ({ ok: false } & TelegramCallFailure)))
   // Sent to an `ingress` socket with a Discord route, after `ready`. The host sends `token` as the
   // bearer of its calls to `DISCORD_API_PATH`. It is valid while this socket is open. `guilds` are
   // the guilds routed to this socket: a guild of the host that is not in it was unlinked, or the bot

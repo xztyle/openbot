@@ -12,6 +12,12 @@ import {
   type SignalServerMessage,
   SLACK_DELIVERY_RESPONSE_BYTES_LIMIT,
 } from "@openbot/contracts/signal-protocol/messages";
+import {
+  TELEGRAM_BOT_ID_PATTERN,
+  TELEGRAM_TEXT_LIMIT,
+  type TelegramCallMethod,
+  type TelegramCallParams,
+} from "@openbot/contracts/signal-protocol/telegram-route";
 import { z } from "zod";
 
 export type {
@@ -50,7 +56,97 @@ const signalMessageTypeSchema = z.enum([
   "disconnect",
   "slack-delivery-result",
   "webhook-delivery-result",
+  "telegram-call",
 ]);
+
+// The Bot API calls an `ingress` socket can make (`TelegramCallParams`). Every object is strict: an
+// extra key, such as `reply_parameters.chat_id`, could reach a chat of another host, so it fails the
+// frame.
+const telegramChatIdSchema = z.int();
+const telegramMessageIdSchema = z.int().positive();
+const telegramTextSchema = z.string().min(1).max(TELEGRAM_TEXT_LIMIT);
+const telegramKeyboardSchema = z.strictObject({
+  inline_keyboard: z
+    .array(
+      z
+        .array(
+          z.strictObject({
+            text: z.string().min(1).max(64),
+            callback_data: z.string().refine((value) => {
+              const bytes = new TextEncoder().encode(value).byteLength;
+              return bytes >= 1 && bytes <= 64;
+            }),
+          }),
+        )
+        .max(8),
+    )
+    .max(8),
+});
+const telegramReplyParametersSchema = z.strictObject({
+  message_id: telegramMessageIdSchema,
+  allow_sending_without_reply: z.boolean().optional(),
+});
+const telegramLinkPreviewSchema = z.strictObject({ is_disabled: z.literal(true) });
+const telegramCallParamsSchemas = {
+  getMe: z.strictObject({}),
+  sendMessage: z.strictObject({
+    chat_id: telegramChatIdSchema,
+    text: telegramTextSchema,
+    parse_mode: z.literal("HTML").optional(),
+    message_thread_id: telegramMessageIdSchema.optional(),
+    reply_parameters: telegramReplyParametersSchema.optional(),
+    reply_markup: telegramKeyboardSchema.optional(),
+    link_preview_options: telegramLinkPreviewSchema.optional(),
+  }),
+  editMessageText: z.strictObject({
+    chat_id: telegramChatIdSchema,
+    message_id: telegramMessageIdSchema,
+    text: telegramTextSchema,
+    parse_mode: z.literal("HTML").optional(),
+    reply_markup: telegramKeyboardSchema.optional(),
+    link_preview_options: telegramLinkPreviewSchema.optional(),
+  }),
+  deleteMessage: z.strictObject({ chat_id: telegramChatIdSchema, message_id: telegramMessageIdSchema }),
+  setMessageReaction: z.strictObject({
+    chat_id: telegramChatIdSchema,
+    message_id: telegramMessageIdSchema,
+    reaction: z.array(z.strictObject({ type: z.literal("emoji"), emoji: z.string().min(1).max(16) })).max(1),
+  }),
+  answerCallbackQuery: z.strictObject({
+    callback_query_id: z.string().min(1).max(128),
+    text: z.string().max(200).optional(),
+    show_alert: z.boolean().optional(),
+  }),
+  leaveChat: z.strictObject({ chat_id: telegramChatIdSchema }),
+  getFile: z.strictObject({ chat_id: telegramChatIdSchema, file_id: z.string().min(1).max(256) }),
+  sendDocument: z.strictObject({
+    chat_id: telegramChatIdSchema,
+    file_name: z.string().min(1).max(255),
+    message_thread_id: telegramMessageIdSchema.optional(),
+    reply_parameters: telegramReplyParametersSchema.optional(),
+  }),
+} satisfies { [Method in TelegramCallMethod]: z.ZodType<TelegramCallParams[Method]> };
+const telegramCall = <Method extends TelegramCallMethod>(method: Method) =>
+  z.object({
+    type: z.literal("telegram-call"),
+    version: z.literal(1),
+    requestId: identifierSchema,
+    botId: z.string().regex(TELEGRAM_BOT_ID_PATTERN),
+    method: z.literal(method),
+    params: telegramCallParamsSchemas[method],
+  });
+const telegramCallSchema = z.discriminatedUnion("method", [
+  telegramCall("getMe"),
+  telegramCall("sendMessage"),
+  telegramCall("editMessageText"),
+  telegramCall("deleteMessage"),
+  telegramCall("setMessageReaction"),
+  telegramCall("answerCallbackQuery"),
+  telegramCall("leaveChat"),
+  telegramCall("getFile"),
+  telegramCall("sendDocument"),
+]);
+
 const signalClientMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("hello"),
@@ -61,6 +157,7 @@ const signalClientMessageSchema = z.discriminatedUnion("type", [
     slackRoute: z.string().min(1).max(8_192).optional(),
     discordRoute: z.string().min(1).max(8_192).optional(),
     webhookRoute: z.string().min(1).max(8_192).optional(),
+    telegramRoute: z.string().min(1).max(16_384).optional(),
   }),
   z.object({
     type: z.enum(["offer", "answer"]),
@@ -117,9 +214,14 @@ const signalClientMessageSchema = z.discriminatedUnion("type", [
       z.literal(503),
     ]),
   }),
+  telegramCallSchema,
 ]) satisfies z.ZodType<SignalClientMessage>;
 
-export function decodeSignalClientMessage(value: unknown): SignalClientMessage {
+/** A decoded client frame. A `telegram-call` keeps the link between its `method` and its `params`. */
+export type DecodedSignalClientMessage = z.output<typeof signalClientMessageSchema>;
+export type TelegramCall = z.output<typeof telegramCallSchema>;
+
+export function decodeSignalClientMessage(value: unknown): DecodedSignalClientMessage {
   const envelope = z.object({ type: z.string() }).safeParse(value);
   if (envelope.success && !signalMessageTypeSchema.safeParse(envelope.data.type).success) {
     throw new Error("Unsupported signal message.");

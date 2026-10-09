@@ -16,8 +16,8 @@ self-hosted account service with its own keys. See
 - Invitations are `openbot://join` links. Copy a link from the app and send it yourself. The app
   does not send an invitation by email.
 - The browser client at `openbot.run/app` does not work with your service.
-- Hosted servers, the OpenBot GitHub App, Slack and the iPhone Live Activity relay stay off. Each
-  needs secrets that only we have.
+- Hosted servers, the OpenBot GitHub App, Slack, the OpenBot Telegram bot and the iPhone Live
+  Activity relay stay off. Each needs secrets that only we have.
 - The other network connections in [PRIVACY.md](../PRIVACY.md) do not change.
 
 ## What you need
@@ -106,7 +106,7 @@ Keep the private JWK secret. With it, a person can open each host that uses your
    - `REMOTE_TICKET_JWKS_URL`: `https://api.example.com/.well-known/jwks.json`.
    - `REMOTE_CONTROL_PLANE_URL`: `https://api.example.com`.
    - The Signal secrets from step 1.
-   - Leave `SLACK_SIGNING_SECRET` empty.
+   - Leave `SLACK_SIGNING_SECRET` and the `TELEGRAM_*` values empty.
 
    If a reverse proxy already uses port 443, also set the values in
    [the reverse proxy notes](../remote/README.md#production-requirements).

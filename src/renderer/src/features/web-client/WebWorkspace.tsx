@@ -40,12 +40,12 @@ import { clearAgentContext, type TeamApiRequest } from "@openbot/team-client/tea
 import { classifyFailure } from "@openbot/telemetry";
 import { Button, hasVisibleToasts, toast } from "@openbot/ui";
 import { AccountDock } from "@openbot/ui/features/account/AccountDock";
-import { AppLoadingScreen } from "@openbot/ui/features/account/AppLoadingScreen";
 import { computeAgentAvatarMoods } from "@openbot/ui/features/agents/agent-avatar-mood";
 import { createFirstAgentDraft, type FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
 import { BillingDialog } from "@openbot/ui/features/billing/BillingDialog";
 import { createBillingStore } from "@openbot/ui/features/billing/billing-store";
 import { LeaveServerDialog } from "@openbot/ui/features/servers/LeaveServerDialog";
+import { ServerConnectionNotice, ServerPanelLoadNotice } from "@openbot/ui/features/servers/ServerConnectionNotice";
 import { ServerRail } from "@openbot/ui/features/servers/ServerRail";
 import { ChatAppsDialog } from "@openbot/ui/features/settings/ChatAppsDialog";
 import { createSettingsHostedServersStore } from "@openbot/ui/features/settings/stores/hosted-servers-store";
@@ -89,10 +89,10 @@ import { watchHostUpdate } from "../servers/host-update-toast";
 import type { ServerHostedSitesOptions, ServerSettingsSection } from "../servers/ServerSettingsModal";
 import type { HostUpdateCalls } from "../servers/ServerUpdatePanel";
 import { remoteUpdateServer, serverRoleCanAdminister } from "../servers/server-capabilities";
+import { createServerConnectionToast } from "../servers/server-connection-toast";
 import { isReaderAuthor } from "../team/reader-identity";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
-import { WebHostOffline } from "./WebHostOffline";
 import { WebMobileNavigation, type WebMobilePane } from "./WebMobileNavigation";
 import { createWebAccountCalls } from "./web-account";
 import { createWebAccountUsage } from "./web-account-usage";
@@ -251,15 +251,22 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   }
   /** The host list was read and holds no computer to connect to. */
   const noHost = () => !workspace.state.host && (workspace.state.hostsLoaded || Boolean(workspace.state.hostsError));
-  // A hosted server that sleeps or wakes keeps the workspace on screen; the server name shows why it does not answer.
-  const hostOffline = () => !noHost() && workspace.state.status !== "online" && !workspace.state.hostedSleep;
-  // The loading crew covers the chat while the opened hosted server wakes, and jumps out when it ends.
-  const hostWaking = () => workspace.state.hostedSleep === "waking" && workspace.state.status !== "online";
-  // Each screen has its own number. A wake that starts again during the exit shows a new screen.
-  const [wakeScreen, setWakeScreen] = createSignal<number | null>(null);
-  let wakeScreens = 0;
-  createEffect(hostWaking, (waking) => {
-    if (waking && untrack(wakeScreen) === null) setWakeScreen(++wakeScreens);
+  const hostOffline = () => !noHost() && !workspace.state.workspaceLoaded;
+  createServerConnectionToast(() => {
+    const host = workspace.state.host;
+    return host
+      ? {
+          id: host.hostId,
+          name: host.name,
+          ready: workspace.state.status === "online",
+          quiet: Boolean(
+            !workspace.state.workspaceLoaded ||
+              workspace.state.hostedSleep ||
+              workspace.state.hostRestart ||
+              workspace.state.incompatibility,
+          ),
+        }
+      : null;
   });
   let resetRevocation = workspace.state.revocationRevision;
   createEffect(
@@ -386,6 +393,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         state: incompatibility ? "incompatible" : hostState(host.hostId),
         // Only the opened host has a known sleep state.
         hostedSleep: active ? workspace.state.hostedSleep : null,
+        hostedIssue: active ? workspace.state.hostedIssue : null,
         notificationsMuted: notice.muted,
         notificationsMutedUntil: notice.mutedUntil,
         notificationLevel: notice.level,
@@ -747,7 +755,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     port: () => channelsPort,
     agents: workspace.profiles,
     // A host switch and a revoked session start the list again. A dropped connection does not: the
-    // open channel and its draft stay, and the effect below reads the list again when the host is back.
+    // open channel and its draft stay, and the controller reads the list again when the host is back.
     scopeKey: () => `${workspace.state.host?.hostId ?? ""}:${workspace.state.revocationRevision}`,
     readSelection: savedChannelId,
     writeSelection: (channelId) => {
@@ -788,13 +796,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         });
     }),
   );
-  // The scope starts before the host is online, so the first connection opens the saved channel here.
-  createEffect(channelsSupported, (supported) => {
-    if (!supported) return;
-    const saved = savedChannelId();
-    if (channels.state.selectedId === null && saved !== null) void channels.open(saved);
-    else void channels.refresh();
-  });
   const channelOpen = () => channels.state.selectedId !== null;
   const createSupported = () => workspace.state.status === "online" && workspace.state.host !== null;
   /** A host with no agents. The first-agent form opens there by itself, as in the desktop app. */
@@ -922,37 +923,21 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     },
   );
   createEffect(
-    () => ({ host: workspace.state.host?.hostId, state: workspace.state.status }),
-    ({ host, state }) => {
-      let active = true;
+    () => workspace.state.host?.hostId,
+    () => {
       usageReading.reset();
       view.reset();
-      // A connect can load an empty host in the same update, so the first-agent form stays open.
-      setCreating(untrack(() => firstAgent() && !channelOpen()));
+      setCreating(false);
       modelsShown = ++modelsRequest;
       setModels([]);
       setStatus(CONNECTING_STATUS);
-      if (host && state === "online") {
-        // Not through `workspace.run`: it drops a task while another runs, and the reconnect that
-        // made the host online is still running here.
-        const request = ++modelsRequest;
-        void Promise.all([workspace.runtime.status(), workspace.runtime.models()]).then(
-          ([nextStatus, nextModels]) => {
-            if (!active) return;
-            setStatus(nextStatus);
-            showModels(request, nextModels);
-          },
-          (error: unknown) => {
-            if (active)
-              toast.error(error instanceof Error ? error.message : t("webClient.error.hostStatus"), {
-                report: { operation: "other", source: "system", cause_code: "unknown" },
-              });
-          },
-        );
-      }
-      return () => {
-        active = false;
-      };
+    },
+  );
+  createEffect(
+    () => ({ status: workspace.state.agentStatus, models: workspace.state.models }),
+    (value) => {
+      if (value.status) setStatus(value.status);
+      showModels(++modelsRequest, value.models);
     },
   );
   async function select(id: string) {
@@ -1017,6 +1002,68 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           data-web-mobile-pane={mobilePane()}
           compact={compact()}
           blockedServer={blockedServer()}
+          initialLoading={hostOffline()}
+          connection={
+            <>
+              <Show when={!noHost() && workspace.state.status !== "online" && !blockedServer()}>
+                <ServerConnectionNotice
+                  name={workspace.state.host?.name ?? t("webClient.notice.findingHosts")}
+                  initial={!workspace.state.workspaceLoaded}
+                  issue={workspace.state.hostedIssue}
+                  detail={
+                    workspace.state.recovery?.phase === "suspended" &&
+                    !workspace.state.hostedSleep &&
+                    !workspace.state.hostedIssue
+                      ? workspace.state.connectionError
+                      : null
+                  }
+                  phase={
+                    workspace.state.hostedSleep ??
+                    (workspace.state.recovery?.phase === "suspended"
+                      ? "blocked"
+                      : workspace.state.status === "connecting"
+                        ? "loading"
+                        : workspace.state.workspaceLoaded
+                          ? "reconnecting"
+                          : "connecting")
+                  }
+                  remainingSeconds={
+                    workspace.state.recovery?.phase === "waiting" || workspace.state.recovery?.phase === "cooldown"
+                      ? workspace.state.recovery.remainingSeconds
+                      : 0
+                  }
+                  busy={workspace.state.status === "connecting" || !workspace.state.host}
+                  onRetry={() => void workspace.run(workspace.reconnect)}
+                  onManage={() => setBillingOpen(true)}
+                />
+              </Show>
+              <Show when={workspace.state.status === "online" && workspace.state.panelsFailed}>
+                <ServerPanelLoadNotice
+                  busy={workspace.state.panelsLoading}
+                  onRetry={() => void workspace.retryPanels()}
+                />
+              </Show>
+              <Show
+                when={
+                  workspace.state.status === "online" &&
+                  (workspace.conversation()?.error ||
+                    (!workspace.conversation()?.page && workspace.conversation()?.loading))
+                }
+              >
+                <ServerConnectionNotice
+                  name={workspace.selected()?.name ?? ""}
+                  phase={workspace.conversation()?.error ? "blocked" : "loading"}
+                  initial={false}
+                  detail={workspace.conversation()?.error ?? null}
+                  busy={workspace.conversation()?.loading === true}
+                  onRetry={() => {
+                    const id = workspace.state.selectedId;
+                    if (id) void workspace.select(id);
+                  }}
+                />
+              </Show>
+            </>
+          }
           onRetryServer={(serverId) =>
             workspace.run(async () => {
               const host = workspace.state.hosts.find((item) => item.hostId === serverId);
@@ -1059,6 +1106,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 />
               </Show>
               <Sidebar
+                agentsConnecting={!noHost() && !workspace.state.agentsLoaded}
                 channels={channelsSupported() ? channels.state.channels.filter((channel) => !channel.archived) : []}
                 deletedChannels={
                   channelsSupported() ? channels.state.channels.filter((channel) => channel.archived) : []
@@ -1435,6 +1483,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           </Show>
           <Show when={!agentFormOpen() && channelOpen()}>
             <ChannelConversation
+              connectionReady={workspace.state.status === "online"}
               isOwnMessage={(authorId) =>
                 isReaderAuthor(authorId, {
                   memberId: workspace.state.memberId,
@@ -1472,32 +1521,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               onRefresh={() => void workspace.run(workspace.refreshHosts)}
             />
           </Show>
-          <Show when={!agentFormOpen() && !channelOpen() && hostOffline()}>
-            <WebHostOffline
-              title={
-                workspace.state.host
-                  ? workspace.state.status === "connecting"
-                    ? t("webClient.notice.connecting")
-                    : t("webClient.notice.disconnected")
-                  : t("webClient.notice.findingHosts")
-              }
-              description={
-                workspace.state.host
-                  ? workspace.state.error
-                    ? sourceText(workspace.state.error)
-                    : t("webClient.notice.keepOpen")
-                  : null
-              }
-              reconnectable={Boolean(workspace.state.host)}
-              connecting={workspace.state.status === "connecting"}
-              disabled={workspace.state.hostsLoading}
-              onReconnect={() =>
-                void workspace.run(async () => {
-                  if (workspace.state.host) await workspace.connect(workspace.state.host);
-                })
-              }
-            />
-          </Show>
           <Show when={!agentFormOpen() && !channelOpen() && !noHost() && !hostOffline()}>
             <Conversation
               headerActions={
@@ -1515,7 +1538,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               }
               runtime={runtime}
               onOpenMarketplace={() => setMarketplaceOpen(true)}
-              agentStatus={workspace.state.status === "online" ? status() : CONNECTING_STATUS}
+              agentStatus={
+                workspace.state.status === "online" && workspace.conversation()?.page ? status() : CONNECTING_STATUS
+              }
               accountUsage={usageReading.accountUsage()}
               // As in the desktop app on a joined host: an owner or admin downloads the host's
               // providers, and the sign-in stays in the host's settings.
@@ -1565,7 +1590,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               browserTabs={workspace.state.browserTabs}
               activeBrowserTabId={workspace.state.activeBrowserTabId}
               browserVisibilitySuspended={workspace.state.status !== "online" || usageOpen()}
-              workspaceCovered={usageOpen() || wakeScreen() !== null}
+              workspaceCovered={usageOpen() || hostOffline()}
               browserControlState={workspace.state.browserControlState}
               server={server()}
               presence={workspace.state.presence ?? { serverId: server()?.id ?? null, members: [], updatedAt: "" }}
@@ -1640,15 +1665,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   void workspace.run(() => workspace.runtime.stop(page.agentId, page.activeTurnId ?? ""));
               }}
             />
-          </Show>
-          <Show when={wakeScreen()} keyed>
-            <div class="conversation-panel">
-              <AppLoadingScreen
-                ready={!hostWaking()}
-                label={t("webClient.hostWaking")}
-                onExited={() => setWakeScreen(untrack(hostWaking) ? ++wakeScreens : null)}
-              />
-            </div>
           </Show>
         </WorkspaceFrame>
       </ChannelsControllerProvider>

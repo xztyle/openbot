@@ -1,11 +1,9 @@
 import { computeAgentAvatarMoods } from "@openbot/ui/features/agents/agent-avatar-mood";
-import { IOS_TESTFLIGHT_URL } from "@openbot/ui/features/mobile-app/ios-testflight";
 import { Sidebar } from "@openbot/ui/features/sidebar/Sidebar";
 import { SidebarMobileAppCard } from "@openbot/ui/features/sidebar/SidebarMobileAppCard";
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, Show } from "solid-js";
-import { writeClipboardText } from "../../clipboard";
 import { useLayout } from "../../layout";
 import { DirectConversation } from "../../lazy-views";
 import { useNavigation } from "../../navigation";
@@ -23,8 +21,9 @@ import { useSettings } from "../settings/settings-context";
 import { usePresence } from "../team/team-context";
 import { useSidebar } from "./sidebar-context";
 
-/** Dismissing the iOS beta card is a choice of this computer, like the sidebar width. */
-const MOBILE_APP_DISMISSED_STORAGE_KEY = "openbot:ios-beta-card-dismissed";
+/** Dismissing the mobile app card is a choice of this computer, like the sidebar width. The key is
+ * new with the Android release, so a computer that dismissed the iPhone-only card sees it once more. */
+const MOBILE_APP_DISMISSED_STORAGE_KEY = "openbot:mobile-app-card-dismissed";
 
 /**
  * The list of Agents and people. It reads the most domains of any pane, and every
@@ -44,9 +43,16 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
   const { activeServer, activeServerSupportsCapability } = useServers();
   const { openServerSettings } = useServerSettings();
   const serverActions = useServerActions();
-  const { setSkillsMarketplaceOpen } = useSettings();
-  const { agentList, agentListConnecting, activeAgent, agentSetupDraft, duplicatingAgentIds, openBotSetup } =
-    useAgents();
+  const { openAppSettings, setSkillsMarketplaceOpen } = useSettings();
+  const {
+    agentList,
+    agentListConnecting,
+    agentListSettled,
+    activeAgent,
+    agentSetupDraft,
+    duplicatingAgentIds,
+    openBotSetup,
+  } = useAgents();
   const { editAgent, duplicateAgent, deleteAgent } = useAgentActions();
   const { activeTurns, queues, failedTurns, usageLimits, pendingPrompts, pendingApprovals } = useTurns();
   const { unreadReplies, recentReplies, markAllAgentMessagesRead } = useConversation();
@@ -201,7 +207,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
       footer={
         <Show when={!platform.landingPreview && !mobileAppDismissed()}>
           <SidebarMobileAppCard
-            onCopyInvite={() => writeClipboardText(IOS_TESTFLIGHT_URL)}
+            onOpenInstall={() => openAppSettings(null, "mobile-connect")}
             onDismiss={() => {
               window.localStorage.setItem(MOBILE_APP_DISMISSED_STORAGE_KEY, "true");
               setMobileAppDismissed(true);
@@ -212,7 +218,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
       onOpenMarketplace={() => setSkillsMarketplaceOpen(true)}
       agentsConnecting={agentListConnecting()}
       emptyAction={
-        agentList().length === 0 && !agentListConnecting()
+        agentList().length === 0 && agentListSettled()
           ? {
               label: t("sidebar.empty.firstAgent"),
               avatarSeed: agentSetupDraft().avatarSeed,

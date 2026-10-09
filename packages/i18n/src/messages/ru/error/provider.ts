@@ -69,6 +69,7 @@ export const messages = {
   "error.provider.unexpectedVersion": "Среда выполнения провайдера вернула неожиданную версию.",
   "error.provider.metadataNoData": "Загрузка метаданных среды выполнения не вернула данных.",
   "error.provider.metadataTooLarge": "Метаданные среды выполнения слишком большие.",
+  "error.provider.requestFailed": "OpenBot не удалось загрузить {url}. {reason}",
   "error.provider.installRecordMismatch": "Запись об установке среды выполнения не совпадает.",
   "error.provider.runtimeChecksum": "Контрольная сумма среды выполнения провайдера не совпадает.",
   "error.provider.codexReleaseShape": "У релиза Codex неожиданная структура.",
@@ -190,6 +191,12 @@ export const messages = {
   "error.provider.antigravityNotStarted": "Сервер Gemini найден, но его версию прочитать не удаётся.",
   "error.provider.antigravityVersionUnreadable": "Не удалось прочитать версию сервера Gemini.",
   "error.provider.antigravitySignIn": "Войдите через Google, чтобы использовать Gemini.",
+  "error.provider.antigravityRateLimited":
+    "Gemini отклонил запрос: достигнут лимит частоты запросов или квота тарифа. Подождите несколько минут или выберите другую модель и повторите попытку.\n{detail}",
+  "error.provider.antigravityModelUnavailable":
+    "Gemini сейчас не может использовать эту модель. Выберите другую модель и повторите попытку.\n{detail}",
+  "error.provider.antigravityServiceFailure":
+    "Сервис Gemini от Google не выполнил запрос. Повторите попытку через несколько минут.\n{detail}",
   "error.provider.cursorArchivePath": "В архиве Cursor неожиданный файл.",
   "error.provider.cursorChecksum": "Контрольная сумма среды выполнения Cursor не совпадает.",
   "error.provider.cursorReleaseShape": "У релиза Cursor неожиданная структура.",

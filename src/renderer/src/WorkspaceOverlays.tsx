@@ -21,6 +21,7 @@ import {
   type OnePasswordConnectorController,
 } from "./features/connectors/onepassword-connector";
 import { createSlackConnector } from "./features/connectors/slack-connector";
+import { createTelegramConnector } from "./features/connectors/telegram-connector";
 import { useCustomAgents } from "./features/custom-agents/custom-agents-context";
 import { useCustomProviders } from "./features/custom-providers/custom-providers-context";
 import { useProviderDetection } from "./features/custom-providers/provider-detection-context";
@@ -233,12 +234,13 @@ function AddServer() {
   );
 }
 
-/** The leave confirmation that the server menu opens. */
+/** The leave or owner removal confirmation that the server menu opens. */
 function LeaveServer() {
   const { leaveConfirmServer, leaveRestoreTarget, cancelLeaveServer, leaveConfirmedServer } = useServerSettings();
   return (
     <LeaveServerDialog
       server={leaveConfirmServer()}
+      removeOwned={leaveConfirmServer()?.role === "owner"}
       onClose={cancelLeaveServer}
       onLeave={leaveConfirmedServer}
       restoreFocusTarget={leaveRestoreTarget()}
@@ -256,7 +258,8 @@ function ServerSettings(props: {
   bitwardenConnector: BitwardenConnectorPanelProps | undefined;
 }) {
   const platform = usePlatform();
-  const { hostStatus, setServerMuted, setServerNotificationLevel, activeServer } = useServers();
+  const { hostStatus, setServerMuted, setServerNotificationLevel, activeServer, hostedServerIds, hostedServersLoaded } =
+    useServers();
   const { selectAgent, selectGlobalSearchMessage } = useNavigation();
   const { selectServer } = useServerSelection();
   const { setPendingAgentSelection } = useServerSwitch();
@@ -343,8 +346,9 @@ function ServerSettings(props: {
     setMcpServerEnabled,
     testMcpServer,
   } = useServerSettings();
-  // The Slack and Discord Orchestrators run on this computer, so their picker lists this computer's
-  // models: none while a joined server is on screen, and then it starts on a new agent's default.
+  // The Slack, Discord and Telegram Orchestrators run on this computer, so their pickers list this
+  // computer's models: none while a joined server is on screen, and then they start on a new agent's
+  // default.
   const { collapseSidebarSection } = useSidebar();
   const orchestratorModels = () => {
     const options = modelOptions();
@@ -358,12 +362,13 @@ function ServerSettings(props: {
     };
   };
   // The Integrations section starts collapsed: the orchestrator is not an agent people chat with
-  // every day. The collapse belongs to the local server, the one on screen when Slack or Discord connects.
+  // every day. The collapse belongs to the local server, the one on screen when the app connects.
   const collapseOrchestratorSection = (sectionId: string) => {
     if (activeServer()?.kind === "local") collapseSidebarSection(sectionId);
   };
   const slack = createSlackConnector(undefined, orchestratorModels, collapseOrchestratorSection);
   const discord = createDiscordConnector(undefined, orchestratorModels, collapseOrchestratorSection);
+  const telegram = createTelegramConnector(undefined, orchestratorModels, collapseOrchestratorSection);
   // The workspace belongs to the selected server. For another server, the switch comes first and
   // the agent is published for the scope it lands in; a message there opens as its agent's chat.
   const openOnServer = (server: ServerSummary, agentId: string, open: () => void) => {
@@ -519,6 +524,8 @@ function ServerSettings(props: {
           onRemoveMember={removeServerMember}
           onRevokeInvite={revokeServerInvite}
           onLeaveServer={leaveServer}
+          // Billing deletes a hosted server, so its owner does not remove it here.
+          onRemoveServer={hostedServersLoaded() && !hostedServerIds().has(server().id) ? leaveServer : undefined}
           onOpenScreenRecordingSettings={() => appPort().openExternal("mac-screen-recording")}
           onRecheckScreenRecording={recheckScreenRecording}
           mcpServers={serverSettingsMcp()}
@@ -579,6 +586,8 @@ function ServerSettings(props: {
           // computer's browser and return to its `openbot://` link.
           slackConnector={server().kind === "local" ? slack : undefined}
           discordConnector={server().kind === "local" ? discord : undefined}
+          // A Telegram chat links to this computer: main opens the `t.me` link in this computer's browser.
+          telegramConnector={server().kind === "local" ? telegram : undefined}
           connectorAgents={agentList()}
           // The feed listens on this computer, so a calendar app on another one cannot read it.
           routineFeed={

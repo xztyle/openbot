@@ -131,9 +131,18 @@ export class ChannelService {
     return this.store.database.commandResult(`channels:${actorId}:${operationId}`) !== undefined;
   }
 
+  /**
+   * `beforeApply` changes the command when its turn in the queue comes, immediately before it is
+   * applied. A caller that completes a command from the stored channel must do it there: the
+   * channel it reads before the call can be older than the commands that still wait in the queue.
+   */
   readonly command = Effect.fn("ChannelService.command")(
-    (command: ChannelCommand, actor: { id: string; name: string }) => {
-      const operation = this.apply(command, actor);
+    (
+      command: ChannelCommand,
+      actor: { id: string; name: string },
+      beforeApply: (command: ChannelCommand) => ChannelCommand = (queued) => queued,
+    ) => {
+      const operation = Effect.suspend(() => this.apply(beforeApply(command), actor));
       return command.type === "stop" || command.type === "archive"
         ? operation
         : this.#serialize(command.channelId, operation);

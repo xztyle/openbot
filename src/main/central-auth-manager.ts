@@ -21,6 +21,7 @@ import {
   type RemoteSessionTicket,
 } from "@openbot/contracts/remote-control-plane";
 import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
+import { TELEGRAM_LINK_CODE_PATTERN } from "@openbot/contracts/signal-protocol/telegram-route";
 import {
   REMOTE_TICKET_AUDIENCE,
   type RemoteMemberRole,
@@ -79,6 +80,9 @@ interface EmailCodeRequest {
   idempotencyKey: string;
   pending: Deferred.Deferred<CentralAuthState, CentralAuthOperationError> | null;
 }
+
+/** A Telegram bot username: 5 to 32 letters, digits and underscores. */
+const TELEGRAM_BOT_USERNAME = /^[A-Za-z0-9_]{5,32}$/u;
 
 const STARTUP_RETRY_WINDOW_MS = 30_000;
 const STARTUP_REQUEST_TIMEOUT_MS = 3_000;
@@ -615,6 +619,72 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
   ).bind(this);
 
   /**
+   * The Telegram route ticket of this host: the chats that the account service links to it, which
+   * Signal routes to its `ingress` socket.
+   */
+
+  readonly issueTelegramRoute = Effect.fn("CentralAuth.issueTelegramRoute")(
+    function* (
+      this: CentralAuthManager,
+      hostId: string,
+    ): Effect.fn.Return<string, CentralAuthOperationError, CentralAuthTransport> {
+      const machineToken = yield* this.#hostMachineToken(hostId);
+      return yield* this.#requestEffect(
+        `/v2/remote/hosts/${encodeURIComponent(hostId)}/telegram-route`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ machineToken }) },
+        (value) => requiredString(decodeRecord(value, "Telegram route"), "ticket"),
+      );
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /** A one-use code that links the next Telegram chat that adds the OpenBot bot to this host. */
+
+  readonly createTelegramLink = Effect.fn("CentralAuth.createTelegramLink")(
+    function* (
+      this: CentralAuthManager,
+      hostId: string,
+    ): Effect.fn.Return<{ botUsername: string; code: string }, CentralAuthOperationError, CentralAuthTransport> {
+      const machineToken = yield* this.#hostMachineToken(hostId);
+      return yield* this.#requestEffect(
+        `/v2/remote/hosts/${encodeURIComponent(hostId)}/telegram-link`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ machineToken }) },
+        (value) => {
+          const record = decodeRecord(value, "Telegram link");
+          const botUsername = requiredString(record, "botUsername");
+          const code = requiredString(record, "code");
+          if (!TELEGRAM_BOT_USERNAME.test(botUsername) || !TELEGRAM_LINK_CODE_PATTERN.test(code))
+            throw new Error("The Telegram link is invalid.");
+          return { botUsername, code };
+        },
+      );
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /** Unlinks a Telegram chat from this host, so Signal stops routing its updates here. */
+
+  readonly unlinkTelegramChat = Effect.fn("CentralAuth.unlinkTelegramChat")(
+    function* (
+      this: CentralAuthManager,
+      hostId: string,
+      chatId: string,
+    ): Effect.fn.Return<void, CentralAuthOperationError, CentralAuthTransport> {
+      const machineToken = yield* this.#hostMachineToken(hostId);
+      yield* this.#requestEffect(
+        `/v2/remote/hosts/${encodeURIComponent(hostId)}/telegram-disconnect`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ machineToken, chatId }),
+        },
+        () => undefined,
+      );
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /**
    * Sends one Live Activity update through the account service to Apple. The host sealed the
    * content with keys that only the phone has, so the service forwards bytes it cannot read.
    * Returns `gone` when Apple refused the token.
@@ -907,6 +977,21 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     ): Effect.fn.Return<void, CentralAuthOperationError, CentralAuthTransport> {
       return yield* this.#authorizedRequestEffect(
         `/v2/remote/hosts/${encodeURIComponent(hostId)}/members/${encodeURIComponent(membershipId)}`,
+        { method: "DELETE" },
+        decodeVoid,
+      );
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /** Removes a host that this account owns from the account service, for all of its members. */
+  readonly removeOwnedRemoteHost = Effect.fn("CentralAuth.removeOwnedRemoteHost")(
+    function* (
+      this: CentralAuthManager,
+      hostId: string,
+    ): Effect.fn.Return<void, CentralAuthOperationError, CentralAuthTransport> {
+      return yield* this.#authorizedRequestEffect(
+        `/v2/remote/hosts/${encodeURIComponent(hostId)}/`,
         { method: "DELETE" },
         decodeVoid,
       );

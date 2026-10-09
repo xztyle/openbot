@@ -88,6 +88,7 @@ const ChannelFilePreviewPanel = lazy(() => import("../conversation/FilePreviewPa
 
 /** What the open channel reads from the client around it. The channel itself comes from `useChannels()`. */
 export interface ChannelConversationProps {
+  connectionReady?: boolean;
   isOwnMessage: (authorId: string) => boolean;
   /** The device with the keyboard on desktop. Web leaves it empty and the browser is detected. */
   platform?: "darwin" | "win32" | "linux" | undefined;
@@ -540,6 +541,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
    * failed.
    */
   const stopWork = async () => {
+    if (props.connectionReady === false) return;
     const channelId = channels.state.page?.channel.id;
     if (!channelId) return;
     for (const taskId of activeRuns()) {
@@ -564,7 +566,13 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const submit = () => {
     const { text, attachments, replyToMessageId } = composer();
     const channelId = channels.state.selectedId;
-    if (channels.state.pending || (!text.trim() && !attachments.length) || !channelId) return;
+    if (
+      props.connectionReady === false ||
+      channels.state.pending ||
+      (!text.trim() && !attachments.length) ||
+      !channelId
+    )
+      return;
     const expanded = expandComposerMentions(text);
     // A request that opens with a member is addressed to that member, the way a reader writes it.
     // A mention later in the text is what it reads as: a reference the owner of the work can see.
@@ -1022,6 +1030,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
                       variant="ghost"
                       class="composer-button"
                       aria-label={t("channel.composer.attach")}
+                      disabled={props.connectionReady === false}
                       onClick={() => addAttachments(() => runtime().agent.chooseAttachments({ filter: "all" }))}
                     >
                       <Plus aria-hidden="true" />
@@ -1039,7 +1048,9 @@ export function ChannelConversation(props: ChannelConversationProps) {
                             aria-keyshortcuts={sendShortcutAriaKey(deviceSendShortcut(props.platform))}
                             title={t(sendShortcutHintKey(deviceSendShortcut(props.platform), "send"))}
                             disabled={
-                              channels.state.pending || (!composer().text.trim() && !composer().attachments.length)
+                              props.connectionReady === false ||
+                              channels.state.pending ||
+                              (!composer().text.trim() && !composer().attachments.length)
                             }
                           >
                             <ArrowUp aria-hidden="true" />
@@ -1051,6 +1062,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
                           variant="ghost"
                           class="voice-button voice-button-active"
                           aria-label={t("channel.composer.stop")}
+                          disabled={props.connectionReady === false}
                           onClick={() => void stopWork()}
                         >
                           <StopIcon />

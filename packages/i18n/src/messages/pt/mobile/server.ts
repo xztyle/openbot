@@ -74,9 +74,9 @@ export const messages = {
     other:
       "Uma conta pode ter {count} servidores pagos. Para adicionar um servidor, exclua um primeiro no OpenBot do seu computador.",
   },
-  "mobile.server.hosted.heroTitle": "Seu próprio servidor na nuvem",
+  "mobile.server.hosted.heroTitle": "Execute o OpenBot 24/7 em um servidor externo",
   "mobile.server.hosted.heroDescription":
-    "Ele funciona quando seu computador está desligado e inicia quando você o usa.",
+    "Os servidores do OpenBot mantêm seus agentes e rotinas em execução, mesmo com o computador desligado. Cuidamos da infraestrutura e da manutenção, para que seu servidor esteja pronto sem nenhuma configuração técnica.",
   "mobile.server.hosted.securePayment": "Pagamento seguro com a Stripe",
   "mobile.server.hosted.joinHint": "Use um convite do dono de um servidor.",
   "mobile.server.hosted.contactHint": "Para um Mac ou um plano para sua empresa.",
@@ -169,6 +169,10 @@ export const messages = {
   "mobile.server.settings.leaveTitle": "Sair de {name}?",
   "mobile.server.settings.leaveBody": "Você precisará de outro convite para entrar novamente.",
   "mobile.server.settings.leave": "Sair do servidor",
+  "mobile.server.settings.removeTitle": "Remover {name}?",
+  "mobile.server.settings.removeBody":
+    "Isto remove o servidor do serviço de contas para todos os membros. Os arquivos e conversas no computador dele continuam. Para usá-lo de novo, registre-o naquele computador.",
+  "mobile.server.settings.remove": "Remover servidor",
   "mobile.server.settings.name": "Nome do servidor",
   "mobile.server.settings.nameLength": "Use de {min} a {max} caracteres.",
   "mobile.server.settings.logo": "Logotipo do servidor",

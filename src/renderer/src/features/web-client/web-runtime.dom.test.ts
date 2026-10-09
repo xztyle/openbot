@@ -47,6 +47,79 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("browser workspace runtime", () => {
+  it.each([401, 403, 503])("classifies account bootstrap denial with status %s", async (status) => {
+    let bootstrap: RemoteTeamPeerActions["getBootstrap"] | undefined;
+    const connection = vi.fn();
+    const runtime = createWebWorkspaceRuntime(
+      "one",
+      { connection, event: vi.fn(), accountChanged: async () => {} },
+      vi.fn(async () => Response.json({ error: "Unavailable" }, { status })),
+      {
+        createPeer: (actions) => {
+          bootstrap = actions.current.getBootstrap;
+          return peer;
+        },
+        acquireHostLock: async () => () => {},
+      },
+    );
+    if (!bootstrap) throw new Error("Peer actions are unavailable.");
+    await expect(bootstrap(host.hostId, "client-key", null)).rejects.toMatchObject({ status });
+    if (status === 503) expect(connection).not.toHaveBeenCalled();
+    else
+      expect(connection).toHaveBeenCalledWith({
+        hostId: host.hostId,
+        state: "offline",
+        message: null,
+        code: "session_revoked",
+      });
+    await runtime.dispose();
+  });
+
+  it.each([401, 403, 503])("reports current-host request denial with status %s", async (status) => {
+    const accessDenied = vi.fn();
+    const runtime = createWebWorkspaceRuntime(
+      "one",
+      { connection: vi.fn(), accessDenied, event: vi.fn(), accountChanged: async () => {} },
+      vi.fn(),
+      { createPeer: () => peer, acquireHostLock: async () => () => {} },
+    );
+    await runtime.connect(host);
+    peer.execute.mockResolvedValueOnce({ ok: false, status, body: {} });
+    if (status === 403) peer.execute.mockResolvedValueOnce({ ok: false, status, body: {} });
+    await expect(runtime.conversation("agent")).rejects.toThrow();
+    if (status === 503) expect(accessDenied).not.toHaveBeenCalled();
+    else
+      expect(accessDenied).toHaveBeenCalledWith(
+        host.hostId,
+        expect.objectContaining({ code: status === 401 ? "authentication_required" : "access_ended" }),
+      );
+    await runtime.dispose();
+  });
+
+  it.each([200, 503])("keeps host access when a refused action has membership status %s", async (status) => {
+    const accessDenied = vi.fn();
+    const runtime = createWebWorkspaceRuntime(
+      "one",
+      { connection: vi.fn(), accessDenied, event: vi.fn(), accountChanged: async () => {} },
+      vi.fn(),
+      { createPeer: () => peer, acquireHostLock: async () => () => {} },
+    );
+    await runtime.connect(host);
+    peer.execute.mockClear();
+    peer.execute.mockResolvedValueOnce({ ok: false, status: 403, body: { error: "Action refused" } });
+    peer.execute.mockResolvedValueOnce({ ok: status === 200, status, body: { id: "member" } });
+
+    const deletion = runtime.deleteAgent("agent");
+    if (status === 200) await expect(deletion).rejects.toThrow("Action refused");
+    else await expect(deletion).rejects.toThrow();
+    expect(accessDenied).not.toHaveBeenCalled();
+    expect(peer.execute).toHaveBeenCalledTimes(2);
+    expect(peer.execute).toHaveBeenLastCalledWith(
+      expect.objectContaining({ method: "GET", path: "/v1/me", timeoutMs: 15_000 }),
+    );
+    await runtime.dispose();
+  });
+
   it("reads the host sidebar layout and validates account usage", async () => {
     peer.execute.mockImplementation(async (command) => ({
       ok: true,
@@ -156,7 +229,7 @@ describe("browser workspace runtime", () => {
     await runtime.dispose();
   });
 
-  it("does not accept a sidebar layout response after the host changes", async () => {
+  it.each([200, 403])("ignores a sidebar response with status %s after the host changes", async (status) => {
     let resolveLayout: ((value: unknown) => void) | undefined;
     peer.execute.mockImplementation(async (command) => {
       if (command.path === "/v1/sidebar-layout") {
@@ -173,20 +246,31 @@ describe("browser workspace runtime", () => {
             : {},
       };
     });
-    const runtime = create();
+    const accessDenied = vi.fn();
+    const runtime = createWebWorkspaceRuntime(
+      "one",
+      { connection: vi.fn(), accessDenied, event: vi.fn(), accountChanged: async () => {} },
+      vi.fn(),
+      { createPeer: () => peer, acquireHostLock: async () => () => {} },
+    );
     await runtime.connect(host);
     if (!runtime.getSidebarLayout) throw new Error("Runtime sidebar layout is unavailable.");
     const pending = runtime.getSidebarLayout();
     await vi.waitFor(() => expect(resolveLayout).toBeDefined());
     await runtime.connect({ ...host, hostId: "other-host", devicePublicKey: "other-key" });
     resolveLayout?.({
-      revision: 1,
-      sections: [],
-      order: ["people", "unassigned"],
-      agentAssignments: {},
-      agentOrder: [],
+      ok: status === 200,
+      status,
+      body: {
+        revision: 1,
+        sections: [],
+        order: ["people", "unassigned"],
+        agentAssignments: {},
+        agentOrder: [],
+      },
     });
     await expect(pending).rejects.toThrow("selected host changed");
+    expect(accessDenied).not.toHaveBeenCalled();
     await runtime.dispose();
   });
 

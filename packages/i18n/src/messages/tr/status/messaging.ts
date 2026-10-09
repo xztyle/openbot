@@ -39,4 +39,10 @@ export const messages = {
   // The page a development Slack install ends on.
   "status.messaging.signInReceived": "OpenBot Slack kurulumunu aldı. Bu sekmeyi kapatabilirsiniz.",
   "status.messaging.signInUnknown": "OpenBot bu Slack kurulumunu başlatmadı. OpenBot içinde tekrar başlatın.",
+  "status.messaging.telegramNoAgent":
+    "Burada henüz yanıt verebilecek bir ajan yok. OpenBot'ta Telegram Düzenleyicisi'ni ekleyin.",
+  "status.messaging.telegramLinked":
+    "OpenBot bu sohbete bağlandı. Ajanlara sormak için {bot} adını anın veya OpenBot'un bir mesajını yanıtlayın.",
+  "status.messaging.telegramOrchestratorName": "Telegram Düzenleyicisi",
+  "status.messaging.telegramOrchestratorTitle": "Telegram'da yanıt verir ve ekibe sorar",
 } as const satisfies PartialTranslation<typeof source>;

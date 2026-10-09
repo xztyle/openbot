@@ -79,6 +79,7 @@ import { decodeScopedAgentEvent } from "./agent-event-decoding";
 import {
   decodeAccountSessions,
   decodeAgentImportSkill,
+  decodeAgentMemoryLimitPreference,
   decodeAnalyticsPreference,
   decodeAppInfo,
   decodeAppLanguagePreference,
@@ -158,7 +159,11 @@ import {
   decodeDynamicIslandPresentation,
 } from "./dynamic-island-decoding";
 import { decodeHostReleaseStatusFromMain } from "./host-release-decoding";
-import { decodeAddOrchestratorReply, decodeMessagingOverviewReply } from "./messaging-decoding";
+import {
+  decodeAddOrchestratorReply,
+  decodeMessagingOverviewReply,
+  decodeTelegramOverviewReply,
+} from "./messaging-decoding";
 import { decodeProviderRuntimeSnapshot } from "./provider-runtime";
 import { decodeRoutineFlowCanvas, decodeRoutineFlowLink, decodeRoutineFlowsChanged } from "./routine-flow-decoding";
 import {
@@ -478,6 +483,8 @@ const openbotApi: OpenBotDesktopApi = {
     approvalAutomation: decodeApprovalAutomationPreference,
     getBusyMessageModePreference: decodeBusyMessageModePreference,
     setBusyMessageModePreference: decodeBusyMessageModePreference,
+    getAgentMemoryLimitPreference: decodeAgentMemoryLimitPreference,
+    setAgentMemoryLimitPreference: decodeAgentMemoryLimitPreference,
     getRemoteSessionReusePreference: decodeRemoteSessionReusePreference,
     setRemoteSessionReusePreference: decodeRemoteSessionReusePreference,
     getAppLanguagePreference: decodeAppLanguagePreference,
@@ -678,6 +685,12 @@ const openbotApi: OpenBotDesktopApi = {
     reconnectDiscordGuild: decodeVoid,
     setDiscordEnabled: decodeVoid,
     addDiscordOrchestrator: decodeAddOrchestratorReply,
+    getTelegramOverview: decodeTelegramOverviewReply,
+    connectTelegramChat: decodeVoid,
+    disconnectTelegramChat: decodeVoid,
+    reconnectTelegramChat: decodeVoid,
+    setTelegramEnabled: decodeVoid,
+    addTelegramOrchestrator: decodeAddOrchestratorReply,
   }),
   hostAdmin: bridgeGroup(IPC_ENDPOINTS.hostAdmin, {
     updateIdentity: decodeServer,

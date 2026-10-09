@@ -100,7 +100,8 @@ body {
   }
 
   .web-app-frame[data-web-mobile-pane="workspace"] .conversation-panel,
-  .web-app-frame[data-web-mobile-pane="workspace"] .remote-compatibility-screen {
+  .web-app-frame[data-web-mobile-pane="workspace"] .remote-compatibility-screen,
+  .web-app-frame[data-web-mobile-pane="workspace"] > .server-connection-workspace {
     display: none;
   }
 
@@ -352,10 +353,6 @@ body {
 .web-connect-download.ui-button,
 .web-connect-download.ui-button:hover {
   color: var(--openbot-text-on-light);
-}
-
-.web-host-offline-reconnect.ui-button {
-  min-width: 160px;
 }
 
 .web-connect-refresh.ui-button {

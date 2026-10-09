@@ -92,6 +92,10 @@ export const messages = defineMessages("error.backend", {
   "error.backend.channelRoutineLimit": "A channel can have at most {limit} routines.",
   "error.backend.agentRoutineLimit": "An agent can have at most {limit} routines.",
   "error.backend.agentMemoryLimit": "An agent can have up to {limit} memories.",
+  "error.backend.agentMemoryLimitReached":
+    "You have {saved} of {limit} memories. To make room, update one memory by memoryId with the combined text of two related memories, then forget the other one, or forget a memory that is no longer true. Then try again.",
+  "error.backend.agentMemoryLimitExceeded":
+    "You have {saved} memories, and the limit is {limit}. The user set the limit below the number of saved memories. Do not forget memories to make room. Tell the user that this memory was not saved.",
   "error.backend.channelHistoryLeadRequired": "Choose a channel lead to prepare the shared history.",
   "error.backend.channelHistoryArriving": "A shared message is still arriving. Resume when it is complete.",
   "error.backend.channelHistoryInvalid": "The history summary is invalid. Resume to try again.",
@@ -187,6 +191,12 @@ export const messages = defineMessages("error.backend", {
   "error.backend.mcpServerExited":
     "The server stopped before it answered. Run the command in a terminal to see its error.",
   "error.backend.mcpServerUnreachable": "OpenBot could not reach the server. Check the URL and your network.",
+  "error.backend.mcpLocalServerOff":
+    "No server answers at {address} on this computer. Start the server, or turn it on in the app that runs it, then try again.",
+  "error.backend.mcpServerBlocked":
+    "This computer blocked the connection to the server. Check your firewall or security software, then try again.",
+  "error.backend.mcpServerIncompatible":
+    "Something answered at this address, but not as an MCP server over Streamable HTTP. Check the URL, and update the app that runs the server.",
   "error.backend.mcpRemoteBridge":
     "{reason} This command runs the mcp-remote bridge. Choose Streamable HTTP with the URL {url} instead, and OpenBot signs you in.",
   "error.backend.oauthNotHttps": "The OAuth endpoint {origin} is not https, so the credentials were not sent.",

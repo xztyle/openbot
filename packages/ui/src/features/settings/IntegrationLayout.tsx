@@ -1,7 +1,7 @@
 /**
  * The parts that every integration page shares: the logo on its tile, the status pill, the page
  * header, the danger zone, and the connect dialog with OpenBot and the other app side by side.
- * GitHub, Slack and Discord use them.
+ * GitHub, Slack, Discord and Telegram use them.
  */
 
 import { AppLogo } from "@openbot/brand";
@@ -59,6 +59,18 @@ export function DiscordMark(props: { class?: string | undefined }) {
   return (
     <svg class={props.class} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d={DISCORD_MARK_PATH} />
+    </svg>
+  );
+}
+
+/** The paper plane of Telegram's mark, drawn here as one shape. The cut is the fold of the wing. */
+const TELEGRAM_MARK_PATH = "M2.5 10.8 21.5 3l-3.7 17.6-5.5-4-2.7 2.6-.6-5.3 9-7.4-10.4 6.4Z";
+
+/** Telegram's mark, for the same reason. */
+export function TelegramMark(props: { class?: string | undefined }) {
+  return (
+    <svg class={props.class} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d={TELEGRAM_MARK_PATH} />
     </svg>
   );
 }

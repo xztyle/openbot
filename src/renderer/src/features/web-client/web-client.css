@@ -1,12 +1,42 @@
 @import "../../styles.css";
 @source "../../";
 
+/*
+ * The app scrolls inside its own panes. Without this, a pull past the top of the chat history
+ * reloads the page on Android, and the whole app bounces on iOS.
+ */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 .web-app {
   min-width: 0;
   height: 100dvh;
   color: var(--openbot-text-primary);
   background: var(--openbot-bg-canvas);
+  -webkit-tap-highlight-color: transparent;
 }
+
+/*
+ * iOS zooms the page into a field whose text is smaller than 16px, and does not zoom out after.
+ * Dialogs and menus render outside `.web-app`, so these rules are not scoped to it.
+ */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"]),
+  textarea,
+  select,
+  [contenteditable="true"],
+  .composer-editor-placeholder {
+    font-size: var(--openbot-text-xl);
+  }
+
+  .composer-editor-surface,
+  .composer-editor-placeholder {
+    line-height: var(--openbot-leading-xl);
+  }
+}
+
 .web-app-frame {
   min-width: 0;
   height: 100%;
@@ -30,6 +60,11 @@
 }
 
 @media (max-width: 720px) {
+  /* `WebMobileNavigation` sets the property while the on-screen keyboard is open. */
+  .web-app {
+    height: var(--web-keyboard-visible-height, 100dvh);
+  }
+
   .web-app-frame {
     --web-mobile-navigation-height: 64px;
     /* The workspace pane gives the rail a 56px column, also in the macOS geometry. */
@@ -146,6 +181,15 @@
     border-color: var(--openbot-border);
     background: var(--openbot-bg-control);
     color: var(--openbot-text-primary);
+  }
+
+  /* The pane switch steps aside while the on-screen keyboard is open. */
+  .web-app-frame:has(.web-mobile-navigation[data-keyboard-open]) {
+    padding-bottom: 0;
+  }
+
+  .web-mobile-navigation[data-keyboard-open] {
+    display: none;
   }
 
   .web-app-frame[data-web-mobile-pane="conversation"] .conversation-header {

@@ -1,36 +1,299 @@
-.event-check-settings {
-  padding: var(--openbot-space-5);
-  color: var(--openbot-text-primary);
+/* Event checks reuse the Routines panel frame: header, scrolling body, list rows and editor actions. */
+.event-check-intro {
+  margin: 0 var(--openbot-space-2) var(--openbot-space-3);
 }
-.event-check-editor,
-.event-check-editor label {
+
+.event-check-empty {
   display: grid;
-  gap: var(--openbot-space-2);
+  justify-items: start;
+  gap: var(--openbot-space-3);
+  margin-inline: var(--openbot-space-2);
 }
-.event-check-editor {
-  gap: var(--openbot-space-4);
-}
-.event-check-actions,
+
+/* A list row: the routine-style button, then the switch outside it. */
 .event-check-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--openbot-space-2);
+  padding-right: var(--openbot-space-2);
 }
-.event-check-row,
-.event-check-log {
-  padding-block: var(--openbot-space-3);
-  border-bottom: 1px solid var(--openbot-border-subtle);
-}
-.event-check-log {
+
+.event-check-section {
   display: grid;
   gap: var(--openbot-space-1);
 }
-.event-check-settings pre {
+
+.event-check-help,
+.event-check-field-help {
+  margin: calc(var(--openbot-space-1) * -1) var(--openbot-space-2) var(--openbot-space-2);
+  line-height: var(--openbot-leading-md);
+}
+
+.event-check-config-field {
+  display: grid;
+}
+
+/* A group of related fields on a raised surface. */
+.event-check-card {
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-3);
+}
+
+.event-check-code {
+  font-family: var(--openbot-font-mono);
+}
+
+.event-check-variable-set {
+  color: var(--openbot-success-text);
+}
+
+.event-check-variable-missing {
+  color: var(--openbot-warning-text);
+}
+
+.event-check-variable-actions,
+.event-check-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+}
+
+.event-check-variable-actions {
+  justify-content: flex-end;
+  margin-top: calc(var(--openbot-space-1) * -1);
+  margin-bottom: var(--openbot-space-3);
+}
+
+.event-check-run-actions {
+  margin-inline: var(--openbot-space-1);
+}
+
+/* Interval or calendar: one segmented control. */
+.event-check-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--openbot-space-0-5);
+  margin-bottom: var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-control);
+  padding: var(--openbot-space-0-5);
+}
+
+.event-check-schedule {
+  margin-bottom: var(--openbot-space-3);
+}
+
+.event-check-details {
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+}
+
+.event-check-details-body {
+  display: grid;
+  padding: 0 var(--openbot-space-3) var(--openbot-space-1);
+}
+
+.event-check-schema {
   overflow: auto;
+  max-height: 180px;
+  margin: 0 0 var(--openbot-space-3);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-control);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  color: var(--openbot-text-secondary);
+  font-family: var(--openbot-font-mono);
+  font-size: var(--openbot-text-sm);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.event-check-settings p {
+
+.event-check-history {
+  display: grid;
+  margin-top: var(--openbot-space-2);
+}
+
+.event-check-log {
+  display: grid;
+  gap: var(--openbot-space-0-5);
+  border-bottom: 1px solid var(--openbot-border);
+  padding: var(--openbot-space-2);
+}
+
+.event-check-log-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-3);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+}
+
+.event-check-log-error {
+  margin: 0;
+  color: var(--openbot-danger-text);
+  font-size: var(--openbot-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.event-check-run-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
   color: var(--openbot-text-muted);
+  white-space: nowrap;
+}
+
+.event-check-run-status-triggered,
+.event-check-run-status-baseline {
+  color: var(--openbot-success-text);
+}
+
+.event-check-run-status-error {
+  color: var(--openbot-danger-text);
+}
+
+/* Descendant rules follow the base rules, so each one wins over the base rule it refines. */
+.event-check-empty p {
+  margin: 0;
+}
+
+.event-check-empty svg,
+.event-check-run-status svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: var(--openbot-icon-stroke);
+}
+
+.event-check-log small {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.event-check-log:last-child {
+  border-bottom: 0;
+}
+
+.event-check-variable code {
+  color: var(--openbot-text-primary);
+  font-family: var(--openbot-font-mono);
+  font-size: var(--openbot-text-sm);
+}
+
+.event-check-variable + .event-check-variable {
+  border-top: 1px solid var(--openbot-border);
+  padding-top: var(--openbot-space-3);
+}
+
+.event-check-history .agent-routines-empty {
+  margin: 0 var(--openbot-space-2);
+}
+
+/* Section headings are bolder than the field labels below them. */
+.event-check-section h3,
+.event-check-card h4 {
+  margin: 0 0 var(--openbot-space-2) var(--openbot-space-2);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  font-weight: 600;
+  line-height: var(--openbot-leading-md);
+}
+
+.event-check-card h4 {
+  margin: 0 0 var(--openbot-space-1);
+  font-weight: 500;
+}
+
+.event-check-card .event-check-help {
+  margin-inline: 0;
+}
+
+.event-check-config-field .event-check-field-help {
+  margin-top: calc(var(--openbot-space-1) * -1);
+}
+
+.event-check-details > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border-radius: var(--openbot-radius-lg);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+  list-style: none;
+  cursor: pointer;
+}
+
+.event-check-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.event-check-details > summary > svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--openbot-duration-hover) ease;
+}
+
+.event-check-details[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .event-check-details > summary:hover {
+    background: var(--openbot-hover);
+    color: var(--openbot-text-primary);
+  }
+}
+
+.event-check-segmented .ui-button {
+  min-height: 28px;
+  color: var(--openbot-text-muted);
+}
+
+.event-check-segmented .ui-button.ui-button-variant-ghost[aria-pressed="true"] {
+  background: var(--openbot-bg-control-active);
+  color: var(--openbot-text-primary);
+}
+
+.event-check-section .settings-field {
+  margin-bottom: var(--openbot-space-2);
+}
+
+.event-check-details-body .settings-field {
+  margin-bottom: var(--openbot-space-3);
+}
+
+.settings-field .event-check-code {
+  font-size: var(--openbot-text-sm);
+}
+
+.settings-field textarea.event-check-code {
+  min-height: 64px;
+  height: 64px;
+  resize: vertical;
+}
+
+.event-check-editor > .event-check-section,
+.event-check-editor > .event-check-details,
+.event-check-editor > .event-check-help {
+  margin: 0;
+}
+
+/* Each top-level section starts below a divider, so the long form reads as groups. */
+.event-check-editor > .event-check-section:not(.event-check-card) {
+  border-top: 1px solid var(--openbot-border);
+  padding-top: var(--openbot-space-4);
+}
+
+.event-check-card .ui-switch-field + .settings-field {
+  margin-top: var(--openbot-space-3);
+}
+
+.event-check-card > .settings-field:last-child,
+.event-check-card > .event-check-variable:last-child .settings-field,
+.event-check-card > .event-check-config-field:last-child .settings-field {
+  margin-bottom: 0;
 }

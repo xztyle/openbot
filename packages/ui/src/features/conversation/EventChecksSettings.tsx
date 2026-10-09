@@ -10,8 +10,14 @@ import type {
 import { defaultEventCheckSchedule } from "@openbot/contracts/event-checks";
 import type { AppTextKey } from "@openbot/i18n";
 import {
+  Bell,
   Button,
+  Check,
+  ChevronRight,
+  CirclePause,
   Input,
+  Minus,
+  Plus,
   Select,
   SelectContent,
   SelectItem,
@@ -19,9 +25,14 @@ import {
   SelectValue,
   Switch,
   SwitchField,
+  Text,
   Textarea,
+  TriangleAlert,
+  X,
 } from "@openbot/ui";
-import { createEffect, createStore, For, Show, snapshot } from "solid-js";
+import { createEffect, createStore, For, onCleanup, Show, snapshot } from "solid-js";
+import { createScrollFades } from "../../components/createScrollFades";
+import { SettingsBackIcon, SettingsForwardIcon } from "../../components/SettingsPanel";
 import { useText } from "../../text";
 import { EventCheckEnvironmentSettings } from "./EventCheckEnvironmentSettings";
 import { RoutineSchedulePicker } from "./RoutineSchedulePicker";
@@ -50,6 +61,7 @@ interface State {
   current: Editor | null;
   history: EventCheckExecution[];
   historyOpen: boolean;
+  confirmDelete: boolean;
   busy: boolean;
   error: string;
 }
@@ -101,37 +113,64 @@ const STATUS_KEYS = {
   cancelled: "agentSettings.eventCheck.cancelled",
 } as const satisfies Record<EventCheckExecution["status"], AppTextKey>;
 function Choice(props: {
+  id: string;
   label: string;
   value: string;
   options: { id: string; name: string }[];
   change(value: string): void;
 }) {
   return (
-    <Select<string>
-      placeholder={props.label}
-      options={props.options.map((item) => item.id)}
-      value={props.value || undefined}
-      onChange={(value) => {
-        if (value) props.change(value);
-      }}
-      itemComponent={(item) => (
-        <SelectItem item={item.item}>
-          {props.options.find((choice) => choice.id === item.item.rawValue)?.name}
-        </SelectItem>
-      )}
-    >
-      <SelectTrigger aria-label={props.label}>
-        <SelectValue<string>>
-          {(state) => props.options.find((choice) => choice.id === state.selectedOption())?.name ?? props.label}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent />
-    </Select>
+    <div class="settings-field">
+      <span id={props.id}>{props.label}</span>
+      <Select<string>
+        placeholder={props.label}
+        options={props.options.map((item) => item.id)}
+        value={props.value || undefined}
+        onChange={(value) => {
+          if (value) props.change(value);
+        }}
+        itemComponent={(item) => (
+          <SelectItem item={item.item}>
+            {props.options.find((choice) => choice.id === item.item.rawValue)?.name}
+          </SelectItem>
+        )}
+      >
+        <SelectTrigger aria-labelledby={props.id}>
+          <SelectValue<string>>
+            {(state) => props.options.find((choice) => choice.id === state.selectedOption())?.name ?? props.label}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent />
+      </Select>
+    </div>
+  );
+}
+function RunStatus(props: { status: EventCheckExecution["status"] }) {
+  const { t } = useText();
+  return (
+    <span class={`event-check-run-status event-check-run-status-${props.status}`}>
+      <Show when={props.status === "triggered"}>
+        <Bell aria-hidden="true" />
+      </Show>
+      <Show when={props.status === "baseline"}>
+        <Check aria-hidden="true" />
+      </Show>
+      <Show when={props.status === "unchanged"}>
+        <Minus aria-hidden="true" />
+      </Show>
+      <Show when={props.status === "error"}>
+        <TriangleAlert aria-hidden="true" />
+      </Show>
+      <Show when={props.status === "cancelled"}>
+        <X aria-hidden="true" />
+      </Show>
+      {t(STATUS_KEYS[props.status])}
+    </span>
   );
 }
 /** Shared controls only; the host adapter owns authentication, storage and scheduling. */
 export function EventChecksSettings(props: Props) {
-  const { t, errorMessage } = useText();
+  const { t, errorMessage, format } = useText();
   const [state, setState] = createStore<State>({
     checks: [],
     accounts: [],
@@ -139,14 +178,24 @@ export function EventChecksSettings(props: Props) {
     current: null,
     history: [],
     historyOpen: false,
+    confirmDelete: false,
     busy: false,
     error: "",
   });
+  const scrollFades = createScrollFades();
+  onCleanup(scrollFades.stop);
+  createEffect(
+    () => [state.current?.value.id, state.checks.length, state.history.length, state.historyOpen, state.error] as const,
+    () => {
+      scrollFades.remeasure();
+    },
+  );
   let epoch = 0;
   const fail = (error: unknown) =>
     setState((draft) => {
       draft.error = errorMessage(error, t("agentSettings.eventCheck.failed"));
     });
+  const time = (value: string) => format.date(new Date(value), { dateStyle: "medium", timeStyle: "short" });
   async function reload() {
     const requested = ++epoch;
     try {
@@ -166,8 +215,6 @@ export function EventChecksSettings(props: Props) {
     () => {
       setState((draft) => {
         draft.current = null;
-      });
-      setState((draft) => {
         draft.error = "";
       });
       void reload();
@@ -182,23 +229,24 @@ export function EventChecksSettings(props: Props) {
     },
   );
   async function open(check?: EventCheck) {
+    const next = editor(props.agentId, check, props.apiProgramsAvailable ?? Boolean(props.api.environment));
     setState((draft) => {
-      draft.current = editor(props.agentId, check, props.apiProgramsAvailable ?? Boolean(props.api.environment));
-    });
-    setState((draft) => {
+      draft.current = next;
       draft.historyOpen = false;
-    });
-    setState((draft) => {
       draft.history = [];
-    });
-    setState((draft) => {
       draft.tools = [];
-    });
-    setState((draft) => {
+      draft.confirmDelete = false;
       draft.error = "";
     });
-    if (state.current?.value.source.kind === "mcp" && state.current.value.source.connectionId)
-      await loadTools(state.current.value.source.connectionId);
+    // A store write is visible only after the next flush, so the new editor, not the store, names the account.
+    if (next.value.source.kind === "mcp" && next.value.source.connectionId)
+      await loadTools(next.value.source.connectionId);
+  }
+  function closeEditor() {
+    setState((draft) => {
+      draft.current = null;
+      draft.error = "";
+    });
   }
   async function loadTools(connectionId: string) {
     try {
@@ -214,8 +262,6 @@ export function EventChecksSettings(props: Props) {
   async function action(run: () => Promise<unknown>) {
     setState((draft) => {
       draft.busy = true;
-    });
-    setState((draft) => {
       draft.error = "";
     });
     try {
@@ -255,8 +301,6 @@ export function EventChecksSettings(props: Props) {
     const runs = await props.api.history({ agentId: props.agentId, id });
     setState((draft) => {
       draft.history = runs;
-    });
-    setState((draft) => {
       draft.historyOpen = true;
     });
   }
@@ -279,416 +323,577 @@ export function EventChecksSettings(props: Props) {
     setState((draft) => {
       if (draft.current) draft.current.value.selection[key] = value;
     });
+  const setTiming = (timing: Editor["timing"]) =>
+    setState((draft) => {
+      if (draft.current) draft.current.timing = timing;
+    });
   return (
-    <section class="event-check-settings" aria-label={t("agentSettings.eventCheck.title")}>
-      <div class="event-check-actions">
-        <Button variant="ghost" onClick={props.onBack}>
-          {t("common.back")}
+    <section class="agent-routines-settings event-check-settings" aria-label={t("agentSettings.eventCheck.title")}>
+      <header class="settings-panel-header agent-routines-header">
+        <Button
+          variant="ghost"
+          type="button"
+          class="settings-panel-nav-button"
+          aria-label={state.current ? t("agentSettings.eventCheck.all") : t("agentSettings.backToSettings")}
+          disabled={state.busy && Boolean(state.current)}
+          onClick={() => (state.current ? closeEditor() : props.onBack())}
+        >
+          <SettingsBackIcon />
         </Button>
-        <Button variant="ghost" onClick={props.onClose}>
-          {t("common.close")}
-        </Button>
-      </div>
-      <h2>{t("agentSettings.eventCheck.title")}</h2>
-      <p>{t("agentSettings.eventCheck.description")}</p>
-      <Show when={state.error}>
-        <p role="alert">{state.error}</p>
-      </Show>
-      <Show
-        when={state.current}
-        fallback={
-          <>
-            <Button onClick={() => void open()}>{t("agentSettings.eventCheck.add")}</Button>
-            <Show when={!state.checks.length}>
-              <p>{t("agentSettings.eventCheck.empty")}</p>
-            </Show>
-            <For each={state.checks}>
-              {(check) => (
-                <div class="event-check-row">
-                  <Button variant="ghost" onClick={() => void open(check)}>
-                    {check.name}
-                  </Button>
-                  <Switch
-                    checked={check.active}
-                    aria-label={t("agentSettings.eventCheck.activeName", { name: check.name })}
-                    onChange={(active) => void action(() => props.api.save({ ...snapshot(check), active }))}
-                    disabled={state.busy}
-                  />
-                  <span>
-                    {check.active
-                      ? t("agentSettings.eventCheck.next", { time: new Date(check.nextCheckAt).toLocaleString() })
-                      : t("agentSettings.eventCheck.paused")}
-                  </span>
-                </div>
-              )}
-            </For>
-          </>
-        }
-      >
-        {(current) => (
-          <div class="event-check-editor">
+        <div class="agent-routines-heading">
+          <h2>
+            {state.current
+              ? state.current.value.id
+                ? t("agentSettings.eventCheck.check")
+                : t("agentSettings.eventCheck.newCheck")
+              : t("agentSettings.eventCheck.title")}
+          </h2>
+        </div>
+        <Show
+          when={!state.current}
+          fallback={
             <Button
               variant="ghost"
-              onClick={() =>
-                setState((draft) => {
-                  draft.current = null;
-                })
-              }
+              type="button"
+              class="settings-panel-nav-button"
+              aria-label={t("common.close")}
+              onClick={props.onClose}
             >
-              {t("agentSettings.eventCheck.all")}
+              <SettingsForwardIcon />
             </Button>
-            <label>
-              {t("agentSettings.eventCheck.name")}
-              <Input
-                value={current().value.name}
-                maxlength={256}
-                onInput={(e) =>
-                  setState((s) => {
-                    if (s.current) s.current.value.name = e.currentTarget.value;
-                  })
+          }
+        >
+          <Button
+            variant="ghost"
+            type="button"
+            class="settings-panel-nav-button"
+            aria-label={t("agentSettings.eventCheck.add")}
+            onClick={() => void open()}
+          >
+            <Plus aria-hidden="true" />
+          </Button>
+        </Show>
+      </header>
+      <div ref={scrollFades.bind} class={["agent-routines-body", scrollFades.classes()]} onScroll={scrollFades.measure}>
+        <Show
+          when={state.current}
+          fallback={
+            <div class="event-check-list-view">
+              <Text as="p" variant="caption" tone="muted" class="event-check-intro">
+                {t("agentSettings.eventCheck.description")}
+              </Text>
+              <Show
+                when={state.checks.length}
+                fallback={
+                  <div class="event-check-empty">
+                    <p class="agent-routines-empty">{t("agentSettings.eventCheck.empty")}</p>
+                    <Button type="button" size="sm" onClick={() => void open()}>
+                      <Plus aria-hidden="true" />
+                      {t("agentSettings.eventCheck.add")}
+                    </Button>
+                  </div>
                 }
-              />
-            </label>
-            <Show when={current().value.source.kind === "mcp"}>
-              <Choice
-                label={t("agentSettings.eventCheck.account")}
-                options={state.accounts}
-                value={current().value.source.connectionId}
-                change={(id) => {
-                  setState((s) => {
-                    if (s.current) {
-                      s.current.value.source.connectionId = id;
-                      s.current.value.source.toolName = "";
-                      s.current.value.selfEvents = {
-                        mode: "exclude",
-                        connectionId: id,
-                        actorPointer: "",
-                        accountActorIds: [],
-                      };
-                    }
-                  });
-                  void loadTools(id);
-                }}
-              />
-              <Show when={!state.accounts.length}>
-                <p>{t("agentSettings.eventCheck.noAccounts")}</p>
+              >
+                <div class="agent-routines-list">
+                  <For each={state.checks}>
+                    {(check) => (
+                      <div class="event-check-row">
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          class="agent-routine-row"
+                          aria-labelledby={`event-check-${check.id}-name`}
+                          aria-describedby={`event-check-${check.id}-summary`}
+                          onClick={() => void open(check)}
+                        >
+                          <span
+                            class={
+                              check.active ? "agent-routine-status-icon-active" : "agent-routine-status-icon-paused"
+                            }
+                          >
+                            <Show when={check.active} fallback={<CirclePause aria-hidden="true" />}>
+                              <Bell aria-hidden="true" />
+                            </Show>
+                          </span>
+                          <span>
+                            <strong id={`event-check-${check.id}-name`}>{check.name}</strong>
+                            <small id={`event-check-${check.id}-summary`}>
+                              {check.active
+                                ? t("agentSettings.eventCheck.next", { time: time(check.nextCheckAt) })
+                                : t("agentSettings.eventCheck.paused")}
+                            </small>
+                          </span>
+                        </Button>
+                        <Switch
+                          checked={check.active}
+                          aria-label={t("agentSettings.eventCheck.activeName", { name: check.name })}
+                          onChange={(active) => void action(() => props.api.save({ ...snapshot(check), active }))}
+                          disabled={state.busy}
+                        />
+                      </div>
+                    )}
+                  </For>
+                </div>
               </Show>
-              <Choice
-                label={t("agentSettings.eventCheck.read")}
-                value={current().value.source.toolName}
-                options={state.tools.map((tool) => ({ id: tool.name, name: tool.name }))}
-                change={(name) =>
-                  setState((s) => {
-                    if (s.current) s.current.value.source.toolName = name;
-                  })
-                }
-              />
-              <Show when={state.tools.find((tool) => tool.name === current().value.source.toolName)}>
-                {(tool) => <p>{tool().description}</p>}
-              </Show>
-            </Show>
-            <Show when={current().value.source.kind === "api"}>
-              <Show when={apiSource(current().value.source)}>
-                {(source) => (
-                  <WatcherProgramFields
-                    source={source()}
-                    change={(value) =>
-                      setState((draft) => {
-                        if (draft.current) draft.current.value.source = value;
+            </div>
+          }
+        >
+          {(current) => (
+            <div class="agent-routine-editor event-check-editor">
+              <div class="agent-routine-editor-actions">
+                <div class="agent-routine-active-toggle">
+                  <Switch
+                    id="event-check-active"
+                    aria-label={t("agentSettings.eventCheck.active")}
+                    checked={current().value.active}
+                    onChange={(active) =>
+                      setState((s) => {
+                        if (s.current) s.current.value.active = active;
                       })
                     }
                   />
-                )}
-              </Show>
-              <Show
-                when={state.checks.find((check) => check.id === current().value.id && check.source.kind === "api")}
-                keyed
-              >
-                {(check) => (
-                  <EventCheckEnvironmentSettings
-                    api={props.api}
-                    check={check}
-                    disabled={dirty()}
-                    changed={async () => {
-                      const id = check.id;
-                      const checks = await reload();
-                      const updated = checks?.find((entry) => entry.id === id);
-                      if (updated && state.current?.value.id === id) await open(updated);
+                  <label for="event-check-active">
+                    {current().value.active
+                      ? t("agentSettings.eventCheck.active")
+                      : t("agentSettings.eventCheck.paused")}
+                  </label>
+                </div>
+                <div class="agent-routine-action-buttons">
+                  <Show
+                    when={!state.confirmDelete}
+                    fallback={
+                      <>
+                        <Button
+                          variant="destructive"
+                          type="button"
+                          size="sm"
+                          disabled={state.busy}
+                          onClick={() =>
+                            void action(async () => {
+                              await props.api.remove({ agentId: props.agentId, id: current().value.id ?? "" });
+                              closeEditor();
+                            })
+                          }
+                        >
+                          {t("agentSettings.eventCheck.deleteNow")}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          size="sm"
+                          onClick={() =>
+                            setState((draft) => {
+                              draft.confirmDelete = false;
+                            })
+                          }
+                        >
+                          {t("common.cancel")}
+                        </Button>
+                      </>
+                    }
+                  >
+                    <Show when={current().value.id}>
+                      <Button
+                        variant="destructive"
+                        type="button"
+                        size="sm"
+                        disabled={state.busy}
+                        onClick={() =>
+                          setState((draft) => {
+                            draft.confirmDelete = true;
+                          })
+                        }
+                      >
+                        {t("common.delete")}
+                      </Button>
+                    </Show>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={
+                        state.busy ||
+                        !current().value.source.toolName ||
+                        !current().value.name.trim() ||
+                        !current().value.instruction.trim()
+                      }
+                      onClick={() => void save()}
+                    >
+                      {t("common.save")}
+                    </Button>
+                  </Show>
+                </div>
+              </div>
+              <label class="settings-field">
+                <span>{t("agentSettings.eventCheck.name")}</span>
+                <Input
+                  value={current().value.name}
+                  maxlength={256}
+                  onInput={(e) =>
+                    setState((s) => {
+                      if (s.current) s.current.value.name = e.currentTarget.value;
+                    })
+                  }
+                />
+              </label>
+              <section class="event-check-section" aria-labelledby="event-check-source-heading">
+                <h3 id="event-check-source-heading">{t("agentSettings.eventCheck.source")}</h3>
+                <Show when={current().value.source.kind === "mcp"}>
+                  <Choice
+                    id="event-check-account-label"
+                    label={t("agentSettings.eventCheck.account")}
+                    options={state.accounts}
+                    value={current().value.source.connectionId}
+                    change={(id) => {
+                      setState((s) => {
+                        if (s.current) {
+                          s.current.value.source.connectionId = id;
+                          s.current.value.source.toolName = "";
+                          s.current.value.selfEvents = {
+                            mode: "exclude",
+                            connectionId: id,
+                            actorPointer: "",
+                            accountActorIds: [],
+                          };
+                        }
+                      });
+                      void loadTools(id);
                     }}
                   />
-                )}
-              </Show>
-              <Show when={!current().value.id}>
-                <p>{t("agentSettings.eventCheck.saveBeforeVariables")}</p>
-              </Show>
-              <Button
-                disabled={state.busy || dirty() || !current().value.id || !props.api.test}
-                onClick={() =>
-                  void action(async () => {
-                    const target = { agentId: props.agentId, id: current().value.id ?? "" };
-                    await props.api.test?.(target);
-                    const history = await props.api.history(target);
-                    setState((draft) => {
-                      draft.history = history;
-                      draft.historyOpen = true;
-                    });
-                  })
-                }
-              >
-                {t("agentSettings.eventCheck.test")}
-              </Button>
-            </Show>
-            <label>
-              {t("agentSettings.eventCheck.instruction")}
-              <Textarea
-                value={current().value.instruction}
-                maxlength={16000}
-                onInput={(e) =>
-                  setState((s) => {
-                    if (s.current) s.current.value.instruction = e.currentTarget.value;
-                  })
-                }
-              />
-            </label>
-            <div class="event-check-actions">
-              <Button
-                variant={current().timing === "interval" ? "secondary" : "ghost"}
-                onClick={() =>
-                  setState((s) => {
-                    if (s.current) s.current.timing = "interval";
-                  })
-                }
-              >
-                {t("agentSettings.eventCheck.interval")}
-              </Button>
-              <Button
-                variant={current().timing === "calendar" ? "secondary" : "ghost"}
-                onClick={() =>
-                  setState((s) => {
-                    if (s.current) s.current.timing = "calendar";
-                  })
-                }
-              >
-                {t("agentSettings.eventCheck.calendar")}
-              </Button>
-            </div>
-            <Show
-              when={current().timing === "interval"}
-              fallback={
-                <RoutineSchedulePicker
-                  schedule={current().calendar}
-                  kinds={ROUTINE_SAVED_DRAFT_KINDS}
-                  onChange={(calendar) =>
-                    setState((s) => {
-                      if (s.current) s.current.calendar = calendar;
-                    })
-                  }
-                />
-              }
-            >
-              <label>
-                {t("agentSettings.eventCheck.seconds")}
-                <Input
-                  type="number"
-                  min={30}
-                  max={8640000000}
-                  value={String(current().seconds)}
-                  onInput={(e) =>
-                    setState((s) => {
-                      if (s.current) s.current.seconds = Number(e.currentTarget.value);
-                    })
-                  }
-                />
-              </label>
-            </Show>
-            <label>
-              {t("agentSettings.eventCheck.timezone")}
-              <Input
-                value={current().value.timezone}
-                onInput={(e) =>
-                  setState((s) => {
-                    if (s.current) s.current.value.timezone = e.currentTarget.value;
-                  })
-                }
-              />
-            </label>
-            <SwitchField
-              checked={current().value.selfEvents.mode === "exclude"}
-              label={t("agentSettings.eventCheck.skipSelf")}
-              description={t("agentSettings.eventCheck.selfHelp")}
-              onChange={(exclude) =>
-                setState((s) => {
-                  if (s.current) s.current.value.selfEvents.mode = exclude ? "exclude" : "include";
-                })
-              }
-            />
-            <Show when={current().value.selfEvents.mode === "exclude"}>
-              <label>
-                {t("agentSettings.eventCheck.actor")}
-                <Input
-                  value={current().value.selfEvents.actorPointer}
-                  onInput={(e) =>
-                    setState((s) => {
-                      if (s.current) s.current.value.selfEvents.actorPointer = e.currentTarget.value;
-                    })
-                  }
-                />
-              </label>
-              <label>
-                {t("agentSettings.eventCheck.actorIds")}
-                <Textarea
-                  value={current().value.selfEvents.accountActorIds.join("\n")}
-                  onInput={(e) =>
-                    setState((s) => {
-                      if (s.current)
-                        s.current.value.selfEvents.accountActorIds = e.currentTarget.value
-                          .split("\n")
-                          .map((id) => id.trim())
-                          .filter(Boolean);
-                    })
-                  }
-                />
-              </label>
-            </Show>
-            <details>
-              <summary>{t("agentSettings.eventCheck.readOptions")}</summary>
-              <label>
-                {t("agentSettings.eventCheck.arguments")}
-                <Textarea
-                  value={current().value.source.argumentsJson}
-                  onInput={(e) => sourceChange("argumentsJson", e.currentTarget.value)}
-                />
-              </label>
-              <p>{t("agentSettings.eventCheck.argumentsHelp")}</p>
-              <Show when={state.tools.find((tool) => tool.name === current().value.source.toolName)}>
-                {(tool) => <pre>{tool().inputSchemaJson}</pre>}
-              </Show>
-              <label>
-                {t("agentSettings.eventCheck.items")}
-                <Input
-                  value={current().value.selection.itemsPointer}
-                  onInput={(e) => selectionChange("itemsPointer", e.currentTarget.value)}
-                />
-              </label>
-              <label>
-                {t("agentSettings.eventCheck.id")}
-                <Input
-                  value={current().value.selection.idPointer}
-                  onInput={(e) => selectionChange("idPointer", e.currentTarget.value)}
-                />
-              </label>
-              <label>
-                {t("agentSettings.eventCheck.revision")}
-                <Input
-                  value={current().value.selection.revisionPointer}
-                  onInput={(e) => selectionChange("revisionPointer", e.currentTarget.value)}
-                />
-              </label>
-              <p>{t("agentSettings.eventCheck.pathHelp")}</p>
-              <label>
-                {t("agentSettings.eventCheck.cursorArgument")}
-                <Input
-                  value={current().value.source.cursorArgument}
-                  onInput={(e) => sourceChange("cursorArgument", e.currentTarget.value)}
-                />
-              </label>
-              <label>
-                {t("agentSettings.eventCheck.nextCursor")}
-                <Input
-                  value={current().value.source.nextCursorPointer}
-                  onInput={(e) => sourceChange("nextCursorPointer", e.currentTarget.value)}
-                />
-              </label>
-            </details>
-            <div class="event-check-actions">
-              <SwitchField
-                checked={current().value.active}
-                label={t("agentSettings.eventCheck.active")}
-                onChange={(active) =>
-                  setState((s) => {
-                    if (s.current) s.current.value.active = active;
-                  })
-                }
-              />
-              <Button
-                disabled={
-                  state.busy ||
-                  !current().value.source.toolName ||
-                  !current().value.name.trim() ||
-                  !current().value.instruction.trim()
-                }
-                onClick={() => void save()}
-              >
-                {t("common.save")}
-              </Button>
-              <Show when={current().value.id}>
-                {(id) => (
-                  <>
-                    <Button
-                      variant="secondary"
-                      disabled={state.busy || dirty() || !current().value.active}
-                      onClick={() =>
-                        void action(async () => {
-                          await props.api.checkNow({ agentId: props.agentId, id: id() });
-                          await history();
+                  <Show when={!state.accounts.length}>
+                    <Text as="p" variant="caption" tone="muted" class="event-check-help">
+                      {t("agentSettings.eventCheck.noAccounts")}
+                    </Text>
+                  </Show>
+                  <Choice
+                    id="event-check-tool-label"
+                    label={t("agentSettings.eventCheck.read")}
+                    value={current().value.source.toolName}
+                    options={state.tools.map((tool) => ({ id: tool.name, name: tool.name }))}
+                    change={(name) =>
+                      setState((s) => {
+                        if (s.current) s.current.value.source.toolName = name;
+                      })
+                    }
+                  />
+                  <Show when={state.tools.find((tool) => tool.name === current().value.source.toolName)}>
+                    {(tool) => (
+                      <Text as="p" variant="caption" tone="muted" class="event-check-help">
+                        {tool().description}
+                      </Text>
+                    )}
+                  </Show>
+                </Show>
+                <Show when={apiSource(current().value.source)}>
+                  {(source) => (
+                    <WatcherProgramFields
+                      source={source()}
+                      change={(value) =>
+                        setState((draft) => {
+                          if (draft.current) draft.current.value.source = value;
                         })
                       }
-                    >
-                      {t("agentSettings.eventCheck.checkNow")}
-                    </Button>
-                    <Button variant="ghost" disabled={state.busy} onClick={() => void action(history)}>
-                      {t("agentSettings.eventCheck.history")}
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      disabled={state.busy}
-                      onClick={() =>
-                        void action(async () => {
-                          await props.api.remove({ agentId: props.agentId, id: id() });
-                          setState((draft) => {
-                            draft.current = null;
-                          });
-                        })
-                      }
-                    >
-                      {t("common.delete")}
-                    </Button>
-                  </>
-                )}
-              </Show>
-            </div>
-            <Show when={state.historyOpen}>
-              <section aria-label={t("agentSettings.eventCheck.history")}>
-                <h3>{t("agentSettings.eventCheck.history")}</h3>
-                <For each={state.history}>
-                  {(run) => (
-                    <div class="event-check-log">
-                      <time datetime={run.startedAt}>{new Date(run.startedAt).toLocaleString()}</time>
-                      <span>{t(STATUS_KEYS[run.status])}</span>
-                      <span>
-                        {t("agentSettings.eventCheck.result", {
-                          items: run.itemCount,
-                          events: run.eventCount,
-                          ms: run.durationMs,
-                        })}
-                      </span>
-                      <Show when={run.skippedSelfCount > 0}>
-                        <span>{t("agentSettings.eventCheck.skipped", { events: run.skippedSelfCount })}</span>
-                      </Show>
-                      <Show when={run.error}>
-                        <p>{run.error}</p>
-                      </Show>
-                    </div>
+                    />
                   )}
-                </For>
-                <Show when={!state.history.length}>
-                  <p>{t("agentSettings.eventCheck.noHistory")}</p>
                 </Show>
               </section>
-            </Show>
-          </div>
-        )}
-      </Show>
+              <Show when={current().value.source.kind === "api"}>
+                <Show
+                  when={state.checks.find((check) => check.id === current().value.id && check.source.kind === "api")}
+                  keyed
+                  fallback={
+                    <Text as="p" variant="caption" tone="muted" class="event-check-help">
+                      {t("agentSettings.eventCheck.saveBeforeVariables")}
+                    </Text>
+                  }
+                >
+                  {(check) => (
+                    <EventCheckEnvironmentSettings
+                      api={props.api}
+                      check={check}
+                      disabled={dirty()}
+                      changed={async () => {
+                        const id = check.id;
+                        const checks = await reload();
+                        const updated = checks?.find((entry) => entry.id === id);
+                        if (updated && state.current?.value.id === id) await open(updated);
+                      }}
+                    />
+                  )}
+                </Show>
+              </Show>
+              <label class="settings-field agent-routine-instruction-field">
+                <span>{t("agentSettings.eventCheck.instruction")}</span>
+                <Textarea
+                  value={current().value.instruction}
+                  maxlength={16000}
+                  onInput={(e) =>
+                    setState((s) => {
+                      if (s.current) s.current.value.instruction = e.currentTarget.value;
+                    })
+                  }
+                />
+              </label>
+              <section class="event-check-section" aria-labelledby="event-check-timing-heading">
+                <h3 id="event-check-timing-heading">{t("agentSettings.eventCheck.timing")}</h3>
+                <div class="event-check-segmented">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    aria-pressed={current().timing === "interval" ? "true" : "false"}
+                    onClick={() => setTiming("interval")}
+                  >
+                    {t("agentSettings.eventCheck.interval")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    aria-pressed={current().timing === "calendar" ? "true" : "false"}
+                    onClick={() => setTiming("calendar")}
+                  >
+                    {t("agentSettings.eventCheck.calendar")}
+                  </Button>
+                </div>
+                <Show
+                  when={current().timing === "interval"}
+                  fallback={
+                    <div class="event-check-schedule">
+                      <RoutineSchedulePicker
+                        schedule={current().calendar}
+                        kinds={ROUTINE_SAVED_DRAFT_KINDS}
+                        onChange={(calendar) =>
+                          setState((s) => {
+                            if (s.current) s.current.calendar = calendar;
+                          })
+                        }
+                      />
+                    </div>
+                  }
+                >
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.seconds")}</span>
+                    <Input
+                      type="number"
+                      min={30}
+                      max={8640000000}
+                      value={String(current().seconds)}
+                      onInput={(e) =>
+                        setState((s) => {
+                          if (s.current) s.current.seconds = Number(e.currentTarget.value);
+                        })
+                      }
+                    />
+                  </label>
+                </Show>
+                <label class="settings-field">
+                  <span>{t("agentSettings.eventCheck.timezone")}</span>
+                  <Input
+                    value={current().value.timezone}
+                    onInput={(e) =>
+                      setState((s) => {
+                        if (s.current) s.current.value.timezone = e.currentTarget.value;
+                      })
+                    }
+                  />
+                </label>
+              </section>
+              <section class="event-check-section event-check-card">
+                <SwitchField
+                  checked={current().value.selfEvents.mode === "exclude"}
+                  label={t("agentSettings.eventCheck.skipSelf")}
+                  description={t("agentSettings.eventCheck.selfHelp")}
+                  onChange={(exclude) =>
+                    setState((s) => {
+                      if (s.current) s.current.value.selfEvents.mode = exclude ? "exclude" : "include";
+                    })
+                  }
+                />
+                <Show when={current().value.selfEvents.mode === "exclude"}>
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.actor")}</span>
+                    <Input
+                      value={current().value.selfEvents.actorPointer}
+                      onInput={(e) =>
+                        setState((s) => {
+                          if (s.current) s.current.value.selfEvents.actorPointer = e.currentTarget.value;
+                        })
+                      }
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.actorIds")}</span>
+                    <Textarea
+                      value={current().value.selfEvents.accountActorIds.join("\n")}
+                      onInput={(e) =>
+                        setState((s) => {
+                          if (s.current)
+                            s.current.value.selfEvents.accountActorIds = e.currentTarget.value
+                              .split("\n")
+                              .map((id) => id.trim())
+                              .filter(Boolean);
+                        })
+                      }
+                    />
+                  </label>
+                </Show>
+              </section>
+              <details class="event-check-details">
+                <summary>
+                  <ChevronRight aria-hidden="true" />
+                  {t("agentSettings.eventCheck.readOptions")}
+                </summary>
+                <div class="event-check-details-body">
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.arguments")}</span>
+                    <Textarea
+                      class="event-check-code"
+                      value={current().value.source.argumentsJson}
+                      onInput={(e) => sourceChange("argumentsJson", e.currentTarget.value)}
+                    />
+                  </label>
+                  <Text as="p" variant="caption" tone="muted" class="event-check-help">
+                    {t("agentSettings.eventCheck.argumentsHelp")}
+                  </Text>
+                  <Show when={state.tools.find((tool) => tool.name === current().value.source.toolName)}>
+                    {(tool) => <pre class="event-check-schema">{tool().inputSchemaJson}</pre>}
+                  </Show>
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.items")}</span>
+                    <Input
+                      class="event-check-code"
+                      value={current().value.selection.itemsPointer}
+                      onInput={(e) => selectionChange("itemsPointer", e.currentTarget.value)}
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.id")}</span>
+                    <Input
+                      class="event-check-code"
+                      value={current().value.selection.idPointer}
+                      onInput={(e) => selectionChange("idPointer", e.currentTarget.value)}
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.revision")}</span>
+                    <Input
+                      class="event-check-code"
+                      value={current().value.selection.revisionPointer}
+                      onInput={(e) => selectionChange("revisionPointer", e.currentTarget.value)}
+                    />
+                  </label>
+                  <Text as="p" variant="caption" tone="muted" class="event-check-help">
+                    {t("agentSettings.eventCheck.pathHelp")}
+                  </Text>
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.cursorArgument")}</span>
+                    <Input
+                      class="event-check-code"
+                      value={current().value.source.cursorArgument}
+                      onInput={(e) => sourceChange("cursorArgument", e.currentTarget.value)}
+                    />
+                  </label>
+                  <label class="settings-field">
+                    <span>{t("agentSettings.eventCheck.nextCursor")}</span>
+                    <Input
+                      class="event-check-code"
+                      value={current().value.source.nextCursorPointer}
+                      onInput={(e) => sourceChange("nextCursorPointer", e.currentTarget.value)}
+                    />
+                  </label>
+                </div>
+              </details>
+              <Show when={current().value.id}>
+                {(id) => (
+                  <section class="event-check-section" aria-labelledby="event-check-activity-heading">
+                    <h3 id="event-check-activity-heading">{t("agentSettings.eventCheck.activity")}</h3>
+                    <div class="event-check-run-actions">
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        size="sm"
+                        disabled={state.busy || dirty() || !current().value.active}
+                        onClick={() =>
+                          void action(async () => {
+                            await props.api.checkNow({ agentId: props.agentId, id: id() });
+                            await history();
+                          })
+                        }
+                      >
+                        {t("agentSettings.eventCheck.checkNow")}
+                      </Button>
+                      <Show when={current().value.source.kind === "api"}>
+                        <Button
+                          variant="secondary"
+                          type="button"
+                          size="sm"
+                          disabled={state.busy || dirty() || !props.api.test}
+                          onClick={() =>
+                            void action(async () => {
+                              const target = { agentId: props.agentId, id: id() };
+                              await props.api.test?.(target);
+                              await history();
+                            })
+                          }
+                        >
+                          {t("agentSettings.eventCheck.test")}
+                        </Button>
+                      </Show>
+                      <Button
+                        variant="ghost"
+                        type="button"
+                        size="sm"
+                        disabled={state.busy}
+                        onClick={() => void action(history)}
+                      >
+                        {t("agentSettings.eventCheck.history")}
+                      </Button>
+                    </div>
+                    <Show when={state.historyOpen}>
+                      <section class="event-check-history" aria-label={t("agentSettings.eventCheck.history")}>
+                        <Show
+                          when={state.history.length}
+                          fallback={<p class="agent-routines-empty">{t("agentSettings.eventCheck.noHistory")}</p>}
+                        >
+                          <For each={state.history}>
+                            {(run) => (
+                              <div class="event-check-log">
+                                <div class="event-check-log-line">
+                                  <time datetime={run.startedAt}>{time(run.startedAt)}</time>
+                                  <RunStatus status={run.status} />
+                                </div>
+                                <small>
+                                  {t("agentSettings.eventCheck.result", {
+                                    items: run.itemCount,
+                                    events: run.eventCount,
+                                    ms: run.durationMs,
+                                  })}
+                                  <Show when={run.skippedSelfCount > 0}>
+                                    {" · "}
+                                    {t("agentSettings.eventCheck.skipped", { events: run.skippedSelfCount })}
+                                  </Show>
+                                </small>
+                                <Show when={run.error}>
+                                  <p class="event-check-log-error">{run.error}</p>
+                                </Show>
+                              </div>
+                            )}
+                          </For>
+                        </Show>
+                      </section>
+                    </Show>
+                  </section>
+                )}
+              </Show>
+            </div>
+          )}
+        </Show>
+        <Show when={state.error}>
+          <p class="agent-settings-save-error" role="alert">
+            {state.error}
+          </p>
+        </Show>
+      </div>
     </section>
   );
 }

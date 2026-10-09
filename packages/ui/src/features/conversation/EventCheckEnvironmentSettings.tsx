@@ -1,5 +1,5 @@
 import type { EventCheck, EventCheckApi, EventCheckEnvironmentStatus } from "@openbot/contracts/event-checks";
-import { Button, Input } from "@openbot/ui";
+import { Button, Input, Text } from "@openbot/ui";
 import { createEffect, createStore, For, onCleanup, Show } from "solid-js";
 import { useText } from "../../text";
 
@@ -89,19 +89,25 @@ export function EventCheckEnvironmentSettings(props: {
     }
   }
   return (
-    <section class="event-check-environment">
-      <h3>{t("agentSettings.eventCheck.environment")}</h3>
-      <p>{t("agentSettings.eventCheck.environmentHelp")}</p>
+    <section class="event-check-section event-check-card" aria-labelledby="event-check-environment-heading">
+      <h4 id="event-check-environment-heading">{t("agentSettings.eventCheck.environment")}</h4>
+      <Text as="p" variant="caption" tone="muted" class="event-check-help">
+        {t("agentSettings.eventCheck.environmentHelp")}
+      </Text>
       <For each={state.variables}>
         {(variable) => (
-          <div>
-            <label>
-              {variable.name} —{" "}
-              {t(
-                variable.configured
-                  ? "agentSettings.eventCheck.variableSet"
-                  : "agentSettings.eventCheck.variableMissing",
-              )}
+          <div class="event-check-variable">
+            <label class="settings-field">
+              <span>
+                <code>{variable.name}</code> —{" "}
+                <span class={variable.configured ? "event-check-variable-set" : "event-check-variable-missing"}>
+                  {t(
+                    variable.configured
+                      ? "agentSettings.eventCheck.variableSet"
+                      : "agentSettings.eventCheck.variableMissing",
+                  )}
+                </span>
+              </span>
               <Input
                 type="password"
                 autocomplete="new-password"
@@ -116,24 +122,33 @@ export function EventCheckEnvironmentSettings(props: {
                 }
               />
             </label>
-            <Button
-              disabled={state.busy || props.disabled || !state.values[variable.name]}
-              onClick={() => void write(variable.name, false)}
-            >
-              {t("agentSettings.eventCheck.saveVariable")}
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={state.busy || props.disabled || !variable.configured}
-              onClick={() => void write(variable.name, true)}
-            >
-              {t("agentSettings.eventCheck.removeVariable")}
-            </Button>
+            <div class="event-check-variable-actions">
+              <Button
+                variant="ghost"
+                type="button"
+                size="sm"
+                disabled={state.busy || props.disabled || !variable.configured}
+                onClick={() => void write(variable.name, true)}
+              >
+                {t("agentSettings.eventCheck.removeVariable")}
+              </Button>
+              <Button
+                variant="secondary"
+                type="button"
+                size="sm"
+                disabled={state.busy || props.disabled || !state.values[variable.name]}
+                onClick={() => void write(variable.name, false)}
+              >
+                {t("agentSettings.eventCheck.saveVariable")}
+              </Button>
+            </div>
           </div>
         )}
       </For>
       <Show when={state.error}>
-        <p role="alert">{state.error}</p>
+        <p class="agent-settings-save-error" role="alert">
+          {state.error}
+        </p>
       </Show>
     </section>
   );

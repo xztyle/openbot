@@ -26,6 +26,12 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.description":
     "A normal program reads the selected app. Empty checks stay silent. AI runs only when new or changed data matches. The first successful check saves a silent baseline.",
   "agentSettings.eventCheck.add": "Add event check",
+  "agentSettings.eventCheck.check": "Event check",
+  "agentSettings.eventCheck.newCheck": "New event check",
+  "agentSettings.eventCheck.source": "What to read",
+  "agentSettings.eventCheck.timing": "When to check",
+  "agentSettings.eventCheck.activity": "Activity",
+  "agentSettings.eventCheck.deleteNow": "Delete now",
   "agentSettings.eventCheck.empty": "No event checks yet.",
   "agentSettings.eventCheck.failed": "Could not update the event check.",
   "agentSettings.eventCheck.name": "Name",

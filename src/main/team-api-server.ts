@@ -122,7 +122,7 @@ import { routeBrowser } from "./team-api/route-browser";
 import { routeChannels } from "./team-api/route-channels";
 import { routeContextReset } from "./team-api/route-context-reset";
 import { routeDirect } from "./team-api/route-direct";
-import { routeEventChecks } from "./team-api/route-event-checks";
+import { eventCheckCapability, routeEventChecks } from "./team-api/route-event-checks";
 import { routeEvents } from "./team-api/route-events";
 import { routeFiles } from "./team-api/route-files";
 import { routeHostAdmin } from "./team-api/route-host-admin";
@@ -1419,7 +1419,8 @@ export class TeamApiServer {
         // and one that did not never shows the panel.
         if (capability === "remote-desktop-setup")
           return this.#options.remoteScreen?.checkSetup !== undefined && this.#options.remoteScreen?.test !== undefined;
-        if (capability === EVENT_CHECKS_CAPABILITY) return this.#options.eventChecks?.supported === true;
+        const checkCapability = eventCheckCapability(capability, this.#options.eventChecks);
+        if (checkCapability !== undefined) return checkCapability;
         if (capability === MCP_SERVERS_CAPABILITY) return this.#options.mcpServers !== undefined;
         if (capability === MCP_CHAT_CAPABILITY) return this.#options.chatMcp !== undefined;
         if (capability === MCP_OAUTH_CAPABILITY) return this.#options.mcpOAuth !== undefined;

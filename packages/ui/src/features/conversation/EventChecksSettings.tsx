@@ -4,6 +4,7 @@ import type {
   EventCheckApi,
   EventCheckExecution,
   EventCheckInput,
+  EventCheckSource,
   EventCheckTool,
 } from "@openbot/contracts/event-checks";
 import { defaultEventCheckSchedule } from "@openbot/contracts/event-checks";
@@ -22,12 +23,15 @@ import {
 } from "@openbot/ui";
 import { createEffect, createStore, For, Show, snapshot } from "solid-js";
 import { useText } from "../../text";
+import { EventCheckEnvironmentSettings } from "./EventCheckEnvironmentSettings";
 import { RoutineSchedulePicker } from "./RoutineSchedulePicker";
 import type { RoutineScheduleDraft } from "./routine-schedule-draft";
 import { ROUTINE_SAVED_DRAFT_KINDS, routineScheduleFromDraft, routineScheduleToDraft } from "./routine-schedule-saved";
+import { WatcherProgramFields } from "./WatcherProgramFields";
 
 interface Props {
   api: EventCheckApi;
+  apiProgramsAvailable?: boolean;
   agentId: string;
   onBack(): void;
   onClose(): void;
@@ -49,7 +53,16 @@ interface State {
   busy: boolean;
   error: string;
 }
-function editor(agentId: string, check?: EventCheck): Editor {
+function apiSource(source: EventCheckSource) {
+  return source.kind === "api" ? source : undefined;
+}
+function defaultSource(api: boolean): EventCheckSource {
+  const common = { toolName: "", argumentsJson: "{}", cursorArgument: "cursor", nextCursorPointer: "/cursor" };
+  return api
+    ? { ...common, kind: "api", connectionId: "API account", variables: [], configuration: [] }
+    : { ...common, kind: "mcp", connectionId: "" };
+}
+function editor(agentId: string, check?: EventCheck, api = false): Editor {
   const schedule = check?.schedule ?? defaultEventCheckSchedule();
   return {
     value: check
@@ -58,19 +71,12 @@ function editor(agentId: string, check?: EventCheck): Editor {
           agentId,
           name: "",
           instruction: "",
-          active: true,
+          active: !api,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           schedule,
           selfEvents: { mode: "exclude", connectionId: "", actorPointer: "", accountActorIds: [] },
-          source: {
-            kind: "mcp",
-            connectionId: "",
-            toolName: "",
-            argumentsJson: "{}",
-            cursorArgument: "",
-            nextCursorPointer: "",
-          },
-          selection: { itemsPointer: "", idPointer: "/id", revisionPointer: "" },
+          source: defaultSource(api),
+          selection: { itemsPointer: api ? "/items" : "", idPointer: "/id", revisionPointer: api ? "/revision" : "" },
         },
     timing: schedule.kind === "interval" ? "interval" : "calendar",
     seconds:
@@ -150,6 +156,7 @@ export function EventChecksSettings(props: Props) {
         draft.checks = checks;
       });
       props.onCountChange(checks.length);
+      return checks;
     } catch (error) {
       if (requested === epoch) fail(error);
     }
@@ -176,7 +183,7 @@ export function EventChecksSettings(props: Props) {
   );
   async function open(check?: EventCheck) {
     setState((draft) => {
-      draft.current = editor(props.agentId, check);
+      draft.current = editor(props.agentId, check, props.apiProgramsAvailable ?? Boolean(props.api.environment));
     });
     setState((draft) => {
       draft.historyOpen = false;
@@ -190,7 +197,8 @@ export function EventChecksSettings(props: Props) {
     setState((draft) => {
       draft.error = "";
     });
-    if (check) await loadTools(check.source.connectionId);
+    if (state.current?.value.source.kind === "mcp" && state.current.value.source.connectionId)
+      await loadTools(state.current.value.source.connectionId);
   }
   async function loadTools(connectionId: string) {
     try {
@@ -237,7 +245,7 @@ export function EventChecksSettings(props: Props) {
     await action(async () => {
       const check = await props.api.save({ ...snapshot(current.value), schedule });
       setState((draft) => {
-        draft.current = editor(props.agentId, check);
+        draft.current = editor(props.agentId, check, props.apiProgramsAvailable ?? Boolean(props.api.environment));
       });
     });
   }
@@ -255,7 +263,7 @@ export function EventChecksSettings(props: Props) {
   const dirty = () => {
     const current = state.current;
     const saved = state.checks.find((check) => check.id === current?.value.id);
-    if (!current || !saved || JSON.stringify(snapshot(current.value)) !== JSON.stringify(snapshot(saved))) return true;
+    if (!current || !saved || JSON.stringify(current.value) !== JSON.stringify(saved)) return true;
     if (current.timing === "interval")
       return saved.schedule.kind !== "interval" || current.seconds !== editor(props.agentId, saved).seconds;
     return (
@@ -341,41 +349,94 @@ export function EventChecksSettings(props: Props) {
                 }
               />
             </label>
-            <Choice
-              label={t("agentSettings.eventCheck.account")}
-              options={state.accounts}
-              value={current().value.source.connectionId}
-              change={(id) => {
-                setState((s) => {
-                  if (s.current) {
-                    s.current.value.source.connectionId = id;
-                    s.current.value.source.toolName = "";
-                    s.current.value.selfEvents = {
-                      mode: "exclude",
-                      connectionId: id,
-                      actorPointer: "",
-                      accountActorIds: [],
-                    };
-                  }
-                });
-                void loadTools(id);
-              }}
-            />
-            <Show when={!state.accounts.length}>
-              <p>{t("agentSettings.eventCheck.noAccounts")}</p>
+            <Show when={current().value.source.kind === "mcp"}>
+              <Choice
+                label={t("agentSettings.eventCheck.account")}
+                options={state.accounts}
+                value={current().value.source.connectionId}
+                change={(id) => {
+                  setState((s) => {
+                    if (s.current) {
+                      s.current.value.source.connectionId = id;
+                      s.current.value.source.toolName = "";
+                      s.current.value.selfEvents = {
+                        mode: "exclude",
+                        connectionId: id,
+                        actorPointer: "",
+                        accountActorIds: [],
+                      };
+                    }
+                  });
+                  void loadTools(id);
+                }}
+              />
+              <Show when={!state.accounts.length}>
+                <p>{t("agentSettings.eventCheck.noAccounts")}</p>
+              </Show>
+              <Choice
+                label={t("agentSettings.eventCheck.read")}
+                value={current().value.source.toolName}
+                options={state.tools.map((tool) => ({ id: tool.name, name: tool.name }))}
+                change={(name) =>
+                  setState((s) => {
+                    if (s.current) s.current.value.source.toolName = name;
+                  })
+                }
+              />
+              <Show when={state.tools.find((tool) => tool.name === current().value.source.toolName)}>
+                {(tool) => <p>{tool().description}</p>}
+              </Show>
             </Show>
-            <Choice
-              label={t("agentSettings.eventCheck.read")}
-              value={current().value.source.toolName}
-              options={state.tools.map((tool) => ({ id: tool.name, name: tool.name }))}
-              change={(name) =>
-                setState((s) => {
-                  if (s.current) s.current.value.source.toolName = name;
-                })
-              }
-            />
-            <Show when={state.tools.find((tool) => tool.name === current().value.source.toolName)}>
-              {(tool) => <p>{tool().description}</p>}
+            <Show when={current().value.source.kind === "api"}>
+              <Show when={apiSource(current().value.source)}>
+                {(source) => (
+                  <WatcherProgramFields
+                    source={source()}
+                    change={(value) =>
+                      setState((draft) => {
+                        if (draft.current) draft.current.value.source = value;
+                      })
+                    }
+                  />
+                )}
+              </Show>
+              <Show
+                when={state.checks.find((check) => check.id === current().value.id && check.source.kind === "api")}
+                keyed
+              >
+                {(check) => (
+                  <EventCheckEnvironmentSettings
+                    api={props.api}
+                    check={check}
+                    disabled={dirty()}
+                    changed={async () => {
+                      const id = check.id;
+                      const checks = await reload();
+                      const updated = checks?.find((entry) => entry.id === id);
+                      if (updated && state.current?.value.id === id) await open(updated);
+                    }}
+                  />
+                )}
+              </Show>
+              <Show when={!current().value.id}>
+                <p>{t("agentSettings.eventCheck.saveBeforeVariables")}</p>
+              </Show>
+              <Button
+                disabled={state.busy || dirty() || !current().value.id || !props.api.test}
+                onClick={() =>
+                  void action(async () => {
+                    const target = { agentId: props.agentId, id: current().value.id ?? "" };
+                    await props.api.test?.(target);
+                    const history = await props.api.history(target);
+                    setState((draft) => {
+                      draft.history = history;
+                      draft.historyOpen = true;
+                    });
+                  })
+                }
+              >
+                {t("agentSettings.eventCheck.test")}
+              </Button>
             </Show>
             <label>
               {t("agentSettings.eventCheck.instruction")}

@@ -12,7 +12,19 @@ import { openBotToolFailure, openBotToolResult } from "./routine-tools";
 const agentId = z.string().min(1).max(128).optional();
 const id = z.string().min(1).max(128);
 const source = z.object({
-  kind: z.literal("mcp"),
+  kind: z.enum(["api", "mcp"]),
+  variables: z.array(z.string().max(128)).max(20).optional(),
+  configuration: z
+    .array(
+      z.object({
+        name: z.string().max(128),
+        label: z.string().max(256),
+        description: z.string().max(2048),
+        value: z.string().max(8192),
+      }),
+    )
+    .max(30)
+    .optional(),
   connectionId: id,
   toolName: z.string().min(1).max(256),
   argumentsJson: z.string().min(1).max(16000),
@@ -26,6 +38,18 @@ const selection = z.object({
 });
 export const EVENT_CHECK_TOOL_DEFINITIONS = [
   {
+    name: "event_check_environment",
+    description:
+      "List declared variable names and configured/missing status. Never returns values. Ask the user: Please add NAME to the .env in this watcher’s settings so we can test it.",
+    shape: { agentId, id },
+  },
+  {
+    name: "test_event_check",
+    description:
+      "Test a saved API check without enabling it, committing an observation, delivering events, or starting inference. An edited shared program resets the prior baseline. Result goes only to its own ten-entry history.",
+    shape: { agentId, id },
+  },
+  {
     name: "list_event_checks",
     description:
       "List saved deterministic event checks. They run ordinary programs, not AI. Use this before creating or changing one. Omit agentId to target yourself.",
@@ -34,19 +58,19 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
   {
     name: "list_event_check_apps",
     description:
-      "List app accounts already allowed in the target chat. A check cannot add permissions or use other accounts.",
+      "List legacy MCP app accounts allowed in the target chat. API watchers instead declare their own per-instance private variables and stable account label.",
     shape: { agentId },
   },
   {
     name: "list_event_check_tools",
     description:
-      "List read-only MCP tools and their schemas for exactly one allowed app account. Use these schemas to build a deterministic query.",
+      "List legacy read-only MCP tools for an existing MCP check. New API watchers use shared agent-authored programs, not these tools.",
     shape: { agentId, connectionId: id },
   },
   {
     name: "save_event_check",
     description:
-      "Create or replace an event check. Use a read-only MCP query, never a provider or AI tool. Empty checks are silent. First success saves a baseline. New IDs or changed revisions wake the target with instruction and untrusted event data. Default and minimum interval is 30 seconds. Follow openbot-event-checks. Self-events are excluded by default: configure the connected account actor IDs and actual change-author path. Never substitute creator or assignee for change author. Include self-events only when the user explicitly asks, such as testing. Provide complete source and selection. JSON Pointer paths locate the result list and item ID/revision; blank revision compares the item. Configure pagination for complete results. Exact argument string values $lastSuccessAt and $now expand to timestamps. Do not put credentials in arguments. Inspect the actual tool result shape before saving.",
+      "Create or replace an event check. Use APIs, never MCP for new checks. Write a reusable program under OpenBot/Shared/Watchers and set source kind api, toolName to its relative .mjs/.js/.py/.sh path, connectionId to one stable account label, variables to the required private variable names, and configuration to ordinary named/labeled/described values shown in settings. Never provide secret values. Save paused before credentials exist. Ask the user to fill missing private variables in the watcher settings. Programs receive JSON arguments and configuration on stdin, only declared private values in their environment, and must emit one complete JSON value on stdout. No model/MCP calls. Use selection /items, /id, /revision and pagination cursor + /cursor, plus a boolean hasNextPage in output. Empty checks are silent. First success saves a baseline. New IDs or changed revisions wake the target with instruction and untrusted event data. Default and minimum interval is 30 seconds. Follow openbot-event-checks. Self-events are excluded by default: configure the connected account actor IDs and actual change-author path. Never substitute creator or assignee for change author. Include self-events only when the user explicitly asks, such as testing. Provide complete source and selection. JSON Pointer paths locate the result list and item ID/revision; blank revision compares the item. Configure pagination for complete results. Exact argument string values $lastSuccessAt and $now expand to timestamps. Do not put credentials in arguments. Inspect the actual tool result shape before saving.",
     shape: {
       agentId,
       id: id.optional(),
@@ -112,6 +136,12 @@ export function handleEventCheckTool(
     const identifier = typeof args.id === "string" ? args.id : "";
     let result: unknown;
     switch (params.tool) {
+      case "event_check_environment":
+        result = yield* checks.environment({ agentId: target, id: identifier });
+        break;
+      case "test_event_check":
+        result = yield* checks.test({ agentId: target, id: identifier });
+        break;
       case "list_event_checks":
         result = yield* checks.list({ agentId: target });
         break;

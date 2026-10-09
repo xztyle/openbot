@@ -40,13 +40,36 @@ export interface EventCheckSelection {
   idPointer: string;
   revisionPointer: string;
 }
-export interface EventCheckSource {
+export interface EventCheckMcpSource {
   kind: "mcp";
   connectionId: string;
   toolName: string;
   argumentsJson: string;
   cursorArgument: string;
   nextCursorPointer: string;
+}
+export interface EventCheckConfiguration {
+  name: string;
+  label: string;
+  description: string;
+  value: string;
+}
+export interface EventCheckApiSource extends Omit<EventCheckMcpSource, "kind"> {
+  kind: "api";
+  variables: string[];
+  configuration: EventCheckConfiguration[];
+  programDigest?: string;
+}
+export type EventCheckSource = EventCheckMcpSource | EventCheckApiSource;
+export interface EventCheckEnvironmentStatus {
+  name: string;
+  configured: boolean;
+}
+export interface EventCheckEnvironmentInput {
+  agentId: string;
+  id: string;
+  name: string;
+  value: string | null;
 }
 export interface EventCheckInput {
   id?: string;
@@ -95,6 +118,9 @@ export interface EventCheckOrigin {
   name: string;
 }
 export interface EventCheckApi {
+  environment?(input: { agentId: string; id: string }): Promise<EventCheckEnvironmentStatus[]>;
+  setEnvironment?(input: EventCheckEnvironmentInput): Promise<EventCheckEnvironmentStatus[]>;
+  test?(input: { agentId: string; id: string }): Promise<EventCheckExecution>;
   list(input: { agentId: string }): Promise<EventCheck[]>;
   save(input: EventCheckInput): Promise<EventCheck>;
   remove(input: { agentId: string; id: string }): Promise<void>;
@@ -148,9 +174,49 @@ function decodeSelfEvents(value: unknown): EventCheckSelfEvents {
   };
 }
 function decodeSource(value: unknown): EventCheckSource {
-  if (!isDynamicRecord(value) || value.kind !== "mcp") throw new Error("Invalid event check source.");
+  if (!isDynamicRecord(value) || (value.kind !== "mcp" && value.kind !== "api"))
+    throw new Error("Invalid event check source.");
   const argumentsJson = text(value.argumentsJson, 16000, true);
   if (!isDynamicRecord(JSON.parse(argumentsJson))) throw new Error("Invalid event check arguments.");
+  if (value.kind === "api") {
+    if (
+      !Array.isArray(value.variables) ||
+      value.variables.length > 20 ||
+      !Array.isArray(value.configuration) ||
+      value.configuration.length > 30
+    )
+      throw new Error("Invalid program configuration.");
+    const variables = value.variables.map(environmentName);
+    const configuration = value.configuration.map(decodeConfiguration);
+    const argumentsValue = JSON.parse(argumentsJson);
+    if (configuration.some((field) => Object.hasOwn(argumentsValue, field.name) || field.name === value.cursorArgument))
+      throw new Error("Configuration conflicts with program arguments.");
+    if (
+      new Set(variables).size !== variables.length ||
+      new Set(configuration.map((field) => field.name)).size !== configuration.length
+    )
+      throw new Error("Duplicate variable.");
+    if (
+      configuration.some(
+        (field) =>
+          variables.includes(field.name) || /(?:token|password|secret|api_?key|authorization)/i.test(field.name),
+      )
+    )
+      throw new Error("Private variables cannot be ordinary configuration.");
+    const programDigest = value.programDigest === undefined ? undefined : text(value.programDigest, 64, true);
+    if (programDigest && !/^[a-f0-9]{64}$/.test(programDigest)) throw new Error("Invalid program digest.");
+    return {
+      kind: "api",
+      connectionId: text(value.connectionId, 128, true),
+      variables,
+      configuration,
+      ...(programDigest ? { programDigest } : {}),
+      toolName: text(value.toolName, 256, true),
+      argumentsJson,
+      cursorArgument: text(value.cursorArgument, 128),
+      nextCursorPointer: pointer(value.nextCursorPointer),
+    };
+  }
   return {
     kind: "mcp",
     connectionId: text(value.connectionId, 128, true),
@@ -228,4 +294,50 @@ export function decodeEventCheckTool(value: unknown): EventCheckTool {
 export function decodeEventCheckList<A>(value: unknown, decode: (entry: unknown) => A, maximum = 100): A[] {
   if (!Array.isArray(value) || value.length > maximum) throw new Error("Invalid check list.");
   return value.map(decode);
+}
+
+export function environmentName(value: unknown): string {
+  const name = text(value, 128, true);
+  if (
+    !/^[A-Z][A-Z0-9_]*$/.test(name) ||
+    /^(PATH|HOME|SHELL|LANG|NODE_.*|PYTHON.*|BASH_ENV|ENV|LD_.*|DYLD_.*|ELECTRON_.*|OPENBOT_.*|BUN_.*|RUBY.*|PERL.*)$/.test(
+      name,
+    )
+  )
+    throw new Error("Invalid variable name.");
+  return name;
+}
+export function decodeEventCheckEnvironmentInput(value: unknown): EventCheckEnvironmentInput {
+  const target = decodeEventCheckTarget(value);
+  if (!isDynamicRecord(value)) throw new Error("Invalid environment input.");
+  const secret = value.value === null ? null : text(value.value, 8192, true);
+  if (secret !== null && (secret.length < 4 || /[\r\n\0]/.test(secret))) throw new Error("Invalid variable value.");
+  return { ...target, name: environmentName(value.name), value: secret };
+}
+export function decodeEventCheckEnvironmentStatus(value: unknown): EventCheckEnvironmentStatus {
+  if (!isDynamicRecord(value) || typeof value.configured !== "boolean") throw new Error("Invalid variable status.");
+  return { name: environmentName(value.name), configured: value.configured };
+}
+export function decodeMcpEventCheckInput(value: unknown): EventCheckInput {
+  const input = decodeEventCheckInput(value);
+  if (input.source.kind !== "mcp") throw new Error("Unsupported v1 source.");
+  return input;
+}
+export function decodeMcpEventCheck(value: unknown): EventCheck {
+  const check = decodeEventCheck(value);
+  if (check.source.kind !== "mcp") throw new Error("Unsupported v1 source.");
+  return check;
+}
+
+function decodeConfiguration(value: unknown): EventCheckConfiguration {
+  if (!isDynamicRecord(value)) throw new Error("Invalid configuration field.");
+  const name = text(value.name, 128, true);
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || ["__proto__", "constructor", "prototype"].includes(name))
+    throw new Error("Invalid configuration name.");
+  return {
+    name,
+    label: text(value.label, 256, true),
+    description: text(value.description, 2048),
+    value: text(value.value, 8192),
+  };
 }

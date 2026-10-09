@@ -1,6 +1,9 @@
 import { defineMessages } from "../../../message";
 
 export const messages = defineMessages("error.backend", {
+  "error.backend.eventCheckProgram": "Choose an existing .mjs, .js, .py or .sh program inside OpenBot/Shared/Watchers.",
+  "error.backend.eventCheckMissingVariable":
+    "Add the required private variable in this event check’s Private variables (.env) settings before enabling it.",
   "error.backend.eventCheckDelivery":
     "An event was found. Delivery is waiting and will retry; the saved event remains on this host.",
   "error.backend.eventCheckSelfEvents":

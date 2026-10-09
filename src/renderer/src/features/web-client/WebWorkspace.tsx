@@ -13,6 +13,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { AGENT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-import-v1";
 import { CONTEXT_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/context-reset-v1";
+import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
 import { HOST_UPDATE_CAPABILITY } from "@openbot/contracts/team-protocol/host-update-v1";
@@ -496,6 +497,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     workspace.onHostEvent,
     eventsEnabled,
     () => eventsEnabled() && workspace.state.capabilities.includes(EVENT_CHECKS_CAPABILITY),
+    () => workspace.state.capabilities.includes(EVENT_CHECK_API_CAPABILITY),
   );
   const remoteAgentAdmin = createRemoteAgentAdmin(
     () => {

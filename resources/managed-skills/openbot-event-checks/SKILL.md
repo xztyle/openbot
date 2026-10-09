@@ -1,55 +1,87 @@
 ---
 name: openbot-event-checks
-description: Create and manage silent deterministic app event checks, also called watchers. Use when the user asks to detect new tickets, messages, mentions, pull requests, or app changes without idle AI turns.
+description: Create reusable, silent API watchers with editable configurations and private variables. Each check is a normal program, with no inference during polling.
 ---
 
-# App event checks
+# API watchers
 
-An event check is a normal host program. It calls a reading MCP tool and compares saved IDs and
-revisions. AI sets it up and handles matching events. AI does not perform the repeated checks.
+Use the app's **direct API, not MCP**, for every new watcher. A watcher is a normal program.
+AI writes its program once and handles matching events. The repeated checks do not use inference.
+OpenBot supplies timing, private variables, baselines, event delivery and the last ten execution logs.
+Existing MCP checks remain supported. Replace one only when the user asks.
 
 ## Defaults
 
-- Check every 30 seconds unless the user gives another interval or calendar schedule.
-- Use one account already enabled in the target chat. Never add app permissions.
-- Read tools only. Keep the user's response instruction and notification intent.
-- Skip changes made by the connected account, including changes made through its MCP tools.
-- First success saves a quiet baseline. Empty, unchanged, self-only, and failed checks stay out
-  of chat and notifications. Last ten executions remain in the check's own history.
+- Check every 30 seconds unless the user specifies another interval or calendar schedule.
+- Create paused. First enabled success saves a silent baseline.
+- Empty, unchanged, failed and self-only checks stay out of chat and notifications.
+- Skip events made by the connected account unless the user explicitly permits them, such as a test.
+- Preserve the user's event scope, response instruction and notification preferences.
 
-## Setup procedure
+## Reuse programs, keep accounts separate
 
-1. For another agent, obtain its stable ID with `openbot.list_agents`. List its existing checks
-   with `openbot.list_event_checks`. Update a matching check instead of adding a duplicate.
-2. Call `openbot.list_event_check_apps` and select the intended account. If several accounts
-   could match the request, ask which one. Do not read all accounts to guess.
-3. Call `openbot.list_event_check_tools`. Inspect a permitted reading tool's input schema and
-   actual result through that same connected account. Never guess result paths or credentials.
-4. Obtain the connected account's current user ID with its reading MCP tools. Identify the field
-   that contains the **person who made each change**. An item's creator, assignee, and owner do
-   not identify who updated it. Prefer an activity/event query with actor IDs and stable event IDs.
-5. Configure the full query, pagination, list path, stable ID path, and revision path. For a list
-   of immutable activity events, stable event IDs are enough. For mutable items, use their revision.
-   Timestamp argument values `$lastSuccessAt` and `$now` must be complete JSON string values.
-6. Save with `openbot.save_event_check`. Set `selfEvents.mode` to `exclude`, `selfEvents.connectionId` to the selected account ID, and `actorPointer` to the
-   verified change-author ID path, and `accountActorIds` to the selected account's verified IDs.
-   Omit schedule for the enforced 30-second default, or pass an interval using `unit: seconds`.
-   Use the user's instruction for useful work after an event; do not add empty status messages.
-7. Run `openbot.run_event_check` to establish the baseline, then read `openbot.event_check_history`.
-   Report the selected account, timing, filtering, and any limit in ordinary words.
+Programs live in `OpenBot/Shared/Watchers`, not in one agent's workspace. Before writing a new
+program, look there for a suitable one. Reuse a program for several agents or app workspaces.
+Each saved check is a separate instance with its own account label, configuration, private variables,
+schedule, baseline and ten execution logs. Never copy tokens between instances automatically.
+A shared program edit gives each instance a fresh baseline before delivering more events.
 
-If the app cannot expose the change author, keep the check paused and explain that self-event
-filtering cannot be verified. Do not substitute the creator/assignee, invent an identity, or silently
-set `mode: include`. Missing or invalid author data fails quietly without advancing the baseline.
+## Program contract
 
-## Testing and changes
+Use `.mjs`/`.js`, `.py` or `.sh`. The host launches the fixed interpreter without a command shell.
+The working directory is `OpenBot/Shared/Watchers`. Read one JSON object from standard input.
+It contains ordinary `configuration` values merged with `argumentsJson`; paging arguments take
+precedence. Read private variables from the process environment. Do not read the private host file.
+No provider or Cloudflare credentials are inherited. Do not depend on extra local environment values.
 
-Self-events may be included **only when the user explicitly requests it**, such as testing.
-Temporarily save `selfEvents.mode: include`, establish the new baseline, then make the authorized
-test change and run the check. Inspect its history and restore `exclude` afterward. A manual read
-can wake the agent for a real matching event. It does not grant permission to write to the app.
+Emit exactly one complete JSON value to standard output, then exit zero. Default output:
+`{"items":[{"id":"stable-id","revision":"selected-content-revision","actor":"actual-author-id"}],"hasNextPage":false}`.
+For another page, use `hasNextPage: true` and a nonempty `cursor`. Read the next `cursor` from stdin.
+The final page may omit `cursor`. Configure selection `/items`, `/id`, `/revision`, paging argument
+`cursor` and result `/cursor`. For content-only changes, compare only requested fields, not status or
+last-updated timestamps. Keep enough useful event content for the agent to act.
 
-Changing the account, query, selection, or self-event policy resets the baseline and cancels old
-pending batches. Changing timing or instructions preserves it. Pause or remove through native
-tools. If the user authorizes replacing an AI polling routine, pause that routine after the check
-is verified. Do not create both for the same purpose. Do not run a model from a polling script.
+Read-only API requests only. Request read-only credentials where the app supports them. Use official
+HTTPS API addresses, bounded request timeouts, complete pagination and no credential-bearing redirects.
+Reject API errors and partial results (including HTTP 200 GraphQL `errors`). Read full requested data;
+never silently use truncated descriptions. Do not run models, MCP clients, provider CLIs or AI SDKs.
+Do not post messages or make other app changes during a check. No persistent child/background process.
+Checks have a 40-second program deadline, 20-page/2,000-item limits and bounded output. Honor rate limits.
+Use the host's baseline comparison rather than saving your own cursor before a read fully succeeds.
+Exact argument strings `$lastSuccessAt` and `$now` expand to host timestamps; the former has a five-minute
+safety overlap. Local state, if needed, must be separate for each instance and contain no credentials.
+
+## Creation procedure
+
+1. Resolve the target agent ID. List `openbot.list_event_checks` and update a matching instance.
+2. Select one intended account. Ask which if ambiguous. Find or write a shared API program.
+   Verify the API query, full result fields, rate limits, pagination and actual user/account identity.
+3. Declare ordinary UI fields in `source.configuration`. Each field has `name`, `label`,
+   `description`, and string `value`. For example:
+   `{"name":"assigneeId","label":"Assigned user","description":"Linear user ID whose tickets to check","value":"VERIFIED_ID"}`.
+   The user can edit these values in the watcher settings. Parse numbers/booleans inside the program.
+   Tokens, passwords and credentials never belong in configuration, arguments, instructions or chat.
+4. Declare needed private names in `source.variables`, for example `["LINEAR_API_TOKEN"]`.
+   Set `source.kind: api`, `toolName` to the relative shared program path, `connectionId` to a stable
+   label for this one account, and `argumentsJson` to ordinary JSON arguments (often `{}`).
+   Save using `openbot.save_event_check` with `active: false`. Omit schedule for 30 seconds.
+5. Call `openbot.event_check_environment`. It returns names and Set/Missing status only.
+   For each missing name ask: **“Please add LINEAR_API_TOKEN in this watcher's Private variables
+   (.env) settings so we can test it.”** Substitute the declared name. Direct the user to agent
+   settings → Event checks → this instance → Private variables (.env).
+   Never ask for the value in chat, read a saved secret, extract it from an MCP connection, or
+   put it in an agent/shared file. Only the user fills masked settings fields.
+6. When configured, use `openbot.test_event_check`. It performs one program read and records only
+   its own execution log. It does not enable the instance or wake an agent. An edited program resets the old baseline before testing.
+   Read `openbot.event_check_history`. Fix errors before enabling.
+7. Verify self-event filtering. Use the connected account's verified IDs and **actual change-author**
+   path. Creator, assignee and owner do not identify who updated an item. If the API cannot expose
+   the author for the requested changes, keep paused and explain the limit. Never silently choose
+   `include`. Include self-events only when the user explicitly permits this scope or a test.
+8. Enable after credentials, successful test and self-event policy are ready. First enabled read
+   establishes the baseline silently. Only matching changes start AI work.
+
+Replacing/removing a private value pauses the instance, resets baseline and cancels pending events.
+Test and enable again. Account/query/configuration/selection/self-event changes reset baseline.
+Timing or response-instruction edits preserve it. If replacing an AI polling routine is authorized,
+keep it paused after the watcher is verified. Never create both for the same purpose.

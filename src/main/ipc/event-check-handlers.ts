@@ -1,6 +1,8 @@
 import {
   decodeEventCheck,
   decodeEventCheckAccount,
+  decodeEventCheckEnvironmentInput,
+  decodeEventCheckEnvironmentStatus,
   decodeEventCheckExecution,
   decodeEventCheckInput,
   decodeEventCheckList,
@@ -8,6 +10,10 @@ import {
   decodeEventCheckTool,
 } from "@openbot/contracts/event-checks";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
+import {
+  EVENT_CHECK_API_CAPABILITY,
+  EVENT_CHECK_API_ROUTES,
+} from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY, EVENT_CHECKS_ROUTES } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
@@ -38,10 +44,32 @@ export function eventCheckIpcHandlers(
   const request = <A>(id: string, path: string, body: unknown, decode: (value: unknown) => A) => {
     if (!remote.supportsCapability(id, EVENT_CHECKS_CAPABILITY))
       throw new Error(sourceText("error.backend.eventCheckUnsupported"));
-    return runCauseEffect(remote.request(id, path, decode, { method: "POST", body, timeoutMs: 60_000 }));
+    const api = remote.supportsCapability(id, EVENT_CHECK_API_CAPABILITY);
+    if (path.startsWith("/v1/event-check-api/") && !api)
+      throw new Error(sourceText("error.backend.eventCheckUnsupported"));
+    const mapped = api ? path.replace("/v1/event-checks/", "/v1/event-check-api/") : path;
+    return runCauseEffect(remote.request(id, mapped, decode, { method: "POST", body, timeoutMs: 60_000 }));
   };
   return {
     eventChecks: {
+      environment: scopedHandler(decodeEventCheckTarget, {
+        local: (v) => runCauseEffect(checks.environment(v)),
+        remote: (v, id) =>
+          request(id, EVENT_CHECK_API_ROUTES.environment, v, (r) =>
+            decodeEventCheckList(r, decodeEventCheckEnvironmentStatus, 20),
+          ),
+      }),
+      setEnvironment: scopedHandler(decodeEventCheckEnvironmentInput, {
+        local: (v) => runCauseEffect(checks.setEnvironment(v)),
+        remote: (v, id) =>
+          request(id, EVENT_CHECK_API_ROUTES.setEnvironment, v, (r) =>
+            decodeEventCheckList(r, decodeEventCheckEnvironmentStatus, 20),
+          ),
+      }),
+      test: scopedHandler(decodeEventCheckTarget, {
+        local: (v) => runCauseEffect(checks.test(v)),
+        remote: (v, id) => request(id, EVENT_CHECK_API_ROUTES.test, v, decodeEventCheckExecution),
+      }),
       list: scopedHandler(parseCheckAgent, {
         local: (v) => runCauseEffect(checks.list(v)),
         remote: (v, id) => request(id, EVENT_CHECKS_ROUTES.list, v, (r) => decodeEventCheckList(r, decodeEventCheck)),

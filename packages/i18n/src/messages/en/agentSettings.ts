@@ -1,6 +1,27 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("agentSettings", {
+  "agentSettings.eventCheck.program": "Shared watcher program",
+  "agentSettings.eventCheck.programPlaceholder": "linear-events.mjs",
+  "agentSettings.eventCheck.programHelp":
+    "The agent writes the program in OpenBot/Shared/Watchers. Several checks can reuse it with different settings and private keys.",
+  "agentSettings.eventCheck.accountLabel": "Account label",
+  "agentSettings.eventCheck.variableNames": "Private variable names (one per line)",
+  "agentSettings.eventCheck.configuration": "Configuration",
+  "agentSettings.eventCheck.configurationHelp":
+    "The agent defines these ordinary settings. Use the private variable fields for keys and passwords.",
+
+  "agentSettings.eventCheck.environment": "Private variables (.env)",
+  "agentSettings.eventCheck.environmentHelp":
+    "Values stay on this host and are never returned to the agent. Replacing or removing a value pauses the check and resets its baseline.",
+  "agentSettings.eventCheck.variableSet": "Set",
+  "agentSettings.eventCheck.variableMissing": "Missing",
+  "agentSettings.eventCheck.variablePlaceholder": "Enter a new value; saved values are hidden",
+  "agentSettings.eventCheck.saveVariable": "Save value",
+  "agentSettings.eventCheck.removeVariable": "Remove value",
+  "agentSettings.eventCheck.saveBeforeVariables": "Save this check paused, then enter its private variable here.",
+  "agentSettings.eventCheck.test": "Test without AI",
+
   "agentSettings.eventCheck.title": "Event checks",
   "agentSettings.eventCheck.description":
     "A normal program reads the selected app. Empty checks stay silent. AI runs only when new or changed data matches. The first successful check saves a silent baseline.",

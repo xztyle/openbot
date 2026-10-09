@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   EventCheck,
+  EventCheckEnvironmentInput,
   EventCheckExecution,
   EventCheckInput,
   EventCheckOrigin,
@@ -8,7 +9,8 @@ import type {
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { sourceText } from "@openbot/i18n/source";
 import { nextEventCheckOccurrence } from "@openbot/team-client/event-check-schedule";
-import { Effect, type Scope } from "effect";
+import { Effect, type Scope, Semaphore } from "effect";
+import type { EventCheckApiReader } from "./event-check-api-reader";
 import type {
   EventCheckArguments,
   EventCheckData,
@@ -27,9 +29,10 @@ import type { CheckOutbox, EventCheckStore } from "./event-check-store";
 import { mcpFailure, mcpSync } from "./mcp-effects";
 import type { RoutineDueSource, RoutineTimer } from "./routine-timer";
 
-interface Options {
+export interface EventCheckSchedulerOptions {
   store: EventCheckStore;
   reader?: EventCheckReader;
+  apiReader?: EventCheckApiReader;
   scope(): Scope.Scope;
   timer: RoutineTimer;
   agentExists(id: string): boolean;
@@ -57,12 +60,34 @@ function scheduleValid(input: EventCheckInput): void {
 }
 /** Owns deterministic polls and durable wakeups. Empty checks never enter the agent runtime. */
 export class EventCheckScheduler implements RoutineDueSource {
+  readonly #mutations = Semaphore.makeUnsafe(1);
   readonly #running = new Set<string>();
   readonly #delivering = new Set<string>();
-  constructor(readonly options: Options) {}
+  constructor(readonly options: EventCheckSchedulerOptions) {}
   get supported(): boolean {
-    return this.options.reader !== undefined;
+    return this.options.reader !== undefined || this.apiSupported;
   }
+  get apiSupported(): boolean {
+    return this.options.apiReader !== undefined;
+  }
+  environment = (input: { agentId: string; id: string }) =>
+    mcpSync(() => this.#apiReader().environment.status(this.options.store.get(input.agentId, input.id)));
+  setEnvironment = (input: EventCheckEnvironmentInput) => this.#mutations.withPermit(this.#setEnvironment(input));
+  readonly #setEnvironment = Effect.fn("EventCheck.setEnvironment")(function* (
+    this: EventCheckScheduler,
+    input: EventCheckEnvironmentInput,
+  ) {
+    const check = yield* mcpSync(() => {
+      const previous = this.options.store.get(input.agentId, input.id);
+      if (previous.source.kind !== "api" || !previous.source.variables.includes(input.name))
+        throw new Error("Undeclared variable.");
+      return this.options.store.save({ ...previous, active: false }, new Date(), true);
+    });
+    yield* this.#apiReader().environment.set(check, input.name, input.value);
+    this.options.timer.arm();
+    return yield* this.environment(input);
+  });
+  test = (input: { agentId: string; id: string }) => this.#runNow(input, true);
   list = (input: { agentId: string }) =>
     mcpSync(() => {
       this.#agent(input.agentId);
@@ -73,7 +98,7 @@ export class EventCheckScheduler implements RoutineDueSource {
   accounts = (input: { agentId: string }) =>
     mcpSync(() => {
       this.#agent(input.agentId);
-      return this.#reader().accounts(input.agentId);
+      return this.options.reader?.accounts(input.agentId) ?? [];
     });
   tools = (input: { agentId: string; connectionId: string }) =>
     this.#reader().read(input.agentId, input.connectionId, (session) => Effect.succeed(session.tools));
@@ -90,6 +115,23 @@ export class EventCheckScheduler implements RoutineDueSource {
       )
         throw new Error(sourceText("error.backend.eventCheckSelfEvents"));
     });
+    if (input.source.kind === "api")
+      return yield* mcpSync(() => {
+        const prepared = this.#apiReader().definition(input);
+        if (
+          input.active &&
+          prepared.source.kind === "api" &&
+          prepared.source.variables.length > 0 &&
+          (!input.id ||
+            this.#apiReader()
+              .environment.status({ ...this.options.store.get(input.agentId, input.id), source: input.source })
+              .some((variable) => !variable.configured))
+        )
+          throw new Error(sourceText("error.backend.eventCheckMissingVariable"));
+        const check = this.options.store.save(prepared, new Date());
+        this.options.timer.arm();
+        return check;
+      });
     if (!input.active && input.id)
       return yield* mcpSync(() => {
         const check = this.options.store.save(input, new Date());
@@ -107,11 +149,16 @@ export class EventCheckScheduler implements RoutineDueSource {
     );
   });
   remove = (input: { agentId: string; id: string }) =>
-    mcpSync(() => {
-      this.options.store.remove(input.agentId, input.id);
-      this.options.timer.arm();
-    });
-  checkNow = (input: { agentId: string; id: string }) =>
+    this.#mutations.withPermit(
+      Effect.gen({ self: this }, function* () {
+        const check = yield* mcpSync(() => this.options.store.get(input.agentId, input.id));
+        yield* mcpSync(() => this.options.store.remove(input.agentId, input.id));
+        if (check.source.kind === "api") yield* this.#apiReader().environment.remove(check);
+        this.options.timer.arm();
+      }),
+    );
+  checkNow = (input: { agentId: string; id: string }) => this.#runNow(input, false);
+  #runNow = (input: { agentId: string; id: string }, test: boolean) =>
     Effect.suspend(() => {
       const check = this.options.store.get(input.agentId, input.id);
       if (this.#running.has(check.id))
@@ -119,7 +166,7 @@ export class EventCheckScheduler implements RoutineDueSource {
           throw new Error(sourceText("error.backend.eventCheckBusy"));
         });
       this.#running.add(check.id);
-      return this.#execute(check).pipe(Effect.ensuring(Effect.sync(() => this.#running.delete(check.id))));
+      return this.#execute(check, test).pipe(Effect.ensuring(Effect.sync(() => this.#running.delete(check.id))));
     });
   nextDueAt(): string | null {
     return this.options.store.nextDueAt();
@@ -144,47 +191,65 @@ export class EventCheckScheduler implements RoutineDueSource {
       );
     }
   });
-  readonly #execute = Effect.fn("EventCheck.execute")(function* (this: EventCheckScheduler, check: EventCheck) {
+  readonly #execute = Effect.fn("EventCheck.execute")(function* (
+    this: EventCheckScheduler,
+    check: EventCheck,
+    test = false,
+  ) {
     const startedAt = new Date().toISOString();
     const id = randomUUID();
     let committed: EventCheckExecution | null = null;
-    return yield* this.#reader()
-      .read(check.agentId, check.source.connectionId, (session) =>
-        Effect.gen({ self: this }, function* () {
-          yield* this.#flush(check, session);
-          const state = yield* mcpSync(() => this.options.store.state(check.id));
-          const items = yield* this.#collect(check, session, state.lastSuccessAt);
-          const observation = yield* mcpSync(() =>
-            observeCheck(items, check.selection, state.baseline, check.selfEvents),
-          );
-          const current = this.#valid(check, session);
-          const status = !current
-            ? "cancelled"
-            : !state.baseline
-              ? "baseline"
-              : observation.changed.length
-                ? "triggered"
-                : "unchanged";
-          const execution = this.#execution(
-            id,
-            check.id,
-            startedAt,
-            status,
-            observation.itemCount,
-            current ? observation.changed.length : 0,
-            null,
-            observation.skippedSelfCount,
-          );
-          yield* mcpSync(() => this.options.store.finish(check, execution, current ? observation : undefined));
-          committed = execution;
-          if (!current) return execution;
-          return yield* this.#flush(check, session).pipe(
-            Effect.as(execution),
-            Effect.catchCause(() =>
-              mcpSync(() =>
-                this.options.store.deliveryError(execution, sourceText("error.backend.eventCheckDelivery")),
-              ),
-            ),
+    return yield* mcpSync(() => {
+      if (!this.options.store.current(check.id, check.revision)) throw new Error("Stale check.");
+      if (check.source.kind !== "api") return check;
+      const prepared = this.#apiReader().definition(check);
+      return JSON.stringify(prepared.source) === JSON.stringify(check.source)
+        ? check
+        : this.options.store.save(prepared, new Date(), true);
+    })
+      .pipe(
+        Effect.flatMap((prepared) => {
+          check = prepared;
+          return this.#read(check, (session) =>
+            Effect.gen({ self: this }, function* () {
+              if (!test) yield* this.#flush(check, session);
+              const state = yield* mcpSync(() => this.options.store.state(check.id));
+              const items = yield* this.#collect(check, session, state.lastSuccessAt);
+              const observation = yield* mcpSync(() =>
+                observeCheck(items, check.selection, state.baseline, check.selfEvents),
+              );
+              const current = test ? session.valid() : this.#valid(check, session);
+              const status = !current
+                ? "cancelled"
+                : test || !state.baseline
+                  ? "baseline"
+                  : observation.changed.length
+                    ? "triggered"
+                    : "unchanged";
+              const execution = this.#execution(
+                id,
+                check.id,
+                startedAt,
+                status,
+                observation.itemCount,
+                current && !test ? observation.changed.length : 0,
+                null,
+                observation.skippedSelfCount,
+              );
+              yield* mcpSync(() =>
+                this.options.store.finish(check, execution, current && !test ? observation : undefined),
+              );
+              committed = execution;
+              if (!current || test) return execution;
+              return yield* this.#flush(check, session).pipe(
+                Effect.as(execution),
+                Effect.catchCause(() =>
+                  mcpSync(() =>
+                    this.options.store.deliveryError(execution, sourceText("error.backend.eventCheckDelivery")),
+                  ),
+                ),
+              );
+            }),
           );
         }),
       )
@@ -247,7 +312,9 @@ export class EventCheckScheduler implements RoutineDueSource {
       const argumentsForPage: EventCheckArguments =
         cursor === null ? args : { ...args, [check.source.cursorArgument]: cursor };
       const result: EventCheckData = yield* session.call(check.source.toolName, argumentsForPage);
-      const data: EventCheckData = yield* mcpSync(() => checkResultData(result));
+      const data: EventCheckData = yield* mcpSync(() =>
+        session.dataKind === "api" ? result : checkResultData(result),
+      );
       const next: string | number | null = yield* mcpSync(() => this.#page(check, data, items));
       if (next === null) return items;
       if (!check.source.cursorArgument || seen.has(String(next)))
@@ -267,9 +334,19 @@ export class EventCheckScheduler implements RoutineDueSource {
     items.push(...selected);
     if (items.length > CHECK_MAX_ITEMS || JSON.stringify(items).length > CHECK_MAX_BYTES)
       throw new Error("Result too large.");
+    if (check.source.kind === "api") {
+      const more = checkPointer(data, "/hasNextPage");
+      if (typeof more !== "boolean") throw new Error("Invalid page state.");
+      if (!more) return null;
+      if (!check.source.nextCursorPointer || !check.source.cursorArgument)
+        throw new Error("Incomplete API pagination.");
+    }
     if (!check.source.nextCursorPointer) return null;
     const next = checkPointer(data, check.source.nextCursorPointer);
-    if (next === null || next === "" || next === false) return null;
+    if (next === null || next === "" || next === false) {
+      if (check.source.kind === "api") throw new Error("Incomplete API pagination.");
+      return null;
+    }
     if (typeof next !== "string" && typeof next !== "number") throw new Error("Invalid result cursor.");
     return next;
   }
@@ -298,9 +375,7 @@ export class EventCheckScheduler implements RoutineDueSource {
       if (this.#delivering.has(event.id)) continue;
       const check = this.options.store.current(event.checkId, event.revision);
       if (!check?.active) continue;
-      yield* this.#reader()
-        .read(check.agentId, check.source.connectionId, (session) => this.#flush(check, session))
-        .pipe(Effect.catchCause(() => Effect.void));
+      yield* this.#read(check, (session) => this.#flush(check, session)).pipe(Effect.catchCause(() => Effect.void));
     }
   });
   readonly #flush = Effect.fn("EventCheck.flush")(function* (
@@ -332,6 +407,18 @@ export class EventCheckScheduler implements RoutineDueSource {
   });
   #agent(id: string): void {
     if (!this.options.agentExists(id)) throw new Error(sourceText("error.agent.unknown", { id }));
+  }
+  #read<A>(
+    check: EventCheck,
+    use: (session: EventCheckReadSession) => Effect.Effect<A, import("./mcp-effects").McpOperationError>,
+  ) {
+    return check.source.kind === "api"
+      ? this.#apiReader().read(check, use)
+      : this.#reader().read(check.agentId, check.source.connectionId, use);
+  }
+  #apiReader(): EventCheckApiReader {
+    if (!this.options.apiReader) throw new Error(sourceText("error.backend.eventCheckUnsupported"));
+    return this.options.apiReader;
   }
   #reader(): EventCheckReader {
     if (!this.options.reader) throw new Error(sourceText("error.backend.eventCheckUnsupported"));

@@ -153,11 +153,12 @@ import { ChannelRoutineScheduler } from "./channel-routine-scheduler";
 import { ChannelService } from "./channel-service";
 import type { BundledProviderExecutables } from "./cli";
 import type { ConversationMarkerExclusions } from "./conversation-read-store";
+import { createEventCheckScheduler } from "./create-event-check-scheduler";
 import type { ProviderSession } from "./database/provider-sessions";
+import type { EventCheckApiReader } from "./event-check-api-reader";
 import { EventCheckDelivery } from "./event-check-delivery";
 import type { EventCheckReader } from "./event-check-reader";
-import { EventCheckScheduler } from "./event-check-scheduler";
-import { EventCheckStore } from "./event-check-store";
+import type { EventCheckScheduler } from "./event-check-scheduler";
 import type { HostMemory } from "./host-memory";
 import type { MailboxStore } from "./mailbox-store";
 import { toMcpOperationError } from "./mcp-effects";
@@ -202,6 +203,7 @@ interface AgentServiceEvents {
 
 export interface AgentServiceOptions {
   eventCheckReader?: EventCheckReader;
+  eventCheckApiReader?: EventCheckApiReader;
   store: AgentStore;
   mailbox: MailboxStore;
   browser: AgentBrowserHost;
@@ -848,9 +850,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       },
       drain: (agentId) => this.#drain.scheduleDrain(agentId),
     });
-    this.eventChecks = new EventCheckScheduler({
-      store: new EventCheckStore(store.database),
-      reader: options.eventCheckReader,
+    this.eventChecks = createEventCheckScheduler(store.database, options, {
       scope: () => this.#scope,
       timer: this.#routineTimer,
       agentExists: (id) =>

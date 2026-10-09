@@ -47,6 +47,7 @@ interface AgentSettingsPanelProps
   /** Event routine calls for a host that advertises `events-v1`; absent keeps the released schedule API. */
   eventRoutines?: EventRoutinesApi;
   eventChecksAvailable?: boolean;
+  apiEventChecksAvailable?: boolean;
   onCreateSkill?: () => void;
   onTrySkill?: (skill: MarketplaceSkillDetail) => void;
   onAddFromMarketplace?: (agentId: string) => void;
@@ -334,6 +335,9 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
           <div class="agent-routines-overlay">
             <EventChecksSettings
               api={api()}
+              apiProgramsAvailable={
+                props.remoteClient ? Boolean(api().environment) : (props.apiEventChecksAvailable ?? true)
+              }
               agentId={props.agent.id}
               onCountChange={(count) =>
                 setDraft((draft) => {

@@ -1,4 +1,5 @@
 import type { ServerSummary } from "@openbot/contracts/ipc";
+import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { classifyFailure } from "@openbot/telemetry";
 import { useText } from "@openbot/ui/text";
@@ -349,6 +350,10 @@ export function ConversationPanels(panelProps: { onOpenUsage?: (trigger: HTMLBut
               onRoutineSelectionRequestHandled={handleRoutineSettingsRequest}
               onOpenRoutineRun={props.onOpenSearchMessage ? openRoutineRunMessage : undefined}
               files={agentFiles(props.server, agent().id)}
+              apiEventChecksAvailable={
+                Boolean(props.runtime?.admin?.eventChecks?.environment) ||
+                serverCanAdminister(props.server, EVENT_CHECK_API_CAPABILITY)
+              }
               eventChecksAvailable={
                 Boolean(props.runtime?.admin?.eventChecks) || serverCanAdminister(props.server, EVENT_CHECKS_CAPABILITY)
               }

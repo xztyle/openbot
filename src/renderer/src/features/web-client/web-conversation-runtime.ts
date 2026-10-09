@@ -33,9 +33,10 @@ function webHostAdmin(
   onHostEvent?: HostEvents,
   eventsEnabled?: () => boolean,
   checksEnabled?: () => boolean,
+  apiChecksEnabled?: () => boolean,
 ): NonNullable<ConversationRuntime["admin"]> {
   // `request()` names the connected host at call time, so a host switch reaches the new host.
-  const checks = eventChecksApi((...args) => request()(...args));
+  const checks = eventChecksApi((...args) => request()(...args), apiChecksEnabled);
   const eventRoutines = webEventRoutinesApi((...args) => request()(...args));
   return {
     skills: {
@@ -90,6 +91,7 @@ export function createWebConversationRuntime(
   onHostEvent?: HostEvents,
   eventsEnabled?: () => boolean,
   checksEnabled?: () => boolean,
+  apiChecksEnabled?: () => boolean,
 ): ConversationRuntime {
   const listeners = new Set<(event: AttachmentImportEvent) => void>();
   const files = createWebAttachmentFiles(remote);
@@ -205,6 +207,8 @@ export function createWebConversationRuntime(
       }
     },
     cancelImportFiles,
-    admin: adminRequest ? webHostAdmin(adminRequest, onHostEvent, eventsEnabled, checksEnabled) : undefined,
+    admin: adminRequest
+      ? webHostAdmin(adminRequest, onHostEvent, eventsEnabled, checksEnabled, apiChecksEnabled)
+      : undefined,
   };
 }

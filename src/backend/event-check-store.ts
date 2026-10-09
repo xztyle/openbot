@@ -66,7 +66,7 @@ export class EventCheckStore {
       .get(id, revision);
     return row ? decodeEventCheck(jsonColumn(row, "definition_json")) : null;
   }
-  save(input: EventCheckInput, now: Date): EventCheck {
+  save(input: EventCheckInput, now: Date, forceReset = false): EventCheck {
     const previous = input.id ? this.get(input.agentId, input.id) : null;
     if (!previous && this.list().length >= 100) throw new Error("Too many event checks.");
     const check: EventCheck = {
@@ -78,6 +78,7 @@ export class EventCheckStore {
       updatedAt: now.toISOString(),
     };
     const reset =
+      forceReset ||
       !previous ||
       JSON.stringify([previous.source, previous.selection, previous.selfEvents]) !==
         JSON.stringify([input.source, input.selection, input.selfEvents]);

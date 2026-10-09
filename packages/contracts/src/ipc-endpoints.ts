@@ -1,6 +1,8 @@
 import type {
   EventCheck,
   EventCheckAccount,
+  EventCheckEnvironmentInput,
+  EventCheckEnvironmentStatus,
   EventCheckExecution,
   EventCheckInput,
   EventCheckTool,
@@ -975,6 +977,13 @@ export const IPC_ENDPOINTS = {
   // A separate group, not part of `servers`: a group is what one registrar covers in full, and
   // `servers` is bound against `RemoteServerManager` while these are bound against `AgentService`.
   eventChecks: {
+    environment: scopedRequest<{ agentId: string; id: string }, EventCheckEnvironmentStatus[]>()(
+      "event-checks:environment",
+    ),
+    setEnvironment: scopedRequest<EventCheckEnvironmentInput, EventCheckEnvironmentStatus[]>()(
+      "event-checks:set-environment",
+    ),
+    test: scopedRequest<{ agentId: string; id: string }, EventCheckExecution>()("event-checks:test"),
     list: scopedRequest<{ agentId: string }, EventCheck[]>()("event-checks:list"),
     save: scopedRequest<EventCheckInput, EventCheck>()("event-checks:save"),
     remove: scopedRequest<{ agentId: string; id: string }, void>()("event-checks:remove"),

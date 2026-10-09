@@ -7,6 +7,9 @@ import { toAgentRemovalFailed } from "../backend/agent/agent-removal";
 import { toHostedSiteOperationFailed } from "../backend/agent/hosted-site-coordinator";
 import { AgentDatabaseSupervisor } from "../backend/agent-data/agent-database-supervisor";
 import { AgentTables } from "../backend/agent-data/agent-tables";
+import { EventCheckApiReader } from "../backend/event-check-api-reader";
+import { EventCheckEnvironment } from "../backend/event-check-environment";
+import { EventCheckStore } from "../backend/event-check-store";
 import { toMcpOperationError } from "../backend/mcp-effects";
 import { DiscordConnectFailed, toDiscordConnectFailed } from "../backend/messaging/discord/discord-connect";
 import { SlackConnectFailed, toSlackConnectFailed } from "../backend/messaging/slack/slack-connect";
@@ -18,6 +21,7 @@ import { localSkillTools } from "./local-skill-tools";
 import { MAC_PERMISSION_URLS } from "./mac-permission-urls";
 import { RemoteMcpSignIn } from "./remote-mcp-sign-in";
 import { RemoteWorkflowError, toRemoteWorkflowError } from "./remote-service-effects";
+import { safeStorageCipher } from "./safe-storage-cipher";
 /**
  * The composition root. Every long-lived service the desktop app owns is built here, in one
  * function, in dependency order, and handed back as a single record.
@@ -401,18 +405,6 @@ export interface ApplicationServices {
 
 /** How the driver's own state reads as the capability the Team API projects. */
 /** The Electron secret storage cipher that every encrypted file in userData uses. */
-function safeStorageCipher(
-  unavailableKey: "error.app.secretStorageUnavailable" | "error.app.macSecureStorageUnavailable",
-) {
-  return {
-    canPersist: () => safeStorage.isEncryptionAvailable(),
-    encrypt: (value: string) => {
-      if (!safeStorage.isEncryptionAvailable()) throw new Error(sourceText(unavailableKey));
-      return safeStorage.encryptString(value);
-    },
-    decrypt: (value: Buffer) => safeStorage.decryptString(value),
-  };
-}
 
 function computerUseCapability(state: ComputerUseState): CapabilityState {
   if (state.status === "ready") return "ready";
@@ -1136,6 +1128,15 @@ export async function createApplicationServices({
     // built-in default.
     developmentDefaults: appVariant === "dev",
     eventCheckReader: chatMcp?.reader,
+    eventCheckApiReader: new EventCheckApiReader(
+      new EventCheckEnvironment(join(app.getPath("userData"), "watcher-environments"), {
+        encrypt: (value) => safeStorageCipher("error.app.secretStorageUnavailable").encrypt(value).toString("base64"),
+        decrypt: (value) =>
+          safeStorageCipher("error.app.secretStorageUnavailable").decrypt(Buffer.from(value, "base64")),
+      }),
+      join(store.sharedRoot, "Watchers"),
+      (check) => new EventCheckStore(store.database).current(check.id, check.revision) !== null,
+    ),
     credentials: {
       apiKey: (provider) => providerCredentials.get(provider),
       // `configs()`, not `list()`: this is the one path the API keys travel, and it ends at the

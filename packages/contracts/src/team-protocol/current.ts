@@ -10,6 +10,7 @@ import { AGENT_UPDATE_CAPABILITY } from "./agent-update-v1";
 import { TEAM_BROWSER_NAVIGATION_CAPABILITY } from "./browser-navigation-v1";
 import { TEAM_BROWSER_VIEW_CAPABILITY, TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY } from "./browser-view-v1";
 import { CONTEXT_RESET_CAPABILITY } from "./context-reset-v1";
+import { EVENT_CHECK_API_CAPABILITY } from "./event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY } from "./event-checks-v1";
 import { EVENTS_CAPABILITY } from "./events-v1";
 import { HOST_ADMIN_CAPABILITY } from "./host-admin-v1";
@@ -102,6 +103,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   MCP_SERVERS_CAPABILITY,
   STORAGE_CAPABILITY,
   EVENT_CHECKS_CAPABILITY,
+  EVENT_CHECK_API_CAPABILITY,
   MCP_CHAT_CAPABILITY,
   MCP_OAUTH_CAPABILITY,
   AGENT_ADMIN_CAPABILITY,

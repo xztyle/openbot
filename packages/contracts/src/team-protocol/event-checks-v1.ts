@@ -1,11 +1,11 @@
 import {
-  decodeEventCheck,
   decodeEventCheckAccount,
   decodeEventCheckExecution,
-  decodeEventCheckInput,
   decodeEventCheckList,
   decodeEventCheckTarget,
   decodeEventCheckTool,
+  decodeMcpEventCheck,
+  decodeMcpEventCheckInput,
 } from "../event-checks";
 import { adminRoute, fields, identifier, type OptionalRouteCodec } from "./admin-wire";
 import { decodeTeamProtocolV2Json } from "./v2";
@@ -26,17 +26,17 @@ const checked =
     decodeTeamProtocolV2Json(decode(value));
 const agent = fields({ agentId: identifier });
 const target = checked(decodeEventCheckTarget);
-const check = checked(decodeEventCheck);
+const check = checked(decodeMcpEventCheck);
 const execution = checked(decodeEventCheckExecution);
 export const EVENT_CHECKS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [
     EVENT_CHECKS_ROUTES.list,
     adminRoute(
       agent,
-      checked((v) => decodeEventCheckList(v, decodeEventCheck)),
+      checked((v) => decodeEventCheckList(v, decodeMcpEventCheck)),
     ),
   ],
-  [EVENT_CHECKS_ROUTES.save, adminRoute(checked(decodeEventCheckInput), check)],
+  [EVENT_CHECKS_ROUTES.save, adminRoute(checked(decodeMcpEventCheckInput), check)],
   [EVENT_CHECKS_ROUTES.remove, adminRoute(target, () => null)],
   [EVENT_CHECKS_ROUTES.checkNow, adminRoute(target, execution)],
   [

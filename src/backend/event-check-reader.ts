@@ -6,6 +6,7 @@ import type { McpOperationError } from "./mcp-effects";
 export type EventCheckData = TeamProtocolV2Json;
 export type EventCheckArguments = { [key: string]: EventCheckData };
 export interface EventCheckReadSession {
+  dataKind?: "api";
   tools: EventCheckTool[];
   valid(): boolean;
   call(toolName: string, args: EventCheckArguments): Effect.Effect<EventCheckData, McpOperationError>;

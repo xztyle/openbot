@@ -17,3 +17,5 @@
   that needs your approval, instead of a generic "app check failed" message.
 - Fix: an event check that an agent saved again no longer loses its link to its template. Checks
   from earlier template versions can be linked to the template, then updated.
+- Slack activity 1.1.1: with more direct conversations than the limit, each check reads the next
+  batch (the longest unread first) and starts over after the last one, instead of stopping.

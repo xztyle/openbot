@@ -308,14 +308,14 @@
     "name": "Slack activity",
     "tagline": "Wake an agent when you are mentioned or messaged in Slack",
     "description": "Checks Slack every two minutes for new messages that matter to one person: mentions of that person, optional keywords, direct messages, and messages in channels you pick. It runs as a normal program with no AI, reads Slack's official Web API with a personal (user) token, or with the token your browser already uses, and never posts or changes anything in Slack. Read-only permissions are enough. A new message, or a message that was edited while it is still recent, wakes the agent once. Messages you wrote yourself are skipped. The check only looks at the last few minutes, so a message that is edited much later is not seen again. If Slack asks the program to slow down, it saves a cooldown and sends no request until the cooldown ends. Use a token from an app that you create in your own workspace. Install it again for another workspace or person: every install has its own settings, token, schedule and history.",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "creatorName": "OpenBot",
     "iconUrl": "https://slack.com/favicon.ico",
     "websiteUrl": "https://slack.com",
     "app": "slack",
     "program": {
       "file": "slack-activity.mjs",
-      "digest": "712f84bacf4a186092113acea465d15bbe437ffdf8a10b4e780e3c3330fc3fd2"
+      "digest": "2b5569350a62d535521ed1004fd2c968df1473384525f8f62a3a92330686e39a"
     },
     "earlierPrograms": [
       {
@@ -327,6 +327,11 @@
         "version": "1.0.1",
         "file": "slack-activity-1.0.1.mjs",
         "digest": "8854eff959bc05f10672ee9a002cc73d3222a8ca576ed68254b5baa93184fec9"
+      },
+      {
+        "version": "1.1.0",
+        "file": "slack-activity-1.1.0.mjs",
+        "digest": "712f84bacf4a186092113acea465d15bbe437ffdf8a10b4e780e3c3330fc3fd2"
       }
     ],
     "accountLabelHint": "The Slack workspace, for example Work",
@@ -382,15 +387,15 @@
       {
         "name": "watchDirectMessages",
         "label": "Watch direct messages",
-        "description": "Type true to watch your direct messages and group direct messages. If you have more of them than the limit below, the check stops and tells you. Type false to turn this off.",
+        "description": "Type true to watch your direct messages and group direct messages. If you have more of them than the limit below, each check reads the next batch and starts over after the last one. Type false to turn this off.",
         "value": "true",
         "required": false,
         "type": "boolean"
       },
       {
         "name": "maxConversations",
-        "label": "Direct conversation limit",
-        "description": "The most direct and group direct conversations to read, from 1 to 100.",
+        "label": "Direct conversations per check",
+        "description": "The most direct and group direct conversations one check reads, from 1 to 100. With more of them, the checks take turns, the longest unread first, so every conversation is read in the end.",
         "value": "30",
         "required": false,
         "type": "text"

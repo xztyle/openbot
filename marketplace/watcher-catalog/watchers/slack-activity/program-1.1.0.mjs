@@ -503,56 +503,11 @@ async function listConversations(ctx) {
       }
     },
   );
+  requireCondition(
+    found.length <= ctx.config.maxConversations,
+    `There are more direct conversations (${found.length}) than maxConversations allows (${ctx.config.maxConversations}). Raise maxConversations or turn off watchDirectMessages.`,
+  );
   return found;
-}
-
-const MAX_CATCH_UP_MS = 24 * 3600 * 1000;
-const MAX_ROTATION_ENTRIES = 1000;
-
-/** Reads the conversations that were read longest ago first. A conversation that was never read comes before all. */
-function pickBatch(found, checked, limit) {
-  return [...found]
-    .sort((a, b) => (checked[a.id] ?? 0) - (checked[b.id] ?? 0) || (a.id < b.id ? -1 : 1))
-    .slice(0, limit);
-}
-
-/** A conversation that was skipped for a few checks is read from when it was last read, up to one day back. */
-function conversationWindow(window, lastChecked) {
-  if (!Number.isFinite(lastChecked) || lastChecked >= window.since) return window;
-  return { since: Math.max(lastChecked, window.until - MAX_CATCH_UP_MS), until: window.until };
-}
-
-/** Per check: when each direct conversation was last read. Only used when there are more than one check can read. */
-export function createRotationStore(directory) {
-  const filename = (instanceId) =>
-    path.join(directory, `${createHash("sha256").update(`rotation:${instanceId}`).digest("hex")}.json`);
-  return {
-    async read(instanceId) {
-      try {
-        const parsed = JSON.parse(await fs.readFile(filename(instanceId), "utf8"));
-        const checked = {};
-        if (isRecord(parsed) && isRecord(parsed.checked))
-          for (const [id, value] of Object.entries(parsed.checked))
-            if (typeof value === "number" && Number.isFinite(value) && value >= 0) checked[id] = value;
-        return checked;
-      } catch {
-        // Missing or damaged state only means every conversation counts as not read yet.
-        return {};
-      }
-    },
-    async write(instanceId, checked) {
-      const target = filename(instanceId);
-      const temporary = `${target}.${randomUUID()}.tmp`;
-      try {
-        await fs.mkdir(directory, { recursive: true, mode: 0o700 });
-        await fs.writeFile(temporary, JSON.stringify({ checked }), { mode: 0o600 });
-        await fs.rename(temporary, target);
-      } catch {
-        await fs.unlink(temporary).catch(() => {});
-        throw new WatcherError("Cannot save which direct conversations were read.", "config");
-      }
-    },
-  };
 }
 
 /** Reads one conversation's recent messages, and the threads that had new replies. */
@@ -621,7 +576,6 @@ export async function runWatcher(
     now = () => Date.now(),
     cooldownDir = defaultCooldownDirectory(),
     store = createCooldownStore(cooldownDir),
-    rotation = createRotationStore(cooldownDir),
   } = {},
 ) {
   const credentials = readCredentials(token);
@@ -647,35 +601,13 @@ export async function runWatcher(
   requireCondition(auth.user_id === config.userId, "The Slack token does not belong to the configured userId.");
 
   const collector = createCollector();
-  let rotated = null;
   if (config.watchMentions) {
     await collectSearch(ctx, collector, window, `<@${config.userId}>`, "mention");
     for (const term of config.keywords) await collectSearch(ctx, collector, window, searchTerm(term), "keyword");
   }
   if (config.watchDirectMessages) {
-    const found = await listConversations(ctx);
-    // With more conversations than one check may read, each check reads the next batch and the list starts over.
-    const rotating = found.length > config.maxConversations;
-    const checked = rotating ? await rotation.read(config.instanceId) : {};
-    const batch = rotating ? pickBatch(found, checked, config.maxConversations) : found;
-    for (const conversation of batch) {
-      await collectHistory(
-        ctx,
-        collector,
-        conversationWindow(window, checked[conversation.id]),
-        conversation,
-        conversation.kind,
-      );
-    }
-    if (rotating) {
-      const known = new Set(found.map((conversation) => conversation.id));
-      const next = Object.fromEntries(Object.entries(checked).filter(([id]) => known.has(id)));
-      for (const conversation of batch) next[conversation.id] = window.until;
-      rotated = Object.fromEntries(
-        Object.entries(next)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, MAX_ROTATION_ENTRIES),
-      );
+    for (const conversation of await listConversations(ctx)) {
+      await collectHistory(ctx, collector, window, conversation, conversation.kind);
     }
   }
   if (config.watchChannels) {
@@ -694,8 +626,6 @@ export async function runWatcher(
     "Too many new messages for one check.",
     "config",
   );
-  // Saved last: a check that failed before this point reads the same batch again.
-  if (rotated) await rotation.write(config.instanceId, rotated);
   return result;
 }
 

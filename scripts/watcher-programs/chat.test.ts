@@ -4,7 +4,8 @@
 // being read, a rate limit being ignored (requests during a cooldown), and a template the host would
 // refuse to install. Every request here goes to a fake `fetch`: nothing was run against live Slack or Discord.
 import { spawn } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -438,28 +439,69 @@ describe("slack-activity", () => {
     expect(messages[2]).toMatch(/HTTP 500/);
   });
 
-  it("stops with a message instead of reporting a partial window when a cap is reached", async () => {
-    const tooMany = fakeFetch((request) =>
-      methodOf(request) === "conversations.list"
-        ? ok({
-            channels: [
-              { id: "D1", is_im: true },
-              { id: "D2", is_im: true },
-              { id: "D3", is_im: true },
-            ],
-          })
-        : workspace(request),
-    );
-    expect(
-      await failureOf(
-        run(
-          { ...base, watchMentions: "false", watchDirectMessages: "true", maxConversations: "2" },
-          { fetchImpl: tooMany.fetchImpl },
-        ),
-      ),
-    ).toMatch(/maxConversations/);
-    expect(tooMany.requests.map(methodOf)).toEqual(["auth.test", "conversations.list"]);
+  it("reads direct conversations in batches, the longest unread first, and starts over after the last", async () => {
+    const conversations = Array.from({ length: 7 }, (_, index) => ({ id: `D${index + 1}`, is_im: true }));
+    const fake = fakeFetch((request) => {
+      const method = methodOf(request);
+      if (method === "conversations.list") return ok({ channels: conversations });
+      if (method === "conversations.history") return ok({ messages: [] });
+      return workspace(request);
+    });
+    const input = {
+      ...base,
+      instanceId: "rotation",
+      watchMentions: "false",
+      watchDirectMessages: "true",
+      maxConversations: "3",
+    };
+    const readOnRun = async (index: number, windowSeconds = 600) => {
+      const until = UNTIL + index * 120_000;
+      const before = fake.requests.length;
+      await run(
+        { ...input, since: new Date(until - windowSeconds * 1000).toISOString(), until: new Date(until).toISOString() },
+        { fetchImpl: fake.fetchImpl, now: () => until },
+      );
+      return fake.requests
+        .slice(before)
+        .filter((request) => methodOf(request) === "conversations.history")
+        .map((request) => ({
+          id: request.url.searchParams.get("channel"),
+          oldest: Number(request.url.searchParams.get("oldest")),
+        }));
+    };
+    expect((await readOnRun(0)).map((read) => read.id)).toEqual(["D1", "D2", "D3"]);
+    expect((await readOnRun(1)).map((read) => read.id)).toEqual(["D4", "D5", "D6"]);
+    expect((await readOnRun(2)).map((read) => read.id)).toEqual(["D7", "D1", "D2"]);
+    // D3 was last read three checks ago, before this narrow window starts: it is read from then, not from the window.
+    const fourth = await readOnRun(3, 60);
+    expect(fourth.map((read) => read.id)).toEqual(["D3", "D4", "D5"]);
+    const [skipped, recent] = fourth;
+    if (!skipped || !recent) throw new Error("Expected reads.");
+    expect(skipped.oldest).toBeLessThan(recent.oldest);
+  });
 
+  it("keeps no rotation state while every conversation fits in one check", async () => {
+    const fake = fakeFetch((request) => {
+      const method = methodOf(request);
+      if (method === "conversations.list") return ok({ channels: [{ id: "D1", is_im: true }] });
+      if (method === "conversations.history") return ok({ messages: [] });
+      return workspace(request);
+    });
+    await run(
+      {
+        ...base,
+        instanceId: "no-rotation",
+        watchMentions: "false",
+        watchDirectMessages: "true",
+        maxConversations: "3",
+      },
+      { fetchImpl: fake.fetchImpl },
+    );
+    const files = await readdir(join(temporary, "cooldowns")).catch((): string[] => []);
+    expect(files).not.toContain(`${createHash("sha256").update("rotation:no-rotation").digest("hex")}.json`);
+  });
+
+  it("stops with a message instead of reporting a partial window when a cap is reached", async () => {
     const budget = fakeFetch(workspace);
     expect(
       await failureOf(run({ ...base, watchDirectMessages: "true", maxRequests: "4" }, { fetchImpl: budget.fetchImpl })),

@@ -1,7 +1,8 @@
 import { basename } from "node:path";
 import { type OAuthClientProvider, UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { AccessDeniedError, UnauthorizedClientError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import type { FetchLike, Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
@@ -11,17 +12,24 @@ import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect, Result, Schema } from "effect";
 import { causeHelpers } from "./effect-boundary";
-import { type McpOAuthAuthority, type McpSignIn, normalizeResource } from "./mcp-oauth-provider";
+import {
+  isLoopback,
+  type McpOAuthAuthority,
+  type McpSignIn,
+  normalizeResource,
+  secureOAuthFetch,
+} from "./mcp-oauth-provider";
 import {
   clearMcpCommandCache,
   type McpToolRuntimes,
+  mcpHandoffHeaders,
+  mcpLaunchEnvironment,
   NO_MCP_TOOL_RUNTIMES,
   type ResolvedMcpServer,
   type UsableMcpServer,
   usableMcpServer,
 } from "./mcp-provider-shapes";
 import { redactMcpSecrets, redactMcpValues } from "./mcp-redaction";
-import { createMcpTransport } from "./mcp-transport";
 
 export const MCP_PROBE_TIMEOUT_MS = 10_000;
 
@@ -57,19 +65,18 @@ export const testMcpServer = Effect.fnUntraced(function* (
   config: McpServerConfig,
   timeoutMs = MCP_PROBE_TIMEOUT_MS,
   tools: McpToolRuntimes = NO_MCP_TOOL_RUNTIMES,
-  oauth?: Pick<McpOAuthAuthority, "accessToken" | "signIn" | "forConnection">,
+  oauth?: Pick<McpOAuthAuthority, "accessToken" | "signIn">,
   signInPlace: McpSignInPlace | null = null,
 ) {
   clearMcpCommandCache();
-  const authority = oauth?.forConnection?.(config.id) ?? oauth;
   return yield* Effect.acquireUseRelease(
-    Effect.sync(() => (config.transport === "http" ? (authority?.signIn(config.url) ?? null) : null)),
+    Effect.sync(() => (config.transport === "http" ? (oauth?.signIn(config.url) ?? null) : null)),
     (signIn) =>
       Effect.gen(function* () {
         const server = yield* usableMcpServer(
           config,
           tools,
-          authority ? (subject) => authority.accessToken(subject.url) : undefined,
+          oauth ? (subject) => oauth.accessToken(subject.url) : undefined,
         );
         return yield* probeMcpServerEffect(server, timeoutMs, signIn, signInPlace);
       }),
@@ -208,7 +215,7 @@ const connectAndCountEffect = Effect.fnUntraced(function* (
     Effect.try({
       try: () => ({
         client: new Client({ name: "openbot-probe", version: "1" }, { capabilities: {} }),
-        transport: createMcpTransport(server, authProvider, challengeRecordingFetch(onChallenge)),
+        transport: createTransport(server, authProvider, onChallenge),
       }),
       catch: (cause) => new McpProbeFailure({ cause }),
     }),
@@ -253,6 +260,59 @@ const countToolsEffect = Effect.fnUntraced(function* (client: Client) {
 function boundedError(text: string): string {
   if (text.length <= INPUT_LIMITS.mcpErrorText) return text;
   return `${text.slice(0, INPUT_LIMITS.mcpErrorText - 1)}…`;
+}
+
+function createTransport(
+  server: ResolvedMcpServer,
+  authProvider: OAuthClientProvider | undefined,
+  onChallenge: (challenge: McpChallenge) => void,
+): Transport {
+  const { config } = server;
+  if (config.transport === "http") {
+    /*
+     * The `authProvider` is what turns a 401 into a sign-in instead of a sentence. Without one the
+     * transport reports the refusal, which is what a server with a pasted key should do.
+     *
+     * With one, the stored token is left out of `requestInit`: a header written there wins over the
+     * one the provider adds, so a token the provider has just refreshed would lose to the value this
+     * probe read a moment before the refusal.
+     */
+    const headers = authProvider
+      ? Object.fromEntries(config.headers.map(({ key, value }) => [key, value]))
+      : mcpHandoffHeaders(server);
+    /*
+     * The transport does OAuth of its own: a 401 on a token this probe believed was still valid
+     * makes it call `auth()` through its own fetch, which spends the refresh token and the client
+     * secret at the discovered endpoint. That is the same exchange the explicit paths guard, so it
+     * gets the same fetch - without it a discovery document could name a plain-text token endpoint
+     * and this one request would still honour it. A provider is only attached to a URL that already
+     * passed `normalizeResource`, so the guard refuses nothing this probe could otherwise reach.
+     */
+    return new StreamableHTTPClientTransport(new URL(config.url), {
+      fetch: authProvider ? secureOAuthFetch() : challengeRecordingFetch(onChallenge),
+      ...(authProvider ? { authProvider } : {}),
+      requestInit: { headers },
+    });
+  }
+  return new StdioClientTransport({
+    command: server.command ?? config.command,
+    args: config.args,
+    // The resolved directory, not the stored one: process creation does not expand a leading `~`,
+    // which the form's own example uses.
+    ...(server.workingDirectory ? { cwd: server.workingDirectory } : {}),
+    // The SDK default first, then this user's own `PATH`, the names the user asked to pass through,
+    // and the user's own pairs. `envPassthrough` has no other meaning anywhere in OpenBot; this is
+    // where it is spent. The launch environment is the providers' as well, so what the panel tests
+    // is what an agent starts.
+    env: {
+      ...getDefaultEnvironment(),
+      ...mcpLaunchEnvironment(server),
+    },
+    // Discarded, not piped. Nothing here reads that pipe, so a server that writes its startup log to
+    // stderr - which a Rust or Python server does with a blocking write - fills the 64 KB buffer and
+    // stops before it answers the handshake. The probe would report a timeout for a working server.
+    stderr: "ignore",
+  });
 }
 
 /**
@@ -328,6 +388,10 @@ function describeMcpErrorText(error: unknown, config: McpServerConfig, timeoutMs
   if (error instanceof UnauthorizedError) return sourceText("error.backend.mcpSignInNotAccepted");
   // The child exited before the handshake: the process failed to start, not the network.
   if (config.transport === "stdio" && isConnectionClosed(error)) return sourceText("error.backend.mcpServerExited");
+  if (config.transport === "http") {
+    const described = describeConnectionFailure(error, config.url);
+    if (described) return described;
+  }
   const status = httpStatus(error);
   if (status !== null) return httpStatusMessage(status);
   if (config.transport === "http" && isNetworkFailure(error)) return sourceText("error.backend.mcpServerUnreachable");
@@ -367,14 +431,60 @@ const NETWORK_ERROR_CODES = new Set([
   "EHOSTUNREACH",
 ]);
 
+/** The error and the causes Node's fetch nests under it, such as `fetch failed` over `ECONNREFUSED`. */
+function causeChain(error: unknown): Error[] {
+  const chain: Error[] = [];
+  for (let current = error; current instanceof Error && chain.length < 4; current = current.cause) chain.push(current);
+  return chain;
+}
+
+/** A system or undici code such as `ECONNREFUSED`. A transport's numeric HTTP status is not one. */
+function systemCode(error: Error): string | null {
+  const code = isDynamicRecord(error) ? error.code : undefined;
+  return typeof code === "string" ? code : null;
+}
+
 /** A request that never reached a server: Node's fetch rejects with `fetch failed` and the system code as the cause. */
 function isNetworkFailure(error: unknown): boolean {
-  for (let current = error, depth = 0; current instanceof Error && depth < 4; current = current.cause, depth++) {
-    const code = isDynamicRecord(current) ? current.code : undefined;
-    if (typeof code === "string" && NETWORK_ERROR_CODES.has(code)) return true;
-    if (current instanceof TypeError && current.message === "fetch failed") return true;
+  return causeChain(error).some((current) => {
+    const code = systemCode(current);
+    if (code !== null && NETWORK_ERROR_CODES.has(code)) return true;
+    return current instanceof TypeError && current.message === "fetch failed";
+  });
+}
+
+/**
+ * What an http connection that failed below MCP says, or `null` for the general sentences.
+ *
+ * A local server, such as the one in the Figma desktop app, refuses the connection while it is
+ * turned off, and "check your network" sends the user the wrong way. Something that answers but
+ * not in MCP over Streamable HTTP is told apart from a server that is not there.
+ */
+function describeConnectionFailure(error: unknown, url: string): string | null {
+  for (const current of causeChain(error)) {
+    const code = systemCode(current);
+    if (code === "ECONNREFUSED" && URL.canParse(url)) {
+      const address = new URL(url);
+      if (isLoopback(address.hostname))
+        return sourceText("error.backend.mcpLocalServerOff", { address: address.origin });
+    }
+    if (code === "EACCES" || code === "EPERM") return sourceText("error.backend.mcpServerBlocked");
+    if (isProtocolMismatch(current, code)) return sourceText("error.backend.mcpServerIncompatible");
   }
-  return false;
+  return null;
+}
+
+/**
+ * An answer that is not MCP over Streamable HTTP: a 405 to the POST, a content type the transport
+ * does not read, or bytes that are not HTTP/1.1.
+ *
+ * Only the transport's own errors and the HTTP parser count. A `SyntaxError` or a schema error can
+ * also come from a sign-in server or from one bad result of a real MCP server, and a closed socket
+ * can be the network.
+ */
+function isProtocolMismatch(error: Error, code: string | null): boolean {
+  if (error instanceof StreamableHTTPError) return error.code === -1 || error.code === 405;
+  return error.name === "HTTPParserError" || (code?.startsWith("HPE_") ?? false);
 }
 
 /**

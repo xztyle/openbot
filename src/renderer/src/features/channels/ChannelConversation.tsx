@@ -88,10 +88,10 @@ const ChannelFilePreviewPanel = lazy(() => import("../conversation/FilePreviewPa
 
 /** What the open channel reads from the client around it. The channel itself comes from `useChannels()`. */
 export interface ChannelConversationProps {
-  headerActions?: import("@solidjs/web").JSX.Element;
   isOwnMessage: (authorId: string) => boolean;
   /** The device with the keyboard on desktop. Web leaves it empty and the browser is detected. */
   platform?: "darwin" | "win32" | "linux" | undefined;
+  headerActions?: import("@solidjs/web").JSX.Element;
   /** Keyed by agent id. */
   pendingApprovals: Record<string, AgentApproval | undefined>;
   /** Keyed by agent id. */

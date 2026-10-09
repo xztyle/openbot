@@ -5,7 +5,11 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { readAnalyticsPreference, writeAnalyticsPreference } from "./analytics-preference-store";
+import {
+  analyticsDisabledByEnvironment,
+  readAnalyticsPreference,
+  writeAnalyticsPreference,
+} from "./analytics-preference-store";
 
 const roots: string[] = [];
 
@@ -33,6 +37,18 @@ describe("analytics preference store", () => {
     const path = join(root, "analytics.json");
     await expect(Effect.runPromise(writeAnalyticsPreference(path, false))).resolves.toEqual({ enabled: false });
     await expect(Effect.runPromise(readAnalyticsPreference(path))).resolves.toEqual({ enabled: false });
+  });
+});
+
+describe("analyticsDisabledByEnvironment", () => {
+  it("turns analytics off only for an explicit off value", () => {
+    for (const value of ["off", "OFF", "0", "false", " no "]) {
+      expect(analyticsDisabledByEnvironment({ OPENBOT_ANALYTICS: value })).toBe(true);
+    }
+    expect(analyticsDisabledByEnvironment({ DO_NOT_TRACK: "1" })).toBe(true);
+    for (const environment of [{}, { OPENBOT_ANALYTICS: "on" }, { OPENBOT_ANALYTICS: "" }, { DO_NOT_TRACK: "0" }]) {
+      expect(analyticsDisabledByEnvironment(environment)).toBe(false);
+    }
   });
 });
 

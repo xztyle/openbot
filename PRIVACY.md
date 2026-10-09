@@ -125,7 +125,10 @@ session, device, browser, operating-system, network, and approximate geographic 
 request. The analytics service runs on OpenBot's self-hosted infrastructure and receives events
 through `analytics.openbot.run`.
 Analytics is enabled in production by default. Desktop users can disable it under **Settings →
-General → Privacy → Share product analytics**. The preference is stored locally and disables both UI
+General → Privacy → Share product analytics**. A self-hosted server or Docker container has no
+settings window. Its owner turns analytics off with `OPENBOT_ANALYTICS=off` (or `DO_NOT_TRACK=1`) in the
+environment, which holds for the whole run, or with `openbot analytics off`, which saves the same
+choice as the setting. The preference is stored locally and disables both UI
 analytics and lifecycle analytics emitted by the local host. Website analytics does not use the
 desktop preference. Mobile has its own phone-wide **Settings → Privacy → Share product analytics**
 preference, independent of desktop and host collection. It defaults to enabled in a

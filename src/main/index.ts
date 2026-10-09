@@ -1160,6 +1160,19 @@ if (!hasSingleInstanceLock) {
     .catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       logger.error("OpenBot failed to start:", toLogValue(error));
+      if (serverMode) {
+        // Nobody sees a dialog on a server. Exit with a code, so the supervisor (systemd or Docker)
+        // sees the failure and the log above says why. The teardown stops what already started.
+        process.exitCode = 1;
+        setTimeout(() => app.exit(1), STARTUP_FAILURE_EXIT_DEADLINE_MS).unref();
+        void teardown
+          .runAll()
+          .catch((teardownError) =>
+            logger.error("Unable to shut down after a failed start:", toLogValue(teardownError)),
+          )
+          .finally(() => app.exit(1));
+        return;
+      }
       // The services, and with them the saved language, may not exist yet. Then the system language applies.
       const translate = services?.language.translate ?? translateFor(resolveLocale("system", app.getLocale()));
       dialog.showErrorBox(translate("startup.failedTitle"), translate("startup.failedBody", { message }));
@@ -1199,6 +1212,8 @@ function reopenMainWindow(): void {
  * single-instance lock, so every later launch exits without opening anything.
  */
 const SHUTDOWN_DEADLINE_MS = 30_000;
+/** A server that failed to start leaves after the teardown, or after this long if the teardown hangs. */
+const STARTUP_FAILURE_EXIT_DEADLINE_MS = 30_000;
 
 function forceExitAfterShutdownDeadline(): void {
   setTimeout(() => {

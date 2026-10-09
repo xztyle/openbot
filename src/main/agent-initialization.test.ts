@@ -67,4 +67,20 @@ describe("AgentInitializationGate", () => {
     expect(gate.pending).toBe(false);
     expect(gate.succeeded).toBe(true);
   });
+
+  it("reports a failed initialization with its error until a retry succeeds", async () => {
+    const initialize = vi
+      .fn<() => Effect.Effect<void, Error>>()
+      .mockReturnValueOnce(Effect.fail(new Error("startup failed")))
+      .mockReturnValueOnce(Effect.void);
+    const gate = new AgentInitializationGate(initialize);
+
+    expect(gate.state).toBe("idle");
+    await expect(Effect.runPromise(gate.start())).rejects.toThrow("startup failed");
+    expect(gate.state).toBe("failed");
+    expect(gate.failure).toEqual(new Error("startup failed"));
+    await Effect.runPromise(gate.start());
+    expect(gate.state).toBe("ok");
+    expect(gate.failure).toBeNull();
+  });
 });

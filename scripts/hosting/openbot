@@ -18,7 +18,13 @@ usage() {
   cat <<'EOF'
 Usage: openbot <command>
 
-  status                         Show the account and the server.
+  status [--raw]                 Show the account and the server, and how the server runs.
+                                 --raw prints the key=value lines that scripts read.
+  health                         Exit 0 when OpenBot works, 1 when it does not (for Docker).
+  backup <file>                  Write a verified copy of the database to a new file.
+                                 It never replaces a file. Run it before an upgrade.
+  diagnostics [<file>]           Show the sanitized diagnostics report, or save it to a new file.
+  analytics [on|off]             Show or change product analytics on this server.
   login [<email>] [--name <name>]
                                  Sign in with a code that OpenBot sends to your email.
                                  The server then shows in the server list of that account.
@@ -135,10 +141,150 @@ show_status() {
   if [ -n "$staged" ]; then echo "OpenBot $staged is ready to install. Run: sudo openbot update"; fi
 }
 
+# Seconds as "3d 4h", "2h 5m", "7m 3s" or "12s".
+duration() {
+  local seconds=${1:-0}
+  if [ "$seconds" -ge 86400 ]; then
+    echo "$((seconds / 86400))d $((seconds % 86400 / 3600))h"
+  elif [ "$seconds" -ge 3600 ]; then
+    echo "$((seconds / 3600))h $((seconds % 3600 / 60))m"
+  elif [ "$seconds" -ge 60 ]; then
+    echo "$((seconds / 60))m $((seconds % 60))s"
+  else
+    echo "${seconds}s"
+  fi
+}
+
+# The lines after the account and the server. A server from before they existed sends none of them.
+show_server_state() {
+  local init health busy problems silent
+  health=$(value health)
+  [ -n "$health" ] || return 0
+  problems=$(value health_problems)
+  if [ "$health" = ok ]; then echo "Health: ok"; else echo "Health: unhealthy (${problems:-unknown})"; fi
+  init=$(value agent_init)
+  case $init in
+    ok) echo "Agents: ready" ;;
+    failed) echo "Agents: failed to start. $(value agent_init_message)" ;;
+    *) echo "Agents: starting" ;;
+  esac
+  echo "Database: schema version $(value schema_version)"
+  busy=$(value busy)
+  if [ "$(value safe_to_restart)" = yes ]; then
+    echo "Restart: safe now"
+  else
+    echo "Restart: not safe now (busy: ${busy:-unknown})"
+  fi
+  if [ -n "$(value providers)" ]; then echo "Providers: $(value providers)"; fi
+  if [ -n "$(value provider_retry)" ]; then echo "Provider restarts: $(value provider_retry)"; fi
+  if [ -n "$(value memory)" ]; then echo "Memory: $(value memory)"; fi
+  echo "Running for: $(duration "$(value uptime_s)")"
+  case $(value last_shutdown) in
+    clean) echo "Last shutdown: clean ($(value starts_24h) starts in 24 hours)" ;;
+    unclean) echo "Last shutdown: NOT clean: a crash, a kill or a power loss ($(value starts_24h) starts in 24 hours)" ;;
+    *) echo "Last shutdown: not known" ;;
+  esac
+  echo "Turns: $(value running_turns) running, longest $(duration "$(value longest_turn_s)"), longest silence $(duration "$(value longest_turn_idle_s)")"
+  silent=$(value silent_turns)
+  if [ "${silent:-0}" -gt 0 ]; then echo "Warning: $silent turn(s) are silent for a long time. OpenBot does not stop them."; fi
+  echo "Analytics: $(value analytics)"
+}
+
 status_command() {
+  local raw=""
+  case ${1:-} in
+    "") ;;
+    --raw) raw=yes ;;
+    *) fail "Unknown option: $1" ;;
+  esac
   control GET /v1/status
   check_answer || exit 1
+  if [ -n "$raw" ]; then
+    grep -v '^status=' <<<"$response"
+    return 0
+  fi
   show_status
+  show_server_state
+}
+
+# Docker runs this. It never waits for the socket and never takes long.
+health_command() {
+  if [ ! -S "$SOCKET" ]; then
+    echo "unhealthy: the control socket is not there" >&2
+    exit 1
+  fi
+  response=$(curl --silent --show-error --max-time 10 --unix-socket "$SOCKET" \
+    --write-out 'status=%{http_code}\n' "http://openbot/v1/health") || {
+    echo "unhealthy: OpenBot does not answer" >&2
+    exit 1
+  }
+  if [ "$(value status)" = 200 ]; then
+    echo "healthy"
+    return 0
+  fi
+  echo "unhealthy: $(value health_problems) $(value agent_init_message)" >&2
+  exit 1
+}
+
+backup_command() {
+  [ "$#" -eq 1 ] || fail "Usage: openbot backup <file>"
+  local path=$1
+  # The server writes the file, so the path has to be one that it understands.
+  case $path in /*) ;; *) path="$PWD/$path" ;; esac
+  control POST /v1/backup "path=$path"
+  if [ "$(value status)" != 200 ]; then
+    case $(value error) in
+      invalid_path) fail "Give the full path of a new file." ;;
+      no_directory) fail "The folder of $path does not exist. Make it first, as the user that runs OpenBot." ;;
+      exists) fail "$path exists. OpenBot does not replace a file. Choose a new name." ;;
+      no_space) fail "There is not enough free disk space for the copy. Free space or choose another folder." ;;
+      backup_running) fail "Another backup is running. Wait for it to end." ;;
+      backup_failed | verify_failed | write_failed)
+        fail "The backup failed ($(value error)). No file was left. The OpenBot log has the reason."
+        ;;
+      unavailable) fail "This OpenBot cannot make a backup." ;;
+      *) check_answer || exit 1 ;;
+    esac
+  fi
+  echo "Backup written: $(value path)"
+  echo "Size: $(value bytes) bytes. Schema version: $(value schema_version). Integrity check: $(value integrity)."
+  echo "Also keep the keyring and the /data files that go with it. See docs/docker.md."
+}
+
+diagnostics_command() {
+  local path=${1:-}
+  control GET /v1/diagnostics
+  if [ "$(value status)" != 200 ]; then
+    check_answer || exit 1
+  fi
+  # The report is JSON. Drop the status line that curl adds after it.
+  if [ -z "$path" ]; then
+    sed '$d' <<<"$response"
+    return 0
+  fi
+  case $path in /*) ;; *) path="$PWD/$path" ;; esac
+  [ ! -e "$path" ] || fail "$path exists. Choose a new name."
+  sed '$d' <<<"$response" >"$path"
+  echo "Diagnostics saved: $path"
+}
+
+analytics_command() {
+  case ${1:-} in
+    "")
+      control GET /v1/status
+      check_answer || exit 1
+      echo "Analytics: $(value analytics)"
+      ;;
+    on | off)
+      control POST /v1/analytics "enabled=$1"
+      if [ "$(value error)" = disabled_by_environment ]; then
+        fail "OPENBOT_ANALYTICS or DO_NOT_TRACK turns analytics off for this run. Remove it and restart to turn analytics on."
+      fi
+      check_answer || exit 1
+      echo "Analytics: $(value analytics)"
+      ;;
+    *) fail "Usage: openbot analytics [on|off]" ;;
+  esac
 }
 
 login_command() {
@@ -259,7 +405,11 @@ uninstall_command() {
 command=${1:-}
 [ "$#" -eq 0 ] || shift
 case $command in
-  status) status_command ;;
+  status) status_command "$@" ;;
+  health) health_command ;;
+  backup) backup_command "$@" ;;
+  diagnostics) diagnostics_command "$@" ;;
+  analytics) analytics_command "$@" ;;
   login) login_command "$@" ;;
   logout)
     control POST /v1/logout

@@ -126,16 +126,13 @@ export const exportOpenBotData = Effect.fn("Archive.exportOpenBotData")(function
 function powerShellLiteral(value: string): string {
   return value.replaceAll("'", "''");
 }
-export const exportDiagnostics = Effect.fn("Archive.exportDiagnostics")(function* (
-  context: Pick<MaintenanceContext, "service" | "browser" | "updater" | "trace" | "parentWindow" | "translate">,
-): Effect.fn.Return<ExportResult, ArchiveOperationError> {
-  const destination = yield* chooseExportDestinationEffect(
-    context.parentWindow,
-    `OpenBot-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
-    [{ name: context.translate("dialog.filter.jsonDocument"), extensions: ["json"] }],
-  );
-  if (!destination) return { saved: false };
-
+/**
+ * The sanitized report as JSON text. The save dialog (`exportDiagnostics`) and the control socket of
+ * a server (`openbot diagnostics`) both send exactly this, so the redaction rules live in one place.
+ */
+export const renderDiagnostics = Effect.fn("Archive.renderDiagnostics")(function* (
+  context: Pick<MaintenanceContext, "service" | "browser" | "updater" | "trace">,
+): Effect.fn.Return<string, ArchiveOperationError> {
   const status = context.service.getStatus();
   const agents = context.service.listAgents();
   const queueCounts = agents.map((agent) => {
@@ -205,8 +202,22 @@ export const exportDiagnostics = Effect.fn("Archive.exportDiagnostics")(function
     privacy:
       "Contains no conversations, URLs, email addresses, tokens, file contents, file paths, or raw error messages.",
   };
+  return `${JSON.stringify(diagnostics, null, 2)}\n`;
+});
+
+export const exportDiagnostics = Effect.fn("Archive.exportDiagnostics")(function* (
+  context: Pick<MaintenanceContext, "service" | "browser" | "updater" | "trace" | "parentWindow" | "translate">,
+): Effect.fn.Return<ExportResult, ArchiveOperationError> {
+  const destination = yield* chooseExportDestinationEffect(
+    context.parentWindow,
+    `OpenBot-diagnostics-${new Date().toISOString().slice(0, 10)}.json`,
+    [{ name: context.translate("dialog.filter.jsonDocument"), extensions: ["json"] }],
+  );
+  if (!destination) return { saved: false };
+
+  const report = yield* renderDiagnostics(context);
   yield* archiveCall(() =>
-    writeFile(destination, `${JSON.stringify(diagnostics, null, 2)}\n`, {
+    writeFile(destination, report, {
       encoding: "utf8",
       mode: 0o600,
     }),

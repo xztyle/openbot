@@ -57,4 +57,9 @@ USER openbot
 WORKDIR /data
 VOLUME /data
 STOPSIGNAL SIGTERM
+# `openbot health` asks the control socket whether the agents started and the database answers. The
+# start period is long, so a database migration can finish before the checks count. Docker only marks
+# the container: it does not restart it. See docs/docker.md.
+HEALTHCHECK --interval=30s --timeout=15s --start-period=300s --retries=3 \
+  CMD ["/usr/local/bin/openbot", "health"]
 ENTRYPOINT ["/usr/bin/tini", "--", "/opt/OpenBot/app/resources/hosting/openbot-container"]

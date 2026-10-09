@@ -21,6 +21,10 @@ export interface HostedServerMemoryOptions {
   /** Called one time when the memory files cannot be read (the level then stays "ok"), and when a listener fails. */
   onError: (message: string, error: unknown) => void;
   now?: () => number;
+  /** Tests only. Reads `/proc` and `/sys/fs/cgroup` files. */
+  readText?: (path: string) => Promise<string>;
+  /** Tests only. Set to false to leave the OOM values of the child processes alone. */
+  adjustChildOomScores?: boolean;
 }
 
 interface MemorySample {
@@ -29,8 +33,9 @@ interface MemorySample {
 }
 
 /**
- * Owns the memory reading of a hosted server. Every 5 seconds it reads the memory of the systemd unit
- * (cgroup v2) and of the machine, and gives each new child process of main a high OOM value.
+ * Owns the memory reading of a hosted server and of a self-hosted server, also one in Docker. Every
+ * 5 seconds it reads the memory of the systemd unit or container (cgroup v2) and of the machine, and
+ * gives each new child process of main a high OOM value.
  * The backend reads the level through `HostMemory` and holds new turns while it is not "ok".
  */
 export class HostedServerMemory implements HostMemory {
@@ -108,7 +113,7 @@ export class HostedServerMemory implements HostMemory {
   #tick = Effect.fn("HostedServerMemory.tick")(function* (this: HostedServerMemory) {
     this.#sample = yield* this.#read();
     this.#level = this.#nextLevel();
-    yield* raiseChildOomScores();
+    if (this.#options.adjustChildOomScores !== false) yield* raiseChildOomScores();
     for (const listener of this.#listeners) {
       try {
         listener();
@@ -119,14 +124,15 @@ export class HostedServerMemory implements HostMemory {
   });
 
   #read = Effect.fn("HostedServerMemory.read")(function* (this: HostedServerMemory) {
+    const read = this.#options.readText ?? ((path: string) => readFile(path, "utf8"));
     const result = yield* Effect.result(
       Effect.gen(function* () {
-        const text = yield* memoryIO(() => readFile("/proc/meminfo", "utf8"));
+        const text = yield* memoryIO(() => read("/proc/meminfo"));
         const machine = yield* Effect.try({
           try: () => parseMeminfo(text),
           catch: (cause) => new HostMemoryFailure({ cause }),
         });
-        const unit = yield* readUnitMemory();
+        const unit = yield* readUnitMemory(read);
         if (!unit) return machine;
         return {
           total: Math.min(machine.total, unit.max),
@@ -172,22 +178,28 @@ function parseMeminfo(text: string): MemorySample {
 }
 
 /**
- * The limit and the use of the unit's cgroup, with no reclaimable file cache, or null when the unit
- * has no limit or no cgroup v2.
+ * The limit and the use of the unit's or container's cgroup, with no reclaimable file cache, or null
+ * when it has no limit or no cgroup v2.
+ *
+ * A file of the cgroup that is missing means "no limit that we can read", not a failure: a container
+ * whose cgroup has no memory controller would otherwise lose the whole reading, and with it the
+ * levels and the turn limit that the machine totals can still give.
  */
-const readUnitMemory = Effect.fn("HostedServerMemory.readUnit")(function* () {
-  const cgroup = (yield* memoryIO(() => readFile("/proc/self/cgroup", "utf8")))
-    .split("\n")
+const readUnitMemory = Effect.fn("HostedServerMemory.readUnit")(function* (read: (path: string) => Promise<string>) {
+  const cgroup = (yield* optionalMemoryIO(() => read("/proc/self/cgroup")))
+    ?.split("\n")
     .find((line) => line.startsWith("0::"));
   if (!cgroup) return null;
-  const root = `/sys/fs/cgroup${cgroup.slice(3)}`;
-  const max = (yield* memoryIO(() => readFile(`${root}/memory.max`, "utf8"))).trim();
-  if (max === "max") return null;
-  const current = Number((yield* memoryIO(() => readFile(`${root}/memory.current`, "utf8"))).trim());
+  // In a container with its own cgroup namespace this is "0::/", and the files are at the mount root.
+  const root = `/sys/fs/cgroup${cgroup.slice(3)}`.replace(/\/+$/u, "");
+  const max = (yield* optionalMemoryIO(() => read(`${root}/memory.max`)))?.trim();
+  if (max === undefined || max === "max" || !/^\d+$/u.test(max)) return null;
+  const current = Number((yield* optionalMemoryIO(() => read(`${root}/memory.current`)))?.trim());
+  if (!Number.isFinite(current)) return null;
   // `memory.current` counts the file cache too. The kernel takes the inactive part back before the
   // OOM killer acts, so it is free memory, as it is in `MemAvailable`.
   const inactiveFile = /^inactive_file (\d+)$/m.exec(
-    yield* memoryIO(() => readFile(`${root}/memory.stat`, "utf8")),
+    (yield* optionalMemoryIO(() => read(`${root}/memory.stat`))) ?? "",
   )?.[1];
   return { max: Number(max), current: current - Number(inactiveFile ?? 0) };
 });

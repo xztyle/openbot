@@ -2633,3 +2633,58 @@ describe.sequential("ProviderRuntime: idle release", () => {
     expect(started.client.running).toBe(true);
   });
 });
+
+describe.sequential("ProviderRuntime: restart after a provider stops", () => {
+  it("keeps starting a stopped provider with long waits, and recovers when the start works again", async () => {
+    const { store, mailbox } = stores(root);
+    let failing = false;
+    const clients: FakeAgentClient[] = [];
+    service = createTestService({
+      store,
+      mailbox,
+      preferredProvider: "codex",
+      clientFactory: (provider) => {
+        const client = new FakeAgentClient(provider, "DONE", true, true, {}, async (method) => {
+          if (failing && method === "initialize") throw new Error("The CLI could not start.");
+        });
+        clients.push(client);
+        return client;
+      },
+    });
+    const running = service;
+    await runCauseEffect(running.initialize());
+    const first = clients[0];
+    if (!first) throw new Error("The fake provider did not start.");
+    expect(running.providerRestarts()).toEqual([]);
+
+    // Only the timers of the restart are faked. The start reads files, so real time moves on.
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout"] });
+    failing = true;
+    first.emit("exit", new Error("Codex stopped."));
+
+    // Three quick restarts (0.5 s, 1 s, 2 s) fail. Then the waits are long.
+    await vi.advanceTimersByTimeAsync(500);
+    await waitFor(() => clients.length === 2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await waitFor(() => clients.length === 3);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await waitFor(() => clients.length === 4);
+    await waitFor(() => running.providerRestarts().some((restart) => restart.attempts >= 4));
+    expect(running.providerRestarts()).toEqual([
+      expect.objectContaining({ provider: "codex", nextAttemptAt: expect.any(Number) }),
+    ]);
+
+    // A long wait does not start anything early, and then it tries again.
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(clients).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await waitFor(() => clients.length === 5);
+
+    // The next wait is 60 seconds, then the waits double up to 10 minutes. 10 minutes is enough for any of them.
+    await waitFor(() => running.providerRestarts().length === 1);
+    failing = false;
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    await waitFor(() => running.providerRestarts().length === 0);
+    await waitFor(() => running.getStatus().providers?.find((row) => row.id === "codex")?.state === "available");
+  });
+});

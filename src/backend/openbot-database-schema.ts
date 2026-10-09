@@ -1,3 +1,5 @@
+import { statfsSync, statSync } from "node:fs";
+import { dirname } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { COMPUTER_USE_MCP_SERVER_NAME } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
@@ -490,6 +492,8 @@ function substituteOnce(source: string, search: string, replacement: string): st
 export interface OpenBotMigrationOptions {
   appliedAt?: string;
   warn?: (message: string, error: unknown) => void;
+  /** Tests only. The free bytes on the disk of this file, or null when unknown. */
+  freeBytes?: (file: string) => number | null;
 }
 
 const logger = createOpenBotLogger("openbot-database-schema");
@@ -660,19 +664,66 @@ export function migrateOpenBotDatabase(db: DatabaseSync, options: OpenBotMigrati
       });
     }
 
-    if (migration.vacuumAfterCommit) {
-      try {
-        db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-        db.exec("VACUUM");
-        db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-      } catch (error) {
-        const warn = options.warn ?? ((message: string, cause: unknown) => logger.warn(message, toLogValue(cause)));
-        warn(`OpenBot database migration to version ${migration.version} succeeded, but VACUUM failed.`, error);
-      }
-    }
+    if (migration.vacuumAfterCommit) vacuumWhenDiskAllows(db, migration.version, options);
   }
 
   assertQuickCheck(db);
+}
+
+/** VACUUM writes a full copy of the database next to it, and the WAL can grow by as much again. */
+const VACUUM_FREE_SPACE_FACTOR = 2;
+const VACUUM_FREE_SPACE_MARGIN_BYTES = 64 * 1024 * 1024;
+
+/**
+ * The compaction after a migration that rewrote many rows. The migration is already committed, so a
+ * VACUUM is only an optimization: when the disk is too full for it, it is skipped with a warning.
+ * A VACUUM that fills the disk would stop every later write of the application, which is worse than a
+ * database that stays a little larger.
+ */
+export function vacuumWhenDiskAllows(db: DatabaseSync, version: number, options: OpenBotMigrationOptions = {}): void {
+  const warn = options.warn ?? ((message: string, cause: unknown) => logger.warn(message, toLogValue(cause)));
+  try {
+    const main = db
+      .prepare("PRAGMA database_list")
+      .all()
+      .find((entry) => entry.name === "main");
+    const file = typeof main?.file === "string" ? main.file : "";
+    if (file) {
+      const free = (options.freeBytes ?? defaultFreeBytes)(file);
+      const size = fileBytes(file) + fileBytes(`${file}-wal`);
+      if (free !== null && free < size * VACUUM_FREE_SPACE_FACTOR + VACUUM_FREE_SPACE_MARGIN_BYTES) {
+        warn(
+          `OpenBot database migration to version ${version} succeeded, but VACUUM was skipped: not enough free disk space.`,
+          new Error(
+            `${free} bytes are free and the database needs about ${size * VACUUM_FREE_SPACE_FACTOR} to compact.`,
+          ),
+        );
+        return;
+      }
+    }
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    db.exec("VACUUM");
+    db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+  } catch (error) {
+    warn(`OpenBot database migration to version ${version} succeeded, but VACUUM failed.`, error);
+  }
+}
+
+function fileBytes(path: string): number {
+  try {
+    return statSync(path).size;
+  } catch {
+    return 0;
+  }
+}
+
+function defaultFreeBytes(file: string): number | null {
+  try {
+    const stats = statfsSync(dirname(file));
+    return stats.bavail * stats.bsize;
+  } catch {
+    return null;
+  }
 }
 
 function migrateToBaselineV8(db: DatabaseSync, appliedAt: string): void {

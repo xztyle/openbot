@@ -62,7 +62,10 @@ be mixed into current conversion or reliability metrics.
 Anonymous events use a dedicated OpenPanel client that is never identified. This separation is a
 privacy boundary and must be covered by a real-SDK transport test, not only an SDK mock.
 
-Desktop analytics is enabled by default and can be disabled in General settings. The preference is
+Desktop analytics is enabled by default and can be disabled in General settings. A server with no
+window (self-hosted or Docker) turns it off with the environment variable `OPENBOT_ANALYTICS=off` (or
+`DO_NOT_TRACK=1`), which locks tracking off for the run and wins over the saved setting, or with the
+control command `openbot analytics off`, which saves the setting. `openbot analytics` shows the state. The preference is
 stored in the main process before analytics initialization and gates both renderer events and host
 lifecycle. A malformed preference fails closed; a missing preference uses the documented default.
 

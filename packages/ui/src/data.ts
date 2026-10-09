@@ -61,11 +61,6 @@ export interface AgentMessageMarkerModel {
   replyToMessageId: string | null;
   /** The sender asked for no answer, so the marker names it as information rather than a request. */
   expectsReply: boolean;
-  /**
-   * One line of what was said, redacted by whoever builds the model. The marker shows it and opens
-   * the full message from it. Absent or empty means the message has no text to show.
-   */
-  preview?: string;
 }
 
 export interface RoutineRunMarkerModel {

@@ -175,7 +175,7 @@ describe("toAgentMessage", () => {
   });
 });
 
-describe("agent message preview", () => {
+describe("agent message marker", () => {
   const exchange = {
     id: "exchange-2",
     author: "agent",
@@ -195,18 +195,10 @@ describe("agent message preview", () => {
     },
   } satisfies ConversationMessage;
 
-  it("puts one redacted line of the text on the marker and keeps the full text in the body", () => {
+  it("keeps the text out of the marker and the full text in the body", () => {
     const message = toAgentMessage(exchange);
-    const marker = message.actionMarker;
-    expect(marker?.kind === "agent-message" ? marker.preview : undefined).toBe(
-      "Deploy is blocked. The token is [redacted] and the rest is long.",
-    );
+    expect(JSON.stringify(message.actionMarker)).not.toContain("Deploy");
     expect(message.body).toContain("Bearer abcdef123456");
-  });
-
-  it("leaves the preview out for a message with no text", () => {
-    const marker = toAgentMessage({ ...exchange, text: "  " }).actionMarker;
-    expect(marker?.kind === "agent-message" && "preview" in marker).toBe(false);
   });
 });
 

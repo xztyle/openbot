@@ -128,7 +128,7 @@ export function AgentActivityIndicator(props: {
         </Show>
         <Show when={elapsed()}>{(time) => <span class="agent-activity-elapsed">{time()}</span>}</Show>
       </section>
-      <Show when={reasoningOpen() && props.phase !== "exiting"}>
+      <Show when={reasoningOpen() && props.reasoning && props.phase !== "exiting"}>
         <div id={reasoningId} class="agent-activity-reasoning">
           {props.reasoning?.()}
         </div>

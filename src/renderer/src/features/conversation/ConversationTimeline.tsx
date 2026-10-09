@@ -24,6 +24,7 @@ import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Loading, lazy, Show, untrack } from "solid-js";
 import { planItems, planTitle } from "../../app-message-projection";
+import { useShowAgentMessages, useShowAgentReasoning } from "../../chat-visibility-preferences";
 import { deviceSendShortcut } from "../../send-shortcut-preference";
 import { agentMessageThread } from "./agent-message-thread";
 import { groupedMessageIds } from "./agent-message-timeline";
@@ -147,6 +148,8 @@ export function ConversationTimeline() {
   } = useConversationViewScope();
   const { t, format } = useText();
   const runtime = conversationRuntime(props);
+  const showAgentReasoning = useShowAgentReasoning();
+  const showAgentMessages = useShowAgentMessages();
   // What the model has thought so far in the turn that runs, for the activity line to open.
   const activeReasoning = createMemo(() => {
     const turnId = props.activeTurnId;
@@ -820,16 +823,20 @@ export function ConversationTimeline() {
                   label={activity().label}
                   phase={activity().phase}
                   since={activity().since}
-                  reasoning={() => (
-                    <ThinkingText
-                      items={activeReasoning()}
-                      streaming
-                      agents={props.agents}
-                      skills={installedSkills()}
-                      onSelectAgent={props.onSelectAgent}
-                      onOpenLink={(url) => void openExternalMessageUrl(url)}
-                    />
-                  )}
+                  reasoning={
+                    showAgentReasoning()
+                      ? () => (
+                          <ThinkingText
+                            items={activeReasoning()}
+                            streaming
+                            agents={props.agents}
+                            skills={installedSkills()}
+                            onSelectAgent={props.onSelectAgent}
+                            onOpenLink={(url) => void openExternalMessageUrl(url)}
+                          />
+                        )
+                      : undefined
+                  }
                 />
               )}
             </Show>
@@ -899,14 +906,14 @@ export function ConversationTimeline() {
           </Show>
         </Show>
       </div>
-      <Show when={openedAgentMessage()}>
+      <Show when={showAgentMessages() ? openedAgentMessage() : null} keyed>
         {(opened) => (
           <AgentMessageDialog
-            entries={agentMessageThread(props.messages, opened().messageId, props.agents)}
-            openedMessageId={opened().messageId}
+            entries={agentMessageThread(props.messages, opened.messageId, props.agents)}
+            openedMessageId={opened.messageId}
             agents={props.agents}
             skills={installedSkills()}
-            restoreFocusTarget={opened().trigger}
+            restoreFocusTarget={opened.trigger}
             onClose={() => setOpenedAgentMessage(null)}
             onSelectAgent={(agentId) => {
               setOpenedAgentMessage(null);

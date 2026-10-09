@@ -24,6 +24,12 @@ import { createSettingsProfileStore } from "@openbot/ui/features/settings/stores
 import { useText } from "@openbot/ui/text";
 import { createSignal, onCleanup } from "solid-js";
 import { readActionSoundChoice, replayActionSoundChoice, setActionSoundChoice } from "../../action-sounds";
+import {
+  setShowAgentMessages,
+  setShowAgentReasoning,
+  useShowAgentMessages,
+  useShowAgentReasoning,
+} from "../../chat-visibility-preferences";
 import { isCompletionSoundEnabled, setCompletionSoundEnabled } from "../../completion-sound";
 import { setWebReportsEnabled, webReportsEnabled } from "../../error-reports";
 import { currentDevicePlatform, setSendShortcutMode, useSendShortcutMode } from "../../send-shortcut-preference";
@@ -70,6 +76,8 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
   const [completionSound, setCompletionSound] = createSignal(isCompletionSoundEnabled());
   const [notificationText, setNotificationText] = createSignal(isNotificationTextEnabled());
   const sendShortcutMode = useSendShortcutMode();
+  const showAgentReasoning = useShowAgentReasoning();
+  const showAgentMessages = useShowAgentMessages();
   // Playback reads the stored value on each event, so the switch follows a change from another tab.
   const [soundChoice, setSoundChoice] = createSignal(readActionSoundChoice());
   const readSoundSettings = () => {
@@ -171,6 +179,18 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                   />
                 </ItemActions>
               </Item>
+              <SwitchField
+                checked={showAgentReasoning()}
+                onChange={setShowAgentReasoning}
+                label={t("settings.showAgentReasoning.title")}
+                description={t("settings.showAgentReasoning.description")}
+              />
+              <SwitchField
+                checked={showAgentMessages()}
+                onChange={setShowAgentMessages}
+                label={t("settings.showAgentMessages.title")}
+                description={t("settings.showAgentMessages.description")}
+              />
             </ItemGroup>
           </SettingsSection>
           <SettingsSection title={t("settings.analytics.webTitle")}>

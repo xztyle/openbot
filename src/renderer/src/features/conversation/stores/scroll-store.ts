@@ -20,6 +20,7 @@ import {
 import { currentText } from "@openbot/ui/text";
 import type { VirtualItem } from "@tanstack/virtual-core";
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { useShowAgentMessages, useShowAgentReasoning } from "../../../chat-visibility-preferences";
 import { groupAgentMessageMarkers } from "../agent-message-timeline";
 import type { ConversationProps, ConversationTarget } from "../conversation-types";
 import { groupRoutineRunMarkers, summarizeRoutineRunMessages } from "../routine-run-timeline";
@@ -55,8 +56,19 @@ function hiddenThinking(message: AgentMessage, activeTurnId: string | null | und
   return message.kind === "thinking" && (message.streaming === true || message.turnId === activeTurnId);
 }
 
+/**
+ * A row the person switched off: the reasoning of a turn, or a message between agents. The message
+ * stays in the conversation, so read state still reaches it; the timeline draws no row for it.
+ */
+function switchedOff(message: AgentMessage, showReasoning: boolean, showAgentMessages: boolean): boolean {
+  if (message.kind === "thinking") return !showReasoning;
+  return !showAgentMessages && message.exchange !== undefined;
+}
+
 export function createScrollStore(deps: ScrollStoreDeps) {
   const scrollFades = createScrollFades();
+  const showReasoning = useShowAgentReasoning();
+  const showAgentMessages = useShowAgentMessages();
   const [virtualScrollMargin, setVirtualScrollMargin] = createSignal(0);
   const [showScrollToLatest, setShowScrollToLatest] = createSignal(false);
   const [atHistoryBoundary, setAtHistoryBoundary] = createSignal(false);
@@ -70,7 +82,10 @@ export function createScrollStore(deps: ScrollStoreDeps) {
   const drawnMessages = createMemo(() => [
     ...summarizeRoutineRunMessages(
       deps.props.messages.filter(
-        (message) => !hiddenThinking(message, deps.props.activeTurnId) && !silentAgentAnswer(message),
+        (message) =>
+          !hiddenThinking(message, deps.props.activeTurnId) &&
+          !silentAgentAnswer(message) &&
+          !switchedOff(message, showReasoning(), showAgentMessages()),
       ),
     ),
     ...deps.pendingMessages(),
@@ -103,7 +118,10 @@ export function createScrollStore(deps: ScrollStoreDeps) {
   );
   /* Every row anchors the count, but only some rows add to it. */
   const timelineRows = createMemo(() =>
-    deps.props.messages.map((message) => ({ id: message.id, countable: countableTimelineMessage(message) })),
+    deps.props.messages.map((message) => ({
+      id: message.id,
+      countable: countableTimelineMessage(message) && !switchedOff(message, showReasoning(), showAgentMessages()),
+    })),
   );
 
   function clearNewMessages(): void {

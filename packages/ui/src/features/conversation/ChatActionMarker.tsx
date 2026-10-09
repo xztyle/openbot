@@ -44,9 +44,9 @@ interface ChatActionMarkerProps {
   onOpenRoutine?: ((routine: { routineId: string; name: string }) => void) | undefined;
   onOpenHostedSite?: ((url: string) => void) | undefined;
   /**
-   * Opens the full message of an agent-to-agent marker, from its preview or from anywhere on the row
-   * that is not a control of its own. `trigger` is the element to give focus back to. Absent, the
-   * marker shows no preview, so a surface that cannot open the message does not tease it.
+   * Opens the peek at an agent-to-agent message, from anywhere on the row that is not a control of
+   * its own. `trigger` is the element to give focus back to. Absent, the row is not a button, so a
+   * surface that cannot open the message does not tease it.
    */
   onOpenAgentMessage?: ((messageId: string, trigger: HTMLElement) => void) | undefined;
 }
@@ -382,10 +382,10 @@ function SingleChatActionMarker(
     setHistoryExpanded(opening);
     if (opening || prefersReducedMotion()) setHistoryMounted(opening);
   };
-  /** The message a click opens: an agent-to-agent marker with text, on a surface that can open it. */
+  /** The message a click opens: an agent-to-agent marker, on a surface that can open it. */
   const openableMessage = () => {
     const marker = props.marker;
-    return marker.kind === "agent-message" && marker.preview && props.onOpenAgentMessage ? marker : undefined;
+    return marker.kind === "agent-message" && props.onOpenAgentMessage ? marker : undefined;
   };
   const routineHistory = () => (props.marker.kind === "routine-run" ? props.marker.previousTransitions : undefined);
   const historyId = () =>
@@ -397,14 +397,6 @@ function SingleChatActionMarker(
       aria-live={props.announce ? "polite" : "off"}
       aria-label={markerAccessibleLabel(props.marker, props.agents, t)}
       data-openable={openableMessage() ? "" : undefined}
-      onClick={(event) => {
-        // The row is a click target beside its controls, so a click on an avatar, a menu or the
-        // preview button keeps its own meaning. The preview button is the keyboard route.
-        const open = openableMessage();
-        const target = event.target;
-        if (!open || !(target instanceof Element) || target.closest("button, a, [role='menuitem']")) return;
-        props.onOpenAgentMessage?.(open.messageId, event.currentTarget);
-      }}
     >
       <div class="chat-action-marker-summary">
         <MarkerContent class="chat-action-marker-content">
@@ -486,17 +478,17 @@ function SingleChatActionMarker(
         </MarkerContent>
         <Show when={openableMessage()}>
           {(marker) => (
+            /* A button that covers the row, behind the agent controls. A click or Enter anywhere else
+               on the row reaches it, and no button sits inside another. */
             <Button
               variant="ghost"
               type="button"
-              class="chat-action-message-preview"
+              class="chat-action-peek-trigger"
               aria-haspopup="dialog"
-              aria-label={t("chat.marker.openMessage", { preview: marker().preview ?? "" })}
+              aria-label={t("chat.marker.openMessage", { summary: markerAccessibleLabel(marker(), props.agents, t) })}
               data-cuelume-tap="open"
               onClick={(event) => props.onOpenAgentMessage?.(marker().messageId, event.currentTarget)}
-            >
-              <span class="chat-action-message-preview-text">{marker().preview}</span>
-            </Button>
+            />
           )}
         </Show>
         <Show when={historyMounted() && routineHistory()}>

@@ -133,6 +133,10 @@ mock. The separate web preview implements the browser runtime with that same moc
   browser notification for a question or an approval shows the question or the approval reason,
   redacted and cut to 160 characters. A secret question and the approval command are never shown.
   The browser keeps the switch in local storage (`web-notification-text.ts`).
+- Account settings > Preferences has "Show agent reasoning" and "Show messages between agents", both on
+  by default. They hide the Thinking rows and the thinking on the activity line, and the rows for
+  messages between agents. The browser keeps them in local storage (`chat-visibility-preferences.ts`),
+  and a change applies at once, without a reload.
 - The agent menu in the sidebar has Mark unread when the host has `conversation-unread`. It marks
   the whole chat unread, because the host's read cursor has no value for "only the last message".
   The open chat cannot be marked, because opening a chat reads it.

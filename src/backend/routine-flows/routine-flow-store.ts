@@ -67,13 +67,17 @@ export class RoutineFlowStore {
     this.#createId = options.createId ?? (() => crypto.randomUUID());
   }
 
+  /**
+   * Links in the order they were made. Two links made in the same millisecond keep their creation
+   * order (`rowid`); the random link id would send to the agents in a different order each time.
+   */
   linksForRoutines(routineIds: readonly string[]): RoutineFlowLink[] {
     if (routineIds.length === 0) return [];
     return databaseRows(
       this.#database.connection
         .prepare(
           `SELECT * FROM routine_flow_links WHERE routine_id IN (${placeholders(routineIds)})
-           ORDER BY created_at, link_id`,
+           ORDER BY created_at, rowid`,
         )
         .all(...routineIds),
     ).map(toLink);
@@ -205,7 +209,7 @@ export class RoutineFlowStore {
   steps(runId: string): RoutineFlowStep[] {
     return databaseRows(
       this.#database.connection
-        .prepare("SELECT * FROM routine_flow_steps WHERE run_id = ? ORDER BY created_at, step_id")
+        .prepare("SELECT * FROM routine_flow_steps WHERE run_id = ? ORDER BY created_at, rowid")
         .all(runId),
     ).map(toStep);
   }

@@ -11,7 +11,6 @@ import {
   skillConversationEvent,
 } from "@openbot/contracts/ipc";
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
-import { redactText } from "@openbot/logging";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
 import type {
   AgentDeliveryMarkerStatus,
@@ -290,7 +289,6 @@ function chatActionMarker(
       messageId: message.exchange.messageId,
       replyToMessageId: message.exchange.replyToMessageId,
       expectsReply: message.exchange.expectsReply !== false,
-      ...previewField(message.text),
     };
   }
   if (isContextResetMarker(message)) return { kind: "context-reset", timestamp: message.createdAt };
@@ -349,26 +347,6 @@ function chatActionMarker(
     return { kind: "unavailable", label: currentText().t("app.action.unavailable"), timestamp: message.createdAt };
   }
   return null;
-}
-
-function previewField(text: string): { preview?: string } {
-  const preview = markerPreview(text);
-  return preview ? { preview } : {};
-}
-
-/** The longest preview a marker keeps. The full message opens from the marker. */
-const MARKER_PREVIEW_LIMIT = 160;
-
-/**
- * The first line of what an agent said to another, redacted, as the one line a marker shows. The
- * redaction is the same as in logs: a token or a key in a teammate message must not sit in the
- * transcript where a glance reaches it. The full message opens on a click and is not redacted,
- * because it is the person's own conversation.
- */
-export function markerPreview(text: string): string {
-  // Redacted before the Markdown is read, so a token the Markdown would split is still one token.
-  const line = markdownPreviewText(redactText(cleanAgentMessageText(text)));
-  return line.length > MARKER_PREVIEW_LIMIT ? `${line.slice(0, MARKER_PREVIEW_LIMIT).trimEnd()}…` : line;
 }
 
 function aggregateDeliveryStatus(statuses: QueueDeliveryStatus[]): AgentDeliveryMarkerStatus {

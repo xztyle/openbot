@@ -1139,4 +1139,33 @@ describe("OpenBot connected desktop shell", () => {
     await waitFor(() => expect(window.localStorage.getItem("openbot:send-shortcut-mode")).toBe("mod-enter"));
     await waitFor(() => expect(shortcut()).toHaveTextContent("⌘Enter to send"));
   });
+
+  it("saves the two chat switches for this browser and keeps the other settings", async () => {
+    window.localStorage.removeItem("openbot:show-agent-reasoning");
+    window.localStorage.removeItem("openbot:show-agent-messages");
+    render(() => <App />);
+    await fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    const reasoning = await screen.findByRole("switch", { name: "Show agent reasoning" });
+    const messages = screen.getByRole("switch", { name: "Show messages between agents" });
+    expect(reasoning).toBeChecked();
+    expect(messages).toBeChecked();
+
+    await fireEvent.click(reasoning);
+    await waitFor(() => expect(window.localStorage.getItem("openbot:show-agent-reasoning")).toBe("false"));
+    expect(window.localStorage.getItem("openbot:show-agent-messages")).toBeNull();
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Show agent reasoning" })).not.toBeChecked());
+    expect(screen.getByRole("switch", { name: "Show messages between agents" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Launch OpenBot at login" })).toBeChecked();
+
+    await fireEvent.click(screen.getByRole("switch", { name: "Show messages between agents" }));
+    await waitFor(() => expect(window.localStorage.getItem("openbot:show-agent-messages")).toBe("false"));
+
+    // Another tab turns reasoning back on; the switch follows.
+    window.localStorage.setItem("openbot:show-agent-reasoning", "true");
+    window.dispatchEvent(new StorageEvent("storage", { key: "openbot:show-agent-reasoning" }));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Show agent reasoning" })).toBeChecked());
+    window.localStorage.removeItem("openbot:show-agent-messages");
+    window.dispatchEvent(new StorageEvent("storage", { key: "openbot:show-agent-messages" }));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Show messages between agents" })).toBeChecked());
+  });
 });

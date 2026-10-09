@@ -9,6 +9,14 @@ import { createEffect, createSignal, onSettled } from "solid-js";
 import { isActionSoundEnabled, readActionSoundTheme, setActionSoundChoice } from "../../action-sounds";
 import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";
+import {
+  readShowAgentMessages,
+  readShowAgentReasoning,
+  setShowAgentMessages,
+  setShowAgentReasoning,
+  useShowAgentMessages,
+  useShowAgentReasoning,
+} from "../../chat-visibility-preferences";
 import { isCompletionSoundEnabled, setCompletionSoundEnabled } from "../../completion-sound";
 import { usePlatform } from "../../platform";
 import { readSendShortcutMode, setSendShortcutMode, useSendShortcutMode } from "../../send-shortcut-preference";
@@ -77,6 +85,8 @@ const Settings = createSimpleContext({
       ...DEFAULT_GENERAL_SETTINGS,
       taskCompletionSound: isCompletionSoundEnabled(),
       sendShortcut: readSendShortcutMode(),
+      showAgentReasoning: readShowAgentReasoning(),
+      showAgentMessages: readShowAgentMessages(),
       soundFeedback: isActionSoundEnabled(),
       soundTheme: readActionSoundTheme(),
     });
@@ -88,6 +98,19 @@ const Settings = createSimpleContext({
       () => sendShortcutMode(),
       (mode) => {
         setGeneralSettings((current) => (current.sendShortcut === mode ? current : { ...current, sendShortcut: mode }));
+      },
+    );
+    // The same for the two chat switches: the web Preferences tab and another tab write them too.
+    const showAgentReasoning = useShowAgentReasoning();
+    const showAgentMessages = useShowAgentMessages();
+    createEffect(
+      () => ({ reasoning: showAgentReasoning(), messages: showAgentMessages() }),
+      ({ reasoning, messages }) => {
+        setGeneralSettings((current) =>
+          current.showAgentReasoning === reasoning && current.showAgentMessages === messages
+            ? current
+            : { ...current, showAgentReasoning: reasoning, showAgentMessages: messages },
+        );
       },
     );
     const [approvalAutomation, setApprovalAutomation] = createSignal<ApprovalAutomationPreference>({
@@ -165,6 +188,12 @@ const Settings = createSimpleContext({
       }
       if (previous.sendShortcut !== value.sendShortcut) {
         setSendShortcutMode(value.sendShortcut);
+      }
+      if (previous.showAgentReasoning !== value.showAgentReasoning) {
+        setShowAgentReasoning(value.showAgentReasoning);
+      }
+      if (previous.showAgentMessages !== value.showAgentMessages) {
+        setShowAgentMessages(value.showAgentMessages);
       }
       if (previous.soundFeedback !== value.soundFeedback || previous.soundTheme !== value.soundTheme) {
         setActionSoundChoice(value.soundFeedback ? value.soundTheme : "off");

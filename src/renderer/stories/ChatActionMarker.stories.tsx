@@ -1,5 +1,6 @@
 import { Heading, Text } from "@openbot/ui";
-import type { AgentProfile, ChatActionMarkerModel } from "@openbot/ui/data";
+import type { AgentMessage, AgentProfile, ChatActionMarkerModel } from "@openbot/ui/data";
+import { AgentMessageDialog } from "@openbot/ui/features/conversation/AgentMessageDialog";
 import { ChatActionMarker } from "@openbot/ui/features/conversation/ChatActionMarker";
 import { createSignal } from "solid-js";
 import { fn } from "storybook/test";
@@ -242,6 +243,62 @@ export const RoutineRunGroup: Story = {
           onOpenRoutine={onOpenRoutine}
         />
       </section>
+    </main>
+  ),
+};
+
+const peekRequest: AgentMessage = {
+  id: "peek-request",
+  author: "agent",
+  body: "Please check the **pricing page** before we ship.\n\n- Compare it with the plan table\n- Tell me what differs",
+  time: "10:00",
+  createdAt: "2026-09-13T10:00:00Z",
+  exchange: {
+    direction: "outgoing",
+    messageId: "peek-1",
+    senderAgentId: "research",
+    recipientAgentIds: ["sales"],
+    replyToMessageId: null,
+    deliveries: [],
+  },
+};
+
+const peekReply: AgentMessage = {
+  id: "peek-reply",
+  author: "agent",
+  body: "Two prices differ. I fixed both.",
+  time: "10:06",
+  createdAt: "2026-09-13T10:06:00Z",
+  exchange: {
+    direction: "incoming",
+    messageId: "peek-2",
+    senderAgentId: "sales",
+    recipientAgentIds: ["research"],
+    replyToMessageId: "peek-1",
+    deliveries: [],
+  },
+};
+
+export const AgentMessagePeek: Story = {
+  render: () => (
+    <main class="foundation-story">
+      <Heading as="h1" size="lg">
+        Peek at a message between agents
+      </Heading>
+      <Text tone="secondary">A translucent layer over the chat. The chat row stays compact.</Text>
+      <AgentMessageDialog
+        entries={[
+          { message: peekRequest, senderName: "Research", recipientNames: ["Sales"], status: "completed" },
+          { message: peekReply, senderName: "Sales", recipientNames: ["Research"], status: "completed" },
+        ]}
+        openedMessageId="peek-1"
+        agents={agents}
+        onClose={fn()}
+        onSelectAgent={onSelectAgent}
+        onOpenLink={fn()}
+        onPreview={fn()}
+        onAttachmentAction={fn()}
+      />
     </main>
   ),
 };

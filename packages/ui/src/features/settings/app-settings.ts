@@ -35,6 +35,10 @@ export interface GeneralSettingsValue {
   taskCompletionSound: boolean;
   /** How the user sends a message: plain Enter, or the platform modifier with Enter. */
   sendShortcut: SendShortcutMode;
+  /** Draw what the model thought: a Thinking row after a turn, and the open activity line. */
+  showAgentReasoning: boolean;
+  /** Draw a row in the chat when one agent messages another, with the peek that opens from it. */
+  showAgentMessages: boolean;
   /** What a message sent to a busy agent does, unless the agent or the message sets its own. */
   busyMessageMode: BusyMessageMode;
   /** How many memories one agent on this computer can hold. */
@@ -72,6 +76,8 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsValue = {
   macBookNotchHeightPercent: 100,
   taskCompletionSound: true,
   sendShortcut: "enter",
+  showAgentReasoning: true,
+  showAgentMessages: true,
   busyMessageMode: DEFAULT_BUSY_MESSAGE_MODE,
   agentMemoryLimit: DEFAULT_AGENT_MEMORY_LIMIT,
   keepRemoteSessions: true,

@@ -2,6 +2,11 @@ import { vi } from "vitest";
 
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
+// A `vmThreads` worker that runs several files keeps the modules the last file loaded, with the
+// mocks it set. Two files that mock one module differently, such as `expo-image`, then saw each
+// other's mock when they ran in one worker, which `test:changed` and `--maxWorkers=1` do.
+vi.resetModules();
+
 // UI tests exercise product behavior without loading native analytics modules or sending events.
 vi.mock("@/features/analytics/mobile-analytics", async () => {
   const { MobileAnalytics } = await import("./features/analytics/analytics-core");

@@ -24,6 +24,7 @@ import {
   testConversationPage,
   testServer,
 } from "./app-test-harness";
+import { setShowAgentMessages, setShowAgentReasoning } from "./chat-visibility-preferences";
 import { AGENT_SELECTION_STORAGE_KEY } from "./features/agents/agent-selection";
 import { useAgents } from "./features/agents/agents-context";
 import { useConversation } from "./features/conversation/conversation-context";
@@ -1156,6 +1157,132 @@ describe("OpenBot connected desktop shell", () => {
     expect(screen.getAllByText("deck.md")).toHaveLength(1);
     observer.disconnect();
     expect([...wrongStates]).toEqual([]);
+  });
+
+  /** The chat of Chief: a thought, a message from Sales Outbound, and the answer Chief gave. */
+  function chatWithThoughtAndAgentMessage() {
+    vi.mocked(window.openbot.agent.readConversation).mockImplementation(async (agentId) => ({
+      agentId,
+      threadId: "thread-chief",
+      activeTurnId: null,
+      revision: 1,
+      messages:
+        agentId === "chief"
+          ? [
+              {
+                id: "delivery-reply-1",
+                author: "agent",
+                source: "agent",
+                senderAgentId: "sales-outbound",
+                text: "RAW_COLLABORATOR_RESULT",
+                createdAt: "2026-08-12T10:00:00.000Z",
+                status: "completed",
+                exchange: {
+                  direction: "incoming",
+                  messageId: "reply-1",
+                  senderAgentId: "sales-outbound",
+                  recipientAgentIds: ["chief"],
+                  replyToMessageId: null,
+                  deliveries: [
+                    {
+                      id: "delivery-reply-1",
+                      recipientAgentId: "chief",
+                      status: "completed",
+                      position: null,
+                      error: null,
+                    },
+                  ],
+                },
+              },
+              {
+                id: "commentary-1",
+                turnId: "turn-1",
+                author: "assistant",
+                itemType: "commentary",
+                text: "I read the pipeline report first.",
+                createdAt: "2026-08-12T10:00:01.000Z",
+                status: "completed",
+              },
+              {
+                id: "assistant-summary-1",
+                turnId: "turn-1",
+                author: "assistant",
+                text: "Sales Outbound reports that the pipeline is ready.",
+                createdAt: "2026-08-12T10:00:02.000Z",
+                status: "completed",
+              },
+            ]
+          : [],
+    }));
+  }
+
+  describe("what the chat shows of agents", () => {
+    afterEach(() => {
+      setShowAgentReasoning(true);
+      setShowAgentMessages(true);
+    });
+
+    it("peeks at an agent message on click and closes the peek with Escape", async () => {
+      chatWithThoughtAndAgentMessage();
+      render(() => <App />);
+
+      const row = await screen.findByRole("button", { name: /^Show the message/ });
+      expect(screen.queryByText("RAW_COLLABORATOR_RESULT")).not.toBeInTheDocument();
+
+      await fireEvent.click(row);
+
+      const peek = await screen.findByRole("dialog", { name: "Message between agents" });
+      expect(within(peek).getByText("RAW_COLLABORATOR_RESULT")).toBeInTheDocument();
+      expect(within(peek).getAllByText("Sales Outbound").length).toBeGreaterThan(0);
+      expect(within(peek).getByRole("button", { name: "Open conversation" })).toBeInTheDocument();
+
+      await fireEvent.keyDown(peek, { key: "Escape" });
+
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Message between agents" })).toBeNull());
+      await waitFor(() => expect(screen.getByRole("button", { name: /^Show the message/ })).toHaveFocus());
+    });
+
+    it("leaves out the messages between agents when the person turns them off, and brings them back", async () => {
+      chatWithThoughtAndAgentMessage();
+      render(() => <App />);
+      expect(await screen.findByRole("button", { name: /^Show the message/ })).toBeInTheDocument();
+
+      setShowAgentMessages(false);
+
+      await waitFor(() => expect(screen.queryByRole("button", { name: /^Show the message/ })).toBeNull());
+      expect(screen.queryByRole("button", { name: "Open chat with Sales Outbound" })).toBeNull();
+      expect(screen.getByText("Sales Outbound reports that the pipeline is ready.")).toBeInTheDocument();
+
+      setShowAgentMessages(true);
+
+      expect(await screen.findByRole("button", { name: /^Show the message/ })).toBeInTheDocument();
+    });
+
+    it("leaves out the reasoning when the person turns it off, and brings it back", async () => {
+      chatWithThoughtAndAgentMessage();
+      render(() => <App />);
+      expect(await screen.findByRole("button", { name: /Thinking/ })).toBeInTheDocument();
+
+      setShowAgentReasoning(false);
+
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Thinking/ })).toBeNull());
+      expect(screen.getByText("Sales Outbound reports that the pipeline is ready.")).toBeInTheDocument();
+
+      setShowAgentReasoning(true);
+
+      expect(await screen.findByRole("button", { name: /Thinking/ })).toBeInTheDocument();
+    });
+
+    it("starts without the rows when the saved choice is off", async () => {
+      setShowAgentMessages(false);
+      setShowAgentReasoning(false);
+      chatWithThoughtAndAgentMessage();
+      render(() => <App />);
+
+      expect(await screen.findByText("Sales Outbound reports that the pipeline is ready.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Show the message/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Thinking/ })).toBeNull();
+    });
   });
 
   it("does not let a late history refresh overwrite a newer streamed snapshot", async () => {

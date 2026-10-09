@@ -4,8 +4,8 @@
   what it thinks. After the turn, a "Thinking" row above the answer opens the same text. The text
   is redacted and cut at 40,000 characters. A provider that shares only a summary of its reasoning,
   or none, shows that summary or says so.
-- Read the full text of a message between agents. A marker shows one redacted line of the message.
-  Click the marker, or press Enter on the line, to read the whole message and its reply.
+- Read the full text of a message between agents. Click the marker row, or press Enter on it, to
+  read the whole message and its reply. See the peek in `peek-and-toggles.md`.
 - Keep Stop next to Send while you type a message to a working agent. The queue has a new "Stop and
   clear queue" action. It cancels the queued messages first, then stops the turn, so none of them
   starts. Cancelled messages stay in the chat marked as cancelled.

@@ -1,4 +1,4 @@
-import type { ChatActionMarkerModel } from "@openbot/ui/data";
+import type { AgentProfile, ChatActionMarkerModel } from "@openbot/ui/data";
 import { ChatActionMarker } from "@openbot/ui/features/conversation/ChatActionMarker";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
@@ -47,26 +47,58 @@ describe("ChatActionMarker agent message", () => {
     messageId: "message-1",
     replyToMessageId: null,
     expectsReply: true,
-    preview: "Please ship the fix",
   };
+  const agents = [agent("chief", "Chief"), agent("builder", "Builder")];
 
-  it("opens the full message from the preview button and from the row", async () => {
+  it("is one button that opens the message, and its agent control keeps its own meaning", async () => {
     const onOpen = vi.fn();
-    render(() => <ChatActionMarker marker={marker} agents={[]} onSelectAgent={vi.fn()} onOpenAgentMessage={onOpen} />);
+    const onSelectAgent = vi.fn();
+    render(() => (
+      <ChatActionMarker marker={marker} agents={agents} onSelectAgent={onSelectAgent} onOpenAgentMessage={onOpen} />
+    ));
 
-    await fireEvent.click(screen.getByRole("button", { name: "Show the full message: Please ship the fix" }));
-    expect(onOpen).toHaveBeenLastCalledWith("message-1", expect.any(HTMLElement));
-    onOpen.mockClear();
+    const row = screen.getByRole("button", { name: "Show the message: Messaged Builder, Completed" });
+    await fireEvent.click(row);
+    expect(onOpen).toHaveBeenCalledWith("message-1", row);
+    expect(onSelectAgent).not.toHaveBeenCalled();
 
-    await fireEvent.click(screen.getByRole("group", { name: /Messaged/ }));
-    expect(onOpen).toHaveBeenCalledWith("message-1", expect.any(HTMLElement));
+    await fireEvent.click(screen.getByRole("button", { name: "Open chat with Builder" }));
+    expect(onSelectAgent).toHaveBeenCalledWith("builder");
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("shows no preview when the surface cannot open the message", () => {
-    render(() => <ChatActionMarker marker={marker} agents={[]} onSelectAgent={vi.fn()} />);
-    expect(screen.queryByText("Please ship the fix")).not.toBeInTheDocument();
+  it("stays compact and draws no text of the message", () => {
+    render(() => (
+      <ChatActionMarker marker={marker} agents={agents} onSelectAgent={vi.fn()} onOpenAgentMessage={vi.fn()} />
+    ));
+    expect(screen.getByRole("group", { name: /Messaged/ })).toHaveTextContent(/^Messaged\s*Builder/);
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+  });
+
+  it("is no button when the surface cannot open the message", () => {
+    render(() => <ChatActionMarker marker={marker} agents={agents} onSelectAgent={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /Show the message/ })).not.toBeInTheDocument();
   });
 });
+
+function agent(id: string, name: string): AgentProfile {
+  return {
+    id,
+    name,
+    title: "",
+    description: "",
+    notifications: true,
+    provider: "codex",
+    model: "gpt-5.6-luna",
+    reasoningEffort: "medium",
+    threadId: null,
+    avatarSeed: id,
+    avatarHue: null,
+    avatarUrl: null,
+    time: "",
+    preview: "",
+  };
+}
 
 function completedMarker(): Extract<ChatActionMarkerModel, { kind: "routine-run" }> {
   return {

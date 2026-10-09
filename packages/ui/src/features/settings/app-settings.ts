@@ -1,6 +1,11 @@
 export type ExternalLinkTarget = "Default browser" | "OpenBot";
 
-import { type AgentMemoryLimit, type BusyMessageMode, DEFAULT_AGENT_MEMORY_LIMIT } from "@openbot/contracts/ipc";
+import {
+  type AgentMemoryLimit,
+  type BusyMessageMode,
+  DEFAULT_AGENT_MEMORY_LIMIT,
+  DEFAULT_BUSY_MESSAGE_MODE,
+} from "@openbot/contracts/ipc";
 /** Which chord sends a message. Re-exported here so settings state can name the same type. */
 import type { SendShortcutMode } from "../conversation/send-shortcut";
 
@@ -64,7 +69,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsValue = {
   macBookNotchHeightPercent: 100,
   taskCompletionSound: true,
   sendShortcut: "enter",
-  busyMessageMode: "queue",
+  busyMessageMode: DEFAULT_BUSY_MESSAGE_MODE,
   agentMemoryLimit: DEFAULT_AGENT_MEMORY_LIMIT,
   keepRemoteSessions: true,
   soundFeedback: false,

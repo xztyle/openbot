@@ -1,4 +1,5 @@
 import { isManagedRuntimeProvider } from "@openbot/contracts/agent-providers";
+import { GITHUB_CONNECTOR_MCP_SERVER_ID } from "@openbot/contracts/ipc";
 import { openPanelTransport, ReportQueue } from "@openbot/telemetry";
 import { fileReportStorage } from "@openbot/telemetry/node";
 import { Effect, Fiber } from "effect";
@@ -7,6 +8,11 @@ import { toHostedSiteOperationFailed } from "../backend/agent/hosted-site-coordi
 import { AgentDatabaseSupervisor } from "../backend/agent-data/agent-database-supervisor";
 import { AgentTables } from "../backend/agent-data/agent-tables";
 import { AgentRoutineStore } from "../backend/agent-routine-store";
+import { EventCheckApiReader } from "../backend/event-check-api-reader";
+import { EventCheckEnvironment } from "../backend/event-check-environment";
+import { EventCheckStore } from "../backend/event-check-store";
+import { EventCheckTemplates } from "../backend/event-check-templates";
+import { toMcpOperationError } from "../backend/mcp-effects";
 import { DiscordConnectFailed, toDiscordConnectFailed } from "../backend/messaging/discord/discord-connect";
 import { SlackConnectFailed, toSlackConnectFailed } from "../backend/messaging/slack/slack-connect";
 import { routineFlowRoutines } from "../backend/routine-flows/routine-flow-routines";
@@ -15,12 +21,15 @@ import { createRoutineFlows, type RoutineFlowsHandle } from "../backend/routine-
 import { type AgentAdminSettingsService, createAgentAdminSettings } from "./agent-admin-settings";
 import { spawnAgentDatabaseHost } from "./agent-database-host-process";
 import { createAgentHostSettings } from "./agent-host-settings";
+import { createChatMcp } from "./create-chat-mcp";
 import { HostReleaseService, readInstallationMode } from "./host-release-service";
 import { HOSTED_UPDATE_TRIGGER, HostedUpdateAdapter } from "./hosted-update-adapter";
 import { LocalSkillLibrary } from "./local-skill-library";
 import { localSkillTools } from "./local-skill-tools";
 import { MAC_PERMISSION_URLS } from "./mac-permission-urls";
+import { RemoteMcpSignIn } from "./remote-mcp-sign-in";
 import { RemoteWorkflowError, toRemoteWorkflowError } from "./remote-service-effects";
+import { safeStorageCipher } from "./safe-storage-cipher";
 /**
  * The composition root. Every long-lived service the desktop app owns is built here, in one
  * function, in dependency order, and handed back as a single record.
@@ -89,6 +98,7 @@ import { HostAnalytics } from "./analytics";
 import { analyticsInventoryDayStore, collectAnalyticsInventory } from "./analytics-inventory";
 import { catalogPluginSlug, isReportedMcpServerName, loadCatalogPluginServers } from "./analytics-plugin-catalog";
 import { readAnalyticsPreference } from "./analytics-preference-store";
+import { createApplicationManagedSkills } from "./application-managed-skills";
 import { ApprovalAutomation, readApprovalAutomation } from "./approval-automation-store";
 import { AutomationServer } from "./automation-server";
 import { BillingDesktopService } from "./billing-service";
@@ -155,7 +165,6 @@ import {
   sendComputerUseHighlightPlacement,
   showMainWindow,
 } from "./main-window";
-import { ManagedSkillService } from "./managed-skill-service";
 import { startMcpOAuthRedirectServer } from "./mcp-oauth-redirect-server";
 import { McpOAuthStore } from "./mcp-oauth-store";
 import { MessagingCredentialStore } from "./messaging-credential-store";
@@ -428,18 +437,6 @@ export interface ApplicationServices {
 
 /** How the driver's own state reads as the capability the Team API projects. */
 /** The Electron secret storage cipher that every encrypted file in userData uses. */
-function safeStorageCipher(
-  unavailableKey: "error.app.secretStorageUnavailable" | "error.app.macSecureStorageUnavailable",
-) {
-  return {
-    canPersist: () => safeStorage.isEncryptionAvailable(),
-    encrypt: (value: string) => {
-      if (!safeStorage.isEncryptionAvailable()) throw new Error(sourceText(unavailableKey));
-      return safeStorage.encryptString(value);
-    },
-    decrypt: (value: Buffer) => safeStorage.decryptString(value),
-  };
-}
 
 function computerUseCapability(state: ComputerUseState): CapabilityState {
   if (state.status === "ready") return "ready";
@@ -748,30 +745,12 @@ export async function createApplicationServices({
   });
   const store = new AgentStore(app.getPath("userData"), homedir());
   await runCauseEffect(store.initialize());
-  const managedSkills = new ManagedSkillService(
+  const managedSkills = createApplicationManagedSkills(
     app.isPackaged
-      ? join(process.resourcesPath, "managed-skills", "openbot-site-hosting", "SKILL.md")
-      : resolve(__dirname, "../../resources/managed-skills/openbot-site-hosting/SKILL.md"),
-  );
-  const skillCreator = new ManagedSkillService(
-    app.isPackaged
-      ? join(process.resourcesPath, "managed-skills", "openbot-skill-creator", "SKILL.md")
-      : resolve(__dirname, "../../resources/managed-skills/openbot-skill-creator/SKILL.md"),
-    undefined,
-    undefined,
-    "openbot-skill-creator",
-  );
-  const dataSkill = new ManagedSkillService(
-    app.isPackaged
-      ? join(process.resourcesPath, "managed-skills", "openbot-data", "SKILL.md")
-      : resolve(__dirname, "../../resources/managed-skills/openbot-data/SKILL.md"),
-    undefined,
-    undefined,
-    "openbot-data",
+      ? join(process.resourcesPath, "managed-skills")
+      : resolve(__dirname, "../../resources/managed-skills"),
   );
   await Effect.runPromise(managedSkills.syncAll(store.list()));
-  await Effect.runPromise(skillCreator.syncAll(store.list()));
-  await Effect.runPromise(dataSkill.syncAll(store.list()));
   const hostedSites = new HostedSiteDesktopService(centralAuth, () => {
     // Read at request time: the team store is created later, and the server can register after launch.
     const hostId = teamStore.getIdentity()?.serverId;
@@ -1025,6 +1004,15 @@ export async function createApplicationServices({
     redirectUrl: mcpOAuthRedirect?.redirectUrl ?? MCP_OAUTH_REDIRECT_URL,
   });
   mcpOAuthAuthority = mcpOAuth;
+  const remoteMcpSignIn = process.env.OPENBOT_MCP_REMOTE_CALLBACK_URL
+    ? new RemoteMcpSignIn({
+        oauth: mcpOAuth,
+        redirectUrl: process.env.OPENBOT_MCP_REMOTE_CALLBACK_URL,
+        isSaved: (id) => service.listMcpServers().some((config) => config.id === id),
+      })
+    : undefined;
+  if (remoteMcpSignIn)
+    teardown.push(TEARDOWN_ORDER.mcpOAuth, "remote MCP sign-ins", () => Effect.runPromise(remoteMcpSignIn.close()));
   teardown.push(TEARDOWN_ORDER.mcpOAuth, "MCP token refresh", () => Effect.runPromise(mcpOAuth.close()));
   /*
    * The built-in GitHub connection. Loaded before the agent service, because the first spawn reads
@@ -1194,6 +1182,21 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.computerUsePermissionHelp, "the Computer Use permission help", () => {
     computerUsePermissionHelp.close();
   });
+  const chatMcp =
+    process.env.OPENBOT_MCP_CHAT_PERMISSIONS === "true"
+      ? await Effect.runPromise(
+          createChatMcp({
+            path: app.getPath("userData"),
+            service: () => service,
+            runtimes: () => providerRuntimes.mcpToolRuntimes(),
+            authorization: (config) =>
+              config.id === GITHUB_CONNECTOR_MCP_SERVER_ID
+                ? githubConnector.mcpAuthorization().pipe(toMcpOperationError)
+                : mcpOAuth.forConnection(config.id).accessToken(config.url),
+          }),
+        )
+      : undefined;
+  if (chatMcp) teardown.push(TEARDOWN_ORDER.mcpOAuth, "chat app connections", () => Effect.runPromise(chatMcp.close()));
   const service: AgentService = new AgentService({
     store,
     mailbox,
@@ -1210,12 +1213,7 @@ export async function createApplicationServices({
         ),
     preferredProvider: setupState.preferredProvider ?? "codex",
     bundledExecutables: providerRuntimes.bundledExecutables(),
-    prepareAgentWorkspace: (agent) =>
-      Effect.gen(function* () {
-        yield* managedSkills.syncAgent(agent);
-        yield* skillCreator.syncAgent(agent);
-        yield* dataSkill.syncAgent(agent);
-      }),
+    prepareAgentWorkspace: (agent) => managedSkills.syncAgent(agent),
     hostedSites: {
       list: () => hostedSites.list().pipe(toHostedSiteOperationFailed),
       publish: (input, roots) => hostedSites.publish(input, roots).pipe(toHostedSiteOperationFailed),
@@ -1227,6 +1225,22 @@ export async function createApplicationServices({
     // Only a dev build leads with the OpenCode development model; a packaged app keeps the
     // built-in default.
     developmentDefaults: appVariant === "dev",
+    eventCheckReader: chatMcp?.reader,
+    eventCheckApiReader: new EventCheckApiReader(
+      new EventCheckEnvironment(join(app.getPath("userData"), "watcher-environments"), {
+        encrypt: (value) => safeStorageCipher("error.app.secretStorageUnavailable").encrypt(value).toString("base64"),
+        decrypt: (value) =>
+          safeStorageCipher("error.app.secretStorageUnavailable").decrypt(Buffer.from(value, "base64")),
+      }),
+      join(store.sharedRoot, "Watchers"),
+      (check) => new EventCheckStore(store.database).current(check.id, check.revision) !== null,
+    ),
+    eventCheckTemplates: new EventCheckTemplates(
+      app.isPackaged
+        ? join(process.resourcesPath, "watcher-catalog")
+        : resolve(__dirname, "../../resources/watcher-catalog"),
+      join(store.sharedRoot, "Watchers"),
+    ),
     credentials: {
       apiKey: (provider) => providerCredentials.get(provider),
       // `configs()`, not `list()`: this is the one path the API keys travel, and it ends at the
@@ -1234,15 +1248,10 @@ export async function createApplicationServices({
       customProviders: () => customProviders.configs(),
       // The same rule: `configs()`, with the environment values, goes to the agent process only.
       customAgents: () => customAgents.configs(),
-      // The enabled MCP servers, read at each spawn. The service owns the store, so this reads back
-      // into the object being constructed; nothing calls it before the constructor returns.
-      mcpServers: () => service.enabledMcpServers(),
-      // The floor under those servers: the `bin` of every managed tool runtime, appended after the
-      // user's own `PATH`, so a machine with no Node can still start `npx some-server` and a machine
-      // that has one keeps the build it installed.
+      // App permissions use a stable chat thread. Missing context gives no apps when enabled.
+      mcpServers: (threadId) => (!threadId && chatMcp ? [] : service.enabledMcpServers(threadId)),
+      mcpScope: chatMcp?.scope,
       mcpToolRuntimes: () => providerRuntimes.mcpToolRuntimes(),
-      // The bearer token for an http server, minted here and spent by the provider process. The
-      // service asks for one at each hand-off; only a test the user pressed may open a browser.
       mcpOAuth,
       providerStateDirectory: join(app.getPath("userData"), "provider-state"),
       // Paths only: `gh` and `git` read the token from the files the connection keeps current.
@@ -1587,6 +1596,9 @@ export async function createApplicationServices({
     channels: service.channels,
     // Present, so the host advertises `mcp-servers-v1`. The routes are admin-only.
     mcpServers: service,
+    mcpOAuth: remoteMcpSignIn,
+    chatMcp: chatMcp?.api,
+    eventChecks: service.eventChecks,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.

@@ -144,7 +144,7 @@ export const OPENBOT_SECURITY_HEADERS = {
  * replaces it. The caller passes the same hashed asset the `@font-face` rule asks
  * for, so the preload below is that request and not a second one.
  */
-export function openBotRootHead(interLatinFont: string) {
+export function openBotRootHead(interLatinFont: string, options: { webApp?: boolean } = {}) {
   return {
     meta: [
       { charSet: "utf-8" },
@@ -165,8 +165,13 @@ export function openBotRootHead(interLatinFont: string) {
       },
       { rel: "icon", href: "/favicon.ico", sizes: "any" },
       { rel: "icon", href: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
-      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
-      { rel: "manifest", href: "/site.webmanifest" },
+      // `/app` brings its own manifest and touch icon, so a browser installs the app and not the site.
+      ...(options.webApp
+        ? []
+        : [
+            { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+            { rel: "manifest", href: "/site.webmanifest" },
+          ]),
     ],
   };
 }

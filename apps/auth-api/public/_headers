@@ -3,3 +3,7 @@
 # the old one for a year without asking again.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The service worker of the web app (push only) must reach a browser as soon as it changes.
+/app/sw.js
+  Cache-Control: no-cache

@@ -19,12 +19,16 @@ export function createWebNotificationRouting(options: {
   t: TextValue["t"];
   /** Opens the agent of a notification that the user clicked. */
   onOpen: (hostId: string, agentId: string) => void;
+  /** True when the host sends push notifications to this browser for the host. The page then shows none of its own. */
+  pushes?: (hostId: string) => boolean;
 }) {
   const { workspace, notifications } = options;
   function notify(hostId: string, event: AgentEvent, agents: AgentSummary[]): void {
     const { muted, level } = untrack(() => notifications.state(hostId));
     if (muted || level === "nothing") return;
     if (event.type === "turn-completed" && level === "all") playCompletionSoundForAgentEvent(event, agents);
+    // The push message already tells the user, also on a phone where a page cannot show a notification.
+    if (options.pushes?.(hostId)) return;
     showWebAgentNotification({
       event,
       agents,

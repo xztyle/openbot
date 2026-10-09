@@ -14,7 +14,21 @@ export const messages = defineMessages("webClient", {
   "webClient.login.wait": "Wait before requesting another code.",
   "webClient.pane.navigation": "Workspace navigation",
   "webClient.pane.chat": "Chat",
-  "webClient.pane.workspace": "Workspace",
+  "webClient.pane.agents": "Agents",
+  "webClient.pane.agentsAttention": {
+    one: "{count} agent needs you or has a new reply",
+    other: "{count} agents need you or have new replies",
+  },
+  "webClient.title.attention": "({count}) {title}",
+  "webClient.push.title": "Push notifications",
+  "webClient.push.description":
+    "Get a notification on this device when an agent of {host} finishes, needs your input or approval, or a scheduled run fails. It also works when OpenBot is closed. The computer sends it to the push service of your browser (Google, Apple, Mozilla or Microsoft), encrypted. It holds the name of the agent and the kind of event, not the text of a message. OpenBot accounts do not see it.",
+  "webClient.push.noHost": "Connect to a computer first.",
+  "webClient.push.browserUnsupported":
+    "This browser cannot receive push notifications. On an iPhone or iPad, add OpenBot to the Home Screen first.",
+  "webClient.push.hostUnsupported": "This computer cannot send push notifications. Update OpenBot on it.",
+  "webClient.push.denied": "This site is blocked from showing notifications. Allow it in the settings of your browser.",
+  "webClient.push.failed": "Could not turn on push notifications. Try again.",
   "webClient.notice.connecting": "Connecting to your computer",
   "webClient.notice.findingHosts": "Finding your computers",
   "webClient.notice.hostsFailed": "Could not load your computers",

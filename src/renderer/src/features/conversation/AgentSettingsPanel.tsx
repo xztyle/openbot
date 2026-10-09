@@ -74,7 +74,13 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     files: { open: false },
     skills: { count: 0, open: false, reopenAfterMarketplace: false },
   });
-  const memoriesPort = createMemo(() => agentMemoriesPort(props.agent.id, props.agent.name, props.memoryLimit ?? null));
+  const memoriesPort = createMemo(
+    () =>
+      props.adminCalls?.memories?.(props.agent.id, props.agent.name) ??
+      agentMemoriesPort(props.agent.id, props.agent.name, props.memoryLimit ?? null),
+  );
+  /** A remote client shows Memories only where it has host calls for them, as the web client does. */
+  const memoriesVisible = () => !props.remoteClient || Boolean(props.adminCalls?.memories);
   const legacyRoutinesPort = createMemo(() =>
     agentRoutinesPort(
       props.agent.id,
@@ -155,9 +161,9 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
             }),
           )
           .catch(() => {});
-      if (!props.remoteClient) {
-        void conversationPort()
-          .agent.listMemories(agentId)
+      if (memoriesVisible()) {
+        void memoriesPort()
+          .list()
           .catch(() => [])
           .then((items) => {
             setDraft((state) => {
@@ -244,9 +250,9 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       detailOpen={draft.routines.open || draft.files.open || draft.checks.open}
       links={
         <>
-          <Show when={!props.remoteClient || skillsMode() !== "hidden" || props.tablesVisible !== false || props.files}>
+          <Show when={memoriesVisible() || skillsMode() !== "hidden" || props.tablesVisible !== false || props.files}>
             <SettingsLinkGroup inset title={t("agentSettings.groups.knows")}>
-              <Show when={!props.remoteClient}>
+              <Show when={memoriesVisible()}>
                 <SettingsLinkRow
                   icon={<BookMarked aria-hidden="true" />}
                   label={t("agentSettings.links.memories")}

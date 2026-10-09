@@ -14,8 +14,8 @@ welcome screen, separate conversation toolbar, or always-visible invitation form
 Invitations use the existing Add remote server dialog.
 
 The conversation accepts an explicit `ConversationRuntime`. Desktop calls still use preload;
-the web adapter uses the authenticated host connection. Browser drafts remain in memory.
-Native-only actions are hidden. Remote browser transport uses the shared desktop browser
+the web adapter uses the authenticated host connection. Composer drafts are kept in this browser's
+local storage. Native-only actions are hidden. Remote browser transport uses the shared desktop browser
 panel through an explicit runtime. Small screens switch between the existing conversation
 and workspace panes. Desktop layout remains unchanged. Browser ownership and stream recovery
 still require the release checks below.
@@ -123,8 +123,12 @@ mock. The separate web preview implements the browser runtime with that same moc
   and host preview URLs are not used as browser attachment links. Blob URLs are released when the
   preview closes, the host changes, or the workspace unmounts. A shared or workspace file link
   reads the file through the host's `/v1/shared-files` or `/v1/workspace-files` route and opens the
-  same panel. "Open" on a file card opens the panel; "Download" saves the file. Images show as
-  file cards, not inline: the browser reads no image bytes until a card is opened.
+  same panel. "Open" on a file card opens the panel; "Download" saves the file. An image file of 3 MB
+  or less shows inline, as on the phone app. The card is a file card until it scrolls into view
+  (`web-image-previews.ts`); then the client reads the file through the host connection, two at a time,
+  makes a blob URL, and the shared message view shows the picture. At most 24 pictures (48 MB) stay as
+  blob URLs, and a picture on screen is never dropped. Every URL is revoked when the host changes. A
+  larger image, or one that fails to load, stays a file card.
 - Pinned agents and channels and collapsed sections are kept in local storage for each account and
   host, with the same storage modules as desktop. Only ids are stored. Pins do not delete
   conversations. Notification changes use the host's existing settings and include
@@ -172,12 +176,70 @@ mock. The separate web preview implements the browser runtime with that same moc
   another origin through CDP (`DOM.describeNode` on the focused frame element gives its frame ID,
   and a frame in another process is a target of its own). An `email` or `number` input has no
   selection to read, so copy gets no text there; paste works.
-- No full remote desktop, push notifications, or offline operation is included. See
-  [Remote desktop](#remote-desktop) for the reason.
+- No full remote desktop or offline operation is included. See [Remote desktop](#remote-desktop) for
+  the reason. Push notifications are in [Push notifications](#push-notifications).
 - These stay desktop only: the application Settings dialog (permissions, app updates),
-  permissions review, hosted site publishing, marketplace publishing, Picture in Picture, the Memories, Routines and Files sections of agent settings, the
-  conversation Files panel, and file reveal. The browser shows host files in Server settings >
-  Storage.
+  permissions review, hosted site publishing, marketplace publishing, Picture in Picture, the Files
+  section of agent settings, the conversation Files panel, and file reveal. The browser shows host
+  files in Server settings > Storage. The Memories and Routines sections of agent settings work on
+  the web: Memories uses the Team API routes of the desktop's remote path and the phone
+  (`web-memories-port.ts`, the same decoders and the same 500 character limit), and Routines use
+  `webRoutinesPort`.
+
+## Connection recovery
+
+The workspace owns one recovery loop for the opened host (`createRemoteConnectionRecovery`, as on
+the phone): a failed connection retries after 2, 4, 8 and 16 seconds, then every two minutes. This
+holds for a host that the account does not host too: the hosted-server status read answers
+`not_hosted`, which counts as "retry". The loop starts when the connection fails and when the page
+becomes visible, it ends a wait when the page becomes visible or the browser fires `online`, and the
+`online` event also renews the Signal socket and the ICE path of the open connection and of each
+status connection (`runtime.networkRestored`). It stops, and shows Reconnect, only for the failures
+that no retry can fix: `session_revoked`, an incompatible host, `protocol_error`, an ended plan, and a
+host that sleeps (it wakes when the user acts). A dropped connection keeps the loaded chat on
+screen with the "reconnecting" notice, and the composer is not ready until the host answers. A
+reconnect only reads state. It never sends a message again.
+
+## Unread and attention
+
+Each agent row in the sidebar shows the unread count, the "responded" mark and a failed routine run
+as on desktop. The client reads the host's read cursors (`GET /v1/agents/conversation-reads`) on
+connect, on resync, and one second after a `turn-completed`, `conversation`, `conversation-page`
+or `conversation-invalidated` event of an agent that is not open. The open chat takes its count
+from its own page and from Mark read. A failed turn comes from the `runtime-snapshot` and
+`turn-completed` events. "Responded" marks a reply that ended while the page had no focus, and focus
+clears it. The tab title shows `(n) OpenBot web`, where n is the number of agents that wait for the
+user or have unread replies, and the Agents tab on a phone shows a dot for them.
+
+## Phone navigation
+
+Below 721 pixels the page shows one pane at a time. The history has two entries for them, so the
+Android back button and the iOS back swipe go from a chat to the list of agents, and from the list out
+of the app (`web-pane-history.ts`). The tab that is called Agents steps back in the same history.
+
+## Installing the app
+
+`/app` has its own manifest, `/app.webmanifest` (`id`, `start_url` and `scope` are `/app`), linked only
+from the `/app` head with `crossorigin="use-credentials"`, because the app can be behind Cloudflare
+Access, which answers a request without the cookie with a sign-in page. The marketing site keeps
+`/site.webmanifest`. The `/app` head also has the `apple-mobile-web-app-*` tags and an opaque touch icon
+(`app-apple-touch-icon.png`); the manifest has a maskable icon (`icon-maskable-512x512.png`). All icons
+are made from the existing brand icon. `/app` stays `Cache-Control: no-store`.
+
+## Push notifications
+
+Account settings > Preferences > Push notifications turns on a push subscription for the opened
+host. The browser registers `/app/sw.js` in the scope `/app/push/<hostId>/`, subscribes with the
+host's public VAPID key, and gives the host the subscription over the Team API (`web-push-v1`, under
+`fork-host-v1`). The host sends a signed and encrypted message to the push service when an agent
+finishes, needs input or approval, or a scheduled run fails, with the browser's level and mute and the
+agent's own switch. The page changes the host's copy when the level, the mute or the language changes.
+While a subscription exists for a host, the page shows no notification of its own for that host.
+The message holds the agent's name and the kind of event, never message text. The service worker
+shows nothing when a page is in focus, and opens the chat when the user taps the notification. See
+[Web push notifications](../PRIVACY.md#web-push-notifications) and
+[the host side](architecture/servers.md#web-push-notifications-web-push-v1). iPhone and iPad give
+push only to a web app that was added to the Home Screen.
 
 ## Remote desktop
 

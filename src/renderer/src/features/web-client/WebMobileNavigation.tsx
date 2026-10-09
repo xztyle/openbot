@@ -1,14 +1,16 @@
 import type { AppTextKey } from "@openbot/i18n";
-import { Button, Globe2, MessageCircle } from "@openbot/ui";
+import { Bot, Button, MessageCircle } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { Dynamic } from "@solidjs/web";
-import { createSignal, For, onSettled } from "solid-js";
+import { createSignal, For, onSettled, Show } from "solid-js";
 
 export type WebMobilePane = "conversation" | "workspace";
 
 interface WebMobileNavigationProps {
   activePane: WebMobilePane;
   onChange: (pane: WebMobilePane) => void;
+  /** The agents that need the user or have a new reply. The Agents tab shows a dot while there is one. */
+  attentionCount?: number;
 }
 
 const PANES: ReadonlyArray<{
@@ -17,7 +19,7 @@ const PANES: ReadonlyArray<{
   Icon: typeof MessageCircle;
 }> = [
   { id: "conversation", label: "webClient.pane.chat", Icon: MessageCircle },
-  { id: "workspace", label: "webClient.pane.workspace", Icon: Globe2 },
+  { id: "workspace", label: "webClient.pane.agents", Icon: Bot },
 ];
 
 /**
@@ -95,6 +97,13 @@ export function WebMobileNavigation(props: WebMobileNavigationProps) {
             >
               <Dynamic component={pane.Icon} aria-hidden="true" />
               <span>{t(pane.label)}</span>
+              <Show when={pane.id === "workspace" && (props.attentionCount ?? 0) > 0}>
+                <span
+                  class="web-mobile-navigation-dot"
+                  role="img"
+                  aria-label={t("webClient.pane.agentsAttention", { count: props.attentionCount ?? 0 })}
+                />
+              </Show>
             </Button>
           )}
         </For>

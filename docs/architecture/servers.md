@@ -200,6 +200,33 @@ server mute and per-agent notification settings apply. Unread state is unchanged
 not deliver system notifications; it shows agent state in its Live Activity. Mute settings are not
 synchronized between devices.
 
+### Web push notifications (`web-push-v1`)
+
+A browser of the web client asks the host for its public VAPID key
+(`POST /v1/web-push/key`), then gives the host its push subscription
+(`POST /v1/web-push/subscription`) or takes it back (`.../remove`). The routes share
+`FORK_HOST_CAPABILITY`, so the capability list does not grow. The codecs are in
+`team-protocol/web-push-v1.ts`; `route-web-push.ts` answers them for any member, and the key of a
+member is the one that the route knows from the session.
+
+`WebPushService` (`src/main/web-push.ts`) keeps the VAPID key pair and the subscriptions in
+`openbot-web-push-v1.json` in the profile, mode 0600, not in SQLite (`web-push-store.ts`). It listens to
+the agent events, asks `notificationForAgentEvent` what each subscription's level says (the same code
+as the desktop and the open page, so "Finished" waits for an idle agent), and sends one message for
+each subscription from the host: VAPID-signed, `aes128gcm`-encrypted (`web-push-crypto.ts`, RFC 8291
+and 8292, `node:crypto` only), straight to the push service. The message holds the agent's name, a
+phrase for the kind of event in the browser's language, the agent id, the thread id and the host id.
+It never holds message text. The host sends only to `fcm.googleapis.com`, `*.push.services.mozilla.com`
+(`updates.`), `*.push.apple.com` and `*.notify.windows.com`, without redirects, because a member
+names the address. A 401, 403, 404 or 410 removes a subscription. A removed or disabled member's
+subscriptions go at the next event.
+
+The browser side is `web-push.ts` in the web client and `apps/auth-api/public/app/sw.js`. A
+subscription belongs to one VAPID key, and each host has its own, so each host has its own service
+worker registration, in the scope `/app/push/<hostId>/`. The worker shows the notification (none when
+a page is in focus) and opens `/app?host=<hostId>&chat=<agentId>` or tells an open page. It has no
+`fetch` handler and no cache. A hosted server that has stopped sends nothing until it starts.
+
 ## Billing
 
 Billing is per server. One account can pay for several servers; each server has its own Stripe

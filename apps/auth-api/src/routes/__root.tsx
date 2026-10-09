@@ -12,7 +12,8 @@ import { OPENBOT_SECURITY_HEADERS, openBotRootHead } from "../lib/site-metadata"
 
 export const Route = createRootRoute({
   beforeLoad: () => ({ siteUrl: servingSiteUrl() }),
-  head: () => openBotRootHead(interLatinFont),
+  head: ({ matches }) =>
+    openBotRootHead(interLatinFont, { webApp: matches.some((match) => /^\/app\/?$/u.test(match.pathname)) }),
   headers: () => OPENBOT_SECURITY_HEADERS,
   component: RootComponent,
   shellComponent: RootDocument,

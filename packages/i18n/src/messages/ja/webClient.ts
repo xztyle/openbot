@@ -15,7 +15,6 @@ export const messages = {
   "webClient.login.wait": "しばらく待ってから、別のコードをリクエストしてください。",
   "webClient.pane.navigation": "ワークスペースのナビゲーション",
   "webClient.pane.chat": "チャット",
-  "webClient.pane.workspace": "ワークスペース",
   "webClient.notice.connecting": "コンピューターに接続しています",
   "webClient.notice.findingHosts": "コンピューターを探しています",
   "webClient.notice.hostsFailed": "コンピューターを読み込めませんでした",

@@ -20,6 +20,7 @@ import { Effect } from "effect";
 import { onCleanup } from "solid-js";
 import type { ConversationRuntime } from "../conversation/conversation-runtime";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
+import { webMemoriesPort } from "../conversation/web-memories-port";
 import { webRoutinesPort } from "../conversation/web-routines-port";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
 import type { WebWorkspaceRuntime } from "./web-runtime";
@@ -71,6 +72,7 @@ function webHostAdmin(
       unpublish: (agentId) =>
         runTeamEffect(unpublishAgentTemplate(request(), agentId).pipe(Effect.mapError((error) => error.cause))),
     },
+    memories: (agentId, agentName) => webMemoriesPort(agentId, agentName, (...args) => request()(...args), onHostEvent),
     get eventChecks() {
       return checksEnabled?.() === true ? checks : undefined;
     },

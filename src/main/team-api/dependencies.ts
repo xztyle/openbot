@@ -48,6 +48,7 @@ import type { McpToolRuntimePreparation } from "../ipc/mcp-server-handlers";
 import type { LiveActivityPushService } from "../live-activity-push";
 import type { RemoteScreenGateway } from "../remote-screen-gateway";
 import type { TeamStore } from "../team-store";
+import type { WebPushService } from "../web-push";
 
 type TeamApiAgentMethods = Pick<
   AgentService,
@@ -250,6 +251,8 @@ export interface TeamApiOptions {
   eventChecks?: EventCheckScheduler;
   /** `security-audit-v1`: admin-only read of the security audit file. */
   securityAudit?: Pick<SecurityAuditLog, "read">;
+  /** `web-push-v1`: a member's browser gives its push subscription, and the host sends it push messages. */
+  webPush?: Pick<WebPushService, "publicKey" | "register" | "remove">;
   /** Starts and waits for the managed tool runtimes behind the MCP save, enable, and test routes. */
   mcpToolRuntimePreparation?: McpToolRuntimePreparation;
   storage?: TeamApiStorage;

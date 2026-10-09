@@ -49,6 +49,8 @@ export interface WebHostConnections {
   /** The state of the opened host, for the other tabs. */
   reportSelected(hostId: string, state: WebHostState): void;
   refresh(): void;
+  /** The browser saw the network come back. Each connection that waits to retry tries again now. */
+  networkRestored(): void;
   dispose(): Promise<void>;
 }
 
@@ -330,6 +332,12 @@ export function createWebHostConnections(options: {
     },
     refresh() {
       for (const entry of entries.values()) entry.recovery?.refresh();
+    },
+    networkRestored() {
+      for (const entry of entries.values()) {
+        entry.peer?.networkRestored();
+        entry.recovery?.networkRestored();
+      }
     },
     async dispose() {
       disposed = true;

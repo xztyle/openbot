@@ -4,6 +4,7 @@ import type { AgentSkillCalls } from "../../skills-port";
 import type { AgentTemplatePublishCalls } from "../agent-templates/agent-templates-port";
 import type { SharedTableCalls } from "./conversation-port";
 import type { ConversationProps } from "./conversation-types";
+import type { MemoriesPort } from "./memories-port";
 import type { EventRoutinesApi } from "./routine-webhooks-api";
 import type { RoutinesPort } from "./routines-port";
 
@@ -49,6 +50,8 @@ export interface ConversationRuntime {
         agentTemplates: AgentTemplatePublishCalls;
         eventRoutines?: EventRoutinesApi | undefined;
         routines?: ((agentId: string) => RoutinesPort) | undefined;
+        /** The agent's memories on the host. Absent, a remote client shows no Memories row. */
+        memories?: ((agentId: string, agentName: string) => MemoriesPort) | undefined;
         eventChecks?: EventCheckApi | undefined;
       }
     | undefined;

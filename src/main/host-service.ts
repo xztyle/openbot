@@ -78,6 +78,8 @@ interface HostServiceOptions {
   chatMcp?: ForwardedApiOptions["chatMcp"];
   eventChecks?: ForwardedApiOptions["eventChecks"];
   securityAudit?: ForwardedApiOptions["securityAudit"];
+  /** Present, so the host advertises the push routes. Its owner stops it with the application. */
+  webPush?: ForwardedApiOptions["webPush"];
   mcpToolRuntimePreparation?: ForwardedApiOptions["mcpToolRuntimePreparation"];
   storage?: ForwardedApiOptions["storage"];
   hostedSites?: ForwardedApiOptions["hostedSites"];
@@ -301,6 +303,7 @@ export class HostService extends EventEmitter<HostEvents> {
       chatMcp: options.chatMcp,
       eventChecks: options.eventChecks,
       securityAudit: options.securityAudit,
+      webPush: options.webPush,
       mcpToolRuntimePreparation: options.mcpToolRuntimePreparation,
       storage: options.storage,
       hostedSites: options.hostedSites,

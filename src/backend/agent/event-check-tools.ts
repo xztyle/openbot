@@ -113,7 +113,7 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
   {
     name: "install_event_check_template",
     description:
-      "Install a template as a PAUSED event check for an agent (omit agentId to target yourself). Fill every required setting from what the user told you, and ask for what you do not know: never guess IDs. Use one accountLabel per account, and install again for another account. Private variables such as tokens and passwords belong to the user alone: never ask for the value in chat, and never put one in any field or file. After the install, call event_check_environment and tell the user which names to add in agent settings, Event checks, this check, Private variables (.env). Then call test_event_check. Enable it only when the user asks.",
+      "Install a template as a PAUSED event check for an agent (omit agentId to target yourself). Pass the settings as a list of {name, value} pairs in `configuration`. Fill every required setting from what the user told you, and ask for what you do not know: never guess IDs. Use one accountLabel per account, and install again for another account. Private variables such as tokens and passwords belong to the user alone: never ask for the value in chat, and never put one in any field or file. After the install, call event_check_environment and tell the user which names to add in agent settings, Event checks, this check, Private variables (.env). Then call test_event_check. Enable it only when the user asks.",
     shape: {
       agentId,
       slug: z.string().min(1).max(64),
@@ -123,7 +123,12 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
       timezone: z.string().max(128).optional(),
       intervalSeconds: z.number().int().min(30).max(86_400).optional(),
       accountActorIds: z.array(z.string().min(1).max(512)).max(20).optional(),
-      configuration: z.record(z.string(), z.string().max(8192)).optional(),
+      // A list, not a record: a record's schema cannot be converted when the Claude SDK and OpenBot load
+      // separate copies of zod, and one tool that fails to convert removes every `openbot` tool.
+      configuration: z
+        .array(z.object({ name: z.string().min(1).max(128), value: z.string().max(8192) }))
+        .max(30)
+        .optional(),
     },
   },
   {
@@ -161,6 +166,17 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
     shape: { agentId, id },
   },
 ] as const;
+/** The tool takes the settings as a list of name and value pairs. The install input is a record. */
+function configurationRecord(value: unknown): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (!Array.isArray(value)) return result;
+  for (const entry of value) {
+    if (!isDynamicRecord(entry) || typeof entry.name !== "string" || typeof entry.value !== "string")
+      throw new Error("Invalid configuration setting.");
+    result[entry.name] = entry.value;
+  }
+  return result;
+}
 const NAMES = new Set<string>(EVENT_CHECK_TOOL_DEFINITIONS.map((definition) => definition.name));
 export function handleEventCheckTool(
   params: DynamicToolCallParams,
@@ -217,7 +233,7 @@ export function handleEventCheckTool(
               timezone: args.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
               intervalSeconds: args.intervalSeconds ?? template.intervalSeconds,
               accountActorIds: args.accountActorIds ?? [],
-              configuration: args.configuration ?? {},
+              configuration: configurationRecord(args.configuration),
             }),
           ),
         );

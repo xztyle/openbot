@@ -280,7 +280,10 @@ it("lets an agent list, install and enable a template, rejects a non-boolean val
   const bad = await call("install_event_check_template", {
     slug: "fixture",
     accountLabel: "work",
-    configuration: { workspace: "alpha", notify: "yes" },
+    configuration: [
+      { name: "workspace", value: "alpha" },
+      { name: "notify", value: "yes" },
+    ],
   });
   expect(bad.success).toBe(false);
   expect(await runCauseEffect(service.eventChecks.list({ agentId: "chief" }))).toHaveLength(0);
@@ -288,7 +291,7 @@ it("lets an agent list, install and enable a template, rejects a non-boolean val
     slug: "fixture",
     accountLabel: "work",
     accountActorIds: ["me"],
-    configuration: { workspace: "alpha" },
+    configuration: [{ name: "workspace", value: "alpha" }],
   });
   expect(installed.success).toBe(true);
   const [check] = await runCauseEffect(service.eventChecks.list({ agentId: "chief" }));

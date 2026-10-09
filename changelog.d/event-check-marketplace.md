@@ -10,3 +10,6 @@
 - Let agents list, install, update, link, enable and pause event check templates with native tools.
   An agent can fill in the settings, but private values such as API keys stay for you to add.
 - Show true or false template settings as toggles, and mark optional settings in the install form.
+- Fix: Claude agents had no `openbot` tools after the template tools shipped. One tool's schema
+  could not be converted, and that removed the whole tool set. The install tool now takes its
+  settings as a list, and a test keeps such schemas out.

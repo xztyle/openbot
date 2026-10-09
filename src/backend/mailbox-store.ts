@@ -44,6 +44,7 @@ import {
   type StoredGeneratedAttachment,
   toAttachmentSummary,
 } from "./attachment-files";
+import { ANSWER_HOLD_LIMIT_MS } from "./collaboration-limits";
 import { eventCheckMarker, isEventCheckOrigin } from "./event-check-marker";
 import { StoredStateFailure, storedIO, storedSync, toStoredStateFailure } from "./stored-state-effects";
 
@@ -116,6 +117,12 @@ interface StoredDelivery {
   createdAt: string;
   /** Sent to steer the running turn, and waiting in the queue instead. Shown only while queued. */
   steerFallback?: QueueSteerFallback;
+  /**
+   * Written when this recipient ended its turn for a request while it waited for answers to
+   * requests of its own: the ids of those requests. The result for the sender waits until they
+   * are resolved. Absent means no result is owed. Never sent to a client.
+   */
+  resultAwaiting?: string[];
 }
 
 function isActiveDelivery(delivery: StoredDelivery): boolean {
@@ -907,7 +914,8 @@ export class MailboxStore {
     ) {
       return null;
     }
-    const delivery = this.#queuedFor(agentId).find((candidate) => !this.#isHeldReply(candidate));
+    const now = Date.now();
+    const delivery = this.#queuedFor(agentId).find((candidate) => !this.#holdsReply(candidate, now));
     return delivery && this.#mayStart(delivery) ? this.#context(delivery) : null;
   }
 
@@ -931,6 +939,157 @@ export class MailboxStore {
       })
       .map((delivery) => this.#context(delivery));
   }
+
+  /**
+   * The receipt of an identical request that `senderAgentId` already sent, when every recipient
+   * still has it queued, starting or running. The text and the link must match, and a message with
+   * a file never matches. An agent that repeats itself to a busy teammate adds nothing.
+   */
+  activeDuplicate(input: {
+    senderAgentId: string;
+    recipientAgentIds: readonly string[];
+    text: string;
+    replyToMessageId: string | null;
+    expectsReply: boolean;
+  }): QueuedMessageReceipt | null {
+    const [first, ...others] = input.recipientAgentIds;
+    if (!first) return null;
+    const text = input.text.trim();
+    const activeFor = (agentId: string) =>
+      this.#state.deliveries.filter((delivery) => delivery.recipientAgentId === agentId && isActiveDelivery(delivery));
+    const candidates = new Set(activeFor(first).map((delivery) => delivery.messageId));
+    const otherActive = others.map((agentId) => new Set(activeFor(agentId).map((delivery) => delivery.messageId)));
+    for (const message of this.#state.messages) {
+      if (
+        !candidates.has(message.id) ||
+        message.sender.kind !== "agent" ||
+        message.sender.agentId !== input.senderAgentId ||
+        message.text !== text ||
+        message.attachments.length > 0 ||
+        message.replyToMessageId !== input.replyToMessageId ||
+        (message.expectsReply === false) !== !input.expectsReply ||
+        !otherActive.every((active) => active.has(message.id))
+      )
+        continue;
+      return this.#receipt(message.id);
+    }
+    return null;
+  }
+
+  /** How many messages `senderAgentId` sent to `recipientAgentId` since `since`, answers and notes included. */
+  agentMessagesBetween(senderAgentId: string, recipientAgentId: string, since: Date): number {
+    const sinceMs = since.getTime();
+    const toRecipient = new Set(
+      this.#state.deliveries
+        .filter((delivery) => delivery.recipientAgentId === recipientAgentId)
+        .map((delivery) => delivery.messageId),
+    );
+    return this.#state.messages.filter(
+      (message) =>
+        message.sender.kind === "agent" &&
+        message.sender.agentId === senderAgentId &&
+        toRecipient.has(message.id) &&
+        Date.parse(message.createdAt) >= sinceMs,
+    ).length;
+  }
+
+  /** Whether this is the first message that ever reached the agent. */
+  isFirstDeliveryTo(agentId: string, deliveryId: string): boolean {
+    return this.#state.deliveries.find((delivery) => delivery.recipientAgentId === agentId)?.id === deliveryId;
+  }
+
+  /**
+   * The messages an agent sent from one turn that ask for a reply. A turn sends such a message
+   * through the `send_message` tool, which keys the message by the turn.
+   */
+  requestsSentInTurn(agentId: string, turnId: string): string[] {
+    const ids: string[] = [];
+    for (const [key, messageId] of Object.entries(this.#state.idempotency)) {
+      const parts = key.split(":");
+      if (parts.length < 3 || parts.at(-2) !== turnId) continue;
+      const message = this.#state.messages.find((candidate) => candidate.id === messageId);
+      if (message?.sender.kind === "agent" && message.sender.agentId === agentId && message.expectsReply !== false) {
+        ids.push(message.id);
+      }
+    }
+    return ids;
+  }
+
+  /**
+   * Whether a request still waits for its recipients: a copy is queued, starting or running; a
+   * recipient ended its turn and owes the requester a deferred result; or a message from a
+   * recipient is on its way to the requester, so the requester has a turn to come.
+   */
+  requestPending(requestId: string): boolean {
+    const request = this.#state.messages.find((candidate) => candidate.id === requestId);
+    if (!request) return false;
+    const copies = this.#state.deliveries.filter((delivery) => delivery.messageId === requestId);
+    if (copies.some((delivery) => isActiveDelivery(delivery) || (delivery.resultAwaiting?.length ?? 0) > 0)) {
+      return true;
+    }
+    if (request.sender.kind !== "agent") return false;
+    const requesterId = request.sender.agentId;
+    const recipients = new Set(copies.map((delivery) => delivery.recipientAgentId));
+    return this.#state.deliveries.some((delivery) => {
+      if (delivery.recipientAgentId !== requesterId || !isActiveDelivery(delivery)) return false;
+      const sender = this.#state.messages.find((candidate) => candidate.id === delivery.messageId)?.sender;
+      return sender?.kind === "agent" && recipients.has(sender.agentId);
+    });
+  }
+
+  /** The requests that an agent ended a turn on, whose results for the sender wait. */
+  deferredResults(agentId: string): Array<{
+    deliveryId: string;
+    messageId: string;
+    turnId: string | null;
+    senderAgentId: string;
+    awaiting: string[];
+  }> {
+    return this.#state.deliveries.flatMap((delivery) => {
+      if (delivery.recipientAgentId !== agentId || !delivery.resultAwaiting?.length) return [];
+      const sender = this.#state.messages.find((candidate) => candidate.id === delivery.messageId)?.sender;
+      if (sender?.kind !== "agent") return [];
+      return [
+        {
+          deliveryId: delivery.id,
+          messageId: delivery.messageId,
+          turnId: delivery.turnId,
+          senderAgentId: sender.agentId,
+          awaiting: [...delivery.resultAwaiting],
+        },
+      ];
+    });
+  }
+
+  /** The ids of every agent that has a deferred result. */
+  agentsWithDeferredResults(): string[] {
+    return [
+      ...new Set(
+        this.#state.deliveries.flatMap((delivery) =>
+          delivery.resultAwaiting?.length ? [delivery.recipientAgentId] : [],
+        ),
+      ),
+    ];
+  }
+
+  /** Records the requests a delivery's result waits for, or clears the record with an empty list. */
+  setResultAwaiting = Effect.fn("MailboxStore.setResultAwaiting")(function* (
+    this: MailboxStore,
+    deliveryId: string,
+    awaiting: readonly string[],
+  ): Effect.fn.Return<void, StoredStateFailure> {
+    try {
+      const delivery = this.#state.deliveries.find((candidate) => candidate.id === deliveryId);
+      if (!delivery) return;
+      const current = delivery.resultAwaiting ?? [];
+      if (current.length === awaiting.length && current.every((id, index) => id === awaiting[index])) return;
+      if (awaiting.length === 0) delete delivery.resultAwaiting;
+      else delivery.resultAwaiting = [...awaiting];
+      this.#persist("delivery.result-deferred");
+    } catch (cause) {
+      return yield* new StoredStateFailure({ cause });
+    }
+  }, Effect.uninterruptible).bind(this);
 
   /** The agents that were sent a request and whose delivery ended with no answer. */
   unansweredRecipients(requestId: string): string[] {
@@ -961,9 +1120,47 @@ export class MailboxStore {
   }
 
   /**
+   * A held answer that has waited `ANSWER_HOLD_LIMIT_MS` is held no longer. A teammate that is slow
+   * or stuck cannot keep the answers of the others from their requester without end.
+   */
+  #holdsReply(delivery: StoredDelivery, now: number): boolean {
+    return now - (Date.parse(delivery.createdAt) || 0) < ANSWER_HOLD_LIMIT_MS && this.#isHeldReply(delivery);
+  }
+
+  /**
+   * When each agent's oldest held answer stops being held, in epoch milliseconds. The drain
+   * scheduler arms a timer for the earliest one, because nothing else wakes a requester whose
+   * teammate stays silent.
+   */
+  heldReplyReleaseTimes(): Map<string, number> {
+    const releases = new Map<string, number>();
+    const now = Date.now();
+    for (const delivery of this.#state.deliveries) {
+      if (delivery.status !== "queued" || !this.#holdsReply(delivery, now)) continue;
+      const release = (Date.parse(delivery.createdAt) || 0) + ANSWER_HOLD_LIMIT_MS;
+      releases.set(delivery.recipientAgentId, Math.min(releases.get(delivery.recipientAgentId) ?? release, release));
+    }
+    return releases;
+  }
+
+  /** Every agent that was sent this message. */
+  recipientsOf(messageId: string): string[] {
+    return this.#state.deliveries
+      .filter((delivery) => delivery.messageId === messageId)
+      .map((delivery) => delivery.recipientAgentId);
+  }
+
+  /** The agents whose copy of this request is still queued, starting or running. */
+  outstandingRecipients(requestId: string): string[] {
+    return this.#state.deliveries
+      .filter((delivery) => delivery.messageId === requestId && isActiveDelivery(delivery))
+      .map((delivery) => delivery.recipientAgentId);
+  }
+
+  /**
    * An answer to a request that its recipient sent to several teammates waits while another of them
    * has the request still queued or running. So the requester reads all the answers in one turn,
-   * not one turn for each answer.
+   * not one turn for each answer. `#holdsReply` adds the time limit.
    */
   #isHeldReply(delivery: StoredDelivery): boolean {
     const reply = this.#requireMessage(delivery.messageId);
@@ -2038,7 +2235,13 @@ export class MailboxStore {
     positions = this.#queuedPositions(),
     message = this.#requireMessage(delivery.messageId),
   ): QueueDelivery {
-    const { editId: _editId, finishedEditOutcomes: _finishedEditOutcomes, steerFallback, ...publicDelivery } = delivery;
+    const {
+      editId: _editId,
+      finishedEditOutcomes: _finishedEditOutcomes,
+      resultAwaiting: _resultAwaiting,
+      steerFallback,
+      ...publicDelivery
+    } = delivery;
     return {
       ...publicDelivery,
       ...(steerFallback && delivery.status === "queued" ? { steerFallback } : {}),
@@ -2374,7 +2577,9 @@ function isStoredDelivery(value: unknown): value is StoredDelivery {
     (isString(value.turnId) || value.turnId === null) &&
     (isString(value.error) || value.error === null) &&
     isString(value.createdAt) &&
-    (value.steerFallback === undefined || isOneOf(QUEUE_STEER_FALLBACKS, value.steerFallback))
+    (value.steerFallback === undefined || isOneOf(QUEUE_STEER_FALLBACKS, value.steerFallback)) &&
+    (value.resultAwaiting === undefined ||
+      (Array.isArray(value.resultAwaiting) && value.resultAwaiting.every((item) => isString(item))))
   );
 }
 

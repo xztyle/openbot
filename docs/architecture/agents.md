@@ -83,6 +83,10 @@ branch refuses them, and no Team API protocol changes.
 - A handoff is a mailbox delivery from the routine (`RoutineScheduler.enqueueHandoff`). It names the
   same routine and run, but `reconcileDelivery` finds a run only by its own delivery, so the run status
   does not change.
+- When every step of a run has ended, the routine's own agent gets one report, because no link leads
+  back to it. The report is a handoff with `expectsReply` false (key `routine-flow-report-<run>`),
+  with the status of each step and the redacted, bounded output of the last steps. The owner's turn
+  may stay silent. No report is sent when the owner's own run failed, or when no link applies.
 - A canvas shows routines of every trigger kind (`routine-flow-routines.ts`). A webhook routine
   carries its endpoint, event type and filters; the details panel saves them, rotates the secret and
   runs a test through the `events` IPC group, as the routine settings do.
@@ -135,7 +139,13 @@ An agent that delegates work can follow and stop it. `openbot.list_agents` repor
 `status` (a starting delivery and a context compaction count as `working`), `queuedMessages`
 (channel work excluded), `turnStartedAt`, and `lastActivityAt`. The last two come from the provider
 notifications that `TurnLifecycle` sees; they are in memory only, so after a restart
-`lastActivityAt` falls back to the newest message for the agent. OpenBot does not record which
+`lastActivityAt` falls back to the newest message for the agent. It also reports what holds an
+agent back, and only when something does: `waitingForUser` (counts of questions, approvals and
+browser takeovers; never the text, because an approval command can hold a secret),
+`usageLimitedUntil` (a spent plan; `null` while the provider has not named the reset),
+`lastTurnFailed` (until a later turn completes), and `heldBy: "channel"` (channel work reserves the
+host, so the queued messages of the agent wait). The tool description is not changed, because a
+changed tool definition replaces every Codex agent session; the developer instructions name the fields. OpenBot does not record which
 files a turn changed. `openbot.interrupt_agent` (`src/backend/agent/agent-interrupt-tool.ts`)
 refuses the caller itself, a channel turn, and a turn that any delivery other than the caller's
 started, so an agent cannot stop work from the user, a routine, or another agent. It cancels the
@@ -149,6 +159,45 @@ another teammate's copy of that request is queued, starting or running (`Mailbox
 When the last copy ends, the waiting answers start in one turn, and the prompt names each teammate
 whose copy ended with no answer. A message from the person does not wait: it starts at once and
 takes the answers that are already in. Each end of a copy schedules a drain for the requester.
+The wait has a limit (`ANSWER_HOLD_LIMIT_MS` in `src/backend/collaboration-limits.ts`, 20 minutes
+from the time of the answer). After it, the answer starts a turn with the other answers that are in,
+and the prompt names the teammates that are still outstanding. Their answers start later turns.
+`HeldReplyTimer` (`src/backend/agent/held-reply-timer.ts`) is the one timer that wakes the requester,
+because a silent teammate sends nothing that would.
+
+### Guards on agent-to-agent traffic
+
+`openbot.send_message` returns the receipt of an identical message (same words, link and kind, no
+file) that the sender already has queued or running at every recipient, with `duplicate: true`. When
+one sender has sent 20 messages to one recipient in 10 minutes (`AGENT_MESSAGE_LIMIT`,
+`AGENT_MESSAGE_WINDOW_MS`), the next call fails with a text that tells the agent to stop and ask the
+user. A fan-out to several recipients counts each pair apart. The count reads the mailbox, so it
+includes answers and host notes, and a restart does not reset it. A retried tool call finds its own
+message first and skips both guards. `openbot.create_agent` refuses when agents have created 20
+agents in 24 hours (`AGENT_CREATION_LIMIT`, `AGENT_CREATION_WINDOW_MS`); an agent that the user
+creates does not count.
+
+### When a delegation ends with no answer
+
+`DelegationFollowUp` (`src/backend/agent/delegation-follow-up.ts`) owns what a requester learns.
+When a request that wants an answer ends with a failed, stopped or restarted turn, a turn that wrote
+only a placeholder, or a start that failed, the requester gets one short OpenBot note. It has the
+shape of an answer from the failing agent: linked to the request, `expectsReply` false, key
+`auto-failure:<delivery id>`, so it joins the answers that a requester holds and starts no loop. The
+note says that OpenBot wrote it. No note is sent when the requester stopped the turn with
+`openbot.interrupt_agent` or cancelled the message, when the agent already answered, or for a
+message that wants no answer. A user's Stop does send a note. A turn that completed while OpenBot was
+down also gets a note, because nothing relayed its result.
+
+A turn that ends while its agent waits for answers to requests of its own has only an interim text.
+The result for the sender is deferred: `resultAwaiting` on the delivery row lists the pending
+requests (JSON in `delivery_json`, so no migration; it is not sent to a client). A request is pending
+while a copy is queued or running, while its recipient owes a deferred result, or while a message from
+the recipient waits for the requester. When the turn that reads the answers ends, its text goes to
+the sender with the key `auto-result:<turn>:<request>` that the immediate relay always used. If that
+turn fails, the sender gets a note. If the requests end with no answer, such as a cancel, the sender
+gets the last text of the agent with a note, because no turn comes. A restart settles every deferred
+result at startup.
 
 This policy lives in `src/backend/agent/developer-instructions.ts` and is supplied on both thread
 start and resume. Codex receives `developerInstructions`; Claude appends them to its system prompt;
@@ -207,6 +256,13 @@ user widens them again, and only the user changes auto-approve, MCP servers and 
 the access and Computer Use limits of the agent that creates it, so a Workspace-only agent cannot
 get around its sandbox through a teammate. There is no creation step for skills or routines in
 the UI.
+
+The first task of an agent that another agent creates is a teammate message from the creator, with
+`expectsReply` true, not a user message. The new agent sees the creator's name in the framing of that
+first message, and its result comes back to the creator like any delegated result. The creator is
+stored as `createdBy` (`agentId`, `at`) in the agent JSON (no migration; a build that does not know
+the field drops it on its next read, and the Team API codecs project through a key allowlist). The
+field also feeds the rolling cap on agents that agents create.
 Codex and Grok receive the dynamic tool definitions; Claude exposes the same operations through
 its SDK MCP bridge. `src/backend/openbot-tools.ts` owns the tool names, descriptions, and Zod
 argument shapes used by both declarations. It reuses the profile, section, and routine schemas.

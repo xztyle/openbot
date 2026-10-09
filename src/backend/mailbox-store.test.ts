@@ -14,6 +14,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { AttachmentFiles } from "./attachment-files";
+import { ANSWER_HOLD_LIMIT_MS } from "./collaboration-limits";
 import { runCauseEffect } from "./effect-boundary";
 import { MailboxStore } from "./mailbox-store";
 import { OpenBotDatabase } from "./openbot-database";
@@ -910,6 +911,107 @@ describe("MailboxStore", () => {
     const next = required(store.nextQueued("chief"));
     const replyIds = [next, ...store.repliesToStartWith(next.delivery.id)].map((context) => context.delivery.messageId);
     expect(replyIds).toEqual([first.messageId, second.messageId]);
+  });
+
+  it("releases a held answer after the hold limit and names who is still outstanding", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const request = await runCauseEffect(
+        store.enqueue({
+          sender: { kind: "agent", agentId: "chief" },
+          recipientAgentIds: ["research", "builder"],
+          text: "One launch risk each.",
+        }),
+      );
+      const answer = await runCauseEffect(
+        store.enqueue({
+          sender: { kind: "agent", agentId: "research" },
+          recipientAgentIds: ["chief"],
+          text: "Risk: stale docs.",
+          replyToMessageId: request.messageId,
+          expectsReply: false,
+        }),
+      );
+      expect(store.nextQueued("chief")).toBeNull();
+      const releaseAt = Date.now() + ANSWER_HOLD_LIMIT_MS;
+      expect(store.heldReplyReleaseTimes().get("chief")).toBe(releaseAt);
+
+      vi.advanceTimersByTime(ANSWER_HOLD_LIMIT_MS - 1);
+      expect(store.nextQueued("chief")).toBeNull();
+      vi.advanceTimersByTime(1);
+      expect(store.nextQueued("chief")?.delivery.messageId).toBe(answer.messageId);
+      // Nothing is held now, so no timer is due, and the slow teammate is still named.
+      expect(store.heldReplyReleaseTimes().size).toBe(0);
+      expect(store.outstandingRecipients(request.messageId).sort()).toEqual(["builder", "research"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("recognizes an identical request that waits, and counts the messages of one pair", async () => {
+    const send = (recipients: string[], text: string, expectsReply?: boolean) =>
+      runCauseEffect(
+        store.enqueue({
+          sender: { kind: "agent", agentId: "chief" },
+          recipientAgentIds: recipients,
+          text,
+          ...(expectsReply === undefined ? {} : { expectsReply }),
+        }),
+      );
+    const first = await send(["research", "builder"], "Draft it.");
+    const match = (recipients: string[], text: string, expectsReply = true) =>
+      store.activeDuplicate({
+        senderAgentId: "chief",
+        recipientAgentIds: recipients,
+        text,
+        replyToMessageId: null,
+        expectsReply,
+      });
+    expect(match(["research"], "Draft it.")?.messageId).toBe(first.messageId);
+    expect(match(["research", "builder"], " Draft it. ")?.messageId).toBe(first.messageId);
+    // Another recipient, other words, or another kind of message is not a repeat.
+    expect(match(["research", "launch"], "Draft it.")).toBeNull();
+    expect(match(["research"], "Draft it again.")).toBeNull();
+    expect(match(["research"], "Draft it.", false)).toBeNull();
+    // A message that ended is not waiting any more.
+    const delivery = required(first.deliveries[0]);
+    await runCauseEffect(store.markStarting(delivery.id));
+    await runCauseEffect(store.markTerminal(delivery.id, "completed"));
+    expect(match(["research"], "Draft it.")).toBeNull();
+    expect(match(["builder"], "Draft it.")?.messageId).toBe(first.messageId);
+
+    await send(["research"], "Second.");
+    expect(store.agentMessagesBetween("chief", "research", new Date(0))).toBe(2);
+    expect(store.agentMessagesBetween("chief", "builder", new Date(0))).toBe(1);
+    expect(store.agentMessagesBetween("research", "chief", new Date(0))).toBe(0);
+    expect(store.agentMessagesBetween("chief", "research", new Date(Date.now() + 60_000))).toBe(0);
+  });
+
+  it("keeps a deferred result across a restart and clears it", async () => {
+    const request = await runCauseEffect(
+      store.enqueue({ sender: { kind: "agent", agentId: "chief" }, recipientAgentIds: ["worker"], text: "Ship it." }),
+    );
+    const delivery = required(request.deliveries[0]);
+    await runCauseEffect(store.markStarting(delivery.id));
+    await runCauseEffect(store.markRunning(delivery.id, "turn-1"));
+    await runCauseEffect(store.markTerminal(delivery.id, "completed"));
+    await runCauseEffect(store.setResultAwaiting(delivery.id, ["request-1"]));
+
+    const restored = new MailboxStore(join(root, "user-data"), join(root, "Shared"));
+    await runCauseEffect(restored.initialize());
+    expect(restored.deferredResults("worker")).toEqual([
+      {
+        deliveryId: delivery.id,
+        messageId: request.messageId,
+        turnId: "turn-1",
+        senderAgentId: "chief",
+        awaiting: ["request-1"],
+      },
+    ]);
+    // The wave is not part of what a client reads.
+    expect(restored.getDelivery(delivery.id)?.delivery).not.toHaveProperty("resultAwaiting");
+    await runCauseEffect(restored.setResultAwaiting(delivery.id, []));
+    expect(restored.deferredResults("worker")).toEqual([]);
   });
 
   it("keeps a message that asks for no answer marked as one after a restart", async () => {

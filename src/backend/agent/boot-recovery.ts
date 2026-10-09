@@ -8,6 +8,7 @@ import type { MailboxStore } from "../mailbox-store";
 import { providerSync } from "../provider-client-effects";
 import { importProviderHistory } from "../provider-history-import";
 import type { ConversationRuntime } from "./conversation-runtime";
+import type { DelegationFollowUp } from "./delegation-follow-up";
 import { conversationContentSignature } from "./delivery-content";
 import { markIncompleteImageGeneration } from "./image-generation";
 import type { MailboxSync } from "./mailbox-sync";
@@ -33,6 +34,7 @@ export interface BootRecoveryOptions {
   conversation: ConversationRuntime;
   mailboxSync: MailboxSync;
   threads: ThreadLifecycle;
+  followUp: DelegationFollowUp;
   hooks: BootRecoveryHooks;
 }
 
@@ -62,6 +64,7 @@ export class BootRecovery {
   readonly #conversation: ConversationRuntime;
   readonly #mailboxSync: MailboxSync;
   readonly #threads: ThreadLifecycle;
+  readonly #followUp: DelegationFollowUp;
   readonly #hooks: BootRecoveryHooks;
   /**
    * Readiness also follows a provider restart, and startup readiness can come after the user's
@@ -80,6 +83,7 @@ export class BootRecovery {
     this.#conversation = options.conversation;
     this.#mailboxSync = options.mailboxSync;
     this.#threads = options.threads;
+    this.#followUp = options.followUp;
     this.#hooks = options.hooks;
   }
 
@@ -238,7 +242,21 @@ export class BootRecovery {
         }
         this.#mailboxSync.emitQueue(delivery.recipientAgentId);
       });
+      // The requester of this delivery hears how it ended: a restart sent no result on. Channel and
+      // external-chat work has no agent requester.
+      if (delivery.sender.kind === "agent" && !this.#hooks.deliveryThreadId?.(delivery.id)) {
+        yield* this.#followUp.noteEnded(
+          delivery,
+          terminal === "completed"
+            ? { kind: "restarted-completed" }
+            : terminal === "failed"
+              ? { kind: "failed", reason }
+              : { kind: "restarted" },
+        );
+      }
     }
+    // A result that waited for answers can have lost its wave to the restart.
+    yield* this.#followUp.settleAll();
   });
 
   recoverPersistedTurns(): void {

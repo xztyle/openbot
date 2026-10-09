@@ -46,6 +46,10 @@ export const messages = defineMessages("error.agent", {
   "error.agent.queuedMessageCreateFailed": "Unable to create queued message.",
   "error.agent.messageUnavailable": "The message is no longer available.",
   "error.agent.hostLimit": "A host can have up to {limit} agents.",
+  "error.agent.messageRateLimit":
+    "You sent {sent} messages to {name} in the last {minutes} minutes. The limit is {limit}. Stop sending messages to this agent now, and ask the user how to continue.",
+  "error.agent.creationLimit":
+    "Agents already created {made} agents in the last {hours} hours. The limit is {limit}. Do not create another agent. Ask the user how to continue.",
   "error.agent.changedWhileDuplicating": "The agent changed while it was being duplicated. Try again.",
   "error.agent.duplicatedAgentGone": "The duplicated agent no longer exists.",
   "error.agent.stateCorrupt": "Agent state is corrupt or from a newer OpenBot version; refusing to overwrite it.",

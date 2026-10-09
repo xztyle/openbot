@@ -15,6 +15,7 @@ import type { MailboxStore } from "../mailbox-store";
 import { decodeRecordResponse } from "../protocol";
 import type { ConversationRuntime } from "./conversation-runtime";
 import type { CustomEndpoints } from "./custom-endpoints";
+import type { DelegationFollowUp } from "./delegation-follow-up";
 import { agentNamesById, deliveryPromptInput } from "./delivery-content";
 import { type DrainScheduler, REMOVED_ENDPOINT_MESSAGE } from "./drain-scheduler";
 import type { MailboxSync } from "./mailbox-sync";
@@ -35,6 +36,7 @@ export interface QueueControlsOptions {
   endpoints: CustomEndpoints;
   drain: DrainScheduler;
   routines: RoutineScheduler;
+  followUp: DelegationFollowUp;
   hooks: QueueControlsHooks;
 }
 
@@ -53,6 +55,7 @@ export class QueueControls {
   readonly #endpoints: CustomEndpoints;
   readonly #drain: DrainScheduler;
   readonly #routines: RoutineScheduler;
+  readonly #followUp: DelegationFollowUp;
   readonly #hooks: QueueControlsHooks;
 
   constructor(options: QueueControlsOptions) {
@@ -64,6 +67,7 @@ export class QueueControls {
     this.#endpoints = options.endpoints;
     this.#drain = options.drain;
     this.#routines = options.routines;
+    this.#followUp = options.followUp;
     this.#hooks = options.hooks;
   }
 
@@ -79,7 +83,11 @@ export class QueueControls {
     this.#mailboxSync.emitQueue(agentId);
     this.#drain.scheduleDrain(agentId);
     // The requester may hold the other answers until this request ends.
-    if (sender?.kind === "agent") this.#drain.scheduleDrain(sender.agentId);
+    if (sender?.kind === "agent") {
+      this.#drain.scheduleDrain(sender.agentId);
+      // The requester may owe a result that waited for this request.
+      yield* this.#followUp.settle(sender.agentId);
+    }
   }, Effect.uninterruptible);
 
   readonly edit = Effect.fn("QueueControls.edit")(function* (

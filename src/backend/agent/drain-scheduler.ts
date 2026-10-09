@@ -10,6 +10,7 @@ import type { MessagingThreads } from "../messaging/messaging-threads";
 import { decodeTurnResponse } from "../protocol";
 import type { ContextCompaction } from "./context-compaction";
 import type { ConversationRuntime } from "./conversation-runtime";
+import type { DelegationFollowUp } from "./delegation-follow-up";
 import {
   agentNamesById,
   CURRENT_MESSAGE_SEPARATOR,
@@ -17,6 +18,7 @@ import {
   deliveryPromptInput,
 } from "./delivery-content";
 import type { DuplicationGate } from "./duplication-gate";
+import { HeldReplyTimer } from "./held-reply-timer";
 import type { MailboxSync } from "./mailbox-sync";
 import type { MemoryHold } from "./memory-hold";
 import type { ProfileSave } from "./profile-save";
@@ -64,6 +66,7 @@ export interface DrainSchedulerOptions {
   threads: ThreadLifecycle;
   memory: MemoryHold;
   usageLimits: UsageLimitGate;
+  followUp: DelegationFollowUp;
   hooks: DrainHooks;
   channels?: ChannelService;
   messaging?: MessagingThreads;
@@ -92,6 +95,7 @@ export class DrainScheduler {
   readonly #threads: ThreadLifecycle;
   readonly #memory: MemoryHold;
   readonly #usageLimits: UsageLimitGate;
+  readonly #followUp: DelegationFollowUp;
   readonly #slots: TurnSlots;
   /** Agents that a full set of turn slots held back. A drain that may free a slot tries them again. */
   readonly #slotWaiters = new Set<string>();
@@ -115,6 +119,8 @@ export class DrainScheduler {
    */
   readonly #startingDeliveries = new Map<AgentProvider, number>();
   readonly #scheduledDrains = new Set<string>();
+  /** Wakes a requester whose held answers reach `ANSWER_HOLD_LIMIT_MS`. */
+  readonly #holdTimer: HeldReplyTimer;
   readonly #drainTasks = new Map<string, Deferred.Deferred<void, DeliveryStartFailed>>();
 
   constructor(options: DrainSchedulerOptions) {
@@ -130,9 +136,17 @@ export class DrainScheduler {
     this.#threads = options.threads;
     this.#memory = options.memory;
     this.#usageLimits = options.usageLimits;
+    this.#followUp = options.followUp;
     this.#hooks = options.hooks;
     this.#channels = options.channels;
     this.#messaging = options.messaging;
+    this.#holdTimer = new HeldReplyTimer({
+      releases: () => this.#mailbox.heldReplyReleaseTimes(),
+      due: (agentIds) => {
+        if (this.#hooks.isStopping()) return;
+        for (const agentId of agentIds) this.#scheduleDrain(agentId);
+      },
+    });
     this.#slots = new TurnSlots({
       limit: () => this.#memory.turnLimit(),
       agentIds: () => this.#store.list().map((agent) => agent.id),
@@ -164,6 +178,7 @@ export class DrainScheduler {
   scheduleDrain(agentId: string): void {
     this.#scheduleDrain(agentId);
     this.retrySlotWaiters();
+    this.#holdTimer.arm();
   }
 
   /**
@@ -226,6 +241,7 @@ export class DrainScheduler {
   }
 
   dispose(): void {
+    this.#holdTimer.dispose();
     this.#drainingAgents.clear();
     this.#scheduledDrains.clear();
     this.#slotWaiters.clear();
@@ -409,6 +425,18 @@ export class DrainScheduler {
           item.sender.kind === "agent" && item.replyToMessageId ? [item.replyToMessageId] : [],
         ),
       );
+      // Teammates that got the same request and have not answered. A released hold, or the person's
+      // message, starts this turn without them.
+      const answeredBy = new Set(
+        batch.flatMap(({ delivery: item }) => (item.sender.kind === "agent" ? [item.sender.agentId] : [])),
+      );
+      const outstanding = [
+        ...new Set(
+          [...requestIds]
+            .flatMap((requestId) => this.#mailbox.outstandingRecipients(requestId))
+            .filter((recipientId) => !answeredBy.has(recipientId) && recipientId !== agent.id),
+        ),
+      ];
       const input = combinedPromptInput(
         batch.map((item) =>
           deliveryPromptInput(item, {
@@ -417,10 +445,15 @@ export class DrainScheduler {
             routineRun:
               item.delivery.sender.kind === "routine" ? this.#routines.runForDelivery(item.delivery.id) : null,
             executionText: execution?.text,
+            fromCreator:
+              item.delivery.sender.kind === "agent" &&
+              this.#store.creatorOf(agent.id) === item.delivery.sender.agentId &&
+              this.#mailbox.isFirstDeliveryTo(agent.id, item.delivery.id),
           }),
         ),
         [...requestIds].flatMap((requestId) => this.#mailbox.unansweredRecipients(requestId)),
         agentNames,
+        outstanding,
       );
       const inputForThread = (providerThreadId: string): typeof input => {
         const handoff = this.#threads.consumePendingHandoff(providerThreadId);
@@ -468,7 +501,10 @@ export class DrainScheduler {
                 // A teammate message that wants no answer tells the model to write nothing, so an empty
                 // turn is the expected result and not a provider that swallowed its error.
                 answerOptional:
-                  delivery.sender.kind === "agent" && delivery.expectsReply === false && !delivery.replyToMessageId,
+                  delivery.expectsReply === false &&
+                  ((delivery.sender.kind === "agent" && !delivery.replyToMessageId) ||
+                    // The report of a routine flow to the agent that owns it.
+                    delivery.sender.kind === "routine"),
                 input: inputForThread(providerThreadId),
                 cwd: agent.workspacePath,
                 runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.sharedRoot),
@@ -566,6 +602,9 @@ export class DrainScheduler {
             }
           }
           yield* this.#mailbox.markTerminal(delivery.id, "failed", reason).pipe(toDeliveryStartFailed);
+          // The requester of this message hears that no result comes, so it does not wait for one.
+          if (!channelDelivery && !messagingDelivery)
+            yield* this.#followUp.noteEnded(delivery, { kind: "failed", reason });
           // The provider did not read the answers that were to start with it, so they wait for the next turn.
           for (const { delivery: companion } of batch) {
             if (companion.id !== delivery.id)

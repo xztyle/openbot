@@ -202,6 +202,18 @@ export class AttentionRegistry {
     );
   }
 
+  /**
+   * How many questions, approvals and browser takeovers wait for the user on this agent. Counts
+   * only: an approval holds the command text, and that text can hold a secret.
+   */
+  attentionCountsFor(agentId: string): { questions: number; approvals: number; browserTakeovers: number } {
+    return {
+      questions: [...this.#prompts.values()].filter((pending) => pending.agentId === agentId).length,
+      approvals: [...this.#approvals.values()].filter((pending) => pending.approval.agentId === agentId).length,
+      browserTakeovers: [...this.#takeovers.values()].filter((pending) => pending.request.agentId === agentId).length,
+    };
+  }
+
   /** The attention section of the runtime snapshot, budgeted prompts first and takeovers last. */
   runtimeAttention(): RuntimeAttention {
     const attentionComplete =

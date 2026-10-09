@@ -763,6 +763,8 @@ export class RoutineScheduler implements RoutineDueSource {
       agentId: string;
       text: string;
       idempotencyKey: string;
+      /** A report to the flow's owner. It asks for no answer. */
+      report?: true;
     },
   ) {
     const agent = yield* routineStep(() => {
@@ -785,6 +787,7 @@ export class RoutineScheduler implements RoutineDueSource {
         text: input.text,
         draftIds: [],
         replyToMessageId: null,
+        ...(input.report ? { expectsReply: false } : {}),
         idempotencyKey: input.idempotencyKey,
       })
       .pipe(Effect.mapError((failure) => new RoutineOperationFailed({ cause: failure.cause })));

@@ -1068,7 +1068,7 @@ describe.sequential("AgentService: routines", () => {
     expect(getString(inputRecords(noticeStart?.params)[0], "text")).toContain("The sender does not want an answer.");
   });
 
-  it("drops a placeholder answer to a teammate request instead of showing and relaying it", async () => {
+  it("drops a placeholder answer to a teammate request and tells the requester that no result came", async () => {
     process.env.OPENBOT_FAKE_AUTO_COMPLETE = "∅";
     const { store, mailbox } = stores(root);
     service = createTestService({ store, mailbox });
@@ -1094,7 +1094,12 @@ describe.sequential("AgentService: routines", () => {
 
     const snapshot = await runCauseEffect(service.readConversation("sales-outbound"));
     expect(snapshot.messages.filter((message) => message.author === "assistant")).toEqual([]);
-    expect(service.listQueue("chief").deliveries).toEqual([]);
+    // The placeholder is not relayed. The requester gets one host note that says no result came.
+    const toChief = service.listQueue("chief").deliveries;
+    expect(toChief).toHaveLength(1);
+    expect(toChief[0]).toMatchObject({ sender: { kind: "agent", agentId: "sales-outbound" }, expectsReply: false });
+    expect(toChief[0]?.text).toContain("wrote no result");
+    expect(toChief[0]?.text).not.toContain("∅");
     expect(service.listAgents().find((agent) => agent.id === "sales-outbound")?.preview).not.toBe("∅");
   });
 

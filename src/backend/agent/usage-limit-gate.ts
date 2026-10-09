@@ -81,6 +81,13 @@ export class UsageLimitGate {
     });
   }
 
+  /** The limit that holds this agent: `resetsAt` in epoch seconds, null while the provider has not said. Null when none holds it. */
+  limitFor(agentId: string): { resetsAt: number | null } | null {
+    const agent = this.#agent(agentId);
+    const limit = agent ? this.#limits.get(limitKey(providerForAgent(agent), agent.model)) : undefined;
+    return limit ? { resetsAt: limit.resetsAt } : null;
+  }
+
   /**
    * The plan refused a turn of this agent. `resetsAt` is in epoch seconds. `model` is the one the
    * turn ran on; the agent's current model when null.

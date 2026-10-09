@@ -60,7 +60,19 @@ import { isPathInside } from "./path-containment";
 import { isRecord } from "./protocol";
 import { StoredStateFailure, storedIO, storedSync } from "./stored-state-effects";
 
-type StoredAgent = AgentSummary & { access: AgentAccess; computerUse: boolean };
+/** The agent that created this one through the `create_agent` tool, and when. */
+interface AgentCreator {
+  agentId: string;
+  at: string;
+}
+
+type StoredAgent = AgentSummary & {
+  access: AgentAccess;
+  computerUse: boolean;
+  // Written only for an agent that another agent created. An older build drops it on its next read, and
+  // no wire protocol carries it, so nothing outside this host depends on it.
+  createdBy?: AgentCreator;
+};
 type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access" | "computerUse"> & {
   avatarUrl?: string | null;
   provider?: AgentProviderId;
@@ -275,6 +287,31 @@ export class AgentStore {
 
   list(): AgentSummary[] {
     return this.#state.agents.map((agent) => ({ ...agent }));
+  }
+
+  /** The agent that created this one through a tool, or null for an agent that a person created. */
+  creatorOf(agentId: string): string | null {
+    return this.#state.agents.find((agent) => agent.id === agentId)?.createdBy?.agentId ?? null;
+  }
+
+  /** Records which agent created this one. Written once, right after the agent exists. */
+  recordCreator(agentId: string, creatorAgentId: string): void {
+    const agent = this.#requireAgent(agentId);
+    const previous = agent.createdBy;
+    agent.createdBy = { agentId: creatorAgentId, at: new Date().toISOString() };
+    try {
+      this.#persist("agent.creator-recorded");
+    } catch (error) {
+      if (previous) agent.createdBy = previous;
+      else delete agent.createdBy;
+      throw error;
+    }
+  }
+
+  /** How many agents other agents created since `since`. A deleted agent no longer counts. */
+  createdByAgentsSince(since: Date): number {
+    return this.#state.agents.filter((agent) => agent.createdBy && Date.parse(agent.createdBy.at) >= since.getTime())
+      .length;
   }
 
   createAgent(input: Omit<CreateAgentInput, "initialMessage">, profileOperationId?: string) {
@@ -1672,6 +1709,11 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     value.busyMessageMode === undefined || isBusyMessageMode(value.busyMessageMode)
       ? value.busyMessageMode
       : reset("busyMessageMode", undefined);
+  // Dropped silently when unreadable: it only labels where an agent came from.
+  const createdBy: AgentCreator | undefined =
+    isRecord(value.createdBy) && isString(value.createdBy.agentId) && isString(value.createdBy.at)
+      ? { agentId: value.createdBy.agentId, at: value.createdBy.at }
+      : undefined;
   let marketplaceSource: StoredAgent["marketplaceSource"];
   if (value.marketplaceSource !== undefined) {
     if (isMarketplaceSource(value.marketplaceSource)) {
@@ -1705,6 +1747,7 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(computerUse === undefined ? {} : { computerUse }),
     ...(allowAutomation === undefined ? {} : { allowAutomation }),
     ...(busyMessageMode === undefined ? {} : { busyMessageMode }),
+    ...(createdBy === undefined ? {} : { createdBy }),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),
   };
   return { agent, repaired };

@@ -6,6 +6,7 @@ import type {
   EventCheckInput,
   EventCheckTool,
 } from "@openbot/contracts/event-checks";
+import { defaultEventCheckSchedule } from "@openbot/contracts/event-checks";
 import type { AppTextKey } from "@openbot/i18n";
 import {
   Button,
@@ -34,7 +35,7 @@ interface Props {
 interface Editor {
   value: EventCheckInput;
   timing: "interval" | "calendar";
-  minutes: number;
+  seconds: number;
   calendar: RoutineScheduleDraft;
 }
 interface State {
@@ -48,12 +49,7 @@ interface State {
   error: string;
 }
 function editor(agentId: string, check?: EventCheck): Editor {
-  const schedule = check?.schedule ?? {
-    kind: "interval" as const,
-    amount: 1,
-    unit: "minutes" as const,
-    anchorAt: new Date().toISOString(),
-  };
+  const schedule = check?.schedule ?? defaultEventCheckSchedule();
   return {
     value: check
       ? structuredClone(snapshot(check))
@@ -64,6 +60,7 @@ function editor(agentId: string, check?: EventCheck): Editor {
           active: true,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           schedule,
+          selfEvents: { mode: "exclude", connectionId: "", actorPointer: "", accountActorIds: [] },
           source: {
             kind: "mcp",
             connectionId: "",
@@ -75,11 +72,18 @@ function editor(agentId: string, check?: EventCheck): Editor {
           selection: { itemsPointer: "", idPointer: "/id", revisionPointer: "" },
         },
     timing: schedule.kind === "interval" ? "interval" : "calendar",
-    minutes:
+    seconds:
       schedule.kind === "interval"
-        ? schedule.amount * (schedule.unit === "minutes" ? 1 : schedule.unit === "hours" ? 60 : 1440)
-        : 1,
-    calendar: routineScheduleToDraft(schedule),
+        ? schedule.amount *
+          (schedule.unit === "seconds"
+            ? 1
+            : schedule.unit === "minutes"
+              ? 60
+              : schedule.unit === "hours"
+                ? 3600
+                : 86400)
+        : 30,
+    calendar: routineScheduleToDraft(schedule.kind === "interval" ? { kind: "daily", time: "09:00" } : schedule),
   };
 }
 const STATUS_KEYS = {
@@ -222,8 +226,8 @@ export function EventChecksSettings(props: Props) {
       current.timing === "interval"
         ? {
             kind: "interval" as const,
-            amount: current.minutes,
-            unit: "minutes" as const,
+            amount: current.seconds,
+            unit: "seconds" as const,
             anchorAt:
               current.value.schedule.kind === "interval" ? current.value.schedule.anchorAt : new Date().toISOString(),
           }
@@ -251,7 +255,7 @@ export function EventChecksSettings(props: Props) {
     const saved = state.checks.find((check) => check.id === current?.value.id);
     if (!current || !saved || JSON.stringify(snapshot(current.value)) !== JSON.stringify(snapshot(saved))) return true;
     if (current.timing === "interval")
-      return saved.schedule.kind !== "interval" || current.minutes !== editor(props.agentId, saved).minutes;
+      return saved.schedule.kind !== "interval" || current.seconds !== editor(props.agentId, saved).seconds;
     return (
       saved.schedule.kind === "interval" ||
       JSON.stringify(snapshot(current.calendar)) !== JSON.stringify(routineScheduleToDraft(saved.schedule))
@@ -344,6 +348,12 @@ export function EventChecksSettings(props: Props) {
                   if (s.current) {
                     s.current.value.source.connectionId = id;
                     s.current.value.source.toolName = "";
+                    s.current.value.selfEvents = {
+                      mode: "exclude",
+                      connectionId: id,
+                      actorPointer: "",
+                      accountActorIds: [],
+                    };
                   }
                 });
                 void loadTools(id);
@@ -414,15 +424,15 @@ export function EventChecksSettings(props: Props) {
               }
             >
               <label>
-                {t("agentSettings.eventCheck.minutes")}
+                {t("agentSettings.eventCheck.seconds")}
                 <Input
                   type="number"
-                  min={1}
-                  max={525600}
-                  value={String(current().minutes)}
+                  min={30}
+                  max={8640000000}
+                  value={String(current().seconds)}
                   onInput={(e) =>
                     setState((s) => {
-                      if (s.current) s.current.minutes = Number(e.currentTarget.value);
+                      if (s.current) s.current.seconds = Number(e.currentTarget.value);
                     })
                   }
                 />
@@ -439,6 +449,44 @@ export function EventChecksSettings(props: Props) {
                 }
               />
             </label>
+            <Switch
+              checked={current().value.selfEvents.mode === "exclude"}
+              aria-label={t("agentSettings.eventCheck.skipSelf")}
+              onChange={(exclude) =>
+                setState((s) => {
+                  if (s.current) s.current.value.selfEvents.mode = exclude ? "exclude" : "include";
+                })
+              }
+            />
+            <p>{t("agentSettings.eventCheck.selfHelp")}</p>
+            <Show when={current().value.selfEvents.mode === "exclude"}>
+              <label>
+                {t("agentSettings.eventCheck.actor")}
+                <Input
+                  value={current().value.selfEvents.actorPointer}
+                  onInput={(e) =>
+                    setState((s) => {
+                      if (s.current) s.current.value.selfEvents.actorPointer = e.currentTarget.value;
+                    })
+                  }
+                />
+              </label>
+              <label>
+                {t("agentSettings.eventCheck.actorIds")}
+                <Textarea
+                  value={current().value.selfEvents.accountActorIds.join("\n")}
+                  onInput={(e) =>
+                    setState((s) => {
+                      if (s.current)
+                        s.current.value.selfEvents.accountActorIds = e.currentTarget.value
+                          .split("\n")
+                          .map((id) => id.trim())
+                          .filter(Boolean);
+                    })
+                  }
+                />
+              </label>
+            </Show>
             <details>
               <summary>{t("agentSettings.eventCheck.readOptions")}</summary>
               <label>
@@ -561,6 +609,9 @@ export function EventChecksSettings(props: Props) {
                           ms: run.durationMs,
                         })}
                       </span>
+                      <Show when={run.skippedSelfCount > 0}>
+                        <span>{t("agentSettings.eventCheck.skipped", { events: run.skippedSelfCount })}</span>
+                      </Show>
                       <Show when={run.error}>
                         <p>{run.error}</p>
                       </Show>

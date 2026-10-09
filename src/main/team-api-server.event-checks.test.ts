@@ -72,14 +72,17 @@ it("requires administrator login and negotiated capability and round-trips setti
         cursorArgument: "",
         nextCursorPointer: "",
       },
+      selfEvents: { mode: "include", connectionId: "", actorPointer: "", accountActorIds: [] },
       selection: { itemsPointer: "/items", idPointer: "/id", revisionPointer: "" },
     };
     expect((await send("save", { ...definition, source: { ...definition.source, argumentsJson: "[]" } })).status).toBe(
       400,
     );
-    const saved = await send("save", definition);
+    const { schedule: _schedule, ...defaultDefinition } = definition;
+    const saved = await send("save", defaultDefinition);
     expect(saved.status).toBe(200);
     const check = await saved.json();
+    expect(check.schedule).toMatchObject({ kind: "interval", amount: 30, unit: "seconds" });
     const target = { agentId: "chief", id: check.id };
     expect(await (await send("check-now", target)).json()).toMatchObject({ status: "baseline", eventCount: 0 });
     expect(await (await send("history", target)).json()).toMatchObject([{ status: "baseline" }]);

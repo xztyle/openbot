@@ -38,6 +38,7 @@ export function createMockEventChecks(): EventCheckApi {
         status: previous.length ? "unchanged" : "baseline",
         itemCount: 0,
         eventCount: 0,
+        skippedSelfCount: 0,
         durationMs: 0,
         error: null,
       };

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { EventCheck, EventCheckSelection } from "@openbot/contracts/event-checks";
+import type { EventCheck, EventCheckSelection, EventCheckSelfEvents } from "@openbot/contracts/event-checks";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import type { EventCheckData } from "./event-check-reader";
@@ -13,6 +13,7 @@ export interface CheckObservation {
   baseline: CheckBaseline;
   changed: EventCheckData[];
   itemCount: number;
+  skippedSelfCount: number;
 }
 
 /** Reads data, never evaluates it. Missing paths and malformed data are failures, not empty results. */
@@ -58,12 +59,14 @@ export function observeCheck(
   items: EventCheckData[],
   selection: EventCheckSelection,
   previous: CheckBaseline | null,
+  selfEvents: EventCheckSelfEvents = { mode: "include", connectionId: "", actorPointer: "", accountActorIds: [] },
 ): CheckObservation {
   if (items.length > CHECK_MAX_ITEMS || JSON.stringify(items).length > CHECK_MAX_BYTES)
     throw new Error("Result too large.");
   const fingerprints: Record<string, string> = { ...previous?.fingerprints };
   const seen = new Set<string>();
   const changed: EventCheckData[] = [];
+  let skippedSelfCount = 0;
   for (const item of items) {
     const id = checkPointer(item, selection.idPointer);
     if ((typeof id !== "string" && typeof id !== "number") || String(id).length > 512)
@@ -71,13 +74,25 @@ export function observeCheck(
     const key = createHash("sha256").update(String(id)).digest("hex");
     if (seen.has(key)) throw new Error("Duplicate result ID.");
     seen.add(key);
+    const selfEvent = isSelfEvent(item, selfEvents);
     const hash = fingerprint(item, selection);
     delete fingerprints[key];
     fingerprints[key] = hash;
-    if (previous && previous.fingerprints[key] !== fingerprints[key]) changed.push(item);
+    if (previous && previous.fingerprints[key] !== fingerprints[key]) {
+      if (selfEvent) skippedSelfCount++;
+      else changed.push(item);
+    }
   }
   const bounded = Object.fromEntries(Object.entries(fingerprints).slice(-10000));
-  return { baseline: { fingerprints: bounded }, changed, itemCount: items.length };
+  return { baseline: { fingerprints: bounded }, changed, itemCount: items.length, skippedSelfCount };
+}
+function isSelfEvent(item: EventCheckData, filter: EventCheckSelfEvents): boolean {
+  if (filter.mode === "include") return false;
+  if (!filter.actorPointer || !filter.accountActorIds.length) throw new Error("Missing self-event filter.");
+  const actor = checkPointer(item, filter.actorPointer);
+  if ((typeof actor !== "string" && typeof actor !== "number") || !String(actor).trim())
+    throw new Error("Missing change author.");
+  return filter.accountActorIds.includes(String(actor));
 }
 export function eventCheckPrompt(check: EventCheck, items: EventCheckData[]): string {
   return [

@@ -19,6 +19,13 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.interval": "Repeat interval",
   "agentSettings.eventCheck.calendar": "Calendar timing",
   "agentSettings.eventCheck.minutes": "Every (minutes)",
+  "agentSettings.eventCheck.seconds": "Every (seconds)",
+  "agentSettings.eventCheck.skipSelf": "Skip my account’s changes",
+  "agentSettings.eventCheck.selfHelp":
+    "On by default. Use the person who made the change, not the item’s creator or assignee. Missing author data makes the check fail quietly. Turn this off only when you want self-events, such as a test.",
+  "agentSettings.eventCheck.actor": "Change author ID path",
+  "agentSettings.eventCheck.actorIds": "Connected account user IDs (one per line)",
+  "agentSettings.eventCheck.skipped": "Self-events skipped: {events}",
   "agentSettings.eventCheck.timezone": "Time zone",
   "agentSettings.eventCheck.readOptions": "Read options",
   "agentSettings.eventCheck.arguments": "Tool options (JSON)",

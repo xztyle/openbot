@@ -7,7 +7,7 @@ import type {
 } from "@openbot/contracts/event-checks";
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { sourceText } from "@openbot/i18n/source";
-import { nextValidRoutineOccurrence } from "@openbot/team-client/routine-schedule";
+import { nextEventCheckOccurrence } from "@openbot/team-client/event-check-schedule";
 import { Effect, type Scope } from "effect";
 import type {
   EventCheckArguments,
@@ -45,11 +45,11 @@ function scheduleValid(input: EventCheckInput): void {
   new Intl.DateTimeFormat("en", { timeZone: input.timezone }).format();
   let previous = new Date();
   for (let index = 0; index < 200; index++) {
-    const next = nextValidRoutineOccurrence(input.schedule, input.timezone, previous);
+    const next = nextEventCheckOccurrence(input.schedule, input.timezone, previous);
     if (
       !Number.isFinite(next.getTime()) ||
       next <= previous ||
-      (index > 0 && next.getTime() - previous.getTime() < 60_000)
+      (index > 0 && next.getTime() - previous.getTime() < 30_000)
     )
       throw new Error(sourceText("error.backend.eventCheckSchedule"));
     previous = next;
@@ -81,6 +81,14 @@ export class EventCheckScheduler implements RoutineDueSource {
     yield* mcpSync(() => {
       this.#agent(input.agentId);
       scheduleValid(input);
+      if (
+        input.active &&
+        input.selfEvents.mode === "exclude" &&
+        (input.selfEvents.connectionId !== input.source.connectionId ||
+          !input.selfEvents.actorPointer ||
+          !input.selfEvents.accountActorIds.length)
+      )
+        throw new Error(sourceText("error.backend.eventCheckSelfEvents"));
     });
     if (!input.active && input.id)
       return yield* mcpSync(() => {
@@ -146,7 +154,9 @@ export class EventCheckScheduler implements RoutineDueSource {
           yield* this.#flush(check, session);
           const state = yield* mcpSync(() => this.options.store.state(check.id));
           const items = yield* this.#collect(check, session, state.lastSuccessAt);
-          const observation = yield* mcpSync(() => observeCheck(items, check.selection, state.baseline));
+          const observation = yield* mcpSync(() =>
+            observeCheck(items, check.selection, state.baseline, check.selfEvents),
+          );
           const current = this.#valid(check, session);
           const status = !current
             ? "cancelled"
@@ -163,6 +173,7 @@ export class EventCheckScheduler implements RoutineDueSource {
             observation.itemCount,
             current ? observation.changed.length : 0,
             null,
+            observation.skippedSelfCount,
           );
           yield* mcpSync(() => this.options.store.finish(check, execution, current ? observation : undefined));
           committed = execution;
@@ -206,6 +217,7 @@ export class EventCheckScheduler implements RoutineDueSource {
     itemCount: number,
     eventCount: number,
     error: string | null,
+    skippedSelfCount = 0,
   ): EventCheckExecution {
     const finishedAt = new Date().toISOString();
     return {
@@ -216,6 +228,7 @@ export class EventCheckScheduler implements RoutineDueSource {
       status,
       itemCount,
       eventCount,
+      skippedSelfCount,
       error,
       durationMs: Math.max(0, Date.parse(finishedAt) - Date.parse(startedAt)),
     };

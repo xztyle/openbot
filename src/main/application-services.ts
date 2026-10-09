@@ -83,6 +83,7 @@ import { HostAnalytics } from "./analytics";
 import { analyticsInventoryDayStore, collectAnalyticsInventory } from "./analytics-inventory";
 import { catalogPluginSlug, isReportedMcpServerName, loadCatalogPluginServers } from "./analytics-plugin-catalog";
 import { readAnalyticsPreference } from "./analytics-preference-store";
+import { createApplicationManagedSkills } from "./application-managed-skills";
 import { ApprovalAutomation, readApprovalAutomation } from "./approval-automation-store";
 import { AutomationServer } from "./automation-server";
 import { BillingDesktopService } from "./billing-service";
@@ -148,7 +149,6 @@ import {
   sendComputerUseHighlightPlacement,
   showMainWindow,
 } from "./main-window";
-import { ManagedSkillService } from "./managed-skill-service";
 import { startMcpOAuthRedirectServer } from "./mcp-oauth-redirect-server";
 import { McpOAuthStore } from "./mcp-oauth-store";
 import { MessagingCredentialStore } from "./messaging-credential-store";
@@ -686,30 +686,12 @@ export async function createApplicationServices({
   });
   const store = new AgentStore(app.getPath("userData"), homedir());
   await runCauseEffect(store.initialize());
-  const managedSkills = new ManagedSkillService(
+  const managedSkills = createApplicationManagedSkills(
     app.isPackaged
-      ? join(process.resourcesPath, "managed-skills", "openbot-site-hosting", "SKILL.md")
-      : resolve(__dirname, "../../resources/managed-skills/openbot-site-hosting/SKILL.md"),
-  );
-  const skillCreator = new ManagedSkillService(
-    app.isPackaged
-      ? join(process.resourcesPath, "managed-skills", "openbot-skill-creator", "SKILL.md")
-      : resolve(__dirname, "../../resources/managed-skills/openbot-skill-creator/SKILL.md"),
-    undefined,
-    undefined,
-    "openbot-skill-creator",
-  );
-  const dataSkill = new ManagedSkillService(
-    app.isPackaged
-      ? join(process.resourcesPath, "managed-skills", "openbot-data", "SKILL.md")
-      : resolve(__dirname, "../../resources/managed-skills/openbot-data/SKILL.md"),
-    undefined,
-    undefined,
-    "openbot-data",
+      ? join(process.resourcesPath, "managed-skills")
+      : resolve(__dirname, "../../resources/managed-skills"),
   );
   await Effect.runPromise(managedSkills.syncAll(store.list()));
-  await Effect.runPromise(skillCreator.syncAll(store.list()));
-  await Effect.runPromise(dataSkill.syncAll(store.list()));
   const hostedSites = new HostedSiteDesktopService(centralAuth, () => {
     // Read at request time: the team store is created later, and the server can register after launch.
     const hostId = teamStore.getIdentity()?.serverId;
@@ -1141,12 +1123,7 @@ export async function createApplicationServices({
     requestTimeoutMs: 30_000,
     preferredProvider: setupState.preferredProvider ?? "codex",
     bundledExecutables: providerRuntimes.bundledExecutables(),
-    prepareAgentWorkspace: (agent) =>
-      Effect.gen(function* () {
-        yield* managedSkills.syncAgent(agent);
-        yield* skillCreator.syncAgent(agent);
-        yield* dataSkill.syncAgent(agent);
-      }),
+    prepareAgentWorkspace: (agent) => managedSkills.syncAgent(agent),
     hostedSites: {
       list: () => hostedSites.list().pipe(toHostedSiteOperationFailed),
       publish: (input, roots) => hostedSites.publish(input, roots).pipe(toHostedSiteOperationFailed),

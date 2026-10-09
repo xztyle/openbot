@@ -46,7 +46,7 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
   {
     name: "save_event_check",
     description:
-      "Create or replace an event check. Use a read-only MCP query, never a provider or AI tool. Empty checks are silent. First success saves a baseline. New IDs or changed revisions wake the target with instruction and untrusted event data. Timing minimum is one minute. Provide complete source and selection. JSON Pointer paths locate the result list and item ID/revision; blank revision compares the item. Configure pagination for complete results. Exact argument string values $lastSuccessAt and $now expand to timestamps. Do not put credentials in arguments. Inspect the actual tool result shape before saving.",
+      "Create or replace an event check. Use a read-only MCP query, never a provider or AI tool. Empty checks are silent. First success saves a baseline. New IDs or changed revisions wake the target with instruction and untrusted event data. Default and minimum interval is 30 seconds. Follow openbot-event-checks. Self-events are excluded by default: configure the connected account actor IDs and actual change-author path. Never substitute creator or assignee for change author. Include self-events only when the user explicitly asks, such as testing. Provide complete source and selection. JSON Pointer paths locate the result list and item ID/revision; blank revision compares the item. Configure pagination for complete results. Exact argument string values $lastSuccessAt and $now expand to timestamps. Do not put credentials in arguments. Inspect the actual tool result shape before saving.",
     shape: {
       agentId,
       id: id.optional(),
@@ -54,7 +54,27 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
       instruction: z.string().min(1).max(16000),
       active: z.boolean(),
       timezone: z.string().min(1).max(128),
-      schedule: routineScheduleZodSchema,
+      schedule: z
+        .union([
+          routineScheduleZodSchema,
+          z
+            .object({
+              kind: z.literal("interval"),
+              amount: z.number().int().min(30).max(8_640_000_000),
+              unit: z.literal("seconds"),
+              anchorAt: z.string(),
+            })
+            .strict(),
+        ])
+        .optional(),
+      selfEvents: z
+        .object({
+          mode: z.enum(["exclude", "include"]),
+          connectionId: id.optional(),
+          actorPointer: z.string().max(512),
+          accountActorIds: z.array(z.string().min(1).max(512)).max(20),
+        })
+        .optional(),
       source,
       selection,
     },

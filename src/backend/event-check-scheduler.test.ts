@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import type { EventCheckInput } from "@openbot/contracts/event-checks";
-import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
+import { decodeEventCheckInput, EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import { Effect } from "effect";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AgentService } from "./agent-service";
@@ -66,6 +66,7 @@ function input(): EventCheckInput {
       cursorArgument: "",
       nextCursorPointer: "",
     },
+    selfEvents: { mode: "include", connectionId: "", actorPointer: "", accountActorIds: [] },
     selection: { itemsPointer: "/items", idPointer: "/id", revisionPointer: "/updatedAt" },
   };
 }
@@ -215,6 +216,7 @@ it("keeps undelivered events during timing edits and clears them only when the q
       durationMs: 0,
       itemCount: 2,
       eventCount: 1,
+      skippedSelfCount: 0,
       error: null,
     },
     changed,
@@ -266,6 +268,7 @@ it("retries an interrupted durable event through the same mailbox idempotency ke
       status: "triggered",
       itemCount: 2,
       eventCount: 1,
+      skippedSelfCount: 0,
       durationMs: 0,
       error: null,
     },
@@ -295,4 +298,75 @@ it("logs an in-flight check as cancelled when its timing or enabled state change
   expect(checks.history("chief", check.id)).toMatchObject([{ status: "cancelled", eventCount: 0 }]);
   expect(checks.state(check.id).baseline).toBeNull();
   expect(service.listQueue("chief").deliveries).toEqual([]);
+});
+
+it("skips the connected account's changes, preserves their fingerprints, and wakes only for another author", async () => {
+  const { service, checks, client } = await boot();
+  items = [{ id: "existing", updatedAt: "1", actor: { id: "me" } }];
+  const check = await runCauseEffect(
+    service.eventChecks.save({
+      ...input(),
+      selfEvents: {
+        mode: "exclude",
+        connectionId: "linear-job-one",
+        actorPointer: "/actor/id",
+        accountActorIds: ["me"],
+      },
+    }),
+  );
+  const target = { agentId: "chief", id: check.id };
+  await expect(
+    runCauseEffect(service.eventChecks.save({ ...check, source: { ...check.source, connectionId: "other-job" } })),
+  ).rejects.toThrow("change-author");
+  expect(checks.get("chief", check.id).source.connectionId).toBe("linear-job-one");
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  items = [
+    { id: "existing", updatedAt: "2", actor: { id: "me" } },
+    { id: "own-new", updatedAt: "1", actor: { id: "me" } },
+  ];
+  expect(await runCauseEffect(service.eventChecks.checkNow(target))).toMatchObject({
+    status: "unchanged",
+    eventCount: 0,
+    skippedSelfCount: 2,
+  });
+  expect(service.listQueue("chief").deliveries).toHaveLength(0);
+  expect(client.requests.filter((request) => request.method === "turn/start")).toHaveLength(0);
+  expect((await runCauseEffect(service.eventChecks.checkNow(target))).skippedSelfCount).toBe(0);
+  const before = checks.state(check.id);
+  items.push({ id: "missing-author", updatedAt: "1" });
+  expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("error");
+  expect(checks.state(check.id)).toEqual(before);
+  expect(service.listQueue("chief").deliveries).toHaveLength(0);
+  items.pop();
+  items[0] = { id: "existing", updatedAt: "3", actor: { id: "other" } };
+  expect(await runCauseEffect(service.eventChecks.checkNow(target))).toMatchObject({
+    status: "triggered",
+    eventCount: 1,
+    skippedSelfCount: 0,
+  });
+  await waitForQueue(service, "chief", (queue) => queue.deliveries[0]?.status === "completed");
+  expect(client.requests.filter((request) => request.method === "turn/start")).toHaveLength(1);
+});
+
+it("defaults to 30 seconds, refuses unconfigured self-event exclusion, and explicitly permits self-events for a test", async () => {
+  const { service, client } = await boot();
+  const definition = { ...input(), schedule: undefined, selfEvents: undefined };
+  const decoded = decodeEventCheckInput(definition);
+  expect(decoded.schedule).toMatchObject({ kind: "interval", amount: 30, unit: "seconds" });
+  expect(decoded.selfEvents.mode).toBe("exclude");
+  await expect(runCauseEffect(service.eventChecks.save(decoded))).rejects.toThrow("change-author");
+  let check = await runCauseEffect(service.eventChecks.save({ ...decoded, selfEvents: input().selfEvents }));
+  const target = { agentId: "chief", id: check.id };
+  await runCauseEffect(service.eventChecks.checkNow(target));
+  items.push({ id: "self-test", updatedAt: "1", actor: "me" });
+  expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("triggered");
+  await waitForQueue(service, "chief", (queue) => queue.deliveries[0]?.status === "completed");
+  expect(client.requests.filter((request) => request.method === "turn/start")).toHaveLength(1);
+  const due = new Date(Date.parse(check.nextCheckAt) + 1);
+  await runCauseEffect(service.eventChecks.processDue(due, () => true));
+  await vi.waitFor(() => expect(service.eventChecks.options.store.history("chief", check.id)).toHaveLength(3));
+  const saved = (await runCauseEffect(service.eventChecks.list({ agentId: "chief" })))[0];
+  if (!saved) throw new Error("Expected the saved check.");
+  check = saved;
+  expect(Date.parse(check.nextCheckAt) - due.getTime()).toBe(29999);
 });

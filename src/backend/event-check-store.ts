@@ -9,7 +9,7 @@ import {
 } from "@openbot/contracts/event-checks";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
-import { nextValidRoutineOccurrence } from "@openbot/team-client/routine-schedule";
+import { nextEventCheckOccurrence } from "@openbot/team-client/event-check-schedule";
 import { withDatabaseTransaction } from "./database-transaction";
 import type { EventCheckData } from "./event-check-reader";
 import type { CheckBaseline, CheckObservation } from "./event-check-result";
@@ -73,13 +73,14 @@ export class EventCheckStore {
       ...input,
       id: previous?.id ?? randomUUID(),
       revision: randomUUID(),
-      nextCheckAt: nextValidRoutineOccurrence(input.schedule, input.timezone, now).toISOString(),
+      nextCheckAt: nextEventCheckOccurrence(input.schedule, input.timezone, now).toISOString(),
       createdAt: previous?.createdAt ?? now.toISOString(),
       updatedAt: now.toISOString(),
     };
     const reset =
       !previous ||
-      JSON.stringify([previous.source, previous.selection]) !== JSON.stringify([input.source, input.selection]);
+      JSON.stringify([previous.source, previous.selection, previous.selfEvents]) !==
+        JSON.stringify([input.source, input.selection, input.selfEvents]);
     return withDatabaseTransaction(this.database, () => {
       const db = this.database.connection;
       db.prepare(`INSERT INTO projection_event_checks (check_id, agent_id, definition_json, active, next_check_at, revision)
@@ -131,7 +132,7 @@ export class EventCheckStore {
     return isDynamicRecord(row) && typeof row.next === "string" ? row.next : null;
   }
   advance(check: EventCheck, now: Date): void {
-    const next = nextValidRoutineOccurrence(check.schedule, check.timezone, now).toISOString();
+    const next = nextEventCheckOccurrence(check.schedule, check.timezone, now).toISOString();
     this.database.connection
       .prepare(
         "UPDATE projection_event_checks SET next_check_at = ?, definition_json = json_set(definition_json, '$.nextCheckAt', ?) WHERE check_id = ? AND revision = ?",

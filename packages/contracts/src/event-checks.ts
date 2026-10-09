@@ -3,6 +3,38 @@ import { isDynamicRecord } from "./runtime-values";
 
 export const EVENT_CHECK_HISTORY_LIMIT = 10;
 export const EVENT_CHECK_ITEM_TYPE_PREFIX = "event-check-event:triggered:";
+export const EVENT_CHECK_DEFAULT_INTERVAL_SECONDS = 30;
+export type EventCheckSchedule =
+  | RoutineSchedule
+  | { kind: "interval"; amount: number; unit: "seconds"; anchorAt: string };
+export interface EventCheckSelfEvents {
+  connectionId: string;
+  mode: "exclude" | "include";
+  actorPointer: string;
+  accountActorIds: string[];
+}
+export function defaultEventCheckSchedule(now = new Date()): EventCheckSchedule {
+  return {
+    kind: "interval",
+    amount: EVENT_CHECK_DEFAULT_INTERVAL_SECONDS,
+    unit: "seconds",
+    anchorAt: now.toISOString(),
+  };
+}
+export function isEventCheckSchedule(value: unknown): value is EventCheckSchedule {
+  if (isRoutineSchedule(value)) return true;
+  return (
+    isDynamicRecord(value) &&
+    value.kind === "interval" &&
+    value.unit === "seconds" &&
+    typeof value.amount === "number" &&
+    Number.isSafeInteger(value.amount) &&
+    value.amount >= 30 &&
+    value.amount <= 8_640_000_000 &&
+    typeof value.anchorAt === "string" &&
+    Number.isFinite(Date.parse(value.anchorAt))
+  );
+}
 export interface EventCheckSelection {
   itemsPointer: string;
   idPointer: string;
@@ -23,7 +55,8 @@ export interface EventCheckInput {
   instruction: string;
   active: boolean;
   timezone: string;
-  schedule: RoutineSchedule;
+  schedule: EventCheckSchedule;
+  selfEvents: EventCheckSelfEvents;
   source: EventCheckSource;
   selection: EventCheckSelection;
 }
@@ -42,6 +75,7 @@ export interface EventCheckExecution {
   status: "baseline" | "unchanged" | "triggered" | "error" | "cancelled";
   itemCount: number;
   eventCount: number;
+  skippedSelfCount: number;
   durationMs: number;
   error: string | null;
 }
@@ -80,9 +114,10 @@ export function decodeEventCheckTarget(value: unknown): { agentId: string; id: s
   return { agentId: text(value.agentId, 128, true), id: text(value.id, 128, true) };
 }
 export function decodeEventCheckInput(value: unknown): EventCheckInput {
-  if (!isDynamicRecord(value) || typeof value.active !== "boolean" || !isRoutineSchedule(value.schedule))
-    throw new Error("Invalid event check.");
-  if (JSON.stringify(value.schedule).length > 4096) throw new Error("Invalid event check schedule.");
+  if (!isDynamicRecord(value) || typeof value.active !== "boolean") throw new Error("Invalid event check.");
+  const schedule = value.schedule === undefined ? defaultEventCheckSchedule() : value.schedule;
+  if (!isEventCheckSchedule(schedule) || JSON.stringify(schedule).length > 4096)
+    throw new Error("Invalid event check schedule.");
   return {
     ...(value.id === undefined ? {} : { id: text(value.id, 128, true) }),
     agentId: text(value.agentId, 128, true),
@@ -90,9 +125,26 @@ export function decodeEventCheckInput(value: unknown): EventCheckInput {
     instruction: text(value.instruction, 16000, true),
     active: value.active,
     timezone: text(value.timezone, 128, true),
-    schedule: value.schedule,
+    schedule,
+    selfEvents: decodeSelfEvents(value.selfEvents),
     source: decodeSource(value.source),
     selection: decodeSelection(value.selection),
+  };
+}
+function decodeSelfEvents(value: unknown): EventCheckSelfEvents {
+  if (value === undefined) return { mode: "exclude", connectionId: "", actorPointer: "", accountActorIds: [] };
+  if (
+    !isDynamicRecord(value) ||
+    (value.mode !== "exclude" && value.mode !== "include") ||
+    !Array.isArray(value.accountActorIds) ||
+    value.accountActorIds.length > 20
+  )
+    throw new Error("Invalid self-event filter.");
+  return {
+    mode: value.mode,
+    connectionId: value.connectionId === undefined ? "" : text(value.connectionId, 128),
+    actorPointer: pointer(value.actorPointer),
+    accountActorIds: value.accountActorIds.map((id) => text(id, 512, true)),
   };
 }
 function decodeSource(value: unknown): EventCheckSource {
@@ -156,6 +208,7 @@ export function decodeEventCheckExecution(value: unknown): EventCheckExecution {
     status,
     itemCount: count(value.itemCount),
     eventCount: count(value.eventCount),
+    skippedSelfCount: value.skippedSelfCount === undefined ? 0 : count(value.skippedSelfCount),
     durationMs: count(value.durationMs),
     error: value.error === null ? null : text(value.error, 2048),
   };

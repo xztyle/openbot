@@ -7,8 +7,8 @@ App request limits still apply. A matching event can start an AI turn.
 Open an agent's settings and select **Event checks**, beside **Skills**, **Tables**, and **Routines**.
 Choose an account already enabled in **Apps for this chat**. Select its reading tool, query options,
 result-list path, stable item ID path, and optional revision path. Give the agent an instruction for
-matching changes. Choose an interval of at least one minute, or a calendar schedule and time zone.
-A bot can also configure checks through OpenBot's native event-check tools.
+matching changes. Choose an interval of at least 30 seconds (the default), or a calendar schedule and time zone.
+An agent can configure checks with native tools and the installed **openbot-event-checks** skill.
 
 The first successful read saves a baseline and stays quiet. Subsequent checks compare item IDs
 and revisions. If the revision path is blank, the program compares the complete item. Query options
@@ -47,3 +47,17 @@ advancing the baseline. The existing full host access of coding agents is unchan
 This extension negotiates the optional `event-checks-v1` capability. Older clients do not receive
 its chat markers or controls. SQLite migration 31 adds separate tables and keeps released schemas
 and existing agent data intact.
+
+## Self-events
+
+Checks skip changes made by the connected account by default. Configure its verified user IDs
+and the actual change-author ID path. The identity filter is bound to that exact app connection;
+switching accounts clears it and requires setup again. Use activity records when a mutable item does not identify
+its latest change author. Creator and assignee fields are not substitutes. Skipped changes still
+advance the baseline, so they cannot reappear as new later; their count appears in the check log.
+Missing author data fails quietly without advancing the baseline. A check without verified actor
+configuration cannot be activated with exclusion enabled. It can be saved paused.
+
+For an explicitly requested test, turn off **Skip my account’s changes**, establish the new quiet
+baseline, then make the test change. Restore exclusion afterward. A filter edit resets the baseline
+and cancels pending events from the previous filter. App rate limits still apply to 30-second reads.

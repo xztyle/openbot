@@ -116,8 +116,9 @@ No account API, Signal, IPC contract, or database migration changes are required
 
 ## Messaging connections
 
-The agents of a computer can answer in an external chat platform: Slack, and Discord (see
-**Discord** below). [messaging.md](../messaging.md) has the setup, the limits and how to add a platform. Every workspace
+The agents of a computer can answer in an external chat platform: Slack, Discord (see **Discord**
+below) and Telegram. [messaging.md](../messaging.md) has the setup, the limits and how to add a
+platform. Every workspace
 installs the one OpenBot Slack app (`apps/slack-app`), and the workspace is linked to the host that
 connected it. People mention @OpenBot or send it a direct message. The workspace's Slack Orchestrator,
 an agent that the connect dialog adds, receives each new conversation, asks its teammates and posts
@@ -145,6 +146,38 @@ the answer. Every answer comes from OpenBot.
   one ticket lifetime after it starts it asks the Worker (`/v2/remote/slack-route/validate`, signed
   like `/v2/remote/resume/validate`) which links of each ticket D1 still has. The host trusts a delivery because Signal checked the signature; no host has the
   signing secret.
+
+Telegram uses the same socket with one difference: one OpenBot bot serves every user, so its token
+must not reach any host. Only Signal has it (`TELEGRAM_BOT_TOKENS`), and the contract is
+`@openbot/contracts/signal-protocol/telegram-route`.
+
+- **Link.** A connection is one chat. The desktop asks `POST /v2/remote/hosts/<id>/telegram-link`
+  (machine token) for a one-use code, and opens `t.me/<bot>?startgroup=<code>` or `?start=<code>`.
+  Telegram sends `/start <code>` in the chat that adds the bot. Signal asks the Worker
+  (`/v2/remote/telegram-route/link`, signed) to link the chat to the host of the code
+  (`telegram_chat_routes`, `telegram_link_codes`: hashes only, no chat name), routes the chat to that
+  host's socket at once, and passes the update on with `linked: true`; the host makes the
+  connection only on that flag, because anyone in a routed chat can send a `/start` with any code.
+  The open code holds the host's socket until the link or its expiry, as no connection may hold it. Another
+  account's host gets `telegram_chat_taken`.
+- **Updates.** Telegram posts to `https://signal.openbot.run/v1/telegram/updates/<bot ID>` with a
+  secret header that Signal derives for each bot. Signal reads only the chat ID, a link code and a
+  callback query ID, and sends `telegram-delivery` to the socket that holds the chat. It always
+  answers 200: Telegram would hold back the bot's other chats behind one offline host. The Telegram
+  route ticket (`telegramRoute` in the hello, audience `openbot-telegram-route`, the Slack route key)
+  and `telegram-route-revoked` work as the Slack ones do.
+- **Calls.** The host sends `telegram-call` only to a Signal whose `ready` names the `telegram`
+  capability, because Signal closes a socket on a frame it does not know. Signal accepts only the
+  methods and parameters of `TelegramCallParams`, as strict objects, only for a chat routed to that
+  socket, and `answerCallbackQuery` only for a press it delivered to it. It returns only message IDs
+  and tokens. `getFile` and `sendDocument` give signed one-use tokens for
+  `GET /v1/telegram/files/<token>` and `POST /v1/telegram/uploads/<token>` (20 MB).
+- **Conversations.** In a supergroup, each reply chain is one conversation: Telegram gives it a
+  `message_thread_id`, the ID of its first message. A forum topic is one conversation, a direct chat
+  is one, and a basic group finds the chain in an in-memory reply map, which a restart forgets. A
+  mention starts or continues a conversation; a reply without a mention continues only a linked one.
+  Telegram has no history API, so `TelegramChatState` keeps the names and last messages it saw, in
+  memory. One Telegram Orchestrator (`telegram-orchestrator.ts`) answers every chat.
 
 The code has two halves. `MessagingThreads` (`src/backend/messaging/`) is built by `AgentService`
 beside `ChannelService` and knows no platform. `MessagingService` is built in the main process and
@@ -192,12 +225,13 @@ transport for its events. `messaging-types.ts` is the seam; the core never reads
   `/invite`.
 - **Deduplication.** An in-memory set drops a redelivered event at once; the mailbox idempotency key
   covers a restart. Events that arrive while no socket is open are lost after Slack's retries.
-- **Screen.** **Server settings → Connectors → Slack** on the computer that runs the agents shows each
-  workspace and its orchestrator, and a two-step dialog connects the workspace and adds the
-  orchestrator on the model the user picks (`messaging:*`). A remote server shows
-  no Slack page, because the install returns to the host's own browser. A live connection counts as
-  use, so a hosted server does not idle out. **Connectors → Discord** is the same page for Discord
-  (`SlackIntegrationPanel` with `platform="discord"`).
+- **Screen.** **Server settings → Connectors → Slack** on the computer that runs the agents shows
+  each workspace and its orchestrator, and a two-step dialog connects the workspace and adds the
+  orchestrator on the model the user picks (`messaging:*`). A remote server shows no Slack page,
+  because the install returns to the host's own browser. A live connection counts as use, so a
+  hosted server does not idle out. **Connectors → Discord** is the same page for Discord
+  (`SlackIntegrationPanel` with `platform="discord"`). **Connectors → Telegram** has its own page
+  (`TelegramIntegrationPanel`), with one row per chat and one orchestrator for all chats.
 
 **Discord.** Every guild installs the one OpenBot Discord app (`apps/discord-app`), and a guild is a
 connection with its own Discord Orchestrator (`discord-orchestrator.ts`). Discord pushes a bot's

@@ -2,6 +2,7 @@ import {
   type AccountUsage,
   type AgentEvent,
   type AgentMemory,
+  type AgentMemoryLimitPreference,
   type AgentModelOption,
   type AgentProviderId,
   type AgentStatus,
@@ -27,6 +28,7 @@ import {
   composedCustomModelId,
   createMcpServerId,
   DEFAULT_AGENT_ACCESS,
+  DEFAULT_AGENT_MEMORY_LIMIT,
   DEFAULT_APP_LOGO_COLOR,
   DEFAULT_APPROVAL_AUTOMATION_PREFERENCE,
   DEFAULT_BUSY_MESSAGE_MODE,
@@ -244,6 +246,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   let analyticsPreference = clone<AnalyticsPreference>(options.analyticsPreference ?? { enabled: true });
   let approvalAutomation = clone<ApprovalAutomationPreference>(DEFAULT_APPROVAL_AUTOMATION_PREFERENCE);
   let busyMessageMode: BusyMessageModePreference = { mode: DEFAULT_BUSY_MESSAGE_MODE };
+  let agentMemoryLimit: AgentMemoryLimitPreference = { limit: DEFAULT_AGENT_MEMORY_LIMIT };
   let remoteSessionReuse: RemoteSessionReusePreference = { ...DEFAULT_REMOTE_SESSION_REUSE_PREFERENCE };
   let languagePreference = clone<AppLanguagePreference>(options.languagePreference ?? { language: "system" });
   const languageListeners = new Set<(preference: AppLanguagePreference) => void>();
@@ -497,6 +500,11 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     setBusyMessageModePreference: async ({ mode }) => {
       busyMessageMode = { mode };
       return clone(busyMessageMode);
+    },
+    getAgentMemoryLimitPreference: async () => clone(agentMemoryLimit),
+    setAgentMemoryLimitPreference: async ({ limit }) => {
+      agentMemoryLimit = { limit };
+      return clone(agentMemoryLimit);
     },
     getAppLanguagePreference: async () => clone(languagePreference),
     setAppLanguagePreference: async ({ language }) => {
@@ -757,7 +765,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       },
     },
     // Preview has one host, so every server answers for the same agents.
-    // The Slack and Discord Orchestrators of the preview are its first agent.
+    // The Slack, Discord and Telegram Orchestrators of the preview are its first agent.
     messaging: createMockMessaging(() => agents[0]?.id ?? "preview-agent"),
     // Preview has one host, so every server answers from the same providers as this computer.
     providerAdmin: {

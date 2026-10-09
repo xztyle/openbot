@@ -1,7 +1,8 @@
 import { isDynamicRecord } from "../runtime-values";
 import { adminRoute, fields, identifier, list, type OptionalRouteCodec, oneOf, string } from "./admin-wire";
+import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
 
-export const MCP_CHAT_CAPABILITY = "mcp-chat-v1";
+export const MCP_CHAT_CAPABILITY = FORK_HOST_CAPABILITY;
 export const MCP_CHAT_ROUTES = { get: "/v1/mcp-chat/get", save: "/v1/mcp-chat/save" } as const;
 export interface McpChatTarget {
   kind: "agent" | "channel";

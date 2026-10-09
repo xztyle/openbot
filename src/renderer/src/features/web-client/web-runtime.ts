@@ -63,7 +63,10 @@ import {
   TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY,
   TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY,
 } from "@openbot/contracts/team-protocol/browser-view-v1";
-import { TEAM_BROWSER_NAVIGATION_CAPABILITY } from "@openbot/contracts/team-protocol/current";
+import {
+  TEAM_BROWSER_NAVIGATION_CAPABILITY,
+  TEAM_TEXT_ATTACHMENTS_CAPABILITY,
+} from "@openbot/contracts/team-protocol/current";
 import {
   decodeTeamProtocolSupportV1,
   type TeamProtocolSupportV1,
@@ -78,6 +81,7 @@ import {
 import { runTeamEffect } from "@openbot/team-client";
 import { createRemoteBrowserView, type RemoteBrowserView } from "@openbot/team-client/browser-view";
 import {
+  RemoteDirectoryError,
   RemoteTeamDirectoryClient,
   type RemoteTeamHost,
   type RemoteTeamInvite,
@@ -89,6 +93,7 @@ import {
   type RemoteFileUpload,
   type RemoteTeamConnectionUpdate,
 } from "@openbot/team-client/remote-peer";
+import { remoteWorkspaceReadTimeout } from "@openbot/team-client/remote-recovery";
 import {
   cancelQueuedMessage,
   deleteAgent,
@@ -221,6 +226,7 @@ export interface WebWorkspaceRuntime {
 
 export interface WebRuntimeEvents {
   connection(update: RemoteTeamConnectionUpdate): void;
+  accessDenied?(hostId: string, error: WebHostConnectionError): void;
   event(hostId: string, event: AgentEvent | TeamRealtimeEvent): void;
   accountChanged(): Promise<void>;
   /** The state of a host this tab has not opened. */
@@ -245,6 +251,14 @@ export class WebHostIncompatibleError extends Error {
   }
 }
 
+export class WebHostConnectionError extends Error {
+  constructor(readonly code: "identity_changed" | "authentication_required" | "access_ended") {
+    super(
+      currentText().t(code === "identity_changed" ? "webClient.error.identityChanged" : "webClient.error.accessEnded"),
+    );
+  }
+}
+
 interface WebConnectionDependencies {
   createPeer: typeof createRemoteTeamPeer;
   acquireHostLock: typeof acquireWebHostLock;
@@ -256,7 +270,7 @@ interface WebConnectionDependencies {
 function pinWebHostKey(accountId: string, host: RemoteTeamHost): void {
   const key = `openbot.web.host-key:${accountId}:${host.hostId}`;
   const pinned = localStorage.getItem(key);
-  if (pinned && pinned !== host.devicePublicKey) throw new Error(currentText().t("webClient.error.identityChanged"));
+  if (pinned && pinned !== host.devicePublicKey) throw new WebHostConnectionError("identity_changed");
   localStorage.setItem(key, host.devicePublicKey);
 }
 
@@ -283,8 +297,15 @@ export function createWebWorkspaceRuntime(
   });
   let sessionsEnded = false;
   const sessionActions = {
-    getBootstrap: (id: string, key: string, sessionId: string | null) =>
-      runTeamEffect(directory.createBootstrap(id, key, sessionId)),
+    getBootstrap: async (id: string, key: string, sessionId: string | null) => {
+      try {
+        return await runTeamEffect(directory.createBootstrap(id, key, sessionId));
+      } catch (error) {
+        if (error instanceof RemoteDirectoryError && (error.status === 401 || error.status === 403))
+          events.connection({ hostId: id, state: "offline", message: null, code: "session_revoked" });
+        throw error;
+      }
+    },
     endSession: async (id: string) => {
       if (!sessionsEnded) await runTeamEffect(directory.endSession(id));
     },
@@ -396,8 +417,28 @@ export function createWebWorkspaceRuntime(
   async function request(method: string, path: string, body: TeamProtocolV2Json = {}, upload?: RemoteFileUpload) {
     if (disposed) throw new Error(currentText().t("webClient.error.connectionClosed"));
     const current = generation;
-    const result = await peer.execute({ id: crypto.randomUUID(), type: "request", method, path, body, upload });
+    const requestHostId = lockedHostId;
+    const result = await peer.execute({
+      id: crypto.randomUUID(),
+      type: "request",
+      method,
+      path,
+      body,
+      upload,
+      timeoutMs: method === "GET" && path === TEAM_API_ROUTES.me ? 15_000 : remoteWorkspaceReadTimeout(method, path),
+    });
     if (disposed || generation !== current) throw new Error(currentText().t("webClient.error.hostChanged"));
+    const membershipRead = method === "GET" && path === TEAM_API_ROUTES.me;
+    // An action can be forbidden while membership remains valid. Confirm access before clearing drafts.
+    if (result.status === 403 && !membershipRead) {
+      await request("GET", TEAM_API_ROUTES.me);
+      if (disposed || generation !== current) throw new Error(currentText().t("webClient.error.hostChanged"));
+    }
+    if (result.status === 401 || (result.status === 403 && membershipRead)) {
+      const error = new WebHostConnectionError(result.status === 401 ? "authentication_required" : "access_ended");
+      if (requestHostId) events.accessDenied?.(requestHostId, error);
+      throw error;
+    }
     if (!result.ok || (result.status ?? 500) >= 400)
       throw new Error(hostRefusal(result.status, result.body) ?? currentText().t("webClient.error.requestIncomplete"));
     return result.body;
@@ -798,7 +839,7 @@ export function createWebWorkspaceRuntime(
       const supported = supportedAttachmentExtensions({
         eml: capabilities.includes("eml-attachments"),
         media: capabilities.includes("media-attachments"),
-        text: capabilities.includes("text-attachments"),
+        text: capabilities.includes(TEAM_TEXT_ATTACHMENTS_CAPABILITY),
       });
       if (extension && !supported.includes(extension)) throw new Error(currentText().t("webClient.error.fileType"));
       if (file.size > MOBILE_ATTACHMENT_BYTES) throw new Error(currentText().t("error.remote.attachmentTooLarge"));

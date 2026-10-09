@@ -49,7 +49,7 @@ it("refuses untrusted sessions and saves only an administrator's negotiated chat
   const headers = {
     Authorization: `Bearer ${token}`,
     "OpenBot-Protocol-Version": "3",
-    "OpenBot-Capabilities": "mcp-chat-v1,mcp-oauth-v1",
+    "OpenBot-Capabilities": "fork-host-v1",
     "Content-Type": "application/json",
   };
   const send = (path: string, body: TeamProtocolV2Json, overrides: Record<string, string> = {}) =>

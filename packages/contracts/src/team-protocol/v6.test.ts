@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isAgentEvent } from "../ipc-agent-events";
 import { isAgentSummary } from "../ipc-agents";
 import request from "./fixtures/v6/client-http-request.json";
 import response from "./fixtures/v6/host-http-response.json";
 import models from "./fixtures/v6/host-models-response.json";
-import quietTurnWire from "./fixtures/v6/host-quiet-turn-completed-event.json";
 import status from "./fixtures/v6/host-status-response.json";
-import { encodeTeamProtocolV1CurrentEvent } from "./v1-adapter";
 import { encodeTeamProtocolV4BaseCurrentEvent } from "./v4-base-adapter";
 import { decodeTeamProtocolV5CurrentHttpRequest, decodeTeamProtocolV5CurrentHttpResponse } from "./v5-adapter";
 import { encodeTeamProtocolV5BaseCurrentEvent } from "./v5-base-adapter";
@@ -87,67 +84,62 @@ describe("Team protocol v6", () => {
     });
   });
 
-  describe("quiet routine runs", () => {
-    // The fixture is what a host writes: the wire names an agent `botId`.
-    const { botId, ...rest } = quietTurnWire;
-    const current = { ...rest, agentId: botId };
-    if (!isAgentEvent(current) || current.type !== "turn-completed") throw new Error("Invalid v6 quiet fixture.");
-    const event = current;
+  it("keeps the released completion shape when the local event is quiet", () => {
+    const event = {
+      type: "turn-completed" as const,
+      agentId: "agent-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status: "completed",
+      origin: "routine" as const,
+      quiet: true as const,
+    };
+    const { quiet: _quiet, ...released } = event;
+    const encoded = encodeTeamProtocolV6BaseCurrentEvent(event);
+    expect(encoded).not.toBeNull();
+    expect(JSON.parse(encoded ?? "null")).toEqual({
+      type: "turn-completed",
+      botId: event.agentId,
+      threadId: event.threadId,
+      turnId: event.turnId,
+      status: event.status,
+      origin: event.origin,
+    });
+    expect(decodeTeamProtocolV6BaseCurrentEvent(JSON.parse(encoded ?? "null"))).toEqual({
+      kind: "known",
+      event: released,
+    });
+    expect(decodeTeamProtocolV6CurrentEvent(createTeamProtocolV6Event(1, JSON.parse(encoded ?? "null")))).toEqual({
+      status: "known",
+      event: released,
+    });
+  });
 
-    it("carries quiet on a completed turn over HTTP events and WebRTC", () => {
-      expect(decodeTeamProtocolV6BaseCurrentEvent(quietTurnWire)).toEqual({ kind: "known", event });
-      expect(JSON.parse(encodeTeamProtocolV6BaseCurrentEvent(event) ?? "null")).toEqual(quietTurnWire);
-      expect(decodeTeamProtocolV6CurrentEvent(createTeamProtocolV6Event(1, quietTurnWire))).toEqual({
-        status: "known",
-        event,
+  it("carries moreWork beside the frozen projection and drops it for older protocols", () => {
+    const busy = {
+      type: "turn-completed" as const,
+      agentId: "agent-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status: "completed" as const,
+      origin: "user" as const,
+      moreWork: true as const,
+    };
+    const wire = JSON.parse(encodeTeamProtocolV6BaseCurrentEvent(busy) ?? "null");
+    expect(wire.moreWork).toBe(true);
+    expect(decodeTeamProtocolV6BaseCurrentEvent(wire)).toMatchObject({ kind: "known", event: { moreWork: true } });
+    // The v6 projection that shipped before the key reads the turn and drops it.
+    expect(decodeTeamProtocolV6BaseEvent(wire)).toMatchObject({ kind: "known" });
+    for (const encode of [encodeTeamProtocolV5BaseCurrentEvent, encodeTeamProtocolV4BaseCurrentEvent]) {
+      expect(encode(busy)).not.toContain("moreWork");
+    }
+    const { moreWork: _moreWork, ...idle } = busy;
+    expect(encodeTeamProtocolV6BaseCurrentEvent(idle)).not.toContain("moreWork");
+    for (const moreWork of [false, "true", 1, null]) {
+      expect(decodeTeamProtocolV6BaseCurrentEvent({ ...wire, moreWork })).toEqual({
+        kind: "invalid",
+        type: "turn-completed",
       });
-      // A turn that is not quiet keeps the shipped shape.
-      const { quiet: _quiet, ...loud } = event;
-      expect(encodeTeamProtocolV6BaseCurrentEvent(loud)).not.toContain("quiet");
-    });
-
-    it("leaves quiet out for a client that does not know it, without an error", () => {
-      // The v6 projection 0.33.0 shipped reads a completed turn and drops the key.
-      const { quiet: _quiet, ...shipped } = quietTurnWire;
-      expect(decodeTeamProtocolV6BaseEvent(quietTurnWire)).toEqual({ kind: "known", event: shipped });
-      // A host serving an older protocol keeps its frozen key lists.
-      for (const encode of [
-        encodeTeamProtocolV5BaseCurrentEvent,
-        encodeTeamProtocolV4BaseCurrentEvent,
-        encodeTeamProtocolV1CurrentEvent,
-      ]) {
-        const wire = encode(event);
-        expect(wire).not.toBeNull();
-        expect(wire).not.toContain("quiet");
-      }
-    });
-
-    it("carries moreWork beside the frozen projection and drops it for older protocols", () => {
-      const busy = { ...event, quiet: undefined, moreWork: true as const };
-      const wire = JSON.parse(encodeTeamProtocolV6BaseCurrentEvent(busy) ?? "null");
-      expect(wire.moreWork).toBe(true);
-      expect(decodeTeamProtocolV6BaseCurrentEvent(wire)).toMatchObject({ kind: "known", event: { moreWork: true } });
-      // The v6 projection that shipped before the key reads the turn and drops it.
-      expect(decodeTeamProtocolV6BaseEvent(wire)).toMatchObject({ kind: "known" });
-      for (const encode of [encodeTeamProtocolV5BaseCurrentEvent, encodeTeamProtocolV4BaseCurrentEvent]) {
-        expect(encode(busy)).not.toContain("moreWork");
-      }
-      const { moreWork: _moreWork, ...idle } = busy;
-      expect(encodeTeamProtocolV6BaseCurrentEvent(idle)).not.toContain("moreWork");
-      for (const moreWork of [false, "true", 1, null]) {
-        expect(decodeTeamProtocolV6BaseCurrentEvent({ ...wire, moreWork })).toEqual({
-          kind: "invalid",
-          type: "turn-completed",
-        });
-      }
-    });
-
-    it("fails closed on a quiet value other than true", () => {
-      for (const quiet of [false, "true", 1, null]) {
-        const malformed = { ...quietTurnWire, quiet };
-        expect(decodeTeamProtocolV6BaseCurrentEvent(malformed)).toEqual({ kind: "invalid", type: "turn-completed" });
-        expect(() => createTeamProtocolV6Event(1, malformed)).toThrow("Invalid Team protocol v6 event.");
-      }
-    });
+    }
   });
 });

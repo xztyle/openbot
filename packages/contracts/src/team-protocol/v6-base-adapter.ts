@@ -11,7 +11,7 @@ import {
   toWireAgentKeys,
   toWireAgentKeysObjectForPath,
 } from "./current-agent-keys";
-import { withMoreWorkTurn, withQuietTurn } from "./turn-quiet-v6";
+import { withMoreWorkTurn } from "./more-work-turn-v6";
 import {
   decodeTeamProtocolV6BaseEvent,
   decodeTeamProtocolV6BaseHttpRequest,
@@ -39,10 +39,7 @@ export function decodeTeamProtocolV6BaseCurrentEvent(value: unknown): TeamProtoc
   let current: unknown;
   try {
     current = withMoreWorkTurn(
-      withQuietTurn(
-        withEventConversationPlans(restoreBrowserSecretMetadata(toCurrentAgentKeys(decodedValue), value), value),
-        value,
-      ),
+      withEventConversationPlans(restoreBrowserSecretMetadata(toCurrentAgentKeys(decodedValue), value), value),
       value,
     );
   } catch {
@@ -70,10 +67,7 @@ export function encodeTeamProtocolV6BaseCurrentEvent(
     (!options.preserveBrowserSecrets && !eventConversationKey(event.type) && event.type !== "turn-completed")
   )
     return encoded;
-  const output = withMoreWorkTurn(
-    withQuietTurn(withEventConversationPlans(JSON.parse(encoded), wireValue), wireValue),
-    wireValue,
-  );
+  const output = withMoreWorkTurn(withEventConversationPlans(JSON.parse(encoded), wireValue), wireValue);
   return JSON.stringify(options.preserveBrowserSecrets ? restoreBrowserSecretMetadata(output, wireValue) : output);
 }
 

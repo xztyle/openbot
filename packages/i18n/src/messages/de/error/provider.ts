@@ -71,6 +71,7 @@ export const messages = {
   "error.provider.unexpectedVersion": "Die Anbieterlaufzeit hat eine unerwartete Version zurückgegeben.",
   "error.provider.metadataNoData": "Der Download der Laufzeitmetadaten hat keine Daten zurückgegeben.",
   "error.provider.metadataTooLarge": "Die Laufzeitmetadaten sind zu groß.",
+  "error.provider.requestFailed": "OpenBot konnte {url} nicht herunterladen. {reason}",
   "error.provider.installRecordMismatch": "Der Installationseintrag der Laufzeit stimmt nicht überein.",
   "error.provider.runtimeChecksum": "Die Prüfsumme der Anbieterlaufzeit stimmt nicht überein.",
   "error.provider.codexReleaseShape": "Die Codex-Version hat eine unerwartete Struktur.",
@@ -199,6 +200,12 @@ export const messages = {
     "Der Gemini-Server wurde gefunden, aber seine Version kann nicht gelesen werden.",
   "error.provider.antigravityVersionUnreadable": "Die Version des Gemini-Servers konnte nicht gelesen werden.",
   "error.provider.antigravitySignIn": "Melde dich mit Google an, um Gemini zu verwenden.",
+  "error.provider.antigravityRateLimited":
+    "Gemini hat die Anfrage abgelehnt, weil ein Ratenlimit oder das Kontingent des Tarifs erreicht ist. Warte ein paar Minuten oder wähle ein anderes Modell und versuche es dann erneut.\n{detail}",
+  "error.provider.antigravityModelUnavailable":
+    "Gemini kann dieses Modell gerade nicht verwenden. Wähle ein anderes Modell und versuche es dann erneut.\n{detail}",
+  "error.provider.antigravityServiceFailure":
+    "Der Gemini-Dienst von Google hat die Anfrage nicht abgeschlossen. Versuche es in ein paar Minuten erneut.\n{detail}",
   "error.provider.cursorArchivePath": "Das Cursor-Archiv enthält eine unerwartete Datei.",
   "error.provider.cursorChecksum": "Die Prüfsumme der Cursor-Laufzeit stimmt nicht überein.",
   "error.provider.cursorReleaseShape": "Die Cursor-Version hat eine unerwartete Struktur.",

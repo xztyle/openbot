@@ -5,7 +5,14 @@ import { createRemoteApiApp, prometheusMetrics } from "./app";
 import { readRemoteApiConfig } from "./config";
 import { DiscordGateway } from "./discord-gateway";
 import { SignalService } from "./signal-service";
-import { RemoteTokenError, RemoteTokenService, signServiceRequest } from "./tokens";
+import { TelegramBotApi } from "./telegram";
+import {
+  RemoteTokenError,
+  RemoteTokenService,
+  signServiceRequest,
+  type TelegramChatLink,
+  TelegramFileTokens,
+} from "./tokens";
 
 const config = readRemoteApiConfig();
 class ControlPlaneError extends Schema.TaggedError<ControlPlaneError>()("ControlPlaneError", {
@@ -14,6 +21,10 @@ class ControlPlaneError extends Schema.TaggedError<ControlPlaneError>()("Control
 
 const ResumeValidation = Schema.Struct({ valid: Schema.Boolean });
 const SlackValidation = Schema.Struct({ teams: Schema.Array(Schema.String) });
+const TelegramValidation = Schema.Struct({
+  chats: Schema.Array(Schema.Struct({ id: Schema.String, botId: Schema.String, linkedAt: Schema.Int })),
+});
+const TelegramLink = Schema.Struct({ hostId: Schema.String, linkedAt: Schema.Int });
 const DiscordValidation = Schema.Struct({ guilds: Schema.Array(Schema.String) });
 const WebhookValidation = Schema.Struct({ routes: Schema.Array(Schema.String) });
 
@@ -25,6 +36,19 @@ class ControlPlane extends Context.Service<
       hostId: string,
       teams: import("@openbot/contracts/signal-protocol/slack-route").SlackRouteTeam[],
     ): Effect.Effect<string[], ControlPlaneError>;
+    validateTelegramRoute(
+      hostId: string,
+      chats: import("@openbot/contracts/signal-protocol/telegram-route").TelegramRouteChat[],
+    ): Effect.Effect<
+      import("@openbot/contracts/signal-protocol/telegram-route").TelegramRouteChat[],
+      ControlPlaneError
+    >;
+    // `null` when the code is not valid (404) or the chat is linked to another host (409).
+    linkTelegramChat(
+      botId: string,
+      chatId: string,
+      code: string,
+    ): Effect.Effect<TelegramChatLink | null, ControlPlaneError>;
     validateDiscordRoute(
       hostId: string,
       guilds: import("@openbot/contracts/signal-protocol/discord-route").DiscordRouteGuild[],
@@ -162,6 +186,44 @@ class ControlPlane extends Context.Service<
           releaseResponse,
         ),
       ),
+      validateTelegramRoute: Effect.fn("ControlPlane.validateTelegramRoute")((hostId, chats) =>
+        Effect.acquireUseRelease(
+          ask("/v2/remote/telegram-route/validate", {
+            hostId,
+            chats: chats.map(({ id, botId, linkedAt }) => ({ id, botId, linkedAt })),
+          }),
+          (response) =>
+            Effect.gen(function* () {
+              if (!response.ok)
+                return yield* new ControlPlaneError({
+                  message: "The account service did not confirm the Telegram route.",
+                });
+              const result = yield* readJson(response).pipe(
+                Effect.flatMap(Schema.decodeUnknownEffect(TelegramValidation)),
+                Effect.mapError(() => new ControlPlaneError({ message: "The account service response is invalid." })),
+              );
+              return [...result.chats];
+            }),
+          releaseResponse,
+        ),
+      ),
+      linkTelegramChat: Effect.fn("ControlPlane.linkTelegramChat")((botId, chatId, code) =>
+        Effect.acquireUseRelease(
+          ask("/v2/remote/telegram-route/link", { botId, chatId, code }),
+          (response) =>
+            Effect.gen(function* () {
+              if (response.status === 404 || response.status === 409) return null;
+              if (!response.ok)
+                return yield* new ControlPlaneError({ message: "The account service did not link the Telegram chat." });
+              const result = yield* readJson(response).pipe(
+                Effect.flatMap(Schema.decodeUnknownEffect(TelegramLink)),
+                Effect.mapError(() => new ControlPlaneError({ message: "The account service response is invalid." })),
+              );
+              return { hostId: result.hostId, linkedAt: result.linkedAt };
+            }),
+          releaseResponse,
+        ),
+      ),
     });
   });
 }
@@ -178,6 +240,14 @@ const tokens = new RemoteTokenService(
     validateSlackRoute: (hostId, teams) =>
       controlPlaneService
         .validateSlackRoute(hostId, teams)
+        .pipe(Effect.mapError((error) => new RemoteTokenError({ message: error.message }))),
+    validateTelegramRoute: (hostId, chats) =>
+      controlPlaneService
+        .validateTelegramRoute(hostId, chats)
+        .pipe(Effect.mapError((error) => new RemoteTokenError({ message: error.message }))),
+    linkTelegramChat: (botId, chatId, code) =>
+      controlPlaneService
+        .linkTelegramChat(botId, chatId, code)
         .pipe(Effect.mapError((error) => new RemoteTokenError({ message: error.message }))),
     validateDiscordRoute: (hostId, guilds) =>
       controlPlaneService
@@ -196,7 +266,12 @@ const signal = new SignalService(
   config.maximumConnectionsPerIp,
   config.maximumMessagesPerMinute,
   undefined,
-  { discord: config.discord !== null },
+  {
+    discord: config.discord !== null,
+    telegram: config.telegram
+      ? { bot: new TelegramBotApi(config.telegram), files: new TelegramFileTokens(config.sessionSecret) }
+      : null,
+  },
 );
 const tlsPaths =
   config.tlsCertificatePath && config.tlsPrivateKeyPath
@@ -232,11 +307,13 @@ const listen = () =>
       : {}),
   });
 listen();
+// Telegram posts to this Signal only after the listener is up. A failure is logged and Signal runs on.
+if (signal.telegram) void signalRuntime.runPromise(signal.telegram.bot.setWebhooks());
 const healthServer = Bun.serve({
   hostname: "127.0.0.1",
   port: config.healthPort,
   routes: {
-    "/health/live": () => Response.json({ service: "openbot-remote-api", status: "live" }),
+    "/health/live": () => Response.json({ service: "openbot-remote-api", status: "live", commit: config.sourceCommit }),
     "/health/ready": () => Response.json({ service: "openbot-remote-api", status: "ready" }),
     "/metrics": (request) => {
       const authorization = request.headers.get("Authorization");

@@ -1,11 +1,16 @@
-import type { AttachmentImportEvent, AttachmentSummary, ConversationPage } from "@openbot/contracts/ipc";
+import type {
+  AgentModelOption,
+  AttachmentImportEvent,
+  AttachmentSummary,
+  ConversationPage,
+} from "@openbot/contracts/ipc";
 import { render, waitFor } from "@solidjs/testing-library";
 import { flush } from "solid-js";
 import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { STORY_AGENT_SUMMARIES } from "../../preview/fixtures";
 import { createWebWorkspace } from "./web-client-context";
 import { createWebConversationRuntime } from "./web-conversation-runtime";
-import type { WebRuntimeEvents, WebWorkspaceRuntime } from "./web-runtime";
+import { WebHostConnectionError, type WebRuntimeEvents, type WebWorkspaceRuntime } from "./web-runtime";
 
 const page: ConversationPage = {
   agentId: "chief",
@@ -223,8 +228,17 @@ describe("web workspace state", () => {
     await vi.waitFor(() => expect(workspace.state.duplicatingAgentIds).toEqual(["chief"]));
     await workspace.duplicateAgent("chief");
     expect(app.runtime.duplicateAgent).toHaveBeenCalledOnce();
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    document.dispatchEvent(new Event("visibilitychange"));
     pending.resolve({ agent: copy, layout });
-    await first;
+    try {
+      await first;
+      expect(workspace.state.selectedId).toBe("chief-copy");
+      expect(workspace.state.duplicatingAgentIds).toEqual([]);
+    } finally {
+      hidden.mockRestore();
+      document.dispatchEvent(new Event("visibilitychange"));
+    }
   });
 
   it("cleans deleted agent state from the authoritative roster", async () => {
@@ -407,6 +421,104 @@ describe("web workspace state", () => {
     directoryRefresh.resolve([]);
     await waitFor(() => expect(workspace.state.host).toBeNull());
   });
+  it.each(["authentication_required", "access_ended"] as const)(
+    "clears private state when a required recovery read fails with %s",
+    async (code) => {
+      const app = harness();
+      const workspace = await connected(app);
+      const host = workspace.state.host;
+      assert(host);
+      workspace.setDraft("Private draft");
+      vi.mocked(app.runtime.models).mockRejectedValueOnce(new WebHostConnectionError(code));
+
+      await workspace.connect(host);
+
+      expect(workspace.state.workspaceLoaded).toBe(false);
+      expect(workspace.state.agents).toEqual([]);
+      expect(workspace.state.conversations).toEqual({});
+      expect(workspace.state.selectedId).toBeNull();
+      expect(workspace.state.revocationRevision).toBe(1);
+      expect(workspace.state.recovery?.phase).toBe("suspended");
+      window.dispatchEvent(new Event("online"));
+      expect(app.runtime.connect).toHaveBeenCalledTimes(2);
+
+      await workspace.reconnect();
+      expect(workspace.state.status).toBe("online");
+      expect(workspace.conversation()?.page).toEqual(page);
+      expect(workspace.conversation()?.draft).toBe("");
+      expect(app.runtime.connect).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it.each(["authentication_required", "access_ended"] as const)(
+    "clears private state when a conversation recovery read fails with %s",
+    async (code) => {
+      const app = harness();
+      const workspace = await connected(app);
+      const host = workspace.state.host;
+      assert(host);
+      workspace.setDraft("Private conversation draft");
+      vi.mocked(app.runtime.conversation).mockRejectedValueOnce(new WebHostConnectionError(code));
+
+      await workspace.connect(host);
+
+      expect(workspace.state.status).toBe("offline");
+      expect(workspace.state.workspaceLoaded).toBe(false);
+      expect(workspace.state.conversations).toEqual({});
+      expect(workspace.state.agents).toEqual([]);
+      expect(workspace.state.recovery?.phase).toBe("suspended");
+      await workspace.send("chief", "Do not send", [], null, "denied-send");
+      expect(app.runtime.send).not.toHaveBeenCalled();
+      window.dispatchEvent(new Event("online"));
+      expect(app.runtime.connect).toHaveBeenCalledTimes(2);
+
+      await workspace.reconnect();
+      expect(workspace.state.status).toBe("online");
+      expect(workspace.conversation()?.draft).toBe("");
+    },
+  );
+
+  it("clears private state on current-host request denial and ignores another host", async () => {
+    const app = harness();
+    const workspace = await connected(app);
+    workspace.setDraft("Private draft");
+    flush();
+    const error = new WebHostConnectionError("access_ended");
+    app.events().accessDenied?.("other-host", error);
+    expect(workspace.conversation()?.draft).toBe("Private draft");
+    app.events().accessDenied?.("host", error);
+    await waitFor(() => expect(workspace.state.status).toBe("offline"));
+    expect(workspace.state.conversations).toEqual({});
+    expect(workspace.state.recovery?.phase).toBe("suspended");
+  });
+
+  it("waits for a revoked connection attempt before one authorized reconnect", async () => {
+    const app = harness();
+    const workspace = await connected(app);
+    const host = workspace.state.host;
+    assert(host);
+    const first = Promise.withResolvers<string[]>();
+    const second = Promise.withResolvers<string[]>();
+    const connect = vi.mocked(app.runtime.connect);
+    connect.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const attempt = workspace.connect(host);
+    await waitFor(() => expect(connect).toHaveBeenCalledTimes(2));
+    const revoked = { hostId: host.hostId, state: "offline", message: null, code: "session_revoked" } as const;
+    app.events().connection(revoked);
+    await waitFor(() => expect(app.runtime.listHosts).toHaveBeenCalledTimes(2));
+    expect(workspace.state.recovery?.phase).toBe("suspended");
+    first.reject(new Error("Access denied"));
+    await attempt;
+    await waitFor(() => expect(connect).toHaveBeenCalledTimes(3));
+    app.events().connection(revoked);
+    second.reject(new Error("Access denied"));
+    await waitFor(() => expect(workspace.state.revocationRevision).toBe(2));
+    window.dispatchEvent(new Event("online"));
+    expect(workspace.state.recovery?.phase).toBe("suspended");
+    expect(workspace.state.conversations).toEqual({});
+    expect(connect).toHaveBeenCalledTimes(3);
+  });
+
   it("ignores a stale revocation refresh after switching hosts", async () => {
     const firstHost = {
       hostId: "host",
@@ -606,7 +718,19 @@ describe("web workspace state", () => {
     app.events().connection({ hostId: "host", state: "offline", message: "Offline" });
     const host = workspace.state.host;
     if (!host) throw new Error("Missing host");
-    await workspace.connect(host);
+    const models = Promise.withResolvers<AgentModelOption[]>();
+    vi.mocked(app.runtime.models).mockReturnValueOnce(models.promise);
+    const reconnect = workspace.connect(host);
+    await waitFor(() => expect(app.runtime.models).toHaveBeenCalledTimes(2));
+    app.events().connection({ hostId: "host", state: "online", message: null });
+    flush();
+    expect(workspace.state.status).toBe("connecting");
+    expect(workspace.state.selectedId).toBe("chief");
+    expect(workspace.conversation()?.page).toEqual(page);
+    expect(workspace.conversation()?.draft).toBe("Unsent text");
+    models.resolve([]);
+    await reconnect;
+    expect(workspace.state.status).toBe("online");
     expect(workspace.conversation()?.draft).toBe("Unsent text");
     expect(app.runtime.send).not.toHaveBeenCalled();
   });

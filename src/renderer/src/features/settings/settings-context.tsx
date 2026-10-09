@@ -104,6 +104,7 @@ const Settings = createSimpleContext({
     let desktopNotificationsChanged = false;
     let notificationTextChanged = false;
     let busyMessageModeChanged = false;
+    let agentMemoryLimitChanged = false;
     let keepRemoteSessionsChanged = false;
     let turboModeChanged = false;
     const [turboModePending, setTurboModePending] = createSignal(false);
@@ -252,6 +253,14 @@ const Settings = createSimpleContext({
           "busyMessageMode",
           settingsPort().setBusyMessageModePreference({ mode: value.busyMessageMode }),
           (preference) => preference.mode,
+        );
+      }
+      if (previous.agentMemoryLimit !== value.agentMemoryLimit) {
+        agentMemoryLimitChanged = true;
+        persistField(
+          "agentMemoryLimit",
+          settingsPort().setAgentMemoryLimitPreference({ limit: value.agentMemoryLimit }),
+          (preference) => preference.limit,
         );
       }
       if (previous.keepRemoteSessions !== value.keepRemoteSessions) {
@@ -411,6 +420,13 @@ const Settings = createSimpleContext({
         .then((preference) => {
           if (busyMessageModeChanged) return;
           setGeneralSettings((current) => ({ ...current, busyMessageMode: preference.mode }));
+        })
+        .catch(() => undefined);
+      void settingsPort()
+        .getAgentMemoryLimitPreference()
+        .then((preference) => {
+          if (agentMemoryLimitChanged) return;
+          setGeneralSettings((current) => ({ ...current, agentMemoryLimit: preference.limit }));
         })
         .catch(() => undefined);
       void settingsPort()

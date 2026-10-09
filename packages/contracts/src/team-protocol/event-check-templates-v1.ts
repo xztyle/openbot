@@ -5,9 +5,10 @@ import {
 } from "../event-check-templates";
 import { decodeEventCheck, decodeEventCheckTarget } from "../event-checks";
 import { adminRoute, fields, type OptionalRouteCodec } from "./admin-wire";
+import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
 import { decodeTeamProtocolV2Json } from "./v2";
 
-export const EVENT_CHECK_TEMPLATES_CAPABILITY = "event-check-templates-v1";
+export const EVENT_CHECK_TEMPLATES_CAPABILITY = FORK_HOST_CAPABILITY;
 export const EVENT_CHECK_TEMPLATES_ROUTES = {
   list: "/v1/event-check-templates/list",
   install: "/v1/event-check-templates/install",

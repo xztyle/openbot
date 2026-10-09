@@ -4,8 +4,9 @@
 import { isDynamicRecord } from "../runtime-values";
 import type { OptionalRouteCodec } from "./admin-wire";
 import { adminRoute, count, empty, fields, identifier, nullable, oneOf, string, variant } from "./admin-wire";
+import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
 
-export const MCP_OAUTH_CAPABILITY = "mcp-oauth-v1";
+export const MCP_OAUTH_CAPABILITY = FORK_HOST_CAPABILITY;
 export const MCP_OAUTH_ROUTES = {
   start: "/v1/mcp-oauth/start",
   status: "/v1/mcp-oauth/status",

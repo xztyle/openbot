@@ -24,7 +24,7 @@ it("lets an owner read the newest audit rows and nobody else", async () => {
     owner = await fixture.signIn();
   const invite = await runCauseEffect(fixture.store.createInvite("member"));
   const member = await runCauseEffect(fixture.store.acceptInvite(invite.token, "member", "member password"));
-  const send = (body: unknown, token = owner, capability = "security-audit-v1") =>
+  const send = (body: unknown, token = owner, capability = "fork-host-v1") =>
     fetch(`${base}/v1/security-audit/list`, {
       method: "POST",
       headers: {

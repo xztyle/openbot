@@ -3,6 +3,7 @@ import { CHANNEL_DELETE_CAPABILITY } from "../ipc-chat-channels";
 import { MCP_SERVERS_CAPABILITY } from "../ipc-mcp-servers";
 import { STORAGE_CAPABILITY } from "../ipc-storage";
 import { AGENT_ADMIN_CAPABILITY } from "./agent-admin-v1";
+import { AGENT_HOST_SETTINGS_CAPABILITY } from "./agent-host-settings-v1";
 import { AGENT_IMPORT_CAPABILITY } from "./agent-import-v1";
 import { AGENT_INSTALL_CAPABILITY } from "./agent-install-v1";
 import { AGENT_PUBLISH_CAPABILITY } from "./agent-publish-v1";
@@ -11,28 +12,28 @@ import { TEAM_BROWSER_NAVIGATION_CAPABILITY } from "./browser-navigation-v1";
 import {
   TEAM_BROWSER_VIEW_CAPABILITY,
   TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY,
+  TEAM_BROWSER_VIEW_CONTEXT_MENU_CAPABILITY,
+  TEAM_BROWSER_VIEW_CURSOR_CAPABILITY,
   TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY,
+  TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY,
 } from "./browser-view-v1";
 import { CONTEXT_RESET_CAPABILITY } from "./context-reset-v1";
-import { EVENT_CHECK_API_CAPABILITY, EVENT_CHECK_DELIVERY_CAPABILITY } from "./event-check-api-v1";
-import { EVENT_CHECK_TEMPLATES_CAPABILITY } from "./event-check-templates-v1";
 import { EVENT_CHECKS_CAPABILITY } from "./event-checks-v1";
 import { EVENTS_CAPABILITY } from "./events-v1";
+import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
 import { HOST_ADMIN_CAPABILITY } from "./host-admin-v1";
 import { HOST_MEMBER_UPDATE_CAPABILITY } from "./host-member-update-v1";
 import { HOST_RELEASE_CAPABILITY } from "./host-release-v1";
 import { HOST_UPDATE_CAPABILITY } from "./host-update-v1";
 import { HOSTED_SITES_CAPABILITY } from "./hosted-sites-v1";
 import { LIVE_ACTIVITY_PUSH_CAPABILITY } from "./live-activity-push-v1";
-import { MCP_CHAT_CAPABILITY } from "./mcp-chat-v1";
-import { MCP_OAUTH_CAPABILITY } from "./mcp-oauth-v1";
 import { TEAM_MESSAGE_CLIENT_ID_CAPABILITY } from "./message-client-id-v1";
 import { PROVIDERS_ADMIN_CAPABILITY } from "./providers-v1";
 import { PROVIDERS_RUNTIMES_V2_CAPABILITY } from "./providers-v2";
 import { PROVIDERS_SIGN_IN_V3_CAPABILITY } from "./providers-v3";
 import { PROVIDERS_V4_CAPABILITY } from "./providers-v4";
 import { TEAM_QUEUE_EDIT_CAPABILITY } from "./queue-edit-v1";
-import { SECURITY_AUDIT_CAPABILITY } from "./security-audit-v1";
+import { QUIET_TURN_CAPABILITY } from "./quiet-turn-v1";
 import { SHARED_TABLES_CAPABILITY } from "./shared-tables-v1";
 import { SKILLS_ADMIN_CAPABILITY } from "./skills-admin-v1";
 import { SKILLS_EVENTS_CAPABILITY } from "./skills-events-v1";
@@ -56,7 +57,7 @@ export const TEAM_EML_ATTACHMENTS_CAPABILITY = "eml-attachments";
  * such as diff, patch, TSV, HAR, GraphQL, and `.gitignore`. An older host rejects those names, so a
  * client attaches them only when the host advertises this.
  */
-export const TEAM_TEXT_ATTACHMENTS_CAPABILITY = "text-attachments";
+export const TEAM_TEXT_ATTACHMENTS_CAPABILITY = FORK_HOST_CAPABILITY;
 /**
  * Frozen optional member-leave-v1 contract: a bodyless `POST /v1/team/leave` answered with 204. The
  * caller, a member or an admin, removes their own membership with the same effects as an admin's
@@ -67,6 +68,7 @@ export const TEAM_TEXT_ATTACHMENTS_CAPABILITY = "text-attachments";
 export const TEAM_MEMBER_LEAVE_CAPABILITY = "member-leave-v1";
 export {
   AGENT_ADMIN_CAPABILITY,
+  AGENT_HOST_SETTINGS_CAPABILITY,
   AGENT_IMPORT_CAPABILITY,
   AGENT_INSTALL_CAPABILITY,
   AGENT_PUBLISH_CAPABILITY,
@@ -85,6 +87,7 @@ export {
   PROVIDERS_RUNTIMES_V2_CAPABILITY,
   PROVIDERS_SIGN_IN_V3_CAPABILITY,
   PROVIDERS_V4_CAPABILITY,
+  QUIET_TURN_CAPABILITY,
   SHARED_TABLES_CAPABILITY,
   SKILLS_ADMIN_CAPABILITY,
   SKILLS_EVENTS_CAPABILITY,
@@ -92,7 +95,10 @@ export {
   TEAM_BROWSER_NAVIGATION_CAPABILITY,
   TEAM_BROWSER_VIEW_CAPABILITY,
   TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY,
+  TEAM_BROWSER_VIEW_CONTEXT_MENU_CAPABILITY,
+  TEAM_BROWSER_VIEW_CURSOR_CAPABILITY,
   TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY,
+  TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY,
   TEAM_MESSAGE_CLIENT_ID_CAPABILITY,
   WORKSPACE_DIRECTORY_CAPABILITY,
 };
@@ -105,7 +111,10 @@ export const TEAM_CURRENT_CAPABILITIES = [
   TEAM_BROWSER_NAVIGATION_CAPABILITY,
   TEAM_BROWSER_VIEW_CAPABILITY,
   TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY,
+  TEAM_BROWSER_VIEW_CURSOR_CAPABILITY,
   TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY,
+  TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY,
+  TEAM_BROWSER_VIEW_CONTEXT_MENU_CAPABILITY,
   "agent-profile-generation",
   "agent-analytics",
   "host-analytics",
@@ -116,17 +125,12 @@ export const TEAM_CURRENT_CAPABILITIES = [
   TEAM_AGENT_CREATE_MODEL_CAPABILITY,
   TEAM_EML_ATTACHMENTS_CAPABILITY,
   TEAM_MEDIA_ATTACHMENTS_CAPABILITY,
-  TEAM_TEXT_ATTACHMENTS_CAPABILITY,
   "channel-chats-v1",
   CHANNEL_DELETE_CAPABILITY,
   MCP_SERVERS_CAPABILITY,
   STORAGE_CAPABILITY,
   EVENT_CHECKS_CAPABILITY,
-  EVENT_CHECK_API_CAPABILITY,
-  EVENT_CHECK_TEMPLATES_CAPABILITY,
-  EVENT_CHECK_DELIVERY_CAPABILITY,
-  MCP_CHAT_CAPABILITY,
-  MCP_OAUTH_CAPABILITY,
+  FORK_HOST_CAPABILITY,
   AGENT_ADMIN_CAPABILITY,
   SKILLS_ADMIN_CAPABILITY,
   SKILLS_EVENTS_CAPABILITY,
@@ -143,6 +147,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   EVENTS_CAPABILITY,
   HOST_UPDATE_CAPABILITY,
   HOST_RELEASE_CAPABILITY,
+  QUIET_TURN_CAPABILITY,
   HOST_MEMBER_UPDATE_CAPABILITY,
   AGENT_IMPORT_CAPABILITY,
   AGENT_PUBLISH_CAPABILITY,
@@ -150,7 +155,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   HOSTED_SITES_CAPABILITY,
   TEAM_MESSAGE_CLIENT_ID_CAPABILITY,
   WORKSPACE_DIRECTORY_CAPABILITY,
-  SECURITY_AUDIT_CAPABILITY,
+  AGENT_HOST_SETTINGS_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];

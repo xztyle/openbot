@@ -25,6 +25,7 @@ import {
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import {
   AGENT_ADMIN_CAPABILITY,
+  AGENT_HOST_SETTINGS_CAPABILITY,
   AGENT_IMPORT_CAPABILITY,
   AGENT_INSTALL_CAPABILITY,
   AGENT_PUBLISH_CAPABILITY,
@@ -43,6 +44,7 @@ import {
   PROVIDERS_RUNTIMES_V2_CAPABILITY,
   PROVIDERS_SIGN_IN_V3_CAPABILITY,
   PROVIDERS_V4_CAPABILITY,
+  QUIET_TURN_CAPABILITY,
   SHARED_TABLES_CAPABILITY,
   SKILLS_ADMIN_CAPABILITY,
   SKILLS_EVENTS_CAPABILITY,
@@ -53,16 +55,14 @@ import {
   type TeamCurrentCapability,
 } from "@openbot/contracts/team-protocol/current";
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
+import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import {
   HOST_RESTART_EVENT,
   type HostRestartEvent,
   type HostRestartState,
 } from "@openbot/contracts/team-protocol/host-update-v1";
 import { teamHttpCodec } from "@openbot/contracts/team-protocol/http-codecs";
-import { MCP_CHAT_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-chat-v1";
-import { MCP_OAUTH_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-oauth-v1";
 import { optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
-import { SECURITY_AUDIT_CAPABILITY } from "@openbot/contracts/team-protocol/security-audit-v1";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import {
   TEAM_APP_VERSION_HEADER,
@@ -116,7 +116,7 @@ import {
   requestProtocol,
   stringField,
 } from "./team-api/request-helpers";
-import { routeAgentAdmin } from "./team-api/route-agent-admin";
+import { routeAgentAdmin, routeAgentHostSettings } from "./team-api/route-agent-admin";
 import { routeAgentImport } from "./team-api/route-agent-import";
 import { routeAgentInstall } from "./team-api/route-agent-install";
 import { routeAgentPublish } from "./team-api/route-agent-publish";
@@ -690,7 +690,7 @@ export class TeamApiServer {
       if ((await this.#routeDirect(context)) === "handled") return;
       if ((await this.#routeBrowser(context)) === "handled") return;
       if ((await this.#routeFiles(context)) === "handled") return;
-      if ((await routeChannels(context, this.#options.channels, this.#options.agents)) === "handled") return;
+      if ((await routeChannels(context, this.#options.channels, this.#options.agents, hidden)) === "handled") return;
       if (
         (await routeMcpServers(context, this.#options.mcpServers, this.#options.mcpToolRuntimePreparation)) ===
         "handled"
@@ -699,6 +699,7 @@ export class TeamApiServer {
       if ((await routeStorage(context, this.#options.storage)) === "handled") return;
       if ((await routeHostedSites(context, this.#options.hostedSites)) === "handled") return;
       if ((await routeAgentAdmin(context, this.#options.admin, hidden)) === "handled") return;
+      if ((await routeAgentHostSettings(context, this.#options.admin, hidden)) === "handled") return;
       if ((await routeSkillsAdmin(context, this.#options.admin, hidden)) === "handled") return;
       if ((await routeSharedTables(context, this.#options.admin)) === "handled") return;
       if ((await routeAgentInstall(context, this.#options.admin, hidden, newAgentHidden)) === "handled") return;
@@ -968,7 +969,18 @@ export class TeamApiServer {
       let queueInvalidation: string | undefined;
       let outgoing: string;
       // `eventCapability` above has already kept an optional event from a client without its capability.
-      const optional = optionalTeamEvent(event);
+      // Completion must still reach a peer without quiet-turn-v1 through its frozen adapter.
+      const optional =
+        event.type === "turn-completed" && event.quiet && connection.capabilities.has(QUIET_TURN_CAPABILITY)
+          ? {
+              type: "quiet-turn-completed" as const,
+              agentId: event.agentId,
+              threadId: event.threadId,
+              turnId: event.turnId,
+              status: event.status,
+              ...(event.origin === undefined ? {} : { origin: event.origin }),
+            }
+          : optionalTeamEvent(event);
       if (optional) {
         // The base events go through the provider view; an optional event that names a hidden agent is left out.
         if (
@@ -1437,11 +1449,10 @@ export class TeamApiServer {
         const checkCapability = eventCheckCapability(capability, this.#options.eventChecks);
         if (checkCapability !== undefined) return checkCapability;
         if (capability === MCP_SERVERS_CAPABILITY) return this.#options.mcpServers !== undefined;
-        if (capability === MCP_CHAT_CAPABILITY) return this.#options.chatMcp !== undefined;
-        if (capability === MCP_OAUTH_CAPABILITY) return this.#options.mcpOAuth !== undefined;
         if (capability === STORAGE_CAPABILITY) return this.#options.storage !== undefined;
         if (capability === HOSTED_SITES_CAPABILITY) return this.#options.hostedSites !== undefined;
         if (capability === AGENT_ADMIN_CAPABILITY) return this.#options.admin?.agents !== undefined;
+        if (capability === AGENT_HOST_SETTINGS_CAPABILITY) return this.#options.admin?.agentHost !== undefined;
         if (capability === SKILLS_ADMIN_CAPABILITY) return this.#options.admin?.skills !== undefined;
         if (capability === SKILLS_EVENTS_CAPABILITY) return this.#options.skills !== undefined;
         if (capability === SHARED_TABLES_CAPABILITY) return this.#options.admin?.sharedTables !== undefined;
@@ -1465,7 +1476,15 @@ export class TeamApiServer {
         if (capability === EVENTS_CAPABILITY) return this.#options.events !== undefined;
         if (capability === AGENT_IMPORT_CAPABILITY) return this.#options.agentImport !== undefined;
         if (capability === LIVE_ACTIVITY_PUSH_CAPABILITY) return this.#options.liveActivityPush !== undefined;
-        if (capability === SECURITY_AUDIT_CAPABILITY) return this.#options.securityAudit !== undefined;
+        // One string covers the fork's features. A host that has any of them advertises it, and a
+        // client that uses a feature the host lacks gets that route's own refusal.
+        if (capability === FORK_HOST_CAPABILITY)
+          return (
+            this.#options.eventChecks?.supported === true ||
+            this.#options.chatMcp !== undefined ||
+            this.#options.mcpOAuth !== undefined ||
+            this.#options.securityAudit !== undefined
+          );
         return true;
       }),
     };

@@ -72,6 +72,15 @@ export interface SetupProviderProps {
   takenAgentIds?: readonly string[] | undefined;
 }
 
+/** How a screen shows the providers. */
+export interface SetupProviderOptions {
+  /**
+   * Whether the free provider is a row and a choice the step can make by itself. First run asks
+   * for it separately, so its plan step shows plan rows only. Without it, it is a row.
+   */
+  includeFree?: () => boolean;
+}
+
 /** The choice a screen opens with. A review opens with the saved one; the first run with none. */
 export interface SetupProviderChoice {
   provider: AgentProviderId | null;
@@ -82,12 +91,16 @@ export interface SetupProviderChoice {
   customModel: () => AgentModelId | null;
 }
 
+// The line that the plan providers share. It tells nothing about one row, so those rows show their
+// version there.
+const INCLUDED_DESCRIPTION = "Included with OpenBot";
+
 // A custom agent is not a first provider: it is added from the detected list or in Settings.
-const SETUP_PROVIDERS: Array<{ id: AgentProviderId; name: string; description: string }> =
+const SETUP_PROVIDERS: Array<{ id: AgentProviderId; name: string; description: string | null }> =
   AGENT_PROVIDER_DESCRIPTORS.filter((descriptor) => descriptor.id !== "acp").map((descriptor) => ({
     id: descriptor.id,
     name: descriptor.displayName,
-    description: descriptor.onboardingDescription,
+    description: descriptor.onboardingDescription === INCLUDED_DESCRIPTION ? null : descriptor.onboardingDescription,
   }));
 
 /**
@@ -95,7 +108,6 @@ const SETUP_PROVIDERS: Array<{ id: AgentProviderId; name: string; description: s
  * as one a newer registry adds, shows as it is.
  */
 const PROVIDER_DESCRIPTION_KEYS: Readonly<Record<string, AppTextKey>> = {
-  "Included with OpenBot": "onboarding.provider.included",
   "Free models, no account needed": "onboarding.provider.freeModels",
   "Google AI Pro or Ultra plan": "onboarding.provider.googlePlan",
   "Cursor plan or API key": "onboarding.provider.cursorPlan",
@@ -127,8 +139,13 @@ export type SetupProviders = ReturnType<typeof createSetupProviders>;
  * actions leave. The first-run flow and the setup dialog both hold one, so a provider is chosen,
  * connected and added the same way on each.
  */
-export function createSetupProviders(props: SetupProviderProps, initial?: SetupProviderChoice) {
+export function createSetupProviders(
+  props: SetupProviderProps,
+  initial?: SetupProviderChoice,
+  settings: SetupProviderOptions = {},
+) {
   const { t } = useText();
+  const includeFree = () => settings.includeFree?.() ?? true;
   const [selectedProvider, setSelectedProvider] = createSignal<AgentProviderId | null>(initial?.provider ?? null);
   /**
    * Whether the user chose their own endpoints rather than a built-in provider. `selectedProvider`
@@ -170,7 +187,7 @@ export function createSetupProviders(props: SetupProviderProps, initial?: SetupP
     ).map((provider) => {
       const status = props.agentStatus.providers?.find((candidate) => candidate.id === provider.id);
       const runtime = props.providerRuntimeStatuses?.[provider.id];
-      const descriptionKey = PROVIDER_DESCRIPTION_KEYS[provider.description];
+      const descriptionKey = provider.description ? PROVIDER_DESCRIPTION_KEYS[provider.description] : undefined;
       return {
         ...provider,
         description: descriptionKey ? t(descriptionKey) : provider.description,
@@ -202,13 +219,16 @@ export function createSetupProviders(props: SetupProviderProps, initial?: SetupP
   const [keptProviders, setKeptProviders] = createSignal<AgentProviderId[] | null>(null);
   /** The user chose the custom provider in "More providers", so it is a row from now on. */
   const [customRevealed, setCustomRevealed] = createSignal(false);
+  /** The free row shows when the step includes it, or when the user chose it in "More providers". */
+  const freeRow = () =>
+    includeFree() || (selectedProvider() === FREE_PROVIDER && providerSelectedByUser() && !customSelected());
   const providerRows = createMemo(() => {
     const kept = keptProviders();
-    const rows = onboardingProviderRows(providerOptions(), kept ?? []);
+    const rows = onboardingProviderRows(providerOptions(), kept ?? [], freeRow());
     // A saved choice that the row rule hides still shows, after the rows the rule gives.
     const saved = initial?.provider;
     if (kept || !saved || rows.listed.some((option) => option.id === saved)) return rows;
-    return onboardingProviderRows(providerOptions(), [...planRowIds(rows.listed), saved]);
+    return onboardingProviderRows(providerOptions(), [...planRowIds(rows.listed), saved], freeRow());
   });
   const customInMore = () =>
     Boolean(props.onAddCustomProvider) && (props.customProviders ?? []).length === 0 && !customRevealed();
@@ -329,9 +349,12 @@ export function createSetupProviders(props: SetupProviderProps, initial?: SetupP
       options: providerOptions(),
       selected: selectedProvider(),
       selectedByUser: providerSelectedByUser(),
+      withFree: includeFree(),
     }),
-    ({ options, selected, selectedByUser }) => {
-      if (selectedByUser && selected && options.some((provider) => provider.id === selected)) return;
+    ({ options: allOptions, selected, selectedByUser, withFree }) => {
+      if (selectedByUser && selected && allOptions.some((provider) => provider.id === selected)) return;
+      // A step without the free row does not choose the free provider by itself.
+      const options = withFree ? allOptions : allOptions.filter((provider) => provider.id !== FREE_PROVIDER);
       if (selected && options.some((provider) => provider.id === selected && providerReady(provider))) return;
       // A signed-in provider comes first, then one whose CLI is on the computer. Free models are the
       // way in when the user has neither.
@@ -428,8 +451,9 @@ export function createSetupProviders(props: SetupProviderProps, initial?: SetupP
     void openProviderGuide(provider, props.onSignInProvider, "sign-in");
   }
 
-  async function connectProvider(provider: AgentProviderId): Promise<void> {
-    if (!props.onConnectProvider || props.refreshingProviders) return;
+  /** Resolves `false` when the request failed; the error then says why. */
+  async function connectProvider(provider: AgentProviderId): Promise<boolean> {
+    if (!props.onConnectProvider || props.refreshingProviders) return true;
     keepProviderRows();
     setError("");
     setProviderErrors((current) => ({ ...current, [provider]: undefined }));
@@ -441,14 +465,17 @@ export function createSetupProviders(props: SetupProviderProps, initial?: SetupP
     );
     try {
       await props.onConnectProvider(provider);
+      return true;
     } catch {
       providersAwaitingFocusRefresh.delete(provider);
       setError(t("onboarding.error.connect", { provider: providerName(provider) }));
+      return false;
     }
   }
 
-  async function downloadProvider(provider: AgentProviderId): Promise<void> {
-    if (!props.onDownloadProvider) return;
+  /** Resolves `false` when the request failed; the error then says why. */
+  async function downloadProvider(provider: AgentProviderId): Promise<boolean> {
+    if (!props.onDownloadProvider) return true;
     keepProviderRows();
     setError("");
     setProviderErrors((current) => ({ ...current, [provider]: undefined }));
@@ -456,8 +483,10 @@ export function createSetupProviders(props: SetupProviderProps, initial?: SetupP
     setSelectedProvider(provider);
     try {
       await props.onDownloadProvider(provider);
+      return true;
     } catch {
       setError(t("onboarding.error.download", { provider: providerName(provider) }));
+      return false;
     }
   }
 
@@ -514,6 +543,13 @@ export function createSetupProviders(props: SetupProviderProps, initial?: SetupP
     signInProvider,
     connectProvider,
     downloadProvider,
+    /** Forgets the user's choice, so the step chooses again from the rows it shows. */
+    clearChoice: () => {
+      choiceChanged = true;
+      setProviderSelectedByUser(false);
+      setCustomSelected(false);
+      setSelectedProvider(null);
+    },
     cancelProviderDownload,
     refreshProviders,
     openProviderGuide,
@@ -551,8 +587,20 @@ export function SetupProviderPicker(props: SetupProviderPickerProps) {
         focusFirst
         disabled={props.disabled}
         refreshingProviders={source().refreshingProviders}
-        onConnectProvider={source().onConnectProvider ? props.providers.connectProvider : undefined}
-        onDownloadProvider={source().onDownloadProvider ? props.providers.downloadProvider : undefined}
+        onConnectProvider={
+          source().onConnectProvider
+            ? async (provider) => {
+                await props.providers.connectProvider(provider);
+              }
+            : undefined
+        }
+        onDownloadProvider={
+          source().onDownloadProvider
+            ? async (provider) => {
+                await props.providers.downloadProvider(provider);
+              }
+            : undefined
+        }
         onCancelProviderDownload={
           source().onCancelProviderDownload ? props.providers.cancelProviderDownload : undefined
         }
@@ -578,6 +626,8 @@ export function SetupProviderPicker(props: SetupProviderPickerProps) {
         onManageCustomProviders={source().onAddCustomProvider ? props.providers.host.openList : undefined}
         moreProviders={props.providers.rows().hidden}
         customInMore={props.providers.customInMore()}
+        customEngine={props.providers.options().find((option) => option.id === FREE_PROVIDER)}
+        versionInDetail
         moreCallout={{
           title: t("onboarding.provider.moreTitle"),
           detail: t("onboarding.provider.moreDetail"),
@@ -638,7 +688,13 @@ export function SetupProviderPicker(props: SetupProviderPickerProps) {
           <OpenCodeKeyDialog
             api={api()}
             onClose={props.providers.closeOpenCodeKey}
-            onReconnect={source().onConnectProvider ? () => props.providers.connectProvider("opencode") : undefined}
+            onReconnect={
+              source().onConnectProvider
+                ? async () => {
+                    await props.providers.connectProvider("opencode");
+                  }
+                : undefined
+            }
           />
         )}
       </Show>

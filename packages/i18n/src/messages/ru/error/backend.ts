@@ -75,6 +75,10 @@ export const messages = {
   "error.backend.channelRoutineLimit": "В канале может быть не более {limit} регулярных задач.",
   "error.backend.agentRoutineLimit": "У агента может быть не более {limit} регулярных задач.",
   "error.backend.agentMemoryLimit": "У агента может быть не более {limit} записей памяти.",
+  "error.backend.agentMemoryLimitReached":
+    "У вас {saved} из {limit} записей памяти. Чтобы освободить место, обновите одну запись по её memoryId объединённым текстом двух связанных записей и забудьте другую или забудьте запись, которая больше не верна. Затем повторите попытку.",
+  "error.backend.agentMemoryLimitExceeded":
+    "У вас {saved} записей памяти, а лимит — {limit}. Пользователь установил лимит ниже числа сохранённых записей. Не забывайте записи, чтобы освободить место. Сообщите пользователю, что эта запись не сохранена.",
   "error.backend.channelHistoryLeadRequired": "Выберите ведущего канала, чтобы подготовить общую историю.",
   "error.backend.channelHistoryArriving": "Общее сообщение ещё приходит. Продолжите, когда оно придёт полностью.",
   "error.backend.channelHistoryInvalid": "Сводка истории некорректна. Продолжите, чтобы повторить попытку.",
@@ -171,6 +175,12 @@ export const messages = {
   "error.backend.mcpServerExited":
     "Сервер остановился, не ответив. Запустите команду в терминале, чтобы увидеть ошибку.",
   "error.backend.mcpServerUnreachable": "OpenBot не смог связаться с сервером. Проверьте URL и сеть.",
+  "error.backend.mcpLocalServerOff":
+    "На этом компьютере по адресу {address} не отвечает ни один сервер. Запустите сервер или включите его в приложении, которое его запускает, и повторите попытку.",
+  "error.backend.mcpServerBlocked":
+    "Этот компьютер заблокировал подключение к серверу. Проверьте брандмауэр или защитное ПО и повторите попытку.",
+  "error.backend.mcpServerIncompatible":
+    "По этому адресу что-то ответило, но не как сервер MCP через Streamable HTTP. Проверьте URL и обновите приложение, которое запускает сервер.",
   "error.backend.mcpRemoteBridge":
     "{reason} Эта команда запускает мост mcp-remote. Выберите вместо него Streamable HTTP с URL {url}, и OpenBot выполнит вход.",
   "error.backend.oauthNotHttps": "Эндпоинт OAuth {origin} не использует https, поэтому учётные данные не отправлены.",

@@ -1,6 +1,26 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("server", {
+  "server.connection.planEnded": "The plan for {name} has ended",
+  "server.connection.wakeFailed": "Could not start {name}",
+  "server.connection.startTimeout": "{name} did not start in time",
+  "server.connection.sleeping": "{name} is asleep",
+  "server.connection.waking": "Starting {name}",
+  "server.connection.loading": "Loading {name}",
+  "server.connection.connecting": "Connecting to {name}",
+  "server.connection.reconnecting": "Reconnecting to {name}",
+  "server.connection.blocked": "{name} needs your attention",
+  "server.connection.nextRetry": "Next attempt in {seconds} seconds.",
+  "server.connection.wakeHint": "Use this workspace or select Retry to start the server.",
+  "server.connection.planHint": "Open account settings to check the server plan.",
+  "server.connection.loadingHint": "You can select another server while this one loads.",
+  "server.connection.cachedHint": "Loaded content and drafts are kept. Server actions will resume after reconnection.",
+  "server.connection.conversationFailed": "The conversation could not load. Try again.",
+  "server.connection.panelsFailed": "Some workspace panels could not load. Try again.",
+  "server.connection.retry": "Retry",
+  "server.connection.manage": "Open settings",
+  "server.connection.restored": "Connection to {name} restored",
+
   "server.compatibility.updateClientTitle": "Update this OpenBot app",
   "server.compatibility.updateHostTitle": "Update OpenBot on {name}",
   "server.compatibility.unsafeDataTitle": "The host returned unsafe data",
@@ -38,8 +58,9 @@ export const messages = defineMessages("server", {
   "server.join.emailBound": "This invitation only works for its email recipient.",
   "server.join.unknownDate": "Unknown",
   // The dialog that the plus button on the server rail opens. {price} is a formatted amount, such as "€20".
-  "server.add.title": "Run OpenBot in the cloud",
-  "server.add.description": "OpenBot runs the server for you. Choose a plan to start.",
+  "server.add.title": "Run OpenBot 24/7 on an external server",
+  "server.add.description":
+    "OpenBot Servers keep your agents and routines running, even when your computer is off. We handle the infrastructure and maintenance, so your server is ready to use without any technical setup.",
   "server.add.billing.label": "Billing period",
   "server.add.currency.label": "Currency",
   "server.add.billing.monthly": "Monthly",
@@ -141,7 +162,6 @@ export const messages = defineMessages("server", {
   "server.select.failedTitle": "Could not select the server",
   "server.select.failedDescription": "Could not switch servers. Try again.",
   "server.select.openAgentFailed": "Could not open {name}. Find it in the sidebar.",
-  "server.scope.agentsLoadFailed": "Could not load agents. Check the server connection and try again.",
   "server.settings.unavailable": "This server is not available.",
   "server.settings.identityRefreshFailed": "The server identity could not refresh.",
   "server.settings.loadFailed": "The server settings could not load.",
@@ -244,6 +264,8 @@ export const messages = defineMessages("server", {
   "server.settings.reachable": "Reachable online. Only invited people can sign in.",
   "server.settings.notReachable": "Not reachable online. Existing members and invitations remain.",
   "server.settings.removeTitle": "Remove server",
+  "server.settings.removeDescription":
+    "Remove this server from the account service for all members. Use this when its computer is no longer available.",
   "server.settings.removeConfirmTitle": "Remove {name}?",
   "server.settings.removeConfirmDescription":
     "This removes the server from the account service for all members and ends remote access. Files and chats on its computer stay intact. To use it again, register it from that computer.",

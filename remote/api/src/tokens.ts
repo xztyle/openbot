@@ -10,6 +10,15 @@ import {
   type SlackRouteTeam,
 } from "@openbot/contracts/signal-protocol/slack-route";
 import {
+  TELEGRAM_BOT_ID_PATTERN,
+  TELEGRAM_CHAT_ID_PATTERN,
+  TELEGRAM_FILE_TOKEN_TTL_SECONDS,
+  TELEGRAM_ROUTE_AUDIENCE,
+  TELEGRAM_ROUTE_CHATS_LIMIT,
+  type TelegramReplyParameters,
+  type TelegramRouteChat,
+} from "@openbot/contracts/signal-protocol/telegram-route";
+import {
   WEBHOOK_ROUTE_AUDIENCE,
   WEBHOOK_ROUTES_LIMIT,
   type WebhookRoute,
@@ -83,6 +92,18 @@ const webhookRouteClaimsSchema = z.object({
     .array(z.object({ id: identifierSchema, linkedAt: z.number().int().nonnegative() }))
     .max(WEBHOOK_ROUTES_LIMIT),
 });
+const telegramRouteClaimsSchema = z.object({
+  hid: identifierSchema,
+  chats: z
+    .array(
+      z.object({
+        id: z.string().regex(TELEGRAM_CHAT_ID_PATTERN),
+        botId: z.string().regex(TELEGRAM_BOT_ID_PATTERN),
+        linkedAt: z.int().nonnegative(),
+      }),
+    )
+    .max(TELEGRAM_ROUTE_CHATS_LIMIT),
+});
 const SLACK_SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 
 export class RemoteTokenError extends Schema.TaggedError<RemoteTokenError>()("RemoteTokenError", {
@@ -106,6 +127,15 @@ export class RemoteTokenService {
   readonly #turnTlsPort: number;
   readonly #validateResumeClaims: (claims: RemoteTicketClaims) => Effect.Effect<boolean, RemoteTokenError>;
   readonly #validateSlackRoute: (hostId: string, teams: SlackRouteTeam[]) => Effect.Effect<string[], RemoteTokenError>;
+  readonly #validateTelegramRoute: (
+    hostId: string,
+    chats: TelegramRouteChat[],
+  ) => Effect.Effect<TelegramRouteChat[], RemoteTokenError>;
+  readonly #linkTelegramChat: (
+    botId: string,
+    chatId: string,
+    code: string,
+  ) => Effect.Effect<TelegramChatLink | null, RemoteTokenError>;
   readonly #validateDiscordRoute: (
     hostId: string,
     guilds: DiscordRouteGuild[],
@@ -127,6 +157,17 @@ export class RemoteTokenService {
       fetch?: FetchImplementation;
       // Asks the account service which links of a route are current. Without it, none is.
       validateSlackRoute?: (hostId: string, teams: SlackRouteTeam[]) => Effect.Effect<string[], RemoteTokenError>;
+      // Asks the account service which chats of a Telegram route are current. Without it, none is.
+      validateTelegramRoute?: (
+        hostId: string,
+        chats: TelegramRouteChat[],
+      ) => Effect.Effect<TelegramRouteChat[], RemoteTokenError>;
+      // Asks the account service to link a chat with a link code. Without it, no code links a chat.
+      linkTelegramChat?: (
+        botId: string,
+        chatId: string,
+        code: string,
+      ) => Effect.Effect<TelegramChatLink | null, RemoteTokenError>;
       // Asks the account service which guild links of a route are current. Without it, none is.
       validateDiscordRoute?: (hostId: string, guilds: DiscordRouteGuild[]) => Effect.Effect<string[], RemoteTokenError>;
       // Asks the account service which webhook links in a ticket are current. Without it, none is.
@@ -151,6 +192,8 @@ export class RemoteTokenService {
     this.#turnTlsPort = config.turnTlsPort;
     this.#validateResumeClaims = validateResumeClaims;
     this.#validateSlackRoute = options.validateSlackRoute ?? (() => Effect.succeed([]));
+    this.#validateTelegramRoute = options.validateTelegramRoute ?? (() => Effect.succeed([]));
+    this.#linkTelegramChat = options.linkTelegramChat ?? (() => Effect.succeed(null));
     this.#validateDiscordRoute = options.validateDiscordRoute ?? (() => Effect.succeed([]));
     this.#validateWebhookRoute = options.validateWebhookRoute ?? (() => Effect.succeed([]));
   }
@@ -243,6 +286,32 @@ export class RemoteTokenService {
 
   readonly validateWebhookRoute = Effect.fn("RemoteTokens.validateWebhookRoute")(
     (hostId: string, routes: WebhookRoute[]) => this.#validateWebhookRoute(hostId, routes),
+  );
+
+  readonly verifyTelegramRoute = Effect.fn("RemoteTokens.verifyTelegramRoute")(
+    (token: string, hostId: string, now = new Date()) =>
+      Effect.gen({ self: this }, function* () {
+        const { payload } = yield* tokenCall(() =>
+          jwtVerify(token, this.#ticketKey, {
+            audience: TELEGRAM_ROUTE_AUDIENCE,
+            algorithms: ["ES256"],
+            requiredClaims: ["exp"],
+            currentDate: now,
+          }),
+        );
+        const claims = yield* tokenDecode(() => telegramRouteClaimsSchema.parse(payload));
+        if (claims.hid !== hostId)
+          return yield* new RemoteTokenError({ message: "The Telegram route belongs to another host." });
+        return { chats: claims.chats };
+      }),
+  );
+
+  readonly validateTelegramRoute = Effect.fn("RemoteTokens.validateTelegramRoute")(
+    (hostId: string, chats: TelegramRouteChat[]) => this.#validateTelegramRoute(hostId, chats),
+  );
+
+  readonly linkTelegramChat = Effect.fn("RemoteTokens.linkTelegramChat")(
+    (botId: string, chatId: string, code: string) => this.#linkTelegramChat(botId, chatId, code),
   );
 
   readonly validateClaims = Effect.fn("RemoteTokens.validateClaims")((claims: RemoteTicketClaims) =>
@@ -396,6 +465,132 @@ export function verifySlackSignature(
   const actualBytes = Buffer.from(signature);
   const expectedBytes = Buffer.from(expected);
   return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+}
+
+/** The host that a link code linked a chat to, and when, in milliseconds. */
+export interface TelegramChatLink {
+  hostId: string;
+  linkedAt: number;
+}
+
+/**
+ * The `secret_token` of one bot's webhook: Telegram sends it in `X-Telegram-Bot-Api-Secret-Token`.
+ * Each bot has its own, so a secret that one bot's settings show cannot sign another bot's updates.
+ */
+export function telegramWebhookSecret(webhookSecret: string, botId: string): string {
+  return createHmac("sha256", webhookSecret).update(`telegram-webhook:${botId}`).digest("base64url");
+}
+
+export function verifyTelegramWebhookSecret(actual: string, expected: string): boolean {
+  const actualBytes = Buffer.from(actual);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+}
+
+/** One file of an update that a host can download from `TELEGRAM_FILES_PATH`. */
+export interface TelegramFileGrant {
+  botId: string;
+  // The Bot API's `file_path`.
+  filePath: string;
+}
+
+/** One document that a host can post to `TELEGRAM_UPLOADS_PATH`, into the chat it named. */
+export interface TelegramUploadGrant {
+  botId: string;
+  chatId: number;
+  fileName: string;
+  messageThreadId?: number;
+  replyParameters?: TelegramReplyParameters;
+}
+
+const telegramFileGrantSchema = z.object({
+  botId: z.string().regex(TELEGRAM_BOT_ID_PATTERN),
+  filePath: z.string().min(1).max(1_024),
+  exp: z.int(),
+});
+const telegramUploadGrantSchema = z.object({
+  botId: z.string().regex(TELEGRAM_BOT_ID_PATTERN),
+  chatId: z.int(),
+  fileName: z.string().min(1).max(255),
+  messageThreadId: z.int().positive().optional(),
+  replyParameters: z
+    .object({ message_id: z.int().positive(), allow_sending_without_reply: z.boolean().optional() })
+    .optional(),
+  exp: z.int(),
+  nonce: z.string().min(1).max(64),
+});
+
+/**
+ * The file and upload tokens: `<base64url JSON>.<base64url HMAC-SHA256>`, signed with keys derived
+ * from the session secret, each with its own label. They expire after
+ * `TELEGRAM_FILE_TOKEN_TTL_SECONDS`. Signal remembers each used upload token until it expires, so one
+ * token posts one document.
+ */
+export class TelegramFileTokens {
+  readonly #fileKey: Buffer;
+  readonly #uploadKey: Buffer;
+  // Upload nonce to its expiry in seconds. Tokens have one TTL, so the oldest entry is first.
+  readonly #usedUploads = new Map<string, number>();
+
+  constructor(sessionSecret: string) {
+    this.#fileKey = createHmac("sha256", sessionSecret).update("openbot-telegram-file-token").digest();
+    this.#uploadKey = createHmac("sha256", sessionSecret).update("openbot-telegram-upload-token").digest();
+  }
+
+  issueFile(grant: TelegramFileGrant, nowSeconds = Math.floor(Date.now() / 1_000)): string {
+    return signGrant(this.#fileKey, { ...grant, exp: nowSeconds + TELEGRAM_FILE_TOKEN_TTL_SECONDS });
+  }
+
+  verifyFile(token: string, nowSeconds = Math.floor(Date.now() / 1_000)): TelegramFileGrant | null {
+    const claims = verifyGrant(this.#fileKey, token, telegramFileGrantSchema);
+    if (!claims || claims.exp <= nowSeconds) return null;
+    return { botId: claims.botId, filePath: claims.filePath };
+  }
+
+  issueUpload(grant: TelegramUploadGrant, nowSeconds = Math.floor(Date.now() / 1_000)): string {
+    return signGrant(this.#uploadKey, {
+      ...grant,
+      exp: nowSeconds + TELEGRAM_FILE_TOKEN_TTL_SECONDS,
+      nonce: crypto.randomUUID(),
+    });
+  }
+
+  /** Returns the grant once. A second use of the same token returns `null`. */
+  consumeUpload(token: string, nowSeconds = Math.floor(Date.now() / 1_000)): TelegramUploadGrant | null {
+    for (const [nonce, expiresAt] of this.#usedUploads) {
+      if (expiresAt > nowSeconds) break;
+      this.#usedUploads.delete(nonce);
+    }
+    const claims = verifyGrant(this.#uploadKey, token, telegramUploadGrantSchema);
+    if (!claims || claims.exp <= nowSeconds || this.#usedUploads.has(claims.nonce)) return null;
+    const { exp, nonce, ...grant } = claims;
+    this.#usedUploads.set(nonce, exp);
+    return grant;
+  }
+}
+
+function signGrant(
+  key: Buffer,
+  claims: (TelegramFileGrant | TelegramUploadGrant) & { exp: number; nonce?: string },
+): string {
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  return `${payload}.${createHmac("sha256", key).update(payload).digest("base64url")}`;
+}
+
+function verifyGrant<S extends z.ZodType>(key: Buffer, token: string, schema: S): z.output<S> | null {
+  const [payload, signature, extra] = token.split(".");
+  if (!payload || !signature || extra !== undefined) return null;
+  const actualBytes = Buffer.from(signature);
+  const expectedBytes = Buffer.from(createHmac("sha256", key).update(payload).digest("base64url"));
+  if (actualBytes.length !== expectedBytes.length || !timingSafeEqual(actualBytes, expectedBytes)) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(Buffer.from(payload, "base64url").toString());
+  } catch {
+    return null;
+  }
+  const claims = schema.safeParse(value);
+  return claims.success ? claims.data : null;
 }
 
 export function verifyWebhookSignature(

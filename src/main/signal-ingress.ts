@@ -8,6 +8,12 @@ import {
   SLACK_DELIVERY_RESPONSE_BYTES_LIMIT,
   type WebhookDeliveryStatus,
 } from "@openbot/contracts/signal-protocol/messages";
+import {
+  TELEGRAM_CAPABILITY,
+  type TelegramCallMethod,
+  type TelegramCallParams,
+  type TelegramCallResult,
+} from "@openbot/contracts/signal-protocol/telegram-route";
 import { createOpenBotLogger } from "@openbot/logging";
 import { Context, Effect, Exit, Layer, ManagedRuntime, Option, Result, Scope } from "effect";
 import WebSocket from "ws";
@@ -19,8 +25,11 @@ import {
   type IngressState,
   MessagingAdapterError,
   type MessagingIngress,
+  TelegramCallError,
+  type TelegramGateway,
 } from "../backend/messaging/messaging-types";
 import { type RemoteWorkflowError, remoteDecode } from "./remote-service-effects";
+import { downloadTelegramFile, signalHttpOrigin, uploadTelegramFile } from "./telegram-files";
 
 const logger = createOpenBotLogger("signal-ingress");
 
@@ -32,6 +41,9 @@ const PONG_TIMEOUT_MS = 10_000;
 const DISCORD_SESSION_WAIT_MS = 15_000;
 /** Signal gives a Discord call about 10 seconds, and an upload carries up to 10 MB. */
 const DISCORD_CALL_TIMEOUT_MS = 60_000;
+/** How long a Telegram call waits for the socket to be ready, and then for Signal's answer. */
+const TELEGRAM_READY_TIMEOUT_MS = 10_000;
+const TELEGRAM_CALL_TIMEOUT_MS = 20_000;
 
 export interface SignalIngressOptions {
   /** The remote host id of this computer, or null before it has a name. */
@@ -44,6 +56,12 @@ export interface SignalIngressOptions {
   issueDiscordRoute(hostId: string): Effect.Effect<string, RemoteWorkflowError>;
   /** The generic webhook route ticket: route IDs registered by this host in account metadata. */
   issueWebhookRoute(hostId: string): Effect.Effect<string, RemoteWorkflowError>;
+  /**
+   * The Telegram route ticket: the chats that the account service links to this host. A failure, such
+   * as an account service without Telegram, leaves the socket without Telegram chats until it opens
+   * again later.
+   */
+  issueTelegramRoute?(hostId: string): Effect.Effect<string, RemoteWorkflowError>;
 }
 
 class SignalIngressAccount extends Context.Service<
@@ -53,6 +71,7 @@ class SignalIngressAccount extends Context.Service<
     slackRoute(hostId: string): Effect.Effect<string, RemoteWorkflowError>;
     discordRoute(hostId: string): Effect.Effect<string, RemoteWorkflowError>;
     webhookRoute(hostId: string): Effect.Effect<string, RemoteWorkflowError>;
+    telegramRoute(hostId: string): Effect.Effect<string | null>;
   }
 >()("openbot/main/SignalIngressAccount") {
   static layer(options: SignalIngressOptions) {
@@ -63,6 +82,19 @@ class SignalIngressAccount extends Context.Service<
         slackRoute: (hostId) => options.issueSlackRoute(hostId),
         discordRoute: (hostId) => options.issueDiscordRoute(hostId),
         webhookRoute: (hostId) => options.issueWebhookRoute(hostId),
+        telegramRoute: (hostId) =>
+          options.issueTelegramRoute
+            ? options.issueTelegramRoute(hostId).pipe(
+                Effect.catch(() =>
+                  Effect.sync(() => {
+                    logger.warn(
+                      "The Telegram route ticket is not available. The socket opens again later for Telegram.",
+                    );
+                    return null;
+                  }),
+                ),
+              )
+            : Effect.succeed(null),
       }),
     );
   }
@@ -90,8 +122,9 @@ export type WebhookIngressHandler = (delivery: WebhookIngressDelivery) => Effect
 
 /**
  * Owns this host's `ingress` socket to Signal, which brings the Events API requests of the Slack
- * workspaces and the Gateway events of the Discord guilds linked to this host. It also makes this
- * host's Discord calls through Signal, which holds the Discord bot token. It needs no WebRTC, so it
+ * workspaces, the Gateway events of the Discord guilds and the updates of the Telegram chats linked to
+ * this host. It also makes this host's Discord and Telegram calls through Signal, which holds both bot
+ * tokens. It needs no WebRTC, so it
  * lives here in main rather than in the hidden peer window. It is open while a connection holds it,
  * and it reconnects with a new ticket and route tickets after every close. It never logs a frame or
  * a call: both carry message text.
@@ -119,8 +152,16 @@ export class SignalIngress implements MessagingIngress {
   /** The open socket serves Slack or Discord without the webhook route, because its ticket failed. */
   #webhookMissing = false;
   #webhookBackoffMs = BACKOFF_START_MS;
+  /** The open socket has no Telegram route, because its ticket failed. */
+  #telegramMissing = false;
+  #telegramBackoffMs = BACKOFF_START_MS;
   readonly #sessionListeners = new Set<(session: DiscordSession | null) => void>();
   readonly #routeListeners = new Set<(guildIds: ReadonlySet<string>) => void>();
+  /** What the Signal of the open socket can do, from its `ready`. */
+  #capabilities = new Set<string>();
+  /** The HTTPS origin of the Signal of the open socket, for Telegram files. */
+  #signalOrigin: string | null = null;
+  readonly #telegramCalls = new Map<string, (answer: TelegramCallAnswer) => void>();
 
   constructor(options: SignalIngressOptions) {
     this.#options = options;
@@ -184,6 +225,24 @@ export class SignalIngress implements MessagingIngress {
   handleWebhooks(handler: WebhookIngressHandler | null): void {
     this.#webhookHandler = handler;
   }
+
+  readonly telegram: TelegramGateway = {
+    available: () => this.#state === "online" && this.#capabilities.has(TELEGRAM_CAPABILITY),
+    call: <M extends TelegramCallMethod>(botId: string, method: M, params: TelegramCallParams[M]) =>
+      this.#telegramCall(botId, method, params),
+    download: (fileToken, destination, maxBytes) =>
+      Effect.suspend(() =>
+        this.#signalOrigin
+          ? downloadTelegramFile(this.#signalOrigin, fileToken, destination, maxBytes)
+          : Effect.fail(telegramUnavailable()),
+      ),
+    upload: (uploadToken, path) =>
+      Effect.suspend(() =>
+        this.#signalOrigin
+          ? uploadTelegramFile(this.#signalOrigin, uploadToken, path)
+          : Effect.fail(telegramUnavailable()),
+      ),
+  };
 
   /** True only after Signal confirms the webhook route ticket on this socket. */
   webhookReady(): boolean {
@@ -299,6 +358,7 @@ export class SignalIngress implements MessagingIngress {
     const account = yield* SignalIngressAccount;
     const slack = this.#holds("slack");
     const discord = this.#holds("discord");
+    const telegram = this.#holds("telegram");
     const webhooks = this.#webhookHolders > 0;
     let webhookTicket: Effect.Effect<string | null, RemoteWorkflowError> = webhooks
       ? account.webhookRoute(hostId)
@@ -319,6 +379,7 @@ export class SignalIngress implements MessagingIngress {
         slack ? account.slackRoute(hostId) : Effect.succeed(null),
         discord ? account.discordRoute(hostId) : Effect.succeed(null),
         webhookTicket,
+        telegram ? account.telegramRoute(hostId) : Effect.succeed(null),
       ],
       { concurrency: "unbounded" },
     ).pipe(Effect.result);
@@ -326,17 +387,21 @@ export class SignalIngress implements MessagingIngress {
       if (generation === this.#generation) this.#wait("unavailable");
       return;
     }
-    const [bootstrap, slackRoute, discordRoute, webhookRoute] = issued.success;
+    const [bootstrap, slackRoute, discordRoute, webhookRoute, telegramRoute] = issued.success;
     const routes = {
       ...(slackRoute === null ? {} : { slackRoute }),
       ...(discordRoute === null ? {} : { discordRoute }),
       ...(webhookRoute === null ? {} : { webhookRoute }),
+      ...(telegramRoute === null ? {} : { telegramRoute }),
     };
     if (generation !== this.#generation || (this.#held() === 0 && this.#webhookHolders === 0)) return;
     this.#webhookMissing = webhooks && webhookRoute === null;
+    this.#telegramMissing = telegram && telegramRoute === null;
+    if (telegram && telegramRoute !== null) this.#telegramBackoffMs = BACKOFF_START_MS;
     const socket = new WebSocket(bootstrap.signalUrl);
     this.#socket = socket;
     this.#apiUrl = discordApiUrl(bootstrap.signalUrl);
+    this.#signalOrigin = signalHttpOrigin(bootstrap.signalUrl);
     socket.on("open", () => {
       const hello: SignalClientMessage = {
         type: "hello",
@@ -353,6 +418,7 @@ export class SignalIngress implements MessagingIngress {
       if (socket !== this.#socket) return;
       this.#socket = null;
       this.#discordSession = null;
+      this.#endTelegram();
       this.#stopPing();
       this.#webhookReady = false;
       if (this.#held() > 0 || this.#webhookHolders > 0) this.#wait("unavailable");
@@ -376,10 +442,11 @@ export class SignalIngress implements MessagingIngress {
     const message = decoded.success;
     if (!message || socket !== this.#socket) return;
     if (message.type === "ready") {
+      this.#capabilities = new Set(message.capabilities ?? []);
       this.#backoffMs = BACKOFF_START_MS;
       this.#startPing(socket);
       this.#setState("online");
-      if (this.#webhookMissing) this.#retryWebhooks();
+      if (this.#webhookMissing || this.#telegramMissing) this.#retryRoutes();
       return;
     }
     if (message.type === "webhook-ready") {
@@ -409,6 +476,22 @@ export class SignalIngress implements MessagingIngress {
         yield* handler(message.guildId, { platform: "discord", delivery: message.delivery }).pipe(
           Effect.catch(() => Effect.void),
         );
+      return;
+    }
+    if (message.type === "telegram-call-result") {
+      this.#telegramCalls.get(message.requestId)?.(message);
+      return;
+    }
+    if (message.type === "telegram-delivery") {
+      // Telegram gets no answer: Signal already answered its webhook.
+      const handler = this.#handler;
+      if (handler)
+        yield* handler(message.chatId, {
+          platform: "telegram",
+          botId: message.botId,
+          body: Buffer.from(message.bodyBase64, "base64"),
+          linked: message.linked === true,
+        }).pipe(Effect.catch(() => Effect.void));
       return;
     }
     if (message.type === "webhook-delivery") {
@@ -475,21 +558,91 @@ export class SignalIngress implements MessagingIngress {
     }, delay);
   }
 
-  /** Opens the shared socket again later, with a longer delay each time, so webhooks come back. */
-  #retryWebhooks(): void {
+  /**
+   * Opens the shared socket again later, with a longer delay each time, so a missing webhook or
+   * Telegram route comes back. Each route has its own delay: a confirmed webhook route does not
+   * shorten the delay of a Telegram route that still fails.
+   */
+  #retryRoutes(): void {
     if (this.#retry) return;
-    const delay = this.#webhookBackoffMs * (0.5 + Math.random() / 2);
-    this.#webhookBackoffMs = Math.min(this.#webhookBackoffMs * 2, BACKOFF_LIMIT_MS);
+    let delay: number;
+    if (this.#webhookMissing) {
+      delay = this.#webhookBackoffMs * (0.5 + Math.random() / 2);
+      this.#webhookBackoffMs = Math.min(this.#webhookBackoffMs * 2, BACKOFF_LIMIT_MS);
+    } else {
+      delay = this.#telegramBackoffMs * (0.5 + Math.random() / 2);
+      this.#telegramBackoffMs = Math.min(this.#telegramBackoffMs * 2, BACKOFF_LIMIT_MS);
+    }
     this.#retry = setTimeout(() => {
       this.#retry = null;
       this.reconnect();
     }, delay);
   }
 
+  /**
+   * One Bot API call through Signal. It waits a short time for the socket to be ready, so a call made
+   * while the socket reconnects does not fail at once.
+   */
+  #telegramCall<M extends TelegramCallMethod>(
+    botId: string,
+    method: M,
+    params: TelegramCallParams[M],
+  ): Effect.Effect<TelegramCallResult, MessagingAdapterError> {
+    return Effect.gen({ self: this }, function* () {
+      yield* this.#telegramReady();
+      const socket = this.#socket;
+      if (!socket || socket.readyState !== WebSocket.OPEN) return yield* telegramUnavailable();
+      const requestId = crypto.randomUUID().replaceAll("-", "");
+      const answer = yield* Effect.callback<TelegramCallAnswer>((resume) => {
+        this.#telegramCalls.set(requestId, (value) => resume(Effect.succeed(value)));
+        const request: SignalClientMessage = {
+          type: "telegram-call",
+          version: SIGNAL_PROTOCOL_VERSION,
+          requestId,
+          botId,
+          method,
+          params,
+        };
+        socket.send(JSON.stringify(request));
+      }).pipe(
+        Effect.timeoutOrElse({ duration: TELEGRAM_CALL_TIMEOUT_MS, orElse: () => Effect.succeed(TELEGRAM_TIMED_OUT) }),
+        Effect.ensuring(Effect.sync(() => this.#telegramCalls.delete(requestId))),
+      );
+      if (answer.ok) return answer.result;
+      return yield* new MessagingAdapterError({
+        cause: new TelegramCallError(answer.errorCode, answer.description, answer.retryAfter ?? null),
+      });
+    });
+  }
+
+  #telegramReady(): Effect.Effect<void, MessagingAdapterError> {
+    if (this.telegram.available()) return Effect.void;
+    // A Signal that answered `ready` without Telegram does not gain it on this socket.
+    if (this.#state === "online") return Effect.fail(telegramUnavailable());
+    return Effect.callback<void>((resume) => {
+      const stop = this.onState(() => {
+        if (!this.telegram.available()) return;
+        stop();
+        resume(Effect.void);
+      });
+      return Effect.sync(stop);
+    }).pipe(
+      Effect.timeoutOrElse({ duration: TELEGRAM_READY_TIMEOUT_MS, orElse: () => Effect.fail(telegramUnavailable()) }),
+    );
+  }
+
+  /** The socket closed: no answer comes for the Telegram calls in flight. */
+  #endTelegram(): void {
+    this.#capabilities = new Set();
+    for (const settle of [...this.#telegramCalls.values()]) settle(TELEGRAM_UNAVAILABLE_ANSWER);
+    this.#telegramCalls.clear();
+  }
+
   #close(): void {
     this.#generation += 1;
     this.#clearRetry();
     this.#stopPing();
+    this.#endTelegram();
     const socket = this.#socket;
     this.#socket = null;
     this.#discordSession = null;
@@ -531,6 +684,17 @@ export class SignalIngress implements MessagingIngress {
 }
 
 const pongs = new WeakMap<WebSocket, boolean>();
+
+type TelegramCallAnswer =
+  | { ok: true; result: TelegramCallResult }
+  | { ok: false; errorCode: number; description: string; retryAfter?: number };
+
+const TELEGRAM_UNAVAILABLE_ANSWER: TelegramCallAnswer = { ok: false, errorCode: 503, description: "relay_unavailable" };
+const TELEGRAM_TIMED_OUT: TelegramCallAnswer = { ok: false, errorCode: 504, description: "timeout" };
+
+function telegramUnavailable(): MessagingAdapterError {
+  return new MessagingAdapterError({ cause: new TelegramCallError(503, "relay_unavailable", null) });
+}
 
 /** Signal's Discord path on the origin of its socket: `wss:` becomes `https:`, and `ws:` (local) `http:`. */
 function discordApiUrl(signalUrl: string): string {

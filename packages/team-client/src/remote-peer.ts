@@ -22,7 +22,7 @@ import {
   type TeamProtocolV2Json,
   teamProtocolV2AuthenticationTranscript,
 } from "@openbot/contracts/team-protocol";
-import { optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
+import { optionalTeamEvent, optionalTeamEventToCurrent } from "@openbot/contracts/team-protocol/optional-events";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import {
   type TeamProtocolV1CurrentEventControl,
@@ -51,7 +51,15 @@ import { encodeTeamWebRtcPayload, TeamWebRtcPayloadDecoder } from "./webrtc-fram
 export type RemoteTeamCommand =
   | { id: string; type: "connect"; hostId: string; hostPublicKey: string }
   | { id: string; type: "disconnect" }
-  | { id: string; type: "request"; method: string; path: string; body: TeamProtocolV2Json; upload?: RemoteFileUpload };
+  | {
+      id: string;
+      type: "request";
+      method: string;
+      path: string;
+      body: TeamProtocolV2Json;
+      upload?: RemoteFileUpload;
+      timeoutMs?: number;
+    };
 
 export interface RemoteTeamBootstrapPayload {
   sessionId: string;
@@ -536,6 +544,7 @@ export function createRemoteTeamPeer(actions: ActionsRef) {
               peerCall(() => actions.current.onUploadProgress?.({ commandId: command.id, sent, total })),
             ).catch(() => undefined);
           },
+          command.timeoutMs,
         );
         return { commandId: command.id, ok: true, status: response.status, body: response.body };
       }).pipe(Effect.result);
@@ -1002,9 +1011,9 @@ export function createRemoteTeamPeer(actions: ActionsRef) {
       }
       if (frame.sequence !== state.lastEventSequence + 1)
         return yield* new RemotePeerError({ message: sourceText("error.remote.eventStreamGap") });
-      const channel = optionalTeamEvent(frame.payload);
+      const channel = yield* peerDecode(() => optionalTeamEvent(frame.payload));
       const decoded = channel
-        ? { status: "known" as const, event: channel }
+        ? { status: "known" as const, event: optionalTeamEventToCurrent(channel) }
         : yield* peerDecode(() => decodeTeamProtocolV6CurrentEvent(frame));
       if (decoded.status === "invalid")
         return yield* new RemotePeerError({ message: sourceText("error.remote.malformedEvent") });
@@ -1076,6 +1085,7 @@ export function createRemoteTeamPeer(actions: ActionsRef) {
     body: TeamProtocolV2Json,
     upload?: RemoteFileUpload,
     onUploadProgress?: (sent: number, total: number) => void,
+    timeoutMs = REQUEST_TIMEOUT_MS,
   ) {
     return Effect.fn("RemotePeer.request")(function* () {
       const state = peer;
@@ -1135,7 +1145,7 @@ export function createRemoteTeamPeer(actions: ActionsRef) {
                 reject(error);
                 if (checksConnection) failPeer(state, error, actions);
               },
-              checksConnection ? compatibilityTimeout : REQUEST_TIMEOUT_MS,
+              checksConnection ? Math.min(compatibilityTimeout, timeoutMs) : timeoutMs,
             );
             const resolve = (value: { status: number; body: TeamProtocolV2Json }) =>
               Deferred.doneUnsafe(answer, Effect.succeed(value));

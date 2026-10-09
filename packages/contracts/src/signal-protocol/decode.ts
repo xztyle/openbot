@@ -20,6 +20,12 @@ import {
   WEBHOOK_DELIVERY_BODY_BYTES_LIMIT,
 } from "./messages";
 import {
+  TELEGRAM_BOT_ID_PATTERN,
+  TELEGRAM_CHAT_ID_PATTERN,
+  TELEGRAM_UPDATE_BYTES_LIMIT,
+  type TelegramCallResult,
+} from "./telegram-route";
+import {
   WEBHOOK_DELIVERY_ID_PATTERN,
   WEBHOOK_ROUTE_ID_PATTERN,
   WEBHOOK_SIGNATURE_PATTERN,
@@ -47,6 +53,7 @@ export function decodeSignalServerMessage(value: unknown): SignalServerMessage |
         connectionId: value.connectionId === null ? null : identifier(value.connectionId),
         resumeToken: identifier(value.resumeToken),
         iceServers: iceServers(value.iceServers),
+        ...(value.capabilities === undefined ? {} : { capabilities: capabilities(value.capabilities) }),
       };
     case "peer-ready":
       return {
@@ -130,6 +137,35 @@ export function decodeSignalServerMessage(value: unknown): SignalServerMessage |
         guildId: identifier(value.guildId),
         delivery: decodeDiscordDelivery(value.delivery),
       };
+    case "telegram-delivery":
+      if (value.linked !== undefined && value.linked !== true) invalid();
+      return {
+        type: kind,
+        version,
+        botId: matching(value.botId, TELEGRAM_BOT_ID_PATTERN),
+        chatId: matching(value.chatId, TELEGRAM_CHAT_ID_PATTERN),
+        bodyBase64: deliveryBody(value.bodyBase64, TELEGRAM_UPDATE_BYTES_LIMIT),
+        ...(value.linked === true ? { linked: true as const } : {}),
+      };
+    case "telegram-call-result":
+      if (value.ok === true)
+        return {
+          type: kind,
+          version,
+          requestId: identifier(value.requestId),
+          ok: true,
+          result: telegramResult(value.result),
+        };
+      if (value.ok !== false) invalid();
+      return {
+        type: kind,
+        version,
+        requestId: identifier(value.requestId),
+        ok: false,
+        errorCode: integer(value.errorCode),
+        description: text(value.description).slice(0, 256),
+        ...(value.retryAfter === undefined ? {} : { retryAfter: retryNumber(value.retryAfter) }),
+      };
     default:
       return null;
   }
@@ -210,6 +246,24 @@ function matching(value: unknown, pattern: RegExp): string {
 function guildList(value: unknown): string[] {
   if (!Array.isArray(value) || value.length > DISCORD_ROUTE_GUILDS_LIMIT) invalid();
   return value.map(identifier);
+}
+
+// Unknown capabilities are kept: a host acts only on the ones it knows.
+function capabilities(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 32) invalid();
+  return value.map(identifier);
+}
+
+function telegramResult(value: unknown): TelegramCallResult {
+  if (!isDynamicRecord(value)) invalid();
+  return {
+    ...(value.messageId === undefined ? {} : { messageId: integer(value.messageId) }),
+    ...(value.botId === undefined ? {} : { botId: matching(value.botId, TELEGRAM_BOT_ID_PATTERN) }),
+    ...(value.username === undefined ? {} : { username: identifier(value.username) }),
+    ...(value.fileToken === undefined ? {} : { fileToken: identifier(value.fileToken) }),
+    ...(value.fileSize === undefined ? {} : { fileSize: retryNumber(value.fileSize) }),
+    ...(value.uploadToken === undefined ? {} : { uploadToken: identifier(value.uploadToken) }),
+  };
 }
 
 function channel(value: unknown): SignalChannel {

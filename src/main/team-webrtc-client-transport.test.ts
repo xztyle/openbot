@@ -15,6 +15,7 @@ import {
   type TeamProtocolV2AuthFrame,
   teamProtocolV2AuthenticationTranscript,
 } from "@openbot/contracts/team-protocol/v2";
+import { sourceText } from "@openbot/i18n/source";
 import { describe, expect, it, vi } from "vitest";
 import { runCauseEffect } from "../backend/effect-boundary";
 import { RemoteConnectTrace } from "./remote-connect-trace";
@@ -144,6 +145,7 @@ function createTransport(
     listMembers: () => authCall(async () => []),
     updateMember: () => authCall(async () => undefined),
     removeMember: () => authCall(async () => undefined),
+    removeOwnedHost: () => authCall(async () => undefined),
     getPrincipalId: () => "user-1",
     controlPlaneUrl: "https://api.example.test",
     downloadHostLogo: () => authCall(async () => ({ bytes: new Uint8Array(), mimeType: "image/png" })),
@@ -166,6 +168,36 @@ function sentRequestId(send: { mock: { calls: unknown[][] } }): string | null {
 }
 
 describe("TeamWebRtcClientTransport", () => {
+  it("ends a required read at its deadline while the bridge send is blocked", async () => {
+    const bridge = new TeamWebRtcBridge();
+    vi.spyOn(bridge, "start").mockReturnValue(Effect.void);
+    vi.spyOn(bridge, "connect").mockImplementation(({ peerId }) =>
+      remoteCall(async () => {
+        queueMicrotask(() => bridge.emit("connected", peerId, channelBinding));
+      }),
+    );
+    vi.spyOn(bridge, "disconnect").mockReturnValue(Effect.void);
+    const { send } = mockAuthenticatedSend(bridge);
+    const transport = createTransport(bridge);
+    transport.pinHostKey("host-1", hostKeys.publicKey);
+    await runCauseEffect(transport.connect("host-1"));
+    const interrupted = vi.fn();
+    send.mockClear().mockReturnValue(Effect.never.pipe(Effect.ensuring(Effect.sync(interrupted))));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const request = runCauseEffect(transport.request("host-1", "/v1/agents"));
+      const rejected = expect(request).rejects.toMatchObject({ code: "remote_timeout" });
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      await vi.advanceTimersByTimeAsync(15_000);
+      await rejected;
+      expect(interrupted).toHaveBeenCalledOnce();
+      expect(send).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+      await runCauseEffect(transport.stop());
+    }
+  });
+
   it("waits for the host directory only for a host without a pinned key, and still refuses one it does not pin", async () => {
     const bridge = new TeamWebRtcBridge();
     vi.spyOn(bridge, "start").mockReturnValue(Effect.void);
@@ -315,6 +347,7 @@ describe("TeamWebRtcClientTransport", () => {
       listMembers: () => authCall(async () => []),
       updateMember: () => authCall(async () => undefined),
       removeMember: () => authCall(async () => undefined),
+      removeOwnedHost: () => authCall(async () => undefined),
       getPrincipalId: () => "user-1",
       controlPlaneUrl: "https://api.example.test",
       downloadHostLogo: () => authCall(async () => ({ bytes: new Uint8Array(), mimeType: "image/png" })),
@@ -479,6 +512,7 @@ describe("TeamWebRtcClientTransport", () => {
       listMembers: () => authCall(async () => []),
       updateMember: () => authCall(async () => undefined),
       removeMember: () => authCall(async () => undefined),
+      removeOwnedHost: () => authCall(async () => undefined),
       getPrincipalId: () => "user-1",
       controlPlaneUrl: "https://api.example.test",
       downloadHostLogo: () => authCall(async () => ({ bytes: new Uint8Array(), mimeType: "image/png" })),
@@ -552,6 +586,7 @@ describe("TeamWebRtcClientTransport", () => {
       listMembers: () => authCall(async () => []),
       updateMember: () => authCall(async () => undefined),
       removeMember: () => authCall(async () => undefined),
+      removeOwnedHost: () => authCall(async () => undefined),
       getPrincipalId: () => principalId,
       controlPlaneUrl: "https://api.example.test",
       downloadHostLogo: () => authCall(async () => ({ bytes: new Uint8Array(), mimeType: "image/png" })),
@@ -622,6 +657,7 @@ describe("TeamWebRtcClientTransport", () => {
       listMembers: () => authCall(async () => []),
       updateMember: () => authCall(async () => undefined),
       removeMember: () => authCall(async () => undefined),
+      removeOwnedHost: () => authCall(async () => undefined),
       getPrincipalId: () => "user-1",
       controlPlaneUrl: "https://api.example.test",
       downloadHostLogo: () => authCall(async () => ({ bytes: new Uint8Array(), mimeType: "image/png" })),
@@ -639,6 +675,53 @@ describe("TeamWebRtcClientTransport", () => {
     expect(endSession).toHaveBeenCalledWith("session-1");
     await runCauseEffect(transport.stop());
     nowSpy.mockRestore();
+  });
+
+  it("connects again and sends a request once more when the bridge finds the channel closed", async () => {
+    const bridge = new TeamWebRtcBridge();
+    const connect = vi.spyOn(bridge, "connect").mockImplementation(({ peerId }) =>
+      remoteCall(async () => {
+        queueMicrotask(() => bridge.emit("connected", peerId, channelBinding));
+      }),
+    );
+    vi.spyOn(bridge, "disconnect").mockReturnValue(Effect.void);
+    const authentication = mockAuthenticatedSend(bridge);
+    const authenticatedSend = authentication.send.getMockImplementation();
+    let refusals = 0;
+    authentication.send.mockImplementation((hostId, channel, data) =>
+      sentRequestId({ mock: { calls: [[hostId, channel, data]] } }) && refusals++ === 0
+        ? remoteCall(async () => {
+            throw new Error(sourceText("error.remote.channelNotOpen"));
+          })
+        : (authenticatedSend?.(hostId, channel, data) ?? Effect.void),
+    );
+    const transport = createTransport(bridge);
+    transport.pinHostKey("host-1", hostKeys.publicKey);
+    try {
+      await runCauseEffect(transport.connect("host-1"));
+      const pending = runCauseEffect(
+        transport.request("host-1", "/v1/agents/research/interrupt", {
+          method: "POST",
+          body: { turnId: "turn-1" },
+        }),
+      );
+      await vi.waitFor(() => expect(refusals).toBe(2));
+      expect(connect).toHaveBeenCalledTimes(2);
+      bridge.emit(
+        "data",
+        "host-1",
+        "rpc",
+        JSON.stringify({
+          version: 2,
+          type: "response",
+          requestId: sentRequestId(authentication.send),
+          result: { status: 204, body: null },
+        }),
+      );
+      await expect(pending).resolves.toBeUndefined();
+    } finally {
+      await runCauseEffect(transport.stop());
+    }
   });
 
   // A response frame whose *body* the released V3 adapter refuses is the same failure as a frame
@@ -750,6 +833,53 @@ describe("TeamWebRtcClientTransport", () => {
       );
       expect(event).toHaveBeenCalledWith("host-1", payload);
     }
+    const completion = {
+      type: "quiet-turn-completed",
+      agentId: "agent-1",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      status: "completed",
+      origin: "routine",
+    };
+    bridge.emit(
+      "data",
+      "host-1",
+      "events",
+      JSON.stringify({
+        version: 2,
+        type: "event",
+        sequence: 5,
+        payload: completion,
+      }),
+    );
+    expect(event).toHaveBeenCalledWith("host-1", { ...completion, type: "turn-completed", quiet: true });
+    const { agentId, ...wire } = completion;
+    bridge.emit(
+      "data",
+      "host-1",
+      "events",
+      JSON.stringify({
+        version: 2,
+        type: "event",
+        sequence: 6,
+        payload: { ...wire, type: "turn-completed", botId: agentId },
+      }),
+    );
+    expect(event).toHaveBeenCalledWith("host-1", { ...completion, type: "turn-completed" });
+    const error = vi.fn();
+    transport.on("error", error);
+    bridge.emit(
+      "data",
+      "host-1",
+      "events",
+      JSON.stringify({
+        version: 2,
+        type: "event",
+        sequence: 7,
+        payload: { ...completion, turnId: null },
+      }),
+    );
+    expect(error).toHaveBeenCalledWith("host-1", "protocol_error", expect.any(String));
     await runCauseEffect(transport.stop());
   });
 

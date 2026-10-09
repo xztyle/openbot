@@ -49,6 +49,11 @@ export interface ConversationTarget {
   serverId: string;
 }
 
+/** What was said so far in a recording, and the conversation it is dictated into. */
+export interface VoiceLiveTranscript extends ConversationTarget {
+  text: string;
+}
+
 export interface ConversationProps {
   headerActions?: JSX.Element;
   runtime?: ConversationRuntime;
@@ -194,6 +199,8 @@ export interface ConversationProps {
   agentAutoApproveLocked?: boolean;
   /** The app default an agent without its own busy-message setting follows. Local agents only. */
   defaultBusyMessageMode?: BusyMessageMode;
+  /** The app memory cap. Local agents only. */
+  agentMemoryLimit?: number;
   /** Absent for a remote agent: its own computer holds that choice. */
   onSetAgentAutoApprove?: (autoApprove: boolean) => Promise<void>;
   /** Starts a new chat with the agent. Absent when its host does not serve `context-reset-v1`. */

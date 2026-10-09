@@ -62,6 +62,13 @@ export interface WorkerBindings {
   DISCORD_STATE_SECRET?: string;
   /** Development only: the public origin of a local API, which Discord can send the browser back to. */
   DISCORD_DEV_PUBLIC_ORIGIN?: string;
+  /**
+   * The OpenBot Telegram bot, which every chat adds: its ID (the part of the token before the colon)
+   * and its username. Not secret. Without them, the Telegram routes answer 503. The Telegram route
+   * ticket uses the Slack route key.
+   */
+  TELEGRAM_BOT_ID?: string;
+  TELEGRAM_BOT_USERNAME?: string;
   /** A Stripe sandbox (`sk_test_`) key in development and test. */
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;

@@ -7,9 +7,11 @@
 // value. A member cannot use the route; `requireAdmin` on the host is the only role gate. The host
 // keeps a bounded file, so the newest 200 rows at most come back, newest first. Widening any of it
 // needs a second capability string.
-import { adminRoute, count, fields, list, type OptionalRouteCodec, oneOf, string } from "./admin-wire";
 
-export const SECURITY_AUDIT_CAPABILITY = "security-audit-v1";
+import { adminRoute, count, fields, list, type OptionalRouteCodec, oneOf, string } from "./admin-wire";
+import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
+
+export const SECURITY_AUDIT_CAPABILITY = FORK_HOST_CAPABILITY;
 export const SECURITY_AUDIT_ROUTES = { list: "/v1/security-audit/list" } as const;
 export const SECURITY_AUDIT_MAX_ROWS = 200;
 

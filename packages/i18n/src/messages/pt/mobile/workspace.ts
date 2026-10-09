@@ -16,12 +16,16 @@ export const messages = {
   "mobile.workspace.error.transportNotReady": "O transporte de dados do aplicativo para celular não está pronto.",
   "mobile.workspace.error.sectionsUnsupported": "Este computador anfitrião não permite alterar seções.",
   "mobile.workspace.error.leaveOwnServer": "Só é possível sair de servidores remotos dos quais você participa.",
+  "mobile.workspace.error.removeOwnedServerOnly": "Somente o proprietário pode remover este servidor.",
   "mobile.workspace.error.agentNotOnHost": "O agente não está neste computador anfitrião.",
   "mobile.workspace.error.filesUnsupported":
     "Este computador anfitrião não permite gerenciar arquivos. Atualize o OpenBot nele.",
   "mobile.workspace.error.agentUnavailableOnHost": "O agente está indisponível neste computador anfitrião.",
   "mobile.workspace.error.agentUnavailable": "O agente está indisponível.",
   "mobile.workspace.error.formUnavailable": "Este formulário não está mais disponível.",
+  "mobile.workspace.error.approvalInactive":
+    "Esta solicitação não está mais aguardando. Outro dispositivo a respondeu ou a tarefa parou.",
+  "mobile.workspace.error.approvalOffline": "Conecte-se ao servidor para responder a esta solicitação.",
   "mobile.workspace.alert.preferencesTitle": "Não foi possível salvar as preferências do chat",
   "mobile.workspace.alert.preferencesBody": "Suas preferências anteriores foram mantidas. Tente novamente.",
   "mobile.workspace.alert.updateRequiredTitle": "Atualização necessária",
@@ -29,6 +33,9 @@ export const messages = {
     "Atualize o servidor no computador para marcar conversas como não lidas.",
   "mobile.workspace.alert.markUnreadTitle": "Não foi possível marcar como não lida",
   "mobile.workspace.alert.markUnreadBody": "Conecte-se novamente ao servidor e tente de novo.",
+  "mobile.workspace.alert.markAllReadTitle": "Não foi possível marcar tudo como lido",
+  "mobile.workspace.alert.markAllReadBody":
+    "Algumas conversas continuam não lidas. Conecte-se novamente ao servidor e tente de novo.",
   "mobile.workspace.alert.serverOrderTitle": "Não foi possível salvar a ordem dos servidores",
   "mobile.workspace.alert.serverOrderBody": "A ordem anterior foi mantida. Tente novamente.",
   "mobile.workspace.error.connectFailed": "A conexão com o servidor falhou.",

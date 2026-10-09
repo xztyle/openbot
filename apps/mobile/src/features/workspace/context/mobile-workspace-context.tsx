@@ -7,12 +7,24 @@ import {
   type UpdateAgentInput,
 } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { AGENT_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/agent-admin-v1";
+import { AGENT_HOST_SETTINGS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-host-settings-v1";
+import { AGENT_PUBLISH_CAPABILITY } from "@openbot/contracts/team-protocol/agent-publish-v1";
+import {
+  TEAM_BROWSER_VIEW_CAPABILITY,
+  TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY,
+  TEAM_BROWSER_VIEW_CONTEXT_MENU_CAPABILITY,
+  TEAM_BROWSER_VIEW_CURSOR_CAPABILITY,
+  TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY,
+  TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY,
+} from "@openbot/contracts/team-protocol/browser-view-v1";
 import { TEAM_CONVERSATION_UNREAD_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
 import { HOST_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/host-admin-v1";
 import { LIVE_ACTIVITY_PUSH_CAPABILITY } from "@openbot/contracts/team-protocol/live-activity-push-v1";
+import { SHARED_TABLES_CAPABILITY } from "@openbot/contracts/team-protocol/shared-tables-v1";
 import { SKILLS_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/skills-admin-v1";
 import { decodeTeamProtocolSupportV1 } from "@openbot/contracts/team-protocol/v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
@@ -38,6 +50,7 @@ import {
   deleteAgent,
   discardAttachmentDraft,
   interruptAgentTurn,
+  respondToApproval,
   respondToBrowserSecret,
   respondToBrowserTakeover,
   type TeamApiRequest,
@@ -45,6 +58,7 @@ import {
 } from "@openbot/team-client/team-api-requests";
 import { replaceEqualDeep, useQueryClient } from "@tanstack/react-query";
 import { Effect } from "effect";
+import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import {
   createContext,
@@ -61,6 +75,13 @@ import { showFailureAlert, showWarningAlert } from "@/features/analytics/failure
 import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
 import { trackWorkspaceActions } from "@/features/analytics/workspace-actions";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
+import {
+  decodeMobileBrowserTab,
+  decodeMobileBrowserTabs,
+  withBrowserTab,
+  withoutBrowserTab,
+} from "@/features/browser/model/browser-tabs";
+import { BROWSER_VIEW_PAGE_SIZE } from "@/features/browser/model/browser-view-bridge";
 import { MobileChannelStore } from "@/features/channels/model/channel-store";
 import { useLiveActivity } from "@/features/live-activity/use-live-activity";
 import { fetch } from "@/features/support/model/logged-fetch";
@@ -82,6 +103,11 @@ import {
 import { conversationMessageId, decodeConversationPage } from "@/features/workspace/model/conversation";
 import { MobileConversationStore } from "@/features/workspace/model/conversation-store";
 import { LiveWorkspaceStore } from "@/features/workspace/model/live-workspace-store";
+import {
+  dropApproval,
+  InactiveRequestError,
+  reducePendingApprovals,
+} from "@/features/workspace/model/pending-approvals";
 import { applyMobileQueueEvent } from "@/features/workspace/model/queue-cache";
 import { decodeServerOrder, serverAccent, serverOrderKey, sortServers } from "@/features/workspace/model/server-order";
 import { applyServerRecovery, serverKind } from "@/features/workspace/model/server-status";
@@ -252,6 +278,9 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         for (const id of removedAgentIds) conversationStore.remove(id);
         liveState.update("unreadAgentIds", (current) => current.filter((id) => !removedAgentIds.has(id)));
         liveState.update("activityByServer", (current) =>
+          Object.fromEntries(Object.entries(current).filter(([id]) => available.has(id))),
+        );
+        liveState.update("approvalRequests", (current) =>
           Object.fromEntries(Object.entries(current).filter(([id]) => available.has(id))),
         );
       }
@@ -482,6 +511,19 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       serverCapabilities.current.set(serverId, compatibility.capabilities);
       channelStore.configure(serverId, compatibility.capabilities);
       void channelStore.refresh(serverId);
+      if (supportsBrowserView(compatibility.capabilities)) {
+        // The tabs only add the browser button. A host that cannot list them still loads.
+        void client
+          .request("GET", TEAM_API_ROUTES.browser.tabs, decodeMobileBrowserTabs)
+          .then((tabs) => {
+            if (!context.isCurrent()) return;
+            liveState.update("browserTabs", (current) => ({
+              ...current,
+              [serverId]: { tabs, activeTabId: current[serverId]?.activeTabId ?? null },
+            }));
+          })
+          .catch(() => undefined);
+      }
       if (compatibility.capabilities.includes("sidebar-layout")) {
         try {
           const layout = await client.request("GET", TEAM_API_ROUTES.sidebarLayout.state, decodeSidebarLayout);
@@ -548,6 +590,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       channelStore,
       applySidebarLayout,
       applyConversationReads,
+      liveState,
     ],
   );
 
@@ -679,6 +722,11 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
     (serverId: string, event: AgentEvent | TeamRealtimeEvent) => {
       if (removedServers.current.has(serverId)) return;
       applyLiveActivityEvent(serverId, event);
+      liveState.update("approvalRequests", (current) => {
+        const previous = current[serverId] ?? [];
+        const next = reducePendingApprovals(previous, event);
+        return next === previous ? current : { ...current, [serverId]: next };
+      });
       if (event.type === "runtime-snapshot") {
         liveState.update("browserRequests", (current) => {
           const next = replaceEqualDeep(
@@ -703,6 +751,12 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         liveState.update("browserRequests", (current) => ({
           ...current,
           [serverId]: (current[serverId] ?? []).filter((item) => item.requestId !== event.requestId),
+        }));
+      } else if (event.type === "browser-changed") {
+        const tabs = decodeMobileBrowserTabs(event.tabs);
+        liveState.update("browserTabs", (current) => ({
+          ...current,
+          [serverId]: { tabs, activeTabId: event.activeTabId },
         }));
       }
       if (event.type === "sidebar-layout-changed") {
@@ -793,10 +847,11 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       }
       if (event.type === "agents-changed") {
         replaceServerAgents(serverId, event.agents);
-        // Access and auto-approve are not in the agent summary; the host sends this event when either changes.
+        // The admin and host settings of an agent are not in the agent summary. The host sends this event
+        // when one of them changes, so an open settings page reads them again.
         void queryClient.invalidateQueries({
           queryKey: ["agent-info", session.apiUrl, session.user.id, sessionScope, serverId],
-          predicate: (query) => query.queryKey.at(-1) === "admin",
+          predicate: (query) => query.queryKey.at(-1) === "admin" || query.queryKey.at(-1) === "host",
         });
       } else if (event.type === "conversation") {
         const knownIds = serverAgentIds.current.get(serverId) ?? new Set<string>();
@@ -844,6 +899,65 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
     ],
   );
 
+  /**
+   * Writes one agent's read cursor on `serverId` after its earlier writes. It rejects when the host refuses it.
+   */
+  const writeAgentRead = useCallback(
+    (agentId: string, visibleMessageId?: string | null, serverId = activeServerId): Promise<void> => {
+      if (!serverId) return Promise.resolve();
+      const isCurrentRead = readRefresh.invalidate(serverId);
+      const generation = loadGeneration.current;
+      liveState.update("unreadAgentIds", (current) =>
+        visibleMessageId === null ? [...new Set([...current, agentId])] : current.filter((id) => id !== agentId),
+      );
+      const write = (readWrites.current.get(agentId) ?? Promise.resolve())
+        .then(async () => {
+          if (generation !== loadGeneration.current) return;
+          const snapshot =
+            visibleMessageId !== undefined
+              ? null
+              : (conversationStore.get(agentId) ?? (await loadConversation(agentId, serverId)));
+          if (generation !== loadGeneration.current) return;
+          const throughMessageId = visibleMessageId !== undefined ? visibleMessageId : snapshot?.messages.at(-1)?.id;
+          if (throughMessageId === undefined) return;
+          const reads = await request(
+            "POST",
+            visibleMessageId === null
+              ? TEAM_API_ROUTES.agent.conversationUnread(agentId)
+              : TEAM_API_ROUTES.agent.conversationRead(agentId),
+            (value) => decodeConversationReads({ [agentId]: value }),
+            visibleMessageId === null ? {} : { throughMessageId },
+            serverId,
+          );
+          if (generation === loadGeneration.current && isCurrentRead()) {
+            readRefresh.invalidate(serverId);
+            applyConversationReads(reads);
+          }
+        })
+        .catch((error: unknown) => {
+          if (generation === loadGeneration.current) void refreshConversationReads(serverId).catch(() => undefined);
+          throw error;
+        });
+      // A failed write must not stop the next write for this agent.
+      const settled = write.catch(() => undefined);
+      readWrites.current.set(agentId, settled);
+      void settled.finally(() => {
+        if (readWrites.current.get(agentId) === settled) readWrites.current.delete(agentId);
+      });
+      return write;
+    },
+    [
+      liveState,
+      request,
+      refreshConversationReads,
+      loadConversation,
+      activeServerId,
+      readRefresh,
+      conversationStore,
+      applyConversationReads,
+    ],
+  );
+
   const markAgentRead = useCallback(
     (agentId: string, visibleMessageId?: string | null) => {
       if (
@@ -858,61 +972,47 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         );
         return;
       }
-      if (!activeServerId) return;
-      const isCurrentRead = readRefresh.invalidate(activeServerId);
-      const generation = loadGeneration.current;
-      liveState.update("unreadAgentIds", (current) =>
-        visibleMessageId === null ? [...new Set([...current, agentId])] : current.filter((id) => id !== agentId),
-      );
-      const write = (readWrites.current.get(agentId) ?? Promise.resolve())
-        .then(async () => {
-          if (generation !== loadGeneration.current) return;
-          const snapshot =
-            visibleMessageId !== undefined
-              ? null
-              : (conversationStore.get(agentId) ?? (await loadConversation(agentId)));
-          if (generation !== loadGeneration.current) return;
-          const throughMessageId = visibleMessageId !== undefined ? visibleMessageId : snapshot?.messages.at(-1)?.id;
-          if (throughMessageId === undefined) return;
-          const reads = await request(
-            "POST",
-            visibleMessageId === null
-              ? TEAM_API_ROUTES.agent.conversationUnread(agentId)
-              : TEAM_API_ROUTES.agent.conversationRead(agentId),
-            (value) => decodeConversationReads({ [agentId]: value }),
-            visibleMessageId === null ? {} : { throughMessageId },
+      void writeAgentRead(agentId, visibleMessageId).catch(() => {
+        if (visibleMessageId === null)
+          showFailureAlert(
+            undefined,
+            "settings",
+            currentText().t("mobile.workspace.alert.markUnreadTitle"),
+            currentText().t("mobile.workspace.alert.markUnreadBody"),
           );
-          if (generation === loadGeneration.current && isCurrentRead()) {
-            readRefresh.invalidate(activeServerId);
-            applyConversationReads(reads);
-          }
-        })
-        .catch(() => {
-          if (generation === loadGeneration.current) void refreshConversationReads().catch(() => undefined);
-          if (visibleMessageId === null)
-            showFailureAlert(
-              undefined,
-              "settings",
-              currentText().t("mobile.workspace.alert.markUnreadTitle"),
-              currentText().t("mobile.workspace.alert.markUnreadBody"),
-            );
-        });
-      readWrites.current.set(agentId, write);
-      void write.finally(() => {
-        if (readWrites.current.get(agentId) === write) readWrites.current.delete(agentId);
       });
     },
-    [
-      liveState,
-      request,
-      refreshConversationReads,
-      loadConversation,
-      activeServerId,
-      readRefresh,
-      conversationStore,
-      applyConversationReads,
-    ],
+    [activeServerId, writeAgentRead],
   );
+
+  /** Marks every unread agent and channel of the active server read through its newest message. */
+  const markAllRead = useCallback(async () => {
+    const serverId = activeServerIdRef.current;
+    if (!serverId) return;
+    // Only listed agents: a read of an id the host no longer knows creates that agent again.
+    const listed = new Set(agents.filter((agent) => agent.serverId === serverId).map((agent) => agent.id));
+    const unread = liveState.get().unreadAgentIds.filter((agentId) => listed.has(agentId));
+    const results = await Promise.allSettled([
+      // A cached chat can be older than the read state, so each receipt uses the host's newest message.
+      ...unread.map(async (agentId) => {
+        const page = await request(
+          "GET",
+          `${TEAM_API_ROUTES.agent.conversationPage(agentId)}?limit=1`,
+          decodeConversationPage,
+          undefined,
+          serverId,
+        );
+        const latestId = page.messages.at(-1)?.id;
+        if (latestId) await writeAgentRead(agentId, latestId, serverId);
+      }),
+      channelStore.markAllRead(serverId, Crypto.randomUUID),
+    ]);
+    const failure = results.find((result) => result.status === "rejected");
+    if (!failure) return;
+    // A later successful write discards the refresh of a refused one, so read the host state once more.
+    await refreshConversationReads(serverId).catch(() => undefined);
+    throw failure.reason;
+  }, [agents, liveState, request, writeAgentRead, channelStore, refreshConversationReads]);
 
   const updatePreferences = useCallback(
     (serverId: string, change: (current: RemoteWorkspacePreferences) => RemoteWorkspacePreferences) => {
@@ -946,7 +1046,108 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
           serverCapabilities.current.get(serverId)?.includes(capability),
       );
     };
+    /** Drops a server that this account left or removed, and its local state. */
+    const forgetServer = (serverId: string) => {
+      removedServers.current.add(serverId);
+      readRefresh.invalidate(serverId);
+      directoryGeneration.current += 1;
+      directoryRefresh.invalidate();
+      setServerDirectoryState("ready");
+      setServerDirectoryError(null);
+      const removedIds = serverAgentIds.current.get(serverId) ?? new Set<string>();
+      serverAgentIds.current.delete(serverId);
+      if (activeServerId === serverId) {
+        loadGeneration.current += 1;
+        setActiveServerId(session.host?.hostId ?? null);
+      }
+      setServers((current) => current.filter((candidate) => candidate.id !== serverId));
+      setSidebarByServer((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== serverId)));
+      setAgents((current) => current.filter((agent) => agent.serverId !== serverId));
+      liveState.update("activityByServer", (current) => {
+        const next = { ...current };
+        delete next[serverId];
+        return next;
+      });
+      liveState.update("approvalRequests", (current) => {
+        const next = { ...current };
+        delete next[serverId];
+        return next;
+      });
+      for (const id of removedIds) conversationStore.remove(id);
+      updatePreferences(serverId, () => ({ hidden: [], pinned: [] }));
+      liveState.update("unreadAgentIds", (current) => current.filter((id) => !removedIds.has(id)));
+    };
     const workspace: MobileWorkspaceContextValue = {
+      browserViewSupport: (serverId) => {
+        const capabilities = serverCapabilities.current.get(serverId) ?? [];
+        const view = supportsBrowserView(capabilities);
+        return {
+          view,
+          clipboard: view && capabilities.includes(TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY),
+          contextMenu: view && capabilities.includes(TEAM_BROWSER_VIEW_CONTEXT_MENU_CAPABILITY),
+          viewport: view && capabilities.includes(TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY),
+        };
+      },
+      openBrowserView: (serverId, tabId, listener) => {
+        const client = connections.current.get(serverId)?.client;
+        const capabilities = serverCapabilities.current.get(serverId) ?? [];
+        if (!client || !supportsBrowserView(capabilities)) return null;
+        return client.openBrowserView(
+          {
+            tabId,
+            namesFrames: capabilities.includes(TEAM_BROWSER_VIEW_FRAME_POINT_CAPABILITY),
+            cursor: capabilities.includes(TEAM_BROWSER_VIEW_CURSOR_CAPABILITY),
+            clipboard: capabilities.includes(TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY),
+            contextMenu: capabilities.includes(TEAM_BROWSER_VIEW_CONTEXT_MENU_CAPABILITY),
+            viewport: capabilities.includes(TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY) ? BROWSER_VIEW_PAGE_SIZE : null,
+          },
+          listener,
+        );
+      },
+      controlBrowserTab: async (serverId, action) => {
+        // The host also sends `browser-changed` for an open or a close. The phone does not wait for
+        // it: the tab list changes at once, and is read again in case the event does not arrive.
+        const readTabs = () =>
+          void request("GET", TEAM_API_ROUTES.browser.tabs, decodeMobileBrowserTabs, undefined, serverId)
+            .then((tabs) =>
+              liveState.update("browserTabs", (current) => ({
+                ...current,
+                [serverId]: { tabs, activeTabId: current[serverId]?.activeTabId ?? null },
+              })),
+            )
+            .catch(() => undefined);
+        if (action.type === "open") {
+          // The desktop opens a new tab for the agent in the same way. `focus` stays false: the
+          // phone does not move the host's own browser to the tab.
+          const opened = await request(
+            "POST",
+            TEAM_API_ROUTES.browser.open,
+            decodeMobileBrowserTab,
+            { url: action.url, ownerThreadId: action.ownerThreadId, ownerAgentId: action.ownerAgentId, focus: false },
+            serverId,
+          );
+          liveState.update("browserTabs", (current) => ({
+            ...current,
+            [serverId]: withBrowserTab(current[serverId], opened),
+          }));
+          readTabs();
+          return opened;
+        }
+        if (action.type === "navigate") {
+          const body = { tabId: action.tabId, direction: action.direction };
+          await request("POST", TEAM_API_ROUTES.browser.navigate, ignoreResponse, body, serverId);
+        } else if (action.type === "reload") {
+          await request("POST", TEAM_API_ROUTES.browser.reload, ignoreResponse, { tabId: action.tabId }, serverId);
+        } else {
+          await request("POST", TEAM_API_ROUTES.browser.close, ignoreResponse, { tabId: action.tabId }, serverId);
+          liveState.update("browserTabs", (current) => ({
+            ...current,
+            [serverId]: withoutBrowserTab(current[serverId], action.tabId),
+          }));
+          readTabs();
+        }
+        return null;
+      },
       sidebarByServer,
       mutateSidebarLayout: async (serverId, action) => {
         if (!serverCapabilities.current.get(serverId)?.includes("sidebar-layout")) {
@@ -998,6 +1199,27 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         Boolean(updatePreferences(serverId, (current) => setChannelHidden(current, id, false))),
       conversationStore,
       liveState,
+      respondToApproval: async (serverId, input) => {
+        const pending = liveState
+          .get()
+          .approvalRequests[serverId]?.some((item) => String(item.requestId) === String(input.requestId));
+        if (!pending) throw new InactiveRequestError(currentText().t("mobile.workspace.error.approvalInactive"));
+        if (serversRef.current.find((server) => server.id === serverId)?.state !== "online")
+          throw new Error(currentText().t("mobile.workspace.error.approvalOffline"));
+        try {
+          await Effect.runPromise(
+            respondToApproval(teamApi(serverId), input).pipe(Effect.mapError((error) => error.cause)),
+          );
+        } catch (error) {
+          // Another device answered first, or the turn ended. The request is gone on the host too.
+          if (error instanceof InactiveRequestError)
+            liveState.update("approvalRequests", (current) => dropApproval(current, serverId, input.requestId));
+          throw error;
+        }
+        // The host answered the agent. Its resolved event can arrive after this, or not at all on a
+        // connection that drops now, so the card goes at once.
+        liveState.update("approvalRequests", (current) => dropApproval(current, serverId, input.requestId));
+      },
       respondToBrowserTakeover: (serverId, input) =>
         Effect.runPromise(
           respondToBrowserTakeover(teamApi(serverId), input).pipe(Effect.mapError((error) => error.cause)),
@@ -1016,29 +1238,13 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         if (!server || server.role === "owner")
           throw new Error(currentText().t("mobile.workspace.error.leaveOwnServer"));
         await runTeamEffect(directory.leaveHost(server.id, server.membershipId));
-        removedServers.current.add(serverId);
-        readRefresh.invalidate(serverId);
-        directoryGeneration.current += 1;
-        directoryRefresh.invalidate();
-        setServerDirectoryState("ready");
-        setServerDirectoryError(null);
-        const removedIds = serverAgentIds.current.get(serverId) ?? new Set<string>();
-        serverAgentIds.current.delete(serverId);
-        if (activeServerId === serverId) {
-          loadGeneration.current += 1;
-          setActiveServerId(session.host?.hostId ?? null);
-        }
-        setServers((current) => current.filter((candidate) => candidate.id !== serverId));
-        setSidebarByServer((current) => Object.fromEntries(Object.entries(current).filter(([id]) => id !== serverId)));
-        setAgents((current) => current.filter((agent) => agent.serverId !== serverId));
-        liveState.update("activityByServer", (current) => {
-          const next = { ...current };
-          delete next[serverId];
-          return next;
-        });
-        for (const id of removedIds) conversationStore.remove(id);
-        updatePreferences(serverId, () => ({ hidden: [], pinned: [] }));
-        liveState.update("unreadAgentIds", (current) => current.filter((id) => !removedIds.has(id)));
+        forgetServer(serverId);
+      },
+      removeServer: async (serverId) => {
+        const server = serversRef.current.find((candidate) => candidate.id === serverId);
+        if (server?.role !== "owner") throw new Error(currentText().t("mobile.workspace.error.removeOwnedServerOnly"));
+        await runTeamEffect(directory.removeOwnedHost(server.id));
+        forgetServer(serverId);
       },
       refreshServer: async (serverId) => {
         connections.current.get(serverId)?.refresh();
@@ -1049,6 +1255,10 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       canManageEventChecks: (serverId) =>
         administers(serverId, EVENT_CHECK_API_CAPABILITY) || administers(serverId, EVENT_CHECKS_CAPABILITY),
       canManageAgentSkills: (serverId) => administers(serverId, SKILLS_ADMIN_CAPABILITY),
+      canManageSharedTables: (serverId) => administers(serverId, SHARED_TABLES_CAPABILITY),
+      canManageAgentAccess: (serverId) => administers(serverId, AGENT_ADMIN_CAPABILITY),
+      canManageAgentHostSettings: (serverId) => administers(serverId, AGENT_HOST_SETTINGS_CAPABILITY),
+      canPublishAgent: (serverId) => administers(serverId, AGENT_PUBLISH_CAPABILITY),
       updateServerIdentity: async (serverId, input) => {
         const server = serversRef.current.find((candidate) => candidate.id === serverId);
         if (!server || server.role === "member")
@@ -1255,6 +1465,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
         mobileAnalytics.track("conversation_action", { action: "unhide", result: saved ? "succeeded" : "failed" });
       },
       markAgentRead,
+      markAllRead,
       markAgentUnread: (agentId) => {
         markAgentRead(agentId, null);
       },
@@ -1304,6 +1515,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
     loadConversation,
     loadOlderMessages,
     markAgentRead,
+    markAllRead,
     pinnedAgentIds,
     pinnedChannelIds,
     hiddenChannelIds,
@@ -1354,4 +1566,9 @@ export function useMobileWorkspace(): MobileWorkspaceContextValue {
   const value = useContext(MobileWorkspaceContext);
   if (!value) throw new Error("useMobileWorkspace must be used within MobileWorkspaceProvider.");
   return value;
+}
+
+/** The host lists its tabs to a member (`browser-control`) and streams one of them (`browser-view`). */
+function supportsBrowserView(capabilities: readonly string[]): boolean {
+  return capabilities.includes("browser-control") && capabilities.includes(TEAM_BROWSER_VIEW_CAPABILITY);
 }

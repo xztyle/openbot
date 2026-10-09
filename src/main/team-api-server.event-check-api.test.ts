@@ -58,7 +58,7 @@ it("protects private variable writes and preserves MCP-only v1 through the real 
     owner = await fixture.signIn();
   const invite = await runCauseEffect(fixture.store.createInvite("member"));
   const member = await runCauseEffect(fixture.store.acceptInvite(invite.token, "member", "member password"));
-  const send = (path: string, body: unknown, token = owner, capability = "event-check-api-v1") =>
+  const send = (path: string, body: unknown, token = owner, capability = "fork-host-v1") =>
     fetch(`${base}/v1/${path}`, {
       method: "POST",
       headers: {

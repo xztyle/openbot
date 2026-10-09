@@ -6,5 +6,6 @@ import type { MobileFeatureConfig } from "@openbot/contracts/mobile-features";
  * Change it with a Worker deploy.
  */
 export const MOBILE_FEATURE_CONFIG: MobileFeatureConfig = {
-  cloudServers: { ios: "0", android: "0" },
+  cloudServers: { ios: "0", android: "1.2.0" },
+  browser: { ios: "1.2.0", android: "1.2.0" },
 };

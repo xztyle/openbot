@@ -161,6 +161,13 @@
       "file": "github-activity.mjs",
       "digest": "b32c5c19b25c87f47ae70b1e66b6a8ea1e9791b3ae2bc88136f8661a4f845b83"
     },
+    "earlierPrograms": [
+      {
+        "version": "1.0.0",
+        "file": "github-activity-1.0.0.mjs",
+        "digest": "d0bc4944e5a6f0f5b2778fc754932f0274fad009d2162a9c448a2727f49cf0f1"
+      }
+    ],
     "accountLabelHint": "The GitHub account, for example Work",
     "variables": [
       {
@@ -310,6 +317,18 @@
       "file": "slack-activity.mjs",
       "digest": "712f84bacf4a186092113acea465d15bbe437ffdf8a10b4e780e3c3330fc3fd2"
     },
+    "earlierPrograms": [
+      {
+        "version": "1.0.0",
+        "file": "slack-activity-1.0.0.mjs",
+        "digest": "eb7dcad2f6c2ec83df626dbbaa95a733a5bf47ae63743af25bc57eb7abc54bb1"
+      },
+      {
+        "version": "1.0.1",
+        "file": "slack-activity-1.0.1.mjs",
+        "digest": "8854eff959bc05f10672ee9a002cc73d3222a8ca576ed68254b5baa93184fec9"
+      }
+    ],
     "accountLabelHint": "The Slack workspace, for example Work",
     "variables": [
       {
@@ -443,6 +462,13 @@
       "file": "gmail-inbox.mjs",
       "digest": "557b429ed364a01cf11f5f75671d35fc9321f401517c6144aab6ae4fe4671b9d"
     },
+    "earlierPrograms": [
+      {
+        "version": "1.0.0",
+        "file": "gmail-inbox-1.0.0.mjs",
+        "digest": "532e577f3a403e3a1afac5120c05a9b4c42236e399988a22b8364ef88717ee47"
+      }
+    ],
     "accountLabelHint": "The Gmail address, for example you@gmail.com",
     "variables": [
       {
@@ -544,6 +570,13 @@
       "file": "protonmail-inbox.mjs",
       "digest": "ebb98a71540202dec87a86d9bf426473438589b433a2b49611abacf2ee68008e"
     },
+    "earlierPrograms": [
+      {
+        "version": "1.0.0",
+        "file": "protonmail-inbox-1.0.0.mjs",
+        "digest": "260a4abfd940d05b871560499d9033993fbbc26843b22a26fd2b7c080bc5c147"
+      }
+    ],
     "accountLabelHint": "The Proton Mail address, for example you@proton.me",
     "variables": [
       {
@@ -645,6 +678,13 @@
       "file": "render-services.mjs",
       "digest": "36e9891e3eb3e5072b77e44be0cd72d640041841d9ef4049702e5f0f4fc98b27"
     },
+    "earlierPrograms": [
+      {
+        "version": "1.0.0",
+        "file": "render-services-1.0.0.mjs",
+        "digest": "2c36c954d53d855af13c0edd3126d641ed8e9fdce36aa5d5387b21b84d276ef0"
+      }
+    ],
     "accountLabelHint": "The Render workspace, for example Work",
     "variables": [
       {
@@ -730,6 +770,13 @@
       "file": "posthog-health.mjs",
       "digest": "d7f583d4a9aefb0f7a8c3338de1d30e4e2da00fb81e6d6289ec00570c8f74e25"
     },
+    "earlierPrograms": [
+      {
+        "version": "1.0.0",
+        "file": "posthog-health-1.0.0.mjs",
+        "digest": "8e1d8bc7e06dffd3ca2cce3dd1d8047e60f679cb3182025db2fa9e05d8da2ca9"
+      }
+    ],
     "accountLabelHint": "The PostHog project, for example Production",
     "variables": [
       {
@@ -847,6 +894,13 @@
       "file": "discord-activity.mjs",
       "digest": "d89f3a7024a3098d3a1c4782f03d4296dcb07914303daf45c2d97a411f575c92"
     },
+    "earlierPrograms": [
+      {
+        "version": "1.0.0",
+        "file": "discord-activity-1.0.0.mjs",
+        "digest": "4bff1b92de6cb975992a1c6263133be01806e8839d89b6d8b694b71ae925471d"
+      }
+    ],
     "accountLabelHint": "The Discord server, for example My server",
     "variables": [
       {
@@ -948,6 +1002,13 @@
       "file": "git-remote-refs.mjs",
       "digest": "fcfe2be798dbc5f0a73e01c475177293a0746f4ade366b06df83cd72885236ef"
     },
+    "earlierPrograms": [
+      {
+        "version": "1.0.0",
+        "file": "git-remote-refs-1.0.0.mjs",
+        "digest": "d0835f214acb58499838bc8143bcc3e9bc5569ba3fb0c1e99a871ef209bcc52b"
+      }
+    ],
     "accountLabelHint": "The repository, for example work-api",
     "variables": [
       {

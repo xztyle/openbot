@@ -15,3 +15,5 @@
   settings as a list, and a test keeps such schemas out.
 - Show agents the real reason when an event check or template action is refused, such as an update
   that needs your approval, instead of a generic "app check failed" message.
+- Fix: an event check that an agent saved again no longer loses its link to its template. Checks
+  from earlier template versions can be linked to the template, then updated.

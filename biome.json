@@ -39,6 +39,7 @@
       "!!.agents",
       "!src/renderer/src/vendor",
       "!marketplace/watcher-catalog/watchers/linear-assigned-intake/program.mjs",
+      "!marketplace/watcher-catalog/watchers/*/program-*.mjs",
       "!resources/watcher-catalog"
     ]
   },

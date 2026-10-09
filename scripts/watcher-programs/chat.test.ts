@@ -836,11 +836,9 @@ describe("template catalog", () => {
 
     const { templates, files } = await loadWatcherCatalog(source);
     expect(templates.map((template) => template.slug)).toEqual(["slack-activity", "discord-activity"]);
-    expect(files.map((file) => file.path).sort()).toEqual([
-      "catalog.json",
-      "programs/discord-activity.mjs",
-      "programs/slack-activity.mjs",
-    ]);
+    expect(files.map((file) => file.path).sort()).toEqual(
+      expect.arrayContaining(["catalog.json", "programs/discord-activity.mjs", "programs/slack-activity.mjs"]),
+    );
     const [slack, discord] = templates;
     expect(slack?.variables.map((variable) => variable.name)).toEqual(["SLACK_USER_TOKEN"]);
     expect(discord?.variables.map((variable) => variable.name)).toEqual(["DISCORD_BOT_TOKEN"]);

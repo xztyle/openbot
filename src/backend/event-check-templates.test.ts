@@ -487,3 +487,30 @@ it("tells an agent why a template update was refused, instead of a generic failu
   const unlinked = await call("update_event_check_template", { id: "00000000-0000-4000-8000-000000000000" });
   expect(unlinked.length).toBeGreaterThan(0);
 });
+
+it("keeps the template link when an agent saves the check again without it", async () => {
+  const { service } = await boot(template("1.0.0", PROGRAM));
+  const installed = await runCauseEffect(
+    service.eventChecks.templateInstall(request({ workspace: "alpha" }), TEST_USER),
+  );
+  const { template: _link, ...source } = installed.source.kind === "api" ? installed.source : never();
+  const saved = await runCauseEffect(
+    service.eventChecks.save(
+      { ...installed, name: "Renamed", source },
+      { kind: "agent", agentId: "chief", name: "Chief" },
+    ),
+  );
+  expect(saved.source.kind === "api" && saved.source.template?.slug).toBe("fixture");
+  // A save that changes the program is a different check: it does not inherit the link.
+  const other = await runCauseEffect(
+    service.eventChecks.save(
+      { ...saved, source: { ...source, toolName: "fixture.mjs" } },
+      { kind: "agent", agentId: "chief", name: "Chief" },
+    ),
+  ).catch(() => null);
+  expect(other?.source.kind === "api" ? other.source.template : undefined).toBeUndefined();
+});
+
+function never(): never {
+  throw new Error("Expected an API check.");
+}

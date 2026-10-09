@@ -82,6 +82,16 @@ function scheduleValid(input: EventCheckInput): void {
     previous = next;
   }
 }
+/**
+ * An agent's save tool cannot carry the link to a template. A save that leaves the program as it was
+ * keeps the link the check had, so a re-save does not turn a template check into one nobody can update.
+ */
+function keepTemplateLink(input: EventCheckInput, previous: EventCheck | null): EventCheckInput {
+  if (!previous || input.source.kind !== "api" || previous.source.kind !== "api") return input;
+  if (input.source.template || !previous.source.template || previous.source.toolName !== input.source.toolName)
+    return input;
+  return { ...input, source: { ...input.source, template: previous.source.template } };
+}
 /** Owns deterministic polls and durable wakeups. Empty checks never enter the agent runtime. */
 export class EventCheckScheduler implements RoutineDueSource {
   readonly #mutations = Semaphore.makeUnsafe(1);
@@ -260,9 +270,12 @@ export class EventCheckScheduler implements RoutineDueSource {
     action?: string,
   ) {
     // Only a person approves a program. The flag is never stored, and an agent tool cannot use it.
-    const { approveProgram, ...input } = request;
+    const { approveProgram, ...requested } = request;
     const approving = approveProgram === true && actor.kind !== "agent";
-    const previous = yield* mcpSync(() => (input.id ? this.options.store.get(input.agentId, input.id) : null));
+    const previous = yield* mcpSync(() =>
+      requested.id ? this.options.store.get(requested.agentId, requested.id) : null,
+    );
+    const input = keepTemplateLink(requested, previous);
     yield* mcpSync(() => {
       this.#agent(input.agentId);
       scheduleValid(input);

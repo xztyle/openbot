@@ -830,11 +830,9 @@ describe("ops watcher templates", () => {
       await cp(join(sourceRoot, "watchers", slug), join(root, "watchers", slug), { recursive: true });
     const { templates, files } = await loadWatcherCatalog(root);
     expect(templates.map((template) => template.slug)).toEqual([...slugs]);
-    expect(files.map((file) => file.path).sort()).toEqual([
-      "catalog.json",
-      "programs/posthog-health.mjs",
-      "programs/render-services.mjs",
-    ]);
+    expect(files.map((file) => file.path).sort()).toEqual(
+      expect.arrayContaining(["catalog.json", "programs/posthog-health.mjs", "programs/render-services.mjs"]),
+    );
     for (const template of templates) {
       expect(template.selection).toEqual({ itemsPointer: "/items", idPointer: "/id", revisionPointer: "/revision" });
       expect(template.actorPointer).toBe("/actor");

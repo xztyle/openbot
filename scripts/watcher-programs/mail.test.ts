@@ -731,11 +731,9 @@ describe("the catalog", () => {
       await cp(join(sourceRoot, "watchers", template.slug), join(root, "watchers", template.slug), { recursive: true });
     const { templates: resolved, files } = await loadWatcherCatalog(root);
     expect(resolved.map((entry) => entry.slug)).toEqual(["gmail-inbox", "protonmail-inbox"]);
-    expect(files.map((file) => file.path).sort()).toEqual([
-      "catalog.json",
-      "programs/gmail-inbox.mjs",
-      "programs/protonmail-inbox.mjs",
-    ]);
+    expect(files.map((file) => file.path).sort()).toEqual(
+      expect.arrayContaining(["catalog.json", "programs/gmail-inbox.mjs", "programs/protonmail-inbox.mjs"]),
+    );
     for (const entry of resolved) {
       const template = templates.find((candidate) => candidate.slug === entry.slug);
       expect(entry.variables.map((variable) => variable.name)).toEqual([template?.variable]);

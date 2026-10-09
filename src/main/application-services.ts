@@ -94,7 +94,7 @@ import { AgentTemplateService } from "./agent-template-service";
 import { HostAnalytics } from "./analytics";
 import { analyticsInventoryDayStore, collectAnalyticsInventory } from "./analytics-inventory";
 import { catalogPluginSlug, isReportedMcpServerName, loadCatalogPluginServers } from "./analytics-plugin-catalog";
-import { readAnalyticsPreference } from "./analytics-preference-store";
+import { analyticsDisabledByEnvironment, readAnalyticsPreference } from "./analytics-preference-store";
 import { createApplicationManagedSkills } from "./application-managed-skills";
 import { ApprovalAutomation, readApprovalAutomation } from "./approval-automation-store";
 import { AutomationServer } from "./automation-server";
@@ -162,6 +162,7 @@ import {
   sendComputerUseHighlightPlacement,
   showMainWindow,
 } from "./main-window";
+import { renderDiagnostics } from "./maintenance-service";
 import { startMcpOAuthRedirectServer } from "./mcp-oauth-redirect-server";
 import { McpOAuthStore } from "./mcp-oauth-store";
 import { MessagingCredentialStore } from "./messaging-credential-store";
@@ -188,7 +189,9 @@ import { sendToRenderer } from "./renderer-ipc";
 import { RequestedUpdate, RequestedUpdateRefusal } from "./requested-update";
 import { RoutineFeedServer } from "./routine-feed-server";
 import { clearRoutineHold, ROUTINE_HOLD_FILE, takeRoutineHold, writeRoutineHold } from "./routine-hold-file";
+import { RunMarker } from "./run-marker";
 import { ServerMode, type ServerModeEnvironment } from "./server-mode";
+import { createServerOperations } from "./server-operations";
 import {
   configureApplicationProtocol,
   configureAttachmentProtocol,
@@ -196,6 +199,7 @@ import {
 } from "./session-configuration";
 import { readSetupState } from "./setup-store";
 import { SignalIngress } from "./signal-ingress";
+import { readSilentTurnThresholdMs, SilentTurnMonitor } from "./silent-turn-monitor";
 import { SkillMarketplaceService } from "./skill-marketplace-service";
 import { SLACK_DEV_CALLBACK_PATH, startSlackDevCallbackServer } from "./slack-dev-callback-server";
 import { TeamStore } from "./team-store";
@@ -221,6 +225,8 @@ const logger = createOpenBotLogger("application-services");
 const SETUP_FILE = "openbot-setup-v2.json";
 const ANALYTICS_PREFERENCE_FILE = "openbot-analytics-preference-v1.json";
 const ANALYTICS_INVENTORY_FILE = "openbot-analytics-inventory-v1.json";
+/** The `running` marker of a server (`run-marker.ts`). */
+const RUN_STATE_FILE = "openbot-run-state-v1.json";
 const APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v2.json";
 const ROUTINE_FEED_FILE = "openbot-routine-feed-v1.json";
 const LEGACY_APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v1.json";
@@ -316,6 +322,8 @@ const TEARDOWN_ORDER = {
   trace: 120,
   // After the service, so the lines its providers write while they stop are kept.
   providerLog: 121,
+  // Last of all: a run that stops before this step is reported as an unclean shutdown.
+  runMarker: 130,
 } as const;
 
 export interface ApplicationServiceContext {
@@ -616,6 +624,18 @@ export async function createApplicationServices({
     "the provider log",
     startProviderLog(join(app.getPath("userData"), "logs")),
   );
+  // A server only: nobody reads a desktop's log, but `openbot status` reports how the last run ended.
+  const runMarker = new RunMarker({
+    path: join(app.getPath("userData"), RUN_STATE_FILE),
+    onError: (message, error) => logger.warn(message, toLogValue(error)),
+  });
+  if (serverModeEnvironment) {
+    await Effect.runPromise(runMarker.begin());
+    if (runMarker.state?.lastShutdown === "unclean") {
+      logger.warn("The last run did not shut down cleanly.", { startsLast24Hours: runMarker.state.startsLast24Hours });
+    }
+    teardown.push(TEARDOWN_ORDER.runMarker, "the run marker", () => Effect.runPromise(runMarker.markClean()));
+  }
   // The one forward reference left in this function: the controller is built at the top of
   // startup because its window must be able to appear immediately, but the two services its
   // critical actions drive are built hundreds of lines below. A single named local rather than
@@ -740,12 +760,14 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.teamWebRtcBridge, "the team WebRTC bridge", () =>
     runCauseEffect(teamWebRtcBridge.stop()),
   );
-  // Only a hosted server: its machine is small, and one unit holds OpenBot and every agent process.
-  const hostMemory = hostedServer
-    ? new HostedServerMemory({
-        onError: (message, error) => logger.warn(message, toLogValue(error)),
-      })
-    : null;
+  // A hosted server and a self-hosted server (also in Docker): the machine is small or shared, and
+  // one unit or container holds OpenBot, its browser and every agent process.
+  const hostMemory =
+    hostedServer || serverModeEnvironment
+      ? new HostedServerMemory({
+          onError: (message, error) => logger.warn(message, toLogValue(error)),
+        })
+      : null;
   if (hostMemory) {
     hostMemory.start();
     teardown.push(TEARDOWN_ORDER.hostedServerMemory, "the hosted server memory reading", () =>
@@ -1710,10 +1732,13 @@ export async function createApplicationServices({
           },
         )
       : undefined;
+  // A headless server has no settings window. `OPENBOT_ANALYTICS=off` turns tracking off for the run.
+  const analyticsLockedOff = analyticsDisabledByEnvironment(process.env);
   const analytics = new HostAnalytics({
     ...(failureReports ? { reports: failureReports } : {}),
     enabled: app.isPackaged && appVariant === "production",
     trackingEnabled: analyticsPreference.enabled,
+    trackingLockedOff: analyticsLockedOff,
     appVersion: app.getVersion(),
     platform: analyticsPlatform,
     // A function for a lifetime reason, not an ordering one: the signed-in account changes
@@ -2052,6 +2077,16 @@ export async function createApplicationServices({
       Effect.runPromise(hostedServerActivity.stop()),
     );
   }
+  // Watches the running turns of a server and says once in the log when one goes silent. It never stops a turn.
+  const silentTurns = new SilentTurnMonitor({
+    activity: () => service.runningTurnActivity(),
+    thresholdMs: readSilentTurnThresholdMs(process.env.OPENBOT_SILENT_TURN_MINUTES),
+    warn: (message, details) => logger.warn(message, details),
+  });
+  if (serverModeEnvironment) {
+    silentTurns.start();
+    teardown.push(TEARDOWN_ORDER.serverMode, "the silent turn monitor", () => silentTurns.stop());
+  }
   const serverMode = serverModeEnvironment
     ? new ServerMode({
         environment: serverModeEnvironment,
@@ -2059,6 +2094,21 @@ export async function createApplicationServices({
         centralAuth,
         host,
         onError: (message, error) => logger.warn(message, toLogValue(error)),
+        log: (message) => logger.info(message),
+        ...createServerOperations({
+          startedAt: Date.now() - process.uptime() * 1000,
+          agentInitialization,
+          database: () => store.database.connection,
+          describeRestartReadiness,
+          service,
+          hostMemory,
+          runMarker,
+          silentTurns,
+          analytics,
+          analyticsPreferenceFile,
+          analyticsLockedOff,
+          renderDiagnostics: () => renderDiagnostics({ service, browser, updater, trace }),
+        }),
       })
     : null;
   if (serverMode) {

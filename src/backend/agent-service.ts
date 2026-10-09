@@ -1134,6 +1134,16 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return this.#routineTimer.nextDueAt();
   }
 
+  /** Each running turn with its start and its last provider event, in epoch milliseconds. Read-only. */
+  runningTurnActivity(): { turnId: string; agentId: string; startedAt: number; lastEventAt: number }[] {
+    return this.#turn.runningTurnActivity();
+  }
+
+  /** The providers that wait for an automatic restart after they stopped. Read-only. */
+  providerRestarts(): { provider: AgentProvider; attempts: number; nextAttemptAt: number }[] {
+    return this.#providers.pendingRestarts();
+  }
+
   hasActiveWork(): string[] {
     const reasons: string[] = [];
     for (const [, snapshot] of this.#conversation.activeSnapshots()) {

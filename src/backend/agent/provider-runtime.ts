@@ -101,6 +101,20 @@ export const PROVIDER_UNASSIGNED_RELEASE_MS = 60_000;
 const PROVIDER_IDLE_CHECK_MS = 60_000;
 /** How often a restart the user asked for checks whether the provider's turns have ended. */
 const PROVIDER_RESTART_POLL_MS = 1_000;
+/** A provider that stops again and again is restarted this many times quickly, then slowly and for good. */
+const QUICK_RESTART_ATTEMPTS = 3;
+const SLOW_RESTART_FIRST_DELAY_MS = 30_000;
+const SLOW_RESTART_MAX_DELAY_MS = 10 * 60_000;
+/** Keeps the attempt count small. The delay is at its cap long before this. */
+const MAX_RESTART_ATTEMPTS = 20;
+
+/** The wait before the slow restart that follows `attempts` earlier restarts: 30 s, doubling, up to 10 minutes. */
+function slowRestartDelayMs(attempts: number): number {
+  return Math.min(
+    SLOW_RESTART_FIRST_DELAY_MS * 2 ** Math.max(0, attempts - QUICK_RESTART_ATTEMPTS),
+    SLOW_RESTART_MAX_DELAY_MS,
+  );
+}
 /**
  * The providers whose shared process reads the agent environment only when it starts. Claude reads
  * it at each session start, and Codex with each thread's config.
@@ -352,6 +366,8 @@ export class ProviderRuntime implements ProviderPort {
   /** Per provider: one provider that exits must not delay, or take the retries of, another. */
   readonly #restartAttempts = new Map<AgentProvider, number>();
   readonly #restartTimers = new Map<AgentProvider, NodeJS.Timeout>();
+  /** When each waiting restart runs, in epoch milliseconds. Read-only status for an operator. */
+  readonly #restartDueAt = new Map<AgentProvider, number>();
   /**
    * Providers whose client exited and whose deliveries `onProviderLost` left for restart recovery.
    * Their next connect runs `onProvidersReady`, also when it is a retry after a timeout.
@@ -1522,6 +1538,7 @@ export class ProviderRuntime implements ProviderPort {
     this.#disposals += 1;
     for (const timer of this.#restartTimers.values()) clearTimeout(timer);
     this.#restartTimers.clear();
+    this.#restartDueAt.clear();
     for (const timer of this.#restartsWhenIdle.values()) if (timer) clearTimeout(timer);
     this.#restartsWhenIdle.clear();
     if (this.#idleCheck) clearInterval(this.#idleCheck);
@@ -2346,7 +2363,9 @@ export class ProviderRuntime implements ProviderPort {
     const anotherProviderIsReady = this.#clients.size > 0 || this.#released.size > 0;
     const attempts = this.#restartAttempts.get(client.provider) ?? 0;
 
-    if (attempts >= 3) {
+    if (attempts >= QUICK_RESTART_ATTEMPTS) {
+      // The quick attempts are used up. The provider stays down, but OpenBot keeps trying, slowly:
+      // a machine that ran out of memory or lost its network comes back without a restart.
       this.#setStatus(
         anotherProviderIsReady
           ? {
@@ -2359,9 +2378,10 @@ export class ProviderRuntime implements ProviderPort {
               phase: "blocked",
               providers,
               capabilities: { ...this.#status.capabilities, chat: "unavailable" },
-              message: `${providerLabel(client.provider)} stopped repeatedly. Restart OpenBot after checking the CLI.`,
+              message: sourceText("error.provider.stoppedRepeatedly", { provider: providerLabel(client.provider) }),
             },
       );
+      this.#scheduleSlowRestart(client.provider, attempts);
       return;
     }
 
@@ -2379,10 +2399,35 @@ export class ProviderRuntime implements ProviderPort {
             phase: "restarting",
             providers,
             capabilities: { ...this.#status.capabilities, chat: "unavailable" },
-            message: `${providerLabel(client.provider)} stopped. Retrying (${attempts + 1}/3)…`,
+            message: `${providerLabel(client.provider)} stopped. Retrying (${attempts + 1}/${QUICK_RESTART_ATTEMPTS})…`,
           },
     );
     this.#scheduleRestart(client.provider, delayMs);
+  }
+
+  /**
+   * The restart after the quick attempts: long, capped waits, written to the log. It uses the same
+   * restart as the quick path, so the deliveries that the exit left behind are recovered in the
+   * same way when the provider is back.
+   */
+  #scheduleSlowRestart(provider: AgentProvider, attempts: number, afterTimeout = false): void {
+    const delayMs = slowRestartDelayMs(attempts);
+    this.#restartAttempts.set(provider, Math.min(attempts + 1, MAX_RESTART_ATTEMPTS));
+    logger.warn("A provider is still down. OpenBot will try to start it again.", {
+      provider,
+      attempt: attempts + 1,
+      retryInSeconds: Math.round(delayMs / 1000),
+    });
+    this.#scheduleRestart(provider, delayMs, afterTimeout);
+  }
+
+  /** The providers that wait for an automatic restart, with the attempts so far. Read-only. */
+  pendingRestarts(): { provider: AgentProvider; attempts: number; nextAttemptAt: number }[] {
+    return [...this.#restartDueAt].map(([provider, nextAttemptAt]) => ({
+      provider,
+      attempts: this.#restartAttempts.get(provider) ?? 0,
+      nextAttemptAt,
+    }));
   }
 
   /**
@@ -2393,10 +2438,12 @@ export class ProviderRuntime implements ProviderPort {
    */
   #scheduleRestart(provider: AgentProvider, delayMs: number, afterTimeout = false): void {
     clearTimeout(this.#restartTimers.get(provider));
+    this.#restartDueAt.set(provider, Date.now() + delayMs);
     this.#restartTimers.set(
       provider,
       setTimeout(() => {
         this.#restartTimers.delete(provider);
+        this.#restartDueAt.delete(provider);
         Effect.runFork(this.#restart(provider, afterTimeout).pipe(Effect.forkIn(this.#scope)));
       }, delayMs),
     );
@@ -2407,6 +2454,7 @@ export class ProviderRuntime implements ProviderPort {
     this.#restartAttempts.delete(provider);
     clearTimeout(this.#restartTimers.get(provider));
     this.#restartTimers.delete(provider);
+    this.#restartDueAt.delete(provider);
   }
 
   readonly #restart = Effect.fn("ProviderRuntime.restart")(function* (
@@ -2428,6 +2476,25 @@ export class ProviderRuntime implements ProviderPort {
     yield* this.#startProvider(provider, { notifyReady }, "restarting").pipe(
       Effect.catch((failure) => Effect.sync(() => this.#emitProviderError(provider, "restart_failed", failure.cause))),
     );
+    // A restart that ended with no client and no other restart waiting would end the retries for
+    // good. That is a start that failed to spawn, for example when the machine was out of memory.
+    // A provider that needs the user (a sign-in, an install, an update) is not retried here.
+    const attempts = this.#restartAttempts.get(provider) ?? 0;
+    if (
+      attempts > 0 &&
+      !this.#clients.has(provider) &&
+      !this.#restartTimers.has(provider) &&
+      !this.#hooks.isStopping() &&
+      disposals === this.#disposals &&
+      this.#status.providers?.find((row) => row.id === provider)?.state === "error"
+    ) {
+      if (attempts < QUICK_RESTART_ATTEMPTS) {
+        this.#restartAttempts.set(provider, attempts + 1);
+        this.#scheduleRestart(provider, 500 * 2 ** attempts, afterTimeout);
+      } else {
+        this.#scheduleSlowRestart(provider, attempts, afterTimeout);
+      }
+    }
     recordRestartActivity();
   }, Effect.uninterruptible);
 
@@ -2437,12 +2504,13 @@ export class ProviderRuntime implements ProviderPort {
    */
   #retryAfterTimeout(provider: AgentProvider, schedule: boolean): string {
     const attempts = this.#restartAttempts.get(provider) ?? 0;
-    const retry = schedule && attempts < 3;
-    if (retry) {
+    if (schedule && attempts < QUICK_RESTART_ATTEMPTS) {
       this.#restartAttempts.set(provider, attempts + 1);
       this.#scheduleRestart(provider, 5_000 * 2 ** attempts, true);
+    } else if (schedule) {
+      this.#scheduleSlowRestart(provider, attempts, true);
     }
-    return sourceText(retry ? "error.provider.cliTimedOut" : "error.provider.cliTimedOutRefresh", {
+    return sourceText(schedule ? "error.provider.cliTimedOut" : "error.provider.cliTimedOutRefresh", {
       provider: providerLabel(provider),
     });
   }

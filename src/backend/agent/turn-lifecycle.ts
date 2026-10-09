@@ -216,6 +216,20 @@ export class TurnLifecycle {
     return this.#lastEventAt.get(agentId) ?? null;
   }
 
+  /**
+   * Each running turn, with when it started and when its provider last reported anything. The
+   * clock is kept for each agent, so a turn that has sent nothing since it started reports its start.
+   * Read-only: an operator reads it to find a turn that went silent. Nothing here stops a turn.
+   */
+  runningTurnActivity(): { turnId: string; agentId: string; startedAt: number; lastEventAt: number }[] {
+    return [...this.#runningTurns].map(([turnId, turn]) => ({
+      turnId,
+      agentId: turn.agentId,
+      startedAt: turn.startedAt,
+      lastEventAt: Math.max(turn.startedAt, this.#lastEventAt.get(turn.agentId) ?? 0),
+    }));
+  }
+
   trackItem(itemId: string, turnId: string): void {
     this.#itemTurns.set(itemId, turnId);
   }

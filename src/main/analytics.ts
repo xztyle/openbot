@@ -104,6 +104,8 @@ export interface HostAnalyticsOptions {
   reports?: ReportQueue;
   enabled: boolean;
   trackingEnabled?: boolean;
+  /** `OPENBOT_ANALYTICS=off`: no preference, setting or request turns tracking on during this run. */
+  trackingLockedOff?: boolean;
   appVersion: string;
   platform: "darwin" | "win32" | "linux";
   resolveOwner: () => AnalyticsIdentity | null;
@@ -211,6 +213,7 @@ export class HostAnalytics {
   readonly #client: HostOpenPanelClient | null;
   #identifiedOwner: AnalyticsIdentity | null = null;
   #trackingEnabled: boolean;
+  readonly #trackingLockedOff: boolean;
   #bufferOwnerlessEvents = true;
   #pending: HostPendingEvent[] = [];
   readonly #activeTurns = new Map<string, ActiveTurn>();
@@ -233,7 +236,8 @@ export class HostAnalytics {
     this.#resolveRoutineRun = options.resolveRoutineRun ?? (() => null);
     this.#resolveInventory = options.resolveInventory;
     this.#inventoryDayStore = options.inventoryDay;
-    this.#trackingEnabled = options.trackingEnabled ?? true;
+    this.#trackingLockedOff = options.trackingLockedOff ?? false;
+    this.#trackingEnabled = (options.trackingEnabled ?? true) && !this.#trackingLockedOff;
     if (!options.enabled) {
       this.#client = null;
       return;
@@ -455,7 +459,13 @@ export class HostAnalytics {
     if (this.#trackingEnabled) this.#enqueue("clear", () => this.#client?.clear());
   }
 
-  setTrackingEnabled(enabled: boolean): void {
+  /** The tracking preference that is in force: the saved choice, or the environment that turns it off. */
+  get trackingEnabled(): boolean {
+    return this.#trackingEnabled;
+  }
+
+  setTrackingEnabled(requested: boolean): void {
+    const enabled = requested && !this.#trackingLockedOff;
     if (this.#trackingEnabled === enabled) return;
     this.#trackingEnabled = enabled;
     this.#configureReports();

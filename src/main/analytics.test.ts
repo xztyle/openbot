@@ -834,6 +834,33 @@ describe("host analytics", () => {
     expect(client.track).toHaveBeenCalledWith("system_turn_started", expect.anything());
   });
 
+  it("stays off for the whole run when the environment locks it off, whatever is saved or requested", () => {
+    const client = fakeClient();
+    const analytics = new HostAnalytics(
+      {
+        enabled: true,
+        trackingEnabled: true,
+        trackingLockedOff: true,
+        appVersion: "1.2.3",
+        platform: "linux",
+        resolveOwner: () => ({ id: "owner-account", email: "owner@example.com" }),
+        resolveAgent: () => AGENT,
+      },
+      () => client,
+    );
+    expect(analytics.trackingEnabled).toBe(false);
+    analytics.setTrackingEnabled(true);
+    expect(analytics.trackingEnabled).toBe(false);
+    analytics.handleAgentEvent({
+      type: "turn-started",
+      agentId: AGENT.id,
+      threadId: AGENT.threadId ?? "",
+      turnId: "turn-1",
+      origin: "user",
+    });
+    expect(client.track).not.toHaveBeenCalled();
+  });
+
   it("clears the host OpenPanel client when tracking is disabled", () => {
     const client = fakeClient();
     const analytics = new HostAnalytics(

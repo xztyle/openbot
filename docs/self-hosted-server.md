@@ -38,7 +38,11 @@ open a database that a newer one migrated. It also refuses a computer that is a 
 
 | Command | Use |
 | --- | --- |
-| `openbot status` | Show the version, the account, the server state and a staged update. |
+| `openbot status [--raw]` | Show the version, the account, the server state, how the server runs (health, agents, database version, restart safety, providers, memory, turns) and a staged update. `--raw` prints the `key=value` lines for scripts. |
+| `openbot health` | Exit 0 when OpenBot works, 1 when it does not. |
+| `openbot backup <file>` | Write a verified copy of the database to a new file, while OpenBot runs. See [Backup](docker.md#backup-and-upgrade-rehearsal). |
+| `openbot diagnostics [<file>]` | Show the sanitized diagnostics report, or save it to a new file. |
+| `openbot analytics [on\|off]` | Show or change product analytics on this server. |
 | `openbot login [<email>] [--name <name>]` | Sign in with an email code. |
 | `openbot logout` | Sign out. The server is not available until the next sign-in. |
 | `openbot name <name>` | Change the server name. |
@@ -91,8 +95,10 @@ and starts the service again.
 ## Control socket
 
 The `openbot` command talks to main over HTTP on a Unix socket, with form bodies and `key=value`
-text answers, so it needs only `curl`. The routes are `GET /v1/status`, `POST /v1/login/start`,
-`POST /v1/login/verify`, `POST /v1/name` and `POST /v1/logout`.
+text answers, so it needs only `curl`. The routes are `GET /v1/status`, `GET /v1/health`,
+`POST /v1/login/start`, `POST /v1/login/verify`, `POST /v1/name`, `POST /v1/logout`,
+`POST /v1/backup`, `GET /v1/diagnostics` and `POST /v1/analytics`. The Docker image and the status
+keys are in [Docker](docker.md#health-logs-and-diagnostics).
 
 Threat model:
 
@@ -103,6 +109,10 @@ Threat model:
   access to its files, its keyring and the OpenBot database, so the socket gives them nothing new.
 - The socket answers a closed list of requests. It never sends the session token or the sign-in
   code back, and a value cannot add a line to an answer. A body is at most 4 KiB.
+- `POST /v1/backup` writes a database copy only when the operator asks. It refuses to replace a file.
+  `GET /v1/diagnostics` sends the same sanitized report as **Export diagnostics**. The status lines
+  hold numbers, state words and reason codes from a fixed list, and one redacted reason for a failed
+  agent start.
 - Server mode starts only in a packaged Linux build with `OPENBOT_SERVER=1`, and never on a hosted
   server, which signs in with its claim.
 

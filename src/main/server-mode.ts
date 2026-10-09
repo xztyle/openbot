@@ -7,7 +7,8 @@
  * this process over a Unix socket in the runtime directory that systemd makes for the service user
  * (mode 0700). Only that user and root can connect. Agents run as the same user and already have
  * full access to its files, so the socket gives them nothing new. The socket answers a closed list
- * of requests: status, the email-code sign-in, the server name and sign-out. It never sends the
+ * of requests: status, health, the email-code sign-in, the server name, sign-out, an operator-started
+ * database snapshot, the sanitized diagnostics report and the analytics switch. It never sends the
  * session token or the sign-in code back.
  *
  * The protocol is HTTP with form bodies and `key=value` text lines, so the command needs only
@@ -23,11 +24,13 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { CentralAuthState } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect } from "effect";
+import type { DatabaseSnapshot, DatabaseSnapshotError } from "../backend/database-snapshot";
 import { runCauseEffect } from "../backend/effect-boundary";
 import type { CentralAuthManager } from "./central-auth-manager";
 import type { HostService } from "./host-service";
 import { readBodyWithin } from "./http-body";
 import { RemoteWorkflowError, remoteCall } from "./remote-service-effects";
+import type { ServerHealth } from "./server-health";
 
 const CONTROL_SOCKET_FILE = "control.sock";
 const MAX_BODY_BYTES = 4096;
@@ -53,12 +56,28 @@ export function takeServerModeEnvironment(
   return { controlSocketPath: join(runtimeDirectory, CONTROL_SOCKET_FILE) };
 }
 
+/** The analytics switch of this server. The environment can force it off for the whole run. */
+export interface ServerModeAnalytics {
+  /** True when the environment turns analytics off. A request cannot turn it on then. */
+  lockedOff: boolean;
+  set: (enabled: boolean) => Effect.Effect<void, { readonly cause: unknown }>;
+}
+
 export interface ServerModeOptions {
   environment: ServerModeEnvironment;
   version: string;
   centralAuth: Pick<CentralAuthManager, "getState" | "requestEmailCode" | "verifyEmailCode" | "logout">;
   host: Pick<HostService, "getStatus" | "configure" | "start" | "updateIdentity">;
   onError: (message: string, error: unknown) => void;
+  /** Operator actions are logged, so `docker logs` shows that a snapshot or a switch happened. */
+  log?: (message: string) => void;
+  /** Reads the state of the server for `status` and `health`. Without it, `status` shows only the account and the host. */
+  health?: () => ServerHealth;
+  /** Writes a verified copy of the database. Only a request from the operator calls it. */
+  snapshot?: (destination: string) => Effect.Effect<DatabaseSnapshot, DatabaseSnapshotError>;
+  /** The sanitized diagnostics report, as JSON text. */
+  diagnostics?: () => Effect.Effect<string, { readonly cause: unknown }>;
+  analytics?: ServerModeAnalytics;
   /** Tests only. */
   uid?: number;
 }
@@ -66,7 +85,20 @@ export interface ServerModeOptions {
 interface Answer {
   status: number;
   lines: Record<string, string | number | null>;
+  /** A whole body instead of lines, for the report. */
+  body?: string;
 }
+
+/** The HTTP status of each way a snapshot can fail. The CLI turns the code into a sentence. */
+const SNAPSHOT_FAILURE_STATUS: Record<DatabaseSnapshotError["code"], number> = {
+  invalid_path: 400,
+  no_directory: 400,
+  exists: 409,
+  no_space: 507,
+  backup_failed: 500,
+  verify_failed: 500,
+  write_failed: 500,
+};
 
 export class ServerMode {
   readonly #options: ServerModeOptions;
@@ -76,6 +108,8 @@ export class ServerMode {
   /** Why the last publish failed. Nobody reads the journal, so `status` shows it. */
   #publishError: string | null = null;
   #publishing: Deferred.Deferred<void> | null = null;
+  /** One snapshot at a time: two copies would compete for the disk and the main thread. */
+  #snapshotRunning = false;
 
   constructor(options: ServerModeOptions) {
     this.#options = options;
@@ -179,8 +213,11 @@ export class ServerMode {
       answer = failure(400, "failed", error instanceof Error ? error.message : null);
     }
     response
-      .writeHead(answer.status, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" })
-      .end(formatLines(answer.lines));
+      .writeHead(answer.status, {
+        "content-type": answer.body === undefined ? "text/plain; charset=utf-8" : "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      })
+      .end(answer.body ?? formatLines(answer.lines));
   }
 
   async #route(method: string | undefined, url: string | undefined, body: URLSearchParams): Promise<Answer> {
@@ -195,6 +232,14 @@ export class ServerMode {
         return runCauseEffect(this.#verifyLogin(body.get("challenge") ?? "", body.get("code") ?? "", body.get("name")));
       case "POST /v1/name":
         return runCauseEffect(this.#rename(body.get("name") ?? ""));
+      case "GET /v1/health":
+        return this.#health();
+      case "GET /v1/diagnostics":
+        return runCauseEffect(this.#diagnostics());
+      case "POST /v1/backup":
+        return runCauseEffect(this.#backup(body.get("path") ?? ""));
+      case "POST /v1/analytics":
+        return runCauseEffect(this.#setAnalytics(body.get("enabled") ?? ""));
       case "POST /v1/logout":
         await runCauseEffect(
           this.#options.centralAuth.logout().pipe(Effect.mapError(({ cause }) => new RemoteWorkflowError({ cause }))),
@@ -218,9 +263,79 @@ export class ServerMode {
         server: host.phase,
         server_name: host.serverName ?? this.#pendingName,
         server_message: this.#publishError ?? host.message,
+        ...this.#options.health?.().lines,
       },
     };
   }
+
+  /** 200 when the server can work, 503 when not. A Docker health check reads only the status code. */
+  #health(): Answer {
+    const health = this.#options.health?.();
+    if (!health) return { status: 200, lines: { healthy: "yes" } };
+    const { lines } = health;
+    return {
+      status: health.healthy ? 200 : 503,
+      lines: {
+        healthy: health.healthy ? "yes" : "no",
+        health_problems: lines.health_problems ?? null,
+        agent_init: lines.agent_init ?? null,
+        agent_init_message: lines.agent_init_message ?? null,
+        schema_version: lines.schema_version ?? null,
+        uptime_s: lines.uptime_s ?? null,
+      },
+    };
+  }
+
+  readonly #diagnostics = Effect.fn("ServerMode.diagnostics")(function* (
+    this: ServerMode,
+  ): Effect.fn.Return<Answer, { readonly cause: unknown }> {
+    const { diagnostics } = this.#options;
+    if (!diagnostics) return failure(501, "unavailable");
+    return { status: 200, lines: {}, body: yield* diagnostics() };
+  });
+
+  readonly #backup = Effect.fn("ServerMode.backup")(function* (
+    this: ServerMode,
+    path: string,
+  ): Effect.fn.Return<Answer, never> {
+    const { snapshot } = this.#options;
+    if (!snapshot) return failure(501, "unavailable");
+    if (!path.trim()) return failure(400, "invalid_path");
+    if (this.#snapshotRunning) return failure(409, "backup_running");
+    this.#snapshotRunning = true;
+    return yield* snapshot(path).pipe(
+      Effect.map((result): Answer => {
+        this.#options.log?.(`A database snapshot was written (${result.bytes} bytes, schema ${result.schemaVersion}).`);
+        return {
+          status: 200,
+          lines: { path: result.path, bytes: result.bytes, schema_version: result.schemaVersion, integrity: "ok" },
+        };
+      }),
+      Effect.catch((error) => {
+        this.#options.onError("A database snapshot failed.", error.cause ?? error.code);
+        return Effect.succeed(failure(SNAPSHOT_FAILURE_STATUS[error.code], error.code));
+      }),
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#snapshotRunning = false;
+        }),
+      ),
+    );
+  });
+
+  readonly #setAnalytics = Effect.fn("ServerMode.setAnalytics")(function* (
+    this: ServerMode,
+    value: string,
+  ): Effect.fn.Return<Answer, { readonly cause: unknown }> {
+    const { analytics } = this.#options;
+    if (!analytics) return failure(501, "unavailable");
+    const requested = ANALYTICS_SWITCH[value.trim().toLowerCase()];
+    if (requested === undefined) return failure(400, "invalid_request");
+    if (requested && analytics.lockedOff) return failure(409, "disabled_by_environment");
+    yield* analytics.set(requested);
+    this.#options.log?.(`Product analytics were turned ${requested ? "on" : "off"} by the operator.`);
+    return this.#status();
+  });
 
   readonly #startLogin = Effect.fn("ServerMode.startLogin")(function* (
     this: ServerMode,
@@ -278,6 +393,15 @@ export class ServerMode {
     return this.#status();
   });
 }
+
+const ANALYTICS_SWITCH: Record<string, boolean | undefined> = {
+  on: true,
+  true: true,
+  "1": true,
+  off: false,
+  false: false,
+  "0": false,
+};
 
 /** The form body, or null when it is larger than a control request can be. */
 async function readBody(request: IncomingMessage): Promise<URLSearchParams | null> {

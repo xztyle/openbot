@@ -138,6 +138,7 @@ export const messages = defineMessages("error.provider", {
   "error.provider.cliTimedOut": "{provider} did not answer in time. The computer may be busy. OpenBot will try again.",
   "error.provider.cliTimedOutRefresh":
     "{provider} did not answer in time. The computer may be busy. Refresh the providers to try again.",
+  "error.provider.stoppedRepeatedly": "{provider} stopped repeatedly. OpenBot keeps trying to start it again.",
   "error.provider.noCodeSignIn": "{provider} cannot be signed in with a code.",
   "error.provider.codeLoginNoLink": "The provider did not show a sign-in link. Try again.",
   "error.provider.codeLoginNotWaiting": "No sign-in is waiting for a code. Start the sign-in again.",

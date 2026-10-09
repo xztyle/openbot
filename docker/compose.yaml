@@ -19,9 +19,20 @@ services:
     stop_grace_period: 60s
     volumes:
       - openbot-data:/data
+    # Docker keeps the log without a limit by default. This keeps the last 30 MB.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    # The image has a health check (`openbot health`). Docker marks the container healthy or
+    # unhealthy and does not restart it.
     # OpenBot only connects out. It needs no published port.
     # environment:
     #   XAI_API_KEY: ${XAI_API_KEY}
+    #   OPENBOT_ANALYTICS: "off"          # no product analytics on this server
+    #   OPENBOT_LOG_LEVEL: info           # trace, debug, info, warn, error or silent
+    #   OPENBOT_SILENT_TURN_MINUTES: "30" # warn in the log when a turn gets no output for this long
 
 volumes:
   openbot-data:

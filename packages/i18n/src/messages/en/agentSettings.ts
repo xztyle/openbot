@@ -18,7 +18,6 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.all": "All event checks",
   "agentSettings.eventCheck.interval": "Repeat interval",
   "agentSettings.eventCheck.calendar": "Calendar timing",
-  "agentSettings.eventCheck.minutes": "Every (minutes)",
   "agentSettings.eventCheck.seconds": "Every (seconds)",
   "agentSettings.eventCheck.skipSelf": "Skip my account’s changes",
   "agentSettings.eventCheck.selfHelp":

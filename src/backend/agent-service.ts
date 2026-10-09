@@ -178,6 +178,8 @@ import type { RoutineFlowTools } from "./routine-flows/routine-flow-tools";
 import { RoutineRecords } from "./routine-records";
 import type { RoutineHoldWindow } from "./routine-store";
 import { RoutineTimer } from "./routine-timer";
+import { LOCAL_USER_ACTOR, type SecurityActor } from "./security-actor";
+import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "./security-audit-log";
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
 import { TimeoutError, withTimeout } from "./with-timeout";
 import {
@@ -211,6 +213,8 @@ export interface AgentServiceOptions {
   eventCheckReader?: EventCheckReader;
   eventCheckApiReader?: EventCheckApiReader;
   eventCheckTemplates?: EventCheckTemplates;
+  /** Where changes that move trust are recorded. Without it nothing is recorded. */
+  securityAudit?: SecurityAuditSink;
   store: AgentStore;
   mailbox: MailboxStore;
   browser: AgentBrowserHost;
@@ -301,6 +305,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #tables: AgentTables | null;
   readonly #routines: RoutineScheduler;
   readonly #routineTimer: RoutineTimer;
+  readonly #audit: SecurityAuditSink;
   readonly #channelRoutines: ChannelRoutineScheduler;
   /** Agent and channel routines of every trigger kind, with their webhook routes. */
   readonly routineRecords: RoutineRecords;
@@ -364,6 +369,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       busyMessageMode = () => DEFAULT_BUSY_MESSAGE_MODE,
     } = options;
     this.#developmentDefaults = developmentDefaults;
+    this.#audit = options.securityAudit ?? NO_SECURITY_AUDIT;
     this.#busyMessageMode = busyMessageMode;
     this.#localSkillTools = localSkillTools;
     this.#routineFlowTools = routineFlowTools;
@@ -893,6 +899,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         !this.#removal.deleting().has(id) &&
         !this.#duplication.isPending(id),
       running: () => this.#initialized && !this.#stopping && !this.#routineTimer.held,
+      audit: options.securityAudit,
       deliver: eventDelivery.send.bind(eventDelivery),
     });
 
@@ -1043,6 +1050,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       hostedSites: this.#hostedSites,
       routines: this.#routines,
       eventChecks: this.eventChecks,
+      audit: this.#audit,
       memories: this.#memories,
       drain: this.#drain,
       followUp: this.#followUp,
@@ -1406,30 +1414,64 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return this.#mcp.list();
   }
 
-  saveMcpServer(input: SaveMcpServerInput): Effect.Effect<McpServerConfig[], AgentLifecycleFailed> {
-    return this.#mcp
-      .save(input)
-      .pipe(
-        Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "saveMcpServer", cause: failure.cause })),
-      );
+  /**
+   * `actor` is who asked. The app calls these for the user and the team API for a member; no agent
+   * tool reaches them. Each change goes to the security audit file with names, never values.
+   */
+  saveMcpServer(
+    input: SaveMcpServerInput,
+    actor: SecurityActor = LOCAL_USER_ACTOR,
+  ): Effect.Effect<McpServerConfig[], AgentLifecycleFailed> {
+    const { config } = input;
+    return this.#mcp.save(input).pipe(
+      Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "saveMcpServer", cause: failure.cause })),
+      Effect.tap(() =>
+        this.#audit.record({
+          actor: auditActor(actor),
+          action: "mcp-server.save",
+          target: { kind: "mcp-server", id: config.id, name: config.name },
+          names: [
+            `transport:${config.transport}`,
+            ...config.env.map((entry) => `env:${entry.key}`),
+            ...config.headers.map((entry) => `header:${entry.key}`),
+          ],
+        }),
+      ),
+    );
   }
 
-  removeMcpServer(input: RemoveMcpServerInput): Effect.Effect<McpServerConfig[], AgentLifecycleFailed> {
-    return this.#mcp
-      .remove(input)
-      .pipe(
-        Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "removeMcpServer", cause: failure.cause })),
-      );
+  removeMcpServer(
+    input: RemoveMcpServerInput,
+    actor: SecurityActor = LOCAL_USER_ACTOR,
+  ): Effect.Effect<McpServerConfig[], AgentLifecycleFailed> {
+    return this.#mcp.remove(input).pipe(
+      Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "removeMcpServer", cause: failure.cause })),
+      Effect.tap(() =>
+        this.#audit.record({
+          actor: auditActor(actor),
+          action: "mcp-server.remove",
+          target: { kind: "mcp-server", id: input.mcpServerId },
+        }),
+      ),
+    );
   }
 
-  setMcpServerEnabled(input: SetMcpServerEnabledInput): Effect.Effect<McpServerConfig[], AgentLifecycleFailed> {
-    return this.#mcp
-      .setEnabled(input)
-      .pipe(
-        Effect.mapError(
-          (failure) => new AgentLifecycleFailed({ operation: "setMcpServerEnabled", cause: failure.cause }),
-        ),
-      );
+  setMcpServerEnabled(
+    input: SetMcpServerEnabledInput,
+    actor: SecurityActor = LOCAL_USER_ACTOR,
+  ): Effect.Effect<McpServerConfig[], AgentLifecycleFailed> {
+    return this.#mcp.setEnabled(input).pipe(
+      Effect.mapError(
+        (failure) => new AgentLifecycleFailed({ operation: "setMcpServerEnabled", cause: failure.cause }),
+      ),
+      Effect.tap(() =>
+        this.#audit.record({
+          actor: auditActor(actor),
+          action: input.enabled ? "mcp-server.enable" : "mcp-server.disable",
+          target: { kind: "mcp-server", id: input.mcpServerId },
+        }),
+      ),
+    );
   }
 
   /**
@@ -1923,6 +1965,24 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     // agent chat is not the only session that holds them: a channel turn runs on a session of its
     // own, and it is written from the same profile.
     if (profileChanged) this.#conversation.unloadAgentThreads(agent.id);
+    const privileged = (["access", "computerUse", "allowAutomation"] as const).filter(
+      (field) => input[field] !== undefined,
+    );
+    if (privileged.length > 0) {
+      const initiator = initiatingAgentId
+        ? this.#store.list().find((item) => item.id === initiatingAgentId)
+        : undefined;
+      yield* this.#audit.record({
+        actor: auditActor(
+          initiatingAgentId
+            ? { kind: "agent", agentId: initiatingAgentId, name: initiator?.name ?? initiatingAgentId }
+            : LOCAL_USER_ACTOR,
+        ),
+        action: "agent.privilege-change",
+        target: { kind: "agent", id: agent.id, name: agent.name },
+        names: privileged,
+      });
+    }
     this.#emit({ type: "agents-changed", agents: this.listAgents() });
     // A plan limit belongs to a provider and a model, so a model change can end a hold or start one.
     // Leaving a hold, nothing else would start the queue before the limit it left resets. Entering
@@ -2164,6 +2224,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           (failure) => new AgentLifecycleFailed({ operation: "resume channel routines", cause: failure.cause }),
         ),
       );
+    // Before any check can run: a file that earlier releases wrote takes the approval it implies.
+    yield* this.eventChecks.adoptLegacyApprovals().pipe(Effect.catchCause(() => Effect.void));
     yield* this.eventChecks.resumePending().pipe(Effect.forkIn(this.#scope));
     yield* lifecycleStep("arm routines", () => {
       this.#channelRoutines.reconcileAll();

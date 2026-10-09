@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { createServer, type Server as HttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
@@ -47,13 +47,28 @@ interface ReadAccess {
   controller: AbortController;
   policy: string;
 }
-/** Owns app transports. Provider processes receive scoped loopback URLs, never the app credentials. */
+/**
+ * Owns app transports. Provider processes receive scoped loopback URLs, never the app credentials.
+ *
+ * Each URL carries a random token. A token is made the first time a chat gets a connection, lives
+ * only in this process's memory, and is gone when the proxy closes or the application restarts. A
+ * provider session that outlives a restart holds a token nobody knows, and gets a new URL when its
+ * thread is configured again. A token is not a boundary against an agent that has full access to
+ * this computer: that agent can also read the memory and the tool results of its own session. It
+ * keeps an agent that is limited to Read only or Off from signing a token for a chat that allows
+ * changes, which the key in a file used to allow.
+ */
 export class ChatMcpProxy {
+  readonly #tokens = new Map<string, string>();
   readonly #running = new Map<AbortController, string>();
   readonly #upstreams = new Map<string, Upstream>();
   #server: HttpServer | null = null;
   #port: number | null = null;
   constructor(readonly options: Options) {}
+  /** The loopback port, or null before `start` and after `close`. */
+  get port(): number | null {
+    return this.#port;
+  }
   readonly start = Effect.fn("ChatMcpProxy.start")(function* (this: ChatMcpProxy) {
     const server = createServer((request, response) => {
       void runCauseEffect(this.#handle(request, response));
@@ -206,7 +221,12 @@ export class ChatMcpProxy {
     return JSON.stringify(redactMcpResult(value, secrets));
   }
   #token(key: string, connection: string): string {
-    return createHmac("sha256", this.options.policies.secret()).update(`${key}\0${connection}`).digest("hex");
+    const id = `${key}\0${connection}`;
+    const held = this.#tokens.get(id);
+    if (held) return held;
+    const token = randomBytes(32).toString("hex");
+    this.#tokens.set(id, token);
+    return token;
   }
   #access(request: IncomingMessage) {
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
@@ -214,9 +234,12 @@ export class ChatMcpProxy {
     if (!match?.[1] || !match[2]) return null;
     const key = Buffer.from(match[1], "base64url").toString("utf8");
     const config = this.options.configs().find((item) => item.id === match[2] && item.enabled);
+    // A pair that never got a URL has no token, and asking must not make one.
+    const token = this.#tokens.get(`${key}\0${match[2]}`);
+    if (!config || !token) return null;
     const received = Buffer.from(request.headers.authorization ?? "");
-    const expected = Buffer.from(`Bearer ${this.#token(key, match[2])}`);
-    if (!config || received.length !== expected.length || !timingSafeEqual(received, expected)) return null;
+    const expected = Buffer.from(`Bearer ${token}`);
+    if (received.length !== expected.length || !timingSafeEqual(received, expected)) return null;
     if (!this.#mode(key, config.id)) return null;
     return { key, config };
   }
@@ -422,5 +445,6 @@ export class ChatMcpProxy {
     if (this.#server) yield* mcpCall(() => new Promise<void>((resolve) => this.#server?.close(() => resolve())));
     this.#server = null;
     this.#port = null;
+    this.#tokens.clear();
   });
 }

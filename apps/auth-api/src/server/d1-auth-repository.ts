@@ -1,6 +1,7 @@
 import type { AccountSession, MobileConnectHostBinding } from "@openbot/contracts/mobile-connect";
 import { Context, Effect, Layer, Schema } from "effect";
 import { sha256 } from "./crypto";
+import { PERSISTENT_SESSION_EXPIRES_AT } from "./session-policy";
 import type {
   AuthRepository,
   AuthUser,
@@ -338,6 +339,37 @@ export class D1AuthRepository implements AuthRepository {
       if (!row) return null;
       yield* this.#updateSessionActivityEffect(tokenHash, row.last_used_at, now);
       return mapUser(row);
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  readonly isMachineSession = Effect.fn("D1AuthRepository.isMachineSession")(
+    function* (
+      this: D1AuthRepository,
+      sessionToken: string,
+      now: number,
+    ): Effect.fn.Return<boolean, AuthStoreError, AuthDatabase> {
+      const database = yield* AuthDatabase;
+      const tokenHash = yield* sha256(sessionToken).pipe(
+        Effect.mapError(() => new AuthStoreError({ message: "Account store operation failed." })),
+      );
+      const row = yield* storeCall(() =>
+        database
+          .prepare(
+            `SELECT 1 AS machine FROM auth_sessions
+         WHERE token_hash = ?
+           AND revoked_at IS NULL
+           AND expires_at > ?
+           AND expires_at = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM mobile_auth_sessions
+             WHERE mobile_auth_sessions.session_id = auth_sessions.id
+           )`,
+          )
+          .bind(tokenHash, now, PERSISTENT_SESSION_EXPIRES_AT)
+          .first<{ machine: number }>(),
+      );
+      return row !== null;
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);

@@ -21,6 +21,7 @@ import type { EventCheckData, EventCheckReader } from "./event-check-reader";
 import { checkPointer, observeCheck } from "./event-check-result";
 import { EventCheckStore } from "./event-check-store";
 import { mcpSync } from "./mcp-effects";
+import { LOCAL_USER_ACTOR as TEST_USER } from "./security-actor";
 
 let root: string;
 let service: AgentService | null = null;
@@ -93,7 +94,7 @@ afterEach(async () => {
 
 it("keeps baseline, empty and unchanged checks silent, then queues one event and one provider turn", async () => {
   const { service, client, store } = await boot();
-  const check = await runCauseEffect(service.eventChecks.save(input()));
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
   const target = { agentId: "chief", id: check.id };
   expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("baseline");
   items = [];
@@ -141,7 +142,7 @@ it("keeps baseline, empty and unchanged checks silent, then queues one event and
 
 it("retains exactly ten execution logs and keeps read errors out of chat and logs free of credentials", async () => {
   const { service, client } = await boot();
-  const check = await runCauseEffect(service.eventChecks.save(input()));
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
   const target = { agentId: "chief", id: check.id };
   for (let index = 0; index < 12; index++) await runCauseEffect(service.eventChecks.checkNow(target));
   fail = true;
@@ -156,24 +157,27 @@ it("retains exactly ten execution logs and keeps read errors out of chat and log
 
 it("lets a disconnected check pause and preserves its baseline across restart and timing changes", async () => {
   const { service: first, checks } = await boot();
-  let check = await runCauseEffect(first.eventChecks.save(input()));
+  let check = await runCauseEffect(first.eventChecks.save(input(), TEST_USER));
   await runCauseEffect(first.eventChecks.checkNow({ agentId: "chief", id: check.id }));
   valid = false;
-  check = await runCauseEffect(first.eventChecks.save({ ...check, active: false }));
+  check = await runCauseEffect(first.eventChecks.save({ ...check, active: false }, TEST_USER));
   expect(check.active).toBe(false);
   valid = true;
   check = await runCauseEffect(
-    first.eventChecks.save({
-      ...check,
-      active: true,
-      schedule: {
-        ...input().schedule,
-        kind: "interval",
-        amount: 2,
-        unit: "minutes",
-        anchorAt: new Date().toISOString(),
+    first.eventChecks.save(
+      {
+        ...check,
+        active: true,
+        schedule: {
+          ...input().schedule,
+          kind: "interval",
+          amount: 2,
+          unit: "minutes",
+          anchorAt: new Date().toISOString(),
+        },
       },
-    }),
+      TEST_USER,
+    ),
   );
   expect(checks.state(check.id).baseline).not.toBeNull();
   await runCauseEffect(first.stop());
@@ -186,7 +190,7 @@ it("lets a disconnected check pause and preserves its baseline across restart an
 
 it("discards an in-flight observation after permissions are revoked without advancing the baseline", async () => {
   const { service, checks } = await boot();
-  const check = await runCauseEffect(service.eventChecks.save(input()));
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
   const target = { agentId: "chief", id: check.id };
   await runCauseEffect(service.eventChecks.checkNow(target));
   const before = checks.state(check.id);
@@ -201,7 +205,7 @@ it("discards an in-flight observation after permissions are revoked without adva
 
 it("keeps undelivered events during timing edits and clears them only when the query changes", async () => {
   const { service, checks } = await boot();
-  const check = await runCauseEffect(service.eventChecks.save(input()));
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
   const baseline = observeCheck(items, check.selection, null);
   const changed = observeCheck([...items, { id: "new", updatedAt: "1" }], check.selection, baseline.baseline);
   const now = new Date().toISOString();
@@ -243,7 +247,7 @@ it("compares stable IDs and revisions, rejects malformed paths and never repeats
 
 it("runs a scheduled one-minute check without a chat turn and advances its next run", async () => {
   const { service } = await boot();
-  const check = await runCauseEffect(service.eventChecks.save(input()));
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
   const due = new Date(Date.parse(check.nextCheckAt) + 1);
   await runCauseEffect(service.eventChecks.processDue(due, () => true));
   await vi.waitFor(() => expect(service.eventChecks.options.store.history("chief", check.id)).toHaveLength(1));
@@ -254,7 +258,7 @@ it("runs a scheduled one-minute check without a chat turn and advances its next 
 
 it("retries an interrupted durable event through the same mailbox idempotency key", async () => {
   const { service, checks, client } = await boot();
-  const check = await runCauseEffect(service.eventChecks.save(input()));
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
   const previous = observeCheck(items, check.selection, null);
   const changed = observeCheck([...items, { id: "after-crash", updatedAt: "1" }], check.selection, previous.baseline);
   const now = new Date().toISOString();
@@ -289,7 +293,7 @@ it("retries an interrupted durable event through the same mailbox idempotency ke
 
 it("logs an in-flight check as cancelled when its timing or enabled state changes", async () => {
   const { service, checks } = await boot();
-  const check = await runCauseEffect(service.eventChecks.save(input()));
+  const check = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
   duringRead = () => {
     checks.save({ ...check, active: false }, new Date());
   };
@@ -304,19 +308,24 @@ it("skips the connected account's changes, preserves their fingerprints, and wak
   const { service, checks, client } = await boot();
   items = [{ id: "existing", updatedAt: "1", actor: { id: "me" } }];
   const check = await runCauseEffect(
-    service.eventChecks.save({
-      ...input(),
-      selfEvents: {
-        mode: "exclude",
-        connectionId: "linear-job-one",
-        actorPointer: "/actor/id",
-        accountActorIds: ["me"],
+    service.eventChecks.save(
+      {
+        ...input(),
+        selfEvents: {
+          mode: "exclude",
+          connectionId: "linear-job-one",
+          actorPointer: "/actor/id",
+          accountActorIds: ["me"],
+        },
       },
-    }),
+      TEST_USER,
+    ),
   );
   const target = { agentId: "chief", id: check.id };
   await expect(
-    runCauseEffect(service.eventChecks.save({ ...check, source: { ...check.source, connectionId: "other-job" } })),
+    runCauseEffect(
+      service.eventChecks.save({ ...check, source: { ...check.source, connectionId: "other-job" } }, TEST_USER),
+    ),
   ).rejects.toThrow("change-author");
   expect(checks.get("chief", check.id).source.connectionId).toBe("linear-job-one");
   await runCauseEffect(service.eventChecks.checkNow(target));
@@ -354,8 +363,8 @@ it("defaults to 30 seconds, refuses unconfigured self-event exclusion, and expli
   const decoded = decodeEventCheckInput(definition);
   expect(decoded.schedule).toMatchObject({ kind: "interval", amount: 30, unit: "seconds" });
   expect(decoded.selfEvents.mode).toBe("exclude");
-  await expect(runCauseEffect(service.eventChecks.save(decoded))).rejects.toThrow("change-author");
-  let check = await runCauseEffect(service.eventChecks.save({ ...decoded, selfEvents: input().selfEvents }));
+  await expect(runCauseEffect(service.eventChecks.save(decoded, TEST_USER))).rejects.toThrow("change-author");
+  let check = await runCauseEffect(service.eventChecks.save({ ...decoded, selfEvents: input().selfEvents }, TEST_USER));
   const target = { agentId: "chief", id: check.id };
   await runCauseEffect(service.eventChecks.checkNow(target));
   items.push({ id: "self-test", updatedAt: "1", actor: "me" });

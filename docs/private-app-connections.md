@@ -44,3 +44,19 @@ Read-only metadata also depends on the selected app server describing its tools 
 App headers and environment variables remain in the local configuration database. Do not assume
 every credential type has encryption at rest. Keep host backups private and use limited tokens.
 No app is connected or granted access merely because it appears in the catalog.
+
+## Proxy tokens
+
+An agent does not get the credential of an app. It gets a loopback URL and a token for one chat and
+one account. The token is random and only in the memory of OpenBot. It is made when a chat first
+gets the account, and it is gone when OpenBot stops. A restart gives a new token to each chat, and a
+provider session that was started before it gets the new URL the next time its thread is configured.
+That replaces the Codex session of an agent that has an account in **Apps for this chat** once
+after each restart, with the same conversation. An earlier release signed the token with a key in
+`chat-app-permissions-v1.json`. That key let any agent that could read the file make a token for a
+chat that allows changes. The file now holds a random value that nothing uses. It stays so that an
+earlier release can still read the file.
+
+The token keeps an agent that is limited to **Read only** or **Off** from reaching an account that
+another chat allows changes for, by accident or by a mistake in a prompt. It is not a boundary
+against an agent that has full access to the computer.

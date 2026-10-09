@@ -13,6 +13,7 @@ import { AuthStoreError } from "../src/server/d1-auth-repository";
 import { runApiEffect } from "../src/server/effect-runtime";
 import { EmailDeliveryError } from "../src/server/email-delivery";
 import { RemoteOperationError } from "../src/server/remote-control-plane";
+import { PERSISTENT_SESSION_EXPIRES_AT } from "../src/server/session-policy";
 import type {
   AuthRepository,
   AuthUser,
@@ -164,6 +165,19 @@ class MemoryAuthRepository implements AuthRepository {
       return session && !session.revoked && session.expiresAt > now && !this.mobileDevices.has(session.id)
         ? session.user
         : null;
+    });
+  }
+
+  isMachineSession(sessionToken: string, now: number): Effect.Effect<boolean, AuthStoreError> {
+    return Effect.sync(() => {
+      const session = this.sessions.get(sessionToken);
+      return Boolean(
+        session &&
+          !session.revoked &&
+          session.expiresAt > now &&
+          session.expiresAt === PERSISTENT_SESSION_EXPIRES_AT &&
+          !this.mobileDevices.has(session.id),
+      );
     });
   }
 

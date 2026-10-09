@@ -77,6 +77,7 @@ interface HostServiceOptions {
   mcpOAuth?: ForwardedApiOptions["mcpOAuth"];
   chatMcp?: ForwardedApiOptions["chatMcp"];
   eventChecks?: ForwardedApiOptions["eventChecks"];
+  securityAudit?: ForwardedApiOptions["securityAudit"];
   mcpToolRuntimePreparation?: ForwardedApiOptions["mcpToolRuntimePreparation"];
   storage?: ForwardedApiOptions["storage"];
   hostedSites?: ForwardedApiOptions["hostedSites"];
@@ -296,6 +297,7 @@ export class HostService extends EventEmitter<HostEvents> {
       mcpOAuth: options.mcpOAuth,
       chatMcp: options.chatMcp,
       eventChecks: options.eventChecks,
+      securityAudit: options.securityAudit,
       mcpToolRuntimePreparation: options.mcpToolRuntimePreparation,
       storage: options.storage,
       hostedSites: options.hostedSites,

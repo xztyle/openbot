@@ -18,6 +18,7 @@ import { SlackConnectFailed, toSlackConnectFailed } from "../backend/messaging/s
 import { routineFlowRoutines } from "../backend/routine-flows/routine-flow-routines";
 import { RoutineFlowStore } from "../backend/routine-flows/routine-flow-store";
 import { createRoutineFlows, type RoutineFlowsHandle } from "../backend/routine-flows/routine-flows";
+import { SecurityAuditLog } from "../backend/security-audit-log";
 import { type AgentAdminSettingsService, createAgentAdminSettings } from "./agent-admin-settings";
 import { spawnAgentDatabaseHost } from "./agent-database-host-process";
 import { createChatMcp } from "./create-chat-mcp";
@@ -837,7 +838,10 @@ export async function createApplicationServices({
   centralAuth.on("changed", forgetSignedOutSessions);
   const updatePreference = await runCauseEffect(readUpdatePreference(updatePreferenceFile));
   const approvalAutomationFile = join(app.getPath("userData"), APPROVAL_AUTOMATION_FILE);
+  // Names of changes that move trust, never values. Kept apart from logs so a log level cannot hide them.
+  const securityAudit = new SecurityAuditLog(join(app.getPath("userData"), "security-audit.jsonl"));
   const approvalAutomation = new ApprovalAutomation({
+    audit: securityAudit,
     path: approvalAutomationFile,
     initial: await runCauseEffect(
       readApprovalAutomation(
@@ -1173,6 +1177,12 @@ export async function createApplicationServices({
         )
       : undefined;
   if (chatMcp) teardown.push(TEARDOWN_ORDER.mcpOAuth, "chat app connections", () => Effect.runPromise(chatMcp.close()));
+  const eventCheckTemplates = new EventCheckTemplates(
+    app.isPackaged
+      ? join(process.resourcesPath, "watcher-catalog")
+      : resolve(__dirname, "../../resources/watcher-catalog"),
+    join(store.sharedRoot, "Watchers"),
+  );
   const service: AgentService = new AgentService({
     store,
     mailbox,
@@ -1203,20 +1213,20 @@ export async function createApplicationServices({
     developmentDefaults: appVariant === "dev",
     eventCheckReader: chatMcp?.reader,
     eventCheckApiReader: new EventCheckApiReader(
-      new EventCheckEnvironment(join(app.getPath("userData"), "watcher-environments"), {
-        encrypt: (value) => safeStorageCipher("error.app.secretStorageUnavailable").encrypt(value).toString("base64"),
-        decrypt: (value) =>
-          safeStorageCipher("error.app.secretStorageUnavailable").decrypt(Buffer.from(value, "base64")),
-      }),
+      new EventCheckEnvironment(
+        join(app.getPath("userData"), "watcher-environments"),
+        {
+          encrypt: (value) => safeStorageCipher("error.app.secretStorageUnavailable").encrypt(value).toString("base64"),
+          decrypt: (value) =>
+            safeStorageCipher("error.app.secretStorageUnavailable").decrypt(Buffer.from(value, "base64")),
+        },
+        (check) => eventCheckTemplates.reviewed(check),
+      ),
       join(store.sharedRoot, "Watchers"),
       (check) => new EventCheckStore(store.database).current(check.id, check.revision) !== null,
     ),
-    eventCheckTemplates: new EventCheckTemplates(
-      app.isPackaged
-        ? join(process.resourcesPath, "watcher-catalog")
-        : resolve(__dirname, "../../resources/watcher-catalog"),
-      join(store.sharedRoot, "Watchers"),
-    ),
+    eventCheckTemplates,
+    securityAudit,
     credentials: {
       apiKey: (provider) => providerCredentials.get(provider),
       // `configs()`, not `list()`: this is the one path the API keys travel, and it ends at the
@@ -1575,6 +1585,7 @@ export async function createApplicationServices({
     mcpOAuth: remoteMcpSignIn,
     chatMcp: chatMcp?.api,
     eventChecks: service.eventChecks,
+    securityAudit,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.
@@ -2094,6 +2105,7 @@ export async function createApplicationServices({
         version: app.getVersion(),
         centralAuth,
         host,
+        audit: securityAudit,
         onError: (message, error) => logger.warn(message, toLogValue(error)),
         log: (message) => logger.info(message),
         ...createServerOperations({

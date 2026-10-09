@@ -109,6 +109,7 @@
     "./team-protocol/event-checks-v1": "./src/team-protocol/event-checks-v1.ts",
     "./team-protocol/event-check-api-v1": "./src/team-protocol/event-check-api-v1.ts",
     "./team-protocol/event-check-templates-v1": "./src/team-protocol/event-check-templates-v1.ts",
+    "./team-protocol/security-audit-v1": "./src/team-protocol/security-audit-v1.ts",
     "./event-check-templates": "./src/event-check-templates.ts"
   },
   "scripts": {

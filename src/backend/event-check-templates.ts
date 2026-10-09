@@ -82,6 +82,19 @@ export class EventCheckTemplates {
       return false;
     }
   }
+  /**
+   * Whether the check runs the reviewed program of the template that it links to. The digest in the
+   * check is the one OpenBot read from the file, so it is the file that this answers for.
+   */
+  reviewed(check: EventCheck): boolean {
+    if (check.source.kind !== "api" || !check.source.template || !check.source.programDigest) return false;
+    try {
+      const slug = check.source.template.slug;
+      return this.list().find((entry) => entry.slug === slug)?.program.digest === check.source.programDigest;
+    } catch {
+      return false;
+    }
+  }
   install(template: EventCheckTemplate, request: EventCheckTemplateInstallInput, now: Date): EventCheckInput {
     const known = new Set(template.configuration.map((field) => field.name));
     if (Object.keys(request.configuration).some((name) => !known.has(name)))

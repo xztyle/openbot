@@ -90,7 +90,8 @@ describe("private account boundary", () => {
     });
     advance(61_000);
     const host = await signIn(service, OWNER);
-    const ticket = await runApiEffect(service.issueMobileAuthTicket(host.sessionToken, "203.0.113.2"));
+    // A person's own sign-in pairs the phone. The server's durable one cannot.
+    const ticket = await runApiEffect(service.issueMobileAuthTicket(client.sessionToken, "203.0.113.2"));
     const phone = await runApiEffect(
       service.redeemMobileAuthTicket(
         ticket.ticket,
@@ -107,6 +108,71 @@ describe("private account boundary", () => {
     advance(3_600_000);
     expect(await runApiEffect(service.authenticate(host.sessionToken))).toMatchObject({ email: OWNER });
     expect(await runApiEffect(service.authenticateMobileSession(phone.sessionToken))).toBeNull();
+    database.close();
+  });
+
+  it("keeps a server's durable sign-in from pairing a phone, joining a team or reading devices, and leaves its host work", async () => {
+    const { database, repository, time, advance } = fixture();
+    const service = new AuthService({
+      repository,
+      delivery: null,
+      exposeDevelopmentCode: true,
+      allowedEmails: [OWNER],
+      now: time,
+      defaultSessionLifetimeMs: 3_600_000,
+      durableSourceIps: ["203.0.113.1"],
+    });
+    const host = await signIn(service, OWNER);
+    advance(61_000);
+    const app = await signIn(service, OWNER, undefined, "203.0.113.2");
+    expect(await runApiEffect(repository.isMachineSession(host.sessionToken, time()))).toBe(true);
+    expect(await runApiEffect(repository.isMachineSession(app.sessionToken, time()))).toBe(false);
+    const restricted = { status: 403, code: "host_session_restricted" };
+    await expect(runApiEffect(service.issueMobileAuthTicket(host.sessionToken, "203.0.113.9"))).rejects.toMatchObject(
+      restricted,
+    );
+    await expect(
+      runApiEffect(service.issueTeamAuthTicket(host.sessionToken, crypto.randomUUID(), "203.0.113.9")),
+    ).rejects.toMatchObject(restricted);
+    await expect(runApiEffect(service.listMobileAuthDevices(host.sessionToken))).rejects.toMatchObject(restricted);
+    await expect(runApiEffect(service.listAccountSessions(host.sessionToken))).rejects.toMatchObject(restricted);
+    await expect(
+      runApiEffect(service.revokeAccountSession(host.sessionToken, crypto.randomUUID())),
+    ).rejects.toMatchObject(restricted);
+    await expect(runApiEffect(service.authenticateInteractive(host.sessionToken))).rejects.toMatchObject(restricted);
+    // What the server needs stays: it signs in, registers its host and signs out.
+    expect(await runApiEffect(service.authenticate(host.sessionToken))).toMatchObject({ email: OWNER });
+    expect(await runApiEffect(service.authenticateDesktopSession(host.sessionToken))).toMatchObject({ email: OWNER });
+    const plane = await remote(database, time);
+    await runApiEffect(
+      plane.registerHost(host.user, {
+        hostId: "host-1",
+        name: "Private VPS",
+        ownerMembershipId: "owner-membership",
+        devicePublicKey: "test-public-key",
+      }),
+    );
+    // The owner's own sign-in on a device still does all of it, and a phone it pairs is not a server.
+    expect(await runApiEffect(service.authenticateInteractive(app.sessionToken))).toMatchObject({ email: OWNER });
+    const ticket = await runApiEffect(service.issueMobileAuthTicket(app.sessionToken, "203.0.113.2"));
+    const phone = await runApiEffect(
+      service.redeemMobileAuthTicket(
+        ticket.ticket,
+        { id: "dc266424-d342-47ef-a093-3f38c07009e2", name: "Phone", platform: "ios" },
+        "203.0.113.1",
+      ),
+    );
+    if (!phone) throw new Error("The phone pairing failed.");
+    expect(
+      database
+        .prepare("SELECT expires_at FROM auth_sessions WHERE token_hash = ?")
+        .get(await runApiEffect(sha256(phone.sessionToken))),
+    ).toEqual({ expires_at: PERSISTENT_SESSION_EXPIRES_AT });
+    expect(await runApiEffect(repository.isMachineSession(phone.sessionToken, time()))).toBe(false);
+    expect(await runApiEffect(service.listMobileAuthDevices(app.sessionToken))).toHaveLength(1);
+    await runApiEffect(service.logout(host.sessionToken));
+    expect(await runApiEffect(service.authenticate(host.sessionToken))).toBeNull();
+    expect(await runApiEffect(repository.isMachineSession(host.sessionToken, time()))).toBe(false);
     database.close();
   });
 

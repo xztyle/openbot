@@ -2,6 +2,7 @@ import { MCP_SERVERS_CAPABILITY } from "@openbot/contracts/ipc";
 import { MCP_ROUTES, mcpRequest } from "@openbot/contracts/team-protocol/mcp-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
+import { memberActor } from "../../backend/security-actor";
 import {
   parseRemoveMcpServer,
   parseSaveMcpServer,
@@ -48,9 +49,10 @@ export async function routeMcpServers(
     // The local save starts the runtime download; the host route shares it, or a first server
     // added remotely never gets the runtime its test and its spawn need.
     toolRuntimes?.startToolRuntimes();
-    return json(200, await runCauseEffect(mcpServers.saveMcpServer(parseSaveMcpServer(body))));
+    return json(200, await runCauseEffect(mcpServers.saveMcpServer(parseSaveMcpServer(body), memberActor(member))));
   }
-  if (remove) return json(200, await runCauseEffect(mcpServers.removeMcpServer(parseRemoveMcpServer(body))));
+  if (remove)
+    return json(200, await runCauseEffect(mcpServers.removeMcpServer(parseRemoveMcpServer(body), memberActor(member))));
   if (test) {
     const parsed = parseTestMcpServer(body);
     if (toolRuntimes) await runCauseEffect(prepareToolRuntimeForTest(parsed.config, toolRuntimes));
@@ -64,5 +66,5 @@ export async function routeMcpServers(
   }
   const toggled = parseSetMcpServerEnabled(body);
   if (toggled.enabled) toolRuntimes?.startToolRuntimes();
-  return json(200, await runCauseEffect(mcpServers.setMcpServerEnabled(toggled)));
+  return json(200, await runCauseEffect(mcpServers.setMcpServerEnabled(toggled, memberActor(member))));
 }

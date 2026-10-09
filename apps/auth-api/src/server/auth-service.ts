@@ -312,6 +312,39 @@ export class AuthService {
     (operation) => operation.pipe(Effect.mapError(authFailure), Effect.provide(this.#layer)),
   ).bind(this);
 
+  /**
+   * A person's own sign-in, not a server's. A server signs in from a configured durable address, or
+   * with a hosted server's claim, and holds a session that never expires. That session lets the
+   * host publish itself, route webhooks, Slack and Discord, and manage its invitations. It does not
+   * let anyone who reads it from the server's disk make a phone pairing code, open a remote session
+   * to the host as the owner, join a team server as the owner, or reach billing and hosted servers.
+   * Those need a sign-in that the owner made on a device, which expires.
+   */
+  readonly authenticateInteractive = Effect.fn("AuthService.authenticateInteractive")(
+    function* (
+      this: AuthService,
+      sessionToken: string,
+    ): Effect.fn.Return<AuthUser | null, AuthWorkflowFailure, AuthDependencies> {
+      const dependencies = yield* AuthDependencies;
+      const user = yield* this.authenticate(sessionToken);
+      // A session that never expires marks a server only where the others do expire. A deployment
+      // with no default lifetime gives every session that expiry, and then it marks nothing.
+      if (
+        user &&
+        dependencies.defaultSessionLifetimeMs !== undefined &&
+        (yield* dependencies.repository.isMachineSession(sessionToken, dependencies.now()))
+      ) {
+        return yield* new AuthServiceError(
+          403,
+          "host_session_restricted",
+          "This sign-in belongs to a server and cannot do this. Use the app or the website with your own sign-in.",
+        );
+      }
+      return user;
+    },
+    (operation) => operation.pipe(Effect.mapError(authFailure), Effect.provide(this.#layer)),
+  ).bind(this);
+
   readonly updateName = Effect.fn("AuthService.updateName")(
     function* (
       this: AuthService,
@@ -411,7 +444,7 @@ export class AuthService {
     ): Effect.fn.Return<{ ticket: string; expiresAt: number }, AuthWorkflowFailure, AuthDependencies> {
       const dependencies = yield* AuthDependencies;
       yield* authValidate(() => validateTeamServerId(serverId));
-      const user = yield* this.authenticate(sessionToken);
+      const user = yield* this.authenticateInteractive(sessionToken);
       if (!user) return yield* new AuthServiceError(401, "unauthorized", "The session is invalid.");
       const now = dependencies.now();
       yield* this.#enforceRateLimit(`team-ticket:user:${user.id}`, 30, now);
@@ -464,6 +497,7 @@ export class AuthService {
       const dependencies = yield* AuthDependencies;
       const user = yield* this.authenticateDesktopSession(sessionToken);
       if (!user) return yield* new AuthServiceError(401, "unauthorized", "The session is invalid.");
+      yield* this.authenticateInteractive(sessionToken);
       const now = dependencies.now();
       yield* this.#enforceRateLimit(`mobile-ticket:user:${user.id}`, 30, now);
       yield* this.#enforceRateLimit(`mobile-ticket:ip:${normalizeSourceIp(sourceIp)}`, 60, now);
@@ -519,7 +553,7 @@ export class AuthService {
       sessionToken: string,
     ): Effect.fn.Return<MobileAuthDevice[], AuthWorkflowFailure, AuthDependencies> {
       const dependencies = yield* AuthDependencies;
-      const user = yield* this.authenticate(sessionToken);
+      const user = yield* this.authenticateInteractive(sessionToken);
       if (!user) return yield* new AuthServiceError(401, "unauthorized", "The session is invalid.");
       return yield* dependencies.repository.listMobileAuthDevices(user.id, dependencies.now());
     },
@@ -548,7 +582,7 @@ export class AuthService {
       if (!isUuidV4(sessionId)) {
         return yield* new AuthServiceError(400, "invalid_mobile_session", "The mobile session ID is invalid.");
       }
-      const user = yield* this.authenticate(sessionToken);
+      const user = yield* this.authenticateInteractive(sessionToken);
       if (!user) return yield* new AuthServiceError(401, "unauthorized", "The session is invalid.");
       yield* dependencies.repository.revokeMobileAuthDevice(user.id, sessionId, dependencies.now());
       yield* dependencies.flushSessionRevocations();
@@ -566,7 +600,7 @@ export class AuthService {
       AuthDependencies
     > {
       const dependencies = yield* AuthDependencies;
-      const user = yield* this.authenticate(sessionToken);
+      const user = yield* this.authenticateInteractive(sessionToken);
       if (!user) return yield* new AuthServiceError(401, "unauthorized", "The session is invalid.");
       return yield* dependencies.repository.listAccountSessions(user.id, sessionToken, dependencies.now());
     },
@@ -582,7 +616,7 @@ export class AuthService {
       const dependencies = yield* AuthDependencies;
       if (!isUuidV4(sessionId))
         return yield* new AuthServiceError(400, "invalid_session", "The session ID is invalid.");
-      const user = yield* this.authenticate(sessionToken);
+      const user = yield* this.authenticateInteractive(sessionToken);
       if (!user) return yield* new AuthServiceError(401, "unauthorized", "The session is invalid.");
       if (!(yield* this.authenticateDesktopSession(sessionToken))) {
         const sessions = yield* dependencies.repository.listAccountSessions(user.id, sessionToken, dependencies.now());

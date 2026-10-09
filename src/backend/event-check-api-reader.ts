@@ -44,7 +44,11 @@ export class EventCheckApiReader {
       const values = yield* mcpSync(() => this.environment.values(check));
       if (check.source.kind !== "api" || check.source.variables.some((name) => !values[name]))
         return yield* mcpSync(() => {
-          throw new Error(sourceText("error.backend.eventCheckMissingVariable"));
+          throw new Error(
+            this.environment.state(check) === "changed"
+              ? sourceText("error.backend.eventCheckProgramChanged")
+              : sourceText("error.backend.eventCheckMissingVariable"),
+          );
         });
       const source = check.source;
       const valid = () => {

@@ -90,12 +90,54 @@ export function EventCheckEnvironmentSettings(props: {
         });
     }
   }
+  async function approve() {
+    const requested = generation,
+      api = props.api,
+      check = props.check;
+    if (props.disabled) return;
+    setState((draft) => {
+      draft.busy = true;
+      draft.error = "";
+    });
+    try {
+      // Only this button asks the host to approve. The host ignores the request from an agent tool.
+      await api.save({ ...check, approveProgram: true });
+      if (requested !== generation) return;
+      await props.changed();
+    } catch (error) {
+      if (requested === generation)
+        setState((draft) => {
+          draft.error = errorMessage(error, t("agentSettings.eventCheck.failed"));
+        });
+    } finally {
+      if (requested === generation)
+        setState((draft) => {
+          draft.busy = false;
+        });
+    }
+  }
   return (
     <section class="event-check-section event-check-card" aria-labelledby={headingId}>
       <h4 id={headingId}>{t("agentSettings.eventCheck.environment")}</h4>
       <Text as="p" variant="caption" tone="muted" class="event-check-help">
         {t("agentSettings.eventCheck.environmentHelp")}
       </Text>
+      <Show when={state.variables.some((variable) => variable.reapprove)}>
+        <div class="event-check-variable">
+          <Text as="p" variant="caption" tone="muted" class="event-check-help" role="alert">
+            {t("agentSettings.eventCheck.reapproveHelp", { program: props.check.source.toolName })}
+          </Text>
+          <Button
+            variant="secondary"
+            type="button"
+            size="sm"
+            disabled={state.busy || props.disabled}
+            onClick={() => void approve()}
+          >
+            {t("agentSettings.eventCheck.approveProgram")}
+          </Button>
+        </div>
+      </Show>
       <For each={state.variables}>
         {(variable) => (
           <div class="event-check-variable">

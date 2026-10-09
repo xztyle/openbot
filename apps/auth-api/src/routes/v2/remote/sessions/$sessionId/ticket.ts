@@ -7,9 +7,9 @@ import {
   apiError,
   json,
   remoteControlPlaneErrorResponse,
+  requestInteractiveUser,
   requestRemoteControlPlane,
   requestRemoteSignalUrl,
-  requestUser,
 } from "../../../../../server/request-auth";
 
 export const Route = createFileRoute("/v2/remote/sessions/$sessionId/ticket")({
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/v2/remote/sessions/$sessionId/ticket")({
       POST: ({ request, params }) =>
         runApiResponse(
           Effect.gen(function* () {
-            const user = yield* requestUser(request);
+            const user = yield* requestInteractiveUser(request);
             if (!user) return apiError(401, "unauthorized", "Sign in is required.");
             const body = yield* readJsonObject(request);
             if (!isString(body.clientPublicKey)) {

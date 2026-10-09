@@ -6,7 +6,7 @@ import {
   hostedServerErrorResponse,
   json,
   requestHostedServerService,
-  requestUser,
+  requestInteractiveUser,
 } from "../../../../../server/request-auth";
 
 export const Route = createFileRoute("/v2/hosting/servers/$serverId/checkout")({
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/v2/hosting/servers/$serverId/checkout")({
       POST: ({ request, params }) =>
         runApiResponse(
           Effect.gen(function* () {
-            const user = yield* requestUser(request);
+            const user = yield* requestInteractiveUser(request);
             if (!user) return apiError(401, "unauthorized", "Sign in is required.");
             return json(
               yield* requestHostedServerService(request).checkout(user, params.serverId, {

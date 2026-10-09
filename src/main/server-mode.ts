@@ -8,8 +8,8 @@
  * (mode 0700). Only that user and root can connect. Agents run as the same user and already have
  * full access to its files, so the socket gives them nothing new. The socket answers a closed list
  * of requests: status, health, the email-code sign-in, the server name, sign-out, an operator-started
- * database snapshot, the sanitized diagnostics report and the analytics switch. It never sends the
- * session token or the sign-in code back.
+ * database snapshot, the sanitized diagnostics report, the analytics switch and the security audit
+ * rows. It never sends the session token or the sign-in code back.
  *
  * The protocol is HTTP with form bodies and `key=value` text lines, so the command needs only
  * `curl --unix-socket`.
@@ -26,6 +26,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect } from "effect";
 import type { DatabaseSnapshot, DatabaseSnapshotError } from "../backend/database-snapshot";
 import { runCauseEffect } from "../backend/effect-boundary";
+import type { SecurityAuditLog } from "../backend/security-audit-log";
 import type { CentralAuthManager } from "./central-auth-manager";
 import type { HostService } from "./host-service";
 import { readBodyWithin } from "./http-body";
@@ -37,6 +38,8 @@ const MAX_BODY_BYTES = 4096;
 const MAX_EMAIL_LENGTH = 254;
 /** The name of a server whose owner signed in without one. The same default as a mobile connect. */
 const DEFAULT_SERVER_NAME = "OpenBot";
+const DEFAULT_AUDIT_ROWS = 50;
+const MAX_AUDIT_ROWS = 200;
 
 export interface ServerModeEnvironment {
   controlSocketPath: string;
@@ -68,6 +71,8 @@ export interface ServerModeOptions {
   version: string;
   centralAuth: Pick<CentralAuthManager, "getState" | "requestEmailCode" | "verifyEmailCode" | "logout">;
   host: Pick<HostService, "getStatus" | "configure" | "start" | "updateIdentity">;
+  /** The security audit file, newest rows first. Absent where nothing records one. */
+  audit?: Pick<SecurityAuditLog, "read">;
   onError: (message: string, error: unknown) => void;
   /** Operator actions are logged, so `docker logs` shows that a snapshot or a switch happened. */
   log?: (message: string) => void;
@@ -226,6 +231,8 @@ export class ServerMode {
     switch (route) {
       case "GET /v1/status":
         return this.#status();
+      case "GET /v1/audit":
+        return this.#audit(url);
       case "POST /v1/login/start":
         return runCauseEffect(this.#startLogin(body.get("email") ?? "", body.get("name")));
       case "POST /v1/login/verify":
@@ -248,6 +255,18 @@ export class ServerMode {
       default:
         return failure(404, "not_found");
     }
+  }
+
+  /** The newest audit rows as `row<N>=<JSON>` lines. The rows hold names and never values. */
+  #audit(url: string | undefined): Answer {
+    if (!this.#options.audit) return failure(404, "not_found");
+    const asked = Number(new URL(url ?? "/", "http://control").searchParams.get("limit") ?? DEFAULT_AUDIT_ROWS);
+    const limit = Number.isInteger(asked) && asked > 0 ? Math.min(asked, MAX_AUDIT_ROWS) : DEFAULT_AUDIT_ROWS;
+    const rows = this.#options.audit.read(limit);
+    return {
+      status: 200,
+      lines: Object.fromEntries(rows.map((row, index) => [`row${index + 1}`, JSON.stringify(row)])),
+    };
   }
 
   #status(): Answer {

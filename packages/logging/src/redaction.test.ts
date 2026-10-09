@@ -2,6 +2,7 @@
 // even when a caller passes them as structured params.
 import { describe, expect, it, vi } from "vitest";
 import {
+  containsCredential,
   createOpenBotLogger,
   type LogValue,
   redactText,
@@ -360,5 +361,17 @@ describe("createOpenBotLogger", () => {
     const error = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     createOpenBotLogger("automation").warn("careful");
     expect(error).toHaveBeenCalledOnce();
+  });
+});
+
+describe("containsCredential", () => {
+  it("finds a provider token or a registered secret and ignores ordinary text", () => {
+    expect(containsCredential("use lin_api_abcdefghijklmnop1234 for Linear")).toBe(true);
+    expect(containsCredential("Authorization: Bearer abcdefghijklmnop1234")).toBe(true);
+    registerSecretValue("correct-horse-battery");
+    expect(containsCredential("repos: correct-horse-battery,other")).toBe(true);
+    expect(containsCredential('{"pageToken": "", "cursor": null}')).toBe(false);
+    expect(containsCredential("Check the risk-register and the task_runner nightly")).toBe(false);
+    expect(containsCredential("")).toBe(false);
   });
 });

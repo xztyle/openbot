@@ -239,6 +239,11 @@ export interface AuthRepository {
   ): Effect.Effect<{ allowed: boolean; count: number; windowStart: number }, AuthStoreError>;
   authenticate(sessionToken: string, now: number): Effect.Effect<AuthUser | null, AuthStoreError>;
   authenticateDesktopSession(sessionToken: string, now: number): Effect.Effect<AuthUser | null, AuthStoreError>;
+  /**
+   * Whether the session is a server's credential: a live, non-mobile session that never expires.
+   * Only a sign-in from a configured durable address, or a hosted server's claim, makes one.
+   */
+  isMachineSession(sessionToken: string, now: number): Effect.Effect<boolean, AuthStoreError>;
   revokeSession(sessionToken: string, now: number): Effect.Effect<void, AuthStoreError>;
   revokeMobileSession(sessionToken: string, now: number): Effect.Effect<boolean, AuthStoreError>;
   updateUserName(userId: string, name: string, now: number): Effect.Effect<AuthUser, AuthStoreError>;

@@ -84,11 +84,12 @@ function Needs(props: { scope: MarketplaceScope; template: EventCheckTemplate })
                 {(field) => (
                   <li>
                     <Text as="span" variant="body-sm" class="marketplace-need-name">
-                      {field.label}
-                      <Show when={field.required}>
-                        {" "}
-                        <Badge variant="outline">{t("marketplace.eventCheck.need.required")}</Badge>
-                      </Show>
+                      {field.label}{" "}
+                      <Badge variant="outline">
+                        {field.required
+                          ? t("marketplace.eventCheck.need.required")
+                          : t("marketplace.eventCheck.optional")}
+                      </Badge>
                     </Text>
                     <Show when={field.description}>
                       <Text as="span" variant="caption" tone="muted">

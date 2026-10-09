@@ -22,6 +22,8 @@ export interface EventCheckTemplateField {
   /** The default the install dialog starts from. */
   value: string;
   required: boolean;
+  /** `boolean` fields hold the text `true` or `false`, and the install dialog shows a switch. */
+  type: "text" | "boolean";
 }
 /** A reviewed program that ships with the host. A client names it by slug and never sends code. */
 export interface EventCheckTemplate {
@@ -100,12 +102,17 @@ function decodeField(value: unknown): EventCheckTemplateField {
   const name = text(value.name, 128, true);
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || ["__proto__", "constructor", "prototype"].includes(name))
     throw new Error("Invalid template field.");
+  const type = value.type === undefined ? "text" : value.type;
+  if (type !== "text" && type !== "boolean") throw new Error("Invalid template field.");
+  const fieldValue = text(value.value, 8192);
+  if (type === "boolean" && fieldValue !== "true" && fieldValue !== "false") throw new Error("Invalid template field.");
   return {
     name,
     label: text(value.label, 256, true),
     description: text(value.description, 2048),
-    value: text(value.value, 8192),
+    value: fieldValue,
     required: value.required,
+    type,
   };
 }
 export function decodeEventCheckTemplate(value: unknown): EventCheckTemplate {

@@ -90,6 +90,8 @@ export class EventCheckTemplates {
       const value = (request.configuration[field.name] ?? field.value).trim();
       if (field.required && !value)
         throw new Error(sourceText("error.backend.eventCheckTemplateField", { name: field.label }));
+      if (field.type === "boolean" && value !== "true" && value !== "false")
+        throw new Error(sourceText("error.backend.eventCheckTemplateBoolean", { name: field.label }));
       return { name: field.name, label: field.label, description: field.description, value };
     });
     return {

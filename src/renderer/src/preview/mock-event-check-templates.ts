@@ -32,6 +32,7 @@ export const PREVIEW_EVENT_CHECK_TEMPLATE: EventCheckTemplate = {
       label: "Team key",
       description: "The short key of the team to watch, such as ENG.",
       value: "",
+      type: "text",
       required: true,
     },
     {
@@ -39,6 +40,15 @@ export const PREVIEW_EVENT_CHECK_TEMPLATE: EventCheckTemplate = {
       label: "Project filter",
       description: "Optional. Leave it empty to watch every project.",
       value: "",
+      type: "text",
+      required: false,
+    },
+    {
+      name: "includeComments",
+      label: "Include comments",
+      description: "Also wake the agent when a comment is added.",
+      value: "true",
+      type: "boolean",
       required: false,
     },
   ],

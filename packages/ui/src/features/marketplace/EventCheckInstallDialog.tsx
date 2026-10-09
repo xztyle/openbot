@@ -1,4 +1,4 @@
-import type { EventCheckTemplate } from "@openbot/contracts/event-check-templates";
+import type { EventCheckTemplate, EventCheckTemplateField } from "@openbot/contracts/event-check-templates";
 import type { EventCheck } from "@openbot/contracts/event-checks";
 import {
   Alert,
@@ -14,6 +14,7 @@ import {
   Heading,
   IconButton,
   Input,
+  SwitchField,
   Text,
   Textarea,
   TriangleAlert,
@@ -61,6 +62,20 @@ interface DialogState {
   busy: boolean;
   created: EventCheck[];
   failed: FailedInstall[];
+}
+
+/** The label of a setting. A setting that the install does not need says so. */
+function FieldLabel(props: { field: EventCheckTemplateField }) {
+  const { t } = useText();
+  return (
+    <>
+      {props.field.label}
+      <Show when={!props.field.required}>
+        {" "}
+        <span class="marketplace-install-optional">{t("marketplace.eventCheck.optional")}</span>
+      </Show>
+    </>
+  );
 }
 
 /** A value that is long, or has line breaks, is edited in a text area. */
@@ -351,43 +366,61 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
 
                 <For each={props.template.configuration}>
                   {(field) => (
-                    <Field
-                      label={field.label}
-                      description={field.description}
-                      required={field.required}
-                      error={
-                        shown() && errors().fields.includes(field.name)
-                          ? t("marketplace.eventCheck.dialog.fieldRequired")
-                          : undefined
+                    <Show
+                      when={field.type === "boolean"}
+                      fallback={
+                        <Field
+                          label={<FieldLabel field={field} />}
+                          description={field.description}
+                          required={field.required}
+                          error={
+                            shown() && errors().fields.includes(field.name)
+                              ? t("marketplace.eventCheck.dialog.fieldRequired")
+                              : undefined
+                          }
+                        >
+                          <Show
+                            when={isLongValue(field.value)}
+                            fallback={
+                              <Input
+                                value={state.form.configuration[field.name] ?? ""}
+                                maxlength={8192}
+                                disabled={state.busy}
+                                onValueChange={(value) =>
+                                  setState((draft) => {
+                                    draft.form.configuration[field.name] = value;
+                                  })
+                                }
+                              />
+                            }
+                          >
+                            <Textarea
+                              value={state.form.configuration[field.name] ?? ""}
+                              maxlength={8192}
+                              disabled={state.busy}
+                              onValueChange={(value) =>
+                                setState((draft) => {
+                                  draft.form.configuration[field.name] = value;
+                                })
+                              }
+                            />
+                          </Show>
+                        </Field>
                       }
                     >
-                      <Show
-                        when={isLongValue(field.value)}
-                        fallback={
-                          <Input
-                            value={state.form.configuration[field.name] ?? ""}
-                            maxlength={8192}
-                            disabled={state.busy}
-                            onValueChange={(value) =>
-                              setState((draft) => {
-                                draft.form.configuration[field.name] = value;
-                              })
-                            }
-                          />
+                      <SwitchField
+                        class="marketplace-install-switch"
+                        label={<FieldLabel field={field} />}
+                        description={field.description}
+                        checked={state.form.configuration[field.name] === "true"}
+                        disabled={state.busy}
+                        onChange={(on) =>
+                          setState((draft) => {
+                            draft.form.configuration[field.name] = on ? "true" : "false";
+                          })
                         }
-                      >
-                        <Textarea
-                          value={state.form.configuration[field.name] ?? ""}
-                          maxlength={8192}
-                          disabled={state.busy}
-                          onValueChange={(value) =>
-                            setState((draft) => {
-                              draft.form.configuration[field.name] = value;
-                            })
-                          }
-                        />
-                      </Show>
-                    </Field>
+                      />
+                    </Show>
                   )}
                 </For>
 

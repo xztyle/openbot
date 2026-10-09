@@ -1,3 +1,4 @@
+import { decodeEventCheckTemplateInstallInput } from "@openbot/contracts/event-check-templates";
 import { decodeEventCheckInput } from "@openbot/contracts/event-checks";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
@@ -104,6 +105,46 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "list_event_check_templates",
+    description:
+      "List the reviewed event check templates this host ships, such as Linear, GitHub, Slack, Gmail, Render or PostHog. Each has settings (configuration) with defaults and a required flag, the names of its private variables, a default interval and a default instruction. Use a template before you write a new program.",
+    shape: {},
+  },
+  {
+    name: "install_event_check_template",
+    description:
+      "Install a template as a PAUSED event check for an agent (omit agentId to target yourself). Fill every required setting from what the user told you, and ask for what you do not know: never guess IDs. Use one accountLabel per account, and install again for another account. Private variables such as tokens and passwords belong to the user alone: never ask for the value in chat, and never put one in any field or file. After the install, call event_check_environment and tell the user which names to add in agent settings, Event checks, this check, Private variables (.env). Then call test_event_check. Enable it only when the user asks.",
+    shape: {
+      agentId,
+      slug: z.string().min(1).max(64),
+      accountLabel: z.string().min(1).max(128),
+      name: z.string().max(256).optional(),
+      instruction: z.string().max(16000).optional(),
+      timezone: z.string().max(128).optional(),
+      intervalSeconds: z.number().int().min(30).max(86_400).optional(),
+      accountActorIds: z.array(z.string().min(1).max(512)).max(20).optional(),
+      configuration: z.record(z.string(), z.string().max(8192)).optional(),
+    },
+  },
+  {
+    name: "update_event_check_template",
+    description:
+      "Move a check that came from a template to the template's current version. It keeps the settings, schedule and instruction, and it gets a fresh baseline: the first read after the update stays quiet.",
+    shape: { agentId, id },
+  },
+  {
+    name: "link_event_check_template",
+    description:
+      "Link an existing check to a template when its program is exactly the template's program. The baseline stays. It fails when the program differs.",
+    shape: { agentId, id, slug: z.string().min(1).max(64) },
+  },
+  {
+    name: "set_event_check_active",
+    description:
+      "Enable or pause a saved check. Enable only when the user asked you to, after its private variables are set (event_check_environment) and test_event_check succeeded. The first enabled read saves a quiet baseline.",
+    shape: { agentId, id, active: z.boolean() },
+  },
+  {
     name: "delete_event_check",
     description: "Remove a saved check and its pending events/logs.",
     shape: { agentId, id },
@@ -157,6 +198,48 @@ export function handleEventCheckTool(
       case "save_event_check":
         result = yield* checks.save(yield* mcpSync(() => decodeEventCheckInput({ ...args, agentId: target })));
         break;
+      case "list_event_check_templates":
+        result = yield* checks.templateList();
+        break;
+      case "install_event_check_template": {
+        const slug = typeof args.slug === "string" ? args.slug : "";
+        const template = (yield* checks.templateList()).find((entry) => entry.slug === slug);
+        if (!template) return openBotToolFailure(sourceText("error.backend.eventCheckTemplateUnknown"));
+        const label = typeof args.accountLabel === "string" ? args.accountLabel : "";
+        const name = typeof args.name === "string" && args.name.trim() ? args.name : `${template.name} — ${label}`;
+        result = yield* checks.templateInstall(
+          yield* mcpSync(() =>
+            decodeEventCheckTemplateInstallInput({
+              ...args,
+              agentId: target,
+              name,
+              instruction: args.instruction ?? template.instruction,
+              timezone: args.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+              intervalSeconds: args.intervalSeconds ?? template.intervalSeconds,
+              accountActorIds: args.accountActorIds ?? [],
+              configuration: args.configuration ?? {},
+            }),
+          ),
+        );
+        break;
+      }
+      case "update_event_check_template":
+        result = yield* checks.templateUpdate({ agentId: target, id: identifier });
+        break;
+      case "link_event_check_template":
+        result = yield* checks.templateAdopt({
+          agentId: target,
+          id: identifier,
+          slug: typeof args.slug === "string" ? args.slug : "",
+        });
+        break;
+      case "set_event_check_active": {
+        const check = (yield* checks.list({ agentId: target })).find((entry) => entry.id === identifier);
+        if (!check || typeof args.active !== "boolean")
+          return openBotToolFailure(sourceText("error.backend.eventCheckFailed"));
+        result = yield* checks.save({ ...check, active: args.active });
+        break;
+      }
       case "delete_event_check":
         result = yield* checks.remove({ agentId: target, id: identifier });
         break;

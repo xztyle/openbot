@@ -20,11 +20,24 @@ Existing MCP checks remain supported. Replace one only when the user asks.
 
 ## Templates first
 
-Marketplace → **Event checks** lists reviewed templates (Linear assigned issues, for example). When one
-fits the user's request, tell them to install it there: the install creates a paused, linked check per
-agent and account, and the user adds private variables in masked fields. Write a new program only when
-no template fits. A check from a template shows its template and version; the user updates it from
-Marketplace, which gives it a fresh baseline.
+Reviewed templates ship with the host (Linear, GitHub, any git server, Slack, Discord, Gmail, Proton Mail,
+Render, PostHog). Call `openbot.list_event_check_templates` first. When one fits the request:
+
+1. Call `openbot.install_event_check_template` with the slug, one `accountLabel` per account, and every
+   required setting from `configuration`. Ask the user for IDs and names you do not know; never guess.
+   The check is saved **paused** and linked to its template. Install again for another account or agent.
+2. Call `openbot.event_check_environment`. Tell the user which private variable names to add in agent
+   settings → Event checks → this check → Private variables (.env). **Never ask for the value in chat,
+   and never put it in any tool field or file.** Only the user fills the masked fields.
+3. When the user says they added them, call `openbot.test_event_check` and read
+   `openbot.event_check_history`. Fix setting mistakes with `openbot.save_event_check`.
+4. Enable with `openbot.set_event_check_active` only when the user asks. The first enabled read saves a
+   quiet baseline.
+
+Use `openbot.update_event_check_template` to move a check to a newer template version (it gets a fresh
+baseline) and `openbot.link_event_check_template` to link an older check whose program is the template's
+program. The user can do the same in Marketplace → **Event checks**. Write a new program only when no
+template fits.
 
 ## Reuse programs, keep accounts separate
 

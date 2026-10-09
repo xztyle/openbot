@@ -7,3 +7,6 @@
   gives the check a fresh baseline.
 - Nine event check templates ship with the host: Linear, GitHub, any git server, Slack, Discord,
   Gmail, Proton Mail, Render and PostHog.
+- Let agents list, install, update, link, enable and pause event check templates with native tools.
+  An agent can fill in the settings, but private values such as API keys stay for you to add.
+- Show true or false template settings as toggles, and mark optional settings in the install form.

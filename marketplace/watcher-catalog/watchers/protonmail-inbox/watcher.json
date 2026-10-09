@@ -59,7 +59,8 @@
       "label": "Unread mail only",
       "description": "Type true to wake the agent only for unread mail, or false for all new mail.",
       "value": "true",
-      "required": true
+      "required": true,
+      "type": "boolean"
     },
     {
       "name": "maxMessages",
@@ -73,7 +74,8 @@
       "label": "Wake for flag changes",
       "description": "Type true to also wake the agent when a message is starred, read or unread. The default is false.",
       "value": "false",
-      "required": false
+      "required": false,
+      "type": "boolean"
     }
   ],
   "arguments": {

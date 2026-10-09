@@ -139,7 +139,7 @@ describe("Marketplace event check templates", () => {
       instruction: PREVIEW_EVENT_CHECK_TEMPLATE.instruction,
       intervalSeconds: PREVIEW_EVENT_CHECK_TEMPLATE.intervalSeconds,
       accountActorIds: ["user-1", "user-2"],
-      configuration: { teamKey: "ENG", projectFilter: "" },
+      configuration: { teamKey: "ENG", projectFilter: "", includeComments: "true" },
     };
     for (const input of sent) expect(input).toMatchObject(expected);
     expect(setEnvironment).not.toHaveBeenCalled();
@@ -205,5 +205,29 @@ describe("Marketplace event check templates", () => {
       }),
     );
     expect(await screen.findByText("Beta · Mine")).toBeInTheDocument();
+  });
+
+  it("shows a yes-or-no setting as a toggle that sends the text true or false, and marks optional settings", async () => {
+    const { install } = setup();
+    await openInstallDialog();
+
+    const toggle = await screen.findByRole("switch", { name: /Include comments/u });
+    expect(toggle).toBeChecked();
+    expect(screen.getByRole("textbox", { name: /^Project filter\s+Optional/u })).toBeInTheDocument();
+    // A required setting has no Optional label.
+    expect(screen.getByRole("textbox", { name: /^Team key$/u })).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    type(/^Account label/u, "Work");
+    type(/^Team key/u, "ENG");
+    fireEvent.click(screen.getByRole("button", { name: "Install on 1 agent" }));
+
+    await waitFor(() => expect(install).toHaveBeenCalledTimes(1));
+    expect(install.mock.calls[0]?.[0].configuration).toEqual({
+      teamKey: "ENG",
+      projectFilter: "",
+      includeComments: "false",
+    });
   });
 });

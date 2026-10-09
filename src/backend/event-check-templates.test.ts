@@ -9,17 +9,21 @@ import type { EventCheckTemplate } from "@openbot/contracts/event-check-template
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { AgentService } from "./agent-service";
 import {
+  callOpenBotTool,
   createTestService,
   FakeAgentClient,
+  paramsRecord,
   startAgentTestFixture,
   stopAgentTestFixture,
   stores,
+  waitFor,
 } from "./agent-service-test-harness";
 import { runCauseEffect } from "./effect-boundary";
 import { EventCheckApiReader } from "./event-check-api-reader";
 import { EventCheckEnvironment } from "./event-check-environment";
 import { EventCheckStore } from "./event-check-store";
 import { EventCheckTemplates } from "./event-check-templates";
+import { getString } from "./protocol";
 
 let root: string,
   service: AgentService | null = null;
@@ -42,8 +46,22 @@ function template(version: string, program: string): EventCheckTemplate {
     accountLabelHint: "Work account",
     variables: [],
     configuration: [
-      { name: "workspace", label: "Workspace", description: "Which workspace", value: "", required: true },
-      { name: "pageSize", label: "Page size", description: "Items per page", value: "50", required: false },
+      {
+        name: "workspace",
+        label: "Workspace",
+        description: "Which workspace",
+        value: "",
+        required: true,
+        type: "text",
+      },
+      {
+        name: "pageSize",
+        label: "Page size",
+        description: "Items per page",
+        value: "50",
+        required: false,
+        type: "text",
+      },
     ],
     argumentsJson: "{}",
     cursorArgument: "cursor",
@@ -85,16 +103,17 @@ async function boot(shipped: EventCheckTemplate, program = PROGRAM) {
     (check) => checks.current(check.id, check.revision) !== null,
     process.execPath,
   );
+  const client = new FakeAgentClient("codex");
   service = createTestService({
     store,
     mailbox,
-    clientFactory: () => new FakeAgentClient("codex"),
+    clientFactory: () => client,
     eventCheckApiReader: reader,
     eventCheckTemplates: new EventCheckTemplates(catalog, programs),
   });
   await runCauseEffect(service.initialize());
   await runCauseEffect(store.getOrCreate("chief"));
-  return { service, checks, programs };
+  return { service, checks, programs, client, store };
 }
 const request = (configuration: Record<string, string>) => ({
   slug: "fixture",
@@ -178,7 +197,7 @@ it("moves a linked check to the newer program, keeps the user's settings and giv
       ...shipped,
       configuration: [
         ...shipped.configuration,
-        { name: "label", label: "Label", description: "New in 2", value: "default", required: false },
+        { name: "label", label: "Label", description: "New in 2", value: "default", required: false, type: "text" },
       ],
     },
     next,
@@ -224,4 +243,60 @@ it("moves a linked check to the newer program, keeps the user's settings and giv
   expect(checks.state(old.id).baseline).toBeNull();
   expect(existsSync(join(programs, "fixture@1.0.0.mjs"))).toBe(true);
   await expect(runCauseEffect(service.eventChecks.templateUpdate({ agentId: "chief", id: old.id }))).rejects.toThrow();
+});
+
+it("lets an agent list, install and enable a template, rejects a non-boolean value, and has no field for private values", async () => {
+  const shipped = template("1.0.0", PROGRAM);
+  const { service, client, store } = await boot({
+    ...shipped,
+    variables: [{ name: "FIXTURE_API_TOKEN", label: "API key", hint: "Create one.", docsUrl: null }],
+    configuration: [
+      ...shipped.configuration,
+      {
+        name: "notify",
+        label: "Notify",
+        description: "Wake the agent",
+        value: "true",
+        required: false,
+        type: "boolean",
+      },
+    ],
+  });
+  await runCauseEffect(service.sendMessage({ agentId: "chief", text: "Set up the fixture check." }));
+  await waitFor(() => Boolean(store.activeProviderSession("chief")?.externalSessionId));
+  const threadId = store.activeProviderSession("chief")?.externalSessionId;
+  if (!threadId) throw new Error("Provider session did not start.");
+  const call = async (tool: string, args: unknown) => {
+    const { result } = await callOpenBotTool(client, threadId, tool, args);
+    const items = paramsRecord(result)?.contentItems;
+    return {
+      success: paramsRecord(result)?.success === true,
+      text: Array.isArray(items) ? (getString(items[0], "text") ?? "") : "",
+    };
+  };
+  const listed = await call("list_event_check_templates", {});
+  expect(listed.success).toBe(true);
+  expect(listed.text).toContain('"slug":"fixture"');
+  const bad = await call("install_event_check_template", {
+    slug: "fixture",
+    accountLabel: "work",
+    configuration: { workspace: "alpha", notify: "yes" },
+  });
+  expect(bad.success).toBe(false);
+  expect(await runCauseEffect(service.eventChecks.list({ agentId: "chief" }))).toHaveLength(0);
+  const installed = await call("install_event_check_template", {
+    slug: "fixture",
+    accountLabel: "work",
+    accountActorIds: ["me"],
+    configuration: { workspace: "alpha" },
+  });
+  expect(installed.success).toBe(true);
+  const [check] = await runCauseEffect(service.eventChecks.list({ agentId: "chief" }));
+  expect(check?.active).toBe(false);
+  expect(check?.name).toBe("Fixture — work");
+  expect(check?.source.kind === "api" && check.source.template?.slug).toBe("fixture");
+  // The private variable is declared but unset, so enabling fails until the user adds it.
+  const early = await call("set_event_check_active", { id: check?.id, active: true });
+  expect(early.success).toBe(false);
+  expect((await runCauseEffect(service.eventChecks.list({ agentId: "chief" })))[0]?.active).toBe(false);
 });

@@ -28,56 +28,64 @@
         "label": "Instance name",
         "description": "A short name that is unique to this check, such as work-eng. It keeps the rate-limit cooldown of one check apart from another.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "workspaceId",
         "label": "Workspace ID",
         "description": "The ID of the Linear workspace (organization). The check stops if the API key belongs to another workspace. Ask your agent to look it up with the Linear app.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "workspaceSlug",
         "label": "Workspace URL key",
         "description": "The part after linear.app/ in your workspace address.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "assigneeId",
         "label": "Your Linear user ID",
         "description": "The user whose assigned issues and led projects to watch. The API key must belong to this user.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "assigneeEmail",
         "label": "Your Linear email",
         "description": "The email of that user. It is checked against the API key, so the check cannot read another account.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "teamId",
         "label": "Team ID",
         "description": "The ID of the one team to watch.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "teamKey",
         "label": "Team key",
         "description": "The short key of that team, such as ENG. It is checked against the team ID.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "pageSize",
         "label": "Page size",
         "description": "How many items to ask for in each request, from 1 to 100.",
         "value": "100",
-        "required": false
+        "required": false,
+        "type": "text"
       }
     ],
     "argumentsJson": "{\"since\":\"$lastSuccessAt\",\"until\":\"$now\"}",
@@ -121,98 +129,112 @@
         "label": "Instance name",
         "description": "A short name that is unique to this check, such as work-github. It keeps the rate-limit cooldown of one check apart from another.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "login",
         "label": "Your GitHub login",
         "description": "Your GitHub user name. The check stops if the token belongs to another account, so it cannot read someone else's notifications.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "apiBaseUrl",
         "label": "GitHub API address",
         "description": "Leave as is for github.com. For GitHub Enterprise Server use https://your-host/api/v3. It must be https.",
         "value": "https://api.github.com",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "watchNotifications",
         "label": "Watch notifications",
         "description": "true or false. Unread notifications: mentions, review requests, assignments and CI activity. Needs a classic token.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "participatingOnly",
         "label": "Only notifications where I take part",
         "description": "true or false. When true, only threads where you are directly involved (mentioned, assigned, or you took part) are read.",
         "value": "false",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "repos",
         "label": "Repositories to watch",
         "description": "Comma-separated list of owner/name, at most 10, for example acme/api,acme/web. Leave empty to watch notifications only. Every repository must be readable with the token, or the check stops.",
         "value": "",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "branches",
         "label": "Branches for new commits",
         "description": "Comma-separated branch names, at most 5, used for every listed repository. Leave empty to use each repository's default branch.",
         "value": "",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "watchPullRequests",
         "label": "Watch pull requests",
         "description": "true or false. Pull requests of the listed repositories that were opened, updated, merged or closed.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "watchIssues",
         "label": "Watch issues",
         "description": "true or false. Issues of the listed repositories that were opened or updated.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "watchCommits",
         "label": "Watch new commits",
         "description": "true or false. New commits on the branches above.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "watchFailedRuns",
         "label": "Watch failed workflow runs",
         "description": "true or false. GitHub Actions runs that failed.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "watchReleases",
         "label": "Watch new releases",
         "description": "true or false. Releases that were published.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "watchSecurityAlerts",
         "label": "Watch Dependabot security alerts",
         "description": "true or false. Open Dependabot alerts that are new or changed. The token needs access to Dependabot alerts, and the check stops with a message if a listed repository does not allow it.",
         "value": "false",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "maxRequests",
         "label": "Request limit per check",
         "description": "The most GitHub requests one check may send, from 5 to 100. The check stops with a message instead of reading part of the data.",
         "value": "60",
-        "required": false
+        "required": false,
+        "type": "text"
       }
     ],
     "argumentsJson": "{\"since\":\"$lastSuccessAt\",\"until\":\"$now\"}",
@@ -256,77 +278,88 @@
         "label": "Instance name",
         "description": "A short name that is unique to this check, such as work-slack. It keeps the rate-limit cooldown of one check apart from another.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "userId",
         "label": "Your Slack user ID",
         "description": "Your member ID, such as U012ABCDE (in Slack: your profile, More, Copy member ID). The check stops if the token belongs to another user.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "watchMentions",
         "label": "Watch mentions",
         "description": "Type true to find messages that mention you, and messages that match your keywords. Type false to turn this off.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "keywords",
         "label": "Keywords",
         "description": "Optional. Search words or phrases, separated by commas. A message that matches one of them is reported like a mention. Needs watchMentions to be true.",
         "value": "",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "watchDirectMessages",
         "label": "Watch direct messages",
         "description": "Type true to watch your direct messages and group direct messages. If you have more of them than the limit below, the check stops and tells you. Type false to turn this off.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "maxConversations",
         "label": "Direct conversation limit",
         "description": "The most direct and group direct conversations to read, from 1 to 100.",
         "value": "30",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "watchChannels",
         "label": "Watch chosen channels",
         "description": "Type true to watch the channels in the next setting. Type false to turn this off.",
         "value": "false",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "channelIds",
         "label": "Channel IDs",
         "description": "Channel IDs separated by commas, such as C012ABCDE,G012ABCDE. They can be public or private channels that you are in. At most 15.",
         "value": "",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "includeThreadReplies",
         "label": "Include thread replies",
         "description": "Type true to also report new replies in threads in your direct messages and chosen channels. This uses more requests. Type false to skip replies.",
         "value": "false",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "threadLookbackHours",
         "label": "Thread look-back (hours)",
         "description": "Only used when thread replies are on. How far back to look for threads that may have new replies, from 1 to 168.",
         "value": "24",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "maxRequests",
         "label": "Request limit per check",
         "description": "The most Slack requests one check may send, from 4 to 200. If the check needs more, it stops with a message and does not report a partial result.",
         "value": "80",
-        "required": false
+        "required": false,
+        "type": "text"
       }
     ],
     "argumentsJson": "{\"since\":\"$lastSuccessAt\",\"until\":\"$now\"}",
@@ -370,56 +403,64 @@
         "label": "Gmail address",
         "description": "The full address of the mailbox to watch, for example you@gmail.com. It must be the account that the app password belongs to.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "host",
         "label": "IMAP server",
         "description": "The IMAP server name. Leave this as it is for Gmail.",
         "value": "imap.gmail.com",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "port",
         "label": "IMAP port",
         "description": "The IMAP port. Leave this as it is for Gmail.",
         "value": "993",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "security",
         "label": "Connection security",
         "description": "tls (secure from the start), starttls (secure after a first step) or none. none works only for a server on this computer. Leave this as it is for Gmail.",
         "value": "tls",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "mailbox",
         "label": "Mailbox",
         "description": "The folder or label to watch. INBOX is your inbox.",
         "value": "INBOX",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "unseenOnly",
         "label": "Unread mail only",
         "description": "Type true to wake the agent only for unread mail, or false for all new mail.",
         "value": "true",
-        "required": true
+        "required": true,
+        "type": "boolean"
       },
       {
         "name": "maxMessages",
         "label": "Most messages to check",
         "description": "How many of the newest messages to read in each check, from 1 to 200. If more messages match, only the newest ones are checked.",
         "value": "50",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "notifyOnFlagChange",
         "label": "Wake for flag changes",
         "description": "Type true to also wake the agent when a message is starred, read or unread. The default is false.",
         "value": "false",
-        "required": false
+        "required": false,
+        "type": "boolean"
       }
     ],
     "argumentsJson": "{\"since\":\"$lastSuccessAt\"}",
@@ -463,56 +504,64 @@
         "label": "Bridge user name",
         "description": "The user name that Proton Mail Bridge shows for your account in its mailbox details. It is usually your Proton email address.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "host",
         "label": "IMAP server",
         "description": "The IMAP server of Proton Mail Bridge. 127.0.0.1 is the default and works only when Bridge runs on the same machine as OpenBot. Inside the OpenBot container, use an address that reaches Bridge instead.",
         "value": "127.0.0.1",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "port",
         "label": "IMAP port",
         "description": "The IMAP port of Proton Mail Bridge. The Bridge default is 1143.",
         "value": "1143",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "security",
         "label": "Connection security",
         "description": "starttls is the Bridge default. tls (secure from the start) and none are also possible; none works only for a server on this computer. A self-signed certificate is accepted only for 127.0.0.1, ::1 and localhost.",
         "value": "starttls",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "mailbox",
         "label": "Mailbox",
         "description": "The folder or label to watch. INBOX is your inbox.",
         "value": "INBOX",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "unseenOnly",
         "label": "Unread mail only",
         "description": "Type true to wake the agent only for unread mail, or false for all new mail.",
         "value": "true",
-        "required": true
+        "required": true,
+        "type": "boolean"
       },
       {
         "name": "maxMessages",
         "label": "Most messages to check",
         "description": "How many of the newest messages to read in each check, from 1 to 200. If more messages match, only the newest ones are checked.",
         "value": "50",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "notifyOnFlagChange",
         "label": "Wake for flag changes",
         "description": "Type true to also wake the agent when a message is starred, read or unread. The default is false.",
         "value": "false",
-        "required": false
+        "required": false,
+        "type": "boolean"
       }
     ],
     "argumentsJson": "{\"since\":\"$lastSuccessAt\"}",
@@ -556,42 +605,48 @@
         "label": "Instance name",
         "description": "A short name that is unique to this check, such as work-render. It keeps the rate-limit cooldown of one check apart from another.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "ownerId",
         "label": "Workspace ID (optional)",
         "description": "Only watch this Render workspace, for example tea-abc123. Leave empty to watch every workspace the API key can see.",
         "value": "",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "serviceNames",
         "label": "Service names (optional)",
         "description": "Only watch services with these names. Separate names with commas. Leave empty to watch all services. The check stops if a name matches no service.",
         "value": "",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "watchDatabases",
         "label": "Watch databases",
         "description": "Write true to also watch Postgres and Key Value instances for a change of status. Write false to watch services only.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "notifyOnDeploying",
         "label": "Wake on deploys in progress",
         "description": "Write false (the default) to wake the agent only when a deploy finishes, fails or is canceled. Write true to also wake it when a deploy starts.",
         "value": "false",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "maxServices",
         "label": "Largest number of services",
         "description": "The most services (and the most databases of each kind) to check, from 1 to 100. If your account has more, the check stops with an error. Narrow it with a workspace ID or service names.",
         "value": "50",
-        "required": false
+        "required": false,
+        "type": "text"
       }
     ],
     "argumentsJson": "{}",
@@ -635,70 +690,80 @@
         "label": "Instance name",
         "description": "A short name that is unique to this check, such as work-posthog. It keeps the rate-limit cooldown of one check apart from another.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "projectId",
         "label": "Project ID",
         "description": "The number in your PostHog address, for example 12345 in https://us.posthog.com/project/12345.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "host",
         "label": "PostHog address",
         "description": "https://us.posthog.com for the US cloud, https://eu.posthog.com for the EU cloud, or the https address of your own PostHog.",
         "value": "https://us.posthog.com",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "windowMinutes",
         "label": "Window in minutes",
         "description": "How much recent time to compare, from 5 to 1440. The default is 60. A short window reacts faster but is noisier.",
         "value": "60",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "dropPercent",
         "label": "Drop that counts as low (percent)",
         "description": "A metric is low when it is more than this much below the comparison. The default is 50, which means less than half.",
         "value": "50",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "spikePercent",
         "label": "Rise that counts as high (percent)",
         "description": "A metric is high when it is more than this much above the comparison. The default is 200, which means more than three times as much.",
         "value": "200",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "minimumBaseline",
         "label": "Smallest event count to compare with",
         "description": "If the comparison window has fewer events than this, it is too quiet and the status is unknown. The default is 50.",
         "value": "50",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "minimumUsers",
         "label": "Smallest user count to compare with",
         "description": "The same limit for unique users. The default is 10.",
         "value": "10",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "minimumErrors",
         "label": "Smallest error count to report",
         "description": "Exceptions and error events are high only when there are at least this many in the window. The default is 10.",
         "value": "10",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "errorEventNames",
         "label": "Custom error events (optional)",
         "description": "Names of your own error events to watch with the exceptions, separated by commas, for example payment_failed,checkout_error. Leave empty to skip.",
         "value": "",
-        "required": false
+        "required": false,
+        "type": "text"
       }
     ],
     "argumentsJson": "{}",
@@ -742,56 +807,64 @@
         "label": "Instance name",
         "description": "A short name that is unique to this check, such as server-discord. It keeps the rate-limit cooldown of one check apart from another.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "channelIds",
         "label": "Channel IDs",
         "description": "The channels to watch, separated by commas. Turn on Developer Mode in Discord, then right click a channel and choose Copy Channel ID. The bot must be able to read each one. At most 20.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "userId",
         "label": "Your Discord user ID",
         "description": "Your own user ID (right click your name with Developer Mode on, then Copy User ID). It is used to find mentions of you and replies to you.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "mentionsOnly",
         "label": "Only mentions of me",
         "description": "Type true to keep only messages that mention you or your roles, or reply to you. Type false to report every new message in the channels.",
         "value": "true",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "mentionRoleIds",
         "label": "Role IDs to count as mentions",
         "description": "Optional. Role IDs separated by commas. A message that mentions one of these roles counts as a mention of you. At most 20.",
         "value": "",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "includeDirectMessagesToBot",
         "label": "Allow direct message channels",
         "description": "Type true to allow a direct message channel with the bot in the channel list. By default, the check refuses a direct message channel ID.",
         "value": "false",
-        "required": false
+        "required": false,
+        "type": "boolean"
       },
       {
         "name": "perChannelLimit",
         "label": "Page size",
         "description": "How many messages to ask for in each request, from 1 to 100. The check reads more pages until it covers the recent window.",
         "value": "50",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "maxRequests",
         "label": "Request limit per check",
         "description": "The most Discord requests one check may send, from 4 to 200. If the check needs more, it stops with a message and does not report a partial result.",
         "value": "60",
-        "required": false
+        "required": false,
+        "type": "text"
       }
     ],
     "argumentsJson": "{\"since\":\"$lastSuccessAt\",\"until\":\"$now\"}",
@@ -835,35 +908,40 @@
         "label": "Repository address",
         "description": "The HTTPS address of the repository, for example https://gitlab.com/group/project.git. Use the exact address; redirects are not followed. Do not put a user name or key in the address.",
         "value": "",
-        "required": true
+        "required": true,
+        "type": "text"
       },
       {
         "name": "username",
         "label": "User name for the access token",
         "description": "Only used when you add an access token. Many servers accept any name; GitLab accepts oauth2 or your user name. Default: git.",
         "value": "git",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "refPrefixes",
         "label": "Which refs to watch",
         "description": "Comma-separated ref prefixes. refs/heads/ means all branches. Use refs/heads/release/ for only release branches. Other prefixes, such as GitLab's refs/merge-requests/, also work if the server shows them.",
         "value": "refs/heads/",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "ignorePatterns",
         "label": "Names to ignore",
         "description": "Comma-separated patterns. * matches any text and ? matches one character. For example dependabot/*,renovate/* skips bot branches.",
         "value": "",
-        "required": false
+        "required": false,
+        "type": "text"
       },
       {
         "name": "includeTags",
         "label": "Also watch tags",
         "description": "true or false. When true, a new tag, or a tag that moved, also wakes the agent.",
         "value": "false",
-        "required": false
+        "required": false,
+        "type": "boolean"
       }
     ],
     "argumentsJson": "{}",

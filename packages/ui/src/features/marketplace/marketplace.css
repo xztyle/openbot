@@ -800,6 +800,12 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   gap: var(--openbot-space-1) var(--openbot-space-2);
 }
 
+.marketplace-install-optional {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: 400;
+}
+
 .marketplace-install-created {
   display: grid;
   gap: var(--openbot-space-2);

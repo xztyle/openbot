@@ -178,6 +178,19 @@ body {
     stroke-width: var(--openbot-icon-stroke);
   }
 
+  .web-mobile-navigation-button {
+    position: relative;
+  }
+
+  /* The dot is a status, so it sits beside the label and does not move it. */
+  .web-mobile-navigation-dot {
+    width: var(--openbot-space-2);
+    height: var(--openbot-space-2);
+    flex: none;
+    border-radius: var(--openbot-radius-pill);
+    background: var(--openbot-accent);
+  }
+
   .web-mobile-navigation-button[data-active="true"] {
     border-color: var(--openbot-border);
     background: var(--openbot-bg-control);

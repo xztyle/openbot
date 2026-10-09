@@ -115,6 +115,7 @@
     "./team-protocol/event-check-templates-v1": "./src/team-protocol/event-check-templates-v1.ts",
     "./team-protocol/fork-host-v1": "./src/team-protocol/fork-host-v1.ts",
     "./team-protocol/security-audit-v1": "./src/team-protocol/security-audit-v1.ts",
+    "./team-protocol/web-push-v1": "./src/team-protocol/web-push-v1.ts",
     "./event-check-templates": "./src/event-check-templates.ts"
   },
   "scripts": {

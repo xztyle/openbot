@@ -28,6 +28,7 @@ import { PROVIDERS_V4_CODECS } from "./providers-v4";
 import { SECURITY_AUDIT_CODECS } from "./security-audit-v1";
 import { SHARED_TABLES_CODECS } from "./shared-tables-v1";
 import { SKILLS_ADMIN_CODECS } from "./skills-admin-v1";
+import { WEB_PUSH_CODECS } from "./web-push-v1";
 import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
 
 export type { OptionalRouteCodec } from "./admin-wire";
@@ -60,6 +61,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...HOSTED_SITES_CODECS,
   ...WORKSPACE_DIRECTORY_CODECS,
   ...AGENT_HOST_SETTINGS_CODECS,
+  ...WEB_PUSH_CODECS,
 ]);
 
 export function optionalRouteCodec(path: string): OptionalRouteCodec | undefined {

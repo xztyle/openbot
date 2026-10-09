@@ -22,6 +22,7 @@ import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
 import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOSTED_SITES_CAPABILITY } from "@openbot/contracts/team-protocol/hosted-sites-v1";
 import { MCP_CHAT_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-chat-v1";
+import { resolveLocale } from "@openbot/i18n";
 import { runTeamEffect } from "@openbot/team-client";
 import {
   cancelHostUpdate,
@@ -109,11 +110,14 @@ import { createWebConversationRuntime } from "./web-conversation-runtime";
 import { createWebConversationView } from "./web-conversation-view";
 import { createWebFileSaver } from "./web-file-download";
 import { createWebHostedServerCalls } from "./web-hosted-servers";
+import { createWebImagePreviews } from "./web-image-previews";
 import { createWebAgentTemplateCalls, createWebMarketplaceCalls } from "./web-marketplace";
 import { createWebServerNotifications } from "./web-notification-preferences";
 import { createWebNotificationRouting } from "./web-notification-routing";
 import { requestWebNotificationPermission } from "./web-notifications";
+import { createWebPaneHistory } from "./web-pane-history";
 import { createWebProviderSettings, openWebDestination } from "./web-provider-admin";
+import { createWebPush, webPushPreferences } from "./web-push";
 import { createWebServerSettings } from "./web-server-settings";
 import { createWebUsagePort } from "./web-usage-port";
 
@@ -166,6 +170,9 @@ type WebWorkspaceProps = {
   /** The server of a return from Stripe Checkout. The add server dialog opens on its progress. */
   hostingReturn?: AddServerResume | null;
   onHostingReturnConsumed?: () => void;
+  /** The chat that a notification link named, `/app?host=<id>&chat=<id>`. It opens once the host is connected. */
+  chatLink?: { hostId: string; agentId: string } | null;
+  onChatLinkConsumed?: () => void;
   /** The interface language this browser keeps. Account settings change it. */
   language: AppLanguage;
   onChangeLanguage: (language: AppLanguage) => void;
@@ -430,6 +437,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     return () => phoneQuery?.removeEventListener("change", update);
   });
   const compact = () => !phone() && layout.leftPanelCompact();
+  // On a phone the back button goes from a chat to the list of agents, as in a native app.
+  const paneHistory = createWebPaneHistory({ pane: mobilePane, setPane: setMobilePane });
+  createEffect(phone, (onPhone) => {
+    if (onPhone) paneHistory.start();
+    else paneHistory.stop();
+  });
+  createEffect(mobilePane, (pane) => paneHistory.sync(pane));
+  onCleanup(paneHistory.stop);
   /** The usage report of the connected host. As on desktop, it follows a host switch. */
   const [usage, setUsage] = createSignal<{ trigger: HTMLElement | null } | null>(null);
   // The compatibility screen wins over the report, so its Retry stays in reach.
@@ -463,11 +478,60 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     if (workspace.state.host?.hostId === hostId && workspace.state.agents.some((agent) => agent.id === agentId))
       await select(agentId);
   }
+  // The host sends push notifications to this browser when the user turned them on for that host.
+  const push = createWebPush({
+    accountId: props.accountId,
+    hostId: () => workspace.state.host?.hostId ?? null,
+    online: () => workspace.state.status === "online",
+    capabilities: () => workspace.state.capabilities,
+    request: () => workspace.runtime.admin?.request,
+    notificationState: notifications.state,
+    locale: () => resolveLocale(props.language, navigator.language),
+    onOpenChat: (hostId, agentId) => void openNotified(hostId, agentId),
+  });
+  onSettled(() => push.listen());
+  // The host knows only what this browser told it, so a new level, a mute or a language goes to it.
+  createEffect(
+    () => {
+      const hostId = workspace.state.host?.hostId;
+      return {
+        online: workspace.state.status === "online",
+        choices: hostId
+          ? JSON.stringify(
+              webPushPreferences(notifications.state(hostId), resolveLocale(props.language, navigator.language)),
+            )
+          : "",
+      };
+    },
+    ({ online }) => {
+      if (online) void push.sync();
+    },
+  );
+  // A notification that opened the app names a chat. It opens once that host is connected.
+  createEffect(
+    () => ({
+      link: props.chatLink,
+      hostsLoaded: workspace.state.hostsLoaded,
+      hostId: workspace.state.host?.hostId,
+      loaded: workspace.state.workspaceLoaded,
+    }),
+    ({ link, hostsLoaded, hostId, loaded }) => {
+      if (!link || !hostsLoaded) return;
+      if (hostId === link.hostId && loaded) {
+        props.onChatLinkConsumed?.();
+        void openNotified(link.hostId, link.agentId);
+      } else if (hostId !== link.hostId) {
+        if (workspace.state.hosts.some((host) => host.hostId === link.hostId)) selectServer(link.hostId);
+        else props.onChatLinkConsumed?.();
+      }
+    },
+  );
   const { setMuted, setNotificationLevel } = createWebNotificationRouting({
     workspace,
     notifications,
     t,
     onOpen: (hostId, agentId) => void openNotified(hostId, agentId),
+    pushes: push.pushes,
   });
   const [searchOpen, setSearchOpen] = createSignal(false);
   const [messageFocusRequest, setMessageFocusRequest] = createSignal<{
@@ -870,9 +934,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         ]),
       ),
       queues: workspace.state.queues,
-      unreadReplies: {},
-      recentReplies: {},
-      failedTurns: {},
+      unreadReplies: { ...workspace.state.unreadCounts },
+      recentReplies: { ...workspace.state.recentReplies },
+      failedTurns: { ...workspace.state.failedTurns },
       // One wait per agent: a question replaces a browser takeover for the same agent.
       pendingPrompts: Object.fromEntries([
         ...workspace.state.takeovers
@@ -886,6 +950,18 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     };
   });
   const sidebarAgentStates = createMemo(() => computeSidebarAgentStates(sidebarActivity()));
+  /** The agents that wait for the user or have a new reply. The tab title and the Agents tab show it. */
+  const attentionCount = createMemo(
+    () =>
+      Object.values(sidebarAgentStates()).filter((state) => state.kind === "waiting" || state.kind === "unread").length,
+  );
+  const baseTitle = document.title;
+  createEffect(attentionCount, (count) => {
+    document.title = count > 0 ? t("webClient.title.attention", { count, title: baseTitle }) : baseTitle;
+  });
+  onCleanup(() => {
+    document.title = baseTitle;
+  });
   const sidebarAgentMoods = createMemo(() => computeAgentAvatarMoods(sidebarActivity()));
   const browserEnabled = createMemo(
     () =>
@@ -912,10 +988,37 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     return () =>
       Effect.runPromise(clearAgentContext(hostRequest(), agent.id).pipe(Effect.mapError((error) => error.cause)));
   });
+  // The browser has no host file URL, so an image that scrolls into view is read through the connection.
+  const imagePreviews = createWebImagePreviews({
+    download: (attachmentId) => workspace.runtime.download(attachmentId),
+    find: (attachmentId) => {
+      const id = workspace.state.selectedId;
+      const messages = id ? workspace.state.conversations[id]?.page?.messages : undefined;
+      for (const message of messages ?? [])
+        for (const attachment of message.attachments ?? []) if (attachment.id === attachmentId) return attachment;
+      return undefined;
+    },
+    online: () => workspace.state.status === "online",
+  });
+  onSettled(() => {
+    const root = document.querySelector(".web-app-frame");
+    const stop = root ? imagePreviews.observe(root) : undefined;
+    return () => {
+      stop?.();
+      imagePreviews.dispose();
+    };
+  });
+  createEffect(
+    () => workspace.state.status === "online",
+    (online) => {
+      if (online) imagePreviews.retryFailed();
+    },
+  );
   const view = createWebConversationView({
     workspace,
     remoteAgentAdmin,
     hidden: () => creating() || channelOpen(),
+    previewUrl: imagePreviews.url,
   });
   createEffect(
     () => workspace.state.error,
@@ -931,6 +1034,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     () => {
       usageReading.reset();
       view.reset();
+      imagePreviews.reset();
       setCreating(false);
       modelsShown = ++modelsRequest;
       setModels([]);
@@ -1140,8 +1244,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       }
                     : undefined
                 }
-                // The browser client does not know the unread counts of agent chats it has not opened.
-                hasUnread
+                hasUnread={
+                  workspace.profiles().some((agent) => (workspace.state.unreadCounts[agent.id] ?? 0) > 0) ||
+                  channels.hasUnread()
+                }
                 serverName={workspace.state.host?.name ?? "OpenBot"}
                 serverMenu={{
                   servers: servers(),
@@ -1272,7 +1378,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 }
                 onOpenSkills={workspace.state.status === "online" ? () => setMarketplaceOpen(true) : undefined}
               />
-              <WebMobileNavigation activePane={mobilePane()} onChange={setMobilePane} />
+              <WebMobileNavigation
+                activePane={mobilePane()}
+                onChange={setMobilePane}
+                attentionCount={attentionCount()}
+              />
             </>
           }
           after={
@@ -1340,6 +1450,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     calls={accountCalls}
                     language={props.language}
                     onChangeLanguage={props.onChangeLanguage}
+                    push={{
+                      availability: push.availability(),
+                      hostName: workspace.state.host?.name ?? "",
+                      enabled: push.enabled(),
+                      busy: push.busy(),
+                      failure: push.failure(),
+                      onChange: (enabled) => void (enabled ? push.enable() : push.disable()),
+                    }}
                   />
                 </Loading>
               </Show>

@@ -177,6 +177,11 @@ export interface WebWorkspaceRuntime {
   markUnread(agentId: string): Promise<ConversationReadState>;
   /** This member's read state for each agent, keyed by agent id. Invalid entries are left out. */
   conversationReads(): Promise<Record<string, ConversationReadState>>;
+  /**
+   * The browser saw the network come back. The open connection renews its path, and each status
+   * connection that waits to retry tries again now. Nothing is resent.
+   */
+  networkRestored?(): void;
   /** Resolves to the conversation message the host stored: the delivery id of the receipt. */
   send(
     agentId: string,
@@ -867,6 +872,10 @@ export function createWebWorkspaceRuntime(
     },
     setTyping(agentId, typing) {
       peer.setTyping(agentId, typing);
+    },
+    networkRestored() {
+      peer.networkRestored();
+      hosts?.networkRestored();
     },
     async cancelUpload() {
       uploadGeneration += 1;

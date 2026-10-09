@@ -7,10 +7,16 @@ import type { WebWorkspace } from "./web-client-context";
 
 type PromptEvent = Extract<AgentEvent, { type: "prompt" }>;
 
-/** The host names attachment previews with the desktop `openbot-attachment:` scheme, which a browser cannot load. */
-function withoutPreviewUrls(message: AgentMessage): AgentMessage {
-  if (!message.attachments) return message;
-  return { ...message, attachments: message.attachments.map((attachment) => ({ ...attachment, previewUrl: null })) };
+/**
+ * The host names attachment previews with the desktop `openbot-attachment:` scheme, which a browser
+ * cannot load. A browser preview is a blob URL that the client made from the file's bytes, or null.
+ */
+function withPreviewUrls(message: AgentMessage, previewUrl: (attachmentId: string) => string | null): AgentMessage {
+  if (!message.attachments?.length) return message;
+  return {
+    ...message,
+    attachments: message.attachments.map((attachment) => ({ ...attachment, previewUrl: previewUrl(attachment.id) })),
+  };
 }
 
 /** The selected agent's messages, and the prompt and approval that wait for the user. */
@@ -19,8 +25,11 @@ export function createWebConversationView(options: {
   remoteAgentAdmin: Pick<ReturnType<typeof createRemoteAgentAdmin>, "settings" | "update">;
   /** True when the agent form or a channel covers the conversation. */
   hidden: () => boolean;
+  /** The blob URL of an image attachment that was fetched. Reads a signal. */
+  previewUrl?: (attachmentId: string) => string | null;
 }) {
   const { workspace, remoteAgentAdmin } = options;
+  const previewUrl = (attachmentId: string) => options.previewUrl?.(attachmentId) ?? null;
   const approval = createMemo(() =>
     workspace.state.approvals.find(
       (item) => item.agentId === workspace.state.selectedId && item.threadId === workspace.selected()?.threadId,
@@ -87,11 +96,11 @@ export function createWebConversationView(options: {
       questions: message.questionPrompt.questions,
     };
   });
-  const messages = createMemo(() =>
-    toAgentMessages(workspace.conversation()?.page?.messages ?? [], workspace.state.selectedId ?? undefined).map(
-      withoutPreviewUrls,
-    ),
+  const projected = createMemo(() =>
+    toAgentMessages(workspace.conversation()?.page?.messages ?? [], workspace.state.selectedId ?? undefined),
   );
+  // A second layer, so a picture that arrives rebuilds only the messages that have attachments.
+  const messages = createMemo(() => projected().map((message) => withPreviewUrls(message, previewUrl)));
   /** The replied-to messages that are not on the loaded pages. The host sends them with each page. */
   const messageReferences = createMemo(() => {
     const page = workspace.conversation()?.page;
@@ -99,7 +108,7 @@ export function createWebConversationView(options: {
     return Object.fromEntries(
       Object.entries(page.references).map(([id, reference]) => [
         id,
-        withoutPreviewUrls(toAgentMessage(reference, page.agentId)),
+        withPreviewUrls(toAgentMessage(reference, page.agentId), previewUrl),
       ]),
     );
   });

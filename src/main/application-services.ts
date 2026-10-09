@@ -207,6 +207,7 @@ import { SignalIngress } from "./signal-ingress";
 import { readSilentTurnThresholdMs, SilentTurnMonitor } from "./silent-turn-monitor";
 import { SkillMarketplaceService } from "./skill-marketplace-service";
 import { SLACK_DEV_CALLBACK_PATH, startSlackDevCallbackServer } from "./slack-dev-callback-server";
+import { hiddenProviderAgentIds } from "./team-api/provider-visibility";
 import { TeamStore } from "./team-store";
 import { TeamWebRtcBridge } from "./team-webrtc-bridge";
 import { TeamWebRtcClientTransport } from "./team-webrtc-client-transport";
@@ -225,6 +226,8 @@ import { listSiblingOpenBotInstances } from "./update-sibling-instances";
 import { PARAKEET_MODEL_DIRECTORY, removeLegacyWhisperCache } from "./voice-model-service";
 import { spawnVoiceTranscriptionHost } from "./voice-transcription-host-process";
 import { VoiceTranscriptionService } from "./voice-transcription-service";
+import { WebPushService } from "./web-push";
+import { WebPushStore } from "./web-push-store";
 import { WebhookRelay } from "./webhook-relay";
 
 const logger = createOpenBotLogger("application-services");
@@ -234,6 +237,8 @@ const ANALYTICS_INVENTORY_FILE = "openbot-analytics-inventory-v1.json";
 /** The `running` marker of a server (`run-marker.ts`). */
 const RUN_STATE_FILE = "openbot-run-state-v1.json";
 const APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v2.json";
+/** The VAPID key pair and the push subscriptions of browsers. A file of the profile, kept apart from the database. */
+const WEB_PUSH_FILE = "openbot-web-push-v1.json";
 const ROUTINE_FEED_FILE = "openbot-routine-feed-v1.json";
 const LEGACY_APPROVAL_AUTOMATION_FILE = "openbot-approval-automation-v1.json";
 const LANGUAGE_PREFERENCE_FILE = "openbot-language-preference-v1.json";
@@ -305,6 +310,8 @@ const TEARDOWN_ORDER = {
   hostEvents: 85.5,
   // After the connections that hold it.
   signalIngress: 86,
+  // Before the host, so a push message does not start while the host stops.
+  webPush: 89,
   host: 90,
   teamWebRtcBridge: 100,
   // Before the agent service, so no handoff is sent to an agent while the service stops.
@@ -1614,6 +1621,18 @@ export async function createApplicationServices({
     undefined,
     join(app.getPath("userData"), "agent-import-uploads"),
   );
+  const webPush = new WebPushService({
+    agents: service,
+    store: new WebPushStore(join(app.getPath("userData"), WEB_PUSH_FILE)),
+    hostId: () => teamStore.getIdentity()?.serverId ?? null,
+    memberActive: (memberId) => {
+      const member = teamStore.getMember(memberId);
+      return member !== null && !member.disabled;
+    },
+    hiddenAgentIds: (protocol) => hiddenProviderAgentIds(service.listAgents(), protocol),
+    logger,
+  });
+  teardown.push(TEARDOWN_ORDER.webPush, "the web push service", () => webPush.dispose());
   const host = new HostService({
     appVersion: app.getVersion(),
     store: teamStore,
@@ -1633,6 +1652,9 @@ export async function createApplicationServices({
     chatMcp: chatMcp?.api,
     eventChecks: service.eventChecks,
     securityAudit,
+    // Present, so the host advertises the push routes. The key pair and the subscriptions are in a file
+    // of this profile, not in the database.
+    webPush,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.

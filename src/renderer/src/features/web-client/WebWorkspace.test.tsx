@@ -960,3 +960,90 @@ describe("web workspace state", () => {
     expect(workspace.state.error).toBeNull();
   });
 });
+
+describe("web workspace unread state", () => {
+  const read = (unreadCount: number) => ({ unreadCount, firstUnreadMessageId: null, throughMessageId: null });
+  const agents = [STORY_AGENT_SUMMARIES[0], STORY_AGENT_SUMMARIES[1]];
+
+  it("reads the unread count of every agent chat on connect", async () => {
+    const app = harness({
+      listAgents: vi.fn().mockResolvedValue(agents),
+      conversationReads: vi.fn().mockResolvedValue({ research: read(3) }),
+    });
+    const workspace = await connected(app);
+    await waitFor(() => expect(workspace.state.unreadCounts).toEqual({ research: 3 }));
+  });
+
+  it("reads again when another agent's turn ends, and marks a reply that came while the page had no focus", async () => {
+    const conversationReads = vi.fn().mockResolvedValue({});
+    const app = harness({ listAgents: vi.fn().mockResolvedValue(agents), conversationReads });
+    const workspace = await connected(app);
+    await waitFor(() => expect(conversationReads).toHaveBeenCalledOnce());
+    conversationReads.mockResolvedValue({ research: read(1) });
+    vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    app.events().event("host", {
+      type: "turn-completed",
+      agentId: "research",
+      threadId: "thread-research",
+      turnId: "turn-1",
+      status: "completed",
+    });
+    await waitFor(() => expect(workspace.state.unreadCounts).toEqual({ research: 1 }));
+    expect(workspace.state.recentReplies).toEqual({ research: true });
+    app.events().event("host", {
+      type: "turn-started",
+      agentId: "research",
+      threadId: "thread-research",
+      turnId: "turn-2",
+    });
+    expect(workspace.state.recentReplies).toEqual({});
+  });
+
+  it("keeps the failed turn of an agent until its next turn starts", async () => {
+    const app = harness();
+    const workspace = await connected(app);
+    app.events().event("host", {
+      type: "turn-completed",
+      agentId: "chief",
+      threadId: "thread-chief",
+      turnId: "turn-1",
+      status: "failed",
+    });
+    flush();
+    expect(workspace.state.failedTurns).toEqual({ chief: "turn-1" });
+    app.events().event("host", { type: "turn-started", agentId: "chief", threadId: "thread-chief", turnId: "turn-2" });
+    flush();
+    expect(workspace.state.failedTurns).toEqual({});
+  });
+
+  it("takes the count of the opened chat from its own page and from mark read", async () => {
+    const unreadPage = { ...page, readState: read(2) };
+    const app = harness({ conversation: vi.fn().mockResolvedValue(unreadPage) });
+    await waitFor(() => expect(app.workspace().state.unreadCounts).toEqual({ chief: 2 }));
+    await app.workspace().markRead();
+    expect(app.workspace().state.unreadCounts).toEqual({});
+  });
+});
+
+describe("web workspace recovery", () => {
+  it("ends a retry wait when the page becomes visible again", async () => {
+    vi.useFakeTimers();
+    try {
+      const connect = vi
+        .fn()
+        .mockResolvedValueOnce(["conversation-pagination"])
+        .mockRejectedValue(new Error("Offline"));
+      const app = harness({ connect });
+      await vi.waitFor(() => expect(app.workspace().state.status).toBe("online"));
+      app.events().connection({ hostId: "host", state: "offline", message: null });
+      await vi.waitFor(() => expect(connect.mock.calls.length).toBeGreaterThan(1));
+      const attempts = connect.mock.calls.length;
+      await vi.waitFor(() => expect(app.workspace().state.recovery?.phase).toBe("waiting"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.waitFor(() => expect(connect.mock.calls.length).toBeGreaterThan(attempts));
+      expect(app.runtime.send).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

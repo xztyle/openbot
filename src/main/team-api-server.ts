@@ -142,6 +142,7 @@ import { routeSharedTables } from "./team-api/route-shared-tables";
 import { routeSkillsAdmin } from "./team-api/route-skills-admin";
 import { routeStorage } from "./team-api/route-storage";
 import { routeTeam } from "./team-api/route-team";
+import { routeWebPush } from "./team-api/route-web-push";
 import { routeWorkspaceDirectory } from "./team-api/route-workspace-directory";
 import { TeamStoreError } from "./team-store";
 
@@ -717,6 +718,7 @@ export class TeamApiServer {
         )) === "handled"
       )
         return;
+      if ((await routeWebPush(context, this.#options.webPush)) === "handled") return;
       if ((await this.#routeAgents(context)) === "handled") return;
 
       if ((await routeEventChecks(context, this.#options.eventChecks)) === "handled") return;
@@ -1483,7 +1485,8 @@ export class TeamApiServer {
             this.#options.eventChecks?.supported === true ||
             this.#options.chatMcp !== undefined ||
             this.#options.mcpOAuth !== undefined ||
-            this.#options.securityAudit !== undefined
+            this.#options.securityAudit !== undefined ||
+            this.#options.webPush !== undefined
           );
         return true;
       }),

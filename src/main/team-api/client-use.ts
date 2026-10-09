@@ -14,6 +14,7 @@ import { SECURITY_AUDIT_ROUTES } from "@openbot/contracts/team-protocol/security
 import { SHARED_TABLES_ROUTES } from "@openbot/contracts/team-protocol/shared-tables-v1";
 import { SKILLS_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/skills-admin-v1";
 import { STORAGE_ROUTES } from "@openbot/contracts/team-protocol/storage-v1";
+import { WEB_PUSH_ROUTES } from "@openbot/contracts/team-protocol/web-push-v1";
 
 /**
  * POST routes that a client sends with no user action: polls, previews, mark-read, and reads that use
@@ -31,6 +32,9 @@ const PASSIVE_ROUTES: ReadonlySet<string> = new Set([
   HOST_MEMBER_UPDATE_ROUTES.status,
   LIVE_ACTIVITY_PUSH_ROUTES.register,
   LIVE_ACTIVITY_PUSH_ROUTES.remove,
+  WEB_PUSH_ROUTES.key,
+  WEB_PUSH_ROUTES.register,
+  WEB_PUSH_ROUTES.remove,
   STORAGE_ROUTES.usage,
   SECURITY_AUDIT_ROUTES.list,
   AGENT_ADMIN_ROUTES.settings,

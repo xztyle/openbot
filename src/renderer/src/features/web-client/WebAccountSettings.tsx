@@ -22,7 +22,7 @@ import { SettingsProfileTab } from "@openbot/ui/features/settings/SettingsProfil
 import { SoundThemePicker } from "@openbot/ui/features/settings/SoundThemePicker";
 import { createSettingsProfileStore } from "@openbot/ui/features/settings/stores/profile-store";
 import { useText } from "@openbot/ui/text";
-import { createSignal, onCleanup } from "solid-js";
+import { createSignal, onCleanup, Show } from "solid-js";
 import { readActionSoundChoice, replayActionSoundChoice, setActionSoundChoice } from "../../action-sounds";
 import {
   setShowAgentMessages,
@@ -35,6 +35,7 @@ import { setWebReportsEnabled, webReportsEnabled } from "../../error-reports";
 import { currentDevicePlatform, setSendShortcutMode, useSendShortcutMode } from "../../send-shortcut-preference";
 import type { WebAccountCalls } from "./web-account";
 import { isNotificationTextEnabled, setNotificationTextEnabled } from "./web-notification-text";
+import type { WebPushAvailability, WebPushFailure } from "./web-push";
 
 const TABS = ["profile", "preferences"] as const;
 type WebAccountSettingsTab = (typeof TABS)[number];
@@ -62,6 +63,15 @@ export interface WebAccountSettingsProps {
   calls: WebAccountCalls;
   language: AppLanguage;
   onChangeLanguage: (language: AppLanguage) => void;
+  /** Push notifications from the opened host. Absent in a build that has none. */
+  push?: {
+    availability: WebPushAvailability;
+    hostName: string;
+    enabled: boolean;
+    busy: boolean;
+    failure: WebPushFailure | null;
+    onChange: (enabled: boolean) => void;
+  };
 }
 
 /**
@@ -216,6 +226,29 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                 label={t("settings.taskSound.title")}
                 description={t("settings.taskSound.description")}
               />
+              <Show when={props.push}>
+                {(push) => (
+                  <SwitchField
+                    checked={push().enabled}
+                    disabled={push().availability !== "ready" || push().busy}
+                    onChange={(checked) => push().onChange(checked)}
+                    label={t("webClient.push.title")}
+                    description={
+                      push().failure === "denied"
+                        ? t("webClient.push.denied")
+                        : push().failure === "failed"
+                          ? t("webClient.push.failed")
+                          : push().availability === "browser-unsupported"
+                            ? t("webClient.push.browserUnsupported")
+                            : push().availability === "no-host"
+                              ? t("webClient.push.noHost")
+                              : push().availability === "host-unsupported"
+                                ? t("webClient.push.hostUnsupported")
+                                : t("webClient.push.description", { host: push().hostName })
+                    }
+                  />
+                )}
+              </Show>
               <SwitchField
                 checked={notificationText()}
                 onChange={(checked) => {

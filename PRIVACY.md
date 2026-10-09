@@ -380,6 +380,9 @@ Billing is off, and Stripe receives nothing, when the account service has no Str
   indexes, team configuration, local team members and sessions, the shared browser profile, cookies,
   application preferences, and the provider CLIs OpenBot downloads. The downloaded CLIs are kept in
   one store for the whole computer, which no other profile data shares.
+- `openbot-web-push-v1.json` in the same folder holds the web push key pair and the push
+  subscriptions of browsers (see [Web push notifications](#web-push-notifications)). Only the
+  user of the computer can read it.
 - The local team configuration contains team member profiles, password hashes and salts when local
   password sign-in is used, invite and session token hashes, and the team identity key pair.
 - `~/.codex` is owned by Codex CLI and contains its login and thread data. OpenBot does not copy or
@@ -465,6 +468,9 @@ Network traffic can also occur when:
 - a user or an agent visits a page in the embedded browser;
 - a user submits text that is not a web address in the browser address bar, which sends the query to Google Search;
 - a locally installed Codex plugin connects to its service;
+- a member turned on push notifications in the web app. The computer then sends encrypted push
+  messages to the push service of that member's browser; see
+  [Web push notifications](#web-push-notifications);
 - an MCP server the user enabled is reached at its own address, and, when that server asks for a
   sign-in, OpenBot connects to the server's authorization service to register itself, to exchange
   the grant the browser returns, and to renew the token. Nothing about the user's agents,
@@ -894,6 +900,37 @@ approves it.
 
 Settings > Live Activities turns this off. The phone then removes its token from the
 host.
+
+## Web push notifications
+
+The web app can tell you that an agent needs you also while the page is closed. This is off until
+you turn on Account settings > Preferences > Push notifications, for the computer that is open. Your
+browser then asks for permission and makes a push subscription for that computer. A subscription is
+the address of the push service of your browser (Google for Chrome and Android, Mozilla for Firefox,
+Apple for Safari, Microsoft for Edge), the public key of your browser, and a secret that only your
+browser and the computer know. The browser sends these to the computer over the encrypted host
+connection, with the level, the mute and the language that you chose for that computer in this
+browser.
+
+The computer keeps the subscriptions, and its own VAPID key pair (the key that identifies it to the
+push service), in `openbot-web-push-v1.json` in its profile, with mode 0600. They are not in the
+database or in an export. The computer forgets a subscription when you turn the switch off, when the
+push service refuses it, when you leave the computer, or when you have more than 10 browsers.
+
+When an agent finishes work, needs your input or approval, or a scheduled run fails, and the level and
+the mute that you chose allow it, the computer sends one message straight to the push service from
+its own network address, signed with its key and encrypted for your browser (RFC 8291 and RFC 8292).
+The message holds the agent's name, a fixed phrase for the kind of event (for example "Finished
+working."), and the ids that open the chat. It never holds the text of a message, a question, a
+command or a file. The text of an agent's question or an approval does not go in it, also when
+"Show text in notifications" is on. The computer sends only to the push services above, and it does
+not follow a redirect. The push service receives the address of the computer, the time, the size of
+the message and the subscription; it cannot read the message. It can keep delivery logs under its own
+policy. A hosted server that has stopped sends nothing until it starts again.
+
+OpenBot's account service and Cloudflare are not on this path and receive nothing from it. The
+browser's service worker (`/app/sw.js`) only shows the message and opens the chat when you tap it. It
+keeps no cache and sees no request of the web app.
 
 ## Optional macOS Host Manager
 

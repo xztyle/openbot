@@ -70,6 +70,21 @@ function takeBillingReturn(): boolean {
   return true;
 }
 
+/** The query fields of a push notification link, `/app?host=<id>&chat=<id>`. The service worker builds them. */
+const CHAT_LINK_FIELDS = { host: "host", chat: "chat" } as const;
+
+/** The chat that a push notification opened the app on. The query is removed after it is read. */
+function takeChatLink(): { hostId: string; agentId: string } | null {
+  const url = new URL(window.location.href);
+  const hostId = url.searchParams.get(CHAT_LINK_FIELDS.host);
+  const agentId = url.searchParams.get(CHAT_LINK_FIELDS.chat);
+  if (hostId === null && agentId === null) return null;
+  url.searchParams.delete(CHAT_LINK_FIELDS.host);
+  url.searchParams.delete(CHAT_LINK_FIELDS.chat);
+  window.history.replaceState(window.history.state, "", url);
+  return hostId && agentId && hostId.length <= 128 && agentId.length <= 128 ? { hostId, agentId } : null;
+}
+
 export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
   // This component renders the text provider, so it reads the text of the last provider that rendered.
   const text = currentText();
@@ -95,6 +110,7 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
   const [inviteUrl, setInviteUrl] = createSignal(takeInviteLink());
   const [pluginSlug, setPluginSlug] = createSignal(takePluginLink());
   const [billingReturn, setBillingReturn] = createSignal(takeBillingReturn());
+  const [chatLink, setChatLink] = createSignal(takeChatLink());
   const [hostingReturn, setHostingReturn] = createSignal(takeHostingReturn());
   // The loading screen stays over the app until its exit ends.
   const [loadingShown, setLoadingShown] = createSignal(true);
@@ -327,6 +343,8 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
                   onInviteClose={() => setInviteUrl(null)}
                   pluginSlug={pluginSlug()}
                   onPluginSlugConsumed={() => setPluginSlug(null)}
+                  chatLink={chatLink()}
+                  onChatLinkConsumed={() => setChatLink(null)}
                   billingReturn={billingReturn()}
                   onBillingReturnConsumed={() => setBillingReturn(false)}
                   hostingReturn={hostingReturn()}

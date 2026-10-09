@@ -66,6 +66,12 @@ interface WebWorkspaceState {
   prompts: Array<Extract<AgentEvent, { type: "prompt" }>>;
   /** The latest progress detail of each agent's running turn. */
   progress: Record<string, { turnId: string; detail: string }>;
+  /** The unread messages of each agent chat, from the host's read cursors. A missing agent has none. */
+  unreadCounts: Record<string, number>;
+  /** The agents that finished a reply while this page had no focus. A new turn or the user's look clears it. */
+  recentReplies: Record<string, boolean>;
+  /** The failed turn of each agent, from the host's runtime snapshot and the end of a turn. */
+  failedTurns: Record<string, string>;
   takeovers: BrowserTakeoverRequest[];
   browserTabs: BrowserTab[];
   activeBrowserTabId: string | null;
@@ -119,6 +125,15 @@ export type WebRuntimeFactory = (
   accountFetch: typeof fetch,
 ) => WebWorkspaceRuntime;
 
+/** Sets the unread count of one chat. A chat with nothing unread has no entry. */
+function setUnread(draft: WebWorkspaceState, agentId: string, count: number): void {
+  if (count > 0) draft.unreadCounts[agentId] = count;
+  else delete draft.unreadCounts[agentId];
+}
+
+/** Events that change unread counts come in bursts. A read starts this long after the first. */
+const READS_DELAY_MS = 1_000;
+
 export type WebWorkspace = ReturnType<typeof createWebWorkspace>;
 
 export function createWebWorkspace(
@@ -146,6 +161,9 @@ export function createWebWorkspace(
     approvals: [],
     prompts: [],
     progress: {},
+    unreadCounts: {},
+    recentReplies: {},
+    failedTurns: {},
     takeovers: [],
     browserTabs: [],
     activeBrowserTabId: null,
@@ -198,6 +216,9 @@ export function createWebWorkspace(
   /** Counts queue snapshots from events by agent. A read that started before a newer snapshot is dropped. */
   const queueRevisions = new Map<string, number>();
   const readWrites = new Map<string, Promise<void>>();
+  /** The unread read in flight, and the timer that waits to start the next one. */
+  let readsLoad: { generation: number; again: boolean } | null = null;
+  let readsTimer: ReturnType<typeof setTimeout> | undefined;
   /** The conversation reads in flight by agent, and the deltas that wait for them to finish. */
   const conversationReads = new Map<string, number>();
   const heldDeltas = new Map<string, Array<Extract<AgentEvent, { type: "conversation-delta" }>>>();
@@ -359,6 +380,9 @@ export function createWebWorkspace(
               event.snapshot.pendingBrowserTakeovers,
               attentionComplete,
             );
+            draft.failedTurns = Object.fromEntries(
+              event.snapshot.failedTurns.map((turn) => [turn.agentId, turn.turnId]),
+            );
           });
         } else if (event.type === "prompt") {
           setState((draft) => {
@@ -383,12 +407,18 @@ export function createWebWorkspace(
         } else if (event.type === "turn-started") {
           setState((draft) => {
             delete draft.progress[event.agentId];
+            delete draft.recentReplies[event.agentId];
+            delete draft.failedTurns[event.agentId];
           });
         } else if (event.type === "conversation-delta") {
           applyDelta(event);
         } else if (event.type === "turn-completed") {
           setState((draft) => {
             if (draft.progress[event.agentId]?.turnId === event.turnId) delete draft.progress[event.agentId];
+            if (event.status === "failed") draft.failedTurns[event.agentId] = event.turnId;
+            else delete draft.failedTurns[event.agentId];
+            // As on desktop, a reply that ends while the page has focus is already seen.
+            if (event.status === "completed" && !document.hasFocus()) draft.recentReplies[event.agentId] = true;
             draft.prompts = draft.prompts.filter(
               (item) =>
                 item.agentId !== event.agentId || item.threadId !== event.threadId || item.turnId !== event.turnId,
@@ -399,6 +429,14 @@ export function createWebWorkspace(
             );
           });
         }
+        // The open chat reads its own state with each page. Another chat only has the host's cursors.
+        if (
+          (event.type === "turn-completed" || event.type === "conversation-invalidated") &&
+          event.agentId !== selectedId
+        )
+          scheduleReads();
+        if (event.type === "conversation" && event.snapshot.agentId !== selectedId) scheduleReads();
+        if (event.type === "conversation-page" && event.page.agentId !== selectedId) scheduleReads();
         if (event.type === "browser-takeover-requested")
           setState((draft) => {
             draft.takeovers = [
@@ -517,6 +555,9 @@ export function createWebWorkspace(
         delete draft.conversations[id];
         delete draft.queues[id];
         delete draft.progress[id];
+        delete draft.unreadCounts[id];
+        delete draft.recentReplies[id];
+        delete draft.failedTurns[id];
       }
       if (nextSelected === null) draft.selectedId = null;
       // The layout also orders channels, so only the agents that left may be dropped from it.
@@ -564,6 +605,9 @@ export function createWebWorkspace(
             draft.approvals = [];
             draft.prompts = [];
             draft.progress = {};
+            draft.unreadCounts = {};
+            draft.recentReplies = {};
+            draft.failedTurns = {};
             draft.takeovers = [];
             draft.browserTabs = [];
             draft.activeBrowserTabId = null;
@@ -675,6 +719,9 @@ export function createWebWorkspace(
       draft.approvals = [];
       draft.prompts = [];
       draft.progress = {};
+      draft.unreadCounts = {};
+      draft.recentReplies = {};
+      draft.failedTurns = {};
       draft.takeovers = [];
       draft.browserTabs = [];
       draft.activeBrowserTabId = null;
@@ -773,6 +820,9 @@ export function createWebWorkspace(
       if (!sameHost) {
         draft.conversations = {};
         draft.queues = {};
+        draft.unreadCounts = {};
+        draft.recentReplies = {};
+        draft.failedTurns = {};
         draft.hiddenIds = [];
       }
       draft.approvals = [];
@@ -817,6 +867,7 @@ export function createWebWorkspace(
       );
       preferences.reconcileActiveServerPins(agents.map((agent) => agent.id));
       for (const agent of agents) loadQueue(agent.id);
+      loadReads();
       void runtime
         .currentMemberId?.()
         .then((memberId) => {
@@ -950,6 +1001,8 @@ export function createWebWorkspace(
         };
         item.loading = false;
         item.error = null;
+        // An older page has the read state of the whole chat too, but only the latest page follows new messages.
+        if (!older && page.readState) setUnread(draft, id, page.readState.unreadCount);
       });
     } catch (error) {
       if (!disposed && current === generation && !blockAccess(error))
@@ -1039,6 +1092,46 @@ export function createWebWorkspace(
       }
     })();
   }
+  /**
+   * Reads the unread count of every agent chat. Reads coalesce as queue reads do. A host that does not
+   * answer, such as an older one, leaves the badges as they are: they only help the user and block nothing.
+   */
+  function loadReads(): void {
+    if (readsLoad?.generation === generation) {
+      readsLoad.again = true;
+      return;
+    }
+    const load = { generation, again: true };
+    readsLoad = load;
+    void (async () => {
+      try {
+        while (load.again && !disposed && load.generation === generation) {
+          load.again = false;
+          const reads = await runtime.conversationReads();
+          if (disposed || load.generation !== generation) continue;
+          setState((draft) => {
+            draft.unreadCounts = Object.fromEntries(
+              Object.entries(reads)
+                .filter(([id, read]) => read.unreadCount > 0 && draft.agents.some((agent) => agent.id === id))
+                .map(([id, read]) => [id, read.unreadCount]),
+            );
+          });
+        }
+      } catch {
+        // See above.
+      } finally {
+        if (readsLoad === load) readsLoad = null;
+      }
+    })();
+  }
+  /** An event burst, such as a streamed reply, costs one read. */
+  function scheduleReads(): void {
+    if (readsTimer !== undefined || disposed) return;
+    readsTimer = setTimeout(() => {
+      readsTimer = undefined;
+      if (!disposed) loadReads();
+    }, READS_DELAY_MS);
+  }
   /** Sends one queue change for the selected agent. The host then sends the new queue as an event. */
   /** Resolves when the host has answered. A failure is reported and does not reject. */
   function changeQueue(change: (agentId: string) => Promise<void>): Promise<void> {
@@ -1062,6 +1155,7 @@ export function createWebWorkspace(
       };
       draft.conversations[id].loading = true;
       draft.conversations[id].error = null;
+      delete draft.recentReplies[id];
     });
     try {
       await load(id);
@@ -1085,6 +1179,7 @@ export function createWebWorkspace(
         if (sidebarLayout.revision >= draft.sidebarLayout.revision) draft.sidebarLayout = sidebarLayout;
       });
       for (const agent of agents) loadQueue(agent.id);
+      loadReads();
       if (!selectedId && agents[0]) await select(agents[0].id);
       await refresh();
     } catch (error) {
@@ -1158,6 +1253,7 @@ export function createWebWorkspace(
         setState((draft) => {
           const value = draft.conversations[id]?.page;
           if (value?.threadId === page.threadId) value.readState = readState;
+          setUnread(draft, id, readState.unreadCount);
         });
       });
     readWrites.set(id, write);
@@ -1176,6 +1272,7 @@ export function createWebWorkspace(
     setState((draft) => {
       const page = draft.conversations[id]?.page;
       if (page) page.readState = readState;
+      setUnread(draft, id, readState.unreadCount);
     });
   }
   /** Marks every agent with unread messages read through its newest one, loaded or not. */
@@ -1200,12 +1297,14 @@ export function createWebWorkspace(
           setState((draft) => {
             const value = draft.conversations[id]?.page;
             if (value?.threadId === page.threadId) value.readState = readState;
+            setUnread(draft, id, readState.unreadCount);
           });
         });
       readWrites.set(id, write);
       return write;
     });
     await Promise.all(writes);
+    loadReads();
   }
   createHostRestartToasts(() =>
     state.host
@@ -1223,6 +1322,11 @@ export function createWebWorkspace(
   onSettled(() => {
     void refreshHosts().catch(report);
     const focus = () => {
+      // The user is back, so every reply that ended while the page had no focus is seen.
+      if (Object.keys(state.recentReplies).length > 0)
+        setState((draft) => {
+          draft.recentReplies = {};
+        });
       runtime.hosts?.refresh();
       void props
         .onSessionCheck()
@@ -1240,11 +1344,18 @@ export function createWebWorkspace(
         recovery.setActive(false);
       } else {
         hostLifecycle.resume();
-        if (state.status !== "online" && state.recovery?.phase !== "suspended") recover();
+        if (state.status !== "online" && state.recovery?.phase !== "suspended") {
+          recover();
+          // The user is back, so a wait that grew while the page was hidden is over. One attempt, not a loop.
+          recovery.networkRestored();
+        }
       }
     };
     const network = () => {
-      if (!document.hidden) recovery.networkRestored();
+      if (document.hidden) return;
+      // The peer renews its own path first: a connection that looks online can be dead after a dead zone.
+      runtime.networkRestored?.();
+      recovery.networkRestored();
     };
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("online", network);
@@ -1252,6 +1363,7 @@ export function createWebWorkspace(
     return () => {
       disposed = true;
       generation += 1;
+      clearTimeout(readsTimer);
       recovery.dispose();
       hostLifecycle.dispose();
       document.removeEventListener("visibilitychange", visibility);

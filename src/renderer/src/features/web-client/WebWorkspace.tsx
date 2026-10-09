@@ -1435,6 +1435,15 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           </Show>
           <Show when={!agentFormOpen() && channelOpen()}>
             <ChannelConversation
+              isOwnMessage={(authorId) =>
+                isReaderAuthor(authorId, {
+                  memberId: workspace.state.memberId,
+                  accountUserId: props.accountId,
+                  onOwnComputer: false,
+                })
+              }
+              pendingApprovals={channelApprovals()}
+              pendingTakeovers={channelTakeovers()}
               headerActions={
                 <Show when={chatAppsSupported()}>
                   <Button
@@ -1448,15 +1457,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   </Button>
                 </Show>
               }
-              isOwnMessage={(authorId) =>
-                isReaderAuthor(authorId, {
-                  memberId: workspace.state.memberId,
-                  accountUserId: props.accountId,
-                  onOwnComputer: false,
-                })
-              }
-              pendingApprovals={channelApprovals()}
-              pendingTakeovers={channelTakeovers()}
               browserTabs={workspace.state.browserTabs}
               onSelectAgent={(id) => {
                 setMobilePane("conversation");

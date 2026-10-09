@@ -244,7 +244,7 @@ ignore the link. Installing needs an owner or admin, as for every event check ro
 | `linear-assigned-intake` | Issues assigned to you (and optionally delegated to an agent user) and projects you lead, in one Linear team. Optional filters by state and label, and comments | `LINEAR_API_TOKEN` |
 | `github-activity` | GitHub notifications, and pull requests, issues, commits, failed runs, releases and alerts of chosen repos | `GITHUB_TOKEN` |
 | `git-remote-refs` | New and moved branches and tags on any git server over HTTPS | `GIT_ACCESS_TOKEN` |
-| `slack-activity` | Mentions, keywords, direct messages and chosen channels | `SLACK_USER_TOKEN` |
+| `slack-activity` | Mentions, keywords, direct messages and chosen channels | `SLACK_USER_TOKEN` (an app user token, or the browser token and its `d` cookie: `xoxc-...; d=xoxd-...`) |
 | `discord-activity` | Messages in chosen channels, with an optional mentions-only filter, through a bot | `DISCORD_BOT_TOKEN` |
 | `gmail-inbox` | New mail in a Gmail mailbox, through IMAP and an app password | `GMAIL_APP_PASSWORD` |
 | `protonmail-inbox` | New mail through Proton Mail Bridge on the same machine | `PROTONMAIL_BRIDGE_PASSWORD` |

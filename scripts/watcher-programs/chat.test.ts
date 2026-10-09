@@ -60,6 +60,11 @@ const UNTIL = Date.parse("2026-10-09T12:00:00.000Z");
 const WINDOW = { since: new Date(SINCE).toISOString(), until: new Date(UNTIL).toISOString() };
 const TOKEN = "TOKEN-SHOULD-NEVER-APPEAR-123";
 const SERVER_TEXT = "SERVER-TEXT-SHOULD-NEVER-APPEAR";
+// An app user token. It contains TOKEN, so every "never printed" check covers it too.
+const SLACK_TOKEN = `xoxp-${TOKEN}`;
+// A browser session token and its d cookie, as they come out of the browser's console and cookie list.
+const BROWSER_TOKEN = "xoxc-1234567890-1234567890-1234567890-abcdef0123456789";
+const BROWSER_COOKIE = "xoxd-AbCdEf%2BGhIjKl%2FMnOp%3D";
 
 let temporary: string;
 beforeEach(async () => {
@@ -134,7 +139,12 @@ describe("slack-activity", () => {
     program = await load(SLACK_FILE);
   });
   const run = (input: DynamicRecord, deps: Deps) =>
-    program.runWatcher(input, { token: TOKEN, now: () => UNTIL, cooldownDir: join(temporary, "cooldowns"), ...deps });
+    program.runWatcher(input, {
+      token: SLACK_TOKEN,
+      now: () => UNTIL,
+      cooldownDir: join(temporary, "cooldowns"),
+      ...deps,
+    });
   const methodOf = (request: Recorded) => request.url.pathname.replace("/api/", "");
 
   function workspace(request: Recorded) {
@@ -247,7 +257,7 @@ describe("slack-activity", () => {
       expect(request.url.origin).toBe("https://slack.com");
       expect(READ_METHODS.has(methodOf(request))).toBe(true);
       expect(request.url.toString()).not.toContain(TOKEN);
-      expect(request.headers.get("authorization")).toBe(`Bearer ${TOKEN}`);
+      expect(request.headers.get("authorization")).toBe(`Bearer ${SLACK_TOKEN}`);
     }
     const history = requests.filter((request) => methodOf(request) === "conversations.history");
     expect(history.map((request) => request.url.searchParams.get("cursor"))).toEqual([null, "next-page", null, null]);
@@ -330,6 +340,65 @@ describe("slack-activity", () => {
     const after = fakeFetch(workspace);
     await run(base, { fetchImpl: after.fetchImpl, now: () => clock });
     expect(after.requests.length).toBeGreaterThan(0);
+  });
+
+  it("reads with a browser token and its d cookie, from the workspace address, and sends no cookie with an app token", async () => {
+    const browser = fakeFetch(workspace);
+    await run(
+      { ...base, workspaceDomain: "Fjordfront.slack.com" },
+      { fetchImpl: browser.fetchImpl, token: `${BROWSER_TOKEN}; d=${BROWSER_COOKIE}` },
+    );
+    expect(browser.requests.length).toBeGreaterThan(0);
+    for (const request of browser.requests) {
+      expect(request.httpMethod).toBe("GET");
+      expect(request.url.host).toBe("fjordfront.slack.com");
+      expect(request.headers.get("authorization")).toBe(`Bearer ${BROWSER_TOKEN}`);
+      expect(request.headers.get("cookie")).toBe(`d=${BROWSER_COOKIE}`);
+    }
+    const app = fakeFetch(workspace);
+    await run(base, { fetchImpl: app.fetchImpl });
+    for (const request of app.requests) {
+      expect(request.url.host).toBe("slack.com");
+      expect(request.headers.get("cookie")).toBeNull();
+    }
+  });
+
+  it("accepts the cookie without its d= label, and encodes a cookie that was pasted decoded", async () => {
+    const plain = fakeFetch(workspace);
+    await run(base, { fetchImpl: plain.fetchImpl, token: `${BROWSER_TOKEN};${BROWSER_COOKIE}` });
+    expect(plain.requests[0]?.headers.get("cookie")).toBe(`d=${BROWSER_COOKIE}`);
+    const decoded = fakeFetch(workspace);
+    await run(base, { fetchImpl: decoded.fetchImpl, token: `${BROWSER_TOKEN}; d=xoxd-AbCdEf+GhIjKl/MnOp=` });
+    expect(decoded.requests[0]?.headers.get("cookie")).toBe(`d=${encodeURIComponent("xoxd-AbCdEf+GhIjKl/MnOp=")}`);
+  });
+
+  it("refuses a browser token without its cookie, a malformed value, and an address outside slack.com, before any request", async () => {
+    const { requests, fetchImpl } = fakeFetch(workspace);
+    const bad = [
+      BROWSER_TOKEN,
+      `${BROWSER_TOKEN}; d=not-a-cookie`,
+      `${SLACK_TOKEN}; d=${BROWSER_COOKIE}`,
+      "xoxb-123456789-bot-token",
+      `${BROWSER_TOKEN}; d=${BROWSER_COOKIE}; extra`,
+      "has a space xoxp-12345678",
+    ];
+    for (const token of bad) {
+      const message = await failureOf(run(base, { fetchImpl, token }));
+      expect(message).not.toContain(BROWSER_TOKEN);
+      expect(message).not.toContain(BROWSER_COOKIE);
+      expect(message).toMatch(/SLACK_USER_TOKEN|xoxp-|xoxc-/);
+    }
+    for (const workspaceDomain of [
+      "evil.example.com",
+      "slack.com.evil.com",
+      "https://fjordfront.slack.com",
+      "a.slack.com/x",
+    ]) {
+      await expect(
+        run({ ...base, workspaceDomain }, { fetchImpl, token: `${BROWSER_TOKEN}; d=${BROWSER_COOKIE}` }),
+      ).rejects.toThrow(/workspaceDomain/);
+    }
+    expect(requests).toHaveLength(0);
   });
 
   it("treats ok:false ratelimited like a 429", async () => {
@@ -717,12 +786,23 @@ describe("program process contract", () => {
     });
   }
   const cases = [
-    { name: "slack", file: SLACK_FILE, variable: "SLACK_USER_TOKEN", prefix: "Slack activity watcher: " },
-    { name: "discord", file: DISCORD_FILE, variable: "DISCORD_BOT_TOKEN", prefix: "Discord activity watcher: " },
+    {
+      name: "slack",
+      file: SLACK_FILE,
+      variable: "SLACK_USER_TOKEN",
+      prefix: "Slack activity watcher: ",
+      secret: "xoxp-SPAWN-SECRET-VALUE-456",
+    },
+    {
+      name: "discord",
+      file: DISCORD_FILE,
+      variable: "DISCORD_BOT_TOKEN",
+      prefix: "Discord activity watcher: ",
+      secret: "SPAWN-SECRET-VALUE-456",
+    },
   ];
-  for (const { name, file, variable, prefix } of cases) {
+  for (const { name, file, variable, prefix, secret } of cases) {
     it(`${name} reports bad input with a safe message and one error code, exit code 1 and no stdout`, async () => {
-      const secret = "SPAWN-SECRET-VALUE-456";
       const badJson = await execute(file, "not json", { [variable]: secret });
       expect(badJson).toMatchObject({ code: 1, stdout: "", stderr: `${prefix}Invalid watcher input JSON.\n` });
       const missingToken = await execute(file, "{}", {});

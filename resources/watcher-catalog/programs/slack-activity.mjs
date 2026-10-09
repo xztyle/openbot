@@ -118,6 +118,46 @@ function readList(value) {
     .filter(Boolean);
 }
 
+/**
+ * The private variable holds one of two things. An app user token starts with xoxp-. A browser token
+ * starts with xoxc- and only works together with the browser's `d` cookie (it starts with xoxd-), so
+ * the value is the token, a semicolon, and the cookie: xoxc-...; d=xoxd-...
+ * The value is never printed. A malformed value gets a fixed message that does not repeat it.
+ */
+export function readCredentials(raw) {
+  requireCondition(
+    typeof raw === "string" && raw.trim().length > 0,
+    "Missing SLACK_USER_TOKEN private variable.",
+    "auth",
+  );
+  const parts = raw.split(";").map((part) => part.trim());
+  requireCondition(
+    parts.length <= 2 && !parts.some((part) => /[^\x21-\x7e]/.test(part)),
+    "Invalid SLACK_USER_TOKEN private variable.",
+    "auth",
+  );
+  const token = parts[0];
+  requireCondition(/^xox[pc]-[A-Za-z0-9-]{8,}$/.test(token), "The Slack token must start with xoxp- or xoxc-.", "auth");
+  if (!token.startsWith("xoxc-")) {
+    requireCondition(parts.length === 1, "An xoxp- token takes no cookie.", "auth");
+    return { token, cookie: null };
+  }
+  const cookiePart = (parts[1] ?? "").replace(/^d=/, "");
+  requireCondition(
+    /^xoxd-[A-Za-z0-9%+/=_.-]{8,}$/.test(cookiePart),
+    "A Slack browser token (xoxc-) needs its d cookie after a semicolon: xoxc-...; d=xoxd-...",
+    "auth",
+  );
+  // The browser stores the cookie URL-encoded. A pasted decoded value is encoded again.
+  return { token, cookie: cookiePart.includes("%") ? cookiePart : encodeURIComponent(cookiePart) };
+}
+
+/** The address of the Web API. Only a slack.com workspace address is accepted, so a token cannot be sent elsewhere. */
+function apiBase(config) {
+  if (!config.workspaceDomain) return API;
+  return `https://${config.workspaceDomain}/api/`;
+}
+
 export function readConfiguration(input) {
   requireCondition(isRecord(input), "Expected a JSON object.");
   requireCondition(
@@ -128,9 +168,15 @@ export function readConfiguration(input) {
   requireCondition(instanceId.length > 0 && instanceId.length <= 128, "Missing or invalid instanceId.");
   const userId = typeof input.userId === "string" ? input.userId.trim() : "";
   requireCondition(/^[UW][A-Z0-9]{2,20}$/.test(userId), "Missing or invalid userId.");
+  const workspaceDomain = typeof input.workspaceDomain === "string" ? input.workspaceDomain.trim().toLowerCase() : "";
+  requireCondition(
+    workspaceDomain === "" || /^[a-z0-9][a-z0-9-]*(\.enterprise)?\.slack\.com$/.test(workspaceDomain),
+    "workspaceDomain must be a slack.com address, such as example.slack.com.",
+  );
   const config = {
     instanceId,
     userId,
+    workspaceDomain,
     watchMentions: readFlag(input.watchMentions, "watchMentions", true),
     watchDirectMessages: readFlag(input.watchDirectMessages, "watchDirectMessages", true),
     watchChannels: readFlag(input.watchChannels, "watchChannels", false),
@@ -271,7 +317,7 @@ async function call(ctx, method, params) {
     "config",
   );
   ctx.requests += 1;
-  const url = new URL(method, API);
+  const url = new URL(method, apiBase(ctx.config));
   for (const [key, value] of Object.entries(params))
     if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
   const controller = new AbortController();
@@ -283,7 +329,11 @@ async function call(ctx, method, params) {
       method: "GET",
       redirect: "error",
       signal: controller.signal,
-      headers: { Authorization: `Bearer ${ctx.token}`, Accept: "application/json" },
+      headers: {
+        Authorization: `Bearer ${ctx.token}`,
+        Accept: "application/json",
+        ...(ctx.cookie ? { Cookie: `d=${ctx.cookie}` } : {}),
+      },
     });
     if (response.status === 429) await saveCooldown(response, ctx);
     if (!response.ok)
@@ -528,19 +578,23 @@ export async function runWatcher(
     store = createCooldownStore(cooldownDir),
   } = {},
 ) {
-  requireCondition(
-    typeof token === "string" && token.trim().length > 0,
-    "Missing SLACK_USER_TOKEN private variable.",
-    "auth",
-  );
-  requireCondition(!/[^\x21-\x7e]/.test(token.trim()), "Invalid SLACK_USER_TOKEN private variable.", "auth");
+  const credentials = readCredentials(token);
   const config = tagged("config", () => readConfiguration(input));
   const window = readWindow(input);
   requireCondition(
     (await store.read(config.instanceId)) <= now(),
     "Slack API cooldown is active; no request was sent.",
   );
-  const ctx = { config, token: token.trim(), fetchImpl, now, store, startedAt: now(), requests: 0 };
+  const ctx = {
+    config,
+    token: credentials.token,
+    cookie: credentials.cookie,
+    fetchImpl,
+    now,
+    store,
+    startedAt: now(),
+    requests: 0,
+  };
 
   // The token must belong to the configured person, so this check cannot read another account.
   const auth = await call(ctx, "auth.test", {});

@@ -43,6 +43,8 @@ async function setup() {
   const deliveries = new Map<string, RoutineFlowDelivery>();
   const answers = new Map<string, string>();
   const sent: Sent[] = [];
+  /** The reports to the routine's own agent, kept apart from the handoffs of the flow. */
+  const reports: Sent[] = [];
   const changed: string[][] = [];
   const state = { failSend: false, clock: BEFORE_RUNS };
   const start = () =>
@@ -57,12 +59,17 @@ async function setup() {
           state.failSend
             ? Effect.fail({ cause: new Error("The mailbox refused the handoff.") })
             : Effect.sync(() => {
-                sent.push({
+                const entry = {
                   agentId: input.agentId,
                   text: input.text,
                   idempotencyKey: input.idempotencyKey,
                   runId: input.run.id,
-                });
+                };
+                if (input.report) {
+                  reports.push(entry);
+                  return `report-${reports.length}`;
+                }
+                sent.push(entry);
                 const deliveryId = `handoff-${sent.length}`;
                 deliveries.set(deliveryId, { status: "queued", turnId: null, error: null });
                 return deliveryId;
@@ -124,6 +131,7 @@ async function setup() {
     routine,
     deliveries,
     sent,
+    reports,
     changed,
     state,
     start,
@@ -155,6 +163,52 @@ describe("routine flows", () => {
     await Effect.runPromise(flows.sweep());
     expect(stepsOf(run.id).writer).toMatchObject({ status: "succeeded", output: "The brief." });
     expect(changed.flat()).toEqual(expect.arrayContaining(["research", "writer"]));
+  });
+
+  it("reports the end of a flow to the routine's own agent once, with bounded and redacted outputs", async () => {
+    const { flows, finishRun, answer, connect, sent, reports } = await setup();
+    await connect("research", "writer");
+    await connect("research", "sales");
+    const run = finishRun({ answer: "Three headlines." });
+    await Effect.runPromise(flows.sweep());
+    expect(sent.map((item) => item.agentId)).toEqual(["writer", "sales"]);
+
+    // One step is still running, so the owner hears nothing yet.
+    answer("handoff-1", "writer", `Ready. Authorization: Bearer ${"a1b2c3d4e5".repeat(6)}\n${"x".repeat(5_000)}`);
+    await Effect.runPromise(flows.sweep());
+    expect(reports).toEqual([]);
+
+    answer("handoff-2", "sales", "Two deals moved.");
+    await Effect.runPromise(flows.sweep());
+    await Effect.runPromise(flows.sweep());
+    expect(reports).toHaveLength(1);
+    const [report] = reports;
+    expect(report).toMatchObject({
+      agentId: "research",
+      runId: run.id,
+      idempotencyKey: `routine-flow-report-${run.id}`,
+    });
+    expect(report?.text).toContain("- research: succeeded");
+    expect(report?.text).toContain("- writer: succeeded");
+    expect(report?.text).toContain("Output of sales:\nTwo deals moved.");
+    expect(report?.text).not.toContain("a1b2c3d4e5a1b2c3d4e5");
+    expect(report?.text.length).toBeLessThan(8_500);
+  });
+
+  it("reports a failed step to the owner, and stays silent when the owner's own run failed", async () => {
+    const { flows, finishRun, connect, deliveries, reports } = await setup();
+    await connect("research", "writer");
+    const failedOwner = finishRun({ error: "The provider is signed out." });
+    await Effect.runPromise(flows.sweep());
+    expect(reports).toEqual([]);
+
+    const run = finishRun({ answer: "Three headlines." });
+    await Effect.runPromise(flows.sweep());
+    deliveries.set("handoff-1", { status: "failed", turnId: null, error: "The provider refused the turn." });
+    await Effect.runPromise(flows.sweep());
+    expect(reports.map((item) => item.runId)).toEqual([run.id]);
+    expect(failedOwner.id).not.toBe(run.id);
+    expect(reports[0]?.text).toContain("- writer: failed: The provider refused the turn.");
   });
 
   it("sends each handoff once, however many sweeps see the answer", async () => {

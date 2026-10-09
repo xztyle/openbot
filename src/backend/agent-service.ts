@@ -107,6 +107,7 @@ import { ContextCompaction } from "./agent/context-compaction";
 import { ConversationReader } from "./agent/conversation-reader";
 import { ConversationRuntime } from "./agent/conversation-runtime";
 import { CustomEndpoints, toEndpointChangeFailed } from "./agent/custom-endpoints";
+import { DelegationFollowUp } from "./agent/delegation-follow-up";
 import { agentNamesById, displayMessageReferences } from "./agent/delivery-content";
 import { DeltaBuffer } from "./agent/delta-buffer";
 import { DrainScheduler } from "./agent/drain-scheduler";
@@ -321,6 +322,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #attachments: AttachmentGateway;
   readonly #browserUploads: BrowserUploads;
   readonly #mailboxSync: MailboxSync;
+  readonly #followUp: DelegationFollowUp;
   readonly #boot: BootRecovery;
   readonly #deltas: DeltaBuffer;
   readonly #turn: TurnLifecycle;
@@ -714,6 +716,17 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           logger.warn("Could not read the work steps of an earlier provider session.", { provider, error }),
       },
     });
+    this.#followUp = new DelegationFollowUp({
+      store,
+      mailbox,
+      mailboxSync: this.#mailboxSync,
+      conversation: this.#conversation,
+      hooks: {
+        scheduleDrain: (agentId) => this.#drain.scheduleDrain(agentId),
+        redactMcp: (text) => this.#mcp.redact(text),
+        emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
+      },
+    });
     this.#boot = new BootRecovery({
       store,
       mailbox,
@@ -721,6 +734,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       conversation: this.#conversation,
       mailboxSync: this.#mailboxSync,
       threads: this.#threads,
+      followUp: this.#followUp,
       hooks: {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         // A deleted routine takes its runs with it, so a run without a record counts as scheduled:
@@ -938,6 +952,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       threads: this.#threads,
       memory: this.#memoryHold,
       usageLimits: this.#usageLimits,
+      followUp: this.#followUp,
       hooks: {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         redactMcp: (text) => this.#mcp.redact(text),
@@ -958,6 +973,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       endpoints: this.#endpoints,
       drain: this.#drain,
       routines: this.#routines,
+      followUp: this.#followUp,
       hooks: {
         channelAssignment: (deliveryId) => this.channels.store.assignmentForDelivery(deliveryId),
       },
@@ -975,6 +991,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       images: this.#images,
       deltas: this.#deltas,
       usageLimits: this.#usageLimits,
+      followUp: this.#followUp,
       hooks: {
         emitFailure: (failure) => this.emit("failure", failure),
         emit: (event) => this.#emit(event),
@@ -1028,6 +1045,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       eventChecks: this.eventChecks,
       memories: this.#memories,
       drain: this.#drain,
+      followUp: this.#followUp,
       tables: this.#tables,
       sidebarLayout: this.#sidebarLayout,
       localSkillTools: this.#localSkillTools,
@@ -1038,7 +1056,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         listAgents: () => this.listAgents(),
         listModels: () => this.listModels(),
         preferredProvider: () => this.preferredProvider(),
-        createAgent: (input, configure) =>
+        createAgent: (input, configure, creatorAgentId) =>
           this.createAgent(
             input,
             configure
@@ -1050,6 +1068,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
                     ),
                   )
               : undefined,
+            undefined,
+            undefined,
+            creatorAgentId,
           ).pipe(toToolOperationFailed),
         updateAgent: (input, initiatingAgentId) =>
           this.updateAgent(input, initiatingAgentId).pipe(toToolOperationFailed),
@@ -1064,6 +1085,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           startedAt: turnId ? this.#turn.turnStartedAt(turnId) : null,
           lastEventAt: this.#turn.lastEventAt(agentId),
         }),
+        lastTurnFailed: (agentId) => this.#turn.failedTurns().has(agentId),
+        usageLimit: (agentId) => this.#usageLimits.limitFor(agentId),
       },
     });
   }
@@ -1258,6 +1281,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     agentId: string;
     text: string;
     idempotencyKey: string;
+    report?: true;
   }): Effect.Effect<string, AgentLifecycleFailed> {
     return this.#routines
       .enqueueHandoff(input)
@@ -1578,7 +1602,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return { provider: this.#providers.preferredProvider(), model: this.#providers.preferredModel() };
   }
 
-  /** `sender` is the person who writes the first message, as `sendMessage` takes it. */
+  /**
+   * `sender` is the person who writes the first message, as `sendMessage` takes it. `creatorAgentId`
+   * names the agent that creates this one through a tool: the first task then comes from that agent,
+   * as a request that expects a result, and not from the person.
+   */
 
   readonly createAgent = Effect.fn("AgentService.createAgent")(function* (
     this: AgentService,
@@ -1586,6 +1614,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     configure?: (agent: AgentSummary) => Effect.Effect<AgentSummary, AgentLifecycleFailed>,
     profileOperationId?: string,
     sender?: ConversationMessageSender,
+    creatorAgentId?: string,
   ) {
     const initialMessage = yield* lifecycleStep("validate initial message", () => {
       const text = input.initialMessage.trim();
@@ -1604,7 +1633,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         yield* this.#prepareAgentWorkspace(agent);
         agent = yield* this.#assignNewAgentModel(agent, input, true);
         if (configure) agent = yield* configure(agent);
-        yield* this.sendMessage({ agentId: agent.id, text: initialMessage, attachmentDraftIds: [] }, sender);
+        const firstTask = { agentId: agent.id, text: initialMessage, attachmentDraftIds: [] };
+        if (creatorAgentId) yield* this.#sendUserMessage(firstTask, undefined, undefined, undefined, creatorAgentId);
+        else yield* this.sendMessage(firstTask, sender);
         return this.#store.list().find((candidate) => candidate.id === agent.id) ?? agent;
       }).pipe(
         Effect.catchDefect((cause) => Effect.fail(new AgentLifecycleFailed({ operation: "create agent", cause }))),
@@ -2673,6 +2704,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     sender: ConversationMessageSender | undefined,
     timezone: string | undefined,
     idempotencyKey?: string,
+    fromAgentId?: string,
   ) {
     const validateRecipient = yield* lifecycleStep("prepare message delivery", () =>
       this.#mailbox.prepareDelivery([input.agentId]),
@@ -2699,8 +2731,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     yield* lifecycleStep("validate message recipient", validateRecipient);
     const receipt = yield* this.#mailbox
       .enqueue({
-        sender: { kind: "user" },
-        ...(sender ? { senderMember: sender } : {}),
+        // An agent that creates this one sends the first task as a teammate request.
+        sender: fromAgentId ? { kind: "agent", agentId: fromAgentId } : { kind: "user" },
+        ...(sender && !fromAgentId ? { senderMember: sender } : {}),
         recipientAgentIds: [agent.id],
         text: input.text,
         draftIds: input.attachmentDraftIds ?? [],

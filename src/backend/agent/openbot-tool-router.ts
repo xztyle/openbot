@@ -30,6 +30,12 @@ import type { AgentTables } from "../agent-data/agent-tables";
 import type { AgentStore } from "../agent-store";
 import { OPENBOT_BROWSER_NAMESPACE } from "../browser-tools";
 import type { ChannelService } from "../channel-service";
+import {
+  AGENT_CREATION_LIMIT,
+  AGENT_CREATION_WINDOW_MS,
+  AGENT_MESSAGE_LIMIT,
+  AGENT_MESSAGE_WINDOW_MS,
+} from "../collaboration-limits";
 import type { EventCheckScheduler } from "../event-check-scheduler";
 import type { MailboxStore } from "../mailbox-store";
 import { agentMcpServers } from "../mcp-provider-shapes";
@@ -47,6 +53,7 @@ import type { BrowserUploads } from "./browser-uploads";
 import type { ChatVisualPreviewHost } from "./chat-visual-preview";
 import type { ConversationRuntime } from "./conversation-runtime";
 import { handleDataTool } from "./data-tools";
+import type { DelegationFollowUp } from "./delegation-follow-up";
 import { responseAttachmentMessageId, visualReplyFileName, visualReplyMessageId } from "./delivery-content";
 import type { DrainScheduler } from "./drain-scheduler";
 import { handleEventCheckTool } from "./event-check-tools";
@@ -83,9 +90,14 @@ export interface OpenBotToolRouterHooks {
   listAgents(): AgentSummary[];
   listModels(): AgentModelOption[];
   preferredProvider(): AgentProvider;
+  /**
+   * `creatorAgentId` is the agent that calls the tool: the new agent's first task comes from it, as a
+   * request that expects a result.
+   */
   createAgent(
     input: CreateAgentInput,
     configure?: (agent: AgentSummary) => Effect.Effect<AgentSummary, ToolOperationFailed>,
+    creatorAgentId?: string,
   ): Effect.Effect<AgentSummary, ToolOperationFailed>;
   /** `initiatingAgentId` is the calling agent, recorded with a model change. */
   updateAgent(input: UpdateAgentInput, initiatingAgentId: string): Effect.Effect<AgentSummary, ToolOperationFailed>;
@@ -101,6 +113,10 @@ export interface OpenBotToolRouterHooks {
   interrupt(agentId: string, turnId: string, mayStop: () => boolean): Effect.Effect<boolean, ToolOperationFailed>;
   /** Epoch milliseconds from the turn lifecycle; null when this process has not seen the event. */
   turnActivity(agentId: string, turnId: string | null): { startedAt: number | null; lastEventAt: number | null };
+  /** True while the newest turn of this agent failed and no later turn has completed. */
+  lastTurnFailed(agentId: string): boolean;
+  /** The plan limit that holds this agent, with its reset in epoch seconds when the provider gave one. */
+  usageLimit(agentId: string): { resetsAt: number | null } | null;
 }
 
 export interface OpenBotToolRouterOptions {
@@ -118,6 +134,7 @@ export interface OpenBotToolRouterOptions {
   eventChecks: EventCheckScheduler;
   memories: AgentMemories;
   drain: DrainScheduler;
+  followUp: DelegationFollowUp;
   tables: AgentTables | null;
   sidebarLayout: AgentSidebar | null;
   localSkillTools?: () => LocalSkillTools;
@@ -188,6 +205,7 @@ export class OpenBotToolRouter {
       conversation: options.conversation,
       channels: options.channels,
       drain: options.drain,
+      followUp: options.followUp,
       hooks: {
         listAgents: () => options.hooks.listAgents(),
         interrupt: (agentId, turnId, mayStop) => options.hooks.interrupt(agentId, turnId, mayStop),
@@ -567,6 +585,10 @@ export class OpenBotToolRouter {
           (latest, delivery) => Math.max(latest, Date.parse(delivery.createdAt) || 0),
           Math.max(lastEventAt ?? 0, startedAt ?? 0),
         );
+        // What keeps the agent from the work it was given. Counts only: an approval holds the command
+        // text, and that text can hold a secret.
+        const attention = this.#attention.attentionCountsFor(agent.id);
+        const usageLimit = this.#hooks.usageLimit(agent.id);
         return {
           id: agent.id,
           name: agent.name,
@@ -576,6 +598,18 @@ export class OpenBotToolRouter {
           queuedMessages,
           ...(working && startedAt !== null ? { turnStartedAt: new Date(startedAt).toISOString() } : {}),
           ...(lastActivity > 0 ? { lastActivityAt: new Date(lastActivity).toISOString() } : {}),
+          ...(attention.questions + attention.approvals + attention.browserTakeovers > 0
+            ? { waitingForUser: attention }
+            : {}),
+          ...(usageLimit
+            ? {
+                usageLimitedUntil:
+                  usageLimit.resetsAt === null ? null : new Date(usageLimit.resetsAt * 1_000).toISOString(),
+              }
+            : {}),
+          ...(this.#hooks.lastTurnFailed(agent.id) ? { lastTurnFailed: true } : {}),
+          // Channel work reserves the host, so the messages of this agent wait behind it.
+          ...(queuedMessages > 0 && this.#channels.queueHold(agent.id) ? { heldBy: "channel" } : {}),
         };
       });
       return openBotToolResult({ agents });
@@ -770,6 +804,17 @@ export class OpenBotToolRouter {
       const args = createAgentToolSchema.parse(params.arguments, { reportInput: true });
       const hue = args.avatarHue ?? null;
       const caller = this.#requireAgent(senderAgentId);
+      // An agent that creates agents in a loop fills the host. The user's own creations do not count.
+      const createdRecently = this.#store.createdByAgentsSince(new Date(Date.now() - AGENT_CREATION_WINDOW_MS));
+      if (createdRecently >= AGENT_CREATION_LIMIT) {
+        return openBotToolFailure(
+          sourceText("error.agent.creationLimit", {
+            made: createdRecently,
+            hours: AGENT_CREATION_WINDOW_MS / 3_600_000,
+            limit: AGENT_CREATION_LIMIT,
+          }),
+        );
+      }
       const listed = this.#hooks.listModels();
       // Checked before the agent exists: a named model the provider does not list, or an effort the
       // model does not support, is an error the calling agent can correct, never a silent default.
@@ -811,6 +856,8 @@ export class OpenBotToolRouter {
           },
           (agent) =>
             Effect.gen({ self: this }, function* () {
+              // Before the first task is queued, so the new agent knows its creator from its first turn.
+              this.#store.recordCreator(agent.id, senderAgentId);
               if (assign) yield* assign(agent.id).pipe(toToolOperationFailed);
               if (lateEffort !== undefined) {
                 const models = this.#hooks.listModels();
@@ -840,12 +887,17 @@ export class OpenBotToolRouter {
                 })
                 .pipe(toToolOperationFailed);
             }).pipe(Effect.catchDefect((cause) => Effect.fail(new ToolOperationFailed({ cause })))),
+          senderAgentId,
         );
       const sidebar = this.#sidebarLayout;
       const created =
         sidebar && sectionId !== null
           ? yield* sidebar.withProfileAssignment(sectionId, create).pipe(toToolOperationFailed)
           : yield* create().pipe(toToolOperationFailed);
+      // The first task is a message from the caller, so its chat shows the outgoing request.
+      const callerSnapshot = this.#conversation.ensureSnapshot(senderAgentId, params.threadId);
+      this.#mailboxSync.syncMailboxMessages(callerSnapshot);
+      this.#conversation.emitConversation(callerSnapshot);
       return { success: true, contentItems: [{ type: "inputText", text: JSON.stringify(created) }] };
     },
     Effect.catchDefect((cause) => Effect.fail(new ToolOperationFailed({ cause }))),
@@ -997,6 +1049,46 @@ export class OpenBotToolRouter {
         throw new Error("expectsReply must be a boolean.");
       }
 
+      // A retried call finds its own message by the tool call id, so the guards below never turn the
+      // retry of a send that worked into a failure.
+      const idempotencyKey = toolCallIdempotencyKey(params);
+      if (!this.#mailbox.receiptForKey(idempotencyKey)) {
+        // The same words, to the same agents, while the first copy still waits or runs, add nothing.
+        const duplicate =
+          paths.length === 0
+            ? this.#mailbox.activeDuplicate({
+                senderAgentId,
+                recipientAgentIds: recipientValues,
+                text: params.arguments.text,
+                replyToMessageId: replyToMessageId ?? null,
+                expectsReply: expectsReply !== false,
+              })
+            : null;
+        if (duplicate) {
+          return openBotToolResult({
+            ...duplicate,
+            duplicate: true,
+            note: sourceText("status.agent.messageDuplicate"),
+          });
+        }
+        // A loop between two agents is told to stop and ask the user. A fan-out to several agents
+        // is not a loop: each pair has its own count.
+        const since = new Date(Date.now() - AGENT_MESSAGE_WINDOW_MS);
+        for (const recipient of recipientValues) {
+          const count = this.#mailbox.agentMessagesBetween(senderAgentId, recipient, since);
+          if (count < AGENT_MESSAGE_LIMIT) continue;
+          const name = this.#hooks.listAgents().find((agent) => agent.id === recipient)?.name ?? recipient;
+          return openBotToolFailure(
+            sourceText("error.agent.messageRateLimit", {
+              sent: count,
+              name,
+              minutes: AGENT_MESSAGE_WINDOW_MS / 60_000,
+              limit: AGENT_MESSAGE_LIMIT,
+            }),
+          );
+        }
+      }
+
       // A request from a Slack turn: the teammate's answer goes back to that Slack thread.
       const messagingReturn = this.#mailbox
         .findDeliveriesByTurn(senderAgentId, params.turnId)
@@ -1012,7 +1104,7 @@ export class OpenBotToolRouter {
           replyToMessageId: replyToMessageId ?? null,
           expectsReply,
           ...(messagingReturn ? { messagingReturn } : {}),
-          idempotencyKey: toolCallIdempotencyKey(params),
+          idempotencyKey,
         })
         .pipe(toToolOperationFailed);
       for (const recipient of recipientValues) {

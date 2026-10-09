@@ -33,6 +33,7 @@ import type { AttentionBrowserHost, AttentionRegistry } from "./attention-regist
 import type { BrowserUploadTarget } from "./browser-uploads";
 import type { ContextCompaction } from "./context-compaction";
 import type { ConversationRuntime } from "./conversation-runtime";
+import type { DelegationFollowUp } from "./delegation-follow-up";
 import type { DeltaBuffer } from "./delta-buffer";
 import type { FailureContext, FailureSignal } from "./failure-signal";
 import type { ImageGenRuntime } from "./image-gen-runtime";
@@ -113,6 +114,7 @@ export interface TurnLifecycleOptions {
   images: ImageGenRuntime;
   deltas: DeltaBuffer;
   usageLimits: UsageLimitGate;
+  followUp: DelegationFollowUp;
   hooks: TurnHooks;
 }
 
@@ -138,6 +140,7 @@ export class TurnLifecycle {
   readonly #images: ImageGenRuntime;
   readonly #deltas: DeltaBuffer;
   readonly #usageLimits: UsageLimitGate;
+  readonly #followUp: DelegationFollowUp;
   readonly #hooks: TurnHooks;
   readonly fileHistory = new ThreadFileHistory();
   readonly #failedTurns = new Map<string, string>();
@@ -183,6 +186,7 @@ export class TurnLifecycle {
     this.#images = options.images;
     this.#deltas = options.deltas;
     this.#usageLimits = options.usageLimits;
+    this.#followUp = options.followUp;
     this.#hooks = options.hooks;
   }
 
@@ -613,17 +617,24 @@ export class TurnLifecycle {
     const latestAssistant = latestTurnAnswer(snapshot.messages, turnId);
     if (deliveries.length > 0) {
       const terminal = outcome === "failed" ? "failed" : outcome === "interrupted" ? "interrupted" : "completed";
+      const reason = terminal === "failed" && failure ? this.#hooks.redactMcp(failure) : null;
       for (const delivery of deliveries) {
         this.#refusedRetries.delete(delivery.delivery.id);
-        const reason = terminal === "failed" && failure ? this.#hooks.redactMcp(failure) : null;
         yield* this.#mailbox.markTerminal(delivery.delivery.id, terminal, reason).pipe(toTurnOperationFailed);
         this.#mailboxSync.syncDeliveryMessage(snapshot, delivery.delivery.id);
       }
-      // A turn can start with the answers of several teammates. `#relayAgentResult` skips each one
-      // that wants no answer, so only a teammate that asked for a result gets one.
-      if (!this.#conversation.isExecutionThread(snapshot.threadId) && terminal === "completed" && latestAssistant) {
-        for (const delivery of deliveries)
-          yield* this.#relayAgentResult(agentId, turnId, delivery, latestAssistant.text);
+      // A turn can start with the answers of several teammates. The follow-up skips each one that
+      // wants no answer, so only a teammate that asked for a result gets one, or the news that none
+      // comes.
+      if (!this.#conversation.isExecutionThread(snapshot.threadId)) {
+        yield* this.#followUp.finishTurn({
+          agentId,
+          turnId,
+          deliveries,
+          terminal,
+          answer: latestAssistant?.text ?? null,
+          failure: reason,
+        });
       }
       // The requester holds the answers of the other teammates until each request has ended, so
       // this end can release them, also when this turn failed and sends no result.
@@ -751,49 +762,6 @@ export class TurnLifecycle {
         Effect.sync(() => this.#hooks.emitError("delivery_turn_association_failed", failure.cause, agentId)),
       ),
     );
-  }, Effect.uninterruptible);
-
-  readonly #relayAgentResult = Effect.fn("TurnLifecycle.relayAgentResult")(function* (
-    this: TurnLifecycle,
-    agentId: string,
-    turnId: string,
-    delivery: DeliveryContext,
-    text: string,
-  ) {
-    if (delivery.delivery.sender.kind !== "agent") return;
-    const messageId = delivery.delivery.messageId;
-    const originAgentId = this.#mailbox.chainOriginAgentId(messageId);
-    const recipientAgentId = delivery.delivery.sender.agentId;
-    if (
-      !originAgentId ||
-      originAgentId === agentId ||
-      // The sender said it wants no answer, so the turn's result stays with this agent. Without
-      // this the sender is woken for an echo of work it only wanted to know about.
-      !this.#mailbox.expectsReply(messageId) ||
-      this.#mailbox.hasReplyFrom(agentId, messageId) ||
-      this.#mailbox.hasAgentMessageFromTurnTo(agentId, turnId, recipientAgentId)
-    )
-      return;
-
-    yield* this.#mailbox
-      .enqueue({
-        sender: { kind: "agent", agentId },
-        recipientAgentIds: [recipientAgentId],
-        text,
-        replyToMessageId: messageId,
-        // The requested result, not a new request. The chain-origin guard above already stops a
-        // second relay; this is what tells the recipient it owes no acknowledgement for one.
-        expectsReply: false,
-        idempotencyKey: `auto-result:${turnId}:${messageId}`,
-      })
-      .pipe(toTurnOperationFailed);
-    const senderSnapshot = this.#conversation.snapshotToUpdate(agentId);
-    if (senderSnapshot) {
-      this.#mailboxSync.syncMailboxMessages(senderSnapshot);
-      this.#conversation.emitConversation(senderSnapshot);
-    }
-    this.#mailboxSync.emitQueue(recipientAgentId);
-    this.#hooks.scheduleDrain(recipientAgentId);
   }, Effect.uninterruptible);
 
   readonly #applyItem = Effect.fn("TurnLifecycle.applyItem")(function* (

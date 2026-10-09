@@ -339,7 +339,10 @@ describe("teammate messages in provider history", () => {
       ),
       ["planner"],
       agentNames,
+      // A released hold also names the teammates that still work. Their line is not message text.
+      ["helper"],
     );
+    expect(combined?.type === "text" ? combined.text : "").toContain("Still waiting for helper");
     const handoff = `${HANDOFF_START}\n--- previous transcript ---\n${HANDOFF_END}${CURRENT_MESSAGE_SEPARATOR}${combined?.type === "text" ? combined.text : ""}`;
     const rebuilt = snapshotFromThread(
       "chief",

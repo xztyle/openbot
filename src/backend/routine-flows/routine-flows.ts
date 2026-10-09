@@ -15,6 +15,10 @@
  *
  * A link only applies to the runs a routine starts after it was made, so connecting an agent never
  * sends it the answer of an earlier run.
+ *
+ * No link leads back to the routine's own agent, so that agent would never learn how its flow
+ * ended. When every step of a run has ended, the owner gets one report: the status of each step and
+ * the bounded, redacted output of the last ones. The report asks for no answer.
  */
 
 import type {
@@ -33,7 +37,7 @@ import type {
   UpdateRoutineFlowLinkInput,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
-import { createOpenBotLogger } from "@openbot/logging";
+import { createOpenBotLogger, redactText } from "@openbot/logging";
 import { nextValidRoutineOccurrence } from "@openbot/team-client/routine-schedule";
 import { Context, Effect, Exit, Layer, ManagedRuntime, Schema, Scope, Semaphore } from "effect";
 import { routineFlowDepths } from "./routine-flow-graph";
@@ -47,6 +51,10 @@ const UPCOMING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 /** A routine every three minutes fires a few thousand times a week; the canvas needs far fewer. */
 const UPCOMING_LIMIT = 400;
 const RECENT_RUNS = 10;
+/** The longest output or error that a flow report quotes for one step. */
+const REPORT_STEP_LIMIT = 2_000;
+/** The longest flow report: the steps come first, then as many outputs as fit. */
+const REPORT_LIMIT = 8_000;
 
 class RoutineFlowFailed extends Schema.TaggedError<RoutineFlowFailed>()("RoutineFlowFailed", {
   cause: Schema.Defect(),
@@ -76,7 +84,11 @@ export interface RoutineFlowsDependencies {
     agentId: string;
     text: string;
     idempotencyKey: string;
+    /** The message reports the end of the flow to its owner, who owes no answer. */
+    report?: true;
   }): Effect.Effect<string, { readonly cause: unknown }>;
+  /** Whether a handoff with this key was sent before, so a restart does not report a run twice. */
+  handoffSent?(idempotencyKey: string): boolean;
   /** The agents whose canvases changed. */
   changed(agentIds: string[]): void;
   now?: () => Date;
@@ -107,6 +119,8 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
         /** A sweep running, and whether another was asked for while it ran. */
         let sweeping = false;
         let again = false;
+        /** Runs whose owner has the report, so a sweep does not look them up again. */
+        const reported = new Set<string>();
 
         const attempt = <A>(work: () => A) =>
           Effect.try({ try: work, catch: (cause) => new RoutineFlowFailed({ cause }) });
@@ -312,6 +326,43 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
           return changed;
         });
 
+        /**
+         * Tells the routine's own agent how its flow ended, once every step has. A run whose owner
+         * failed has only skipped steps, and the owner knows its own failure: nothing is reported then.
+         */
+        const reportToOwner = Effect.fn("RoutineFlows.reportToOwner")(function* (run: RoutineFlowRun) {
+          if (reported.has(run.id)) return;
+          const key = `routine-flow-report-${run.id}`;
+          if (dependencies.handoffSent?.(key)) {
+            reported.add(run.id);
+            return;
+          }
+          const links = store.linksForRoutines([run.routineId]).filter((link) => link.createdAt <= run.createdAt);
+          if (links.length === 0) return;
+          const steps = store.steps(run.id);
+          const byAgent = new Map(steps.map((step) => [step.agentId, step]));
+          const depths = routineFlowDepths(run.agentId, links);
+          for (const agentId of depths.keys()) if (!byAgent.has(agentId)) return;
+          if (steps.some((step) => step.status === "running")) return;
+          if (!steps.some((step) => step.agentId !== run.agentId && step.status !== "skipped")) {
+            reported.add(run.id);
+            return;
+          }
+          const text = reportText(run, steps, links, dependencies.agentName);
+          const sent = yield* dependencies
+            .sendHandoff({ run, agentId: run.agentId, text, idempotencyKey: key, report: true })
+            .pipe(Effect.exit);
+          if (Exit.isSuccess(sent)) {
+            reported.add(run.id);
+            return;
+          }
+          // Tried again by the next sweep.
+          logger.warn("A routine flow could not report to its owner.", {
+            runId: run.id,
+            cause: String(sent.cause),
+          });
+        });
+
         const sweepOnce = Effect.fn("RoutineFlows.sweepOnce")(function* () {
           const since = new Date(now().getTime() - SWEEP_WINDOW_MS).toISOString();
           const changed = new Set<string>();
@@ -343,6 +394,7 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
             const run = store.run(runId);
             if (!run) continue;
             for (const agentId of yield* advance(run)) changed.add(agentId);
+            yield* reportToOwner(run);
             if (changed.size > 0) for (const agentId of agentsOfRoutine(run.routineId)) changed.add(agentId);
           }
           if (changed.size > 0) dependencies.changed([...changed]);
@@ -414,6 +466,45 @@ function handoffText(
   const instructions = [...new Set(inputs.map((input) => input.instruction.trim()).filter(Boolean))];
   const task = instructions.length > 0 ? instructions.join("\n\n") : "Do your part of the routine with this.";
   return `The routine "${routineName}" continues with you.\n\n${parts.join("\n\n---\n\n")}\n\n${task}`;
+}
+
+/**
+ * The report to the agent that owns a routine flow. The text goes to a provider, so it stays English.
+ * The steps come first. The last steps (the agents no link leaves) add their output or error.
+ */
+function reportText(
+  run: Pick<RoutineFlowRun, "routineName" | "scheduledFor" | "agentId">,
+  steps: readonly RoutineFlowStep[],
+  links: readonly { fromAgentId: string }[],
+  agentName: (agentId: string) => string,
+): string {
+  const quote = (text: string) => {
+    const safe = redactText(text).trim();
+    return safe.length > REPORT_STEP_LIMIT ? `${safe.slice(0, REPORT_STEP_LIMIT - 1)}…` : safe;
+  };
+  const lines = steps.map((step) => {
+    const label = agentName(step.agentId);
+    const failure =
+      step.status === "failed" && step.error ? `: ${quote(step.error).replace(/\s+/g, " ").slice(0, 200)}` : "";
+    return `- ${label}: ${step.status}${failure}`;
+  });
+  const hasOutgoing = new Set(links.map((link) => link.fromAgentId));
+  const last = steps.filter(
+    (step) =>
+      step.agentId !== run.agentId && !hasOutgoing.has(step.agentId) && step.status === "succeeded" && step.output,
+  );
+  let report = [`The routine flow "${run.routineName}" has ended. Every step is done.`, "", "Steps:", ...lines].join(
+    "\n",
+  );
+  for (const step of last) {
+    const part = `\n\nOutput of ${agentName(step.agentId)}:\n${quote(step.output ?? "")}`;
+    if (report.length + part.length > REPORT_LIMIT) {
+      report += "\n\n(More output is in the chat of that agent.)";
+      break;
+    }
+    report += part;
+  }
+  return report;
 }
 
 /** The times a routine fires in the next week, soonest first, from its schedule. A webhook has none. */

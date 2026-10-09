@@ -61,9 +61,15 @@ runtime supplies channel and caller identity. A child keeps its parent owner; a 
 Only assignments and awaited results start turns. Completed child results are combined before the
 owner returns. The limit is eight automatic assignments per root request and two active assignments
 per channel. One agent runs at most one work turn across all chats. Declared workspace and browser
-resources are serialized; undeclared resources reserve the host. An assignment keeps the resources
-it started with until it ends, and a task with an active assignment starts no second owner. These
-controls do not restrict provider process privileges.
+resources serialize channel assignments with each other; undeclared resources reserve the host for
+channel work. Resources do not apply between channel work and direct messages. While any channel
+assignment is active, no agent starts a message from its normal queue (`ChannelService.mayDrain`),
+and a channel assignment starts only when no direct message is starting or running
+(`ChannelService` `normalBusy`). Each side reserves the whole host, whatever the assignment
+declared. A direct message that waits for this shows `heldBy: "channel"` in `openbot.list_agents`
+and the channel name in the queue. An assignment keeps the resources it started with until it ends,
+and a task with an active assignment starts no second owner. These controls do not restrict
+provider process privileges.
 
 Each turn receives bounded channel context: purpose, responsibilities, the current request, source
 messages and replies, shared decisions, recent messages, and attachment references. A versioned

@@ -1259,6 +1259,7 @@ export async function createApplicationServices({
       },
       agentName: (agentId) => store.list().find((agent) => agent.id === agentId)?.name ?? agentId,
       sendHandoff: (input) => service.enqueueRoutineHandoff(input),
+      handoffSent: (idempotencyKey) => mailbox.receiptForKey(idempotencyKey) !== null,
       changed: (agentIds) => {
         for (const listener of routineFlowListeners) listener({ agentIds });
       },

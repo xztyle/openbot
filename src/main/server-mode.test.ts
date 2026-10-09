@@ -26,7 +26,7 @@ afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
 });
 
-function fixture() {
+function fixture(audit?: ConstructorParameters<typeof ServerMode>[0]["audit"]) {
   let state: CentralAuthState = { status: "signed_out" };
   let hostStatus: HostStatus = {
     phase: "unconfigured",
@@ -94,6 +94,7 @@ function fixture() {
     version: "9.9.9",
     centralAuth,
     host,
+    audit,
     onError: () => undefined,
   });
   return { mode, centralAuth, host };
@@ -182,6 +183,31 @@ describe("ServerMode control socket", () => {
     expect(host.configure).toHaveBeenCalledOnce();
     const status = await send("GET", "/v1/status");
     expect(status.text).toContain("server=online\nserver_name=Lab Server\n");
+  });
+
+  it("answers the newest audit rows as one JSON line each, within the limit, and 404 without a file", async () => {
+    const rows = Array.from({ length: 3 }, (_, index) => ({
+      at: `2026-01-0${index + 1}T00:00:00.000Z`,
+      actor: { kind: "agent" as const, id: "chief" },
+      action: `event-check.save-${index}`,
+      target: { kind: "event-check" },
+    }));
+    const read = vi.fn((limit: number) => rows.slice(0, limit));
+    server = fixture({ read }).mode;
+    await runCauseEffect(server.listen());
+    const answer = await send("GET", "/v1/audit?limit=2");
+    expect(read).toHaveBeenCalledWith(2);
+    expect(answer.status).toBe(200);
+    expect(answer.text.trim().split("\n")).toEqual([
+      `row1=${JSON.stringify(rows[0])}`,
+      `row2=${JSON.stringify(rows[1])}`,
+    ]);
+    await send("GET", "/v1/audit?limit=9999");
+    expect(read).toHaveBeenLastCalledWith(200);
+    await Effect.runPromise(server.close());
+    server = fixture().mode;
+    await runCauseEffect(server.listen());
+    expect((await send("GET", "/v1/audit")).status).toBe(404);
   });
 
   it("shows why publishing failed, on one line", async () => {

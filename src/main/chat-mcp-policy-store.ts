@@ -6,11 +6,18 @@ import { Effect, Semaphore } from "effect";
 import { writeJsonFileAtomically } from "../backend/atomic-json-file";
 import { mcpCall, mcpSync } from "../backend/mcp-effects";
 
-/** Owns durable per-chat grants. An unreadable file fails startup closed and is never overwritten. */
+/**
+ * Owns durable per-chat grants. An unreadable file fails startup closed and is never overwritten.
+ *
+ * The file once held the key that signed proxy tokens, so anything that could read the file could
+ * sign a token for a chat with more rights. The tokens are random and live in memory now, and no
+ * code reads a key from the file. The `secret` field stays, filled with a fresh random value that
+ * nothing uses, only so that an earlier release can still read the file after a downgrade. Loading
+ * replaces the old key with such a value.
+ */
 export class ChatMcpPolicyStore {
   readonly #queue = Semaphore.makeUnsafe(1);
   #chats: Record<string, McpChatPolicy> = {};
-  #secret = "";
   constructor(readonly path: string) {}
   readonly load = Effect.fn("ChatMcpPolicyStore.load")(function* (this: ChatMcpPolicyStore) {
     const raw = yield* mcpCall(() =>
@@ -20,30 +27,21 @@ export class ChatMcpPolicyStore {
       }),
     );
     if (raw === null) {
-      this.#secret = randomBytes(32).toString("hex");
       yield* this.#persist(this.#chats);
       return;
     }
     yield* mcpSync(() => this.#decode(raw));
+    // Drops the key that an earlier release wrote. A file that cannot be written keeps working.
+    yield* this.#persist(this.#chats).pipe(Effect.catch(() => Effect.void));
   });
   #decode(raw: string): void {
     const value = JSON.parse(raw);
-    if (
-      !isDynamicRecord(value) ||
-      value.version !== 1 ||
-      typeof value.secret !== "string" ||
-      !/^[a-f0-9]{64}$/.test(value.secret) ||
-      !isDynamicRecord(value.chats)
-    )
+    if (!isDynamicRecord(value) || value.version !== 1 || !isDynamicRecord(value.chats))
       throw new Error("Unreadable chat app permissions.");
     const chats = Object.fromEntries(
       Object.entries(value.chats).map(([key, policy]) => [key, decodeMcpChatPolicy(policy)]),
     );
     this.#chats = chats;
-    this.#secret = value.secret;
-  }
-  secret(): string {
-    return this.#secret;
   }
   get(key: string): McpChatPolicy {
     return this.#chats[key] ?? { grants: [] };
@@ -58,6 +56,6 @@ export class ChatMcpPolicyStore {
     );
   }
   #persist(chats: Record<string, McpChatPolicy>) {
-    return writeJsonFileAtomically(this.path, { version: 1, secret: this.#secret, chats });
+    return writeJsonFileAtomically(this.path, { version: 1, secret: randomBytes(32).toString("hex"), chats });
   }
 }

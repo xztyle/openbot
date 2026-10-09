@@ -8,7 +8,7 @@ import {
   apiError,
   hostedServerErrorResponse,
   requestHostedServerService,
-  requestUser,
+  requestInteractiveUser,
 } from "../../../../../server/request-auth";
 
 export const Route = createFileRoute("/v2/hosting/servers/$serverId/lifecycle")({
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/v2/hosting/servers/$serverId/lifecycle")(
       POST: ({ request, params }) =>
         runApiResponse(
           Effect.gen(function* () {
-            const user = yield* requestUser(request);
+            const user = yield* requestInteractiveUser(request);
             if (!user) return apiError(401, "unauthorized", "Sign in is required.");
             const body = yield* readJsonObject(request);
             const input = parseHostedServerLifecycleInput({ ...body, serverId: params.serverId });

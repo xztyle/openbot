@@ -1,9 +1,11 @@
 import { decodeEventCheckTemplateInstallInput } from "@openbot/contracts/event-check-templates";
 import { decodeEventCheckInput } from "@openbot/contracts/event-checks";
+import { type AgentSummary, workspaceAccessEnforced } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import { z } from "zod";
+import { refusalMessage } from "../event-check-refusal";
 import type { EventCheckScheduler } from "../event-check-scheduler";
 import { mcpSync } from "../mcp-effects";
 import type { DynamicToolCallParams } from "../protocol";
@@ -162,13 +164,32 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
   },
 ] as const;
 const NAMES = new Set<string>(EVENT_CHECK_TOOL_DEFINITIONS.map((definition) => definition.name));
+// A program runs unconfined on the host and writes to the shared folder, so a Workspace-only agent
+// may read about checks and may not create, change, test, run or enable them.
+const WORKSPACE_REFUSED = new Set<string>([
+  "save_event_check",
+  "test_event_check",
+  "run_event_check",
+  "install_event_check_template",
+  "update_event_check_template",
+  "link_event_check_template",
+  "set_event_check_active",
+  "delete_event_check",
+]);
 export function handleEventCheckTool(
   params: DynamicToolCallParams,
   senderAgentId: string,
   checks: EventCheckScheduler,
+  caller: () => AgentSummary,
 ) {
   if (!NAMES.has(params.tool)) return Effect.succeed(null);
   return Effect.gen(function* () {
+    const sender = caller();
+    const actor = { kind: "agent", agentId: senderAgentId, name: sender.name } as const;
+    if (WORKSPACE_REFUSED.has(params.tool) && workspaceAccessEnforced(sender)) {
+      yield* checks.refused(actor, params.tool, senderAgentId);
+      return openBotToolFailure(sourceText("error.backend.eventCheckWorkspaceOnly"));
+    }
     const args = yield* mcpSync(() => {
       if (!isDynamicRecord(params.arguments)) throw new Error("Invalid event check tool request.");
       return params.arguments;
@@ -196,7 +217,7 @@ export function handleEventCheckTool(
         });
         break;
       case "save_event_check":
-        result = yield* checks.save(yield* mcpSync(() => decodeEventCheckInput({ ...args, agentId: target })));
+        result = yield* checks.save(yield* mcpSync(() => decodeEventCheckInput({ ...args, agentId: target })), actor);
         break;
       case "list_event_check_templates":
         result = yield* checks.templateList();
@@ -220,28 +241,28 @@ export function handleEventCheckTool(
               configuration: args.configuration ?? {},
             }),
           ),
+          actor,
         );
         break;
       }
       case "update_event_check_template":
-        result = yield* checks.templateUpdate({ agentId: target, id: identifier });
+        result = yield* checks.templateUpdate({ agentId: target, id: identifier }, actor);
         break;
       case "link_event_check_template":
-        result = yield* checks.templateAdopt({
-          agentId: target,
-          id: identifier,
-          slug: typeof args.slug === "string" ? args.slug : "",
-        });
+        result = yield* checks.templateAdopt(
+          { agentId: target, id: identifier, slug: typeof args.slug === "string" ? args.slug : "" },
+          actor,
+        );
         break;
       case "set_event_check_active": {
         const check = (yield* checks.list({ agentId: target })).find((entry) => entry.id === identifier);
         if (!check || typeof args.active !== "boolean")
           return openBotToolFailure(sourceText("error.backend.eventCheckFailed"));
-        result = yield* checks.save({ ...check, active: args.active });
+        result = yield* checks.save({ ...check, active: args.active }, actor);
         break;
       }
       case "delete_event_check":
-        result = yield* checks.remove({ agentId: target, id: identifier });
+        result = yield* checks.remove({ agentId: target, id: identifier }, actor);
         break;
       case "run_event_check":
         result = yield* checks.checkNow({ agentId: target, id: identifier });
@@ -251,5 +272,12 @@ export function handleEventCheckTool(
         break;
     }
     return openBotToolResult(result ?? { removed: true });
-  }).pipe(Effect.catchCause(() => Effect.succeed(openBotToolFailure(sourceText("error.backend.eventCheckFailed")))));
+  }).pipe(
+    // A refusal says what to change. Any other failure stays generic: its cause can hold private detail.
+    Effect.catch((failure) => {
+      const message = refusalMessage(failure);
+      return Effect.succeed(openBotToolFailure(message ?? sourceText("error.backend.eventCheckFailed")));
+    }),
+    Effect.catchCause(() => Effect.succeed(openBotToolFailure(sourceText("error.backend.eventCheckFailed")))),
+  );
 }

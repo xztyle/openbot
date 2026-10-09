@@ -70,6 +70,11 @@ export type EventCheckSource = EventCheckMcpSource | EventCheckApiSource;
 export interface EventCheckEnvironmentStatus {
   name: string;
   configured: boolean;
+  /**
+   * Set when a value is held but not usable, because the program or its destination settings changed
+   * after the user approved them. The user approves the check again to use the values.
+   */
+  reapprove?: boolean;
 }
 export interface EventCheckEnvironmentInput {
   agentId: string;
@@ -77,6 +82,14 @@ export interface EventCheckEnvironmentInput {
   name: string;
   value: string | null;
 }
+/**
+ * Who last saved a check, set by the host and never trusted from a client. It is additive: data and
+ * clients from before it have no author, and a kind that this build does not know reads as none.
+ */
+export type EventCheckAuthor =
+  | { kind: "user" }
+  | { kind: "member"; name: string }
+  | { kind: "agent"; agentId: string; name: string };
 export interface EventCheckInput {
   id?: string;
   agentId: string;
@@ -88,8 +101,15 @@ export interface EventCheckInput {
   selfEvents: EventCheckSelfEvents;
   source: EventCheckSource;
   selection: EventCheckSelection;
+  lastSavedBy?: EventCheckAuthor;
+  /**
+   * Asks the host to approve the program and destination settings as they are now, so the private
+   * values work with them. Only a person can approve: the host ignores this from an agent tool, and
+   * it is never stored. A host from before it ignores it, and the values stay unusable.
+   */
+  approveProgram?: boolean;
 }
-export interface EventCheck extends Omit<EventCheckInput, "id"> {
+export interface EventCheck extends Omit<EventCheckInput, "id" | "approveProgram"> {
   id: string;
   revision: string;
   nextCheckAt: string;
@@ -161,7 +181,18 @@ export function decodeEventCheckInput(value: unknown): EventCheckInput {
     selfEvents: decodeSelfEvents(value.selfEvents),
     source: decodeSource(value.source),
     selection: decodeSelection(value.selection),
+    ...authorField(value.lastSavedBy),
+    ...(value.approveProgram === true ? { approveProgram: true } : {}),
   };
+}
+function authorField(value: unknown): { lastSavedBy?: EventCheckAuthor } {
+  if (!isDynamicRecord(value)) return {};
+  if (value.kind === "user") return { lastSavedBy: { kind: "user" } };
+  if (value.kind === "member" && typeof value.name === "string")
+    return { lastSavedBy: { kind: "member", name: value.name.slice(0, 128) } };
+  if (value.kind === "agent" && typeof value.agentId === "string" && typeof value.name === "string")
+    return { lastSavedBy: { kind: "agent", agentId: value.agentId.slice(0, 128), name: value.name.slice(0, 128) } };
+  return {};
 }
 function decodeSelfEvents(value: unknown): EventCheckSelfEvents {
   if (value === undefined) return { mode: "exclude", connectionId: "", actorPointer: "", accountActorIds: [] };
@@ -253,7 +284,7 @@ function decodeSelection(value: unknown): EventCheckSelection {
   };
 }
 export function decodeEventCheck(value: unknown): EventCheck {
-  const input = decodeEventCheckInput(value);
+  const { approveProgram: _request, ...input } = decodeEventCheckInput(value);
   if (!isDynamicRecord(value)) throw new Error("Invalid event check.");
   return {
     ...input,
@@ -329,7 +360,11 @@ export function decodeEventCheckEnvironmentInput(value: unknown): EventCheckEnvi
 }
 export function decodeEventCheckEnvironmentStatus(value: unknown): EventCheckEnvironmentStatus {
   if (!isDynamicRecord(value) || typeof value.configured !== "boolean") throw new Error("Invalid variable status.");
-  return { name: environmentName(value.name), configured: value.configured };
+  return {
+    name: environmentName(value.name),
+    configured: value.configured,
+    ...(value.reapprove === true ? { reapprove: true } : {}),
+  };
 }
 export function decodeMcpEventCheckInput(value: unknown): EventCheckInput {
   const input = decodeEventCheckInput(value);

@@ -25,6 +25,8 @@ Usage: openbot <command>
                                  Its name is "OpenBot" when you give no name.
   logout                         Sign out. The server stops until the next sign-in.
   name <name>                    Change the server name.
+  audit [<count>]                Show the newest security changes, such as who changed an event check,
+                                 an app connection or auto-approve. It shows names, never values.
   logs [-f]                      Show the OpenBot log.
   start | stop | restart         Control the OpenBot service (sudo).
   update                         Install the newest release now (sudo).
@@ -190,6 +192,14 @@ login_command() {
   fi
 }
 
+audit_command() {
+  local count=${1:-50}
+  [[ $count =~ ^[0-9]+$ ]] || fail "Usage: openbot audit [<count>]"
+  control GET "/v1/audit?limit=$count"
+  check_answer || exit 1
+  { sed -n 's/^row[0-9]*=//p' <<<"$response"; } || true
+}
+
 logs_command() {
   require_host "read the log on the host with: docker logs <container>"
   if [ "${1:-}" = -f ]; then exec journalctl --unit "$UNIT" --follow --lines 100; fi
@@ -272,6 +282,7 @@ case $command in
     check_answer || exit 1
     show_status
     ;;
+  audit) audit_command "$@" ;;
   logs) logs_command "$@" ;;
   start | stop | restart)
     require_host "run docker $command <container> on the host"

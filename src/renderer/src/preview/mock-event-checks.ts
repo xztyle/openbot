@@ -63,8 +63,10 @@ export function createMockEventChecks(): EventCheckApi &
       )
         throw new Error("Missing private variable.");
       const now = new Date().toISOString();
+      // The request to approve is not part of a saved check.
+      const { approveProgram: _request, ...saved } = structuredClone(input);
       const check: EventCheck = {
-        ...structuredClone(input),
+        ...saved,
         id: input.id ?? crypto.randomUUID(),
         revision: crypto.randomUUID(),
         nextCheckAt: now,

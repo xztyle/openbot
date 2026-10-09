@@ -10,6 +10,7 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
+import { memberActor } from "../../backend/security-actor";
 import { HttpError } from "./http-error";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
 import { readJson, requireAdmin } from "./request-helpers";
@@ -51,14 +52,14 @@ export async function routeEventChecks(
       result = await runCauseEffect(checks.accounts({ agentId: body.agentId }));
       break;
     case EVENT_CHECKS_ROUTES.save:
-      result = await runCauseEffect(checks.save(decodeEventCheckInput(body)));
+      result = await runCauseEffect(checks.save(decodeEventCheckInput(body), memberActor(context.member)));
       break;
     case EVENT_CHECKS_ROUTES.tools:
       if (typeof body.connectionId !== "string") throw new HttpError(400, sourceText("error.mcp.chatDenied"));
       result = await runCauseEffect(checks.tools({ agentId: body.agentId, connectionId: body.connectionId }));
       break;
     case EVENT_CHECKS_ROUTES.remove:
-      await runCauseEffect(checks.remove(decodeEventCheckTarget(body)));
+      await runCauseEffect(checks.remove(decodeEventCheckTarget(body), memberActor(context.member)));
       result = null;
       break;
     case EVENT_CHECKS_ROUTES.history:

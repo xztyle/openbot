@@ -122,6 +122,32 @@ describe("approval automation store", () => {
 });
 
 describe("ApprovalAutomation", () => {
+  it("records who changed a grant or Turbo, and nothing when the value is the same", async () => {
+    const path = join(await temporaryRoot(), "automation.json");
+    const record = vi.fn((_entry: unknown) => Effect.void);
+    const automation = new ApprovalAutomation({
+      path,
+      initial: await runCauseEffect(readApprovalAutomation(path, [])),
+      knownAgentIds: () => ["agent-1"],
+      audit: { record },
+    });
+    await runCauseEffect(automation.set({ agentId: "agent-1", autoApprove: true }));
+    expect(record).not.toHaveBeenCalled();
+    await runCauseEffect(
+      automation.set({ agentId: "agent-1", autoApprove: false }, { kind: "member", memberId: "m1", name: "Ana" }),
+    );
+    await runCauseEffect(automation.set({ turbo: true }));
+    expect(record.mock.calls.map(([entry]) => entry)).toEqual([
+      {
+        actor: { kind: "member", id: "m1", name: "Ana" },
+        action: "approval.auto-approve",
+        target: { kind: "agent", id: "agent-1" },
+        names: ["off"],
+      },
+      { actor: { kind: "user" }, action: "approval.turbo", target: { kind: "host" }, names: ["on"] },
+    ]);
+  });
+
   it("keeps an opt-out across restart and Turbo, and lets the user enable it again", async () => {
     const path = join(await temporaryRoot(), "automation.json");
     const agents = ["agent-1"];

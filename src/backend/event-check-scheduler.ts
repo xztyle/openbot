@@ -9,15 +9,18 @@ import type {
 } from "@openbot/contracts/event-checks";
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { sourceText } from "@openbot/i18n/source";
+import { containsCredential } from "@openbot/logging";
 import { nextEventCheckOccurrence } from "@openbot/team-client/event-check-schedule";
 import { Effect, type Scope, Semaphore } from "effect";
 import type { EventCheckApiReader } from "./event-check-api-reader";
+import { eventCheckDestination } from "./event-check-approval";
 import type {
   EventCheckArguments,
   EventCheckData,
   EventCheckReader,
   EventCheckReadSession,
 } from "./event-check-reader";
+import { EventCheckRefusal } from "./event-check-refusal";
 import {
   CHECK_MAX_BYTES,
   CHECK_MAX_ITEMS,
@@ -30,6 +33,8 @@ import type { CheckOutbox, EventCheckStore } from "./event-check-store";
 import type { EventCheckTemplates } from "./event-check-templates";
 import { mcpFailure, mcpSync } from "./mcp-effects";
 import type { RoutineDueSource, RoutineTimer } from "./routine-timer";
+import { authorOf, plainName, type SecurityActor } from "./security-actor";
+import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "./security-audit-log";
 
 export interface EventCheckSchedulerOptions {
   store: EventCheckStore;
@@ -40,6 +45,7 @@ export interface EventCheckSchedulerOptions {
   timer: RoutineTimer;
   agentExists(id: string): boolean;
   running(): boolean;
+  audit?: SecurityAuditSink;
   deliver(
     check: EventCheck,
     event: CheckOutbox,
@@ -80,17 +86,19 @@ export class EventCheckScheduler implements RoutineDueSource {
   readonly templateInstall = Effect.fn("EventCheck.templateInstall")(function* (
     this: EventCheckScheduler,
     input: EventCheckTemplateInstallInput,
+    actor: SecurityActor,
   ) {
     const prepared = yield* mcpSync(() => {
       this.#agent(input.agentId);
       const templates = this.#templates();
       return templates.install(templates.get(input.slug), input, new Date());
     });
-    return yield* this.save(prepared);
+    return yield* this.#save(prepared, actor, "event-check.template-install");
   });
   readonly templateUpdate = Effect.fn("EventCheck.templateUpdate")(function* (
     this: EventCheckScheduler,
     input: { agentId: string; id: string },
+    actor: SecurityActor,
   ) {
     const prepared = yield* mcpSync(() => {
       const templates = this.#templates();
@@ -99,35 +107,74 @@ export class EventCheckScheduler implements RoutineDueSource {
       if (!link) throw new Error(sourceText("error.backend.eventCheckTemplateNotLinked"));
       return templates.upgrade(templates.get(link.slug), check);
     });
-    return yield* this.save(prepared);
+    return yield* this.#save(prepared, actor, "event-check.template-update");
   });
   readonly templateAdopt = Effect.fn("EventCheck.templateAdopt")(function* (
     this: EventCheckScheduler,
     input: { agentId: string; id: string; slug: string },
+    actor: SecurityActor,
   ) {
     const prepared = yield* mcpSync(() => {
       const templates = this.#templates();
       return templates.link(templates.get(input.slug), this.options.store.get(input.agentId, input.id));
     });
-    return yield* this.save(prepared);
+    return yield* this.#save(prepared, actor, "event-check.template-link");
   });
   environment = (input: { agentId: string; id: string }) =>
     mcpSync(() => this.#apiReader().environment.status(this.options.store.get(input.agentId, input.id)));
-  setEnvironment = (input: EventCheckEnvironmentInput) => this.#mutations.withPermit(this.#setEnvironment(input));
+  /** Gives program files that earlier releases stored values for the approval of the program they had. */
+  readonly adoptLegacyApprovals = Effect.fn("EventCheck.adoptLegacyApprovals")(function* (this: EventCheckScheduler) {
+    const reader = this.options.apiReader;
+    if (!reader) return;
+    const checks = yield* mcpSync(() => this.options.store.list());
+    for (const check of checks)
+      if (check.source.kind === "api" && check.source.variables.length > 0)
+        yield* reader.environment.adoptLegacy(check).pipe(Effect.catchCause(() => Effect.void));
+  });
+  /** Only a person sets a private value. This is for the app and the team API, never for an agent tool. */
+  setEnvironment = (input: EventCheckEnvironmentInput, actor: SecurityActor) =>
+    this.#mutations.withPermit(this.#setEnvironment(input, actor));
   readonly #setEnvironment = Effect.fn("EventCheck.setEnvironment")(function* (
     this: EventCheckScheduler,
     input: EventCheckEnvironmentInput,
+    actor: SecurityActor,
   ) {
     const check = yield* mcpSync(() => {
+      if (actor.kind === "agent") throw new Error("Agents cannot set private variables.");
       const previous = this.options.store.get(input.agentId, input.id);
       if (previous.source.kind !== "api" || !previous.source.variables.includes(input.name))
         throw new Error("Undeclared variable.");
-      return this.options.store.save({ ...previous, active: false }, new Date(), true);
+      // The digest of the file as it is now. Setting a value approves exactly this program.
+      return this.options.store.save({ ...this.#apiReader().definition(previous), active: false }, new Date(), true);
     });
     yield* this.#apiReader().environment.set(check, input.name, input.value);
     this.options.timer.arm();
+    yield* this.#audit(
+      actor,
+      input.value === null ? "event-check.remove-variable" : "event-check.set-variable",
+      check,
+      [input.name],
+    );
     return yield* this.environment(input);
   });
+  /** Records that a tool call was refused before it reached the check. */
+  refused = (actor: SecurityActor, tool: string, agentId: string) =>
+    (this.options.audit ?? NO_SECURITY_AUDIT).record({
+      actor: auditActor(actor),
+      action: `event-check.tool-refused`,
+      target: { kind: "agent", id: agentId },
+      names: [tool],
+      outcome: "refused",
+    });
+  #audit(actor: SecurityActor, action: string, check: EventCheck, names?: string[], refused = false) {
+    return (this.options.audit ?? NO_SECURITY_AUDIT).record({
+      actor: auditActor(actor),
+      action,
+      target: { kind: "event-check", id: check.id, agentId: check.agentId, name: plainName(check.name) },
+      ...(names ? { names } : {}),
+      ...(refused ? { outcome: "refused" as const } : {}),
+    });
+  }
   test = (input: { agentId: string; id: string }) => this.#runNow(input, true);
   list = (input: { agentId: string }) =>
     mcpSync(() => {
@@ -143,10 +190,60 @@ export class EventCheckScheduler implements RoutineDueSource {
     });
   tools = (input: { agentId: string; connectionId: string }) =>
     this.#reader().read(input.agentId, input.connectionId, (session) => Effect.succeed(session.tools));
-  readonly save = Effect.fn("EventCheck.save")(function* (this: EventCheckScheduler, input: EventCheckInput) {
+  readonly save = (input: EventCheckInput, actor: SecurityActor) => this.#save(input, actor);
+  /**
+   * The fields that say what a check reads and tells: an author changes only when these change. The
+   * keys are sorted, so the order that a client wrote them in does not look like a change.
+   */
+  #content(check: EventCheckInput): string {
+    const sorted = (record: EventCheckInput["source"] | EventCheckInput["selection"]) =>
+      Object.entries(record)
+        .filter(([, value]) => value !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right));
+    const source =
+      check.source.kind === "api" ? { ...check.source, programDigest: undefined, template: undefined } : check.source;
+    return JSON.stringify([check.name, check.instruction, sorted(source), sorted(check.selection)]);
+  }
+  /**
+   * Refuses a field that holds a credential. Only a field the request changes is checked, so a check
+   * that already holds one can still be paused or deleted. The message names the field, never the value.
+   */
+  #screen(input: EventCheckInput, previous: EventCheckInput | null): void {
+    const fields: Array<[string, string, string | undefined]> = [
+      [sourceText("error.backend.eventCheckFieldName"), input.name, previous?.name],
+      [sourceText("error.backend.eventCheckFieldInstruction"), input.instruction, previous?.instruction],
+      [
+        sourceText("error.backend.eventCheckFieldArguments"),
+        input.source.argumentsJson,
+        previous?.source.argumentsJson,
+      ],
+      [sourceText("error.backend.eventCheckFieldAccount"), input.source.connectionId, previous?.source.connectionId],
+    ];
+    if (input.source.kind === "api") {
+      const held = new Map(
+        previous?.source.kind === "api" ? previous.source.configuration.map((field) => [field.name, field.value]) : [],
+      );
+      for (const field of input.source.configuration)
+        fields.push([field.label.trim() || field.name, field.value, held.get(field.name)]);
+    }
+    for (const [label, value, before] of fields)
+      if (value !== before && containsCredential(value))
+        throw new EventCheckRefusal(sourceText("error.backend.eventCheckCredentialField", { field: label }));
+  }
+  readonly #save = Effect.fn("EventCheck.save")(function* (
+    this: EventCheckScheduler,
+    request: EventCheckInput,
+    actor: SecurityActor,
+    action?: string,
+  ) {
+    // Only a person approves a program. The flag is never stored, and an agent tool cannot use it.
+    const { approveProgram, ...input } = request;
+    const approving = approveProgram === true && actor.kind !== "agent";
+    const previous = yield* mcpSync(() => (input.id ? this.options.store.get(input.agentId, input.id) : null));
     yield* mcpSync(() => {
       this.#agent(input.agentId);
       scheduleValid(input);
+      this.#screen(input, previous);
       if (
         input.active &&
         input.selfEvents.mode === "exclude" &&
@@ -156,46 +253,123 @@ export class EventCheckScheduler implements RoutineDueSource {
       )
         throw new Error(sourceText("error.backend.eventCheckSelfEvents"));
     });
-    if (input.source.kind === "api")
-      return yield* mcpSync(() => {
-        const prepared = this.#apiReader().definition(input);
-        if (
-          input.active &&
-          prepared.source.kind === "api" &&
-          prepared.source.variables.length > 0 &&
-          (!input.id ||
-            this.#apiReader()
-              .environment.status({ ...this.options.store.get(input.agentId, input.id), source: input.source })
-              .some((variable) => !variable.configured))
-        )
-          throw new Error(sourceText("error.backend.eventCheckMissingVariable"));
-        const check = this.options.store.save(prepared, new Date());
+    const author =
+      previous && this.#content(previous) === this.#content(input) ? previous.lastSavedBy : authorOf(actor);
+    const kind =
+      action ??
+      (!previous
+        ? "event-check.create"
+        : previous.active !== input.active && this.#content(previous) === this.#content(input)
+          ? input.active
+            ? "event-check.enable"
+            : "event-check.disable"
+          : "event-check.save");
+    const withAuthor = (check: EventCheckInput): EventCheckInput => {
+      const { lastSavedBy: _client, ...rest } = check;
+      return author ? { ...rest, lastSavedBy: author } : rest;
+    };
+    const record = (check: EventCheck) =>
+      this.#audit(actor, kind, check, previous ? this.#changed(previous, check) : undefined);
+    if (input.source.kind === "api") {
+      const saved = yield* Effect.gen({ self: this }, function* () {
+        const prepared = yield* mcpSync(() => this.#apiReader().definition(input));
+        if (prepared.source.kind !== "api")
+          return yield* mcpSync(() => {
+            throw new Error("Invalid program source.");
+          });
+        const source = prepared.source;
+        const environment = this.#apiReader().environment;
+        if (source.variables.length > 0 && previous?.source.kind === "api") {
+          const candidate: EventCheck = { ...previous, source };
+          const unchanged: EventCheck = {
+            ...previous,
+            source: { ...previous.source, programDigest: source.programDigest },
+          };
+          // A person who edits an address setting of an approved program moves the approval with it.
+          // A person who asks for it approves the program too. An agent does neither.
+          if (
+            actor.kind !== "agent" &&
+            (approving ||
+              (environment.state(unchanged) === "approved" &&
+                eventCheckDestination(source) !== eventCheckDestination(previous.source)))
+          )
+            yield* environment.approve(candidate);
+        }
+        if (prepared.active && source.variables.length > 0) {
+          const candidate: EventCheck | null = previous ? { ...previous, source } : null;
+          const status = candidate ? environment.status(candidate) : [];
+          if (!candidate || status.some((variable) => !variable.configured)) {
+            const stale = status.some((variable) => variable.reapprove === true);
+            if (candidate) yield* this.#audit(actor, "event-check.enable", candidate, undefined, true);
+            return yield* mcpSync(() => {
+              throw new EventCheckRefusal(
+                sourceText(
+                  stale ? "error.backend.eventCheckApprovalNeeded" : "error.backend.eventCheckMissingVariable",
+                ),
+              );
+            });
+          }
+        }
+        return yield* mcpSync(() => {
+          const check = this.options.store.save(withAuthor(prepared), new Date());
+          this.options.timer.arm();
+          return check;
+        });
+      });
+      yield* record(saved);
+      return saved;
+    }
+    if (!input.active && input.id) {
+      const saved = yield* mcpSync(() => {
+        const check = this.options.store.save(withAuthor(input), new Date());
         this.options.timer.arm();
         return check;
       });
-    if (!input.active && input.id)
-      return yield* mcpSync(() => {
-        const check = this.options.store.save(input, new Date());
-        this.options.timer.arm();
-        return check;
-      });
-    return yield* this.#reader().read(input.agentId, input.source.connectionId, (session) =>
+      yield* record(saved);
+      return saved;
+    }
+    const saved = yield* this.#reader().read(input.agentId, input.source.connectionId, (session) =>
       mcpSync(() => {
         if (!session.valid() || !session.tools.some((tool) => tool.name === input.source.toolName))
           throw new Error(sourceText("error.mcp.chatDenied"));
-        const check = this.options.store.save(input, new Date());
+        const check = this.options.store.save(withAuthor(input), new Date());
         this.options.timer.arm();
         return check;
       }),
     );
+    yield* record(saved);
+    return saved;
   });
-  remove = (input: { agentId: string; id: string }) =>
+  /** Names of the top-level fields that differ, for the audit file. Never values. */
+  #changed(previous: EventCheck, next: EventCheck): string[] {
+    const names: string[] = [];
+    if (previous.name !== next.name) names.push("name");
+    if (previous.instruction !== next.instruction) names.push("instruction");
+    if (previous.active !== next.active) names.push("active");
+    if (JSON.stringify(previous.schedule) !== JSON.stringify(next.schedule) || previous.timezone !== next.timezone)
+      names.push("schedule");
+    if (JSON.stringify(previous.selection) !== JSON.stringify(next.selection)) names.push("selection");
+    if (JSON.stringify(previous.selfEvents) !== JSON.stringify(next.selfEvents)) names.push("selfEvents");
+    if (previous.source.kind !== next.source.kind) names.push("source");
+    else if (previous.source.kind === "api" && next.source.kind === "api") {
+      if (previous.source.toolName !== next.source.toolName) names.push("program");
+      else if (previous.source.programDigest !== next.source.programDigest) names.push("programDigest");
+      if (previous.source.argumentsJson !== next.source.argumentsJson) names.push("arguments");
+      if (JSON.stringify(previous.source.variables) !== JSON.stringify(next.source.variables)) names.push("variables");
+      for (const field of next.source.configuration)
+        if (previous.source.configuration.find((held) => held.name === field.name)?.value !== field.value)
+          names.push(`setting:${field.name}`);
+    } else if (JSON.stringify(previous.source) !== JSON.stringify(next.source)) names.push("source");
+    return names;
+  }
+  remove = (input: { agentId: string; id: string }, actor: SecurityActor) =>
     this.#mutations.withPermit(
       Effect.gen({ self: this }, function* () {
         const check = yield* mcpSync(() => this.options.store.get(input.agentId, input.id));
         yield* mcpSync(() => this.options.store.remove(input.agentId, input.id));
         if (check.source.kind === "api") yield* this.#apiReader().environment.remove(check);
         this.options.timer.arm();
+        yield* this.#audit(actor, "event-check.delete", check);
       }),
     );
   checkNow = (input: { agentId: string; id: string }) => this.#runNow(input, false);
@@ -240,13 +414,23 @@ export class EventCheckScheduler implements RoutineDueSource {
     const startedAt = new Date().toISOString();
     const id = randomUUID();
     let committed: EventCheckExecution | null = null;
+    let paused: EventCheck | null = null;
     return yield* mcpSync(() => {
       if (!this.options.store.current(check.id, check.revision)) throw new Error("Stale check.");
       if (check.source.kind !== "api") return check;
       const prepared = this.#apiReader().definition(check);
-      return JSON.stringify(prepared.source) === JSON.stringify(check.source)
-        ? check
-        : this.options.store.save(prepared, new Date(), true);
+      if (JSON.stringify(prepared.source) === JSON.stringify(check.source)) return check;
+      // The program or an address setting is not what the user approved, and private values exist.
+      // The check stops here. It keeps the new digest, so its status says the values need approval.
+      if (
+        prepared.source.kind === "api" &&
+        prepared.source.variables.length > 0 &&
+        this.#apiReader().environment.state({ ...check, source: prepared.source }) === "changed"
+      ) {
+        paused = this.options.store.save({ ...prepared, active: false }, new Date(), true);
+        throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgramChanged"));
+      }
+      return this.options.store.save(prepared, new Date(), true);
     })
       .pipe(
         Effect.flatMap((prepared) => {
@@ -297,20 +481,39 @@ export class EventCheckScheduler implements RoutineDueSource {
       .pipe(
         Effect.timeout("45 seconds"),
         Effect.catchCause(() =>
-          mcpSync(() => {
-            if (committed)
-              return this.options.store.deliveryError(committed, sourceText("error.backend.eventCheckDelivery"));
-            const execution = this.#execution(
-              id,
-              check.id,
-              startedAt,
-              "error",
-              0,
-              0,
-              sourceText("error.backend.eventCheckFailed"),
-            );
-            this.options.store.finish(check, execution);
-            return execution;
+          Effect.gen({ self: this }, function* () {
+            const stopped: EventCheck | null = paused;
+            if (stopped) {
+              const execution = this.#execution(
+                id,
+                stopped.id,
+                startedAt,
+                "error",
+                0,
+                0,
+                sourceText("error.backend.eventCheckProgramChanged"),
+              );
+              yield* mcpSync(() => this.options.store.finish(stopped, execution));
+              yield* this.#audit({ kind: "user" }, "event-check.paused-program-changed", stopped, undefined, true).pipe(
+                Effect.catchCause(() => Effect.void),
+              );
+              return execution;
+            }
+            return yield* mcpSync(() => {
+              if (committed)
+                return this.options.store.deliveryError(committed, sourceText("error.backend.eventCheckDelivery"));
+              const execution = this.#execution(
+                id,
+                check.id,
+                startedAt,
+                "error",
+                0,
+                0,
+                sourceText("error.backend.eventCheckFailed"),
+              );
+              this.options.store.finish(check, execution);
+              return execution;
+            });
           }),
         ),
       );

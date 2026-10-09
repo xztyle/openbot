@@ -7,6 +7,7 @@ import {
   apiError,
   json,
   remoteControlPlaneErrorResponse,
+  requestInteractiveUser,
   requestRemoteControlPlane,
   requestUser,
 } from "../../../../../server/request-auth";
@@ -37,6 +38,9 @@ export const Route = createFileRoute("/v2/remote/hosts/$hostId/invites")({
             ) {
               return apiError(400, "invalid_remote_request", "The invitation is invalid.");
             }
+            // A server's own sign-in may invite members. An admin or a permanent invitation lasts
+            // beyond the person who reads that sign-in off the server, so it needs a person's own.
+            if (body.role === "admin" || body.permanent === true) yield* requestInteractiveUser(request);
             return json(
               yield* requestRemoteControlPlane().createInvite(user, {
                 hostId: params.hostId,

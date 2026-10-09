@@ -27,6 +27,7 @@ import { EVENT_CHECKS_CAPABILITY, EVENT_CHECKS_ROUTES } from "@openbot/contracts
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
+import { LOCAL_USER_ACTOR } from "../../backend/security-actor";
 import type { RemoteServerManager } from "../remote-server-manager";
 import type { IpcGroupHandlers } from "./define-ipc-group";
 import { scopedHandler, scopedQueryHandler } from "./scoped-handler";
@@ -71,15 +72,15 @@ export function eventCheckIpcHandlers(
         remote: (id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.list, {}, decodeEventCheckTemplateList),
       }),
       install: scopedHandler(decodeEventCheckTemplateInstallInput, {
-        local: (v) => runCauseEffect(checks.templateInstall(v)),
+        local: (v) => runCauseEffect(checks.templateInstall(v, LOCAL_USER_ACTOR)),
         remote: (v, id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.install, v, decodeEventCheck),
       }),
       update: scopedHandler(decodeEventCheckTarget, {
-        local: (v) => runCauseEffect(checks.templateUpdate(v)),
+        local: (v) => runCauseEffect(checks.templateUpdate(v, LOCAL_USER_ACTOR)),
         remote: (v, id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.update, v, decodeEventCheck),
       }),
       adopt: scopedHandler(decodeEventCheckTemplateAdoptInput, {
-        local: (v) => runCauseEffect(checks.templateAdopt(v)),
+        local: (v) => runCauseEffect(checks.templateAdopt(v, LOCAL_USER_ACTOR)),
         remote: (v, id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.adopt, v, decodeEventCheck),
       }),
     },
@@ -92,7 +93,7 @@ export function eventCheckIpcHandlers(
           ),
       }),
       setEnvironment: scopedHandler(decodeEventCheckEnvironmentInput, {
-        local: (v) => runCauseEffect(checks.setEnvironment(v)),
+        local: (v) => runCauseEffect(checks.setEnvironment(v, LOCAL_USER_ACTOR)),
         remote: (v, id) =>
           request(id, EVENT_CHECK_API_ROUTES.setEnvironment, v, (r) =>
             decodeEventCheckList(r, decodeEventCheckEnvironmentStatus, 20),
@@ -107,11 +108,11 @@ export function eventCheckIpcHandlers(
         remote: (v, id) => request(id, EVENT_CHECKS_ROUTES.list, v, (r) => decodeEventCheckList(r, decodeEventCheck)),
       }),
       save: scopedHandler(decodeEventCheckInput, {
-        local: (v) => runCauseEffect(checks.save(v)),
+        local: (v) => runCauseEffect(checks.save(v, LOCAL_USER_ACTOR)),
         remote: (v, id) => request(id, EVENT_CHECKS_ROUTES.save, v, decodeEventCheck),
       }),
       remove: scopedHandler(decodeEventCheckTarget, {
-        local: (v) => runCauseEffect(checks.remove(v)),
+        local: (v) => runCauseEffect(checks.remove(v, LOCAL_USER_ACTOR)),
         remote: (v, id) => request(id, EVENT_CHECKS_ROUTES.remove, v, () => undefined),
       }),
       checkNow: scopedHandler(decodeEventCheckTarget, {

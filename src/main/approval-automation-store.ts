@@ -10,6 +10,8 @@ import { isBoolean, isDynamicRecord, isString } from "@openbot/contracts/runtime
 import { sourceText } from "@openbot/i18n/source";
 import { Effect, Result, Semaphore } from "effect";
 import { isMissingFileError } from "../backend/file-errors";
+import { LOCAL_USER_ACTOR, type SecurityActor } from "../backend/security-actor";
+import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "../backend/security-audit-log";
 import { PreferenceFileFailure, readPreferenceFile, writePreferenceFile } from "./preference-file";
 
 /** Missing settings use the product default; invalid settings always require approval. */
@@ -69,6 +71,8 @@ export interface ApprovalAutomationOptions {
   initial: ApprovalAutomationPreference;
   /** Agent ids that still exist. A grant for an agent the user deleted is dropped rather than kept. */
   knownAgentIds: () => Iterable<string>;
+  /** Receives every change of the global or per-agent grant. */
+  audit?: SecurityAuditSink;
 }
 
 /**
@@ -83,6 +87,7 @@ export interface ApprovalAutomationOptions {
 export class ApprovalAutomation {
   readonly #path: string;
   readonly #knownAgentIds: () => Iterable<string>;
+  readonly #audit: SecurityAuditSink;
   #preference: ApprovalAutomationPreference;
   #writes = Semaphore.makeUnsafe(1);
   readonly #deletingAgentIds = new Set<string>();
@@ -91,6 +96,7 @@ export class ApprovalAutomation {
   constructor(options: ApprovalAutomationOptions) {
     this.#path = options.path;
     this.#knownAgentIds = options.knownAgentIds;
+    this.#audit = options.audit ?? NO_SECURITY_AUDIT;
     this.#preference = options.initial;
   }
 
@@ -127,15 +133,40 @@ export class ApprovalAutomation {
     return () => this.#listeners.delete(listener);
   }
 
-  set(input: SetApprovalAutomationInput): Effect.Effect<ApprovalAutomationPreference, PreferenceFileFailure> {
+  /** `actor` is who asked: the app for the user, or a team member through the admin routes. */
+  set(
+    input: SetApprovalAutomationInput,
+    actor: SecurityActor = LOCAL_USER_ACTOR,
+  ): Effect.Effect<ApprovalAutomationPreference, PreferenceFileFailure> {
     return Effect.suspend(() => {
       if (input.autoApprove && input.agentId && this.#deletingAgentIds.has(input.agentId)) {
         return Effect.fail(
           new PreferenceFileFailure({ cause: new Error(sourceText("error.agent.approvalWhileDeleting")) }),
         );
       }
-      return this.#writes.withPermit(this.#apply(input));
+      const before = this.#preference;
+      return this.#writes.withPermit(this.#apply(input)).pipe(Effect.tap(() => this.#record(input, before, actor)));
     });
+  }
+
+  #record(input: SetApprovalAutomationInput, before: ApprovalAutomationPreference, actor: SecurityActor) {
+    const rows: Array<{ action: string; agentId?: string; value: boolean }> = [];
+    if (input.turbo !== undefined && input.turbo !== before.turbo)
+      rows.push({ action: "approval.turbo", value: input.turbo });
+    if (
+      input.agentId !== undefined &&
+      input.autoApprove !== undefined &&
+      agentAutoApprovalEnabled(before, input.agentId) !== input.autoApprove
+    )
+      rows.push({ action: "approval.auto-approve", agentId: input.agentId, value: input.autoApprove });
+    return Effect.forEach(rows, (row) =>
+      this.#audit.record({
+        actor: auditActor(actor),
+        action: row.action,
+        target: row.agentId === undefined ? { kind: "host" } : { kind: "agent", id: row.agentId },
+        names: [row.value ? "on" : "off"],
+      }),
+    );
   }
 
   /** Persist revocation before deleting data, and keep grant writes behind the deletion. */

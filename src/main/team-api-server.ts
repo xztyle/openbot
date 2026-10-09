@@ -62,6 +62,7 @@ import { teamHttpCodec } from "@openbot/contracts/team-protocol/http-codecs";
 import { MCP_CHAT_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-chat-v1";
 import { MCP_OAUTH_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-oauth-v1";
 import { optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
+import { SECURITY_AUDIT_CAPABILITY } from "@openbot/contracts/team-protocol/security-audit-v1";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import {
   TEAM_APP_VERSION_HEADER,
@@ -136,6 +137,7 @@ import { routeMcpChat } from "./team-api/route-mcp-chat";
 import { routeMcpOAuth } from "./team-api/route-mcp-oauth";
 import { routeProviders } from "./team-api/route-providers";
 import { routeRemoteScreen } from "./team-api/route-remote-screen";
+import { routeSecurityAudit } from "./team-api/route-security-audit";
 import { routeSharedTables } from "./team-api/route-shared-tables";
 import { routeSkillsAdmin } from "./team-api/route-skills-admin";
 import { routeStorage } from "./team-api/route-storage";
@@ -717,6 +719,7 @@ export class TeamApiServer {
       if ((await this.#routeAgents(context)) === "handled") return;
 
       if ((await routeEventChecks(context, this.#options.eventChecks)) === "handled") return;
+      if ((await routeSecurityAudit(context, this.#options.securityAudit)) === "handled") return;
       if ((await routeMcpChat(context, this.#options.chatMcp)) === "handled") return;
       if ((await routeMcpOAuth(context, this.#options.mcpOAuth)) === "handled") return;
       return this.#json(response, 404, { error: sourceText("error.team.routeNotFound") });
@@ -1462,6 +1465,7 @@ export class TeamApiServer {
         if (capability === EVENTS_CAPABILITY) return this.#options.events !== undefined;
         if (capability === AGENT_IMPORT_CAPABILITY) return this.#options.agentImport !== undefined;
         if (capability === LIVE_ACTIVITY_PUSH_CAPABILITY) return this.#options.liveActivityPush !== undefined;
+        if (capability === SECURITY_AUDIT_CAPABILITY) return this.#options.securityAudit !== undefined;
         return true;
       }),
     };

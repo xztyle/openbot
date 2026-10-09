@@ -4,6 +4,18 @@ export const messages = defineMessages("error.backend", {
   "error.backend.eventCheckProgram": "Choose an existing .mjs, .js, .py or .sh program inside OpenBot/Shared/Watchers.",
   "error.backend.eventCheckMissingVariable":
     "Add the required private variable in this event check’s Private variables (.env) settings before enabling it.",
+  "error.backend.eventCheckProgramChanged":
+    "The program or the address settings of this event check changed after its private variables were approved. The check is paused and its variables are not used. Review the program, then approve it in this event check’s Private variables (.env) settings.",
+  "error.backend.eventCheckApprovalNeeded":
+    "This event check cannot be enabled until the user approves its program. Ask the user to open this event check in agent settings and approve it in Private variables (.env).",
+  "error.backend.eventCheckCredentialField":
+    "The “{field}” field looks like a credential, so it was not saved. Remove it. Credentials belong only in this event check’s Private variables (.env) settings.",
+  "error.backend.eventCheckFieldName": "name",
+  "error.backend.eventCheckFieldInstruction": "instruction",
+  "error.backend.eventCheckFieldArguments": "arguments",
+  "error.backend.eventCheckFieldAccount": "account label",
+  "error.backend.eventCheckWorkspaceOnly":
+    "This agent has Workspace-only access, so it cannot create, change, test, run or enable event checks. Ask the user to do it, or to give the agent Full access.",
   "error.backend.eventCheckDelivery":
     "An event was found. Delivery is waiting and will retry; the saved event remains on this host.",
   "error.backend.eventCheckSelfEvents":

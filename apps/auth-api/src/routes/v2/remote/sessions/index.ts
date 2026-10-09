@@ -9,8 +9,8 @@ import {
   bearerToken,
   json,
   remoteControlPlaneErrorResponse,
+  requestInteractiveUser,
   requestRemoteControlPlane,
-  requestUser,
 } from "../../../../server/request-auth";
 
 export const Route = createFileRoute("/v2/remote/sessions/")({
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/v2/remote/sessions/")({
           Effect.gen(function* () {
             const token = bearerToken(request);
             if (!token) return apiError(401, "unauthorized", "Sign in is required.");
-            const user = yield* requestUser(request);
+            const user = yield* requestInteractiveUser(request);
             if (!user) return apiError(401, "unauthorized", "Sign in is required.");
             const body = yield* readJsonObject(request);
             if (!isString(body.hostId)) return apiError(400, "invalid_remote_request", "The host ID is invalid.");

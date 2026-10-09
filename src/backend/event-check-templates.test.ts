@@ -24,6 +24,7 @@ import { EventCheckEnvironment } from "./event-check-environment";
 import { EventCheckStore } from "./event-check-store";
 import { EventCheckTemplates } from "./event-check-templates";
 import { getString } from "./protocol";
+import { LOCAL_USER_ACTOR as TEST_USER } from "./security-actor";
 
 let root: string,
   service: AgentService | null = null;
@@ -97,8 +98,9 @@ async function boot(shipped: EventCheckTemplate, program = PROGRAM) {
   await mkdir(join(catalog, "programs"), { recursive: true });
   await writeFile(join(catalog, "catalog.json"), JSON.stringify([shipped]));
   await writeFile(join(catalog, "programs", "fixture.mjs"), program);
+  const templates = new EventCheckTemplates(catalog, programs);
   const reader = new EventCheckApiReader(
-    new EventCheckEnvironment(join(root, "private-watchers"), cipher()),
+    new EventCheckEnvironment(join(root, "private-watchers"), cipher(), (check) => templates.reviewed(check)),
     programs,
     (check) => checks.current(check.id, check.revision) !== null,
     process.execPath,
@@ -109,7 +111,7 @@ async function boot(shipped: EventCheckTemplate, program = PROGRAM) {
     mailbox,
     clientFactory: () => client,
     eventCheckApiReader: reader,
-    eventCheckTemplates: new EventCheckTemplates(catalog, programs),
+    eventCheckTemplates: templates,
   });
   await runCauseEffect(service.initialize());
   await runCauseEffect(store.getOrCreate("chief"));
@@ -137,7 +139,7 @@ it("installs a paused, linked check from the shipped program and refuses unknown
   const { service, programs } = await boot(template("1.0.0", PROGRAM));
   const checks = service.eventChecks;
   expect(await runCauseEffect(checks.templateList())).toHaveLength(1);
-  const installed = await runCauseEffect(checks.templateInstall(request({ workspace: "alpha" })));
+  const installed = await runCauseEffect(checks.templateInstall(request({ workspace: "alpha" }), TEST_USER));
   expect(installed.active).toBe(false);
   expect(installed.source.kind === "api" && installed.source.template).toEqual({ slug: "fixture", version: "1.0.0" });
   expect(installed.source.kind === "api" && installed.source.configuration.map((field) => field.value)).toEqual([
@@ -145,22 +147,28 @@ it("installs a paused, linked check from the shipped program and refuses unknown
     "50",
   ]);
   expect(readFileSync(join(programs, "fixture@1.0.0.mjs"), "utf8")).toBe(PROGRAM);
-  await expect(runCauseEffect(checks.templateInstall(request({})))).rejects.toThrow();
-  await expect(runCauseEffect(checks.templateInstall(request({ workspace: "a", extra: "b" })))).rejects.toThrow();
+  await expect(runCauseEffect(checks.templateInstall(request({}), TEST_USER))).rejects.toThrow();
+  await expect(
+    runCauseEffect(checks.templateInstall(request({ workspace: "a", extra: "b" }), TEST_USER)),
+  ).rejects.toThrow();
   const second = await runCauseEffect(
-    checks.templateInstall({ ...request({ workspace: "beta" }), accountLabel: "home" }),
+    checks.templateInstall({ ...request({ workspace: "beta" }), accountLabel: "home" }, TEST_USER),
   );
   expect(second.id).not.toBe(installed.id);
 });
 it("never replaces a shared program that no longer matches the reviewed one", async () => {
   const { service, programs } = await boot(template("1.0.0", PROGRAM));
   await writeFile(join(programs, "fixture@1.0.0.mjs"), `${PROGRAM}\n// edited`);
-  await expect(runCauseEffect(service.eventChecks.templateInstall(request({ workspace: "alpha" })))).rejects.toThrow();
+  await expect(
+    runCauseEffect(service.eventChecks.templateInstall(request({ workspace: "alpha" }), TEST_USER)),
+  ).rejects.toThrow();
   expect(readFileSync(join(programs, "fixture@1.0.0.mjs"), "utf8")).toContain("// edited");
 });
 it("links an existing check without resetting its baseline, and refuses a program that differs", async () => {
   const { service, checks, programs } = await boot(template("1.0.0", PROGRAM));
-  const installed = await runCauseEffect(service.eventChecks.templateInstall(request({ workspace: "alpha" })));
+  const installed = await runCauseEffect(
+    service.eventChecks.templateInstall(request({ workspace: "alpha" }), TEST_USER),
+  );
   const target = { agentId: "chief", id: installed.id };
   await runCauseEffect(service.eventChecks.test(target));
   // A check that predates the catalog: the same program under its own name, with no link.
@@ -168,25 +176,28 @@ it("links an existing check without resetting its baseline, and refuses a progra
   if (installed.source.kind !== "api") throw new Error("Expected an API check.");
   const { template: _link, ...source } = installed.source;
   const legacy = await runCauseEffect(
-    service.eventChecks.save({
-      ...installed,
-      id: undefined,
-      name: "Legacy",
-      active: true,
-      source: { ...source, toolName: "mine.mjs" },
-    }),
+    service.eventChecks.save(
+      {
+        ...installed,
+        id: undefined,
+        name: "Legacy",
+        active: true,
+        source: { ...source, toolName: "mine.mjs" },
+      },
+      TEST_USER,
+    ),
   );
   await runCauseEffect(service.eventChecks.checkNow({ agentId: "chief", id: legacy.id }));
   const before = checks.state(legacy.id);
   expect(before.baseline).not.toBeNull();
   const linked = await runCauseEffect(
-    service.eventChecks.templateAdopt({ agentId: "chief", id: legacy.id, slug: "fixture" }),
+    service.eventChecks.templateAdopt({ agentId: "chief", id: legacy.id, slug: "fixture" }, TEST_USER),
   );
   expect(linked.source.kind === "api" && linked.source.template?.slug).toBe("fixture");
   expect(checks.state(legacy.id)).toEqual(before);
   await writeFile(join(programs, "mine.mjs"), `${PROGRAM}\n// edited`);
   await expect(
-    runCauseEffect(service.eventChecks.templateAdopt({ agentId: "chief", id: legacy.id, slug: "fixture" })),
+    runCauseEffect(service.eventChecks.templateAdopt({ agentId: "chief", id: legacy.id, slug: "fixture" }, TEST_USER)),
   ).rejects.toThrow();
 });
 it("moves a linked check to the newer program, keeps the user's settings and gives it a fresh baseline", async () => {
@@ -204,31 +215,34 @@ it("moves a linked check to the newer program, keeps the user's settings and giv
   );
   await writeFile(join(programs, "fixture@1.0.0.mjs"), PROGRAM);
   const old = await runCauseEffect(
-    service.eventChecks.save({
-      agentId: "chief",
-      name: "Old",
-      instruction: "Mine",
-      active: true,
-      timezone: "UTC",
-      schedule: { kind: "interval", amount: 120, unit: "seconds", anchorAt: new Date().toISOString() },
-      selfEvents: { mode: "exclude", connectionId: "work", actorPointer: "/actor", accountActorIds: ["me"] },
-      source: {
-        kind: "api",
-        connectionId: "work",
-        variables: [],
-        configuration: [{ name: "workspace", label: "Workspace", description: "Which workspace", value: "alpha" }],
-        toolName: "fixture@1.0.0.mjs",
-        argumentsJson: "{}",
-        cursorArgument: "cursor",
-        nextCursorPointer: "/cursor",
-        template: { slug: "fixture", version: "1.0.0" },
+    service.eventChecks.save(
+      {
+        agentId: "chief",
+        name: "Old",
+        instruction: "Mine",
+        active: true,
+        timezone: "UTC",
+        schedule: { kind: "interval", amount: 120, unit: "seconds", anchorAt: new Date().toISOString() },
+        selfEvents: { mode: "exclude", connectionId: "work", actorPointer: "/actor", accountActorIds: ["me"] },
+        source: {
+          kind: "api",
+          connectionId: "work",
+          variables: [],
+          configuration: [{ name: "workspace", label: "Workspace", description: "Which workspace", value: "alpha" }],
+          toolName: "fixture@1.0.0.mjs",
+          argumentsJson: "{}",
+          cursorArgument: "cursor",
+          nextCursorPointer: "/cursor",
+          template: { slug: "fixture", version: "1.0.0" },
+        },
+        selection: { itemsPointer: "/items", idPointer: "/id", revisionPointer: "/revision" },
       },
-      selection: { itemsPointer: "/items", idPointer: "/id", revisionPointer: "/revision" },
-    }),
+      TEST_USER,
+    ),
   );
   await runCauseEffect(service.eventChecks.checkNow({ agentId: "chief", id: old.id }));
   expect(checks.state(old.id).baseline).not.toBeNull();
-  const updated = await runCauseEffect(service.eventChecks.templateUpdate({ agentId: "chief", id: old.id }));
+  const updated = await runCauseEffect(service.eventChecks.templateUpdate({ agentId: "chief", id: old.id }, TEST_USER));
   expect(updated.source.kind === "api" && updated.source.template?.version).toBe("2.0.0");
   expect(updated.source.kind === "api" && updated.source.toolName).toBe("fixture@2.0.0.mjs");
   expect(
@@ -242,9 +256,69 @@ it("moves a linked check to the newer program, keeps the user's settings and giv
   expect(updated.schedule).toMatchObject({ amount: 120 });
   expect(checks.state(old.id).baseline).toBeNull();
   expect(existsSync(join(programs, "fixture@1.0.0.mjs"))).toBe(true);
-  await expect(runCauseEffect(service.eventChecks.templateUpdate({ agentId: "chief", id: old.id }))).rejects.toThrow();
+  await expect(
+    runCauseEffect(service.eventChecks.templateUpdate({ agentId: "chief", id: old.id }, TEST_USER)),
+  ).rejects.toThrow();
 });
 
+it("keeps private values through an update to the reviewed program and withholds them from an edited copy", async () => {
+  const next = `${PROGRAM}\n// version two`;
+  const shipped = {
+    ...template("2.0.0", next),
+    variables: [{ name: "FIXTURE_API_TOKEN", label: "Key", hint: "", docsUrl: null }],
+  };
+  const { service, checks, programs } = await boot(shipped, next);
+  await writeFile(join(programs, "fixture@1.0.0.mjs"), PROGRAM);
+  const old = await runCauseEffect(
+    service.eventChecks.save(
+      {
+        agentId: "chief",
+        name: "Old",
+        instruction: "Mine",
+        active: false,
+        timezone: "UTC",
+        schedule: { kind: "interval", amount: 120, unit: "seconds", anchorAt: new Date().toISOString() },
+        selfEvents: { mode: "exclude", connectionId: "work", actorPointer: "/actor", accountActorIds: ["me"] },
+        source: {
+          kind: "api",
+          connectionId: "work",
+          variables: ["FIXTURE_API_TOKEN"],
+          configuration: [{ name: "workspace", label: "Workspace", description: "Which workspace", value: "alpha" }],
+          toolName: "fixture@1.0.0.mjs",
+          argumentsJson: "{}",
+          cursorArgument: "cursor",
+          nextCursorPointer: "/cursor",
+          template: { slug: "fixture", version: "1.0.0" },
+        },
+        selection: { itemsPointer: "/items", idPointer: "/id", revisionPointer: "/revision" },
+      },
+      TEST_USER,
+    ),
+  );
+  const target = { agentId: "chief", id: old.id };
+  await runCauseEffect(
+    service.eventChecks.setEnvironment(
+      { ...target, name: "FIXTURE_API_TOKEN", value: "fixture-private-key" },
+      TEST_USER,
+    ),
+  );
+  await runCauseEffect(service.eventChecks.save({ ...checks.get("chief", old.id), active: true }, TEST_USER));
+  const agent = { kind: "agent", agentId: "chief", name: "Chief" } as const;
+  // The catalog's own program counts as approved, so an agent can move the check to it.
+  const updated = await runCauseEffect(service.eventChecks.templateUpdate(target, agent));
+  expect(updated.active).toBe(true);
+  expect(await runCauseEffect(service.eventChecks.environment(target))).toEqual([
+    { name: "FIXTURE_API_TOKEN", configured: true },
+  ]);
+  expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("baseline");
+  // A copy of that file that someone edited is not the reviewed program.
+  await writeFile(join(programs, "fixture@2.0.0.mjs"), `${next}\n// edited`);
+  expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("error");
+  expect(checks.get("chief", old.id).active).toBe(false);
+  expect(await runCauseEffect(service.eventChecks.environment(target))).toEqual([
+    { name: "FIXTURE_API_TOKEN", configured: false, reapprove: true },
+  ]);
+});
 it("lets an agent list, install and enable a template, rejects a non-boolean value, and has no field for private values", async () => {
   const shipped = template("1.0.0", PROGRAM);
   const { service, client, store } = await boot({

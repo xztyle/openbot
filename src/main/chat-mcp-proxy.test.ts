@@ -1,6 +1,7 @@
 // @vitest-environment node
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHmac } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -142,6 +143,74 @@ it("keeps accounts apart, rejects cached writes, revokes access and persists the
   } finally {
     await Promise.all(clients.map((client) => client.close()));
     await runCauseEffect(proxy.close());
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("accepts only random in-memory tokens: one built from the permissions file or an earlier run fails", async () => {
+  const root = await mkdtemp(join(tmpdir(), "openbot-chat-token-"));
+  const app = await fakeApp();
+  const configs = [config("job-two", app.url, "Bearer two")];
+  const policies = new ChatMcpPolicyStore(join(root, "permissions.json"));
+  await runCauseEffect(policies.load());
+  await runCauseEffect(policies.save("agent:one", { grants: [] }));
+  await runCauseEffect(policies.save("channel:group", { grants: [{ connectionId: "job-two", mode: "write" }] }));
+  const create = () =>
+    new ChatMcpProxy({
+      policies,
+      configs: () => configs,
+      chatKey: (id) => id,
+      runtimes: () => NO_MCP_TOOL_RUNTIMES,
+      authorization: () => Effect.succeed(null),
+    });
+  const call = (url: string, authorization: string) =>
+    fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1" } },
+      }),
+    }).then((response) => response.status);
+  let first = create();
+  let second: ChatMcpProxy | null = null;
+  try {
+    await runCauseEffect(first.start());
+    const granted = first.forThread("channel:group", configs)[0];
+    if (!granted) throw new Error("Missing the granted account.");
+    const url = granted.url.split("?")[0] ?? "";
+    const token = granted.headers[0]?.value ?? "";
+    const legitimate = await connect(granted);
+    expect((await legitimate.listTools()).tools.map((tool) => tool.name)).toEqual(["read", "send", "unknown"]);
+    await legitimate.close();
+    // What an agent in another chat could build from the file: the key the file used to hold.
+    const stored = JSON.parse(await readFile(policies.path, "utf8"));
+    expect(typeof stored.secret).toBe("string");
+    for (const secret of [String(stored.secret), ""]) {
+      const forged = createHmac("sha256", secret).update("channel:group\0job-two").digest("hex");
+      expect(await call(url, `Bearer ${forged}`)).toBe(403);
+    }
+    // The file holds a new unused value each time it is written, so reading it teaches nothing.
+    await runCauseEffect(policies.save("agent:one", { grants: [] }));
+    expect(JSON.parse(await readFile(policies.path, "utf8")).secret).not.toBe(stored.secret);
+    // A restart: the old token and the old URL are dead, and the new URL carries another token.
+    await runCauseEffect(first.close());
+    first = create();
+    await runCauseEffect(first.start());
+    // The port is new, so the old URL is refused or, if the system reused the port, answered 403.
+    expect([0, 403]).toContain(await call(url, token).catch(() => 0));
+    const reissued = first.forThread("channel:group", configs)[0];
+    expect(reissued?.headers[0]?.value).not.toBe(token);
+    // A pair that never got a URL has no token to guess.
+    second = create();
+    await runCauseEffect(second.start());
+    expect(await call(url.replace(/:\d+\//u, `:${second.port}/`), token)).toBe(403);
+  } finally {
+    await runCauseEffect(first.close());
+    if (second) await runCauseEffect(second.close());
     await app.close();
     await rm(root, { recursive: true, force: true });
   }

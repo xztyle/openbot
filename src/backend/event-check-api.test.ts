@@ -26,6 +26,7 @@ import { runCauseEffect } from "./effect-boundary";
 import { EventCheckApiReader } from "./event-check-api-reader";
 import { EventCheckEnvironment } from "./event-check-environment";
 import { EventCheckStore } from "./event-check-store";
+import { LOCAL_USER_ACTOR as TEST_USER } from "./security-actor";
 
 let root: string,
   service: AgentService | null = null;
@@ -102,18 +103,21 @@ afterEach(async () => {
 });
 it("runs shared API programs with separate masked variables, editable config, no idle inference and one wakeup", async () => {
   const { service, checks, client, environment, programs } = await boot();
-  const saved = await runCauseEffect(service.eventChecks.save(input())),
+  const saved = await runCauseEffect(service.eventChecks.save(input(), TEST_USER)),
     target = { agentId: "chief", id: saved.id };
   expect((await runCauseEffect(service.eventChecks.environment(target))).every((field) => !field.configured)).toBe(
     true,
   );
   expect((await runCauseEffect(service.eventChecks.test(target))).status).toBe("error");
-  await expect(runCauseEffect(service.eventChecks.save({ ...saved, active: true }))).rejects.toThrow();
+  await expect(runCauseEffect(service.eventChecks.save({ ...saved, active: true }, TEST_USER))).rejects.toThrow();
   const token = "private-api-token/secret=first";
   await Promise.all([
-    runCauseEffect(service.eventChecks.setEnvironment({ ...target, name: "TEST_API_TOKEN", value: token })),
+    runCauseEffect(service.eventChecks.setEnvironment({ ...target, name: "TEST_API_TOKEN", value: token }, TEST_USER)),
     runCauseEffect(
-      service.eventChecks.setEnvironment({ ...target, name: "SECOND_API_TOKEN", value: "second-private-api-token" }),
+      service.eventChecks.setEnvironment(
+        { ...target, name: "SECOND_API_TOKEN", value: "second-private-api-token" },
+        TEST_USER,
+      ),
     ),
   ]);
   expect(await runCauseEffect(service.eventChecks.environment(target))).toEqual([
@@ -125,7 +129,7 @@ it("runs shared API programs with separate masked variables, editable config, no
   expect(checks.state(saved.id).baseline).toBeNull();
   expect(client.requests.filter((request) => request.method === "turn/start")).toHaveLength(0);
   const paused = checks.get("chief", saved.id);
-  const active = await runCauseEffect(service.eventChecks.save({ ...paused, active: true }));
+  const active = await runCauseEffect(service.eventChecks.save({ ...paused, active: true }, TEST_USER));
   expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("baseline");
   await writeFile(join(programs, "data.json"), JSON.stringify({ text: "first", status: "done" }));
   expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("unchanged");
@@ -137,11 +141,14 @@ it("runs shared API programs with separate masked variables, editable config, no
   expect(JSON.stringify(client.requests)).not.toContain(token);
   expect(JSON.stringify(checks.pending())).not.toContain(token);
   const second = await runCauseEffect(
-    service.eventChecks.save({
-      ...input(),
-      name: "Second workspace",
-      source: { ...input().source, connectionId: "job-two" },
-    }),
+    service.eventChecks.save(
+      {
+        ...input(),
+        name: "Second workspace",
+        source: { ...input().source, connectionId: "job-two" },
+      },
+      TEST_USER,
+    ),
   );
   expect(
     (await runCauseEffect(service.eventChecks.environment({ agentId: "chief", id: second.id }))).every(
@@ -150,15 +157,20 @@ it("runs shared API programs with separate masked variables, editable config, no
   ).toBe(true);
   await expect(
     runCauseEffect(
-      service.eventChecks.setEnvironment({
-        agentId: "other",
-        id: saved.id,
-        name: "TEST_API_TOKEN",
-        value: "wrong-account-token",
-      }),
+      service.eventChecks.setEnvironment(
+        {
+          agentId: "other",
+          id: saved.id,
+          name: "TEST_API_TOKEN",
+          value: "wrong-account-token",
+        },
+        TEST_USER,
+      ),
     ),
   ).rejects.toThrow();
-  await runCauseEffect(service.eventChecks.setEnvironment({ ...target, name: "TEST_API_TOKEN", value: null }));
+  await runCauseEffect(
+    service.eventChecks.setEnvironment({ ...target, name: "TEST_API_TOKEN", value: null }, TEST_USER),
+  );
   expect(checks.get("chief", saved.id).active).toBe(false);
   expect(checks.state(saved.id).baseline).toBeNull();
   expect((await runCauseEffect(service.eventChecks.test(target))).status).toBe("error");
@@ -198,7 +210,9 @@ it("rejects unsafe variables, program escapes, and configuration secrets", async
     decodeEventCheckEnvironmentInput({ agentId: "chief", id: "x", name: "TEST_API_TOKEN", value: "xy" }),
   ).toThrow();
   await expect(
-    runCauseEffect(service.eventChecks.save({ ...input(), source: { ...input().source, toolName: "../outside.mjs" } })),
+    runCauseEffect(
+      service.eventChecks.save({ ...input(), source: { ...input().source, toolName: "../outside.mjs" } }, TEST_USER),
+    ),
   ).rejects.toThrow();
   expect(() =>
     decodeEventCheckInput({
@@ -211,24 +225,38 @@ it("rejects unsafe variables, program escapes, and configuration secrets", async
   ).toThrow();
 });
 
-it("records program failures, prevents incomplete pages, resets edited programs and cancels stale reads", async () => {
+it("records program failures, prevents incomplete pages, pauses edited programs until a person approves and cancels stale reads", async () => {
   const { service, checks, programs } = await boot();
-  let saved = await runCauseEffect(service.eventChecks.save(input()));
+  let saved = await runCauseEffect(service.eventChecks.save(input(), TEST_USER));
   const target = { agentId: "chief", id: saved.id };
   for (const name of ["TEST_API_TOKEN", "SECOND_API_TOKEN"])
-    await runCauseEffect(service.eventChecks.setEnvironment({ ...target, name, value: "private-test-value" }));
-  saved = await runCauseEffect(service.eventChecks.save({ ...checks.get("chief", saved.id), active: true }));
+    await runCauseEffect(
+      service.eventChecks.setEnvironment({ ...target, name, value: "private-test-value" }, TEST_USER),
+    );
+  saved = await runCauseEffect(service.eventChecks.save({ ...checks.get("chief", saved.id), active: true }, TEST_USER));
   await runCauseEffect(service.eventChecks.checkNow(target));
-  await writeFile(join(programs, "tickets.mjs"), `process.stdout.write(JSON.stringify({items:[],hasNextPage:true}));`);
+  // A program edit stops the check: its values go only to a program that a person approved.
+  const edit = async (code: string) => {
+    await writeFile(join(programs, "tickets.mjs"), code);
+    expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("error");
+    expect(checks.get("chief", saved.id).active).toBe(false);
+    await runCauseEffect(
+      service.eventChecks.save({ ...checks.get("chief", saved.id), active: true, approveProgram: true }, TEST_USER),
+    );
+  };
+  await edit(`process.stdout.write(JSON.stringify({items:[],hasNextPage:true}));`);
   expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("error");
   expect(checks.state(saved.id).baseline).toBeNull();
-  await writeFile(join(programs, "tickets.mjs"), `process.stdout.write(JSON.stringify({items:[],hasNextPage:false}));`);
+  await edit(`process.stdout.write(JSON.stringify({items:[],hasNextPage:false}));`);
   expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("baseline");
-  await writeFile(join(programs, "tickets.mjs"), `process.stdout.write('invalid json '+process.env.TEST_API_TOKEN);`);
+  await edit(`process.stdout.write('invalid json '+process.env.TEST_API_TOKEN);`);
   expect((await runCauseEffect(service.eventChecks.checkNow(target))).status).toBe("error");
   const captured = checks.get("chief", saved.id);
   await runCauseEffect(
-    service.eventChecks.setEnvironment({ ...target, name: "TEST_API_TOKEN", value: "rotated-private-value" }),
+    service.eventChecks.setEnvironment(
+      { ...target, name: "TEST_API_TOKEN", value: "rotated-private-value" },
+      TEST_USER,
+    ),
   );
   expect(checks.get("chief", saved.id).active).toBe(false);
   expect(checks.current(saved.id, captured.revision)).toBeNull();
@@ -245,15 +273,17 @@ it("stops stale program work and its descendants when private variables change",
 const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'inherit'});
 fs.writeFileSync('owned-child.pid',String(child.pid));fs.writeFileSync('ready','ready');setInterval(()=>{},1000);`,
   );
-  const saved = await runCauseEffect(service.eventChecks.save(input())),
+  const saved = await runCauseEffect(service.eventChecks.save(input(), TEST_USER)),
     target = { agentId: "chief", id: saved.id };
   for (const name of ["TEST_API_TOKEN", "SECOND_API_TOKEN"])
-    await runCauseEffect(service.eventChecks.setEnvironment({ ...target, name, value: "private-test-value" }));
+    await runCauseEffect(
+      service.eventChecks.setEnvironment({ ...target, name, value: "private-test-value" }, TEST_USER),
+    );
   const reading = runCauseEffect(service.eventChecks.test(target));
   await waitFor(() => existsSync(join(programs, "ready")));
   const pid = Number(readFileSync(join(programs, "owned-child.pid"), "utf8"));
   await runCauseEffect(
-    service.eventChecks.setEnvironment({ ...target, name: "TEST_API_TOKEN", value: "new-private-value" }),
+    service.eventChecks.setEnvironment({ ...target, name: "TEST_API_TOKEN", value: "new-private-value" }, TEST_USER),
   );
   expect((await reading).status).toBe("error");
   await waitFor(() => {

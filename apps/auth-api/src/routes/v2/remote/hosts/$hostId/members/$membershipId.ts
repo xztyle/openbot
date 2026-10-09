@@ -5,6 +5,7 @@ import { readJsonObject } from "../../../../../../server/json-body";
 import {
   apiError,
   remoteControlPlaneErrorResponse,
+  requestInteractiveUser,
   requestRemoteControlPlane,
   requestUser,
 } from "../../../../../../server/request-auth";
@@ -22,6 +23,9 @@ export const Route = createFileRoute("/v2/remote/hosts/$hostId/members/$membersh
               return apiError(400, "invalid_remote_request", "The member role is invalid.");
             if (body.reactivate !== undefined && body.reactivate !== true)
               return apiError(400, "invalid_remote_request", "The member status is invalid.");
+            // A server's own sign-in may lower a role. Making an admin, or bringing back a removed
+            // member, needs a person's own sign-in.
+            if (body.role === "admin" || body.reactivate === true) yield* requestInteractiveUser(request);
             yield* requestRemoteControlPlane().changeMembership(user.id, {
               hostId: params.hostId,
               membershipId: params.membershipId,

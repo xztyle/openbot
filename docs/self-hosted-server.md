@@ -42,6 +42,7 @@ open a database that a newer one migrated. It also refuses a computer that is a 
 | `openbot login [<email>] [--name <name>]` | Sign in with an email code. |
 | `openbot logout` | Sign out. The server is not available until the next sign-in. |
 | `openbot name <name>` | Change the server name. |
+| `openbot audit [count]` | Show the newest security changes: who changed an event check, an app connection, auto-approve or another agent. Names only, never values. |
 | `openbot logs [-f]` | Show the journal of `openbot.service`. |
 | `sudo openbot start\|stop\|restart` | Control `openbot.service`. |
 | `sudo openbot update` | Download, check and install the newest release now. |
@@ -92,7 +93,9 @@ and starts the service again.
 
 The `openbot` command talks to main over HTTP on a Unix socket, with form bodies and `key=value`
 text answers, so it needs only `curl`. The routes are `GET /v1/status`, `POST /v1/login/start`,
-`POST /v1/login/verify`, `POST /v1/name` and `POST /v1/logout`.
+`POST /v1/login/verify`, `POST /v1/name`, `POST /v1/logout` and `GET /v1/audit?limit=N`. The last one
+answers with the newest rows of the security audit file, as `row<N>=<JSON>` lines. `openbot audit [count]`
+shows them. A row has names and never a value.
 
 Threat model:
 
@@ -105,6 +108,28 @@ Threat model:
   code back, and a value cannot add a line to an answer. A body is at most 4 KiB.
 - Server mode starts only in a packaged Linux build with `OPENBOT_SERVER=1`, and never on a hosted
   server, which signs in with its claim.
+
+## The session of the server
+
+`openbot login` gives the server a session on the account server. The session never expires when
+the account server lists the address of the server as a durable source address
+(`AUTH_DURABLE_SOURCE_IPS`), which a private deployment does. Anyone who reads the token from the
+server, for example an agent that has full access, would get a lasting owner credential. So the
+account server treats a session that never expires and is not a phone as the credential of a server:
+it works as the host, and it cannot do what only a person on a device should do.
+
+| The session of a server can | It cannot |
+| --- | --- |
+| Sign in, sign out, read the account and the profile, set the name and the avatar | Make a Mobile Connect code, or list or end the phones and other sessions of the account |
+| Publish and register the host, get its ticket, and send the live activity | Open a remote session to a host (the owner's own client does this), or join a team server |
+| Route webhooks, Slack and Discord to the host | Reach billing, hosted servers or their checkout |
+| List and make `member` invitations, list members, lower a role, remove a member | Make an `admin` or a permanent invitation, make an admin, or bring back a removed member |
+
+An `admin` invitation or a role change to admin must come from the owner's app or the website, with
+the owner's own sign-in. The refusal is `403 host_session_restricted`. The restriction needs no
+database change: the account server derives it from the session expiry and the phone table. A
+deployment that sets no default session lifetime has no durable class and no restriction. To end a
+server's session, sign out with `openbot logout` or end it in the account's sessions list.
 
 ## Not confirmed
 

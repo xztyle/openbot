@@ -36,6 +36,7 @@ import { agentMcpServers } from "../mcp-provider-shapes";
 import { CHAT_VISUAL_PREVIEW_DEFAULT_WIDTH, htmlPreviewToolSchema, htmlRenderToolSchema } from "../openbot-tools";
 import { type AppServerRequest, type DynamicToolCallParams, type DynamicToolResult, isRecord } from "../protocol";
 import { handleRoutineFlowTool, type RoutineFlowTools } from "../routine-flows/routine-flow-tools";
+import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "../security-audit-log";
 import type { StoredStateFailure } from "../stored-state-effects";
 import { AgentInterruptTool } from "./agent-interrupt-tool";
 import type { AgentMemories } from "./agent-memories";
@@ -116,6 +117,8 @@ export interface OpenBotToolRouterOptions {
   hostedSites: HostedSiteCoordinator;
   routines: RoutineScheduler;
   eventChecks: EventCheckScheduler;
+  /** Receives the tool calls that change another agent. */
+  audit?: SecurityAuditSink;
   memories: AgentMemories;
   drain: DrainScheduler;
   tables: AgentTables | null;
@@ -127,6 +130,17 @@ export interface OpenBotToolRouterOptions {
   visualPreview?: ChatVisualPreviewHost | null;
   hooks: OpenBotToolRouterHooks;
 }
+
+/** Tools that take an `agentId` and change that agent's profile, instructions or skills. */
+const CROSS_AGENT_TOOLS = new Set([
+  "update_profile",
+  "create_routine",
+  "update_routine",
+  "delete_routine",
+  "install_local_skill",
+  "set_skill_enabled",
+  "uninstall_skill",
+]);
 
 /**
  * Owns the answer to every request a provider process sends to OpenBot: approvals and prompts go to
@@ -148,6 +162,7 @@ export class OpenBotToolRouter {
   readonly #hostedSites: HostedSiteCoordinator;
   readonly #routines: RoutineScheduler;
   readonly #eventChecks: EventCheckScheduler;
+  readonly #audit: SecurityAuditSink;
   readonly #memories: AgentMemories;
   readonly #drain: DrainScheduler;
   readonly #tables: AgentTables | null;
@@ -172,6 +187,7 @@ export class OpenBotToolRouter {
     this.#hostedSites = options.hostedSites;
     this.#routines = options.routines;
     this.#eventChecks = options.eventChecks;
+    this.#audit = options.audit ?? NO_SECURITY_AUDIT;
     this.#memories = options.memories;
     this.#drain = options.drain;
     this.#tables = options.tables;
@@ -395,6 +411,21 @@ export class OpenBotToolRouter {
     };
   });
 
+  /** A tool that changes another agent goes to the audit file, with the field names and no values. */
+  #auditCrossAgent(params: DynamicToolCallParams, senderAgentId: string) {
+    const args = params.arguments;
+    if (!CROSS_AGENT_TOOLS.has(params.tool) || !isRecord(args)) return Effect.void;
+    const target = args.agentId;
+    if (typeof target !== "string" || target === senderAgentId) return Effect.void;
+    const sender = this.#hooks.listAgents().find((agent) => agent.id === senderAgentId);
+    return this.#audit.record({
+      actor: auditActor({ kind: "agent", agentId: senderAgentId, name: sender?.name ?? senderAgentId }),
+      action: "agent.cross-agent-tool",
+      target: { kind: "agent", id: target },
+      names: [params.tool, ...Object.keys(args).filter((key) => key !== "agentId" && args[key] !== undefined)],
+    });
+  }
+
   /**
    * The provider, model and effort an `update_profile` call names, checked against what the CLIs list
    * now. Like `create_agent`, a model or an effort that is not listed is an error that names the valid
@@ -437,6 +468,7 @@ export class OpenBotToolRouter {
   ) {
     const senderAgentId = this.#conversation.agentForThread(params.threadId);
     if (!senderAgentId) throw new Error("The sending OpenBot agent is unknown.");
+    yield* this.#auditCrossAgent(params, senderAgentId);
 
     if (LOCAL_SKILL_TOOL_DEFINITIONS.some((tool) => tool.name === params.tool)) {
       const reportFailure = (error: unknown) =>
@@ -607,7 +639,9 @@ export class OpenBotToolRouter {
     );
     if (sidebarResult) return sidebarResult;
 
-    const checkResult = yield* handleEventCheckTool(params, senderAgentId, this.#eventChecks);
+    const checkResult = yield* handleEventCheckTool(params, senderAgentId, this.#eventChecks, () =>
+      this.#requireAgent(senderAgentId),
+    );
     if (checkResult) return checkResult;
     const routineResult = yield* this.#routines.handleTool(params, senderAgentId);
     if (routineResult) return routineResult;
@@ -846,6 +880,14 @@ export class OpenBotToolRouter {
         sidebar && sectionId !== null
           ? yield* sidebar.withProfileAssignment(sectionId, create).pipe(toToolOperationFailed)
           : yield* create().pipe(toToolOperationFailed);
+      yield* this.#audit.record({
+        actor: auditActor({ kind: "agent", agentId: senderAgentId, name: caller.name }),
+        action: "agent.create",
+        target: { kind: "agent", id: created.id, name: created.name },
+        names: Object.entries(args)
+          .filter(([, value]) => value !== undefined)
+          .map(([key]) => key),
+      });
       return { success: true, contentItems: [{ type: "inputText", text: JSON.stringify(created) }] };
     },
     Effect.catchDefect((cause) => Effect.fail(new ToolOperationFailed({ cause }))),

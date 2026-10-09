@@ -14,6 +14,9 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.environment": "Private variables (.env)",
   "agentSettings.eventCheck.environmentHelp":
     "Values stay on this host and are never returned to the agent. Replacing or removing a value pauses the check and resets its baseline.",
+  "agentSettings.eventCheck.reapproveHelp":
+    "The program “{program}” or the address settings of this check changed after you added these values. The check is paused and the values are not used. Read the program, then approve it. Your values stay.",
+  "agentSettings.eventCheck.approveProgram": "Approve this program",
   "agentSettings.eventCheck.variableSet": "Set",
   "agentSettings.eventCheck.variableMissing": "Missing",
   "agentSettings.eventCheck.variablePlaceholder": "Enter a new value; saved values are hidden",

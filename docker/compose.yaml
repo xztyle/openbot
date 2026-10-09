@@ -13,6 +13,21 @@ services:
       # The Docker default profile, with user namespaces for the Electron sandbox.
       - seccomp=./seccomp.json
       - no-new-privileges:true
+    # The image runs as UID 1000 and has no SUID file, so it needs no capability of its own. The only
+    # one that it keeps is SYS_CHROOT: the Electron sandbox changes the root of a process inside its
+    # user namespace, and the seccomp profile allows `chroot` only to a container that has the capability.
+    # A compromised agent process gets none of the others (CHOWN, DAC_OVERRIDE, SETUID, NET_RAW, ...).
+    # `ping` does not work without NET_RAW. See docs/docker.md.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_CHROOT
+    # Counts threads too. This stops a fork bomb of an agent from using all process slots of the host;
+    # it is far above what Chromium, the providers and a large build use together.
+    pids_limit: 8192
+    # A limit keeps a runaway agent from taking all memory of the host. Set it below the memory of
+    # your host, for example 75% of it, and remove the comment mark:
+    # mem_limit: 6g
     # Chromium uses shared memory. The Docker default of 64 MB is too small.
     shm_size: 1g
     # OpenBot stops its agents and closes the database before it exits.

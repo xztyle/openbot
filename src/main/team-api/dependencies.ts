@@ -1,6 +1,7 @@
 import type { Effect } from "effect";
 import type { ChannelService } from "../../backend/channel-service";
 import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
+import type { SecurityAuditLog } from "../../backend/security-audit-log";
 import type { AgentAdminSettingsService } from "../agent-admin-settings";
 import type { AgentMarketplaceService } from "../agent-marketplace-service";
 import type { AgentTemplateService } from "../agent-template-service";
@@ -244,6 +245,8 @@ export interface TeamApiOptions {
   mcpOAuth?: RemoteMcpSignIn;
   chatMcp?: ChatMcpService;
   eventChecks?: EventCheckScheduler;
+  /** `security-audit-v1`: admin-only read of the security audit file. */
+  securityAudit?: Pick<SecurityAuditLog, "read">;
   /** Starts and waits for the managed tool runtimes behind the MCP save, enable, and test routes. */
   mcpToolRuntimePreparation?: McpToolRuntimePreparation;
   storage?: TeamApiStorage;

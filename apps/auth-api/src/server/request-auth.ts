@@ -220,6 +220,17 @@ export function requestUser(request: Request) {
   return requestAuthService().authenticate(token);
 }
 
+/**
+ * The signed-in person, refused with 403 when the session belongs to a server. Use it for what a
+ * server's own credential must not do: pair a phone, open a session to its host as the owner, join a
+ * team server, reach billing or hosted servers, and make an admin or permanent invitation.
+ */
+export function requestInteractiveUser(request: Request) {
+  const token = bearerToken(request);
+  if (!token) return Effect.succeed(null);
+  return requestAuthService().authenticateInteractive(token);
+}
+
 export function skillErrorResponse(error: unknown): Response {
   if (error instanceof MarketplaceQueryError) return apiError(400, error.code, error.message);
   if (error instanceof MarketplaceRateLimitError) {

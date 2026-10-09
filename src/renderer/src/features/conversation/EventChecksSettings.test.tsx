@@ -128,3 +128,32 @@ it("shows agent-defined configuration and masked private values without discardi
   await fireEvent.click(screen.getByRole("button", { name: "Remove value" }));
   await screen.findByLabelText(/LINEAR_API_TOKEN — Missing/);
 });
+
+it("asks to approve a program that changed, and sends the approval only from that button", async () => {
+  const api = createMockEventChecks();
+  const check = await api.save({
+    ...input,
+    active: false,
+    source: {
+      kind: "api",
+      connectionId: "Linear job one",
+      toolName: "linear.mjs",
+      variables: ["LINEAR_API_TOKEN"],
+      configuration: [],
+      argumentsJson: "{}",
+      cursorArgument: "cursor",
+      nextCursorPointer: "/cursor",
+    },
+  });
+  vi.spyOn(api, "environment").mockResolvedValue([{ name: "LINEAR_API_TOKEN", configured: false, reapprove: true }]);
+  const save = vi.spyOn(api, "save");
+  render(() => (
+    <EventChecksSettings api={api} agentId="chief" onBack={vi.fn()} onClose={vi.fn()} onCountChange={vi.fn()} />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: "Linear tickets" }));
+  await screen.findByText(/changed after you added these values/);
+  expect(save).not.toHaveBeenCalled();
+  await fireEvent.click(screen.getByRole("button", { name: "Approve this program" }));
+  await waitFor(() => expect(save).toHaveBeenCalledOnce());
+  expect(save.mock.calls[0]?.[0]).toMatchObject({ id: check.id, approveProgram: true });
+});

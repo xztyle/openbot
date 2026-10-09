@@ -13,6 +13,7 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import type { AgentService } from "../backend/agent-service";
 import { causeHelpers } from "../backend/effect-boundary";
+import { LOCAL_USER_ACTOR, type SecurityActor } from "../backend/security-actor";
 import type { ApprovalAutomation } from "./approval-automation-store";
 
 export interface AgentAdminSettingsDependencies {
@@ -22,7 +23,10 @@ export interface AgentAdminSettingsDependencies {
 
 export interface AgentAdminSettingsService {
   read(agentId: string): AgentAdminSettings;
-  update(input: UpdateAgentAdminSettingsInput): Effect.Effect<AgentAdminSettings, AgentSettingsFailure>;
+  update(
+    input: UpdateAgentAdminSettingsInput,
+    actor?: SecurityActor,
+  ): Effect.Effect<AgentAdminSettings, AgentSettingsFailure>;
 }
 
 export class AgentNotFoundError extends Error {}
@@ -46,11 +50,11 @@ export function createAgentAdminSettings({
   }
   return {
     read: (agentId) => settings(requireAgent(agentId)),
-    update(input) {
-      return update(input);
+    update(input, actor = LOCAL_USER_ACTOR) {
+      return update(input, actor);
     },
   };
-  function update({ agentId, access, autoApprove }: UpdateAgentAdminSettingsInput) {
+  function update({ agentId, access, autoApprove }: UpdateAgentAdminSettingsInput, actor: SecurityActor) {
     return Effect.fn("AgentAdminSettings.update")(function* () {
       let agent = yield* Effect.try({
         try: () => requireAgent(agentId),
@@ -58,7 +62,7 @@ export function createAgentAdminSettings({
       });
       if (access !== undefined) agent = yield* agents.updateAgent({ agentId, access }).pipe(toAgentSettingsFailure);
       if (autoApprove !== undefined)
-        yield* approvalAutomation.set({ agentId, autoApprove }).pipe(toAgentSettingsFailure);
+        yield* approvalAutomation.set({ agentId, autoApprove }, actor).pipe(toAgentSettingsFailure);
       return settings(agent);
     })().pipe(Effect.uninterruptible);
   }

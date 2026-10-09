@@ -2,6 +2,7 @@ import { parseUpdateAgentAdminSettingsInput } from "@openbot/contracts/ipc";
 import { AGENT_ADMIN_CAPABILITY, AGENT_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/agent-admin-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
+import { memberActor } from "../../backend/security-actor";
 import { AgentNotFoundError } from "../agent-admin-settings";
 import type { TeamApiAdmin } from "./dependencies";
 import { HttpError } from "./http-error";
@@ -37,7 +38,7 @@ export async function routeAgentAdmin(
     } catch (error) {
       throw new HttpError(400, error instanceof Error ? error.message : "Invalid agent settings update.");
     }
-    return json(200, await runCauseEffect(settings.update(input)));
+    return json(200, await runCauseEffect(settings.update(input, memberActor(member))));
   } catch (error) {
     if (error instanceof AgentNotFoundError) throw new HttpError(404, error.message);
     throw error;

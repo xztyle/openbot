@@ -11,6 +11,7 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
+import { memberActor } from "../../backend/security-actor";
 import { HttpError } from "./http-error";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
 import { readJson, requireAdmin } from "./request-helpers";
@@ -31,13 +32,17 @@ export async function routeEventCheckTemplates(
       result = await runCauseEffect(checks.templateList());
       break;
     case EVENT_CHECK_TEMPLATES_ROUTES.install:
-      result = await runCauseEffect(checks.templateInstall(decodeEventCheckTemplateInstallInput(body)));
+      result = await runCauseEffect(
+        checks.templateInstall(decodeEventCheckTemplateInstallInput(body), memberActor(context.member)),
+      );
       break;
     case EVENT_CHECK_TEMPLATES_ROUTES.update:
-      result = await runCauseEffect(checks.templateUpdate(decodeEventCheckTarget(body)));
+      result = await runCauseEffect(checks.templateUpdate(decodeEventCheckTarget(body), memberActor(context.member)));
       break;
     case EVENT_CHECK_TEMPLATES_ROUTES.adopt:
-      result = await runCauseEffect(checks.templateAdopt(decodeEventCheckTemplateAdoptInput(body)));
+      result = await runCauseEffect(
+        checks.templateAdopt(decodeEventCheckTemplateAdoptInput(body), memberActor(context.member)),
+      );
       break;
     default:
       return "unmatched";

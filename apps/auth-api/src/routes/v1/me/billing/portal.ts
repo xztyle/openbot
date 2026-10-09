@@ -8,7 +8,7 @@ import {
   billingErrorResponse,
   json,
   requestBillingService,
-  requestUser,
+  requestInteractiveUser,
 } from "../../../../server/request-auth";
 
 export const Route = createFileRoute("/v1/me/billing/portal")({
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/v1/me/billing/portal")({
       POST: ({ request }) =>
         runApiResponse(
           Effect.gen(function* () {
-            const user = yield* requestUser(request);
+            const user = yield* requestInteractiveUser(request);
             if (!user) return apiError(401, "unauthorized", "Sign in is required.");
             const billing = requestBillingService();
             if (!billing) return apiError(503, "billing_unavailable", "Billing is not available.");

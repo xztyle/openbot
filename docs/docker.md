@@ -22,6 +22,7 @@ With `docker run`:
 curl -fsSLO https://raw.githubusercontent.com/nightly-labs/openbot/main/docker/seccomp.json
 docker run -d --name openbot --restart unless-stopped \
   --security-opt seccomp=seccomp.json --security-opt no-new-privileges:true \
+  --cap-drop ALL --cap-add SYS_CHROOT --pids-limit 8192 \
   --shm-size 1g --stop-timeout 60 \
   -v openbot-data:/data \
   ghcr.io/nightly-labs/openbot:latest
@@ -37,6 +38,8 @@ The options in both examples are necessary:
 | Option | Why |
 | --- | --- |
 | `seccomp=seccomp.json` | The Electron sandbox makes user namespaces. The default seccomp profile of Docker refuses them, and the container stops with a message. See [Security](#security). |
+| `--cap-drop ALL --cap-add SYS_CHROOT` | The image needs no capability except `chroot`, which the Electron sandbox uses in its user namespace. See [Security](#security). |
+| `--pids-limit 8192` | Counts threads too. A fork bomb of an agent cannot use all process slots of the host. Raise it only if a large build reaches it. |
 | `--shm-size 1g` | Chromium uses shared memory. The Docker default of 64 MB is too small. |
 | `--stop-timeout 60` | OpenBot stops its agents and closes its database before it exits. |
 | `-v openbot-data:/data` | All data is in `/data`. Without a volume, it goes away with the container. |
@@ -84,7 +87,7 @@ protect a home folder. To back it up, stop the container and copy the volume.
 
 ## Commands
 
-In the container, `openbot status`, `login`, `logout`, `name` and `version` work as on a
+In the container, `openbot status`, `login`, `logout`, `name`, `audit` and `version` work as on a
 [self-hosted server](self-hosted-server.md#commands). Do the other tasks with Docker on the host:
 
 | Task | Command |
@@ -118,10 +121,19 @@ environment of OpenBot, so they can read these values.
   make user namespaces, which gives processes in the container more of the kernel to call. The kernel
   still refuses other namespaces to a process that is not in its own user namespace. Do not use
   `seccomp=unconfined`, `--privileged` or `--no-sandbox` instead.
+- **No capabilities.** The compose file drops all capabilities and adds back `SYS_CHROOT`. A process
+  of an agent then cannot change file owners, ignore file permissions, send raw packets or change its
+  user, even in a bug of a tool. `ping` does not work. The seccomp profile allows `chroot` only to a
+  container that has `SYS_CHROOT`, and the sandbox of Chromium uses it. The start prints a warning if
+  `chroot` is not possible. Set a memory limit (`mem_limit` in the compose file) below the memory of the host.
 - **Not root.** The image runs as UID 1000. Root owns the release, so agents cannot change it. The
   release has no SUID file. `no-new-privileges` keeps it that way.
 - **Agents have full access in the container.** They run commands, change all of `/data` and use the
-  network. The container is the boundary. Do not mount the Docker socket, your home folder or another
+  network. The container is the boundary. That includes the keyring password file in `/data`, the
+  encrypted private variables of [event checks](event-checks.md#private-variables-and-approval),
+  and the environment of every running process in the container (`/proc/<pid>/environ`). The
+  container does not protect these values from a compromised agent. See the
+  [secret sidecar design](architecture/secret-sidecar.md) for the change that does. Do not mount the Docker socket, your home folder or another
   host folder that agents must not change.
 - **Check the image.** Each release image has a build provenance attestation:
 
@@ -155,6 +167,9 @@ does not use systemd.
   scripts of this image: the start with the sandbox on, `openbot status`, a restart, a new container
   on the same volume after a kill, a stop that exits with 0, and the messages for a missing seccomp
   profile and for a volume that the user cannot write. The release workflow also starts each image.
+- Not tested: the `cap_drop: ALL` and `pids_limit` options. They were set after reading the seccomp
+  profile and the entrypoint, not in a running container. If the container stops with a sandbox
+  message, remove `cap_drop` and `cap_add` first, and report it.
 - Not tested: a sign-in with `openbot login` in a container, remote use of a container from the app,
   Podman, Kubernetes, rootless Docker, and hosts that restrict user namespaces with AppArmor, such as
   Ubuntu 23.10 or newer. On such a host, the container can need an AppArmor profile that permits

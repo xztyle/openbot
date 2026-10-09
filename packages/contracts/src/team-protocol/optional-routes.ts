@@ -24,6 +24,7 @@ import { PROVIDERS_ADMIN_CODECS } from "./providers-v1";
 import { PROVIDERS_RUNTIMES_V2_CODECS } from "./providers-v2";
 import { PROVIDERS_SIGN_IN_V3_CODECS } from "./providers-v3";
 import { PROVIDERS_V4_CODECS } from "./providers-v4";
+import { SECURITY_AUDIT_CODECS } from "./security-audit-v1";
 import { SHARED_TABLES_CODECS } from "./shared-tables-v1";
 import { SKILLS_ADMIN_CODECS } from "./skills-admin-v1";
 import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
@@ -34,6 +35,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...EVENT_CHECKS_CODECS,
   ...EVENT_CHECK_API_CODECS,
   ...EVENT_CHECK_TEMPLATES_CODECS,
+  ...SECURITY_AUDIT_CODECS,
   ...MCP_CHAT_CODECS,
   ...MCP_OAUTH_CODECS,
   ...AGENT_ADMIN_CODECS,

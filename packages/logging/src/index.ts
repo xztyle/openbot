@@ -49,6 +49,8 @@ const CREDENTIAL_ASSIGNMENT = new RegExp(
 // part of a diagnostic that names what failed.
 const KNOWN_SECRET_PREFIXES =
   /(?<![A-Za-z0-9_-])(?:sk-ant|sk-|xai-|ghp_|gho_|ghu_|ghr_|ghs_|github_pat_|AKIA|xox[abeoprs]-|xapp-)[A-Za-z0-9._-]{8,}/g;
+// The same rule without the `g` flag, whose `lastIndex` makes `test` depend on the previous call.
+const KNOWN_SECRET_PREFIXES_ONCE = new RegExp(KNOWN_SECRET_PREFIXES.source, "u");
 // Bounded for the same reason as the label above, and more sharply: with `+`
 // on the local part, every character of a long payload consumed the rest of
 // the run looking for an `@` and then backtracked over all of it.
@@ -127,6 +129,28 @@ function uriEncoded(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+// Longer list than the log rule above, for refusing a value before it is stored. A log line that
+// shows `rnd_state_value` as `[redacted]` loses a little; a form that refuses it is a visible error.
+// So each prefix here needs a long random tail.
+const CREDENTIAL_TOKEN =
+  /(?<![A-Za-z0-9_-])(?:sk-ant-|sk-|xai-|ghp_|gho_|ghu_|ghr_|ghs_|github_pat_|AKIA|xox[abeoprs]-|xapp-|lin_api_|lin_oauth_|rnd_|phx_|phc_|glpat-|sk_live_|rk_live_|AIza)[A-Za-z0-9._-]{16,}/u;
+const CREDENTIAL_BEARER = /Bearer\s+[A-Za-z0-9._~+/=-]{16,}/iu;
+
+/**
+ * Whether ordinary text holds a credential that a form must refuse to store: a token with a known
+ * provider prefix, a bearer token, or a value that was registered with `registerSecretValue`. It
+ * does not use the label rules of `redactText`, which also flag an empty `"pageToken": ""`. The
+ * result says nothing about which part matched, so a caller can name the field and never the value.
+ */
+export function containsCredential(value: string): boolean {
+  if (!value) return false;
+  if (CREDENTIAL_TOKEN.test(value) || CREDENTIAL_BEARER.test(value) || KNOWN_SECRET_PREFIXES_ONCE.test(value))
+    return true;
+  for (const secret of registeredSecrets)
+    if (secret.length >= MIN_REGISTERED_SECRET_LENGTH && value.includes(secret)) return true;
+  return false;
 }
 
 /** Whether a key or variable name labels a secret, by the same rule the key redaction uses. */

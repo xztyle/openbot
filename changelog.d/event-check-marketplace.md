@@ -13,3 +13,5 @@
 - Fix: Claude agents had no `openbot` tools after the template tools shipped. One tool's schema
   could not be converted, and that removed the whole tool set. The install tool now takes its
   settings as a list, and a test keeps such schemas out.
+- Show agents the real reason when an event check or template action is refused, such as an update
+  that needs your approval, instead of a generic "app check failed" message.

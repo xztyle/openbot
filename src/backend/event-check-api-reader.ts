@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import type { EventCheckEnvironment } from "./event-check-environment";
 import { runEventCheckProgram } from "./event-check-program";
 import type { EventCheckReadSession } from "./event-check-reader";
+import { EventCheckRefusal } from "./event-check-refusal";
 import { type McpOperationError, mcpSync } from "./mcp-effects";
 import { isPathInside } from "./path-containment";
 
@@ -21,11 +22,11 @@ export class EventCheckApiReader {
   #program(input: EventCheckInput): { path: string; digest: string } {
     const name = input.source.toolName;
     if (isAbsolute(name) || ![".mjs", ".js", ".py", ".sh"].includes(extname(name)))
-      throw new Error(sourceText("error.backend.eventCheckProgram"));
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgram"));
     const root = realpathSync(this.programsRoot),
       path = realpathSync(join(root, name));
     if (!isPathInside(root, path) || !statSync(path).isFile() || statSync(path).size > 1_048_576)
-      throw new Error(sourceText("error.backend.eventCheckProgram"));
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgram"));
     return { path, digest: createHash("sha256").update(readFileSync(path)).digest("hex") };
   }
   definition(input: EventCheckInput): EventCheckInput {

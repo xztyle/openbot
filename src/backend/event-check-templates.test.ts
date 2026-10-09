@@ -466,3 +466,24 @@ it("lets an agent list, install and enable a template, rejects a non-boolean val
   expect(early.success).toBe(false);
   expect((await runCauseEffect(service.eventChecks.list({ agentId: "chief" })))[0]?.active).toBe(false);
 });
+
+it("tells an agent why a template update was refused, instead of a generic failure", async () => {
+  const { service, client, store } = await boot(template("1.0.0", PROGRAM));
+  await runCauseEffect(service.sendMessage({ agentId: "chief", text: "Update the check." }));
+  await waitFor(() => Boolean(store.activeProviderSession("chief")?.externalSessionId));
+  const threadId = store.activeProviderSession("chief")?.externalSessionId;
+  if (!threadId) throw new Error("Provider session did not start.");
+  const call = async (tool: string, args: unknown) => {
+    const { result } = await callOpenBotTool(client, threadId, tool, args);
+    const items = paramsRecord(result)?.contentItems;
+    return Array.isArray(items) ? (getString(items[0], "text") ?? "") : "";
+  };
+  const installed = await runCauseEffect(
+    service.eventChecks.templateInstall(request({ workspace: "alpha" }), TEST_USER),
+  );
+  // The check already runs the shipped version, so the update has nothing to do. The reason must show.
+  const current = await call("update_event_check_template", { id: installed.id });
+  expect(current).toContain("already uses the latest version");
+  const unlinked = await call("update_event_check_template", { id: "00000000-0000-4000-8000-000000000000" });
+  expect(unlinked.length).toBeGreaterThan(0);
+});

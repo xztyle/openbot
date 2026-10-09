@@ -40,6 +40,8 @@ export const messages = defineMessages("error.backend", {
   "error.backend.eventCheckUnsupported": "This host does not support event checks.",
   "error.backend.eventCheckTemplateUnknown": "This host does not have that event check template.",
   "error.backend.eventCheckTemplateField": "Fill in the required setting “{name}” before you install this event check.",
+  "error.backend.eventCheckTemplateWrite":
+    "OpenBot could not write the template program into OpenBot/Shared/Watchers. Check that the folder exists and has space and permissions.",
   "error.backend.eventCheckTemplateBoolean": "“{name}” must be true or false.",
   "error.backend.eventCheckTemplateProgram":
     "The program for this template does not match the reviewed version. Nothing was installed.",

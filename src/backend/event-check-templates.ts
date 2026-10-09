@@ -8,6 +8,7 @@ import {
 } from "@openbot/contracts/event-check-templates";
 import type { EventCheck, EventCheckApiSource, EventCheckInput } from "@openbot/contracts/event-checks";
 import { sourceText } from "@openbot/i18n/source";
+import { EventCheckRefusal } from "./event-check-refusal";
 import { isPathInside } from "./path-containment";
 
 const digestOf = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
@@ -31,20 +32,20 @@ export class EventCheckTemplates {
     for (const template of templates)
       for (const program of [template.program, ...(template.earlierPrograms ?? [])])
         if (digestOf(this.#source(program.file)) !== program.digest)
-          throw new Error(sourceText("error.backend.eventCheckTemplateProgram"));
+          throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateProgram"));
     this.#templates = templates;
     return templates;
   }
   get(slug: string): EventCheckTemplate {
     const template = this.list().find((entry) => entry.slug === slug);
-    if (!template) throw new Error(sourceText("error.backend.eventCheckTemplateUnknown"));
+    if (!template) throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateUnknown"));
     return template;
   }
   #source(file: string): string {
     const root = realpathSync(join(this.catalogRoot, "programs"));
     const path = realpathSync(join(root, file));
     if (!isPathInside(root, path) || !statSync(path).isFile())
-      throw new Error(sourceText("error.backend.eventCheckProgram"));
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgram"));
     return path;
   }
   /** The name the program takes in the shared folder. A version in the name keeps an old instance on its own file. */
@@ -58,15 +59,19 @@ export class EventCheckTemplates {
     const target = join(this.programsRoot, name);
     if (existsSync(target)) {
       if (digestOf(target) !== template.program.digest)
-        throw new Error(sourceText("error.backend.eventCheckTemplateProgram"));
+        throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateProgram"));
       return name;
     }
     const staged = `${target}.${process.pid}.tmp`;
     try {
       copyFileSync(this.#source(template.program.file), staged);
       if (digestOf(staged) !== template.program.digest)
-        throw new Error(sourceText("error.backend.eventCheckTemplateProgram"));
+        throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateProgram"));
       renameSync(staged, target);
+    } catch (error) {
+      if (error instanceof EventCheckRefusal) throw error;
+      // A file system failure holds a path and a code, never a value. The user can act on this sentence.
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateWrite"));
     } finally {
       rmSync(staged, { force: true });
     }
@@ -115,13 +120,13 @@ export class EventCheckTemplates {
   install(template: EventCheckTemplate, request: EventCheckTemplateInstallInput, now: Date): EventCheckInput {
     const known = new Set(template.configuration.map((field) => field.name));
     if (Object.keys(request.configuration).some((name) => !known.has(name)))
-      throw new Error(sourceText("error.backend.eventCheckTemplateUnknown"));
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateUnknown"));
     const configuration = template.configuration.map((field) => {
       const value = (request.configuration[field.name] ?? field.value).trim();
       if (field.required && !value)
-        throw new Error(sourceText("error.backend.eventCheckTemplateField", { name: field.label }));
+        throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateField", { name: field.label }));
       if (field.type === "boolean" && value !== "true" && value !== "false")
-        throw new Error(sourceText("error.backend.eventCheckTemplateBoolean", { name: field.label }));
+        throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateBoolean", { name: field.label }));
       return { name: field.name, label: field.label, description: field.description, value };
     });
     return {
@@ -155,9 +160,9 @@ export class EventCheckTemplates {
   upgrade(template: EventCheckTemplate, check: EventCheck): EventCheckInput {
     const source = check.source;
     if (source.kind !== "api" || source.template?.slug !== template.slug)
-      throw new Error(sourceText("error.backend.eventCheckTemplateNotLinked"));
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateNotLinked"));
     if (source.template.version === template.version)
-      throw new Error(sourceText("error.backend.eventCheckTemplateCurrent"));
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateCurrent"));
     const held = new Map(source.configuration.map((field) => [field.name, field.value]));
     const next: EventCheckApiSource = {
       ...source,
@@ -184,7 +189,7 @@ export class EventCheckTemplates {
   link(template: EventCheckTemplate, check: EventCheck): EventCheckInput {
     const version = this.matchedVersion(template, check);
     if (check.source.kind !== "api" || version === null)
-      throw new Error(sourceText("error.backend.eventCheckTemplateProgram"));
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateProgram"));
     return { ...check, source: { ...check.source, template: { slug: template.slug, version } } };
   }
 }

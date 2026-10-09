@@ -78,7 +78,7 @@ function scheduleValid(input: EventCheckInput): void {
       next <= previous ||
       (index > 0 && next.getTime() - previous.getTime() < 30_000)
     )
-      throw new Error(sourceText("error.backend.eventCheckSchedule"));
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckSchedule"));
     previous = next;
   }
 }
@@ -125,7 +125,7 @@ export class EventCheckScheduler implements RoutineDueSource {
       const templates = this.#templates();
       const check = this.options.store.get(input.agentId, input.id);
       const link = check.source.kind === "api" ? check.source.template : undefined;
-      if (!link) throw new Error(sourceText("error.backend.eventCheckTemplateNotLinked"));
+      if (!link) throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateNotLinked"));
       return templates.upgrade(templates.get(link.slug), check);
     });
     return yield* this.#save(prepared, actor, "event-check.template-update");
@@ -274,7 +274,7 @@ export class EventCheckScheduler implements RoutineDueSource {
           !input.selfEvents.actorPointer ||
           !input.selfEvents.accountActorIds.length)
       )
-        throw new Error(sourceText("error.backend.eventCheckSelfEvents"));
+        throw new EventCheckRefusal(sourceText("error.backend.eventCheckSelfEvents"));
     });
     const author =
       previous && this.#content(previous) === this.#content(input) ? previous.lastSavedBy : authorOf(actor);
@@ -354,7 +354,7 @@ export class EventCheckScheduler implements RoutineDueSource {
     const saved = yield* this.#reader().read(input.agentId, input.source.connectionId, (session) =>
       mcpSync(() => {
         if (!session.valid() || !session.tools.some((tool) => tool.name === input.source.toolName))
-          throw new Error(sourceText("error.mcp.chatDenied"));
+          throw new EventCheckRefusal(sourceText("error.mcp.chatDenied"));
         const check = this.options.store.save(withAuthor(input), new Date());
         this.options.timer.arm();
         return check;
@@ -401,7 +401,7 @@ export class EventCheckScheduler implements RoutineDueSource {
       const check = this.options.store.get(input.agentId, input.id);
       if (this.#running.has(check.id))
         return mcpSync(() => {
-          throw new Error(sourceText("error.backend.eventCheckBusy"));
+          throw new EventCheckRefusal(sourceText("error.backend.eventCheckBusy"));
         });
       this.#running.add(check.id);
       return this.#execute(check, test).pipe(Effect.ensuring(Effect.sync(() => this.#running.delete(check.id))));
@@ -789,7 +789,7 @@ export class EventCheckScheduler implements RoutineDueSource {
     this.#deliveredAt.get(checkId)?.push(Date.now());
   }
   #agent(id: string): void {
-    if (!this.options.agentExists(id)) throw new Error(sourceText("error.agent.unknown", { id }));
+    if (!this.options.agentExists(id)) throw new EventCheckRefusal(sourceText("error.agent.unknown", { id }));
   }
   #read<A>(
     check: EventCheck,
@@ -801,15 +801,15 @@ export class EventCheckScheduler implements RoutineDueSource {
   }
   #templates(): EventCheckTemplates {
     if (!this.options.templates || !this.options.apiReader)
-      throw new Error(sourceText("error.backend.eventCheckUnsupported"));
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckUnsupported"));
     return this.options.templates;
   }
   #apiReader(): EventCheckApiReader {
-    if (!this.options.apiReader) throw new Error(sourceText("error.backend.eventCheckUnsupported"));
+    if (!this.options.apiReader) throw new EventCheckRefusal(sourceText("error.backend.eventCheckUnsupported"));
     return this.options.apiReader;
   }
   #reader(): EventCheckReader {
-    if (!this.options.reader) throw new Error(sourceText("error.backend.eventCheckUnsupported"));
+    if (!this.options.reader) throw new EventCheckRefusal(sourceText("error.backend.eventCheckUnsupported"));
     return this.options.reader;
   }
 }

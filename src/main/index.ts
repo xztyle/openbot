@@ -57,6 +57,7 @@ import { customAgentIpcHandlers } from "./ipc/custom-agent-handlers";
 import { customProviderIpcHandlers } from "./ipc/custom-provider-handlers";
 import { registerIpcGroups } from "./ipc/define-ipc-group";
 import { dynamicIslandIpcHandlers } from "./ipc/dynamic-island-handlers";
+import { eventCheckIpcHandlers } from "./ipc/event-check-handlers";
 import { eventsIpcHandlers } from "./ipc/events-handlers";
 import { githubConnectorIpcHandlers } from "./ipc/github-connector-handlers";
 import { hostAdminIpcHandlers } from "./ipc/host-admin-handlers";
@@ -569,6 +570,7 @@ function registerIpcHandlers({
       remoteServers,
     }),
     ...messagingIpcHandlers({ messaging }),
+    ...eventCheckIpcHandlers(service.eventChecks, remoteServers),
     ...mcpServerIpcHandlers({
       service,
       remoteServers,

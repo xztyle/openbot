@@ -154,6 +154,10 @@ import { ChannelService } from "./channel-service";
 import type { BundledProviderExecutables } from "./cli";
 import type { ConversationMarkerExclusions } from "./conversation-read-store";
 import type { ProviderSession } from "./database/provider-sessions";
+import { EventCheckDelivery } from "./event-check-delivery";
+import type { EventCheckReader } from "./event-check-reader";
+import { EventCheckScheduler } from "./event-check-scheduler";
+import { EventCheckStore } from "./event-check-store";
 import type { HostMemory } from "./host-memory";
 import type { MailboxStore } from "./mailbox-store";
 import { toMcpOperationError } from "./mcp-effects";
@@ -197,6 +201,7 @@ interface AgentServiceEvents {
 }
 
 export interface AgentServiceOptions {
+  eventCheckReader?: EventCheckReader;
   store: AgentStore;
   mailbox: MailboxStore;
   browser: AgentBrowserHost;
@@ -286,6 +291,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #channelRoutines: ChannelRoutineScheduler;
   /** Agent and channel routines of every trigger kind, with their webhook routes. */
   readonly routineRecords: RoutineRecords;
+  readonly eventChecks: EventCheckScheduler;
   readonly #mcp: McpGateway;
   readonly #providers: ProviderRuntime;
   readonly #endpoints: CustomEndpoints;
@@ -401,7 +407,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     // One timer for both routine owners. The sources are read lazily because `channels` and its
     // scheduler are built further down, and because an owner's earliest routine changes constantly.
     this.#routineTimer = new RoutineTimer(
-      () => [this.#routines, this.#channelRoutines],
+      () => [this.#routines, this.#channelRoutines, this.eventChecks],
       () => this.#initialized && !this.#stopping,
       (code, error) => this.#emitError(code, error),
     );
@@ -831,6 +837,30 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       channelRoutinesChanged: (channelId) => this.#emit({ type: "channel-routines-changed", channelId }),
       routinesHeld: () => this.#routineTimer.held,
     });
+    const eventDelivery = new EventCheckDelivery({
+      store,
+      mailbox,
+      conversation: this.#conversation,
+      sync: (snapshot) => this.#mailboxSync.syncMailboxMessages(snapshot),
+      changed: (agents, agentId) => {
+        this.#emit({ type: "agents-changed", agents });
+        this.#mailboxSync.emitQueue(agentId);
+      },
+      drain: (agentId) => this.#drain.scheduleDrain(agentId),
+    });
+    this.eventChecks = new EventCheckScheduler({
+      store: new EventCheckStore(store.database),
+      reader: options.eventCheckReader,
+      scope: () => this.#scope,
+      timer: this.#routineTimer,
+      agentExists: (id) =>
+        this.#store.list().some((agent) => agent.id === id) &&
+        !this.#removal.deleting().has(id) &&
+        !this.#duplication.isPending(id),
+      running: () => this.#initialized && !this.#stopping && !this.#routineTimer.held,
+      deliver: eventDelivery.send.bind(eventDelivery),
+    });
+
     this.messaging = new MessagingThreads(store.database, mailbox, {
       schedule: (agentId) => this.#drain.scheduleDrain(agentId),
       busy: (agentId) =>
@@ -972,6 +1002,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       channels: this.channels,
       hostedSites: this.#hostedSites,
       routines: this.#routines,
+      eventChecks: this.eventChecks,
       memories: this.#memories,
       drain: this.#drain,
       tables: this.#tables,
@@ -2026,6 +2057,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           (failure) => new AgentLifecycleFailed({ operation: "resume channel routines", cause: failure.cause }),
         ),
       );
+    yield* this.eventChecks.resumePending().pipe(Effect.forkIn(this.#scope));
     yield* lifecycleStep("arm routines", () => {
       this.#channelRoutines.reconcileAll();
       this.#routineTimer.arm();

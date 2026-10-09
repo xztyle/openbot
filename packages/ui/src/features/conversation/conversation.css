@@ -30,3 +30,5 @@
 @import "./styles/browser-takeover.css";
 @import "./styles/surface-overrides.css";
 @import "./styles/browser-previews.css";
+
+@import "./styles/event-checks.css";

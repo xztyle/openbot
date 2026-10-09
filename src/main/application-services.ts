@@ -1158,6 +1158,7 @@ export async function createApplicationServices({
     // Only a dev build leads with the OpenCode development model; a packaged app keeps the
     // built-in default.
     developmentDefaults: appVariant === "dev",
+    eventCheckReader: chatMcp?.reader,
     credentials: {
       apiKey: (provider) => providerCredentials.get(provider),
       // `configs()`, not `list()`: this is the one path the API keys travel, and it ends at the
@@ -1465,6 +1466,7 @@ export async function createApplicationServices({
     mcpServers: service,
     mcpOAuth: remoteMcpSignIn,
     chatMcp: chatMcp?.api,
+    eventChecks: service.eventChecks,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.

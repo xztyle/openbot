@@ -215,6 +215,7 @@ export class OpenBotDatabase {
       excludeRoutineEvents?: boolean;
       excludeRoutineRunEvents?: boolean;
       excludeHostedSiteEvents?: boolean;
+      excludeEventCheckEvents?: boolean;
     } = {},
   ): ConversationPage {
     return this.#conversations.readConversationPage(agentId, threadId, anchor, requestedLimit, options);
@@ -227,6 +228,7 @@ export class OpenBotDatabase {
       excludeRoutineEvents?: boolean;
       excludeRoutineRunEvents?: boolean;
       excludeHostedSiteEvents?: boolean;
+      excludeEventCheckEvents?: boolean;
     } = {},
   ): string | null {
     return this.#conversations.supportedConversationCursor(threadId, throughMessageId, options);

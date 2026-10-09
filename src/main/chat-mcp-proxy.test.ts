@@ -15,6 +15,7 @@ import { Effect } from "effect";
 import { expect, it, vi } from "vitest";
 import { runCauseEffect } from "../backend/effect-boundary";
 import { readJsonBody } from "../backend/local-mcp-bridge";
+import { mcpFailure } from "../backend/mcp-effects";
 import { NO_MCP_TOOL_RUNTIMES } from "../backend/mcp-provider-shapes";
 import { ChatMcpPolicyStore } from "./chat-mcp-policy-store";
 import { ChatMcpProxy } from "./chat-mcp-proxy";
@@ -191,6 +192,61 @@ await server.connect(new StdioServerTransport());`,
   } finally {
     await client?.close();
     await runCauseEffect(proxy.close());
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("gives deterministic checks only their selected account and fresh read tools, even in a write-enabled chat", async () => {
+  const root = await mkdtemp(join(tmpdir(), "openbot-event-check-mcp-"));
+  const app = await fakeApp();
+  const policies = new ChatMcpPolicyStore(join(root, "policy.json"));
+  await runCauseEffect(policies.load());
+  await runCauseEffect(policies.save("agent:one", { grants: [{ connectionId: "job-one", mode: "write" }] }));
+  const configs = [config("job-one", app.url, "Bearer one"), config("job-two", app.url, "Bearer two")];
+  const proxy = new ChatMcpProxy({
+    policies,
+    configs: () => configs,
+    chatKey: (id) => id,
+    runtimes: () => NO_MCP_TOOL_RUNTIMES,
+    authorization: () => Effect.succeed(null),
+  });
+  try {
+    expect(proxy.readAccounts("agent:one")).toEqual([{ id: "job-one", name: "job-one" }]);
+    await expect(runCauseEffect(proxy.read("agent:one", "job-two", () => Effect.void))).rejects.toThrow();
+    const tools = await runCauseEffect(proxy.read("agent:one", "job-one", (session) => Effect.succeed(session.tools)));
+    expect(tools.map((tool) => tool.name)).toEqual(["read"]);
+    await expect(
+      runCauseEffect(proxy.read("agent:one", "job-one", (session) => session.call("send", {}))),
+    ).rejects.toThrow();
+    const result = await runCauseEffect(proxy.read("agent:one", "job-one", (session) => session.call("read", {})));
+    expect(JSON.stringify(result)).not.toContain("Bearer one");
+    expect(app.calls).toEqual(["Bearer one:read"]);
+    await expect(
+      runCauseEffect(
+        proxy.read("agent:one", "job-one", (session) =>
+          Effect.gen(function* () {
+            app.reclassify();
+            yield* session.call("read", {});
+          }),
+        ),
+      ),
+    ).rejects.toThrow();
+    expect(app.calls).toHaveLength(1);
+    await expect(
+      runCauseEffect(
+        proxy.read("agent:one", "job-one", (session) =>
+          Effect.gen(function* () {
+            yield* policies.save("agent:one", { grants: [] }).pipe(Effect.mapError(mcpFailure));
+            proxy.revoke("agent:one");
+            yield* session.call("read", {});
+          }),
+        ),
+      ),
+    ).rejects.toThrow();
+    expect(app.calls).toHaveLength(1);
+  } finally {
+    await runCauseEffect(proxy.close());
+    await app.close();
     await rm(root, { recursive: true, force: true });
   }
 });

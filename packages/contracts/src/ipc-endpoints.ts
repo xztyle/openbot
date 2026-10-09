@@ -1,3 +1,10 @@
+import type {
+  EventCheck,
+  EventCheckAccount,
+  EventCheckExecution,
+  EventCheckInput,
+  EventCheckTool,
+} from "./event-checks";
 // The one channel list. Each endpoint holds its wire value, the group it belongs to, and whether it
 // is a request the renderer invokes or an event the main process sends. That is what lets a
 // registrar bind its handlers as an object keyed by endpoint, so a channel with no handler, and a
@@ -967,6 +974,15 @@ export const IPC_ENDPOINTS = {
   },
   // A separate group, not part of `servers`: a group is what one registrar covers in full, and
   // `servers` is bound against `RemoteServerManager` while these are bound against `AgentService`.
+  eventChecks: {
+    list: scopedRequest<{ agentId: string }, EventCheck[]>()("event-checks:list"),
+    save: scopedRequest<EventCheckInput, EventCheck>()("event-checks:save"),
+    remove: scopedRequest<{ agentId: string; id: string }, void>()("event-checks:remove"),
+    checkNow: scopedRequest<{ agentId: string; id: string }, EventCheckExecution>()("event-checks:check-now"),
+    history: scopedRequest<{ agentId: string; id: string }, EventCheckExecution[]>()("event-checks:history"),
+    accounts: scopedRequest<{ agentId: string }, EventCheckAccount[]>()("event-checks:accounts"),
+    tools: scopedRequest<{ agentId: string; connectionId: string }, EventCheckTool[]>()("event-checks:tools"),
+  },
   mcpServers: {
     // Every MCP method names its server, because the settings modal can be open for a server the user
     // has not switched to. Each mutation answers with the whole list, so the panel never merges.
@@ -1108,6 +1124,7 @@ export const IPC_GROUP_PATHS = {
   plugins: "plugins",
   host: "host",
   events: "events",
+  eventChecks: "eventChecks",
   remoteDesktop: "remoteDesktop",
 } as const satisfies { readonly [Group in keyof IpcEndpoints]: string | null };
 

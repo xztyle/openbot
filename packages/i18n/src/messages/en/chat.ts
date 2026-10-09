@@ -1,6 +1,7 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("chat", {
+  "chat.marker.eventCheck": "Event check: {name} — triggered",
   "chat.activity.workingOnIt": "Working on it…",
   "chat.activity.thinking": "Thinking it through…",
   "chat.activity.connectingDots": "Connecting the dots…",

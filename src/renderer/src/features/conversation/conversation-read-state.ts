@@ -1,4 +1,5 @@
 import { CHAT_VISUAL_ITEM_TYPE_PREFIX } from "@openbot/contracts/chat-visual";
+import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import type {
   ConversationMessageAuthor,
   ConversationReadState,
@@ -33,6 +34,7 @@ export type AgentAutoReadEntry =
  */
 export function isRoutineEventItem(message: { itemType?: string }): boolean {
   return (
+    message.itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX) === true ||
     message.itemType?.startsWith(ROUTINE_EVENT_ITEM_TYPE_PREFIX) === true ||
     message.itemType?.startsWith(ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX) === true ||
     message.itemType?.startsWith(HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX) === true ||

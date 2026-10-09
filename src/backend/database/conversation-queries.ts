@@ -1,4 +1,5 @@
 import { CHAT_VISUAL_ITEM_TYPE_PREFIX } from "@openbot/contracts/chat-visual";
+import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import type {
   ConversationFileSearchPage,
   ConversationFileSearchResult,
@@ -198,6 +199,7 @@ export class ConversationQueries {
       excludeRoutineEvents?: boolean;
       excludeRoutineRunEvents?: boolean;
       excludeHostedSiteEvents?: boolean;
+      excludeEventCheckEvents?: boolean;
     } = {},
   ): ConversationPage {
     if (!threadId) {
@@ -227,6 +229,7 @@ export class ConversationQueries {
       options.excludeRoutineEvents === true,
       options.excludeRoutineRunEvents === true,
       options.excludeHostedSiteEvents === true,
+      options.excludeEventCheckEvents === true,
     );
     const messages = rows.map((row) => decodeConversationMessageJson(requiredStringColumn(row, "message_json")));
     const messageIds = new Set(messages.map((message) => message.id));
@@ -248,6 +251,7 @@ export class ConversationQueries {
                options.excludeRoutineEvents === true,
                options.excludeRoutineRunEvents === true,
                options.excludeHostedSiteEvents === true,
+               options.excludeEventCheckEvents === true,
              )}`,
           )
           .all(threadId, ...referenceIds),
@@ -266,6 +270,7 @@ export class ConversationQueries {
           options.excludeRoutineEvents === true,
           options.excludeRoutineRunEvents === true,
           options.excludeHostedSiteEvents === true,
+          options.excludeEventCheckEvents === true,
         )
       : { count: 0, oldestAt: null };
     const hasOlder = older.count > 0;
@@ -292,6 +297,7 @@ export class ConversationQueries {
       excludeRoutineEvents?: boolean;
       excludeRoutineRunEvents?: boolean;
       excludeHostedSiteEvents?: boolean;
+      excludeEventCheckEvents?: boolean;
     } = {},
   ): string | null {
     if (!throughMessageId) return null;
@@ -317,6 +323,7 @@ export class ConversationQueries {
                options.excludeRoutineEvents === true,
                options.excludeRoutineRunEvents === true,
                options.excludeHostedSiteEvents === true,
+               options.excludeEventCheckEvents === true,
              )}
            ORDER BY created_at DESC, ordinal DESC, message_id DESC
            LIMIT 1`,
@@ -360,7 +367,7 @@ export class ConversationQueries {
              AND COALESCE(json_extract(message.message_json, '$.delivery.status'), '') NOT IN ('queued', 'cancelled')
              AND COALESCE(message.item_type, '') != 'commentary'
              AND COALESCE(message.item_type, '') NOT LIKE '${SKILL_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_EVENT_ITEM_TYPE_PREFIX}%'
-             AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%'
+             AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(message.item_type, '') NOT LIKE '${EVENT_CHECK_ITEM_TYPE_PREFIX}%'
              AND COALESCE(message.item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'
              AND COALESCE(message.item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'
              AND json_extract(message.message_json, '$.routine') IS NULL
@@ -380,7 +387,7 @@ export class ConversationQueries {
              AND COALESCE(json_extract(message.message_json, '$.delivery.status'), '') NOT IN ('queued', 'cancelled')
              AND COALESCE(message.item_type, '') != 'commentary'
              AND COALESCE(message.item_type, '') NOT LIKE '${SKILL_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_EVENT_ITEM_TYPE_PREFIX}%'
-             AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%'
+             AND COALESCE(message.item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(message.item_type, '') NOT LIKE '${EVENT_CHECK_ITEM_TYPE_PREFIX}%'
              AND COALESCE(message.item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'
              AND COALESCE(message.item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'
              AND json_extract(message.message_json, '$.routine') IS NULL
@@ -460,12 +467,14 @@ export class ConversationQueries {
     excludeRoutineEvents: boolean,
     excludeRoutineRunEvents: boolean,
     excludeHostedSiteEvents: boolean,
+    excludeEventCheckEvents: boolean,
   ): DynamicRecord[] {
     const columns = "created_at, ordinal, message_id, message_json";
     const routineFilter = conversationMarkerSqlFilter(
       excludeRoutineEvents,
       excludeRoutineRunEvents,
       excludeHostedSiteEvents,
+      excludeEventCheckEvents,
     );
     if (anchor.type === "latest") {
       return databaseRows(
@@ -573,11 +582,13 @@ export class ConversationQueries {
     excludeRoutineEvents: boolean,
     excludeRoutineRunEvents: boolean,
     excludeHostedSiteEvents: boolean,
+    excludeEventCheckEvents: boolean,
   ): { count: number; oldestAt: string | null } {
     const routineFilter = conversationMarkerSqlFilter(
       excludeRoutineEvents,
       excludeRoutineRunEvents,
       excludeHostedSiteEvents,
+      excludeEventCheckEvents,
     );
     // The count reads only the page-order index when no marker is filtered out. The oldest time is the
     // first row in that index, not a minimum over every older row.
@@ -638,12 +649,14 @@ function conversationMarkerSqlFilter(
   excludeRoutineEvents: boolean,
   excludeRoutineRunEvents: boolean,
   excludeHostedSiteEvents: boolean,
+  excludeEventCheckEvents: boolean,
 ): string {
   return [
     excludeRoutineEvents
       ? `AND COALESCE(item_type, '') NOT LIKE '${SKILL_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'`
       : "",
     excludeRoutineRunEvents ? `AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%'` : "",
+    excludeEventCheckEvents ? `AND COALESCE(item_type, '') NOT LIKE '${EVENT_CHECK_ITEM_TYPE_PREFIX}%'` : "",
     excludeHostedSiteEvents ? `AND COALESCE(item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'` : "",
   ]
     .filter(Boolean)

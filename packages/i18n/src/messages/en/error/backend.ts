@@ -1,6 +1,14 @@
 import { defineMessages } from "../../../message";
 
 export const messages = defineMessages("error.backend", {
+  "error.backend.eventCheckDelivery":
+    "An event was found. Delivery is waiting and will retry; the saved event remains on this host.",
+  "error.backend.eventCheckSchedule":
+    "Event checks must be at least one minute apart. Use a valid time zone and schedule.",
+  "error.backend.eventCheckBusy": "This event check is already running.",
+  "error.backend.eventCheckFailed":
+    "The app check failed. Check the selected account, read tool, result paths, pagination, and access. No baseline was changed.",
+  "error.backend.eventCheckUnsupported": "This host does not support event checks.",
   "error.backend.eventsUnavailable": "Events are not available on this host.",
   "error.backend.webhookRouteLimit": "A host can have at most {limit} webhook routines.",
   "error.backend.webhookSettingsInvalid": "Check the webhook settings and try again.",

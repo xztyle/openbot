@@ -1,3 +1,4 @@
+import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import type { AgentSummary, ConversationMessage, QueueDeliveryStatus } from "@openbot/contracts/ipc";
 import {
   CONVERSATION_PLAN_ITEM_TYPE,
@@ -130,7 +131,11 @@ export function toAgentMessages(messages: ConversationMessage[], ownerAgentId?: 
   const result: AgentMessage[] = [];
   const thinkingByTurn = new Map<string, AgentMessage>();
   for (const message of messages) {
-    if ((message.delivery?.status === "queued" || message.delivery?.status === "cancelled") && !message.routine) {
+    if (
+      (message.delivery?.status === "queued" || message.delivery?.status === "cancelled") &&
+      !message.routine &&
+      !message.itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX)
+    ) {
       continue;
     }
     if (message.author !== "assistant" || message.itemType !== "commentary") {
@@ -245,6 +250,13 @@ function chatActionMarker(
   routineRunEvent: ReturnType<typeof routineRunConversationEvent>,
   hostedSiteEvent: ReturnType<typeof hostedSiteConversationEvent>,
 ): ChatActionMarkerModel | null {
+  if (message.itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX))
+    return {
+      kind: "event-check",
+      name: message.text,
+      checkId: message.itemType.slice(EVENT_CHECK_ITEM_TYPE_PREFIX.length).split(":")[0] ?? "",
+      timestamp: message.createdAt,
+    };
   if (message.exchange) {
     const targetDeliveries = message.exchange.deliveries.map((delivery) => ({
       agentId: delivery.recipientAgentId,

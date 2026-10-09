@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { CHAT_VISUAL_ITEM_TYPE_PREFIX } from "@openbot/contracts/chat-visual";
+import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import {
   AGENT_EXCHANGE_ITEM_TYPE,
   type AgentSummary,
@@ -21,6 +22,7 @@ export interface ConversationMarkerExclusions {
   excludeRoutineEvents?: boolean;
   excludeRoutineRunEvents?: boolean;
   excludeHostedSiteEvents?: boolean;
+  excludeEventCheckEvents?: boolean;
 }
 
 export class ConversationReadStore {
@@ -272,7 +274,7 @@ export class ConversationReadStore {
       AND COALESCE(item_type, '') NOT LIKE '${CHAT_VISUAL_ITEM_TYPE_PREFIX}%'
       AND COALESCE(item_type, '') != '${AGENT_EXCHANGE_ITEM_TYPE}'
       AND COALESCE(item_type, '') NOT LIKE '${SKILL_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_EVENT_ITEM_TYPE_PREFIX}%'
-      AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%'
+      AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${EVENT_CHECK_ITEM_TYPE_PREFIX}%'
       AND COALESCE(item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'
       AND COALESCE(item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'
       AND COALESCE(item_type, '') != '${CONTEXT_RESET_ITEM_TYPE}'`;
@@ -381,6 +383,7 @@ function stateFromSnapshot(snapshot: ConversationSnapshot, throughMessageId: str
         !message.itemType?.startsWith(CHAT_VISUAL_ITEM_TYPE_PREFIX) &&
         message.itemType !== AGENT_EXCHANGE_ITEM_TYPE &&
         !message.itemType?.startsWith(SKILL_EVENT_ITEM_TYPE_PREFIX) &&
+        !message.itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX) &&
         !message.itemType?.startsWith(ROUTINE_EVENT_ITEM_TYPE_PREFIX) &&
         !message.itemType?.startsWith(ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX) &&
         !message.itemType?.startsWith(HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX) &&

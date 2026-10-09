@@ -1,5 +1,6 @@
 import type { Effect } from "effect";
 import type { ChannelService } from "../../backend/channel-service";
+import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
 import type { AgentAdminSettingsService } from "../agent-admin-settings";
 import type { AgentMarketplaceService } from "../agent-marketplace-service";
 import type { AgentTemplateService } from "../agent-template-service";
@@ -238,6 +239,7 @@ export interface TeamApiOptions {
   mcpServers?: TeamApiMcpServers;
   mcpOAuth?: RemoteMcpSignIn;
   chatMcp?: ChatMcpService;
+  eventChecks?: EventCheckScheduler;
   /** Starts and waits for the managed tool runtimes behind the MCP save, enable, and test routes. */
   mcpToolRuntimePreparation?: McpToolRuntimePreparation;
   storage?: TeamApiStorage;

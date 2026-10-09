@@ -1,0 +1,36 @@
+.event-check-settings {
+  padding: var(--openbot-space-5);
+  color: var(--openbot-text-primary);
+}
+.event-check-editor,
+.event-check-editor label {
+  display: grid;
+  gap: var(--openbot-space-2);
+}
+.event-check-editor {
+  gap: var(--openbot-space-4);
+}
+.event-check-actions,
+.event-check-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+.event-check-row,
+.event-check-log {
+  padding-block: var(--openbot-space-3);
+  border-bottom: 1px solid var(--openbot-border-subtle);
+}
+.event-check-log {
+  display: grid;
+  gap: var(--openbot-space-1);
+}
+.event-check-settings pre {
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.event-check-settings p {
+  color: var(--openbot-text-muted);
+}

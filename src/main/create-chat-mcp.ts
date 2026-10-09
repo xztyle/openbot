@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { COMPUTER_USE_MCP_SERVER_ID } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import type { AgentService } from "../backend/agent-service";
+import type { EventCheckReader } from "../backend/event-check-reader";
 import { toMcpOperationError } from "../backend/mcp-effects";
 import type { McpAuthorizationSource, McpToolRuntimeSource } from "../backend/mcp-provider-shapes";
 import { ChatMcpPolicyStore } from "./chat-mcp-policy-store";
@@ -44,5 +45,17 @@ export const createChatMcp = Effect.fn("ChatMcp.create")(function* (options: Opt
         .filter((config) => config.id !== COMPUTER_USE_MCP_SERVER_ID),
     changed: () => options.service().refreshAllAgentRuntimes().pipe(toMcpOperationError),
   });
-  return { api, scope: proxy.forThread.bind(proxy), close: proxy.close.bind(proxy) };
+  const thread = (agentId: string) => {
+    const agent = options
+      .service()
+      .listAgents()
+      .find((item) => item.id === agentId);
+    if (!agent?.threadId) throw new Error("Unknown event check agent.");
+    return agent.threadId;
+  };
+  const reader: EventCheckReader = {
+    accounts: (agentId) => proxy.readAccounts(thread(agentId)),
+    read: (agentId, connectionId, use) => Effect.suspend(() => proxy.read(thread(agentId), connectionId, use)),
+  };
+  return { api, reader, scope: proxy.forThread.bind(proxy), close: proxy.close.bind(proxy) };
 });

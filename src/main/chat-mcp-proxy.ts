@@ -10,14 +10,17 @@ import { COMPUTER_USE_MCP_SERVER_ID, type McpServerConfig } from "@openbot/contr
 import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import { runCauseEffect } from "../backend/effect-boundary";
+import type { EventCheckArguments, EventCheckReadSession } from "../backend/event-check-reader";
 import { readJsonBody } from "../backend/local-mcp-bridge";
 import { isSlackApp, mayCallChatTool } from "../backend/mcp-chat-policy";
-import { type McpOperationError, mcpCall } from "../backend/mcp-effects";
+import { McpOperationError, mcpCall, mcpFailure, mcpSync } from "../backend/mcp-effects";
 import {
   type McpAuthorizationSource,
   type McpToolRuntimeSource,
   usableMcpServer,
 } from "../backend/mcp-provider-shapes";
+import { mcpSecretValues, redactMcpValues } from "../backend/mcp-redaction";
+import { redactMcpResult } from "../backend/mcp-result-redaction";
 import { createMcpTransport } from "../backend/mcp-transport";
 import type { ChatMcpPolicyStore } from "./chat-mcp-policy-store";
 
@@ -32,8 +35,18 @@ interface Options {
 interface Upstream {
   client: Client;
   ready: Promise<void>;
+  secrets: string[];
+  connectionId: string;
+  users: number;
+  obsolete: boolean;
 }
 
+interface ReadAccess {
+  key: string;
+  config: McpServerConfig;
+  controller: AbortController;
+  policy: string;
+}
 /** Owns app transports. Provider processes receive scoped loopback URLs, never the app credentials. */
 export class ChatMcpProxy {
   readonly #running = new Map<AbortController, string>();
@@ -61,6 +74,7 @@ export class ChatMcpProxy {
     this.#port = address.port;
   });
   forThread(threadId: string, configs: readonly McpServerConfig[]): McpServerConfig[] {
+    Effect.runFork(this.#retireRemoved());
     const key = this.options.chatKey(threadId);
     const builtIn = configs.filter((config) => config.id === COMPUTER_USE_MCP_SERVER_ID);
     if (!key || this.#port === null) return builtIn;
@@ -85,7 +99,111 @@ export class ChatMcpProxy {
     ];
   }
   revoke(key: string): void {
+    Effect.runFork(this.#retireRemoved());
     for (const [controller, chat] of this.#running) if (chat === key) controller.abort();
+  }
+  readAccounts(threadId: string) {
+    const key = this.options.chatKey(threadId);
+    if (!key) return [];
+    return this.options
+      .configs()
+      .filter((config) => config.enabled && this.#mode(key, config.id))
+      .map((config) => ({ id: config.id, name: config.name }));
+  }
+  read<A>(
+    threadId: string,
+    connectionId: string,
+    use: (session: EventCheckReadSession) => Effect.Effect<A, McpOperationError>,
+  ): Effect.Effect<A, McpOperationError> {
+    return Effect.acquireUseRelease(
+      mcpCall(() => {
+        const key = this.options.chatKey(threadId);
+        const config = this.options.configs().find((item) => item.id === connectionId && item.enabled);
+        if (!key || !config || !this.#mode(key, connectionId)) throw new Error(sourceText("error.mcp.chatDenied"));
+        const controller = new AbortController();
+        this.#running.set(controller, key);
+        const access: ReadAccess = { key, config, controller, policy: JSON.stringify(this.options.policies.get(key)) };
+        return access;
+      }),
+      (access) =>
+        Effect.acquireUseRelease(
+          this.#upstream(access.config),
+          (upstream) => this.#readSession(threadId, access, upstream).pipe(Effect.flatMap(use)),
+          (upstream) => this.#releaseUpstream(upstream),
+        ),
+      (access) =>
+        Effect.sync(() => {
+          access.controller.abort();
+          this.#running.delete(access.controller);
+        }),
+    ).pipe(
+      Effect.timeout("45 seconds"),
+      Effect.mapError(mcpFailure),
+      Effect.catchCause(() =>
+        mcpSync(() => {
+          throw new Error(sourceText("error.mcp.chatUnreachable"));
+        }),
+      ),
+    );
+  }
+  readonly #readSession = Effect.fn("ChatMcpProxy.readSession")(function* (
+    this: ChatMcpProxy,
+    threadId: string,
+    access: ReadAccess,
+    upstream: Upstream,
+  ) {
+    const valid = () =>
+      !access.controller.signal.aborted &&
+      this.options.chatKey(threadId) === access.key &&
+      JSON.stringify(this.options.policies.get(access.key)) === access.policy &&
+      this.options
+        .configs()
+        .some((config) => config.enabled && JSON.stringify(config) === JSON.stringify(access.config));
+    const tools = yield* mcpCall(() => this.#safeTools(upstream.client, access.controller.signal));
+    if (JSON.stringify(tools).length > 512_000) throw new Error("App tool metadata too large.");
+    if (!valid()) throw new Error(sourceText("error.mcp.chatDenied"));
+    const allowed = tools.filter((tool) => mayCallChatTool("read", tool, access.config));
+    const session: EventCheckReadSession = {
+      valid,
+      tools: allowed
+        .filter((tool) => tool.name.length <= 256 && JSON.stringify(tool.inputSchema).length <= 16000)
+        .slice(0, 500)
+        .map((tool) => ({
+          name: redactMcpValues(tool.name, upstream.secrets),
+          description: redactMcpValues(tool.description ?? "", upstream.secrets).slice(0, 4096),
+          inputSchemaJson: this.#redactJson(tool.inputSchema, upstream.secrets),
+        })),
+      call: (toolName, args) => this.#readTool(access, upstream, valid, toolName, args),
+    };
+    return session;
+  });
+  readonly #readTool = Effect.fn("ChatMcpProxy.readTool")(function* (
+    this: ChatMcpProxy,
+    access: { config: McpServerConfig; controller: AbortController },
+    upstream: Upstream,
+    valid: () => boolean,
+    toolName: string,
+    args: EventCheckArguments,
+  ) {
+    const tools = yield* mcpCall(() => this.#safeTools(upstream.client, access.controller.signal));
+    const tool = tools.find((item) => item.name === toolName);
+    if (!valid() || !tool || !mayCallChatTool("read", tool, access.config))
+      throw new Error(sourceText("error.mcp.chatDenied"));
+    const result = yield* Effect.tryPromise({
+      try: (signal) =>
+        upstream.client.callTool({ name: toolName, arguments: args }, undefined, {
+          signal: AbortSignal.any([signal, access.controller.signal]),
+          timeout: 30_000,
+        }),
+      catch: () => new McpOperationError({ cause: new Error(sourceText("error.mcp.chatUnreachable")) }),
+    });
+    if (!valid()) throw new Error(sourceText("error.mcp.chatDenied"));
+    const encoded = JSON.stringify(result);
+    if (encoded.length > 512_000) throw new Error("App result too large.");
+    return redactMcpResult(result, upstream.secrets);
+  });
+  #redactJson(value: unknown, secrets: string[]): string {
+    return JSON.stringify(redactMcpResult(value, secrets));
   }
   #token(key: string, connection: string): string {
     return createHmac("sha256", this.options.policies.secret()).update(`${key}\0${connection}`).digest("hex");
@@ -151,7 +269,7 @@ export class ChatMcpProxy {
           yield* mcpCall(() => transport.handleRequest(request, response, body));
         }),
       () => mcpCall(() => mcp.close()).pipe(Effect.catch(() => Effect.void)),
-    );
+    ).pipe(Effect.ensuring(this.#releaseUpstream(upstream)));
   });
   #serverFor(key: string, config: McpServerConfig, upstream: Upstream): Server {
     const mcp = new Server({ name: "openbot-chat-app", version: "1" }, { capabilities: { tools: {} } });
@@ -192,11 +310,24 @@ export class ChatMcpProxy {
     const held = this.#upstreams.get(identity);
     if (held) {
       yield* mcpCall(() => held.ready);
+      held.users++;
       return held;
+    }
+    for (const upstream of this.#upstreams.values()) {
+      if (upstream.connectionId !== config.id) continue;
+      upstream.obsolete = true;
+      if (upstream.users === 0) yield* this.#releaseUpstream(upstream);
     }
     const client = new Client({ name: "openbot-chat-gateway", version: "1" }, { capabilities: {} });
     const transport = createMcpTransport(resolved);
-    const upstream: Upstream = { client, ready: Promise.resolve() };
+    const upstream: Upstream = {
+      client,
+      ready: Promise.resolve(),
+      connectionId: config.id,
+      users: 0,
+      obsolete: false,
+      secrets: [...mcpSecretValues([config]), ...(resolved.authorization ? [resolved.authorization] : [])],
+    };
     client.onclose = () => {
       if (this.#upstreams.get(identity) === upstream) this.#upstreams.delete(identity);
     };
@@ -205,7 +336,31 @@ export class ChatMcpProxy {
     yield* mcpCall(() => upstream.ready).pipe(
       Effect.onError(() => Effect.sync(() => this.#upstreams.delete(identity))),
     );
+    upstream.users++;
     return upstream;
+  });
+  readonly #releaseUpstream = Effect.fn("ChatMcpProxy.releaseUpstream")(function* (
+    this: ChatMcpProxy,
+    upstream: Upstream,
+  ) {
+    upstream.users = Math.max(0, upstream.users - 1);
+    if (upstream.obsolete && upstream.users === 0) {
+      for (const [identity, held] of this.#upstreams) if (held === upstream) this.#upstreams.delete(identity);
+      yield* mcpCall(() => upstream.client.close()).pipe(Effect.catch(() => Effect.void));
+    }
+  });
+  readonly #retireRemoved = Effect.fn("ChatMcpProxy.retireRemoved")(function* (this: ChatMcpProxy) {
+    const enabled = new Set(
+      this.options
+        .configs()
+        .filter((config) => config.enabled)
+        .map((config) => config.id),
+    );
+    for (const upstream of this.#upstreams.values()) {
+      if (enabled.has(upstream.connectionId)) continue;
+      upstream.obsolete = true;
+      if (upstream.users === 0) yield* this.#releaseUpstream(upstream);
+    }
   });
   readonly #launchConfig = Effect.fn("ChatMcpProxy.launchConfig")(function* (
     this: ChatMcpProxy,
@@ -233,20 +388,22 @@ export class ChatMcpProxy {
       throw error;
     }
   }
-  async #safeTools(client: Client): Promise<Tool[]> {
+  async #safeTools(client: Client, signal?: AbortSignal): Promise<Tool[]> {
     try {
-      return await this.#tools(client);
+      return await this.#tools(client, signal);
     } catch {
       throw new Error(sourceText("error.mcp.chatUnreachable"));
     }
   }
   // Read current metadata before every authorization, including servers without change notifications.
-  async #tools(client: Client): Promise<Tool[]> {
+  async #tools(client: Client, signal?: AbortSignal): Promise<Tool[]> {
     const tools: Tool[] = [];
     const seen = new Set<string>();
     let cursor: string | undefined;
+    let pages = 0;
     do {
-      const page = await client.listTools(cursor ? { cursor } : undefined, { timeout: 30_000 });
+      if (++pages > 20) throw new Error("Too many app tool pages.");
+      const page = await client.listTools(cursor ? { cursor } : undefined, { timeout: 30_000, signal });
       tools.push(...page.tools);
       cursor = page.nextCursor;
       if (tools.length > 10_000 || (cursor && seen.has(cursor))) throw new Error("Invalid app tools pagination.");

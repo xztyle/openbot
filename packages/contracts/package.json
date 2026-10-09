@@ -101,7 +101,9 @@
     "./team-protocol/skills-events-v1": "./src/team-protocol/skills-events-v1.ts",
     "./team-protocol/optional-routes": "./src/team-protocol/optional-routes.ts",
     "./team-protocol/remote-stream-v1": "./src/team-protocol/remote-stream-v1.ts",
-    "./team-protocol/mcp-chat-v1": "./src/team-protocol/mcp-chat-v1.ts"
+    "./team-protocol/mcp-chat-v1": "./src/team-protocol/mcp-chat-v1.ts",
+    "./event-checks": "./src/event-checks.ts",
+    "./team-protocol/event-checks-v1": "./src/team-protocol/event-checks-v1.ts"
   },
   "scripts": {
     "typecheck": "bun ../../node_modules/typescript/bin/tsc --noEmit -p tsconfig.json",

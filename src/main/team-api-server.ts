@@ -50,6 +50,7 @@ import {
   TEAM_CURRENT_CAPABILITIES,
   type TeamCurrentCapability,
 } from "@openbot/contracts/team-protocol/current";
+import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import {
   HOST_RESTART_EVENT,
   type HostRestartEvent,
@@ -121,6 +122,7 @@ import { routeBrowser } from "./team-api/route-browser";
 import { routeChannels } from "./team-api/route-channels";
 import { routeContextReset } from "./team-api/route-context-reset";
 import { routeDirect } from "./team-api/route-direct";
+import { routeEventChecks } from "./team-api/route-event-checks";
 import { routeEvents } from "./team-api/route-events";
 import { routeFiles } from "./team-api/route-files";
 import { routeHostAdmin } from "./team-api/route-host-admin";
@@ -704,6 +706,7 @@ export class TeamApiServer {
         return;
       if ((await this.#routeAgents(context)) === "handled") return;
 
+      if ((await routeEventChecks(context, this.#options.eventChecks)) === "handled") return;
       if ((await routeMcpChat(context, this.#options.chatMcp)) === "handled") return;
       if ((await routeMcpOAuth(context, this.#options.mcpOAuth)) === "handled") return;
       return this.#json(response, 404, { error: sourceText("error.team.routeNotFound") });
@@ -980,9 +983,10 @@ export class TeamApiServer {
         event.type === "conversation" &&
         (!connection.capabilities.has("routine-event-markers") ||
           !connection.capabilities.has("routine-run-event-markers") ||
-          !connection.capabilities.has("hosted-site-event-markers"))
+          !connection.capabilities.has("hosted-site-event-markers") ||
+          !connection.capabilities.has(EVENT_CHECKS_CAPABILITY))
       ) {
-        const key = `${eventProtocol(connection.capabilities)}:${connection.capabilities.has("opencode")}:${connection.capabilities.has("routine-event-markers")}:${connection.capabilities.has("routine-run-event-markers")}:${connection.capabilities.has("hosted-site-event-markers")}:${encodingOptions.preserveSemanticTags}`;
+        const key = `${eventProtocol(connection.capabilities)}:${connection.capabilities.has("opencode")}:${connection.capabilities.has("routine-event-markers")}:${connection.capabilities.has("routine-run-event-markers")}:${connection.capabilities.has("hosted-site-event-markers")}:${encodingOptions.preserveSemanticTags}:${connection.capabilities.has(EVENT_CHECKS_CAPABILITY)}`;
         let filtered = filteredConversationPayloads.get(key);
         if (!filtered) {
           filtered =
@@ -1415,6 +1419,7 @@ export class TeamApiServer {
         // and one that did not never shows the panel.
         if (capability === "remote-desktop-setup")
           return this.#options.remoteScreen?.checkSetup !== undefined && this.#options.remoteScreen?.test !== undefined;
+        if (capability === EVENT_CHECKS_CAPABILITY) return this.#options.eventChecks?.supported === true;
         if (capability === MCP_SERVERS_CAPABILITY) return this.#options.mcpServers !== undefined;
         if (capability === MCP_CHAT_CAPABILITY) return this.#options.chatMcp !== undefined;
         if (capability === MCP_OAUTH_CAPABILITY) return this.#options.mcpOAuth !== undefined;

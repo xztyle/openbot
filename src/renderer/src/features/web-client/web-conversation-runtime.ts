@@ -1,6 +1,7 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { AgentEvent, AttachmentImportEvent, AttachmentSummary, TeamRealtimeEvent } from "@openbot/contracts/ipc";
 import { runTeamEffect } from "@openbot/team-client";
+import { eventChecksApi } from "@openbot/team-client/event-checks-api";
 import {
   deleteSharedTable,
   installAgentSkill,
@@ -19,6 +20,7 @@ import { Effect } from "effect";
 import { onCleanup } from "solid-js";
 import type { ConversationRuntime } from "../conversation/conversation-runtime";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
+import { webRoutinesPort } from "../conversation/web-routines-port";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
 import type { WebWorkspaceRuntime } from "./web-runtime";
 
@@ -30,8 +32,10 @@ function webHostAdmin(
   request: () => TeamApiRequest,
   onHostEvent?: HostEvents,
   eventsEnabled?: () => boolean,
+  checksEnabled?: () => boolean,
 ): NonNullable<ConversationRuntime["admin"]> {
   // `request()` names the connected host at call time, so a host switch reaches the new host.
+  const checks = eventChecksApi((...args) => request()(...args));
   const eventRoutines = webEventRoutinesApi((...args) => request()(...args));
   return {
     skills: {
@@ -65,6 +69,14 @@ function webHostAdmin(
       unpublish: (agentId) =>
         runTeamEffect(unpublishAgentTemplate(request(), agentId).pipe(Effect.mapError((error) => error.cause))),
     },
+    get eventChecks() {
+      return checksEnabled?.() === true ? checks : undefined;
+    },
+    get routines() {
+      return eventsEnabled?.() === false
+        ? undefined
+        : (agentId: string) => webRoutinesPort(agentId, eventRoutines, (...args) => request()(...args), onHostEvent);
+    },
     get eventRoutines() {
       return eventsEnabled?.() === false ? undefined : eventRoutines;
     },
@@ -77,6 +89,7 @@ export function createWebConversationRuntime(
   adminRequest?: () => TeamApiRequest,
   onHostEvent?: HostEvents,
   eventsEnabled?: () => boolean,
+  checksEnabled?: () => boolean,
 ): ConversationRuntime {
   const listeners = new Set<(event: AttachmentImportEvent) => void>();
   const files = createWebAttachmentFiles(remote);
@@ -192,6 +205,6 @@ export function createWebConversationRuntime(
       }
     },
     cancelImportFiles,
-    admin: adminRequest ? webHostAdmin(adminRequest, onHostEvent, eventsEnabled) : undefined,
+    admin: adminRequest ? webHostAdmin(adminRequest, onHostEvent, eventsEnabled, checksEnabled) : undefined,
   };
 }

@@ -346,6 +346,7 @@ describe("TeamApiServer conversations", () => {
       excludeRoutineEvents: true,
       excludeRoutineRunEvents: true,
       excludeHostedSiteEvents: true,
+      excludeEventCheckEvents: true,
     });
     await expect(
       jsonRequest(base, "/v1/agents/chief/conversation-page?limit=10", {
@@ -357,6 +358,7 @@ describe("TeamApiServer conversations", () => {
       excludeRoutineEvents: false,
       excludeRoutineRunEvents: false,
       excludeHostedSiteEvents: false,
+      excludeEventCheckEvents: true,
     });
     for (const capabilities of [TEAM_CURRENT_CAPABILITIES, TEAM_PROTOCOL_V1_CAPABILITIES]) {
       const page = await jsonRequest(base, "/v1/agents/chief/conversation-page?limit=10", {
@@ -374,6 +376,7 @@ describe("TeamApiServer conversations", () => {
       excludeRoutineEvents: true,
       excludeRoutineRunEvents: true,
       excludeHostedSiteEvents: true,
+      excludeEventCheckEvents: true,
     });
     await expect(
       jsonRequest(base, "/v1/agents/conversation-reads", {
@@ -387,6 +390,7 @@ describe("TeamApiServer conversations", () => {
       excludeRoutineEvents: false,
       excludeRoutineRunEvents: false,
       excludeHostedSiteEvents: false,
+      excludeEventCheckEvents: true,
     });
     await expect(
       jsonRequest(base, "/v1/agents/chief/conversation/read", {

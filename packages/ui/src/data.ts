@@ -64,6 +64,7 @@ export interface AgentMessageMarkerModel {
 }
 
 export type ChatActionMarkerModel =
+  | { kind: "event-check"; name: string; checkId: string; timestamp: string }
   | (SkillConversationEvent & { kind: "skill-lifecycle"; timestamp: string })
   | AgentMessageMarkerModel
   /**

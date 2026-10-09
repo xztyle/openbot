@@ -4,6 +4,7 @@ import { isImageGenerationAspectRatio } from "@openbot/contracts/ipc";
 import { isString } from "@openbot/contracts/runtime-values";
 import { displayMessageReferences, type TeammatePrompt, teammatePrompts } from "./agent/delivery-content";
 import { imageGenerationFailure, isImageGenerationItem } from "./agent/image-generation";
+import { eventCheckMarker } from "./event-check-marker";
 import type { DeliveryContext } from "./mailbox-store";
 import type { ThreadItem, ThreadResponse } from "./protocol";
 
@@ -181,6 +182,7 @@ function promptMessage(
     text: delivery?.text ?? row.text,
     createdAt: delivery?.createdAt ?? row.createdAt,
     status: "completed",
+    ...eventCheckMarker(context?.eventCheck),
   };
 }
 

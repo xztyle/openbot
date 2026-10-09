@@ -167,8 +167,15 @@ export interface PluginCatalogApp {
 }
 
 export type PluginCatalogServer =
-  | { name: string; transport: "http"; url: string; auth?: unknown }
-  | { name: string; transport: "stdio"; command: string; args: string[]; auth?: unknown };
+  | { name: string; transport: "http"; url: string; auth?: unknown; supersedes?: Array<{ url: string }> }
+  | {
+      name: string;
+      transport: "stdio";
+      command: string;
+      args: string[];
+      auth?: unknown;
+      supersedes?: Array<{ command: string; args: string[] }>;
+    };
 
 export interface PluginCatalogDetail {
   slug: string;

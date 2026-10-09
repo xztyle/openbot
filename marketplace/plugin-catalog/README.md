@@ -32,6 +32,26 @@ Rules for a new entry:
   the `Authorization` header at hand-off. No bridge program is installed, and
   no listing may name one.
 
+## Change the server of a listing
+
+An installed row is the app's row while its command and words (or its address) are the listing's.
+When a listing moves to a newer server, for example `slack-mcp-server@1.3.0` to a later version,
+list the earlier signature in `supersedes` on the app's `server`, so those rows are not lost:
+
+```json
+"supersedes": [{ "command": "npx", "args": ["-y", "slack-mcp-server@1.3.0", "--transport", "stdio"] }]
+```
+
+An `http` server lists `{ "url": "https://..." }`. An entry must be a complete, valid signature, must
+not equal the current one, and may have no other field. The app page then offers **Update** for such a
+row, which tests the new version and rewrites the words in place. OpenBot also rewrites the row at
+startup (`migrateCatalogSuccessors`). Only a row with the exact earlier words moves. Its id, name,
+credentials, enabled state and chat access stay. A row with any other word is the user's own edit.
+
+Slack read-only mode allows a reviewed list of tool names (`SLACK_READ_TOOLS` in
+`src/backend/mcp-chat-policy.ts`) for one server. The build stops when the Slack listing names a
+different server than `SLACK_MCP_ARGS`. Review the tool names of the new version, then change both.
+
 ## Paper
 
 Paper Desktop installs its CLI at `~/.paper/bin/paper`. `paper mcp` is a stdio

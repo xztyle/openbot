@@ -6,9 +6,10 @@ import { createEffect, For, Show } from "solid-js";
 import { AgentGrid, AppCard, SkillGrid } from "./MarketplaceCards";
 import { EventCheckGrid, EventCheckPanel, matchesTemplate } from "./MarketplaceEventChecks";
 import { type FilterGroup, MarketplaceFilter } from "./MarketplaceFilter";
-import { skillAgents } from "./MarketplaceInstallSkill";
+import { outdatedAgentIds, SkillUpdates, skillAgents } from "./MarketplaceInstallSkill";
 import { Block } from "./MarketplaceParts";
 import { CATEGORY_LABELS, type MarketplaceListing } from "./marketplace-listing";
+import type { MarketplaceApp } from "./marketplace-model";
 import {
   appGroups,
   isMarketplaceTab,
@@ -16,6 +17,7 @@ import {
   type MarketplaceTab,
   matchesApp,
   type OwnedFilter,
+  type SkillStatusFilter,
 } from "./marketplace-view";
 
 const TABS: readonly MarketplaceTab[] = ["agents", "apps", "skills", "eventChecks"];
@@ -50,6 +52,10 @@ const SHOW_TAB = {
 
 function ownedOf(value: string | null): OwnedFilter | null {
   return value === "yes" || value === "no" ? value : null;
+}
+
+function skillStatusOf(value: string | null): SkillStatusFilter | null {
+  return value === "update" ? value : ownedOf(value);
 }
 
 function categoryOf(value: string | null): SkillCategory | null {
@@ -186,11 +192,19 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
       .items()
       .filter((listing) => owns(state().agentsOwned, (model().agentState(listing) ?? "add") !== "add"));
   const skills = () =>
-    props.scope.skills.items().filter((skill) => owns(state().skillsOwned, skillAgents(props.scope, skill).length > 0));
+    props.scope.skills.items().filter((skill) => {
+      const status = state().skillsOwned;
+      if (status === "update") return outdatedAgentIds(props.scope, skill).length > 0;
+      return owns(status, skillAgents(props.scope, skill).length > 0);
+    });
+  /** The category in the reader's language, which the search reads beside the name and the description. */
+  const appCategoryLabel = (app: MarketplaceApp) =>
+    t(app.kind === "custom" ? "marketplace.app.custom" : CATEGORY_LABELS[app.category]);
   const apps = () =>
     model()
       .apps()
-      .filter((app) => matchesApp(app, state().query));
+      .filter((app) => matchesApp(app, state().query, appCategoryLabel(app)))
+      .filter((app) => state().appCategory === null || (app.kind !== "custom" && app.category === state().appCategory));
   const eventChecks = () =>
     model().eventChecks
       ? props.scope.eventChecks
@@ -275,11 +289,12 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
             options: [
               { value: "yes", label: t("marketplace.filter.installed") },
               { value: "no", label: t("marketplace.filter.notInstalled") },
+              { value: "update", label: t("marketplace.filter.updates") },
             ],
             value: state().skillsOwned,
             set: (value: string | null) =>
               nav().set((draft) => {
-                draft.skillsOwned = ownedOf(value);
+                draft.skillsOwned = skillStatusOf(value);
               }),
           },
         ]
@@ -291,6 +306,26 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
       set: (value) =>
         nav().set((draft) => {
           draft.skillCategory = categoryOf(value);
+        }),
+    },
+  ];
+  /** Only the categories that an app has, so no choice leads to an empty list. */
+  const appCategoryOptions = () => {
+    const present = new Set(
+      model()
+        .apps()
+        .flatMap((app) => (app.kind === "custom" ? [] : [app.category])),
+    );
+    return categoryOptions().filter((option) => present.has(option.value) || option.value === state().appCategory);
+  };
+  const appFilterGroups = (): FilterGroup[] => [
+    {
+      legend: t("marketplace.filter.category"),
+      options: appCategoryOptions(),
+      value: state().appCategory,
+      set: (value) =>
+        nav().set((draft) => {
+          draft.appCategory = categoryOf(value);
         }),
     },
   ];
@@ -312,12 +347,15 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
         ]
       : [];
   const eventChecksFiltered = () => state().eventChecksOwned !== null;
+  const appsFiltered = () => state().appCategory !== null;
   const agentsFiltered = () => state().agentCategory !== null || state().agentsOwned !== null;
   const skillsFiltered = () => state().skillCategory !== null || state().skillsOwned !== null;
   const clearFilters = (tab: MarketplaceTab) =>
     nav().set((draft) => {
       if (tab === "eventChecks") {
         draft.eventChecksOwned = null;
+      } else if (tab === "apps") {
+        draft.appCategory = null;
       } else if (tab === "agents") {
         draft.agentCategory = null;
         draft.agentsOwned = null;
@@ -368,6 +406,9 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
           <Show when={state().tab === "agents"}>
             <MarketplaceFilter groups={agentGroups()} />
           </Show>
+          <Show when={state().tab === "apps"}>
+            <MarketplaceFilter groups={appFilterGroups()} />
+          </Show>
           <Show when={state().tab === "skills"}>
             <MarketplaceFilter groups={skillGroups()} />
           </Show>
@@ -410,8 +451,8 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
                     scope={props.scope}
                     tab="apps"
                     counts={counts()}
-                    filtered={false}
-                    onClearFilters={() => undefined}
+                    filtered={appsFiltered()}
+                    onClearFilters={() => clearFilters("apps")}
                   />
                 }
               >
@@ -432,22 +473,25 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
             </div>
           </SlidingTabs.Content>
           <SlidingTabs.Content value="skills">
-            <ListingPanel
-              listing={props.scope.skills}
-              loadingLabel={t("marketplace.loading.skills")}
-              count={skills().length}
-              empty={
-                <NoMatch
-                  scope={props.scope}
-                  tab="skills"
-                  counts={counts()}
-                  filtered={skillsFiltered()}
-                  onClearFilters={() => clearFilters("skills")}
-                />
-              }
-            >
-              <SkillGrid scope={props.scope} items={skills()} />
-            </ListingPanel>
+            <div class="marketplace-stack">
+              <SkillUpdates scope={props.scope} />
+              <ListingPanel
+                listing={props.scope.skills}
+                loadingLabel={t("marketplace.loading.skills")}
+                count={skills().length}
+                empty={
+                  <NoMatch
+                    scope={props.scope}
+                    tab="skills"
+                    counts={counts()}
+                    filtered={skillsFiltered()}
+                    onClearFilters={() => clearFilters("skills")}
+                  />
+                }
+              >
+                <SkillGrid scope={props.scope} items={skills()} />
+              </ListingPanel>
+            </div>
           </SlidingTabs.Content>
           <Show when={model().eventChecks}>
             <SlidingTabs.Content value="eventChecks">

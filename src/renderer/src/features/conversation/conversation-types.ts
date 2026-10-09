@@ -65,6 +65,8 @@ export interface ConversationProps {
    * pressed Connect or Install on the card: the page then starts the connect step.
    */
   onOpenMarketplaceApp?: (request: { appId: string; connect: boolean }) => void;
+  /** What the host holds of a suggested app, so a card says "Connect", "Allow in this chat" or "Connected" truthfully. */
+  marketplaceAppAccess?: import("./marketplace-app-access").MarketplaceAppAccess;
   platform?: import("@openbot/contracts/ipc").AppInfo["platform"];
 
   agentStatus: AgentStatus;

@@ -10,8 +10,17 @@ export type MarketplaceSuggestionKind = "app" | "skill";
 /**
  * Where the suggested listing is for this user. `attention` is an app whose connection needs a new
  * sign-in. `unavailable` cannot be connected here, for example by a member of a joined server.
+ * `disabled` is an app that is connected and turned off. `off` is an app that is connected and
+ * turned on, and that this chat may not use yet: only the user allows it, from the app's page.
  */
-export type MarketplaceSuggestionState = "available" | "busy" | "connected" | "attention" | "unavailable";
+export type MarketplaceSuggestionState =
+  | "available"
+  | "busy"
+  | "connected"
+  | "attention"
+  | "unavailable"
+  | "disabled"
+  | "off";
 
 export interface MarketplaceSuggestionCardProps {
   kind: MarketplaceSuggestionKind;
@@ -24,12 +33,19 @@ export interface MarketplaceSuggestionCardProps {
   state: MarketplaceSuggestionState;
   /** Why the user cannot connect it here. Shown under the header when `unavailable`. */
   unavailableText?: string;
+  /** What the user has to do next. Shown under the header when the state is `off` or `disabled`. */
+  stateText?: string;
   /** The user dismissed the card. It stays as one line with Undo. */
   dismissed?: boolean;
   /** Runs the connect or install step. The approval and sign-in dialogs stay in the consumer. */
   onConnect?: (() => void) | undefined;
   /** Opens the listing in Marketplace. */
   onOpenDetails?: (() => void) | undefined;
+  /**
+   * Opens the app's page, where the user turns an account on or allows it in this chat. It grants
+   * nothing: the choice is made on the page.
+   */
+  onManage?: (() => void) | undefined;
   onDismiss?: () => void;
   onRestore?: () => void;
 }
@@ -121,6 +137,12 @@ export function MarketplaceSuggestionCard(props: MarketplaceSuggestionCardProps)
             {props.unavailableText}
           </p>
         </Show>
+        <Show when={(props.state === "off" || props.state === "disabled") && props.stateText}>
+          <p class="marketplace-suggestion-unavailable">
+            <Lock aria-hidden="true" />
+            {props.stateText}
+          </p>
+        </Show>
       </article>
     </Show>
   );
@@ -148,7 +170,24 @@ function SuggestionAction(props: MarketplaceSuggestionCardProps) {
           {app() ? t("marketplace.app.connected") : t("chat.suggestion.installed")}
         </Badge>
       </Match>
-      <Match when={props.onConnect && props.state !== "unavailable"}>
+      <Match when={props.onManage && (props.state === "off" || props.state === "disabled")}>
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          aria-label={
+            props.state === "off"
+              ? t("chat.suggestion.allowNamed", { name: props.name })
+              : t("chat.suggestion.turnOnNamed", { name: props.name })
+          }
+          onClick={() => props.onManage?.()}
+        >
+          {props.state === "off" ? t("chat.suggestion.allow") : t("chat.suggestion.turnOn")}
+        </Button>
+      </Match>
+      <Match
+        when={props.onConnect && props.state !== "unavailable" && props.state !== "off" && props.state !== "disabled"}
+      >
         <Button
           type="button"
           variant={props.state === "attention" ? "outline" : "default"}

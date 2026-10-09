@@ -284,12 +284,30 @@ There is no per-agent record of which agent an app was installed for, so "remove
 no other agent uses the plugin" from the first design is not what ships. The host-global removal is
 stated in the confirmation instead. A receipt store (3.1) would allow the narrower rule later.
 
+### 3.3a Update and accounts
+
+An app can have several accounts: one MCP row for each, named `<App> — <number>`, with an id that
+starts with `mcpacct-`. The page acts on one row by its id, so the chat access of the row stays:
+turn it on or off (`setMcpServerEnabled`), rename it, check it (`testMcpServer` with the stored
+credentials) and sign in again or change its key. The status of an app is **Disabled** while every
+account is off.
+
+A listing that moves to a newer server lists the earlier signatures in `supersedes`
+(`marketplace/plugin-catalog/README.md`). A row that still holds one of them, word for word, is read
+as the app's row. The page offers **Update**, which tests a new command (an address is not tested,
+because its sign-in belongs to the old address) and saves the new words over the same row. At startup `McpServerStore.migrateCatalogSuccessors` does the same rewrite from the generated
+`src/backend/mcp-catalog-successors.generated.ts`. It changes only the command and words (or the
+address), never the id, name, credentials or enabled state.
+
+The chat access of an agent uses the released `mcp-chat-v1` routes. No capability string is added.
+
 ### 3.4 Known limits
 
 | Limit | Effect |
 | --- | --- |
 | Codex accepts `stdio` only | An `http` app does nothing on a Codex agent, and gives no error. Show this on the listing. |
 | `mcp-servers-v1` is frozen | The install writes local records only. A team server is out of scope. |
+| Plugin skills are not published | The Worker serves a pinned version (`GET /v1/skills/:id/versions/:versionId` and `.../content`), and `installVersion` installs it. No plugin pins a skill, and the build refuses one, because it cannot check that the version is published. The app page has the menu that installs the pinned skills on several agents. A disconnect removes the skills from the open chat's agent only. |
 | A skill download needs a session | A plugin that has skills needs a signed-in account. A plugin that has an app only installs when the user is not signed in. |
 
 ## 4. The public share link

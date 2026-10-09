@@ -9,6 +9,9 @@ export const messages = defineMessages("plugin", {
   "plugin.askPrompt": "Ask {name}: {prompt}",
   "plugin.section.apps": "Apps",
   "plugin.section.skills": "Skills",
+  "plugin.skillsPerAgent":
+    "The app works for every agent that you allow. The skills tell an agent how to use it, and each agent has its own.",
+  "plugin.skillsName": "{name} skills",
   "plugin.section.information": "Information",
   "plugin.info.developer": "Developer",
   "plugin.info.category": "Category",

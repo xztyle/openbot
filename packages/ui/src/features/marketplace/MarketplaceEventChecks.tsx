@@ -1,8 +1,23 @@
 import type { EventCheckTemplate } from "@openbot/contracts/event-check-templates";
-import { Badge, Bell, Button, Heading, Skeleton, Text } from "@openbot/ui";
+import {
+  Badge,
+  Bell,
+  Button,
+  Heading,
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+  SettingsSection,
+  Skeleton,
+  Text,
+} from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
-import { createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import { Done } from "./MarketplaceParts";
 import { templateLinkOf } from "./marketplace-event-checks";
 import type { MarketplaceScope } from "./marketplace-view";
@@ -150,6 +165,70 @@ export function EventCheckPanel(props: {
           </Show>
         </div>
       </Show>
+    </Show>
+  );
+}
+
+/**
+ * The reviewed event checks that read the API of an app, on the app's page. They keep their own
+ * private variables on the host. They never use the accounts of the app, so connecting the app gives
+ * a check no access, and a check gives the app none.
+ */
+export function RelatedEventChecks(props: { scope: MarketplaceScope; appId: string }) {
+  const { t } = useText();
+  const catalog = () => props.scope.eventChecks;
+  const templates = () =>
+    props.scope.model.eventChecks
+      ? catalog()
+          .templates()
+          .filter((template) => template.app === props.appId)
+      : [];
+  /* The installed copies show only once the checks of the agents were read. */
+  createEffect(
+    () => templates().length > 0,
+    (any) => {
+      if (any) catalog().readChecks();
+    },
+  );
+  const outdated = (template: EventCheckTemplate) =>
+    catalog()
+      .instances(template.slug)
+      .some((entry) => isOutdated(template, templateLinkOf(entry.check)?.version));
+  return (
+    <Show when={templates().length > 0}>
+      <SettingsSection title={t("marketplace.eventCheck.forApp")} description={t("marketplace.eventCheck.forAppHelp")}>
+        <ItemGroup class="settings-modal-card">
+          <For each={templates()} keyed={(template) => template.slug}>
+            {(template) => (
+              <Item class="settings-modal-row">
+                <ItemMedia>
+                  <EventCheckMark template={template()} size="sm" />
+                </ItemMedia>
+                <ItemContent>
+                  <ItemTitle>{template().name}</ItemTitle>
+                  <ItemDescription>{template().tagline}</ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <Show when={catalog().instances(template().slug).length > 0}>
+                    <Show when={outdated(template())} fallback={<Done>{t("marketplace.eventCheck.installed")}</Done>}>
+                      <Badge variant="info-light">{t("marketplace.eventCheck.updateAvailable")}</Badge>
+                    </Show>
+                  </Show>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={t("marketplace.open", { name: template().name })}
+                    onClick={() => props.scope.nav.go({ kind: "eventCheck", slug: template().slug })}
+                  >
+                    {t("marketplace.eventCheck.view")}
+                  </Button>
+                </ItemActions>
+              </Item>
+            )}
+          </For>
+        </ItemGroup>
+      </SettingsSection>
     </Show>
   );
 }

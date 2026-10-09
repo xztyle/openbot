@@ -7,6 +7,7 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { McpServerConfig } from "@openbot/contracts/ipc";
 import { afterEach, describe, expect, it } from "vitest";
 import { runCauseEffect } from "./effect-boundary";
+import type { McpCatalogSuccessor } from "./mcp-catalog-successors.generated";
 import { McpServerStore } from "./mcp-server-store";
 import { OpenBotDatabase } from "./openbot-database";
 
@@ -179,6 +180,41 @@ describe("McpServerStore", () => {
     });
     expect(store.list().find((config) => config.id === edited.id)?.transport).toBe("stdio");
     expect(store.list().find((config) => config.id === renamed.id)?.transport).toBe("stdio");
+  });
+  // A catalog bump must not orphan the rows that earlier releases installed. The rewrite moves only
+  // a row that still holds an earlier signature word for word, and changes nothing else about it.
+  it("moves rows of an earlier catalog release in place and leaves edited rows alone", async () => {
+    const { store } = await setup();
+    const older = { command: "npx", args: ["-y", "tool-mcp@1.0.0", "--stdio"] };
+    const newer = { command: "npx", args: ["-y", "tool-mcp@2.0.0", "--stdio"] };
+    const successors: McpCatalogSuccessor[] = [{ serverName: "tool", transport: "stdio", from: older, to: newer }];
+    const account = store.save(
+      stdioConfig({
+        id: "mcpacct-00000000-0000-4000-8000-000000000001",
+        name: "Tool — 2",
+        ...older,
+        env: [{ key: "TOKEN", value: "typed-by-user" }],
+      }),
+    );
+    store.setEnabled(account.id, false);
+    const sameWords = store.save(stdioConfig({ name: "tool", ...older }));
+    const edited = store.save(stdioConfig({ name: "tool-edited", ...older, args: [...older.args, "--debug"] }));
+    const unrelatedName = store.save(stdioConfig({ name: "My copy", ...older }));
+
+    expect(store.migrateCatalogSuccessors(successors)).toBe(2);
+    expect(store.migrateCatalogSuccessors(successors)).toBe(0);
+
+    expect(store.get(account.id)).toMatchObject({
+      id: account.id,
+      name: "Tool — 2",
+      enabled: false,
+      env: [{ key: "TOKEN", value: "typed-by-user" }],
+      ...newer,
+    });
+    expect(store.get(sameWords.id)).toMatchObject({ name: "tool", ...newer });
+    expect(store.get(edited.id)?.args).toEqual([...older.args, "--debug"]);
+    expect(store.get(unrelatedName.id)?.args).toEqual(older.args);
+    expect(store.list().map((config) => config.id)).toEqual([account.id, sameWords.id, edited.id, unrelatedName.id]);
   });
 });
 

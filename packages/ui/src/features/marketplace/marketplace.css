@@ -824,6 +824,131 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   gap: var(--openbot-space-2);
 }
 
+/* ---------------------------------------------------------------- accounts and chat access */
+
+/* A row of an account: the name and the switch on the first line, the actions below, wrapping. */
+.marketplace-account {
+  flex-wrap: wrap;
+  row-gap: var(--openbot-space-2);
+}
+
+.marketplace-account-actions {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+}
+
+.marketplace-account-badge {
+  margin-inline-start: var(--openbot-space-2);
+}
+
+.marketplace-account-failed {
+  color: var(--openbot-danger);
+  overflow-wrap: anywhere;
+}
+
+.marketplace-account-rename {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.marketplace-account-rename > .ui-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+/* The app offers to move its accounts to the current version. */
+.marketplace-update {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-3) var(--openbot-space-4);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-card);
+  background: var(--openbot-bg-control);
+}
+
+.marketplace-update > p {
+  flex: 1 1 14rem;
+  min-width: 0;
+  margin: 0;
+}
+
+.marketplace-access,
+.marketplace-access-account {
+  display: grid;
+  gap: var(--openbot-space-3);
+  min-width: 0;
+}
+
+.marketplace-access-account > h4 {
+  margin: 0;
+}
+
+.marketplace-access-failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+/* An agent and its three choices. On a narrow screen the choices go under the name. */
+.marketplace-access-row {
+  flex-wrap: wrap;
+  row-gap: var(--openbot-space-2);
+}
+
+.marketplace-access-agent {
+  display: flex;
+  flex: 1 1 10rem;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+}
+
+.marketplace-access-agent-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.marketplace-access-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-1-5);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The step after a connect: what the open chat's agent may do with the new account. */
+.marketplace-allow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-4);
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-card);
+  background: var(--openbot-bg-control);
+}
+
+.marketplace-allow-copy {
+  display: grid;
+  flex: 1 1 16rem;
+  gap: var(--openbot-space-1);
+  min-width: 0;
+}
+
+.marketplace-allow-copy > p {
+  margin: 0;
+}
+
 /* Last, because it is the most specific icon rule: every button icon in the window is 16px. */
 .skills-marketplace .ui-button > svg,
 .marketplace-search > svg {

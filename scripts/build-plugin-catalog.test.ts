@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildPluginCatalog,
+  checkSlackReadPolicy,
   defaultPluginCatalogPaths,
   loadPluginCatalog,
   validatePlugin,
@@ -18,11 +19,24 @@ afterEach(async () => {
 });
 
 describe("plugin catalog source", () => {
-  it("loads fifteen listings in catalog order", async () => {
+  it("loads every listing in catalog order", async () => {
     const { spec, plugins } = await loadPluginCatalog(paths.sourceRoot);
     expect(spec.catalogVersion).toBe("v1");
     expect(plugins.map((plugin) => plugin.slug)).toEqual(spec.order);
-    expect(plugins).toHaveLength(15);
+    expect(plugins).toHaveLength(22);
+  });
+
+  /* Read-only mode allows a reviewed list of Slack tool names, and only for the server it was
+     reviewed against. A bump of the listing must not drop Slack back to the generic hint rule. */
+  it("names the Slack server that read-only mode was reviewed for", async () => {
+    const { plugins } = await loadPluginCatalog(paths.sourceRoot);
+    const slack = plugins.find((plugin) => plugin.slug === "slack");
+    if (!slack) throw new Error("The catalog has no Slack listing.");
+    expect(() => checkSlackReadPolicy(plugins)).not.toThrow();
+    const app = slack.apps[0];
+    if (app?.server.transport !== "stdio") throw new Error("The Slack listing must run a command.");
+    const bumped = { ...slack, apps: [{ ...app, server: { ...app.server, args: ["-y", "slack-mcp-server@1.4.0"] } }] };
+    expect(() => checkSlackReadPolicy([bumped])).toThrow("SLACK_MCP_ARGS");
   });
 
   it("matches the checked-in outputs byte for byte, without touching the repository", async () => {
@@ -32,11 +46,15 @@ describe("plugin catalog source", () => {
       sourceRoot: paths.sourceRoot,
       rendererPath: join(root, "marketplace-plugin-catalog.ts"),
       workerPath: join(root, "plugin-catalog.generated.ts"),
+      successorsPath: join(root, "mcp-catalog-successors.generated.ts"),
       snapshotDir: join(root, "snapshot"),
     };
     await buildPluginCatalog({ paths: generated });
     await expect(readFile(generated.rendererPath, "utf8")).resolves.toBe(await readFile(paths.rendererPath, "utf8"));
     await expect(readFile(generated.workerPath, "utf8")).resolves.toBe(await readFile(paths.workerPath, "utf8"));
+    await expect(readFile(generated.successorsPath, "utf8")).resolves.toBe(
+      await readFile(paths.successorsPath, "utf8"),
+    );
     // A stale detail file from a removed plugin must fail here rather than
     // survive beside the fresh outputs, so the file sets are compared too.
     const fresh = (await listFiles(generated.snapshotDir)).sort();
@@ -50,7 +68,7 @@ describe("plugin catalog source", () => {
   });
 
   it("passes --check on the checked-in tree", async () => {
-    await expect(buildPluginCatalog({ check: true })).resolves.toMatchObject({ plugins: 15 });
+    await expect(buildPluginCatalog({ check: true })).resolves.toMatchObject({ plugins: 22 });
   });
 });
 
@@ -79,6 +97,7 @@ interface TestServer {
   url?: string;
   command?: string;
   args?: unknown[];
+  supersedes?: unknown;
   auth?: Array<{
     id: string;
     kind: string;
@@ -217,5 +236,47 @@ describe("plugin catalog validation", () => {
     expect(() => validatePlugin("example", remote, false, updatedAt)).toThrow("loopback http");
     const unmarked = pluginWithServer({ ...httpServer, url: "http://127.0.0.1:3845/mcp" });
     expect(() => validatePlugin("example", unmarked, false, updatedAt)).toThrow("an https url");
+  });
+});
+
+describe("plugin catalog supersedes", () => {
+  const stdio = (supersedes: unknown): TestServer => ({
+    name: "example",
+    transport: "stdio",
+    command: "npx",
+    args: ["-y", "example-mcp@2.0.0"],
+    ...(supersedes === undefined ? {} : { supersedes }),
+  });
+
+  it("keeps the earlier signatures of a listing", () => {
+    const older = [{ command: "npx", args: ["-y", "example-mcp@1.0.0"] }];
+    const plugin = validatePlugin("example", pluginWithServer(stdio(older)), false, updatedAt);
+    expect(plugin.apps[0]?.server).toMatchObject({ supersedes: older });
+  });
+
+  it("refuses the current signature as an earlier one, and a repeat", () => {
+    const current = [{ command: "npx", args: ["-y", "example-mcp@2.0.0"] }];
+    expect(() => validatePlugin("example", pluginWithServer(stdio(current)), false, updatedAt)).toThrow(
+      "supersedes the current signature",
+    );
+    const twice = [
+      { command: "npx", args: ["-y", "example-mcp@1.0.0"] },
+      { command: "npx", args: ["-y", "example-mcp@1.0.0"] },
+    ];
+    expect(() => validatePlugin("example", pluginWithServer(stdio(twice)), false, updatedAt)).toThrow("repeats");
+  });
+
+  it("refuses an entry with a field it does not use", () => {
+    const loose = [{ command: "npx", args: ["-y", "example-mcp@1.0.0"], workingDirectory: "/tmp" }];
+    expect(() => validatePlugin("example", pluginWithServer(stdio(loose)), false, updatedAt)).toThrow(
+      "only a command and its args",
+    );
+  });
+
+  it("takes an https address for an http listing", () => {
+    const server = { ...httpServer, supersedes: [{ url: "https://example.com/sse" }] };
+    expect(() => validatePlugin("example", pluginWithServer(server), false, updatedAt)).not.toThrow();
+    const plain = { ...httpServer, supersedes: [{ url: "http://example.com/sse" }] };
+    expect(() => validatePlugin("example", pluginWithServer(plain), false, updatedAt)).toThrow("https url");
   });
 });

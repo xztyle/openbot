@@ -55,7 +55,10 @@ const meta = {
   },
   argTypes: {
     kind: { control: "inline-radio", options: ["app", "skill"] },
-    state: { control: "select", options: ["available", "busy", "connected", "attention", "unavailable"] },
+    state: {
+      control: "select",
+      options: ["available", "busy", "connected", "attention", "unavailable", "disabled", "off"],
+    },
   },
   parameters: { layout: "centered", a11y: { test: "error" } },
 } satisfies Meta<typeof MarketplaceSuggestionCard>;
@@ -70,6 +73,32 @@ export const Available: Story = {};
 export const Connecting: Story = { args: { state: "busy" } };
 
 export const Connected: Story = { args: { state: "connected" } };
+
+/** The app is connected and turned on, and this chat may not use it yet. Only the user allows it. */
+export const NotAllowedInThisChat: Story = {
+  args: {
+    kind: "app",
+    name: "Linear",
+    description: "Issues, cycles and project status",
+    iconUrl: LINEAR_ICON,
+    state: "off",
+    stateText: "Linear is connected, but this chat cannot use it yet.",
+    onManage: fn(),
+  },
+};
+
+/** Every account of the app is turned off, so no chat can use it. */
+export const TurnedOff: Story = {
+  args: {
+    kind: "app",
+    name: "Linear",
+    description: "Issues, cycles and project status",
+    iconUrl: LINEAR_ICON,
+    state: "disabled",
+    stateText: "Linear is connected but turned off, so no chat can use it.",
+    onManage: fn(),
+  },
+};
 
 /** The app was connected before, and its sign-in has expired. */
 export const NeedsAttention: Story = {

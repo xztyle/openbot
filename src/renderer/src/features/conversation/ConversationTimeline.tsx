@@ -453,6 +453,7 @@ export function ConversationTimeline() {
                                         messageId={message()?.id ?? initialMessage.id}
                                         appId={suggestion().appId}
                                         localServer={props.server?.kind === "local"}
+                                        access={props.marketplaceAppAccess}
                                         onOpenMarketplaceApp={props.onOpenMarketplaceApp}
                                       />
                                     )}

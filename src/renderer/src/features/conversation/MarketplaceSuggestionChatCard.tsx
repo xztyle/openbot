@@ -9,6 +9,7 @@ import { createMemo, createSignal, onSettled, untrack } from "solid-js";
 import { githubConnectorPort } from "../connectors/github-connector-port";
 import { MARKETPLACE_PLUGINS } from "../settings/marketplace-plugin-catalog";
 import { localizedPlugin } from "../settings/marketplace-plugin-text";
+import type { MarketplaceAppAccess } from "./marketplace-app-access";
 import { dismissMarketplaceSuggestion, marketplaceSuggestionDismissed } from "./marketplace-suggestion-dismissals";
 
 export interface MarketplaceSuggestionChatCardProps {
@@ -16,6 +17,8 @@ export interface MarketplaceSuggestionChatCardProps {
   appId: string;
   /** GitHub connects only on the computer that runs OpenBot. */
   localServer: boolean;
+  /** Where the app stands for this chat. Absent: only the catalog is known, and the card offers Connect. */
+  access?: MarketplaceAppAccess | undefined;
   onOpenMarketplaceApp?: ((request: { appId: string; connect: boolean }) => void) | undefined;
 }
 
@@ -38,8 +41,23 @@ export function MarketplaceSuggestionChatCard(props: MarketplaceSuggestionChatCa
   const github = () => props.appId === GITHUB_MARKETPLACE_APP_ID;
   // Only the desktop app of the computer that runs OpenBot has this connection, and `window.openbot`.
   const githubStatus = createGitHubStatus(untrack(() => github() && props.localServer));
+  /* The card reads what the host holds only while it shows, and a plugin card is the only one that needs it. */
+  onSettled(() => {
+    if (!github()) props.access?.watch();
+  });
   const state = (): MarketplaceSuggestionState => {
-    if (!github()) return "available";
+    if (!github()) {
+      switch (props.access?.state(props.appId)) {
+        case "allowed":
+          return "connected";
+        case "off":
+          return "off";
+        case "disabled":
+          return "disabled";
+        default:
+          return "available";
+      }
+    }
     const status = githubStatus();
     if (!props.localServer || status?.available === false) return "unavailable";
     if (status?.state === "connected") return "connected";
@@ -58,8 +76,14 @@ export function MarketplaceSuggestionChatCard(props: MarketplaceSuggestionChatCa
       unavailableText={
         props.localServer ? t("chat.suggestion.githubUnavailable") : t("chat.suggestion.githubLocalOnly")
       }
+      stateText={
+        state() === "off"
+          ? t("chat.suggestion.off", { name: plugin()?.name ?? props.appId })
+          : t("chat.suggestion.disabled", { name: plugin()?.name ?? props.appId })
+      }
       dismissed={marketplaceSuggestionDismissed(props.messageId)}
       onConnect={props.onOpenMarketplaceApp ? () => open(true) : undefined}
+      onManage={props.onOpenMarketplaceApp ? () => open(false) : undefined}
       onOpenDetails={props.onOpenMarketplaceApp && state() !== "unavailable" ? () => open(false) : undefined}
       onDismiss={() => dismissMarketplaceSuggestion(props.messageId, true)}
       onRestore={() => dismissMarketplaceSuggestion(props.messageId, false)}

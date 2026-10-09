@@ -1,7 +1,8 @@
 import type { CentralAuthUser, UpdateAgentInput } from "@openbot/contracts/ipc";
+import { MCP_SERVERS_CAPABILITY } from "@openbot/contracts/ipc";
 import { hasVisibleToasts } from "@openbot/ui";
 import { unloadedHistory } from "@openbot/ui/features/conversation/ChatScrollRail";
-import { createMemo } from "solid-js";
+import { createEffect, createMemo } from "solid-js";
 import { useNavigation } from "../../navigation";
 import { usePlatform } from "../../platform";
 import { useProviders } from "../../providers";
@@ -15,16 +16,18 @@ import { useBrowserTabs } from "../browser/browser-context";
 import { useCustomAgents } from "../custom-agents/custom-agents-context";
 import { useCustomProviders } from "../custom-providers/custom-providers-context";
 import { useRemoteDesktop } from "../remote-desktop/remote-desktop-context";
-import { serverSupportsCapability } from "../servers/server-capabilities";
+import { serverCanAdminister, serverSupportsCapability } from "../servers/server-capabilities";
 import { useServerScope } from "../servers/server-scope";
 import { useServerSettings } from "../servers/server-settings";
 import { useServers } from "../servers/servers-context";
+import { desktopMarketplaceCalls } from "../settings/marketplace-calls";
 import { useSettings } from "../settings/settings-context";
 import { isReaderAuthor } from "../team/reader-identity";
 import { usePresence } from "../team/team-context";
 import { useUsage } from "../usage/usage-context";
 import { Conversation } from "./Conversation";
 import { useConversation } from "./conversation-context";
+import { createMarketplaceAppAccess } from "./marketplace-app-access";
 
 /**
  * The transcript of the active Agent, with everything the composer needs to send
@@ -230,10 +233,25 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
     () => activeServer()?.kind === "local" && providerRuntimeDownloadsAvailable(),
   );
 
+  /* What the host holds of a suggested app, so its card tells whether this chat can use it. This
+     computer, or a joined server this account administers. */
+  const appAccess = createMarketplaceAppAccess({
+    calls: desktopMarketplaceCalls,
+    serverId: () => {
+      const server = activeServer();
+      return serverCanAdminister(server, MCP_SERVERS_CAPABILITY) ? server.id : undefined;
+    },
+    agentId: () => activeAgent()?.id,
+  });
+  createEffect(skillsMarketplaceOpen, (open, previous) => {
+    if (previous && !open) appAccess.refresh();
+  });
+
   return (
     <Conversation
       platform={platform.appInfo()?.platform}
       onOpenMarketplace={() => setSkillsMarketplaceOpen(true)}
+      marketplaceAppAccess={appAccess}
       onOpenMarketplaceApp={(request) => {
         setPendingPluginConnect(request.connect);
         setPendingPluginSlug(request.appId);

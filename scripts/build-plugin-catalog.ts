@@ -11,6 +11,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
+import { SLACK_MCP_ARGS, SLACK_MCP_COMMAND } from "../src/backend/mcp-chat-policy";
 
 const logger = createOpenBotLogger("build-plugin-catalog");
 
@@ -30,6 +31,8 @@ export interface PluginCatalogPaths {
   sourceRoot: string;
   rendererPath: string;
   workerPath: string;
+  /** The module the backend reads to move a row of an older release to the current listing. */
+  successorsPath: string;
   snapshotDir: string;
 }
 
@@ -38,6 +41,7 @@ export function defaultPluginCatalogPaths(root: string = projectRoot): PluginCat
     sourceRoot: join(root, "marketplace", "plugin-catalog"),
     rendererPath: join(root, "src", "renderer", "src", "features", "settings", "marketplace-plugin-catalog.ts"),
     workerPath: join(root, "apps", "auth-api", "src", "lib", "plugin-catalog.generated.ts"),
+    successorsPath: join(root, "src", "backend", "mcp-catalog-successors.generated.ts"),
     snapshotDir: join(root, "resources", "plugin-catalog"),
   };
 }
@@ -99,6 +103,8 @@ export interface PluginHttpServer {
   transport: "http";
   url: string;
   auth?: PluginAuthFlow[];
+  /** The addresses that earlier releases of the listing used. */
+  supersedes?: Array<{ url: string }>;
 }
 
 export interface PluginStdioServer {
@@ -107,6 +113,8 @@ export interface PluginStdioServer {
   command: string;
   args: string[];
   auth?: PluginAuthFlow[];
+  /** The commands, with their exact words, that earlier releases of the listing used. */
+  supersedes?: Array<{ command: string; args: string[] }>;
 }
 
 export type PluginServer = PluginHttpServer | PluginStdioServer;
@@ -138,10 +146,11 @@ export interface PluginDetail {
 }
 
 /**
- * Reads the catalog source, validates every listing, and writes the three
+ * Reads the catalog source, validates every listing, and writes the
  * generated outputs: the renderer literal the Apps tab reads, the Worker
- * module the JSON routes will serve, and the offline snapshot shipped with
- * the app. With `check`, it fails when a checked-in file differs from a
+ * module the JSON routes will serve, the module that moves rows of an older
+ * release to the current listing, and the offline snapshot shipped with the
+ * app. With `check`, it fails when a checked-in file differs from a
  * fresh build, so a hand edit cannot ship.
  */
 export async function buildPluginCatalog(options?: {
@@ -152,13 +161,15 @@ export async function buildPluginCatalog(options?: {
   const { spec, plugins } = await loadPluginCatalog(paths.sourceRoot);
   const renderer = renderRendererModule(plugins);
   const worker = renderWorkerModule(spec, plugins);
+  const successors = renderSuccessorsModule(plugins);
   const snapshot = renderSnapshot(spec, plugins);
   if (options?.check) {
-    await checkGenerated(paths, renderer, worker, snapshot);
+    await checkGenerated(paths, renderer, worker, successors, snapshot);
     return { plugins: plugins.length, catalogVersion: spec.catalogVersion };
   }
   await writeFile(paths.rendererPath, renderer);
   await writeFile(paths.workerPath, worker);
+  await writeFile(paths.successorsPath, successors);
   await writeSnapshot(paths.snapshotDir, snapshot);
   return { plugins: plugins.length, catalogVersion: spec.catalogVersion };
 }
@@ -179,7 +190,31 @@ export async function loadPluginCatalog(
     const raw = JSON.parse(await readFile(join(sourceRoot, "plugins", slug, "plugin.json"), "utf8"));
     plugins.push(validatePlugin(slug, raw, spec.featured.includes(slug), spec.updatedAt));
   }
+  checkSlackReadPolicy(plugins);
   return { spec, plugins };
+}
+
+/**
+ * Read-only mode for Slack allows a reviewed list of tool names (`SLACK_READ_TOOLS`), and it applies
+ * that list only to the server that `isSlackApp` names. A listing that moves to another version of
+ * the server would silently fall back to the generic `readOnlyHint` rule, which can block every Slack
+ * tool. So the listing and the policy name the same command, and a bump fails here until the list is
+ * reviewed against the new version and `SLACK_MCP_ARGS` is changed with it.
+ */
+export function checkSlackReadPolicy(plugins: PluginDetail[]): void {
+  const server = plugins.find((plugin) => plugin.slug === "slack")?.apps[0]?.server;
+  if (!server) return;
+  if (
+    server.transport !== "stdio" ||
+    server.command !== SLACK_MCP_COMMAND ||
+    JSON.stringify(server.args) !== JSON.stringify(SLACK_MCP_ARGS)
+  ) {
+    throw new Error(
+      "The Slack listing no longer names the server that read-only mode was reviewed for. " +
+        "Review SLACK_READ_TOOLS in src/backend/mcp-chat-policy.ts for the new version, " +
+        "then change SLACK_MCP_ARGS there to match the listing.",
+    );
+  }
 }
 
 function parseCatalogSpec(value: unknown): PluginCatalogSpec {
@@ -290,6 +325,7 @@ function parseApp(slug: string, value: unknown): PluginApp {
   const firstError = errors.name ?? errors.command ?? errors.url;
   if (firstError) throw new Error(`Plugin ${slug} server is invalid: ${firstError}`);
   checkCredentialFlows(slug, server, base);
+  checkSupersedes(slug, server);
   return { id: text("id"), name: text("name"), description: text("description"), iconUrl, server };
 }
 
@@ -307,7 +343,14 @@ function parseServer(slug: string, value: unknown): PluginServer {
     if (!isString(url) || !(local ? isLoopbackHttpUrl(url) : url.startsWith("https://"))) {
       throw new Error(`Plugin ${slug} server needs ${local ? "a loopback http" : "an https"} url.`);
     }
-    return auth ? { name: value.name, transport: "http", url, auth } : { name: value.name, transport: "http", url };
+    const supersedes = parseSupersedes(slug, value.supersedes, "http");
+    return {
+      name: value.name,
+      transport: "http",
+      url,
+      ...(auth ? { auth } : {}),
+      ...(supersedes.length > 0 ? { supersedes } : {}),
+    };
   }
   if (value.transport === "stdio") {
     if (!isString(value.command) || value.command.trim().length === 0 || !Array.isArray(value.args)) {
@@ -317,11 +360,53 @@ function parseServer(slug: string, value: unknown): PluginServer {
       throw new Error(`Plugin ${slug} server args must all be strings: ${JSON.stringify(value.args)}.`);
     }
     const args = [...value.args];
-    return auth
-      ? { name: value.name, transport: "stdio", command: value.command, args, auth }
-      : { name: value.name, transport: "stdio", command: value.command, args };
+    const supersedes = parseSupersedes(slug, value.supersedes, "stdio");
+    return {
+      name: value.name,
+      transport: "stdio",
+      command: value.command,
+      args,
+      ...(auth ? { auth } : {}),
+      ...(supersedes.length > 0 ? { supersedes } : {}),
+    };
   }
   throw new Error(`Plugin ${slug} server needs a known transport.`);
+}
+
+/**
+ * The earlier signatures of a listing. Each one must be complete and valid on its own, because an
+ * update writes the current words over exactly these and nothing else.
+ */
+function parseSupersedes(slug: string, value: unknown, transport: "http"): Array<{ url: string }>;
+function parseSupersedes(slug: string, value: unknown, transport: "stdio"): Array<{ command: string; args: string[] }>;
+function parseSupersedes(
+  slug: string,
+  value: unknown,
+  transport: "http" | "stdio",
+): Array<{ url: string } | { command: string; args: string[] }> {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length === 0 || value.length > 8) {
+    throw new Error(`Plugin ${slug} supersedes must list one to eight earlier signatures.`);
+  }
+  return value.map((entry) => {
+    if (!isDynamicRecord(entry)) throw new Error(`Plugin ${slug} has an invalid supersedes entry.`);
+    if (transport === "http") {
+      if (!isString(entry.url) || !entry.url.startsWith("https://") || Object.keys(entry).length !== 1) {
+        throw new Error(`Plugin ${slug} supersedes entry needs only an https url.`);
+      }
+      return { url: entry.url };
+    }
+    if (
+      !isString(entry.command) ||
+      entry.command.trim().length === 0 ||
+      !Array.isArray(entry.args) ||
+      !entry.args.every(isString) ||
+      Object.keys(entry).length !== 2
+    ) {
+      throw new Error(`Plugin ${slug} supersedes entry needs only a command and its args.`);
+    }
+    return { command: entry.command, args: [...entry.args] };
+  });
 }
 
 function parseAuth(slug: string, value: unknown, transport: unknown): PluginAuthFlow[] | undefined {
@@ -427,6 +512,32 @@ function parseField(slug: string, value: unknown, transport: unknown): PluginAut
     if (value.optional) field.optional = true;
   }
   return field;
+}
+
+function signature(server: PluginServer): string {
+  return server.transport === "http" ? server.url : JSON.stringify([server.command, server.args]);
+}
+
+/** Each earlier signature must be a server the form would accept, not the current one, and not a repeat. */
+function checkSupersedes(slug: string, server: PluginServer): void {
+  const seen = new Set<string>([signature(server)]);
+  const earlier: PluginServer[] =
+    server.transport === "http"
+      ? (server.supersedes ?? []).map((old) => ({ name: server.name, transport: "http", url: old.url }))
+      : (server.supersedes ?? []).map((old) => ({
+          name: server.name,
+          transport: "stdio",
+          command: old.command,
+          args: old.args,
+        }));
+  for (const old of earlier) {
+    const key = signature(old);
+    if (seen.has(key)) throw new Error(`Plugin ${slug} supersedes the current signature or repeats one.`);
+    seen.add(key);
+    const errors = mcpConfigErrors(normalizeMcpConfig(baseServerConfig(old)));
+    const firstError = errors.name ?? errors.command ?? errors.url;
+    if (firstError) throw new Error(`Plugin ${slug} supersedes entry is invalid: ${firstError}`);
+  }
 }
 
 function baseServerConfig(server: PluginServer): McpServerConfig {
@@ -690,8 +801,15 @@ export interface PluginCatalogApp {
 }
 
 export type PluginCatalogServer =
-  | { name: string; transport: "http"; url: string; auth?: unknown }
-  | { name: string; transport: "stdio"; command: string; args: string[]; auth?: unknown };
+  | { name: string; transport: "http"; url: string; auth?: unknown; supersedes?: Array<{ url: string }> }
+  | {
+      name: string;
+      transport: "stdio";
+      command: string;
+      args: string[];
+      auth?: unknown;
+      supersedes?: Array<{ command: string; args: string[] }>;
+    };
 
 export interface PluginCatalogDetail {
   slug: string;
@@ -711,6 +829,59 @@ export interface PluginCatalogDetail {
 }
 
 export const PLUGIN_CATALOG_DETAILS: Record<string, PluginCatalogDetail> = ${tsLiteral(details)};
+`;
+}
+
+/**
+ * The rows an update moves, for the backend: it cannot read the renderer's catalog, and a startup
+ * rewrite must match an earlier release's signature word for word.
+ */
+type PluginSuccessor =
+  | { serverName: string; transport: "http"; from: { url: string }; to: { url: string } }
+  | {
+      serverName: string;
+      transport: "stdio";
+      from: { command: string; args: string[] };
+      to: { command: string; args: string[] };
+    };
+
+function renderSuccessorsModule(plugins: PluginDetail[]): string {
+  const successors = plugins.flatMap((plugin) =>
+    plugin.apps.flatMap((app): PluginSuccessor[] => {
+      const server = app.server;
+      if (server.transport === "http")
+        return (server.supersedes ?? []).map((old) => ({
+          serverName: server.name,
+          transport: "http",
+          from: { url: old.url },
+          to: { url: server.url },
+        }));
+      return (server.supersedes ?? []).map((old) => ({
+        serverName: server.name,
+        transport: "stdio",
+        from: { command: old.command, args: old.args },
+        to: { command: server.command, args: server.args },
+      }));
+    }),
+  );
+  return `/**
+ * The server signatures that earlier releases of a catalog listing used, and the signature each one
+ * moves to.
+ *
+ * Generated from marketplace/plugin-catalog/ by scripts/build-plugin-catalog.ts.
+ * Do not edit by hand.
+ */
+
+export type McpCatalogSuccessor =
+  | { serverName: string; transport: "http"; from: { url: string }; to: { url: string } }
+  | {
+      serverName: string;
+      transport: "stdio";
+      from: { command: string; args: string[] };
+      to: { command: string; args: string[] };
+    };
+
+export const MCP_CATALOG_SUCCESSORS: readonly McpCatalogSuccessor[] = ${tsLiteral(successors)};
 `;
 }
 
@@ -751,15 +922,18 @@ async function checkGenerated(
   paths: PluginCatalogPaths,
   renderer: string,
   worker: string,
+  successors: string,
   snapshot: Array<{ path: string; content: string }>,
 ): Promise<void> {
   const expected = new Map<string, string>();
   expected.set(resolve(paths.rendererPath), renderer);
   expected.set(resolve(paths.workerPath), worker);
+  expected.set(resolve(paths.successorsPath), successors);
   for (const file of snapshot) expected.set(resolve(join(paths.snapshotDir, file.path)), file.content);
   const actual = new Map<string, string>();
   actual.set(resolve(paths.rendererPath), await readFile(paths.rendererPath, "utf8"));
   actual.set(resolve(paths.workerPath), await readFile(paths.workerPath, "utf8"));
+  actual.set(resolve(paths.successorsPath), await readFile(paths.successorsPath, "utf8"));
   for (const file of snapshot) {
     actual.set(resolve(join(paths.snapshotDir, file.path)), await readFile(join(paths.snapshotDir, file.path), "utf8"));
   }

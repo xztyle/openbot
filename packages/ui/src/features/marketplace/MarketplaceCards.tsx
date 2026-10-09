@@ -3,7 +3,7 @@ import { Badge, Button, Heading, Plus, Text } from "@openbot/ui";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { useText } from "@openbot/ui/text";
 import { For, Match, Show, Switch } from "solid-js";
-import { InstallSkill } from "./MarketplaceInstallSkill";
+import { InstallSkill, outdatedAgentIds } from "./MarketplaceInstallSkill";
 import { AppLogo, Done, SkillMark } from "./MarketplaceParts";
 import { CATEGORY_LABELS } from "./marketplace-listing";
 import type { MarketplaceApp } from "./marketplace-model";
@@ -96,6 +96,7 @@ function AgentCard(props: { scope: MarketplaceScope; listing: MarketplaceAgentSu
 function SkillCard(props: { scope: MarketplaceScope; skill: MarketplaceSkillSummary }) {
   const { t } = useText();
   const installs = useInstalls();
+  const outdated = () => outdatedAgentIds(props.scope, props.skill).length > 0;
   const id = () => `marketplace-skill-${props.skill.id}`;
   return (
     <article class="marketplace-card" aria-labelledby={id()}>
@@ -125,6 +126,9 @@ function SkillCard(props: { scope: MarketplaceScope; skill: MarketplaceSkillSumm
         <Text as="span" variant="caption" tone="muted">
           {[props.skill.creatorName, installs(props.skill.installs)].join(" · ")}
         </Text>
+        <Show when={outdated()}>
+          <Badge variant="info-light">{t("marketplace.skill.updateAvailable")}</Badge>
+        </Show>
       </div>
     </article>
   );
@@ -172,27 +176,55 @@ export function AppAction(props: {
         if (connected) props.onConnected?.();
       });
   };
+  /* An app whose accounts are off is not offered again: Connect would add an account. Its page turns
+   * them on. */
+  const held = () => props.app.status === "connected" || props.app.status === "disabled";
+  /* An app with accounts that needs attention is reviewed on its page: Reconnect would add one more
+   * account, with a new connection id and none of the chat access of the others. */
+  const review = () => attention() && props.app.kind === "plugin" && model().appConnections(props.app).length > 0;
   return (
     <Show
-      when={props.app.status !== "connected"}
+      when={!review()}
       fallback={
         <Show when={props.size}>
-          <Done>{t("marketplace.app.connected")}</Done>
+          <Button
+            type="button"
+            variant="outline"
+            size={props.size}
+            aria-label={t("marketplace.app.reviewNamed", { name: props.app.name })}
+            onClick={() => props.scope.nav.go({ kind: "app", id: props.app.id })}
+          >
+            {t("marketplace.app.review")}
+          </Button>
         </Show>
       }
     >
-      {/* A custom server is turned on in Server settings › MCP, not here. */}
-      <Show when={model().canConnectApps() && props.app.kind !== "custom"}>
-        <Button
-          type="button"
-          variant={props.variant ?? (props.size ? "outline" : "default")}
-          size={props.size}
-          loading={model().appBusy(props.app.id)}
-          aria-label={label()}
-          onClick={connect}
-        >
-          {props.named ? label() : attention() ? t("marketplace.app.reconnect") : t("marketplace.app.connect")}
-        </Button>
+      <Show
+        when={!held()}
+        fallback={
+          <Show when={props.size}>
+            <Show
+              when={props.app.status === "connected"}
+              fallback={<Badge variant="outline">{t("marketplace.app.disabled")}</Badge>}
+            >
+              <Done>{t("marketplace.app.connected")}</Done>
+            </Show>
+          </Show>
+        }
+      >
+        {/* A custom server is turned on in Server settings › MCP, not here. */}
+        <Show when={model().canConnectApps() && props.app.kind !== "custom"}>
+          <Button
+            type="button"
+            variant={props.variant ?? (props.size ? "outline" : "default")}
+            size={props.size}
+            loading={model().appBusy(props.app.id)}
+            aria-label={label()}
+            onClick={connect}
+          >
+            {props.named ? label() : attention() ? t("marketplace.app.reconnect") : t("marketplace.app.connect")}
+          </Button>
+        </Show>
       </Show>
     </Show>
   );
@@ -215,6 +247,11 @@ function focusCard(label: string) {
 /** An app card, as on the Agents and Skills tabs. The card opens the app page; Connect sits above it. */
 export function AppCard(props: { scope: MarketplaceScope; app: MarketplaceApp }) {
   const { t } = useText();
+  /** "2 accounts" for an app the host holds, so a card says how many connections an agent could use. */
+  const accounts = () => {
+    const count = props.app.accountCount ?? 0;
+    return count > 0 ? t("marketplace.app.accounts", { count }) : "";
+  };
   const id = () => `marketplace-app-${props.app.id}`;
   const open = () => t("marketplace.open", { name: props.app.name });
   return (
@@ -241,7 +278,7 @@ export function AppCard(props: { scope: MarketplaceScope; app: MarketplaceApp })
       </Text>
       <div class="marketplace-card-foot">
         <Text as="span" variant="caption" tone="muted">
-          {t(appKind(props.app))}
+          {[t(appKind(props.app)), accounts()].filter(Boolean).join(" · ")}
         </Text>
       </div>
     </article>

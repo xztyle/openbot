@@ -13,7 +13,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative } from "node:path";
-import { assertSupportedAttachmentName, attachmentMimeTypeForName } from "@openbot/contracts/attachment-files";
+import {
+  assertSupportedAttachmentName,
+  attachmentFileExtension,
+  attachmentMimeTypeForName,
+} from "@openbot/contracts/attachment-files";
 import { ATTACHMENT_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AttachmentDataInput,
@@ -676,9 +680,14 @@ function attachmentMetadata(
   explicitMimeType?: string,
 ): { kind: AttachmentKind; mimeType: string; previewKind: AttachmentPreviewKind } {
   const inferred = attachmentMimeTypeForName(name);
-  // Media stays an opaque file even if an importer supplies a preview MIME type.
+  // Media stays an opaque file even if an importer supplies a preview MIME type. An SVG is text for
+  // the provider: an `image/*` type would send it as a raster image block.
   const mimeType =
-    inferred.startsWith("audio/") || inferred.startsWith("video/") ? inferred : explicitMimeType?.trim() || inferred;
+    inferred.startsWith("audio/") || inferred.startsWith("video/")
+      ? inferred
+      : attachmentFileExtension(name) === "svg"
+        ? "text/plain"
+        : explicitMimeType?.trim() || inferred;
   const previewKind: AttachmentPreviewKind = mimeType.startsWith("image/")
     ? "image"
     : mimeType === "application/pdf"

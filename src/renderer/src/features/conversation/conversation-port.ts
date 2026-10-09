@@ -12,6 +12,7 @@ export interface ConversationPort {
     | "listRoutines"
     | "listTables"
     | "markConversationRead"
+    | "markConversationUnread"
     | "readConversationPage"
     | "searchConversationMessages"
     | "sendMessage"

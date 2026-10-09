@@ -13,11 +13,14 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { isString } from "@openbot/contracts/runtime-values";
+import { createOpenBotLogger } from "@openbot/logging";
 import { Deferred, Effect, Exit } from "effect";
 import { runCauseEffect } from "./effect-boundary";
 import { type McpOperationError, mcpCall, mcpFailure, mcpResult, mcpSync } from "./mcp-effects";
 import type { DynamicToolResult } from "./protocol";
 import type { ProviderClientOperationError } from "./provider-client-effects";
+
+const logger = createOpenBotLogger("local-mcp-bridge");
 
 interface DynamicToolDefinition {
   type: "function";
@@ -206,6 +209,9 @@ export class LocalMcpBridge {
   ): Effect.fn.Return<void, McpOperationError> {
     const route = this.#authorize(request);
     if (!route) {
+      // Usually a session that closed or was replaced while its agent still held the old address. The
+      // agent then sees its OpenBot tools as disconnected, and nothing else records the call.
+      logger.warn("The local MCP bridge refused a call from a session it does not know.");
       response.writeHead(401, { "content-type": "application/json" });
       response.end(JSON.stringify({ error: "unauthorized" }));
       return;
@@ -301,7 +307,12 @@ export class LocalMcpBridge {
           if (requestId !== undefined) route.running.get(requestId)?.abort();
         }
         mcpResult(yield* Effect.result(mcpCall(() => transport.handleRequest(request, response, body))));
-      } catch {
+      } catch (error) {
+        // The error name only. A parse error quotes the request body, which holds the tool arguments.
+        logger.warn("The local MCP bridge failed to answer a call.", {
+          namespace: route.namespace.name,
+          cause: error instanceof Error ? error.name : "unknown",
+        });
         if (!response.headersSent) {
           response.writeHead(500, { "content-type": "application/json" });
           response.end(

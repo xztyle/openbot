@@ -69,6 +69,7 @@ export const messages = defineMessages("webClient", {
   "webClient.error.incompatible": "This host is not compatible with OpenBot web. Update the host and reload this page.",
   "webClient.error.sendUnconfirmed": "Message delivery is not confirmed. Refresh before sending it again.",
   "webClient.error.fileType": "Update the host to attach this file type.",
+  "webClient.error.markUnreadUnsupported": "Update the host to mark a chat unread.",
   "webClient.error.uploadCancelled": "The attachment upload was cancelled.",
   "webClient.error.duplication": "This host does not support agent duplication.",
   "webClient.error.connectServerFirst": "Connect to this server first.",

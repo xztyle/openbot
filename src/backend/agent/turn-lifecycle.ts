@@ -11,6 +11,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
+import { createOpenBotLogger } from "@openbot/logging";
 import { classifyFailure } from "@openbot/telemetry";
 import { Deferred, Effect, Exit, Schema, Scope } from "effect";
 import type { AgentClient } from "../agent-client";
@@ -28,6 +29,7 @@ import {
   isRecord,
   type ThreadItem,
 } from "../protocol";
+import { boundedReasoningText, REASONING_TEXT_LIMIT } from "../reasoning-text";
 import type { AgentMemories } from "./agent-memories";
 import type { AttentionBrowserHost, AttentionRegistry } from "./attention-registry";
 import type { BrowserUploadTarget } from "./browser-uploads";
@@ -49,12 +51,15 @@ import {
   isNonActionableCodexWarning,
   providerLabel,
   type ToolUsageSignal,
+  toolFailure,
   toolProgressText,
   toolUsage,
   toThreadItem,
 } from "./thread-items";
 import { collectProviderUsage } from "./usage-collection";
 import { USAGE_LIMIT_METHOD, type UsageLimitGate } from "./usage-limit-gate";
+
+const logger = createOpenBotLogger("turn-lifecycle");
 
 export interface AgentBrowserHost extends AttentionBrowserHost, BrowserUploadTarget {
   onChanged(listener: (tabs: BrowserTab[], activeTabId: string | null) => void): () => void;
@@ -402,6 +407,8 @@ export class TurnLifecycle {
           }
           if (notification.method === "item/reasoning/summaryPartAdded" && !message.text) return;
         }
+        // A thought that passed its bound stops growing; the completed item then holds the bounded text.
+        if (message.itemType === "commentary" && message.text.length >= REASONING_TEXT_LIMIT) return;
         message.text += delta;
         message.status = "streaming";
         this.#deltas.buffer({
@@ -707,6 +714,8 @@ export class TurnLifecycle {
       status: outcome,
       origin: deliveries[0]?.delivery.sender.kind ?? "unknown",
       ...(quiet ? { quiet: true as const } : {}),
+      // After the deliveries ended and the result reached the requester, so a relayed answer counts.
+      ...(outcome === "completed" && this.#mailbox.hasFollowUpWork(agentId) ? { moreWork: true as const } : {}),
     });
     if (shouldCompact) yield* this.#compaction.request(agentId, threadId);
     else this.#hooks.scheduleDrain(agentId);
@@ -810,6 +819,9 @@ export class TurnLifecycle {
   ) {
     const usage = completed ? toolUsage(item) : null;
     if (usage) this.#hooks.emitToolUsage({ ...usage, agentId, turnId });
+    // The log keeps what the activity line shows for a moment: which tool failed, in which turn, and why.
+    const failure = completed ? toolFailure(item) : null;
+    if (failure) logger.warn("A tool step failed.", { agentId, turnId, tool: failure.tool, cause: failure.reason });
     if (yield* this.#images.handleItem(agentId, threadId, turnId, item, completed)) return;
     const toolProgress = toolProgressText(item, completed);
     if (toolProgress) {
@@ -823,7 +835,8 @@ export class TurnLifecycle {
       message = newAssistantMessage(item.id, turnId);
       snapshot.messages.push(message);
     }
-    if (isString(item.text)) message.text = item.text;
+    // Thinking is commentary: it is redacted and bounded here, the one place a finished item is stored.
+    if (isString(item.text)) message.text = item.phase === "commentary" ? boundedReasoningText(item.text) : item.text;
     if (isString(item.phase)) message.itemType = item.phase;
     message.status = completed ? "completed" : "streaming";
     this.#itemTurns.set(item.id, turnId);

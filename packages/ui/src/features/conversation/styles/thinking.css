@@ -1,0 +1,121 @@
+/*
+ * The reasoning of a turn. A closed row is one muted line in the chat; open, it shows the text in a
+ * box that scrolls. The live version lives under the agent activity line.
+ */
+
+.thinking-disclosure {
+  box-sizing: border-box;
+  width: min(100%, 448px);
+  margin: 0 0 var(--openbot-space-1);
+  color: var(--openbot-text-muted);
+}
+
+.ui-button.thinking-disclosure-toggle {
+  display: flex;
+  width: 100%;
+  height: auto;
+  min-height: var(--openbot-chat-marker-height);
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--openbot-space-1-5);
+  padding: var(--openbot-space-1) var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+  text-align: start;
+}
+
+.thinking-disclosure-chevron {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  flex: 0 0 auto;
+  transform: rotate(-90deg);
+  transition: transform var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+
+.thinking-disclosure[data-open] .thinking-disclosure-chevron {
+  transform: rotate(0deg);
+}
+
+.thinking-disclosure-label {
+  flex: 0 0 auto;
+  color: var(--openbot-text-secondary);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.thinking-disclosure-preview {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thinking-disclosure-panel {
+  min-width: 0;
+}
+
+.thinking-text {
+  box-sizing: border-box;
+  max-height: min(60dvh, 480px);
+  overflow-y: auto;
+  margin: var(--openbot-space-1) 0 var(--openbot-space-1) var(--openbot-space-3);
+  border-inline-start: 2px solid var(--openbot-border);
+  padding: var(--openbot-space-1) var(--openbot-space-3);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.thinking-text:focus-visible {
+  outline: 0;
+  box-shadow: var(--openbot-focus-ring);
+}
+
+.thinking-step + .thinking-step {
+  margin-top: var(--openbot-space-2);
+}
+
+.thinking-note {
+  margin: var(--openbot-space-2) 0 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+/* The live version: the activity line becomes the button, and the text opens under it. */
+.ui-button.agent-activity-toggle {
+  pointer-events: auto;
+  display: flex;
+  height: auto;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--openbot-space-1);
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.agent-activity-toggle-chevron {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  flex: 0 0 auto;
+  color: var(--openbot-text-muted);
+  transform: rotate(-90deg);
+  transition: transform var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+
+.agent-activity-toggle[aria-expanded="true"] .agent-activity-toggle-chevron {
+  transform: rotate(0deg);
+}
+
+.agent-activity-reasoning {
+  pointer-events: auto;
+  padding: 0 0 var(--openbot-space-2) var(--openbot-space-2);
+}

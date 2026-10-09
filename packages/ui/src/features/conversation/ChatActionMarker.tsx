@@ -43,9 +43,15 @@ interface ChatActionMarkerProps {
   onSelectAgent: (agentId: string) => void;
   onOpenRoutine?: ((routine: { routineId: string; name: string }) => void) | undefined;
   onOpenHostedSite?: ((url: string) => void) | undefined;
+  /**
+   * Opens the full message of an agent-to-agent marker, from its preview or from anywhere on the row
+   * that is not a control of its own. `trigger` is the element to give focus back to. Absent, the
+   * marker shows no preview, so a surface that cannot open the message does not tease it.
+   */
+  onOpenAgentMessage?: ((messageId: string, trigger: HTMLElement) => void) | undefined;
 }
 
-const STATUS_LABELS = {
+export const STATUS_LABELS = {
   queued: "chat.marker.status.queued",
   "in-progress": "chat.marker.status.inProgress",
   "needs-attention": "chat.marker.status.needsAttention",
@@ -104,6 +110,7 @@ export function ChatActionMarker(props: ChatActionMarkerProps) {
                   onSelectAgent={props.onSelectAgent}
                   onOpenRoutine={props.onOpenRoutine}
                   onOpenHostedSite={props.onOpenHostedSite}
+                  onOpenAgentMessage={props.onOpenAgentMessage}
                 />
               )}
             </Show>
@@ -128,6 +135,7 @@ export function ChatActionMarker(props: ChatActionMarkerProps) {
           agents={props.agents}
           drawnMessageCount={drawnEntryCount}
           onSelectAgent={props.onSelectAgent}
+          onOpenAgentMessage={props.onOpenAgentMessage}
         />
       )}
     </Show>
@@ -155,6 +163,7 @@ function MarkerGroup(props: {
   routineAvailable?: boolean | undefined;
   onSelectAgent: (agentId: string) => void;
   onOpenRoutine?: ((routine: { routineId: string; name: string }) => void) | undefined;
+  onOpenAgentMessage?: ((messageId: string, trigger: HTMLElement) => void) | undefined;
   summary: (control: MarkerGroupToggle) => JSX.Element;
 }) {
   const { t } = useText();
@@ -194,6 +203,7 @@ function MarkerGroup(props: {
                         routineAvailable={props.routineAvailable}
                         onSelectAgent={props.onSelectAgent}
                         onOpenRoutine={props.onOpenRoutine}
+                        onOpenAgentMessage={props.onOpenAgentMessage}
                       />
                     </li>
                   )}
@@ -221,6 +231,7 @@ function AgentMessageGroupMarker(props: {
   agents: AgentProfile[];
   drawnMessageCount: number;
   onSelectAgent: (agentId: string) => void;
+  onOpenAgentMessage?: ((messageId: string, trigger: HTMLElement) => void) | undefined;
 }) {
   const { t, format } = useText();
   const agentIds = () => [
@@ -248,6 +259,7 @@ function AgentMessageGroupMarker(props: {
       drawnCount={props.drawnMessageCount}
       agents={props.agents}
       onSelectAgent={props.onSelectAgent}
+      onOpenAgentMessage={props.onOpenAgentMessage}
       summary={(control) => (
         <>
           <span class="chat-action-marker-label">{label()}</span>
@@ -370,6 +382,11 @@ function SingleChatActionMarker(
     setHistoryExpanded(opening);
     if (opening || prefersReducedMotion()) setHistoryMounted(opening);
   };
+  /** The message a click opens: an agent-to-agent marker with text, on a surface that can open it. */
+  const openableMessage = () => {
+    const marker = props.marker;
+    return marker.kind === "agent-message" && marker.preview && props.onOpenAgentMessage ? marker : undefined;
+  };
   const routineHistory = () => (props.marker.kind === "routine-run" ? props.marker.previousTransitions : undefined);
   const historyId = () =>
     props.marker.kind === "routine-run" ? `routine-run-history-${props.marker.runId}` : undefined;
@@ -379,6 +396,15 @@ function SingleChatActionMarker(
       role={props.announce ? "status" : "group"}
       aria-live={props.announce ? "polite" : "off"}
       aria-label={markerAccessibleLabel(props.marker, props.agents, t)}
+      data-openable={openableMessage() ? "" : undefined}
+      onClick={(event) => {
+        // The row is a click target beside its controls, so a click on an avatar, a menu or the
+        // preview button keeps its own meaning. The preview button is the keyboard route.
+        const open = openableMessage();
+        const target = event.target;
+        if (!open || !(target instanceof Element) || target.closest("button, a, [role='menuitem']")) return;
+        props.onOpenAgentMessage?.(open.messageId, event.currentTarget);
+      }}
     >
       <div class="chat-action-marker-summary">
         <MarkerContent class="chat-action-marker-content">
@@ -458,6 +484,21 @@ function SingleChatActionMarker(
             </Button>
           </Show>
         </MarkerContent>
+        <Show when={openableMessage()}>
+          {(marker) => (
+            <Button
+              variant="ghost"
+              type="button"
+              class="chat-action-message-preview"
+              aria-haspopup="dialog"
+              aria-label={t("chat.marker.openMessage", { preview: marker().preview ?? "" })}
+              data-cuelume-tap="open"
+              onClick={(event) => props.onOpenAgentMessage?.(marker().messageId, event.currentTarget)}
+            >
+              <span class="chat-action-message-preview-text">{marker().preview}</span>
+            </Button>
+          )}
+        </Show>
         <Show when={historyMounted() && routineHistory()}>
           {(transitions) => (
             <RoutineRunHistory

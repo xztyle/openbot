@@ -70,24 +70,101 @@ export const CONTEXT_ATTACHMENT_EXTENSIONS = [
   "zsh",
 ] as const;
 
+/**
+ * Text-only formats added after the base list. A host that advertises the `text-attachments`
+ * capability accepts them. An older remote host rejects them, so a client offers them only to a host
+ * that advertises it. A dotfile such as `.gitignore` has the extension `gitignore`, so the dotfile
+ * names are in this list as well. Archives and binary formats stay out.
+ */
+export const EXTENDED_TEXT_ATTACHMENT_EXTENSIONS = [
+  "diff",
+  "patch",
+  "tsv",
+  "har",
+  "graphql",
+  "gql",
+  "proto",
+  "tf",
+  "tfvars",
+  "hcl",
+  "lua",
+  "svg",
+  "r",
+  "pl",
+  "dart",
+  "ex",
+  "exs",
+  "erl",
+  "hs",
+  "clj",
+  "groovy",
+  "zig",
+  "jl",
+  "scss",
+  "sass",
+  "less",
+  "rst",
+  "adoc",
+  "org",
+  "srt",
+  "vtt",
+  "ndjson",
+  "geojson",
+  "jsonc",
+  "json5",
+  "cfg",
+  "cmake",
+  "mk",
+  "nix",
+  "bat",
+  "cmd",
+  "ics",
+  "gitignore",
+  "gitattributes",
+  "dockerignore",
+  "editorconfig",
+  "npmrc",
+  "nvmrc",
+  "prettierrc",
+  "eslintrc",
+  "babelrc",
+  "bashrc",
+  "zshrc",
+] as const;
+
 export const ATTACHMENT_FILE_EXTENSIONS = [
   ...IMAGE_ATTACHMENT_EXTENSIONS,
   ...MEDIA_ATTACHMENT_EXTENSIONS,
   ...CONTEXT_ATTACHMENT_EXTENSIONS,
+  ...EXTENDED_TEXT_ATTACHMENT_EXTENSIONS,
 ] as const;
 
-/** What a host accepts beyond the base list. An older remote host rejects EML, MP3, and MOV. */
+/**
+ * What a host accepts beyond the base list. An older remote host rejects EML, MP3, MOV, and the
+ * extended text formats.
+ */
 export interface AttachmentSupport {
   eml: boolean;
   media: boolean;
+  text: boolean;
+}
+
+function isExtendedTextExtension(extension: string | null): boolean {
+  return EXTENDED_TEXT_ATTACHMENT_EXTENSIONS.some((text) => text === extension);
 }
 
 export function supportedAttachmentExtensions(support: AttachmentSupport): string[] {
   return ATTACHMENT_FILE_EXTENSIONS.filter(
     (extension) =>
       (support.eml || extension !== "eml") &&
-      (support.media || !MEDIA_ATTACHMENT_EXTENSIONS.some((media) => media === extension)),
+      (support.media || !MEDIA_ATTACHMENT_EXTENSIONS.some((media) => media === extension)) &&
+      (support.text || !isExtendedTextExtension(extension)),
   );
+}
+
+/** Whether the name needs a host that advertises the `text-attachments` capability. */
+export function isExtendedTextAttachmentName(name: string): boolean {
+  return isExtendedTextExtension(attachmentFileExtension(name));
 }
 
 export const ATTACHMENT_FILE_ACCEPT = ATTACHMENT_FILE_EXTENSIONS.map((extension) => `.${extension}`).join(",");
@@ -120,6 +197,7 @@ export function isSupportedAttachmentNameFor(name: string, support: AttachmentSu
   const extension = attachmentFileExtension(name);
   if (extension === "eml") return support.eml;
   if (MEDIA_ATTACHMENT_EXTENSIONS.some((media) => media === extension)) return support.media;
+  if (isExtendedTextExtension(extension)) return support.text;
   return true;
 }
 
@@ -155,9 +233,10 @@ export function attachmentMimeTypeForName(name: string) {
       return "video/quicktime";
     case "pdf":
       return "application/pdf";
-    // SVG is not in ATTACHMENT_FILE_EXTENSIONS, so it cannot be attached: an attachment with an
-    // `image/*` type becomes `kind: "image"` and reaches the provider as a raster image block.
-    // The file preview panel previews any workspace file, so it still needs the type.
+    // An SVG attachment is text, not a raster image: an attachment with an `image/*` type becomes
+    // `kind: "image"` and reaches the provider as a raster image block. `attachmentMetadata` in
+    // `src/backend/attachment-files.ts` therefore stores an SVG attachment as `text/plain`. The file
+    // preview panel previews any workspace file, so this function still returns the image type.
     case "svg":
       return "image/svg+xml";
     case "eml":

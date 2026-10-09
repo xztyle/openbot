@@ -32,6 +32,36 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+describe("MailboxStore follow-up work", () => {
+  it("counts queued work and a request that waits for a teammate, and nothing else", async () => {
+    expect(store.hasFollowUpWork("chief")).toBe(false);
+    // The orchestrator asks the builder for work and waits for the answer.
+    const request = await runCauseEffect(
+      store.enqueue({ sender: { kind: "agent", agentId: "chief" }, recipientAgentIds: ["builder"], text: "Build it" }),
+    );
+    expect(store.hasFollowUpWork("chief")).toBe(true);
+    expect(store.hasFollowUpWork("builder")).toBe(true);
+    const delivery = required(request.deliveries[0]);
+    await runCauseEffect(store.markStarting(delivery.id));
+    await runCauseEffect(store.markRunning(delivery.id, "turn-1"));
+    expect(store.hasFollowUpWork("chief")).toBe(true);
+    await runCauseEffect(store.markTerminal(delivery.id, "completed"));
+    expect(store.hasFollowUpWork("chief")).toBe(false);
+    expect(store.hasFollowUpWork("builder")).toBe(false);
+    // A message that wants no answer leaves its sender idle, and the receiver has work.
+    await runCauseEffect(
+      store.enqueue({
+        sender: { kind: "agent", agentId: "chief" },
+        recipientAgentIds: ["builder"],
+        text: "FYI",
+        expectsReply: false,
+      }),
+    );
+    expect(store.hasFollowUpWork("chief")).toBe(false);
+    expect(store.hasFollowUpWork("builder")).toBe(true);
+  });
+});
+
 describe("MailboxStore", () => {
   it("preserves edit attachment bytes across restart and clears unrelated drafts", async () => {
     const file = join(root, "pasted.txt");

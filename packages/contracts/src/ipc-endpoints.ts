@@ -835,6 +835,8 @@ export const IPC_ENDPOINTS = {
     markConversationRead: scopedRequest<MarkConversationReadInput, ConversationReadState>()(
       "agent:mark-conversation-read",
     ),
+    // The argument is the agent id. A joined server needs the `conversation-unread` capability.
+    markConversationUnread: scopedRequest<string, ConversationReadState>()("agent:mark-conversation-unread"),
     sendMessage: scopedRequest<SendMessageInput, QueuedMessageReceipt>()("agent:send-message"),
     setMessageReaction: scopedRequest<SetMessageReactionInput, void>()("agent:set-message-reaction"),
     listQueue: scopedRequest<string, QueueSnapshot>()("agent:list-queue"),

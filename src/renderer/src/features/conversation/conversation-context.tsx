@@ -863,6 +863,20 @@ const Conversation = createSimpleContext({
       }
     }
 
+    /**
+     * Marks an agent chat unread again. The host moves the read cursor to before the first message, so
+     * the whole history counts as unread: the cursor has no value for "only the last message".
+     */
+    async function markAgentMessagesUnread(agentId: string, serverId = activeServerId()): Promise<void> {
+      if (!scopeIsCurrent()) return;
+      // A read that is still in flight would write its cursor after this one.
+      await (conversationReadOperations.get(agentConversationKey(serverId, agentId)) ?? Promise.resolve()).catch(
+        () => undefined,
+      );
+      const state = await conversationPort().agent.markConversationUnread(agentId, serverId);
+      if (scopeIsCurrent()) applyConversationReadState(agentId, state);
+    }
+
     /** Marks each unread agent chat read through its newest message, which may not be loaded yet. */
     async function markAllAgentMessagesRead(): Promise<void> {
       const serverId = activeServerId();
@@ -941,6 +955,7 @@ const Conversation = createSimpleContext({
       searchAgentMessages,
       sendMessage,
       markAgentMessagesRead,
+      markAgentMessagesUnread,
       markAllAgentMessagesRead,
       presentPromptResolution,
       setTeamTyping: notifyTeamTyping,

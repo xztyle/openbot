@@ -28,6 +28,7 @@ import { isCompletionSoundEnabled, setCompletionSoundEnabled } from "../../compl
 import { setWebReportsEnabled, webReportsEnabled } from "../../error-reports";
 import { currentDevicePlatform, setSendShortcutMode, useSendShortcutMode } from "../../send-shortcut-preference";
 import type { WebAccountCalls } from "./web-account";
+import { isNotificationTextEnabled, setNotificationTextEnabled } from "./web-notification-text";
 
 const TABS = ["profile", "preferences"] as const;
 type WebAccountSettingsTab = (typeof TABS)[number];
@@ -67,11 +68,13 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
   const { t } = useText();
   const [activeTab, setActiveTab] = createSignal<WebAccountSettingsTab>("profile");
   const [completionSound, setCompletionSound] = createSignal(isCompletionSoundEnabled());
+  const [notificationText, setNotificationText] = createSignal(isNotificationTextEnabled());
   const sendShortcutMode = useSendShortcutMode();
   // Playback reads the stored value on each event, so the switch follows a change from another tab.
   const [soundChoice, setSoundChoice] = createSignal(readActionSoundChoice());
   const readSoundSettings = () => {
     setCompletionSound(isCompletionSoundEnabled());
+    setNotificationText(isNotificationTextEnabled());
     setSoundChoice(readActionSoundChoice());
   };
   window.addEventListener("storage", readSoundSettings);
@@ -192,6 +195,15 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                 }}
                 label={t("settings.taskSound.title")}
                 description={t("settings.taskSound.description")}
+              />
+              <SwitchField
+                checked={notificationText()}
+                onChange={(checked) => {
+                  setNotificationText(checked);
+                  setNotificationTextEnabled(checked);
+                }}
+                label={t("settings.notificationText.title")}
+                description={t("settings.notificationText.description")}
               />
               <Item class="settings-modal-row settings-sound-theme-row">
                 <ItemContent>

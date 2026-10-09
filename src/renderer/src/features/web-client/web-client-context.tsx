@@ -853,11 +853,12 @@ export function createWebWorkspace(
     })();
   }
   /** Sends one queue change for the selected agent. The host then sends the new queue as an event. */
-  function changeQueue(change: (agentId: string) => Promise<void>) {
+  /** Resolves when the host has answered. A failure is reported and does not reject. */
+  function changeQueue(change: (agentId: string) => Promise<void>): Promise<void> {
     const id = selectedId;
     const current = generation;
-    if (!id || state.status !== "online") return;
-    void change(id).catch((error) => {
+    if (!id || state.status !== "online") return Promise.resolve();
+    return change(id).catch((error) => {
       if (current === generation) report(error);
     });
   }
@@ -976,6 +977,21 @@ export function createWebWorkspace(
     readWrites.set(id, write);
     return write;
   }
+  /** Marks an agent's whole conversation unread, then updates the open page if it is that agent's. */
+  async function markUnread(id: string) {
+    if (state.status !== "online" || !state.capabilities.includes("conversation-unread")) {
+      throw new Error(currentText().t("webClient.error.markUnreadUnsupported"));
+    }
+    const current = generation;
+    const readState = await (readWrites.get(id) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => runtime.markUnread(id));
+    if (disposed || current !== generation) return;
+    setState((draft) => {
+      const page = draft.conversations[id]?.page;
+      if (page) page.readState = readState;
+    });
+  }
   /** Marks every agent with unread messages read through its newest one, loaded or not. */
   async function markAllRead() {
     if (state.status !== "online") return;
@@ -1075,10 +1091,11 @@ export function createWebWorkspace(
     select,
     refresh,
     send,
-    cancelQueued: (deliveryId: string) => changeQueue((agentId) => runtime.cancelQueued({ agentId, deliveryId })),
+    cancelQueued: (deliveryId: string): Promise<void> =>
+      changeQueue((agentId) => runtime.cancelQueued({ agentId, deliveryId })),
     steerQueued(deliveryId: string) {
       const expectedTurnId = conversation()?.page?.activeTurnId;
-      if (expectedTurnId) changeQueue((agentId) => runtime.steerQueued({ agentId, deliveryId, expectedTurnId }));
+      if (expectedTurnId) void changeQueue((agentId) => runtime.steerQueued({ agentId, deliveryId, expectedTurnId }));
     },
     reorderQueue: (deliveryIds: string[]) => changeQueue((agentId) => runtime.reorderQueue({ agentId, deliveryIds })),
     async updateQueued(
@@ -1105,6 +1122,7 @@ export function createWebWorkspace(
       }
     },
     markRead,
+    markUnread,
     markAllRead,
     async mutateSidebarLayout(action: SidebarLayoutAction) {
       if (state.status !== "online" || !state.capabilities.includes("sidebar-layout")) {

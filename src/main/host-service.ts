@@ -947,6 +947,12 @@ export class HostService extends EventEmitter<HostEvents> {
     );
   }
 
+  markAgentConversationUnread(agentId: string) {
+    return remoteDecode(() => this.#currentAgentReaderId()).pipe(
+      Effect.flatMap((readerId) => this.#options.agents.markConversationUnread(agentId, readerId)),
+    );
+  }
+
   listDirectThreads(): DirectThreadSummary[] {
     if (!this.#options.store.configured) return [];
     const memberId = this.#findCurrentMemberId();

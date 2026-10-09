@@ -1148,6 +1148,19 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   workspace.state.status === "online" && workspace.state.capabilities.includes("agent-duplication")
                 }
                 duplicatingAgentIds={new Set(workspace.state.duplicatingAgentIds)}
+                onMarkAgentUnread={
+                  workspace.state.capabilities.includes("conversation-unread")
+                    ? (agentId) => {
+                        void workspace.markUnread(agentId).then(
+                          () => toast.success(t("sidebar.agentMenu.markedUnread")),
+                          () =>
+                            actionToast.error(t("sidebar.agentMenu.markUnreadFailed"), {
+                              report: { operation: "other", source: "action", cause_code: "unknown" },
+                            }),
+                        );
+                      }
+                    : undefined
+                }
                 onDuplicateAgent={workspace.duplicateAgent}
                 deleteSupported={
                   workspace.state.status === "online" &&

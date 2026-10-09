@@ -2,6 +2,11 @@
 
 export interface NotificationPreference {
   desktopNotifications: boolean;
+  /**
+   * Puts the question or the approval reason of an agent in the notification body. Absent means off:
+   * a notification can show on a lock screen.
+   */
+  showText?: boolean;
 }
 
 // The conversation a clicked notification was about. The renderer opens it.

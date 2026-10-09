@@ -165,6 +165,11 @@ export interface WebWorkspaceRuntime {
   conversation(agentId: string, before?: string): Promise<ConversationPage>;
   /** Marks this member's messages from the agent read through `throughMessageId`, or all when it is null. */
   markRead(agentId: string, throughMessageId: string | null): Promise<ConversationReadState>;
+  /**
+   * Marks the whole conversation unread for this member: the host's read cursor has no value for "only
+   * the last message". Needs the `conversation-unread` capability.
+   */
+  markUnread(agentId: string): Promise<ConversationReadState>;
   /** This member's read state for each agent, keyed by agent id. Invalid entries are left out. */
   conversationReads(): Promise<Record<string, ConversationReadState>>;
   /** Resolves to the conversation message the host stored: the delivery id of the receipt. */
@@ -718,6 +723,11 @@ export function createWebWorkspaceRuntime(
       if (!isConversationReadState(value)) throw new Error("The host returned an invalid read state.");
       return value;
     },
+    async markUnread(id) {
+      const value = await request("POST", TEAM_API_ROUTES.agent.conversationUnread(id), {});
+      if (!isConversationReadState(value)) throw new Error("The host returned an invalid read state.");
+      return value;
+    },
     async conversationReads() {
       const value = await request("GET", TEAM_API_ROUTES.agents.conversationReads);
       const reads: Record<string, ConversationReadState> = {};
@@ -788,6 +798,7 @@ export function createWebWorkspaceRuntime(
       const supported = supportedAttachmentExtensions({
         eml: capabilities.includes("eml-attachments"),
         media: capabilities.includes("media-attachments"),
+        text: capabilities.includes("text-attachments"),
       });
       if (extension && !supported.includes(extension)) throw new Error(currentText().t("webClient.error.fileType"));
       if (file.size > MOBILE_ATTACHMENT_BYTES) throw new Error(currentText().t("error.remote.attachmentTooLarge"));

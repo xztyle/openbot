@@ -260,12 +260,13 @@ const Turns = createSimpleContext({
       }
     }
 
-    function cancelQueuedMessage(deliveryId: string) {
+    /** Resolves when the host has answered. A failure shows on the chat and does not reject. */
+    function cancelQueuedMessage(deliveryId: string): Promise<void> {
       const agent = activeAgent();
-      if (!agent) return;
+      if (!agent) return Promise.resolve();
       const serverId = activeServerId();
       const analytics = desktopAnalytics.scope();
-      void turnsPort()
+      return turnsPort()
         .agent.cancelQueuedMessage({ agentId: agent.id, deliveryId })
         .then(() => analytics.track("queue_action", { action: "cancel", result: "succeeded" }))
         .catch((error) => {

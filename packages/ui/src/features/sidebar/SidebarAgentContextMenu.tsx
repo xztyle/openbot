@@ -3,7 +3,7 @@
  * away is `SidebarMoveToSubmenu`, which the channel menu shows too; everything here is agent-only.
  */
 
-import { ContextMenu, Copy, Pin, PinOff } from "@openbot/ui";
+import { ContextMenu, Copy, Mail, Pin, PinOff } from "@openbot/ui";
 import { Show } from "solid-js";
 import type { AgentProfile } from "../../data";
 import { useText } from "../../text";
@@ -33,6 +33,18 @@ export function SidebarAgentContextMenu(menuProps: { agent: AgentProfile; pinned
           <EditIcon />
           <span>{t("sidebar.agentMenu.edit")}</span>
         </ContextMenu.Item>
+        <Show when={props.onMarkAgentUnread}>
+          {(markUnread) => (
+            <ContextMenu.Item
+              // The chat on screen is read: opening a chat reads it, so marking it would undo itself.
+              disabled={props.activeAgentId === menuProps.agent.id}
+              onSelect={() => markUnread()(menuProps.agent.id)}
+            >
+              <Mail class="agent-context-icon size-4" aria-hidden="true" />
+              <span>{t("sidebar.agentMenu.markUnread")}</span>
+            </ContextMenu.Item>
+          )}
+        </Show>
         <Show when={props.duplicateSupported !== false && props.onDuplicateAgent}>
           <ContextMenu.Item
             disabled={props.duplicatingAgentIds?.has(menuProps.agent.id)}

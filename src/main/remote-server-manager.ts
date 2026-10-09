@@ -1162,6 +1162,17 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     });
   }
 
+  /** Marks the whole conversation unread for this member. The host decides the cursor; see `markUnread`. */
+  markAgentConversationUnread(
+    agentId: string,
+    serverId = this.#store.activeServerId,
+  ): Effect.Effect<ConversationReadState, RemoteWorkflowError> {
+    return this.request(serverId, TEAM_API_ROUTES.agent.conversationUnread(agentId), decodeConversationReadState, {
+      method: "POST",
+      body: {},
+    });
+  }
+
   getPresence(serverId = this.#store.activeServerId): TeamPresenceSnapshot {
     return this.#presence.get(serverId);
   }

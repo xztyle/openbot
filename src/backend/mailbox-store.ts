@@ -1900,6 +1900,20 @@ export class MailboxStore {
     );
   }
 
+  /**
+   * Whether the agent has work after the turn that just ended: a delivery that waits to start or
+   * runs, or a request the agent sent to a teammate that has not ended and so still owes a reply.
+   * An agent with neither is idle, which is when a "Finished" notification says something true.
+   */
+  hasFollowUpWork(agentId: string): boolean {
+    if (this.hasUnfinishedDelivery(agentId)) return true;
+    return this.#state.deliveries.some((delivery) => {
+      if (delivery.status !== "queued" && delivery.status !== "starting" && delivery.status !== "running") return false;
+      const message = this.#state.messages.find((candidate) => candidate.id === delivery.messageId);
+      return message?.sender.kind === "agent" && message.sender.agentId === agentId && message.expectsReply !== false;
+    });
+  }
+
   unresolvedDeliveries(): DeliveryContext[] {
     return this.#state.deliveries
       .filter((delivery) => delivery.status === "starting" || delivery.status === "running")

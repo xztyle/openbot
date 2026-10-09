@@ -28,6 +28,7 @@ import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
 import { CONTEXT_RESET_CAPABILITY, CONTEXT_RESET_ROUTES } from "@openbot/contracts/team-protocol/context-reset-v1";
+import { TEAM_CONVERSATION_UNREAD_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
 import { duplicateAgentIntoLayout } from "../../backend/agent/duplication-gate";
@@ -345,6 +346,14 @@ export function agentIpcHandlers({
       markConversationRead: scopedHandler(parseMarkConversationRead, {
         local: (parsed) => runCauseEffect(host.markAgentConversationRead(parsed)),
         remote: (parsed, serverId) => runCauseEffect(remoteServers.markAgentConversationRead(parsed, serverId)),
+      }),
+      markConversationUnread: scopedHandler(parseAgentId, {
+        local: (agentId) => runCauseEffect(host.markAgentConversationUnread(agentId)),
+        remote: async (agentId, serverId) => {
+          if (!remoteServers.supportsCapability(serverId, TEAM_CONVERSATION_UNREAD_CAPABILITY))
+            throw new Error(sourceText("error.team.markUnreadUnsupported"));
+          return runCauseEffect(remoteServers.markAgentConversationUnread(agentId, serverId));
+        },
       }),
       sendMessage: scopedHandler(parseSendMessage, {
         local: (input) => runCauseEffect(service.sendMessage(input, host.conversationSender())),

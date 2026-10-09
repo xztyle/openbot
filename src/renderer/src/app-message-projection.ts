@@ -11,6 +11,7 @@ import {
   skillConversationEvent,
 } from "@openbot/contracts/ipc";
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
+import { redactText } from "@openbot/logging";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
 import type {
   AgentDeliveryMarkerStatus,
@@ -70,6 +71,7 @@ export function toAgentMessage(message: ConversationMessage, ownerAgentId?: stri
     senderAgentId: exchangeSenderId,
     senderMember: message.author === "user" ? message.senderMember : undefined,
     replyToMessageId: message.replyToMessageId,
+    ...(cancelledByUser(message) ? { cancelled: true as const } : {}),
     attachments: message.attachments,
     imageGeneration: message.imageGeneration,
     questionPrompt: message.questionPrompt,
@@ -128,12 +130,22 @@ export function planTitle(plan: AgentMessagePlan): string {
   return t("chat.taskList.title");
 }
 
+/**
+ * A message of the person that they cancelled in the queue. It stays in the chat marked Cancelled,
+ * because the text was theirs and the agent never read it. A cancelled message of another kind, such
+ * as a teammate's request, has its own marker and stays out of the transcript as before.
+ */
+function cancelledByUser(message: ConversationMessage): boolean {
+  return message.delivery?.status === "cancelled" && message.author === "user" && !message.exchange && !message.routine;
+}
+
 export function toAgentMessages(messages: ConversationMessage[], ownerAgentId?: string): AgentMessage[] {
   const result: AgentMessage[] = [];
   const thinkingByTurn = new Map<string, AgentMessage>();
   for (const message of messages) {
     if (
-      (message.delivery?.status === "queued" || message.delivery?.status === "cancelled") &&
+      (message.delivery?.status === "queued" ||
+        (message.delivery?.status === "cancelled" && !cancelledByUser(message))) &&
       !message.routine &&
       !message.itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX)
     ) {
@@ -230,6 +242,7 @@ export function agentMessagesEqual(left: AgentMessage, right: AgentMessage): boo
     left.senderMember?.id === right.senderMember?.id &&
     left.senderMember?.name === right.senderMember?.name &&
     left.replyToMessageId === right.replyToMessageId &&
+    left.cancelled === right.cancelled &&
     left.reaction === right.reaction &&
     JSON.stringify(left.reactions) === JSON.stringify(right.reactions) &&
     JSON.stringify(left.reactionSummary) === JSON.stringify(right.reactionSummary) &&
@@ -277,6 +290,7 @@ function chatActionMarker(
       messageId: message.exchange.messageId,
       replyToMessageId: message.exchange.replyToMessageId,
       expectsReply: message.exchange.expectsReply !== false,
+      ...previewField(message.text),
     };
   }
   if (isContextResetMarker(message)) return { kind: "context-reset", timestamp: message.createdAt };
@@ -335,6 +349,26 @@ function chatActionMarker(
     return { kind: "unavailable", label: currentText().t("app.action.unavailable"), timestamp: message.createdAt };
   }
   return null;
+}
+
+function previewField(text: string): { preview?: string } {
+  const preview = markerPreview(text);
+  return preview ? { preview } : {};
+}
+
+/** The longest preview a marker keeps. The full message opens from the marker. */
+const MARKER_PREVIEW_LIMIT = 160;
+
+/**
+ * The first line of what an agent said to another, redacted, as the one line a marker shows. The
+ * redaction is the same as in logs: a token or a key in a teammate message must not sit in the
+ * transcript where a glance reaches it. The full message opens on a click and is not redacted,
+ * because it is the person's own conversation.
+ */
+export function markerPreview(text: string): string {
+  // Redacted before the Markdown is read, so a token the Markdown would split is still one token.
+  const line = markdownPreviewText(redactText(cleanAgentMessageText(text)));
+  return line.length > MARKER_PREVIEW_LIMIT ? `${line.slice(0, MARKER_PREVIEW_LIMIT).trimEnd()}…` : line;
 }
 
 function aggregateDeliveryStatus(statuses: QueueDeliveryStatus[]): AgentDeliveryMarkerStatus {

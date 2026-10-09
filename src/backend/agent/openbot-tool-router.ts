@@ -87,6 +87,15 @@ import type { AgentBrowserHost } from "./turn-lifecycle";
 
 const logger = createOpenBotLogger("openbot-tool-router");
 
+/** The log fields for a cancelled call, with the reason the client gave when it cancelled it. */
+function cancelContext<T extends object>(
+  context: T,
+  request: { signal?: AbortSignal | undefined },
+): T & { reason: string } {
+  const reason = request.signal?.reason;
+  return { ...context, reason: typeof reason === "string" ? reason : "turn ended or provider stopped" };
+}
+
 export interface OpenBotToolRouterHooks {
   listAgents(): AgentSummary[];
   listModels(): AgentModelOption[];
@@ -234,20 +243,60 @@ export class OpenBotToolRouter {
     client: AgentClient,
     request: AppServerRequest,
   ) {
-    if (request.signal?.aborted) return;
-    request.signal?.addEventListener("abort", () => this.#attention.cancelRequest(client, request.id), {
-      once: true,
+    // What the log and the error event name when a tool call does not finish: which tool, which agent
+    // and turn, and which provider. Only a dynamic tool call has them; another request names its method.
+    const toolCall = isDynamicToolCall(request.params) ? request.params : null;
+    const callContext = () => ({
+      method: request.method,
+      provider: client.provider,
+      ...(toolCall
+        ? {
+            tool: `${toolCall.namespace ?? "openbot"}.${toolCall.tool}`,
+            agentId: this.#conversation.agentForThread(toolCall.threadId),
+            turnId: toolCall.turnId,
+            callId: toolCall.callId,
+          }
+        : {}),
     });
+    if (request.signal?.aborted) {
+      // The provider ended the turn, or the process went away, before OpenBot started the call.
+      if (toolCall) logger.warn("A tool call was cancelled before it ran.", cancelContext(callContext(), request));
+      return;
+    }
+    request.signal?.addEventListener(
+      "abort",
+      () => {
+        // The call keeps running until its own work stops, but the provider no longer waits for it.
+        // The model then reports its tools as disconnected, so the log says why they were.
+        if (toolCall)
+          logger.warn("A tool call was cancelled before it answered.", cancelContext(callContext(), request));
+        this.#attention.cancelRequest(client, request.id);
+      },
+      { once: true },
+    );
     const reportFailure = (error: unknown) =>
       Effect.sync(() => {
+        const cause = this.#hooks.redactMcp(String(error));
+        const context = callContext();
+        logger.warn(toolCall ? "A tool call failed." : "A server request failed.", {
+          ...context,
+          cause: cause.length > 500 ? `${cause.slice(0, 500)}…` : cause,
+        });
         if (client.running) {
           try {
-            client.respondError(request.id, { code: -32603, message: String(error) });
+            // The provider shows this text to the model, which relays it to the user.
+            client.respondError(request.id, { code: -32603, message: cause });
           } catch {
             // The process can exit between the running check and the write.
           }
         }
-        this.#hooks.emitError("server_request_failed", error);
+        this.#hooks.emitError(
+          "server_request_failed",
+          toolCall
+            ? new Error(sourceText("error.agent.toolFailed", { tool: context.tool ?? "", reason: cause }))
+            : error,
+          context.agentId,
+        );
       });
     return yield* Effect.gen({ self: this }, function* () {
       switch (request.method) {

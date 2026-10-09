@@ -262,7 +262,7 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
         this.#write({ method, id, params: method === "thread/resume" ? metadataOnlyResumeParams(params) : params });
         if (method === "turn/interrupt" && isRecord(params) && isString(params.threadId) && isString(params.turnId)) {
           this.#interruptedTurns.add(JSON.stringify([params.threadId, params.turnId]));
-          this.#cancelToolRequests(params.threadId, params.turnId);
+          this.#cancelToolRequests(params.threadId, params.turnId, "the turn was interrupted");
         }
       } catch (cause) {
         resume(Effect.fail(new ProviderClientOperationError({ cause })));
@@ -318,7 +318,7 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
           signal = controller.signal;
           if (this.#interruptedTurns.has(JSON.stringify([message.params.threadId, message.params.turnId]))) {
             this.#toolRequests.delete(message.id);
-            controller.abort();
+            controller.abort("the turn was interrupted");
           }
         }
         this.emit("request", {
@@ -358,12 +358,16 @@ export class CodexAppServerClient extends EventEmitter<ClientEvents> {
     pending.resolve(message.result);
   }
 
-  #cancelToolRequests(threadId?: string, turnId?: string): void {
+  #cancelToolRequests(threadId?: string, turnId?: string, interruption?: string): void {
     if (threadId === undefined) this.#interruptedTurns.clear();
     for (const [id, request] of this.#toolRequests) {
       if (threadId !== undefined && (request.threadId !== threadId || request.turnId !== turnId)) continue;
       this.#toolRequests.delete(id);
-      request.controller.abort();
+      // The reason reaches the tool router's log: a call that ends this way is what the model reports
+      // as a tool that disconnected.
+      request.controller.abort(
+        interruption ?? (threadId === undefined ? "the provider process stopped" : "the turn ended"),
+      );
     }
   }
 

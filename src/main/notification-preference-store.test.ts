@@ -41,7 +41,7 @@ describe("notification permission request", () => {
     expect(showWelcome).toHaveBeenCalledTimes(1);
     await runCauseEffect(store.set({ desktopNotifications: false }));
     const restarted = await loadedStore(path);
-    expect(restarted.get()).toEqual({ desktopNotifications: false });
+    expect(restarted.get()).toEqual({ desktopNotifications: false, showText: false });
     expect(restarted.permissionRequested()).toBe(true);
   });
 

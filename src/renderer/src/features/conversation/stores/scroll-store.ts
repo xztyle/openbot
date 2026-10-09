@@ -47,6 +47,14 @@ export interface ScrollStoreDeps {
   sticky: ScrollStickyState;
 }
 
+/**
+ * Reasoning shows as a row of its own once its turn is over. While the turn runs, the activity line
+ * under the chat carries it and opens it, so the same words are not drawn twice.
+ */
+function hiddenThinking(message: AgentMessage, activeTurnId: string | null | undefined): boolean {
+  return message.kind === "thinking" && (message.streaming === true || message.turnId === activeTurnId);
+}
+
 export function createScrollStore(deps: ScrollStoreDeps) {
   const scrollFades = createScrollFades();
   const [virtualScrollMargin, setVirtualScrollMargin] = createSignal(0);
@@ -61,7 +69,9 @@ export function createScrollStore(deps: ScrollStoreDeps) {
 
   const drawnMessages = createMemo(() => [
     ...summarizeRoutineRunMessages(
-      deps.props.messages.filter((message) => message.kind !== "thinking" && !silentAgentAnswer(message)),
+      deps.props.messages.filter(
+        (message) => !hiddenThinking(message, deps.props.activeTurnId) && !silentAgentAnswer(message),
+      ),
     ),
     ...deps.pendingMessages(),
   ]);

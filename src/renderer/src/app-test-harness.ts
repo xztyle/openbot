@@ -912,6 +912,9 @@ export function installOpenbotStub(): void {
         firstUnreadMessageId: null,
         throughMessageId: input.throughMessageId,
       })),
+      markConversationUnread: vi
+        .fn()
+        .mockResolvedValue({ unreadCount: 1, firstUnreadMessageId: null, throughMessageId: null }),
       chooseAttachments: vi.fn().mockResolvedValue([]),
       onAttachmentImport: vi.fn(attachmentImportBridge.subscribe),
       discardDraftAttachment: vi.fn().mockResolvedValue(undefined),

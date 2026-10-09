@@ -10,6 +10,13 @@
   overscroll-behavior: contain;
 }
 
+/* One action under the rows. It aligns with the row text, not with the row icons. */
+.agent-queue-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--queue-row-inset-end) var(--queue-row-gutter) var(--queue-row-inset-start);
+}
+
 .agent-queue-item {
   --queue-drag-step: 0;
 

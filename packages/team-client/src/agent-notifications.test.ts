@@ -104,6 +104,72 @@ describe("notificationForAgentEvent", () => {
   });
 });
 
+describe("notifications for a delegation chain", () => {
+  const translate = translateFor("en");
+
+  it("says Finished only after the turn that leaves the agent idle", () => {
+    const busy = { ...completed("completed"), moreWork: true as const };
+    expect(notificationForAgentEvent(busy, [agent], translate, "all")).toBeNull();
+    expect(notificationForAgentEvent(completed("completed"), [agent], translate, "all")?.body).toBe(
+      "Finished working.",
+    );
+    // A failure is news whatever else is queued.
+    expect(notificationForAgentEvent({ ...busy, status: "failed" }, [agent], translate, "all")?.body).toBe(
+      "Stopped with an error.",
+    );
+  });
+});
+
+describe("notification text", () => {
+  const translate = translateFor("en");
+  const redact = (text: string) => text.replace("sk-secret-token", "[redacted]");
+  const detail = { redact };
+  const ask = (overrides: Partial<Extract<AgentEvent, { type: "prompt" }>["questions"][number]> = {}): AgentEvent => ({
+    ...prompt,
+    questions: [{ id: "q", header: "", question: "Deploy to staging?", isSecret: false, options: null, ...overrides }],
+  });
+
+  it("keeps the fixed words unless the user opted in", () => {
+    expect(notificationForAgentEvent(ask(), [agent], translate, "all")?.body).toBe("Needs your input.");
+    expect(notificationForAgentEvent(ask(), [agent], translate, "all", { detail })?.body).toBe("Deploy to staging?");
+  });
+
+  it("redacts and shortens the text, and never shows a secret question", () => {
+    const long = `Use sk-secret-token ${"word ".repeat(80)}`;
+    const body = notificationForAgentEvent(ask({ question: long }), [agent], translate, "all", { detail })?.body ?? "";
+    expect(body).not.toContain("sk-secret-token");
+    expect(body.length).toBeLessThanOrEqual(161);
+    expect(body.endsWith("…")).toBe(true);
+    expect(notificationForAgentEvent(ask({ isSecret: true }), [agent], translate, "all", { detail })?.body).toBe(
+      "Needs your input.",
+    );
+  });
+
+  it("shows the approval reason, never the command", () => {
+    const approval = (reason: string | null): AgentEvent => ({
+      type: "approval",
+      approval: {
+        requestId: 1,
+        agentId: "chief",
+        threadId: "thread-chief",
+        turnId: "turn-1",
+        kind: "command",
+        command: "curl -H 'x: sk-secret-token' example.com",
+        cwd: null,
+        reason,
+        grantRoot: null,
+        permissions: null,
+      },
+    });
+    expect(
+      notificationForAgentEvent(approval("Install the package"), [agent], translate, "all", { detail })?.body,
+    ).toBe("Install the package");
+    expect(notificationForAgentEvent(approval(null), [agent], translate, "all", { detail })?.body).toBe(
+      "Needs your approval.",
+    );
+  });
+});
+
 function completed(status: string): Extract<AgentEvent, { type: "turn-completed" }> {
   return {
     type: "turn-completed",

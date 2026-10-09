@@ -22,6 +22,11 @@ interface QueuePanelProps {
   canSteer: boolean;
   onSteer: (deliveryId: string) => void;
   onCancel: (deliveryId: string) => void;
+  /**
+   * Cancels every queued message and then stops the running turn. The caller orders the two: the
+   * turn that stops starts the next queued message as it ends. Absent when no turn runs.
+   */
+  onStopAndClear?: (() => void) | undefined;
   onEdit: (delivery: QueueDelivery) => void;
   onReorder: (deliveryIds: string[]) => void;
 }
@@ -34,6 +39,7 @@ interface DragSlot {
 export function QueuePanel(props: QueuePanelProps) {
   const { t } = useText();
   const [deleteHeldId, setDeleteHeldId] = createSignal<string | null>(null);
+  const [stopAndClearOpen, setStopAndClearOpen] = createSignal(false);
   const [draggedId, setDraggedId] = createSignal<string | null>(null);
   const [dragOverId, setDragOverId] = createSignal<string | null>(null);
   const [announcement, setAnnouncement] = createSignal("");
@@ -64,6 +70,8 @@ export function QueuePanel(props: QueuePanelProps) {
         return leftPosition - rightPosition || left.createdAt.localeCompare(right.createdAt);
       }),
   );
+  /** The messages "Stop and clear queue" cancels: those still waiting, not one that steers right now. */
+  const queuedCount = createMemo(() => sourceDeliveries().filter((delivery) => delivery.status === "queued").length);
   const initialSourceDeliveries = untrack(sourceDeliveries);
   const [renderedDeliveries, setRenderedDeliveries] = createSignal<QueueDelivery[]>(initialSourceDeliveries);
   const visibleDeliveries = createMemo(() =>
@@ -584,10 +592,36 @@ export function QueuePanel(props: QueuePanelProps) {
             </For>
           </div>
         </div>
+        <Show when={props.onStopAndClear && queuedCount() > 0}>
+          <div class="agent-queue-panel-footer">
+            <Button
+              variant="destructive-ghost"
+              size="xs"
+              type="button"
+              class="agent-queue-stop-all"
+              onClick={() => setStopAndClearOpen(true)}
+            >
+              {t("queue.stopAndClear.action")}
+            </Button>
+          </div>
+        </Show>
         <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
           {announcement()}
         </div>
       </section>
+      <ConfirmDialog
+        open={stopAndClearOpen()}
+        onCancel={() => setStopAndClearOpen(false)}
+        onConfirm={() => {
+          setStopAndClearOpen(false);
+          props.onStopAndClear?.();
+        }}
+        title={t("queue.stopAndClear.title")}
+        description={t("queue.stopAndClear.body", { count: queuedCount() })}
+        confirmLabel={t("queue.stopAndClear.confirm")}
+        cancelLabel={t("queue.stopAndClear.keep")}
+        initialFocus="cancel"
+      />
       <ConfirmDialog
         open={deleteHeldId() !== null}
         onCancel={() => setDeleteHeldId(null)}

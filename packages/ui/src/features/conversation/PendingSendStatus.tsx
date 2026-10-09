@@ -4,7 +4,11 @@ import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 
 export interface PendingSendStatusProps {
-  state: "waiting" | "sending" | "failed";
+  /**
+   * `held` is the few seconds a message to a working agent stays with the client, so Undo and Edit
+   * can still take it back. After that the host steers it into the running turn and cannot.
+   */
+  state: "held" | "waiting" | "sending" | "failed";
   /** Why the send failed, when the host or the connection said. */
   error?: string | null;
   /** The composer shows the update notice; keep recovery actions without a second error. */
@@ -16,6 +20,8 @@ export interface PendingSendStatusProps {
   onRetry: () => void;
   onEdit: () => void;
   onDismiss: () => void;
+  /** Takes back a held message. The message goes, and so do the files it carried. */
+  onUndo?: () => void;
 }
 
 /**
@@ -26,6 +32,7 @@ export interface PendingSendStatusProps {
 export function PendingSendStatus(props: PendingSendStatusProps): JSX.Element {
   const { t } = useText();
   const label = () => {
+    if (props.state === "held") return t("chat.send.held");
     if (props.state === "waiting") return t("chat.send.waiting");
     if (props.state === "sending") return t("chat.send.sending");
     return props.retrySafe ? t("chat.send.failed") : t("chat.send.unconfirmed");
@@ -39,6 +46,14 @@ export function PendingSendStatus(props: PendingSendStatusProps): JSX.Element {
             {(error) => <span class="pending-send-error">{error()}</span>}
           </Show>
         </span>
+      </Show>
+      <Show when={props.state === "held"}>
+        <Button variant="ghost" size="xs" onClick={() => props.onUndo?.()}>
+          {t("chat.send.undo")}
+        </Button>
+        <Button variant="ghost" size="xs" disabled={!props.canEdit} onClick={() => props.onEdit()}>
+          {t("chat.send.edit")}
+        </Button>
       </Show>
       <Show when={props.state === "failed"}>
         <Show when={props.retrySafe && !props.updateRequired}>

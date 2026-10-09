@@ -1208,105 +1208,6 @@ a {
   color: var(--openbot-text-dim);
 }
 
-/* The two hero pills share one stagger line, stacked: the launch above, the platforms below. */
-.landing-hero-pills {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Product Hunt launch. The orange is Product Hunt's own brand colour, so it is kept local to the
-   launch rather than added to the palette, and goes with it when the launch ends. */
-.ph-pill {
-  --ph-orange: #ff6154;
-  --ph-orange-soft: rgba(255, 97, 84, 0.16);
-  --ph-orange-glow: rgba(255, 97, 84, 0.45);
-}
-
-.ph-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px 4px 4px;
-  border: 1px solid rgba(255, 97, 84, 0.4);
-  border-radius: var(--openbot-radius-pill);
-  background: linear-gradient(90deg, var(--ph-orange-soft), var(--openbot-bg-sidebar) 70%);
-  color: var(--openbot-text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  white-space: nowrap;
-  transition:
-    border-color var(--openbot-duration-normal) ease,
-    transform var(--openbot-duration-fast) var(--openbot-ease-out);
-}
-
-.ph-pill-mark {
-  position: relative;
-  width: 24px;
-  height: 24px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: var(--openbot-radius-pill);
-  background: var(--ph-orange);
-  color: #fff;
-}
-
-.ph-pill-mark::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: 0 0 0 0 var(--ph-orange-glow);
-  animation: ph-ring 1.8s var(--openbot-ease-out) infinite;
-}
-
-.ph-pill-mark svg {
-  width: 10px;
-  height: 10px;
-  fill: currentColor;
-}
-
-.ph-pill-copy strong {
-  color: var(--openbot-text-primary);
-  font-weight: 600;
-}
-
-.ph-pill-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 22px;
-  padding: 0 9px;
-  border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-surface-light);
-  color: var(--openbot-text-on-light);
-  font-weight: 600;
-}
-
-.ph-pill-cta::after {
-  content: "→";
-  transition: transform var(--openbot-duration-fast) var(--openbot-ease-out);
-}
-
-.ph-pill:focus-visible {
-  outline: 0;
-  box-shadow: 0 0 0 3px var(--openbot-accent-strong);
-}
-
-@keyframes ph-ring {
-  0% {
-    box-shadow: 0 0 0 0 var(--ph-orange-glow);
-  }
-
-  70%,
-  100% {
-    box-shadow: 0 0 0 8px rgba(255, 97, 84, 0);
-  }
-}
-
 .landing-title {
   display: flex;
   align-items: center;
@@ -1652,6 +1553,29 @@ a {
 
 .landing-download-card[data-download-platform="linux"] {
   background: var(--openbot-logo-dev);
+}
+
+/* The phone apps: a blue and a coral beside the three build colours. Dark text keeps over 7:1 on both. */
+.landing-page {
+  --download-ios-color: #74b9ff;
+  --download-android-color: #ee9a7d;
+}
+
+.landing-download-card[data-download-platform="ios"] {
+  background: var(--download-ios-color);
+}
+
+.landing-download-card[data-download-platform="android"] {
+  background: var(--download-android-color);
+}
+
+.landing-download-grid-mobile {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.landing-download-grid-mobile .landing-download-card {
+  min-height: 320px;
 }
 
 .landing-download-card[data-state="available"] {
@@ -3822,16 +3746,6 @@ a {
     height: 11px;
   }
 
-  .ph-pill {
-    gap: 6px;
-    font-size: 10px;
-  }
-
-  .ph-pill-mark {
-    width: 23px;
-    height: 23px;
-  }
-
   .landing-preview {
     height: 590px;
     margin-top: 64px;
@@ -3855,11 +3769,19 @@ a {
     margin-top: 42px;
   }
 
+  .landing-download-grid-mobile {
+    margin-top: 14px;
+  }
+
   .landing-download-card,
   .landing-download-card[data-download-platform="linux"] {
     min-height: 360px;
     grid-column: auto;
     padding: 26px;
+  }
+
+  .landing-download-grid-mobile .landing-download-card {
+    min-height: 300px;
   }
 
   .landing-footer-inner {
@@ -7514,13 +7436,6 @@ a {
   .plugin-fact-link:hover {
     color: var(--openbot-text-primary);
   }
-  .ph-pill:hover {
-    border-color: var(--ph-orange);
-  }
-
-  .ph-pill:hover .ph-pill-cta::after {
-    transform: translateX(2px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -7543,14 +7458,8 @@ a {
     transform: none;
   }
 
-  .plugin-dialog,
-  .ph-pill-mark::after {
+  .plugin-dialog {
     animation: none;
-  }
-
-  .ph-pill,
-  .ph-pill-cta::after {
-    transition: none;
   }
 }
 
@@ -8023,6 +7932,12 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 12px 24px;
+}
+
+.changelog-latest-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .changelog-latest-text {
@@ -8767,6 +8682,16 @@ a {
   --download-color: var(--openbot-logo-dev);
 }
 
+.download-main[data-download-platform="ios"],
+.download-main [data-download-platform="ios"] {
+  --download-color: var(--download-ios-color);
+}
+
+.download-main[data-download-platform="android"],
+.download-main [data-download-platform="android"] {
+  --download-color: var(--download-android-color);
+}
+
 .download-panel,
 .download-hub-card,
 .download-system-card {
@@ -9216,6 +9141,15 @@ a {
   border-radius: 24px;
 }
 
+.download-hub-cards-mobile {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.download-hub-cards-mobile .download-hub-card {
+  min-height: 460px;
+}
+
 .download-hub-card-logo {
   width: clamp(80px, 7.4vw, 104px);
   height: clamp(80px, 7.4vw, 104px);
@@ -9331,7 +9265,8 @@ a {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .download-hub-card {
+  .download-hub-card,
+  .download-hub-cards-mobile .download-hub-card {
     min-height: 0;
   }
 
@@ -9378,6 +9313,15 @@ a {
   margin-top: 28px;
   color: var(--openbot-text-muted);
   font-size: 14px;
+}
+
+.landing-download-pages-mobile {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-left: 4px;
+  padding-left: 20px;
+  border-left: 1px solid var(--openbot-border-strong);
 }
 
 .landing-download-pages a {

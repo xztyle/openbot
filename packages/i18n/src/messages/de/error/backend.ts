@@ -76,6 +76,10 @@ export const messages = {
   "error.backend.channelRoutineLimit": "Ein Kanal kann höchstens {limit} Routinen haben.",
   "error.backend.agentRoutineLimit": "Ein Agent kann höchstens {limit} Routinen haben.",
   "error.backend.agentMemoryLimit": "Ein Agent kann bis zu {limit} Erinnerungen haben.",
+  "error.backend.agentMemoryLimitReached":
+    "Du hast {saved} von {limit} Erinnerungen. Um Platz zu schaffen, aktualisiere eine Erinnerung über ihre memoryId mit dem kombinierten Text zweier verwandter Erinnerungen und vergiss dann die andere, oder vergiss eine Erinnerung, die nicht mehr stimmt. Versuche es dann erneut.",
+  "error.backend.agentMemoryLimitExceeded":
+    "Du hast {saved} Erinnerungen, und das Limit ist {limit}. Der Benutzer hat das Limit unter die Zahl der gespeicherten Erinnerungen gesetzt. Vergiss keine Erinnerungen, um Platz zu schaffen. Sag dem Benutzer, dass diese Erinnerung nicht gespeichert wurde.",
   "error.backend.channelHistoryLeadRequired": "Wähle eine Kanalleitung, um den geteilten Verlauf vorzubereiten.",
   "error.backend.channelHistoryArriving":
     "Eine geteilte Nachricht wird noch empfangen. Setze fort, wenn sie vollständig ist.",
@@ -183,6 +187,12 @@ export const messages = {
   "error.backend.mcpServerExited":
     "Der Server wurde beendet, bevor er geantwortet hat. Führe den Befehl in einem Terminal aus, um seinen Fehler zu sehen.",
   "error.backend.mcpServerUnreachable": "OpenBot konnte den Server nicht erreichen. Prüfe die URL und dein Netzwerk.",
+  "error.backend.mcpLocalServerOff":
+    "Unter {address} antwortet auf diesem Computer kein Server. Starte den Server oder schalte ihn in der App ein, die ihn ausführt, und versuche es dann erneut.",
+  "error.backend.mcpServerBlocked":
+    "Dieser Computer hat die Verbindung zum Server blockiert. Prüfe deine Firewall oder Sicherheitssoftware und versuche es dann erneut.",
+  "error.backend.mcpServerIncompatible":
+    "Unter dieser Adresse hat etwas geantwortet, aber nicht als MCP-Server über Streamable HTTP. Prüfe die URL und aktualisiere die App, die den Server ausführt.",
   "error.backend.mcpRemoteBridge":
     "{reason} Dieser Befehl startet die mcp-remote-Brücke. Wähle stattdessen Streamable HTTP mit der URL {url}, dann meldet OpenBot dich an.",
   "error.backend.oauthNotHttps":

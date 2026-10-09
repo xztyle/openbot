@@ -10,4 +10,8 @@ export const messages = {
   "error.messaging.discordUnsupported": "Este computador não consegue se conectar ao Discord.",
   "error.messaging.discordRelayUnavailable":
     "O OpenBot não consegue receber eventos do Discord neste computador. Entre, dê um nome a este computador e tente novamente.",
+  "error.messaging.telegramNotConnected": "Este chat do Telegram não está conectado.",
+  "error.messaging.telegramUnsupported": "Este computador não pode se conectar ao Telegram.",
+  "error.messaging.telegramRelayUnavailable":
+    "O OpenBot não consegue acessar o Telegram neste computador. Entre na conta, dê um nome a este computador e tente novamente.",
 } as const satisfies PartialTranslation<typeof source>;

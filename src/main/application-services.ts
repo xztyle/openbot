@@ -20,6 +20,7 @@ import { RoutineFlowStore } from "../backend/routine-flows/routine-flow-store";
 import { createRoutineFlows, type RoutineFlowsHandle } from "../backend/routine-flows/routine-flows";
 import { type AgentAdminSettingsService, createAgentAdminSettings } from "./agent-admin-settings";
 import { spawnAgentDatabaseHost } from "./agent-database-host-process";
+import { createAgentHostSettings } from "./agent-host-settings";
 import { createChatMcp } from "./create-chat-mcp";
 import { HostReleaseService, readInstallationMode } from "./host-release-service";
 import { HOSTED_UPDATE_TRIGGER, HostedUpdateAdapter } from "./hosted-update-adapter";
@@ -71,7 +72,7 @@ import { decodeRecord, requiredString } from "@openbot/contracts/ipc-decoding";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { REMOTE_ACCOUNT_CHECK_INTERVAL_MS } from "@openbot/team-client";
-import { app, type BrowserWindow, nativeImage, safeStorage, screen, shell } from "electron";
+import { app, type BrowserWindow, clipboard, nativeImage, safeStorage, screen, shell } from "electron";
 import { pasteCodeLoginSupported } from "../backend/agent/cli-code-login";
 import { toMcpGatewayFailed } from "../backend/agent/mcp-gateway";
 import { AgentLifecycleFailed, AgentService } from "../backend/agent-service";
@@ -81,8 +82,9 @@ import { runCauseEffect } from "../backend/effect-boundary";
 import { MailboxStore } from "../backend/mailbox-store";
 import { McpOAuth } from "../backend/mcp-oauth-provider";
 import { discordDriver } from "../backend/messaging/discord/discord-driver";
-import { MessagingService } from "../backend/messaging/messaging-service";
+import { MessagingOperationFailed, MessagingService } from "../backend/messaging/messaging-service";
 import { slackDriver } from "../backend/messaging/slack/slack-driver";
+import { telegramDriver } from "../backend/messaging/telegram/telegram-driver";
 import { passwordVaultRouter } from "../backend/password-vault-router";
 import { SidebarLayoutStore } from "../backend/sidebar-layout-store";
 import { StorageUsageScanner, StorageUsageService } from "../backend/storage-usage";
@@ -90,6 +92,7 @@ import { TeamChatStore } from "../backend/team-chat-store";
 import { AgentImportService } from "./agent-import-service";
 import { AgentInitializationGate } from "./agent-initialization";
 import { AgentMarketplaceService } from "./agent-marketplace-service";
+import { AgentMemoryLimitPreferenceStore } from "./agent-memory-limit-preference-store";
 import { AgentTemplateService } from "./agent-template-service";
 import { HostAnalytics } from "./analytics";
 import { analyticsInventoryDayStore, collectAnalyticsInventory } from "./analytics-inventory";
@@ -175,6 +178,7 @@ import { startProviderLog } from "./provider-log";
 import { toProviderRuntimeFailure } from "./provider-runtime-effects";
 import { ProviderRuntimeManager, providerRuntimeRoot, runtimeTarget } from "./provider-runtime-manager";
 import { ProviderUseSettingsStore } from "./provider-use-settings-store";
+import { decodeQueuedMessageReceipt } from "./remote-agent-decoding";
 import { RemoteConnectTrace } from "./remote-connect-trace";
 import { RemoteDesktopManager } from "./remote-desktop-manager";
 import { resolveRemoteDesktopRuntime } from "./remote-desktop-runtime-artifact";
@@ -213,7 +217,8 @@ import {
   UpdateService,
 } from "./update-service";
 import { listSiblingOpenBotInstances } from "./update-sibling-instances";
-import { WHISPER_MODEL_NAME, WHISPER_MODEL_URL } from "./voice-model-service";
+import { PARAKEET_MODEL_DIRECTORY, removeLegacyWhisperCache } from "./voice-model-service";
+import { spawnVoiceTranscriptionHost } from "./voice-transcription-host-process";
 import { VoiceTranscriptionService } from "./voice-transcription-service";
 import { WebhookRelay } from "./webhook-relay";
 
@@ -229,6 +234,7 @@ const LOGO_COLOR_PREFERENCE_FILE = "openbot-logo-color-preference-v1.json";
 const UPDATE_PREFERENCE_FILE = "openbot-update-preference-v1.json";
 const NOTIFICATION_PREFERENCE_FILE = "openbot-notification-preference-v1.json";
 const BUSY_MESSAGE_MODE_PREFERENCE_FILE = "openbot-busy-message-mode-v1.json";
+const AGENT_MEMORY_LIMIT_PREFERENCE_FILE = "openbot-agent-memory-limit-v1.json";
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
 const DYNAMIC_ISLAND_PREFERENCE_FILE = "openbot-dynamic-island-preference-v1.json";
 const BROWSER_STATE_FILE = "openbot-browser-state-v1.json";
@@ -356,7 +362,7 @@ export interface ApplicationServices {
   routineFlows: RoutineFlowsService;
   providerRuntimes: ProviderRuntimeManager;
   providerCredentials: ProviderCredentialStore;
-  /** The Slack connections of the agents on this host. */
+  /** The Slack and Telegram connections of the agents on this host. */
   messaging: MessagingService;
   /** Reached by the entry point for one thing only: handing a returning grant to its sign-in. */
   mcpOAuth: McpOAuth;
@@ -385,6 +391,7 @@ export interface ApplicationServices {
   logoColor: LogoColorService;
   notificationPreference: NotificationPreferenceStore;
   busyMessageMode: BusyMessageModePreferenceStore;
+  agentMemoryLimit: AgentMemoryLimitPreferenceStore;
   remoteSessionReuse: RemoteSessionReusePreferenceStore;
   remoteSessionCache: RemoteSessionCache;
   agentInitialization: AgentInitializationGate<AgentLifecycleFailed>;
@@ -448,7 +455,7 @@ interface MessagingServicesContext {
 }
 
 /**
- * The Slack and Discord connections. Awaited in place, so start and teardown order stay as they were
+ * The Slack, Discord and Telegram connections. Awaited in place, so start and teardown order stay as they were
  * inline.
  */
 async function createMessagingServices({
@@ -460,7 +467,7 @@ async function createMessagingServices({
   readHostId,
 }: MessagingServicesContext): Promise<{ messaging: MessagingService; signalIngress: SignalIngress }> {
   /*
-   * The Slack workspaces and Discord guilds where the agents answer. The tokens use the same cipher as every other
+   * The Slack workspaces, Discord guilds and Telegram chats where the agents answer. The tokens use the same cipher as every other
    * secret; an unreadable file is reported, not fatal, and each workspace then connects again.
    */
   const messagingCredentials = new MessagingCredentialStore(
@@ -472,8 +479,8 @@ async function createMessagingServices({
     logger.warn(
       `OpenBot could not read the messaging token file (${messagingCredentialLoadError.name}). It was left unchanged.`,
     );
-  // The Signal socket that brings the events of the Slack workspaces and Discord guilds linked to this
-  // host, and makes its Discord calls.
+  // The Signal socket that brings the events of the Slack workspaces, Discord guilds and Telegram chats
+  // linked to this host, and makes its Discord and Telegram calls.
   const signalIngress = new SignalIngress({
     hostId: readHostId,
     signedIn: () => {
@@ -488,6 +495,7 @@ async function createMessagingServices({
     issueSlackRoute: (hostId) => centralAuth.issueSlackRoute(hostId).pipe(toRemoteWorkflowError),
     issueDiscordRoute: (hostId) => centralAuth.issueDiscordRoute(hostId).pipe(toRemoteWorkflowError),
     issueWebhookRoute: (hostId) => centralAuth.issueWebhookRoute(hostId).pipe(toRemoteWorkflowError),
+    issueTelegramRoute: (hostId) => centralAuth.issueTelegramRoute(hostId).pipe(toRemoteWorkflowError),
   });
   teardown.push(TEARDOWN_ORDER.signalIngress, "the Signal ingress socket", () =>
     Effect.runPromise(signalIngress.dispose()),
@@ -508,7 +516,11 @@ async function createMessagingServices({
       createMemory: (input) => service.createMemory(input),
     },
     credentials: messagingCredentials,
-    drivers: [slackDriver({ ingress: signalIngress }), discordDriver({ ingress: signalIngress })],
+    drivers: [
+      slackDriver({ ingress: signalIngress }),
+      discordDriver({ ingress: signalIngress }),
+      telegramDriver({ ingress: signalIngress }),
+    ],
     downloadsRoot: join(app.getPath("userData"), "messaging-downloads"),
     ingress: signalIngress,
     sidebar: sidebarLayout,
@@ -574,6 +586,31 @@ async function createMessagingServices({
         }),
       openExternal: (url) => shell.openExternal(url),
     },
+    telegramApp: {
+      createLink: () =>
+        Effect.suspend(() => {
+          const hostId = readHostId();
+          if (!hostId)
+            return Effect.fail(
+              new MessagingOperationFailed({
+                cause: new Error(sourceText("error.messaging.telegramRelayUnavailable")),
+              }),
+            );
+          return centralAuth
+            .createTelegramLink(hostId)
+            .pipe(Effect.mapError((error) => new MessagingOperationFailed({ cause: error.cause })));
+        }),
+      unlink: (chatId) =>
+        Effect.suspend(() => {
+          const hostId = readHostId();
+          return hostId
+            ? centralAuth
+                .unlinkTelegramChat(hostId, chatId)
+                .pipe(Effect.mapError((error) => new MessagingOperationFailed({ cause: error.cause })))
+            : Effect.void;
+        }),
+      openExternal: (url) => shell.openExternal(url),
+    },
   });
   // Not awaited: a connection waits for Slack, and the app does not wait for it.
   void runCauseEffect(messaging.start()).catch((error) =>
@@ -620,7 +657,8 @@ export async function createApplicationServices({
   // startup because its window must be able to appear immediately, but the two services its
   // critical actions drive are built hundreds of lines below. A single named local rather than
   // two lazy getters, so the gap is visible and bounded.
-  let criticalActionTargets: { agents: AgentService; remoteServers: RemoteServerManager } | null = null;
+  let criticalActionTargets: { agents: AgentService; host: HostService; remoteServers: RemoteServerManager } | null =
+    null;
   const dynamicIsland = new DynamicIslandWindowController({
     platform: process.platform,
     preferencePath: join(app.getPath("userData"), DYNAMIC_ISLAND_PREFERENCE_FILE),
@@ -636,10 +674,14 @@ export async function createApplicationServices({
         if (!criticalActionTargets) {
           return Effect.fail(new DynamicIslandFailed({ cause: new Error(sourceText("error.app.notReady")) }));
         }
-        const { agents, remoteServers } = criticalActionTargets;
-        return performDynamicIslandCriticalAction(action, agents, remoteServers, decodeVoid).pipe(
-          toDynamicIslandFailed,
-        );
+        const { agents, host, remoteServers } = criticalActionTargets;
+        return performDynamicIslandCriticalAction(
+          action,
+          agents,
+          remoteServers,
+          { decodeVoid, decodeQueuedMessageReceipt },
+          () => host.conversationSender(),
+        ).pipe(toDynamicIslandFailed);
       }),
   });
   teardown.push(TEARDOWN_ORDER.dynamicIsland, "the Dynamic Island", () => dynamicIsland.destroy());
@@ -797,6 +839,10 @@ export async function createApplicationServices({
     join(app.getPath("userData"), BUSY_MESSAGE_MODE_PREFERENCE_FILE),
   );
   await runCauseEffect(busyMessageMode.load());
+  const agentMemoryLimit = new AgentMemoryLimitPreferenceStore(
+    join(app.getPath("userData"), AGENT_MEMORY_LIMIT_PREFERENCE_FILE),
+  );
+  await runCauseEffect(agentMemoryLimit.load());
   const remoteSessionReuse = new RemoteSessionReusePreferenceStore(
     join(app.getPath("userData"), REMOTE_SESSION_REUSE_PREFERENCE_FILE),
   );
@@ -1224,6 +1270,7 @@ export async function createApplicationServices({
     routineFlowTools: () => routineFlowRuntime,
     approvalAutomation,
     busyMessageMode: () => busyMessageMode.get().mode,
+    agentMemoryLimit: () => agentMemoryLimit.get().limit,
     deleteWithRevokedApproval: (agentId, remove) =>
       approvalAutomation.deleteAgent(agentId, remove).pipe(toAgentRemovalFailed),
     tables,
@@ -1561,6 +1608,7 @@ export async function createApplicationServices({
     // Each member present advertises its admin capability. Every admin route requires an owner or admin.
     admin: {
       agents: agentAdminSettings,
+      agentHost: createAgentHostSettings({ agents: service, busyMessageMode }),
       skills,
       sharedTables: service,
       marketplaceAgents,
@@ -1660,6 +1708,9 @@ export async function createApplicationServices({
         primary: display.id === primaryId,
       }));
     },
+    // A member's paste in the remote desktop replaces this computer's clipboard, as a copy they make
+    // on it does.
+    writeRemoteDesktopClipboard: (text) => clipboard.writeText(text),
     getRemoteDesktopIceServers: () =>
       Effect.try({
         try: () => {
@@ -1774,6 +1825,7 @@ export async function createApplicationServices({
       selfHostedApiOrigin: selfHostedApiOrigin(centralAuthApiUrl),
       appVersion: app.getVersion(),
       connectTrace,
+      accountReady: centralAuthInitialization,
       getLocalHostId: () => teamStore.getIdentity()?.serverId ?? null,
       hostedServers: {
         unavailable: (serverId, wake) => hostedServers.unavailableHost(serverId, wake),
@@ -1794,6 +1846,7 @@ export async function createApplicationServices({
         updateMember: (hostId, membershipId, role, reactivate) =>
           centralAuth.updateRemoteMember(hostId, membershipId, role, reactivate),
         removeMember: (hostId, membershipId) => centralAuth.removeRemoteMember(hostId, membershipId),
+        removeOwnedHost: (hostId) => centralAuth.removeOwnedRemoteHost(hostId),
         getPrincipalId: () => centralAuth.getSignedInUser().id,
         controlPlaneUrl: centralAuth.resolveApiUrl("/"),
         downloadHostLogo: (hostId, version) => centralAuth.downloadRemoteHostLogo(hostId, version),
@@ -1810,7 +1863,7 @@ export async function createApplicationServices({
   teamWebRtcBridge.on("accountServersChanged", () => void Effect.runPromise(remoteServers.invalidateDirectory()));
   teardown.push(TEARDOWN_ORDER.remoteServers, "the remote servers", () => runCauseEffect(remoteServers.stop()));
   await runCauseEffect(remoteServers.initialize());
-  criticalActionTargets = { agents: service, remoteServers };
+  criticalActionTargets = { agents: service, host, remoteServers };
   // After `remoteServers.initialize()`. The client half polls for the host's connection file and
   // throws when it never appears, before any window is shown - see the module it lives in. It reads
   // the joined servers to choose between WebRTC and HTTP, so it waits for the account's host list.
@@ -1854,12 +1907,18 @@ export async function createApplicationServices({
   });
   teardown.push(TEARDOWN_ORDER.remoteDesktop, "remote desktop", () => Effect.runPromise(remoteDesktop.stop()));
   const voice = new VoiceTranscriptionService({
-    resourcesRoot: app.isPackaged ? join(process.resourcesPath, "whisper") : resolve(".openbot-build/whisper"),
-    modelPath: app.isPackaged
-      ? join(app.getPath("userData"), "runtimes", "whisper", WHISPER_MODEL_NAME)
-      : resolve(".openbot-build/whisper/model", WHISPER_MODEL_NAME),
-    modelDownloadUrl: WHISPER_MODEL_URL,
+    resourcesRoot: app.isPackaged ? join(process.resourcesPath, "voice") : resolve(".openbot-build/voice"),
+    modelDirectory: app.isPackaged
+      ? join(app.getPath("userData"), "runtimes", PARAKEET_MODEL_DIRECTORY)
+      : resolve(".openbot-build/voice/model"),
+    spawnHost: spawnVoiceTranscriptionHost,
   });
+  if (app.isPackaged) {
+    // Parakeet replaced Whisper. The Whisper model is an application download, not user data.
+    void Effect.runPromise(removeLegacyWhisperCache(join(app.getPath("userData"), "runtimes", "whisper"))).catch(
+      (error) => logger.warn("Could not remove the old Whisper model cache.", toLogValue(error)),
+    );
+  }
   teardown.push(TEARDOWN_ORDER.voice, "voice transcription", () => Effect.runPromise(voice.shutdown()));
   voice.on("modelStatus", forwardVoiceModelStatus);
   const currentVersion = app.getVersion();
@@ -2113,6 +2172,7 @@ export async function createApplicationServices({
     logoColor,
     notificationPreference,
     busyMessageMode,
+    agentMemoryLimit,
     remoteSessionReuse,
     remoteSessionCache,
     agentInitialization,

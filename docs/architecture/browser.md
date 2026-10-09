@@ -86,6 +86,15 @@ the `media-attachments` capability; released protocol adapters keep their existi
 `browser-tools.ts` defines provider schemas and parses each call into a typed tool and its arguments.
 `browser-tool-actions.ts` maps input tools to CDP operations. It does not own tabs or import the host.
 `BrowserHost` owns tab access checks, operation queues, focus, deadlines, and persistent browser state.
+The browser session and service-worker fallback remove the `OpenBot/` and `Electron/` user-agent
+tokens. They keep the installed Chromium version and host platform. Requests to `accounts.google.com`
+keep the `Electron/` token because Google rejects the account identifier step without it. This
+exception does not change the page identity or the identity sent to other sites.
+Electron provides native `navigator.userAgentData` but no client-hint request headers. On HTTPS and
+loopback HTTP, the host supplies the basic Chromium brand/version, desktop flag, and platform hints.
+It preserves hints supplied by Chromium and does not add high-entropy hints. The focused check is
+`bun run test:browser --scenario=identity`; add `--google-live` for the Google identifier check.
+The local identity report is `.openbot-build/browser-identity.json`.
 Website popups are adopted into managed `WebContentsView` tabs through Electron's window creation
 hook. Native guests retain their opener, request body, and shared browser session. Local tab and
 agent tool results expose `openerTabId` while that relationship is live. Independent `noopener`
@@ -148,6 +157,25 @@ key input that comes back, in fractions of the last frame, through the same acce
 outside the per-tab operation queue, so watching never delays a tool call. `browser-view-client.ts` is
 the client half, and it reuses the Remote Desktop websocket tunnel rather than adding a WebRTC channel.
 The `browser-view` capability says whether a host has both.
+
+The mobile app (iOS and Android) draws the pointer itself, so it needs the page's cursor. A host with
+`browser-view-cursor` sends a `cursor` text message, from the tab's `cursor-changed` event, to a
+socket opened with `cursor=1`; desktop and web clients do not ask. The phone uses the
+`browser-view-clipboard` inputs of the desktop and web clients: `paste`, `copy` (answered with
+`copied` or `copyTooLarge`) and `cut`, and Cmd+A for Select All. A client that reads only the
+`copied` answer never asks for a cursor or a menu, so it gets no other text message. A host with
+`browser-view-context-menu` sends the menu of a
+right-click to the socket that made it (opened with `menu=1`) as a `context-menu` message, and opens
+no native menu: that menu would show on the host's screen. Only http and https addresses go in the
+message. A host with `browser-view-viewport` holds the page at the size a socket asks for with
+`viewport=WxH` while that socket is open, through the same device metrics override as an agent's
+`set_environment`, so a resize of the host's window does not change the page. A tab with a custom
+size from `set_environment` keeps it. The phone asks for 1280x800. On the phone, the view runs in the
+hidden page that holds the Team peer (`features/browser/model/browser-view-bridge.ts`). That page
+sends each frame to the screen as base64 and holds the newest frame until the screen has drawn the
+previous one. Back, forward, reload, new tab and close tab use the released `browser-control`
+routes. The account server's `browser` mobile feature flag turns the phone's browser off for an app
+version (`apps/auth-api/src/server/mobile-features-config.ts`).
 
 ## Secure browser authentication
 

@@ -4,11 +4,10 @@ import { useAuth } from "./features/account/account-context";
 import { useProviderDetection } from "./features/custom-providers/provider-detection-context";
 import { useSetup } from "./features/onboarding/onboarding-context";
 import { useSetupProviderProps } from "./features/onboarding/setup-provider-props";
+import { useServerScope } from "./features/servers/server-scope";
 import { useServerSelection } from "./features/servers/server-selection";
-import { useSettings } from "./features/settings/settings-context";
-import type { SoundFeedbackChoice } from "./features/settings/sound-feedback";
 import { StartupSplash } from "./features/startup/StartupSplash";
-import { AccountLogin, InitialSetup, OnboardingFlow } from "./lazy-views";
+import { AccountLogin, FirstRunFlow, InitialSetup } from "./lazy-views";
 import { usePlatform } from "./platform";
 import { WorkspaceShell } from "./WorkspaceShell";
 
@@ -38,24 +37,11 @@ export function AppAccessGate() {
   const platform = usePlatform();
   const auth = useAuth();
   const setup = useSetup();
-  // Setup is ungated: it only ever runs against this computer, so there is no remote server to hide
-  // the endpoints from. Settings gates on `activeServer()`; see `WorkspaceOverlays.tsx`.
+  const scope = useServerScope();
+  // Setup actions run against this computer. The view waits for its first status before offering them.
   const setupProviders = useSetupProviderProps();
   const detection = useProviderDetection();
   const { joinRemoteDuringSetup } = useServerSelection();
-  const { generalSettings, updateGeneralSettings } = useSettings();
-  const soundFeedback: SoundFeedbackChoice = {
-    get value() {
-      const settings = generalSettings();
-      return settings.soundFeedback ? settings.soundTheme : "off";
-    },
-    onChange: (value) =>
-      updateGeneralSettings({
-        ...generalSettings(),
-        soundFeedback: value !== "off",
-        ...(value === "off" ? {} : { soundTheme: value }),
-      }),
-  };
   const started = () => setup.setupLoaded() && platform.appInfo() !== null;
   const [splashShown, setSplashShown] = createSignal(true);
   // A startup mark for `dev:bench`: the first moment the app can leave the splash.
@@ -85,36 +71,40 @@ export function AppAccessGate() {
             <Show
               when={setup.setupState()?.completed}
               fallback={
-                <Show
-                  when={setup.pendingInviteUrl().trim()}
-                  fallback={
+                <Show when={scope.connection.hasContent} fallback={<WorkspaceShell account={account} />}>
+                  <Show
+                    when={setup.pendingInviteUrl().trim()}
+                    fallback={
+                      <Loading fallback={<LoadingScreen />}>
+                        <FirstRunFlow
+                          {...setupProviders}
+                          state={
+                            setup.setupState() ?? { completed: false, preferredProvider: null, preferredModel: null }
+                          }
+                          platform={platform.appInfo()?.platform ?? "darwin"}
+                          onSave={setup.saveSetup}
+                          onProviderStepShown={detection.scanOnce}
+                          logoVariant={platform.appInfo()?.variant ?? "production"}
+                        />
+                      </Loading>
+                    }
+                  >
                     <Loading fallback={<LoadingScreen />}>
-                      <OnboardingFlow
+                      <InitialSetup
                         {...setupProviders}
                         state={
                           setup.setupState() ?? { completed: false, preferredProvider: null, preferredModel: null }
                         }
                         platform={platform.appInfo()?.platform ?? "darwin"}
+                        accountEmail={account().email}
+                        inviteUrl={setup.pendingInviteUrl()}
                         onSave={setup.saveSetup}
-                        onProviderStepShown={detection.scanOnce}
-                        soundFeedback={soundFeedback}
+                        onPreviewInvite={setup.previewInvite}
+                        onJoinRemote={joinRemoteDuringSetup}
+                        onLogout={auth.logoutCentralAccount}
                       />
                     </Loading>
-                  }
-                >
-                  <Loading fallback={<LoadingScreen />}>
-                    <InitialSetup
-                      {...setupProviders}
-                      state={setup.setupState() ?? { completed: false, preferredProvider: null, preferredModel: null }}
-                      platform={platform.appInfo()?.platform ?? "darwin"}
-                      accountEmail={account().email}
-                      inviteUrl={setup.pendingInviteUrl()}
-                      onSave={setup.saveSetup}
-                      onPreviewInvite={setup.previewInvite}
-                      onJoinRemote={joinRemoteDuringSetup}
-                      onLogout={auth.logoutCentralAccount}
-                    />
-                  </Loading>
+                  </Show>
                 </Show>
               }
             >

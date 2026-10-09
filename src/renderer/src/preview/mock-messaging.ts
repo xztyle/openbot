@@ -2,6 +2,9 @@ import type { MessagingConnection, MessagingDesktopApi, MessagingPlatform } from
 import { sourceText } from "@openbot/i18n/source";
 import { clone } from "./mock-support";
 
+/** The platforms whose preview has one workspace. Telegram has a chat for each link. */
+type WorkspacePlatform = Exclude<MessagingPlatform, "telegram">;
+
 const PREVIEW_WORKSPACE = {
   slack: { workspaceId: "T0PREVIEW", workspaceName: "Preview workspace", botUserId: "U0PREVIEW" },
   discord: {
@@ -9,14 +12,19 @@ const PREVIEW_WORKSPACE = {
     workspaceName: "Preview Discord server",
     botUserId: "100000000000000002",
   },
-} as const satisfies Record<MessagingPlatform, { workspaceId: string; workspaceName: string; botUserId: string }>;
+} as const satisfies Record<WorkspacePlatform, { workspaceId: string; workspaceName: string; botUserId: string }>;
+
+/** The time Telegram takes in the preview before a chat links: the user picks the chat there. */
+const TELEGRAM_LINK_MS = 1_500;
 
 /**
- * The Slack workspaces and Discord servers of the preview host. Connecting connects a preview
- * workspace at once. `orchestrator` names the preview agent that stands in for the orchestrator.
+ * The Slack workspaces, Discord servers and Telegram chats of the preview host. Connecting Slack or
+ * Discord connects a preview workspace at once. A Telegram link adds a preview chat after a moment,
+ * as the user picks it in Telegram. `orchestrator` names the preview agent that stands in for the
+ * orchestrators.
  */
 export function createMockMessaging(orchestrator: () => string): MessagingDesktopApi {
-  const platform = (name: MessagingPlatform, notConnected: string) => {
+  const platform = (name: WorkspacePlatform, notConnected: string) => {
     const connections = new Map<string, MessagingConnection>();
     const change = (workspaceId: string, update: Partial<MessagingConnection>) => {
       const current = connections.get(workspaceId);
@@ -53,6 +61,15 @@ export function createMockMessaging(orchestrator: () => string): MessagingDeskto
   };
   const slack = platform("slack", sourceText("error.messaging.notConnected"));
   const discord = platform("discord", sourceText("error.messaging.discordNotConnected"));
+  const chats = new Map<string, MessagingConnection>();
+  /** One orchestrator answers every Telegram chat, so a new chat gets it too. */
+  let telegramOrchestrator: string | null = null;
+  let linkedChats = 0;
+  const changeChat = (workspaceId: string, update: Partial<MessagingConnection>) => {
+    const current = chats.get(workspaceId);
+    if (!current) throw new Error(sourceText("error.messaging.notConnected"));
+    chats.set(workspaceId, { ...current, ...update });
+  };
   return {
     getSlackOverview: slack.overview,
     connectSlackWorkspace: slack.connect,
@@ -66,5 +83,40 @@ export function createMockMessaging(orchestrator: () => string): MessagingDeskto
     reconnectDiscordGuild: discord.reconnect,
     setDiscordEnabled: discord.setEnabled,
     addDiscordOrchestrator: discord.addOrchestrator,
+    getTelegramOverview: async () => clone({ connections: [...chats.values()] }),
+    connectTelegramChat: async ({ place }) => {
+      linkedChats += 1;
+      const count = linkedChats;
+      // Telegram gives a group a negative chat ID, and a direct chat a positive one.
+      const chat =
+        place === "group"
+          ? { workspaceId: `-100${count}`, workspaceName: `Preview group ${count}` }
+          : { workspaceId: `${700_000 + count}`, workspaceName: `Preview chat ${count}` };
+      setTimeout(() => {
+        chats.set(chat.workspaceId, {
+          ...chat,
+          platform: "telegram",
+          enabled: true,
+          state: "connected",
+          botUserId: "7000000000",
+          missingScopes: [],
+          retryAt: null,
+          credentials: "saved",
+          orchestratorAgentId: telegramOrchestrator,
+        });
+      }, TELEGRAM_LINK_MS);
+    },
+    disconnectTelegramChat: async ({ workspaceId }) => {
+      chats.delete(workspaceId);
+    },
+    reconnectTelegramChat: async ({ workspaceId }) => changeChat(workspaceId, { enabled: true, state: "connected" }),
+    setTelegramEnabled: async ({ workspaceId, enabled }) =>
+      changeChat(workspaceId, { enabled, state: enabled ? "connected" : "paused" }),
+    addTelegramOrchestrator: async () => {
+      const agentId = orchestrator();
+      telegramOrchestrator = agentId;
+      for (const workspaceId of chats.keys()) changeChat(workspaceId, { orchestratorAgentId: agentId });
+      return { agentId, sectionId: null };
+    },
   };
 }

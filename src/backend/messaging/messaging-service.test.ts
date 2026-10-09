@@ -203,6 +203,12 @@ const onlineIngress: MessagingIngress = {
   onState: () => () => undefined,
   handle: () => undefined,
   reconnect: () => undefined,
+  telegram: {
+    available: () => false,
+    call: () => Effect.die("Slack tests make no Telegram call."),
+    download: () => Effect.die("Slack tests make no Telegram call."),
+    upload: () => Effect.die("Slack tests make no Telegram call."),
+  },
   discord: () => Effect.die(new Error("No Discord in this test.")),
   onDiscordRoutes: () => () => undefined,
 };

@@ -25,6 +25,7 @@ describe("development Auth API LAN access", () => {
       "/v2/remote/sessions/session-1/end",
       "/v2/remote/invites/preview",
       "/v2/remote/invites/accept",
+      "/v2/remote/hosts/host-1/",
       "/v2/remote/hosts/host-1/members/member-1",
       "/v2/remote/hosts/host-1/logo?v=logo-version",
       "/v1/agent-templates/AbCdEfGhIjKlMnOpQrSt_-",
@@ -47,6 +48,15 @@ describe("development Auth API LAN access", () => {
     expect(developmentNetworkRequestAllowed("192.168.1.20", "/v1/agent-templates/template-id/card")).toBe(false);
     expect(developmentNetworkRequestAllowed("192.168.1.20", "/v2/remote/hosts/register")).toBe(false);
     expect(developmentNetworkRequestAllowed("192.168.1.20", "/v2/remote/hosts/host-1/slack-route")).toBe(false);
+    for (const path of [
+      "/v2/remote/hosts/host-1/telegram-link",
+      "/v2/remote/hosts/host-1/telegram-route",
+      "/v2/remote/hosts/host-1/telegram-disconnect",
+      "/v2/remote/telegram-route/link",
+      "/v2/remote/telegram-route/validate",
+    ]) {
+      expect(developmentNetworkRequestAllowed("192.168.1.20", path)).toBe(false);
+    }
     expect(developmentNetworkRequestAllowed("192.168.1.20", "/v2/slack/authorize")).toBe(false);
     expect(developmentNetworkRequestAllowed("192.168.1.20", "/v2/remote/hosts/host-1/logo/other")).toBe(false);
     expect(developmentNetworkRequestAllowed("192.168.1.20", "/v2/remote/sessions/session-1/other")).toBe(false);

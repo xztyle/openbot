@@ -38,8 +38,9 @@ export const messages = {
   "server.join.account": "Conta",
   "server.join.emailBound": "Este convite só funciona para o destinatário do e-mail.",
   "server.join.unknownDate": "Desconhecida",
-  "server.add.title": "Execute o OpenBot na nuvem",
-  "server.add.description": "O OpenBot executa o servidor para você. Escolha um plano para começar.",
+  "server.add.title": "Execute o OpenBot 24/7 em um servidor externo",
+  "server.add.description":
+    "Os servidores do OpenBot mantêm seus agentes e rotinas em execução, mesmo com o computador desligado. Cuidamos da infraestrutura e da manutenção, para que seu servidor esteja pronto sem nenhuma configuração técnica.",
   "server.add.billing.label": "Período de cobrança",
   "server.add.currency.label": "Moeda",
   "server.add.billing.monthly": "Mensal",
@@ -124,13 +125,12 @@ export const messages = {
   "server.rail.notificationSettings": "Configurações de notificações",
   "server.rail.usage": "Uso",
   "server.rail.settings": "Configurações do servidor",
+  "server.rail.remove": "Remover servidor",
   "server.rail.leave": "Sair do servidor",
   "server.rail.delete": "Excluir servidor",
   "server.select.failedTitle": "Não foi possível selecionar o servidor",
   "server.select.failedDescription": "Não foi possível trocar de servidor. Tente novamente.",
   "server.select.openAgentFailed": "Não foi possível abrir {name}. Encontre-o na barra lateral.",
-  "server.scope.agentsLoadFailed":
-    "Não foi possível carregar os agentes. Verifique a conexão com o servidor e tente novamente.",
   "server.settings.unavailable": "Este servidor está indisponível.",
   "server.settings.identityRefreshFailed": "Não foi possível atualizar a identidade do servidor.",
   "server.settings.loadFailed": "Não foi possível carregar as configurações do servidor.",
@@ -219,6 +219,14 @@ export const messages = {
   "server.settings.saveIdentityFirst": "Salve a identidade do servidor antes de publicar.",
   "server.settings.reachable": "Acessível online. Só pessoas convidadas podem entrar.",
   "server.settings.notReachable": "Não acessível online. Os membros e convites existentes são mantidos.",
+  "server.settings.removeTitle": "Remover servidor",
+  "server.settings.removeDescription":
+    "Remova este servidor do serviço de contas para todos os membros. Use quando o computador dele não estiver mais disponível.",
+  "server.settings.removeConfirmTitle": "Remover {name}?",
+  "server.settings.removeConfirmDescription":
+    "Isto remove o servidor do serviço de contas para todos os membros e encerra o acesso remoto. Os arquivos e conversas no computador dele continuam intactos. Para usá-lo de novo, registre-o naquele computador.",
+  "server.settings.removing": "Removendo…",
+  "server.settings.removedTitle": "{name} removido",
   "server.settings.leaveTitle": "Sair do servidor",
   "server.settings.leaveDescription":
     "Remova este servidor da sua lista de servidores. O servidor e os outros membros permanecem.",

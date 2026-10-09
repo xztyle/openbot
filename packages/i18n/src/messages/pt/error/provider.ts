@@ -69,6 +69,7 @@ export const messages = {
   "error.provider.unexpectedVersion": "O ambiente de execução do provedor retornou uma versão inesperada.",
   "error.provider.metadataNoData": "O download dos metadados do ambiente de execução não retornou dados.",
   "error.provider.metadataTooLarge": "Os metadados do ambiente de execução são muito grandes.",
+  "error.provider.requestFailed": "O OpenBot não conseguiu baixar {url}. {reason}",
   "error.provider.installRecordMismatch": "O registro de instalação do ambiente de execução não corresponde.",
   "error.provider.runtimeChecksum": "A soma de verificação do ambiente de execução do provedor não corresponde.",
   "error.provider.codexReleaseShape": "A versão do Codex tem um formato inesperado.",
@@ -182,6 +183,12 @@ export const messages = {
   "error.provider.antigravityNotStarted": "O servidor do Gemini foi encontrado, mas não é possível ler sua versão.",
   "error.provider.antigravityVersionUnreadable": "Não foi possível ler a versão do servidor do Gemini.",
   "error.provider.antigravitySignIn": "Entre com o Google para usar o Gemini.",
+  "error.provider.antigravityRateLimited":
+    "O Gemini recusou a solicitação porque um limite de taxa ou a cota do plano foi atingido. Aguarde alguns minutos ou escolha outro modelo e tente novamente.\n{detail}",
+  "error.provider.antigravityModelUnavailable":
+    "O Gemini não pode usar este modelo agora. Escolha outro modelo e tente novamente.\n{detail}",
+  "error.provider.antigravityServiceFailure":
+    "O serviço Gemini do Google não concluiu a solicitação. Tente novamente em alguns minutos.\n{detail}",
   "error.provider.cursorArchivePath": "O arquivo compactado do Cursor contém um arquivo inesperado.",
   "error.provider.cursorChecksum": "A soma de verificação do ambiente de execução do Cursor não corresponde.",
   "error.provider.cursorReleaseShape": "A versão do Cursor tem um formato inesperado.",

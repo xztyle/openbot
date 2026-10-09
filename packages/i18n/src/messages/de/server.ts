@@ -38,8 +38,9 @@ export const messages = {
   "server.join.account": "Konto",
   "server.join.emailBound": "Diese Einladung funktioniert nur für den E-Mail-Empfänger.",
   "server.join.unknownDate": "Unbekannt",
-  "server.add.title": "OpenBot in der Cloud ausführen",
-  "server.add.description": "OpenBot betreibt den Server für dich. Wähle einen Tarif, um zu starten.",
+  "server.add.title": "OpenBot rund um die Uhr auf einem externen Server ausführen",
+  "server.add.description":
+    "OpenBot-Server halten deine Agenten und Routinen am Laufen, auch wenn dein Computer aus ist. Wir kümmern uns um Infrastruktur und Wartung, damit dein Server ohne technische Einrichtung bereit ist.",
   "server.add.billing.label": "Abrechnungszeitraum",
   "server.add.currency.label": "Währung",
   "server.add.billing.monthly": "Monatlich",
@@ -132,13 +133,12 @@ export const messages = {
   "server.rail.usage": "Nutzung",
   "server.rail.schedule": "Routinen",
   "server.rail.settings": "Servereinstellungen",
+  "server.rail.remove": "Server entfernen",
   "server.rail.leave": "Server verlassen",
   "server.rail.delete": "Server löschen",
   "server.select.failedTitle": "Server konnte nicht ausgewählt werden",
   "server.select.failedDescription": "Der Server konnte nicht gewechselt werden. Versuche es erneut.",
   "server.select.openAgentFailed": "{name} konnte nicht geöffnet werden. Suche ihn in der Seitenleiste.",
-  "server.scope.agentsLoadFailed":
-    "Die Agenten konnten nicht geladen werden. Prüfe die Serververbindung und versuche es erneut.",
   "server.settings.unavailable": "Dieser Server ist nicht verfügbar.",
   "server.settings.identityRefreshFailed": "Die Serveridentität konnte nicht aktualisiert werden.",
   "server.settings.loadFailed": "Die Servereinstellungen konnten nicht geladen werden.",
@@ -246,6 +246,14 @@ export const messages = {
   "server.settings.saveIdentityFirst": "Speichere die Serveridentität vor der Veröffentlichung.",
   "server.settings.reachable": "Online erreichbar. Nur eingeladene Personen können sich anmelden.",
   "server.settings.notReachable": "Online nicht erreichbar. Bestehende Mitglieder und Einladungen bleiben erhalten.",
+  "server.settings.removeTitle": "Server entfernen",
+  "server.settings.removeDescription":
+    "Entferne diesen Server für alle Mitglieder aus dem Kontodienst. Nutze dies, wenn sein Computer nicht mehr verfügbar ist.",
+  "server.settings.removeConfirmTitle": "{name} entfernen?",
+  "server.settings.removeConfirmDescription":
+    "Dadurch wird der Server für alle Mitglieder aus dem Kontodienst entfernt und der Fernzugriff beendet. Dateien und Chats auf seinem Computer bleiben erhalten. Um ihn wieder zu nutzen, registriere ihn auf diesem Computer.",
+  "server.settings.removing": "Wird entfernt…",
+  "server.settings.removedTitle": "{name} entfernt",
   "server.settings.leaveTitle": "Server verlassen",
   "server.settings.leaveDescription":
     "Entferne diesen Server aus deiner Serverliste. Der Server und seine anderen Mitglieder bleiben erhalten.",

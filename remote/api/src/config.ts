@@ -1,3 +1,5 @@
+import { TELEGRAM_BOT_ID_PATTERN } from "@openbot/contracts/signal-protocol/telegram-route";
+
 export interface RemoteApiConfig {
   host: string;
   port: number;
@@ -18,9 +20,15 @@ export interface RemoteApiConfig {
   maximumConnectionsPerIp: number;
   maximumMessagesPerMinute: number;
   trustProxy: boolean;
+  // The repository commit of this build, from the image. `/health/live` shows it, so a deploy can be
+  // compared with a release tag. `unknown` for a build without it.
+  sourceCommit: string;
   // The signing secret of each OpenBot Slack app, production and development, which share this
   // Signal. A request must name the app whose secret signed it. Without one, the Slack route answers 503.
   slackSigningSecrets: SlackSigningSecret[];
+  // The OpenBot Telegram bots, production and development, which share this Signal. Without them,
+  // the Telegram routes answer 404 and `ready` names no `telegram` capability.
+  telegram: TelegramConfig | null;
   // The OpenBot Discord bot. Without it, Signal keeps no Gateway connection and the Discord API route
   // answers 503.
   discord: DiscordBotConfig | null;
@@ -34,6 +42,20 @@ export interface DiscordBotConfig {
 interface SlackSigningSecret {
   appId: string;
   secret: string;
+}
+
+interface TelegramBot {
+  botId: string;
+  // The bot token. Only Signal has it: never log it or put it in a frame.
+  token: string;
+}
+
+export interface TelegramConfig {
+  bots: TelegramBot[];
+  // Signal derives the webhook secret of each bot from it (`telegramWebhookSecret`).
+  webhookSecret: string;
+  // The public https origin of this Signal. With it, Signal sets the webhook of each bot when it starts.
+  webhookOrigin: string | null;
 }
 
 /**
@@ -52,6 +74,49 @@ function readSlackSigningSecrets(value: string | undefined): SlackSigningSecret[
     secrets.push({ appId, secret });
   }
   return secrets;
+}
+
+/**
+ * `TELEGRAM_BOT_TOKENS` is a comma-separated list of bot tokens, `<bot ID>:<secret>`. A malformed
+ * value, or a missing or weak `TELEGRAM_WEBHOOK_SECRET`, turns off only Telegram: the remote sessions
+ * and the Slack route keep running.
+ */
+function readTelegramConfig(environment: Record<string, string | undefined>): TelegramConfig | null {
+  const off = (message: string) => {
+    console.error(`${message} Telegram is off.`);
+    return null;
+  };
+  const bots: TelegramBot[] = [];
+  for (const token of (environment.TELEGRAM_BOT_TOKENS ?? "").split(",").map((part) => part.trim())) {
+    if (!token) continue;
+    const separator = token.indexOf(":");
+    const botId = token.slice(0, separator);
+    if (
+      separator < 0 ||
+      !TELEGRAM_BOT_ID_PATTERN.test(botId) ||
+      !/^[A-Za-z0-9_-]{1,128}$/u.test(token.slice(separator + 1)) ||
+      bots.some((bot) => bot.botId === botId)
+    )
+      return off("TELEGRAM_BOT_TOKENS must list different <bot ID>:<secret> bot tokens.");
+    bots.push({ botId, token });
+  }
+  if (bots.length === 0) return null;
+  const webhookSecret = environment.TELEGRAM_WEBHOOK_SECRET?.trim() ?? "";
+  if (new TextEncoder().encode(webhookSecret).byteLength < 32)
+    return off("TELEGRAM_WEBHOOK_SECRET must contain at least 32 bytes.");
+  const origin = optional(environment.TELEGRAM_WEBHOOK_ORIGIN);
+  const webhookOrigin = origin ? httpsOrigin(origin) : null;
+  if (origin && !webhookOrigin) return off("TELEGRAM_WEBHOOK_ORIGIN must be an https origin.");
+  return { bots, webhookSecret, webhookOrigin };
+}
+
+function httpsOrigin(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.origin === value.replace(/\/+$/u, "") ? url.origin : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -93,7 +158,9 @@ export function readRemoteApiConfig(environment: Record<string, string | undefin
     maximumConnectionsPerIp: positiveInteger(environment.REMOTE_MAX_CONNECTIONS_PER_IP, 32),
     maximumMessagesPerMinute: positiveInteger(environment.REMOTE_MAX_MESSAGES_PER_MINUTE, 600),
     trustProxy: environment.REMOTE_TRUST_PROXY === "true",
+    sourceCommit: optional(environment.OPENBOT_SOURCE_COMMIT) ?? "unknown",
     slackSigningSecrets: readSlackSigningSecrets(environment.SLACK_SIGNING_SECRET),
+    telegram: readTelegramConfig(environment),
     discord: readDiscordBot(environment.DISCORD_BOT_TOKEN, environment.DISCORD_APPLICATION_ID),
   };
 }

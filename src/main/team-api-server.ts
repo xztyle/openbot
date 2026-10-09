@@ -25,6 +25,7 @@ import {
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import {
   AGENT_ADMIN_CAPABILITY,
+  AGENT_HOST_SETTINGS_CAPABILITY,
   AGENT_IMPORT_CAPABILITY,
   AGENT_INSTALL_CAPABILITY,
   AGENT_PUBLISH_CAPABILITY,
@@ -43,6 +44,7 @@ import {
   PROVIDERS_RUNTIMES_V2_CAPABILITY,
   PROVIDERS_SIGN_IN_V3_CAPABILITY,
   PROVIDERS_V4_CAPABILITY,
+  QUIET_TURN_CAPABILITY,
   SHARED_TABLES_CAPABILITY,
   SKILLS_ADMIN_CAPABILITY,
   SKILLS_EVENTS_CAPABILITY,
@@ -115,7 +117,7 @@ import {
   requestProtocol,
   stringField,
 } from "./team-api/request-helpers";
-import { routeAgentAdmin } from "./team-api/route-agent-admin";
+import { routeAgentAdmin, routeAgentHostSettings } from "./team-api/route-agent-admin";
 import { routeAgentImport } from "./team-api/route-agent-import";
 import { routeAgentInstall } from "./team-api/route-agent-install";
 import { routeAgentPublish } from "./team-api/route-agent-publish";
@@ -688,7 +690,7 @@ export class TeamApiServer {
       if ((await this.#routeDirect(context)) === "handled") return;
       if ((await this.#routeBrowser(context)) === "handled") return;
       if ((await this.#routeFiles(context)) === "handled") return;
-      if ((await routeChannels(context, this.#options.channels, this.#options.agents)) === "handled") return;
+      if ((await routeChannels(context, this.#options.channels, this.#options.agents, hidden)) === "handled") return;
       if (
         (await routeMcpServers(context, this.#options.mcpServers, this.#options.mcpToolRuntimePreparation)) ===
         "handled"
@@ -697,6 +699,7 @@ export class TeamApiServer {
       if ((await routeStorage(context, this.#options.storage)) === "handled") return;
       if ((await routeHostedSites(context, this.#options.hostedSites)) === "handled") return;
       if ((await routeAgentAdmin(context, this.#options.admin, hidden)) === "handled") return;
+      if ((await routeAgentHostSettings(context, this.#options.admin, hidden)) === "handled") return;
       if ((await routeSkillsAdmin(context, this.#options.admin, hidden)) === "handled") return;
       if ((await routeSharedTables(context, this.#options.admin)) === "handled") return;
       if ((await routeAgentInstall(context, this.#options.admin, hidden, newAgentHidden)) === "handled") return;
@@ -965,7 +968,18 @@ export class TeamApiServer {
       let queueInvalidation: string | undefined;
       let outgoing: string;
       // `eventCapability` above has already kept an optional event from a client without its capability.
-      const optional = optionalTeamEvent(event);
+      // Completion must still reach a peer without quiet-turn-v1 through its frozen adapter.
+      const optional =
+        event.type === "turn-completed" && event.quiet && connection.capabilities.has(QUIET_TURN_CAPABILITY)
+          ? {
+              type: "quiet-turn-completed" as const,
+              agentId: event.agentId,
+              threadId: event.threadId,
+              turnId: event.turnId,
+              status: event.status,
+              ...(event.origin === undefined ? {} : { origin: event.origin }),
+            }
+          : optionalTeamEvent(event);
       if (optional) {
         // The base events go through the provider view; an optional event that names a hidden agent is left out.
         if (
@@ -1439,6 +1453,7 @@ export class TeamApiServer {
         if (capability === STORAGE_CAPABILITY) return this.#options.storage !== undefined;
         if (capability === HOSTED_SITES_CAPABILITY) return this.#options.hostedSites !== undefined;
         if (capability === AGENT_ADMIN_CAPABILITY) return this.#options.admin?.agents !== undefined;
+        if (capability === AGENT_HOST_SETTINGS_CAPABILITY) return this.#options.admin?.agentHost !== undefined;
         if (capability === SKILLS_ADMIN_CAPABILITY) return this.#options.admin?.skills !== undefined;
         if (capability === SKILLS_EVENTS_CAPABILITY) return this.#options.skills !== undefined;
         if (capability === SHARED_TABLES_CAPABILITY) return this.#options.admin?.sharedTables !== undefined;

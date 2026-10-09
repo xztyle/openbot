@@ -16,6 +16,8 @@ describe("live workspace state", () => {
       unreadAgentIds: ["agent"],
       unreadCounts: {},
       browserRequests: {},
+      browserTabs: {},
+      approvalRequests: {},
     });
     expect(store.get().browserRequests).toBe(requests);
   });

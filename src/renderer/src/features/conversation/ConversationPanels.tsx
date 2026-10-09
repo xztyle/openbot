@@ -2,6 +2,7 @@ import type { ServerSummary } from "@openbot/contracts/ipc";
 import { EVENT_CHECK_API_CAPABILITY } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { classifyFailure } from "@openbot/telemetry";
+import { SETTINGS_PANEL_DEFAULT, SETTINGS_PANEL_MAX } from "@openbot/ui/components/SettingsPanel";
 import { useText } from "@openbot/ui/text";
 import { actionToast } from "../../action-toast";
 import { createSettingsPanelWidth, saveSettingsPanelWidth } from "../../components/settings-panel-width";
@@ -16,8 +17,6 @@ import { useConversationController } from "./conversation-controller-context";
 import { useConversationViewScope } from "./conversation-scope";
 import { desktopEventRoutinesApi } from "./routine-webhooks-api";
 
-const SETTINGS_PANEL_MIN = 180;
-const SETTINGS_PANEL_MAX = 1600;
 const BROWSER_PANEL_DEFAULT_RATIO = 0.5;
 const BROWSER_PANEL_MIN = 220;
 const BROWSER_PANEL_MAX = 1600;
@@ -98,7 +97,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: (trigger: HTMLBut
     Math.min(
       SETTINGS_PANEL_MAX,
       Math.max(
-        SETTINGS_PANEL_MIN,
+        SETTINGS_PANEL_DEFAULT,
         (conversationPanelElement()?.clientWidth || window.innerWidth) - CONVERSATION_PANEL_MIN,
       ),
     );
@@ -305,6 +304,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: (trigger: HTMLBut
               automationEditable={props.server?.kind === "local"}
               busyMessageModeEditable={props.server?.kind === "local"}
               defaultBusyMessageMode={props.defaultBusyMessageMode}
+              memoryLimit={props.server?.kind === "local" ? props.agentMemoryLimit : undefined}
               agents={props.agents}
               onStartNewChat={props.onClearAgentContext}
               onCreateSkill={

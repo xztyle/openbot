@@ -71,6 +71,10 @@ export const messages = {
   "error.backend.channelRoutineLimit": "1 つのチャンネルに置けるルーティンは {limit} 個までです。",
   "error.backend.agentRoutineLimit": "1 つのエージェントに置けるルーティンは {limit} 個までです。",
   "error.backend.agentMemoryLimit": "1 つのエージェントに置けるメモリーは {limit} 個までです。",
+  "error.backend.agentMemoryLimitReached":
+    "メモリーは {limit} 個中 {saved} 個です。空きを作るには、関連する 2 つのメモリーをまとめた文で一方を memoryId で更新してからもう一方を削除するか、もう正しくないメモリーを削除してください。そのあと、もう一度試してください。",
+  "error.backend.agentMemoryLimitExceeded":
+    "メモリーは {saved} 個あり、上限は {limit} 個です。ユーザーが保存済みの数より低い上限を設定しました。空きを作るためにメモリーを削除しないでください。このメモリーは保存されなかったとユーザーに伝えてください。",
   "error.backend.channelHistoryLeadRequired": "共有履歴を準備するには、チャンネルリードを選択してください。",
   "error.backend.channelHistoryArriving": "共有メッセージをまだ受信中です。完了してから再開してください。",
   "error.backend.channelHistoryInvalid": "履歴の要約が無効です。再開してもう一度お試しください。",
@@ -161,6 +165,12 @@ export const messages = {
     "サーバーは応答する前に停止しました。ターミナルでコマンドを実行してエラーを確認してください。",
   "error.backend.mcpServerUnreachable":
     "OpenBot はサーバーに接続できませんでした。URL とネットワークを確認してください。",
+  "error.backend.mcpLocalServerOff":
+    "このコンピューターの {address} で応答するサーバーがありません。サーバーを起動するか、サーバーを実行するアプリでオンにしてから、もう一度お試しください。",
+  "error.backend.mcpServerBlocked":
+    "このコンピューターがサーバーへの接続をブロックしました。ファイアウォールまたはセキュリティソフトを確認してから、もう一度お試しください。",
+  "error.backend.mcpServerIncompatible":
+    "このアドレスで応答がありましたが、Streamable HTTP の MCP サーバーではありません。URL を確認し、サーバーを実行するアプリを更新してください。",
   "error.backend.mcpRemoteBridge":
     "{reason} このコマンドは mcp-remote ブリッジを実行します。代わりに URL {url} で Streamable HTTP を選ぶと、OpenBot がサインインします。",
   "error.backend.oauthNotHttps": "OAuth エンドポイント {origin} は https ではないため、認証情報を送信しませんでした。",

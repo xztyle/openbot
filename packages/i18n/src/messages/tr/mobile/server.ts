@@ -74,8 +74,9 @@ export const messages = {
     other:
       "Bir hesap en fazla {count} ücretli sunucuya sahip olabilir. Sunucu eklemek için önce bilgisayarınızdaki OpenBot'ta birini silin.",
   },
-  "mobile.server.hosted.heroTitle": "Bulutta size ait bir sunucu",
-  "mobile.server.hosted.heroDescription": "Bilgisayarınız kapalıyken de çalışır ve kullandığınızda başlar.",
+  "mobile.server.hosted.heroTitle": "OpenBot'u harici bir sunucuda 7/24 çalıştırın",
+  "mobile.server.hosted.heroDescription":
+    "OpenBot Sunucuları, bilgisayarınız kapalıyken bile ajanlarınızı ve rutinlerinizi çalışır durumda tutar. Altyapı ve bakımla biz ilgileniriz; sunucunuz teknik bir kurulum gerektirmeden kullanıma hazır olur.",
   "mobile.server.hosted.securePayment": "Stripe ile güvenli ödeme",
   "mobile.server.hosted.joinHint": "Bir sunucu sahibinden gelen daveti kullanın.",
   "mobile.server.hosted.contactHint": "Bir Mac veya şirketiniz için bir plan için.",
@@ -167,6 +168,10 @@ export const messages = {
   "mobile.server.settings.leaveTitle": "{name} sunucusundan ayrılmak istiyor musunuz?",
   "mobile.server.settings.leaveBody": "Tekrar katılmak için başka bir davete ihtiyacınız olacak.",
   "mobile.server.settings.leave": "Sunucudan ayrıl",
+  "mobile.server.settings.removeTitle": "{name} kaldırılsın mı?",
+  "mobile.server.settings.removeBody":
+    "Bu işlem sunucuyu tüm üyeler için hesap hizmetinden kaldırır. Bilgisayarındaki dosyalar ve sohbetler kalır. Yeniden kullanmak için o bilgisayardan kaydedin.",
+  "mobile.server.settings.remove": "Sunucuyu kaldır",
   "mobile.server.settings.name": "Sunucu adı",
   "mobile.server.settings.nameLength": "{min} ile {max} karakter kullanın.",
   "mobile.server.settings.logo": "Sunucu logosu",

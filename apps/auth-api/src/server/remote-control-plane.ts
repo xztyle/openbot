@@ -12,8 +12,20 @@ import {
   SLACK_ROUTE_AUDIENCE,
   SLACK_ROUTE_TEAMS_LIMIT,
   SLACK_ROUTE_TTL_SECONDS,
+  type SlackRouteClaims,
   type SlackRouteTeam,
 } from "@openbot/contracts/signal-protocol/slack-route";
+import {
+  TELEGRAM_BOT_ID_PATTERN,
+  TELEGRAM_CHAT_ID_PATTERN,
+  TELEGRAM_LINK_CODE_PATTERN,
+  TELEGRAM_LINK_CODE_TTL_SECONDS,
+  TELEGRAM_ROUTE_AUDIENCE,
+  TELEGRAM_ROUTE_CHATS_LIMIT,
+  TELEGRAM_ROUTE_TTL_SECONDS,
+  type TelegramRouteChat,
+  type TelegramRouteClaims,
+} from "@openbot/contracts/signal-protocol/telegram-route";
 import {
   REMOTE_TICKET_AUDIENCE,
   REMOTE_TICKET_PROTOCOL_VERSION,
@@ -29,7 +41,7 @@ import {
 } from "@openbot/contracts/signal-protocol/webhook-route";
 import { sourceText } from "@openbot/i18n/source";
 import { Context, Effect, Layer, Result, Schema } from "effect";
-import { importJWK, type JWK, SignJWT } from "jose";
+import { importJWK, type JWK, type JWTPayload, SignJWT } from "jose";
 import { getServerEntitlement } from "./billing-entitlement";
 import { decodeBase64Url, hmacSha256, importHmacSha256Key, randomToken, sha256 } from "./crypto";
 import { readSessionMembership } from "./remote-session-membership";
@@ -41,6 +53,7 @@ const LEGACY_SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/u;
 const AUTH_EVENT_RETRY_MS = 60_000;
 const MAX_OUTSTANDING_INVITES_PER_HOST = 50;
 const MAX_PERMANENT_INVITES_PER_HOST = 5;
+const MAX_TELEGRAM_LINK_CODES_PER_HOST = 10;
 // An active member keeps a seat; anyone else needs a free one. Binds: host, user, host, limit.
 const MEMBER_SEAT_AVAILABLE_SQL = `(
   EXISTS(SELECT 1 FROM remote_memberships WHERE host_id = ? AND user_id = ? AND status = 'active')
@@ -132,6 +145,25 @@ interface TicketSignerConfig {
 }
 
 type RemoteFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+/** The OpenBot Telegram bot that this Worker links chats for. */
+interface TelegramBot {
+  botId: string;
+  botUsername: string;
+}
+
+interface TelegramLinkCodeRow {
+  bot_id: string;
+  host_id: string;
+  account_id: string;
+  expires_at: number;
+  chat_id: string | null;
+}
+
+interface TelegramChatLink {
+  hostId: string;
+  linkedAt: number;
+}
 
 interface RemoteAuthEventRow {
   event_id: string;
@@ -238,10 +270,11 @@ export class RemoteTicketSigner {
 }
 
 /**
- * Signs the Slack route ticket that names the workspaces linked to a host. It uses its own key,
- * which the public JWKS also lists, so each key can rotate on its own.
+ * Signs the route tickets that name the Slack workspaces and the Telegram chats linked to a host. It
+ * uses its own key, which the public JWKS also lists, so each key can rotate on its own. Each ticket
+ * kind has its own audience, so Signal cannot take one kind for the other.
  */
-class SlackRouteSigner {
+class RouteSigner {
   readonly #keyId: string;
   readonly #privateJwk: JWK;
   #key: Awaited<ReturnType<typeof importJWK>> | null = null;
@@ -252,19 +285,19 @@ class SlackRouteSigner {
     this.#privateJwk = parseJwk(config.privateJwk);
   }
 
-  readonly issue = Effect.fn("SlackRouteSigner.issue")(function* (
-    this: SlackRouteSigner,
-    input: { hostId: string; teams: SlackRouteTeam[]; now: number },
+  readonly issue = Effect.fn("RouteSigner.issue")(function* (
+    this: RouteSigner,
+    input: { audience: string; claims: JWTPayload; ttlSeconds: number; now: number },
   ) {
     this.#key ??= yield* remoteCall(() => importJWK(this.#privateJwk, "ES256"));
     const key = this.#key;
     const issuedAt = Math.floor(input.now / 1_000);
     return yield* remoteCall(() =>
-      new SignJWT({ hid: input.hostId, teams: input.teams })
+      new SignJWT(input.claims)
         .setProtectedHeader({ alg: "ES256", typ: "JWT", kid: this.#keyId })
         .setIssuedAt(issuedAt)
-        .setExpirationTime(issuedAt + SLACK_ROUTE_TTL_SECONDS)
-        .setAudience(SLACK_ROUTE_AUDIENCE)
+        .setExpirationTime(issuedAt + input.ttlSeconds)
+        .setAudience(input.audience)
         .sign(key),
     );
   }).bind(this);
@@ -323,7 +356,8 @@ class RemoteDependencies extends Context.Service<
   {
     database: D1Database;
     signer: RemoteTicketSigner;
-    slackRouteSigner: SlackRouteSigner | null;
+    routeSigner: RouteSigner | null;
+    telegram: TelegramBot | null;
     discordRouteSigner: DiscordRouteSigner | null;
     now: () => number;
     schedule: ((delivery: Effect.Effect<void, RemoteFailure>) => void) | null;
@@ -352,6 +386,8 @@ export class RemoteControlPlane {
       | "SLACK_ROUTE_KEY_ID"
       | "DISCORD_ROUTE_PRIVATE_JWK"
       | "DISCORD_ROUTE_KEY_ID"
+      | "TELEGRAM_BOT_ID"
+      | "TELEGRAM_BOT_USERNAME"
     >,
     options: {
       fetch?: RemoteFetch;
@@ -368,9 +404,9 @@ export class RemoteControlPlane {
       publicJwks: bindings.REMOTE_TICKET_PUBLIC_JWKS,
       keyId: bindings.REMOTE_TICKET_KEY_ID,
     });
-    const slackRouteSigner =
+    const routeSigner =
       bindings.SLACK_ROUTE_PRIVATE_JWK && bindings.SLACK_ROUTE_KEY_ID
-        ? new SlackRouteSigner({
+        ? new RouteSigner({
             privateJwk: bindings.SLACK_ROUTE_PRIVATE_JWK,
             publicJwks: bindings.REMOTE_TICKET_PUBLIC_JWKS,
             keyId: bindings.SLACK_ROUTE_KEY_ID,
@@ -384,6 +420,12 @@ export class RemoteControlPlane {
             keyId: bindings.DISCORD_ROUTE_KEY_ID,
           })
         : null;
+    const telegramBotId = bindings.TELEGRAM_BOT_ID?.trim();
+    const telegramBotUsername = bindings.TELEGRAM_BOT_USERNAME?.trim();
+    const telegram =
+      telegramBotId && telegramBotUsername && TELEGRAM_BOT_ID_PATTERN.test(telegramBotId)
+        ? { botId: telegramBotId, botUsername: telegramBotUsername }
+        : null;
     const webhookUrl = bindings.REMOTE_AUTH_WEBHOOK_URL?.trim() || null;
     const webhookSecret = bindings.REMOTE_AUTH_WEBHOOK_SECRET?.trim() || null;
     const fetcher: RemoteFetch = options.fetch ?? ((input, init) => fetch(input, init));
@@ -392,8 +434,9 @@ export class RemoteControlPlane {
     this.#layer = Layer.succeed(RemoteDependencies, {
       database: this.#database,
       signer: this.#signer,
-      slackRouteSigner,
+      routeSigner,
       discordRouteSigner,
+      telegram,
       now,
       schedule,
       fetch: fetcher,
@@ -1530,6 +1573,8 @@ export class RemoteControlPlane {
                 dependencies.database.prepare("DELETE FROM remote_invites WHERE host_id = ?").bind(hostId),
                 dependencies.database.prepare("DELETE FROM slack_workspace_routes WHERE host_id = ?").bind(hostId),
                 dependencies.database.prepare("DELETE FROM discord_guild_routes WHERE host_id = ?").bind(hostId),
+                dependencies.database.prepare("DELETE FROM telegram_chat_routes WHERE host_id = ?").bind(hostId),
+                dependencies.database.prepare("DELETE FROM telegram_link_codes WHERE host_id = ?").bind(hostId),
               ]
             : [
                 dependencies.database
@@ -1573,7 +1618,7 @@ export class RemoteControlPlane {
       machineToken: string,
     ): Effect.fn.Return<{ ticket: string; teams: string[] }, RemoteFailure, RemoteDependencies> {
       const dependencies = yield* RemoteDependencies;
-      const signer = dependencies.slackRouteSigner;
+      const signer = dependencies.routeSigner;
       if (!signer) {
         return yield* new RemoteControlPlaneError(503, "slack_not_configured", "Slack routing is not configured.");
       }
@@ -1588,7 +1633,12 @@ export class RemoteControlPlane {
       );
       const teams = rows.results.map((row) => ({ id: row.team_id, appId: row.app_id, linkedAt: row.connected_at }));
       return {
-        ticket: yield* signer.issue({ hostId, teams, now: dependencies.now() }),
+        ticket: yield* signer.issue({
+          audience: SLACK_ROUTE_AUDIENCE,
+          claims: { hid: hostId, teams } satisfies Omit<SlackRouteClaims, "aud" | "iat" | "exp">,
+          ttlSeconds: SLACK_ROUTE_TTL_SECONDS,
+          now: dependencies.now(),
+        }),
         teams: teams.map((team) => team.id),
       };
     },
@@ -1941,6 +1991,270 @@ export class RemoteControlPlane {
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
 
+  /**
+   * A one-use code that links a Telegram chat to this host. The user opens
+   * `https://t.me/<bot>?start=<code>` or `?startgroup=<code>`, and Telegram sends `/start <code>` in
+   * the chat. Only the SHA-256 of the code is kept.
+   */
+
+  readonly issueTelegramLinkCode = Effect.fn("RemoteControlPlane.issueTelegramLinkCode")(
+    function* (
+      this: RemoteControlPlane,
+      hostId: string,
+      machineToken: string,
+    ): Effect.fn.Return<{ botUsername: string; code: string; expiresAt: number }, RemoteFailure, RemoteDependencies> {
+      const dependencies = yield* RemoteDependencies;
+      const telegram = dependencies.telegram;
+      if (!telegram) return yield* telegramNotConfigured();
+      const host = yield* this.authenticateHost(hostId, machineToken);
+      const now = dependencies.now();
+      const code = randomToken();
+      const codeHash = yield* sha256(code).pipe(
+        Effect.mapError((error) => (error instanceof RemoteControlPlaneError ? error : new RemoteOperationError({}))),
+      );
+      const expiresAt = now + TELEGRAM_LINK_CODE_TTL_SECONDS * 1_000;
+      // The count and the insert are one statement: two requests at once cannot both pass the limit.
+      const [, created] = yield* remoteCall(() =>
+        dependencies.database.batch([
+          dependencies.database
+            .prepare("DELETE FROM telegram_link_codes WHERE host_id = ? AND expires_at <= ?")
+            .bind(hostId, now),
+          dependencies.database
+            .prepare(
+              `INSERT INTO telegram_link_codes(code_hash, bot_id, host_id, account_id, expires_at)
+           SELECT ?, ?, ?, ?, ?
+           WHERE (SELECT COUNT(*) FROM telegram_link_codes WHERE host_id = ? AND expires_at > ?) < ?`,
+            )
+            .bind(
+              codeHash,
+              telegram.botId,
+              hostId,
+              host.owner_user_id,
+              expiresAt,
+              hostId,
+              now,
+              MAX_TELEGRAM_LINK_CODES_PER_HOST,
+            ),
+        ]),
+      );
+      if ((created?.meta.changes ?? 0) !== 1) {
+        return yield* new RemoteControlPlaneError(
+          429,
+          "telegram_link_limit",
+          "Use an open Telegram link or let it expire before you ask for another one.",
+        );
+      }
+      return { botUsername: telegram.botUsername, code, expiresAt };
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /**
+   * Links a Telegram chat to the host that asked for the code. Signal calls this when a chat sends
+   * `/start <code>`.
+   *
+   * A chat answers to one host. The account that linked it can move it to another of its hosts;
+   * another account gets `telegram_chat_taken` until the first host disconnects the chat. A repeat of
+   * the code from the chat that it linked gets the same answer.
+   */
+
+  readonly linkTelegramChat = Effect.fn("RemoteControlPlane.linkTelegramChat")(
+    function* (
+      this: RemoteControlPlane,
+      input: { botId: string; chatId: string; code: string },
+    ): Effect.fn.Return<TelegramChatLink, RemoteFailure, RemoteDependencies> {
+      const dependencies = yield* RemoteDependencies;
+      if (!dependencies.telegram) return yield* telegramNotConfigured();
+      if (
+        !TELEGRAM_BOT_ID_PATTERN.test(input.botId) ||
+        !TELEGRAM_CHAT_ID_PATTERN.test(input.chatId) ||
+        !TELEGRAM_LINK_CODE_PATTERN.test(input.code)
+      ) {
+        return yield* invalid("Telegram link");
+      }
+      const codeHash = yield* sha256(input.code).pipe(
+        Effect.mapError((error) => (error instanceof RemoteControlPlaneError ? error : new RemoteOperationError({}))),
+      );
+      const now = dependencies.now();
+      const state = yield* this.#telegramLinkState(codeHash, input, now);
+      if ("hostId" in state) return state;
+      const hostId = state.host_id;
+      // One batch, so two links at once cannot both win: the route is written only while the code is
+      // unused, and the code is marked used only when the route is this link. Another account's row
+      // stays as it is. When the link is made, Signal drops any older route of the chat: a host that
+      // the chat moved away from cannot keep it with the ticket it holds.
+      const [, used] = yield* remoteCall(() =>
+        dependencies.database.batch([
+          dependencies.database
+            .prepare(
+              `INSERT INTO telegram_chat_routes(bot_id, chat_id, host_id, account_id, linked_at)
+           SELECT ?, ?, ?, ?, ?
+           WHERE EXISTS (
+               SELECT 1 FROM telegram_link_codes
+                WHERE code_hash = ? AND bot_id = ? AND chat_id IS NULL AND expires_at > ?
+             )
+             AND (
+               SELECT COUNT(*) FROM telegram_chat_routes WHERE host_id = ? AND NOT (bot_id = ? AND chat_id = ?)
+             ) < ?
+           ON CONFLICT(bot_id, chat_id) DO UPDATE SET host_id = excluded.host_id, linked_at = excluded.linked_at
+           WHERE telegram_chat_routes.account_id = excluded.account_id`,
+            )
+            .bind(
+              input.botId,
+              input.chatId,
+              hostId,
+              state.account_id,
+              now,
+              codeHash,
+              input.botId,
+              now,
+              hostId,
+              input.botId,
+              input.chatId,
+              TELEGRAM_ROUTE_CHATS_LIMIT,
+            ),
+          dependencies.database
+            .prepare(
+              `UPDATE telegram_link_codes SET chat_id = ?, linked_at = ?
+            WHERE code_hash = ? AND chat_id IS NULL
+              AND EXISTS (
+                SELECT 1 FROM telegram_chat_routes WHERE bot_id = ? AND chat_id = ? AND host_id = ? AND linked_at = ?
+              )`,
+            )
+            .bind(input.chatId, now, codeHash, input.botId, input.chatId, hostId, now),
+          this.#authEventStatement(
+            { type: "telegram-route-revoked", botId: input.botId, chatId: input.chatId, through: now - 1 },
+            now,
+            {
+              sql: "EXISTS (SELECT 1 FROM telegram_link_codes WHERE code_hash = ? AND chat_id = ? AND linked_at = ?)",
+              binds: [codeHash, input.chatId, now],
+            },
+          ),
+        ]),
+      );
+      if ((used?.meta.changes ?? 0) === 1) {
+        yield* this.#flushAuthEvents();
+        return { hostId, linkedAt: now };
+      }
+      // Another link changed the chat or the code after the first read. Give the answer of the state now.
+      const current = yield* this.#telegramLinkState(codeHash, input, now);
+      if ("hostId" in current) return current;
+      return yield* telegramLinkInvalid();
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /**
+   * The route ticket that the host's Signal `ingress` socket presents: the Telegram chats linked to
+   * this host, signed. The host asks for a new one each time the socket connects.
+   */
+
+  readonly issueTelegramRoute = Effect.fn("RemoteControlPlane.issueTelegramRoute")(
+    function* (
+      this: RemoteControlPlane,
+      hostId: string,
+      machineToken: string,
+    ): Effect.fn.Return<{ ticket: string; chats: string[] }, RemoteFailure, RemoteDependencies> {
+      const dependencies = yield* RemoteDependencies;
+      const signer = dependencies.routeSigner;
+      if (!signer || !dependencies.telegram) return yield* telegramNotConfigured();
+      yield* this.authenticateHost(hostId, machineToken);
+      const rows = yield* remoteCall(() =>
+        dependencies.database
+          .prepare(
+            "SELECT bot_id, chat_id, linked_at FROM telegram_chat_routes WHERE host_id = ? ORDER BY linked_at DESC LIMIT ?",
+          )
+          .bind(hostId, TELEGRAM_ROUTE_CHATS_LIMIT)
+          .all<{ bot_id: string; chat_id: string; linked_at: number }>(),
+      );
+      const chats: TelegramRouteChat[] = rows.results.map((row) => ({
+        id: row.chat_id,
+        botId: row.bot_id,
+        linkedAt: row.linked_at,
+      }));
+      return {
+        ticket: yield* signer.issue({
+          audience: TELEGRAM_ROUTE_AUDIENCE,
+          claims: { hid: hostId, chats } satisfies Omit<TelegramRouteClaims, "aud" | "iat" | "exp">,
+          ttlSeconds: TELEGRAM_ROUTE_TTL_SECONDS,
+          now: dependencies.now(),
+        }),
+        chats: chats.map((chat) => chat.id),
+      };
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /** The chats of a route ticket that D1 still links to the host, with the same bot and link. */
+
+  readonly validateTelegramRoute = Effect.fn("RemoteControlPlane.validateTelegramRoute")(
+    function* (
+      this: RemoteControlPlane,
+      input: { hostId: string; chats: TelegramRouteChat[] },
+    ): Effect.fn.Return<TelegramRouteChat[], RemoteFailure, RemoteDependencies> {
+      const dependencies = yield* RemoteDependencies;
+      if (input.chats.length === 0) return [];
+      const rows = yield* remoteCall(() =>
+        dependencies.database
+          .prepare("SELECT bot_id, chat_id, linked_at FROM telegram_chat_routes WHERE host_id = ?")
+          .bind(input.hostId)
+          .all<{ bot_id: string; chat_id: string; linked_at: number }>(),
+      );
+      const linked = new Map(rows.results.map((row) => [`${row.bot_id}:${row.chat_id}`, row.linked_at]));
+      // Each current link whole, so Signal keeps only these bot, chat and time triples.
+      return input.chats
+        .filter((chat) => linked.get(`${chat.botId}:${chat.id}`) === chat.linkedAt)
+        .map((chat) => ({ id: chat.id, botId: chat.botId, linkedAt: chat.linkedAt }));
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /**
+   * Unlinks a Telegram chat from this host, for each bot. It works without the Telegram settings, so
+   * a host can always remove a chat.
+   */
+
+  readonly disconnectTelegramChat = Effect.fn("RemoteControlPlane.disconnectTelegramChat")(
+    function* (
+      this: RemoteControlPlane,
+      hostId: string,
+      machineToken: string,
+      chatId: string,
+    ): Effect.fn.Return<void, RemoteFailure, RemoteDependencies> {
+      const dependencies = yield* RemoteDependencies;
+      if (!TELEGRAM_CHAT_ID_PATTERN.test(chatId)) return yield* invalid("Telegram chat ID");
+      yield* this.authenticateHost(hostId, machineToken);
+      const links = yield* remoteCall(() =>
+        dependencies.database
+          .prepare("SELECT bot_id FROM telegram_chat_routes WHERE chat_id = ? AND host_id = ?")
+          .bind(chatId, hostId)
+          .all<{ bot_id: string }>(),
+      );
+      if (links.results.length === 0) return;
+      const now = dependencies.now();
+      // Signal drops the route now, so the host cannot keep the chat with the ticket it holds.
+      yield* remoteCall(() =>
+        dependencies.database.batch([
+          ...links.results.map((link) =>
+            this.#authEventStatement(
+              { type: "telegram-route-revoked", botId: link.bot_id, chatId, through: now },
+              now,
+              {
+                sql: "EXISTS (SELECT 1 FROM telegram_chat_routes WHERE bot_id = ? AND chat_id = ? AND host_id = ?)",
+                binds: [link.bot_id, chatId, hostId],
+              },
+            ),
+          ),
+          dependencies.database
+            .prepare("DELETE FROM telegram_chat_routes WHERE chat_id = ? AND host_id = ?")
+            .bind(chatId, hostId),
+        ]),
+      );
+      yield* this.#flushAuthEvents();
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
   /** Checks the credential that a host received when it registered. */
 
   readonly authenticateHost = Effect.fn("RemoteControlPlane.authenticateHost")(
@@ -1986,6 +2300,79 @@ export class RemoteControlPlane {
       const roleArgument1 = roles;
       return yield* remoteValidate(() => this.#assertRole(roleArgument0, roleArgument1));
     });
+  });
+
+  /**
+   * What a link code can do now: the current link, when the code already linked this chat or the chat
+   * is already on the code's host, or the code row, when the chat can be linked. Fails otherwise.
+   */
+  readonly #telegramLinkState = Effect.fn("RemoteControlPlane.telegramLinkState")(function* (
+    this: RemoteControlPlane,
+    codeHash: string,
+    input: { botId: string; chatId: string },
+    now: number,
+  ): Effect.fn.Return<TelegramChatLink | TelegramLinkCodeRow, RemoteFailure, RemoteDependencies> {
+    const dependencies = yield* RemoteDependencies;
+    const code = yield* remoteCall(() =>
+      dependencies.database
+        .prepare(
+          "SELECT bot_id, host_id, account_id, expires_at, chat_id FROM telegram_link_codes WHERE code_hash = ? LIMIT 1",
+        )
+        .bind(codeHash)
+        .first<TelegramLinkCodeRow>(),
+    );
+    if (
+      !code ||
+      code.expires_at <= now ||
+      code.bot_id !== input.botId ||
+      (code.chat_id !== null && code.chat_id !== input.chatId)
+    ) {
+      return yield* telegramLinkInvalid();
+    }
+    const route = yield* remoteCall(() =>
+      dependencies.database
+        .prepare(
+          "SELECT host_id, account_id, linked_at FROM telegram_chat_routes WHERE bot_id = ? AND chat_id = ? LIMIT 1",
+        )
+        .bind(input.botId, input.chatId)
+        .first<{ host_id: string; account_id: string; linked_at: number }>(),
+    );
+    if (code.chat_id !== null) {
+      // A repeat of the code that linked this chat. The chat can have moved or gone since then.
+      if (route?.host_id === code.host_id) return { hostId: route.host_id, linkedAt: route.linked_at };
+      return yield* telegramLinkInvalid();
+    }
+    if (route && route.account_id !== code.account_id) {
+      return yield* new RemoteControlPlaneError(
+        409,
+        "telegram_chat_taken",
+        "Another OpenBot server answers this Telegram chat. Disconnect it there first.",
+      );
+    }
+    if (route?.host_id === code.host_id) {
+      // The chat is already on this host. The code is used, and the link stays as it is.
+      yield* remoteCall(() =>
+        dependencies.database
+          .prepare("UPDATE telegram_link_codes SET chat_id = ?, linked_at = ? WHERE code_hash = ? AND chat_id IS NULL")
+          .bind(input.chatId, route.linked_at, codeHash)
+          .run(),
+      );
+      return { hostId: route.host_id, linkedAt: route.linked_at };
+    }
+    const linked = yield* remoteCall(() =>
+      dependencies.database
+        .prepare("SELECT COUNT(*) AS count FROM telegram_chat_routes WHERE host_id = ?")
+        .bind(code.host_id)
+        .first<{ count: number }>(),
+    );
+    if ((linked?.count ?? 0) >= TELEGRAM_ROUTE_CHATS_LIMIT) {
+      return yield* new RemoteControlPlaneError(
+        409,
+        "telegram_chat_limit",
+        `A server can link up to ${TELEGRAM_ROUTE_CHATS_LIMIT} Telegram chats.`,
+      );
+    }
+    return code;
   });
 
   readonly #requireMemberSeat = Effect.fn("RemoteControlPlane.requireMemberSeat")(function* (
@@ -2120,6 +2507,14 @@ export function authEventStatement(
        SELECT ?, ?, ?, 0, ?${condition ? ` WHERE ${condition.sql}` : ""}`,
     )
     .bind(crypto.randomUUID(), JSON.stringify(event), now, now, ...(condition?.binds ?? []));
+}
+
+function telegramNotConfigured(): RemoteControlPlaneError {
+  return new RemoteControlPlaneError(503, "telegram_not_configured", "Telegram is not configured.");
+}
+
+function telegramLinkInvalid(): RemoteControlPlaneError {
+  return new RemoteControlPlaneError(404, "telegram_link_invalid", "The Telegram link is invalid or expired.");
 }
 
 function memberLimitReached(limit: number): RemoteControlPlaneError {

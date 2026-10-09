@@ -1,6 +1,7 @@
 import {
   CHANNEL_CHATS_CAPABILITY,
   CHANNEL_DELETE_CAPABILITY,
+  type ChannelCommand,
   parseChannelCommand,
   parseChannelRead,
 } from "@openbot/contracts/ipc";
@@ -48,6 +49,7 @@ export async function routeChannels(
   context: TeamApiRequestContext,
   channels: ChannelService | undefined,
   agents: ChannelSettingsAgents,
+  hiddenAgentIds: ReadonlySet<string> = new Set(),
 ): Promise<RouteOutcome> {
   const { method, url, capabilities, member, request, json, empty } = context;
   const list = method === "GET" && url.pathname === CHANNEL_ROUTES.list;
@@ -79,8 +81,38 @@ export async function routeChannels(
     throw new HttpError(403, sourceText("error.team.membersCannotArchiveChannels"));
   return json(
     200,
-    await runCauseEffect(channels.command(input, { id: member.id, name: member.name ?? "Team member" })),
+    await runCauseEffect(
+      channels.command(input, { id: member.id, name: member.name ?? "Team member" }, (queued) =>
+        keepHiddenMembers(queued, channels, hiddenAgentIds),
+      ),
+    ),
   );
+}
+
+/**
+ * A peer never sees an agent its protocol hides, so its save names only the members it sees and no
+ * lead when the lead is hidden. The stored hidden members and the hidden lead stay: without them,
+ * renaming a channel on that peer would remove those agents from it and pause their tasks.
+ *
+ * It runs when the save's turn in the command queue comes, not when the request arrives: a save
+ * that still waits in the queue can add a hidden member, and the channel read at arrival does not
+ * have that member yet.
+ */
+function keepHiddenMembers(
+  input: ChannelCommand,
+  channels: ChannelService,
+  hiddenAgentIds: ReadonlySet<string>,
+): ChannelCommand {
+  if (input.type !== "save" || hiddenAgentIds.size === 0 || !channels.store.exists(input.channelId)) return input;
+  const stored = channels.store.get(input.channelId);
+  const named = new Set(input.draft.members.map((item) => item.agentId));
+  const kept = stored.members.filter((item) => hiddenAgentIds.has(item.agentId) && !named.has(item.agentId));
+  const leadAgentId =
+    input.draft.leadAgentId === null && stored.leadAgentId !== null && hiddenAgentIds.has(stored.leadAgentId)
+      ? stored.leadAgentId
+      : input.draft.leadAgentId;
+  if (kept.length === 0 && leadAgentId === input.draft.leadAgentId) return input;
+  return { ...input, draft: { ...input.draft, members: [...input.draft.members, ...kept], leadAgentId } };
 }
 
 async function routeChannelSettings(

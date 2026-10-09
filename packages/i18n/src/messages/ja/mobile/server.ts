@@ -73,8 +73,9 @@ export const messages = {
     other:
       "1 つのアカウントで持てる有料サーバーは {count} 台までです。サーバーを追加するには、先にコンピューターの OpenBot でサーバーを削除してください。",
   },
-  "mobile.server.hosted.heroTitle": "クラウド上の専用サーバー",
-  "mobile.server.hosted.heroDescription": "コンピューターの電源が切れていても動作し、使うときに起動します。",
+  "mobile.server.hosted.heroTitle": "外部サーバーで OpenBot を 24 時間 365 日実行",
+  "mobile.server.hosted.heroDescription":
+    "OpenBot サーバーは、コンピューターの電源が切れていてもエージェントとルーティンを動かし続けます。インフラと保守は私たちが担当するため、技術的な設定なしですぐに使えます。",
   "mobile.server.hosted.securePayment": "Stripe による安全な支払い",
   "mobile.server.hosted.joinHint": "サーバーのオーナーからの招待を使います。",
   "mobile.server.hosted.contactHint": "Mac や会社向けのプランについて。",
@@ -163,6 +164,10 @@ export const messages = {
   "mobile.server.settings.leaveTitle": "{name} から退出しますか？",
   "mobile.server.settings.leaveBody": "再度参加するには新しい招待が必要です。",
   "mobile.server.settings.leave": "サーバーから退出",
+  "mobile.server.settings.removeTitle": "{name} を削除しますか？",
+  "mobile.server.settings.removeBody":
+    "すべてのメンバーについてサーバーをアカウントサービスから削除します。そのコンピューター上のファイルとチャットは残ります。再び使うには、そのコンピューターから登録してください。",
+  "mobile.server.settings.remove": "サーバーを削除",
   "mobile.server.settings.name": "サーバー名",
   "mobile.server.settings.nameLength": "{min}〜{max} 文字で入力してください。",
   "mobile.server.settings.logo": "サーバーのロゴ",

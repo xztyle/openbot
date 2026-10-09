@@ -86,8 +86,9 @@ export const messages = {
     other:
       "На аккаунте может быть {count} платных сервера. Чтобы добавить сервер, сначала удалите один в OpenBot на компьютере.",
   },
-  "mobile.server.hosted.heroTitle": "Ваш собственный сервер в облаке",
-  "mobile.server.hosted.heroDescription": "Работает, когда компьютер выключен, и запускается, когда он нужен.",
+  "mobile.server.hosted.heroTitle": "Запустите OpenBot 24/7 на внешнем сервере",
+  "mobile.server.hosted.heroDescription":
+    "Серверы OpenBot поддерживают работу ваших агентов и регулярных задач, даже когда компьютер выключен. Мы берём на себя инфраструктуру и обслуживание, поэтому сервер готов к работе без технической настройки.",
   "mobile.server.hosted.securePayment": "Безопасная оплата через Stripe",
   "mobile.server.hosted.joinHint": "Используйте приглашение от владельца сервера.",
   "mobile.server.hosted.contactHint": "Для Mac или тарифа для вашей компании.",
@@ -191,6 +192,10 @@ export const messages = {
   "mobile.server.settings.leaveTitle": "Покинуть «{name}»?",
   "mobile.server.settings.leaveBody": "Чтобы присоединиться снова, понадобится новое приглашение.",
   "mobile.server.settings.leave": "Покинуть сервер",
+  "mobile.server.settings.removeTitle": "Удалить «{name}»?",
+  "mobile.server.settings.removeBody":
+    "Сервер будет удалён из сервиса аккаунтов для всех участников. Файлы и чаты на его компьютере останутся. Чтобы снова использовать сервер, зарегистрируйте его с того компьютера.",
+  "mobile.server.settings.remove": "Удалить сервер",
   "mobile.server.settings.name": "Название сервера",
   "mobile.server.settings.nameLength": "Длина — от {min} до {max} символов.",
   "mobile.server.settings.logo": "Логотип сервера",

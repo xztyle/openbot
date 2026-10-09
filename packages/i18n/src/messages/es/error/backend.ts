@@ -75,6 +75,10 @@ export const messages = {
   "error.backend.channelRoutineLimit": "Un canal puede tener un máximo de {limit} rutinas.",
   "error.backend.agentRoutineLimit": "Un agente puede tener un máximo de {limit} rutinas.",
   "error.backend.agentMemoryLimit": "Un agente puede tener hasta {limit} recuerdos.",
+  "error.backend.agentMemoryLimitReached":
+    "Tienes {saved} de {limit} recuerdos. Para hacer sitio, actualiza un recuerdo por su memoryId con el texto combinado de dos recuerdos relacionados y olvida el otro, u olvida un recuerdo que ya no sea cierto. Luego vuelve a intentarlo.",
+  "error.backend.agentMemoryLimitExceeded":
+    "Tienes {saved} recuerdos y el límite es {limit}. El usuario fijó el límite por debajo del número de recuerdos guardados. No olvides recuerdos para hacer sitio. Dile al usuario que este recuerdo no se guardó.",
   "error.backend.channelHistoryLeadRequired": "Elige un coordinador de canal para preparar el historial compartido.",
   "error.backend.channelHistoryArriving": "Aún se está recibiendo un mensaje compartido. Reanuda cuando esté completo.",
   "error.backend.channelHistoryInvalid": "El resumen del historial no es válido. Reanuda para intentarlo de nuevo.",
@@ -177,6 +181,12 @@ export const messages = {
   "error.backend.mcpServerExited":
     "El servidor se detuvo antes de responder. Ejecuta el comando en una terminal para ver su error.",
   "error.backend.mcpServerUnreachable": "OpenBot no pudo conectar con el servidor. Revisa la URL y tu red.",
+  "error.backend.mcpLocalServerOff":
+    "Ningún servidor responde en {address} en este equipo. Inicia el servidor o actívalo en la app que lo ejecuta y vuelve a intentarlo.",
+  "error.backend.mcpServerBlocked":
+    "Este equipo bloqueó la conexión con el servidor. Revisa tu firewall o software de seguridad y vuelve a intentarlo.",
+  "error.backend.mcpServerIncompatible":
+    "Algo respondió en esta dirección, pero no como un servidor MCP por Streamable HTTP. Revisa la URL y actualiza la app que ejecuta el servidor.",
   "error.backend.mcpRemoteBridge":
     "{reason} Este comando ejecuta el puente mcp-remote. Elige Streamable HTTP con la URL {url} y OpenBot iniciará tu sesión.",
   "error.backend.oauthNotHttps": "El endpoint OAuth {origin} no usa https, por lo que no se enviaron las credenciales.",

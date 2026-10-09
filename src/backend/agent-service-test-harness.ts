@@ -474,12 +474,18 @@ export function fakeBrowser(tabs: BrowserTab[] = [], uploadTarget = { inputId: "
 /**
  * `AgentService` with the arguments every test here would otherwise repeat. The browser stub and the
  * request timeout are harness defaults, not assertions: a test that cares about either one passes its
- * own value and overrides the default.
+ * own value and overrides the default. A message to a busy agent queues unless the test passes
+ * `busyMessageMode`, so a change of the app default does not change what the queue tests check.
  */
 export function createTestService(
   options: Partial<AgentServiceOptions> & Pick<AgentServiceOptions, "store" | "mailbox">,
 ): AgentService {
-  return new AgentService({ browser: fakeBrowser(), requestTimeoutMs: 30_000, ...options });
+  return new AgentService({
+    browser: fakeBrowser(),
+    requestTimeoutMs: 30_000,
+    busyMessageMode: () => "queue",
+    ...options,
+  });
 }
 
 /**

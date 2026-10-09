@@ -39,6 +39,13 @@ export const messages = defineMessages("marketplace", {
   // The skill page, and why Try is off.
   "marketplace.skill.loading": "Loading skill",
   "marketplace.skill.update": "Update skill",
+  "marketplace.skill.updateAvailable": "Update available",
+  "marketplace.skill.updates.label": "Skill updates",
+  "marketplace.skill.updates.count": {
+    one: "{count} installed skill has an update.",
+    other: "{count} installed skills have updates.",
+  },
+  "marketplace.skill.updates.all": "Update all",
   "marketplace.try.readFailed": "OpenBot could not read this agent's skills. Try again.",
   "marketplace.try.enable": "Enable this skill in agent settings to try it.",
   "marketplace.try.repair": "Repair this skill in agent settings to try it.",
@@ -61,6 +68,7 @@ export const messages = defineMessages("marketplace", {
   "marketplace.filter.notAdded": "Not added",
   "marketplace.filter.installed": "Installed",
   "marketplace.filter.notInstalled": "Not installed",
+  "marketplace.filter.updates": "Updates available",
   "marketplace.filter.clear": "Clear filters",
   "marketplace.noMatch.apps": "No apps match this search.",
   "marketplace.noMatch.filters": "Nothing matches the filters.",
@@ -90,6 +98,10 @@ export const messages = defineMessages("marketplace", {
   // Apps.
   "marketplace.app.connect": "Connect",
   "marketplace.app.reconnect": "Reconnect",
+  "marketplace.app.disabled": "Disabled",
+  "marketplace.app.review": "Review",
+  "marketplace.app.reviewNamed": "Review {name}",
+  "marketplace.app.accounts": { one: "{count} account", other: "{count} accounts" },
   "marketplace.app.connectNamed": "Connect {name}",
   "marketplace.app.reconnectNamed": "Reconnect {name}",
   "marketplace.app.connected": "Connected",
@@ -261,6 +273,25 @@ export const messages = defineMessages("marketplace", {
   "marketplace.notice.appConnected": "{name} connected.",
   "marketplace.notice.appDisconnected": "{name} disconnected.",
   "marketplace.notice.serverRemoved": "{name} removed.",
+  "marketplace.notice.skillsUpdated": { one: "{count} skill updated.", other: "{count} skills updated." },
+  "marketplace.notice.accountEnabled": "{name} turned on.",
+  "marketplace.notice.accountDisabled": "{name} turned off.",
+  "marketplace.notice.accountRenamed": "Renamed to {name}.",
+  "marketplace.notice.accountChecked": {
+    one: "{name} works. {count} tool is available.",
+    other: "{name} works. {count} tools are available.",
+  },
+  "marketplace.notice.accountCheckFailed": "{name} does not work.",
+  "marketplace.notice.accountReconnected": "{name} is connected again.",
+  "marketplace.notice.appUpdated": {
+    one: "{count} account of {name} updated.",
+    other: "{count} accounts of {name} updated.",
+  },
+  "marketplace.notice.appUpdatedSignIn": {
+    one: "{count} account of {name} updated. Sign in again if the app asks.",
+    other: "{count} accounts of {name} updated. Sign in again if the app asks.",
+  },
+  "marketplace.notice.accessSet": "{account} for {agent}: {mode}.",
   "marketplace.notice.skillInstalled": {
     one: "{name} installed on {count} agent.",
     other: "{name} installed on {count} agents.",
@@ -306,6 +337,10 @@ export const messages = defineMessages("marketplace", {
   "marketplace.eventCheck.optional": "Optional",
   "marketplace.eventCheck.need.nothing": "This event check needs no private variable and no setting.",
   "marketplace.eventCheck.need.interval": "Checks every {interval} by default.",
+  "marketplace.eventCheck.forApp": "Event checks for this app",
+  "marketplace.eventCheck.forAppHelp":
+    "Reviewed checks that read the API of this app. They use their own private variables, never the accounts you connected here.",
+  "marketplace.eventCheck.view": "View",
   "marketplace.eventCheck.installedTitle": "Installed",
   "marketplace.eventCheck.installedHelp": "Every copy of this event check, on every agent.",
   "marketplace.eventCheck.installedNone": "Not installed on any agent yet.",
@@ -361,6 +396,10 @@ export const messages = defineMessages("marketplace", {
 
   // Errors. {reason} is an error message. {failures} is a list of error messages.
   "marketplace.error.openLink": "Could not open the link.",
+  "marketplace.error.accountNoServer": "Select a server that holds the apps to change an account.",
+  "marketplace.error.updateFailed": "{name} was not updated, because the new version did not work. {reason}",
+  "marketplace.error.updateAllPartial": "Could not update {skills}.",
+  "marketplace.error.accessGone": "{name} is not available to chats now. Close this window and try again.",
   "marketplace.error.copyLink": "Could not copy the link.",
   "marketplace.error.connectNoServer": "Select a local server to connect this app.",
   "marketplace.error.installNoServer": "Select a local server to install a plugin.",
@@ -374,4 +413,48 @@ export const messages = defineMessages("marketplace", {
   "marketplace.error.uninstallPartial": "Some of {name} could not be removed. {failures}",
   "marketplace.error.actionFailed": "Could not complete the marketplace action. Try again.",
   "marketplace.thisAgent": "this agent",
+
+  // The accounts of an app. {name} is the name of an account.
+  "marketplace.account.disabled": "Disabled",
+  "marketplace.account.outdated": "Update available",
+  "marketplace.account.rename": "Rename",
+  "marketplace.account.renameNamed": "Rename {name}",
+  "marketplace.account.check": "Check connection",
+  "marketplace.account.checkNamed": "Check the connection of {name}",
+  "marketplace.account.checking": "Checking…",
+  "marketplace.account.working": {
+    one: "Works. {count} tool is available.",
+    other: "Works. {count} tools are available.",
+  },
+  "marketplace.account.failed": "Does not work. {reason}",
+  "marketplace.account.signIn": "Sign in again",
+  "marketplace.account.signInNamed": "Sign in again to {name}",
+  "marketplace.account.changeKey": "Change key",
+  "marketplace.account.changeKeyNamed": "Change the key of {name}",
+  "marketplace.account.updateTitle": "Update {name}",
+  "marketplace.account.updateDescription": {
+    one: "One account of {name} still uses an older version of its server. The update moves it to the current version. Its name, sign-in and chat access stay.",
+    other:
+      "{count} accounts of {name} still use an older version of its server. The update moves them to the current version. Their names, sign-ins and chat access stay.",
+  },
+  "marketplace.account.update": "Update",
+  "marketplace.account.updateNamed": "Update the connection of {name}",
+
+  // What each agent's chat may do with an account.
+  "marketplace.access.title": "Chat access",
+  "marketplace.access.description":
+    "Choose what each agent's chat may do with each account. A new account starts Off in every chat.",
+  "marketplace.access.thisChat": "This chat",
+  "marketplace.access.loading": "Reading chat access",
+  "marketplace.access.readFailed": "Could not read the chat access of {agents}.",
+  "marketplace.access.saving": "Saving access for {agent}. The host refreshes its agents, so this can take a moment.",
+  "marketplace.access.unreadable": "Not available",
+  "marketplace.access.noAccounts": "Turn on an account to choose what chats may do with it.",
+  "marketplace.access.disabledNote": "An account that is turned off is not offered to any chat.",
+  "marketplace.access.groups": "Group chats are set in the chat itself, in Apps for this chat.",
+  "marketplace.access.groupLabel": "{agent}, {account}",
+  "marketplace.access.allowFor": "Allow for {agent}",
+  "marketplace.access.allowDescription":
+    "{account} is connected, but {agent} cannot use it yet. Choose what {agent} may do with it.",
+  "marketplace.access.notNow": "Keep it off",
 });

@@ -4,9 +4,20 @@ import type {
   McpTestResult,
   TestMcpServerInput,
 } from "@openbot/contracts/ipc";
+import type { McpChatGrant, McpChatSnapshot, McpChatTarget } from "@openbot/contracts/team-protocol/mcp-chat-v1";
 import type { MarketplaceEventChecks } from "@openbot/ui/features/marketplace/marketplace-event-checks";
 import { appPort } from "../../app-port";
 import { type AgentSkillCalls, agentSkillCalls, type SkillsPort, skillsPort } from "../../skills-port";
+
+/**
+ * The per-chat app permissions of a host (`mcp-chat-v1`): what a chat may use of each connected
+ * account. A save replaces the whole policy of the chat, and the host then refreshes the runtimes of
+ * its agents, which can take a while.
+ */
+interface MarketplaceChatApps {
+  get: (target: McpChatTarget) => Promise<McpChatSnapshot>;
+  save: (target: McpChatTarget, grants: McpChatGrant[]) => Promise<McpChatSnapshot>;
+}
 
 /**
  * What the marketplace calls. The desktop app reads the catalog and changes agents through main. The
@@ -16,13 +27,22 @@ export interface MarketplaceCalls {
   skills: Pick<SkillsPort["skills"], "get" | "list">;
   agents: Pick<SkillsPort["marketplaceAgents"], "get" | "list">;
   agentSkills: (hostServerId?: string) => AgentSkillCalls;
-  mcp: Pick<SkillsPort["agent"], "listMcpServers" | "removeMcpServer" | "saveMcpServer" | "testMcpServer"> & {
+  mcp: Pick<
+    SkillsPort["agent"],
+    "listMcpServers" | "removeMcpServer" | "saveMcpServer" | "setMcpServerEnabled" | "testMcpServer"
+  > & {
     supportsRemoteSignIn?: () => boolean;
     signInMcpServer: (input: TestMcpServerInput, serverId: string, signal?: AbortSignal) => Promise<McpTestResult>;
   };
   /** `serverId` absent: this computer, which is also the only place an installed agent is updated. */
   addAgent: (input: InstallMarketplaceAgentInput, serverId: string | undefined) => Promise<AddedAgent>;
   openUrl: (url: string) => Promise<void>;
+  /**
+   * The chat permissions of a host, or nothing when this client cannot reach them (`serverId` is the
+   * host that holds the apps). Absent here: the Marketplace shows no access controls. The desktop
+   * bridge has no channel for them yet; the browser client reaches them over the Team API.
+   */
+  chatApps?: ((serverId: string) => MarketplaceChatApps | undefined) | undefined;
   /**
    * The event check templates and checks of a host. `serverId` absent: this computer. Absent here: the
    * client has none, and the Event checks tab is not shown.

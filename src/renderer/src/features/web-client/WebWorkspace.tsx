@@ -85,6 +85,7 @@ import { Conversation, createConversationController } from "../conversation/Conv
 import { clearStoredQueueEdit } from "../conversation/composer-draft";
 import { ConversationControllerProvider } from "../conversation/conversation-controller-context";
 import { composerDraftKey } from "../conversation/conversation-keys";
+import { createMarketplaceAppAccess } from "../conversation/marketplace-app-access";
 import type { FilesPort } from "../files/files-port";
 import { hostSetupProviderProps } from "../onboarding/host-setup-provider-props";
 import { ServerOnboarding } from "../onboarding/ServerOnboarding";
@@ -643,6 +644,21 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   );
   const agentTemplateCalls = createWebAgentTemplateCalls(props.accountFetch, hostRequest);
   const [marketplaceOpen, setMarketplaceOpen] = createSignal(false);
+  /** The app a suggestion card in the chat asked for. Only a press on the card sets it. */
+  const [cardApp, setCardApp] = createSignal<{ appId: string; connect: boolean } | null>(null);
+  /* What the host holds of a suggested app, so its card tells whether this chat can use it. */
+  const appAccess = createMarketplaceAppAccess({
+    calls: () => marketplaceCalls,
+    serverId: () => (workspace.runtime.admin ? server()?.id : undefined),
+    agentId: () => workspace.state.selectedId ?? undefined,
+  });
+  /* Connecting an app, allowing it or turning it off happens in these two windows. */
+  createEffect(
+    () => marketplaceOpen() || chatApps.state.open,
+    (open, previous) => {
+      if (previous && !open) appAccess.refresh();
+    },
+  );
   // A link opens its overlay once it has arrived, which can be after sign-in.
   createEffect(
     () => props.inviteUrl,
@@ -1438,8 +1454,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   setMarketplaceOpen(false);
                   await openAddedAgent(agent);
                 }}
-                pluginSlug={props.pluginSlug}
-                onPluginSlugConsumed={() => props.onPluginSlugConsumed?.()}
+                pluginSlug={cardApp()?.appId ?? props.pluginSlug}
+                pluginConnect={cardApp()?.connect}
+                onPluginSlugConsumed={() => {
+                  setCardApp(null);
+                  props.onPluginSlugConsumed?.();
+                }}
               />
               <Show when={accountSettingsOpen()}>
                 <Loading>
@@ -1673,6 +1693,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               }
               runtime={runtime}
               onOpenMarketplace={() => setMarketplaceOpen(true)}
+              onOpenMarketplaceApp={(request) => {
+                setCardApp(request);
+                setMarketplaceOpen(true);
+              }}
+              marketplaceAppAccess={appAccess}
               agentStatus={
                 workspace.state.status === "online" && workspace.conversation()?.page ? status() : CONNECTING_STATUS
               }

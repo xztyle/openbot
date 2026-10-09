@@ -11,6 +11,7 @@ import {
 import { type DynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { databaseRow, databaseRows, requiredStringColumn } from "./database/database-rows";
+import { MCP_CATALOG_SUCCESSORS, type McpCatalogSuccessor } from "./mcp-catalog-successors.generated";
 import { registerMcpSecretValues } from "./mcp-redaction";
 import type { OpenBotDatabase } from "./openbot-database";
 
@@ -199,6 +200,62 @@ export class McpServerStore {
       return converted;
     } catch (error) {
       // SQLite may have rolled back already, and a second ROLLBACK would replace the error that did it.
+      if (db.isTransaction) db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  /**
+   * Moves a row of an older catalog release to the current listing, and answers how many rows changed.
+   *
+   * The catalog lists, for each app, the exact commands or addresses that earlier releases of the
+   * listing used. A row is moved only when it still holds one of them word for word, and when it is
+   * the app's row: it has the listing's name, or it is an account row (`mcpacct-` id), whose name the
+   * user chose. A row with any other word is the user's own edit and stays as it is. Only the words
+   * that say how the server is reached change. The id, the name, the credentials, the enabled state and
+   * the position stay, so the chat grants of the row (which name the id) and its sign-in stay too.
+   *
+   * Like the bridge conversion above this is a data rewrite, not a schema migration, and it converts
+   * nothing when it runs again.
+   */
+  migrateCatalogSuccessors(
+    successors: readonly McpCatalogSuccessor[] = MCP_CATALOG_SUCCESSORS,
+    now = new Date().toISOString(),
+  ): number {
+    if (successors.length === 0) return 0;
+    const db = this.database.connection;
+    let moved = 0;
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const rows = databaseRows(
+        db.prepare("SELECT mcp_server_id, name, transport, command, args_json, url FROM projection_mcp_servers").all(),
+      );
+      for (const row of rows) {
+        const id = requiredStringColumn(row, "mcp_server_id");
+        const successor = successors.find(
+          (candidate) =>
+            (row.name === candidate.serverName || id.startsWith("mcpacct-")) &&
+            row.transport === candidate.transport &&
+            (candidate.transport === "http"
+              ? row.url === candidate.from.url
+              : row.command === candidate.from.command && isStringList(row.args_json, candidate.from.args)),
+        );
+        if (!successor) continue;
+        if (successor.transport === "http")
+          db.prepare("UPDATE projection_mcp_servers SET url = ?, updated_at = ? WHERE mcp_server_id = ?").run(
+            successor.to.url,
+            now,
+            id,
+          );
+        else
+          db.prepare(
+            "UPDATE projection_mcp_servers SET command = ?, args_json = ?, updated_at = ? WHERE mcp_server_id = ?",
+          ).run(successor.to.command, JSON.stringify(successor.to.args), now, id);
+        moved += 1;
+      }
+      db.exec("COMMIT");
+      return moved;
+    } catch (error) {
       if (db.isTransaction) db.exec("ROLLBACK");
       throw error;
     }

@@ -28,7 +28,12 @@ export interface MarketplacePluginPrompt {
  */
 export type MarketplacePluginServer = MarketplacePluginServerBase &
   (
-    | { transport: Extract<McpTransport, "http">; url: string }
+    | {
+        transport: Extract<McpTransport, "http">;
+        url: string;
+        /** The addresses that earlier releases of this listing used. A row on one of them can be updated. */
+        supersedes?: { url: string }[];
+      }
     | {
         transport: Extract<McpTransport, "stdio">;
         /**
@@ -38,6 +43,12 @@ export type MarketplacePluginServer = MarketplacePluginServerBase &
          */
         command: string;
         args: string[];
+        /**
+         * The commands that earlier releases of this listing used, each with its exact words. A row
+         * that still holds one of them is this app's row from an older release, and an update moves
+         * it to `command` and `args` in place.
+         */
+        supersedes?: { command: string; args: string[] }[];
       }
   );
 
@@ -63,19 +74,53 @@ interface MarketplacePluginServerBase {
  * and enabled state all differ legitimately from what the listing states.
  */
 export function isPluginAppConfig(config: McpServerConfig, app: MarketplacePluginApp): boolean {
+  return isCurrentPluginAppConfig(config, app) || isOutdatedPluginAppConfig(config, app);
+}
+
+/** Whether the row has the name the app claims: the listing's name, or a name the user gave an account. */
+function claimsApp(config: McpServerConfig, app: MarketplacePluginApp): boolean {
+  return (
+    (config.name === app.server.name || config.id.startsWith("mcpacct-")) && config.transport === app.server.transport
+  );
+}
+
+function sameWords(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((word, index) => word === right[index]);
+}
+
+/** The row reaches the server that the listing names today. */
+function isCurrentPluginAppConfig(config: McpServerConfig, app: MarketplacePluginApp): boolean {
   const server = app.server;
-  if ((config.name !== server.name && !config.id.startsWith("mcpacct-")) || config.transport !== server.transport)
-    return false;
+  if (!claimsApp(config, app)) return false;
   if (server.transport === "http") {
     // A listing that asks for the user's own link cannot know the address, only its host.
     const userLink = (server.auth ?? []).some((flow) => mcpFlowFields(flow).some((field) => field.url));
     return userLink ? isListingUrl(config.url, server.url) : config.url === server.url;
   }
-  return (
-    config.command === server.command &&
-    config.args.length === server.args.length &&
-    config.args.every((arg, index) => arg === server.args[index])
-  );
+  return config.command === server.command && sameWords(config.args, server.args);
+}
+
+/**
+ * Whether the row is this app's row from an older release of the listing: it still holds, word for
+ * word, a command or an address that the listing lists in `supersedes`. A row that differs in any
+ * word is the user's own edit and is not claimed.
+ */
+export function isOutdatedPluginAppConfig(config: McpServerConfig, app: MarketplacePluginApp): boolean {
+  const server = app.server;
+  if (!claimsApp(config, app) || isCurrentPluginAppConfig(config, app)) return false;
+  if (server.transport === "http") return (server.supersedes ?? []).some((old) => old.url === config.url);
+  return (server.supersedes ?? []).some((old) => old.command === config.command && sameWords(old.args, config.args));
+}
+
+/**
+ * The row as the listing describes it today. The id, the name, the credentials and the enabled
+ * state stay: only the words that say how the server is reached change.
+ */
+export function updatedPluginAppConfig(config: McpServerConfig, app: MarketplacePluginApp): McpServerConfig {
+  const server = app.server;
+  return server.transport === "http"
+    ? { ...config, url: server.url }
+    : { ...config, command: server.command, args: [...server.args] };
 }
 
 /** An MCP server the plugin publishes. The listing calls it an app, because that is what it is to the user. */

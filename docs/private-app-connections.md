@@ -21,13 +21,21 @@ such as **Slack — Job A**. Repeat for other accounts. Tokens go in the connect
 Disconnecting one new account removes only its credentials. Older connections retain their
 original shared credential scope for compatibility.
 
-Open **Apps for this chat** in a direct or group conversation. For each account, select:
+Open **Apps for this chat** in a direct or group conversation, or open the app's page in
+Marketplace. The page has a **Chat access** list with one row for each agent and account. After you
+connect an app, the page also asks once what the open chat's agent may do with the new account. It
+stays Off until you press a mode. A link, an agent or a default never grants access. The page also
+shows an account that is turned off as **Disabled**, and has controls to turn an account on or off,
+rename it, check it, and sign in again, without a new connection id. A group conversation has no row
+there: set it in the conversation. For each account, select:
 
 - **Off**: the chat receives no tools from that account.
 - **Read only**: the host lists and accepts only tools declared read-only, with no destructive hint.
 - **Allow changes**: the chat can use that account's offered tools, including sending tools.
 
-New chats start with all app accounts off. Scheduled work uses its chat's choices. A group has
+New chats start with all app accounts off. A save in the page replaces the choices of one chat and
+makes the host refresh the app connections of its agents, so it can take a moment. A turned-off
+account is not offered to any chat, and the host drops its choices at the next save of a chat. Scheduled work uses its chat's choices. A group has
 one shared selection for its members. Changes affect subsequent calls and cancel running proxy
 calls; they cannot undo an action the app already accepted.
 

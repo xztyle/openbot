@@ -21,6 +21,9 @@ export type MarketplaceTab = "agents" | "apps" | "skills" | "eventChecks";
 /** "yes": only what the user has. "no": only what the user does not have. */
 export type OwnedFilter = "yes" | "no";
 
+/** A skill is also filtered by whether an agent has a newer version of it to install. */
+export type SkillStatusFilter = OwnedFilter | "update";
+
 export interface MarketplaceNavigationState {
   /** The views the user went through. The first is always the browse view. */
   stack: MarketplaceView[];
@@ -28,8 +31,9 @@ export interface MarketplaceNavigationState {
   query: string;
   agentCategory: SkillCategory | null;
   agentsOwned: OwnedFilter | null;
+  appCategory: SkillCategory | null;
   skillCategory: SkillCategory | null;
-  skillsOwned: OwnedFilter | null;
+  skillsOwned: SkillStatusFilter | null;
   eventChecksOwned: OwnedFilter | null;
   /** The slug of a link that names no app of this catalog. */
   missingApp: string | null;
@@ -53,6 +57,7 @@ function initialState(): MarketplaceNavigationState {
     query: "",
     agentCategory: null,
     agentsOwned: null,
+    appCategory: null,
     skillCategory: null,
     skillsOwned: null,
     eventChecksOwned: null,
@@ -110,10 +115,15 @@ export function serverAddress(server: McpServerConfig): string {
   }
 }
 
-/** Whether an app matches the search. */
-export function matchesApp(app: MarketplaceApp, query: string): boolean {
+/**
+ * Whether an app matches the search: its name, its line, the paragraph of its listing and its
+ * category, as the reader sees them. `categoryLabel` is the category in the reader's language.
+ */
+export function matchesApp(app: MarketplaceApp, query: string, categoryLabel = ""): boolean {
   const text = query.trim().toLowerCase();
-  return !text || app.name.toLowerCase().includes(text) || app.tagline.toLowerCase().includes(text);
+  if (!text) return true;
+  const description = app.kind === "plugin" ? app.plugin.description : "";
+  return [app.name, app.tagline, description, categoryLabel].some((value) => value.toLowerCase().includes(text));
 }
 
 /** The apps the user has (attention first), then the others. An empty group is left out. */
@@ -124,7 +134,11 @@ export function appGroups(
     {
       id: "marketplace-apps-yours",
       key: "marketplace.app.yourApps",
-      apps: [...apps.filter((app) => app.status === "attention"), ...apps.filter((app) => app.status === "connected")],
+      apps: [
+        ...apps.filter((app) => app.status === "attention"),
+        ...apps.filter((app) => app.status === "connected"),
+        ...apps.filter((app) => app.status === "disabled"),
+      ],
     },
     { id: "marketplace-apps-more", key: "marketplace.app.moreApps", apps: apps.filter((app) => app.status === "idle") },
   ];

@@ -2,6 +2,11 @@ import {
   EVENT_CHECK_API_CAPABILITY,
   EVENT_CHECK_DELIVERY_CAPABILITY,
 } from "@openbot/contracts/team-protocol/event-check-api-v1";
+import {
+  decodeMcpChatSnapshot,
+  MCP_CHAT_CAPABILITY,
+  MCP_CHAT_ROUTES,
+} from "@openbot/contracts/team-protocol/mcp-chat-v1";
 import { MCP_OAUTH_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-oauth-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import { eventCheckTemplatesApi } from "@openbot/team-client/event-check-templates-api";
@@ -16,6 +21,7 @@ import {
   removeMcpServer,
   saveMcpServer,
   setAgentSkillEnabled,
+  setMcpServerEnabled,
   testMcpServer,
   uninstallAgentSkill,
 } from "@openbot/team-client/team-admin-requests";
@@ -74,7 +80,22 @@ export function createWebMarketplaceCalls(
         runTeamEffect(saveMcpServer(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
       removeMcpServer: async (input, serverId) =>
         runTeamEffect(removeMcpServer(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
+      setMcpServerEnabled: async (input, serverId) =>
+        runTeamEffect(setMcpServerEnabled(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
     },
+    // The routes answer only an administrator, and only a host that runs with chat permissions.
+    chatApps: (serverId) =>
+      capabilities().includes(MCP_CHAT_CAPABILITY)
+        ? {
+            get: (target) =>
+              request(serverId)("POST", MCP_CHAT_ROUTES.get, decodeMcpChatSnapshot, { target: { ...target } }),
+            save: (target, grants) =>
+              request(serverId)("POST", MCP_CHAT_ROUTES.save, decodeMcpChatSnapshot, {
+                target: { ...target },
+                grants: grants.map((grant) => ({ ...grant })),
+              }),
+          }
+        : undefined,
     addAgent: async (input, serverId) => {
       if (!serverId) throw new Error(noAgentInstall());
       return runTeamEffect(

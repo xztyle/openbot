@@ -15,15 +15,18 @@ import {
   Text,
 } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
-import { createSignal, For, Match, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js";
 import { BitwardenConnectorPanel } from "../settings/BitwardenConnectorPanel";
 import { GitHubConnectorPanel } from "../settings/GitHubConnectorPanel";
 import { DangerZone, DetailHeader, WizardDialog } from "../settings/IntegrationLayout";
 import { OnePasswordConnectorPanel } from "../settings/OnePasswordConnectorPanel";
+import { AccountsSection, AllowForAgent, ChatAccessSection } from "./MarketplaceAccounts";
 import { AppAction } from "./MarketplaceCards";
+import { RelatedEventChecks } from "./MarketplaceEventChecks";
+import { AgentMenu } from "./MarketplaceInstallSkill";
 import { AppMark, TryCard } from "./MarketplaceParts";
 import { CATEGORY_LABELS } from "./marketplace-listing";
-import type { MarketplaceApp, MarketplaceAppStatus } from "./marketplace-model";
+import type { MarketplaceAccount, MarketplaceApp, MarketplaceAppStatus } from "./marketplace-model";
 import { type MarketplaceScope, serverAddress } from "./marketplace-view";
 import { PluginIcon } from "./PluginIcon";
 
@@ -33,8 +36,14 @@ type CustomApp = Extract<MarketplaceApp, { kind: "custom" }>;
 const STATUS_LABEL = {
   connected: "marketplace.app.connected",
   attention: "marketplace.app.attention",
+  disabled: "marketplace.app.disabled",
   idle: "marketplace.app.notConnected",
 } as const satisfies Record<MarketplaceAppStatus, string>;
+
+/** The status pill has no state of its own for an app that is turned off: it reads as not in use. */
+function pillStatus(status: MarketplaceAppStatus) {
+  return status === "disabled" ? "idle" : status;
+}
 
 interface AccountRemovalProps {
   scope: MarketplaceScope;
@@ -61,33 +70,34 @@ function AccountRemovalConfirmation(props: AccountRemovalProps & { onCancel: () 
   );
 }
 
-function DisconnectAccount(props: AccountRemovalProps & { disabled: boolean }) {
-  const { t } = useText();
-  const [open, setOpen] = createSignal(false);
-  const model = () => props.scope.model;
-  return (
-    <>
-      <Button
-        variant="outline"
-        disabled={props.disabled}
-        onClick={() => {
-          model().clearError();
-          setOpen(true);
-        }}
-      >
-        {t("mcp.connection.remove")}
-      </Button>
-      <Show when={open()}>
-        <AccountRemovalConfirmation scope={props.scope} connection={props.connection} onCancel={() => setOpen(false)} />
-      </Show>
-    </>
-  );
-}
-
 function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
   const { t } = useText();
   const model = () => props.scope.model;
   const plugin = () => props.app.plugin;
+  const accounts = () => model().appConnections(props.app);
+  /** The account the user asked to disconnect, held while the confirmation is on screen. */
+  const [removing, setRemoving] = createSignal<MarketplaceAccount | null>(null);
+  /* The access controls need each agent's choices, read once when the page shows an account. */
+  createEffect(
+    () => model().canConnectApps() && accounts().length > 0 && model().chatAccess.supported(),
+    (needed) => {
+      if (needed) model().chatAccess.read();
+    },
+  );
+  /* The skills of a plugin are per agent, so every agent's skills are read for the menu. */
+  createEffect(
+    () => plugin().skills.length > 0 && model().agents().length > 0,
+    (needed) => {
+      if (needed) model().readSkills();
+    },
+  );
+  /* The related event checks need the templates of the host. */
+  createEffect(
+    () => model().eventChecks,
+    (source) => {
+      if (source) props.scope.eventChecks.load();
+    },
+  );
   /* The name a reader hears carries the visible host, so the row is not three times "Open link". */
   const links = () =>
     [
@@ -109,7 +119,7 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
       <DetailHeader
         logo={<AppMark app={props.app} />}
         name={props.app.name}
-        status={props.app.status}
+        status={pillStatus(props.app.status)}
         statusLabel={t(STATUS_LABEL[props.app.status])}
         subtitle={props.app.tagline}
         actions={
@@ -119,7 +129,9 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
               {t("plugin.copyLink")}
             </Button>
             <AppAction scope={props.scope} app={props.app} />
-            <Show when={props.app.status === "connected" && model().canConnectApps()}>
+            <Show
+              when={(props.app.status === "connected" || props.app.status === "disabled") && model().canConnectApps()}
+            >
               <Button
                 type="button"
                 loading={model().appBusy(props.app.id)}
@@ -131,6 +143,7 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
           </>
         }
       />
+      <AllowForAgent scope={props.scope} app={props.app} />
       <Show when={plugin().prompts.length > 0}>
         <TryCard
           seed={plugin().name}
@@ -163,7 +176,24 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
         </SettingsSection>
       </Show>
       <Show when={plugin().skills.length > 0}>
-        <SettingsSection title={t("plugin.section.skills")}>
+        <SettingsSection
+          title={t("plugin.section.skills")}
+          description={t("plugin.skillsPerAgent")}
+          actions={
+            <Show when={model().agents().length > 0 && model().canConnectApps()}>
+              <AgentMenu
+                agents={model().agents()}
+                name={t("plugin.skillsName", { name: plugin().name })}
+                has={(id) => model().pluginSkillAgents(props.app).includes(id)}
+                known={(id) => model().skillRead(id) === "loaded"}
+                busy={model().appBusy(props.app.id)}
+                activeAgentId={model().activeAgentId()}
+                onOpen={() => model().readSkills()}
+                onChange={(agentIds, on) => void model().setPluginSkills(props.app, agentIds, on)}
+              />
+            </Show>
+          }
+        >
           <ItemGroup class="settings-modal-card">
             <For each={plugin().skills}>
               {(skill) => (
@@ -181,26 +211,9 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
           </ItemGroup>
         </SettingsSection>
       </Show>
-      <Show when={model().appConnections?.(props.app).length}>
-        <SettingsSection title={t("mcp.connection.accounts")}>
-          <ItemGroup class="settings-modal-card">
-            <For each={model().appConnections?.(props.app)}>
-              {(connection) => (
-                <Item class="settings-modal-row" role="group" aria-label={connection.name}>
-                  <ItemContent>
-                    <ItemTitle>{connection.name}</ItemTitle>
-                  </ItemContent>
-                  <DisconnectAccount
-                    scope={props.scope}
-                    connection={connection}
-                    disabled={model().appBusy(props.app.id)}
-                  />
-                </Item>
-              )}
-            </For>
-          </ItemGroup>
-        </SettingsSection>
-      </Show>
+      <AccountsSection scope={props.scope} app={props.app} onDisconnect={setRemoving} />
+      <ChatAccessSection scope={props.scope} app={props.app} />
+      <RelatedEventChecks scope={props.scope} appId={props.app.id} />
       <AppInformation
         developer={plugin().creatorName}
         category={t(CATEGORY_LABELS[plugin().category])}
@@ -218,6 +231,11 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
           confirm={props.app.kind !== "plugin"}
           onAction={() => model().disconnectApp(props.app)}
         />
+      </Show>
+      <Show when={removing()}>
+        {(account) => (
+          <AccountRemovalConfirmation scope={props.scope} connection={account()} onCancel={() => setRemoving(null)} />
+        )}
       </Show>
     </>
   );
@@ -336,7 +354,7 @@ function CustomServerPage(props: { scope: MarketplaceScope; app: CustomApp }) {
       <DetailHeader
         logo={<Plug aria-hidden="true" />}
         name={props.app.name}
-        status={props.app.status}
+        status={pillStatus(props.app.status)}
         statusLabel={t(STATUS_LABEL[props.app.status])}
         subtitle={t("marketplace.app.custom")}
       />

@@ -6,7 +6,12 @@ import type {
   MarketplaceSkillSummary,
 } from "@openbot/contracts/ipc";
 import { Marketplace } from "@openbot/ui/features/marketplace/Marketplace";
-import type { MarketplaceApp, MarketplaceModel } from "@openbot/ui/features/marketplace/marketplace-model";
+import type {
+  ChatAccessMode,
+  MarketplaceAccount,
+  MarketplaceApp,
+  MarketplaceModel,
+} from "@openbot/ui/features/marketplace/marketplace-model";
 import {
   createMarketplaceNavigation,
   type MarketplaceNavigation,
@@ -77,6 +82,10 @@ interface StoryProps {
   start?: (nav: MarketplaceNavigation) => void;
 }
 
+function account(id: string, name: string): MarketplaceAccount {
+  return { id, name, enabled: true, renamable: true, outdated: false, reconnect: "sign-in", check: { phase: "idle" } };
+}
+
 /** The real window on fixtures. Each action changes the fixture state, so the states can be tried. */
 function MarketplaceStory(props: StoryProps) {
   const { member, empty, start } = untrack(() => ({ ...props }));
@@ -89,6 +98,10 @@ function MarketplaceStory(props: StoryProps) {
     apps: MarketplaceApp[];
     busy: Record<string, true>;
     notice: string;
+    /** The accounts of a connected plugin app, by app id. */
+    accounts: Record<string, MarketplaceAccount[]>;
+    /** What each agent's chat may do with each account, by agent id and account id. */
+    modes: Record<string, Record<string, ChatAccessMode>>;
   }>({
     added: { [STORY_MARKETPLACE_AGENTS[1]?.id ?? ""]: true },
     installed: { chief: firstSkill ? [installed(firstSkill)] : [] },
@@ -125,6 +138,13 @@ function MarketplaceStory(props: StoryProps) {
     ],
     busy: {},
     notice: "",
+    accounts: {
+      [STORY_MARKETPLACE_PLUGINS[0]?.slug ?? ""]: [
+        account("story-account-1", "Linear — 1"),
+        { ...account("story-account-2", "Linear — 2"), enabled: false },
+      ],
+    },
+    modes: { chief: { "story-account-1": "read" } },
   });
   const [error, setError] = createSignal<string | null>(null);
   const [open, setOpen] = createSignal(true);
@@ -156,18 +176,62 @@ function MarketplaceStory(props: StoryProps) {
     skillRead: () => "loaded",
     installedSkill: (agentId, skillId) => state.installed[agentId]?.find((skill) => skill.skillId === skillId),
     skillBusy: () => false,
-    setSkill: async (skill, agentIds, on) =>
+    setSkill: async (skill, agentIds, on) => {
+      const listing = STORY_MARKETPLACE_SKILLS.find((entry) => entry.id === skill.id);
       setState((draft) => {
         for (const agentId of agentIds) {
           const list = (draft.installed[agentId] ?? []).filter((entry) => entry.skillId !== skill.id);
-          draft.installed[agentId] = on ? [...list, installed(skill)] : list;
+          draft.installed[agentId] = on && listing ? [...list, installed(listing)] : list;
         }
-      }),
+      });
+      return true;
+    },
+    outdatedSkills: () => [],
+    updateAllSkills: async () => undefined,
+    skillsUpdating: () => false,
     trySkill: fn(),
 
     apps: () => state.apps,
     canConnectApps: () => !member,
     appBusy: () => false,
+    appConnections: (app) => state.accounts[app.id] ?? [],
+    pluginSkillAgents: () => [],
+    setPluginSkills: async () => true,
+    accountBusy: () => false,
+    setAccountEnabled: async (id, enabled) => {
+      setState((draft) => {
+        for (const list of Object.values(draft.accounts))
+          for (const entry of list) if (entry.id === id) entry.enabled = enabled;
+      });
+      return true;
+    },
+    renameAccount: async (id, name) => {
+      setState((draft) => {
+        for (const list of Object.values(draft.accounts))
+          for (const entry of list) if (entry.id === id) entry.name = name;
+      });
+      return true;
+    },
+    checkAccount: async () => undefined,
+    reconnectAccount: async () => true,
+    updateApp: async () => true,
+    justConnected: () => null,
+    dismissJustConnected: () => undefined,
+    chatAccess: {
+      supported: () => !member,
+      read: () => undefined,
+      readState: () => "loaded",
+      readError: () => "",
+      listed: () => true,
+      mode: (agentId, accountId) => state.modes[agentId]?.[accountId] ?? "off",
+      setMode: async (agentId, accountId, mode) => {
+        setState((draft) => {
+          draft.modes[agentId] = { ...draft.modes[agentId], [accountId]: mode };
+        });
+        return true;
+      },
+      saving: () => null,
+    },
     connectApp: async (app) => {
       setApp(app.id, "connected");
       return true;
@@ -242,6 +306,15 @@ export const PluginApp = at((nav) => {
   tab("apps")(nav);
   nav.go({ kind: "app", id: STORY_MARKETPLACE_PLUGINS[0]?.slug ?? "" });
 });
+
+/** The accounts and the chat access of an app, at the width of a phone window. */
+export const PluginAppNarrow: Story = {
+  ...at((nav) => {
+    tab("apps")(nav);
+    nav.go({ kind: "app", id: STORY_MARKETPLACE_PLUGINS[0]?.slug ?? "" });
+  }),
+  parameters: { viewport: { defaultViewport: "marketplaceNarrow" } },
+};
 
 export const GitHub = at((nav) => {
   tab("apps")(nav);

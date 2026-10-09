@@ -240,6 +240,14 @@ export class McpGateway {
   }
 
   /**
+   * Rows of an older catalog release reach the current listing's server from here on. Exact matches
+   * only; the id, name and credentials of a row stay, so its chat grants and sign-in stay too.
+   */
+  migrateCatalogSuccessors(): void {
+    this.#servers.migrateCatalogSuccessors();
+  }
+
+  /**
    * Connects to the configuration the user is looking at, once, and reports what it found.
    *
    * The configuration comes from the form, not from the table, so a draft can be tested before it

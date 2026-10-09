@@ -34,6 +34,7 @@ function setup(
       listMcpServers: async () => [],
       removeMcpServer: async () => [],
       saveMcpServer: async () => [],
+      setMcpServerEnabled: async () => [],
       testMcpServer: vi.fn(),
       signInMcpServer: vi.fn(),
     },

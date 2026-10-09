@@ -7,6 +7,7 @@ import { imageGenerationFailure, isImageGenerationItem } from "./agent/image-gen
 import { eventCheckMarker } from "./event-check-marker";
 import type { DeliveryContext } from "./mailbox-store";
 import type { ThreadItem, ThreadResponse } from "./protocol";
+import { boundedReasoningText } from "./reasoning-text";
 
 export interface ThreadTurnMessageContext {
   id: string;
@@ -101,7 +102,7 @@ export function messagesFromThreadItems(
         id: item.id,
         turnId: turn.id,
         author: "assistant",
-        text: item.text,
+        text: item.phase === "commentary" ? boundedReasoningText(item.text) : item.text,
         createdAt,
         status: normalizeCompletionStatus(turn.status ?? "completed"),
         itemType: isString(item.phase) ? item.phase : "agentMessage",

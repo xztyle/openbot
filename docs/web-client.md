@@ -89,8 +89,8 @@ mock. The separate web preview implements the browser runtime with that same moc
   click or key press starts the audio context again, because Safari plays sound only after a user
   action and iOS can interrupt it.
 - Capability checks hide unavailable browser-view and creation-model controls. Hosts without
-  pagination use their full conversation endpoint. Unsupported media and EML uploads are refused
-  before transfer. Host authorization remains the final decision for every action.
+  pagination use their full conversation endpoint. Unsupported media, EML and extended text uploads
+  (`text-attachments`) are refused before transfer. Host authorization remains the final decision for every action.
 - Teammate creation and editing follow the host's existing member permissions. Host
   administration, provider installation, and provider sign-in are only for an owner or admin whose
   host serves the related route; a member does not see them. Agent deletion uses
@@ -129,6 +129,21 @@ mock. The separate web preview implements the browser runtime with that same moc
   host, with the same storage modules as desktop. Only ids are stored. Pins do not delete
   conversations. Notification changes use the host's existing settings and include
   mute and unmute. Search queries are not persisted. The separate hide/show toolbar was removed.
+- Account settings > Preferences has "Show text in notifications", off by default. With it on, a
+  browser notification for a question or an approval shows the question or the approval reason,
+  redacted and cut to 160 characters. A secret question and the approval command are never shown.
+  The browser keeps the switch in local storage (`web-notification-text.ts`).
+- The agent menu in the sidebar has Mark unread when the host has `conversation-unread`. It marks
+  the whole chat unread, because the host's read cursor has no value for "only the last message".
+  The open chat cannot be marked, because opening a chat reads it.
+- A message that the user sends to a working agent stays in the chat for four seconds with Undo and
+  Edit before it goes to the host, unless the agent queues messages. After that the host steers it
+  into the running turn and cannot take it back. The text is in the draft store meanwhile, as for any
+  send that is not confirmed.
+- Saved replies are a row of chips above an empty message box. A tap sends the reply as a normal
+  message, with the message chosen for a reply as its `replyToMessageId`. The list is in local storage
+  of this browser (`openbot.saved-replies.v1`), not on the host: OpenBot has no per-host setting that
+  a client can write.
 - The queue of the selected agent comes from the host's queue route. The client reads it again when
   the host sends `queue-invalidated`. Steer, cancel, reorder, and edit use the same Team API routes
   as a desktop client of a remote host, and edit holds the message when the host has `queue-edit-v1`.

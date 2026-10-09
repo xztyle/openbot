@@ -1,5 +1,7 @@
 import type { AppTextKey } from "@openbot/i18n";
-import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import { Button, ChevronDown } from "@openbot/ui";
+import type { JSX } from "@solidjs/web";
+import { createEffect, createMemo, createSignal, createUniqueId, Show } from "solid-js";
 import type { AgentProfile } from "../../data";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
@@ -75,8 +77,16 @@ export function AgentActivityIndicator(props: {
    * so a working agent reads differently from a stalled one.
    */
   since?: number;
+  /**
+   * Draws the model's reasoning for this turn (see `ThinkingText`). With it, the activity line
+   * becomes a button that opens the reasoning under the line. A function, so a closed line draws
+   * nothing. Without it, the line is only text, as before.
+   */
+  reasoning?: (() => JSX.Element) | undefined;
 }) {
   const { t, format } = useText();
+  const [reasoningOpen, setReasoningOpen] = createSignal(false);
+  const reasoningId = createUniqueId();
   const label = () => props.detail ?? t(agentActivityLabelKey(props.label));
   const elapsedMs = createElapsed(() => (props.phase === "exiting" ? undefined : props.since));
   const elapsed = createMemo(() => {
@@ -102,9 +112,27 @@ export function AgentActivityIndicator(props: {
       />
       <section class="agent-activity-content" aria-label={t("chat.activity.current")}>
         <AgentAvatar agent={props.agent} mood="working" class="agent-activity-avatar" />
-        <span class="agent-activity-label">{label()}</span>
+        <Show when={props.reasoning} fallback={<span class="agent-activity-label">{label()}</span>}>
+          <Button
+            variant="ghost"
+            type="button"
+            class="agent-activity-toggle"
+            aria-expanded={reasoningOpen() ? "true" : "false"}
+            aria-controls={reasoningOpen() ? reasoningId : undefined}
+            aria-label={t("chat.thinking.toggle", { detail: label() })}
+            onClick={() => setReasoningOpen((open) => !open)}
+          >
+            <span class="agent-activity-label">{label()}</span>
+            <ChevronDown class="agent-activity-toggle-chevron" aria-hidden="true" />
+          </Button>
+        </Show>
         <Show when={elapsed()}>{(time) => <span class="agent-activity-elapsed">{time()}</span>}</Show>
       </section>
+      <Show when={reasoningOpen() && props.phase !== "exiting"}>
+        <div id={reasoningId} class="agent-activity-reasoning">
+          {props.reasoning?.()}
+        </div>
+      </Show>
     </div>
   );
 }

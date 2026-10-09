@@ -2,6 +2,18 @@ import { defineMessages } from "../../message";
 
 export const messages = defineMessages("composer", {
   "composer.notice.dismiss": "Dismiss error",
+  "composer.savedReplies.label": "Saved replies",
+  "composer.savedReplies.edit": "Edit saved replies",
+  "composer.savedReplies.title": "Saved replies",
+  "composer.savedReplies.description": "Short messages you send often. Choosing one sends it to the agent at once.",
+  "composer.savedReplies.item": "Saved reply {number}",
+  "composer.savedReplies.remove": "Remove saved reply {number}",
+  "composer.savedReplies.empty": "No saved replies. Add one below.",
+  "composer.savedReplies.add": "Add a reply",
+  "composer.savedReplies.reset": "Restore defaults",
+  "composer.savedReplies.default.continue": "Continue",
+  "composer.savedReplies.default.approvePlan": "Approve plan",
+  "composer.savedReplies.default.summarize": "Summarize status and blockers",
   "composer.signIn.title": "Sign in required",
   "composer.signIn.body": "Sign in to {provider} to send messages.",
   "composer.signIn.pending": "Signing in…",

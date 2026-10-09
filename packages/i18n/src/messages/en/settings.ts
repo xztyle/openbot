@@ -61,6 +61,9 @@ export const messages = defineMessages("settings", {
   "settings.alerts.title": "Alerts",
   "settings.desktopNotifications.title": "Desktop notifications",
   "settings.desktopNotifications.description": "Show a notification when an agent needs attention.",
+  "settings.notificationText.title": "Show text in notifications",
+  "settings.notificationText.description":
+    "Put the question or the approval reason in the notification. A lock screen can show it, so it is off by default.",
   "settings.testNotification.title": "Test notification",
   "settings.testNotification.description":
     "Show one now. If it does not appear, allow OpenBot notifications in your system settings.",

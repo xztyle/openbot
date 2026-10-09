@@ -4,7 +4,7 @@ import { Effect, Result, Semaphore } from "effect";
 import { isMissingFileError } from "../backend/file-errors";
 import { type PreferenceFileFailure, readPreferenceFile, writePreferenceFile } from "./preference-file";
 
-const DEFAULT_PREFERENCE: NotificationPreference = { desktopNotifications: true };
+const DEFAULT_PREFERENCE: NotificationPreference = { desktopNotifications: true, showText: false };
 
 interface StoredNotificationPreference extends NotificationPreference {
   /** Whether OpenBot has already shown the notification that makes macOS ask for permission. */
@@ -35,6 +35,8 @@ export class NotificationPreferenceStore {
           if (isDynamicRecord(parsed) && parsed.version === 1 && isBoolean(parsed.desktopNotifications))
             return {
               desktopNotifications: parsed.desktopNotifications,
+              // A file from before the switch has no value, which is off.
+              showText: parsed.showText === true,
               permissionRequested: parsed.permissionRequested === true,
             };
           return null;
@@ -48,7 +50,7 @@ export class NotificationPreferenceStore {
   }
 
   get(): NotificationPreference {
-    return { desktopNotifications: this.#stored.desktopNotifications };
+    return { desktopNotifications: this.#stored.desktopNotifications, showText: this.#stored.showText === true };
   }
 
   permissionRequested(): boolean {
@@ -57,9 +59,14 @@ export class NotificationPreferenceStore {
 
   readonly set = Effect.fn("NotificationPreference.set")(function* (
     this: NotificationPreferenceStore,
-    { desktopNotifications }: NotificationPreference,
+    { desktopNotifications, showText }: NotificationPreference,
   ) {
-    yield* this.#write((stored) => ({ ...stored, desktopNotifications }));
+    yield* this.#write((stored) => ({
+      ...stored,
+      desktopNotifications,
+      // A caller that predates the switch omits it, and keeps what the user chose.
+      showText: showText ?? stored.showText === true,
+    }));
     return this.get();
   });
 

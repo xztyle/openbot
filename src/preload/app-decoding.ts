@@ -267,8 +267,10 @@ export function decodeRemoteSessionReusePreference(value: unknown): RemoteSessio
 }
 
 export function decodeNotificationPreference(value: unknown): NotificationPreference {
+  const record = decodeRecord(value, "notification preference");
   return {
-    desktopNotifications: requiredBoolean(decodeRecord(value, "notification preference"), "desktopNotifications"),
+    desktopNotifications: requiredBoolean(record, "desktopNotifications"),
+    ...(record.showText === undefined ? {} : { showText: requiredBoolean(record, "showText") }),
   };
 }
 

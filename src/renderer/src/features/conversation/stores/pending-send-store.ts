@@ -9,10 +9,15 @@ import type { ComposerDraft, ConversationTarget, SendMessageResult } from "../co
 export const PENDING_SEND_ID_PREFIX = "pending:";
 
 /**
+ * `held` is the short wait before a message to a working agent leaves, so the user can undo it or
+ * edit it: the host steers such a message into the running turn at once and cannot take it back.
  * `waiting` stands behind an earlier send of the same chat that has not finished, or failed: the
  * host stores messages in the order it receives them, so a later one never overtakes.
  */
-type PendingSendState = "waiting" | "sending" | "failed" | "sent";
+type PendingSendState = "held" | "waiting" | "sending" | "failed" | "sent";
+
+/** How long a message to a working agent stays with the client before it goes to the host. */
+export const BUSY_SEND_HOLD_MS = 4_000;
 
 export interface PendingSend {
   clientMessageId: string;
@@ -50,6 +55,8 @@ export function createPendingSendStore() {
   // The sends themselves. A store write shows on the next flush, and the next send must start from
   // the queue as it is now, so the logic reads this map and the store only draws a copy of it.
   const queues = new Map<string, PendingSend[]>();
+  // The release timer of each held send.
+  const holds = new Map<string, ReturnType<typeof setTimeout>>();
   const [sends, setSends] = createStore<Record<string, PendingSend[]>>({});
   // The send function of each pending message, kept for Retry.
   const deliverers = new Map<string, DeliverPendingSend>();
@@ -95,23 +102,44 @@ export function createPendingSendStore() {
       });
   }
 
+  /** Lets a held send go: the oldest waiting send of its chat starts if nothing stands before it. */
+  function release(key: string, clientMessageId: string): void {
+    const timer = holds.get(clientMessageId);
+    if (timer !== undefined) clearTimeout(timer);
+    holds.delete(clientMessageId);
+    const send = find(key, clientMessageId);
+    if (send?.state !== "held") return;
+    send.state = "waiting";
+    publish(key);
+    pump(key);
+  }
+
+  /** `holdMs` keeps the send with the client for that long first, so Undo and Edit can still take it back. */
   function add(
     target: ConversationTarget,
     input: Pick<PendingSend, "draft" | "text" | "retrySafe">,
     deliver: DeliverPendingSend,
+    holdMs = 0,
   ): void {
     const key = composerDraftKey(target);
     const send: PendingSend = {
       ...input,
       clientMessageId: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
-      state: "waiting",
+      state: holdMs > 0 ? "held" : "waiting",
       messageId: null,
       error: null,
     };
     deliverers.set(send.clientMessageId, deliver);
     queues.set(key, [...(queues.get(key) ?? []), send]);
     publish(key);
+    if (holdMs > 0) {
+      holds.set(
+        send.clientMessageId,
+        setTimeout(() => release(key, send.clientMessageId), holdMs),
+      );
+      return;
+    }
     pump(key);
   }
 
@@ -131,11 +159,14 @@ export function createPendingSendStore() {
     pump(key);
   }
 
-  /** Drops a failed send, for Edit or Dismiss, and lets the sends behind it go. */
+  /** Drops a failed or held send, for Edit, Undo or Dismiss, and lets the sends behind it go. */
   function remove(target: ConversationTarget, clientMessageId: string): PendingSend | undefined {
     const key = composerDraftKey(target);
     const send = find(key, clientMessageId);
-    if (send?.state !== "failed") return undefined;
+    if (send?.state !== "failed" && send?.state !== "held") return undefined;
+    const timer = holds.get(clientMessageId);
+    if (timer !== undefined) clearTimeout(timer);
+    holds.delete(clientMessageId);
     deliverers.delete(clientMessageId);
     queues.set(
       key,

@@ -199,7 +199,8 @@ export interface ConversationProps {
   /** Starts a new chat with the agent. Absent when its host does not serve `context-reset-v1`. */
   onClearAgentContext?: () => Promise<void>;
   onRespondToBrowserTakeover: (decision: "complete" | "cancel") => Promise<boolean>;
-  onCancelQueuedMessage: (deliveryId: string) => void;
+  /** Resolves when the host has answered, so a caller can cancel several messages and then act. */
+  onCancelQueuedMessage: (deliveryId: string) => void | Promise<void>;
   onSteerQueuedMessage: (deliveryId: string) => void;
   onUpdateQueuedMessage: (
     deliveryId: string,
@@ -212,7 +213,7 @@ export interface ConversationProps {
   onActivateBrowserTab: (tabId: string) => void;
   onCloseBrowserTab: (tabId: string) => void | Promise<void>;
   onOpenRemoteDesktop: (serverId: string, trigger: HTMLElement) => Promise<void>;
-  onStop: () => void;
+  onStop: () => void | Promise<void>;
 }
 
 /** `messageId` is the conversation message the host stored: the delivery id of the receipt. */

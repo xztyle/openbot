@@ -1427,6 +1427,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         firstUnreadMessageId: null,
         throughMessageId: input.throughMessageId,
       }),
+      markConversationUnread: async () => ({ unreadCount: 1, firstUnreadMessageId: null, throughMessageId: null }),
       chooseAttachments: async (_input) => [],
       onAttachmentImport: (listener) => {
         attachmentListeners.add(listener);

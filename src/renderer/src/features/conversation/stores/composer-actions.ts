@@ -1,5 +1,10 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import { type DraftAttachment, LOCAL_SERVER_ID, type QueueDelivery } from "@openbot/contracts/ipc";
+import {
+  DEFAULT_BUSY_MESSAGE_MODE,
+  type DraftAttachment,
+  LOCAL_SERVER_ID,
+  type QueueDelivery,
+} from "@openbot/contracts/ipc";
 import { TEAM_MESSAGE_CLIENT_ID_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { isQueueEditRejected, TEAM_QUEUE_EDIT_CAPABILITY } from "@openbot/contracts/team-protocol/queue-edit-v1";
 import { expandComposerMentions } from "@openbot/ui/features/conversation/ComposerEditor";
@@ -9,7 +14,7 @@ import { copyComposerDraft, EMPTY_DRAFT, QUEUE_EDIT_STORAGE_KEY, type StoredQueu
 import { composerDraftKey } from "../conversation-keys";
 import { conversationRuntime } from "../conversation-runtime";
 import type { ComposerDraft, ConversationProps, ConversationTarget } from "../conversation-types";
-import type { PendingSendStore } from "./pending-send-store";
+import { BUSY_SEND_HOLD_MS, type PendingSendStore } from "./pending-send-store";
 
 // Each member reads the interface language when it is called.
 const { t, errorMessage } = currentText();
@@ -538,17 +543,36 @@ export function createComposerActions(deps: ComposerActionsDeps) {
       (server?.id === target.serverId &&
         (server.kind !== "remote" ||
           Boolean(server.compatibility?.capabilities.includes(TEAM_MESSAGE_CLIENT_ID_CAPABILITY))));
-    deps.pendingSends.add(target, { draft, text, retrySafe }, async (pending) => {
-      const result = await send(
-        pending.text,
-        pending.draft.attachments.map((item) => item.id),
-        pending.draft.replyToMessageId,
-        target,
-        pending.clientMessageId,
-      );
-      if ("error" in result) playActionSound("error");
-      return result;
-    });
+    deps.pendingSends.add(
+      target,
+      { draft, text, retrySafe },
+      async (pending) => {
+        const result = await send(
+          pending.text,
+          pending.draft.attachments.map((item) => item.id),
+          pending.draft.replyToMessageId,
+          target,
+          pending.clientMessageId,
+        );
+        if ("error" in result) playActionSound("error");
+        return result;
+      },
+      steersRunningTurn(target) ? BUSY_SEND_HOLD_MS : 0,
+    );
+  }
+
+  /**
+   * Whether the host would take this message into the turn the agent is running now. It does that
+   * at once and cannot take the message back, so the client holds such a message for a few seconds.
+   * The host decides by the agent's own busy-message mode, else the app's. A remote host's default is
+   * unknown here, so only a known "queue" skips the hold: a queued message can be edited or deleted
+   * in the queue panel at any time.
+   */
+  function steersRunningTurn(target: ConversationTarget): boolean {
+    const agent = deps.props.agent;
+    if (!agent || agent.id !== target.agentId || !deps.props.activeTurnId) return false;
+    if (target.serverId !== (deps.props.server?.id ?? LOCAL_SERVER_ID)) return false;
+    return (agent.busyMessageMode ?? deps.props.defaultBusyMessageMode ?? DEFAULT_BUSY_MESSAGE_MODE) !== "queue";
   }
 
   function retryPendingSend(clientMessageId: string): void {
@@ -617,6 +641,16 @@ export function createComposerActions(deps: ComposerActionsDeps) {
     void submitMessage();
   }
 
+  /**
+   * Sends a saved reply as a normal message. With a message chosen to reply to, it is a reply to
+   * that message. The row of replies shows only over an empty message box, so what the draft holds
+   * besides the choice of message is nothing, and sending clears it.
+   */
+  function sendSavedReply(text: string): Promise<boolean> {
+    const draft = deps.currentDraft();
+    return submitMessage({ text, attachments: [], replyToMessageId: draft.replyToMessageId ?? null }, undefined, draft);
+  }
+
   /** An instruction about selected text is a reply to that message. A failure shows on its row. */
   async function sendSelectionInstruction(messageId: string, body: string): Promise<boolean> {
     const target = deps.currentTarget();
@@ -638,6 +672,7 @@ export function createComposerActions(deps: ComposerActionsDeps) {
     submitMessage,
     submitComposer,
     sendSelectionInstruction,
+    sendSavedReply,
     retryPendingSend,
     editPendingSend,
     dismissPendingSend,

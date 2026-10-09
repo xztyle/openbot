@@ -1,6 +1,7 @@
 import { agentProviderName, COMPUTER_USE_MCP_SERVER_NAME } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
+import { redactText } from "@openbot/logging";
 import { type AgentProvider, RequestTimeoutError } from "../agent-client";
 import { AppServerError } from "../app-server-client";
 import { type DynamicToolCallParams, getString, isRecord, reasoningText, type ThreadItem } from "../protocol";
@@ -176,11 +177,89 @@ export function toolUsage(item: ThreadItem): ToolUsage | null {
   return { kind: "mcp", server: mcp[1], tool: mcp[2], failed };
 }
 
+/** The longest reason the activity line and the log keep. The full text stays with the provider. */
+const TOOL_FAILURE_REASON_LIMIT = 240;
+
+/** A failed tool step: the tool that failed and why, as one redacted line each. */
+export interface ToolFailure {
+  tool: string;
+  reason: string | null;
+}
+
+function firstLine(text: string, last = false): string {
+  const lines = text
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return (last ? lines.at(-1) : lines[0]) ?? "";
+}
+
+function oneLine(text: string): string {
+  const line = redactText(text).replace(/\s+/gu, " ").trim();
+  return line.length > TOOL_FAILURE_REASON_LIMIT ? `${line.slice(0, TOOL_FAILURE_REASON_LIMIT).trimEnd()}…` : line;
+}
+
+/** The text a provider put in a failed step: an `error`, a `result`, or the content a tool returned. */
+function failureText(item: ThreadItem): string {
+  for (const key of ["error", "failure", "result"] as const) {
+    const value = item[key];
+    if (isString(value) && value.trim()) return firstLine(value);
+    if (isRecord(value)) {
+      const message = getString(value, "message") ?? getString(value, "error") ?? getString(value, "text");
+      if (message?.trim()) return firstLine(message);
+    }
+  }
+  const contentItems = item.contentItems;
+  if (Array.isArray(contentItems)) {
+    const text = contentItems
+      .filter(isRecord)
+      .map((content) => getString(content, "text") ?? "")
+      .find((value) => value.trim());
+    if (text) return firstLine(text);
+  }
+  // A shell step has no error text; the last line of its output is usually the failure.
+  const output = getString(item, "aggregatedOutput");
+  const exitCode = item.exitCode;
+  const code = typeof exitCode === "number" ? `exit code ${exitCode}` : "";
+  return [code, output ? firstLine(output, true) : ""].filter(Boolean).join(": ");
+}
+
+/**
+ * What a completed tool step that failed was, or null when the step did not fail. A provider names
+ * the failure differently: Codex puts an `error` on an MCP call and `success: false` on a dynamic one,
+ * Claude marks a result `is_error`, and an ACP agent sets the status. A declined step is the user's
+ * own choice, so it is not a failure. Both fields are redacted and cut: they reach the log and the
+ * activity line, and a tool quotes what it was given.
+ */
+export function toolFailure(item: ThreadItem): ToolFailure | null {
+  const type = item.type.toLowerCase();
+  if (!/(tool.*call|commandexecution|filechange|websearch|computeraction)/u.test(type)) return null;
+  const dynamicFailed = item.type === "dynamicToolCall" && item.success === false;
+  if (getString(item, "status") !== "failed" && !dynamicFailed) return null;
+  const server = getString(item, "server") ?? getString(item, "namespace");
+  const named = getString(item, "tool") ?? getString(item, "name") ?? getString(item, "title");
+  const claude = named ? /^mcp__(.+?)__(.+)$/u.exec(named) : null;
+  const tool =
+    item.type === "commandExecution"
+      ? "command"
+      : item.type === "fileChange"
+        ? "file change"
+        : claude?.[1] && claude[2]
+          ? `${claude[1]}.${claude[2]}`
+          : server && named
+            ? `${server}.${named}`
+            : (named ?? item.type);
+  return { tool: oneLine(tool), reason: oneLine(failureText(item)) || null };
+}
+
 export function toolProgressText(item: ThreadItem, completed: boolean): string | null {
   const type = item.type.toLowerCase();
   if (!/(tool.*call|commandexecution|filechange|websearch|computeraction)/u.test(type)) return null;
-  if (completed && getString(item, "status") === "failed") {
-    return "A tool step failed; reviewing the result and deciding what to try next…";
+  const failure = completed ? toolFailure(item) : null;
+  if (failure) {
+    return failure.reason
+      ? sourceText("status.agent.toolFailed", { tool: failure.tool, reason: failure.reason })
+      : sourceText("status.agent.toolFailedNoReason", { tool: failure.tool });
   }
 
   const descriptor = [item.type, getString(item, "name"), getString(item, "title"), getString(item, "tool")]

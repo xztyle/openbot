@@ -175,6 +175,93 @@ describe("toAgentMessage", () => {
   });
 });
 
+describe("agent message preview", () => {
+  const exchange = {
+    id: "exchange-2",
+    author: "agent",
+    source: "agent",
+    text: "**Deploy** is blocked.\nThe token is Bearer abcdef123456 and the rest is long.",
+    createdAt: "2026-09-01T08:00:00.000Z",
+    status: "completed",
+    exchange: {
+      direction: "outgoing",
+      messageId: "message-2",
+      senderAgentId: "chief",
+      recipientAgentIds: ["research"],
+      replyToMessageId: null,
+      deliveries: [
+        { id: "delivery-3", recipientAgentId: "research", status: "completed", position: null, error: null },
+      ],
+    },
+  } satisfies ConversationMessage;
+
+  it("puts one redacted line of the text on the marker and keeps the full text in the body", () => {
+    const message = toAgentMessage(exchange);
+    const marker = message.actionMarker;
+    expect(marker?.kind === "agent-message" ? marker.preview : undefined).toBe(
+      "Deploy is blocked. The token is [redacted] and the rest is long.",
+    );
+    expect(message.body).toContain("Bearer abcdef123456");
+  });
+
+  it("leaves the preview out for a message with no text", () => {
+    const marker = toAgentMessage({ ...exchange, text: "  " }).actionMarker;
+    expect(marker?.kind === "agent-message" && "preview" in marker).toBe(false);
+  });
+});
+
+describe("messages the person cancelled in the queue", () => {
+  const sent = (status: "queued" | "cancelled", extra: Partial<ConversationMessage> = {}): ConversationMessage => ({
+    id: `m-${status}`,
+    author: "user",
+    source: "user",
+    text: "use the other branch",
+    createdAt: "2026-09-01T08:00:00.000Z",
+    status: "completed",
+    delivery: { id: `d-${status}`, status, position: status === "queued" ? 1 : null },
+    ...extra,
+  });
+
+  it("keeps a cancelled message in the transcript, marked, and leaves the queue to the queue panel", () => {
+    const result = toAgentMessages([sent("queued"), sent("cancelled")]);
+    expect(result.map((message) => message.id)).toEqual(["m-cancelled"]);
+    expect(result[0]).toMatchObject({ body: "use the other branch", cancelled: true });
+  });
+
+  it("still hides a cancelled teammate request, which has its own marker", () => {
+    const request = sent("cancelled", {
+      author: "agent",
+      source: "agent",
+      exchange: {
+        direction: "incoming",
+        messageId: "message-9",
+        senderAgentId: "chief",
+        recipientAgentIds: ["research"],
+        replyToMessageId: null,
+        deliveries: [],
+      },
+    });
+    expect(toAgentMessages([request])).toEqual([]);
+  });
+});
+
+describe("reasoning of a turn", () => {
+  it("joins the commentary of one turn into one thinking message with the full text of each step", () => {
+    const step = (id: string, text: string): ConversationMessage => ({
+      id,
+      turnId: "turn-1",
+      author: "assistant",
+      text,
+      createdAt: "2026-09-01T08:00:00.000Z",
+      status: "completed",
+      itemType: "commentary",
+    });
+    const [thinking, ...rest] = toAgentMessages([step("a", "First thought"), step("b", "Second thought")]);
+    expect(rest).toEqual([]);
+    expect(thinking).toMatchObject({ kind: "thinking", items: ["First thought", "Second thought"] });
+  });
+});
+
 function hostedSiteMessage(status: "succeeded"): ConversationMessage {
   return {
     id: `hosted-site-${status}`,

@@ -3,6 +3,7 @@ import { accountUsageCoversModel, canPreviewAttachment } from "@openbot/contract
 import {
   TEAM_EML_ATTACHMENTS_CAPABILITY,
   TEAM_MEDIA_ATTACHMENTS_CAPABILITY,
+  TEAM_TEXT_ATTACHMENTS_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
 import {
   ArrowUp,
@@ -29,11 +30,13 @@ import {
 } from "@openbot/ui/features/conversation/ComposerNotice";
 import { CloseIcon, MoreIcon, StopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
 import { RichMessageText } from "@openbot/ui/features/conversation/RichMessageText";
+import { SavedReplies } from "@openbot/ui/features/conversation/SavedReplies";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, For, Loading, lazy, onCleanup, Show } from "solid-js";
 import { reportErrorBanner, reportNotification } from "../../error-reports";
 import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../../send-shortcut-preference";
 import { useConversationViewScope } from "./conversation-scope";
+import { defaultSavedReplies, readSavedReplies, SAVED_REPLIES_STORAGE_KEY, writeSavedReplies } from "./saved-replies";
 import { formatVoiceDuration, voiceButtonLabel, voiceSupported } from "./voice-status";
 
 /** @internal Stable HMR boundary for conversation composer. */
@@ -67,6 +70,7 @@ export function ConversationComposer() {
     removeAttachment,
     reorderPresentedQueue,
     replyTarget,
+    sendSavedReply,
     setComposerFocusRequest,
     setAttachmentPickerElement,
     setShowComposerActions,
@@ -97,6 +101,30 @@ export function ConversationComposer() {
   const awaitingVisible = () => awaitingReplies().length > 0 && !pickerOpen();
   const slotOpen = () => queueVisible() || awaitingVisible();
   const voiceAvailable = () => !props.runtime && voiceSupported(props.platform);
+  // The person's own list, or null while they keep the shipped replies. Another tab can change it.
+  const [customReplies, setCustomReplies] = createSignal(readSavedReplies());
+  const savedReplies = () => customReplies() ?? defaultSavedReplies(t);
+  const syncSavedReplies = (event: StorageEvent) => {
+    if (event.key === null || event.key === SAVED_REPLIES_STORAGE_KEY) setCustomReplies(readSavedReplies());
+  };
+  window.addEventListener("storage", syncSavedReplies);
+  onCleanup(() => window.removeEventListener("storage", syncSavedReplies));
+  const saveReplies = (replies: string[] | null) => {
+    writeSavedReplies(replies);
+    setCustomReplies(replies);
+  };
+  /** Send replaces Stop once the composer holds something; Stop then stands beside it instead. */
+  const stopBesideSend = () => Boolean(editingDeliveryId()) || composerHasContent();
+  /**
+   * The messages "Stop and clear queue" cancels. The queue is cleared before the turn is stopped: the
+   * turn that stops starts the next queued message as it ends, so a message left in the queue would
+   * start the moment the user stopped the agent.
+   */
+  const stopAndClearQueue = async () => {
+    const queued = presentedQueueDeliveries().filter((delivery) => delivery.status === "queued");
+    await Promise.allSettled(queued.map((delivery) => props.onCancelQueuedMessage(delivery.id)));
+    void props.onStop();
+  };
   /**
    * The provider status is the only source of truth for a signed-out provider, so the notice and the
    * model picker's "Sign in required" label can never disagree, and the notice is shown before the
@@ -150,6 +178,7 @@ export function ConversationComposer() {
     return supportedAttachmentExtensions({
       eml: local || capabilities.includes(TEAM_EML_ATTACHMENTS_CAPABILITY),
       media: local || capabilities.includes(TEAM_MEDIA_ATTACHMENTS_CAPABILITY),
+      text: local || capabilities.includes(TEAM_TEXT_ATTACHMENTS_CAPABILITY),
     })
       .map((extension) => `.${extension}`)
       .join(",");
@@ -181,6 +210,7 @@ export function ConversationComposer() {
                   canSteer={Boolean(props.activeTurnId)}
                   onSteer={props.onSteerQueuedMessage}
                   onCancel={props.onCancelQueuedMessage}
+                  onStopAndClear={props.activeTurnId ? stopAndClearQueue : undefined}
                   onEdit={editQueuedMessage}
                   onReorder={reorderPresentedQueue}
                 />
@@ -284,6 +314,28 @@ export function ConversationComposer() {
               }}
             />
           )}
+        </Show>
+        {/* One tap sends a reply, so the row shows only where Send would work: an idle agent chat with an empty message box. */}
+        <Show
+          when={
+            props.agent &&
+            agentReady() &&
+            !composerHasContent() &&
+            !editingDeliveryId() &&
+            voicePhase() === "idle" &&
+            !signInRequired() &&
+            !providerUpdateRequired() &&
+            !usageExhausted() &&
+            !pickerOpen()
+          }
+        >
+          <SavedReplies
+            replies={savedReplies()}
+            disabled={submitting() || attachmentBusy()}
+            onSend={(reply) => void sendSavedReply(reply)}
+            onChange={(replies) => saveReplies(replies)}
+            onReset={customReplies() === null ? undefined : () => saveReplies(null)}
+          />
         </Show>
         <div
           class={`composer${voicePhase() === "recording" ? " composer-recording" : ""}`}
@@ -514,6 +566,19 @@ export function ConversationComposer() {
                     <MoreIcon />
                   </fieldset>
                 </Show>
+              </Show>
+              <Show when={props.activeTurnId && voicePhase() !== "recording" && stopBesideSend()}>
+                {/* Stop stays reachable while the user types a steering message, next to Send. */}
+                <Button
+                  variant="ghost"
+                  type="button"
+                  class="voice-button voice-button-active"
+                  aria-label={t("composer.send.stop")}
+                  data-cuelume-tap="close"
+                  onClick={props.onStop}
+                >
+                  <StopIcon />
+                </Button>
               </Show>
               <Show
                 when={

@@ -48,6 +48,12 @@ export function SettingsNotificationsTab(props: SettingsNotificationsTabProps) {
             label={i18n.t("settings.desktopNotifications.title")}
             description={i18n.t("settings.desktopNotifications.description")}
           />
+          <SwitchField
+            checked={props.value.notificationText}
+            onChange={(checked) => props.onUpdateSetting("notificationText", checked)}
+            label={i18n.t("settings.notificationText.title")}
+            description={i18n.t("settings.notificationText.description")}
+          />
           <Show when={props.onTestNotification}>
             {(onTestNotification) => (
               <Item>

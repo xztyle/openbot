@@ -63,6 +63,7 @@ function harness(overrides: Partial<WebWorkspaceRuntime> = {}) {
     listAgents: vi.fn().mockResolvedValue([STORY_AGENT_SUMMARIES[0]]),
     conversation: vi.fn().mockResolvedValue(page),
     markRead: vi.fn().mockResolvedValue({ unreadCount: 0, firstUnreadMessageId: null, throughMessageId: null }),
+    markUnread: vi.fn().mockResolvedValue({ unreadCount: 1, firstUnreadMessageId: null, throughMessageId: null }),
     conversationReads: vi.fn().mockResolvedValue({}),
     send: vi.fn().mockResolvedValue("delivery-1"),
     stop: vi.fn(),

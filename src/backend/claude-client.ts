@@ -970,13 +970,14 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     if (message.type === "user") {
       const turn = runtime.activeTurn;
       if (!turn) return;
-      for (const { id: toolCallId, text } of messageToolResults(message.message)) {
+      for (const { id: toolCallId, text, isError } of messageToolResults(message.message)) {
         // A subagent's task ids are its own, so only the main agent's results name a plan task.
         if (!message.parent_tool_use_id) foldClaudePlanResult(runtime.plan, toolCallId, message.tool_use_result, text);
         const name = turn.toolCalls.get(toolCallId);
         if (!name) continue;
         turn.toolCalls.delete(toolCallId);
-        this.#emitToolCall(runtime, toolCallId, name, true);
+        // A failed result carries the tool's own error text, which the activity line and the log show.
+        this.#emitToolCall(runtime, toolCallId, name, true, undefined, isError ? text : undefined);
       }
       return;
     }
@@ -1040,7 +1041,14 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     yield* this.#completeTurn(runtime, status, errors.length > 0 ? errors.join("\n") : null);
   });
 
-  #emitToolCall(runtime: ThreadRuntime, id: string, name: string, completed: boolean, input?: unknown): void {
+  #emitToolCall(
+    runtime: ThreadRuntime,
+    id: string,
+    name: string,
+    completed: boolean,
+    input?: unknown,
+    failure?: string,
+  ): void {
     const turn = runtime.activeTurn;
     if (!turn) return;
     this.emit("notification", {
@@ -1054,7 +1062,13 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           typeof input.file_path === "string"
             ? [input.file_path]
             : undefined,
-        item: { id, type: "toolCall", name, status: completed ? "completed" : "in_progress" },
+        item: {
+          id,
+          type: "toolCall",
+          name,
+          status: failure !== undefined ? "failed" : completed ? "completed" : "in_progress",
+          ...(failure !== undefined ? { error: failure } : {}),
+        },
       },
     });
   }
@@ -1664,7 +1678,7 @@ function messageToolCalls(message: unknown): Array<{ id: string; name: string; i
   });
 }
 
-function messageToolResults(message: unknown): Array<{ id: string; text: string }> {
+function messageToolResults(message: unknown): Array<{ id: string; text: string; isError: boolean }> {
   if (!isRecord(message) || !Array.isArray(message.content)) return [];
   return message.content.filter(isRecord).flatMap((block) => {
     const id = getString(block, "tool_use_id");
@@ -1678,7 +1692,7 @@ function messageToolResults(message: unknown): Array<{ id: string; text: string 
             .map((part) => getString(part, "text") ?? "")
             .join("\n")
         : "";
-    return [{ id, text }];
+    return [{ id, text, isError: block.is_error === true }];
   });
 }
 

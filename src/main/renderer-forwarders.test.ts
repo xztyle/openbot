@@ -105,6 +105,7 @@ function setup() {
     getTranslate: () => translateFor("en"),
     getFormat: () => createFormat("en"),
     desktopNotificationsEnabled: () => mocks.desktopNotifications,
+    notificationTextEnabled: () => false,
   });
   return { ...forwarders, servers, request, waitForLookup: () => lookupSettled };
 }

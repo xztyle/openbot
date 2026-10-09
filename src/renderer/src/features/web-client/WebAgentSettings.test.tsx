@@ -68,6 +68,7 @@ function runtimeFixture(
     listAgents: async () => [],
     conversation: async () => EMPTY_PAGE,
     markRead: async () => ({ unreadCount: 0, firstUnreadMessageId: null, throughMessageId: null }),
+    markUnread: async () => ({ unreadCount: 1, firstUnreadMessageId: null, throughMessageId: null }),
     conversationReads: async () => ({}),
     send: async () => "delivery-1",
     stop: async () => {},

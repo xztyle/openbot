@@ -26,34 +26,47 @@ describe("attachment file whitelist", () => {
   });
 
   it("offers media only when the selected host supports it, without hiding other files", () => {
-    const legacy = supportedAttachmentExtensions({ eml: false, media: false });
+    const legacy = supportedAttachmentExtensions({ eml: false, media: false, text: false });
     expect(legacy).not.toContain("mp3");
     expect(legacy).not.toContain("mov");
     expect(legacy).not.toContain("eml");
     expect(legacy).toEqual(expect.arrayContaining(["png", "pdf", "txt"]));
-    const media = supportedAttachmentExtensions({ eml: false, media: true });
+    const media = supportedAttachmentExtensions({ eml: false, media: true, text: false });
     expect(media).toEqual(expect.arrayContaining(["mp3", "mov", "pdf"]));
     expect(media).not.toContain("eml");
-    const eml = supportedAttachmentExtensions({ eml: true, media: false });
+    const eml = supportedAttachmentExtensions({ eml: true, media: false, text: false });
     expect(eml).toContain("eml");
     expect(eml).not.toContain("mp3");
     expect(eml).not.toContain("mov");
     expect(
-      supportedAttachmentExtensions({ eml: true, media: true })
+      supportedAttachmentExtensions({ eml: true, media: true, text: true })
         .map((extension) => `.${extension}`)
         .join(","),
     ).toBe(ATTACHMENT_FILE_ACCEPT);
   });
 
   it("checks one name against the same host support as the picker filter", () => {
-    const legacy = { eml: false, media: false };
+    const legacy = { eml: false, media: false, text: false };
     expect(isSupportedAttachmentNameFor("photo.png", legacy)).toBe(true);
     expect(isSupportedAttachmentNameFor("Dockerfile", legacy)).toBe(true);
     expect(isSupportedAttachmentNameFor("clip.MOV", legacy)).toBe(false);
     expect(isSupportedAttachmentNameFor("message.eml", legacy)).toBe(false);
-    expect(isSupportedAttachmentNameFor("clip.mov", { eml: false, media: true })).toBe(true);
-    expect(isSupportedAttachmentNameFor("message.eml", { eml: true, media: false })).toBe(true);
-    expect(isSupportedAttachmentNameFor("setup.exe", { eml: true, media: true })).toBe(false);
+    expect(isSupportedAttachmentNameFor("clip.mov", { eml: false, media: true, text: false })).toBe(true);
+    expect(isSupportedAttachmentNameFor("message.eml", { eml: true, media: false, text: false })).toBe(true);
+    expect(isSupportedAttachmentNameFor("setup.exe", { eml: true, media: true, text: true })).toBe(false);
+  });
+
+  it("offers extended text formats and dotfiles only to a host that supports them", () => {
+    const legacy = { eml: true, media: true, text: false };
+    const current = { ...legacy, text: true };
+    for (const name of ["fix.patch", "changes.diff", "data.tsv", "api.graphql", "main.tf", ".gitignore", "logo.svg"]) {
+      expect(isSupportedAttachmentName(name)).toBe(true);
+      expect(isSupportedAttachmentNameFor(name, legacy)).toBe(false);
+      expect(isSupportedAttachmentNameFor(name, current)).toBe(true);
+    }
+    expect(supportedAttachmentExtensions(legacy)).not.toContain("patch");
+    expect(supportedAttachmentExtensions(current)).toEqual(expect.arrayContaining(["patch", "gitignore", "svg"]));
+    expect(isSupportedAttachmentName("bundle.tar")).toBe(false);
   });
 
   it("assigns stable MIME types to supported formats", () => {

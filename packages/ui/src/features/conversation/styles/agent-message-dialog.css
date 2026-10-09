@@ -1,0 +1,91 @@
+/*
+ * The full text of a message between agents. It opens from a marker in the chat, over the chat, and
+ * scrolls inside itself so a long report never grows past the window.
+ */
+
+.agent-message-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--openbot-layer-dialog) + 1);
+  display: grid;
+  place-items: center;
+  padding: var(--openbot-space-6);
+}
+
+.agent-message-dialog {
+  display: flex;
+  width: min(640px, 100%);
+  max-height: calc(100dvh - var(--openbot-space-6) * 2);
+  flex-direction: column;
+  overflow: hidden;
+  outline: 0;
+  border-radius: var(--openbot-radius-xl);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-primary);
+}
+
+.agent-message-dialog-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-4) var(--openbot-space-4) var(--openbot-space-2) var(--openbot-space-6);
+}
+
+.agent-message-dialog-title {
+  margin: 0;
+  font-size: var(--openbot-text-xl);
+  line-height: var(--openbot-leading-xl);
+  font-weight: var(--openbot-weight-semibold);
+  letter-spacing: var(--openbot-tracking-tight);
+}
+
+.agent-message-dialog-list {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-4);
+  margin: 0;
+  overflow-y: auto;
+  padding: var(--openbot-space-2) var(--openbot-space-6) var(--openbot-space-6);
+  list-style: none;
+}
+
+.agent-message-dialog-entry {
+  min-width: 0;
+}
+
+/* The message that was opened keeps a rule at its side, so the reply is read as the other half. */
+.agent-message-dialog-entry[data-opened] {
+  border-inline-start: 2px solid var(--openbot-accent);
+  padding-inline-start: var(--openbot-space-3);
+}
+
+.agent-message-dialog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--openbot-space-1) var(--openbot-space-2);
+  margin-bottom: var(--openbot-space-1-5);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+.agent-message-dialog-names {
+  color: var(--openbot-text-secondary);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.agent-message-dialog-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.agent-message-dialog-empty {
+  margin: 0;
+  color: var(--openbot-text-muted);
+}

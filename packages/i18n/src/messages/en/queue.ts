@@ -24,4 +24,13 @@ export const messages = defineMessages("queue", {
   "queue.deleteHeld.title": "Delete queued message?",
   "queue.deleteHeld.body": "Another device is editing this message. The agent will not receive it.",
   "queue.deleteHeld.keep": "Keep",
+  "queue.stopAndClear.action": "Stop and clear queue",
+  "queue.stopAndClear.title": "Stop the agent and clear the queue?",
+  "queue.stopAndClear.body": {
+    one: "The agent stops its current work and the queued message is cancelled. It stays in the chat marked Cancelled.",
+    other:
+      "The agent stops its current work and {count} queued messages are cancelled. They stay in the chat marked Cancelled.",
+  },
+  "queue.stopAndClear.confirm": "Stop and clear",
+  "queue.stopAndClear.keep": "Keep working",
 });

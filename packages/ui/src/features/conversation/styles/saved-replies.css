@@ -1,0 +1,128 @@
+/*
+ * Saved replies: a row of chips above the composer, and the dialog that edits the list. The chips
+ * scroll sideways, so a phone keeps one line however many replies there are.
+ */
+
+.saved-replies {
+  border: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  margin: 0 var(--openbot-space-1) var(--openbot-space-1);
+  min-width: 0;
+}
+
+.saved-replies-chips {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--openbot-space-1-5);
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.saved-replies-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.saved-reply-chip {
+  flex: 0 0 auto;
+  max-width: 60vw;
+}
+
+.saved-reply-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saved-replies-edit {
+  flex: 0 0 auto;
+}
+
+.saved-replies-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--openbot-layer-dialog) + 1);
+  display: grid;
+  place-items: center;
+  padding: var(--openbot-space-6);
+}
+
+.saved-replies-dialog {
+  width: min(480px, 100%);
+  max-height: calc(100dvh - var(--openbot-space-6) * 2);
+  overflow-y: auto;
+  outline: 0;
+  border-radius: var(--openbot-radius-xl);
+  background: var(--openbot-bg-control);
+  padding: var(--openbot-space-6);
+  color: var(--openbot-text-primary);
+}
+
+.saved-replies-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
+.saved-replies-title {
+  margin: 0;
+  font-size: var(--openbot-text-xl);
+  line-height: var(--openbot-leading-xl);
+  font-weight: var(--openbot-weight-semibold);
+  letter-spacing: var(--openbot-tracking-tight);
+}
+
+.saved-replies-description,
+.saved-replies-empty {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+}
+
+.saved-replies-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--openbot-space-3);
+  margin: var(--openbot-space-4) 0 0;
+}
+
+.saved-replies-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saved-replies-row {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+}
+
+.saved-replies-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.saved-replies-add {
+  align-self: flex-start;
+}
+
+.saved-replies-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--openbot-space-2);
+}
+
+.saved-replies-reset {
+  margin-inline-end: auto;
+}

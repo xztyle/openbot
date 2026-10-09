@@ -61,6 +61,11 @@ export interface AgentMessageMarkerModel {
   replyToMessageId: string | null;
   /** The sender asked for no answer, so the marker names it as information rather than a request. */
   expectsReply: boolean;
+  /**
+   * One line of what was said, redacted by whoever builds the model. The marker shows it and opens
+   * the full message from it. Absent or empty means the message has no text to show.
+   */
+  preview?: string;
 }
 
 export interface RoutineRunMarkerModel {
@@ -160,6 +165,11 @@ export interface AgentMessage {
   /** The person who wrote a `you` message. Absent on the reader's own older messages. */
   senderMember?: ConversationMessageSender;
   replyToMessageId?: string | null;
+  /**
+   * The person cancelled this message while it waited in the queue, so the agent never read it. The
+   * chat keeps it, marked, as the record of what was said.
+   */
+  cancelled?: true;
   attachments?: AttachmentSummary[];
   imageGeneration?: ImageGenerationInfo;
   questionPrompt?: ConversationQuestionPrompt;

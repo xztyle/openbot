@@ -18,6 +18,8 @@ export interface GeneralSettingsValue {
   restoreLastWorkspace: boolean;
   externalLinkTarget: ExternalLinkTarget;
   desktopNotifications: boolean;
+  /** Puts the question or the approval reason in a notification. Off: a lock screen can show it. */
+  notificationText: boolean;
   macBookNotch: boolean;
   macBookNotchHaptics: boolean;
   macBookNotchIdle: boolean;
@@ -54,6 +56,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsValue = {
   restoreLastWorkspace: true,
   externalLinkTarget: "Default browser",
   desktopNotifications: true,
+  notificationText: false,
   macBookNotch: true,
   macBookNotchHaptics: true,
   macBookNotchIdle: true,

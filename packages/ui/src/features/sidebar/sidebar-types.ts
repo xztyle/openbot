@@ -74,6 +74,11 @@ export interface SidebarProps {
   createSupported?: boolean;
   onCreateAgent: () => void;
   onEditAgent: (agentId: string) => void;
+  /**
+   * Marks the agent's chat unread again. The host marks the whole history unread: its read cursor
+   * has no "only the last message" value. Absent when the host cannot mark a chat unread.
+   */
+  onMarkAgentUnread?: ((agentId: string) => void) | undefined;
   duplicateSupported?: boolean;
   duplicatingAgentIds?: ReadonlySet<string>;
   onDuplicateAgent?: (agentId: string) => Promise<void>;

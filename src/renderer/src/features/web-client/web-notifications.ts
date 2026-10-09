@@ -1,6 +1,8 @@
 import type { AgentEvent, AgentSummary, ServerNotificationLevel } from "@openbot/contracts/ipc";
 import type { AppTranslate } from "@openbot/i18n";
+import { redactText } from "@openbot/logging";
 import { notificationForAgentEvent } from "@openbot/team-client/agent-notifications";
+import { isNotificationTextEnabled } from "./web-notification-text";
 
 const PERMISSION_ASKED_KEY = "openbot.web.notification-permission-asked";
 /** The tab of this browser that has focus. The tab that speaks for a host is often in the background. */
@@ -98,7 +100,9 @@ export function showWebAgentNotification(options: {
   onOpen(agentId: string): void;
 }): void {
   if (typeof Notification === "undefined" || Notification.permission !== "granted" || browserFocused()) return;
-  const content = notificationForAgentEvent(options.event, options.agents, options.translate, options.level);
+  const content = notificationForAgentEvent(options.event, options.agents, options.translate, options.level, {
+    detail: isNotificationTextEnabled() ? { redact: redactText } : undefined,
+  });
   if (!content) return;
   try {
     const notification = new Notification(content.title, { body: content.body });

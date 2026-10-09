@@ -36,6 +36,38 @@ describe("ChatActionMarker routine history", () => {
   });
 });
 
+describe("ChatActionMarker agent message", () => {
+  const marker: Extract<ChatActionMarkerModel, { kind: "agent-message" }> = {
+    kind: "agent-message",
+    direction: "outgoing",
+    sourceAgentId: "chief",
+    targetDeliveries: [{ agentId: "builder", status: "completed" }],
+    status: "completed",
+    timestamp: "2026-09-01T08:02:00.000Z",
+    messageId: "message-1",
+    replyToMessageId: null,
+    expectsReply: true,
+    preview: "Please ship the fix",
+  };
+
+  it("opens the full message from the preview button and from the row", async () => {
+    const onOpen = vi.fn();
+    render(() => <ChatActionMarker marker={marker} agents={[]} onSelectAgent={vi.fn()} onOpenAgentMessage={onOpen} />);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Show the full message: Please ship the fix" }));
+    expect(onOpen).toHaveBeenLastCalledWith("message-1", expect.any(HTMLElement));
+    onOpen.mockClear();
+
+    await fireEvent.click(screen.getByRole("group", { name: /Messaged/ }));
+    expect(onOpen).toHaveBeenCalledWith("message-1", expect.any(HTMLElement));
+  });
+
+  it("shows no preview when the surface cannot open the message", () => {
+    render(() => <ChatActionMarker marker={marker} agents={[]} onSelectAgent={vi.fn()} />);
+    expect(screen.queryByText("Please ship the fix")).not.toBeInTheDocument();
+  });
+});
+
 function completedMarker(): Extract<ChatActionMarkerModel, { kind: "routine-run" }> {
   return {
     kind: "routine-run",

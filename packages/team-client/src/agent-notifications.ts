@@ -42,38 +42,77 @@ export function notificationForUsageLimit(
   };
 }
 
+export interface AgentNotificationOptions {
+  /**
+   * Puts the question or the approval reason in the body. Off by default: a notification can show on
+   * a lock screen. `redact` is required with it, and runs on the text before it is shortened.
+   */
+  detail?: { redact(text: string): string } | undefined;
+}
+
+/** The longest question or reason a body shows. A notification is one glance, not a document. */
+const DETAIL_LIMIT = 160;
+
 /**
  * What a server's agent event says to the user, or null when the server level or the agent's own
- * switch keeps it quiet. "needs-me" keeps only the events that wait for the user.
+ * switch keeps it quiet. "needs-me" keeps only the events that wait for the user. A completed turn
+ * after which the agent has more work says nothing: the notice comes with the turn that leaves it idle.
  */
 export function notificationForAgentEvent(
   event: AgentEvent,
   agents: AgentSummary[],
   translate: AppTranslate,
   level: ServerNotificationLevel,
+  options: AgentNotificationOptions = {},
 ): AgentNotificationContent | null {
   if (level === "nothing") return null;
-  const subject = notificationSubject(event, level, translate);
+  const subject = notificationSubject(event, level, translate, options);
   if (!subject) return null;
   const agent = agents.find((candidate) => candidate.id === subject.agentId);
   if (!agent?.notifications) return null;
   return { title: agent.name, ...subject };
 }
 
+/** One line of redacted text, cut at a word where it is long. Empty when there is nothing to show. */
+function detailLine(text: string | null | undefined, redact: (text: string) => string): string {
+  const line = redact(text ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (line.length <= DETAIL_LIMIT) return line;
+  const cut = line.slice(0, DETAIL_LIMIT);
+  const word = cut.lastIndexOf(" ");
+  return `${(word > DETAIL_LIMIT / 2 ? cut.slice(0, word) : cut).trimEnd()}…`;
+}
+
 function notificationSubject(
   event: AgentEvent,
   level: ServerNotificationLevel,
   translate: AppTranslate,
+  options: AgentNotificationOptions,
 ): Omit<AgentNotificationContent, "title"> | null {
   if (event.type === "prompt") {
-    return { body: translate("notification.needsInput"), agentId: event.agentId, threadId: event.threadId };
+    // A secret question asks for a password or a key, so even its wording stays off the lock screen.
+    const [question] = event.questions;
+    const detail =
+      options.detail && question && !event.questions.some((candidate) => candidate.isSecret)
+        ? detailLine(question.question, options.detail.redact)
+        : "";
+    return {
+      body: detail || translate("notification.needsInput"),
+      agentId: event.agentId,
+      threadId: event.threadId,
+    };
   }
   if (event.type === "approval") {
     const { agentId, threadId } = event.approval;
-    return { body: translate("notification.needsApproval"), agentId, threadId };
+    // The reason only: the command can hold a secret that no pattern recognizes.
+    const detail = options.detail ? detailLine(event.approval.reason, options.detail.redact) : "";
+    return { body: detail || translate("notification.needsApproval"), agentId, threadId };
   }
   // A quiet routine run posted nothing, so there is nothing to look at.
   if (event.type !== "turn-completed" || level !== "all" || event.quiet) return null;
+  // The agent goes on with queued work or waits for a teammate, so this turn is not the end.
+  if (event.moreWork && event.status === "completed") return null;
   const { agentId, threadId } = event;
   if (event.status === "completed") return { body: translate("notification.finished"), agentId, threadId };
   // An interrupted turn is one the user stopped, so it is not news.

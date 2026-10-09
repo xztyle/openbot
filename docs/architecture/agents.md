@@ -44,6 +44,24 @@ not put the marker in the preview either. The provider history import
 routine delivery started, it skips each answer that is only the marker, and when every answer is
 the marker it skips the turn's thinking too, so a later import does not bring a quiet turn back.
 
+## Notifications for a chain of agents
+
+A "Finished" notification says that an agent has stopped, so it waits for the turn after which the
+agent has no more work. `TurnLifecycle` adds `moreWork: true` to the `turn-completed` event of a
+completed turn when the agent still has a delivery that is queued, starting or running, or has sent
+a request that waits for an answer (`MailboxStore.hasFollowUpWork`). The Team API v6 adapter puts the
+key beside the frozen projection, as it does `quiet` (`turn-quiet-v6.ts`); a client that does not know
+it, or a host that does not send it, notifies for every completed turn as before. A failed turn always
+notifies, and a turn that another agent started still notifies when it leaves its agent idle. The
+orchestrator's final summary turn is such a turn. A message that the person cancels from the queue
+after the turn ended is not an event, so it does not send the notification that it would have held
+back.
+
+Notification text is off by default. With "Show text in notifications" on, a question notification
+shows the question and an approval notification shows its reason, redacted and cut to 160
+characters; a secret question and an approval command are never shown. The desktop keeps the switch
+in the notification preference file, and the web client in local storage.
+
 ## Routine calendar feed
 
 `src/main/routine-feed-server.ts` is a loopback HTTP listener that serves the routines of this
@@ -157,6 +175,33 @@ verbosity setting or response filter. Delivery is tested, but compliance depends
 model, and existing conversation context; Grok's input block is not a dedicated system message.
 Restarting the app reapplies the current policy without deleting conversation history. The policy
 does not hide mailbox records, tool activity, approvals, or failures in desktop or mobile clients.
+
+### Reasoning in the chat
+
+Reasoning reaches the chat as commentary. Codex sends `reasoning` items (the summary when it has
+one, else the raw content), Claude sends `thinking` blocks, and an ACP agent sends thought chunks;
+`TurnLifecycle` stores each as an assistant message with the item type `commentary`, in the same
+conversation JSON as every other message, so no migration and no new wire field is needed. The
+Team API already carries the messages to the web client and the phone, with no member filter other
+than the agent list. A provider can give a summary, the whole text or nothing: OpenBot sets no
+reasoning option on any provider, so what the user sees is what the provider sent by default.
+`boundedReasoningText` (`src/backend/reasoning-text.ts`) redacts the text and cuts it at 40,000
+characters when an item completes, and when a turn is read back from a provider. Streamed pieces are
+not redacted one by one, because a secret can split across two pieces; the completed item replaces
+them. The renderer joins the commentary of one turn into one `thinking` message. While the turn runs,
+the activity line opens it. After the turn, a "Thinking" row above the answer opens it.
+
+### Failed tool calls
+
+A dynamic tool call (`item/tool/call`) that fails in `OpenBotToolRouter` is logged with the tool,
+the agent, the turn and the call, with the cause redacted, and the same cause goes to the provider
+and to the user as an error event for that agent. A call that the provider cancels (the turn ended,
+the turn was interrupted, or the provider process stopped) is logged with that reason; the model
+reports such a call as a tool that disconnected. The local MCP bridge logs a call from a session it
+does not know (usually a session that closed or was replaced) and a call that it could not answer;
+it logs the error name and not the message, because a parse error quotes the request. A failed tool
+step in any provider (`status: failed`, a dynamic tool with `success: false`, a Claude result with
+`is_error`) is logged by `TurnLifecycle` and shown on the activity line with its tool and reason.
 
 ### Model evaluation scenarios
 

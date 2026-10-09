@@ -23,6 +23,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import type { AppFormat, AppTranslate } from "@openbot/i18n";
+import { redactText } from "@openbot/logging";
 import { notificationForAgentEvent, notificationForUsageLimit } from "@openbot/team-client/agent-notifications";
 import { BrowserWindow, Notification } from "electron";
 import type { AgentService } from "../backend/agent-service";
@@ -48,6 +49,8 @@ export interface RendererForwarderDependencies {
   getFormat: () => AppFormat;
   /** The Settings switch for every desktop notification, read at the moment one is raised. */
   desktopNotificationsEnabled: () => boolean;
+  /** Whether a notification body shows the question or the approval reason. Off unless the user chose it. */
+  notificationTextEnabled: () => boolean;
 }
 
 /**
@@ -64,6 +67,7 @@ export function createRendererForwarders({
   getTranslate,
   getFormat,
   desktopNotificationsEnabled,
+  notificationTextEnabled,
 }: RendererForwarderDependencies) {
   function forwardAgentEvent(serverId: string, event: AgentEvent, bufferedLive = false): void {
     if (serverId === LOCAL_SERVER_ID) getHostAnalytics()?.handleAgentEvent(event);
@@ -113,7 +117,9 @@ export function createRendererForwarders({
       ? null
       : event.type === "usage-limit-reached"
         ? notificationForUsageLimit(event, agents, getTranslate(), getFormat(), level)
-        : notificationForAgentEvent(event, agents, getTranslate(), level);
+        : notificationForAgentEvent(event, agents, getTranslate(), level, {
+            detail: notificationTextEnabled() ? { redact: redactText } : undefined,
+          });
     if (!content) return;
     const notification = new Notification({ title: content.title, body: content.body });
     notification.on("click", () => {

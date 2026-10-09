@@ -229,7 +229,7 @@ it("keeps preparing true while later files of one selection are still reading", 
 });
 
 it("rejects formats the selected host does not accept, with the file name, and keeps the others", async () => {
-  const state = mount(undefined, () => ({ eml: false, media: false }));
+  const state = mount(undefined, () => ({ eml: false, media: false, text: false }));
   native.documents.mockResolvedValue({
     canceled: false,
     assets: [

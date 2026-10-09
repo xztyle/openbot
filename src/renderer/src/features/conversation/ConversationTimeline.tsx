@@ -3,6 +3,7 @@ import type { ConversationMessageSender } from "@openbot/contracts/ipc";
 import { Button } from "@openbot/ui";
 import type { AgentMessage, ChatActionMarkerModel } from "@openbot/ui/data";
 import { AgentActivityIndicator } from "@openbot/ui/features/conversation/AgentActivity";
+import { AgentMessageDialog } from "@openbot/ui/features/conversation/AgentMessageDialog";
 import { AttachmentCards } from "@openbot/ui/features/conversation/AttachmentCards";
 import { ChatActionMarker } from "@openbot/ui/features/conversation/ChatActionMarker";
 import { type ChatMessageAuthor, ChatMessageRow } from "@openbot/ui/features/conversation/ChatMessageRow";
@@ -16,12 +17,15 @@ import { ScrollToLatestButton } from "@openbot/ui/features/conversation/MessageN
 import { MessageActions } from "@openbot/ui/features/conversation/MessageRendering";
 import { PendingSendStatus } from "@openbot/ui/features/conversation/PendingSendStatus";
 import { TaskList } from "@openbot/ui/features/conversation/TaskList";
+import { ThinkingDisclosure } from "@openbot/ui/features/conversation/ThinkingDisclosure";
+import { ThinkingText } from "@openbot/ui/features/conversation/ThinkingText";
 import { UnreadMessagesBanner, UnreadMessagesDivider } from "@openbot/ui/features/conversation/UnreadMessages";
 import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Loading, lazy, Show, untrack } from "solid-js";
 import { planItems, planTitle } from "../../app-message-projection";
 import { deviceSendShortcut } from "../../send-shortcut-preference";
+import { agentMessageThread } from "./agent-message-thread";
 import { groupedMessageIds } from "./agent-message-timeline";
 import { continuesSenderRun } from "./chat-grouping";
 import { chatVisualPageUrl } from "./chat-visual-url";
@@ -52,6 +56,7 @@ function rowDrawsTime(message: AgentMessage): boolean {
     !markerOnlyMessage(message) &&
     !message.questionPrompt &&
     message.kind !== "plan" &&
+    message.kind !== "thinking" &&
     chatVisualReply(message) === null
   );
 }
@@ -142,6 +147,16 @@ export function ConversationTimeline() {
   } = useConversationViewScope();
   const { t, format } = useText();
   const runtime = conversationRuntime(props);
+  // What the model has thought so far in the turn that runs, for the activity line to open.
+  const activeReasoning = createMemo(() => {
+    const turnId = props.activeTurnId;
+    if (!turnId) return [];
+    return props.messages.find((message) => message.kind === "thinking" && message.turnId === turnId)?.items ?? [];
+  });
+  // The agent-to-agent message whose full text is open, and the marker to give focus back to.
+  const [openedAgentMessage, setOpenedAgentMessage] = createSignal<{ messageId: string; trigger: HTMLElement } | null>(
+    null,
+  );
   /**
    * The other person who wrote a message. The reader's own message, an agent message, and a message
    * from before senders were kept have none, so a chat with one person looks as it always did.
@@ -361,7 +376,7 @@ export function ConversationTimeline() {
                 const pending = createMemo(() => pendingSend() !== undefined);
                 const pendingState = () => {
                   const state = pendingSend()?.state;
-                  return state === "failed" || state === "waiting" ? state : "sending";
+                  return state === "failed" || state === "waiting" || state === "held" ? state : "sending";
                 };
                 const pendingRetrySafe = () => {
                   const send = pendingSend();
@@ -427,6 +442,9 @@ export function ConversationTimeline() {
                                         onSelectAgent={props.onSelectAgent}
                                         onOpenRoutine={openRoutineSettings}
                                         onOpenHostedSite={(url) => void openExternalMessageUrl(url)}
+                                        onOpenAgentMessage={(messageId, trigger) =>
+                                          setOpenedAgentMessage({ messageId, trigger })
+                                        }
                                       />
                                     }
                                   >
@@ -483,6 +501,41 @@ export function ConversationTimeline() {
                               />
                             </div>
                           </Show>
+                        </article>
+                      </ChatRowBoundary>
+                    </div>
+                  );
+                }
+                if (untrack(() => initialMessage.kind === "thinking")) {
+                  // The reasoning of a finished turn is one quiet row, with no bubble, time or reactions.
+                  const items = () => message()?.items ?? initialMessage.items ?? [];
+                  return (
+                    <div
+                      data-index={virtualRow.index}
+                      ref={messageVirtualizer.measureElement}
+                      class="virtual-chat-row"
+                      style={{
+                        transform: messageVirtualizer.isVirtualized()
+                          ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
+                          : "none",
+                      }}
+                    >
+                      <Show when={dayMarker()}>
+                        {(label) => (
+                          <div class="time-marker">
+                            <span>{label()}</span>
+                          </div>
+                        )}
+                      </Show>
+                      <ChatRowBoundary>
+                        <article>
+                          <ThinkingDisclosure
+                            items={items()}
+                            agents={props.agents}
+                            skills={installedSkills()}
+                            onSelectAgent={props.onSelectAgent}
+                            onOpenLink={(url) => void openExternalMessageUrl(url)}
+                          />
                         </article>
                       </ChatRowBoundary>
                     </div>
@@ -653,7 +706,13 @@ export function ConversationTimeline() {
                             onOpenSharedFile={openSharedFile}
                             onOpenWorkspaceFile={openWorkspaceFile}
                             onDownload={(attachment) => attachmentAction(attachment, "download")}
-                            class={pending() ? "message-entry-pending" : undefined}
+                            class={
+                              pending()
+                                ? "message-entry-pending"
+                                : message()?.cancelled
+                                  ? "message-entry-cancelled"
+                                  : undefined
+                            }
                             footer={
                               pending() ? (
                                 <PendingSendStatus
@@ -674,7 +733,13 @@ export function ConversationTimeline() {
                                     const send = pendingSend();
                                     if (send) dismissPendingSend(send.clientMessageId);
                                   }}
+                                  onUndo={() => {
+                                    const send = pendingSend();
+                                    if (send) dismissPendingSend(send.clientMessageId);
+                                  }}
                                 />
+                              ) : message()?.cancelled ? (
+                                <span class="message-cancelled-note">{t("chat.message.cancelled")}</span>
                               ) : undefined
                             }
                             actions={
@@ -755,6 +820,16 @@ export function ConversationTimeline() {
                   label={activity().label}
                   phase={activity().phase}
                   since={activity().since}
+                  reasoning={() => (
+                    <ThinkingText
+                      items={activeReasoning()}
+                      streaming
+                      agents={props.agents}
+                      skills={installedSkills()}
+                      onSelectAgent={props.onSelectAgent}
+                      onOpenLink={(url) => void openExternalMessageUrl(url)}
+                    />
+                  )}
                 />
               )}
             </Show>
@@ -824,6 +899,28 @@ export function ConversationTimeline() {
           </Show>
         </Show>
       </div>
+      <Show when={openedAgentMessage()}>
+        {(opened) => (
+          <AgentMessageDialog
+            entries={agentMessageThread(props.messages, opened().messageId, props.agents)}
+            openedMessageId={opened().messageId}
+            agents={props.agents}
+            skills={installedSkills()}
+            restoreFocusTarget={opened().trigger}
+            onClose={() => setOpenedAgentMessage(null)}
+            onSelectAgent={(agentId) => {
+              setOpenedAgentMessage(null);
+              props.onSelectAgent(agentId);
+            }}
+            onOpenLink={(url) => void openExternalMessageUrl(url)}
+            onPreview={(attachment) => void previewAttachment(attachment)}
+            onAttachmentAction={attachmentAction}
+            onOpenSharedFile={openSharedFile}
+            onOpenWorkspaceFile={openWorkspaceFile}
+            onDownload={(attachment) => attachmentAction(attachment, "download")}
+          />
+        )}
+      </Show>
     </>
   );
 }

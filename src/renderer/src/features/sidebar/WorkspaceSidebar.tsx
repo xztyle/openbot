@@ -1,3 +1,5 @@
+import { TEAM_CONVERSATION_UNREAD_CAPABILITY } from "@openbot/contracts/team-protocol/current";
+import { toast } from "@openbot/ui";
 import { computeAgentAvatarMoods } from "@openbot/ui/features/agents/agent-avatar-mood";
 import { IOS_TESTFLIGHT_URL } from "@openbot/ui/features/mobile-app/ios-testflight";
 import { Sidebar } from "@openbot/ui/features/sidebar/Sidebar";
@@ -49,7 +51,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
     useAgents();
   const { editAgent, duplicateAgent, deleteAgent } = useAgentActions();
   const { activeTurns, queues, failedTurns, usageLimits, pendingPrompts, pendingApprovals } = useTurns();
-  const { unreadReplies, recentReplies, markAllAgentMessagesRead } = useConversation();
+  const { unreadReplies, recentReplies, markAllAgentMessagesRead, markAgentMessagesUnread } = useConversation();
   const { directPeople } = usePresence();
   const { activeDirectMember, activeDirectMemberId, directThreads } = useDirectMessages();
   const { selectAgent, selectDirectMember, setGlobalSearchVisibility } = useNavigation();
@@ -191,6 +193,17 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
         openBotSetup();
       }}
       onEditAgent={editAgent}
+      onMarkAgentUnread={
+        activeServer()?.kind !== "remote" || activeServerSupportsCapability(TEAM_CONVERSATION_UNREAD_CAPABILITY)
+          ? (agentId) => {
+              void markAgentMessagesUnread(agentId).catch(() =>
+                toast.error(t("sidebar.agentMenu.markUnreadFailed"), {
+                  report: { operation: "other", source: "action", cause_code: "unknown" },
+                }),
+              );
+            }
+          : undefined
+      }
       duplicateSupported={activeServerSupportsCapability("agent-duplication")}
       duplicatingAgentIds={duplicatingAgentIds()}
       onDuplicateAgent={duplicateAgent}

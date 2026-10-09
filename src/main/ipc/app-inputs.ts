@@ -146,7 +146,12 @@ export function parseNotificationPreference(input: unknown): NotificationPrefere
   if (!isDynamicRecord(input) || !isBoolean(input.desktopNotifications)) {
     throw new Error("Notification preference is required.");
   }
-  return { desktopNotifications: input.desktopNotifications };
+  if (input.showText !== undefined && !isBoolean(input.showText))
+    throw new Error("Notification preference is required.");
+  return {
+    desktopNotifications: input.desktopNotifications,
+    ...(input.showText === undefined ? {} : { showText: input.showText }),
+  };
 }
 
 export function parseDynamicIslandPreference(input: unknown): DynamicIslandPreference {

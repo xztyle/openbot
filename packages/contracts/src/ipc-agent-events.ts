@@ -73,6 +73,12 @@ export type AgentEvent =
        * `team-protocol/turn-quiet-v6.ts`.
        */
       quiet?: true;
+      /**
+       * The agent still has queued work or waits for a teammate's reply, so it is not idle yet and a
+       * "Finished" notification waits for the turn after which it is. The Team API carries it on
+       * protocol 6 beside the frozen projection, like `quiet`.
+       */
+      moreWork?: true;
     }
   | {
       type: "prompt";
@@ -192,7 +198,8 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
         isString(value.threadId) &&
         isString(value.turnId) &&
         (value.origin === undefined || isAgentTurnOrigin(value.origin)) &&
-        (value.quiet === undefined || value.quiet === true)
+        (value.quiet === undefined || value.quiet === true) &&
+        (value.moreWork === undefined || value.moreWork === true)
       );
     case "prompt":
       return (

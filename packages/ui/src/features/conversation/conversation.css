@@ -21,6 +21,9 @@
 @import "./styles/code-preview.css";
 @import "./styles/chat-visual.css";
 @import "./styles/composer.css";
+@import "./styles/saved-replies.css";
+@import "./styles/agent-message-dialog.css";
+@import "./styles/thinking.css";
 @import "./styles/attachments.css";
 @import "./styles/image-lightbox.css";
 @import "./styles/queue.css";

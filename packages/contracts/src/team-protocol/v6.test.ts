@@ -122,6 +122,26 @@ describe("Team protocol v6", () => {
       }
     });
 
+    it("carries moreWork beside the frozen projection and drops it for older protocols", () => {
+      const busy = { ...event, quiet: undefined, moreWork: true as const };
+      const wire = JSON.parse(encodeTeamProtocolV6BaseCurrentEvent(busy) ?? "null");
+      expect(wire.moreWork).toBe(true);
+      expect(decodeTeamProtocolV6BaseCurrentEvent(wire)).toMatchObject({ kind: "known", event: { moreWork: true } });
+      // The v6 projection that shipped before the key reads the turn and drops it.
+      expect(decodeTeamProtocolV6BaseEvent(wire)).toMatchObject({ kind: "known" });
+      for (const encode of [encodeTeamProtocolV5BaseCurrentEvent, encodeTeamProtocolV4BaseCurrentEvent]) {
+        expect(encode(busy)).not.toContain("moreWork");
+      }
+      const { moreWork: _moreWork, ...idle } = busy;
+      expect(encodeTeamProtocolV6BaseCurrentEvent(idle)).not.toContain("moreWork");
+      for (const moreWork of [false, "true", 1, null]) {
+        expect(decodeTeamProtocolV6BaseCurrentEvent({ ...wire, moreWork })).toEqual({
+          kind: "invalid",
+          type: "turn-completed",
+        });
+      }
+    });
+
     it("fails closed on a quiet value other than true", () => {
       for (const quiet of [false, "true", 1, null]) {
         const malformed = { ...quietTurnWire, quiet };

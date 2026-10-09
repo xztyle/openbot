@@ -102,6 +102,7 @@ const Settings = createSimpleContext({
     let allowRemoteUpdatesChanged = false;
     let autoInstallUpdatesChanged = false;
     let desktopNotificationsChanged = false;
+    let notificationTextChanged = false;
     let busyMessageModeChanged = false;
     let keepRemoteSessionsChanged = false;
     let turboModeChanged = false;
@@ -232,6 +233,17 @@ const Settings = createSimpleContext({
           "desktopNotifications",
           settingsPort().notifications.setPreference({ desktopNotifications: value.desktopNotifications }),
           (preference) => preference.desktopNotifications,
+        );
+      }
+      if (previous.notificationText !== value.notificationText) {
+        notificationTextChanged = true;
+        persistField(
+          "notificationText",
+          settingsPort().notifications.setPreference({
+            desktopNotifications: value.desktopNotifications,
+            showText: value.notificationText,
+          }),
+          (preference) => preference.showText === true,
         );
       }
       if (previous.busyMessageMode !== value.busyMessageMode) {
@@ -411,8 +423,11 @@ const Settings = createSimpleContext({
       void settingsPort()
         .notifications.getPreference()
         .then((preference) => {
-          if (desktopNotificationsChanged) return;
-          setGeneralSettings((current) => ({ ...current, desktopNotifications: preference.desktopNotifications }));
+          setGeneralSettings((current) => ({
+            ...current,
+            ...(desktopNotificationsChanged ? {} : { desktopNotifications: preference.desktopNotifications }),
+            ...(notificationTextChanged ? {} : { notificationText: preference.showText === true }),
+          }));
         })
         .catch(() => undefined);
       void settingsPort()

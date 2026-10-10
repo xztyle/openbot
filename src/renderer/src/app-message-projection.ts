@@ -378,22 +378,47 @@ function startsOtherTurn(message: AgentMessage): boolean {
   return message.exchange?.direction === "incoming" || message.routine !== undefined;
 }
 
+/** What one row means for the event check scans. Read once per row, not once per marker. */
+interface EventCheckRow {
+  turnId: string | undefined;
+  marker: boolean;
+  /** A message of the person that the agent read. */
+  person: boolean;
+  /** A message that draws a bubble of the agent: the rows that can carry the chip. */
+  carrier: boolean;
+  /** A prompt that the agent did not get from the person or an event check, and that starts a turn. */
+  startsOther: boolean;
+  /** Output of the agent, drawn or not. It shows that a turn already ran before a marker. */
+  output: boolean;
+}
+
+function eventCheckRow(message: AgentMessage): EventCheckRow {
+  return {
+    turnId: message.turnId,
+    marker: isEventCheckMarkerMessage(message),
+    person: isPersonPrompt(message),
+    carrier: carriesEventCheckOrigin(message),
+    startsOther: startsOtherTurn(message),
+    output: isAgentOutput(message),
+  };
+}
+
 /**
  * Whether the turn of a marker was already running when its event arrived: an earlier message of
  * the same turn exists, an agent message, a message of the person, or another event check. The
  * marker then sits in the middle of that turn. It needs a turn id on the marker.
  */
-function arrivedInRunningTurn(messages: readonly AgentMessage[], markerIndex: number, turn: string): boolean {
+function arrivedInRunningTurn(rows: readonly EventCheckRow[], markerIndex: number, turn: string): boolean {
   for (let index = markerIndex - 1; index >= 0; index -= 1) {
-    const row = messages[index];
+    const row = rows[index];
     if (row?.turnId === undefined) continue;
-    const prompt = isPersonPrompt(row) || isEventCheckMarkerMessage(row);
+    const prompt = row.person || row.marker;
     if (row.turnId === turn) {
-      if (prompt || isAgentOutput(row)) return true;
+      if (prompt || row.output) return true;
       continue;
     }
     // Another turn is behind this one: nothing before it can belong to this turn.
-    if (prompt || isAgentOutput(row)) return false;
+    if (prompt || row.output) return false;
   }
   return false;
 }
@@ -407,67 +432,207 @@ interface EventCheckInteraction {
   open: boolean;
 }
 
+const NONE = Number.POSITIVE_INFINITY;
+
+/** The first entry of an ascending list that is greater than `index`, or `NONE`. */
+function firstAfter(list: readonly number[] | undefined, index: number): number {
+  if (!list) return NONE;
+  let low = 0;
+  let high = list.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if ((list[middle] ?? NONE) > index) high = middle;
+    else low = middle + 1;
+  }
+  return list[low] ?? NONE;
+}
+
+/** The last entry of an ascending list that is less than `bound`, or -1. */
+function lastBefore(list: readonly number[] | undefined, bound: number): number {
+  if (!list) return -1;
+  let low = 0;
+  let high = list.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if ((list[middle] ?? NONE) < bound) low = middle + 1;
+    else high = middle;
+  }
+  return list[low - 1] ?? -1;
+}
+
+function pushTo<Key>(map: Map<Key, number[]>, key: Key, index: number): void {
+  const list = map.get(key);
+  if (list) list.push(index);
+  else map.set(key, [index]);
+}
+
 /**
- * The agent messages that answer one marker, or `null` when it has none yet.
- *
- * The turn id of the marker says which messages belong to its turn. A marker without one, because
- * its delivery has not started, falls back to message order: the interaction runs until the next
- * message of the person, the next event check, or the next prompt that is not theirs.
+ * The rows of one list, indexed once so that the interaction of each marker costs a few binary
+ * searches instead of a scan to the end of the list. A scan for a marker that has no answer yet,
+ * for example one whose answers were silent, used to read every row behind it.
  */
-function eventCheckInteraction(
-  messages: readonly AgentMessage[],
-  markerIndex: number,
-  activeTurnId: string | null | undefined,
-): EventCheckInteraction | null {
-  let turn = messages[markerIndex]?.turnId;
-  let first = -1;
-  let last = -1;
-  let interrupted = false;
-  let personWrote = false;
-  // A message of another turn came first, so a message without a turn id cannot be attributed.
-  let foreignSeen = false;
-  for (let index = markerIndex + 1; index < messages.length; index += 1) {
-    const row = messages[index];
-    if (!row) continue;
-    if (isEventCheckMarkerMessage(row)) {
-      if (turn === undefined) break;
-      if (row.turnId === turn) {
-        // Another event reached the same turn: it owns the messages from here on.
-        if (first >= 0) interrupted = true;
-        break;
+class EventCheckIndex {
+  readonly rows: EventCheckRow[];
+  private readonly markersByTurn = new Map<string, number[]>();
+  private readonly carriersByTurn = new Map<string, number[]>();
+  private readonly personsByTurn = new Map<string, number[]>();
+  private readonly carriersWithoutTurn: number[] = [];
+  private readonly personsWithoutTurn: number[] = [];
+  /** Rows that are foreign to a marker of another turn: every marker, and a person or carrier with a turn. */
+  private readonly foreignIndex: number[] = [];
+  private readonly foreignTurn: Array<string | undefined> = [];
+  /** For each entry of the list above, the position of the first later entry of another turn. */
+  private readonly foreignRunEnd: number[] = [];
+
+  constructor(messages: readonly AgentMessage[]) {
+    this.rows = messages.map(eventCheckRow);
+    this.rows.forEach((row, index) => {
+      const { turnId } = row;
+      if (row.marker) {
+        if (turnId !== undefined) pushTo(this.markersByTurn, turnId, index);
+        this.foreignIndex.push(index);
+        this.foreignTurn.push(turnId);
+      } else if (row.person) {
+        if (turnId === undefined) this.personsWithoutTurn.push(index);
+        else {
+          pushTo(this.personsByTurn, turnId, index);
+          this.foreignIndex.push(index);
+          this.foreignTurn.push(turnId);
+        }
+      } else if (row.carrier) {
+        if (turnId === undefined) this.carriersWithoutTurn.push(index);
+        else {
+          pushTo(this.carriersByTurn, turnId, index);
+          this.foreignIndex.push(index);
+          this.foreignTurn.push(turnId);
+        }
       }
-      if (first >= 0) break;
-      foreignSeen = true;
-      continue;
+    });
+    const count = this.foreignIndex.length;
+    for (let position = count - 1; position >= 0; position -= 1) {
+      const next = position + 1;
+      this.foreignRunEnd[position] =
+        next < count && this.foreignTurn[next] !== this.foreignTurn[position]
+          ? next
+          : (this.foreignRunEnd[next] ?? count);
     }
-    if (isPersonPrompt(row)) {
-      if (turn === undefined) break;
-      if (row.turnId === undefined || row.turnId === turn) {
-        personWrote = true;
+  }
+
+  /** The first row after `index` that is foreign to `turn`: it ends the interaction of that turn. */
+  firstForeignAfter(index: number, turn: string): number {
+    let low = 0;
+    let high = this.foreignIndex.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if ((this.foreignIndex[middle] ?? NONE) > index) high = middle;
+      else low = middle + 1;
+    }
+    if (low >= this.foreignIndex.length) return NONE;
+    if (this.foreignTurn[low] !== turn) return this.foreignIndex[low] ?? NONE;
+    const end = this.foreignRunEnd[low] ?? this.foreignIndex.length;
+    return this.foreignIndex[end] ?? NONE;
+  }
+
+  /**
+   * The messages that answer a marker that has a turn id: those of its turn, and those with no
+   * turn id that no row of another turn came before.
+   */
+  interactionOfTurn(
+    markerIndex: number,
+    turn: string,
+    activeTurnId: string | null | undefined,
+    messages: readonly AgentMessage[],
+  ): EventCheckInteraction | null {
+    // Another event check of the same turn owns the messages from its place on.
+    const stop = firstAfter(this.markersByTurn.get(turn), markerIndex);
+    const foreign = this.firstForeignAfter(markerIndex, turn);
+    const ofTurn = firstAfter(this.carriersByTurn.get(turn), markerIndex);
+    const withoutTurn = firstAfter(this.carriersWithoutTurn, markerIndex);
+    let first = NONE;
+    if (ofTurn < stop) first = ofTurn;
+    if (withoutTurn < stop && withoutTurn < foreign && withoutTurn < first) first = withoutTurn;
+    if (first === NONE) return null;
+    // A row of another turn before the first message makes the messages with no turn id foreign.
+    const foreignBeforeFirst = foreign < first;
+    const end = this.firstForeignAfter(first, turn);
+    const interruptedByEvent = stop < end;
+    const limit = Math.min(end, stop);
+    let last = first;
+    const lastOfTurn = lastBefore(this.carriersByTurn.get(turn), limit);
+    if (lastOfTurn > last) last = lastOfTurn;
+    if (!foreignBeforeFirst) {
+      const lastWithoutTurn = lastBefore(this.carriersWithoutTurn, limit);
+      if (lastWithoutTurn > last) last = lastWithoutTurn;
+    }
+    const personWrote = Math.min(
+      firstAfter(this.personsByTurn.get(turn), markerIndex),
+      firstAfter(this.personsWithoutTurn, markerIndex),
+    );
+    const interrupted = interruptedByEvent || personWrote < last;
+    const lastRow = messages[last];
+    const open = lastRow?.streaming === true || activeTurnId === turn;
+    return { first, last, interrupted, open };
+  }
+
+  /**
+   * The same for a marker whose delivery has not started, so it has no turn id. The interaction
+   * runs until the next message of the person, the next event check, or the next prompt that is
+   * not theirs, so the scan is short.
+   */
+  interactionByOrder(
+    markerIndex: number,
+    activeTurnId: string | null | undefined,
+    messages: readonly AgentMessage[],
+  ): EventCheckInteraction | null {
+    let turn: string | undefined;
+    let first = -1;
+    let last = -1;
+    let interrupted = false;
+    let personWrote = false;
+    // A message of another turn came first, so a message without a turn id cannot be attributed.
+    let foreignSeen = false;
+    for (let index = markerIndex + 1; index < this.rows.length; index += 1) {
+      const row = this.rows[index];
+      if (!row) continue;
+      if (row.marker) {
+        if (turn === undefined) break;
+        if (row.turnId === turn) {
+          if (first >= 0) interrupted = true;
+          break;
+        }
+        if (first >= 0) break;
+        foreignSeen = true;
         continue;
       }
-      if (first >= 0) break;
-      foreignSeen = true;
-      continue;
+      if (row.person) {
+        if (turn === undefined) break;
+        if (row.turnId === undefined || row.turnId === turn) {
+          personWrote = true;
+          continue;
+        }
+        if (first >= 0) break;
+        foreignSeen = true;
+        continue;
+      }
+      if (turn === undefined && row.startsOther) break;
+      if (!row.carrier) continue;
+      if (turn === undefined) turn = row.turnId;
+      else if (row.turnId === undefined) {
+        if (foreignSeen) continue;
+      } else if (row.turnId !== turn) {
+        if (first >= 0) break;
+        foreignSeen = true;
+        continue;
+      }
+      if (first < 0) first = index;
+      last = index;
+      if (personWrote) interrupted = true;
     }
-    if (turn === undefined && startsOtherTurn(row)) break;
-    if (!carriesEventCheckOrigin(row)) continue;
-    if (turn === undefined) turn = row.turnId;
-    else if (row.turnId === undefined) {
-      if (foreignSeen) continue;
-    } else if (row.turnId !== turn) {
-      if (first >= 0) break;
-      foreignSeen = true;
-      continue;
-    }
-    if (first < 0) first = index;
-    last = index;
-    if (personWrote) interrupted = true;
+    if (first < 0) return null;
+    const lastRow = messages[last];
+    const open = lastRow?.streaming === true || (turn !== undefined && activeTurnId === turn);
+    return { first, last, interrupted, open };
   }
-  if (first < 0) return null;
-  const lastRow = messages[last];
-  const open = lastRow?.streaming === true || (turn !== undefined && activeTurnId === turn);
-  return { first, last, interrupted, open };
 }
 
 /**
@@ -488,13 +653,18 @@ export function eventCheckOrigins(
   options: { activeTurnId?: string | null | undefined } = {},
 ): Map<string, MessageEventCheckOrigin> {
   const origins = new Map<string, MessageEventCheckOrigin>();
+  if (!messages.some(isEventCheckMarkerMessage)) return origins;
+  const index = new EventCheckIndex(messages);
   messages.forEach((marker, markerIndex) => {
     const model = marker.actionMarker;
     if (model?.kind !== "event-check") return;
     const turn = marker.turnId;
     // A delivery that has not started while another turn runs: that turn's output is not its answer.
     if (turn === undefined && options.activeTurnId != null) return;
-    const interaction = eventCheckInteraction(messages, markerIndex, options.activeTurnId);
+    const interaction =
+      turn === undefined
+        ? index.interactionByOrder(markerIndex, options.activeTurnId, messages)
+        : index.interactionOfTurn(markerIndex, turn, options.activeTurnId, messages);
     if (!interaction) return;
     const firstMessage = messages[interaction.first];
     if (!firstMessage) return;
@@ -504,7 +674,7 @@ export function eventCheckOrigins(
       timestamp: model.timestamp,
       position,
     });
-    const midTurn = turn !== undefined && arrivedInRunningTurn(messages, markerIndex, turn);
+    const midTurn = turn !== undefined && arrivedInRunningTurn(index.rows, markerIndex, turn);
     if (midTurn || interaction.interrupted) {
       origins.set(firstMessage.id, origin("only"));
       return;

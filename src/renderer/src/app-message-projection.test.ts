@@ -1,3 +1,4 @@
+import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import type { AgentSummary, AttachmentSummary, ConversationMessage } from "@openbot/contracts/ipc";
 import {
@@ -7,6 +8,8 @@ import {
   routineRunConversationEventItemType,
   skillConversationEventItemType,
 } from "@openbot/contracts/ipc";
+import type { AgentMessage, MessageEventCheckOrigin } from "@openbot/ui/data";
+import { silentAgentAnswer } from "@openbot/ui/features/conversation/new-message-tally";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   agentProfilesEqual,
@@ -739,5 +742,273 @@ describe("message projection that keeps unchanged messages", () => {
     project(list, "chief");
     const next = [...list.filter((item) => item.id !== "answer-1"), message("late", { turnId: "t3" })];
     expect(project(next, "chief")).toEqual(legacyToAgentMessages(next, "chief"));
+  });
+});
+
+describe("event check origins of a long list", () => {
+  /*
+   * The scans of `eventCheckOrigins` before the rows were indexed. They are the golden output: one
+   * pass over the rest of the list for each marker.
+   */
+  const isMarker = (message: AgentMessage) => message.actionMarker?.kind === "event-check";
+  const carries = (message: AgentMessage) =>
+    message.author === "agent" &&
+    (message.kind === undefined || message.kind === "text") &&
+    !message.actionMarker &&
+    !message.questionPrompt &&
+    !message.plan &&
+    !message.id.startsWith("ui-") &&
+    chatVisualReply(message) === null &&
+    !silentAgentAnswer(message);
+  const isOutput = (message: AgentMessage) =>
+    message.author === "agent" && !message.actionMarker && !message.id.startsWith("ui-");
+  const isPerson = (message: AgentMessage) => message.author === "you" && message.cancelled !== true;
+  const startsOther = (message: AgentMessage) =>
+    message.exchange?.direction === "incoming" || message.routine !== undefined;
+
+  function oracleArrived(messages: readonly AgentMessage[], markerIndex: number, turn: string): boolean {
+    for (let index = markerIndex - 1; index >= 0; index -= 1) {
+      const row = messages[index];
+      if (row?.turnId === undefined) continue;
+      const prompt = isPerson(row) || isMarker(row);
+      if (row.turnId === turn) {
+        if (prompt || isOutput(row)) return true;
+        continue;
+      }
+      if (prompt || isOutput(row)) return false;
+    }
+    return false;
+  }
+
+  function oracleInteraction(messages: readonly AgentMessage[], markerIndex: number, activeTurnId?: string | null) {
+    let turn = messages[markerIndex]?.turnId;
+    let first = -1;
+    let last = -1;
+    let interrupted = false;
+    let personWrote = false;
+    let foreignSeen = false;
+    for (let index = markerIndex + 1; index < messages.length; index += 1) {
+      const row = messages[index];
+      if (!row) continue;
+      if (isMarker(row)) {
+        if (turn === undefined) break;
+        if (row.turnId === turn) {
+          if (first >= 0) interrupted = true;
+          break;
+        }
+        if (first >= 0) break;
+        foreignSeen = true;
+        continue;
+      }
+      if (isPerson(row)) {
+        if (turn === undefined) break;
+        if (row.turnId === undefined || row.turnId === turn) {
+          personWrote = true;
+          continue;
+        }
+        if (first >= 0) break;
+        foreignSeen = true;
+        continue;
+      }
+      if (turn === undefined && startsOther(row)) break;
+      if (!carries(row)) continue;
+      if (turn === undefined) turn = row.turnId;
+      else if (row.turnId === undefined) {
+        if (foreignSeen) continue;
+      } else if (row.turnId !== turn) {
+        if (first >= 0) break;
+        foreignSeen = true;
+        continue;
+      }
+      if (first < 0) first = index;
+      last = index;
+      if (personWrote) interrupted = true;
+    }
+    if (first < 0) return null;
+    const open = messages[last]?.streaming === true || (turn !== undefined && activeTurnId === turn);
+    return { first, last, interrupted, open };
+  }
+
+  function oracleOrigins(messages: readonly AgentMessage[], activeTurnId?: string | null) {
+    const origins = new Map<string, MessageEventCheckOrigin>();
+    messages.forEach((marker, markerIndex) => {
+      const model = marker.actionMarker;
+      if (model?.kind !== "event-check") return;
+      const turn = marker.turnId;
+      if (turn === undefined && activeTurnId != null) return;
+      const interaction = oracleInteraction(messages, markerIndex, activeTurnId);
+      if (!interaction) return;
+      const firstMessage = messages[interaction.first];
+      if (!firstMessage) return;
+      const origin = (position: MessageEventCheckOrigin["position"]): MessageEventCheckOrigin => ({
+        name: model.name,
+        checkId: model.checkId,
+        timestamp: model.timestamp,
+        position,
+      });
+      if ((turn !== undefined && oracleArrived(messages, markerIndex, turn)) || interaction.interrupted) {
+        origins.set(firstMessage.id, origin("only"));
+        return;
+      }
+      if (interaction.open) {
+        origins.set(firstMessage.id, origin("start"));
+        return;
+      }
+      if (interaction.first === interaction.last) {
+        origins.set(firstMessage.id, origin("only"));
+        return;
+      }
+      origins.set(firstMessage.id, origin("start"));
+      const lastMessage = messages[interaction.last];
+      if (lastMessage) origins.set(lastMessage.id, origin("end"));
+    });
+    return origins;
+  }
+
+  type Kind = "marker" | "person" | "cancelled" | "answer" | "silent" | "thinking" | "incoming" | "ui";
+  const KINDS: Kind[] = [
+    "marker",
+    "marker",
+    "person",
+    "cancelled",
+    "answer",
+    "answer",
+    "answer",
+    "silent",
+    "thinking",
+    "incoming",
+    "ui",
+  ];
+  function row(kind: Kind, id: string, turnId: string | undefined, second: number): AgentMessage {
+    const base: AgentMessage = {
+      id,
+      turnId,
+      author: "agent",
+      body: `Body ${id}`,
+      time: "09:00",
+      createdAt: new Date(Date.UTC(2026, 8, 21, 9, 0, second)).toISOString(),
+    };
+    switch (kind) {
+      case "marker":
+        return {
+          ...base,
+          body: "",
+          kind: "action-marker",
+          actionMarker: {
+            kind: "event-check",
+            name: `Check ${id}`,
+            checkId: `check-${id}`,
+            timestamp: base.createdAt ?? "",
+          },
+        };
+      case "person":
+        return { ...base, author: "you" };
+      case "cancelled":
+        return { ...base, author: "you", cancelled: true };
+      case "silent":
+        return { ...base, body: "" };
+      case "thinking":
+        return { ...base, kind: "thinking", body: "", items: ["a"], itemIds: ["a"] };
+      case "incoming":
+        return {
+          ...base,
+          author: "you",
+          exchange: {
+            direction: "incoming",
+            messageId: id,
+            senderAgentId: "peer",
+            recipientAgentIds: ["chief"],
+            replyToMessageId: null,
+            deliveries: [],
+          },
+        };
+      case "ui":
+        return { ...base, id: `ui-${id}` };
+      default:
+        return base;
+    }
+  }
+
+  /** A small generator with a fixed seed, so a failure repeats. */
+  function random(seed: number) {
+    let state = seed;
+    return () => {
+      state = (state * 1664525 + 1013904223) % 4294967296;
+      return state / 4294967296;
+    };
+  }
+
+  const entries = (map: Map<string, MessageEventCheckOrigin>) =>
+    [...map].map(([id, origin]) => `${id}:${origin.position}:${origin.checkId}`).sort();
+
+  it("gives the output of the earlier scans for random lists of messages, turns and markers", () => {
+    const turns = [undefined, "t1", "t2", "t3"] as const;
+    const active = [undefined, null, "t1", "t2"] as const;
+    for (let seed = 1; seed <= 600; seed += 1) {
+      const next = random(seed);
+      const length = 1 + Math.floor(next() * 22);
+      const messages = Array.from({ length }, (_, index) =>
+        row(
+          KINDS[Math.floor(next() * KINDS.length)] ?? "answer",
+          `m${index}`,
+          turns[Math.floor(next() * turns.length)],
+          index,
+        ),
+      );
+      const activeTurnId = active[Math.floor(next() * active.length)];
+      expect(entries(eventCheckOrigins(messages, { activeTurnId })), `seed ${seed}`).toEqual(
+        entries(oracleOrigins(messages, activeTurnId)),
+      );
+    }
+  });
+
+  /** Counts each read of the turn id of a row: the scans read it for every row they pass. */
+  function countTurnReads(messages: AgentMessage[]) {
+    const counter = { reads: 0 };
+    const counted = messages.map((message) => {
+      const turnId = message.turnId;
+      const copy = { ...message };
+      Object.defineProperty(copy, "turnId", {
+        get() {
+          counter.reads += 1;
+          return turnId;
+        },
+        enumerable: true,
+      });
+      return copy;
+    });
+    return { counted, counter };
+  }
+
+  it("finds the chips of a list with 1,000 messages and 700 markers with a bounded number of reads", () => {
+    const messages: AgentMessage[] = [];
+    // Markers that are followed by silent answers only, so no marker finds a carrier near itself.
+    // Every tenth message is a drawn answer of an earlier turn, as a queued event leaves it.
+    for (let index = 0; index < 1000; index += 1) {
+      const turn = `t${Math.floor(index / 1.4)}`;
+      if (index % 10 === 9) messages.push(row("answer", `m${index}`, `t${Math.floor((index - 9) / 1.4)}`, index));
+      else if (index % 10 < 7) messages.push(row("marker", `m${index}`, turn, index));
+      else messages.push(row("silent", `m${index}`, turn, index));
+    }
+    expect(messages.filter(isMarker)).toHaveLength(700);
+    const golden = oracleOrigins(messages);
+
+    const { counted, counter } = countTurnReads(messages);
+    const origins = eventCheckOrigins(counted);
+    expect(entries(origins)).toEqual(entries(golden));
+    expect(origins.size).toBeGreaterThan(0);
+    // Each row is read to index it, and a marker reads a few rows. It never reads the rest of the list.
+    expect(counter.reads).toBeLessThan(messages.length * 6);
+    // The scans before read about half of the list for each marker.
+    const before = countTurnReads(messages);
+    oracleOrigins(before.counted);
+    expect(before.counter.reads).toBeGreaterThan(messages.length * 100);
+  });
+
+  it("does not read any row for a list with no markers", () => {
+    const messages = Array.from({ length: 400 }, (_, index) => row("answer", `m${index}`, "t1", index));
+    const { counted, counter } = countTurnReads(messages);
+    expect(eventCheckOrigins(counted).size).toBe(0);
+    expect(counter.reads).toBe(0);
   });
 });

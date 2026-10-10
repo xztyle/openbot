@@ -377,6 +377,21 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
    * a name alone cannot say which row an app's name belongs to.
    */
   const [servers, setServers] = createSignal<readonly McpServerConfig[]>([]);
+  /**
+   * Which http rows this computer holds a sign-in for, by row id. Only this computer answers: a
+   * joined server signs in for itself. A row that is not here is not known to be signed out.
+   */
+  const [signIns, setSignIns] = createSignal<Readonly<Record<string, boolean>>>({});
+  async function readSignIns(serverId: string): Promise<Record<string, boolean>> {
+    if (props.hostServerId) return {};
+    // A badge beside the list, not the list: a failed read marks no account rather than failing the apps.
+    try {
+      const states = await calls().mcp.listMcpSignIns?.(serverId);
+      return Object.fromEntries((states ?? []).map((state) => [state.mcpServerId, state.signedIn]));
+    } catch {
+      return {};
+    }
+  }
   /** The row this app installed as, or nothing: a name on its own is not enough to claim a row. */
   const heldApp = (app: MarketplacePluginApp) => servers().find((held) => isPluginAppConfig(held, app));
   /** The agent that a plugin's skills go to: the open conversation, else the first agent. */
@@ -398,7 +413,8 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     if (parts.length === 0 || !parts.every(Boolean)) return parts.some(Boolean) ? "attention" : "idle";
     const rows = pluginRows(plugin);
     if (rows.length > 0 && rows.every((row) => !row.enabled)) return "disabled";
-    if (rows.some((row) => row.enabled && checks[row.id]?.phase === "failed")) return "attention";
+    if (rows.some((row) => row.enabled && (checks[row.id]?.phase === "failed" || signedOut(plugin, row))))
+      return "attention";
     return "connected";
   }
 
@@ -416,6 +432,11 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     if (flow?.kind !== "link") return null;
     return !props.hostServerId || calls().mcp.supportsRemoteSignIn?.() ? "sign-in" : null;
   }
+  /** A sign-in that the host held and no longer holds: only a row the browser signs in for can be that. */
+  function signedOut(plugin: MarketplacePluginDetail, row: McpServerConfig): boolean {
+    if (!row.enabled || row.transport !== "http" || signIns()[row.id] !== false) return false;
+    return listingAppOf(plugin, row)?.server.auth?.[0]?.kind === "link";
+  }
   function accountsOf(plugin: MarketplacePluginDetail): MarketplaceAccount[] {
     return pluginRows(plugin).map((row) => {
       const listing = listingAppOf(plugin, row);
@@ -426,6 +447,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         renamable: row.id.startsWith("mcpacct-"),
         outdated: listing ? isOutdatedPluginAppConfig(row, listing) : false,
         reconnect: listing ? reconnectKind(listing) : null,
+        signedOut: signedOut(plugin, row),
         check: checks[row.id] ?? { phase: "idle" },
       };
     });
@@ -533,9 +555,10 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     }
     setServersFailedFor(null);
     try {
-      const configs = await calls().mcp.listMcpServers(serverId);
+      const [configs, states] = await Promise.all([calls().mcp.listMcpServers(serverId), readSignIns(serverId)]);
       if (request !== serversRead) return;
       setServers(configs);
+      setSignIns(states);
       setServersReadFor(serverId);
     } catch (cause) {
       if (request !== serversRead) return;
@@ -994,6 +1017,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         setServers(await calls().mcp.saveMcpServer({ config: { ...connected, id: row.id } }, serverId));
       return true;
     });
+    if (done) setSignIns(await readSignIns(serverId));
     mark(key, false);
     if (done) {
       clearCheck(id);

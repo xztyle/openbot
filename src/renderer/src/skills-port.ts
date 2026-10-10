@@ -20,6 +20,7 @@ export interface SkillsPort {
     | "listAgentSkills"
     | "listInstalledSkills"
     | "listMcpServers"
+    | "listMcpSignIns"
     | "onEvent"
     | "removeMcpServer"
     | "saveMcpServer"

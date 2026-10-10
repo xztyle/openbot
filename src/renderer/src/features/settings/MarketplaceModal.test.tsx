@@ -681,6 +681,39 @@ describe("MarketplaceModal", () => {
       await waitFor(() => expect(screen.getByRole("button", { name: "Connect Aave" })).toBeEnabled());
     });
 
+    /** A sign-in that this computer lost is not a working connection, whatever the host row says. */
+    it("marks an account whose sign-in is gone and signs it in again under the same row", async () => {
+      let signedIn = false;
+      const signInMcpServer = vi.fn<MarketplaceCalls["mcp"]["signInMcpServer"]>(async () => {
+        signedIn = true;
+        return { toolCount: 4, error: null };
+      });
+      const saveMcpServer = vi.fn<MarketplaceCalls["mcp"]["saveMcpServer"]>(async ({ config }) => [config]);
+      const calls = desktopMarketplaceCalls();
+      calls.mcp = {
+        ...calls.mcp,
+        listMcpServers: async () => [hostApp()],
+        listMcpSignIns: async () => [{ mcpServerId: "mcp-1", signedIn }],
+        signInMcpServer,
+        saveMcpServer,
+      };
+      renderMarketplace({ ...writer, plugins: [withLink], calls });
+      await openAppPage();
+
+      expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+      expect(await screen.findByText("Sign in to aave again")).toBeInTheDocument();
+      // The alert at the top and the account row both offer the sign-in.
+      const [signIn] = screen.getAllByRole("button", { name: "Sign in again to aave" });
+      if (!signIn) throw new Error("The sign-in button is missing.");
+      fireEvent.click(signIn);
+      fireEvent.click(await screen.findByRole("button", { name: "Continue to Aave" }));
+
+      await waitFor(() => expect(signInMcpServer).toHaveBeenCalled());
+      expect(signInMcpServer.mock.lastCall?.[0].config.id).toBe("mcp-1");
+      expect(await screen.findByText("Connected")).toBeInTheDocument();
+      expect(screen.queryByText("Sign in to aave again")).toBeNull();
+    });
+
     it("saves nothing when the connect dialog is closed", async () => {
       const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => [input.config]);
       window.openbot.agent = { ...window.openbot.agent, listMcpServers: vi.fn(async () => []), saveMcpServer };

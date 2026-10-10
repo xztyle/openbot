@@ -32,7 +32,8 @@ export type AppsRead = "loading" | "loaded" | "failed";
 
 /**
  * `disabled`: the host holds the app, and every account of it is turned off. No agent can use it.
- * `attention`: something is left from a partial install, or a check of an account failed.
+ * `attention`: something is left from a partial install, a check of an account failed, or the
+ * sign-in of an account is gone.
  * `connecting`: a sign-in that the user started is waiting for the service.
  * `unknown`: this account cannot read what the host holds, so the app is neither connected nor not.
  */
@@ -67,6 +68,8 @@ export interface MarketplaceAccount {
   outdated: boolean;
   /** How to get this account working again without a new connection: sign in again, or give a new key. */
   reconnect: "sign-in" | "key" | null;
+  /** This computer holds no sign-in for the account any more, so it cannot reach the service until the user signs in again. */
+  signedOut: boolean;
   check: MarketplaceAccountCheck;
 }
 

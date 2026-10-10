@@ -1,5 +1,11 @@
 import { pluginLinkText } from "@openbot/contracts/plugin-links";
 import {
+  Alert,
+  AlertActions,
+  AlertContent,
+  AlertDescription,
+  AlertIcon,
+  AlertTitle,
   Button,
   ConfirmDialog,
   ExternalLink,
@@ -13,6 +19,7 @@ import {
   Plug,
   SettingsSection,
   Text,
+  TriangleAlert,
 } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js";
@@ -80,6 +87,11 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
   const model = () => props.scope.model;
   const plugin = () => props.app.plugin;
   const accounts = () => model().appConnections(props.app);
+  /** The accounts that this computer cannot sign in for any more, which the user can sign in to again. */
+  const signedOut = () =>
+    model().canConnectApps()
+      ? accounts().filter((account) => account.signedOut && account.reconnect === "sign-in")
+      : [];
   /** The account the user asked to disconnect, held while the confirmation is on screen. */
   const [removing, setRemoving] = createSignal<MarketplaceAccount | null>(null);
   /* The access controls need each agent's choices, read once when the page shows an account. */
@@ -152,6 +164,31 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
         }
       />
       <AppsReadNotice scope={props.scope} />
+      {/* Like the GitHub page: the sign-in is gone, and the way back is one press away. */}
+      <For each={signedOut()}>
+        {(account) => (
+          <Alert tone="warning">
+            <AlertIcon>
+              <TriangleAlert />
+            </AlertIcon>
+            <AlertContent>
+              <AlertTitle>{t("marketplace.account.signedOutTitle", { name: account.name })}</AlertTitle>
+              <AlertDescription>{t("marketplace.account.signedOutDescription")}</AlertDescription>
+            </AlertContent>
+            <AlertActions>
+              <Button
+                type="button"
+                size="sm"
+                disabled={model().accountBusy(account.id) || model().appBusy(props.app.id)}
+                aria-label={t("marketplace.account.signInNamed", { name: account.name })}
+                onClick={() => void model().reconnectAccount(props.app, account.id)}
+              >
+                {t("marketplace.account.signIn")}
+              </Button>
+            </AlertActions>
+          </Alert>
+        )}
+      </For>
       <AllowForAgent scope={props.scope} app={props.app} />
       <Show when={plugin().prompts.length > 0}>
         <TryCard

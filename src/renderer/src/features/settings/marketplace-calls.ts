@@ -38,6 +38,11 @@ export interface MarketplaceCalls {
      * the browser client, whose sign-in ends through its abort signal.
      */
     cancelMcpSignIn?: SkillsPort["agent"]["cancelMcpSignIn"];
+    /**
+     * Whether this computer holds a sign-in for each http row, yes or no. Absent: the client cannot
+     * tell, so an account is not marked as signed out. A joined server answers an empty list.
+     */
+    listMcpSignIns?: SkillsPort["agent"]["listMcpSignIns"];
   };
   /** `serverId` absent: this computer, which is also the only place an installed agent is updated. */
   addAgent: (input: InstallMarketplaceAgentInput, serverId: string | undefined) => Promise<AddedAgent>;

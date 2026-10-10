@@ -433,6 +433,10 @@ export const messages = defineMessages("marketplace", {
     other: "Works. {count} tools are available.",
   },
   "marketplace.account.failed": "Does not work. {reason}",
+  "marketplace.account.signedOut": "Signed out. Sign in again to use this account.",
+  "marketplace.account.signedOutTitle": "Sign in to {name} again",
+  "marketplace.account.signedOutDescription":
+    "This computer no longer holds the sign-in, so agents cannot use this account until you sign in again.",
   "marketplace.account.signIn": "Sign in again",
   "marketplace.account.signInNamed": "Sign in again to {name}",
   "marketplace.account.changeKey": "Change key",

@@ -268,6 +268,9 @@ function CheckLine(props: { account: MarketplaceAccount }) {
           </ItemDescription>
         )}
       </Match>
+      <Match when={props.account.check.phase === "idle" && props.account.signedOut}>
+        <ItemDescription class="marketplace-account-failed">{t("marketplace.account.signedOut")}</ItemDescription>
+      </Match>
       <Match when={props.account.check.phase === "failed" && props.account.check}>
         {(check) => (
           <ItemDescription class="marketplace-account-failed">
@@ -332,7 +335,8 @@ function AccountRow(props: {
   const account = () => props.account;
   const [renaming, setRenaming] = createSignal(false);
   const busy = () => model().accountBusy(account().id) || model().appBusy(props.app.id);
-  const failed = () => account().check.phase === "failed";
+  /** A check that failed, or a sign-in that is gone: the way back in is the main action of the row. */
+  const failed = () => account().check.phase === "failed" || account().signedOut;
   return (
     <Item class="settings-modal-row marketplace-account" role="group" aria-label={account().name}>
       <ItemContent>

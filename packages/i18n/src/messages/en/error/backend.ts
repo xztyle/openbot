@@ -45,6 +45,10 @@ export const messages = defineMessages("error.backend", {
   "error.backend.eventCheckTemplateBoolean": "“{name}” must be true or false.",
   "error.backend.eventCheckTemplateProgram":
     "The program for this template does not match the reviewed version. Nothing was installed.",
+  "error.backend.eventCheckTemplatePicker":
+    "“{name}” holds a choice that this setting cannot use. Pick the conversations again.",
+  "error.backend.eventCheckDiscoverUnsupported":
+    "This event check cannot list choices. Update it to the latest version of its template, and keep its program as it is.",
   "error.backend.eventCheckTemplateCurrent": "This event check already uses the latest version of its template.",
   "error.backend.eventCheckTemplateNotLinked": "This event check did not come from a template.",
   "error.backend.eventsUnavailable": "Events are not available on this host.",

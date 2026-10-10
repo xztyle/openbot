@@ -69,6 +69,13 @@ export async function loadWatcherCatalog(
       throw new Error(`Watcher ${slug} program holds a secret-looking value.`);
     const file = `${slug}${extname(source.program)}`;
     const digest = createHash("sha256").update(program).digest("hex");
+    // A picker lists its options by running the program with `discover: true`. A program that never
+    // reads that input would run a normal check instead, so the build refuses the pairing.
+    const pickers = Array.isArray(source.configuration)
+      ? source.configuration.filter((field) => isDynamicRecord(field) && field.picker !== undefined)
+      : [];
+    if (pickers.length > 0 && !/\bdiscover\b/u.test(program.toString("utf8")))
+      throw new Error(`Watcher ${slug} declares a picker, but its program has no discovery.`);
     const { arguments: args, program: _name, earlierPrograms: earlierSource, ...rest } = source;
     // Earlier versions stay byte for byte, so a check that still runs one can be linked, then updated.
     const earlierPrograms: { version: string; file: string; digest: string }[] = [];
@@ -125,8 +132,9 @@ async function proveInstallable(templates: EventCheckTemplate[], files: Generate
           timezone: "UTC",
           intervalSeconds: template.intervalSeconds,
           accountActorIds: [],
+          // A picker value has a strict shape, so its default (empty, or valid) goes in as it is.
           configuration: Object.fromEntries(
-            template.configuration.map((field) => [field.name, field.value || "sample"]),
+            template.configuration.map((field) => [field.name, field.picker ? field.value : field.value || "sample"]),
           ),
         },
         new Date(),

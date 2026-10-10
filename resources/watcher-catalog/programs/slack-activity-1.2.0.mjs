@@ -6,8 +6,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // Read-only Slack check. Every request is a GET to the official Web API.
 // One run does all its work and prints one page: it either covers the whole recent
 // window or fails with a safe message. It never prints a partial window.
-// With `discover: true` in the input it does not check for events. It lists the conversations of
-// the token's user, so that a person can pick them in the app instead of copying IDs.
 const API = "https://slack.com/api/";
 const MAX_INPUT_BYTES = 65536;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -22,17 +20,6 @@ const MAX_CONTEXT_GROUPS = 10;
 const MAX_NAME_LOOKUPS = 12;
 const MAX_KEYWORDS = 10;
 const MAX_CHANNELS = 15;
-const MAX_RULES = 50;
-const MAX_OPTIONS = 1000;
-const MAX_LABEL = 80;
-const MAX_DESCRIPTION = 120;
-const MAX_DM_LOOKUPS = 60;
-const MAX_RESOLVE_PAGES = 5;
-const CONVERSATION_ID = /^[CGD][A-Z0-9]{2,20}$/;
-const USER_ID = /^[UW][A-Z0-9]{2,20}$/;
-// What a rule can ask for in a conversation: every new message, or only those that mention the person.
-const RULE_MODES = new Set(["all", "mentions"]);
-const CONVERSATION_TYPES = "public_channel,private_channel,im,mpim";
 const MAX_TEXT = 300;
 const MAX_COOLDOWN_MS = 3600 * 1000;
 const DEFAULT_COOLDOWN_MS = 60 * 1000;
@@ -134,27 +121,6 @@ function readList(value) {
 }
 
 /**
- * `ID:mode` pairs separated by commas, such as C012ABCDE:all,D012ABCDE:mentions. A conversation that
- * is listed twice is a mistake, so it is refused and not merged.
- */
-export function readConversationRules(value) {
-  const rules = [];
-  const seen = new Set();
-  for (const entry of readList(value)) {
-    const parts = entry.split(":").map((part) => part.trim());
-    requireCondition(
-      parts.length === 2 && CONVERSATION_ID.test(parts[0]) && RULE_MODES.has(parts[1]),
-      "conversationRules must be pairs of a conversation ID and a mode (all or mentions), such as C012ABCDE:mentions.",
-    );
-    requireCondition(!seen.has(parts[0]), "conversationRules lists a conversation twice.");
-    seen.add(parts[0]);
-    rules.push({ id: parts[0], mode: parts[1] });
-  }
-  requireCondition(rules.length <= MAX_RULES, `conversationRules can hold at most ${MAX_RULES} conversations.`);
-  return rules;
-}
-
-/**
  * The private variable holds one of two things. An app user token starts with xoxp-. A browser token
  * starts with xoxc- and only works together with the browser's `d` cookie (it starts with xoxd-), so
  * the value is the token, a semicolon, and the cookie: xoxc-...; d=xoxd-...
@@ -194,21 +160,6 @@ function apiBase(config) {
   return `https://${config.workspaceDomain}/api/`;
 }
 
-function readUserId(value) {
-  const userId = typeof value === "string" ? value.trim() : "";
-  requireCondition(USER_ID.test(userId), "Missing or invalid userId.");
-  return userId;
-}
-
-function readWorkspaceDomain(value) {
-  const workspaceDomain = typeof value === "string" ? value.trim().toLowerCase() : "";
-  requireCondition(
-    workspaceDomain === "" || /^[a-z0-9][a-z0-9-]*(\.enterprise)?\.slack\.com$/.test(workspaceDomain),
-    "workspaceDomain must be a slack.com address, such as example.slack.com.",
-  );
-  return workspaceDomain;
-}
-
 export function readConfiguration(input) {
   requireCondition(isRecord(input), "Expected a JSON object.");
   requireCondition(
@@ -217,8 +168,13 @@ export function readConfiguration(input) {
   );
   const instanceId = typeof input.instanceId === "string" ? input.instanceId.trim() : "";
   requireCondition(instanceId.length > 0 && instanceId.length <= 128, "Missing or invalid instanceId.");
-  const userId = readUserId(input.userId);
-  const workspaceDomain = readWorkspaceDomain(input.workspaceDomain);
+  const userId = typeof input.userId === "string" ? input.userId.trim() : "";
+  requireCondition(/^[UW][A-Z0-9]{2,20}$/.test(userId), "Missing or invalid userId.");
+  const workspaceDomain = typeof input.workspaceDomain === "string" ? input.workspaceDomain.trim().toLowerCase() : "";
+  requireCondition(
+    workspaceDomain === "" || /^[a-z0-9][a-z0-9-]*(\.enterprise)?\.slack\.com$/.test(workspaceDomain),
+    "workspaceDomain must be a slack.com address, such as example.slack.com.",
+  );
   const config = {
     instanceId,
     userId,
@@ -229,7 +185,6 @@ export function readConfiguration(input) {
     includeThreadReplies: readFlag(input.includeThreadReplies, "includeThreadReplies", false),
     keywords: readList(input.keywords),
     channelIds: readList(input.channelIds),
-    conversationRules: readConversationRules(input.conversationRules),
     maxConversations: readInteger(input.maxConversations, "maxConversations", 30, 1, 100),
     contextMessages: readInteger(input.contextMessages, "contextMessages", 8, 0, 20),
     maxRequests: readInteger(input.maxRequests, "maxRequests", 80, 4, 200),
@@ -242,18 +197,14 @@ export function readConfiguration(input) {
   );
   requireCondition(config.channelIds.length <= MAX_CHANNELS, `channelIds can hold at most ${MAX_CHANNELS} channels.`);
   requireCondition(
-    config.channelIds.every((id) => CONVERSATION_ID.test(id)),
+    config.channelIds.every((id) => /^[CGD][A-Z0-9]{2,20}$/.test(id)),
     "channelIds must be Slack channel IDs.",
   );
   config.channelIds = [...new Set(config.channelIds)];
-  // A chosen conversation is read whatever the other switches say, so a rule alone is enough to run.
   if (config.watchChannels)
-    requireCondition(
-      config.channelIds.length > 0 || config.conversationRules.length > 0,
-      "watchChannels needs at least one channel ID in channelIds.",
-    );
+    requireCondition(config.channelIds.length > 0, "watchChannels needs at least one channel ID in channelIds.");
   requireCondition(
-    config.watchMentions || config.watchDirectMessages || config.watchChannels || config.conversationRules.length > 0,
+    config.watchMentions || config.watchDirectMessages || config.watchChannels,
     "Turn on at least one of watchMentions, watchDirectMessages or watchChannels.",
   );
   return config;
@@ -422,18 +373,13 @@ function nextCursor(body) {
   return typeof cursor === "string" && cursor.length > 0 ? cursor : null;
 }
 
-const STOP = Symbol("stop");
-
-/**
- * Follows Slack cursors until the list ends. A repeated cursor is an error, never a silent stop.
- * A page handler that answers STOP ends the walk: it has all it needs.
- */
+/** Follows Slack cursors until the list ends. A repeated cursor is an error, never a silent stop. */
 async function cursorPages(ctx, method, params, onPage) {
   let cursor = null;
   const seen = new Set();
   while (true) {
     const body = await call(ctx, method, { ...params, cursor });
-    if ((await onPage(body)) === STOP) return;
+    await onPage(body);
     const next = nextCursor(body);
     if (!next) return;
     requireCondition(!seen.has(next) && next !== cursor, "Slack pagination did not advance.");
@@ -612,19 +558,8 @@ export function createRotationStore(directory) {
   };
 }
 
-/** Whether the text of a message mentions the person: `<@U012ABCDE>`, or the older `<@U012ABCDE|name>`. */
-function mentionsUser(message, userId) {
-  const text = typeof message.text === "string" ? message.text : "";
-  return text.includes(`<@${userId}>`) || text.includes(`<@${userId}|`);
-}
-
-/**
- * Reads one conversation's recent messages, and the threads that had new replies. With `mode` set to
- * "mentions" only a message that mentions the person is kept. A thread is still opened when its first
- * message does not, because a reply can.
- */
-async function collectHistory(ctx, collector, window, channel, kind, mode = "all") {
-  const wanted = (message) => mode === "all" || mentionsUser(message, ctx.config.userId);
+/** Reads one conversation's recent messages, and the threads that had new replies. */
+async function collectHistory(ctx, collector, window, channel, kind) {
   const oldest = ctx.config.includeThreadReplies
     ? window.since - ctx.config.threadLookbackHours * 3600 * 1000
     : window.since;
@@ -642,7 +577,7 @@ async function collectHistory(ctx, collector, window, channel, kind, mode = "all
       requireCondition(Array.isArray(body.messages), "Unexpected Slack response.");
       for (const message of body.messages) {
         if (!isContent(message)) continue;
-        if (inWindow(message, window) && wanted(message)) collector.add(toItem(message, channel, kind));
+        if (inWindow(message, window)) collector.add(toItem(message, channel, kind));
         if (
           ctx.config.includeThreadReplies &&
           message.thread_ts === message.ts &&
@@ -668,8 +603,7 @@ async function collectHistory(ctx, collector, window, channel, kind, mode = "all
       (body) => {
         requireCondition(Array.isArray(body.messages), "Unexpected Slack response.");
         for (const message of body.messages) {
-          if (!isContent(message) || message.ts === threadTs || !inWindow(message, window) || !wanted(message))
-            continue;
+          if (!isContent(message) || message.ts === threadTs || !inWindow(message, window)) continue;
           collector.add(toItem(message, channel, "thread", { threadTs }));
         }
       },
@@ -677,25 +611,19 @@ async function collectHistory(ctx, collector, window, channel, kind, mode = "all
   }
 }
 
-/** The display name of a person, or null when Slack has none. A failed request is thrown. */
-async function fetchPersonName(ctx, id) {
-  const body = await call(ctx, "users.info", { user: id });
-  const profile = isRecord(body.user) && isRecord(body.user.profile) ? body.user.profile : {};
-  for (const candidate of [profile.display_name, profile.real_name, body.user?.real_name, body.user?.name]) {
-    const name = preview(candidate);
-    if (name) return name.slice(0, 80);
-  }
-  return null;
-}
-
 /** The display name of a person, or null. Best effort: a failed lookup never fails a check. */
 async function personName(ctx, id) {
   try {
-    return await fetchPersonName(ctx, id);
+    const body = await call(ctx, "users.info", { user: id });
+    const profile = isRecord(body.user) && isRecord(body.user.profile) ? body.user.profile : {};
+    for (const candidate of [profile.display_name, profile.real_name, body.user?.real_name, body.user?.name]) {
+      const name = preview(candidate);
+      if (name) return name.slice(0, 80);
+    }
   } catch {
     // Names are a convenience.
-    return null;
   }
+  return null;
 }
 
 /**
@@ -785,218 +713,6 @@ async function channelName(ctx, id) {
   return isRecord(body.channel) && typeof body.channel.name === "string" ? body.channel.name : undefined;
 }
 
-/** What a conversation is, from the fields that Slack puts on it. */
-function conversationKind(channel) {
-  if (channel.is_im === true) return "dm";
-  if (channel.is_mpim === true) return "group_dm";
-  return channel.is_private === true || channel.is_group === true ? "private_channel" : "channel";
-}
-
-/**
- * The name and kind of each chosen conversation. One walk over the conversations of the person
- * answers most of them with a few requests, and it stops once it has them all. A conversation that
- * it does not list, such as a public channel the person has not joined, is asked for by itself.
- */
-async function resolveConversations(ctx, ids) {
-  const known = new Map();
-  const wanted = new Set(ids.filter((id) => !id.startsWith("D")));
-  for (const id of ids) if (id.startsWith("D")) known.set(id, { id, name: undefined, kind: "dm" });
-  if (wanted.size > 0) {
-    let pages = 0;
-    try {
-      await cursorPages(
-        ctx,
-        "users.conversations",
-        { types: CONVERSATION_TYPES, exclude_archived: "true", limit: PAGE_SIZE },
-        (body) => {
-          pages += 1;
-          if (!Array.isArray(body.channels)) return STOP;
-          for (const channel of body.channels)
-            if (isRecord(channel) && wanted.has(channel.id))
-              known.set(channel.id, {
-                id: channel.id,
-                name: typeof channel.name === "string" ? channel.name : undefined,
-                kind: conversationKind(channel),
-              });
-          return [...wanted].every((id) => known.has(id)) || pages >= MAX_RESOLVE_PAGES ? STOP : undefined;
-        },
-      );
-    } catch (error) {
-      // A rate limit stops the whole check. Any other failure falls back to asking for each one.
-      if (error instanceof WatcherError && error.code === "rate_limited") throw error;
-    }
-  }
-  for (const id of ids) {
-    if (known.has(id)) continue;
-    const body = await call(ctx, "conversations.info", { channel: id });
-    const channel = isRecord(body.channel) ? body.channel : {};
-    known.set(id, {
-      id,
-      name: typeof channel.name === "string" ? channel.name : undefined,
-      kind: conversationKind(channel),
-    });
-  }
-  return known;
-}
-
-// What the app shows in its pickers is text from Slack that other people wrote. It is cleaned here
-// and checked again by the host: no control or formatting character, and a short length.
-function cleanLabel(value, limit) {
-  const text =
-    typeof value === "string"
-      ? value
-          .replace(/[\t\n\r\u2028\u2029]/g, " ")
-          .replace(/[\p{Cc}\p{Cf}]/gu, "")
-          .replace(/\s+/g, " ")
-          .trim()
-      : "";
-  const characters = Array.from(text);
-  return characters.length > limit ? `${characters.slice(0, limit - 1).join("")}…` : text;
-}
-
-/** A group conversation is named `mpdm-alice--bob--carol-1` by Slack. The label lists the people. */
-function groupLabel(name) {
-  const plain = typeof name === "string" ? name.replace(/^mpdm-/, "").replace(/-\d+$/, "") : "";
-  return cleanLabel(plain.split("--").filter(Boolean).join(", "), MAX_LABEL);
-}
-
-/** The display names of some people, as far as the request cap and Slack allow. Any failure ends the lookups. */
-async function lookupNames(ctx, userIds) {
-  const names = new Map();
-  for (const id of userIds.slice(0, MAX_DM_LOOKUPS)) {
-    if (ctx.requests >= ctx.config.maxRequests) break;
-    try {
-      const name = await fetchPersonName(ctx, id);
-      if (name) names.set(id, name);
-    } catch {
-      // A rate limit already saved its cooldown. A missing scope fails every lookup. Labels keep the ID.
-      break;
-    }
-  }
-  return names;
-}
-
-const GROUP_ORDER = ["channel", "private_channel", "dm", "group_dm"];
-
-function readDiscoveryConfiguration(input) {
-  requireCondition(isRecord(input), "Expected a JSON object.");
-  const instanceId = typeof input.instanceId === "string" ? input.instanceId.trim() : "";
-  requireCondition(instanceId.length <= 128, "Missing or invalid instanceId.");
-  const userId = typeof input.userId === "string" ? input.userId.trim() : "";
-  return {
-    // A draft has no instance yet. Its requests share one cooldown, as they share one token.
-    instanceId: instanceId || "discovery",
-    userId: userId ? readUserId(userId) : "",
-    workspaceDomain: readWorkspaceDomain(input.workspaceDomain),
-    maxRequests: readInteger(input.maxRequests, "maxRequests", 80, 4, 200),
-  };
-}
-
-/**
- * The conversations that the token's user is in, for a picker: public and private channels, direct
- * messages and group direct messages. The list is bounded and cleaned. It sends no secret and no message.
- */
-async function discoverConversations(ctx) {
-  const auth = await call(ctx, "auth.test", {});
-  requireCondition(
-    ctx.config.userId === "" || auth.user_id === ctx.config.userId,
-    "The Slack token does not belong to the configured userId.",
-  );
-  const found = [];
-  let truncated = false;
-  await cursorPages(
-    ctx,
-    "users.conversations",
-    { types: CONVERSATION_TYPES, exclude_archived: "true", limit: PAGE_SIZE },
-    (body) => {
-      requireCondition(Array.isArray(body.channels), "Unexpected Slack response.", "upstream");
-      for (const channel of body.channels) {
-        if (!isRecord(channel) || typeof channel.id !== "string" || !CONVERSATION_ID.test(channel.id)) continue;
-        if (channel.is_archived === true || channel.is_user_deleted === true) continue;
-        if (found.length >= MAX_OPTIONS) {
-          truncated = true;
-          return STOP;
-        }
-        found.push({ channel, group: conversationKind(channel) });
-      }
-      return undefined;
-    },
-  );
-  const partners = [
-    ...new Set(
-      found
-        .filter((entry) => entry.group === "dm" && typeof entry.channel.user === "string")
-        .map((entry) => entry.channel.user)
-        .filter((id) => USER_ID.test(id)),
-    ),
-  ];
-  const names = await lookupNames(ctx, partners);
-  const options = found.map(({ channel, group }) => {
-    let label;
-    if (group === "dm") {
-      const partner = USER_ID.test(channel.user ?? "") ? channel.user : channel.id;
-      label = `@${cleanLabel(names.get(partner) ?? partner, MAX_LABEL - 1)}`;
-    } else if (group === "group_dm") {
-      label = groupLabel(channel.name) || channel.id;
-    } else {
-      label = `#${cleanLabel(channel.name, MAX_LABEL - 1) || channel.id}`;
-    }
-    const option = { id: channel.id, label, group };
-    if (group === "channel" || group === "private_channel") {
-      const description = cleanLabel(channel.purpose?.value || channel.topic?.value, MAX_DESCRIPTION);
-      if (description) option.description = description;
-    }
-    return option;
-  });
-  options.sort(
-    (a, b) =>
-      GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group) ||
-      a.label.localeCompare(b.label, "en", { sensitivity: "base" }) ||
-      (a.id < b.id ? -1 : 1),
-  );
-  const result = { options };
-  if (truncated) result.truncated = true;
-  // The descriptions are a convenience. Without them the list is far under the size that the host reads.
-  if (Buffer.byteLength(JSON.stringify(result)) > MAX_OUTPUT_BYTES)
-    for (const option of options) delete option.description;
-  while (Buffer.byteLength(JSON.stringify(result)) > MAX_OUTPUT_BYTES && options.length > 0) {
-    options.length = Math.floor(options.length / 2);
-    result.truncated = true;
-  }
-  return result;
-}
-
-/** Lists the conversations of the token's user. `runWatcher` calls it for an input with `discover: true`. */
-export async function runDiscovery(
-  input,
-  {
-    token = process.env.SLACK_USER_TOKEN,
-    fetchImpl = fetch,
-    now = () => Date.now(),
-    cooldownDir = defaultCooldownDirectory(),
-    store = createCooldownStore(cooldownDir),
-  } = {},
-) {
-  const credentials = readCredentials(token);
-  const config = tagged("config", () => readDiscoveryConfiguration(input));
-  requireCondition(
-    (await store.read(config.instanceId)) <= now(),
-    "Slack API cooldown is active; no request was sent.",
-    "rate_limited",
-  );
-  const ctx = {
-    config,
-    token: credentials.token,
-    cookie: credentials.cookie,
-    fetchImpl,
-    now,
-    store,
-    startedAt: now(),
-    requests: 0,
-  };
-  return discoverConversations(ctx);
-}
-
 export async function runWatcher(
   input,
   {
@@ -1008,7 +724,6 @@ export async function runWatcher(
     rotation = createRotationStore(cooldownDir),
   } = {},
 ) {
-  if (isRecord(input) && input.discover === true) return runDiscovery(input, { token, fetchImpl, now, store });
   const credentials = readCredentials(token);
   const config = tagged("config", () => readConfiguration(input));
   const window = readWindow(input);
@@ -1038,9 +753,7 @@ export async function runWatcher(
     for (const term of config.keywords) await collectSearch(ctx, collector, window, searchTerm(term), "keyword");
   }
   if (config.watchDirectMessages) {
-    // A direct conversation with a rule of its own is read by that rule, not as one of all.
-    const ruled = new Set(config.conversationRules.map((rule) => rule.id));
-    const found = (await listConversations(ctx)).filter((conversation) => !ruled.has(conversation.id));
+    const found = await listConversations(ctx);
     // With more conversations than one check may read, each check reads the next batch and the list starts over.
     const rotating = found.length > config.maxConversations;
     const checked = rotating ? await rotation.read(config.instanceId) : {};
@@ -1067,24 +780,8 @@ export async function runWatcher(
   }
   if (config.watchChannels) {
     for (const id of config.channelIds) {
-      // A conversation with a rule is read by its rule below.
-      if (config.conversationRules.some((rule) => rule.id === id)) continue;
       const channel = { id, name: await channelName(ctx, id) };
       await collectHistory(ctx, collector, window, channel, id.startsWith("D") ? "dm" : "channel");
-    }
-  }
-  if (config.conversationRules.length > 0) {
-    const known = await resolveConversations(
-      ctx,
-      config.conversationRules.map((rule) => rule.id),
-    );
-    for (const rule of config.conversationRules) {
-      const conversation = known.get(rule.id);
-      const channel = { id: rule.id, name: conversation?.name };
-      const direct = conversation?.kind === "dm" || conversation?.kind === "group_dm";
-      // A message that a person-only rule kept was found because it mentions the person.
-      const kind = direct ? conversation.kind : rule.mode === "mentions" ? "mention" : "channel";
-      await collectHistory(ctx, collector, window, channel, kind, rule.mode);
     }
   }
 

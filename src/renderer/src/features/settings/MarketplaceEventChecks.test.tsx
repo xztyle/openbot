@@ -228,7 +228,104 @@ describe("Marketplace event check templates", () => {
     expect(install.mock.calls[0]?.[0].configuration).toEqual({
       teamKey: "ENG",
       projectFilter: "",
+      watchedConversations: "",
       includeComments: "false",
+    });
+  });
+
+  describe("picker setting", () => {
+    const loadButton = () => screen.findByRole("button", { name: "Load my conversations" });
+
+    it("waits for the private value, loads the list with it once, and keeps it out of the install request", async () => {
+      const { install, templates, setEnvironment } = setup();
+      const discover = vi.spyOn(templates, "discover");
+      await openInstallDialog();
+
+      const load = await loadButton();
+      expect(load).toBeDisabled();
+      expect(screen.getByText(/Add Sample API token above to load your conversations/u)).toBeInTheDocument();
+      type(/^Account label/u, "Work");
+      type(/^Team key/u, "ENG");
+      const token = screen.getByLabelText("Sample API token");
+      expect(token).toHaveAttribute("type", "password");
+      fireEvent.input(token, { target: { value: SECRET } });
+      await waitFor(() => expect(load).toBeEnabled());
+
+      fireEvent.click(load);
+      expect(await screen.findByRole("checkbox", { name: "Watch #engineering" })).toBeInTheDocument();
+      expect(discover).toHaveBeenCalledTimes(1);
+      expect(discover).toHaveBeenCalledWith({
+        slug: PREVIEW_EVENT_CHECK_TEMPLATE.slug,
+        field: "watchedConversations",
+        configuration: { teamKey: "ENG", projectFilter: "", includeComments: "true" },
+        variables: { SAMPLE_API_TOKEN: SECRET },
+      });
+      // The list is in groups, and each group has its own title.
+      for (const title of ["Channels", "Private channels", "Direct messages"])
+        expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+
+      // Choose a channel and a direct message, and set one to only mentions.
+      await fireEvent.click(screen.getByRole("checkbox", { name: "Watch #engineering" }));
+      await fireEvent.click(screen.getByRole("checkbox", { name: "Watch @Alice Example" }));
+      const mode = await screen.findByRole("button", { name: /What to watch in @Alice Example/u });
+      // The list opens on pointer down, not on click.
+      await fireEvent.pointerDown(mode, { pointerType: "mouse", button: 0 });
+      fireEvent.click(await screen.findByRole("option", { name: "Only mentions" }));
+      await waitFor(() => expect(mode).toHaveTextContent("Only mentions"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Install on 1 agent" }));
+      await waitFor(() => expect(install).toHaveBeenCalledTimes(1));
+      expect(install.mock.calls[0]?.[0].configuration.watchedConversations).toBe("ENG:all,ALICE:mentions");
+      // The typed value is in no install request, and nothing was saved until the user presses Save.
+      expect(JSON.stringify(install.mock.calls)).not.toContain(SECRET);
+      expect(setEnvironment).not.toHaveBeenCalled();
+
+      // The next step opens with the value in its masked field, ready to save.
+      const field = await screen.findByLabelText(/SAMPLE_API_TOKEN/u);
+      expect(field).toHaveValue(SECRET);
+      expect(setEnvironment).not.toHaveBeenCalled();
+    });
+
+    it("searches the list, adds an ID by hand, and shows a saved ID that the list does not hold", async () => {
+      setup();
+      await openInstallDialog();
+      fireEvent.input(screen.getByLabelText("Sample API token"), { target: { value: SECRET } });
+      fireEvent.click(await loadButton());
+      await screen.findByRole("checkbox", { name: "Watch #design" });
+
+      fireEvent.input(screen.getByRole("searchbox", { name: "Search conversations" }), { target: { value: "ops" } });
+      await waitFor(() => expect(screen.queryByRole("checkbox", { name: "Watch #design" })).not.toBeInTheDocument());
+      expect(screen.getByRole("checkbox", { name: "Watch #operations" })).toBeInTheDocument();
+      fireEvent.input(screen.getByRole("searchbox", { name: "Search conversations" }), { target: { value: "zzz" } });
+      expect(await screen.findByText("No conversation matches your search.")).toBeInTheDocument();
+
+      const manual = screen.getByRole("textbox", { name: "Add by ID" });
+      fireEvent.input(manual, { target: { value: "not an id" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      expect(await screen.findByText(/This is not an ID/u)).toBeInTheDocument();
+      fireEvent.input(manual, { target: { value: "OLD123" } });
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+      // The list does not hold it, so it is shown apart, with a way to remove it.
+      expect(await screen.findByText("Chosen, not in the list")).toBeInTheDocument();
+      expect(screen.getByText("OLD123")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Remove OLD123" }));
+      await waitFor(() => expect(screen.queryByText("OLD123")).not.toBeInTheDocument());
+    });
+
+    it("says why the list could not load, with the text the host gave, and lets the user try again", async () => {
+      const { templates } = setup();
+      const discover = vi
+        .spyOn(templates, "discover")
+        .mockRejectedValueOnce(new Error("The app did not accept the saved credentials."));
+      await openInstallDialog();
+      fireEvent.input(screen.getByLabelText("Sample API token"), { target: { value: SECRET } });
+      fireEvent.click(await loadButton());
+      expect(await screen.findByText("The app did not accept the saved credentials.")).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Add by ID" })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Load my conversations" }));
+      expect(await screen.findByRole("checkbox", { name: "Watch #engineering" })).toBeInTheDocument();
+      expect(discover).toHaveBeenCalledTimes(2);
     });
   });
 });

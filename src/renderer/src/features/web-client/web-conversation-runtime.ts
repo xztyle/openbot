@@ -1,6 +1,7 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { AgentEvent, AttachmentImportEvent, AttachmentSummary, TeamRealtimeEvent } from "@openbot/contracts/ipc";
 import { runTeamEffect } from "@openbot/team-client";
+import { eventCheckTemplatesApi } from "@openbot/team-client/event-check-templates-api";
 import { eventChecksApi } from "@openbot/team-client/event-checks-api";
 import {
   deleteSharedTable,
@@ -39,6 +40,7 @@ function webHostAdmin(
 ): NonNullable<ConversationRuntime["admin"]> {
   // `request()` names the connected host at call time, so a host switch reaches the new host.
   const checks = eventChecksApi((...args) => request()(...args), apiChecksEnabled, deliveryChecksEnabled);
+  const templates = eventCheckTemplatesApi((...args) => request()(...args));
   const eventRoutines = webEventRoutinesApi((...args) => request()(...args));
   return {
     skills: {
@@ -75,6 +77,10 @@ function webHostAdmin(
     memories: (agentId, agentName) => webMemoriesPort(agentId, agentName, (...args) => request()(...args), onHostEvent),
     get eventChecks() {
       return checksEnabled?.() === true ? checks : undefined;
+    },
+    get eventCheckTemplates() {
+      // Same capability as the API checks: a host that has one has the other.
+      return checksEnabled?.() === true && apiChecksEnabled?.() === true ? templates : undefined;
     },
     get routines() {
       return eventsEnabled?.() === false

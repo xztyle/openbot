@@ -43,8 +43,13 @@ interface Deps {
   sleep?: (ms: number) => Promise<void>;
   cooldownDir?: string;
 }
+interface Discovery {
+  options: Array<{ id: string; label: string; group: string; description?: string }>;
+  truncated?: boolean;
+}
 interface Program {
   runWatcher(input: DynamicRecord, deps: Deps): Promise<Result>;
+  runDiscovery?(input: DynamicRecord, deps: Deps): Promise<Discovery>;
   snowflakeFromTime?(ms: number): string;
 }
 function isProgram(value: unknown): value is Program {
@@ -604,6 +609,436 @@ describe("slack-activity", () => {
     await expect(run(base, { fetchImpl, token: "" })).rejects.toThrow(/SLACK_USER_TOKEN/);
     expect(requests).toHaveLength(0);
   });
+
+  describe("conversation rules", () => {
+    const ruled = { ...base, watchMentions: "false", watchDirectMessages: "false" };
+    const mention = `<@${ME}>`;
+    /** A workspace where C200 is a channel, G300 a group conversation and D400 a direct conversation. */
+    function rulesWorkspace(request: Recorded) {
+      const method = methodOf(request);
+      const channel = request.url.searchParams.get("channel");
+      if (method === "users.conversations") {
+        return ok({
+          channels: [
+            { id: "C200", name: "ops", is_channel: true },
+            { id: "C201", name: "random", is_channel: true },
+            { id: "G300", name: "mpdm-ann--bob-1", is_mpim: true, is_group: true, is_private: true },
+            { id: "G301", name: "secret", is_group: true, is_private: true },
+            { id: "D400", is_im: true, user: "U222BBBB" },
+          ],
+        });
+      }
+      if (method === "conversations.history") {
+        const messages: Record<string, DynamicRecord[]> = {
+          C200: [
+            { ts: ts(300), text: `please look ${mention}`, user: "U222BBBB" },
+            { ts: ts(200), text: "unrelated chatter", user: "U333CCCC" },
+            { ts: ts(100), text: `<@${ME}|me> legacy mention form`, user: "U333CCCC" },
+          ],
+          C201: [{ ts: ts(250), text: "everything is shown", user: "U333CCCC" }],
+          G300: [
+            { ts: ts(280), text: "group without mention", user: "U222BBBB" },
+            { ts: ts(270), text: `group ${mention}`, user: "U222BBBB" },
+          ],
+          D400: [
+            { ts: ts(260), text: "dm without mention", user: "U222BBBB" },
+            { ts: ts(255), text: `dm ${mention}`, user: "U222BBBB" },
+          ],
+        };
+        return ok({ messages: messages[channel ?? ""] ?? [] });
+      }
+      return workspace(request);
+    }
+    const historyOf = (requests: Recorded[]) =>
+      requests.filter((request) => methodOf(request) === "conversations.history");
+
+    it("keeps only messages that mention the person in a mentions rule, and every message in an all rule", async () => {
+      const { requests, fetchImpl } = fakeFetch(rulesWorkspace);
+      const result = await run(
+        { ...ruled, conversationRules: "C200:mentions, C201:all,G300:mentions,D400:all" },
+        {
+          fetchImpl,
+        },
+      );
+      const byId = new Map(result.items.map((item) => [item.id, item]));
+      expect([...byId.keys()].sort()).toEqual(
+        [
+          `C200:${ts(300)}`,
+          `C200:${ts(100)}`,
+          `C201:${ts(250)}`,
+          `G300:${ts(270)}`,
+          `D400:${ts(260)}`,
+          `D400:${ts(255)}`,
+        ].sort(),
+      );
+      expect(byId.get(`C200:${ts(300)}`)).toMatchObject({ kind: "mention", channel: "C200", channelName: "ops" });
+      expect(byId.get(`C201:${ts(250)}`)).toMatchObject({ kind: "channel", channelName: "random" });
+      expect(byId.get(`G300:${ts(270)}`)).toMatchObject({ kind: "group_dm" });
+      expect(byId.get(`D400:${ts(255)}`)).toMatchObject({ kind: "dm" });
+      // One walk over the person's conversations names them all: no request for each one.
+      expect(requests.map(methodOf).filter((method) => method === "conversations.info")).toHaveLength(0);
+      expect(requests.map(methodOf).filter((method) => method === "users.conversations")).toHaveLength(1);
+      expect(historyOf(requests).map((request) => request.url.searchParams.get("channel"))).toEqual([
+        "C200",
+        "C201",
+        "G300",
+        "D400",
+      ]);
+      for (const request of requests) expect(request.httpMethod).toBe("GET");
+    });
+
+    it("runs on a rule alone, without any other switch", async () => {
+      const { fetchImpl } = fakeFetch(rulesWorkspace);
+      const result = await run({ ...ruled, conversationRules: "C201:all" }, { fetchImpl });
+      expect(result.items.map((item) => item.id)).toEqual([`C201:${ts(250)}`]);
+    });
+
+    it("lets a rule replace the generic direct message watch for its own conversation only", async () => {
+      const fake = fakeFetch((request) => {
+        if (methodOf(request) === "conversations.list")
+          return ok({
+            channels: [
+              { id: "D400", is_im: true },
+              { id: "D500", is_im: true },
+            ],
+          });
+        if (methodOf(request) === "conversations.history" && request.url.searchParams.get("channel") === "D500")
+          return ok({ messages: [{ ts: ts(120), text: "plain dm", user: "U333CCCC" }] });
+        return rulesWorkspace(request);
+      });
+      const result = await run(
+        { ...ruled, watchDirectMessages: "true", conversationRules: "D400:mentions" },
+        { fetchImpl: fake.fetchImpl },
+      );
+      expect(result.items.map((item) => item.id).sort()).toEqual([`D400:${ts(255)}`, `D500:${ts(120)}`].sort());
+      // D400 is read once, by its rule.
+      const reads = historyOf(fake.requests).map((request) => request.url.searchParams.get("channel"));
+      expect(reads.filter((id) => id === "D400")).toHaveLength(1);
+      expect(reads).toContain("D500");
+      // A direct conversation with a rule needs no name lookup request.
+      expect(fake.requests.some((request) => methodOf(request) === "conversations.info")).toBe(false);
+    });
+
+    it("keeps watchChannels and channelIds working, and lets a rule override the same ID", async () => {
+      const legacy = fakeFetch(rulesWorkspace);
+      const old = await run(
+        { ...ruled, watchChannels: "true", channelIds: "C200,C201" },
+        { fetchImpl: legacy.fetchImpl },
+      );
+      // Each listed ID behaves as "all", read the way the earlier version did: one info request each.
+      expect(old.items.filter((item) => item.channel === "C200")).toHaveLength(3);
+      expect(legacy.requests.filter((request) => methodOf(request) === "conversations.info")).toHaveLength(2);
+      expect(legacy.requests.some((request) => methodOf(request) === "users.conversations")).toBe(false);
+
+      const mixed = fakeFetch(rulesWorkspace);
+      const merged = await run(
+        { ...ruled, watchChannels: "true", channelIds: "C200,C201", conversationRules: "C200:mentions" },
+        { fetchImpl: mixed.fetchImpl },
+      );
+      expect(merged.items.filter((item) => item.channel === "C200")).toHaveLength(2);
+      expect(merged.items.filter((item) => item.channel === "C201")).toHaveLength(1);
+      expect(
+        historyOf(mixed.requests).filter((request) => request.url.searchParams.get("channel") === "C200"),
+      ).toHaveLength(1);
+    });
+
+    it("filters thread replies by mention too, and still opens a thread whose first message has none", async () => {
+      const parent = {
+        ts: ts(100),
+        thread_ts: ts(100),
+        reply_count: 2,
+        latest_reply: ts(300),
+        text: "parent",
+        user: "U444DDDD",
+      };
+      const fake = fakeFetch((request) => {
+        const method = methodOf(request);
+        if (method === "conversations.history") return ok({ messages: [parent] });
+        if (method === "conversations.replies")
+          return ok({
+            messages: [
+              parent,
+              { ts: ts(200), thread_ts: ts(100), text: "reply without mention", user: "U777GGGG" },
+              { ts: ts(300), thread_ts: ts(100), text: `reply ${mention}`, user: "U777GGGG" },
+            ],
+          });
+        return rulesWorkspace(request);
+      });
+      const result = await run(
+        { ...ruled, conversationRules: "C200:mentions", includeThreadReplies: "true" },
+        { fetchImpl: fake.fetchImpl },
+      );
+      expect(result.items.map((item) => [item.kind, item.id])).toEqual([["thread", `C200:${ts(300)}`]]);
+    });
+
+    it("asks for a conversation that the person has not joined, and treats a missing list as no answer", async () => {
+      const fake = fakeFetch((request) => {
+        const method = methodOf(request);
+        if (method === "users.conversations") return ok({ channels: [{ id: "C201", name: "random" }] });
+        if (method === "conversations.info")
+          return ok({ channel: { id: request.url.searchParams.get("channel"), name: "public-elsewhere" } });
+        return rulesWorkspace(request);
+      });
+      const result = await run({ ...ruled, conversationRules: "C201:all,C900:all" }, { fetchImpl: fake.fetchImpl });
+      expect(fake.requests.filter((request) => methodOf(request) === "conversations.info")).toHaveLength(1);
+      expect(result.items.find((item) => item.channel === "C900")).toBeUndefined();
+      // The list ended without C900, so it was asked for by its ID.
+      expect(
+        fake.requests
+          .filter((request) => methodOf(request) === "conversations.info")
+          .map((request) => request.url.searchParams.get("channel")),
+      ).toEqual(["C900"]);
+    });
+
+    it("stops with a rate limit when the walk over conversations is limited, and keeps its cooldown", async () => {
+      const limited = fakeFetch((request) =>
+        methodOf(request) === "users.conversations"
+          ? { status: 429, headers: { "Retry-After": "30" }, body: { ok: false } }
+          : rulesWorkspace(request),
+      );
+      expect(
+        await failureOf(run({ ...ruled, conversationRules: "C200:all" }, { fetchImpl: limited.fetchImpl })),
+      ).toMatch(/rate limit/);
+      expect(limited.requests.filter((request) => methodOf(request) === "conversations.history")).toHaveLength(0);
+      const after = fakeFetch(rulesWorkspace);
+      expect(await failureOf(run({ ...ruled, conversationRules: "C200:all" }, { fetchImpl: after.fetchImpl }))).toMatch(
+        /cooldown is active/,
+      );
+      expect(after.requests).toHaveLength(0);
+    });
+
+    it("rejects a malformed rule list before any request", async () => {
+      const { requests, fetchImpl } = fakeFetch(rulesWorkspace);
+      const tooMany = Array.from({ length: 51 }, (_, index) => `C${String(1000 + index)}:all`).join(",");
+      const bad: Array<[string, RegExp]> = [
+        ["C200", /conversationRules/],
+        ["C200:everything", /conversationRules/],
+        ["C200:all:mentions", /conversationRules/],
+        ["general:all", /conversationRules/],
+        ["C200:all,C200:mentions", /twice/],
+        [tooMany, /at most 50/],
+      ];
+      for (const [rules, pattern] of bad)
+        await expect(run({ ...ruled, conversationRules: rules }, { fetchImpl })).rejects.toThrow(pattern);
+      expect(requests).toHaveLength(0);
+      // An empty value changes nothing: the earlier settings decide.
+      await expect(run({ ...ruled, conversationRules: "" }, { fetchImpl })).rejects.toThrow(/at least one/);
+    });
+  });
+
+  describe("conversation discovery", () => {
+    const discoverInput = { instanceId: "disc", userId: ME, discover: true };
+    const discover = (input: DynamicRecord, deps: Deps) => {
+      if (!program.runDiscovery) throw new Error("Expected a discovery function.");
+      return program.runDiscovery(input, {
+        token: SLACK_TOKEN,
+        now: () => UNTIL,
+        cooldownDir: join(temporary, "cooldowns"),
+        ...deps,
+      });
+    };
+    const codeOf = async (attempt: Promise<unknown>): Promise<string | undefined> => {
+      const error = await attempt.then(
+        () => null,
+        (reason: unknown) => reason,
+      );
+      return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : undefined;
+    };
+    const names: Record<string, string> = { U222BBBB: "Pat Doe", U333CCCC: "" };
+    function directory(request: Recorded) {
+      const method = methodOf(request);
+      if (method === "auth.test") return ok({ user_id: ME });
+      if (method === "users.info") {
+        const id = request.url.searchParams.get("user") ?? "";
+        return ok({
+          user: { id, profile: { display_name: names[id] ?? "" }, real_name: id === "U333CCCC" ? "Qu\u202einn" : "" },
+        });
+      }
+      if (method === "users.conversations") {
+        const cursor = request.url.searchParams.get("cursor");
+        expect(request.url.searchParams.get("types")).toBe("public_channel,private_channel,im,mpim");
+        expect(request.url.searchParams.get("exclude_archived")).toBe("true");
+        if (!cursor)
+          return ok({
+            channels: [
+              { id: "C200", name: "general", is_channel: true, purpose: { value: "Company\u0007 news\n and more" } },
+              { id: "G301", name: "secret-club", is_group: true, is_private: true },
+              { id: "D400", is_im: true, user: "U222BBBB" },
+              { id: "Cold", name: "not-an-id" },
+              { id: "C999", name: "archived", is_archived: true },
+            ],
+            response_metadata: { next_cursor: "page-2" },
+          });
+        return ok({
+          channels: [
+            { id: "G300", name: "mpdm-ann--bob--cy-1", is_mpim: true, is_group: true, is_private: true },
+            { id: "D500", is_im: true, user: "U333CCCC" },
+            { id: "D600", is_im: true, user: "U999ZZZZ", is_user_deleted: true },
+            { id: "C201", name: `ev‮il\u0000${"x".repeat(200)}`, is_channel: true },
+          ],
+        });
+      }
+      return { status: 500, body: { ok: false } };
+    }
+
+    it("lists the conversations of the token's user in groups, across pages, with clean labels", async () => {
+      const { requests, fetchImpl } = fakeFetch(directory);
+      const result = await discover(discoverInput, { fetchImpl });
+      expect(result.truncated).toBeUndefined();
+      expect(result.options.map((option) => [option.id, option.group, option.label])).toEqual([
+        ["C201", "channel", `#evil${"x".repeat(74)}…`],
+        ["C200", "channel", "#general"],
+        ["G301", "private_channel", "#secret-club"],
+        ["D400", "dm", "@Pat Doe"],
+        ["D500", "dm", "@Quinn"],
+        ["G300", "group_dm", "ann, bob, cy"],
+      ]);
+      expect(result.options.find((option) => option.id === "C200")?.description).toBe("Company news and more");
+      for (const option of result.options) {
+        expect(option.label).not.toMatch(/\p{Cc}|\p{Cf}/u);
+        expect(option.label.length).toBeLessThanOrEqual(80);
+      }
+      // The partner of each direct conversation is asked for once. The deleted user is not.
+      expect(
+        requests
+          .filter((request) => methodOf(request) === "users.info")
+          .map((request) => request.url.searchParams.get("user"))
+          .sort(),
+      ).toEqual(["U222BBBB", "U333CCCC"]);
+      // Only read methods, one GET each, with the token in a header and never in a URL.
+      for (const request of requests) {
+        expect(request.httpMethod).toBe("GET");
+        expect(READ_METHODS.has(methodOf(request)) || methodOf(request) === "users.conversations").toBe(true);
+        expect(request.url.toString()).not.toContain(TOKEN);
+      }
+      expect(JSON.stringify(result)).not.toContain(TOKEN);
+    });
+
+    it("is what runWatcher does for an input with discover true, and it reads no messages", async () => {
+      const { requests, fetchImpl } = fakeFetch(directory);
+      const result = await run(discoverInput, { fetchImpl });
+      expect(result).toMatchObject({ options: expect.arrayContaining([expect.objectContaining({ id: "C200" })]) });
+      expect(result).not.toHaveProperty("items");
+      expect(requests.map(methodOf).filter((method) => method.startsWith("conversations."))).toEqual([]);
+    });
+
+    it("needs no window, no instance name and no user ID", async () => {
+      const { fetchImpl } = fakeFetch(directory);
+      const result = await discover({ discover: true }, { fetchImpl });
+      expect(result.options.length).toBeGreaterThan(0);
+    });
+
+    it("falls back to the user ID when names cannot be read, and never fails for it", async () => {
+      const { requests, fetchImpl } = fakeFetch((request) =>
+        methodOf(request) === "users.info" ? { body: { ok: false, error: "missing_scope" } } : directory(request),
+      );
+      const result = await discover(discoverInput, { fetchImpl });
+      expect(result.options.filter((option) => option.group === "dm").map((option) => option.label)).toEqual([
+        "@U222BBBB",
+        "@U333CCCC",
+      ]);
+      // A failed lookup ends the lookups: the second person is not asked for.
+      expect(requests.filter((request) => methodOf(request) === "users.info")).toHaveLength(1);
+    });
+
+    it("caps the number of name lookups and the number of options", async () => {
+      const people = Array.from({ length: 70 }, (_, index) => ({
+        id: `D${String(1000 + index)}`,
+        is_im: true,
+        user: `U${String(1000 + index)}`,
+      }));
+      const many = fakeFetch((request) => {
+        if (methodOf(request) === "users.conversations") return ok({ channels: people });
+        return directory(request);
+      });
+      const result = await discover({ ...discoverInput, maxRequests: "200" }, { fetchImpl: many.fetchImpl });
+      expect(result.options).toHaveLength(70);
+      expect(many.requests.filter((request) => methodOf(request) === "users.info")).toHaveLength(60);
+
+      const channels = Array.from({ length: 1005 }, (_, index) => ({
+        id: `C${String(10000 + index)}`,
+        name: `chan-${String(index).padStart(4, "0")}`,
+        is_channel: true,
+      }));
+      const huge = fakeFetch((request) => {
+        if (methodOf(request) !== "users.conversations") return directory(request);
+        const start = Number(request.url.searchParams.get("cursor") ?? "0");
+        const page = channels.slice(start, start + 200);
+        return ok({
+          channels: page,
+          response_metadata: { next_cursor: start + 200 < channels.length ? String(start + 200) : "" },
+        });
+      });
+      const capped = await discover({ ...discoverInput, maxRequests: "200" }, { fetchImpl: huge.fetchImpl });
+      expect(capped.options).toHaveLength(1000);
+      expect(capped.truncated).toBe(true);
+    });
+
+    it("reports the same error codes as the check", async () => {
+      const auth = fakeFetch(() => ({ body: { ok: false, error: "invalid_auth" } }));
+      expect(await codeOf(discover(discoverInput, { fetchImpl: auth.fetchImpl }))).toBe("auth");
+      const scope = fakeFetch((request) =>
+        methodOf(request) === "users.conversations"
+          ? { body: { ok: false, error: "missing_scope" } }
+          : directory(request),
+      );
+      expect(await codeOf(discover(discoverInput, { fetchImpl: scope.fetchImpl }))).toBe("auth");
+      const upstream = fakeFetch(() => ({ status: 503, body: { ok: false } }));
+      expect(await codeOf(discover(discoverInput, { fetchImpl: upstream.fetchImpl }))).toBe("upstream");
+      const limited = fakeFetch(() => ({ status: 429, headers: { "Retry-After": "7" }, body: { ok: false } }));
+      expect(
+        await codeOf(discover({ ...discoverInput, instanceId: "limited" }, { fetchImpl: limited.fetchImpl })),
+      ).toBe("rate_limited");
+      expect(await codeOf(discover({ ...discoverInput, userId: "nobody" }, { fetchImpl: auth.fetchImpl }))).toBe(
+        "config",
+      );
+      expect(
+        await codeOf(
+          discover({ ...discoverInput, workspaceDomain: "evil.example.com" }, { fetchImpl: auth.fetchImpl }),
+        ),
+      ).toBe("config");
+      expect(await codeOf(discover(discoverInput, { fetchImpl: auth.fetchImpl, token: "" }))).toBe("auth");
+      expect(await codeOf(discover(discoverInput, { fetchImpl: auth.fetchImpl, token: "xoxb-not-a-user-token" }))).toBe(
+        "auth",
+      );
+      const other = fakeFetch((request) =>
+        methodOf(request) === "auth.test" ? ok({ user_id: "U999OTHER" }) : directory(request),
+      );
+      expect(await failureOf(discover(discoverInput, { fetchImpl: other.fetchImpl }))).toMatch(/does not belong/);
+      // The request cap and the time budget are the check's own.
+      const capped = fakeFetch(directory);
+      expect(
+        await codeOf(
+          discover({ ...discoverInput, maxRequests: "4", workspaceDomain: "" }, { fetchImpl: capped.fetchImpl }),
+        ),
+      ).toBeUndefined();
+      let clock = UNTIL;
+      const slow = fakeFetch((request) => {
+        clock += 31_000;
+        return directory(request);
+      });
+      expect(await codeOf(discover(discoverInput, { fetchImpl: slow.fetchImpl, now: () => clock }))).toBe("config");
+    });
+
+    it("saves the cooldown that Slack asks for and sends nothing while it lasts", async () => {
+      const limited = fakeFetch(() => ({ status: 429, headers: { "Retry-After": "30" }, body: { ok: false } }));
+      expect(await codeOf(discover(discoverInput, { fetchImpl: limited.fetchImpl }))).toBe("rate_limited");
+      const after = fakeFetch(directory);
+      expect(await codeOf(discover(discoverInput, { fetchImpl: after.fetchImpl }))).toBe("rate_limited");
+      expect(after.requests).toHaveLength(0);
+      // The check of the same instance shares the cooldown.
+      expect(await failureOf(run({ ...base, instanceId: "disc" }, { fetchImpl: after.fetchImpl }))).toMatch(/cooldown/);
+    });
+
+    it("never prints the token or server text in a failure", async () => {
+      const attempts = [
+        fakeFetch(() => ({ body: { ok: false, error: `${SERVER_TEXT} ${TOKEN}` } })),
+        fakeFetch(() => ({ status: 500, body: { message: `${SERVER_TEXT} ${TOKEN}` } })),
+      ];
+      for (const attempt of attempts)
+        expectSafe(await failureOf(discover(discoverInput, { fetchImpl: attempt.fetchImpl })));
+    });
+  });
 });
 
 describe("discord-activity", () => {
@@ -932,6 +1367,16 @@ describe("program process contract", () => {
       expect(oversized).toMatchObject({ code: 1, stdout: "" });
     });
   }
+  it("slack discovery fails with one code and no stdout, and never echoes a malformed token", async () => {
+    const secret = "not-a-token-SPAWN-SECRET-789";
+    const run = await execute(SLACK_FILE, JSON.stringify({ discover: true }), { SLACK_USER_TOKEN: secret });
+    expect(run).toMatchObject({ code: 1, stdout: "" });
+    expect(run.stderr).not.toContain(secret);
+    expect(run.stderr.trim().split("\n")).toEqual([
+      expect.stringContaining("Slack activity watcher: "),
+      "openbot-error: auth",
+    ]);
+  });
 });
 
 describe("template catalog", () => {
@@ -969,5 +1414,50 @@ describe("template catalog", () => {
     expect(files.find((file) => file.path === "programs/slack-activity.mjs")?.content.toString()).toBe(
       await readFile(SLACK_FILE, "utf8"),
     );
+  });
+
+  it("ships the picker setting, keeps the released program, and refuses a picker whose program has no discovery", async () => {
+    const source = join(temporary, "source");
+    await mkdir(join(source, "watchers"), { recursive: true });
+    await writeFile(
+      join(source, "catalog.json"),
+      JSON.stringify({ schemaVersion: 1, catalogVersion: "v1", order: ["slack-activity"] }),
+    );
+    await cp(join(WATCHERS, "slack-activity"), join(source, "watchers", "slack-activity"), { recursive: true });
+    const { templates, files } = await loadWatcherCatalog(source);
+    const [slack] = templates;
+    // A client from before pickers decodes this field as text, so the type stays text.
+    const rules = slack?.configuration.find((field) => field.name === "conversationRules");
+    expect(rules).toMatchObject({
+      type: "text",
+      required: false,
+      value: "",
+      picker: {
+        optionsFrom: "program",
+        modes: [
+          { value: "all", label: expect.any(String) },
+          { value: "mentions", label: expect.any(String) },
+        ],
+      },
+    });
+    expect(slack?.version).toBe("1.3.0");
+    expect(slack?.earlierPrograms?.map((program) => program.version)).toEqual([
+      "1.0.0",
+      "1.0.1",
+      "1.1.0",
+      "1.1.1",
+      "1.2.0",
+    ]);
+    // Every released program stays byte for byte, so a check that runs one can still be linked.
+    const earlier = files.find((file) => file.path === "programs/slack-activity-1.2.0.mjs");
+    expect(
+      createHash("sha256")
+        .update(earlier?.content ?? "")
+        .digest("hex"),
+    ).toBe("d245334c1ae670396e6f66d422fee3524a979d1e17dac648e900b6097c9131c0");
+
+    const blind = join(source, "watchers", "slack-activity", "program.mjs");
+    await writeFile(blind, "process.stdout.write('{}');\n");
+    await expect(loadWatcherCatalog(source)).rejects.toThrow(/picker/);
   });
 });

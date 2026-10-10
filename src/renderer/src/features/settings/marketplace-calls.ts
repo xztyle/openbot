@@ -79,6 +79,8 @@ function desktopEventChecks(serverId?: string): MarketplaceEventChecks {
       install: (input) => templates().install(input, serverId),
       update: (input) => templates().update(input, serverId),
       adopt: (input) => templates().adopt(input, serverId),
+      discover: (input) => templates().discover(input, serverId),
+      discoverCheck: (input) => templates().discoverCheck(input, serverId),
     },
     checks: {
       environment: (input) => checks().environment(input, serverId),

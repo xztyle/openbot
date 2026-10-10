@@ -1,5 +1,8 @@
 import {
+  decodeEventCheckDiscoverCheckInput,
+  decodeEventCheckPickerOptions,
   decodeEventCheckTemplateAdoptInput,
+  decodeEventCheckTemplateDiscoverInput,
   decodeEventCheckTemplateInstallInput,
   decodeEventCheckTemplateList,
 } from "@openbot/contracts/event-check-templates";
@@ -82,6 +85,15 @@ export function eventCheckIpcHandlers(
       adopt: scopedHandler(decodeEventCheckTemplateAdoptInput, {
         local: (v) => runCauseEffect(checks.templateAdopt(v, LOCAL_USER_ACTOR)),
         remote: (v, id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.adopt, v, decodeEventCheck),
+      }),
+      // The payload of `discover` can hold private values. The decoder keeps them out of its messages.
+      discover: scopedHandler(decodeEventCheckTemplateDiscoverInput, {
+        local: (v) => runCauseEffect(checks.templateDiscover(v, LOCAL_USER_ACTOR)),
+        remote: (v, id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.discover, v, decodeEventCheckPickerOptions),
+      }),
+      discoverCheck: scopedHandler(decodeEventCheckDiscoverCheckInput, {
+        local: (v) => runCauseEffect(checks.discoverCheck(v, LOCAL_USER_ACTOR)),
+        remote: (v, id) => templates(id, EVENT_CHECK_TEMPLATES_ROUTES.discoverCheck, v, decodeEventCheckPickerOptions),
       }),
     },
     eventChecks: {

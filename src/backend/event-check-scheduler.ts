@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { EventCheckTemplate, EventCheckTemplateInstallInput } from "@openbot/contracts/event-check-templates";
+import {
+  decodeEventCheckPickerOptions,
+  type EventCheckDiscoverCheckInput,
+  type EventCheckPickerOptions,
+  type EventCheckTemplate,
+  type EventCheckTemplateDiscoverInput,
+  type EventCheckTemplateInstallInput,
+} from "@openbot/contracts/event-check-templates";
 import type {
   EventCheck,
   EventCheckEnvironmentInput,
@@ -9,7 +16,7 @@ import type {
 } from "@openbot/contracts/event-checks";
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { sourceText } from "@openbot/i18n/source";
-import { containsCredential } from "@openbot/logging";
+import { containsCredential, registerSecretValue } from "@openbot/logging";
 import { nextEventCheckOccurrence } from "@openbot/team-client/event-check-schedule";
 import { Cause, Effect, type Scope, Semaphore } from "effect";
 import type { EventCheckApiReader } from "./event-check-api-reader";
@@ -21,7 +28,7 @@ import type {
   EventCheckReader,
   EventCheckReadSession,
 } from "./event-check-reader";
-import { EventCheckRefusal } from "./event-check-refusal";
+import { EventCheckRefusal, refusalMessage } from "./event-check-refusal";
 import {
   CHECK_MAX_BYTES,
   CHECK_MAX_ITEMS,
@@ -32,7 +39,7 @@ import {
 } from "./event-check-result";
 import { type CheckOutbox, EVENT_CHECK_FAILURE_NOTICE_STREAK, type EventCheckStore } from "./event-check-store";
 import type { EventCheckTemplates } from "./event-check-templates";
-import { mcpFailure, mcpSync } from "./mcp-effects";
+import { type McpOperationError, mcpFailure, mcpSync } from "./mcp-effects";
 import type { RoutineDueSource, RoutineTimer } from "./routine-timer";
 import { authorOf, plainName, type SecurityActor } from "./security-actor";
 import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "./security-audit-log";
@@ -95,6 +102,8 @@ function keepTemplateLink(input: EventCheckInput, previous: EventCheck | null): 
 /** Owns deterministic polls and durable wakeups. Empty checks never enter the agent runtime. */
 export class EventCheckScheduler implements RoutineDueSource {
   readonly #mutations = Semaphore.makeUnsafe(1);
+  /** Listing choices starts a program each time, so only a few run at once. The others wait. */
+  readonly #discoveries = Semaphore.makeUnsafe(2);
   readonly #running = new Set<string>();
   readonly #delivering = new Set<string>();
   /** When each check handed work to its agent in the last hour. Memory only: the cap is soft. */
@@ -151,6 +160,66 @@ export class EventCheckScheduler implements RoutineDueSource {
     });
     return yield* this.#save(prepared, actor, "event-check.template-link");
   });
+  /**
+   * The choices of a picker setting, for an install form that has no check yet. The typed private
+   * values are used for this one call, in memory. They are not stored, not audited, and not part of
+   * any error text. Only a person asks: an agent tool does not reach this method, and it refuses an
+   * agent actor besides.
+   */
+  readonly templateDiscover = Effect.fn("EventCheck.templateDiscover")(function* (
+    this: EventCheckScheduler,
+    input: EventCheckTemplateDiscoverInput,
+    actor: SecurityActor,
+  ) {
+    const prepared = yield* mcpSync(() => {
+      if (actor.kind === "agent")
+        throw new EventCheckRefusal(sourceText("error.backend.eventCheckDiscoverUnsupported"));
+      const templates = this.#templates();
+      const draft = templates.draftDiscovery(templates.get(input.slug), input);
+      // A draft value never reaches a log through this path, and a stray copy of it would be masked.
+      // A short value is not registered: a typed "x" must not mask every x in every later log line.
+      for (const value of Object.values(draft.variables)) registerSecretValue(value);
+      return draft;
+    });
+    return yield* this.#discoveries.withPermit(
+      this.#apiReader()
+        .discover(prepared.name, prepared.digest, prepared.variables, prepared.configuration)
+        .pipe(Effect.flatMap(this.#pickerOptions), Effect.mapError(this.#discoveryFailure)),
+    );
+  });
+  /** The same for an installed check, with the private values that it holds and the user approved. */
+  readonly discoverCheck = Effect.fn("EventCheck.discoverCheck")(function* (
+    this: EventCheckScheduler,
+    input: EventCheckDiscoverCheckInput,
+    actor: SecurityActor,
+  ) {
+    const check = yield* mcpSync(() => {
+      if (actor.kind === "agent")
+        throw new EventCheckRefusal(sourceText("error.backend.eventCheckDiscoverUnsupported"));
+      const check = this.options.store.get(input.agentId, input.id);
+      this.#templates().discoverable(check, input.field);
+      return check;
+    }).pipe(Effect.mapError(this.#discoveryFailure));
+    return yield* this.#discoveries.withPermit(
+      this.#apiReader()
+        .read(check, (session) => session.call("discover", { discover: true }))
+        .pipe(Effect.flatMap(this.#pickerOptions), Effect.mapError(this.#discoveryFailure)),
+    );
+  });
+  /** What a program printed, read as untrusted text: a wrong shape fails with the generic text. */
+  readonly #pickerOptions = (value: unknown): Effect.Effect<EventCheckPickerOptions, McpOperationError> =>
+    mcpSync(() => decodeEventCheckPickerOptions(value));
+  /**
+   * A failure of a discovery as a refusal with fixed text: the program's code text, a refusal that
+   * names a step, or the generic text. Program output and values never reach the message.
+   */
+  readonly #discoveryFailure = (failure: McpOperationError): McpOperationError => {
+    const message =
+      refusalMessage(failure) ??
+      eventCheckProgramError(failure)?.message ??
+      sourceText("error.backend.eventCheckFailed");
+    return mcpFailure(new EventCheckRefusal(message));
+  };
   environment = (input: { agentId: string; id: string }) =>
     mcpSync(() => this.#apiReader().environment.status(this.options.store.get(input.agentId, input.id)));
   /** Gives program files that earlier releases stored values for the approval of the program they had. */

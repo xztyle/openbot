@@ -36,6 +36,12 @@ Rules for a new template:
   program byte for byte as `programs/<slug>-<version>.<ext>` and lists its digest in the generated
   catalog. The build fails when an earlier program equals the current one.
 
+A `configuration` field can set `"picker": { "optionsFrom": "program", "modes": [{ "value", "label" }] }`
+beside `"type": "text"`. The value is then a list of `ID:mode` pairs, and the program must answer
+an input with `discover: true` by printing `{ "options": [{ "id", "label", "group", "description"? }] }`
+instead of a check result. The build fails when a template has a picker and the program never reads
+`discover`. Keep the type `text`: a client from before pickers shows such a field as a text box.
+
 `watcher.json` fields: `slug`, `name`, `tagline`, `description`, `version`, `creatorName`,
 `iconUrl`, `websiteUrl`, `app` (the Apps listing it reads from, or `null`), `program` (file name in
 the template directory), `earlierPrograms` (optional), `accountLabelHint`, `variables` (`name`, `label`, `hint`, `docsUrl`),

@@ -1,6 +1,9 @@
 import type {
+  EventCheckDiscoverCheckInput,
+  EventCheckPickerOptions,
   EventCheckTemplate,
   EventCheckTemplateApi,
+  EventCheckTemplateDiscoverInput,
   EventCheckTemplateInstallInput,
 } from "@openbot/contracts/event-check-templates";
 import type { EventCheck, EventCheckApi } from "@openbot/contracts/event-checks";
@@ -71,6 +74,14 @@ export interface EventCheckCatalog {
   refresh: (agentId: string) => Promise<void>;
   /** The check api of the host, for the private variables. */
   checkApi: () => EventCheckApi | undefined;
+  /** Whether the host lists the choices of a picker setting. When it does not, the setting is a text box. */
+  canDiscover: () => boolean;
+  /**
+   * The choices for an install that has no check yet. The typed private values go with the call and
+   * are used once by the host: this module keeps nothing of them.
+   */
+  discover: (input: EventCheckTemplateDiscoverInput) => Promise<EventCheckPickerOptions>;
+  discoverCheck: (input: EventCheckDiscoverCheckInput) => Promise<EventCheckPickerOptions>;
 }
 
 /**
@@ -199,5 +210,16 @@ export function createEventCheckCatalog(options: {
     },
     refresh,
     checkApi: () => options.source()?.checks,
+    canDiscover: () => typeof options.source()?.templates.discover === "function",
+    discover: (input) => {
+      const discover = required().templates.discover;
+      if (!discover) throw new Error("This host cannot list choices.");
+      return discover(input);
+    },
+    discoverCheck: (input) => {
+      const discover = required().templates.discoverCheck;
+      if (!discover) throw new Error("This host cannot list choices.");
+      return discover(input);
+    },
   };
 }

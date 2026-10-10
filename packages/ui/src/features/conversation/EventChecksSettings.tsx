@@ -1,4 +1,9 @@
 import type {
+  EventCheckPickerOptions,
+  EventCheckTemplate,
+  EventCheckTemplatePicker,
+} from "@openbot/contracts/event-check-templates";
+import type {
   EventCheck,
   EventCheckAccount,
   EventCheckApi,
@@ -36,13 +41,25 @@ import { SettingsBackIcon, SettingsForwardIcon } from "../../components/Settings
 import { useText } from "../../text";
 import { EventCheckEnvironmentSettings } from "./EventCheckEnvironmentSettings";
 import { itemFiltersFromText, itemFiltersToText } from "./event-check-item-filters";
+import type { PickerBinding } from "./event-check-picker";
 import { RoutineSchedulePicker } from "./RoutineSchedulePicker";
 import type { RoutineScheduleDraft } from "./routine-schedule-draft";
 import { ROUTINE_SAVED_DRAFT_KINDS, routineScheduleFromDraft, routineScheduleToDraft } from "./routine-schedule-saved";
 import { WatcherProgramFields } from "./WatcherProgramFields";
 
+/**
+ * What an editor needs from the templates of the host to show a setting as a picker: the templates,
+ * to learn which settings are pickers, and the discovery of an installed check. Absent: every
+ * setting is a text box.
+ */
+export interface EventCheckPickerSource {
+  list(): Promise<EventCheckTemplate[]>;
+  discoverCheck?(input: { agentId: string; id: string; field: string }): Promise<EventCheckPickerOptions>;
+}
 interface Props {
   api: EventCheckApi;
+  /** Lets a setting that its template declares as a picker be filled from a list. */
+  pickers?: EventCheckPickerSource | undefined;
   apiProgramsAvailable?: boolean;
   /** Whether the host keeps the delivery setting. Defaults to what the API says, then to yes. */
   deliveryAvailable?: boolean;
@@ -70,6 +87,10 @@ interface State {
   confirmDelete: boolean;
   busy: boolean;
   error: string;
+  /** The picker settings of the open check, with what is missing before its list can load. */
+  pickers: Record<string, EventCheckTemplatePicker>;
+  /** The labels of the private variables that are not set yet, or null while that is not known. */
+  missingVariables: string[] | null;
 }
 /** The list answer carries `health`. It is not part of what the user edits or saves. */
 function withoutHealth(check: EventCheck): EventCheck {
@@ -199,6 +220,8 @@ export function EventChecksSettings(props: Props) {
     confirmDelete: false,
     busy: false,
     error: "",
+    pickers: {},
+    missingVariables: null,
   });
   const scrollFades = createScrollFades();
   onCleanup(scrollFades.stop);
@@ -253,6 +276,37 @@ export function EventChecksSettings(props: Props) {
         .catch(fail);
     },
   );
+  // The templates are read once for this panel, and only for a check that came from one.
+  let templatesRead: Promise<EventCheckTemplate[]> | null = null;
+  async function loadPickers(check: EventCheck) {
+    const link = check.source.kind === "api" ? check.source.template : undefined;
+    const source = props.pickers;
+    if (!source?.discoverCheck || !link || check.source.kind !== "api") return;
+    try {
+      templatesRead ??= source.list();
+      const template = (await templatesRead).find((entry) => entry.slug === link.slug);
+      // Only the version that the template ships has a program that can list its choices.
+      if (!template || template.version !== link.version) return;
+      const configured = new Set(check.source.configuration.map((field) => field.name));
+      const pickers: Record<string, EventCheckTemplatePicker> = {};
+      for (const field of template.configuration)
+        if (field.picker && configured.has(field.name)) pickers[field.name] = field.picker;
+      if (Object.keys(pickers).length === 0) return;
+      const status = props.api.environment ? await props.api.environment({ agentId: check.agentId, id: check.id }) : [];
+      const ready = new Set(status.filter((entry) => entry.configured && !entry.reapprove).map((entry) => entry.name));
+      const missing = template.variables
+        .filter((variable) => !ready.has(variable.name))
+        .map((variable) => variable.label);
+      if (state.current?.value.id !== check.id) return;
+      setState((draft) => {
+        draft.pickers = pickers;
+        draft.missingVariables = missing;
+      });
+    } catch {
+      // The settings stay text boxes. Nothing here is needed to edit the check.
+      templatesRead = null;
+    }
+  }
   async function open(check?: EventCheck) {
     const next = editor(props.agentId, check, props.apiProgramsAvailable ?? Boolean(props.api.environment));
     setState((draft) => {
@@ -262,7 +316,10 @@ export function EventChecksSettings(props: Props) {
       draft.tools = [];
       draft.confirmDelete = false;
       draft.error = "";
+      draft.pickers = {};
+      draft.missingVariables = null;
     });
+    if (check?.id) void loadPickers(check);
     // A store write is visible only after the next flush, so the new editor, not the store, names the account.
     if (next.value.source.kind === "mcp" && next.value.source.connectionId)
       await loadTools(next.value.source.connectionId);
@@ -356,6 +413,28 @@ export function EventChecksSettings(props: Props) {
     return (
       saved.schedule.kind === "interval" ||
       JSON.stringify(snapshot(current.calendar)) !== JSON.stringify(routineScheduleToDraft(saved.schedule))
+    );
+  };
+  /** Each picker setting of the open check, with the call that reads its list from the saved check. */
+  const pickerBindings = (): Record<string, PickerBinding> => {
+    const discover = props.pickers?.discoverCheck;
+    const id = state.current?.value.id;
+    const missing = state.missingVariables;
+    if (!discover || !id) return {};
+    return Object.fromEntries(
+      Object.entries(state.pickers).map(([field, picker]) => [
+        field,
+        {
+          picker,
+          load: () => discover({ agentId: props.agentId, id, field }),
+          blocked:
+            missing === null
+              ? undefined
+              : missing.length > 0
+                ? t("agentSettings.eventCheck.picker.needSaved", { name: missing.join(", ") })
+                : undefined,
+        },
+      ]),
     );
   };
   const sourceChange = (key: "argumentsJson" | "cursorArgument" | "nextCursorPointer", value: string) =>
@@ -654,6 +733,7 @@ export function EventChecksSettings(props: Props) {
                 <Show when={apiSource(current().value.source)}>
                   {(source) => (
                     <WatcherProgramFields
+                      pickers={pickerBindings()}
                       source={source()}
                       change={(value) =>
                         setState((draft) => {

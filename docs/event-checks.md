@@ -237,6 +237,31 @@ The link is not part of what the check reads, so adding or removing it keeps the
 Hosts that support this advertise `event-check-templates-v1`. Older clients do not show the tab and
 ignore the link. Installing needs an owner or admin, as for every event check route.
 
+### Picker settings
+
+A template can declare a text setting as a **picker**. The setting stays one text, such as
+`C012ABCDE:mentions,D012ABCDE:all`: an ID and a mode, separated by commas. The install form and
+the check editor then show a list of choices that the program reads from the person's own account,
+and each choice has a mode (for Slack: all messages, or only mentions). A person can also add an ID
+by hand, and a saved ID that the list does not show stays visible.
+
+- The list comes from the template's own program. The host runs the reviewed program with
+  `discover: true` and the same fixed environment, time limit, output limit and error codes as a
+  check. The program prints `{"options": [{"id", "label", "group", "description"?}]}`. The host
+  reads that as untrusted text: it checks the shape, cleans the labels and keeps at most 1000.
+- Only a person asks for a list. There is no agent tool for it, and the host refuses an agent.
+- For an installed check, the host uses the private values that the check holds and that you
+  approved, and only when the check runs the current reviewed program of its template.
+- For an install that does not exist yet, the install form sends the typed private values with
+  the request. The host uses them once, in memory. It does not store, log or audit them, and it does
+  not return them. You save them for the check in the next step.
+- The setting keeps `type: "text"` on the wire, with a `picker` object beside it. A client from
+  before pickers shows a plain text box.
+
+Hosts that have it answer `POST /v1/event-check-templates/discover` and
+`/v1/event-check-templates/discover-check` under the same `fork-host-v1` capability as the other
+template routes.
+
 ### Templates that ship
 
 | Template | Reads | Credential (private variable) |

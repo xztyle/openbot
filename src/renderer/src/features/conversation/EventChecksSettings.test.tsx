@@ -3,6 +3,7 @@ import { decodeEventCheckInput } from "@openbot/contracts/event-checks";
 import { EventChecksSettings } from "@openbot/ui/features/conversation/EventChecksSettings";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { expect, it, vi } from "vitest";
+import { createMockEventCheckTemplates, PREVIEW_EVENT_CHECK_TEMPLATE } from "../../preview/mock-event-check-templates";
 import { createMockEventChecks } from "../../preview/mock-event-checks";
 
 const input: EventCheckInput = {
@@ -185,4 +186,77 @@ it("marks a check that keeps failing in the list, and saves its item filters onl
     digestSeconds: 0,
     itemFilters: [{ pointer: "/state", value: "open" }],
   });
+});
+
+it("fills a picker setting of a template check from its saved private value, and degrades to text without it", async () => {
+  const api = createMockEventChecks();
+  const templates = createMockEventCheckTemplates(api);
+  const preview = PREVIEW_EVENT_CHECK_TEMPLATE;
+  const check = await templates.install({
+    slug: preview.slug,
+    agentId: "chief",
+    name: "Sample",
+    accountLabel: "Work",
+    instruction: "Look.",
+    timezone: "UTC",
+    intervalSeconds: 60,
+    accountActorIds: [],
+    configuration: { teamKey: "ENG", watchedConversations: "OLD123:all" },
+  });
+  const discoverCheck = vi.spyOn(templates, "discoverCheck");
+  render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={templates}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  // The private value is missing, so the list says what it needs and does not call the host.
+  const load = await screen.findByRole("button", { name: "Load my conversations" });
+  await waitFor(() => expect(load).toBeDisabled());
+  expect(screen.getByText(/Save SAMPLE_API_TOKEN|Save Sample API token/u)).toBeInTheDocument();
+  // A saved ID that the list does not hold is shown, so it can be kept or removed.
+  expect(screen.getByText("OLD123")).toBeInTheDocument();
+  await fireEvent.input(await screen.findByLabelText(/SAMPLE_API_TOKEN — Missing/), { target: { value: "tok-1" } });
+  await fireEvent.click(screen.getByRole("button", { name: "Save value" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Load my conversations" })).toBeEnabled());
+  await fireEvent.click(screen.getByRole("button", { name: "Load my conversations" }));
+  expect(await screen.findByRole("checkbox", { name: "Watch #design" })).toBeInTheDocument();
+  expect(discoverCheck).toHaveBeenCalledWith({ agentId: "chief", id: check.id, field: "watchedConversations" });
+  await fireEvent.click(screen.getByRole("checkbox", { name: "Watch #design" }));
+  const save = vi.spyOn(api, "save");
+  await fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  const saved = save.mock.calls[0]?.[0].source;
+  expect(
+    saved?.kind === "api" && saved.configuration.find((field) => field.name === "watchedConversations"),
+  ).toMatchObject({
+    value: "OLD123:all,DES:all",
+  });
+});
+
+it("shows a picker setting as plain text when the host offers no picker", async () => {
+  const api = createMockEventChecks();
+  const templates = createMockEventCheckTemplates(api);
+  await templates.install({
+    slug: PREVIEW_EVENT_CHECK_TEMPLATE.slug,
+    agentId: "chief",
+    name: "Sample",
+    accountLabel: "Work",
+    instruction: "Look.",
+    timezone: "UTC",
+    intervalSeconds: 60,
+    accountActorIds: [],
+    configuration: { teamKey: "ENG" },
+  });
+  render(() => (
+    <EventChecksSettings api={api} agentId="chief" onBack={vi.fn()} onClose={vi.fn()} onCountChange={vi.fn()} />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  expect(await screen.findByRole("textbox", { name: "Conversations to watch" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Load my conversations" })).toBeNull();
 });

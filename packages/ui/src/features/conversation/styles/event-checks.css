@@ -309,3 +309,135 @@
 .event-check-card > .event-check-config-field:last-child .settings-field {
   margin-bottom: 0;
 }
+
+/* A setting that is filled from a list the program reads from the person's account. */
+.event-check-picker {
+  display: grid;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.event-check-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2) var(--openbot-space-3);
+}
+
+.event-check-picker-note,
+.event-check-picker-error {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.event-check-picker-error {
+  color: var(--openbot-danger-text);
+}
+
+.event-check-picker-search {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+}
+
+.event-check-picker-search > .ui-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A long list scrolls in its own frame, so the form around it keeps its place. */
+.event-check-picker-scroll {
+  display: grid;
+  gap: var(--openbot-space-3);
+  max-height: 20rem;
+  overflow-y: auto;
+  padding: var(--openbot-space-2);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-surface);
+}
+
+.event-check-picker-group {
+  display: grid;
+  gap: var(--openbot-space-1);
+  min-width: 0;
+}
+
+.event-check-picker-group-title {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: 600;
+}
+
+.event-check-picker-list {
+  display: grid;
+  gap: var(--openbot-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A choice and its mode. On a narrow screen the mode goes under the name. */
+.event-check-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-1) var(--openbot-space-2);
+  min-width: 0;
+}
+
+.event-check-picker-choice {
+  display: flex;
+  flex: 1 1 14rem;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+}
+
+.event-check-picker-name {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.event-check-picker-mode {
+  min-width: 9rem;
+}
+
+.event-check-picker-manual {
+  display: grid;
+  gap: var(--openbot-space-1);
+}
+
+.event-check-picker-manual-row {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.event-check-picker-manual-row > .ui-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.event-check-picker-raw {
+  display: grid;
+  gap: var(--openbot-space-1);
+}
+
+/* The private values of an install that has no check yet, used once to load a list. */
+.marketplace-install-draft {
+  display: grid;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+}

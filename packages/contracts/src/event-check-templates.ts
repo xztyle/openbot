@@ -9,11 +9,31 @@ import {
 import { isDynamicRecord } from "./runtime-values";
 
 export const EVENT_CHECK_TEMPLATE_LIMIT = 100;
+/** The most conversations (or other options) one picker field can hold. */
+export const EVENT_CHECK_PICKER_MAX_ENTRIES = 50;
+/** The most options one discovery can list. A longer answer is refused, not cut. */
+export const EVENT_CHECK_PICKER_MAX_OPTIONS = 1000;
 export interface EventCheckTemplateVariable {
   name: string;
   label: string;
   hint: string;
   docsUrl: string | null;
+}
+/** One thing a person can ask for in an option of a picker, such as every message or only mentions. */
+export interface EventCheckTemplatePickerMode {
+  value: string;
+  label: string;
+}
+/**
+ * A text setting that a client can fill from a list. The value stays one text, `ID:mode,ID:mode`, so
+ * the program reads it the way it reads any other setting. A client that does not know `picker` shows
+ * the setting as the plain text field that it is.
+ */
+export interface EventCheckTemplatePicker {
+  /** The options come from the program itself: it runs with `discover: true` and lists them. */
+  optionsFrom: "program";
+  /** The modes an option can have, the first one being the default. */
+  modes: readonly EventCheckTemplatePickerMode[];
 }
 export interface EventCheckTemplateField {
   name: string;
@@ -24,6 +44,48 @@ export interface EventCheckTemplateField {
   required: boolean;
   /** `boolean` fields hold the text `true` or `false`, and the install dialog shows a switch. */
   type: "text" | "boolean";
+  /**
+   * Only on a `text` field. It stays `text` on the wire on purpose: a client from before pickers
+   * decodes the field and shows a text box, and a client that knows `picker` shows a list instead.
+   */
+  picker?: EventCheckTemplatePicker;
+}
+/** One entry of a picker value: the ID of an option and the mode that was chosen for it. */
+export interface EventCheckPickerEntry {
+  id: string;
+  mode: string;
+}
+/** One conversation (or other choice) that a program found for a picker. Text from another party: never markup. */
+export interface EventCheckPickerOption {
+  id: string;
+  label: string;
+  /** A short machine word the picker groups by, such as `channel` or `dm`. */
+  group: string;
+  description?: string;
+}
+export interface EventCheckPickerOptions {
+  options: EventCheckPickerOption[];
+  /** True when the program had more than it listed. */
+  truncated?: boolean;
+}
+/**
+ * A discovery for an install that does not exist yet. `variables` holds the private values the user
+ * typed in the dialog. The host uses them for this one call, in memory: it never stores, logs or
+ * audits them, and it never returns them.
+ */
+export interface EventCheckTemplateDiscoverInput {
+  slug: string;
+  /** The name of the picker field that the options are for. */
+  field: string;
+  /** The values of the other settings that the program reads, by name. */
+  configuration: Record<string, string>;
+  variables: Record<string, string>;
+}
+/** A discovery for an installed check: it uses the private values that the check already holds. */
+export interface EventCheckDiscoverCheckInput {
+  agentId: string;
+  id: string;
+  field: string;
 }
 /** An earlier version of a template's program. The host keeps it so a check that runs it can still be linked. */
 export interface EventCheckTemplateEarlierProgram {
@@ -77,6 +139,13 @@ export interface EventCheckTemplateApi {
   update(input: { agentId: string; id: string }): Promise<EventCheck>;
   /** Links an existing check to its template, when its program is exactly the template's program. */
   adopt(input: { agentId: string; id: string; slug: string }): Promise<EventCheck>;
+  /**
+   * Lists the options of a picker field before the check exists. Absent when the host or client has no
+   * pickers. The answer goes only to the person who asked.
+   */
+  discover?(input: EventCheckTemplateDiscoverInput): Promise<EventCheckPickerOptions>;
+  /** The same for an installed check, with the private values it holds. Absent when there are no pickers. */
+  discoverCheck?(input: EventCheckDiscoverCheckInput): Promise<EventCheckPickerOptions>;
 }
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -105,6 +174,46 @@ function decodeVariable(value: unknown): EventCheckTemplateVariable {
     docsUrl: link(value.docsUrl),
   };
 }
+const PICKER_MODE = /^[a-z][a-z0-9_-]{0,31}$/;
+const PICKER_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+const PICKER_GROUP = /^[a-z][a-z0-9_]{0,31}$/;
+function decodePicker(value: unknown): EventCheckTemplatePicker {
+  if (!isDynamicRecord(value) || value.optionsFrom !== "program") throw new Error("Invalid template picker.");
+  const modes = list(value.modes, 4, (entry): EventCheckTemplatePickerMode => {
+    if (!isDynamicRecord(entry)) throw new Error("Invalid template picker.");
+    const mode = text(entry.value, 32, true);
+    if (!PICKER_MODE.test(mode)) throw new Error("Invalid template picker.");
+    return { value: mode, label: text(entry.label, 64, true) };
+  });
+  if (modes.length === 0 || new Set(modes.map((mode) => mode.value)).size !== modes.length)
+    throw new Error("Invalid template picker.");
+  return { optionsFrom: "program", modes };
+}
+/**
+ * The entries of a picker value, `ID:mode,ID:mode`. An empty value has none. It throws on anything
+ * else: a mode that the picker does not declare, an ID twice, an ID that is not plain, or too many.
+ * The program reads the same text, so a value that passes here is one it can use.
+ */
+export function parseEventCheckPickerValue(value: string, picker: EventCheckTemplatePicker): EventCheckPickerEntry[] {
+  const trimmed = value.trim();
+  if (trimmed === "") return [];
+  const modes = new Set(picker.modes.map((mode) => mode.value));
+  const seen = new Set<string>();
+  const entries = trimmed.split(",").map((part): EventCheckPickerEntry => {
+    const pieces = part.split(":").map((piece) => piece.trim());
+    const [id, mode] = pieces;
+    if (pieces.length !== 2 || id === undefined || mode === undefined || !PICKER_ID.test(id) || !modes.has(mode))
+      throw new Error("Invalid picker value.");
+    if (seen.has(id)) throw new Error("Invalid picker value.");
+    seen.add(id);
+    return { id, mode };
+  });
+  if (entries.length > EVENT_CHECK_PICKER_MAX_ENTRIES) throw new Error("Invalid picker value.");
+  return entries;
+}
+export function formatEventCheckPickerValue(entries: readonly EventCheckPickerEntry[]): string {
+  return entries.map((entry) => `${entry.id}:${entry.mode}`).join(",");
+}
 function decodeField(value: unknown): EventCheckTemplateField {
   if (!isDynamicRecord(value) || typeof value.required !== "boolean") throw new Error("Invalid template field.");
   const name = text(value.name, 128, true);
@@ -114,6 +223,10 @@ function decodeField(value: unknown): EventCheckTemplateField {
   if (type !== "text" && type !== "boolean") throw new Error("Invalid template field.");
   const fieldValue = text(value.value, 8192);
   if (type === "boolean" && fieldValue !== "true" && fieldValue !== "false") throw new Error("Invalid template field.");
+  const picker = value.picker === undefined ? undefined : decodePicker(value.picker);
+  // A picker fills a text value. A boolean has nothing to pick, and a default must be a valid value.
+  if (picker && type !== "text") throw new Error("Invalid template field.");
+  if (picker) parseEventCheckPickerValue(fieldValue, picker);
   return {
     name,
     label: text(value.label, 256, true),
@@ -121,6 +234,7 @@ function decodeField(value: unknown): EventCheckTemplateField {
     value: fieldValue,
     required: value.required,
     type,
+    ...(picker ? { picker } : {}),
   };
 }
 const PROGRAM_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(mjs|js|py|sh)$/;
@@ -210,4 +324,85 @@ export function decodeEventCheckTemplateInstallInput(value: unknown): EventCheck
 export function decodeEventCheckTemplateAdoptInput(value: unknown): { agentId: string; id: string; slug: string } {
   if (!isDynamicRecord(value)) throw new Error("Invalid template link.");
   return { ...decodeEventCheckTarget(value), slug: slug(value.slug) };
+}
+
+const OPTION_LABEL_LIMIT = 120;
+const OPTION_DESCRIPTION_LIMIT = 200;
+/** Text from another party: no control or formatting character, one line, a bounded length. */
+function cleanOptionText(value: unknown, limit: number): string {
+  if (typeof value !== "string") throw new Error("Invalid picker option.");
+  const cleaned = value
+    .replace(/[\t\n\r\u2028\u2029]/g, " ")
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const characters = Array.from(cleaned);
+  return characters.length > limit ? `${characters.slice(0, limit - 1).join("")}…` : cleaned;
+}
+function decodePickerOption(value: unknown): EventCheckPickerOption {
+  if (!isDynamicRecord(value) || typeof value.id !== "string" || !PICKER_ID.test(value.id))
+    throw new Error("Invalid picker option.");
+  if (typeof value.group !== "string" || !PICKER_GROUP.test(value.group)) throw new Error("Invalid picker option.");
+  const label = cleanOptionText(value.label, OPTION_LABEL_LIMIT) || value.id;
+  const description =
+    value.description === undefined ? "" : cleanOptionText(value.description, OPTION_DESCRIPTION_LIMIT);
+  return { id: value.id, label, group: value.group, ...(description ? { description } : {}) };
+}
+/**
+ * What a program printed for a picker, read as untrusted text. A shape that is wrong is refused. A
+ * list that is too long is refused too, because a client would show a part and call it all. An ID
+ * that comes twice is kept once.
+ */
+export function decodeEventCheckPickerOptions(value: unknown): EventCheckPickerOptions {
+  if (!isDynamicRecord(value) || !Array.isArray(value.options) || value.options.length > EVENT_CHECK_PICKER_MAX_OPTIONS)
+    throw new Error("Invalid picker options.");
+  if (value.truncated !== undefined && typeof value.truncated !== "boolean") throw new Error("Invalid picker options.");
+  const seen = new Set<string>();
+  const options: EventCheckPickerOption[] = [];
+  for (const entry of value.options) {
+    const option = decodePickerOption(entry);
+    if (seen.has(option.id)) continue;
+    seen.add(option.id);
+    options.push(option);
+  }
+  return { options, ...(value.truncated === true ? { truncated: true } : {}) };
+}
+const NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+function valueMap(value: unknown, maximum: number, nameOk: (name: string) => boolean): Record<string, string> {
+  if (!isDynamicRecord(value)) throw new Error("Invalid template discovery.");
+  const entries = Object.entries(value);
+  if (entries.length > maximum) throw new Error("Invalid template discovery.");
+  const result: Record<string, string> = {};
+  for (const [name, entry] of entries) {
+    if (!nameOk(name) || ["__proto__", "constructor", "prototype"].includes(name) || typeof entry !== "string")
+      throw new Error("Invalid template discovery.");
+    // Never put the value in the message: it can be a private value.
+    if (entry.length > 8192) throw new Error("Invalid template discovery.");
+    result[name] = entry;
+  }
+  return result;
+}
+export function decodeEventCheckTemplateDiscoverInput(value: unknown): EventCheckTemplateDiscoverInput {
+  if (!isDynamicRecord(value)) throw new Error("Invalid template discovery.");
+  const field = text(value.field, 128, true);
+  if (!NAME.test(field)) throw new Error("Invalid template discovery.");
+  return {
+    slug: slug(value.slug),
+    field,
+    configuration: valueMap(value.configuration, 30, (name) => NAME.test(name)),
+    variables: valueMap(value.variables, 20, (name) => {
+      try {
+        environmentName(name);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  };
+}
+export function decodeEventCheckDiscoverCheckInput(value: unknown): EventCheckDiscoverCheckInput {
+  if (!isDynamicRecord(value)) throw new Error("Invalid template discovery.");
+  const field = text(value.field, 128, true);
+  if (!NAME.test(field)) throw new Error("Invalid template discovery.");
+  return { ...decodeEventCheckTarget(value), field };
 }

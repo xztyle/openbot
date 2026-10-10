@@ -1,4 +1,10 @@
-import type { EventCheckTemplate, EventCheckTemplateInstallInput } from "./event-check-templates";
+import type {
+  EventCheckDiscoverCheckInput,
+  EventCheckPickerOptions,
+  EventCheckTemplate,
+  EventCheckTemplateDiscoverInput,
+  EventCheckTemplateInstallInput,
+} from "./event-check-templates";
 import type {
   EventCheck,
   EventCheckAccount,
@@ -1058,6 +1064,13 @@ export const IPC_ENDPOINTS = {
     install: scopedRequest<EventCheckTemplateInstallInput, EventCheck>()("event-check-templates:install"),
     update: scopedRequest<{ agentId: string; id: string }, EventCheck>()("event-check-templates:update"),
     adopt: scopedRequest<{ agentId: string; id: string; slug: string }, EventCheck>()("event-check-templates:adopt"),
+    /** The payload can hold private values the user typed. They are used once and never stored. */
+    discover: scopedRequest<EventCheckTemplateDiscoverInput, EventCheckPickerOptions>()(
+      "event-check-templates:discover",
+    ),
+    discoverCheck: scopedRequest<EventCheckDiscoverCheckInput, EventCheckPickerOptions>()(
+      "event-check-templates:discover-check",
+    ),
   },
   mcpServers: {
     // Every MCP method names its server, because the settings modal can be open for a server the user

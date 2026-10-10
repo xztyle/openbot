@@ -1,5 +1,8 @@
 import {
+  decodeEventCheckDiscoverCheckInput,
+  decodeEventCheckPickerOptions,
   decodeEventCheckTemplateAdoptInput,
+  decodeEventCheckTemplateDiscoverInput,
   decodeEventCheckTemplateInstallInput,
   decodeEventCheckTemplateList,
 } from "../event-check-templates";
@@ -14,6 +17,14 @@ export const EVENT_CHECK_TEMPLATES_ROUTES = {
   install: "/v1/event-check-templates/install",
   update: "/v1/event-check-templates/update",
   adopt: "/v1/event-check-templates/adopt",
+  /**
+   * Lists the choices of a picker setting, with private values the user typed that the host uses once.
+   * Behind `fork-host-v1`, like the routes above: a host that has it answers, and an older host does
+   * not, so a client shows the setting as plain text there.
+   */
+  discover: "/v1/event-check-templates/discover",
+  /** The same for an installed check, with the private values that it holds. */
+  discoverCheck: "/v1/event-check-templates/discover-check",
 } as const;
 const checked =
   <A>(decode: (value: unknown) => A) =>
@@ -29,5 +40,13 @@ export const EVENT_CHECK_TEMPLATES_CODECS: ReadonlyMap<string, OptionalRouteCode
   [
     EVENT_CHECK_TEMPLATES_ROUTES.adopt,
     adminRoute(checked(decodeEventCheckTemplateAdoptInput), checked(decodeEventCheck)),
+  ],
+  [
+    EVENT_CHECK_TEMPLATES_ROUTES.discover,
+    adminRoute(checked(decodeEventCheckTemplateDiscoverInput), checked(decodeEventCheckPickerOptions)),
+  ],
+  [
+    EVENT_CHECK_TEMPLATES_ROUTES.discoverCheck,
+    adminRoute(checked(decodeEventCheckDiscoverCheckInput), checked(decodeEventCheckPickerOptions)),
   ],
 ]);

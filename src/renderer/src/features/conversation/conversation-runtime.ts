@@ -1,3 +1,4 @@
+import type { EventCheckTemplateApi } from "@openbot/contracts/event-check-templates";
 import type { EventCheckApi } from "@openbot/contracts/event-checks";
 import type { AttachmentSummary, FilePreview, OpenBotDesktopApi } from "@openbot/contracts/ipc";
 import type { AgentSkillCalls } from "../../skills-port";
@@ -53,6 +54,8 @@ export interface ConversationRuntime {
         /** The agent's memories on the host. Absent, a remote client shows no Memories row. */
         memories?: ((agentId: string, agentName: string) => MemoriesPort) | undefined;
         eventChecks?: EventCheckApi | undefined;
+        /** The templates of the host, so an event check editor can show a picker setting as a list. */
+        eventCheckTemplates?: Pick<EventCheckTemplateApi, "list" | "discoverCheck"> | undefined;
       }
     | undefined;
 }

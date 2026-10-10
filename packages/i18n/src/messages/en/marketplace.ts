@@ -335,6 +335,9 @@ export const messages = defineMessages("marketplace", {
   "marketplace.eventCheck.need.settingsHelp": "You can change these when you install.",
   "marketplace.eventCheck.need.required": "Required",
   "marketplace.eventCheck.optional": "Optional",
+  "marketplace.eventCheck.dialog.draftTitle": "To load your list",
+  "marketplace.eventCheck.dialog.draftHelp":
+    "These private values are used once to read your list. They are not saved here. You save them for the check in the next step.",
   "marketplace.eventCheck.need.nothing": "This event check needs no private variable and no setting.",
   "marketplace.eventCheck.need.interval": "Checks every {interval} by default.",
   "marketplace.eventCheck.forApp": "Event checks for this app",

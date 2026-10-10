@@ -14,6 +14,11 @@ export function EventCheckEnvironmentSettings(props: {
   api: EventCheckApi;
   check: EventCheck;
   disabled?: boolean;
+  /**
+   * Values the user typed earlier in this dialog, by variable name. They fill the fields once, when
+   * the section opens. Nothing is saved until the user presses Save value.
+   */
+  prefill?: Record<string, string> | undefined;
   changed(): Promise<void>;
 }) {
   const { t, errorMessage } = useText();
@@ -26,6 +31,7 @@ export function EventCheckEnvironmentSettings(props: {
     error: "",
   });
   let generation = 0;
+  let prefilled = false;
   onCleanup(() => {
     generation++;
     setState((draft) => {
@@ -38,8 +44,10 @@ export function EventCheckEnvironmentSettings(props: {
       const requested = ++generation;
       const api = props.api,
         check = props.check;
+      const typed = prefilled ? {} : { ...props.prefill };
+      prefilled = true;
       setState((draft) => {
-        draft.values = {};
+        draft.values = typed;
         draft.error = "";
         draft.variables = [];
       });

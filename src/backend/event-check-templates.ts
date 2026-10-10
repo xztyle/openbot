@@ -4,7 +4,10 @@ import { extname, join } from "node:path";
 import {
   decodeEventCheckTemplateList,
   type EventCheckTemplate,
+  type EventCheckTemplateDiscoverInput,
+  type EventCheckTemplateField,
   type EventCheckTemplateInstallInput,
+  parseEventCheckPickerValue,
 } from "@openbot/contracts/event-check-templates";
 import type { EventCheck, EventCheckApiSource, EventCheckInput } from "@openbot/contracts/event-checks";
 import { sourceText } from "@openbot/i18n/source";
@@ -127,6 +130,14 @@ export class EventCheckTemplates {
         throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateField", { name: field.label }));
       if (field.type === "boolean" && value !== "true" && value !== "false")
         throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateBoolean", { name: field.label }));
+      if (field.picker) {
+        // A picker value has one strict shape. The program reads the same text, so a bad one stops here.
+        try {
+          parseEventCheckPickerValue(value, field.picker);
+        } catch {
+          throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplatePicker", { name: field.label }));
+        }
+      }
       return { name: field.name, label: field.label, description: field.description, value };
     });
     return {
@@ -155,6 +166,52 @@ export class EventCheckTemplates {
       },
       selection: template.selection,
     };
+  }
+  /** The picker field of a template by name, or a refusal when there is none. */
+  #pickerField(template: EventCheckTemplate, name: string): EventCheckTemplateField {
+    const field = template.configuration.find((entry) => entry.name === name && entry.picker !== undefined);
+    if (!field) throw new EventCheckRefusal(sourceText("error.backend.eventCheckDiscoverUnsupported"));
+    return field;
+  }
+  /**
+   * What a draft discovery runs: the reviewed program of the template, the settings the person has
+   * typed (any other setting keeps its default), and the typed private values. Nothing here is saved.
+   * A name that the template does not declare is refused, as an install refuses it.
+   */
+  draftDiscovery(template: EventCheckTemplate, input: EventCheckTemplateDiscoverInput) {
+    const picker = this.#pickerField(template, input.field);
+    const variableNames = new Set(template.variables.map((variable) => variable.name));
+    const fieldNames = new Set(template.configuration.map((field) => field.name));
+    if (
+      Object.keys(input.variables).some((name) => !variableNames.has(name)) ||
+      Object.keys(input.configuration).some((name) => !fieldNames.has(name))
+    )
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateUnknown"));
+    const variables: Record<string, string> = {};
+    for (const name of variableNames) {
+      const value = input.variables[name] ?? "";
+      if (value.trim() === "") throw new EventCheckRefusal(sourceText("error.backend.eventCheckMissingVariable"));
+      variables[name] = value;
+    }
+    const configuration: Record<string, string> = {};
+    for (const field of template.configuration)
+      if (field.name !== picker.name)
+        configuration[field.name] = (input.configuration[field.name] ?? field.value).trim();
+    return { name: this.place(template), digest: template.program.digest, variables, configuration };
+  }
+  /**
+   * The template whose picker an installed check can list. The check must be linked, and must run the
+   * current reviewed program byte for byte: an earlier program has no discovery, and a program that
+   * someone edited is not one that this host reviewed.
+   */
+  discoverable(check: EventCheck, field: string): EventCheckTemplate {
+    const link = check.source.kind === "api" ? check.source.template : undefined;
+    if (!link) throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateNotLinked"));
+    const template = this.get(link.slug);
+    this.#pickerField(template, field);
+    if (this.matchedVersion(template, check) !== template.version)
+      throw new EventCheckRefusal(sourceText("error.backend.eventCheckDiscoverUnsupported"));
+    return template;
   }
   /** The same check on the template's current version. The user's values and choices stay. */
   upgrade(template: EventCheckTemplate, check: EventCheck): EventCheckInput {

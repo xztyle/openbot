@@ -2,11 +2,12 @@
 // Failure modes: a client supplying program text, a modified shared program being trusted, a template
 // link resetting a live baseline, an update losing the user's settings, and a missing required setting.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { EventCheckTemplate } from "@openbot/contracts/event-check-templates";
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { EVENT_CHECK_TOOL_DEFINITIONS } from "./agent/event-check-tools";
 import type { AgentService } from "./agent-service";
 import {
   callOpenBotTool,
@@ -25,6 +26,7 @@ import { EventCheckStore } from "./event-check-store";
 import { EventCheckTemplates } from "./event-check-templates";
 import { getString } from "./protocol";
 import { LOCAL_USER_ACTOR as TEST_USER } from "./security-actor";
+import { SecurityAuditLog } from "./security-audit-log";
 
 let root: string,
   service: AgentService | null = null;
@@ -89,7 +91,12 @@ function cipher() {
     },
   };
 }
-async function boot(shipped: EventCheckTemplate, program = PROGRAM, earlierFiles: Record<string, string> = {}) {
+async function boot(
+  shipped: EventCheckTemplate,
+  program = PROGRAM,
+  earlierFiles: Record<string, string> = {},
+  audit?: SecurityAuditLog,
+) {
   const { store, mailbox } = stores(root),
     checks = new EventCheckStore(store.database),
     programs = join(store.sharedRoot, "Watchers"),
@@ -113,6 +120,7 @@ async function boot(shipped: EventCheckTemplate, program = PROGRAM, earlierFiles
     clientFactory: () => client,
     eventCheckApiReader: reader,
     eventCheckTemplates: templates,
+    ...(audit ? { securityAudit: audit } : {}),
   });
   await runCauseEffect(service.initialize());
   await runCauseEffect(store.getOrCreate("chief"));
@@ -514,3 +522,226 @@ it("keeps the template link when an agent saves the check again without it", asy
 function never(): never {
   throw new Error("Expected an API check.");
 }
+
+// A program that lists choices when it is asked to. It never prints the token, and its failure text
+// holds the token on purpose: the host must not pass that text on.
+const DISCOVERING = `let raw=''; for await (const chunk of process.stdin) raw += chunk;
+const config = JSON.parse(raw);
+if (config.discover === true) {
+  const token = process.env.FIXTURE_API_TOKEN ?? '';
+  if (!token.startsWith('good-')) {
+    process.stderr.write('Fixture failed with ' + token + ' SERVER-TEXT\\nopenbot-error: auth\\n');
+    process.exit(1);
+  }
+  process.stdout.write(JSON.stringify({ options: [
+    { id: 'C1AAA', label: '#general-' + config.workspace + '\\u0007', group: 'channel' },
+    { id: 'D1AAA', label: '@pat', group: 'dm' },
+    { id: 'C1AAA', label: 'again', group: 'channel' },
+  ] }));
+  process.exit(0);
+}
+process.stdout.write(JSON.stringify({items:[{id:config.workspace,revision:'1',actor:'someone'}],hasNextPage:false}));`;
+function discovering(version = "1.0.0", program = DISCOVERING): EventCheckTemplate {
+  const shipped = template(version, program);
+  return {
+    ...shipped,
+    variables: [{ name: "FIXTURE_API_TOKEN", label: "API key", hint: "", docsUrl: null }],
+    configuration: [
+      ...shipped.configuration,
+      {
+        name: "rules",
+        label: "Rules",
+        description: "Pick them",
+        value: "",
+        required: false,
+        type: "text",
+        picker: {
+          optionsFrom: "program",
+          modes: [
+            { value: "all", label: "All" },
+            { value: "mentions", label: "Mentions" },
+          ],
+        },
+      },
+    ],
+  };
+}
+const draft = (
+  overrides: Partial<{ variables: Record<string, string>; field: string; configuration: Record<string, string> }> = {},
+) => ({
+  slug: "fixture",
+  field: "rules",
+  configuration: { workspace: "alpha" },
+  variables: { FIXTURE_API_TOKEN: "good-draft-token" },
+  ...overrides,
+});
+const AGENT = { kind: "agent", agentId: "chief", name: "Chief" } as const;
+/** Every file under `directory`, read as text, whose content holds `needle`. */
+function filesHolding(directory: string, needle: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(directory, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const path = join(entry.parentPath, entry.name);
+    try {
+      if (readFileSync(path).includes(needle)) found.push(path);
+    } catch {
+      // A file that cannot be read cannot hold the value for a reader either.
+    }
+  }
+  return found;
+}
+
+it("rejects a picker value that is not ID:mode pairs at install, and accepts a valid one", async () => {
+  const { service } = await boot(discovering(), DISCOVERING);
+  const checks = service.eventChecks;
+  await expect(
+    runCauseEffect(checks.templateInstall(request({ workspace: "alpha", rules: "C1AAA:sometimes" }), TEST_USER)),
+  ).rejects.toThrow(/Rules/);
+  await expect(
+    runCauseEffect(checks.templateInstall(request({ workspace: "alpha", rules: "C1AAA" }), TEST_USER)),
+  ).rejects.toThrow();
+  const installed = await runCauseEffect(
+    checks.templateInstall(request({ workspace: "alpha", rules: "C1AAA:mentions,D1AAA:all" }), TEST_USER),
+  );
+  expect(
+    installed.source.kind === "api" && installed.source.configuration.find((field) => field.name === "rules")?.value,
+  ).toBe("C1AAA:mentions,D1AAA:all");
+});
+
+it("lists choices for a draft with typed private values, and keeps those values off disk and out of the audit", async () => {
+  const audit = new SecurityAuditLog(join(root, "security-audit.jsonl"));
+  const { service, programs } = await boot(discovering(), DISCOVERING, {}, audit);
+  const typed = "good-draft-token-PRIVATE-9917";
+  const result = await runCauseEffect(
+    service.eventChecks.templateDiscover(draft({ variables: { FIXTURE_API_TOKEN: typed } }), TEST_USER),
+  );
+  // The settings that the form holds reach the program. The label is cleaned, and an ID comes once.
+  expect(result).toEqual({
+    options: [
+      { id: "C1AAA", label: "#general-alpha", group: "channel" },
+      { id: "D1AAA", label: "@pat", group: "dm" },
+    ],
+  });
+  expect(JSON.stringify(result)).not.toContain(typed);
+  // Only the reviewed program was placed. No private file exists, and no file under the host's data holds the value.
+  expect(existsSync(join(programs, "fixture@1.0.0.mjs"))).toBe(true);
+  expect(existsSync(join(root, "private-watchers"))).toBe(false);
+  expect(filesHolding(root, typed)).toEqual([]);
+  // A read is not a change: nothing was audited, and there is no check to name.
+  expect(audit.read(50)).toEqual([]);
+});
+
+it("refuses a draft with only fixed text: a bad token, a missing value, a name the template does not declare", async () => {
+  const { service } = await boot(discovering(), DISCOVERING);
+  const checks = service.eventChecks;
+  const secret = "wrong-token-VALUE-THAT-MUST-NOT-LEAK";
+  const failure = await runCauseEffect(
+    checks.templateDiscover(draft({ variables: { FIXTURE_API_TOKEN: secret } }), TEST_USER),
+  ).then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(failure).toBeInstanceOf(Error);
+  const message = failure instanceof Error ? failure.message : "";
+  expect(message).toContain("did not accept the saved credentials");
+  expect(message).not.toContain(secret);
+  expect(message).not.toContain("SERVER-TEXT");
+  const refusals = [
+    draft({ variables: {} }),
+    draft({ variables: { FIXTURE_API_TOKEN: "   " } }),
+    draft({ variables: { FIXTURE_API_TOKEN: "good-x", OTHER_VALUE: "x" } }),
+    draft({ configuration: { workspace: "alpha", surprise: "x" } }),
+    draft({ field: "workspace" }),
+    draft({ field: "nothing" }),
+    { ...draft(), slug: "unknown" },
+  ];
+  for (const refused of refusals)
+    await expect(runCauseEffect(checks.templateDiscover(refused, TEST_USER))).rejects.toThrow();
+});
+
+it("lists the choices of an installed check with its saved private value, and never for an agent", async () => {
+  const { service, checks, programs } = await boot(discovering(), DISCOVERING);
+  const installed = await runCauseEffect(
+    service.eventChecks.templateInstall(request({ workspace: "beta" }), TEST_USER),
+  );
+  const target = { agentId: "chief", id: installed.id, field: "rules" };
+  // No value is set yet: the host says so, and starts nothing it could leak to.
+  await expect(runCauseEffect(service.eventChecks.discoverCheck(target, TEST_USER))).rejects.toThrow();
+  await runCauseEffect(
+    service.eventChecks.setEnvironment(
+      { agentId: "chief", id: installed.id, name: "FIXTURE_API_TOKEN", value: "good-stored-token" },
+      TEST_USER,
+    ),
+  );
+  const result = await runCauseEffect(service.eventChecks.discoverCheck(target, TEST_USER));
+  expect(result.options.map((option) => option.label)).toEqual(["#general-beta", "@pat"]);
+  // An agent has no way to this call, and the method refuses it as well.
+  await expect(runCauseEffect(service.eventChecks.discoverCheck(target, AGENT))).rejects.toThrow();
+  await expect(runCauseEffect(service.eventChecks.templateDiscover(draft(), AGENT))).rejects.toThrow();
+  expect(EVENT_CHECK_TOOL_DEFINITIONS.some((tool) => /discover|choices|picker/iu.test(tool.name))).toBe(false);
+  // An edited copy of the program is not the reviewed one: it neither runs nor receives the value.
+  await writeFile(join(programs, "fixture@1.0.0.mjs"), `${DISCOVERING}\n// edited`);
+  await expect(runCauseEffect(service.eventChecks.discoverCheck(target, TEST_USER))).rejects.toThrow();
+  expect(checks.get("chief", installed.id).active).toBe(false);
+  // A field that is not a picker is refused as well.
+  await expect(
+    runCauseEffect(service.eventChecks.discoverCheck({ ...target, field: "workspace" }, TEST_USER)),
+  ).rejects.toThrow();
+});
+
+it("refuses to list choices for a check that runs an earlier program, or has no template", async () => {
+  const earlier = `${DISCOVERING}\n// version one`;
+  const { service, programs } = await boot(
+    {
+      ...discovering("2.0.0"),
+      earlierPrograms: [{ version: "1.0.0", file: "fixture-1.0.0.mjs", digest: digest(earlier) }],
+    },
+    DISCOVERING,
+    { "fixture-1.0.0.mjs": earlier },
+  );
+  await writeFile(join(programs, "fixture@1.0.0.mjs"), earlier);
+  const saved = await runCauseEffect(
+    service.eventChecks.save(
+      {
+        agentId: "chief",
+        name: "Old",
+        instruction: "Mine",
+        active: false,
+        timezone: "UTC",
+        schedule: { kind: "interval", amount: 120, unit: "seconds", anchorAt: new Date().toISOString() },
+        selfEvents: { mode: "exclude", connectionId: "work", actorPointer: "/actor", accountActorIds: ["me"] },
+        source: {
+          kind: "api",
+          connectionId: "work",
+          variables: ["FIXTURE_API_TOKEN"],
+          configuration: [{ name: "workspace", label: "Workspace", description: "", value: "alpha" }],
+          toolName: "fixture@1.0.0.mjs",
+          argumentsJson: "{}",
+          cursorArgument: "cursor",
+          nextCursorPointer: "/cursor",
+          template: { slug: "fixture", version: "1.0.0" },
+        },
+        selection: { itemsPointer: "/items", idPointer: "/id", revisionPointer: "/revision" },
+      },
+      TEST_USER,
+    ),
+  );
+  const target = { agentId: "chief", id: saved.id, field: "rules" };
+  await expect(runCauseEffect(service.eventChecks.discoverCheck(target, TEST_USER))).rejects.toThrow(
+    /cannot list choices/,
+  );
+  const plain = await runCauseEffect(
+    service.eventChecks.save(
+      {
+        ...saved,
+        id: undefined,
+        name: "Plain",
+        source: saved.source.kind === "api" ? { ...saved.source, template: undefined } : saved.source,
+      },
+      TEST_USER,
+    ),
+  );
+  await expect(
+    runCauseEffect(service.eventChecks.discoverCheck({ ...target, id: plain.id }, TEST_USER)),
+  ).rejects.toThrow();
+});

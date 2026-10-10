@@ -1,4 +1,8 @@
-import type { EventCheckTemplate, EventCheckTemplateApi } from "@openbot/contracts/event-check-templates";
+import type {
+  EventCheckPickerOptions,
+  EventCheckTemplate,
+  EventCheckTemplateApi,
+} from "@openbot/contracts/event-check-templates";
 import type { EventCheck, EventCheckApi, EventCheckInput } from "@openbot/contracts/event-checks";
 
 /**
@@ -44,6 +48,21 @@ export const PREVIEW_EVENT_CHECK_TEMPLATE: EventCheckTemplate = {
       required: false,
     },
     {
+      name: "watchedConversations",
+      label: "Conversations to watch",
+      description: "Optional. Load your list, then choose each conversation and what to watch in it.",
+      value: "",
+      type: "text",
+      required: false,
+      picker: {
+        optionsFrom: "program",
+        modes: [
+          { value: "all", label: "All messages" },
+          { value: "mentions", label: "Only mentions" },
+        ],
+      },
+    },
+    {
       name: "includeComments",
       label: "Include comments",
       description: "Also wake the agent when a comment is added.",
@@ -61,8 +80,19 @@ export const PREVIEW_EVENT_CHECK_TEMPLATE: EventCheckTemplate = {
   instruction: "Read the changed items. Tell me what is new and what needs my answer.",
 };
 
+/** Made-up choices for the preview picker. Nothing here comes from a real account. */
+const PREVIEW_PICKER_OPTIONS: EventCheckPickerOptions = {
+  options: [
+    { id: "ENG", label: "#engineering", group: "channel", description: "Product and platform work" },
+    { id: "DES", label: "#design", group: "channel" },
+    { id: "OPS", label: "#operations", group: "private_channel", description: "Releases and on-call" },
+    { id: "ALICE", label: "@Alice Example", group: "dm" },
+    { id: "BOB", label: "@Bob Example", group: "dm" },
+  ],
+};
+
 /** Installs, updates and links through the preview's event checks, so both show the same checks. */
-export function createMockEventCheckTemplates(checks: EventCheckApi): EventCheckTemplateApi {
+export function createMockEventCheckTemplates(checks: EventCheckApi): Required<EventCheckTemplateApi> {
   const templates = [PREVIEW_EVENT_CHECK_TEMPLATE];
   const template = (slug: string) => {
     const found = templates.find((entry) => entry.slug === slug);
@@ -129,6 +159,19 @@ export function createMockEventCheckTemplates(checks: EventCheckApi): EventCheck
       if (check.source.kind !== "api" || check.source.toolName !== entry.program.file)
         throw new Error("This check does not run the program of this template.");
       return checks.save({ ...check, source: { ...check.source, template: link(entry) } });
+    },
+    // A draft needs its typed private value, as the host does. The preview never keeps it.
+    discover: async ({ slug, variables }) => {
+      template(slug);
+      if (!Object.values(variables).some((value) => value.trim() !== ""))
+        throw new Error("Add the sample API token first.");
+      return structuredClone(PREVIEW_PICKER_OPTIONS);
+    },
+    discoverCheck: async ({ agentId, id }) => {
+      const status = (await checks.environment?.({ agentId, id })) ?? [];
+      if (status.length === 0 || status.some((variable) => !variable.configured))
+        throw new Error("Add the sample API token first.");
+      return structuredClone(PREVIEW_PICKER_OPTIONS);
     },
   };
 }

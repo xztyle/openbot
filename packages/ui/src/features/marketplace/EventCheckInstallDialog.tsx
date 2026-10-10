@@ -22,8 +22,9 @@ import {
 } from "@openbot/ui";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { useText } from "@openbot/ui/text";
-import { createStore, createUniqueId, For, Show } from "solid-js";
+import { createStore, createUniqueId, For, Match, onCleanup, Show, Switch } from "solid-js";
 import { EventCheckEnvironmentSettings } from "../conversation/EventCheckEnvironmentSettings";
+import { EventCheckPickerField } from "../conversation/EventCheckPickerField";
 import {
   checkName,
   type InstallForm,
@@ -62,6 +63,11 @@ interface DialogState {
   busy: boolean;
   created: EventCheck[];
   failed: FailedInstall[];
+  /**
+   * Private values typed here to load a list. Memory only: they leave this dialog in one discovery
+   * call, and fill the fields of the next step. They are never part of an install request.
+   */
+  draft: Record<string, string>;
 }
 
 /** The label of a setting. A setting that the install does not need says so. */
@@ -100,8 +106,30 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
     busy: false,
     created: [],
     failed: [],
+    draft: {},
+  });
+  onCleanup(() => {
+    setState((draft) => {
+      draft.draft = {};
+    });
   });
   const dialogId = createUniqueId();
+  const firstPicker = () => props.template.configuration.find((field) => field.picker !== undefined)?.name;
+  const canPick = () => props.catalog.canDiscover() && firstPicker() !== undefined;
+  /** The label of the first private value that is still empty, or null when each one is typed. */
+  const missingDraft = () =>
+    props.template.variables.find((variable) => (state.draft[variable.name] ?? "").trim() === "")?.label ?? null;
+  const pickerLoad = (fieldName: string) => () =>
+    props.catalog.discover({
+      slug: props.template.slug,
+      field: fieldName,
+      configuration: Object.fromEntries(
+        props.template.configuration
+          .filter((field) => field.picker === undefined)
+          .map((field) => [field.name, state.form.configuration[field.name] ?? field.value]),
+      ),
+      variables: { ...state.draft },
+    });
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const errors = () => installFormErrors(props.template, state.form);
   const agentName = (agentId: string) => props.agents.find((agent) => agent.id === agentId)?.name ?? agentId;
@@ -257,6 +285,7 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
                           {(api) => (
                             <EventCheckEnvironmentSettings
                               api={api()}
+                              prefill={state.draft}
                               check={props.catalog.check(created.agentId, created.id) ?? created}
                               changed={() => props.catalog.refresh(created.agentId)}
                             />
@@ -366,23 +395,97 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
 
                 <For each={props.template.configuration}>
                   {(field) => (
-                    <Show
-                      when={field.type === "boolean"}
-                      fallback={
-                        <Field
-                          label={<FieldLabel field={field} />}
-                          description={field.description}
-                          required={field.required}
-                          error={
-                            shown() && errors().fields.includes(field.name)
-                              ? t("marketplace.eventCheck.dialog.fieldRequired")
-                              : undefined
-                          }
-                        >
-                          <Show
-                            when={isLongValue(field.value)}
-                            fallback={
-                              <Input
+                    <>
+                      <Show when={canPick() && field.name === firstPicker()}>
+                        <fieldset class="marketplace-install-draft" disabled={state.busy}>
+                          <legend class="ui-label">{t("marketplace.eventCheck.dialog.draftTitle")}</legend>
+                          <Text as="small" variant="caption" tone="muted">
+                            {t("marketplace.eventCheck.dialog.draftHelp")}
+                          </Text>
+                          <For each={props.template.variables}>
+                            {(variable) => (
+                              <Field label={variable.label}>
+                                <Input
+                                  type="password"
+                                  autocomplete="new-password"
+                                  value={state.draft[variable.name] ?? ""}
+                                  maxlength={8192}
+                                  disabled={state.busy}
+                                  onValueChange={(value) =>
+                                    setState((draft) => {
+                                      draft.draft[variable.name] = value;
+                                    })
+                                  }
+                                />
+                              </Field>
+                            )}
+                          </For>
+                        </fieldset>
+                      </Show>
+                      <Switch>
+                        <Match when={field.type === "boolean"}>
+                          <SwitchField
+                            class="marketplace-install-switch"
+                            label={<FieldLabel field={field} />}
+                            description={field.description}
+                            checked={state.form.configuration[field.name] === "true"}
+                            disabled={state.busy}
+                            onChange={(on) =>
+                              setState((draft) => {
+                                draft.form.configuration[field.name] = on ? "true" : "false";
+                              })
+                            }
+                          />
+                        </Match>
+                        <Match when={field.picker !== undefined && canPick() ? field.picker : undefined}>
+                          {(picker) => (
+                            <EventCheckPickerField
+                              label={<FieldLabel field={field} />}
+                              description={field.description}
+                              picker={picker()}
+                              value={state.form.configuration[field.name] ?? ""}
+                              disabled={state.busy}
+                              blocked={
+                                missingDraft()
+                                  ? t("agentSettings.eventCheck.picker.needTyped", { name: missingDraft() ?? "" })
+                                  : undefined
+                              }
+                              load={pickerLoad(field.name)}
+                              onChange={(value) =>
+                                setState((draft) => {
+                                  draft.form.configuration[field.name] = value;
+                                })
+                              }
+                            />
+                          )}
+                        </Match>
+                        <Match when={true}>
+                          <Field
+                            label={<FieldLabel field={field} />}
+                            description={field.description}
+                            required={field.required}
+                            error={
+                              shown() && errors().fields.includes(field.name)
+                                ? t("marketplace.eventCheck.dialog.fieldRequired")
+                                : undefined
+                            }
+                          >
+                            <Show
+                              when={isLongValue(field.value)}
+                              fallback={
+                                <Input
+                                  value={state.form.configuration[field.name] ?? ""}
+                                  maxlength={8192}
+                                  disabled={state.busy}
+                                  onValueChange={(value) =>
+                                    setState((draft) => {
+                                      draft.form.configuration[field.name] = value;
+                                    })
+                                  }
+                                />
+                              }
+                            >
+                              <Textarea
                                 value={state.form.configuration[field.name] ?? ""}
                                 maxlength={8192}
                                 disabled={state.busy}
@@ -392,35 +495,11 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
                                   })
                                 }
                               />
-                            }
-                          >
-                            <Textarea
-                              value={state.form.configuration[field.name] ?? ""}
-                              maxlength={8192}
-                              disabled={state.busy}
-                              onValueChange={(value) =>
-                                setState((draft) => {
-                                  draft.form.configuration[field.name] = value;
-                                })
-                              }
-                            />
-                          </Show>
-                        </Field>
-                      }
-                    >
-                      <SwitchField
-                        class="marketplace-install-switch"
-                        label={<FieldLabel field={field} />}
-                        description={field.description}
-                        checked={state.form.configuration[field.name] === "true"}
-                        disabled={state.busy}
-                        onChange={(on) =>
-                          setState((draft) => {
-                            draft.form.configuration[field.name] = on ? "true" : "false";
-                          })
-                        }
-                      />
-                    </Show>
+                            </Show>
+                          </Field>
+                        </Match>
+                      </Switch>
+                    </>
                   )}
                 </For>
 

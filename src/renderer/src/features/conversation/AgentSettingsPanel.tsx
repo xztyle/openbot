@@ -95,6 +95,13 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       : props.eventChecksAvailable !== false
         ? window.openbot.eventChecks
         : undefined;
+  /** The templates of the host, so a setting that a template declares as a picker can be filled from a list. */
+  const pickerSource = () =>
+    props.remoteClient
+      ? props.adminCalls?.eventCheckTemplates
+      : props.eventChecksAvailable !== false
+        ? window.openbot.eventCheckTemplates
+        : undefined;
   const routinesVisible = () => !props.remoteClient || Boolean(props.adminCalls?.routines);
   const routinesPort = createMemo(() => {
     if (props.adminCalls?.routines) return props.adminCalls.routines(props.agent.id);
@@ -369,6 +376,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
           <div class="agent-routines-overlay">
             <EventChecksSettings
               api={api()}
+              pickers={pickerSource()}
               apiProgramsAvailable={
                 props.remoteClient ? Boolean(api().environment) : (props.apiEventChecksAvailable ?? true)
               }

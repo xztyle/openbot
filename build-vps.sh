@@ -8,6 +8,7 @@
 #     --deploy   deploy the release right after the build (idle check, smoke test, Worker, host)
 #     --check    also run the translation check and the typechecks (they are not part of the image)
 #     --tarball  also write image.tar.gz (only a remote deploy needs it)
+#     --worker-only  build only the website/Worker export (deploy it with --worker-only)
 set -euo pipefail
 umask 077
 cd "$(dirname "$0")"
@@ -28,12 +29,13 @@ while :; do
   sleep 30; waited=$((waited + 30))
 done
 
-ref=fork/main deploy=0 check=0 tarball=0
+ref=fork/main deploy=0 check=0 tarball=0 worker_only=0
 for argument in "$@"; do
   case "$argument" in
     --deploy) deploy=1 ;;
     --check) check=1 ;;
     --tarball) tarball=1 ;;
+    --worker-only) worker_only=1 ;;
     -*) echo "Unknown option $argument" >&2; exit 2 ;;
     *) ref=$argument ;;
   esac
@@ -109,14 +111,23 @@ for base, directories, files in os.walk(sys.argv[1]):
 PY
 phase contexts
 
+# Builder size: 8 GB and one job at a time on the small host. A bigger host sets these in the
+# environment or in /opt/openbot/build.env (OPENBOT_BUILDER_MEMORY=24g, OPENBOT_BUILDER_PARALLELISM=4).
+[[ -f /opt/openbot/build.env ]] && . /opt/openbot/build.env
+builder_memory=${OPENBOT_BUILDER_MEMORY:-8g}
+builder_parallelism=${OPENBOT_BUILDER_PARALLELISM:-1}
+builder_bytes=$(( ${builder_memory%g} * 1073741824 ))
 if ! docker buildx inspect "$builder" >/dev/null 2>&1; then
+  toml=$(mktemp)
+  printf '[worker.oci]\n  max-parallelism = %s\n' "$builder_parallelism" > "$toml"
   docker buildx create --name "$builder" --driver docker-container \
-    --driver-opt memory=8g --driver-opt memory-swap=8g \
-    --buildkitd-config docker/private-buildkit.toml >/dev/null
+    --driver-opt memory="$builder_memory" --driver-opt memory-swap="$builder_memory" \
+    --buildkitd-config "$toml" >/dev/null
+  rm -f "$toml"
 fi
 docker buildx inspect "$builder" --bootstrap > "$release/builder.log"
 cap=$(docker inspect "buildx_buildkit_${builder}0" --format '{{.HostConfig.Memory}}')
-[[ "$cap" == 8589934592 ]] || { echo "Builder must have an 8 GB memory cap." >&2; exit 1; }
+[[ "$cap" == "$builder_bytes" ]] || { echo "Builder must have a ${builder_memory} memory cap (has $cap bytes)." >&2; exit 1; }
 
 build() { # build <log> <buildx args...>; the contexts and arguments every target shares
   local log=$1; shift
@@ -142,16 +153,18 @@ attempt() { # attempt <log> <buildx args...>
   tail -40 "$log" >&2
   exit 1
 }
-echo "Building $image (maximum build memory 8 GB)."
+echo "Building $image (build memory ${builder_memory}, ${builder_parallelism} parallel)."
 if [[ $check == 1 ]]; then
   attempt "$release/checks.log" --target checks
   phase checks
 fi
-attempt "$release/build.log" --target runtime --load --tag "$image"
+if [[ $worker_only == 0 ]]; then
+  attempt "$release/build.log" --target runtime --load --tag "$image"
+fi
 phase image
 attempt "$release/website-export.log" --target website --output "type=local,dest=$release/worker"
 phase website
-docker image inspect "$image" --format '{{.Architecture}}' | grep -qx amd64
+[[ $worker_only == 1 ]] || docker image inspect "$image" --format '{{.Architecture}}' | grep -qx amd64
 if [[ $tarball == 1 ]]; then
   docker save "$image" | gzip > "$release/image.tar.gz"
   (cd "$release" && sha256sum image.tar.gz > image.sha256)

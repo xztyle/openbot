@@ -145,6 +145,13 @@ def validate_after(before, expected_schema, environment_hash):
 
 def main():
     started = time.monotonic()
+    if "--worker-only" in sys.argv[2:]:
+        # Website and Worker only: the host is not touched, so no idle check and no restart.
+        worker = deploy_worker()
+        (RELEASE / "worker-deployment.json").write_text(
+            json.dumps(dict(revision=REVISION, worker=worker, phases_seconds=TIMES), indent=2))
+        print(json.dumps(dict(worker=worker, deploy_seconds=round(time.monotonic() - started, 3), host_touched=False)))
+        return
     before = database_state(BASE / "data/.config/OpenBot/openbot.db")
     (RELEASE / "before.json").write_text(json.dumps(before, indent=2))
     if before["active"] or before["pending"]:

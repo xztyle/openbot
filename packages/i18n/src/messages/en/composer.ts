@@ -78,6 +78,12 @@ export const messages = defineMessages("composer", {
   "composer.upload.cancel": "Cancel upload",
   "composer.voice.progress": "Downloading voice model {progress}%",
   "composer.voice.recording": "Voice recording",
+  "composer.queueEdit.label": "Editing queued message",
+  "composer.queueEdit.cancelLabel": "Cancel editing the queued message",
+  "composer.queueEdit.deleteTitle": "Delete this queued message?",
+  "composer.queueEdit.deleteBody":
+    "The message is empty, so there is nothing to save. If you delete it, the agent will not receive it.",
+  "composer.queueEdit.keep": "Keep editing",
   "composer.send.saveQueued": "Save queued message",
   "composer.send.voice": "Send voice message",
   "composer.send.message": "Send message",

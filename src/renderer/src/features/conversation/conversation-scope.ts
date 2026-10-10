@@ -1260,6 +1260,7 @@ export function createConversationViewScope(props: ConversationProps) {
     startVoiceRecording,
     stopVoiceRecording,
     cancelVoiceRecording,
+    cancelQueuedMessageEdit,
     submitComposer,
     submitting,
     unreadDividerVisible,

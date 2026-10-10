@@ -8,6 +8,7 @@ import {
 import {
   ArrowUp,
   Button,
+  ConfirmDialog,
   DropdownMenu,
   File,
   Image,
@@ -48,6 +49,7 @@ export function ConversationComposer() {
     attachmentAction,
     attachmentBusy,
     awaitingReplies,
+    cancelQueuedMessageEdit,
     dismissAwaitingReplies,
     composerFocusRequest,
     composerHasContent,
@@ -100,6 +102,20 @@ export function ConversationComposer() {
   let skillPickerChosen = false;
   // A pending Save keeps its exact request for retry. Block changes until retry or cancel.
   const savePending = () => Boolean(editingDeliveryId() && editingPendingSave());
+  const [deleteQueuedOpen, setDeleteQueuedOpen] = createSignal(false);
+  /**
+   * Save with nothing left to save cannot succeed, and failing without a word looks like a dead
+   * button. It asks whether the person means to delete the queued message instead.
+   */
+  const submit = () => {
+    const draft = currentDraft();
+    const emptyEdit = !draft.text.trim() && draft.attachments.length === 0;
+    if (editingDeliveryId() && !savePending() && voicePhase() === "idle" && emptyEdit) {
+      setDeleteQueuedOpen(true);
+      return;
+    }
+    submitComposer();
+  };
   // The mention picker grows out of the same edge as the queue, so only one of them holds it.
   const queueVisible = () => queuePanelVisible() && !pickerOpen();
   const awaitingVisible = () => awaitingReplies().length > 0 && !pickerOpen();
@@ -221,7 +237,7 @@ export function ConversationComposer() {
             voicePhase() === "requesting" ||
             voicePhase() === "transcribing"
           }
-          onClick={submitComposer}
+          onClick={submit}
         >
           <Show when={submitting()} fallback={<ArrowUp aria-hidden="true" />}>
             <LoaderCircle class="composer-spinner" aria-hidden="true" />
@@ -276,6 +292,24 @@ export function ConversationComposer() {
             </Show>
           </div>
         </div>
+        <Show when={editingDeliveryId()}>
+          <div class="composer-queue-edit">
+            <p role="status">{t("composer.queueEdit.label")}</p>
+            <Button
+              variant="ghost"
+              size="xs"
+              type="button"
+              aria-label={t("composer.queueEdit.cancelLabel")}
+              disabled={submitting()}
+              onClick={() => {
+                void cancelQueuedMessageEdit();
+                setComposerFocusRequest((current) => current + 1);
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+          </div>
+        </Show>
         <Show when={replyTarget()}>
           {(message) => (
             <div class="composer-reply-preview">
@@ -478,7 +512,7 @@ export function ConversationComposer() {
                 updateCurrentDraft({ text });
                 updateTeamTyping(text);
               }}
-              onSubmit={submitComposer}
+              onSubmit={submit}
               sendShortcut={deviceSendShortcut(props.platform)}
               onPickerOpenChange={setPickerOpen}
               onPasteFiles={(files) => {
@@ -641,6 +675,20 @@ export function ConversationComposer() {
             </div>
           </div>
         </div>
+        <ConfirmDialog
+          open={deleteQueuedOpen()}
+          onCancel={() => setDeleteQueuedOpen(false)}
+          onConfirm={() => {
+            const deliveryId = editingDeliveryId();
+            setDeleteQueuedOpen(false);
+            if (deliveryId) void props.onCancelQueuedMessage(deliveryId);
+          }}
+          title={t("composer.queueEdit.deleteTitle")}
+          description={t("composer.queueEdit.deleteBody")}
+          confirmLabel={t("common.delete")}
+          cancelLabel={t("composer.queueEdit.keep")}
+          initialFocus="cancel"
+        />
       </div>
     </Show>
   );

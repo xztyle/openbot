@@ -1286,6 +1286,61 @@ describe("queue edit", () => {
     );
   });
 
+  it("shows how to leave a queued edit and brings back the draft that was in the composer", async () => {
+    const delivery = queuedDelivery("exit-edit", "Original queue message", 1);
+    queueWith(delivery);
+    vi.mocked(window.openbot.agent.editQueuedMessage).mockResolvedValue({ agentId: "chief", deliveries: [delivery] });
+    render(() => <App />);
+    const composer = await screen.findByRole("textbox", { name: "Message Chief" });
+    composer.textContent = "My own draft";
+    await fireEvent.input(composer);
+    await fireEvent.click(await screen.findByRole("button", { name: "Edit queued message 1" }));
+    expect(await screen.findByText("Editing queued message")).toBeInTheDocument();
+    await waitFor(() => expect(composer).toHaveTextContent("Original queue message"));
+    const begin = vi.mocked(window.openbot.agent.editQueuedMessage).mock.calls[0]?.[0];
+    assert(begin);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel editing the queued message" }));
+    await waitFor(() => expect(screen.queryByText("Editing queued message")).not.toBeInTheDocument());
+    expect(composer).toHaveTextContent("My own draft");
+    expect(window.openbot.agent.editQueuedMessage).toHaveBeenCalledWith(
+      { agentId: "chief", deliveryId: delivery.id, editId: begin.editId, action: "cancel" },
+      "local",
+    );
+  });
+
+  it("asks before deleting a queued message that Save would leave empty", async () => {
+    const delivery = queuedDelivery("empty-edit", "Original queue message", 1);
+    queueWith(delivery);
+    vi.mocked(window.openbot.agent.editQueuedMessage).mockResolvedValue({ agentId: "chief", deliveries: [delivery] });
+    render(() => <App />);
+    const composer = await screen.findByRole("textbox", { name: "Message Chief" });
+    await fireEvent.click(await screen.findByRole("button", { name: "Edit queued message 1" }));
+    await screen.findByText("Editing queued message");
+    composer.textContent = "";
+    await fireEvent.input(composer);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Save queued message" }));
+    const confirmation = await screen.findByRole("alertdialog", { name: "Delete this queued message?" });
+    expect(window.openbot.agent.cancelQueuedMessage).not.toHaveBeenCalled();
+    await fireEvent.click(within(confirmation).getByRole("button", { name: "Keep editing" }));
+    expect(window.openbot.agent.cancelQueuedMessage).not.toHaveBeenCalled();
+    expect(screen.getByText("Editing queued message")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Save queued message" }));
+    await fireEvent.click(
+      within(await screen.findByRole("alertdialog", { name: "Delete this queued message?" })).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    await waitFor(() =>
+      expect(window.openbot.agent.cancelQueuedMessage).toHaveBeenCalledWith({
+        agentId: "chief",
+        deliveryId: delivery.id,
+      }),
+    );
+  });
+
   it("reuses the durable Save request after a lost response and blocks edits until retry", async () => {
     const delivery = queuedDelivery("durable-save", "Original queue message", 1);
     queueWith(delivery);

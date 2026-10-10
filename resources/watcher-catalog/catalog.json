@@ -308,14 +308,14 @@
     "name": "Slack activity",
     "tagline": "Wake an agent when you are mentioned or messaged in Slack",
     "description": "Checks Slack every two minutes for new messages that matter to one person: mentions of that person, optional keywords, direct messages, and messages in the channels and conversations you pick, from a list that loads from your Slack account, each set to all new messages or only mentions of you. It runs as a normal program with no AI, reads Slack's official Web API with a personal (user) token, or with the token your browser already uses, and never posts or changes anything in Slack. Read-only permissions are enough. A new message, or a message that was edited while it is still recent, wakes the agent once. Messages you wrote yourself are skipped. The check only looks at the last few minutes, so a message that is edited much later is not seen again. If Slack asks the program to slow down, it saves a cooldown and sends no request until the cooldown ends. Use a token from an app that you create in your own workspace. Install it again for another workspace or person: every install has its own settings, token, schedule and history.",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "creatorName": "OpenBot",
     "iconUrl": "https://slack.com/favicon.ico",
     "websiteUrl": "https://slack.com",
     "app": "slack",
     "program": {
       "file": "slack-activity.mjs",
-      "digest": "dcce9ee475b99b37aee11844163106616392e10a872ff93b7d077d71aa4f6138"
+      "digest": "1a836b41e5d6db477e5b1ff3ebbca4c223ed1db9b0a2218647fec68ddae26081"
     },
     "earlierPrograms": [
       {
@@ -342,6 +342,11 @@
         "version": "1.2.0",
         "file": "slack-activity-1.2.0.mjs",
         "digest": "d245334c1ae670396e6f66d422fee3524a979d1e17dac648e900b6097c9131c0"
+      },
+      {
+        "version": "1.3.0",
+        "file": "slack-activity-1.3.0.mjs",
+        "digest": "dcce9ee475b99b37aee11844163106616392e10a872ff93b7d077d71aa4f6138"
       }
     ],
     "accountLabelHint": "The Slack workspace, for example Work",

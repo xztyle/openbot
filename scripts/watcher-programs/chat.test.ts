@@ -46,6 +46,7 @@ interface Deps {
 interface Discovery {
   options: Array<{ id: string; label: string; group: string; description?: string }>;
   truncated?: boolean;
+  account?: { id: string; label: string };
 }
 interface Program {
   runWatcher(input: DynamicRecord, deps: Deps): Promise<Result>;
@@ -141,6 +142,7 @@ describe("slack-activity", () => {
     "conversations.replies",
     "conversations.info",
     "users.info",
+    "users.list",
   ]);
   let program: Program;
   beforeEach(async () => {
@@ -1038,6 +1040,159 @@ describe("slack-activity", () => {
       for (const attempt of attempts)
         expectSafe(await failureOf(discover(discoverInput, { fetchImpl: attempt.fetchImpl })));
     });
+
+    describe("names from the member list and from chosen IDs", () => {
+      const page = (members: DynamicRecord[], next = "") => ok({ members, response_metadata: { next_cursor: next } });
+      const member = (id: string, display: string, real = "") => ({
+        id,
+        name: id.toLowerCase(),
+        profile: { display_name: display, real_name: real },
+      });
+      /** `directory` with a member list of two pages, a third that must not be read, and a shared channel. */
+      function withMembers(request: Recorded) {
+        const method = methodOf(request);
+        const params = request.url.searchParams;
+        if (method === "auth.test") return ok({ user_id: ME, user: "pat", team: "Acme" });
+        if (method === "users.list") {
+          const cursor = params.get("cursor");
+          if (!cursor) return page([member("U111AAAA", "Me"), member("U222BBBB", "Pat Doe")], "m2");
+          if (cursor === "m2") return page([member("U333CCCC", "", "Qu‮inn")], "m3");
+          return page([member("U999ZZZZ", "Never read")]);
+        }
+        if (method === "conversations.info") {
+          const channel = params.get("channel");
+          if (channel === "C777") return ok({ channel: { id: "C777", name: "open-source", is_channel: true } });
+          if (channel === "D900") return ok({ channel: { id: "D900", is_im: true, user: "U222BBBB" } });
+          return { body: { ok: false, error: "channel_not_found" } };
+        }
+        return directory(request);
+      }
+
+      it("names direct conversation partners from the member list, in pages, with no call for each person", async () => {
+        const { requests, fetchImpl } = fakeFetch(withMembers);
+        const result = await discover(discoverInput, { fetchImpl });
+        expect(result.options.filter((option) => option.group === "dm").map((option) => option.label)).toEqual([
+          "@Pat Doe",
+          "@Quinn",
+        ]);
+        const lists = requests.filter((request) => methodOf(request) === "users.list");
+        // Two pages answer both partners. The third page is not read, and nobody is asked for alone.
+        expect(lists).toHaveLength(2);
+        for (const request of lists) expect(request.url.searchParams.get("limit")).toBe("200");
+        expect(requests.filter((request) => methodOf(request) === "users.info")).toHaveLength(0);
+      });
+
+      it("asks for a person alone only when the member list does not hold them", async () => {
+        const { requests, fetchImpl } = fakeFetch((request) => {
+          if (methodOf(request) === "users.list") return page([member("U222BBBB", "Pat Doe")]);
+          return withMembers(request);
+        });
+        const result = await discover(discoverInput, { fetchImpl });
+        expect(result.options.find((option) => option.id === "D500")?.label).toBe("@Quinn");
+        expect(
+          requests
+            .filter((request) => methodOf(request) === "users.info")
+            .map((request) => request.url.searchParams.get("user")),
+        ).toEqual(["U333CCCC"]);
+      });
+
+      it("keeps the cooldown rule: a rate limit on the member list sends no more requests", async () => {
+        const { requests, fetchImpl } = fakeFetch((request) =>
+          methodOf(request) === "users.list"
+            ? { status: 429, headers: { "Retry-After": "30" }, body: { ok: false } }
+            : directory(request),
+        );
+        const result = await discover({ ...discoverInput, instanceId: "limited-members" }, { fetchImpl });
+        expect(result.options.filter((option) => option.group === "dm").map((option) => option.label)).toEqual([
+          "@U222BBBB",
+          "@U333CCCC",
+        ]);
+        expect(requests.filter((request) => methodOf(request) === "users.info")).toHaveLength(0);
+        const after = fakeFetch(directory);
+        expect(
+          await codeOf(discover({ ...discoverInput, instanceId: "limited-members" }, { fetchImpl: after.fetchImpl })),
+        ).toBe("rate_limited");
+      });
+
+      it("returns the account that the token belongs to", async () => {
+        const { fetchImpl } = fakeFetch(withMembers);
+        const result = await discover(discoverInput, { fetchImpl });
+        expect(result.account).toEqual({ id: ME, label: "pat (Acme)" });
+      });
+
+      it("names only the chosen IDs, with no walk over the whole list", async () => {
+        const { requests, fetchImpl } = fakeFetch(withMembers);
+        const result = await discover(
+          { ...discoverInput, ids: ["C200", "D400", "G300", "C777", "D900", "C404", "not-an-id"] },
+          { fetchImpl },
+        );
+        // C404 is not found and is left out. An ID that no conversation can have is never asked for.
+        expect(result.options.map((option) => [option.id, option.group, option.label])).toEqual([
+          ["C200", "channel", "#general"],
+          ["D400", "dm", "@Pat Doe"],
+          ["G300", "group_dm", "ann, bob, cy"],
+          ["C777", "channel", "#open-source"],
+          ["D900", "dm", "@Pat Doe"],
+        ]);
+        expect(result.account).toEqual({ id: ME, label: "pat (Acme)" });
+        const asked = requests.map(methodOf);
+        // The walk over the person's conversations is the existing one and stops once it has what it needs.
+        expect(asked.filter((method) => method === "users.conversations").length).toBeLessThanOrEqual(2);
+        expect(
+          requests
+            .filter((request) => methodOf(request) === "conversations.info")
+            .map((request) => request.url.searchParams.get("channel"))
+            .sort(),
+        ).toEqual(["C404", "C777", "D900"]);
+        expect(asked).not.toContain("users.info");
+      });
+
+      it("answers an empty list of IDs with no option and one request, and refuses too many", async () => {
+        const { requests, fetchImpl } = fakeFetch(withMembers);
+        const result = await discover({ ...discoverInput, ids: [] }, { fetchImpl });
+        expect(result.options).toEqual([]);
+        expect(requests.map(methodOf)).toEqual(["auth.test"]);
+        const many = Array.from({ length: 51 }, (_, index) => `C${String(10000 + index)}`);
+        expect(await codeOf(discover({ ...discoverInput, ids: many }, { fetchImpl }))).toBe("config");
+      });
+
+      it("keeps the request cap and the error codes when it names chosen IDs", async () => {
+        const unknown = Array.from({ length: 12 }, (_, index) => `C${String(20000 + index)}`);
+        const capped = fakeFetch((request) =>
+          methodOf(request) === "users.conversations" ? ok({ channels: [] }) : withMembers(request),
+        );
+        const result = await discover(
+          { ...discoverInput, maxRequests: "4", ids: unknown },
+          { fetchImpl: capped.fetchImpl },
+        );
+        expect(result.options).toEqual([]);
+        expect(capped.requests.length).toBeLessThanOrEqual(4);
+        const limited = fakeFetch((request) =>
+          methodOf(request) === "users.conversations"
+            ? { status: 429, headers: { "Retry-After": "7" }, body: { ok: false } }
+            : withMembers(request),
+        );
+        expect(
+          await codeOf(
+            discover({ ...discoverInput, instanceId: "limited-ids", ids: ["C200"] }, { fetchImpl: limited.fetchImpl }),
+          ),
+        ).toBe("rate_limited");
+        const noScope = fakeFetch((request) =>
+          methodOf(request) === "conversations.info"
+            ? { body: { ok: false, error: "missing_scope" } }
+            : methodOf(request) === "users.conversations"
+              ? ok({ channels: [] })
+              : withMembers(request),
+        );
+        const stopped = await discover(
+          { ...discoverInput, ids: ["C777", "C778", "C779"] },
+          { fetchImpl: noScope.fetchImpl },
+        );
+        // A missing scope fails every lookup, so the first failure ends them.
+        expect(stopped.options).toEqual([]);
+        expect(noScope.requests.filter((request) => methodOf(request) === "conversations.info")).toHaveLength(1);
+      });
+    });
   });
 });
 
@@ -1440,13 +1595,14 @@ describe("template catalog", () => {
         ],
       },
     });
-    expect(slack?.version).toBe("1.3.0");
+    expect(slack?.version).toBe("1.4.0");
     expect(slack?.earlierPrograms?.map((program) => program.version)).toEqual([
       "1.0.0",
       "1.0.1",
       "1.1.0",
       "1.1.1",
       "1.2.0",
+      "1.3.0",
     ]);
     // Every released program stays byte for byte, so a check that runs one can still be linked.
     const earlier = files.find((file) => file.path === "programs/slack-activity-1.2.0.mjs");
@@ -1455,6 +1611,13 @@ describe("template catalog", () => {
         .update(earlier?.content ?? "")
         .digest("hex"),
     ).toBe("d245334c1ae670396e6f66d422fee3524a979d1e17dac648e900b6097c9131c0");
+    // The program that 1.3.0 shipped is kept byte for byte, so a check that runs it can be linked.
+    const previous = files.find((file) => file.path === "programs/slack-activity-1.3.0.mjs");
+    expect(
+      createHash("sha256")
+        .update(previous?.content ?? "")
+        .digest("hex"),
+    ).toBe("dcce9ee475b99b37aee11844163106616392e10a872ff93b7d077d71aa4f6138");
 
     const blind = join(source, "watchers", "slack-activity", "program.mjs");
     await writeFile(blind, "process.stdout.write('{}');\n");

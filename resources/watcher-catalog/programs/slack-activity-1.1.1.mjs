@@ -16,8 +16,6 @@ const MAX_ITEMS = 2000;
 const MAX_OUTPUT_BYTES = 400000;
 const PAGE_SIZE = 200;
 const SEARCH_PAGE_SIZE = 100;
-const MAX_CONTEXT_GROUPS = 10;
-const MAX_NAME_LOOKUPS = 12;
 const MAX_KEYWORDS = 10;
 const MAX_CHANNELS = 15;
 const MAX_TEXT = 300;
@@ -186,7 +184,6 @@ export function readConfiguration(input) {
     keywords: readList(input.keywords),
     channelIds: readList(input.channelIds),
     maxConversations: readInteger(input.maxConversations, "maxConversations", 30, 1, 100),
-    contextMessages: readInteger(input.contextMessages, "contextMessages", 8, 0, 20),
     maxRequests: readInteger(input.maxRequests, "maxRequests", 80, 4, 200),
     threadLookbackHours: readInteger(input.threadLookbackHours, "threadLookbackHours", 24, 1, 168),
   };
@@ -611,103 +608,6 @@ async function collectHistory(ctx, collector, window, channel, kind) {
   }
 }
 
-/** The display name of a person, or null. Best effort: a failed lookup never fails a check. */
-async function personName(ctx, id) {
-  try {
-    const body = await call(ctx, "users.info", { user: id });
-    const profile = isRecord(body.user) && isRecord(body.user.profile) ? body.user.profile : {};
-    for (const candidate of [profile.display_name, profile.real_name, body.user?.real_name, body.user?.name]) {
-      const name = preview(candidate);
-      if (name) return name.slice(0, 80);
-    }
-  } catch {
-    // Names are a convenience.
-  }
-  return null;
-}
-
-/**
- * Earlier messages of the same conversation, oldest first, so an event is not read without what was
- * said before it. A message that the configured person wrote has fromMe true. Best effort: it only
- * adds fields, it reads at most one conversation per group, and an error never fails the check.
- */
-async function attachContext(ctx, items) {
-  const limit = ctx.config.contextMessages;
-  if (limit === 0 || items.length === 0) return;
-  const groups = new Map();
-  for (const item of items) {
-    const key = item.threadTs ? `${item.channel}:${item.threadTs}` : item.channel;
-    const group = groups.get(key) ?? { channel: item.channel, threadTs: item.threadTs, items: [] };
-    group.items.push(item);
-    groups.set(key, group);
-  }
-  const newestFirst = [...groups.values()].sort(
-    (a, b) => Math.max(...b.items.map(tsOfItem)) - Math.max(...a.items.map(tsOfItem)),
-  );
-  const names = new Map();
-  let lookups = 0;
-  const nameOf = async (id) => {
-    if (id === UNKNOWN_ACTOR || id === ctx.config.userId) return null;
-    if (!names.has(id)) {
-      if (lookups >= MAX_NAME_LOOKUPS || ctx.requests >= ctx.config.maxRequests) return null;
-      lookups += 1;
-      names.set(id, await personName(ctx, id));
-    }
-    return names.get(id);
-  };
-  for (const group of newestFirst.slice(0, MAX_CONTEXT_GROUPS)) {
-    if (ctx.requests >= ctx.config.maxRequests) break;
-    const newest = Math.max(...group.items.map(tsOfItem));
-    const params = {
-      channel: group.channel,
-      latest: formatTs(newest + 1000),
-      inclusive: "true",
-      limit: Math.min(100, limit + group.items.length + 1),
-    };
-    let messages;
-    try {
-      const body = group.threadTs
-        ? await call(ctx, "conversations.replies", { ...params, ts: group.threadTs })
-        : await call(ctx, "conversations.history", params);
-      if (!Array.isArray(body.messages)) continue;
-      messages = body.messages.filter((message) => isContent(message) && typeof message.ts === "string");
-    } catch {
-      continue;
-    }
-    const earlier = messages
-      .map((message) => ({ message, ms: parseTsOrNaN(message.ts) }))
-      .filter((entry) => Number.isFinite(entry.ms))
-      .sort((a, b) => a.ms - b.ms);
-    for (const item of group.items) {
-      const before = earlier.filter((entry) => entry.ms < tsOfItem(item) && entry.message.ts !== item.id.split(":")[1]);
-      const recent = before.slice(-limit);
-      if (recent.length === 0) continue;
-      item.context = [];
-      for (const { message } of recent) {
-        const actor = actorOf(message);
-        const entry = { ts: message.ts, user: actor, fromMe: actor === ctx.config.userId, text: preview(message.text) };
-        const name = await nameOf(actor);
-        if (name) entry.name = name;
-        item.context.push(entry);
-      }
-      const senderName = await nameOf(item.actor);
-      if (senderName) item.actorName = senderName;
-    }
-  }
-}
-
-function tsOfItem(item) {
-  return parseTs(item.id.split(":")[1]);
-}
-
-function parseTsOrNaN(ts) {
-  try {
-    return parseTs(ts);
-  } catch {
-    return Number.NaN;
-  }
-}
-
 async function channelName(ctx, id) {
   const body = await call(ctx, "conversations.info", { channel: id });
   return isRecord(body.channel) && typeof body.channel.name === "string" ? body.channel.name : undefined;
@@ -788,14 +688,7 @@ export async function runWatcher(
   // Oldest first, so the agent reads the conversation in order.
   const items = [...collector.items.values()].sort((a, b) => parseTs(a.id.split(":")[1]) - parseTs(b.id.split(":")[1]));
   requireCondition(items.length <= MAX_ITEMS, "Too many new messages for one check.", "config");
-  await attachContext(ctx, items);
   const result = { items, hasNextPage: false, cursor: null };
-  // Context is a convenience: when it makes the result too large, the events go out without it.
-  if (Buffer.byteLength(JSON.stringify(result)) > MAX_OUTPUT_BYTES)
-    for (const item of items) {
-      delete item.context;
-      delete item.actorName;
-    }
   requireCondition(
     Buffer.byteLength(JSON.stringify(result)) <= MAX_OUTPUT_BYTES,
     "Too many new messages for one check.",

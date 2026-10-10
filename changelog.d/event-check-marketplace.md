@@ -19,3 +19,6 @@
   from earlier template versions can be linked to the template, then updated.
 - Slack activity 1.1.1: with more direct conversations than the limit, each check reads the next
   batch (the longest unread first) and starts over after the last one, instead of stopping.
+- Slack activity 1.2.0: each event now carries the earlier messages of its conversation (oldest
+  first, with fromMe marking what you wrote) and the sender's name when known. The setting
+  "Context messages per event" controls how many (0 turns it off).

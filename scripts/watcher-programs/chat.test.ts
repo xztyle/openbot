@@ -122,6 +122,7 @@ describe("slack-activity", () => {
     watchChannels: "false",
     channelIds: "",
     includeThreadReplies: "false",
+    contextMessages: "0",
     ...WINDOW,
   };
   const ts = (offsetSeconds: number, micro = 100) =>
@@ -134,6 +135,7 @@ describe("slack-activity", () => {
     "conversations.history",
     "conversations.replies",
     "conversations.info",
+    "users.info",
   ]);
   let program: Program;
   beforeEach(async () => {
@@ -478,6 +480,73 @@ describe("slack-activity", () => {
     const [skipped, recent] = fourth;
     if (!skipped || !recent) throw new Error("Expected reads.");
     expect(skipped.oldest).toBeLessThan(recent.oldest);
+  });
+
+  describe("conversation context", () => {
+    const withContext = { ...base, watchMentions: "false", watchDirectMessages: "true", contextMessages: "3" };
+    const workspaceWith = (handler: (request: Recorded) => { body?: unknown } | null) =>
+      fakeFetch((request) => {
+        const answer = handler(request);
+        return answer ?? workspace(request);
+      });
+
+    it("attaches the earlier messages of the conversation, oldest first, and marks the person's own", async () => {
+      const fake = workspaceWith((request) => {
+        const method = methodOf(request);
+        if (method === "conversations.list") return ok({ channels: [{ id: "D9", is_im: true }] });
+        if (method === "conversations.history") {
+          return ok({
+            messages: [
+              { ts: ts(300), text: "any news about the deploy?", user: "U222BBBB" },
+              { ts: ts(250), text: "it went out at noon", user: ME },
+              { ts: ts(200), text: "ping me when it is live", user: "U222BBBB" },
+              { ts: ts(150), text: "older than the limit", user: ME },
+              { ts: ts(100), subtype: "channel_join", text: "joined", user: "U222BBBB" },
+            ],
+          });
+        }
+        if (method === "users.info")
+          return ok({ user: { id: request.url.searchParams.get("user"), profile: { display_name: "Pat" } } });
+        return null;
+      });
+      const result = await run(withContext, { fetchImpl: fake.fetchImpl });
+      const item = result.items.find((entry) => entry.id === `D9:${ts(300)}`);
+      expect(item?.context).toEqual([
+        { ts: ts(150), user: ME, fromMe: true, text: "older than the limit" },
+        { ts: ts(200), user: "U222BBBB", fromMe: false, text: "ping me when it is live", name: "Pat" },
+        { ts: ts(250), user: ME, fromMe: true, text: "it went out at noon" },
+      ]);
+      expect(item?.actorName).toBe("Pat");
+      expect(fake.requests.every((request) => READ_METHODS.has(methodOf(request)))).toBe(true);
+    });
+
+    it("sends no context request when it is turned off", async () => {
+      const fake = workspaceWith((request) =>
+        methodOf(request) === "conversations.list" ? ok({ channels: [{ id: "D9", is_im: true }] }) : null,
+      );
+      await run({ ...withContext, contextMessages: "0" }, { fetchImpl: fake.fetchImpl });
+      const calls = fake.requests.filter((request) => methodOf(request) === "conversations.history");
+      expect(calls).toHaveLength(1);
+      expect(fake.requests.some((request) => methodOf(request) === "users.info")).toBe(false);
+    });
+
+    it("never fails the check when the context cannot be read", async () => {
+      let history = 0;
+      const fake = workspaceWith((request) => {
+        const method = methodOf(request);
+        if (method === "conversations.list") return ok({ channels: [{ id: "D9", is_im: true }] });
+        if (method === "conversations.history") {
+          history += 1;
+          return history === 1
+            ? ok({ messages: [{ ts: ts(300), text: "new", user: "U222BBBB" }] })
+            : { body: { ok: false, error: "channel_not_found" } };
+        }
+        return null;
+      });
+      const result = await run(withContext, { fetchImpl: fake.fetchImpl });
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).not.toHaveProperty("context");
+    });
   });
 
   it("keeps no rotation state while every conversation fits in one check", async () => {

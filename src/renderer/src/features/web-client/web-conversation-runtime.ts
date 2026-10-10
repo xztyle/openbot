@@ -1,4 +1,3 @@
-import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { AgentEvent, AttachmentImportEvent, AttachmentSummary, TeamRealtimeEvent } from "@openbot/contracts/ipc";
 import { runTeamEffect } from "@openbot/team-client";
 import { eventCheckTemplatesApi } from "@openbot/team-client/event-check-templates-api";
@@ -18,13 +17,14 @@ import {
 import { listInstalledSkills, type TeamApiRequest } from "@openbot/team-client/team-api-requests";
 import { currentText } from "@openbot/ui/text";
 import { Effect } from "effect";
-import { onCleanup } from "solid-js";
+import { createSignal, onCleanup } from "solid-js";
 import type { ConversationRuntime } from "../conversation/conversation-runtime";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import { webMemoriesPort } from "../conversation/web-memories-port";
 import { webRoutinesPort } from "../conversation/web-routines-port";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
 import type { WebWorkspaceRuntime } from "./web-runtime";
+import { isHostFileTypeError, planUploads, type UploadRejection, uploadRejectionNotice } from "./web-upload-plan";
 
 /** The events of the connected host. */
 type HostEvents = (listener: (event: AgentEvent | TeamRealtimeEvent) => void) => () => void;
@@ -106,6 +106,7 @@ export function createWebConversationRuntime(
   const listeners = new Set<(event: AttachmentImportEvent) => void>();
   const files = createWebAttachmentFiles(remote);
   let importing: { cancelled: boolean; serverId: string } | undefined;
+  const [importProgress, setImportProgress] = createSignal<{ current: number; total: number } | null>(null);
   async function cancelImportFiles() {
     if (!importing) return;
     importing.cancelled = true;
@@ -120,6 +121,12 @@ export function createWebConversationRuntime(
   };
   const emit = (event: AttachmentImportEvent) => {
     for (const listener of listeners) listener(event);
+  };
+  /** Shows a message in the chat that the import events reach, with no upload behind it. */
+  const notify = (serverId: string, message: string) => {
+    const requestId = crypto.randomUUID();
+    emit({ type: "started", serverId, requestId });
+    emit({ type: "error", serverId, requestId, message });
   };
   onCleanup(() => {
     void cancelImportFiles();
@@ -177,20 +184,36 @@ export function createWebConversationRuntime(
     voice: { onModelStatus: () => () => {}, prepareModel: unavailable, transcribe: unavailable },
     openUrl: openWebLink,
     previewAttachment: files.preview,
-    async importFiles(files) {
-      if (importing || files.length === 0) return;
+    importProgress,
+    async importFiles(files, options) {
+      if (files.length === 0) return;
+      const text = currentText();
       const serverId = hostId();
+      // A second pick during an upload would race the first for the draft's room. Say so, and keep both.
+      if (importing) {
+        notify(serverId, text.t("webClient.upload.busy"));
+        return;
+      }
       const job = { cancelled: false, serverId };
       importing = job;
       const requestId = crypto.randomUUID();
       emit({ type: "started", serverId, requestId });
       const attachments: AttachmentSummary[] = [];
       try {
-        if (files.length > INPUT_LIMITS.attachments)
-          throw new Error(currentText().t("webClient.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
-        for (const file of files) {
+        // Every file is checked before the first one goes up, so a refused file never costs an upload
+        // and never takes the valid files down with it.
+        const plan = planUploads(files, options?.room);
+        const rejected: UploadRejection[] = [...plan.rejected];
+        for (const [index, file] of plan.accepted.entries()) {
           if (job.cancelled || hostId() !== serverId) break;
-          attachments.push(await remote.upload(file));
+          setImportProgress({ current: index + 1, total: plan.accepted.length });
+          try {
+            attachments.push(await remote.upload(file));
+          } catch (error) {
+            // The host's capabilities decide this one, so it is known only now. The rest go on.
+            if (!isHostFileTypeError(error, text)) throw error;
+            rejected.push({ name: file.name, reason: "host" });
+          }
         }
         if (job.cancelled || hostId() !== serverId) {
           if (hostId() === serverId)
@@ -198,7 +221,13 @@ export function createWebConversationRuntime(
           emit({ type: "completed", serverId, requestId, attachments: [] });
           return;
         }
+        const notice = rejected.length > 0 ? uploadRejectionNotice(rejected, text) : "";
+        if (attachments.length === 0 && notice) {
+          emit({ type: "error", serverId, requestId, message: notice });
+          return;
+        }
         emit({ type: "completed", serverId, requestId, attachments });
+        if (notice) notify(serverId, notice);
       } catch (error) {
         if (hostId() === serverId)
           await Promise.allSettled(attachments.map((attachment) => remote.discard(attachment.id)));
@@ -214,6 +243,7 @@ export function createWebConversationRuntime(
         });
       } finally {
         importing = undefined;
+        setImportProgress(null);
       }
     },
     cancelImportFiles,

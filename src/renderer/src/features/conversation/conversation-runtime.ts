@@ -41,8 +41,13 @@ export interface ConversationRuntime {
   voice: Pick<OpenBotDesktopApi["voice"], "onModelStatus" | "prepareModel" | "transcribe">;
   openUrl: OpenBotDesktopApi["openUrl"];
   previewAttachment?: (attachment: AttachmentSummary) => Promise<FilePreview>;
-  importFiles?: (files: File[]) => Promise<void>;
+  /**
+   * `room` is how many more files the draft takes. A file past it is named and not uploaded.
+   */
+  importFiles?: (files: File[], options?: { room?: number }) => Promise<void>;
   cancelImportFiles?: () => Promise<void>;
+  /** The file that goes up now and how many go up in all. Null while no upload runs. */
+  importProgress?: () => { current: number; total: number } | null;
   /** The host admin calls of a client without the desktop port. Absent, skills, tables and publishing are hidden. */
   admin?:
     | {

@@ -1,3 +1,4 @@
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { MessageSelectionActions } from "@openbot/ui/features/conversation/SelectionActions";
 import { useText } from "@openbot/ui/text";
 import { createEffect, Show } from "solid-js";
@@ -19,6 +20,7 @@ export function ConversationView(props: ConversationProps) {
     agentReady,
     browserPanelWidth,
     browserSidebarOpen,
+    currentDraft,
     dropActive,
     filePreviewOpen,
     filesOpen,
@@ -63,7 +65,10 @@ export function ConversationView(props: ConversationProps) {
           event.preventDefault();
           setDropActive(false);
           // The desktop preload imports a dropped file; a client with its own runtime imports it here.
-          if (props.runtime?.importFiles) void props.runtime.importFiles([...(event.dataTransfer?.files ?? [])]);
+          if (props.runtime?.importFiles)
+            void props.runtime.importFiles([...(event.dataTransfer?.files ?? [])], {
+              room: Math.max(0, INPUT_LIMITS.attachments - currentDraft().attachments.length),
+            });
         }}
       >
         <MessageSelectionActions

@@ -1,5 +1,6 @@
 import { expandAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { chatTagReferences, expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentApproval,
   type AttachmentSummary,
@@ -86,6 +87,7 @@ import { channelRoutinesPort, eventRoutinesPort } from "../conversation/routines
 import { ChannelEditor } from "./ChannelEditor";
 import { type ChannelTimelineEntry, channelTimelineEntries, firstUnreadChannelMessageId } from "./channel-timeline";
 import { useChannels } from "./channels-context";
+import { PartialAttachmentImportError } from "./channels-port";
 
 const ChannelFilePreviewPanel = lazy(() => import("../conversation/FilePreviewPanel"));
 
@@ -214,18 +216,49 @@ export function ChannelConversation(props: ChannelConversationProps) {
     updateComposer({ replyToMessageId: messageId });
     setComposerFocusRequest((current) => current + 1);
   };
+  /** How many more files the open channel's draft takes. */
+  const attachmentRoom = () => {
+    const selectedId = channels.state.selectedId;
+    const attached = selectedId ? (conversation.channelDrafts()[selectedId]?.attachments.length ?? 0) : 0;
+    return Math.max(0, INPUT_LIMITS.attachments - attached);
+  };
+  /** Puts uploaded files in a channel's draft, as many as it has room for. Returns how many were left out. */
+  const attachToDraft = (channelId: string, attachments: AttachmentSummary[]): number => {
+    const attached = conversation.channelDrafts()[channelId]?.attachments.length ?? 0;
+    const room = Math.max(0, INPUT_LIMITS.attachments - attached);
+    const accepted = attachments.slice(0, room);
+    const leftOut = attachments.slice(room);
+    // A file the draft cannot take is not kept on the host either.
+    for (const attachment of leftOut) void runtime().agent.discardDraftAttachment?.(attachment.id);
+    if (accepted.length > 0)
+      updateDraft(channelId, (draft) => ({ ...draft, attachments: [...draft.attachments, ...accepted] }));
+    return leftOut.length;
+  };
   const addAttachments = (load: () => Promise<AttachmentSummary[]>) =>
     void channels.perform(async () => {
       const selectedId = channels.state.selectedId;
-      const attachments = await load();
-      if (selectedId)
-        updateDraft(selectedId, (draft) => ({ ...draft, attachments: [...draft.attachments, ...attachments] }));
+      let attachments: AttachmentSummary[];
+      let refused: PartialAttachmentImportError | null = null;
+      try {
+        attachments = await load();
+      } catch (error) {
+        // Some files went up and some were refused: the good ones attach, and the message names the rest.
+        if (!(error instanceof PartialAttachmentImportError)) throw error;
+        attachments = error.attachments;
+        refused = error;
+      }
+      let leftOut = attachments.length;
+      if (selectedId) leftOut = attachToDraft(selectedId, attachments);
+      else for (const attachment of attachments) void runtime().agent.discardDraftAttachment?.(attachment.id);
+      if (refused) throw refused;
+      if (leftOut > 0) throw new Error(t("composer.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
     });
   /** Dropped or pasted files. Only a browser runtime imports them here; the desktop preload imports its own. */
   const canImportFiles = () => Boolean(runtime().importAttachments && channels.state.page?.channel.archived === false);
   const importFiles = (files: File[]) => {
     const importAttachments = runtime().importAttachments;
-    if (importAttachments && canImportFiles() && files.length > 0) addAttachments(() => importAttachments(files));
+    if (importAttachments && canImportFiles() && files.length > 0)
+      addAttachments(() => importAttachments(files, attachmentRoom()));
   };
   const [dropActive, setDropActive] = createSignal(false);
   const [copyError, setCopyError] = createSignal<string | null>(null);
@@ -1150,11 +1183,12 @@ export function ChannelConversation(props: ChannelConversationProps) {
                               variant="ghost"
                               size="xs"
                               aria-label={t("channel.composer.removeAttachment", { name: attachment.name })}
-                              onClick={() =>
+                              onClick={() => {
                                 updateComposer({
                                   attachments: composer().attachments.filter((item) => item.id !== attachment.id),
-                                })
-                              }
+                                });
+                                void runtime().agent.discardDraftAttachment?.(attachment.id);
+                              }}
                             >
                               <X aria-hidden="true" />
                             </Button>
@@ -1193,6 +1227,13 @@ export function ChannelConversation(props: ChannelConversationProps) {
                       <Plus aria-hidden="true" />
                     </Button>
                     <div class="composer-primary-actions">
+                      <Show when={runtime().importProgress?.()}>
+                        {(progress) => (
+                          <span class="voice-model-progress" role="status">
+                            {t("composer.upload.progress", { current: progress().current, total: progress().total })}
+                          </span>
+                        )}
+                      </Show>
                       {/* As in the agent chat, an empty composer offers stop while work runs. */}
                       <Show
                         when={activeRuns().length > 0 && !composer().text.trim() && !composer().attachments.length}

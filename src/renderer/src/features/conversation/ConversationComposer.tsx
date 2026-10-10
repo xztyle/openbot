@@ -1,4 +1,5 @@
 import { supportedAttachmentExtensions } from "@openbot/contracts/attachment-files";
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { accountUsageCoversModel, canPreviewAttachment } from "@openbot/contracts/ipc";
 import {
   TEAM_EML_ATTACHMENTS_CAPABILITY,
@@ -103,6 +104,8 @@ export function ConversationComposer() {
   let skillPickerChosen = false;
   // A pending Save keeps its exact request for retry. Block changes until retry or cancel.
   const savePending = () => Boolean(editingDeliveryId() && editingPendingSave());
+  /** How many more files the draft takes, so an upload names a file it cannot attach before it starts. */
+  const attachmentRoom = () => Math.max(0, INPUT_LIMITS.attachments - currentDraft().attachments.length);
   const [deleteQueuedOpen, setDeleteQueuedOpen] = createSignal(false);
   /**
    * Save with nothing left to save cannot succeed, and failing without a word looks like a dead
@@ -513,7 +516,7 @@ export function ConversationComposer() {
               sendShortcut={deviceSendShortcut(props.platform)}
               onPickerOpenChange={setPickerOpen}
               onPasteFiles={(files) => {
-                if (props.runtime?.importFiles) void props.runtime.importFiles(files);
+                if (props.runtime?.importFiles) void props.runtime.importFiles(files, { room: attachmentRoom() });
               }}
               onOpenAttachment={(attachment) =>
                 canPreviewAttachment(attachment)
@@ -544,7 +547,9 @@ export function ConversationComposer() {
               data-openbot-attachment-picker={props.runtime ? undefined : "true"}
               onChange={(event) => {
                 if (props.runtime?.importFiles)
-                  void props.runtime.importFiles(Array.from(event.currentTarget.files ?? []));
+                  void props.runtime.importFiles(Array.from(event.currentTarget.files ?? []), {
+                    room: attachmentRoom(),
+                  });
               }}
             />
             <DropdownMenu.Root
@@ -611,6 +616,13 @@ export function ConversationComposer() {
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
             <div class="composer-primary-actions">
+              <Show when={attachmentBusy() && props.runtime?.importProgress?.()}>
+                {(progress) => (
+                  <span class="voice-model-progress" role="status">
+                    {t("composer.upload.progress", { current: progress().current, total: progress().total })}
+                  </span>
+                )}
+              </Show>
               <Show when={attachmentBusy() && props.runtime?.cancelImportFiles} keyed>
                 {(cancelImportFiles) => (
                   <Button variant="ghost" type="button" onClick={() => void cancelImportFiles()}>

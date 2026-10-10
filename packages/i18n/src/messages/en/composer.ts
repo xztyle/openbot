@@ -77,6 +77,7 @@ export const messages = defineMessages("composer", {
   "composer.add.skill": "Use a skill",
   "composer.add.context": "Add context",
   "composer.upload.cancel": "Cancel upload",
+  "composer.upload.progress": "Uploading {current} of {total}",
   "composer.voice.progress": "Downloading voice model {progress}%",
   "composer.voice.recording": "Voice recording",
   "composer.queueEdit.label": "Editing queued message",

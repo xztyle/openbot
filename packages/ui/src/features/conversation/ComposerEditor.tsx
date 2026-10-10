@@ -40,6 +40,7 @@ import {
 } from "./composer-picker";
 import {
   type AttachmentTokenActions,
+  clipToRoom,
   createAttachmentToken,
   createMcpToken,
   createMentionToken,
@@ -51,7 +52,7 @@ import {
   syncSkillTokens,
   truncateComposerValue,
 } from "./composer-tokens";
-import { isSendShortcutKey, type SendShortcut } from "./send-shortcut";
+import { isSendShortcutKey, type SendShortcut, sendShortcutEnterKeyHint } from "./send-shortcut";
 
 interface ComposerEditorProps {
   agentId: string | undefined;
@@ -64,6 +65,11 @@ interface ComposerEditorProps {
   placeholder: string;
   ariaLabel: string;
   disabled: boolean;
+  /**
+   * Why the editor is off, such as "Connecting" or "Host sleeping". The placeholder says it to the
+   * eye only, so a reader hears it as the description of the disabled field.
+   */
+  disabledReason?: string | undefined;
   focusRequest?: number;
   /** Raised by one to open the skill picker at the caret, as a typed `$` does. */
   skillPickerRequest?: number;
@@ -100,6 +106,15 @@ export function expandComposerMentions(value: string): string {
 export function ComposerEditor(props: ComposerEditorProps) {
   const { t, format } = useText();
   const [mention, setMention] = createSignal<MentionContext | null>(null);
+  /* How many characters the last paste or key press could not add, so the person sees why. */
+  const [limitNotice, setLimitNotice] = createSignal<number | null>(null);
+  let limitNoticeTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(limitNoticeTimer));
+  function showLimitNotice(notAdded: number) {
+    setLimitNotice(notAdded);
+    clearTimeout(limitNoticeTimer);
+    limitNoticeTimer = setTimeout(() => setLimitNotice(null), 8_000);
+  }
   const [activeOption, setActiveOption] = createSignal(0);
   /* Where the `$` that the add menu wrote starts, so that picker can say why it is empty. */
   const [requestedMentionStart, setRequestedMentionStart] = createSignal<number | null>(null);
@@ -108,6 +123,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
     content: string;
   } | null>(null);
   const attachmentTooltipId = `composer-file-tooltip-${createUniqueId()}`;
+  const pickerId = `composer-picker-${createUniqueId()}`;
+  const pickerListId = `${pickerId}-list`;
+  const pickerStatusId = `${pickerId}-status`;
+  const disabledReasonId = `${pickerId}-reason`;
+  const pickerOptionId = (index: number) => `${pickerId}-option-${index}`;
   /*
    * Measured again on every keystroke, and almost always the same two values. Without this
    * comparison each measurement is a new object, which moves the picker to a new portal and
@@ -198,6 +218,22 @@ export function ComposerEditor(props: ComposerEditorProps) {
     () => pickerOpen(),
     (open) => {
       props.onPickerOpenChange?.(open);
+    },
+  );
+  /*
+   * The editor keeps the focus, so the option the arrow keys reach is named here. It is set on the
+   * element, not as a JSX attribute: the textbox is focusable through `tabindex`, which the lint rule
+   * for `aria-activedescendant` does not read from Solid's lowercase attribute.
+   */
+  createEffect(
+    () =>
+      pickerOpen() && pickerStatus() === null && matchingOptions().length > 0
+        ? pickerOptionId(Math.min(activeOption(), matchingOptions().length - 1))
+        : null,
+    (optionId) => {
+      if (!editor) return;
+      if (optionId) editor.setAttribute("aria-activedescendant", optionId);
+      else editor.removeAttribute("aria-activedescendant");
     },
   );
   const pickerOptionElements = new Map<string, HTMLElement>();
@@ -404,6 +440,44 @@ export function ComposerEditor(props: ComposerEditorProps) {
     scheduleCaretScroll();
   }
 
+  /**
+   * How many more characters the message takes. A selection counts as free room, because the text
+   * that goes in replaces it. Text that is already there is never cut to make room.
+   */
+  function inputRoom(): number {
+    if (!editor) return 0;
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    let selected = 0;
+    if (range && !range.collapsed && editor.contains(range.commonAncestorContainer)) {
+      const holder = document.createElement("div");
+      holder.append(range.cloneContents());
+      selected = serializeEditor(holder).length;
+    }
+    return Math.max(0, INPUT_LIMITS.messageText - (serializeEditor(editor).length - selected));
+  }
+
+  /** Inserts the part of `text` that fits and says how much did not. */
+  function insertWithinLimit(text: string): boolean {
+    if (!editor) return false;
+    const accepted = clipToRoom(text, inputRoom());
+    if (accepted.length < text.length) showLimitNotice(text.length - accepted.length);
+    if (!accepted) return false;
+    insertPlainText(editor, accepted);
+    return true;
+  }
+
+  function addLineBreak() {
+    if (!editor) return;
+    if (inputRoom() < 1) {
+      showLimitNotice(1);
+      return;
+    }
+    insertLineBreak(editor);
+    emitValue();
+    updateMention();
+  }
+
   /*
    * Every plain character takes the same road: this handler cancels the native insert and asks the
    * browser to insert the text. Letting the default action write some characters and the editor
@@ -417,8 +491,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const lineBreak = event.inputType === "insertLineBreak" || event.inputType === "insertParagraph";
     if (!lineBreak && (event.inputType !== "insertText" || !event.data)) return;
     event.preventDefault();
-    if (lineBreak) insertLineBreak(editor);
-    else if (event.data) insertPlainText(editor, event.data);
+    if (lineBreak) {
+      addLineBreak();
+      return;
+    }
+    if (event.data && !insertWithinLimit(event.data)) return;
     emitValue();
     updateMention();
   }
@@ -624,19 +701,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
     if (event.key === "Enter" && event.shiftKey) {
       event.preventDefault();
-      if (!editor) return;
-      insertLineBreak(editor);
-      emitValue();
-      updateMention();
+      addLineBreak();
       return;
     }
     if (event.key === "Enter") {
       if (sendShortcut !== "enter" && !isSendShortcutKey(event, sendShortcut)) {
         event.preventDefault();
-        if (!editor) return;
-        insertLineBreak(editor);
-        emitValue();
-        updateMention();
+        addLineBreak();
         return;
       }
       event.preventDefault();
@@ -679,10 +750,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
       return;
     }
 
-    const text = clipboard.getData("text/plain").replace(/\r\n?/g, "\n").slice(0, INPUT_LIMITS.messageText);
+    const text = clipboard.getData("text/plain").replace(/\r\n?/g, "\n");
     if (!text) return;
 
-    insertPlainText(editor, text);
+    // Only what fits goes in, at the caret. The text already written is never cut for it.
+    if (!insertWithinLimit(text)) return;
     emitValue();
     updateMention();
   }
@@ -692,6 +764,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
       <Show when={!props.value}>
         <span class="composer-editor-placeholder" aria-hidden="true">
           {props.placeholder}
+        </span>
+      </Show>
+      <Show when={props.disabled && props.disabledReason}>
+        <span id={disabledReasonId} class="sr-only">
+          {props.disabledReason}
         </span>
       </Show>
       {/* biome-ignore lint/a11y/useSemanticElements: contenteditable is required for inline agent chips. */}
@@ -705,6 +782,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
         aria-label={props.ariaLabel}
         aria-disabled={props.disabled ? "true" : "false"}
         aria-multiline="true"
+        aria-autocomplete={pickerOpen() ? "list" : undefined}
+        aria-haspopup={pickerOpen() ? "listbox" : undefined}
+        aria-controls={pickerOpen() ? (pickerStatus() === null ? pickerListId : pickerStatusId) : undefined}
+        aria-describedby={props.disabled && props.disabledReason ? disabledReasonId : undefined}
+        enterkeyhint={sendShortcutEnterKeyHint(props.sendShortcut ?? "enter")}
         spellcheck="true"
         data-cuelume-type=""
         onFocus={ensureEditorSelection}
@@ -743,7 +825,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
           >
             <Show when={pickerStatus()}>
               {(status) => (
-                <p class="mention-picker-status" role="status">
+                <p id={pickerStatusId} class="mention-picker-status" role="status">
                   {status()}
                 </p>
               )}
@@ -752,6 +834,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               <Listbox.Root<PickerOption>
                 as="div"
                 ref={pickerFades.bind}
+                id={pickerListId}
                 class={["mention-picker-list", pickerFades.classes()]}
                 onScroll={pickerFades.measure}
                 aria-label={t(
@@ -780,6 +863,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   return (
                     <Listbox.Item
                       ref={(element) => pickerOptionElements.set(pickerOptionKey(option), element)}
+                      id={pickerOptionId(optionIndex())}
                       item={item}
                       aria-label={pickerOptionText(option, t)}
                       class={[
@@ -827,6 +911,16 @@ export function ComposerEditor(props: ComposerEditorProps) {
             </Show>
           </div>
         </Portal>
+      </Show>
+      <Show when={limitNotice()}>
+        {(notAdded) => (
+          <p class="composer-editor-limit-notice" role="status">
+            {t("composer.limit.notAdded", {
+              limit: format.number(INPUT_LIMITS.messageText),
+              count: format.number(notAdded()),
+            })}
+          </p>
+        )}
       </Show>
       <Show when={attachmentTooltip()}>
         {(activeTooltip) => (

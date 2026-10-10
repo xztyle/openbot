@@ -1,9 +1,10 @@
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { DraftAttachment, InstalledSkill, McpServerConfig } from "@openbot/contracts/ipc";
 import type { AgentProfile } from "@openbot/ui/data";
 import { ComposerEditor } from "@openbot/ui/features/conversation/ComposerEditor";
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 const originalMatchMedia = window.matchMedia;
 
@@ -70,6 +71,17 @@ function mcpServer(overrides: Partial<McpServerConfig> = {}): McpServerConfig {
     headers: [],
     ...overrides,
   };
+}
+
+/** Puts the caret inside the editor's first text node. */
+function placeCaret(editor: HTMLElement, offset: number) {
+  const text = editor.firstChild;
+  assert(text);
+  const caret = document.createRange();
+  caret.setStart(text, offset);
+  caret.collapse(true);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(caret);
 }
 
 /** Types a trigger and its query, the way the picker reads the caret. */
@@ -154,6 +166,51 @@ describe("ComposerEditor", () => {
     expect(screen.getByLabelText("MCP server Aave")).toBeInTheDocument();
   });
 
+  it("tells a screen reader which option of the open picker is active", async () => {
+    const { editor } = renderComposer(
+      [],
+      "",
+      [],
+      [],
+      [mcpServer(), mcpServer({ id: "mcp-aave-2", name: "Aave test" })],
+    );
+    expect(editor).not.toHaveAttribute("aria-controls");
+
+    await typeQuery(editor, "$Aa");
+    const picker = await screen.findByRole("listbox", { name: "Insert skill or MCP server" });
+    expect(editor).toHaveAttribute("aria-controls", picker.id);
+    expect(editor).toHaveAttribute("aria-autocomplete", "list");
+    const active = editor.getAttribute("aria-activedescendant");
+    expect(active).toBeTruthy();
+    expect(document.getElementById(active ?? "")).toHaveTextContent("Aave");
+
+    await fireEvent.keyDown(editor, { key: "ArrowDown" });
+    await waitFor(() => expect(editor.getAttribute("aria-activedescendant")).not.toBe(active));
+    expect(document.getElementById(editor.getAttribute("aria-activedescendant") ?? "")).toHaveTextContent("Aave test");
+
+    await fireEvent.keyDown(editor, { key: "Escape" });
+    await waitFor(() => expect(editor).not.toHaveAttribute("aria-controls"));
+    expect(editor).not.toHaveAttribute("aria-activedescendant");
+  });
+
+  it("describes a disabled editor with the reason the placeholder shows only to the eye", () => {
+    render(() => (
+      <ComposerEditor
+        agentId="chief"
+        agents={[]}
+        value=""
+        placeholder="Connecting…"
+        disabledReason="Connecting…"
+        ariaLabel="Message"
+        disabled={true}
+        onValueChange={() => {}}
+        onSubmit={() => {}}
+      />
+    ));
+
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveAccessibleDescription("Connecting…");
+  });
+
   it("withholds a server the host has turned off", async () => {
     const { editor } = renderComposer([], "", [], [], [mcpServer({ enabled: false })]);
 
@@ -182,6 +239,39 @@ describe("ComposerEditor", () => {
 
     await fireEvent.keyDown(editor, { key: "Enter", metaKey: true });
     expect(onSubmit).toHaveBeenCalledOnce();
+  });
+
+  it("labels the on-screen Return key as send only where Enter sends", () => {
+    const { editor } = renderComposer([], "", [], [], [], "enter");
+    expect(editor).toHaveAttribute("enterkeyhint", "send");
+    cleanup();
+    const modifier = renderComposer([], "", [], [], [], "ctrl-enter");
+    expect(modifier.editor).toHaveAttribute("enterkeyhint", "enter");
+  });
+
+  it("adds only the part of a paste that fits and never cuts the text already written", async () => {
+    const existing = "a".repeat(INPUT_LIMITS.messageText - 5);
+    const { editor, onValueChange } = renderComposer([], existing);
+    placeCaret(editor, 0);
+
+    await fireEvent.paste(editor, {
+      clipboardData: { files: [], items: [], getData: () => "b".repeat(20) },
+    });
+
+    await waitFor(() => expect(onValueChange).toHaveBeenCalled());
+    expect(onValueChange).toHaveBeenLastCalledWith(`bbbbb${existing}`);
+    expect(await screen.findByText("Message is limited to 100,000 characters; 15 were not added.")).toBeInTheDocument();
+  });
+
+  it("adds nothing and says so when the message is full", async () => {
+    const existing = "a".repeat(INPUT_LIMITS.messageText);
+    const { editor, onValueChange } = renderComposer([], existing);
+    placeCaret(editor, 10);
+
+    await fireEvent.paste(editor, { clipboardData: { files: [], items: [], getData: () => "xyz" } });
+
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(await screen.findByText("Message is limited to 100,000 characters; 3 were not added.")).toBeInTheDocument();
   });
 
   it("sends on Ctrl+Enter in modifier mode on other platforms", async () => {

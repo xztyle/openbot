@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isSendShortcutKey, parseSendShortcutMode, resolveSendShortcut } from "./send-shortcut";
+import {
+  effectiveSendShortcutMode,
+  isSendShortcutKey,
+  parseSendShortcutMode,
+  resolveSendShortcut,
+  sendShortcutEnterKeyHint,
+} from "./send-shortcut";
 
 function key(overrides: Partial<KeyboardEvent> = {}): {
   key: string;
@@ -55,5 +61,25 @@ describe("isSendShortcutKey", () => {
 
   it("ignores other keys", () => {
     expect(isSendShortcutKey(key({ key: "a", metaKey: true }), "meta-enter")).toBe(false);
+  });
+});
+
+describe("effectiveSendShortcutMode", () => {
+  it("keeps the saved mode on a desktop layout", () => {
+    expect(effectiveSendShortcutMode("enter", false)).toBe("enter");
+    expect(effectiveSendShortcutMode("mod-enter", false)).toBe("mod-enter");
+  });
+
+  it("makes Return add a line on a touch layout, whatever the saved mode", () => {
+    expect(effectiveSendShortcutMode("enter", true)).toBe("mod-enter");
+    expect(resolveSendShortcut(effectiveSendShortcutMode("enter", true), "darwin")).toBe("meta-enter");
+  });
+});
+
+describe("sendShortcutEnterKeyHint", () => {
+  it("names the Return key send only where plain Enter sends", () => {
+    expect(sendShortcutEnterKeyHint("enter")).toBe("send");
+    expect(sendShortcutEnterKeyHint("meta-enter")).toBe("enter");
+    expect(sendShortcutEnterKeyHint("ctrl-enter")).toBe("enter");
   });
 });

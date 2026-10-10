@@ -32,6 +32,7 @@ export interface MessageActionsDeps {
   copiedMessageId: () => string | null;
   setCopiedMessageId: (id: string | null) => void;
   setComposerError: (error: string | null, targetOverride?: ConversationTarget) => void;
+  setComposerFocusRequest: (update: (current: number) => number) => void;
 }
 
 export function createMessageActions(deps: MessageActionsDeps) {
@@ -39,6 +40,8 @@ export function createMessageActions(deps: MessageActionsDeps) {
     deps.updateCurrentDraft({ replyToMessageId: message.id });
     deps.setOpenReactionMessageId(null);
     deps.setOpenMoreMessageId(null);
+    // The next thing the person does is write the reply, so the caret goes there.
+    deps.setComposerFocusRequest((current) => current + 1);
   }
 
   async function reactToMessage(message: AgentMessage, emoji: MessageReaction | null) {

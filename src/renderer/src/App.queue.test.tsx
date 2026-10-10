@@ -98,6 +98,68 @@ describe("OpenBot connected desktop shell", () => {
     restarted.unmount();
   });
 
+  it("puts a held message back ahead of what is written now, with its files", async () => {
+    // A message to a working agent is held only where the agent steers rather than queues.
+    vi.mocked(window.openbot.getBusyMessageModePreference).mockResolvedValue({ mode: "steer" });
+    render(() => <App />);
+    await confirmOnboardingModel();
+    const composer = await screen.findByRole("textbox", { name: "Message Chief" });
+    await screen.findByRole("heading", { name: "Chief" });
+    emitAgentEvent?.({
+      type: "conversation",
+      snapshot: { agentId: "chief", threadId: "thread-chief", activeTurnId: "turn-live", revision: 1, messages: [] },
+    });
+    // A running turn is what holds the message: the stop button names it.
+    await screen.findByRole("button", { name: "Stop agent" });
+    emitAttachmentImport?.({ type: "started", requestId: "held-paste", serverId: "local" });
+    emitAttachmentImport?.({
+      type: "completed",
+      requestId: "held-paste",
+      serverId: "local",
+      attachments: [attachment("held-1", "report.pdf", "pdf")],
+    });
+    await screen.findByRole("button", { name: "Remove report.pdf" });
+    composer.textContent = "Steer the run";
+    await fireEvent.input(composer);
+    await fireEvent.keyDown(composer, { key: "Enter" });
+    await screen.findByText("Sending in a few seconds");
+    expect(screen.queryByRole("button", { name: "Remove report.pdf" })).not.toBeInTheDocument();
+
+    // The person kept typing: Undo must not replace it.
+    composer.textContent = "Second thought";
+    await fireEvent.input(composer);
+    const undo = screen.getByRole("button", { name: "Undo" });
+    expect(undo).toBeEnabled();
+    await fireEvent.click(undo);
+
+    await waitFor(() => expect(composer).toHaveTextContent(/Steer the run\s*Second thought/));
+    expect(screen.getByRole("button", { name: "Remove report.pdf" })).toBeInTheDocument();
+    expect(screen.queryByText("Sending in a few seconds")).not.toBeInTheDocument();
+    expect(window.openbot.agent.sendMessage).not.toHaveBeenCalled();
+    expect(window.openbot.agent.discardDraftAttachment).not.toHaveBeenCalled();
+  });
+
+  it("puts a failed message back ahead of what is written now", async () => {
+    vi.mocked(window.openbot.agent.sendMessage).mockRejectedValueOnce(new Error("Mailbox unavailable"));
+    render(() => <App />);
+    await confirmOnboardingModel();
+    const composer = await screen.findByRole("textbox", { name: "Message Chief" });
+    composer.textContent = "Run this Monday";
+    await fireEvent.input(composer);
+    await fireEvent.keyDown(composer, { key: "Enter" });
+    await screen.findByText("Mailbox unavailable");
+    composer.textContent = "Another draft";
+    await fireEvent.input(composer);
+
+    const edit = screen.getByRole("button", { name: "Edit" });
+    expect(edit).toBeEnabled();
+    await fireEvent.click(edit);
+
+    await waitFor(() => expect(composer).toHaveTextContent(/Run this Monday\s*Another draft/));
+    expect(screen.queryByText("Mailbox unavailable")).not.toBeInTheDocument();
+    expect(window.openbot.agent.sendMessage).toHaveBeenCalledOnce();
+  });
+
   it("does not read an earlier agent reply again after sending a message", async () => {
     render(() => <App />);
     await screen.findByRole("heading", { name: "Chief" });
@@ -332,6 +394,8 @@ describe("OpenBot connected desktop shell", () => {
     expect(screen.getByText("Replying to Agent")).toBeInTheDocument();
 
     const composer = screen.getByRole("textbox", { name: "Message Chief" });
+    // The reply is written next, so the caret is already in the message box.
+    await waitFor(() => expect(composer).toHaveFocus());
     composer.textContent = "Yes, today please";
     await fireEvent.input(composer);
     await fireEvent.keyDown(composer, { key: "Enter" });
@@ -557,6 +621,40 @@ describe("OpenBot connected desktop shell", () => {
         deliveryId: "delivery-edited",
       }),
     );
+  });
+
+  it("moves a queued message up or down with buttons, for a touch screen", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+    const first = queuedDelivery("delivery-first", "First work", 1);
+    const second = queuedDelivery("delivery-second", "Second work", 2);
+    const third = queuedDelivery("delivery-third", "Third work", 3);
+    emitAgentEvent?.({
+      type: "queue-changed",
+      snapshot: {
+        agentId: "chief",
+        deliveries: [
+          queuedDelivery("delivery-running", "Running", null, { status: "running", turnId: "turn-1" }),
+          first,
+          second,
+          third,
+        ],
+      },
+    });
+
+    // Nothing can move above the first message or below the last one.
+    await screen.findByRole("group", { name: "Queued message 1: First work" });
+    expect(screen.getByRole("button", { name: "Move queued message 1 up" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move queued message 3 down" })).toBeDisabled();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Move queued message 2 up" }));
+    await waitFor(() =>
+      expect(window.openbot.agent.reorderQueue).toHaveBeenCalledWith({
+        agentId: "chief",
+        deliveryIds: ["delivery-second", "delivery-first", "delivery-third"],
+      }),
+    );
+    expect(await screen.findByText("Moved queued message to position 1 of 3.")).toBeInTheDocument();
   });
 
   it("keeps foreground starts out of Queue and hides waiting work between turns", async () => {
@@ -1283,6 +1381,61 @@ describe("queue edit", () => {
         { agentId: "chief", deliveryId: delivery.id, editId: secondBegin.editId, action: "cancel" },
         "local",
       ),
+    );
+  });
+
+  it("shows how to leave a queued edit and brings back the draft that was in the composer", async () => {
+    const delivery = queuedDelivery("exit-edit", "Original queue message", 1);
+    queueWith(delivery);
+    vi.mocked(window.openbot.agent.editQueuedMessage).mockResolvedValue({ agentId: "chief", deliveries: [delivery] });
+    render(() => <App />);
+    const composer = await screen.findByRole("textbox", { name: "Message Chief" });
+    composer.textContent = "My own draft";
+    await fireEvent.input(composer);
+    await fireEvent.click(await screen.findByRole("button", { name: "Edit queued message 1" }));
+    expect(await screen.findByText("Editing queued message")).toBeInTheDocument();
+    await waitFor(() => expect(composer).toHaveTextContent("Original queue message"));
+    const begin = vi.mocked(window.openbot.agent.editQueuedMessage).mock.calls[0]?.[0];
+    assert(begin);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel editing the queued message" }));
+    await waitFor(() => expect(screen.queryByText("Editing queued message")).not.toBeInTheDocument());
+    expect(composer).toHaveTextContent("My own draft");
+    expect(window.openbot.agent.editQueuedMessage).toHaveBeenCalledWith(
+      { agentId: "chief", deliveryId: delivery.id, editId: begin.editId, action: "cancel" },
+      "local",
+    );
+  });
+
+  it("asks before deleting a queued message that Save would leave empty", async () => {
+    const delivery = queuedDelivery("empty-edit", "Original queue message", 1);
+    queueWith(delivery);
+    vi.mocked(window.openbot.agent.editQueuedMessage).mockResolvedValue({ agentId: "chief", deliveries: [delivery] });
+    render(() => <App />);
+    const composer = await screen.findByRole("textbox", { name: "Message Chief" });
+    await fireEvent.click(await screen.findByRole("button", { name: "Edit queued message 1" }));
+    await screen.findByText("Editing queued message");
+    composer.textContent = "";
+    await fireEvent.input(composer);
+
+    await fireEvent.click(screen.getByRole("button", { name: "Save queued message" }));
+    const confirmation = await screen.findByRole("alertdialog", { name: "Delete this queued message?" });
+    expect(window.openbot.agent.cancelQueuedMessage).not.toHaveBeenCalled();
+    await fireEvent.click(within(confirmation).getByRole("button", { name: "Keep editing" }));
+    expect(window.openbot.agent.cancelQueuedMessage).not.toHaveBeenCalled();
+    expect(screen.getByText("Editing queued message")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Save queued message" }));
+    await fireEvent.click(
+      within(await screen.findByRole("alertdialog", { name: "Delete this queued message?" })).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    await waitFor(() =>
+      expect(window.openbot.agent.cancelQueuedMessage).toHaveBeenCalledWith({
+        agentId: "chief",
+        deliveryId: delivery.id,
+      }),
     );
   });
 

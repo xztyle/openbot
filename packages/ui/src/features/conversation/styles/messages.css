@@ -1474,6 +1474,11 @@ button.chat-action-target:active,
   color: var(--openbot-danger-text);
 }
 
+.pending-send-note {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
 .pending-send-error {
   margin-inline-start: var(--openbot-space-2);
   overflow-wrap: anywhere;

@@ -1,5 +1,6 @@
 import { expandAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { chatTagReferences, expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentApproval,
   type AttachmentSummary,
@@ -30,8 +31,9 @@ import {
   unloadedHistory,
 } from "@openbot/ui/features/conversation/ChatScrollRail";
 import { ComposerEditor, expandComposerMentions } from "@openbot/ui/features/conversation/ComposerEditor";
-import { StopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
+import { CloseIcon, StopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
 import { ApprovalCard, BrowserTakeoverCard } from "@openbot/ui/features/conversation/ConversationPrompts";
+import { keepComposerFocusOnSendPress } from "@openbot/ui/features/conversation/composer-focus";
 import {
   calculateChatScrollMargin,
   createChatVirtualizer,
@@ -63,6 +65,7 @@ import {
   Loading,
   lazy,
   onCleanup,
+  onSettled,
   Show,
   untrack,
 } from "solid-js";
@@ -85,6 +88,7 @@ import { channelRoutinesPort, eventRoutinesPort } from "../conversation/routines
 import { ChannelEditor } from "./ChannelEditor";
 import { type ChannelTimelineEntry, channelTimelineEntries, firstUnreadChannelMessageId } from "./channel-timeline";
 import { useChannels } from "./channels-context";
+import { PartialAttachmentImportError } from "./channels-port";
 
 const ChannelFilePreviewPanel = lazy(() => import("../conversation/FilePreviewPanel"));
 
@@ -207,18 +211,55 @@ export function ChannelConversation(props: ChannelConversationProps) {
     const selectedId = channels.state.selectedId;
     if (selectedId) updateDraft(selectedId, (draft) => ({ ...draft, ...patch }));
   };
+  // Raised by one to put the caret in the message box, as a reply does.
+  const [composerFocusRequest, setComposerFocusRequest] = createSignal(0);
+  const startReply = (messageId: string) => {
+    updateComposer({ replyToMessageId: messageId });
+    setComposerFocusRequest((current) => current + 1);
+  };
+  /** How many more files the open channel's draft takes. */
+  const attachmentRoom = () => {
+    const selectedId = channels.state.selectedId;
+    const attached = selectedId ? (conversation.channelDrafts()[selectedId]?.attachments.length ?? 0) : 0;
+    return Math.max(0, INPUT_LIMITS.attachments - attached);
+  };
+  /** Puts uploaded files in a channel's draft, as many as it has room for. Returns how many were left out. */
+  const attachToDraft = (channelId: string, attachments: AttachmentSummary[]): number => {
+    const attached = conversation.channelDrafts()[channelId]?.attachments.length ?? 0;
+    const room = Math.max(0, INPUT_LIMITS.attachments - attached);
+    const accepted = attachments.slice(0, room);
+    const leftOut = attachments.slice(room);
+    // A file the draft cannot take is not kept on the host either.
+    for (const attachment of leftOut) void runtime().agent.discardDraftAttachment?.(attachment.id);
+    if (accepted.length > 0)
+      updateDraft(channelId, (draft) => ({ ...draft, attachments: [...draft.attachments, ...accepted] }));
+    return leftOut.length;
+  };
   const addAttachments = (load: () => Promise<AttachmentSummary[]>) =>
     void channels.perform(async () => {
       const selectedId = channels.state.selectedId;
-      const attachments = await load();
-      if (selectedId)
-        updateDraft(selectedId, (draft) => ({ ...draft, attachments: [...draft.attachments, ...attachments] }));
+      let attachments: AttachmentSummary[];
+      let refused: PartialAttachmentImportError | null = null;
+      try {
+        attachments = await load();
+      } catch (error) {
+        // Some files went up and some were refused: the good ones attach, and the message names the rest.
+        if (!(error instanceof PartialAttachmentImportError)) throw error;
+        attachments = error.attachments;
+        refused = error;
+      }
+      let leftOut = attachments.length;
+      if (selectedId) leftOut = attachToDraft(selectedId, attachments);
+      else for (const attachment of attachments) void runtime().agent.discardDraftAttachment?.(attachment.id);
+      if (refused) throw refused;
+      if (leftOut > 0) throw new Error(t("composer.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
     });
   /** Dropped or pasted files. Only a browser runtime imports them here; the desktop preload imports its own. */
   const canImportFiles = () => Boolean(runtime().importAttachments && channels.state.page?.channel.archived === false);
   const importFiles = (files: File[]) => {
     const importAttachments = runtime().importAttachments;
-    if (importAttachments && canImportFiles() && files.length > 0) addAttachments(() => importAttachments(files));
+    if (importAttachments && canImportFiles() && files.length > 0)
+      addAttachments(() => importAttachments(files, attachmentRoom()));
   };
   const [dropActive, setDropActive] = createSignal(false);
   const [copyError, setCopyError] = createSignal<string | null>(null);
@@ -233,8 +274,69 @@ export function ChannelConversation(props: ChannelConversationProps) {
       });
     },
   );
-  const clearSent = (channelId: string, text: string) =>
-    updateDraft(channelId, (draft) => (draft.text === text ? EMPTY_DRAFT : draft));
+  /**
+   * Takes a sent message out of its draft. The editor stays open while a send runs, so the person may
+   * have written on: text that changed is theirs and stays, and so do files and a reply they added.
+   */
+  const clearSent = (
+    channelId: string,
+    sent: { text: string; attachmentIds: readonly string[]; replyToMessageId: string | null },
+  ) =>
+    updateDraft(channelId, (draft) => ({
+      text: draft.text === sent.text ? "" : draft.text,
+      attachments: draft.attachments.filter((attachment) => !sent.attachmentIds.includes(attachment.id)),
+      replyToMessageId: draft.replyToMessageId === sent.replyToMessageId ? null : draft.replyToMessageId,
+    }));
+  // A send is a command, and the next command waits for it. Say so instead of dropping a key press.
+  const [sending, setSending] = createSignal(false);
+  // Why a key press did not send, until the cause is over.
+  const [waitNotice, setWaitNotice] = createSignal<string | null>(null);
+  // Files that the desktop preload imports from a paste or a drop, and has not finished yet.
+  const [importingFiles, setImportingFiles] = createSignal(0);
+  createEffect(
+    () => channels.state.pending || importingFiles() > 0,
+    (waiting) => {
+      if (!waiting) setWaitNotice(null);
+    },
+  );
+  onSettled(() => {
+    // The desktop preload imports a file dropped or pasted on the conversation panel, and reports it
+    // here as events. A browser client uploads through `importAttachments` and has no such events.
+    const subscribe = runtime().agent.onAttachmentImport;
+    if (!subscribe) return;
+    const channelsOfRequests = new Map<string, string>();
+    return subscribe((event) => {
+      if (event.type === "started") {
+        const channelId = channels.state.selectedId;
+        if (!channelId || channels.state.page?.channel.archived !== false) return;
+        channelsOfRequests.set(event.requestId, channelId);
+        setImportingFiles((count) => count + 1);
+        return;
+      }
+      const channelId = channelsOfRequests.get(event.requestId);
+      if (event.type === "completed") {
+        if (!channelId) {
+          for (const attachment of event.attachments) void runtime().agent.discardDraftAttachment?.(attachment.id);
+          return;
+        }
+        channelsOfRequests.delete(event.requestId);
+        setImportingFiles((count) => Math.max(0, count - 1));
+        const leftOut = attachToDraft(channelId, event.attachments);
+        if (leftOut > 0)
+          void channels.perform(async () => {
+            throw new Error(t("composer.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
+          });
+        return;
+      }
+      if (!channelId) return;
+      channelsOfRequests.delete(event.requestId);
+      setImportingFiles((count) => Math.max(0, count - 1));
+      // The same line the channel shows for any failed action, with its own way to dismiss it.
+      void channels.perform(async () => {
+        throw new Error(event.message);
+      });
+    });
+  });
   let messageList: HTMLElement | undefined;
   let virtualRoot: HTMLElement | undefined;
   let unreadMessagesDivider: HTMLElement | undefined;
@@ -288,6 +390,11 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const timeline = createMemo(() => {
     const page = channels.state.page;
     return page ? channelTimelineEntries(page, agentList(), isOwnMessage, { t, format }) : [];
+  });
+  /** The message the draft replies to, when it is in the part of the channel that is loaded. */
+  const replyEntry = createMemo(() => {
+    const replyToMessageId = composer().replyToMessageId;
+    return replyToMessageId ? timeline().find((entry) => entry.id === replyToMessageId) : undefined;
   });
   const unreadCount = createMemo(
     () => channels.state.channels.find((channel) => channel.id === channels.state.selectedId)?.unreadCount ?? 0,
@@ -460,15 +567,18 @@ export function ChannelConversation(props: ChannelConversationProps) {
    * The clipboard gets the message the reader sees, not its stored form: a mention is a name and an
    * attachment is a file name. A channel has no skills of its own, so only the agent names expand.
    */
-  const copyChannelMessage = async (message: AgentMessage) => {
+  const readableMessageText = (message: AgentMessage) => {
     const attachmentNames = new Map((message.attachments ?? []).map((attachment) => [attachment.id, attachment.name]));
     const agentNames = new Map(agentList().map((agent) => [agent.id, agent.name]));
-    const text = expandAttachmentReferences(
+    return expandAttachmentReferences(
       expandChatTagReferences(message.body, (reference) =>
         reference.kind === "agent" ? agentNames.get(reference.id) : undefined,
       ),
       (reference) => attachmentNames.get(reference.attachmentId),
     );
+  };
+  const copyChannelMessage = async (message: AgentMessage) => {
+    const text = readableMessageText(message);
     if (!text) return;
     setOpenMoreMessageId(null);
     setCopyError(null);
@@ -640,31 +750,37 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const submit = () => {
     const { text, attachments, replyToMessageId } = composer();
     const channelId = channels.state.selectedId;
-    if (
-      props.connectionReady === false ||
-      channels.state.pending ||
-      (!text.trim() && !attachments.length) ||
-      !channelId
-    )
+    if (props.connectionReady === false || (!text.trim() && !attachments.length) || !channelId) return;
+    if (importingFiles() > 0) {
+      setWaitNotice(t("webClient.upload.busy"));
       return;
+    }
+    if (channels.state.pending) {
+      setWaitNotice(t("channel.composer.waitToSend"));
+      return;
+    }
     const expanded = expandComposerMentions(text);
     // A request that opens with a member is addressed to that member, the way a reader writes it.
     // A mention later in the text is what it reads as: a reference the owner of the work can see.
     const mention = chatTagReferences(expanded).find(
       (reference) => reference.kind === "agent" && !expanded.slice(0, reference.start).trim(),
     );
-    void channels.command(
-      {
-        type: "send",
-        operationId: crypto.randomUUID(),
-        channelId,
-        text: expanded,
-        recipientAgentId: mention?.id ?? null,
-        replyToMessageId,
-        attachmentDraftIds: attachments.map((attachment) => attachment.id),
-      },
-      () => clearSent(channelId, text),
-    );
+    const attachmentIds = attachments.map((attachment) => attachment.id);
+    setSending(true);
+    void channels
+      .command(
+        {
+          type: "send",
+          operationId: crypto.randomUUID(),
+          channelId,
+          text: expanded,
+          recipientAgentId: mention?.id ?? null,
+          replyToMessageId,
+          attachmentDraftIds: attachmentIds,
+        },
+        () => clearSent(channelId, { text, attachmentIds, replyToMessageId }),
+      )
+      .finally(() => setSending(false));
   };
   return (
     <main
@@ -699,7 +815,12 @@ export function ChannelConversation(props: ChannelConversationProps) {
             variant="ghost"
             onClick={() =>
               void channels.retry((sent) => {
-                if (sent.type === "send") clearSent(sent.channelId, sent.text);
+                if (sent.type === "send")
+                  clearSent(sent.channelId, {
+                    text: sent.text,
+                    attachmentIds: sent.attachmentDraftIds,
+                    replyToMessageId: sent.replyToMessageId,
+                  });
               })
             }
           >
@@ -919,11 +1040,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
                                   }
                                   onExpandEmoji={() => {}}
                                   onReact={() => {}}
-                                  onReply={
-                                    page().channel.archived
-                                      ? undefined
-                                      : () => updateComposer({ replyToMessageId: initialEntry.id })
-                                  }
+                                  onReply={page().channel.archived ? undefined : () => startReply(initialEntry.id)}
                                   onCopy={() => void copyChannelMessage(entry()?.message ?? initialEntry.message)}
                                 />
                               }
@@ -1073,6 +1190,44 @@ export function ChannelConversation(props: ChannelConversationProps) {
                     selectAgent(id);
                   }}
                 />
+                <Show when={composer().replyToMessageId}>
+                  <Show
+                    when={replyEntry()}
+                    fallback={
+                      // The message is not in the loaded part of the channel, so only the way out shows.
+                      <div class="composer-reply-preview">
+                        <div>
+                          <span>{t("channel.composer.replying")}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          aria-label={t("channel.composer.cancelReply")}
+                          onClick={() => updateComposer({ replyToMessageId: null })}
+                        >
+                          <CloseIcon />
+                        </Button>
+                      </div>
+                    }
+                  >
+                    {(entry) => (
+                      <div class="composer-reply-preview">
+                        <div>
+                          <span>{t("channel.composer.replyingTo", { name: entry().author.name })}</span>
+                          <p>{readableMessageText(entry().message) || t("composer.reply.attachment")}</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          aria-label={t("channel.composer.cancelReply")}
+                          onClick={() => updateComposer({ replyToMessageId: null })}
+                        >
+                          <CloseIcon />
+                        </Button>
+                      </div>
+                    )}
+                  </Show>
+                </Show>
                 <form
                   class="composer"
                   data-compact={
@@ -1088,16 +1243,6 @@ export function ChannelConversation(props: ChannelConversationProps) {
                     submit();
                   }}
                 >
-                  <Show when={composer().replyToMessageId}>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => updateComposer({ replyToMessageId: null })}
-                    >
-                      {t("channel.composer.cancelReply")}
-                    </Button>
-                  </Show>
                   <Show when={composer().attachments.length}>
                     <div class="composer-attachments">
                       <For each={composer().attachments}>
@@ -1111,11 +1256,12 @@ export function ChannelConversation(props: ChannelConversationProps) {
                               variant="ghost"
                               size="xs"
                               aria-label={t("channel.composer.removeAttachment", { name: attachment.name })}
-                              onClick={() =>
+                              onClick={() => {
                                 updateComposer({
                                   attachments: composer().attachments.filter((item) => item.id !== attachment.id),
-                                })
-                              }
+                                });
+                                void runtime().agent.discardDraftAttachment?.(attachment.id);
+                              }}
                             >
                               <X aria-hidden="true" />
                             </Button>
@@ -1135,7 +1281,8 @@ export function ChannelConversation(props: ChannelConversationProps) {
                       ariaLabel={t("channel.composer.label")}
                       placeholder={t("channel.composer.placeholder", { name: page().channel.name })}
                       value={composer().text}
-                      disabled={channels.state.pending}
+                      focusRequest={composerFocusRequest()}
+                      disabled={false}
                       onSubmit={submit}
                       onPasteFiles={importFiles}
                       onValueChange={(text) => updateComposer({ text })}
@@ -1153,6 +1300,18 @@ export function ChannelConversation(props: ChannelConversationProps) {
                       <Plus aria-hidden="true" />
                     </Button>
                     <div class="composer-primary-actions">
+                      <Show when={sending() || waitNotice()}>
+                        <span class="voice-model-progress" role="status">
+                          {waitNotice() ?? t("channel.composer.sending")}
+                        </span>
+                      </Show>
+                      <Show when={runtime().importProgress?.()}>
+                        {(progress) => (
+                          <span class="voice-model-progress" role="status">
+                            {t("composer.upload.progress", { current: progress().current, total: progress().total })}
+                          </span>
+                        )}
+                      </Show>
                       {/* As in the agent chat, an empty composer offers stop while work runs. */}
                       <Show
                         when={activeRuns().length > 0 && !composer().text.trim() && !composer().attachments.length}
@@ -1164,9 +1323,11 @@ export function ChannelConversation(props: ChannelConversationProps) {
                             aria-label={t("channel.composer.send")}
                             aria-keyshortcuts={sendShortcutAriaKey(deviceSendShortcut(props.platform))}
                             title={t(sendShortcutHintKey(deviceSendShortcut(props.platform), "send"))}
+                            onPointerDown={keepComposerFocusOnSendPress}
                             disabled={
                               props.connectionReady === false ||
                               channels.state.pending ||
+                              importingFiles() > 0 ||
                               (!composer().text.trim() && !composer().attachments.length)
                             }
                           >

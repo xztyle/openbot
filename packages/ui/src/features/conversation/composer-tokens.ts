@@ -27,6 +27,19 @@ export function truncateComposerValue(value: string, limit: number): string {
   return result + value.slice(cursor, cursor + limit - result.length);
 }
 
+/**
+ * The head of `text` that fits in `room` characters. It never splits a surrogate pair, and it
+ * returns nothing when no room is left: a paste adds what fits and never cuts text that is there.
+ */
+export function clipToRoom(text: string, room: number): string {
+  if (room <= 0) return "";
+  if (text.length <= room) return text;
+  let end = room;
+  const last = text.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return text.slice(0, end);
+}
+
 export interface AttachmentTokenActions {
   tooltipId: string;
   open: (attachment: DraftAttachment, keepTooltip?: boolean) => void;

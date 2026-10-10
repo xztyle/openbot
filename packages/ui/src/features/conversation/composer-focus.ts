@@ -1,3 +1,5 @@
+import { usesTouchLayout } from "../../utils";
+
 const OPEN_POPUP = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
 /** The settings side panel and the overlays that open inside it: what happens there is the user's choice. */
 const SETTINGS_SURFACE = ".settings-panel, .agent-routines-overlay";
@@ -24,4 +26,16 @@ export function shouldRestoreComposerFocus(editor: HTMLElement): boolean {
   // A switch or a button that a click in the settings panel focused is still where the person works.
   if (active.closest(SETTINGS_SURFACE)) return false;
   return !active.matches(TEXT_ENTRY) && !active.matches(":focus-visible");
+}
+
+/**
+ * Keeps the focus in the message box when a touch press lands on Send. Our assumption, not yet
+ * seen on a device: the press moves the focus to the button, the on-screen keyboard closes, and it
+ * opens again for the next message. Cancelling the pointer press keeps the focus and the keyboard.
+ * The click still fires, so Send works as before. A mouse and a keyboard are left alone.
+ */
+export function keepComposerFocusOnSendPress(event: Pick<Event, "preventDefault">): void {
+  if (!usesTouchLayout()) return;
+  const active = document.activeElement;
+  if (active?.getAttribute("role") === "textbox" && active.closest(".composer")) event.preventDefault();
 }

@@ -1,4 +1,5 @@
 import {
+  effectiveSendShortcutMode,
   parseSendShortcutMode,
   resolveSendShortcut,
   type SendShortcut,
@@ -6,6 +7,7 @@ import {
   sendShortcutAriaKey,
   sendShortcutHintKey,
 } from "@openbot/ui/features/conversation/send-shortcut";
+import { usesTouchLayout } from "@openbot/ui/utils";
 import { createSignal } from "solid-js";
 
 export { sendShortcutAriaKey, sendShortcutHintKey };
@@ -43,13 +45,15 @@ export function writeSendShortcutMode(mode: SendShortcutMode, storage?: Preferen
   }
 }
 
-/** The device with the keyboard: macOS takes ⌘Enter, Windows and Linux take Ctrl+Enter. */
+/** The device with the keyboard: Apple devices take ⌘Enter, Windows and Linux take Ctrl+Enter. */
 export function devicePlatform(
   userAgentDataPlatform?: string,
   fallbackPlatform?: string,
 ): "darwin" | "win32" | "linux" {
   const platform = (userAgentDataPlatform ?? fallbackPlatform ?? "").toLowerCase();
-  if (platform.includes("mac")) return "darwin";
+  // An iPhone reports "iPhone" and an iPad "iPad", or "MacIntel" when it asks for the desktop site.
+  if (platform.includes("mac") || platform.includes("iphone") || platform.includes("ipad") || platform.includes("ios"))
+    return "darwin";
   if (platform.includes("win")) return "win32";
   return "linux";
 }
@@ -91,7 +95,11 @@ export function setSendShortcutMode(mode: SendShortcutMode): void {
 /**
  * The resolved chord for this page. Desktop call sites pass the host platform, which is the
  * device with the keyboard there; web call sites leave it empty and the browser is detected.
+ * On a touch layout Return adds a line whatever the saved mode is, and Send sends.
  */
 export function deviceSendShortcut(appPlatform?: "darwin" | "win32" | "linux"): SendShortcut {
-  return resolveSendShortcut(sendShortcutMode(), appPlatform ?? currentDevicePlatform());
+  return resolveSendShortcut(
+    effectiveSendShortcutMode(sendShortcutMode(), usesTouchLayout()),
+    appPlatform ?? currentDevicePlatform(),
+  );
 }

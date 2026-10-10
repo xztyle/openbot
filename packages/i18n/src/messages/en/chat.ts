@@ -262,6 +262,9 @@ export const messages = defineMessages("chat", {
   "chat.send.failed": "Not sent",
   "chat.send.unconfirmed": "Not confirmed. Check the chat before you send it again.",
   "chat.send.edit": "Edit",
+  "chat.send.editBlocked": "Finish or cancel the queued message edit first.",
+  "chat.send.restoreTooLarge":
+    "This message cannot join the text in the composer: it would be too long or have too many files. Send the composer first.",
   "chat.send.dismiss": "Dismiss",
   "chat.history.olderFailed": "Older messages could not load.",
   "chat.messageUnavailable": "This message is no longer available.",

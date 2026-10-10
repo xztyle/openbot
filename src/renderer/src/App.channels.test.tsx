@@ -2,7 +2,7 @@ import type { ChannelMessage } from "@openbot/contracts/ipc";
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { assert, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { emitAgentEvent, installOpenbotStub, testServer } from "./app-test-harness";
+import { attachment, emitAgentEvent, emitAttachmentImport, installOpenbotStub, testServer } from "./app-test-harness";
 import { setShowAgentReasoning } from "./chat-visibility-preferences";
 import { CHANNEL_SELECTION_STORAGE_KEY } from "./features/channels/channel-selection";
 import { AccountDock } from "./lazy-views";
@@ -843,6 +843,73 @@ it("closes a channel deleted from another connection", async () => {
   await window.openbot.agent.deleteChannel("channel-test");
   await waitFor(() => expect(screen.queryByRole("main", { name: "Channel conversation" })).not.toBeInTheDocument());
   expect(screen.queryByRole("button", { name: /^Project room\./ })).not.toBeInTheDocument();
+});
+
+it("shows the message a channel reply answers and puts the caret in the message box", async () => {
+  const chat = await openSavedChannel();
+  const composer = within(chat).getByRole("textbox", { name: "Message to channel" });
+  composer.textContent = "Prepare the report";
+  await fireEvent.input(composer);
+  await fireEvent.click(within(chat).getByRole("button", { name: "Send message" }));
+  await within(chat).findByRole("article", { name: "Message from You" });
+
+  const shown = within(chat).getAllByText("Prepare the report").length;
+  await fireEvent.click(within(chat).getByRole("button", { name: /Reply to/ }));
+  await within(chat).findByText("Replying to You");
+  // The quote above the message box repeats the text of the message that is answered.
+  expect(within(chat).getAllByText("Prepare the report")).toHaveLength(shown + 1);
+  await waitFor(() => expect(composer).toHaveFocus());
+
+  await fireEvent.click(within(chat).getByRole("button", { name: "Cancel reply" }));
+  await waitFor(() => expect(within(chat).queryByText("Replying to You")).not.toBeInTheDocument());
+});
+
+it("keeps the channel message box open while a send runs and says why a second send waits", async () => {
+  const chat = await openSavedChannel();
+  const originalCommand = window.openbot.agent.channelCommand;
+  const release = Promise.withResolvers<void>();
+  vi.spyOn(window.openbot.agent, "channelCommand").mockImplementation(async (input) => {
+    if (input.type === "send") await release.promise;
+    return originalCommand(input);
+  });
+  const composer = within(chat).getByRole("textbox", { name: "Message to channel" });
+  composer.textContent = "First request";
+  await fireEvent.input(composer);
+  await fireEvent.click(within(chat).getByRole("button", { name: "Send message" }));
+  await within(chat).findByText("Sending…");
+
+  // The person keeps writing, and an Enter during the send is answered, not dropped.
+  expect(composer).toHaveAttribute("aria-disabled", "false");
+  composer.textContent = "First request and a second thought";
+  await fireEvent.input(composer);
+  await fireEvent.keyDown(composer, { key: "Enter" });
+  await within(chat).findByText("Wait for the message to send, then send again.");
+
+  release.resolve();
+  await waitFor(() => expect(within(chat).queryByText("Sending…")).not.toBeInTheDocument());
+  // The text changed after the send, so it stays in the box for the person to send or edit.
+  expect(composer).toHaveTextContent("First request and a second thought");
+});
+
+it("attaches a file that the desktop imports from a paste or drop, and shows an import failure", async () => {
+  const chat = await openSavedChannel();
+  emitAttachmentImport?.({ type: "started", requestId: "channel-paste", serverId: "local" });
+  emitAttachmentImport?.({
+    type: "completed",
+    requestId: "channel-paste",
+    serverId: "local",
+    attachments: [attachment("paste-1", "report.pdf", "pdf")],
+  });
+  await within(chat).findByRole("button", { name: "Remove report.pdf" });
+
+  emitAttachmentImport?.({ type: "started", requestId: "channel-bad", serverId: "local" });
+  emitAttachmentImport?.({
+    type: "error",
+    requestId: "channel-bad",
+    serverId: "local",
+    message: "notes.xyz is not supported.",
+  });
+  expect(await within(chat).findByText("notes.xyz is not supported.")).toBeInTheDocument();
 });
 
 it("addresses a channel member only while the request names one", async () => {

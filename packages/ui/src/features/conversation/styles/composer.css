@@ -119,6 +119,28 @@
   color: var(--openbot-text-secondary);
 }
 
+.composer-queue-edit {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 10px 6px;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+  padding: 4px 6px 4px 12px;
+  color: var(--openbot-text-primary);
+}
+
+.composer-queue-edit p {
+  min-width: 0;
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: 550;
+}
+
 .composer {
   position: relative;
   z-index: 11;
@@ -601,6 +623,22 @@
 }
 
 .composer-editor-surface[aria-disabled="true"] {
+  pointer-events: none;
+}
+
+.composer-editor-limit-notice {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  left: 4px;
+  margin: 0;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-surface);
+  padding: 2px 8px;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  line-height: 16px;
   pointer-events: none;
 }
 

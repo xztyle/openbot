@@ -308,6 +308,84 @@ describe("web workspace state", () => {
     expect(app.runtime.discard).toHaveBeenCalledWith("late-file");
     expect(events.at(-1)).toMatchObject({ type: "completed", attachments: [] });
   });
+  describe("file import", () => {
+    const summary = (name: string): AttachmentSummary => ({
+      id: `draft-${name}`,
+      kind: "file",
+      name,
+      mimeType: "text/plain",
+      size: 1,
+      previewKind: "text",
+      previewUrl: null,
+    });
+
+    it("names the refused files with the reason and uploads only the valid ones", async () => {
+      const app = harness({ upload: vi.fn(async (file: File) => summary(file.name)) });
+      await connected(app);
+      const adapter = app.conversationRuntime();
+      const events: AttachmentImportEvent[] = [];
+      adapter.agent.onAttachmentImport((event) => events.push(event));
+
+      await adapter.importFiles?.([
+        new File(["a"], "one.txt"),
+        new File(["b"], "movie.xyz"),
+        new File([new Uint8Array(10 * 1024 * 1024 + 1)], "huge.pdf"),
+        new File(["c"], "two.txt"),
+      ]);
+
+      expect(vi.mocked(app.runtime.upload).mock.calls.map(([file]) => file.name)).toEqual(["one.txt", "two.txt"]);
+      const completed = events.find((event) => event.type === "completed");
+      expect(completed).toMatchObject({ attachments: [{ name: "one.txt" }, { name: "two.txt" }] });
+      const errors = events.flatMap((event) => (event.type === "error" ? [event.message] : []));
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain("File type not supported: movie.xyz.");
+      expect(errors[0]).toContain("Larger than 10.0 MB: huge.pdf.");
+    });
+
+    it("does not upload a file the draft has no room for, and says which", async () => {
+      const app = harness({ upload: vi.fn(async (file: File) => summary(file.name)) });
+      await connected(app);
+      const adapter = app.conversationRuntime();
+      const events: AttachmentImportEvent[] = [];
+      adapter.agent.onAttachmentImport((event) => events.push(event));
+
+      await adapter.importFiles?.([new File(["a"], "one.txt"), new File(["b"], "two.txt")], { room: 1 });
+
+      expect(vi.mocked(app.runtime.upload).mock.calls.map(([file]) => file.name)).toEqual(["one.txt"]);
+      const errors = events.flatMap((event) => (event.type === "error" ? [event.message] : []));
+      expect(errors).toEqual(["A message can have up to 10 attachments. Not added: two.txt."]);
+    });
+
+    it("says to wait when a second import starts during an upload, and shows the progress", async () => {
+      let finish: (attachment: AttachmentSummary) => void = () => {};
+      const app = harness({
+        upload: vi.fn(
+          () =>
+            new Promise<AttachmentSummary>((resolve) => {
+              finish = resolve;
+            }),
+        ),
+      });
+      await connected(app);
+      const adapter = app.conversationRuntime();
+      const events: AttachmentImportEvent[] = [];
+      adapter.agent.onAttachmentImport((event) => events.push(event));
+
+      const first = adapter.importFiles?.([new File(["a"], "one.txt"), new File(["b"], "two.txt")]);
+      await waitFor(() => expect(app.runtime.upload).toHaveBeenCalledOnce());
+      expect(adapter.importProgress?.()).toEqual({ current: 1, total: 2 });
+      await adapter.importFiles?.([new File(["c"], "three.txt")]);
+
+      expect(app.runtime.upload).toHaveBeenCalledOnce();
+      expect(events.at(-1)).toMatchObject({ type: "error", message: "Wait for the current upload to finish." });
+      finish(summary("one.txt"));
+      await waitFor(() => expect(app.runtime.upload).toHaveBeenCalledTimes(2));
+      expect(adapter.importProgress?.()).toEqual({ current: 2, total: 2 });
+      finish(summary("two.txt"));
+      await first;
+      expect(adapter.importProgress?.()).toBeNull();
+    });
+  });
   it("loads older pages until a search result is available", async () => {
     const app = harness({
       conversation: vi.fn().mockResolvedValue({ ...page, pageInfo: { hasOlder: true, olderCursor: "older" } }),

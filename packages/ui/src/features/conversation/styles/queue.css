@@ -258,6 +258,20 @@
   padding: 0;
 }
 
+/*
+ * A mouse drags a row and a keyboard uses Alt+Arrow. A touch screen or a narrow window has neither,
+ * so only there the two move buttons take room in the row.
+ */
+.agent-queue-move {
+  display: none;
+}
+
+@media (max-width: 620px), (hover: none), (pointer: coarse) {
+  .agent-queue-move {
+    display: inline-flex;
+  }
+}
+
 .agent-queue-icon-button.agent-queue-delete:hover:not(:disabled),
 .agent-queue-icon-button.agent-queue-delete:focus-visible {
   background: var(--openbot-danger-soft);

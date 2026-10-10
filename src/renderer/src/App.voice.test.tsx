@@ -256,6 +256,24 @@ describe("OpenBot connected desktop shell", () => {
     await waitFor(() => expect(screen.queryByText("Transcription failed")).not.toBeInTheDocument());
   });
 
+  it("keeps a recording whose transcription failed and transcribes it again on request", async () => {
+    vi.mocked(window.openbot.voice.transcribe)
+      .mockRejectedValueOnce(new Error("Transcription failed"))
+      .mockResolvedValueOnce({ text: "Second try" });
+    installVoiceRecordingMocks();
+    render(() => <App />);
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Create prompt with voice" }));
+    const recording = await screen.findByRole("group", { name: "Voice recording" });
+    await fireEvent.click(within(recording).getByRole("button", { name: "Stop voice recording" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Transcription failed");
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Retry transcription" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Message Chief" })).toHaveTextContent("Second try"));
+    expect(window.openbot.voice.transcribe).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("button", { name: "Retry transcription" })).not.toBeInTheDocument();
+  });
+
   it("finishes an accepted voice send on the original server after the server changes", async () => {
     const local = testServer("local", true);
     const remote = testServer("remote-1", false);

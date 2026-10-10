@@ -1,10 +1,11 @@
-import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { AgentEvent, AttachmentSummary, TeamRealtimeEvent } from "@openbot/contracts/ipc";
 import { currentText } from "@openbot/ui/text";
-import type { ChannelsPort } from "../channels/channels-port";
+import { createSignal } from "solid-js";
+import { type ChannelsPort, PartialAttachmentImportError } from "../channels/channels-port";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
 import type { WebWorkspaceRuntime } from "./web-runtime";
+import { isHostFileTypeError, planUploads, type UploadRejection, uploadRejectionNotice } from "./web-upload-plan";
 
 const unavailable = async (): Promise<never> => {
   throw new Error(currentText().t("webClient.error.desktopOnly"));
@@ -39,18 +40,37 @@ export function createWebChannelsPort(
   const channels = remote.channels;
   const admin = remote.admin;
   const eventRoutines = admin ? webEventRoutinesApi(admin.request) : undefined;
-  async function importAttachments(chosen: File[]): Promise<AttachmentSummary[]> {
-    if (chosen.length > INPUT_LIMITS.attachments)
-      throw new Error(currentText().t("webClient.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
+  const [importProgress, setImportProgress] = createSignal<{ current: number; total: number } | null>(null);
+  let uploading = false;
+  async function importAttachments(chosen: File[], room?: number): Promise<AttachmentSummary[]> {
+    const text = currentText();
+    // The upload that starts last cancels the one before it, so a second pick waits and says so.
+    if (uploading) throw new Error(text.t("webClient.upload.busy"));
+    // Every file is checked before the first one goes up. A refused file is named, and the rest attach.
+    const plan = planUploads(chosen, room);
+    const rejected: UploadRejection[] = [...plan.rejected];
     const serverId = hostId();
     const uploaded: AttachmentSummary[] = [];
+    uploading = true;
     try {
-      for (const file of chosen) uploaded.push(await remote.upload(file));
+      for (const [index, file] of plan.accepted.entries()) {
+        setImportProgress({ current: index + 1, total: plan.accepted.length });
+        try {
+          uploaded.push(await remote.upload(file));
+        } catch (error) {
+          if (!isHostFileTypeError(error, text)) throw error;
+          rejected.push({ name: file.name, reason: "host" });
+        }
+      }
     } catch (error) {
       // After a host switch the drafts belong to the previous host, and the runtime discards them there.
       if (hostId() === serverId) await Promise.allSettled(uploaded.map((attachment) => remote.discard(attachment.id)));
       throw error;
+    } finally {
+      uploading = false;
+      setImportProgress(null);
     }
+    if (rejected.length > 0) throw new PartialAttachmentImportError(uploadRejectionNotice(rejected, text), uploaded);
     return uploaded;
   }
   return {
@@ -75,6 +95,7 @@ export function createWebChannelsPort(
         }),
       chooseAttachments: async () => importAttachments(await chooseFiles()),
       openAttachment: ({ attachmentId }) => files.download(attachmentId),
+      discardDraftAttachment: (id) => remote.discard(id),
       respondToApproval: (input) => remote.approve(input),
       respondToPrompt: (input) => remote.answer(input),
       respondToBrowserTakeover: (input) => remote.respondToTakeover(input),
@@ -88,5 +109,6 @@ export function createWebChannelsPort(
     fileActions: "browser",
     previewAttachment: files.preview,
     importAttachments,
+    importProgress,
   };
 }

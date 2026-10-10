@@ -1,4 +1,5 @@
 import { supportedAttachmentExtensions } from "@openbot/contracts/attachment-files";
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { accountUsageCoversModel, canPreviewAttachment } from "@openbot/contracts/ipc";
 import {
   TEAM_EML_ATTACHMENTS_CAPABILITY,
@@ -8,6 +9,7 @@ import {
 import {
   ArrowUp,
   Button,
+  ConfirmDialog,
   DropdownMenu,
   File,
   Image,
@@ -29,6 +31,7 @@ import {
   ComposerUsageLimitNotice,
 } from "@openbot/ui/features/conversation/ComposerNotice";
 import { CloseIcon, StopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
+import { keepComposerFocusOnSendPress } from "@openbot/ui/features/conversation/composer-focus";
 import { RichMessageText } from "@openbot/ui/features/conversation/RichMessageText";
 import { SavedReplies } from "@openbot/ui/features/conversation/SavedReplies";
 import { VoiceRecordingMorph } from "@openbot/ui/features/conversation/VoiceRecordingMorph";
@@ -48,6 +51,7 @@ export function ConversationComposer() {
     attachmentAction,
     attachmentBusy,
     awaitingReplies,
+    cancelQueuedMessageEdit,
     dismissAwaitingReplies,
     composerFocusRequest,
     composerHasContent,
@@ -79,6 +83,8 @@ export function ConversationComposer() {
     startVoiceRecording,
     stopVoiceRecording,
     cancelVoiceRecording,
+    retryVoiceTranscription,
+    voiceRetryAvailable,
     submitComposer,
     submitting,
     unreferencedDraftAttachments,
@@ -100,6 +106,22 @@ export function ConversationComposer() {
   let skillPickerChosen = false;
   // A pending Save keeps its exact request for retry. Block changes until retry or cancel.
   const savePending = () => Boolean(editingDeliveryId() && editingPendingSave());
+  /** How many more files the draft takes, so an upload names a file it cannot attach before it starts. */
+  const attachmentRoom = () => Math.max(0, INPUT_LIMITS.attachments - currentDraft().attachments.length);
+  const [deleteQueuedOpen, setDeleteQueuedOpen] = createSignal(false);
+  /**
+   * Save with nothing left to save cannot succeed, and failing without a word looks like a dead
+   * button. It asks whether the person means to delete the queued message instead.
+   */
+  const submit = () => {
+    const draft = currentDraft();
+    const emptyEdit = !draft.text.trim() && draft.attachments.length === 0;
+    if (editingDeliveryId() && !savePending() && voicePhase() === "idle" && emptyEdit) {
+      setDeleteQueuedOpen(true);
+      return;
+    }
+    submitComposer();
+  };
   // The mention picker grows out of the same edge as the queue, so only one of them holds it.
   const queueVisible = () => queuePanelVisible() && !pickerOpen();
   const awaitingVisible = () => awaitingReplies().length > 0 && !pickerOpen();
@@ -187,6 +209,16 @@ export function ConversationComposer() {
       .map((extension) => `.${extension}`)
       .join(",");
   };
+  /** Why the message box is off while the agent is not ready. The same words show as its placeholder. */
+  const notReadyReason = () => {
+    if (agentReady()) return undefined;
+    if (props.agentsConnecting) return t("common.connecting");
+    if (!props.runtime) return t("composer.placeholder.cliSetup");
+    if (props.server?.state === "online") return t("composer.placeholder.hostSetup");
+    if (props.server?.hostedSleep === "sleeping") return t("composer.placeholder.hostSleeping");
+    if (props.server?.hostedSleep === "waking") return t("composer.placeholder.hostWaking");
+    return t("composer.placeholder.connectHost");
+  };
   /** Send, or Stop while the agent works and the message box is empty. */
   const SendControl = () => (
     <Show
@@ -221,7 +253,8 @@ export function ConversationComposer() {
             voicePhase() === "requesting" ||
             voicePhase() === "transcribing"
           }
-          onClick={submitComposer}
+          onPointerDown={keepComposerFocusOnSendPress}
+          onClick={submit}
         >
           <Show when={submitting()} fallback={<ArrowUp aria-hidden="true" />}>
             <LoaderCircle class="composer-spinner" aria-hidden="true" />
@@ -276,6 +309,24 @@ export function ConversationComposer() {
             </Show>
           </div>
         </div>
+        <Show when={editingDeliveryId()}>
+          <div class="composer-queue-edit">
+            <p role="status">{t("composer.queueEdit.label")}</p>
+            <Button
+              variant="ghost"
+              size="xs"
+              type="button"
+              aria-label={t("composer.queueEdit.cancelLabel")}
+              disabled={submitting()}
+              onClick={() => {
+                void cancelQueuedMessageEdit();
+                setComposerFocusRequest((current) => current + 1);
+              }}
+            >
+              {t("common.cancel")}
+            </Button>
+          </div>
+        </Show>
         <Show when={replyTarget()}>
           {(message) => (
             <div class="composer-reply-preview">
@@ -454,23 +505,8 @@ export function ConversationComposer() {
               attachments={currentDraft().attachments}
               value={currentDraft().text}
               disabled={submitting() || voicePhase() === "transcribing" || !agentReady() || savePending()}
-              placeholder={
-                !agentReady()
-                  ? props.agentsConnecting
-                    ? t("common.connecting")
-                    : props.runtime
-                      ? props.server?.state === "online"
-                        ? t("composer.placeholder.hostSetup")
-                        : props.server?.hostedSleep === "sleeping"
-                          ? t("composer.placeholder.hostSleeping")
-                          : props.server?.hostedSleep === "waking"
-                            ? t("composer.placeholder.hostWaking")
-                            : t("composer.placeholder.connectHost")
-                      : t("composer.placeholder.cliSetup")
-                  : replyTarget()
-                    ? t("composer.placeholder.reply")
-                    : messageLabel()
-              }
+              placeholder={notReadyReason() ?? (replyTarget() ? t("composer.placeholder.reply") : messageLabel())}
+              disabledReason={notReadyReason()}
               ariaLabel={messageLabel()}
               focusRequest={composerFocusRequest()}
               skillPickerRequest={skillPickerRequest()}
@@ -478,11 +514,11 @@ export function ConversationComposer() {
                 updateCurrentDraft({ text });
                 updateTeamTyping(text);
               }}
-              onSubmit={submitComposer}
+              onSubmit={submit}
               sendShortcut={deviceSendShortcut(props.platform)}
               onPickerOpenChange={setPickerOpen}
               onPasteFiles={(files) => {
-                if (props.runtime?.importFiles) void props.runtime.importFiles(files);
+                if (props.runtime?.importFiles) void props.runtime.importFiles(files, { room: attachmentRoom() });
               }}
               onOpenAttachment={(attachment) =>
                 canPreviewAttachment(attachment)
@@ -513,7 +549,9 @@ export function ConversationComposer() {
               data-openbot-attachment-picker={props.runtime ? undefined : "true"}
               onChange={(event) => {
                 if (props.runtime?.importFiles)
-                  void props.runtime.importFiles(Array.from(event.currentTarget.files ?? []));
+                  void props.runtime.importFiles(Array.from(event.currentTarget.files ?? []), {
+                    room: attachmentRoom(),
+                  });
               }}
             />
             <DropdownMenu.Root
@@ -580,12 +618,24 @@ export function ConversationComposer() {
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
             <div class="composer-primary-actions">
+              <Show when={attachmentBusy() && props.runtime?.importProgress?.()}>
+                {(progress) => (
+                  <span class="voice-model-progress" role="status">
+                    {t("composer.upload.progress", { current: progress().current, total: progress().total })}
+                  </span>
+                )}
+              </Show>
               <Show when={attachmentBusy() && props.runtime?.cancelImportFiles} keyed>
                 {(cancelImportFiles) => (
                   <Button variant="ghost" type="button" onClick={() => void cancelImportFiles()}>
                     {t("composer.upload.cancel")}
                   </Button>
                 )}
+              </Show>
+              <Show when={voiceAvailable() && voiceRetryAvailable() && voicePhase() === "idle"}>
+                <Button variant="ghost" type="button" onClick={() => void retryVoiceTranscription()}>
+                  {t("composer.voice.retry")}
+                </Button>
               </Show>
               <Show when={voiceAvailable() && voicePhase() === "preparing"}>
                 <span class="voice-model-progress" role="status">
@@ -641,6 +691,20 @@ export function ConversationComposer() {
             </div>
           </div>
         </div>
+        <ConfirmDialog
+          open={deleteQueuedOpen()}
+          onCancel={() => setDeleteQueuedOpen(false)}
+          onConfirm={() => {
+            const deliveryId = editingDeliveryId();
+            setDeleteQueuedOpen(false);
+            if (deliveryId) void props.onCancelQueuedMessage(deliveryId);
+          }}
+          title={t("composer.queueEdit.deleteTitle")}
+          description={t("composer.queueEdit.deleteBody")}
+          confirmLabel={t("common.delete")}
+          cancelLabel={t("composer.queueEdit.keep")}
+          initialFocus="cancel"
+        />
       </div>
     </Show>
   );

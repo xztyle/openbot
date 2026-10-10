@@ -1,7 +1,7 @@
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
 import type { InstalledSkill, QueueDelivery, QueueHold, QueueSteerFallback } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
-import { Button, ConfirmDialog } from "@openbot/ui";
+import { Button, ChevronDown, ChevronUp, ConfirmDialog } from "@openbot/ui";
 import { prefersReducedMotion } from "@openbot/ui/utils";
 import { createEffect, createMemo, createSignal, createUniqueId, For, onCleanup, Show, untrack } from "solid-js";
 import { createVerticalDragPreview } from "../../components/createVerticalDragPreview";
@@ -506,6 +506,29 @@ export function QueuePanel(props: QueuePanelProps) {
                       {messagePreview(delivery)}
                     </span>
                     <div class="agent-queue-actions">
+                      {/* Drag and Alt+Arrow do not exist on a touch screen. These two buttons show there. */}
+                      <Show when={actionable && queueIds().length > 1}>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          class="agent-queue-icon-button agent-queue-move"
+                          disabled={queueIds()[0] === delivery.id}
+                          aria-label={t("queue.item.moveUpLabel", { position: delivery.position ?? "" })}
+                          onClick={() => moveDelivery(delivery.id, -1)}
+                        >
+                          <ChevronUp aria-hidden="true" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          class="agent-queue-icon-button agent-queue-move"
+                          disabled={queueIds().at(-1) === delivery.id}
+                          aria-label={t("queue.item.moveDownLabel", { position: delivery.position ?? "" })}
+                          onClick={() => moveDelivery(delivery.id, 1)}
+                        >
+                          <ChevronDown aria-hidden="true" />
+                        </Button>
+                      </Show>
                       <Show when={editing}>
                         <span class="agent-queue-editing-badge">{t("queue.item.editing")}</span>
                       </Show>

@@ -414,7 +414,13 @@ export function createConversationViewScope(props: ConversationProps) {
       restoreTranscript: (...args) => composer.restoreVoiceTranscript(...args),
     },
   });
-  const { startVoiceRecording, stopVoiceRecording, cancelVoiceRecording } = voice;
+  const {
+    startVoiceRecording,
+    stopVoiceRecording,
+    cancelVoiceRecording,
+    retryVoiceTranscription,
+    voiceRetryAvailable,
+  } = voice;
   // Live text belongs to the conversation it is dictated into, not to whichever one is open.
   const voiceLiveText = () => {
     const live = voiceLiveTranscript();
@@ -542,6 +548,7 @@ export function createConversationViewScope(props: ConversationProps) {
     copiedMessageId,
     setCopiedMessageId,
     setComposerError: setScopedComposerError,
+    setComposerFocusRequest,
   });
   const { replyToMessage, reactToMessage, copyMessage, removeAttachment } = messageActions;
   const settings = createSettingsStore({
@@ -1260,6 +1267,9 @@ export function createConversationViewScope(props: ConversationProps) {
     startVoiceRecording,
     stopVoiceRecording,
     cancelVoiceRecording,
+    retryVoiceTranscription,
+    voiceRetryAvailable,
+    cancelQueuedMessageEdit,
     submitComposer,
     submitting,
     unreadDividerVisible,

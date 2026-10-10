@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { shouldRestoreComposerFocus } from "./composer-focus";
+import { keepComposerFocusOnSendPress, shouldRestoreComposerFocus } from "./composer-focus";
 
 function composer() {
   const editor = document.createElement("div");
@@ -42,5 +42,52 @@ describe("shouldRestoreComposerFocus", () => {
     overlay.className = "agent-routines-overlay";
     pointerFocusedButtonIn(overlay);
     expect(shouldRestoreComposerFocus(editor)).toBe(false);
+  });
+});
+
+describe("keepComposerFocusOnSendPress", () => {
+  const originalMatchMedia = window.matchMedia;
+
+  afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+    document.body.replaceChildren();
+  });
+
+  function touchScreen(matches: boolean) {
+    window.matchMedia = vi.fn().mockReturnValue({ matches });
+  }
+
+  function focusedMessageBox() {
+    const composer = document.createElement("form");
+    composer.className = "composer";
+    const editor = document.createElement("div");
+    editor.setAttribute("role", "textbox");
+    editor.setAttribute("tabindex", "0");
+    composer.append(editor);
+    document.body.append(composer);
+    editor.focus();
+  }
+
+  it("cancels the press on a touch screen while the message box has the focus", () => {
+    touchScreen(true);
+    focusedMessageBox();
+    const event = { preventDefault: vi.fn() };
+    keepComposerFocusOnSendPress(event);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("leaves a mouse press alone", () => {
+    touchScreen(false);
+    focusedMessageBox();
+    const event = { preventDefault: vi.fn() };
+    keepComposerFocusOnSendPress(event);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("leaves the press alone when the message box does not have the focus", () => {
+    touchScreen(true);
+    const event = { preventDefault: vi.fn() };
+    keepComposerFocusOnSendPress(event);
+    expect(event.preventDefault).not.toHaveBeenCalled();
   });
 });

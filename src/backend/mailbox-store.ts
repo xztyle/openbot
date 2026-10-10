@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import { rewriteAttachmentReferences } from "@openbot/contracts/attachment-references";
 import type { EventCheckOrigin } from "@openbot/contracts/event-checks";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
@@ -204,8 +205,11 @@ export class MailboxStore {
   readonly #deliveryGate = new MailboxDeliveryGate();
   readonly #stagedGeneratedAttachments = new Map<string, StoredGeneratedAttachment>();
   #state: StoredState = structuredClone(EMPTY_STATE);
-  /** Set once `initialize` has finished. A failed attempt leaves it false, so the next call retries. */
-  #initialized = false;
+  /**
+   * The connection on which `initialize` last finished. A failed attempt leaves it unset, so the next
+   * call retries, and a database that was closed since then has no such connection, so it runs again.
+   */
+  #initializedOn: DatabaseSync | null = null;
 
   constructor(userDataPath: string, sharedRoot: string, database = new OpenBotDatabase(userDataPath)) {
     this.#statePath = join(userDataPath, "mailbox.json");
@@ -218,7 +222,7 @@ export class MailboxStore {
   ): Effect.fn.Return<void, StoredStateFailure> {
     // The application and `AgentService` both call this. A second run would clear the drafts that
     // were created between the two calls, because this method resets every draft it does not retain.
-    if (this.#initialized) return;
+    if (this.#isInitialized()) return;
     try {
       yield* Effect.all(
         [
@@ -254,11 +258,20 @@ export class MailboxStore {
         .resetDrafts(retainedDrafts.map((draft) => draft.id))
         .pipe(Effect.mapError(({ cause }) => new StoredStateFailure({ cause })));
       yield* this.#drainFileDeletionOutboxEffect();
-      this.#initialized = true;
+      this.#initializedOn = this.#database.connection;
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });
     }
   }, Effect.uninterruptible).bind(this);
+
+  #isInitialized(): boolean {
+    try {
+      return this.#initializedOn !== null && this.#database.connection === this.#initializedOn;
+    } catch {
+      // The connection getter throws while the database is closed.
+      return false;
+    }
+  }
 
   prepareAttachments = Effect.fn("MailboxStore.prepareAttachments")(function* (
     this: MailboxStore,

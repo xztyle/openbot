@@ -117,6 +117,10 @@ describe("MailboxStore", () => {
     expect(init).toHaveBeenCalledTimes(2);
     await runCauseEffect(retried.initialize());
     expect(init).toHaveBeenCalledTimes(2);
+    // A database that was closed is opened and read again.
+    database.close();
+    await runCauseEffect(retried.initialize());
+    expect(init).toHaveBeenCalledTimes(3);
     database.close();
   });
 

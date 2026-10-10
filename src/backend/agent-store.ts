@@ -16,6 +16,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import { avatarFileExtension, isAvatarMimeType, isValidAvatarImage } from "@openbot/contracts/avatar-images";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { AgentProfileDraft } from "@openbot/contracts/ipc";
@@ -158,8 +159,11 @@ export class AgentStore {
   readonly #profileCreationRecovery: ProfileCreationRecovery;
   readonly #database: OpenBotDatabase;
   #state: StoredState = { version: 2, examplesInitialized: false, agents: [] };
-  /** Set once `initialize` has finished. A failed attempt leaves it false, so the next call retries. */
-  #initialized = false;
+  /**
+   * The connection on which `initialize` last finished. A failed attempt leaves it unset, so the next
+   * call retries, and a database that was closed since then has no such connection, so it runs again.
+   */
+  #initializedOn: DatabaseSync | null = null;
   readonly #avatarUpdateQueue = Semaphore.makeUnsafe(1);
   readonly #creationQueue = Semaphore.makeUnsafe(1);
 
@@ -202,7 +206,7 @@ export class AgentStore {
   ): Effect.fn.Return<void, StoredStateFailure> {
     // The application and `AgentService` both call this. A second run would re-read and re-repair a
     // roster that the first run already restored, and it would write a second set of repair events.
-    if (this.#initialized) return;
+    if (this.#isInitialized()) return;
     try {
       yield* Effect.all(
         [
@@ -285,11 +289,20 @@ export class AgentStore {
       // Last, so that a thread belonging to an agent the two recoveries above have just removed is gone
       // rather than re-adopted.
       this.#reconcileUnclaimedThreads();
-      this.#initialized = true;
+      this.#initializedOn = this.#database.connection;
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });
     }
   }, Effect.uninterruptible).bind(this);
+
+  #isInitialized(): boolean {
+    try {
+      return this.#initializedOn !== null && this.#database.connection === this.#initializedOn;
+    } catch {
+      // The connection getter throws while the database is closed.
+      return false;
+    }
+  }
 
   list(): AgentSummary[] {
     return this.#state.agents.map((agent) => ({ ...agent }));

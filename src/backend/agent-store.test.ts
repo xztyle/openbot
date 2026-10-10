@@ -362,6 +362,12 @@ describe("AgentStore", () => {
       events,
     );
     expect(store.list().map((agent) => agent.id)).toEqual(["chief"]);
+
+    // A database that was closed is opened and read again, as a restart in the same process does.
+    store.database.close();
+    await runCauseEffect(store.initialize());
+    expect(init).toHaveBeenCalledTimes(3);
+    expect(store.list().map((agent) => agent.id)).toEqual(["chief"]);
   });
 
   it("persists marketplace installation versions", async () => {

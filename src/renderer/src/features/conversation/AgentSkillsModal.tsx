@@ -75,7 +75,9 @@ export function AgentSkillsModal(props: AgentSkillsModalProps) {
   let detailRequest = 0;
   let listRequest = 0;
   let modalContent: HTMLDivElement | undefined;
-  let confirmationTrigger: HTMLButtonElement | undefined;
+  // The "more" button that asked for the question. Each menu reports its own, so a Cancel returns
+  // the focus to the skill that asked, not to the button of whichever row rendered last.
+  let confirmReturnFocus: HTMLElement | undefined;
   const skillsMode = () => props.skillsMode ?? "mutable";
   const mutable = () => skillsMode() === "mutable" || skillsMode() === "host";
   /** The local skills library is on this computer, so only its own agents can use it. */
@@ -216,11 +218,13 @@ export function AgentSkillsModal(props: AgentSkillsModalProps) {
     props.onAddFromMarketplace(props.agentId);
   }
 
-  function requestRemove(skill: InstalledSkill): void {
+  function requestRemove(skill: InstalledSkill, trigger?: HTMLElement): void {
+    confirmReturnFocus = trigger;
     setConfirm({ kind: "remove", skill });
   }
 
-  function requestReplace(skill: InstalledSkill): void {
+  function requestReplace(skill: InstalledSkill, trigger?: HTMLElement): void {
+    confirmReturnFocus = trigger;
     setConfirm({ kind: "replace", skill });
   }
 
@@ -324,8 +328,11 @@ export function AgentSkillsModal(props: AgentSkillsModalProps) {
 
   function cancelConfirm(): void {
     if (savingId()) return;
+    const trigger = confirmReturnFocus;
     setConfirm(null);
-    queueMicrotask(() => confirmationTrigger?.focus());
+    queueMicrotask(() => {
+      if (trigger?.isConnected) trigger.focus();
+    });
   }
 
   return (
@@ -367,16 +374,16 @@ export function AgentSkillsModal(props: AgentSkillsModalProps) {
                       <SkillMoreMenu
                         skill={skill()}
                         disabled={savingId() === skill().skillId}
-                        onUpdate={() =>
-                          skill().state === "modified" ? requestReplace(skill()) : void install(skill(), false)
+                        onUpdate={(trigger) =>
+                          skill().state === "modified" ? requestReplace(skill(), trigger) : void install(skill(), false)
                         }
-                        onRepair={() =>
-                          skill().state === "modified" ? requestReplace(skill()) : void install(skill(), false)
+                        onRepair={(trigger) =>
+                          skill().state === "modified" ? requestReplace(skill(), trigger) : void install(skill(), false)
                         }
-                        onUninstall={() => requestRemove(skill())}
+                        onUninstall={(trigger) => requestRemove(skill(), trigger)}
                       />
                       <Switch
-                        aria-label={`Enable ${skill().name}`}
+                        aria-label={t("skill.enableName", { name: skill().name })}
                         checked={isEnabled(skill())}
                         disabled={savingId() === skill().skillId}
                         onChange={(enabled) => void setEnabled(skill(), enabled)}
@@ -530,23 +537,20 @@ export function AgentSkillsModal(props: AgentSkillsModalProps) {
                                             <SkillMoreMenu
                                               skill={skill()}
                                               disabled={savingId() === skill().skillId}
-                                              onUpdate={() =>
+                                              onUpdate={(trigger) =>
                                                 skill().state === "modified"
-                                                  ? requestReplace(skill())
+                                                  ? requestReplace(skill(), trigger)
                                                   : void install(skill(), false)
                                               }
-                                              onRepair={() =>
+                                              onRepair={(trigger) =>
                                                 skill().state === "modified"
-                                                  ? requestReplace(skill())
+                                                  ? requestReplace(skill(), trigger)
                                                   : void install(skill(), false)
                                               }
-                                              onUninstall={() => requestRemove(skill())}
-                                              triggerRef={(element) => {
-                                                confirmationTrigger = element;
-                                              }}
+                                              onUninstall={(trigger) => requestRemove(skill(), trigger)}
                                             />
                                             <Switch
-                                              aria-label={`Enable ${skill().name}`}
+                                              aria-label={t("skill.enableName", { name: skill().name })}
                                               checked={isEnabled(skill())}
                                               disabled={savingId() === skill().skillId}
                                               onChange={(enabled) => void setEnabled(skill(), enabled)}
@@ -665,31 +669,34 @@ export function AgentSkillsModal(props: AgentSkillsModalProps) {
 function SkillMoreMenu(props: {
   skill: InstalledSkill;
   disabled: boolean;
-  onUpdate: () => void;
-  onRepair: () => void;
-  onUninstall: () => void;
-  triggerRef?: (element: HTMLButtonElement) => void;
+  /** Each action receives this menu's button, for the focus to return to after a question. */
+  onUpdate: (trigger: HTMLElement | undefined) => void;
+  onRepair: (trigger: HTMLElement | undefined) => void;
+  onUninstall: (trigger: HTMLElement | undefined) => void;
 }) {
   const { t } = useText();
+  let trigger: HTMLButtonElement | undefined;
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
         class="agent-skill-more"
         aria-label={t("skill.moreFor", { name: props.skill.name })}
         disabled={props.disabled}
-        ref={props.triggerRef}
+        ref={(element: HTMLButtonElement) => {
+          trigger = element;
+        }}
       >
         <Ellipsis />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="agent-skill-menu">
           <Show when={props.skill.state === "update-available"}>
-            <DropdownMenu.Item onSelect={props.onUpdate}>{t("skill.update")}</DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={() => props.onUpdate(trigger)}>{t("skill.update")}</DropdownMenu.Item>
           </Show>
           <Show when={props.skill.state === "needs-repair" || props.skill.state === "modified"}>
-            <DropdownMenu.Item onSelect={props.onRepair}>{t("skill.repair")}</DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={() => props.onRepair(trigger)}>{t("skill.repair")}</DropdownMenu.Item>
           </Show>
-          <DropdownMenu.Item class="ui-action-menu-danger" onSelect={props.onUninstall}>
+          <DropdownMenu.Item class="ui-action-menu-danger" onSelect={() => props.onUninstall(trigger)}>
             <Trash2 />
             {t("skill.uninstall")}
           </DropdownMenu.Item>

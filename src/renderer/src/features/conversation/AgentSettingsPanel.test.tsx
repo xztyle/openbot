@@ -624,6 +624,27 @@ describe("AgentSettingsPanel", () => {
     );
   });
 
+  it("returns the focus to the skill that asked when its confirmation is cancelled", async () => {
+    mock = createMockOpenBot();
+    window.openbot = mock.api;
+    const installed = await mock.api.skills.listInstalled("chief");
+    const original = installed.find((item) => item.skillId === "skill-release-notes");
+    if (!original) throw new Error("Missing skill fixture");
+    const first = { ...original, state: "modified" as const };
+    // Rows are sorted by name, so the second row is the last one that renders.
+    const second = { ...first, skillId: "skill-zeta", slug: "skill-zeta", name: "Zeta notes" };
+    vi.spyOn(mock.api.skills, "listInstalled").mockResolvedValue([first, second]);
+    render(() => (
+      <AgentSkillsModal open agentId="chief" agentName="Chief" onOpenChange={vi.fn()} onCountChange={vi.fn()} />
+    ));
+    const firstMore = await screen.findByRole("button", { name: `More for ${first.name}` });
+    await fireEvent.pointerDown(firstMore, { button: 0 });
+    await fireEvent.pointerUp(await screen.findByRole("menuitem", { name: "Repair" }), { button: 0 });
+    const confirm = await screen.findByRole("alertdialog", { name: "Replace local changes?" });
+    await fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(firstMore).toHaveFocus());
+  });
+
   it("lists a workspace skill folder read-only with its problem", async () => {
     mock = createMockOpenBot();
     window.openbot = mock.api;

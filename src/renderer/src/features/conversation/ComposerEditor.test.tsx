@@ -166,6 +166,51 @@ describe("ComposerEditor", () => {
     expect(screen.getByLabelText("MCP server Aave")).toBeInTheDocument();
   });
 
+  it("tells a screen reader which option of the open picker is active", async () => {
+    const { editor } = renderComposer(
+      [],
+      "",
+      [],
+      [],
+      [mcpServer(), mcpServer({ id: "mcp-aave-2", name: "Aave test" })],
+    );
+    expect(editor).not.toHaveAttribute("aria-controls");
+
+    await typeQuery(editor, "$Aa");
+    const picker = await screen.findByRole("listbox", { name: "Insert skill or MCP server" });
+    expect(editor).toHaveAttribute("aria-controls", picker.id);
+    expect(editor).toHaveAttribute("aria-autocomplete", "list");
+    const active = editor.getAttribute("aria-activedescendant");
+    expect(active).toBeTruthy();
+    expect(document.getElementById(active ?? "")).toHaveTextContent("Aave");
+
+    await fireEvent.keyDown(editor, { key: "ArrowDown" });
+    await waitFor(() => expect(editor.getAttribute("aria-activedescendant")).not.toBe(active));
+    expect(document.getElementById(editor.getAttribute("aria-activedescendant") ?? "")).toHaveTextContent("Aave test");
+
+    await fireEvent.keyDown(editor, { key: "Escape" });
+    await waitFor(() => expect(editor).not.toHaveAttribute("aria-controls"));
+    expect(editor).not.toHaveAttribute("aria-activedescendant");
+  });
+
+  it("describes a disabled editor with the reason the placeholder shows only to the eye", () => {
+    render(() => (
+      <ComposerEditor
+        agentId="chief"
+        agents={[]}
+        value=""
+        placeholder="Connecting…"
+        disabledReason="Connecting…"
+        ariaLabel="Message"
+        disabled={true}
+        onValueChange={() => {}}
+        onSubmit={() => {}}
+      />
+    ));
+
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveAccessibleDescription("Connecting…");
+  });
+
   it("withholds a server the host has turned off", async () => {
     const { editor } = renderComposer([], "", [], [], [mcpServer({ enabled: false })]);
 

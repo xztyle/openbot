@@ -65,6 +65,11 @@ interface ComposerEditorProps {
   placeholder: string;
   ariaLabel: string;
   disabled: boolean;
+  /**
+   * Why the editor is off, such as "Connecting" or "Host sleeping". The placeholder says it to the
+   * eye only, so a reader hears it as the description of the disabled field.
+   */
+  disabledReason?: string | undefined;
   focusRequest?: number;
   /** Raised by one to open the skill picker at the caret, as a typed `$` does. */
   skillPickerRequest?: number;
@@ -118,6 +123,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
     content: string;
   } | null>(null);
   const attachmentTooltipId = `composer-file-tooltip-${createUniqueId()}`;
+  const pickerId = `composer-picker-${createUniqueId()}`;
+  const pickerListId = `${pickerId}-list`;
+  const pickerStatusId = `${pickerId}-status`;
+  const disabledReasonId = `${pickerId}-reason`;
+  const pickerOptionId = (index: number) => `${pickerId}-option-${index}`;
   /*
    * Measured again on every keystroke, and almost always the same two values. Without this
    * comparison each measurement is a new object, which moves the picker to a new portal and
@@ -208,6 +218,22 @@ export function ComposerEditor(props: ComposerEditorProps) {
     () => pickerOpen(),
     (open) => {
       props.onPickerOpenChange?.(open);
+    },
+  );
+  /*
+   * The editor keeps the focus, so the option the arrow keys reach is named here. It is set on the
+   * element, not as a JSX attribute: the textbox is focusable through `tabindex`, which the lint rule
+   * for `aria-activedescendant` does not read from Solid's lowercase attribute.
+   */
+  createEffect(
+    () =>
+      pickerOpen() && pickerStatus() === null && matchingOptions().length > 0
+        ? pickerOptionId(Math.min(activeOption(), matchingOptions().length - 1))
+        : null,
+    (optionId) => {
+      if (!editor) return;
+      if (optionId) editor.setAttribute("aria-activedescendant", optionId);
+      else editor.removeAttribute("aria-activedescendant");
     },
   );
   const pickerOptionElements = new Map<string, HTMLElement>();
@@ -740,6 +766,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
           {props.placeholder}
         </span>
       </Show>
+      <Show when={props.disabled && props.disabledReason}>
+        <span id={disabledReasonId} class="sr-only">
+          {props.disabledReason}
+        </span>
+      </Show>
       {/* biome-ignore lint/a11y/useSemanticElements: contenteditable is required for inline agent chips. */}
       {/* biome-ignore lint/a11y/useFocusableInteractive: Solid 2 uses the lowercase tabindex DOM attribute. */}
       <div
@@ -751,6 +782,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
         aria-label={props.ariaLabel}
         aria-disabled={props.disabled ? "true" : "false"}
         aria-multiline="true"
+        aria-autocomplete={pickerOpen() ? "list" : undefined}
+        aria-haspopup={pickerOpen() ? "listbox" : undefined}
+        aria-controls={pickerOpen() ? (pickerStatus() === null ? pickerListId : pickerStatusId) : undefined}
+        aria-describedby={props.disabled && props.disabledReason ? disabledReasonId : undefined}
         enterkeyhint={sendShortcutEnterKeyHint(props.sendShortcut ?? "enter")}
         spellcheck="true"
         data-cuelume-type=""
@@ -790,7 +825,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
           >
             <Show when={pickerStatus()}>
               {(status) => (
-                <p class="mention-picker-status" role="status">
+                <p id={pickerStatusId} class="mention-picker-status" role="status">
                   {status()}
                 </p>
               )}
@@ -799,6 +834,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               <Listbox.Root<PickerOption>
                 as="div"
                 ref={pickerFades.bind}
+                id={pickerListId}
                 class={["mention-picker-list", pickerFades.classes()]}
                 onScroll={pickerFades.measure}
                 aria-label={t(
@@ -827,6 +863,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   return (
                     <Listbox.Item
                       ref={(element) => pickerOptionElements.set(pickerOptionKey(option), element)}
+                      id={pickerOptionId(optionIndex())}
                       item={item}
                       aria-label={pickerOptionText(option, t)}
                       class={[

@@ -203,6 +203,16 @@ export function ConversationComposer() {
       .map((extension) => `.${extension}`)
       .join(",");
   };
+  /** Why the message box is off while the agent is not ready. The same words show as its placeholder. */
+  const notReadyReason = () => {
+    if (agentReady()) return undefined;
+    if (props.agentsConnecting) return t("common.connecting");
+    if (!props.runtime) return t("composer.placeholder.cliSetup");
+    if (props.server?.state === "online") return t("composer.placeholder.hostSetup");
+    if (props.server?.hostedSleep === "sleeping") return t("composer.placeholder.hostSleeping");
+    if (props.server?.hostedSleep === "waking") return t("composer.placeholder.hostWaking");
+    return t("composer.placeholder.connectHost");
+  };
   /** Send, or Stop while the agent works and the message box is empty. */
   const SendControl = () => (
     <Show
@@ -488,23 +498,8 @@ export function ConversationComposer() {
               attachments={currentDraft().attachments}
               value={currentDraft().text}
               disabled={submitting() || voicePhase() === "transcribing" || !agentReady() || savePending()}
-              placeholder={
-                !agentReady()
-                  ? props.agentsConnecting
-                    ? t("common.connecting")
-                    : props.runtime
-                      ? props.server?.state === "online"
-                        ? t("composer.placeholder.hostSetup")
-                        : props.server?.hostedSleep === "sleeping"
-                          ? t("composer.placeholder.hostSleeping")
-                          : props.server?.hostedSleep === "waking"
-                            ? t("composer.placeholder.hostWaking")
-                            : t("composer.placeholder.connectHost")
-                      : t("composer.placeholder.cliSetup")
-                  : replyTarget()
-                    ? t("composer.placeholder.reply")
-                    : messageLabel()
-              }
+              placeholder={notReadyReason() ?? (replyTarget() ? t("composer.placeholder.reply") : messageLabel())}
+              disabledReason={notReadyReason()}
               ariaLabel={messageLabel()}
               focusRequest={composerFocusRequest()}
               skillPickerRequest={skillPickerRequest()}

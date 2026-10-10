@@ -48,6 +48,9 @@ import { createPluginAppConfig } from "./marketplace-plugin-catalog";
 import { localizedPlugin } from "./marketplace-plugin-text";
 import { agentHomeCache, marketplaceErrorMessage, skillHomeCache } from "./marketplace-shared";
 
+/** How long a result stays on screen. */
+const NOTICE_MS = 6000;
+
 const ACCESS_MODE_LABEL = {
   off: "mcp.chat.off",
   read: "mcp.chat.read",
@@ -120,6 +123,18 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
 
   const [error, setError] = createSignal<string | null>(null);
   const [notice, setNotice] = createSignal("");
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * The result of an action, said to a screen reader and shown for a few seconds. A notice that only
+   * the live region held would leave a sighted user with no sign that the action did anything. The
+   * text is cleared when the time ends, so the same result later is a new change.
+   */
+  function announce(text: string) {
+    setNotice(text);
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => setNotice(""), NOTICE_MS);
+  }
+  onCleanup(() => clearTimeout(noticeTimer));
   /** The actions in flight: `agent:<listing>`, `skill:<skill>` and `app:<app id>`. */
   const [busy, setBusy] = createStore<Record<string, true>>({});
   const mark = (key: string, on: boolean) =>
@@ -186,7 +201,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     setAdded((draft) => {
       draft[listing.id] = { agent, serverId };
     });
-    setNotice(t(copy ? "marketplace.notice.agentUpdated" : "marketplace.notice.agentAdded", { name: agent.name }));
+    announce(t(copy ? "marketplace.notice.agentUpdated" : "marketplace.notice.agentAdded", { name: agent.name }));
     return true;
   }
 
@@ -320,7 +335,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, false);
     const changed = agentIds.length - failed.length;
     if (changed > 0)
-      setNotice(
+      announce(
         t(on ? "marketplace.notice.skillInstalled" : "marketplace.notice.skillRemoved", {
           name: skill.name,
           count: changed,
@@ -354,7 +369,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     for (const skill of todo) if (!(await setSkill(skill, skill.agentIds, true))) failed.push(skill.name);
     setSkillsUpdating(false);
     if (failed.length > 0) setError(t("marketplace.error.updateAllPartial", { skills: format.list(failed) }));
-    else setNotice(t("marketplace.notice.skillsUpdated", { count: todo.length }));
+    else announce(t("marketplace.notice.skillsUpdated", { count: todo.length }));
   }
 
   async function loadSkill(id: string) {
@@ -763,7 +778,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     if (installed && plugin.skills.length > 0) await readInstalled(agentId);
     mark(key, false);
     if (installed) {
-      setNotice(t("marketplace.notice.appConnected", { name: plugin.name }));
+      announce(t("marketplace.notice.appConnected", { name: plugin.name }));
       /* The new account starts Off for every chat. The page offers one explicit step to allow it. */
       setJustConnected(connectedAccount);
       void chatAccess.refresh();
@@ -840,7 +855,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, false);
     if (failures.length > 0)
       setError(t("marketplace.error.uninstallPartial", { name: plugin.name, failures: failures.join(" ") }));
-    else setNotice(t("marketplace.notice.appDisconnected", { name: plugin.name }));
+    else announce(t("marketplace.notice.appDisconnected", { name: plugin.name }));
   }
 
   async function removeServer(id: string) {
@@ -853,7 +868,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     const next = await run(() => calls().mcp.removeMcpServer({ mcpServerId: id }, serverId));
     if (!next) return false;
     setServers(next);
-    setNotice(t("marketplace.notice.serverRemoved", { name }));
+    announce(t("marketplace.notice.serverRemoved", { name }));
     return true;
   }
 
@@ -894,7 +909,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, false);
     const changed = agentIds.length - failed.length;
     if (changed > 0)
-      setNotice(
+      announce(
         t(on ? "marketplace.notice.skillInstalled" : "marketplace.notice.skillRemoved", {
           name: plugin.name,
           count: changed,
@@ -942,7 +957,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     if (next) {
       setServers(next);
       clearCheck(id);
-      setNotice(
+      announce(
         t(enabled ? "marketplace.notice.accountEnabled" : "marketplace.notice.accountDisabled", { name: row.name }),
       );
       /* The host drops the grants of a disabled account the next time it saves a chat's choices. */
@@ -967,7 +982,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, false);
     if (!saved) return false;
     setServers(saved);
-    setNotice(t("marketplace.notice.accountRenamed", { name: next }));
+    announce(t("marketplace.notice.accountRenamed", { name: next }));
     await chatAccess.refresh();
     return true;
   }
@@ -991,7 +1006,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     setChecks((draft) => {
       draft[id] = found;
     });
-    setNotice(
+    announce(
       found.phase === "ok"
         ? t("marketplace.notice.accountChecked", { name: row.name, count: found.toolCount })
         : t("marketplace.notice.accountCheckFailed", { name: row.name }),
@@ -1021,7 +1036,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, false);
     if (done) {
       clearCheck(id);
-      setNotice(t("marketplace.notice.accountReconnected", { name: row.name }));
+      announce(t("marketplace.notice.accountReconnected", { name: row.name }));
     }
     return done === true;
   }
@@ -1067,7 +1082,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     });
     mark(key, false);
     if (updated !== undefined)
-      setNotice(
+      announce(
         t(updated.signIn ? "marketplace.notice.appUpdatedSignIn" : "marketplace.notice.appUpdated", {
           name: app.plugin.name,
           count: updated.moved,
@@ -1171,7 +1186,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         }
       });
       if (next)
-        setNotice(
+        announce(
           t("marketplace.notice.accessSet", {
             agent: agentName(agentId),
             account: name,

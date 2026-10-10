@@ -271,9 +271,11 @@ describe("Marketplace app accounts", () => {
       expect(calls.mcp.saveMcpServer.mock.lastCall?.[0].config).toEqual(
         account(ONE, "Linear — 1", { url: LINEAR_URL, headers: secret }),
       );
-      expect(
-        await screen.findByText("1 account of Linear updated. Sign in again if the app asks."),
-      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent(
+          "1 account of Linear updated. Sign in again if the app asks.",
+        ),
+      );
     });
   });
 

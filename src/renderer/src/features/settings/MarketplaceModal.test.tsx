@@ -536,6 +536,21 @@ describe("MarketplaceModal", () => {
       await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Aave connected."));
     });
 
+    it("shows the result of a connect on screen, not only in the live region", async () => {
+      window.openbot.agent = {
+        ...window.openbot.agent,
+        listMcpServers: vi.fn(async () => []),
+        saveMcpServer: vi.fn(async (input) => [input.config]),
+      };
+      renderMarketplace({ ...writer, plugins: [plugin] });
+      await openAppPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Connect Aave" }));
+
+      // The live region is for a screen reader. A sighted user needs the same words in view.
+      expect(await screen.findByText("Aave connected.", { ignore: "[role='status']" })).toBeVisible();
+      expect(screen.getByRole("status")).toHaveTextContent("Aave connected.");
+    });
+
     it("saves the configuration the connect dialog proved", async () => {
       const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => [input.config]);
       const testMcpServer: OpenBotDesktopApi["agent"]["testMcpServer"] = vi.fn(async () => ({

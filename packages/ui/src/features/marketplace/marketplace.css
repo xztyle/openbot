@@ -92,6 +92,24 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   box-shadow: 0 12px 32px var(--openbot-shadow-dialog);
 }
 
+/* What an action did, for a few seconds. It sits where the error does, in the neutral colors. */
+.skills-marketplace-notice {
+  position: sticky;
+  bottom: var(--openbot-space-4);
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  margin: 0 auto var(--openbot-space-4);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-primary);
+  box-shadow: 0 12px 32px var(--openbot-shadow-dialog);
+  overflow-wrap: anywhere;
+}
+
 .marketplace-visually-hidden {
   position: absolute;
   width: 1px;

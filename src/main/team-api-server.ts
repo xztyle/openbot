@@ -946,6 +946,12 @@ export class TeamApiServer {
 
   #broadcastAgentEventToClients(event: AgentEvent, audience: ConversationEventAudience = "all"): void {
     const filteredConversationPayloads = new Map<string, string>();
+    // The snapshot a finished turn sends to a client that takes no conversation events. It is read
+    // once for the whole broadcast, and its encoding is shared by the clients that decode it alike.
+    // The key holds every input of the encoder: the protocol, the semantic tags option and the
+    // browser secret capability. A client with another protocol view gets its own encoding.
+    let completionSnapshot: ReturnType<TeamApiOptions["agents"]["getRuntimeSnapshot"]> | undefined;
+    const completionPayloads = new Map<string, string | null>();
 
     for (const [client, connection] of this.#eventClients) {
       if (event.type === "conversation") {
@@ -1043,19 +1049,19 @@ export class TeamApiServer {
       if (event.type !== "turn-completed" || !supportsRuntimeSnapshots || connection.includeConversationEvents) {
         continue;
       }
-      const completionSnapshot =
-        encodeEvent(
-          {
-            type: "runtime-snapshot",
-            snapshot: this.#options.agents.getRuntimeSnapshot(),
-          },
-          encodingOptions,
-        ) ?? undefined;
-      if (!completionSnapshot) continue;
-      // The snapshot is this client's own. It does not fit, so this client loses the snapshot and
+      const completionKey = `${eventProtocol(connection.capabilities)}:${encodingOptions.preserveSemanticTags}:${connection.capabilities.has("browser-secret-handoff")}`;
+      let completionPayload = completionPayloads.get(completionKey);
+      if (completionPayload === undefined) {
+        completionSnapshot ??= this.#options.agents.getRuntimeSnapshot();
+        completionPayload =
+          encodeEvent({ type: "runtime-snapshot", snapshot: completionSnapshot }, encodingOptions) ?? null;
+        completionPayloads.set(completionKey, completionPayload);
+      }
+      if (!completionPayload) continue;
+      // The snapshot does not fit this client's protocol view, so this client loses the snapshot and
       // keeps the turn, and the clients after it in the loop still get the turn.
-      if (Buffer.byteLength(completionSnapshot) > AGENT_RUNTIME_SNAPSHOT_BYTES_LIMIT) continue;
-      client.send(completionSnapshot);
+      if (Buffer.byteLength(completionPayload) > AGENT_RUNTIME_SNAPSHOT_BYTES_LIMIT) continue;
+      client.send(completionPayload);
     }
   }
 

@@ -549,6 +549,78 @@ describe("TeamApiServer events", () => {
     fits.close();
   }, 30_000);
 
+  it("reads the post-turn snapshot once for every client and keeps each protocol's view of it", async () => {
+    const agentEvents = new EventEmitter();
+    const source = opencodeFixture[0];
+    if (!isAgentSummary(source)) throw new Error("Invalid agent fixture.");
+    const codex: AgentSummary = { ...source, id: "codex-agent", provider: "codex", model: "gpt-5.6-luna" };
+    // A protocol 1 client cannot see an OpenCode agent. A protocol 5 client can.
+    const opencode: AgentSummary = { ...source, id: "opencode-agent", provider: "opencode" };
+    const agents = [codex, opencode];
+    const getRuntimeSnapshot = vi.fn<TeamApiAgents["getRuntimeSnapshot"]>(() => ({
+      ...createAgents().getRuntimeSnapshot(),
+      agents,
+    }));
+    const { store, start } = await createTeamApiFixture("post-turn-snapshot-once", { configure: true });
+    const { port } = await start({
+      agents: createAgents({ listAgents: () => agents, getRuntimeSnapshot }, agentEvents),
+    });
+    const login = await Effect.runPromise(store.login("owner", "correct horse battery"));
+    const received = new Map<
+      string,
+      Array<{ type: string; snapshot?: { bots?: Array<{ id: string }>; agents?: Array<{ id: string }> } }>
+    >();
+    const open = async (name: string, capabilities: string[]): Promise<WebSocket> => {
+      const messages: Array<{
+        type: string;
+        snapshot?: { bots?: Array<{ id: string }>; agents?: Array<{ id: string }> };
+      }> = [];
+      received.set(name, messages);
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/v1/events`, [
+        "openbot-team-v1",
+        `openbot-token.${login.sessionToken}`,
+      ]);
+      const presence = nextJsonEvent(socket);
+      await new Promise<void>((resolve, reject) => {
+        socket.addEventListener("open", () => resolve(), { once: true });
+        socket.addEventListener("error", () => reject(new Error("WebSocket did not open.")), { once: true });
+      });
+      socket.addEventListener("message", (message) => messages.push(JSON.parse(String(message.data))));
+      await presence;
+      const initialSnapshot = nextJsonEvent(socket);
+      socket.send(JSON.stringify({ type: "agent-event-scope", includeConversations: false, capabilities }));
+      await expect(initialSnapshot).resolves.toMatchObject({ type: "runtime-snapshot" });
+      return socket;
+    };
+    const sockets = [
+      await open("first", ["agent-runtime-snapshots"]),
+      await open("second", ["agent-runtime-snapshots"]),
+      await open("current", ["agent-runtime-snapshots", "local-providers"]),
+    ];
+    for (const messages of received.values()) messages.length = 0;
+    getRuntimeSnapshot.mockClear();
+
+    agentEvents.emit("event", {
+      type: "turn-completed",
+      agentId: "codex-agent",
+      threadId: "thread-chief",
+      turnId: "turn-1",
+      status: "completed",
+    });
+    const snapshotOf = (name: string) => received.get(name)?.find((message) => message.type === "runtime-snapshot");
+    await vi.waitFor(() => {
+      for (const name of received.keys()) expect(snapshotOf(name)).toBeDefined();
+    });
+
+    expect(getRuntimeSnapshot).toHaveBeenCalledTimes(1);
+    expect(snapshotOf("first")).toEqual(snapshotOf("second"));
+    const idsOf = (name: string) =>
+      (snapshotOf(name)?.snapshot?.bots ?? snapshotOf(name)?.snapshot?.agents ?? []).map((agent) => agent.id);
+    expect(idsOf("first")).toEqual(["codex-agent"]);
+    expect(idsOf("current")).toEqual(["codex-agent", "opencode-agent"]);
+    for (const socket of sockets) socket.close();
+  }, 30_000);
+
   it("keeps legacy event clients connected without sending runtime snapshots", async () => {
     const { store, start } = await createTeamApiFixture("legacy-events", { configure: true });
     const login = await Effect.runPromise(store.login("owner", "correct horse battery"));

@@ -210,8 +210,11 @@ export function ConnectorsPanel(props: {
             <BitwardenConnectorPanel
               status={panel().status}
               busy={panel().busy}
+              statusFailed={panel().statusFailed}
               onConnect={(key) => panel().onConnect(key)}
               onDisconnect={() => panel().onDisconnect()}
+              onCancel={() => panel().onCancel?.()}
+              onRetryStatus={() => panel().onRetryStatus?.()}
             />
           </>
         )}

@@ -20,6 +20,7 @@ import { createActivityStore } from "./stores/activity-store";
 import { createBrowserStore } from "./stores/browser-store";
 import { createComposerActions } from "./stores/composer-actions";
 import { createComposerStore, currentConversationTarget } from "./stores/composer-store";
+import { createEventCheckIconStore, eventCheckIconSource } from "./stores/event-check-icon-store";
 import { createMcpServersStore } from "./stores/mcp-servers-store";
 import { createMessageActions } from "./stores/message-actions";
 import { createPanelsStore } from "./stores/panels-store";
@@ -365,6 +366,11 @@ export function createConversationViewScope(props: ConversationProps) {
     jumpToUnreadMessages,
     jumpToLatestMessage,
   } = scroll;
+  const { eventCheckIconUrl } = createEventCheckIconStore({
+    source: () => eventCheckIconSource(props),
+    agentId: () => props.agent?.id,
+    origins: eventCheckOriginById,
+  });
   const search = createSearchStore({
     props,
     chatSearchOpen,
@@ -1174,6 +1180,7 @@ export function createConversationViewScope(props: ConversationProps) {
     timelineMessages,
     timelineIndexById,
     eventCheckOriginById,
+    eventCheckIconUrl,
     unreadBoundaryMessageId,
     moveChatSearch,
     newMessageCount,

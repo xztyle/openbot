@@ -12,7 +12,7 @@ import {
   MessageHeader,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show } from "solid-js";
 import { avatarHeadColor } from "../../bloub-avatar";
 import type { AgentMessage, AgentProfile, MessageEventCheckOrigin } from "../../data";
 import { useText } from "../../text";
@@ -61,6 +61,11 @@ export interface ChatMessageRowProps {
    * the bubble with the name of the check, so the reader knows where the message came from.
    */
   eventCheckOrigin?: MessageEventCheckOrigin | undefined;
+  /**
+   * The https address of the icon of the app that the event check reads, such as Slack. The chip
+   * draws it in place of the bell, and keeps the bell when it is absent or does not load.
+   */
+  eventCheckIconUrl?: string | null | undefined;
   onRemoveReaction?: () => void;
   actions?: JSX.Element;
   footer?: JSX.Element;
@@ -75,6 +80,30 @@ export interface ChatMessageRowProps {
   onOpenSharedFile?: (path: string) => void;
   onOpenWorkspaceFile?: (path: string) => void;
   onDownload?: (attachment: AttachmentSummary) => void;
+}
+
+/**
+ * The icon of the app that an event check reads, or a bell when it has none or the image does not
+ * load. The address comes from the template of the check, as in the Marketplace, and is https only.
+ */
+function OriginIcon(props: { url: string | null | undefined }) {
+  const [failed, setFailed] = createSignal<string | null>(null);
+  const url = () => (props.url && props.url !== failed() ? props.url : null);
+  return (
+    <Show when={url()} fallback={<Bell aria-hidden="true" />} keyed>
+      {(src) => (
+        <img
+          class="message-origin-icon"
+          src={src}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          referrerpolicy="no-referrer"
+          onError={() => setFailed(src)}
+        />
+      )}
+    </Show>
+  );
 }
 
 /**
@@ -211,7 +240,7 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
                   aria-label={originLabel(origin())}
                   data-position={origin().position}
                 >
-                  <Bell aria-hidden="true" />
+                  <OriginIcon url={props.eventCheckIconUrl} />
                   <span class="message-origin-name">{origin().name}</span>
                 </BubbleReactions>
               )}

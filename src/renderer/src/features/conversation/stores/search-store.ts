@@ -5,7 +5,7 @@ import { clearChatSearchHighlights, findChatSearchMatches, renderChatSearchHighl
 import type { ConversationProps } from "../conversation-types";
 
 export interface SearchStoreDeps {
-  props: ConversationProps;
+  props: Pick<ConversationProps, "messages" | "onSearchMessages" | "onOpenSearchMessage">;
   chatSearchOpen: () => boolean;
   chatSearchQuery: () => string;
   activeChatSearchIndex: () => number;
@@ -30,13 +30,20 @@ export function createSearchStore(deps: SearchStoreDeps) {
   let chatSearchRequest = 0;
   let lastChatSearchQuery = "";
 
+  function searchMessageSignature(): string {
+    if (!deps.chatSearchOpen() || !deps.chatSearchQuery().trim()) return "";
+    return deps.props.messages
+      .map((message) => `${message.id}:${message.body}:${message.items?.join("\u0000") ?? ""}`)
+      .join("\u0001");
+  }
+
   createEffect(
     () => ({
       open: deps.chatSearchOpen(),
       query: deps.chatSearchQuery(),
-      messageSignature: deps.props.messages
-        .map((message) => `${message.id}:${message.body}:${message.items?.join("\u0000") ?? ""}`)
-        .join("\u0001"),
+      // Read the messages only while a search runs. A closed search then does not run again, or
+      // join every message, for each streamed delta.
+      messageSignature: searchMessageSignature(),
       remoteMessageIds: deps.chatSearchMessageIds(),
       activeRemoteIndex: deps.activeChatSearchIndex(),
     }),
@@ -46,7 +53,7 @@ export function createSearchStore(deps: SearchStoreDeps) {
       const queryChanged = query !== lastChatSearchQuery;
       lastChatSearchQuery = query;
       if (!open || !query.trim()) {
-        deps.setChatSearchMatches([]);
+        if (deps.chatSearchMatches().length > 0) deps.setChatSearchMatches([]);
         if (remoteMessageIds.length > 0) deps.setChatSearchMessageIds([]);
         deps.setChatSearchTotal(0);
         deps.setActiveChatSearchIndex(-1);

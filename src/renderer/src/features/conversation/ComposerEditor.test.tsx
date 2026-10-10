@@ -1,9 +1,10 @@
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { DraftAttachment, InstalledSkill, McpServerConfig } from "@openbot/contracts/ipc";
 import type { AgentProfile } from "@openbot/ui/data";
 import { ComposerEditor } from "@openbot/ui/features/conversation/ComposerEditor";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
 const originalMatchMedia = window.matchMedia;
 
@@ -70,6 +71,17 @@ function mcpServer(overrides: Partial<McpServerConfig> = {}): McpServerConfig {
     headers: [],
     ...overrides,
   };
+}
+
+/** Puts the caret inside the editor's first text node. */
+function placeCaret(editor: HTMLElement, offset: number) {
+  const text = editor.firstChild;
+  assert(text);
+  const caret = document.createRange();
+  caret.setStart(text, offset);
+  caret.collapse(true);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(caret);
 }
 
 /** Types a trigger and its query, the way the picker reads the caret. */
@@ -190,6 +202,31 @@ describe("ComposerEditor", () => {
     cleanup();
     const modifier = renderComposer([], "", [], [], [], "ctrl-enter");
     expect(modifier.editor).toHaveAttribute("enterkeyhint", "enter");
+  });
+
+  it("adds only the part of a paste that fits and never cuts the text already written", async () => {
+    const existing = "a".repeat(INPUT_LIMITS.messageText - 5);
+    const { editor, onValueChange } = renderComposer([], existing);
+    placeCaret(editor, 0);
+
+    await fireEvent.paste(editor, {
+      clipboardData: { files: [], items: [], getData: () => "b".repeat(20) },
+    });
+
+    await waitFor(() => expect(onValueChange).toHaveBeenCalled());
+    expect(onValueChange).toHaveBeenLastCalledWith(`bbbbb${existing}`);
+    expect(await screen.findByText("Message is limited to 100,000 characters; 15 were not added.")).toBeInTheDocument();
+  });
+
+  it("adds nothing and says so when the message is full", async () => {
+    const existing = "a".repeat(INPUT_LIMITS.messageText);
+    const { editor, onValueChange } = renderComposer([], existing);
+    placeCaret(editor, 10);
+
+    await fireEvent.paste(editor, { clipboardData: { files: [], items: [], getData: () => "xyz" } });
+
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(await screen.findByText("Message is limited to 100,000 characters; 3 were not added.")).toBeInTheDocument();
   });
 
   it("sends on Ctrl+Enter in modifier mode on other platforms", async () => {

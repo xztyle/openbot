@@ -71,6 +71,7 @@ export const messages = defineMessages("composer", {
   "composer.placeholder.reply": "Reply…",
   "composer.placeholder.message": "Message {name}",
   "composer.placeholder.messageAgent": "Message agent",
+  "composer.limit.notAdded": "Message is limited to {limit} characters; {count} were not added.",
   "composer.add.label": "Add to prompt",
   "composer.add.image": "Attach image",
   "composer.add.skill": "Use a skill",

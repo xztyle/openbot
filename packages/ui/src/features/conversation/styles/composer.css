@@ -626,6 +626,22 @@
   pointer-events: none;
 }
 
+.composer-editor-limit-notice {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  left: 4px;
+  margin: 0;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-surface);
+  padding: 2px 8px;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  line-height: 16px;
+  pointer-events: none;
+}
+
 .composer-editor-placeholder {
   position: absolute;
   top: 2px;

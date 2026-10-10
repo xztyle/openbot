@@ -119,8 +119,9 @@ build() { # build <log> <buildx args...>; the contexts and arguments every targe
 attempt() { # attempt <log> <buildx args...>
   local log=$1
   build "$@" && return 0
-  if grep -q "no active session\|DeadlineExceeded" "$log"; then
-    echo "BuildKit session timed out; trying once more." >&2
+  if grep -q "no active session\|DeadlineExceeded\|ResourceExhausted\|cannot allocate memory" "$log"; then
+    echo "BuildKit ran short of time or memory; waiting 60 s and trying once more." >&2
+    sleep 60
     build "$@" && return 0
   fi
   tail -40 "$log" >&2

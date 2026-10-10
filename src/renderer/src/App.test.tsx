@@ -782,6 +782,22 @@ describe("OpenBot connected desktop shell", () => {
     await screen.findByRole("heading", { name: "Chief" });
   });
 
+  it("finds settings pages by what they hold and opens an agent page from search", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+
+    await fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const input = await screen.findByRole("combobox", { name: "Search OpenBot" });
+    // Words that describe what a page holds find it, as the page name does not hold them.
+    await fireEvent.input(input, { target: { value: "spend" } });
+    await screen.findByRole("option", { name: /Usage/ });
+    await fireEvent.input(input, { target: { value: "api key" } });
+    await screen.findByRole("option", { name: /Providers/ });
+    await fireEvent.input(input, { target: { value: "chief: memories" } });
+    await fireEvent.click(await screen.findByRole("option", { name: /Chief: Memories/ }));
+    await screen.findByRole("dialog", { name: "Memories" });
+  });
+
   it("closes global search with Escape and a backdrop press", async () => {
     render(() => <App />);
     await screen.findByRole("heading", { name: "Chief" });

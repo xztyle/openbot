@@ -176,7 +176,7 @@ export interface ServerSettingsModalProps {
    * computer, so a remote server passes nothing.
    */
   routineFeed?: ServerRoutineFeedOptions | undefined;
-  /** The section to show when the dialog opens. Updates shows General when the server has no Updates section. */
+  /** The section to show when the dialog opens. General shows when the server does not have that section. */
   initialSection?: ServerSettingsSection | null;
 }
 
@@ -241,8 +241,46 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
    */
   const canManageMcp = () => serverRoleCanAdminister(props.server);
   const actionsAvailable = () => local() || props.server.state === "online";
-  const availableInitialSection = (): Section | null =>
-    props.initialSection === "updates" && !props.hostUpdate ? null : (props.initialSection ?? null);
+  const connectorsAvailable = () =>
+    Boolean(
+      props.githubConnector ||
+        props.onePasswordConnector ||
+        props.bitwardenConnector ||
+        props.slackConnector ||
+        props.discordConnector ||
+        props.telegramConnector,
+    );
+  /** Whether this dialog has the section, from the options its caller supplied: the same test as its navigation. */
+  const sectionAvailable = (value: Section): boolean => {
+    switch (value) {
+      case "general":
+      case "members":
+        return true;
+      case "desktop":
+        return remoteDesktopSection();
+      case "mcp":
+        return Boolean(props.mcpServers);
+      case "storage":
+        return Boolean(props.storage);
+      case "sites":
+        return Boolean(props.hostedSites);
+      case "providers":
+        return Boolean(props.providers || props.onSwitchToManageProviders);
+      case "updates":
+        return Boolean(props.hostUpdate);
+      case "import":
+        return Boolean(props.agentImport);
+      case "routines":
+        return Boolean(props.routineFeed);
+      case "connectors":
+        return connectorsAvailable();
+    }
+  };
+  /** The section that an opener asked for, or none when this server does not have it. General shows then. */
+  const availableInitialSection = (): Section | null => {
+    const requested = props.initialSection;
+    return requested && sectionAvailable(requested) ? requested : null;
+  };
   const published = () => (local() ? props.hostStatus?.phase === "online" : props.server.state === "online");
 
   async function run(key: string, action: () => Promise<void>): Promise<boolean> {
@@ -589,16 +627,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
                 <span>{t(sections.routines.title)}</span>
               </Tabs.Trigger>
             </Show>
-            <Show
-              when={
-                props.githubConnector ||
-                props.onePasswordConnector ||
-                props.bitwardenConnector ||
-                props.slackConnector ||
-                props.discordConnector ||
-                props.telegramConnector
-              }
-            >
+            <Show when={connectorsAvailable()}>
               <Tabs.Trigger class="settings-modal-nav-item" value="connectors">
                 <Plug aria-hidden="true" />
                 <span>{t(sections.connectors.title)}</span>
@@ -728,16 +757,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
             </Tabs.Content>
           )}
         </Show>
-        <Show
-          when={
-            props.githubConnector ||
-            props.onePasswordConnector ||
-            props.bitwardenConnector ||
-            props.slackConnector ||
-            props.discordConnector ||
-            props.telegramConnector
-          }
-        >
+        <Show when={connectorsAvailable()}>
           <Tabs.Content value="connectors" class="settings-modal-tab-panel server-settings-panel" data-tab="connectors">
             <ConnectorsPanel
               github={props.githubConnector}

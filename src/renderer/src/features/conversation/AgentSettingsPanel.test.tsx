@@ -2,6 +2,7 @@ import SharedAgentSettingsPanel, {
   type AgentRuntimeSettings,
 } from "@openbot/ui/features/conversation/AgentSettingsPanel";
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
+import { type ComponentProps, createSignal } from "solid-js";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { STORY_AGENT_STATUS, STORY_AGENTS, STORY_MODELS } from "../../preview/fixtures";
 import { createMockOpenBot, type MockOpenBotControls } from "../../preview/mock-openbot";
@@ -202,6 +203,75 @@ describe("AgentSettingsPanel", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Back to settings" }));
     expect(await screen.findByRole("button", { name: /^Files/u })).toBeInTheDocument();
+  });
+
+  it("shows the settings again when the detail that was open loses its capability", async () => {
+    mock = createMockOpenBot();
+    window.openbot = mock.api;
+    const [files, setFiles] = createSignal<ComponentProps<typeof AgentSettingsPanel>["files"]>({
+      serverId: "local",
+      canManage: true,
+      onPreviewFile: vi.fn(),
+      onShowMessage: vi.fn(),
+      onOpenConversation: vi.fn(),
+    });
+    render(() => (
+      <AgentSettingsPanel
+        agent={firstAgent}
+        runtimeSettings={{ provider: "codex", model: "gpt-5.6-sol", reasoningEffort: "high" }}
+        agentStatus={STORY_AGENT_STATUS}
+        modelOptions={STORY_MODELS}
+        working={false}
+        maxWidth={() => 640}
+        onClose={vi.fn()}
+        onWidthChange={vi.fn()}
+        onUpdateAgent={vi.fn(async () => undefined)}
+        onUpdateRuntimeSettings={vi.fn(async () => true)}
+        onSetAgentAvatar={vi.fn(async () => undefined)}
+        files={files()}
+      />
+    ));
+
+    await fireEvent.click(await screen.findByRole("button", { name: /^Files/u }));
+    await screen.findByRole("region", { name: `Files of ${firstAgent.name}` });
+    expect(screen.queryByRole("textbox", { name: "Agent instructions" })).toBeNull();
+
+    setFiles(undefined);
+    expect(await screen.findByRole("textbox", { name: "Agent instructions" })).toBeInTheDocument();
+  });
+
+  it("does not save a name when the window loses focus, only when the field is left", async () => {
+    const onUpdateAgent = vi.fn(async () => undefined);
+    const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(false);
+    try {
+      render(() => (
+        <SharedAgentSettingsPanel
+          agent={firstAgent}
+          runtimeSettings={{ provider: "codex", model: "gpt-5.6-sol", reasoningEffort: "high" }}
+          agentStatus={STORY_AGENT_STATUS}
+          modelOptions={STORY_MODELS}
+          working={false}
+          width={296}
+          maxWidth={() => 640}
+          onClose={vi.fn()}
+          onResize={vi.fn()}
+          onResizeEnd={vi.fn()}
+          onUpdateAgent={onUpdateAgent}
+          onUpdateRuntimeSettings={vi.fn(async () => true)}
+          onSetAgentAvatar={vi.fn(async () => undefined)}
+        />
+      ));
+      const name = await screen.findByRole("textbox", { name: "Agent name" });
+      await fireEvent.input(name, { target: { value: "Renamed" } });
+      await fireEvent.blur(name);
+      expect(onUpdateAgent).not.toHaveBeenCalled();
+
+      hasFocus.mockReturnValue(true);
+      await fireEvent.blur(name);
+      await waitFor(() => expect(onUpdateAgent).toHaveBeenCalledWith(firstAgent.id, { name: "Renamed" }));
+    } finally {
+      hasFocus.mockRestore();
+    }
   });
 
   it("opens a requested skill in the existing management modal", async () => {

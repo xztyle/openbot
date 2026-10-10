@@ -30,6 +30,10 @@ export interface PickerBinding {
   load(): Promise<EventCheckPickerOptions>;
   /** A sentence that says what is missing before the list can load. Absent when it can. */
   blocked?: string | undefined;
+  /** A list that an earlier field of the same setting already loaded, so the field starts with it. */
+  initial?: EventCheckPickerOptions | undefined;
+  /** Called with each list that the field loads, so the owner can keep it across a remount. */
+  onLoaded?(options: EventCheckPickerOptions): void;
 }
 
 export interface PickerSection {
@@ -103,7 +107,10 @@ export function pickerLimitReached(entries: readonly EventCheckPickerEntry[]): b
   return entries.length >= EVENT_CHECK_PICKER_MAX_ENTRIES;
 }
 
-/** The saved entries that the loaded list does not hold: an ID that is gone, or that the list cut off. */
+/**
+ * The saved entries that the loaded list does not hold: an ID that is gone, or that the list cut off.
+ * Call it only for a list that was loaded. Before that, no entry is known to be outside it.
+ */
 export function entriesOutsideList(
   entries: readonly EventCheckPickerEntry[],
   options: readonly EventCheckPickerOption[],

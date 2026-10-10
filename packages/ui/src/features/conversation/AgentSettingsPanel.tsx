@@ -504,7 +504,15 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     }
   }
 
+  /**
+   * Switching to another app blurs the focused field while the window is inactive. That is not the
+   * person leaving the field: Chromium gives focus back on return, and the save happens at the next
+   * real blur. The save when the panel closes does not depend on this.
+   */
+  const windowInactive = () => !document.hasFocus();
+
   function saveName(): void {
+    if (windowInactive()) return;
     const value = draft.fields.name.trim() || t("agent.setup.nameFallback");
     setDraft((state) => {
       state.fields.name = value;
@@ -513,6 +521,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   }
 
   function saveTitle(): void {
+    if (windowInactive()) return;
     const value = draft.fields.title.trim();
     setDraft((state) => {
       state.fields.title = value;

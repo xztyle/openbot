@@ -103,6 +103,12 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
         ? window.openbot.eventCheckTemplates
         : undefined;
   const routinesVisible = () => !props.remoteClient || Boolean(props.adminCalls?.routines);
+  /**
+   * Whether a detail view is on screen. A detail whose capability is momentarily missing renders
+   * nothing, so it must not hide the header and the settings under it.
+   */
+  const detailOpen = () =>
+    draft.routines.open || (draft.files.open && Boolean(props.files)) || (draft.checks.open && Boolean(checksApi()));
   const routinesPort = createMemo(() => {
     if (props.adminCalls?.routines) return props.adminCalls.routines(props.agent.id);
     const eventApi = props.eventRoutines ?? props.adminCalls?.eventRoutines;
@@ -254,7 +260,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       width={panelWidth()}
       onResize={setPanelWidth}
       onResizeEnd={saveSettingsPanelWidth}
-      detailOpen={draft.routines.open || draft.files.open || draft.checks.open}
+      detailOpen={detailOpen()}
       links={
         <>
           <Show when={memoriesVisible() || skillsMode() !== "hidden" || props.tablesVisible !== false || props.files}>

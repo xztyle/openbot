@@ -2,14 +2,22 @@ import type { EventCheckApiSource } from "@openbot/contracts/event-checks";
 import { Input, Text, Textarea } from "@openbot/ui";
 import { For, Show, snapshot } from "solid-js";
 import { useText } from "../../text";
-import { EventCheckPickerField } from "./EventCheckPickerField";
+import { EventCheckSettingField } from "./EventCheckSettingField";
 import type { PickerBinding } from "./event-check-picker";
+
+/** What the template of a check says about one of its settings, by name. */
+export interface WatcherSettingKind {
+  type: "text" | "boolean";
+  required: boolean;
+}
 
 export function WatcherProgramFields(props: {
   source: EventCheckApiSource;
   change(source: EventCheckApiSource): void;
   /** The settings that the template declares as pickers, by name. Any other setting is a text box. */
   pickers?: Record<string, PickerBinding> | undefined;
+  /** The kind of each setting that the template declares, by name. Any other setting is a text box. */
+  fields?: Record<string, WatcherSettingKind> | undefined;
 }) {
   const { t } = useText();
   const update = (fields: Partial<EventCheckApiSource>) => props.change({ ...snapshot(props.source), ...fields });
@@ -52,64 +60,27 @@ export function WatcherProgramFields(props: {
           <Text as="p" variant="caption" tone="muted" class="event-check-help">
             {t("agentSettings.eventCheck.configurationHelp")}
           </Text>
-          <For each={props.source.configuration}>
+          {/* Keyed by name: a change builds new entries, and a row that remounted would drop its list. */}
+          <For each={props.source.configuration} keyed={(field) => field.name}>
             {(field) => (
-              <Show
-                when={props.pickers?.[field.name]}
-                fallback={
-                  <div class="event-check-config-field">
-                    <label class="settings-field">
-                      <span>{field.label}</span>
-                      <Input
-                        value={field.value}
-                        maxlength={8192}
-                        aria-describedby={field.description ? `event-check-config-${field.name}` : undefined}
-                        onInput={(e) =>
-                          update({
-                            configuration: props.source.configuration.map((entry) =>
-                              entry.name === field.name
-                                ? { ...snapshot(entry), value: e.currentTarget.value }
-                                : snapshot(entry),
-                            ),
-                          })
-                        }
-                      />
-                    </label>
-                    <Show when={field.description}>
-                      <Text
-                        as="small"
-                        variant="caption"
-                        tone="muted"
-                        id={`event-check-config-${field.name}`}
-                        class="event-check-field-help"
-                      >
-                        {field.description}
-                      </Text>
-                    </Show>
-                  </div>
+              <EventCheckSettingField
+                layout="panel"
+                name={field().name}
+                label={field().label}
+                description={field().description}
+                type={props.fields?.[field().name]?.type}
+                required={props.fields?.[field().name]?.required}
+                picker={props.pickers?.[field().name]}
+                value={field().value}
+                onChange={(value) =>
+                  props.change({
+                    ...snapshot(props.source),
+                    configuration: props.source.configuration.map((entry) =>
+                      entry.name === field().name ? { ...snapshot(entry), value } : snapshot(entry),
+                    ),
+                  })
                 }
-              >
-                {(binding) => (
-                  <div class="event-check-config-field">
-                    <EventCheckPickerField
-                      label={field.label}
-                      description={field.description}
-                      picker={binding().picker}
-                      value={field.value}
-                      blocked={binding().blocked}
-                      load={() => binding().load()}
-                      onChange={(value) =>
-                        props.change({
-                          ...snapshot(props.source),
-                          configuration: props.source.configuration.map((entry) =>
-                            entry.name === field.name ? { ...snapshot(entry), value } : snapshot(entry),
-                          ),
-                        })
-                      }
-                    />
-                  </div>
-                )}
-              </Show>
+              />
             )}
           </For>
         </div>

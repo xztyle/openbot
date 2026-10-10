@@ -19,48 +19,80 @@ export function EventCheckEnvironmentSettings(props: {
    * the section opens. Nothing is saved until the user presses Save value.
    */
   prefill?: Record<string, string> | undefined;
+  /** The names that the template gives its variables, by variable name. A variable with none shows its name. */
+  labels?: Record<string, string> | undefined;
+  /** Called with the status of the variables each time it is read or changed, so a sibling can follow it. */
+  onStatus?(variables: EventCheckEnvironmentStatus[]): void;
+  /** Called after a value or an approval was saved. The owner reads the check again. */
   changed(): Promise<void>;
 }) {
   const { t, errorMessage } = useText();
   // Several checks can show this section at once, so the heading id is its own.
   const headingId = `event-check-environment-${createUniqueId()}`;
+  const reasonId = `${headingId}-reason`;
   const [state, setState] = createStore<EnvironmentState>({
     variables: [],
     values: {},
     busy: false,
     error: "",
   });
-  let generation = 0;
+  // `identity` ends with the check, the api or this section: a write that outlives it is dropped.
+  // `reads` ends a status read that a newer read or a write has replaced. A new revision of the same
+  // check changes neither the typed values nor the write that is running.
+  let identity = 0;
+  let reads = 0;
   let prefilled = false;
   onCleanup(() => {
-    generation++;
+    identity++;
+    reads++;
     setState((draft) => {
       draft.values = {};
     });
   });
+  // The owner passes a new `check` object after each read of its list, with the same id and revision.
+  // That is not a new check: only a change of the api or the id starts the section over.
+  let seenApi: EventCheckApi | undefined;
+  let seenId: string | undefined;
   createEffect(
-    () => [props.api, props.check.id, props.check.revision] as const,
-    () => {
-      const requested = ++generation;
-      const api = props.api,
-        check = props.check;
+    () => [props.api, props.check.id] as const,
+    ([api, checkId]) => {
+      if (api === seenApi && checkId === seenId) return;
+      seenApi = api;
+      seenId = checkId;
+      identity++;
       const typed = prefilled ? {} : { ...props.prefill };
       prefilled = true;
       setState((draft) => {
         draft.values = typed;
         draft.error = "";
         draft.variables = [];
+        draft.busy = false;
       });
+    },
+  );
+  let readApi: EventCheckApi | undefined;
+  let readId: string | undefined;
+  let readRevision: string | undefined;
+  createEffect(
+    () => [props.api, props.check.id, props.check.revision] as const,
+    ([api, checkId, revision]) => {
+      if (api === readApi && checkId === readId && revision === readRevision) return;
+      readApi = api;
+      readId = checkId;
+      readRevision = revision;
+      const requested = ++reads;
+      const check = props.check;
       void api
-        .environment?.({ agentId: check.agentId, id: check.id })
+        .environment?.({ agentId: check.agentId, id: checkId })
         .then((variables) => {
-          if (requested === generation)
-            setState((draft) => {
-              draft.variables = variables;
-            });
+          if (requested !== reads) return;
+          setState((draft) => {
+            draft.variables = variables;
+          });
+          props.onStatus?.(variables);
         })
         .catch((error) => {
-          if (requested === generation)
+          if (requested === reads)
             setState((draft) => {
               draft.error = errorMessage(error, t("agentSettings.eventCheck.failed"));
             });
@@ -68,38 +100,42 @@ export function EventCheckEnvironmentSettings(props: {
     },
   );
   async function write(name: string, remove: boolean) {
-    const requested = generation,
+    const requested = identity,
       api = props.api,
       check = props.check;
     const value = remove ? null : (state.values[name] ?? "");
     if (props.disabled || (!remove && !value)) return;
     setState((draft) => {
-      draft.values = {};
+      // Only the value that is being saved leaves the field. The other fields keep what was typed.
+      draft.values[name] = "";
       draft.busy = true;
       draft.error = "";
     });
     try {
       const variables = await api.setEnvironment?.({ agentId: check.agentId, id: check.id, name, value });
-      if (requested !== generation) return;
-      if (variables)
+      if (requested !== identity) return;
+      if (variables) {
+        reads++;
         setState((draft) => {
           draft.variables = variables;
         });
+        props.onStatus?.(variables);
+      }
       await props.changed();
     } catch (error) {
-      if (requested === generation)
+      if (requested === identity)
         setState((draft) => {
           draft.error = errorMessage(error, t("agentSettings.eventCheck.failed"));
         });
     } finally {
-      if (requested === generation)
+      if (requested === identity)
         setState((draft) => {
           draft.busy = false;
         });
     }
   }
   async function approve() {
-    const requested = generation,
+    const requested = identity,
       api = props.api,
       check = props.check;
     if (props.disabled) return;
@@ -110,15 +146,15 @@ export function EventCheckEnvironmentSettings(props: {
     try {
       // Only this button asks the host to approve. The host ignores the request from an agent tool.
       await api.save({ ...check, approveProgram: true });
-      if (requested !== generation) return;
+      if (requested !== identity) return;
       await props.changed();
     } catch (error) {
-      if (requested === generation)
+      if (requested === identity)
         setState((draft) => {
           draft.error = errorMessage(error, t("agentSettings.eventCheck.failed"));
         });
     } finally {
-      if (requested === generation)
+      if (requested === identity)
         setState((draft) => {
           draft.busy = false;
         });
@@ -130,6 +166,11 @@ export function EventCheckEnvironmentSettings(props: {
       <Text as="p" variant="caption" tone="muted" class="event-check-help">
         {t("agentSettings.eventCheck.environmentHelp")}
       </Text>
+      <Show when={props.disabled}>
+        <Text as="p" variant="caption" tone="muted" id={reasonId} class="event-check-help">
+          {t("agentSettings.eventCheck.environmentDisabled")}
+        </Text>
+      </Show>
       <Show when={state.variables.some((variable) => variable.reapprove)}>
         <div class="event-check-variable">
           <Text as="p" variant="caption" tone="muted" class="event-check-help" role="alert">
@@ -139,6 +180,7 @@ export function EventCheckEnvironmentSettings(props: {
             variant="secondary"
             type="button"
             size="sm"
+            aria-describedby={props.disabled ? reasonId : undefined}
             disabled={state.busy || props.disabled}
             onClick={() => void approve()}
           >
@@ -146,15 +188,18 @@ export function EventCheckEnvironmentSettings(props: {
           </Button>
         </div>
       </Show>
-      <For each={state.variables}>
+      <For each={state.variables} keyed={(variable) => variable.name}>
         {(variable) => (
           <div class="event-check-variable">
             <label class="settings-field">
               <span>
-                <code>{variable.name}</code> —{" "}
-                <span class={variable.configured ? "event-check-variable-set" : "event-check-variable-missing"}>
+                <Show when={props.labels?.[variable().name]} fallback={<code>{variable().name}</code>}>
+                  {(label) => label()}
+                </Show>{" "}
+                —{" "}
+                <span class={variable().configured ? "event-check-variable-set" : "event-check-variable-missing"}>
                   {t(
-                    variable.configured
+                    variable().configured
                       ? "agentSettings.eventCheck.variableSet"
                       : "agentSettings.eventCheck.variableMissing",
                   )}
@@ -163,13 +208,14 @@ export function EventCheckEnvironmentSettings(props: {
               <Input
                 type="password"
                 autocomplete="new-password"
-                value={state.values[variable.name] ?? ""}
+                value={state.values[variable().name] ?? ""}
                 maxlength={8192}
                 placeholder={t("agentSettings.eventCheck.variablePlaceholder")}
+                aria-describedby={props.disabled ? reasonId : undefined}
                 disabled={state.busy || props.disabled}
                 onInput={(event) =>
                   setState((draft) => {
-                    draft.values[variable.name] = event.currentTarget.value;
+                    draft.values[variable().name] = event.currentTarget.value;
                   })
                 }
               />
@@ -179,8 +225,9 @@ export function EventCheckEnvironmentSettings(props: {
                 variant="ghost"
                 type="button"
                 size="sm"
-                disabled={state.busy || props.disabled || !variable.configured}
-                onClick={() => void write(variable.name, true)}
+                aria-describedby={props.disabled ? reasonId : undefined}
+                disabled={state.busy || props.disabled || !variable().configured}
+                onClick={() => void write(variable().name, true)}
               >
                 {t("agentSettings.eventCheck.removeVariable")}
               </Button>
@@ -188,8 +235,9 @@ export function EventCheckEnvironmentSettings(props: {
                 variant="secondary"
                 type="button"
                 size="sm"
-                disabled={state.busy || props.disabled || !state.values[variable.name]}
-                onClick={() => void write(variable.name, false)}
+                aria-describedby={props.disabled ? reasonId : undefined}
+                disabled={state.busy || props.disabled || !state.values[variable().name]}
+                onClick={() => void write(variable().name, false)}
               >
                 {t("agentSettings.eventCheck.saveVariable")}
               </Button>

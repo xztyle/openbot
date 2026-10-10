@@ -1,4 +1,6 @@
 const OPEN_POPUP = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+/** The settings side panel and the overlays that open inside it: what happens there is the user's choice. */
+const SETTINGS_SURFACE = ".settings-panel, .agent-routines-overlay";
 const TEXT_ENTRY = 'input, textarea, select, [contenteditable=""], [contenteditable="true"]';
 
 /**
@@ -6,7 +8,8 @@ const TEXT_ENTRY = 'input, textarea, select, [contenteditable=""], [contentedita
  *
  * Chromium gives focus back to the element that had it, so this only acts when that was nothing
  * (`body`, after a click in the transcript) or a control the pointer focused, such as a sidebar row.
- * A popup, a text selection, another text field or a keyboard-focused control is the user's choice.
+ * A popup, a text selection, another text field, a keyboard-focused control or a control in the
+ * settings panel is the user's choice.
  */
 export function shouldRestoreComposerFocus(editor: HTMLElement): boolean {
   if (!editor.isConnected || editor.getAttribute("contenteditable") !== "true") return false;
@@ -18,5 +21,7 @@ export function shouldRestoreComposerFocus(editor: HTMLElement): boolean {
   const selection = document.getSelection();
   if (selection && !selection.isCollapsed && !editor.contains(selection.anchorNode)) return false;
   if (!active || active === document.body || active === document.documentElement) return true;
+  // A switch or a button that a click in the settings panel focused is still where the person works.
+  if (active.closest(SETTINGS_SURFACE)) return false;
   return !active.matches(TEXT_ENTRY) && !active.matches(":focus-visible");
 }

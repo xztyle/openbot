@@ -7,6 +7,7 @@ import type {
   EventCheck,
   EventCheckAccount,
   EventCheckApi,
+  EventCheckEnvironmentStatus,
   EventCheckExecution,
   EventCheckInput,
   EventCheckSource,
@@ -28,6 +29,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Spinner,
   Switch,
   SwitchField,
   Text,
@@ -45,7 +47,7 @@ import type { PickerBinding } from "./event-check-picker";
 import { RoutineSchedulePicker } from "./RoutineSchedulePicker";
 import type { RoutineScheduleDraft } from "./routine-schedule-draft";
 import { ROUTINE_SAVED_DRAFT_KINDS, routineScheduleFromDraft, routineScheduleToDraft } from "./routine-schedule-saved";
-import { WatcherProgramFields } from "./WatcherProgramFields";
+import { WatcherProgramFields, type WatcherSettingKind } from "./WatcherProgramFields";
 
 /**
  * What an editor needs from the templates of the host to show a setting as a picker: the templates,
@@ -72,6 +74,8 @@ interface Editor {
   value: EventCheckInput;
   timing: "interval" | "calendar";
   seconds: number;
+  /** What the person typed in the interval box. It can be empty, which `seconds` cannot say. */
+  secondsText: string;
   calendar: RoutineScheduleDraft;
   /** Seconds to combine events into one message. Zero delivers each find at once. */
   digestSeconds: number;
@@ -87,10 +91,18 @@ interface State {
   confirmDelete: boolean;
   busy: boolean;
   error: string;
+  /** The list of checks is being read: when the panel opens, for another agent, or after Retry. */
+  loading: boolean;
+  /** Why the list could not be read. Empty when it could. */
+  loadError: string;
   /** The picker settings of the open check, with what is missing before its list can load. */
   pickers: Record<string, EventCheckTemplatePicker>;
-  /** The labels of the private variables that are not set yet, or null while that is not known. */
-  missingVariables: string[] | null;
+  /** What the template of the open check says about its settings, by name. */
+  fields: Record<string, WatcherSettingKind>;
+  /** The private variables that the template of the open check declares, or null while that is not known. */
+  templateVariables: { name: string; label: string }[] | null;
+  /** The status of the private variables of the open check, or null while that is not known. */
+  environment: EventCheckEnvironmentStatus[] | null;
 }
 /** The list answer carries `health`. It is not part of what the user edits or saves. */
 function withoutHealth(check: EventCheck): EventCheck {
@@ -111,8 +123,20 @@ function defaultSource(api: boolean): EventCheckSource {
     ? { ...common, kind: "api", connectionId: "API account", variables: [], configuration: [] }
     : { ...common, kind: "mcp", connectionId: "" };
 }
+const MIN_INTERVAL_SECONDS = 30;
+/** The shortest and the longest interval that the editor offers. A saved interval beyond it stays valid. */
+const MAX_INTERVAL_SECONDS = 86_400;
+const MAX_SAVED_INTERVAL_SECONDS = 8_640_000_000;
+function intervalValid(seconds: number): boolean {
+  return Number.isSafeInteger(seconds) && seconds >= MIN_INTERVAL_SECONDS && seconds <= MAX_SAVED_INTERVAL_SECONDS;
+}
 function editor(agentId: string, check?: EventCheck, api = false): Editor {
   const schedule = check?.schedule ?? defaultEventCheckSchedule();
+  const seconds =
+    schedule.kind === "interval"
+      ? schedule.amount *
+        (schedule.unit === "seconds" ? 1 : schedule.unit === "minutes" ? 60 : schedule.unit === "hours" ? 3600 : 86400)
+      : 30;
   return {
     value: check
       ? structuredClone(snapshot(withoutHealth(check)))
@@ -128,17 +152,8 @@ function editor(agentId: string, check?: EventCheck, api = false): Editor {
           selection: { itemsPointer: api ? "/items" : "", idPointer: "/id", revisionPointer: api ? "/revision" : "" },
         },
     timing: schedule.kind === "interval" ? "interval" : "calendar",
-    seconds:
-      schedule.kind === "interval"
-        ? schedule.amount *
-          (schedule.unit === "seconds"
-            ? 1
-            : schedule.unit === "minutes"
-              ? 60
-              : schedule.unit === "hours"
-                ? 3600
-                : 86400)
-        : 30,
+    seconds,
+    secondsText: String(seconds),
     calendar: routineScheduleToDraft(schedule.kind === "interval" ? { kind: "daily", time: "09:00" } : schedule),
     digestSeconds: check?.delivery?.digestSeconds ?? 0,
     filtersText: itemFiltersToText(check?.delivery?.itemFilters ?? []),
@@ -220,8 +235,12 @@ export function EventChecksSettings(props: Props) {
     confirmDelete: false,
     busy: false,
     error: "",
+    loading: true,
+    loadError: "",
     pickers: {},
-    missingVariables: null,
+    fields: {},
+    templateVariables: null,
+    environment: null,
   });
   const scrollFades = createScrollFades();
   onCleanup(scrollFades.stop);
@@ -232,18 +251,22 @@ export function EventChecksSettings(props: Props) {
     },
   );
   let epoch = 0;
-  const fail = (error: unknown) =>
+  const fail = (error: unknown, fallback: string) =>
     setState((draft) => {
-      draft.error = errorMessage(error, t("agentSettings.eventCheck.failed"));
+      draft.error = errorMessage(error, fallback);
     });
   const time = (value: string) => format.date(new Date(value), { dateStyle: "medium", timeStyle: "short" });
   const deliveryAvailable = () => props.deliveryAvailable ?? props.api.deliverySettings ?? true;
+  const apiPrograms = () => props.apiProgramsAvailable ?? Boolean(props.api.environment);
   const digestName = (seconds: number) =>
     seconds === 0
       ? t("agentSettings.eventCheck.digestOff")
       : seconds >= 3600
         ? t("agentSettings.eventCheck.digestHours", { count: seconds / 3600 })
         : t("agentSettings.eventCheck.digestMinutes", { count: seconds / 60 });
+  /** The lists that pickers loaded, by check and setting. A remounted field starts from its list. */
+  const loadedLists = new Map<string, EventCheckPickerOptions>();
+  const listKey = (checkId: string, field: string) => `${checkId}:${field}`;
   async function reload() {
     const requested = ++epoch;
     try {
@@ -251,64 +274,108 @@ export function EventChecksSettings(props: Props) {
       if (requested !== epoch) return;
       setState((draft) => {
         draft.checks = checks;
+        draft.loading = false;
+        draft.loadError = "";
       });
       props.onCountChange(checks.length);
       return checks;
     } catch (error) {
-      if (requested === epoch) fail(error);
+      if (requested !== epoch) return;
+      const message = errorMessage(error, t("agentSettings.eventCheck.loadFailed"));
+      setState((draft) => {
+        // Without a list to show, the list view says so and offers Retry. With one, a banner is enough.
+        if (draft.loading) {
+          draft.loadError = message;
+          if (draft.current) draft.error = message;
+        } else draft.error = message;
+        draft.loading = false;
+      });
     }
   }
+  function retryLoad() {
+    setState((draft) => {
+      draft.loading = true;
+      draft.loadError = "";
+      draft.error = "";
+    });
+    void reload();
+  }
+  let lastAgentId: string | undefined;
   createEffect(
     () => [props.api, props.agentId] as const,
-    () => {
-      setState((draft) => {
-        draft.current = null;
-        draft.error = "";
-      });
+    ([, agentId]) => {
+      // Another agent starts over. The same agent with another api object only reads the lists again:
+      // the check that is open and its unsaved edits stay.
+      const agentChanged = agentId !== lastAgentId;
+      lastAgentId = agentId;
+      if (agentChanged) {
+        loadedLists.clear();
+        setState((draft) => {
+          draft.current = null;
+          draft.error = "";
+          draft.checks = [];
+          draft.accounts = [];
+          draft.loading = true;
+          draft.loadError = "";
+        });
+      }
       void reload();
       void props.api
-        .accounts({ agentId: props.agentId })
+        .accounts({ agentId })
         .then((accounts) =>
           setState((draft) => {
             draft.accounts = accounts;
           }),
         )
-        .catch(fail);
+        .catch((error) => fail(error, t("agentSettings.eventCheck.accountsFailed")));
     },
   );
   // The templates are read once for this panel, and only for a check that came from one.
   let templatesRead: Promise<EventCheckTemplate[]> | null = null;
-  async function loadPickers(check: EventCheck) {
+  /**
+   * Reads what the template of a check says about its settings: which one is a switch, which one a
+   * list, which one is optional, and what the private variables are called.
+   */
+  async function loadTemplateSettings(check: EventCheck) {
     const link = check.source.kind === "api" ? check.source.template : undefined;
     const source = props.pickers;
-    if (!source?.discoverCheck || !link || check.source.kind !== "api") return;
+    if (!source || !link || check.source.kind !== "api") return;
     try {
       templatesRead ??= source.list();
       const template = (await templatesRead).find((entry) => entry.slug === link.slug);
-      // Only the version that the template ships has a program that can list its choices.
-      if (!template || template.version !== link.version) return;
+      if (!template || state.current?.value.id !== check.id) return;
       const configured = new Set(check.source.configuration.map((field) => field.name));
+      // The kind of a setting follows its name, whichever version made the check. Only the version
+      // that the template ships has a program that can list the choices of a picker.
+      const shipped = template.version === link.version;
+      const fields: Record<string, WatcherSettingKind> = {};
       const pickers: Record<string, EventCheckTemplatePicker> = {};
-      for (const field of template.configuration)
-        if (field.picker && configured.has(field.name)) pickers[field.name] = field.picker;
+      for (const field of template.configuration) {
+        if (!configured.has(field.name)) continue;
+        fields[field.name] = { type: field.type, required: field.required };
+        if (shipped && field.picker && source.discoverCheck) pickers[field.name] = field.picker;
+      }
+      setState((draft) => {
+        draft.fields = fields;
+        draft.templateVariables = template.variables.map((variable) => ({
+          name: variable.name,
+          label: variable.label,
+        }));
+      });
       if (Object.keys(pickers).length === 0) return;
       const status = props.api.environment ? await props.api.environment({ agentId: check.agentId, id: check.id }) : [];
-      const ready = new Set(status.filter((entry) => entry.configured && !entry.reapprove).map((entry) => entry.name));
-      const missing = template.variables
-        .filter((variable) => !ready.has(variable.name))
-        .map((variable) => variable.label);
       if (state.current?.value.id !== check.id) return;
       setState((draft) => {
         draft.pickers = pickers;
-        draft.missingVariables = missing;
+        draft.environment = status;
       });
     } catch {
-      // The settings stay text boxes. Nothing here is needed to edit the check.
+      // The settings stay as they are. Nothing here is needed to edit the check.
       templatesRead = null;
     }
   }
   async function open(check?: EventCheck) {
-    const next = editor(props.agentId, check, props.apiProgramsAvailable ?? Boolean(props.api.environment));
+    const next = editor(props.agentId, check, apiPrograms());
     setState((draft) => {
       draft.current = next;
       draft.historyOpen = false;
@@ -317,9 +384,11 @@ export function EventChecksSettings(props: Props) {
       draft.confirmDelete = false;
       draft.error = "";
       draft.pickers = {};
-      draft.missingVariables = null;
+      draft.fields = {};
+      draft.templateVariables = null;
+      draft.environment = null;
     });
-    if (check?.id) void loadPickers(check);
+    if (check?.id) void loadTemplateSettings(check);
     // A store write is visible only after the next flush, so the new editor, not the store, names the account.
     if (next.value.source.kind === "mcp" && next.value.source.connectionId)
       await loadTools(next.value.source.connectionId);
@@ -338,10 +407,10 @@ export function EventChecksSettings(props: Props) {
           draft.tools = tools;
         });
     } catch (error) {
-      fail(error);
+      fail(error, t("agentSettings.eventCheck.toolsFailed"));
     }
   }
-  async function action(run: () => Promise<unknown>) {
+  async function action(run: () => Promise<unknown>, failure: string) {
     setState((draft) => {
       draft.busy = true;
       draft.error = "";
@@ -350,7 +419,7 @@ export function EventChecksSettings(props: Props) {
       await run();
       await reload();
     } catch (error) {
-      fail(error);
+      fail(error, failure);
     } finally {
       setState((draft) => {
         draft.busy = false;
@@ -386,18 +455,38 @@ export function EventChecksSettings(props: Props) {
     await action(async () => {
       const check = await props.api.save({ ...snapshot(current.value), schedule, ...delivery });
       setState((draft) => {
-        draft.current = editor(props.agentId, check, props.apiProgramsAvailable ?? Boolean(props.api.environment));
+        draft.current = editor(props.agentId, check, apiPrograms());
       });
-    });
+    }, t("agentSettings.eventCheck.saveFailed"));
   }
   async function history() {
     const id = state.current?.value.id;
     if (!id) return;
-    const runs = await props.api.history({ agentId: props.agentId, id });
-    setState((draft) => {
-      draft.history = runs;
-      draft.historyOpen = true;
-    });
+    try {
+      const runs = await props.api.history({ agentId: props.agentId, id });
+      setState((draft) => {
+        draft.history = runs;
+        draft.historyOpen = true;
+      });
+    } catch (error) {
+      fail(error, t("agentSettings.eventCheck.historyFailed"));
+    }
+  }
+  /**
+   * A private value or an approval was saved. The host pauses the check and approves its program,
+   * so the saved check changed. An editor with no unsaved edit takes the saved check over; the
+   * history, the tools and the lists of the pickers stay. An editor with an edit keeps the draft.
+   */
+  async function variablesChanged(id: string) {
+    const clean = state.current?.value.id === id && !dirty();
+    const before = clean ? JSON.stringify(snapshot(state.current)) : "";
+    const checks = await reload();
+    const updated = checks?.find((entry) => entry.id === id);
+    if (!updated || state.current?.value.id !== id) return;
+    if (clean && JSON.stringify(snapshot(state.current)) === before)
+      setState((draft) => {
+        draft.current = editor(props.agentId, updated, apiPrograms());
+      });
   }
   const dirty = () => {
     const current = state.current;
@@ -419,7 +508,7 @@ export function EventChecksSettings(props: Props) {
   const pickerBindings = (): Record<string, PickerBinding> => {
     const discover = props.pickers?.discoverCheck;
     const id = state.current?.value.id;
-    const missing = state.missingVariables;
+    const missing = missingVariables();
     if (!discover || !id) return {};
     return Object.fromEntries(
       Object.entries(state.pickers).map(([field, picker]) => [
@@ -433,10 +522,24 @@ export function EventChecksSettings(props: Props) {
               : missing.length > 0
                 ? t("agentSettings.eventCheck.picker.needSaved", { name: missing.join(", ") })
                 : undefined,
+          initial: loadedLists.get(listKey(id, field)),
+          onLoaded: (options: EventCheckPickerOptions) => {
+            loadedLists.set(listKey(id, field), options);
+          },
         },
       ]),
     );
   };
+  /** The labels of the private variables that are not set yet, or null while that is not known. */
+  const missingVariables = (): string[] | null => {
+    const declared = state.templateVariables;
+    const status = state.environment;
+    if (declared === null || status === null) return null;
+    const ready = new Set(status.filter((entry) => entry.configured && !entry.reapprove).map((entry) => entry.name));
+    return declared.filter((variable) => !ready.has(variable.name)).map((variable) => variable.label);
+  };
+  const variableLabels = () =>
+    Object.fromEntries((state.templateVariables ?? []).map((variable) => [variable.name, variable.label]));
   const sourceChange = (key: "argumentsJson" | "cursorArgument" | "nextCursorPointer", value: string) =>
     setState((draft) => {
       if (draft.current) draft.current.value.source[key] = value;
@@ -449,6 +552,48 @@ export function EventChecksSettings(props: Props) {
     setState((draft) => {
       if (draft.current) draft.current.timing = timing;
     });
+  /** The saved check that the open editor edits, with its health. Absent for a check that is not saved yet. */
+  const savedCheck = () => state.checks.find((check) => check.id === state.current?.value.id);
+  const failing = () => {
+    const health = savedCheck()?.health;
+    return health && health.consecutiveErrors > 0 ? health : undefined;
+  };
+  /** The settings that Save needs and that are empty, named as the form names them. */
+  const missingForSave = () => {
+    const current = state.current;
+    if (!current) return [];
+    const missing: string[] = [];
+    if (!current.value.name.trim()) missing.push(t("agentSettings.eventCheck.name"));
+    if (!current.value.source.toolName)
+      missing.push(
+        current.value.source.kind === "api"
+          ? t("agentSettings.eventCheck.program")
+          : t("agentSettings.eventCheck.read"),
+      );
+    if (!current.value.instruction.trim()) missing.push(t("agentSettings.eventCheck.instruction"));
+    return missing;
+  };
+  /** The interval, in seconds, that the saved check has: a longer one than the editor offers stays valid. */
+  const savedIntervalSeconds = () => {
+    const saved = savedCheck();
+    return saved ? editor(props.agentId, saved).seconds : 0;
+  };
+  const intervalProblem = () => state.current?.timing === "interval" && !intervalValid(state.current.seconds);
+  /** Why Check now is off, or null when it is on. */
+  const checkNowReason = () =>
+    dirty()
+      ? t("agentSettings.eventCheck.runNeedsSave")
+      : state.current?.value.active
+        ? null
+        : t("agentSettings.eventCheck.runNeedsActive");
+  const testReason = () => (dirty() ? t("agentSettings.eventCheck.runNeedsSave") : null);
+  const saveReason = () => {
+    const missing = missingForSave();
+    return missing.length > 0 ? t("agentSettings.eventCheck.saveNeeds", { fields: format.list(missing) }) : null;
+  };
+  let focusDeleteButton = false;
+  /** The confirmation swaps the buttons. Focus follows the swap, so a keyboard user is not left on nothing. */
+  const focusWhenShown = (element: HTMLElement) => queueMicrotask(() => element.focus());
   return (
     <section class="agent-routines-settings event-check-settings" aria-label={t("agentSettings.eventCheck.title")}>
       <header class="settings-panel-header agent-routines-header">
@@ -463,7 +608,7 @@ export function EventChecksSettings(props: Props) {
           <SettingsBackIcon />
         </Button>
         <div class="agent-routines-heading">
-          <h2>
+          <h2 aria-describedby={failing() ? "event-check-failing-reason" : undefined}>
             {state.current
               ? state.current.value.id
                 ? t("agentSettings.eventCheck.check")
@@ -505,81 +650,126 @@ export function EventChecksSettings(props: Props) {
                 {t("agentSettings.eventCheck.description")}
               </Text>
               <Show
-                when={state.checks.length}
+                when={!state.loading}
                 fallback={
-                  <div class="event-check-empty">
-                    <p class="agent-routines-empty">{t("agentSettings.eventCheck.empty")}</p>
-                    <Button type="button" size="sm" onClick={() => void open()}>
-                      <Plus aria-hidden="true" />
-                      {t("agentSettings.eventCheck.add")}
-                    </Button>
+                  <div class="event-check-empty" role="status">
+                    <Spinner size="sm" />
+                    <p class="agent-routines-empty">{t("agentSettings.eventCheck.loading")}</p>
                   </div>
                 }
               >
-                <div class="agent-routines-list">
-                  <For each={state.checks}>
-                    {(check) => (
-                      <div class="event-check-row">
-                        <Button
-                          variant="ghost"
-                          type="button"
-                          class="agent-routine-row"
-                          aria-labelledby={`event-check-${check.id}-name`}
-                          aria-describedby={`event-check-${check.id}-summary`}
-                          onClick={() => void open(check)}
-                        >
-                          <span
-                            class={
-                              check.active ? "agent-routine-status-icon-active" : "agent-routine-status-icon-paused"
-                            }
-                          >
-                            <Show when={check.active} fallback={<CirclePause aria-hidden="true" />}>
-                              <Bell aria-hidden="true" />
-                            </Show>
-                          </span>
-                          <span>
-                            <strong id={`event-check-${check.id}-name`}>{check.name}</strong>
-                            <small id={`event-check-${check.id}-summary`}>
-                              {check.active
-                                ? t("agentSettings.eventCheck.next", { time: time(check.nextCheckAt) })
-                                : t("agentSettings.eventCheck.paused")}
-                              <Show when={templateLink(check.source)}>
-                                {(link) => (
-                                  <>
-                                    {" · "}
-                                    {t("agentSettings.eventCheck.fromTemplate", {
-                                      name: link().slug,
-                                      version: link().version,
-                                    })}
-                                  </>
-                                )}
-                              </Show>
-                              <Show when={(check.health?.consecutiveErrors ?? 0) > 0}>
-                                {" · "}
-                                <span class="event-check-failing" title={sourceText(check.health?.lastError ?? "")}>
-                                  <TriangleAlert aria-hidden="true" />
-                                  {t("agentSettings.eventCheck.failing")}
-                                </span>
-                              </Show>
-                            </small>
-                          </span>
+                <Show
+                  when={!state.loadError}
+                  fallback={
+                    <div class="event-check-empty">
+                      <p class="agent-settings-save-error" role="alert">
+                        {state.loadError}
+                      </p>
+                      <Button type="button" size="sm" variant="secondary" onClick={retryLoad}>
+                        {t("common.retry")}
+                      </Button>
+                    </div>
+                  }
+                >
+                  <Show
+                    when={state.checks.length}
+                    fallback={
+                      <div class="event-check-empty">
+                        <p class="agent-routines-empty">{t("agentSettings.eventCheck.empty")}</p>
+                        <Button type="button" size="sm" onClick={() => void open()}>
+                          <Plus aria-hidden="true" />
+                          {t("agentSettings.eventCheck.add")}
                         </Button>
-                        <Switch
-                          checked={check.active}
-                          aria-label={t("agentSettings.eventCheck.activeName", { name: check.name })}
-                          onChange={(active) => void action(() => props.api.save({ ...snapshot(check), active }))}
-                          disabled={state.busy}
-                        />
                       </div>
-                    )}
-                  </For>
-                </div>
+                    }
+                  >
+                    <div class="agent-routines-list">
+                      <For each={state.checks}>
+                        {(check) => (
+                          <div class="event-check-row">
+                            <Button
+                              variant="ghost"
+                              type="button"
+                              class="agent-routine-row"
+                              aria-labelledby={`event-check-${check.id}-name`}
+                              aria-describedby={`event-check-${check.id}-summary`}
+                              onClick={() => void open(check)}
+                            >
+                              <span
+                                class={
+                                  check.active ? "agent-routine-status-icon-active" : "agent-routine-status-icon-paused"
+                                }
+                              >
+                                <Show when={check.active} fallback={<CirclePause aria-hidden="true" />}>
+                                  <Bell aria-hidden="true" />
+                                </Show>
+                              </span>
+                              <span>
+                                <strong id={`event-check-${check.id}-name`}>{check.name}</strong>
+                                <small id={`event-check-${check.id}-summary`}>
+                                  {check.active
+                                    ? t("agentSettings.eventCheck.next", { time: time(check.nextCheckAt) })
+                                    : t("agentSettings.eventCheck.paused")}
+                                  <Show when={templateLink(check.source)}>
+                                    {(link) => (
+                                      <>
+                                        {" · "}
+                                        {t("agentSettings.eventCheck.fromTemplate", {
+                                          name: link().slug,
+                                          version: link().version,
+                                        })}
+                                      </>
+                                    )}
+                                  </Show>
+                                  <Show when={(check.health?.consecutiveErrors ?? 0) > 0}>
+                                    {" · "}
+                                    <span class="event-check-failing" title={sourceText(check.health?.lastError ?? "")}>
+                                      <TriangleAlert aria-hidden="true" />
+                                      {t("agentSettings.eventCheck.failing")}
+                                    </span>
+                                  </Show>
+                                </small>
+                              </span>
+                            </Button>
+                            <Switch
+                              checked={check.active}
+                              aria-label={t("agentSettings.eventCheck.activeName", { name: check.name })}
+                              onChange={(active) =>
+                                void action(
+                                  () => props.api.save({ ...snapshot(check), active }),
+                                  t("agentSettings.eventCheck.toggleFailed"),
+                                )
+                              }
+                              disabled={state.busy}
+                            />
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </Show>
               </Show>
             </div>
           }
         >
           {(current) => (
             <div class="agent-routine-editor event-check-editor">
+              <Show when={failing()}>
+                {(health) => (
+                  <Text
+                    as="p"
+                    variant="caption"
+                    id="event-check-failing-reason"
+                    class="event-check-help event-check-failing"
+                  >
+                    <TriangleAlert aria-hidden="true" />
+                    {t("agentSettings.eventCheck.failingReason", {
+                      count: health().consecutiveErrors,
+                      reason: sourceText(health().lastError ?? ""),
+                    })}
+                  </Text>
+                )}
+              </Show>
               <div class="agent-routine-editor-actions">
                 <div class="agent-routine-active-toggle">
                   <Switch
@@ -611,21 +801,24 @@ export function EventChecksSettings(props: Props) {
                           onClick={() =>
                             void action(async () => {
                               await props.api.remove({ agentId: props.agentId, id: current().value.id ?? "" });
+                              loadedLists.clear();
                               closeEditor();
-                            })
+                            }, t("agentSettings.eventCheck.deleteFailed"))
                           }
                         >
                           {t("agentSettings.eventCheck.deleteNow")}
                         </Button>
                         <Button
+                          ref={focusWhenShown}
                           variant="secondary"
                           type="button"
                           size="sm"
-                          onClick={() =>
+                          onClick={() => {
+                            focusDeleteButton = true;
                             setState((draft) => {
                               draft.confirmDelete = false;
-                            })
-                          }
+                            });
+                          }}
                         >
                           {t("common.cancel")}
                         </Button>
@@ -634,6 +827,13 @@ export function EventChecksSettings(props: Props) {
                   >
                     <Show when={current().value.id}>
                       <Button
+                        ref={(element: HTMLButtonElement) => {
+                          // Cancel brought this button back: focus returns to where the person was.
+                          if (focusDeleteButton) {
+                            focusDeleteButton = false;
+                            focusWhenShown(element);
+                          }
+                        }}
                         variant="destructive"
                         type="button"
                         size="sm"
@@ -650,12 +850,8 @@ export function EventChecksSettings(props: Props) {
                     <Button
                       type="button"
                       size="sm"
-                      disabled={
-                        state.busy ||
-                        !current().value.source.toolName ||
-                        !current().value.name.trim() ||
-                        !current().value.instruction.trim()
-                      }
+                      aria-describedby={saveReason() ? "event-check-save-reason" : undefined}
+                      disabled={state.busy || missingForSave().length > 0 || intervalProblem()}
                       onClick={() => void save()}
                     >
                       {t("common.save")}
@@ -663,6 +859,13 @@ export function EventChecksSettings(props: Props) {
                   </Show>
                 </div>
               </div>
+              <Show when={saveReason()}>
+                {(reason) => (
+                  <Text as="p" variant="caption" tone="muted" id="event-check-save-reason" class="event-check-help">
+                    {reason()}
+                  </Text>
+                )}
+              </Show>
               <label class="settings-field">
                 <span>{t("agentSettings.eventCheck.name")}</span>
                 <Input
@@ -734,6 +937,7 @@ export function EventChecksSettings(props: Props) {
                   {(source) => (
                     <WatcherProgramFields
                       pickers={pickerBindings()}
+                      fields={state.fields}
                       source={source()}
                       change={(value) =>
                         setState((draft) => {
@@ -747,24 +951,26 @@ export function EventChecksSettings(props: Props) {
               <Show when={current().value.source.kind === "api"}>
                 <Show
                   when={state.checks.find((check) => check.id === current().value.id && check.source.kind === "api")}
-                  keyed
                   fallback={
                     <Text as="p" variant="caption" tone="muted" class="event-check-help">
                       {t("agentSettings.eventCheck.saveBeforeVariables")}
                     </Text>
                   }
                 >
+                  {/* Not keyed on the check: a new revision of it must not drop the values that were typed. */}
                   {(check) => (
                     <EventCheckEnvironmentSettings
                       api={props.api}
-                      check={check}
+                      check={check()}
+                      labels={variableLabels()}
                       disabled={dirty()}
-                      changed={async () => {
-                        const id = check.id;
-                        const checks = await reload();
-                        const updated = checks?.find((entry) => entry.id === id);
-                        if (updated && state.current?.value.id === id) await open(updated);
+                      onStatus={(status) => {
+                        if (state.current?.value.id === check().id)
+                          setState((draft) => {
+                            draft.environment = status;
+                          });
                       }}
+                      changed={() => variablesChanged(check().id)}
                     />
                   )}
                 </Show>
@@ -823,16 +1029,33 @@ export function EventChecksSettings(props: Props) {
                     <span>{t("agentSettings.eventCheck.seconds")}</span>
                     <Input
                       type="number"
-                      min={30}
-                      max={8640000000}
-                      value={String(current().seconds)}
+                      min={MIN_INTERVAL_SECONDS}
+                      // An interval that was saved above the day still opens as valid.
+                      max={Math.max(MAX_INTERVAL_SECONDS, savedIntervalSeconds())}
+                      aria-invalid={intervalProblem() ? "true" : undefined}
+                      aria-describedby={intervalProblem() ? "event-check-interval-error" : undefined}
+                      value={current().secondsText}
                       onInput={(e) =>
                         setState((s) => {
-                          if (s.current) s.current.seconds = Number(e.currentTarget.value);
+                          if (!s.current) return;
+                          const text = e.currentTarget.value;
+                          s.current.secondsText = text;
+                          s.current.seconds = text.trim() === "" ? Number.NaN : Number(text);
                         })
                       }
                     />
                   </label>
+                  <Show when={intervalProblem()}>
+                    <Text
+                      as="p"
+                      variant="caption"
+                      id="event-check-interval-error"
+                      role="alert"
+                      class="event-check-help event-check-failing"
+                    >
+                      {t("agentSettings.eventCheck.intervalInvalid", { min: MIN_INTERVAL_SECONDS })}
+                    </Text>
+                  </Show>
                 </Show>
                 <label class="settings-field">
                   <span>{t("agentSettings.eventCheck.timezone")}</span>
@@ -998,12 +1221,13 @@ export function EventChecksSettings(props: Props) {
                         variant="secondary"
                         type="button"
                         size="sm"
-                        disabled={state.busy || dirty() || !current().value.active}
+                        aria-describedby={checkNowReason() ? "event-check-run-reason" : undefined}
+                        disabled={state.busy || checkNowReason() !== null}
                         onClick={() =>
                           void action(async () => {
                             await props.api.checkNow({ agentId: props.agentId, id: id() });
                             await history();
-                          })
+                          }, t("agentSettings.eventCheck.checkNowFailed"))
                         }
                       >
                         {t("agentSettings.eventCheck.checkNow")}
@@ -1013,13 +1237,14 @@ export function EventChecksSettings(props: Props) {
                           variant="secondary"
                           type="button"
                           size="sm"
-                          disabled={state.busy || dirty() || !props.api.test}
+                          aria-describedby={testReason() ? "event-check-run-reason" : undefined}
+                          disabled={state.busy || testReason() !== null || !props.api.test}
                           onClick={() =>
                             void action(async () => {
                               const target = { agentId: props.agentId, id: id() };
                               await props.api.test?.(target);
                               await history();
-                            })
+                            }, t("agentSettings.eventCheck.testFailed"))
                           }
                         >
                           {t("agentSettings.eventCheck.test")}
@@ -1030,11 +1255,24 @@ export function EventChecksSettings(props: Props) {
                         type="button"
                         size="sm"
                         disabled={state.busy}
-                        onClick={() => void action(history)}
+                        onClick={() => void action(history, t("agentSettings.eventCheck.historyFailed"))}
                       >
                         {t("agentSettings.eventCheck.history")}
                       </Button>
                     </div>
+                    <Show when={checkNowReason()}>
+                      {(reason) => (
+                        <Text
+                          as="p"
+                          variant="caption"
+                          tone="muted"
+                          id="event-check-run-reason"
+                          class="event-check-help"
+                        >
+                          {reason()}
+                        </Text>
+                      )}
+                    </Show>
                     <Show when={state.historyOpen}>
                       <section class="event-check-history" aria-label={t("agentSettings.eventCheck.history")}>
                         <Show

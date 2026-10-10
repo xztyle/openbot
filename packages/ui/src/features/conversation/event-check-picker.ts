@@ -28,6 +28,12 @@ export function pickerGroupKey(group: string): AppTextKey | null {
 export interface PickerBinding {
   picker: EventCheckTemplatePicker;
   load(): Promise<EventCheckPickerOptions>;
+  /**
+   * Names only the given IDs, for a saved choice that has no name yet. It costs a few requests and
+   * not the whole list. Absent when the owner has no safe way to ask: a draft never reads with a
+   * token that was only typed, unless the person pressed Load.
+   */
+  resolve?(ids: string[]): Promise<EventCheckPickerOptions>;
   /** A sentence that says what is missing before the list can load. Absent when it can. */
   blocked?: string | undefined;
   /** A list that an earlier field of the same setting already loaded, so the field starts with it. */

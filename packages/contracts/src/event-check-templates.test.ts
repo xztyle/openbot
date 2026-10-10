@@ -167,6 +167,27 @@ describe("picker options", () => {
   });
 });
 
+describe("picker account", () => {
+  it("keeps the account of an answer and drops a wrong one without failing the list", () => {
+    const options = [{ id: "C1ABC", label: "#general", group: "channel" }];
+    expect(
+      decodeEventCheckPickerOptions({ options, account: { id: "U012ABCDE", label: " pat\u0007 (Acme) " } }),
+    ).toEqual({ options, account: { id: "U012ABCDE", label: "pat (Acme)" } });
+    for (const account of ["pat", { id: "has space", label: "x" }, { id: "U1ABC", label: 3 }, null])
+      expect(decodeEventCheckPickerOptions({ options, account })).toEqual({ options });
+  });
+
+  it("keeps the time of a list and its stale mark, and drops either when it is wrong", () => {
+    const options = [{ id: "C1ABC", label: "#general", group: "channel" }];
+    const readAt = "2026-10-10T06:00:00.000Z";
+    expect(decodeEventCheckPickerOptions({ options, readAt })).toEqual({ options, readAt });
+    expect(decodeEventCheckPickerOptions({ options, readAt, stale: true })).toEqual({ options, readAt, stale: true });
+    // A mark without a time says nothing a person could use, and a wrong time is no time.
+    expect(decodeEventCheckPickerOptions({ options, stale: true })).toEqual({ options });
+    expect(decodeEventCheckPickerOptions({ options, readAt: "yesterday", stale: "yes" })).toEqual({ options });
+  });
+});
+
 describe("discovery requests", () => {
   it("reads a draft request with its private values and refuses the wrong shape without echoing a value", () => {
     const input = decodeEventCheckTemplateDiscoverInput({
@@ -194,6 +215,33 @@ describe("discovery requests", () => {
       expect(message).not.toBe("");
       expect(message).not.toContain("SECRET");
     }
+  });
+
+  it("reads the IDs that a discovery names, and refuses a wrong one or too many", () => {
+    const draft = { slug: "slack-activity", field: "conversationRules", configuration: {}, variables: {} };
+    expect(decodeEventCheckTemplateDiscoverInput({ ...draft, ids: ["C1ABC", "D2DEF", "C1ABC"] }).ids).toEqual([
+      "C1ABC",
+      "D2DEF",
+    ]);
+    expect(decodeEventCheckTemplateDiscoverInput({ ...draft, ids: [] })).not.toHaveProperty("ids");
+    expect(decodeEventCheckTemplateDiscoverInput(draft)).not.toHaveProperty("ids");
+    const target = { agentId: "chief", id: "c1", field: "conversationRules" };
+    expect(decodeEventCheckDiscoverCheckInput({ ...target, ids: ["C1ABC"] })).toEqual({ ...target, ids: ["C1ABC"] });
+    for (const bad of [
+      ["has space"],
+      [3],
+      "C1ABC",
+      Array.from({ length: EVENT_CHECK_PICKER_MAX_ENTRIES + 1 }, (_, index) => `C${index}AB`),
+    ]) {
+      expect(() => decodeEventCheckDiscoverCheckInput({ ...target, ids: bad })).toThrow();
+      expect(() => decodeEventCheckTemplateDiscoverInput({ ...draft, ids: bad })).toThrow();
+    }
+  });
+
+  it("reads the request to read the app again", () => {
+    const target = { agentId: "chief", id: "c1", field: "conversationRules" };
+    expect(decodeEventCheckDiscoverCheckInput({ ...target, refresh: true })).toEqual({ ...target, refresh: true });
+    expect(decodeEventCheckDiscoverCheckInput({ ...target, refresh: "yes" })).toEqual(target);
   });
 
   it("reads the target of an installed check", () => {

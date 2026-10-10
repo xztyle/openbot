@@ -65,7 +65,12 @@ import { WatcherProgramFields, type WatcherSettingKind } from "./WatcherProgramF
  */
 export interface EventCheckPickerSource {
   list(): Promise<EventCheckTemplate[]>;
-  discoverCheck?(input: { agentId: string; id: string; field: string }): Promise<EventCheckPickerOptions>;
+  discoverCheck?(input: {
+    agentId: string;
+    id: string;
+    field: string;
+    ids?: string[];
+  }): Promise<EventCheckPickerOptions>;
 }
 interface Props {
   api: EventCheckApi;
@@ -702,6 +707,8 @@ export function EventChecksSettings(props: Props) {
         {
           picker,
           load: () => discover({ agentId: shownAgent, id, field }),
+          // Names for saved choices that have none, from the saved check's own private value.
+          resolve: (ids: string[]) => discover({ agentId: shownAgent, id, field, ids }),
           blocked:
             missing === null
               ? undefined

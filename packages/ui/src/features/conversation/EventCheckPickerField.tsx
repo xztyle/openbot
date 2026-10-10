@@ -21,7 +21,7 @@ import {
   X,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { createMemo, createStore, createUniqueId, For, onCleanup, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createStore, createUniqueId, For, onCleanup, Show, untrack } from "solid-js";
 import { useText } from "../../text";
 import {
   entriesOutsideList,
@@ -54,6 +54,11 @@ export interface EventCheckPickerFieldProps {
   onChange(value: string, labels: Record<string, string>): void;
   /** Reads the list. It can fail with a sentence that is safe to show. */
   load(): Promise<EventCheckPickerOptions>;
+  /**
+   * Names the saved choices that have no name yet, with one cheap call. The field asks once, when it
+   * can load and no list was loaded. A failure is silent: the choices keep showing their IDs.
+   */
+  resolve?(ids: string[]): Promise<EventCheckPickerOptions>;
   /** What is missing before the list can load, as a sentence. Absent when it can load. */
   blocked?: string | undefined;
   /** A list that was loaded before. The field starts with it, so a remount does not drop it. */
@@ -73,6 +78,8 @@ interface PickerState {
   /** The names that this field has seen, by ID: from the loaded lists and from the rows that were chosen. */
   labels: Record<string, string>;
   truncated: boolean;
+  /** The account that the loaded list is for, when the program said. */
+  account: string;
   error: string;
   query: string;
   manual: string;
@@ -94,6 +101,7 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
     options: initial ? [...initial.options] : [],
     labels: Object.fromEntries((initial?.options ?? []).map((option) => [option.id, option.label])),
     truncated: initial?.truncated === true,
+    account: initial?.account?.label ?? "",
     error: "",
     query: "",
     manual: "",
@@ -178,6 +186,7 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
       setState((draft) => {
         draft.options = result.options;
         draft.truncated = result.truncated === true;
+        draft.account = result.account?.label ?? "";
         draft.status = "loaded";
         draft.listed = true;
         for (const option of result.options) draft.labels[option.id] = option.label;
@@ -196,6 +205,40 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
       });
     }
   }
+
+  /**
+   * Names the chosen options that have no name, with one call that asks for just those. It runs
+   * once, as soon as the field can load, and never while a list is on screen.
+   */
+  let resolveStarted = false;
+  createEffect(
+    () => ({
+      ready: props.resolve !== undefined && !props.blocked && !props.disabled && !state.listed,
+      unnamed: (entries() ?? []).filter((entry) => nameOf(entry.id) === undefined).map((entry) => entry.id),
+    }),
+    ({ ready, unnamed }) => {
+      if (!ready || resolveStarted || unnamed.length === 0) return;
+      resolveStarted = true;
+      const resolve = props.resolve;
+      if (!resolve) return;
+      const requested = generation;
+      resolve(unnamed).then(
+        (result) => {
+          // A list that loaded meanwhile already has every name it can give.
+          if (requested !== generation || state.listed) return;
+          setState((draft) => {
+            for (const option of result.options) draft.labels[option.id] = option.label;
+          });
+          const chosen = entries() ?? [];
+          if (chosen.some((entry) => nameOf(entry.id) !== props.labels?.[entry.id]))
+            props.onChange(props.value, namesFor(chosen));
+        },
+        () => {
+          // Names are a convenience. The IDs stay, and Load still works.
+        },
+      );
+    },
+  );
 
   const ModeSelect = (selectProps: { optionId: string; mode: string }) => (
     <Select<string>
@@ -357,6 +400,11 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
             <Show when={props.blocked}>
               <Text as="p" variant="caption" tone="muted" class="event-check-picker-note">
                 {props.blocked}
+              </Text>
+            </Show>
+            <Show when={state.listed && state.account}>
+              <Text as="p" variant="caption" tone="muted" class="event-check-picker-note">
+                {t("agentSettings.eventCheck.picker.account", { name: state.account })}
               </Text>
             </Show>
             <Show when={state.status === "failed"}>

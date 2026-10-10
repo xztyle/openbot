@@ -534,11 +534,15 @@ if (config.discover === true) {
     process.stderr.write('Fixture failed with ' + token + ' SERVER-TEXT\\nopenbot-error: auth\\n');
     process.exit(1);
   }
-  process.stdout.write(JSON.stringify({ options: [
+  const options = [
     { id: 'C1AAA', label: '#general-' + config.workspace + '\\u0007', group: 'channel' },
     { id: 'D1AAA', label: '@pat', group: 'dm' },
     { id: 'C1AAA', label: 'again', group: 'channel' },
-  ] }));
+  ];
+  // Counts the runs and records what was asked, in files that the test reads.
+  const fs = await import('node:fs');
+  if (config.workspace.startsWith('/')) fs.appendFileSync(config.workspace + '.log', JSON.stringify(config.ids ?? null) + '\\n');
+  process.stdout.write(JSON.stringify({ options: Array.isArray(config.ids) ? options.filter((option) => config.ids.includes(option.id)) : options }));
   process.exit(0);
 }
 process.stdout.write(JSON.stringify({items:[{id:config.workspace,revision:'1',actor:'someone'}],hasNextPage:false}));`;
@@ -568,7 +572,12 @@ function discovering(version = "1.0.0", program = DISCOVERING): EventCheckTempla
   };
 }
 const draft = (
-  overrides: Partial<{ variables: Record<string, string>; field: string; configuration: Record<string, string> }> = {},
+  overrides: Partial<{
+    variables: Record<string, string>;
+    field: string;
+    configuration: Record<string, string>;
+    ids: string[];
+  }> = {},
 ) => ({
   slug: "fixture",
   field: "rules",
@@ -817,4 +826,31 @@ it("keeps the names of picked choices with the check, without touching the basel
   );
   expect(rulesField(narrowed)?.optionLabels).toEqual({ C1AAA: "#general-renamed" });
   expect(checks.state(active.id).baseline).toBeNull();
+});
+
+it("asks the program for only the named IDs, for a draft and for an installed check", async () => {
+  const { service } = await boot(discovering(), DISCOVERING);
+  const asked = (log: string) => readFileSync(`${log}.log`, "utf8").trim().split("\n");
+  const draftLog = join(root, "draft-run");
+  const named = await runCauseEffect(
+    service.eventChecks.templateDiscover(draft({ configuration: { workspace: draftLog }, ids: ["D1AAA"] }), TEST_USER),
+  );
+  expect(named.options.map((option) => option.id)).toEqual(["D1AAA"]);
+  expect(asked(draftLog)).toEqual([JSON.stringify(["D1AAA"])]);
+  const installLog = join(root, "installed-run");
+  const installed = await runCauseEffect(
+    service.eventChecks.templateInstall(request({ workspace: installLog }), TEST_USER),
+  );
+  await runCauseEffect(
+    service.eventChecks.setEnvironment(
+      { agentId: "chief", id: installed.id, name: "FIXTURE_API_TOKEN", value: "good-stored-token" },
+      TEST_USER,
+    ),
+  );
+  const target = { agentId: "chief", id: installed.id, field: "rules" };
+  const some = await runCauseEffect(service.eventChecks.discoverCheck({ ...target, ids: ["C1AAA"] }, TEST_USER));
+  expect(some.options.map((option) => option.id)).toEqual(["C1AAA"]);
+  const all = await runCauseEffect(service.eventChecks.discoverCheck(target, TEST_USER));
+  expect(all.options.map((option) => option.id)).toEqual(["C1AAA", "D1AAA"]);
+  expect(asked(installLog)).toEqual([JSON.stringify(["C1AAA"]), "null"]);
 });

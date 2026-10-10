@@ -66,10 +66,31 @@ export interface EventCheckPickerOption {
   group: string;
   description?: string;
 }
+/** Whose account a program read the options from, so a person can see which account the list is for. */
+export interface EventCheckPickerAccount {
+  id: string;
+  label: string;
+}
 export interface EventCheckPickerOptions {
   options: EventCheckPickerOption[];
   /** True when the program had more than it listed. */
   truncated?: boolean;
+  /**
+   * The account that the token belongs to, when the program says. Optional and additive: a host or
+   * client from before it drops the field when it decodes the answer.
+   */
+  account?: EventCheckPickerAccount;
+  /**
+   * When the host read this list from the app, as an ISO time. A list from the host's memory is older
+   * than the call that asked for it. Optional and additive: older hosts leave it out and older clients
+   * drop it.
+   */
+  readAt?: string;
+  /**
+   * True when the app could not be read just now and `readAt` is an older list that the host kept.
+   * Optional and additive, like `readAt`.
+   */
+  stale?: boolean;
 }
 /**
  * A discovery for an install that does not exist yet. `variables` holds the private values the user
@@ -83,12 +104,24 @@ export interface EventCheckTemplateDiscoverInput {
   /** The values of the other settings that the program reads, by name. */
   configuration: Record<string, string>;
   variables: Record<string, string>;
+  /**
+   * Names only these options. A program that knows `ids` answers with just those; an older program
+   * ignores it and lists everything, which holds the names as well. Optional and additive.
+   */
+  ids?: string[];
 }
 /** A discovery for an installed check: it uses the private values that the check already holds. */
 export interface EventCheckDiscoverCheckInput {
   agentId: string;
   id: string;
   field: string;
+  /** Names only these options, as in a draft discovery. Optional and additive. */
+  ids?: string[];
+  /**
+   * Asks the host to read the app again and not to answer from the list it kept. Optional and
+   * additive: a host from before it never keeps a list, so it always reads the app.
+   */
+  refresh?: boolean;
 }
 /** An earlier version of a template's program. The host keeps it so a check that runs it can still be linked. */
 export interface EventCheckTemplateEarlierProgram {
@@ -371,6 +404,11 @@ export function decodeEventCheckPickerOptions(value: unknown): EventCheckPickerO
   if (!isDynamicRecord(value) || !Array.isArray(value.options) || value.options.length > EVENT_CHECK_PICKER_MAX_OPTIONS)
     throw new Error("Invalid picker options.");
   if (value.truncated !== undefined && typeof value.truncated !== "boolean") throw new Error("Invalid picker options.");
+  const account = decodePickerAccount(value.account);
+  const readAt =
+    typeof value.readAt === "string" && value.readAt.length <= 64 && Number.isFinite(Date.parse(value.readAt))
+      ? value.readAt
+      : undefined;
   const seen = new Set<string>();
   const options: EventCheckPickerOption[] = [];
   for (const entry of value.options) {
@@ -379,7 +417,23 @@ export function decodeEventCheckPickerOptions(value: unknown): EventCheckPickerO
     seen.add(option.id);
     options.push(option);
   }
-  return { options, ...(value.truncated === true ? { truncated: true } : {}) };
+  return {
+    options,
+    ...(value.truncated === true ? { truncated: true } : {}),
+    ...(account ? { account } : {}),
+    ...(readAt ? { readAt } : {}),
+    ...(value.stale === true && readAt ? { stale: true } : {}),
+  };
+}
+/** The account of an answer, read leniently: a wrong shape is no account, and never fails the list. */
+function decodePickerAccount(value: unknown): EventCheckPickerAccount | undefined {
+  if (!isDynamicRecord(value) || typeof value.id !== "string" || !PICKER_ID.test(value.id)) return undefined;
+  try {
+    const label = cleanEventCheckOptionText(value.label, OPTION_LABEL_LIMIT) || value.id;
+    return { id: value.id, label };
+  } catch {
+    return undefined;
+  }
 }
 const NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
 function valueMap(value: unknown, maximum: number, nameOk: (name: string) => boolean): Record<string, string> {
@@ -396,10 +450,26 @@ function valueMap(value: unknown, maximum: number, nameOk: (name: string) => boo
   }
   return result;
 }
+/** The IDs that a discovery names, or none. Strict: a wrong ID is refused, so a call never lists more than asked. */
+function discoveryIds(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > EVENT_CHECK_PICKER_MAX_ENTRIES)
+    throw new Error("Invalid template discovery.");
+  const ids = [
+    ...new Set(
+      value.map((id) => {
+        if (typeof id !== "string" || !PICKER_ID.test(id)) throw new Error("Invalid template discovery.");
+        return id;
+      }),
+    ),
+  ];
+  return ids.length > 0 ? ids : undefined;
+}
 export function decodeEventCheckTemplateDiscoverInput(value: unknown): EventCheckTemplateDiscoverInput {
   if (!isDynamicRecord(value)) throw new Error("Invalid template discovery.");
   const field = text(value.field, 128, true);
   if (!NAME.test(field)) throw new Error("Invalid template discovery.");
+  const ids = discoveryIds(value.ids);
   return {
     slug: slug(value.slug),
     field,
@@ -412,11 +482,18 @@ export function decodeEventCheckTemplateDiscoverInput(value: unknown): EventChec
         return false;
       }
     }),
+    ...(ids ? { ids } : {}),
   };
 }
 export function decodeEventCheckDiscoverCheckInput(value: unknown): EventCheckDiscoverCheckInput {
   if (!isDynamicRecord(value)) throw new Error("Invalid template discovery.");
   const field = text(value.field, 128, true);
   if (!NAME.test(field)) throw new Error("Invalid template discovery.");
-  return { ...decodeEventCheckTarget(value), field };
+  const ids = discoveryIds(value.ids);
+  return {
+    ...decodeEventCheckTarget(value),
+    field,
+    ...(ids ? { ids } : {}),
+    ...(value.refresh === true ? { refresh: true } : {}),
+  };
 }

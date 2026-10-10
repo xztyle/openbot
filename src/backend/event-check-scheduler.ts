@@ -189,7 +189,11 @@ export class EventCheckScheduler implements RoutineDueSource {
     });
     return yield* this.#discoveries.withPermit(
       this.#apiReader()
-        .discover(prepared.name, prepared.digest, prepared.variables, prepared.configuration)
+        .discover(prepared.name, prepared.digest, prepared.variables, {
+          ...prepared.configuration,
+          // A program that knows `ids` names only those. An older one lists everything, and that works too.
+          ...(input.ids ? { ids: input.ids } : {}),
+        })
         .pipe(Effect.flatMap(this.#pickerOptions), Effect.mapError(this.#discoveryFailure)),
     );
   });
@@ -208,7 +212,9 @@ export class EventCheckScheduler implements RoutineDueSource {
     }).pipe(Effect.mapError(this.#discoveryFailure));
     return yield* this.#discoveries.withPermit(
       this.#apiReader()
-        .read(check, (session) => session.call("discover", { discover: true }))
+        .read(check, (session) =>
+          session.call("discover", { discover: true, ...(input.ids ? { ids: input.ids } : {}) }),
+        )
         .pipe(Effect.flatMap(this.#pickerOptions), Effect.mapError(this.#discoveryFailure)),
     );
   });

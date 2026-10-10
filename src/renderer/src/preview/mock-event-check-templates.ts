@@ -89,7 +89,15 @@ const PREVIEW_PICKER_OPTIONS: EventCheckPickerOptions = {
     { id: "ALICE", label: "@Alice Example", group: "dm" },
     { id: "BOB", label: "@Bob Example", group: "dm" },
   ],
+  account: { id: "UPREVIEW", label: "preview-user (Example workspace)" },
 };
+
+/** The options for a call: all of them, or only the ones for the IDs that the call names. */
+function previewOptions(ids: readonly string[] | undefined): EventCheckPickerOptions {
+  const all = structuredClone(PREVIEW_PICKER_OPTIONS);
+  if (!ids || ids.length === 0) return all;
+  return { options: all.options.filter((option) => ids.includes(option.id)), account: all.account };
+}
 
 /** Installs, updates and links through the preview's event checks, so both show the same checks. */
 export function createMockEventCheckTemplates(checks: EventCheckApi): Required<EventCheckTemplateApi> {
@@ -165,17 +173,17 @@ export function createMockEventCheckTemplates(checks: EventCheckApi): Required<E
       return checks.save({ ...check, source: { ...check.source, template: link(entry) } });
     },
     // A draft needs its typed private value, as the host does. The preview never keeps it.
-    discover: async ({ slug, variables }) => {
+    discover: async ({ slug, variables, ids }) => {
       template(slug);
       if (!Object.values(variables).some((value) => value.trim() !== ""))
         throw new Error("Add the sample API token first.");
-      return structuredClone(PREVIEW_PICKER_OPTIONS);
+      return previewOptions(ids);
     },
-    discoverCheck: async ({ agentId, id }) => {
+    discoverCheck: async ({ agentId, id, ids }) => {
       const status = (await checks.environment?.({ agentId, id })) ?? [];
       if (status.length === 0 || status.some((variable) => !variable.configured))
         throw new Error("Add the sample API token first.");
-      return structuredClone(PREVIEW_PICKER_OPTIONS);
+      return previewOptions(ids);
     },
   };
 }

@@ -226,6 +226,11 @@ it("marks a check that keeps failing in the list, and saves its item filters onl
   });
 });
 
+/** The calls that asked for the whole list, not for the names of some IDs. */
+function fullLists(spy: { mock: { calls: Array<[{ ids?: string[] | undefined }]> } }) {
+  return spy.mock.calls.filter(([input]) => input.ids === undefined);
+}
+
 /** A template check on `chief` with a picker setting, an optional switch and one private variable. */
 async function installSample(configuration: Record<string, string>, token?: string) {
   const api = createMockEventChecks();
@@ -291,7 +296,7 @@ it("fills a picker setting of a template check from its saved private value, and
   expect(screen.getByRole("checkbox", { name: "Watch #design" })).toBeChecked();
   expect(screen.getByRole("checkbox", { name: "Watch #engineering" })).toBeChecked();
   expect(screen.getByRole("button", { name: "Reload the list" })).toBeInTheDocument();
-  expect(discoverCheck).toHaveBeenCalledTimes(1);
+  expect(fullLists(discoverCheck)).toHaveLength(1);
 });
 
 it("saves the names of chosen conversations with the check and shows them again without loading the list", async () => {
@@ -366,7 +371,36 @@ it("keeps the loaded list when a private value is saved and when the same check 
   await fireEvent.click(screen.getByRole("button", { name: "All event checks" }));
   await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
   expect(await screen.findByRole("checkbox", { name: "Watch #engineering" })).toBeChecked();
-  expect(discoverCheck).toHaveBeenCalledTimes(1);
+  expect(fullLists(discoverCheck)).toHaveLength(1);
+});
+
+it("names a saved choice with one call for just that ID, before any list is loaded", async () => {
+  const { api, templates, check } = await installSample({ watchedConversations: "DES:all,GONE1:mentions" }, "tok-1");
+  const discoverCheck = vi.spyOn(templates, "discoverCheck");
+  render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={templates}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  const chosen = await screen.findByRole("region", { name: "Chosen" });
+  await waitFor(() => expect(chosen).toHaveTextContent("#design"));
+  // The ID that the account no longer has stays as its ID. Only IDs were asked for, never the list.
+  expect(chosen).toHaveTextContent("GONE1");
+  expect(discoverCheck).toHaveBeenCalledWith({
+    agentId: "chief",
+    id: check.id,
+    field: "watchedConversations",
+    ids: ["DES", "GONE1"],
+  });
+  expect(fullLists(discoverCheck)).toHaveLength(0);
+  // Naming a choice is not an edit: there is nothing to save.
+  expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
 });
 
 it("shows a true-or-false setting of a template check as a switch, even for an older template version", async () => {

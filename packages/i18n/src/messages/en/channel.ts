@@ -27,6 +27,8 @@ export const messages = defineMessages("channel", {
   "channel.composer.placeholder": "Message {name}",
   "channel.composer.attach": "Attach files",
   "channel.composer.send": "Send message",
+  "channel.composer.sending": "Sending…",
+  "channel.composer.waitToSend": "Wait for the message to send, then send again.",
   "channel.composer.stop": "Stop work",
   "channel.panel.label": "Channel panel",
   "channel.panel.close": "Close channel panel",

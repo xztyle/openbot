@@ -864,6 +864,33 @@ it("shows the message a channel reply answers and puts the caret in the message 
   await waitFor(() => expect(within(chat).queryByText("Replying to You")).not.toBeInTheDocument());
 });
 
+it("keeps the channel message box open while a send runs and says why a second send waits", async () => {
+  const chat = await openSavedChannel();
+  const originalCommand = window.openbot.agent.channelCommand;
+  const release = Promise.withResolvers<void>();
+  vi.spyOn(window.openbot.agent, "channelCommand").mockImplementation(async (input) => {
+    if (input.type === "send") await release.promise;
+    return originalCommand(input);
+  });
+  const composer = within(chat).getByRole("textbox", { name: "Message to channel" });
+  composer.textContent = "First request";
+  await fireEvent.input(composer);
+  await fireEvent.click(within(chat).getByRole("button", { name: "Send message" }));
+  await within(chat).findByText("Sending…");
+
+  // The person keeps writing, and an Enter during the send is answered, not dropped.
+  expect(composer).toHaveAttribute("aria-disabled", "false");
+  composer.textContent = "First request and a second thought";
+  await fireEvent.input(composer);
+  await fireEvent.keyDown(composer, { key: "Enter" });
+  await within(chat).findByText("Wait for the message to send, then send again.");
+
+  release.resolve();
+  await waitFor(() => expect(within(chat).queryByText("Sending…")).not.toBeInTheDocument());
+  // The text changed after the send, so it stays in the box for the person to send or edit.
+  expect(composer).toHaveTextContent("First request and a second thought");
+});
+
 it("addresses a channel member only while the request names one", async () => {
   const chat = await openSavedChannel();
   const command = vi.spyOn(window.openbot.agent, "channelCommand");

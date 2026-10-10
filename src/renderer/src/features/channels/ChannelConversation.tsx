@@ -273,8 +273,28 @@ export function ChannelConversation(props: ChannelConversationProps) {
       });
     },
   );
-  const clearSent = (channelId: string, text: string) =>
-    updateDraft(channelId, (draft) => (draft.text === text ? EMPTY_DRAFT : draft));
+  /**
+   * Takes a sent message out of its draft. The editor stays open while a send runs, so the person may
+   * have written on: text that changed is theirs and stays, and so do files and a reply they added.
+   */
+  const clearSent = (
+    channelId: string,
+    sent: { text: string; attachmentIds: readonly string[]; replyToMessageId: string | null },
+  ) =>
+    updateDraft(channelId, (draft) => ({
+      text: draft.text === sent.text ? "" : draft.text,
+      attachments: draft.attachments.filter((attachment) => !sent.attachmentIds.includes(attachment.id)),
+      replyToMessageId: draft.replyToMessageId === sent.replyToMessageId ? null : draft.replyToMessageId,
+    }));
+  // A send is a command, and the next command waits for it. Say so instead of dropping a key press.
+  const [sending, setSending] = createSignal(false);
+  const [waitForSend, setWaitForSend] = createSignal(false);
+  createEffect(
+    () => channels.state.pending,
+    (pending) => {
+      if (!pending) setWaitForSend(false);
+    },
+  );
   let messageList: HTMLElement | undefined;
   let virtualRoot: HTMLElement | undefined;
   let unreadMessagesDivider: HTMLElement | undefined;
@@ -688,31 +708,33 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const submit = () => {
     const { text, attachments, replyToMessageId } = composer();
     const channelId = channels.state.selectedId;
-    if (
-      props.connectionReady === false ||
-      channels.state.pending ||
-      (!text.trim() && !attachments.length) ||
-      !channelId
-    )
+    if (props.connectionReady === false || (!text.trim() && !attachments.length) || !channelId) return;
+    if (channels.state.pending) {
+      setWaitForSend(true);
       return;
+    }
     const expanded = expandComposerMentions(text);
     // A request that opens with a member is addressed to that member, the way a reader writes it.
     // A mention later in the text is what it reads as: a reference the owner of the work can see.
     const mention = chatTagReferences(expanded).find(
       (reference) => reference.kind === "agent" && !expanded.slice(0, reference.start).trim(),
     );
-    void channels.command(
-      {
-        type: "send",
-        operationId: crypto.randomUUID(),
-        channelId,
-        text: expanded,
-        recipientAgentId: mention?.id ?? null,
-        replyToMessageId,
-        attachmentDraftIds: attachments.map((attachment) => attachment.id),
-      },
-      () => clearSent(channelId, text),
-    );
+    const attachmentIds = attachments.map((attachment) => attachment.id);
+    setSending(true);
+    void channels
+      .command(
+        {
+          type: "send",
+          operationId: crypto.randomUUID(),
+          channelId,
+          text: expanded,
+          recipientAgentId: mention?.id ?? null,
+          replyToMessageId,
+          attachmentDraftIds: attachmentIds,
+        },
+        () => clearSent(channelId, { text, attachmentIds, replyToMessageId }),
+      )
+      .finally(() => setSending(false));
   };
   return (
     <main
@@ -747,7 +769,12 @@ export function ChannelConversation(props: ChannelConversationProps) {
             variant="ghost"
             onClick={() =>
               void channels.retry((sent) => {
-                if (sent.type === "send") clearSent(sent.channelId, sent.text);
+                if (sent.type === "send")
+                  clearSent(sent.channelId, {
+                    text: sent.text,
+                    attachmentIds: sent.attachmentDraftIds,
+                    replyToMessageId: sent.replyToMessageId,
+                  });
               })
             }
           >
@@ -1209,7 +1236,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
                       placeholder={t("channel.composer.placeholder", { name: page().channel.name })}
                       value={composer().text}
                       focusRequest={composerFocusRequest()}
-                      disabled={channels.state.pending}
+                      disabled={false}
                       onSubmit={submit}
                       onPasteFiles={importFiles}
                       onValueChange={(text) => updateComposer({ text })}
@@ -1227,6 +1254,13 @@ export function ChannelConversation(props: ChannelConversationProps) {
                       <Plus aria-hidden="true" />
                     </Button>
                     <div class="composer-primary-actions">
+                      <Show when={sending() || waitForSend()}>
+                        <span class="voice-model-progress" role="status">
+                          {sending() && !waitForSend()
+                            ? t("channel.composer.sending")
+                            : t("channel.composer.waitToSend")}
+                        </span>
+                      </Show>
                       <Show when={runtime().importProgress?.()}>
                         {(progress) => (
                           <span class="voice-model-progress" role="status">

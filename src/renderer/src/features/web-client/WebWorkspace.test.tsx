@@ -999,6 +999,23 @@ describe("web workspace remembers the opened chat", () => {
     expect(readAgentSelection()["web:account:host"]).toBe("research");
   });
 
+  it("opens the first agent in sidebar order on a first visit", async () => {
+    const layout = {
+      revision: 1,
+      sections: [],
+      order: ["people", "unassigned"],
+      agentAssignments: {},
+      agentOrder: ["research", "chief"],
+    };
+    const app = harness({
+      connect: vi.fn().mockResolvedValue(["conversation-pagination", "sidebar-layout"]),
+      getSidebarLayout: vi.fn().mockResolvedValue(layout),
+      listAgents: vi.fn().mockResolvedValue(twoAgents()),
+      conversation: byAgent(),
+    });
+    await waitFor(() => expect(app.workspace().state.selectedId).toBe("research"));
+  });
+
   it("keeps a separate chat for each host", async () => {
     writeAgentSelection("web:account:host", "research");
     const app = harness({ listAgents: vi.fn().mockResolvedValue(twoAgents()), conversation: byAgent() });

@@ -951,10 +951,15 @@ export function createWebWorkspace(
     });
     try {
       const capabilities = await runtime.connect(host);
-      const [agents, agentStatus, models] = await Promise.all([
+      // With no saved chat the first one in sidebar order opens, so the layout is read with the roster.
+      // A saved chat needs no layout, which keeps the chat opening in the same turn as the roster.
+      const layoutRead =
+        !savedAgentId() && capabilities.includes("sidebar-layout") ? runtime.getSidebarLayout : undefined;
+      const [agents, agentStatus, models, openingLayout] = await Promise.all([
         runtime.listAgents(),
         runtime.status(),
         runtime.models(),
+        layoutRead ? layoutRead().catch(() => null) : Promise.resolve(null),
       ]);
       if (disposed || current !== generation) return;
       revokedReconnect = false;
@@ -1001,11 +1006,23 @@ export function createWebWorkspace(
         () => undefined,
       );
       const agentIds = agents.map((agent) => agent.id);
+      const saved = savedAgentId();
+      let layout = openingLayout;
+      // A saved chat that the host no longer has needs the layout, which is read only for this case.
+      if (
+        !layout &&
+        saved &&
+        !agentIds.includes(saved) &&
+        !(previousSelected && agentIds.includes(previousSelected)) &&
+        capabilities.includes("sidebar-layout")
+      ) {
+        layout = await readSidebarLayout(capabilities, agentIds).catch(() => null);
+        if (disposed || current !== generation) return;
+      }
       const first =
         previousSelected && agentIds.includes(previousSelected)
           ? previousSelected
-          : await agentToOpen(capabilities, agentIds);
-      if (disposed || current !== generation) return;
+          : initialAgentId(agentIds, layout ?? { agentOrder: [] }, saved);
       if (first) await select(first);
     } catch (error) {
       if (disposed || current !== generation) return;
@@ -1266,18 +1283,6 @@ export function createWebWorkspace(
   /** The chat that this browser last opened on this host, while the host still has it. */
   function savedAgentId(): string | null {
     return hostId ? (readAgentSelection()[webAgentSelectionKey(props.accountId, hostId)] ?? null) : null;
-  }
-  /**
-   * The chat to open when none is selected: the saved one, else the first in sidebar order. The layout
-   * is read here only when nothing is saved; it is the same read that the panels make.
-   */
-  async function agentToOpen(capabilities: readonly string[], agentIds: string[]): Promise<string | null> {
-    const current = generation;
-    const saved = savedAgentId();
-    if (saved && agentIds.includes(saved)) return saved;
-    const layout = await readSidebarLayout(capabilities, agentIds).catch(() => state.sidebarLayout);
-    if (disposed || current !== generation) return null;
-    return initialAgentId(agentIds, layout);
   }
   async function select(id: string) {
     const current = generation;

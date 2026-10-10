@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { AgentSummary } from "@openbot/contracts/ipc";
 import { revokeRoutineWebhooks } from "../webhook-route-store";
 import type { DatabaseCore } from "./database-core";
-import { databaseRow, databaseRows, requiredStringColumn } from "./database-rows";
+import { databaseRow, databaseRows, requiredNumberColumn, requiredStringColumn } from "./database-rows";
 
 type AgentRuntime = Pick<AgentSummary, "provider" | "model" | "reasoningEffort">;
 
@@ -17,6 +17,13 @@ export interface AgentModelChange {
   previous: AgentRuntime;
   next: AgentRuntime;
 }
+
+/**
+ * How many superseded roster events one write removes. The first write after an upgrade meets the
+ * backlog that earlier builds left, and a bound keeps that write from rewriting all of it at once.
+ * Each write adds one event and removes up to this many, so the backlog shrinks on later writes.
+ */
+const ROSTER_PRUNE_BATCH = 64;
 
 export interface AgentRosterOptions {
   core: DatabaseCore;
@@ -139,9 +146,44 @@ export class AgentRoster {
           );
           if (agent.threadId) this.ensureThreadProjection(db, agent, sequences[0] ?? 0);
         });
+        this.#pruneSupersededRosterEvents(db, sequences[0] ?? 0);
         return null;
       },
     );
+  }
+
+  /**
+   * Removes roster events that a newer one replaced, with their command receipts, in the
+   * transaction of the write that replaced them.
+   *
+   * Every roster write appends the whole agent list, and `latestRosterAgents` reads only the newest
+   * event, so an older one is dead weight that grows with every message. Two kinds stay: an audit
+   * entry of a model change that one agent made (its `modelChange` is the only record of who did it),
+   * and the event of the write in progress. A receipt goes only when no event of its command remains,
+   * so a command that wrote other events keeps the answer it has stored.
+   */
+  #pruneSupersededRosterEvents(db: DatabaseSync, newestSequence: number): void {
+    const superseded = databaseRows(
+      db
+        .prepare(
+          `SELECT sequence, command_id FROM orchestration_events
+           WHERE aggregate_type = 'agents' AND aggregate_id = 'agents' AND sequence < ?
+             AND event_type <> 'agent.model-changed'
+             AND json_extract(payload_json, '$.modelChange') IS NULL
+           ORDER BY sequence LIMIT ?`,
+        )
+        .all(newestSequence, ROSTER_PRUNE_BATCH),
+    );
+    const removeEvent = db.prepare("DELETE FROM orchestration_events WHERE sequence = ?");
+    const removeReceipt = db.prepare(
+      `DELETE FROM orchestration_command_receipts
+       WHERE command_id = ? AND NOT EXISTS (SELECT 1 FROM orchestration_events WHERE command_id = ?)`,
+    );
+    for (const row of superseded) {
+      const commandId = requiredStringColumn(row, "command_id");
+      removeEvent.run(requiredNumberColumn(row, "sequence"));
+      removeReceipt.run(commandId, commandId);
+    }
   }
 
   hardDeleteAgent(commandId: string, agentId: string, threadId: string | null, remainingAgents: AgentSummary[]): void {

@@ -311,6 +311,37 @@ describe("AgentStore", () => {
     ).toEqual(["chief", "sales-outbound"]);
   });
 
+  it("keeps one roster event, and still rebuilds the roster from it, after many writes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openbot-store-"));
+    temporaryRoots.push(root);
+    const userData = join(root, "user-data");
+    const home = join(root, "home");
+    const store = new AgentStore(userData, home);
+    await runCauseEffect(store.initialize());
+    await runCauseEffect(store.getOrCreate("chief"));
+    await runCauseEffect(store.getOrCreate("sales-outbound"));
+    for (let index = 0; index < 5; index++) await runCauseEffect(store.updatePreview("chief", `message ${index}`));
+    const rosterEvents = () =>
+      store.database.connection
+        .prepare("SELECT command_id FROM orchestration_events WHERE aggregate_type = 'agents'")
+        .all();
+    expect(rosterEvents()).toHaveLength(1);
+    expect(
+      store.database.connection.prepare("SELECT COUNT(*) AS count FROM orchestration_command_receipts").get(),
+    ).toEqual(expect.objectContaining({ count: 1 }));
+
+    store.database.connection.exec("DELETE FROM projection_agents");
+    const rebuilt = new AgentStore(userData, home);
+    await runCauseEffect(rebuilt.initialize());
+    expect(
+      rebuilt
+        .list()
+        .map((agent) => agent.id)
+        .sort(),
+    ).toEqual(["chief", "sales-outbound"]);
+    expect(rebuilt.list().find((agent) => agent.id === "chief")?.preview).toBe("message 4");
+  });
+
   it("persists marketplace installation versions", async () => {
     const root = await mkdtemp(join(tmpdir(), "openbot-store-"));
     temporaryRoots.push(root);

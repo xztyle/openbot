@@ -158,12 +158,24 @@ if [[ $check == 1 ]]; then
   attempt "$release/checks.log" --target checks
   phase checks
 fi
+# The website export and the image are independent and share the install layers, so they run side by
+# side. The builder parallelism limit (OPENBOT_BUILDER_PARALLELISM) decides how many steps really
+# run at once: with 1, they still run one after the other.
+website_started=$SECONDS
+( attempt "$release/website-export.log" --target website --output "type=local,dest=$release/worker" ) &
+website_pid=$!
+trap 'kill "$website_pid" 2>/dev/null || true' EXIT
 if [[ $worker_only == 0 ]]; then
   attempt "$release/build.log" --target runtime --load --tag "$image"
 fi
 phase image
-attempt "$release/website-export.log" --target website --output "type=local,dest=$release/worker"
-phase website
+if ! wait "$website_pid"; then
+  echo "The website export failed; see $release/website-export.log" >&2
+  exit 1
+fi
+trap - EXIT
+phases[website]=$((SECONDS - website_started))
+phase_started=$SECONDS
 [[ $worker_only == 1 ]] || docker image inspect "$image" --format '{{.Architecture}}' | grep -qx amd64
 if [[ $tarball == 1 ]]; then
   docker save "$image" | gzip > "$release/image.tar.gz"

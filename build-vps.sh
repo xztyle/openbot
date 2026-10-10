@@ -13,6 +13,21 @@ umask 077
 cd "$(dirname "$0")"
 docker() { sudo -n docker "$@"; }
 
+# The host has 11 GB and runs OpenBot; a build can take 8 GB. Starting one while other heavy jobs run
+# made the kernel kill processes inside OpenBot. Wait for memory, or give up instead of risking it.
+need_mb=${OPENBOT_BUILD_MIN_FREE_MB:-6500}
+waited=0
+while :; do
+  available=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
+  [[ "$available" -ge "$need_mb" ]] && break
+  if [[ $waited -ge 1800 ]]; then
+    echo "Only ${available} MB of memory is available (need ${need_mb}); not building. Stop other heavy jobs and run again." >&2
+    exit 1
+  fi
+  echo "Waiting for memory: ${available} MB available, need ${need_mb} MB." >&2
+  sleep 30; waited=$((waited + 30))
+done
+
 ref=fork/main deploy=0 check=0 tarball=0
 for argument in "$@"; do
   case "$argument" in

@@ -24,7 +24,7 @@ import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Loading, lazy, Show, untrack } from "solid-js";
 import { planItems, planTitle } from "../../app-message-projection";
-import { useShowAgentMessages, useShowAgentReasoning } from "../../chat-visibility-preferences";
+import { useShowAgentReasoning } from "../../chat-visibility-preferences";
 import { deviceSendShortcut } from "../../send-shortcut-preference";
 import { agentMessageThread } from "./agent-message-thread";
 import { groupedMessageIds } from "./agent-message-timeline";
@@ -65,7 +65,16 @@ function rowDrawsTime(message: AgentMessage): boolean {
 /** Marker-only rows that render attachment cards below the marker do not end with one. */
 function markerRowEndsWithMarker(message: AgentMessage): boolean {
   if (!markerOnlyMessage(message)) return false;
-  return !(message.exchange?.direction === "incoming" && (message.attachments?.length ?? 0) > 0);
+  return !drawsAttachmentCards(message);
+}
+
+/** A single incoming agent message draws the cards of its files below its marker. A group does not. */
+function drawsAttachmentCards(message: AgentMessage | undefined): boolean {
+  return (
+    message?.actionMarker?.kind === "agent-message" &&
+    message.exchange?.direction === "incoming" &&
+    (message.attachments?.length ?? 0) > 0
+  );
 }
 
 function routineMarkerAvailable(
@@ -151,7 +160,6 @@ export function ConversationTimeline() {
   const { t, format } = useText();
   const runtime = conversationRuntime(props);
   const showAgentReasoning = useShowAgentReasoning();
-  const showAgentMessages = useShowAgentMessages();
   // What the model has thought so far in the turn that runs, for the activity line to open.
   const activeReasoning = createMemo(() => {
     const turnId = props.activeTurnId;
@@ -493,12 +501,7 @@ export function ConversationTimeline() {
                               </Show>
                             )}
                           </Show>
-                          <Show
-                            when={
-                              initialMessage.exchange?.direction === "incoming" &&
-                              (message()?.attachments?.length ?? 0) > 0
-                            }
-                          >
+                          <Show when={drawsAttachmentCards(message())}>
                             <div class="chat-action-attachments">
                               <AttachmentCards
                                 attachments={message()?.attachments ?? []}
@@ -537,6 +540,8 @@ export function ConversationTimeline() {
                         <article>
                           <ThinkingDisclosure
                             items={items()}
+                            // With reasoning switched off the row stays closed and shows no preview line.
+                            showPreview={showAgentReasoning()}
                             agents={props.agents}
                             skills={installedSkills()}
                             onSelectAgent={props.onSelectAgent}
@@ -830,20 +835,16 @@ export function ConversationTimeline() {
                   label={activity().label}
                   phase={activity().phase}
                   since={activity().since}
-                  reasoning={
-                    showAgentReasoning()
-                      ? () => (
-                          <ThinkingText
-                            items={activeReasoning()}
-                            streaming
-                            agents={props.agents}
-                            skills={installedSkills()}
-                            onSelectAgent={props.onSelectAgent}
-                            onOpenLink={(url) => void openExternalMessageUrl(url)}
-                          />
-                        )
-                      : undefined
-                  }
+                  reasoning={() => (
+                    <ThinkingText
+                      items={activeReasoning()}
+                      streaming
+                      agents={props.agents}
+                      skills={installedSkills()}
+                      onSelectAgent={props.onSelectAgent}
+                      onOpenLink={(url) => void openExternalMessageUrl(url)}
+                    />
+                  )}
                 />
               )}
             </Show>
@@ -913,7 +914,7 @@ export function ConversationTimeline() {
           </Show>
         </Show>
       </div>
-      <Show when={showAgentMessages() ? openedAgentMessage() : null} keyed>
+      <Show when={openedAgentMessage()} keyed>
         {(opened) => (
           <AgentMessageDialog
             entries={agentMessageThread(props.messages, opened.messageId, props.agents)}

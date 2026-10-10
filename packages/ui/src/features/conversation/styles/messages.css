@@ -389,10 +389,17 @@
   line-height: var(--openbot-leading-sm);
 }
 
-.message-origin-chip svg {
+.message-origin-chip svg,
+.message-origin-icon {
   width: var(--openbot-icon-xs);
   height: var(--openbot-icon-xs);
   flex: 0 0 auto;
+}
+
+/* The logo of the app is the picture of its site: it keeps its shape and a small corner radius. */
+.message-origin-icon {
+  border-radius: var(--openbot-radius-xs);
+  object-fit: contain;
 }
 
 .message-origin-name {

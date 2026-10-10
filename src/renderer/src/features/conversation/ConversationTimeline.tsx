@@ -111,6 +111,7 @@ export function ConversationTimeline() {
     timelineMessages,
     timelineIndexById,
     eventCheckOriginById,
+    eventCheckIconUrl,
     unreadBoundaryMessageId,
     moveChatSearch,
     openExternalMessageUrl,
@@ -644,6 +645,8 @@ export function ConversationTimeline() {
                     </div>
                   );
                 }
+                // The chip that this message carries, when it answers an event check.
+                const eventCheckOrigin = () => eventCheckOriginById().get(message()?.id ?? initialMessage.id);
                 const displayedReactions = createMemo(() => {
                   const currentMessage = message();
                   if (currentMessage?.reactions?.length) return currentMessage.reactions;
@@ -697,7 +700,8 @@ export function ConversationTimeline() {
                             skills={installedSkills()}
                             referencedMessage={referencedMessage()}
                             referencedAuthorName={referencedAuthorName()}
-                            eventCheckOrigin={eventCheckOriginById().get(message()?.id ?? initialMessage.id)}
+                            eventCheckOrigin={eventCheckOrigin()}
+                            eventCheckIconUrl={eventCheckIconUrl(eventCheckOrigin()?.checkId)}
                             reactions={displayedReactions()}
                             reactionOverflowCount={message()?.reactionSummary?.overflowCount}
                             onRemoveReaction={() => {

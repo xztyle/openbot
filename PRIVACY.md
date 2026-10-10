@@ -1022,3 +1022,10 @@ send its selected app data to the configured AI provider. Programs use the agent
 computer access. File permissions and encryption do not isolate them from other files under the
 same OS account, and arbitrary authored code is not an enforced read-only network sandbox. The
 creation skill requires direct API reads, read-only tokens where available, and no MCP or model calls.
+
+A reply that an event check started shows a small chip with the icon of the app that the check
+reads. The desktop app loads that picture from the website of the app, at an `https` address in
+the template catalog that ships with OpenBot, the same way the Marketplace shows it. That website
+receives the IP address of the computer and the request for the picture. It receives no chat text,
+no check name, and no account data. The app asks for the picture only when the chat shows such a
+chip, and the chip keeps a bell when the picture does not load.

@@ -19,7 +19,7 @@ const origin: MessageEventCheckOrigin = {
   position: "start",
 };
 
-function renderRow(eventCheckOrigin?: MessageEventCheckOrigin) {
+function renderRow(eventCheckOrigin?: MessageEventCheckOrigin, eventCheckIconUrl?: string | null) {
   return render(() => (
     <ChatMessageRow
       message={message}
@@ -27,6 +27,7 @@ function renderRow(eventCheckOrigin?: MessageEventCheckOrigin) {
       agents={[]}
       data-chat-search-message="answer"
       eventCheckOrigin={eventCheckOrigin}
+      eventCheckIconUrl={eventCheckIconUrl}
       onSelectAgent={vi.fn()}
       onOpenLink={vi.fn()}
       onPreview={vi.fn()}
@@ -43,8 +44,16 @@ describe("ChatMessageRow event check origin", () => {
     expect(chip).toHaveTextContent("Slack mentions and DMs");
   });
 
+  it("keeps the name of the chip when it shows the icon of the app, and the icon is no extra image", () => {
+    renderRow(origin, "https://slack.com/favicon.ico");
+
+    const chip = screen.getByRole("note", { name: /^Event check: Slack mentions and DMs · .+/u });
+    expect(chip).toHaveTextContent("Slack mentions and DMs");
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
   it("draws no chip for a message that is not the answer to an event", () => {
-    renderRow();
+    renderRow(undefined, "https://slack.com/favicon.ico");
 
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });

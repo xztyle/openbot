@@ -109,23 +109,30 @@ export const AllStates: Story = {
   ),
 };
 
+/** A stand-in for the logo of an app: the chat draws the icon of the template of the check. */
+const STORY_APP_ICON =
+  "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%234a154b'/%3E%3Ccircle cx='8' cy='8' r='3' fill='white'/%3E%3C/svg%3E";
+
 /**
  * An event check has no row of its own. The first and the last agent message of the interaction
- * carry a chip on the top edge of the bubble, and a long name is cut with an ellipsis.
+ * carry a chip on the top edge of the bubble, and a long name is cut with an ellipsis. The chip
+ * shows the logo of the app of the check, and a bell when the app has none.
  */
 export const EventCheckOrigin: Story = {
   render: () => {
     const chief = requireFixture(STORY_AGENTS[0], "Story agent 0");
     const origin = { name: "Slack mentions and DMs", checkId: "slack", timestamp: "2026-09-13T21:03:00.000Z" };
-    const rows: Array<{ message: AgentMessage; chip?: "start" | "end" | "only"; name?: string }> = [
+    const rows: Array<{ message: AgentMessage; chip?: "start" | "end" | "only"; name?: string; icon?: string }> = [
       {
         message: storyMessage("start", "Two new mentions in the release channel. I am opening both threads."),
         chip: "start",
+        icon: STORY_APP_ICON,
       },
       { message: storyMessage("middle", "The first one asks for the changelog link. I sent it.") },
       {
         message: storyMessage("end", "Done. Both threads have an answer and nothing else is waiting."),
         chip: "end",
+        icon: STORY_APP_ICON,
       },
       {
         message: storyMessage("long", "A check with a very long name keeps the chip inside the chat."),
@@ -147,6 +154,7 @@ export const EventCheckOrigin: Story = {
                     eventCheckOrigin={
                       row.chip ? { ...origin, name: row.name ?? origin.name, position: row.chip } : undefined
                     }
+                    eventCheckIconUrl={row.icon}
                     onSelectAgent={onSelectAgent}
                     onOpenLink={fn()}
                     onPreview={fn()}

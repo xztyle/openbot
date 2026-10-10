@@ -16,6 +16,8 @@ const STORAGE_PREFIX = "openbot.web.push:";
 
 /** The service worker sends this to an open page when the user taps a notification. */
 export const WEB_PUSH_OPEN_MESSAGE = "openbot:open-chat";
+/** The service worker sends this to an open page when the push service gave the browser another address. */
+export const WEB_PUSH_CHANGED_MESSAGE = "openbot:push-changed";
 
 export type WebPushFailure = "denied" | "failed";
 
@@ -246,6 +248,8 @@ export function createWebPush(options: {
         isString(data.agentId)
       )
         options.onOpenChat(data.hostId, data.agentId);
+      // The host holds the old address. The same call as at each connect gives it the new one.
+      else if (isDynamicRecord(data) && data.type === WEB_PUSH_CHANGED_MESSAGE) void sync();
     };
     navigator.serviceWorker.addEventListener("message", receive);
     return () => navigator.serviceWorker.removeEventListener("message", receive);

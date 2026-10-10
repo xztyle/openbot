@@ -15,6 +15,7 @@ import { composerDraftKey } from "../conversation-keys";
 import { conversationRuntime } from "../conversation-runtime";
 import type { ComposerDraft, ConversationProps, ConversationTarget } from "../conversation-types";
 import { BUSY_SEND_HOLD_MS, type PendingSendStore } from "./pending-send-store";
+import { createTypingNotifier } from "./typing-notifier";
 
 // Each member reads the interface language when it is called.
 const { t, errorMessage } = currentText();
@@ -77,17 +78,14 @@ export interface ComposerActionsDeps {
 }
 
 export function createComposerActions(deps: ComposerActionsDeps) {
+  const typingNotifier = createTypingNotifier({
+    state: deps.typing,
+    onTypingChange: (agentId, typing) => deps.props.onTypingChange(agentId, typing),
+    stop: () => stopTeamTyping(),
+  });
+
   function updateTeamTyping(text: string): void {
-    const agentId = deps.props.agent?.id;
-    if (deps.typing.idleTimer) clearTimeout(deps.typing.idleTimer);
-    if (!agentId || !text.trim()) {
-      stopTeamTyping();
-      return;
-    }
-    if (deps.typing.agentId && deps.typing.agentId !== agentId) deps.props.onTypingChange(deps.typing.agentId, false);
-    deps.typing.agentId = agentId;
-    deps.props.onTypingChange(agentId, true);
-    deps.typing.idleTimer = setTimeout(stopTeamTyping, 3_000);
+    typingNotifier.update(deps.props.agent?.id, text);
   }
 
   function stopTeamTyping(): void {

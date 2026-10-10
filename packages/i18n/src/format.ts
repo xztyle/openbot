@@ -49,6 +49,18 @@ function numberFormat(locale: string | undefined, options: Intl.NumberFormatOpti
   return created;
 }
 
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** A formatter per locale and options: a message list formats one time for each message. */
+function dateFormat(locale: string | undefined, options: Intl.DateTimeFormatOptions | undefined): Intl.DateTimeFormat {
+  const cacheKey = `${locale ?? ""}\u0000${JSON.stringify(options ?? {})}`;
+  const cached = dateFormats.get(cacheKey);
+  if (cached) return cached;
+  const created = new Intl.DateTimeFormat(locale, options);
+  dateFormats.set(cacheKey, created);
+  return created;
+}
+
 function compactNumber(locale: string | undefined, value: number): string {
   try {
     return numberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(value);
@@ -97,7 +109,7 @@ export function createFormat(locale: TranslatedLocale, intlLocale: string | null
     percent: (value, options) => numberFormat(tag, { style: "percent", ...options }).format(value),
     currencyUsd: (value, options) =>
       numberFormat(tag, { style: "currency", currency: "USD", ...options }).format(value),
-    date: (value, options) => new Intl.DateTimeFormat(tag, options).format(value),
+    date: (value, options) => dateFormat(tag, options).format(value),
     hour12: usesHour12(tag),
     list: (items) => {
       if (typeof Intl.ListFormat === "function") {

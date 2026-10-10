@@ -394,6 +394,8 @@ describe("OpenBot connected desktop shell", () => {
     expect(screen.getByText("Replying to Agent")).toBeInTheDocument();
 
     const composer = screen.getByRole("textbox", { name: "Message Chief" });
+    // The reply is written next, so the caret is already in the message box.
+    await waitFor(() => expect(composer).toHaveFocus());
     composer.textContent = "Yes, today please";
     await fireEvent.input(composer);
     await fireEvent.keyDown(composer, { key: "Enter" });

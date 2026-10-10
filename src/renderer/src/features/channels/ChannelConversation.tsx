@@ -30,7 +30,7 @@ import {
   unloadedHistory,
 } from "@openbot/ui/features/conversation/ChatScrollRail";
 import { ComposerEditor, expandComposerMentions } from "@openbot/ui/features/conversation/ComposerEditor";
-import { StopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
+import { CloseIcon, StopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
 import { ApprovalCard, BrowserTakeoverCard } from "@openbot/ui/features/conversation/ConversationPrompts";
 import {
   calculateChatScrollMargin,
@@ -207,6 +207,12 @@ export function ChannelConversation(props: ChannelConversationProps) {
     const selectedId = channels.state.selectedId;
     if (selectedId) updateDraft(selectedId, (draft) => ({ ...draft, ...patch }));
   };
+  // Raised by one to put the caret in the message box, as a reply does.
+  const [composerFocusRequest, setComposerFocusRequest] = createSignal(0);
+  const startReply = (messageId: string) => {
+    updateComposer({ replyToMessageId: messageId });
+    setComposerFocusRequest((current) => current + 1);
+  };
   const addAttachments = (load: () => Promise<AttachmentSummary[]>) =>
     void channels.perform(async () => {
       const selectedId = channels.state.selectedId;
@@ -288,6 +294,11 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const timeline = createMemo(() => {
     const page = channels.state.page;
     return page ? channelTimelineEntries(page, agentList(), isOwnMessage, { t, format }) : [];
+  });
+  /** The message the draft replies to, when it is in the part of the channel that is loaded. */
+  const replyEntry = createMemo(() => {
+    const replyToMessageId = composer().replyToMessageId;
+    return replyToMessageId ? timeline().find((entry) => entry.id === replyToMessageId) : undefined;
   });
   const unreadCount = createMemo(
     () => channels.state.channels.find((channel) => channel.id === channels.state.selectedId)?.unreadCount ?? 0,
@@ -460,15 +471,18 @@ export function ChannelConversation(props: ChannelConversationProps) {
    * The clipboard gets the message the reader sees, not its stored form: a mention is a name and an
    * attachment is a file name. A channel has no skills of its own, so only the agent names expand.
    */
-  const copyChannelMessage = async (message: AgentMessage) => {
+  const readableMessageText = (message: AgentMessage) => {
     const attachmentNames = new Map((message.attachments ?? []).map((attachment) => [attachment.id, attachment.name]));
     const agentNames = new Map(agentList().map((agent) => [agent.id, agent.name]));
-    const text = expandAttachmentReferences(
+    return expandAttachmentReferences(
       expandChatTagReferences(message.body, (reference) =>
         reference.kind === "agent" ? agentNames.get(reference.id) : undefined,
       ),
       (reference) => attachmentNames.get(reference.attachmentId),
     );
+  };
+  const copyChannelMessage = async (message: AgentMessage) => {
+    const text = readableMessageText(message);
     if (!text) return;
     setOpenMoreMessageId(null);
     setCopyError(null);
@@ -919,11 +933,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
                                   }
                                   onExpandEmoji={() => {}}
                                   onReact={() => {}}
-                                  onReply={
-                                    page().channel.archived
-                                      ? undefined
-                                      : () => updateComposer({ replyToMessageId: initialEntry.id })
-                                  }
+                                  onReply={page().channel.archived ? undefined : () => startReply(initialEntry.id)}
                                   onCopy={() => void copyChannelMessage(entry()?.message ?? initialEntry.message)}
                                 />
                               }
@@ -1073,6 +1083,44 @@ export function ChannelConversation(props: ChannelConversationProps) {
                     selectAgent(id);
                   }}
                 />
+                <Show when={composer().replyToMessageId}>
+                  <Show
+                    when={replyEntry()}
+                    fallback={
+                      // The message is not in the loaded part of the channel, so only the way out shows.
+                      <div class="composer-reply-preview">
+                        <div>
+                          <span>{t("channel.composer.replying")}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          aria-label={t("channel.composer.cancelReply")}
+                          onClick={() => updateComposer({ replyToMessageId: null })}
+                        >
+                          <CloseIcon />
+                        </Button>
+                      </div>
+                    }
+                  >
+                    {(entry) => (
+                      <div class="composer-reply-preview">
+                        <div>
+                          <span>{t("channel.composer.replyingTo", { name: entry().author.name })}</span>
+                          <p>{readableMessageText(entry().message) || t("composer.reply.attachment")}</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          type="button"
+                          aria-label={t("channel.composer.cancelReply")}
+                          onClick={() => updateComposer({ replyToMessageId: null })}
+                        >
+                          <CloseIcon />
+                        </Button>
+                      </div>
+                    )}
+                  </Show>
+                </Show>
                 <form
                   class="composer"
                   data-compact={
@@ -1088,16 +1136,6 @@ export function ChannelConversation(props: ChannelConversationProps) {
                     submit();
                   }}
                 >
-                  <Show when={composer().replyToMessageId}>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => updateComposer({ replyToMessageId: null })}
-                    >
-                      {t("channel.composer.cancelReply")}
-                    </Button>
-                  </Show>
                   <Show when={composer().attachments.length}>
                     <div class="composer-attachments">
                       <For each={composer().attachments}>
@@ -1135,6 +1173,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
                       ariaLabel={t("channel.composer.label")}
                       placeholder={t("channel.composer.placeholder", { name: page().channel.name })}
                       value={composer().text}
+                      focusRequest={composerFocusRequest()}
                       disabled={channels.state.pending}
                       onSubmit={submit}
                       onPasteFiles={importFiles}

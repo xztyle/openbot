@@ -845,6 +845,25 @@ it("closes a channel deleted from another connection", async () => {
   expect(screen.queryByRole("button", { name: /^Project room\./ })).not.toBeInTheDocument();
 });
 
+it("shows the message a channel reply answers and puts the caret in the message box", async () => {
+  const chat = await openSavedChannel();
+  const composer = within(chat).getByRole("textbox", { name: "Message to channel" });
+  composer.textContent = "Prepare the report";
+  await fireEvent.input(composer);
+  await fireEvent.click(within(chat).getByRole("button", { name: "Send message" }));
+  await within(chat).findByRole("article", { name: "Message from You" });
+
+  const shown = within(chat).getAllByText("Prepare the report").length;
+  await fireEvent.click(within(chat).getByRole("button", { name: /Reply to/ }));
+  await within(chat).findByText("Replying to You");
+  // The quote above the message box repeats the text of the message that is answered.
+  expect(within(chat).getAllByText("Prepare the report")).toHaveLength(shown + 1);
+  await waitFor(() => expect(composer).toHaveFocus());
+
+  await fireEvent.click(within(chat).getByRole("button", { name: "Cancel reply" }));
+  await waitFor(() => expect(within(chat).queryByText("Replying to You")).not.toBeInTheDocument());
+});
+
 it("addresses a channel member only while the request names one", async () => {
   const chat = await openSavedChannel();
   const command = vi.spyOn(window.openbot.agent, "channelCommand");

@@ -542,6 +542,7 @@ export function createConversationViewScope(props: ConversationProps) {
     copiedMessageId,
     setCopiedMessageId,
     setComposerError: setScopedComposerError,
+    setComposerFocusRequest,
   });
   const { replyToMessage, reactToMessage, copyMessage, removeAttachment } = messageActions;
   const settings = createSettingsStore({

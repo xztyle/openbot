@@ -20,6 +20,8 @@ export const messages = defineMessages("channel", {
   "channel.conversation.noMembers": "Add agents in channel settings to start work.",
   "channel.conversation.archivedNotice": "Deleted channel. Preview only.",
   "channel.composer.cancelReply": "Cancel reply",
+  "channel.composer.replying": "Replying to a message",
+  "channel.composer.replyingTo": "Replying to {name}",
   "channel.composer.removeAttachment": "Remove {name}",
   "channel.composer.label": "Message to channel",
   "channel.composer.placeholder": "Message {name}",

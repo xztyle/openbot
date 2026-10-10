@@ -51,7 +51,7 @@ import {
   syncSkillTokens,
   truncateComposerValue,
 } from "./composer-tokens";
-import { isSendShortcutKey, type SendShortcut } from "./send-shortcut";
+import { isSendShortcutKey, type SendShortcut, sendShortcutEnterKeyHint } from "./send-shortcut";
 
 interface ComposerEditorProps {
   agentId: string | undefined;
@@ -705,6 +705,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
         aria-label={props.ariaLabel}
         aria-disabled={props.disabled ? "true" : "false"}
         aria-multiline="true"
+        enterkeyhint={sendShortcutEnterKeyHint(props.sendShortcut ?? "enter")}
         spellcheck="true"
         data-cuelume-type=""
         onFocus={ensureEditorSelection}

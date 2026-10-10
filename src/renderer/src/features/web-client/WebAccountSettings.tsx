@@ -22,6 +22,7 @@ import { SettingsProfileTab } from "@openbot/ui/features/settings/SettingsProfil
 import { SoundThemePicker } from "@openbot/ui/features/settings/SoundThemePicker";
 import { createSettingsProfileStore } from "@openbot/ui/features/settings/stores/profile-store";
 import { useText } from "@openbot/ui/text";
+import { usesTouchLayout } from "@openbot/ui/utils";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { readActionSoundChoice, replayActionSoundChoice, setActionSoundChoice } from "../../action-sounds";
 import {
@@ -162,20 +163,23 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
         <Tabs.Content value="preferences" class="settings-modal-tab-panel" data-tab="preferences">
           <SettingsSection title={t("settings.appBehavior.title")}>
             <ItemGroup class="settings-modal-card">
-              <Item class="settings-modal-row">
-                <ItemContent>
-                  <ItemTitle>{t("settings.sendShortcut.title")}</ItemTitle>
-                  <ItemDescription>{t("settings.sendShortcut.description")}</ItemDescription>
-                </ItemContent>
-                <ItemActions>
-                  <SendShortcutSelect
-                    value={sendShortcutMode()}
-                    onChange={(mode) => setSendShortcutMode(mode)}
-                    devicePlatform={currentDevicePlatform()}
-                    {...(modalElement ? { mount: modalElement } : {})}
-                  />
-                </ItemActions>
-              </Item>
+              {/* A phone has no Enter key to choose: Return adds a line and Send sends. */}
+              <Show when={!usesTouchLayout()}>
+                <Item class="settings-modal-row">
+                  <ItemContent>
+                    <ItemTitle>{t("settings.sendShortcut.title")}</ItemTitle>
+                    <ItemDescription>{t("settings.sendShortcut.description")}</ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <SendShortcutSelect
+                      value={sendShortcutMode()}
+                      onChange={(mode) => setSendShortcutMode(mode)}
+                      devicePlatform={currentDevicePlatform()}
+                      {...(modalElement ? { mount: modalElement } : {})}
+                    />
+                  </ItemActions>
+                </Item>
+              </Show>
               <Item class="settings-modal-row">
                 <ItemContent>
                   <ItemTitle>{t("settings.language.title")}</ItemTitle>

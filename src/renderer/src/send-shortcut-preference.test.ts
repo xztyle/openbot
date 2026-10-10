@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { devicePlatform, readSendShortcutMode, writeSendShortcutMode } from "./send-shortcut-preference";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  devicePlatform,
+  deviceSendShortcut,
+  readSendShortcutMode,
+  writeSendShortcutMode,
+} from "./send-shortcut-preference";
 
 function storageWith(value: string | null): Pick<Storage, "getItem" | "setItem"> {
   return { getItem: () => value, setItem: () => undefined };
@@ -31,5 +36,28 @@ describe("send shortcut preference", () => {
     expect(devicePlatform("Windows", "Win32")).toBe("win32");
     expect(devicePlatform(undefined, "Linux x86_64")).toBe("linux");
     expect(devicePlatform(undefined, undefined)).toBe("linux");
+  });
+
+  it("does not take an iPhone or iPad for Linux", () => {
+    expect(devicePlatform(undefined, "iPhone")).toBe("darwin");
+    expect(devicePlatform(undefined, "iPad")).toBe("darwin");
+    expect(devicePlatform("iOS", undefined)).toBe("darwin");
+  });
+});
+
+describe("device send shortcut", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps Enter on a desktop layout", () => {
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+    expect(deviceSendShortcut("linux")).toBe("enter");
+  });
+
+  it("sends only with the Send button or the modifier chord on a touch layout", () => {
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: true }) });
+    expect(deviceSendShortcut("darwin")).toBe("meta-enter");
+    expect(deviceSendShortcut("win32")).toBe("ctrl-enter");
   });
 });

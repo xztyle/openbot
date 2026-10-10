@@ -18,6 +18,20 @@ export function parseSendShortcutMode(value: unknown): SendShortcutMode {
   return value === "mod-enter" ? "mod-enter" : "enter";
 }
 
+/**
+ * A touch layout has no Enter key to send with. Return on the on-screen keyboard adds a line, and
+ * only the Send button sends; a paired hardware keyboard still sends with the platform modifier.
+ * Desktop layouts keep the stored mode.
+ */
+export function effectiveSendShortcutMode(mode: SendShortcutMode, touchLayout: boolean): SendShortcutMode {
+  return touchLayout ? "mod-enter" : mode;
+}
+
+/** The label of the on-screen Return key: "send" only where plain Enter sends. */
+export function sendShortcutEnterKeyHint(shortcut: SendShortcut): "send" | "enter" {
+  return shortcut === "enter" ? "send" : "enter";
+}
+
 /** The device with the keyboard decides the modifier, never a remote host. */
 export function resolveSendShortcut(
   mode: SendShortcutMode,

@@ -1,7 +1,7 @@
 import type { DraftAttachment, InstalledSkill, McpServerConfig } from "@openbot/contracts/ipc";
 import type { AgentProfile } from "@openbot/ui/data";
 import { ComposerEditor } from "@openbot/ui/features/conversation/ComposerEditor";
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -182,6 +182,14 @@ describe("ComposerEditor", () => {
 
     await fireEvent.keyDown(editor, { key: "Enter", metaKey: true });
     expect(onSubmit).toHaveBeenCalledOnce();
+  });
+
+  it("labels the on-screen Return key as send only where Enter sends", () => {
+    const { editor } = renderComposer([], "", [], [], [], "enter");
+    expect(editor).toHaveAttribute("enterkeyhint", "send");
+    cleanup();
+    const modifier = renderComposer([], "", [], [], [], "ctrl-enter");
+    expect(modifier.editor).toHaveAttribute("enterkeyhint", "enter");
   });
 
   it("sends on Ctrl+Enter in modifier mode on other platforms", async () => {

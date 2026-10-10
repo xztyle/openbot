@@ -30,3 +30,32 @@ export function writeAgentSelection(serverId: string, agentId: string, storage?:
     // A local display preference must not block agent navigation.
   }
 }
+
+/** The selection key of the web client: one chat for each account and host. Desktop servers use their own ids. */
+export function webAgentSelectionKey(accountId: string, hostId: string): string {
+  return `web:${accountId}:${hostId}`;
+}
+
+/**
+ * The agent to open when a workspace has no selection: the saved one while it still exists, else the
+ * first in the order the sidebar draws. The sidebar sorts by `agentOrder`; an agent that the layout does
+ * not name yet follows the named ones, in the order the host listed them.
+ */
+export function initialAgentId(
+  agentIds: readonly string[],
+  layout: { agentOrder: readonly string[] },
+  savedAgentId?: string | null,
+): string | null {
+  if (savedAgentId && agentIds.includes(savedAgentId)) return savedAgentId;
+  const orderIndex = new Map(layout.agentOrder.map((id, index) => [id, index]));
+  let first: string | null = null;
+  let firstRank = Number.POSITIVE_INFINITY;
+  agentIds.forEach((id, index) => {
+    const rank = orderIndex.get(id) ?? layout.agentOrder.length + index;
+    if (rank < firstRank) {
+      first = id;
+      firstRank = rank;
+    }
+  });
+  return first;
+}

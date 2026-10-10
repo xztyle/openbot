@@ -300,6 +300,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     skill: Pick<MarketplaceSkillSummary, "id" | "name">,
     agentIds: readonly string[],
     on: boolean,
+    options: { removeModified?: boolean } = {},
   ) {
     const key = `skill:${skill.id}`;
     if (agentIds.length === 0 || busy[key]) return false;
@@ -312,7 +313,12 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       const analytics = desktopAnalytics.scope();
       try {
         if (on) await skillCalls().install({ agentId, skillId: skill.id, replaceModified: false });
-        else await skillCalls().uninstall({ agentId, skillId: skill.id });
+        else
+          await skillCalls().uninstall({
+            agentId,
+            skillId: skill.id,
+            ...(options.removeModified ? { removeModified: true } : {}),
+          });
         analytics.track("marketplace_action", {
           entity: "skill",
           action,
@@ -885,7 +891,12 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
    * The app is host-global and its skills are per agent, so this is how a second agent gets the
    * instructions for an app that is already connected. A failure on one agent does not stop the rest.
    */
-  async function setPluginSkills(app: MarketplaceApp, agentIds: readonly string[], on: boolean) {
+  async function setPluginSkills(
+    app: MarketplaceApp,
+    agentIds: readonly string[],
+    on: boolean,
+    options: { removeModified?: boolean } = {},
+  ) {
     if (app.kind !== "plugin" || agentIds.length === 0) return false;
     const plugin = app.plugin;
     const key = `app:${plugin.slug}`;
@@ -898,7 +909,12 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       try {
         for (const skill of plugin.skills) {
           if (on) await skillCalls().install({ agentId, skillId: skill.id, versionId: skill.versionId });
-          else if (installedSkill(agentId, skill.id)) await skillCalls().uninstall({ agentId, skillId: skill.id });
+          else if (installedSkill(agentId, skill.id))
+            await skillCalls().uninstall({
+              agentId,
+              skillId: skill.id,
+              ...(options.removeModified ? { removeModified: true } : {}),
+            });
         }
       } catch (cause) {
         failed.push(agentName(agentId));

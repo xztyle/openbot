@@ -141,6 +141,8 @@ export interface MarketplaceModel {
     skill: Pick<MarketplaceSkillSummary, "id" | "name">,
     agentIds: readonly string[],
     on: boolean,
+    /** `removeModified`: the user confirmed that files they changed go with the skill. */
+    options?: { removeModified?: boolean },
   ) => Promise<boolean>;
   /**
    * The installed skills that have a newer version, with the agents that hold the old one. It reads
@@ -159,7 +161,12 @@ export interface MarketplaceModel {
   /** The agents that hold every skill that the plugin pins. */
   pluginSkillAgents: (app: MarketplaceApp) => readonly string[];
   /** Installs the plugin's pinned skills on each agent, or removes them. True when every agent changed. */
-  setPluginSkills: (app: MarketplaceApp, agentIds: readonly string[], on: boolean) => Promise<boolean>;
+  setPluginSkills: (
+    app: MarketplaceApp,
+    agentIds: readonly string[],
+    on: boolean,
+    options?: { removeModified?: boolean },
+  ) => Promise<boolean>;
   /** Whether an action on the account is running. */
   accountBusy: (accountId: string) => boolean;
   /** Turns an account on or off for every agent. */

@@ -270,10 +270,13 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
                 name={t("plugin.skillsName", { name: plugin().name })}
                 has={(id) => model().pluginSkillAgents(props.app).includes(id)}
                 known={(id) => model().skillRead(id) === "loaded"}
+                modified={(id) =>
+                  plugin().skills.some((skill) => model().installedSkill(id, skill.id)?.state === "modified")
+                }
                 busy={model().appBusy(props.app.id)}
                 activeAgentId={model().activeAgentId()}
                 onOpen={() => model().readSkills()}
-                onChange={(agentIds, on) => void model().setPluginSkills(props.app, agentIds, on)}
+                onChange={(agentIds, on, options) => void model().setPluginSkills(props.app, agentIds, on, options)}
               />
             </Show>
           }

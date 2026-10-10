@@ -234,6 +234,62 @@ describe("MarketplaceModal", () => {
     });
   });
 
+  describe("skill removal", () => {
+    /**
+     * A clear on "All agents" is a loop over the agents. It asks first, and the agent whose copy has
+     * changed files is named in the question, so the backend's refusal to delete them is answered.
+     */
+    it("asks before it removes a skill from several agents and then removes the changed files too", async () => {
+      const uninstall = vi.fn(async () => undefined);
+      window.openbot.skills = {
+        ...window.openbot.skills,
+        listInstalled: vi.fn(async (agentId) => [
+          installedSkill("release-notes", "Release Notes", agentId === "research" ? { state: "modified" } : {}),
+        ]),
+        uninstall,
+      };
+      renderMarketplace({
+        agents: [agentRow("writer", "Writer"), agentRow("research", "Research")],
+        activeAgentId: "writer",
+      });
+      fireEvent.click(screen.getByRole("tab", { name: "Skills" }));
+      fireEvent.pointerDown(await screen.findByRole("button", { name: "All agents have Release Notes. Change" }), {
+        button: 0,
+      });
+      fireEvent.pointerUp(await screen.findByRole("menuitemcheckbox", { name: "All agents" }), { button: 0 });
+
+      const confirm = await screen.findByRole("alertdialog", {
+        name: "Remove Release Notes from Writer and Research?",
+      });
+      expect(uninstall).not.toHaveBeenCalled();
+      fireEvent.click(within(confirm).getByRole("button", { name: "Remove skill" }));
+
+      await waitFor(() => expect(uninstall).toHaveBeenCalledTimes(2));
+      expect(uninstall).toHaveBeenCalledWith({ agentId: "writer", skillId: "release-notes", removeModified: true });
+      expect(uninstall).toHaveBeenCalledWith({ agentId: "research", skillId: "release-notes", removeModified: true });
+    });
+
+    it("removes the skill of one unchanged agent at once", async () => {
+      const uninstall = vi.fn(async () => undefined);
+      window.openbot.skills = {
+        ...window.openbot.skills,
+        listInstalled: vi.fn(async () => [installedSkill("release-notes", "Release Notes")]),
+        uninstall,
+      };
+      renderMarketplace({ agents: [agentRow("writer", "Writer")], activeAgentId: "writer" });
+      fireEvent.click(screen.getByRole("tab", { name: "Skills" }));
+      fireEvent.pointerDown(await screen.findByRole("button", { name: "Writer has Release Notes. Change" }), {
+        button: 0,
+      });
+      fireEvent.pointerUp(await screen.findByRole("menuitemcheckbox", { name: /^Writer/u }), { button: 0 });
+
+      await waitFor(() =>
+        expect(uninstall).toHaveBeenCalledExactlyOnceWith({ agentId: "writer", skillId: "release-notes" }),
+      );
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+  });
+
   describe("agents", () => {
     const detail: MarketplaceAgentDetail = {
       id: "research-agent",

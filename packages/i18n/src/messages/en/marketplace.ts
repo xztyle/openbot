@@ -40,6 +40,10 @@ export const messages = defineMessages("marketplace", {
   "marketplace.skill.loading": "Loading skill",
   "marketplace.skill.update": "Update skill",
   "marketplace.skill.updateAvailable": "Update available",
+  "marketplace.skill.remove.titleMany": "Remove {name} from {agents}?",
+  "marketplace.skill.remove.many": "OpenBot removes {name} from each of these agents. Chat history stays.",
+  "marketplace.skill.remove.modifiedMany":
+    "Some of these agents have local changes in the skill's files. Removing deletes those files. Chat history stays.",
   "marketplace.skill.updates.label": "Skill updates",
   "marketplace.skill.updates.count": {
     one: "{count} installed skill has an update.",

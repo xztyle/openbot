@@ -5,9 +5,11 @@ import { mkdir, mkdtemp, readdir, readFile, readlink, rename, rm, symlink, write
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
+import { Effect } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentStore } from "./agent-store";
 import { runCauseEffect } from "./effect-boundary";
+import { StoredStateFailure } from "./stored-state-effects";
 
 const temporaryRoots: string[] = [];
 const AGENT_PROFILE_INPUT = {
@@ -340,6 +342,26 @@ describe("AgentStore", () => {
         .sort(),
     ).toEqual(["chief", "sales-outbound"]);
     expect(rebuilt.list().find((agent) => agent.id === "chief")?.preview).toBe("message 4");
+  });
+
+  it("runs its startup once and retries after a failed first attempt", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openbot-store-"));
+    temporaryRoots.push(root);
+    const store = new AgentStore(join(root, "user-data"), join(root, "home"));
+    const init = vi.spyOn(store.database, "initialize");
+    init.mockReturnValueOnce(Effect.fail(new StoredStateFailure({ cause: new Error("Disk unavailable.") })));
+    await expect(runCauseEffect(store.initialize())).rejects.toThrow("Disk unavailable.");
+    await runCauseEffect(store.initialize());
+    expect(init).toHaveBeenCalledTimes(2);
+    await runCauseEffect(store.getOrCreate("chief"));
+    // A second call, as `AgentService.initialize` makes, neither reads the database nor changes the roster.
+    const events = store.database.connection.prepare("SELECT COUNT(*) AS count FROM orchestration_events").get();
+    await runCauseEffect(store.initialize());
+    expect(init).toHaveBeenCalledTimes(2);
+    expect(store.database.connection.prepare("SELECT COUNT(*) AS count FROM orchestration_events").get()).toEqual(
+      events,
+    );
+    expect(store.list().map((agent) => agent.id)).toEqual(["chief"]);
   });
 
   it("persists marketplace installation versions", async () => {

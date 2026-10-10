@@ -204,6 +204,8 @@ export class MailboxStore {
   readonly #deliveryGate = new MailboxDeliveryGate();
   readonly #stagedGeneratedAttachments = new Map<string, StoredGeneratedAttachment>();
   #state: StoredState = structuredClone(EMPTY_STATE);
+  /** Set once `initialize` has finished. A failed attempt leaves it false, so the next call retries. */
+  #initialized = false;
 
   constructor(userDataPath: string, sharedRoot: string, database = new OpenBotDatabase(userDataPath)) {
     this.#statePath = join(userDataPath, "mailbox.json");
@@ -214,6 +216,9 @@ export class MailboxStore {
   initialize = Effect.fn("MailboxStore.initialize")(function* (
     this: MailboxStore,
   ): Effect.fn.Return<void, StoredStateFailure> {
+    // The application and `AgentService` both call this. A second run would clear the drafts that
+    // were created between the two calls, because this method resets every draft it does not retain.
+    if (this.#initialized) return;
     try {
       yield* Effect.all(
         [
@@ -249,6 +254,7 @@ export class MailboxStore {
         .resetDrafts(retainedDrafts.map((draft) => draft.id))
         .pipe(Effect.mapError(({ cause }) => new StoredStateFailure({ cause })));
       yield* this.#drainFileDeletionOutboxEffect();
+      this.#initialized = true;
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });
     }

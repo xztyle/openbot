@@ -158,6 +158,8 @@ export class AgentStore {
   readonly #profileCreationRecovery: ProfileCreationRecovery;
   readonly #database: OpenBotDatabase;
   #state: StoredState = { version: 2, examplesInitialized: false, agents: [] };
+  /** Set once `initialize` has finished. A failed attempt leaves it false, so the next call retries. */
+  #initialized = false;
   readonly #avatarUpdateQueue = Semaphore.makeUnsafe(1);
   readonly #creationQueue = Semaphore.makeUnsafe(1);
 
@@ -198,6 +200,9 @@ export class AgentStore {
   initialize = Effect.fn("AgentStore.initialize")(function* (
     this: AgentStore,
   ): Effect.fn.Return<void, StoredStateFailure> {
+    // The application and `AgentService` both call this. A second run would re-read and re-repair a
+    // roster that the first run already restored, and it would write a second set of repair events.
+    if (this.#initialized) return;
     try {
       yield* Effect.all(
         [
@@ -280,6 +285,7 @@ export class AgentStore {
       // Last, so that a thread belonging to an agent the two recoveries above have just removed is gone
       // rather than re-adopted.
       this.#reconcileUnclaimedThreads();
+      this.#initialized = true;
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });
     }

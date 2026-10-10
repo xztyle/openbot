@@ -18,6 +18,7 @@ import { ANSWER_HOLD_LIMIT_MS } from "./collaboration-limits";
 import { runCauseEffect } from "./effect-boundary";
 import { MailboxStore } from "./mailbox-store";
 import { OpenBotDatabase } from "./openbot-database";
+import { StoredStateFailure } from "./stored-state-effects";
 
 let root: string;
 let store: MailboxStore;
@@ -92,6 +93,31 @@ describe("MailboxStore", () => {
     expect(next?.delivery.attachments).toHaveLength(1);
     const saved = await runCauseEffect(restored.resolveAttachment(next?.delivery.attachments[0]?.id ?? ""));
     await expect(readFile(saved?.path ?? "", "utf8")).resolves.toBe("Pasted bytes");
+  });
+
+  it("runs its startup once, keeps a draft made after it, and retries after a failed first attempt", async () => {
+    const file = join(root, "again.txt");
+    await writeFile(file, "Draft bytes");
+    // `AgentService.initialize` calls it again after the application did. The second call must not
+    // reset the drafts that were created in between.
+    const [draft] = await runCauseEffect(store.prepareAttachments([file]));
+    assert(draft);
+    await runCauseEffect(store.initialize());
+    await runCauseEffect(
+      store.enqueue({ sender: { kind: "user" }, recipientAgentIds: ["chief"], text: "Keep it", draftIds: [draft.id] }),
+    );
+    expect(store.nextQueued("chief")?.delivery.attachments).toHaveLength(1);
+
+    const database = new OpenBotDatabase(join(root, "retry-data"));
+    const retried = new MailboxStore(join(root, "retry-data"), join(root, "RetryShared"), database);
+    const init = vi.spyOn(database, "initialize");
+    init.mockReturnValueOnce(Effect.fail(new StoredStateFailure({ cause: new Error("Disk unavailable.") })));
+    await expect(runCauseEffect(retried.initialize())).rejects.toThrow("Disk unavailable.");
+    await runCauseEffect(retried.initialize());
+    expect(init).toHaveBeenCalledTimes(2);
+    await runCauseEffect(retried.initialize());
+    expect(init).toHaveBeenCalledTimes(2);
+    database.close();
   });
 
   it("retains a composer backup across restart and releases it when the edit ends", async () => {

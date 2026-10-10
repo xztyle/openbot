@@ -108,6 +108,7 @@ export const messages = defineMessages("marketplace", {
   "marketplace.app.accounts": { one: "{count} account", other: "{count} accounts" },
   "marketplace.app.connectNamed": "Connect {name}",
   "marketplace.app.checking": "Checking…",
+  "marketplace.app.reviewAccounts": "Review accounts",
   "marketplace.app.readFailed": "Could not read apps on {host}.",
   "marketplace.app.adminOnly": "Only an owner or admin of {server} can connect apps.",
   "marketplace.app.adminOnlyThisServer": "Only an owner or admin of this server can connect apps.",
@@ -129,6 +130,8 @@ export const messages = defineMessages("marketplace", {
   "marketplace.app.disconnect.title": "Disconnect",
   "marketplace.app.disconnect.description":
     "Remove {name} and its skills from this computer. You can connect it again later.",
+  "marketplace.app.disconnect.descriptionOnHost":
+    "Remove {name} and its skills from {host}. You can connect it again later.",
   "marketplace.app.disconnect.action": "Disconnect",
   "marketplace.app.remove.title": "Remove server",
   "marketplace.app.remove.description": "Your agents can no longer use this server. Its settings are deleted.",
@@ -408,20 +411,20 @@ export const messages = defineMessages("marketplace", {
 
   // Errors. {reason} is an error message. {failures} is a list of error messages.
   "marketplace.error.openLink": "Could not open the link.",
-  "marketplace.error.accountNoServer": "Select a server that holds the apps to change an account.",
+  "marketplace.error.accountNoServer": "This account cannot change app accounts on this server. Ask an owner or admin.",
   "marketplace.error.updateFailed": "{name} was not updated, because the new version did not work. {reason}",
   "marketplace.error.updateAllPartial": "Could not update {skills}.",
   "marketplace.error.accessGone": "{name} is not available to chats now. Close this window and try again.",
   "marketplace.error.copyLink": "Could not copy the link.",
-  "marketplace.error.connectNoServer": "Select a local server to connect this app.",
-  "marketplace.error.installNoServer": "Select a local server to install a plugin.",
+  "marketplace.error.connectNoServer": "This account cannot connect apps on this server. Ask an owner or admin.",
+  "marketplace.error.installNoServer": "This account cannot install plugins on this server. Ask an owner or admin.",
   "marketplace.error.installNoAgent": "Choose an agent to install this plugin's skills.",
   "marketplace.error.installLocalOnHost":
     "Install {name} on the computer that runs these agents: its app runs its server on that computer.",
   "marketplace.error.installOnHost":
     "Install {name} on the computer that runs these agents: its app needs a browser sign-in.",
   "marketplace.error.appInvalid": "{name} cannot be added: {reason}",
-  "marketplace.error.uninstallNoServer": "Select a local server to uninstall a plugin.",
+  "marketplace.error.uninstallNoServer": "This account cannot remove plugins on this server. Ask an owner or admin.",
   "marketplace.error.uninstallPartial": "Some of {name} could not be removed. {failures}",
   "marketplace.error.actionFailed": "Could not complete the marketplace action. Try again.",
   "marketplace.thisAgent": "this agent",

@@ -813,6 +813,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       ),
       skillSlugs: plugin.skills.filter((skill) => pluginSkillHeld(skill.id)).map((skill) => skill.slug),
       agentName: agentName(pluginAgentId()),
+      hostName: props.pluginHostName,
     };
   }
 

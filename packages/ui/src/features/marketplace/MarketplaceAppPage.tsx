@@ -120,6 +120,9 @@ function AccountRemovalConfirmation(props: AccountRemovalProps & { onCancel: () 
   );
 }
 
+/** Where "Review accounts" goes. One app page is open at a time. */
+const ACCOUNTS_ANCHOR = "marketplace-app-accounts";
+
 function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
   const { t } = useText();
   const model = () => props.scope.model;
@@ -160,6 +163,11 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
       { label: t("plugin.link.privacyPolicy"), url: plugin().privacyPolicyUrl },
       { label: t("plugin.link.terms"), url: plugin().termsUrl },
     ].flatMap((link) => (link.url ? [{ label: link.label, url: link.url, text: pluginLinkText(link.url) }] : []));
+  const reviewAccounts = () => {
+    const section = document.getElementById(ACCOUNTS_ANCHOR);
+    section?.scrollIntoView({ block: "start" });
+    section?.focus({ preventScroll: true });
+  };
   const runPrompt = () => {
     const run = model().runPrompt;
     if (!run) return undefined;
@@ -192,6 +200,12 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
               {t("plugin.copyLink")}
             </Button>
             <AppAction scope={props.scope} app={props.app} />
+            {/* "Needs attention" says what is wrong in the accounts below, so the action goes there. */}
+            <Show when={props.app.status === "attention" && accounts().length > 0}>
+              <Button type="button" onClick={reviewAccounts}>
+                {t("marketplace.app.reviewAccounts")}
+              </Button>
+            </Show>
             <Show
               when={(props.app.status === "connected" || props.app.status === "disabled") && model().canConnectApps()}
             >
@@ -303,7 +317,7 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
           </ItemGroup>
         </SettingsSection>
       </Show>
-      <AccountsSection scope={props.scope} app={props.app} onDisconnect={setRemoving} />
+      <AccountsSection scope={props.scope} app={props.app} anchorId={ACCOUNTS_ANCHOR} onDisconnect={setRemoving} />
       <ChatAccessSection scope={props.scope} app={props.app} />
       <RelatedEventChecks scope={props.scope} appId={props.app.id} />
       <AppInformation
@@ -316,7 +330,14 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
       <Show when={props.app.status !== "idle" && model().canConnectApps()}>
         <DangerZone
           title={t("marketplace.app.disconnect.title")}
-          description={t("marketplace.app.disconnect.description", { name: props.app.name })}
+          description={
+            model().appsHostName?.()
+              ? t("marketplace.app.disconnect.descriptionOnHost", {
+                  name: props.app.name,
+                  host: model().appsHostName?.() ?? "",
+                })
+              : t("marketplace.app.disconnect.description", { name: props.app.name })
+          }
           action={t("marketplace.app.disconnect.action")}
           busy={model().appBusy(props.app.id)}
           // A plugin opens its own uninstall dialog, which lists the apps and skills it removes.

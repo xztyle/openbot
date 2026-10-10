@@ -435,6 +435,8 @@ function AccountRow(props: {
 export function AccountsSection(props: {
   scope: MarketplaceScope;
   app: PluginApp;
+  /** The id of the section, so that an action in the page header can bring the user to it. */
+  anchorId?: string;
   onDisconnect: (account: MarketplaceAccount) => void;
 }) {
   const { t } = useText();
@@ -443,7 +445,7 @@ export function AccountsSection(props: {
   const outdated = () => accounts().filter((account) => account.outdated);
   return (
     <Show when={accounts().length > 0}>
-      <SettingsSection title={t("mcp.connection.accounts")}>
+      <SettingsSection id={props.anchorId} tabindex={-1} title={t("mcp.connection.accounts")}>
         <Show when={outdated().length > 0 && model().canConnectApps()}>
           <section
             class="marketplace-update"

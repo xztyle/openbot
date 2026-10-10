@@ -785,6 +785,8 @@ describe("MarketplaceModal", () => {
       await openAppPage();
 
       expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+      // The page header has an action for the state it names.
+      expect(screen.getByRole("button", { name: "Review accounts" })).toBeInTheDocument();
       expect(await screen.findByText("Sign in to aave again")).toBeInTheDocument();
       // The alert at the top and the account row both offer the sign-in.
       const [signIn] = screen.getAllByRole("button", { name: "Sign in again to aave" });

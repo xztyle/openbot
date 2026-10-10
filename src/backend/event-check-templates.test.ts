@@ -3,11 +3,11 @@
 // link resetting a live baseline, an update losing the user's settings, and a missing required setting.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { EventCheckTemplate } from "@openbot/contracts/event-check-templates";
 import { decodeEventCheckInput, type EventCheck, type EventCheckConfiguration } from "@openbot/contracts/event-checks";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EVENT_CHECK_TOOL_DEFINITIONS } from "./agent/event-check-tools";
 import type { AgentService } from "./agent-service";
 import {
@@ -142,6 +142,7 @@ beforeEach(async () => {
   ({ root } = await startAgentTestFixture());
 });
 afterEach(async () => {
+  vi.useRealTimers();
   await stopAgentTestFixture(root, service);
   service = null;
 });
@@ -526,7 +527,8 @@ function never(): never {
 
 // A program that lists choices when it is asked to. It never prints the token, and its failure text
 // holds the token on purpose: the host must not pass that text on.
-const DISCOVERING = `let raw=''; for await (const chunk of process.stdin) raw += chunk;
+const DISCOVERING = `import fs from 'node:fs';
+let raw=''; for await (const chunk of process.stdin) raw += chunk;
 const config = JSON.parse(raw);
 if (config.discover === true) {
   const token = process.env.FIXTURE_API_TOKEN ?? '';
@@ -539,9 +541,16 @@ if (config.discover === true) {
     { id: 'D1AAA', label: '@pat', group: 'dm' },
     { id: 'C1AAA', label: 'again', group: 'channel' },
   ];
-  // Counts the runs and records what was asked, in files that the test reads.
-  const fs = await import('node:fs');
-  if (config.workspace.startsWith('/')) fs.appendFileSync(config.workspace + '.log', JSON.stringify(config.ids ?? null) + '\\n');
+  // A workspace that is a path counts the runs and records what was asked, in files that a test reads.
+  // A file beside it makes the run fail with one code, as the app would when it limits or is down.
+  if (config.workspace.startsWith('/')) {
+    fs.appendFileSync(config.workspace + '.log', JSON.stringify(config.ids ?? null) + '\\n');
+    for (const code of ['rate_limited', 'upstream', 'auth'])
+      if (fs.existsSync(config.workspace + '.' + code)) {
+        process.stderr.write('Fixture failed SERVER-TEXT\\nopenbot-error: ' + code + '\\n');
+        process.exit(1);
+      }
+  }
   process.stdout.write(JSON.stringify({ options: Array.isArray(config.ids) ? options.filter((option) => config.ids.includes(option.id)) : options }));
   process.exit(0);
 }
@@ -853,4 +862,137 @@ it("asks the program for only the named IDs, for a draft and for an installed ch
   const all = await runCauseEffect(service.eventChecks.discoverCheck(target, TEST_USER));
   expect(all.options.map((option) => option.id)).toEqual(["C1AAA", "D1AAA"]);
   expect(asked(installLog)).toEqual([JSON.stringify(["C1AAA"]), "null"]);
+});
+
+/** An installed check with a saved private value, whose program counts its runs in a file. */
+async function listingCheck() {
+  const booted = await boot(discovering(), DISCOVERING);
+  const log = join(root, "runs");
+  const installed = await runCauseEffect(
+    booted.service.eventChecks.templateInstall(request({ workspace: log }), TEST_USER),
+  );
+  const setValue = (value: string | null) =>
+    runCauseEffect(
+      booted.service.eventChecks.setEnvironment(
+        { agentId: "chief", id: installed.id, name: "FIXTURE_API_TOKEN", value },
+        TEST_USER,
+      ),
+    );
+  await setValue("good-stored-token");
+  const target = { agentId: "chief", id: installed.id, field: "rules" };
+  const list = (
+    extra: { ids?: string[]; refresh?: boolean } = {},
+    actor: typeof TEST_USER | typeof AGENT = TEST_USER,
+  ) => runCauseEffect(booted.service.eventChecks.discoverCheck({ ...target, ...extra }, actor));
+  const runs = () => (existsSync(`${log}.log`) ? readFileSync(`${log}.log`, "utf8").trim().split("\n").length : 0);
+  return { ...booted, log, installed, target, setValue, list, runs };
+}
+
+it("serves a list from memory for ten minutes, names a few IDs from it, and reads the app again on refresh", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { list, runs } = await listingCheck();
+  const first = await list();
+  expect(runs()).toBe(1);
+  expect(first.readAt).toBeDefined();
+  expect(first.stale).toBeUndefined();
+  const second = await list();
+  expect(runs()).toBe(1);
+  expect(second).toEqual(first);
+  // A call for a few IDs is answered from the whole list, with no request to the app.
+  const some = await list({ ids: ["D1AAA"] });
+  expect(some.options.map((option) => option.id)).toEqual(["D1AAA"]);
+  expect(some.readAt).toBe(first.readAt);
+  expect(runs()).toBe(1);
+  await list({ refresh: true });
+  expect(runs()).toBe(2);
+  vi.setSystemTime(Date.now() + 11 * 60_000);
+  const later = await list();
+  expect(runs()).toBe(3);
+  expect(later.readAt).not.toBe(first.readAt);
+});
+
+it("shares one call between callers that ask for the same list at once", async () => {
+  const { list, runs } = await listingCheck();
+  const [one, two] = await Promise.all([list(), list()]);
+  expect(runs()).toBe(1);
+  expect(two).toEqual(one);
+});
+
+it("drops the lists when a private value changes, so an old list is not served for the new value", async () => {
+  const { list, runs, setValue } = await listingCheck();
+  await list();
+  await list();
+  expect(runs()).toBe(1);
+  await setValue("good-another-token");
+  await list();
+  expect(runs()).toBe(2);
+  // A removed value leaves nothing to list with, and nothing in memory answers for it.
+  await setValue(null);
+  await expect(list()).rejects.toThrow();
+  expect(runs()).toBe(2);
+});
+
+it("refuses an agent even while the list is in memory, and runs nothing for it", async () => {
+  const { list, runs } = await listingCheck();
+  await list();
+  await expect(list({}, AGENT)).rejects.toThrow();
+  await expect(list({ ids: ["C1AAA"] }, AGENT)).rejects.toThrow();
+  expect(runs()).toBe(1);
+});
+
+it("refuses a check that no longer runs the reviewed program, even while the list is in memory", async () => {
+  const { list, programs, runs } = await listingCheck();
+  await list();
+  await writeFile(join(programs, "fixture@1.0.0.mjs"), `${DISCOVERING}\n// edited`);
+  await expect(list()).rejects.toThrow();
+  expect(runs()).toBe(1);
+});
+
+it("keeps nothing from a draft: each draft call reads the app, and an installed check never gets its list", async () => {
+  const { service, log, list, runs } = await listingCheck();
+  const typed = "good-draft-token-PRIVATE-4412";
+  const asDraft = () =>
+    runCauseEffect(
+      service.eventChecks.templateDiscover(
+        draft({ configuration: { workspace: log }, variables: { FIXTURE_API_TOKEN: typed } }),
+        TEST_USER,
+      ),
+    );
+  await asDraft();
+  await asDraft();
+  expect(runs()).toBe(2);
+  // The check shares the program and the settings of the drafts. Its own call still reads the app.
+  await list();
+  expect(runs()).toBe(3);
+  expect(filesHolding(root, typed)).toEqual([]);
+});
+
+it("answers with the older list, marked stale, when the app is rate limited or down, and not for a refused token", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { list, log, runs } = await listingCheck();
+  const first = await list();
+  vi.setSystemTime(Date.now() + 11 * 60_000);
+  await writeFile(`${log}.rate_limited`, "");
+  const limited = await list();
+  expect(runs()).toBe(2);
+  expect(limited.stale).toBe(true);
+  expect(limited.readAt).toBe(first.readAt);
+  expect(limited.options).toEqual(first.options);
+  await rm(`${log}.rate_limited`);
+  await writeFile(`${log}.upstream`, "");
+  expect((await list({ refresh: true })).stale).toBe(true);
+  await rm(`${log}.upstream`);
+  // The token was refused: an older list would hide that, so the call fails with the fixed text.
+  await writeFile(`${log}.auth`, "");
+  const refused = await list({ refresh: true }).then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(refused).toBeInstanceOf(Error);
+  expect(refused instanceof Error ? refused.message : "").toContain("did not accept the saved credentials");
+  expect(refused instanceof Error ? refused.message : "").not.toContain("SERVER-TEXT");
+  await rm(`${log}.auth`);
+  const recovered = await list();
+  expect(recovered.stale).toBeUndefined();
+  expect(recovered.readAt).not.toBe(first.readAt);
 });

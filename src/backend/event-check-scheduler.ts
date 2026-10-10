@@ -9,6 +9,7 @@ import {
 } from "@openbot/contracts/event-check-templates";
 import type {
   EventCheck,
+  EventCheckApiSource,
   EventCheckEnvironmentInput,
   EventCheckExecution,
   EventCheckInput,
@@ -21,6 +22,7 @@ import { nextEventCheckOccurrence } from "@openbot/team-client/event-check-sched
 import { Cause, Effect, type Scope, Semaphore } from "effect";
 import type { EventCheckApiReader } from "./event-check-api-reader";
 import { eventCheckDestination } from "./event-check-approval";
+import { EventCheckDiscoveryCache } from "./event-check-discovery-cache";
 import { eventCheckProgramError } from "./event-check-program";
 import type {
   EventCheckArguments,
@@ -110,6 +112,11 @@ export class EventCheckScheduler implements RoutineDueSource {
   readonly #mutations = Semaphore.makeUnsafe(1);
   /** Listing choices starts a program each time, so only a few run at once. The others wait. */
   readonly #discoveries = Semaphore.makeUnsafe(2);
+  /**
+   * The lists that installed checks read for their pickers. Memory only, and never a draft's list.
+   * It is dropped whenever a private value, an approval, the program or the account of a check changes.
+   */
+  readonly #discoveryCache = new EventCheckDiscoveryCache<McpOperationError>();
   readonly #running = new Set<string>();
   readonly #delivering = new Set<string>();
   /** When each check handed work to its agent in the last hour. Memory only: the cap is soft. */
@@ -197,26 +204,56 @@ export class EventCheckScheduler implements RoutineDueSource {
         .pipe(Effect.flatMap(this.#pickerOptions), Effect.mapError(this.#discoveryFailure)),
     );
   });
-  /** The same for an installed check, with the private values that it holds and the user approved. */
+  /**
+   * The same for an installed check, with the private values that it holds and the user approved.
+   * Every call is authorized first, from the store and the reviewed template, and only then may a
+   * list in memory answer it. A list is kept for ten minutes, so adding a second choice does not read
+   * the app again. When the app is rate limited or down, an older list answers and says it is stale.
+   */
   readonly discoverCheck = Effect.fn("EventCheck.discoverCheck")(function* (
     this: EventCheckScheduler,
     input: EventCheckDiscoverCheckInput,
     actor: SecurityActor,
   ) {
-    const check = yield* mcpSync(() => {
+    const { check, template } = yield* mcpSync(() => {
       if (actor.kind === "agent")
         throw new EventCheckRefusal(sourceText("error.backend.eventCheckDiscoverUnsupported"));
       const check = this.options.store.get(input.agentId, input.id);
-      this.#templates().discoverable(check, input.field);
-      return check;
+      return { check, template: this.#templates().discoverable(check, input.field) };
     }).pipe(Effect.mapError(this.#discoveryFailure));
-    return yield* this.#discoveries.withPermit(
+    const ids = input.ids ?? [];
+    const parts = {
+      agentId: check.agentId,
+      checkId: check.id,
+      field: input.field,
+      digest: template.program.digest,
+      // The other settings, as the user typed them. A private value is never one of them.
+      settings: Object.fromEntries(
+        (check.source.kind === "api" ? check.source.configuration : [])
+          .filter((setting) => setting.name !== input.field)
+          .map((setting) => [setting.name, setting.value]),
+      ),
+    };
+    const wholeKey = this.#discoveryCache.key({ ...parts, ids: [] });
+    if (ids.length > 0 && input.refresh !== true) {
+      const named = this.#discoveryCache.named(wholeKey, ids);
+      if (named) return named;
+    }
+    const load = this.#discoveries.withPermit(
       this.#apiReader()
-        .read(check, (session) =>
-          session.call("discover", { discover: true, ...(input.ids ? { ids: input.ids } : {}) }),
-        )
-        .pipe(Effect.flatMap(this.#pickerOptions), Effect.mapError(this.#discoveryFailure)),
+        .read(check, (session) => session.call("discover", { discover: true, ...(ids.length > 0 ? { ids } : {}) }))
+        .pipe(Effect.flatMap(this.#pickerOptions)),
     );
+    return yield* this.#discoveryCache
+      .read(ids.length > 0 ? this.#discoveryCache.key({ ...parts, ids }) : wholeKey, load, {
+        refresh: input.refresh === true,
+        // Waiting fixes a rate limit and an outage. A refused token or a wrong setting it does not.
+        standIn: (failure) => {
+          const code = eventCheckProgramError(failure)?.code;
+          return code === "rate_limited" || code === "upstream";
+        },
+      })
+      .pipe(Effect.mapError(this.#discoveryFailure));
   });
   /** What a program printed, read as untrusted text: a wrong shape fails with the generic text. */
   readonly #pickerOptions = (value: unknown): Effect.Effect<EventCheckPickerOptions, McpOperationError> =>
@@ -242,6 +279,8 @@ export class EventCheckScheduler implements RoutineDueSource {
     for (const check of checks)
       if (check.source.kind === "api" && check.source.variables.length > 0)
         yield* reader.environment.adoptLegacy(check).pipe(Effect.catchCause(() => Effect.void));
+    // An approval is given: a list that was read without one must not outlive it.
+    this.#discoveryCache.invalidate();
   });
   /** Only a person sets a private value. This is for the app and the team API, never for an agent tool. */
   setEnvironment = (input: EventCheckEnvironmentInput, actor: SecurityActor) =>
@@ -256,10 +295,13 @@ export class EventCheckScheduler implements RoutineDueSource {
       const previous = this.options.store.get(input.agentId, input.id);
       if (previous.source.kind !== "api" || !previous.source.variables.includes(input.name))
         throw new Error("Undeclared variable.");
+      // A value or its approval changes below: no list read before it is served after it.
+      this.#discoveryCache.invalidate();
       // The digest of the file as it is now. Setting a value approves exactly this program.
       return this.options.store.save({ ...this.#apiReader().definition(previous), active: false }, new Date(), true);
     });
     yield* this.#apiReader().environment.set(check, input.name, input.value);
+    this.#discoveryCache.invalidate();
     this.options.timer.arm();
     yield* this.#audit(
       actor,
@@ -444,6 +486,7 @@ export class EventCheckScheduler implements RoutineDueSource {
           return check;
         });
       });
+      if (this.#changesWhatListsAllow(action, approving, previous, saved)) this.#discoveryCache.invalidate();
       yield* record(saved);
       return saved;
     }
@@ -468,6 +511,28 @@ export class EventCheckScheduler implements RoutineDueSource {
     yield* record(saved);
     return saved;
   });
+  /**
+   * Whether a save moves what a list of choices depends on: the program, its digest, the account or
+   * the variables, a setting that names an address, an approval, or a move to another template version.
+   */
+  #changesWhatListsAllow(
+    action: string | undefined,
+    approving: boolean,
+    previous: EventCheck | null,
+    saved: EventCheck,
+  ): boolean {
+    if (approving || action === "event-check.template-update" || action === "event-check.template-link") return true;
+    if (previous?.source.kind !== "api" || saved.source.kind !== "api") return false;
+    const shape = (source: EventCheckApiSource) =>
+      JSON.stringify([
+        source.toolName,
+        source.programDigest,
+        source.connectionId,
+        source.variables,
+        eventCheckDestination(source),
+      ]);
+    return shape(previous.source) !== shape(saved.source);
+  }
   /** Names of the top-level fields that differ, for the audit file. Never values. */
   #changed(previous: EventCheck, next: EventCheck): string[] {
     const names: string[] = [];
@@ -496,6 +561,7 @@ export class EventCheckScheduler implements RoutineDueSource {
         const check = yield* mcpSync(() => this.options.store.get(input.agentId, input.id));
         yield* mcpSync(() => this.options.store.remove(input.agentId, input.id));
         if (check.source.kind === "api") yield* this.#apiReader().environment.remove(check);
+        this.#discoveryCache.invalidate();
         this.options.timer.arm();
         yield* this.#audit(actor, "event-check.delete", check);
       }),
@@ -555,9 +621,11 @@ export class EventCheckScheduler implements RoutineDueSource {
         prepared.source.variables.length > 0 &&
         this.#apiReader().environment.state({ ...check, source: prepared.source }) === "changed"
       ) {
+        this.#discoveryCache.invalidate();
         paused = this.options.store.save({ ...prepared, active: false }, new Date(), true);
         throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgramChanged"));
       }
+      this.#discoveryCache.invalidate();
       return this.options.store.save(prepared, new Date(), true);
     })
       .pipe(

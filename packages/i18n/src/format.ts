@@ -50,10 +50,19 @@ function numberFormat(locale: string | undefined, options: Intl.NumberFormatOpti
 }
 
 const dateFormats = new Map<string, Intl.DateTimeFormat>();
+let dateFormatConstructor: typeof Intl.DateTimeFormat | undefined;
 
-/** A formatter per locale and options: a message list formats one time for each message. */
+/**
+ * A formatter per locale and options: a message list formats one time for each message. A
+ * formatter keeps the time zone that was current when it was made, so the key holds the offset of
+ * now, and a change of the computer's zone makes a new one.
+ */
 function dateFormat(locale: string | undefined, options: Intl.DateTimeFormatOptions | undefined): Intl.DateTimeFormat {
-  const cacheKey = `${locale ?? ""}\u0000${JSON.stringify(options ?? {})}`;
+  if (dateFormatConstructor !== Intl.DateTimeFormat) {
+    dateFormatConstructor = Intl.DateTimeFormat;
+    dateFormats.clear();
+  }
+  const cacheKey = `${locale ?? ""}\u0000${new Date().getTimezoneOffset()}\u0000${JSON.stringify(options ?? {})}`;
   const cached = dateFormats.get(cacheKey);
   if (cached) return cached;
   const created = new Intl.DateTimeFormat(locale, options);

@@ -65,6 +65,7 @@ import {
   Loading,
   lazy,
   onCleanup,
+  onSettled,
   Show,
   untrack,
 } from "solid-js";
@@ -288,13 +289,54 @@ export function ChannelConversation(props: ChannelConversationProps) {
     }));
   // A send is a command, and the next command waits for it. Say so instead of dropping a key press.
   const [sending, setSending] = createSignal(false);
-  const [waitForSend, setWaitForSend] = createSignal(false);
+  // Why a key press did not send, until the cause is over.
+  const [waitNotice, setWaitNotice] = createSignal<string | null>(null);
+  // Files that the desktop preload imports from a paste or a drop, and has not finished yet.
+  const [importingFiles, setImportingFiles] = createSignal(0);
   createEffect(
-    () => channels.state.pending,
-    (pending) => {
-      if (!pending) setWaitForSend(false);
+    () => channels.state.pending || importingFiles() > 0,
+    (waiting) => {
+      if (!waiting) setWaitNotice(null);
     },
   );
+  onSettled(() => {
+    // The desktop preload imports a file dropped or pasted on the conversation panel, and reports it
+    // here as events. A browser client uploads through `importAttachments` and has no such events.
+    const subscribe = runtime().agent.onAttachmentImport;
+    if (!subscribe) return;
+    const channelsOfRequests = new Map<string, string>();
+    return subscribe((event) => {
+      if (event.type === "started") {
+        const channelId = channels.state.selectedId;
+        if (!channelId || channels.state.page?.channel.archived !== false) return;
+        channelsOfRequests.set(event.requestId, channelId);
+        setImportingFiles((count) => count + 1);
+        return;
+      }
+      const channelId = channelsOfRequests.get(event.requestId);
+      if (event.type === "completed") {
+        if (!channelId) {
+          for (const attachment of event.attachments) void runtime().agent.discardDraftAttachment?.(attachment.id);
+          return;
+        }
+        channelsOfRequests.delete(event.requestId);
+        setImportingFiles((count) => Math.max(0, count - 1));
+        const leftOut = attachToDraft(channelId, event.attachments);
+        if (leftOut > 0)
+          void channels.perform(async () => {
+            throw new Error(t("composer.error.attachmentLimit", { limit: INPUT_LIMITS.attachments }));
+          });
+        return;
+      }
+      if (!channelId) return;
+      channelsOfRequests.delete(event.requestId);
+      setImportingFiles((count) => Math.max(0, count - 1));
+      // The same line the channel shows for any failed action, with its own way to dismiss it.
+      void channels.perform(async () => {
+        throw new Error(event.message);
+      });
+    });
+  });
   let messageList: HTMLElement | undefined;
   let virtualRoot: HTMLElement | undefined;
   let unreadMessagesDivider: HTMLElement | undefined;
@@ -709,8 +751,12 @@ export function ChannelConversation(props: ChannelConversationProps) {
     const { text, attachments, replyToMessageId } = composer();
     const channelId = channels.state.selectedId;
     if (props.connectionReady === false || (!text.trim() && !attachments.length) || !channelId) return;
+    if (importingFiles() > 0) {
+      setWaitNotice(t("webClient.upload.busy"));
+      return;
+    }
     if (channels.state.pending) {
-      setWaitForSend(true);
+      setWaitNotice(t("channel.composer.waitToSend"));
       return;
     }
     const expanded = expandComposerMentions(text);
@@ -1254,11 +1300,9 @@ export function ChannelConversation(props: ChannelConversationProps) {
                       <Plus aria-hidden="true" />
                     </Button>
                     <div class="composer-primary-actions">
-                      <Show when={sending() || waitForSend()}>
+                      <Show when={sending() || waitNotice()}>
                         <span class="voice-model-progress" role="status">
-                          {sending() && !waitForSend()
-                            ? t("channel.composer.sending")
-                            : t("channel.composer.waitToSend")}
+                          {waitNotice() ?? t("channel.composer.sending")}
                         </span>
                       </Show>
                       <Show when={runtime().importProgress?.()}>
@@ -1283,6 +1327,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
                             disabled={
                               props.connectionReady === false ||
                               channels.state.pending ||
+                              importingFiles() > 0 ||
                               (!composer().text.trim() && !composer().attachments.length)
                             }
                           >

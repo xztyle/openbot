@@ -2,7 +2,7 @@ import type { ChannelMessage } from "@openbot/contracts/ipc";
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { assert, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { emitAgentEvent, installOpenbotStub, testServer } from "./app-test-harness";
+import { attachment, emitAgentEvent, emitAttachmentImport, installOpenbotStub, testServer } from "./app-test-harness";
 import { setShowAgentReasoning } from "./chat-visibility-preferences";
 import { CHANNEL_SELECTION_STORAGE_KEY } from "./features/channels/channel-selection";
 import { AccountDock } from "./lazy-views";
@@ -889,6 +889,27 @@ it("keeps the channel message box open while a send runs and says why a second s
   await waitFor(() => expect(within(chat).queryByText("Sending…")).not.toBeInTheDocument());
   // The text changed after the send, so it stays in the box for the person to send or edit.
   expect(composer).toHaveTextContent("First request and a second thought");
+});
+
+it("attaches a file that the desktop imports from a paste or drop, and shows an import failure", async () => {
+  const chat = await openSavedChannel();
+  emitAttachmentImport?.({ type: "started", requestId: "channel-paste", serverId: "local" });
+  emitAttachmentImport?.({
+    type: "completed",
+    requestId: "channel-paste",
+    serverId: "local",
+    attachments: [attachment("paste-1", "report.pdf", "pdf")],
+  });
+  await within(chat).findByRole("button", { name: "Remove report.pdf" });
+
+  emitAttachmentImport?.({ type: "started", requestId: "channel-bad", serverId: "local" });
+  emitAttachmentImport?.({
+    type: "error",
+    requestId: "channel-bad",
+    serverId: "local",
+    message: "notes.xyz is not supported.",
+  });
+  expect(await within(chat).findByText("notes.xyz is not supported.")).toBeInTheDocument();
 });
 
 it("addresses a channel member only while the request names one", async () => {

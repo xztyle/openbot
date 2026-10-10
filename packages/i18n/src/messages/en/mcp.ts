@@ -2,7 +2,7 @@ import { defineMessages } from "../../message";
 
 export const messages = defineMessages("mcp", {
   "mcp.connection.accounts": "Accounts",
-  "mcp.connection.remove": "Disconnect account",
+  "mcp.connection.remove": "Remove account",
   "mcp.chat.title": "Apps for this chat",
   "mcp.chat.description": "Choose the accounts this chat can use. These choices also apply to its scheduled work.",
   "mcp.chat.off": "Off",

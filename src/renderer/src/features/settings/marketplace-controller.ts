@@ -1289,6 +1289,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     canConnectApps: () => Boolean(props.pluginServerId),
     appsRead,
     retryApps,
+    appsHostName: () => props.pluginHostName,
     appBusy: (id) => Boolean(busy[`app:${id}`]),
     pluginSkillAgents: (app) => (app.kind === "plugin" ? pluginSkillAgents(app.plugin) : []),
     setPluginSkills,

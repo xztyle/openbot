@@ -433,6 +433,11 @@ export const messages = defineMessages("marketplace", {
     other: "Works. {count} tools are available.",
   },
   "marketplace.account.failed": "Does not work. {reason}",
+  "marketplace.account.removeDescription": "{name} is removed from {host}. The app and its other accounts stay.",
+  "marketplace.account.removeChats": "Chats of {agents} can no longer use it.",
+  "marketplace.account.removeChatsNone": "No chat can use it now.",
+  "marketplace.account.removeChatsUnknown": "Chats can no longer use it.",
+  "marketplace.account.removeSignIn": "The saved sign-in or key is deleted. Connect again to use the account.",
   "marketplace.account.signedOut": "Signed out. Sign in again to use this account.",
   "marketplace.account.signedOutTitle": "Sign in to {name} again",
   "marketplace.account.signedOutDescription":

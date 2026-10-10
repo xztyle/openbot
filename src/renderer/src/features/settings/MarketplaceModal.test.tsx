@@ -891,10 +891,10 @@ describe("MarketplaceModal", () => {
         renderMarketplace({ ...writer, plugins: [withSkill] });
         await openAppPage();
         const account = await screen.findByRole("group", { name: appName });
-        fireEvent.click(within(account).getByRole("button", { name: "Disconnect account" }));
+        fireEvent.click(within(account).getByRole("button", { name: "Remove account" }));
         const confirm = await screen.findByRole("alertdialog", { name: `Remove ${appName}?` });
         expect(removeMcpServer).not.toHaveBeenCalled();
-        fireEvent.click(within(confirm).getByRole("button", { name: remove ? "Disconnect account" : "Cancel" }));
+        fireEvent.click(within(confirm).getByRole("button", { name: remove ? "Remove account" : "Cancel" }));
 
         await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
         if (remove) {
@@ -905,6 +905,33 @@ describe("MarketplaceModal", () => {
         expect(uninstall).not.toHaveBeenCalled();
       },
     );
+
+    it("lists what removing an account takes and does not show an earlier failure", async () => {
+      const writeText = vi.fn().mockRejectedValue(new DOMException("Document is not focused.", "NotAllowedError"));
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+      Object.defineProperty(document, "execCommand", { configurable: true, value: vi.fn(() => false) });
+      try {
+        window.openbot.agent = {
+          ...window.openbot.agent,
+          listMcpServers: vi.fn(async () => [hostApp()]),
+          removeMcpServer: vi.fn(async () => []),
+        };
+        renderMarketplace({ ...writer, plugins: [plugin] });
+        await openAppPage();
+        // An earlier failure, still on screen: it belongs to the copy, not to this question.
+        fireEvent.click(await screen.findByRole("button", { name: "Copy link" }));
+        await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not copy the link."));
+        const account = await screen.findByRole("group", { name: appName });
+        fireEvent.click(within(account).getByRole("button", { name: "Remove account" }));
+
+        const confirm = await screen.findByRole("alertdialog", { name: `Remove ${appName}?` });
+        expect(within(confirm).getByText(/saved sign-in or key is deleted/u)).toBeInTheDocument();
+        expect(within(confirm).getByText(/Chats can no longer use it/u)).toBeInTheDocument();
+        expect(within(confirm).queryByText("Could not copy the link.")).toBeNull();
+      } finally {
+        Reflect.deleteProperty(document, "execCommand");
+      }
+    });
 
     /**
      * A cleanup that half works. The skill must still go even though the app row refused, and the

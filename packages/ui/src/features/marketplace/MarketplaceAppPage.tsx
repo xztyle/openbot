@@ -22,7 +22,7 @@ import {
   TriangleAlert,
 } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Match, onSettled, Show, Switch } from "solid-js";
 import { BitwardenConnectorPanel } from "../settings/BitwardenConnectorPanel";
 import { GitHubConnectorPanel } from "../settings/GitHubConnectorPanel";
 import { DangerZone, DetailHeader, type IntegrationStatus, WizardDialog } from "../settings/IntegrationLayout";
@@ -62,9 +62,33 @@ interface AccountRemovalProps {
   connection: { id: string; name: string };
 }
 
+/**
+ * What removing one account takes, said before it goes: the chats that lose it, and the saved
+ * sign-in or key. The app and its other accounts stay. The chat access is read for the page already,
+ * so the names are the real ones; before that read the dialog says it in general words.
+ */
 function AccountRemovalConfirmation(props: AccountRemovalProps & { onCancel: () => void }) {
-  const { t } = useText();
+  const { t, format } = useText();
   const model = () => props.scope.model;
+  const access = () => model().chatAccess;
+  /* An earlier failure belongs to that action, not to this question. */
+  onSettled(() => {
+    model().clearError();
+  });
+  const chatsKnown = () =>
+    access().supported() &&
+    model().agents().length > 0 &&
+    model()
+      .agents()
+      .every((agent) => access().readState(agent.id) === "loaded");
+  const chats = () =>
+    model()
+      .agents()
+      .filter(
+        (agent) =>
+          access().listed(agent.id, props.connection.id) && access().mode(agent.id, props.connection.id) !== "off",
+      )
+      .map((agent) => agent.name);
   const remove = async () => {
     if (await model().removeServer(props.connection.id)) props.onCancel();
   };
@@ -73,12 +97,26 @@ function AccountRemovalConfirmation(props: AccountRemovalProps & { onCancel: () 
       open
       initialFocus="cancel"
       title={t("mcp.panel.removeTitle", { name: props.connection.name })}
-      description={t("mcp.panel.removeDescription")}
+      description={t("marketplace.account.removeDescription", {
+        name: props.connection.name,
+        host: model().appsHostName?.() ?? t("mcp.connect.thisComputer"),
+      })}
       confirmLabel={t("mcp.connection.remove")}
       error={model().error()}
       onCancel={props.onCancel}
       onConfirm={remove}
-    />
+    >
+      <ul class="marketplace-remove-list">
+        <li>
+          {chatsKnown()
+            ? chats().length > 0
+              ? t("marketplace.account.removeChats", { agents: format.list(chats()) })
+              : t("marketplace.account.removeChatsNone")
+            : t("marketplace.account.removeChatsUnknown")}
+        </li>
+        <li>{t("marketplace.account.removeSignIn")}</li>
+      </ul>
+    </ConfirmDialog>
   );
 }
 

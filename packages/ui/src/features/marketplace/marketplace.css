@@ -874,6 +874,15 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   margin-inline-start: var(--openbot-space-2);
 }
 
+/* What removing an account takes, in the confirmation. */
+.marketplace-remove-list {
+  display: grid;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  padding-inline-start: var(--openbot-space-4);
+  text-align: start;
+}
+
 .marketplace-account-failed {
   color: var(--openbot-danger);
   overflow-wrap: anywhere;

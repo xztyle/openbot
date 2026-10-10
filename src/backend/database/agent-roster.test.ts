@@ -205,3 +205,43 @@ describe("AgentRoster.replaceAgents", () => {
     ]);
   });
 });
+
+describe("AgentRoster.getAgent", () => {
+  it("reads one agent by id, so a streamed flush never parses the rest of the roster", async () => {
+    const database = await createDatabase();
+    database.replaceAgents("seed", [agent("chief"), agent("scout")], "agent.updated");
+    // A row that is not an agent would break a search through the whole roster. The write below must not read it.
+    database.connection.prepare("UPDATE projection_agents SET agent_json = ? WHERE agent_id = ?").run("null", "scout");
+    expect(database.listAgents()).toContain(null);
+
+    const snapshot = {
+      agentId: "chief",
+      threadId: "openbot-thread-chief",
+      activeTurnId: "turn-1",
+      revision: 0,
+      messages: [
+        {
+          id: "streamed",
+          author: "agent" as const,
+          text: "Partial answer",
+          status: "streaming" as const,
+          createdAt: "2026-08-18T10:00:02.000Z",
+        },
+      ],
+    };
+    expect(() =>
+      database.persistStreamingMessage({ snapshot, messageId: "streamed", eventType: "message.streamed" }),
+    ).not.toThrow();
+    expect(database.connection.prepare("SELECT COUNT(*) AS count FROM projection_thread_messages").get()).toEqual(
+      expect.objectContaining({ count: 1 }),
+    );
+    // An unknown agent is still refused, as it was with the whole-roster read.
+    expect(() =>
+      database.persistStreamingMessage({
+        snapshot: { ...snapshot, agentId: "ghost", threadId: "openbot-thread-ghost" },
+        messageId: "streamed",
+        eventType: "message.streamed",
+      }),
+    ).toThrow("Unknown agent for conversation: ghost");
+  });
+});

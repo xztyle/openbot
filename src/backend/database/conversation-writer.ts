@@ -63,7 +63,7 @@ export class ConversationWriter {
       ],
       (db, sequences) => {
         const sequence = sequences[0] ?? snapshot.revision;
-        const agent = this.#roster.listAgents().find((candidate) => candidate.id === snapshot.agentId);
+        const agent = this.#roster.getAgent(snapshot.agentId);
         if (!agent) throw new Error(`Unknown agent for conversation: ${snapshot.agentId}`);
         this.#roster.ensureThreadProjection(db, agent, sequence);
         db.prepare(
@@ -236,7 +236,7 @@ export class ConversationWriter {
       ],
       (db, sequences) => {
         const sequence = sequences[0] ?? snapshot.revision;
-        const agent = this.#roster.listAgents().find((candidate) => candidate.id === snapshot.agentId);
+        const agent = this.#roster.getAgent(snapshot.agentId);
         if (!agent) throw new Error(`Unknown agent for conversation: ${snapshot.agentId}`);
         this.#roster.ensureThreadProjection(db, agent, sequence);
         supersedeStreamedMessageEvents(db, threadId, messageId, input.eventType, sequence);
@@ -304,7 +304,7 @@ export class ConversationWriter {
       ],
       (db, sequences) => {
         const sequence = sequences[0] ?? 0;
-        const agent = this.#roster.listAgents().find((candidate) => candidate.id === input.agentId);
+        const agent = this.#roster.getAgent(input.agentId);
         if (!agent || agent.threadId !== input.threadId) {
           throw new Error(`Unknown agent thread for conversation append: ${input.agentId}`);
         }
@@ -408,7 +408,7 @@ export class ConversationWriter {
       ],
       (db, sequences) => {
         const sequence = sequences[0] ?? 0;
-        const agent = this.#roster.listAgents().find((candidate) => candidate.id === input.agentId);
+        const agent = this.#roster.getAgent(input.agentId);
         const threadOwner = databaseRow(
           db.prepare("SELECT agent_id FROM projection_threads WHERE thread_id = ?").get(input.threadId),
         );
@@ -606,7 +606,7 @@ export class ConversationWriter {
       ],
       (db, sequences) => {
         const sequence = sequences[0] ?? 0;
-        const agent = this.#roster.listAgents().find((candidate) => candidate.id === input.agentId);
+        const agent = this.#roster.getAgent(input.agentId);
         if (!agent) {
           throw new Error(`Unknown agent thread for provider history: ${input.agentId}`);
         }

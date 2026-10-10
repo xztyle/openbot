@@ -56,6 +56,17 @@ export class AgentRoster {
   }
 
   /**
+   * One agent, read by its id. The conversation writer calls this for each streamed flush, so it
+   * must not parse every agent of the roster the way `listAgents` does.
+   */
+  getAgent(agentId: string): AgentSummary | undefined {
+    const row = databaseRow(
+      this.#core.connection.prepare("SELECT agent_json FROM projection_agents WHERE agent_id = ?").get(agentId),
+    );
+    return row ? JSON.parse(requiredStringColumn(row, "agent_json")) : undefined;
+  }
+
+  /**
    * Every thread row no agent claims as its own `thread_id`.
    *
    * `projection_threads.agent_id` carries no foreign key to `projection_agents`, the chat list is the

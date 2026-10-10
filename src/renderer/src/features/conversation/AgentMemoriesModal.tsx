@@ -3,8 +3,11 @@ import type { MemoryEntry } from "@openbot/contracts/ipc";
 import type { AppFormat, AppMessages, AppTextKey } from "@openbot/i18n";
 import { Button, ConfirmDialog, Dialog, IconButton, Plus, Textarea, Trash2, X } from "@openbot/ui";
 import { createScrollFades } from "@openbot/ui/components/createScrollFades";
+import { limitNoteText } from "@openbot/ui/features/settings/limit-note";
+import { createUnsavedGuard, DiscardChangesDialog } from "@openbot/ui/features/settings/unsaved-changes";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal, For, onSettled, Show, untrack } from "solid-js";
+import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";
 import type { MemoriesPort } from "./memories-port";
 
@@ -26,6 +29,9 @@ const EMPTY_TEXT = {
   channel: "memory.emptyChannel",
 } as const satisfies Record<MemoriesPort["ownerNoun"], AppTextKey>;
 
+/** A deleted memory can come back for this long. It is longer than a plain toast: Undo needs a moment. */
+const UNDO_DELETE_MS = 8_000;
+
 export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
   const { t, format, errorMessage } = useText();
   const [memories, setMemories] = createSignal<MemoryEntry[]>([]);
@@ -42,6 +48,32 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
   let newMemoryInput: HTMLTextAreaElement | undefined;
   let editingInput: HTMLTextAreaElement | undefined;
   let confirmationTrigger: HTMLButtonElement | undefined;
+  const limitNote = limitNoteText(t, format);
+
+  /** The text of the memory being edited differs from the saved text. */
+  const editDirty = () => {
+    const id = editingId();
+    const saved = id ? memories().find((memory) => memory.id === id) : undefined;
+    return saved !== undefined && editingText() !== saved.text;
+  };
+  const hasDraft = () => editDirty() || newText().trim() !== "";
+  // Every way out of a changed draft asks first: another memory, the add button, Escape, the close
+  // button and a tap outside. A draft survives a close that the host makes, such as a tab change.
+  const guard = createUnsavedGuard({ dirty: hasDraft });
+
+  function discardDrafts(): void {
+    setEditingId(null);
+    setEditingText("");
+    setAddOpen(false);
+    setNewText("");
+  }
+
+  function requestClose(): void {
+    guard.request(() => {
+      discardDrafts();
+      props.onOpenChange(false);
+    });
+  }
 
   onSettled(() => scrollFades.stop);
 
@@ -58,6 +90,9 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
       const next = await props.port.list();
       setMemories(next);
       props.onCountChange(next.length);
+      // A memory that another window deleted leaves no editor on screen, so its draft goes too.
+      const editing = untrack(editingId);
+      if (editing && !next.some((memory) => memory.id === editing)) setEditingId(null);
     } catch (caught) {
       setError(errorMessage(caught, t("memory.loadFailed")));
     } finally {
@@ -65,13 +100,17 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
     }
   }
 
+  // Drafts belong to one owner. They stay while the same agent reopens the modal, and go when
+  // another owner shows.
+  let draftOwner: string | null = null;
   createEffect(
     () => [props.open, props.port.ownerId] as const,
-    ([open]) => {
+    ([open, ownerId]) => {
       if (!open) return;
-      setEditingId(null);
-      setAddOpen(false);
-      setNewText("");
+      if (draftOwner !== ownerId) {
+        draftOwner = ownerId;
+        discardDrafts();
+      }
       setClearConfirmation(false);
       void untrack(() => loadMemories());
     },
@@ -111,21 +150,31 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
 
   function startEditing(memory: MemoryEntry): void {
     if (savingId()) return;
-    setEditingId(memory.id);
-    setEditingText(memory.text);
-    setAddOpen(false);
-    setError(null);
-    queueMicrotask(() => {
-      editingInput?.focus();
-      editingInput?.setSelectionRange(memory.text.length, memory.text.length);
+    guard.request(() => {
+      setEditingId(memory.id);
+      setEditingText(memory.text);
+      setAddOpen(false);
+      setNewText("");
+      setError(null);
+      queueMicrotask(() => {
+        editingInput?.focus();
+        editingInput?.setSelectionRange(memory.text.length, memory.text.length);
+      });
     });
   }
 
   function openAddComposer(): void {
-    setEditingId(null);
-    setAddOpen(true);
-    setError(null);
-    queueMicrotask(() => newMemoryInput?.focus());
+    if (addOpen()) {
+      queueMicrotask(() => newMemoryInput?.focus());
+      return;
+    }
+    guard.request(() => {
+      setEditingId(null);
+      setEditingText("");
+      setAddOpen(true);
+      setError(null);
+      queueMicrotask(() => newMemoryInput?.focus());
+    });
   }
 
   function cancelAddComposer(): void {
@@ -162,14 +211,20 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
 
   async function deleteMemory(memory: MemoryEntry): Promise<void> {
     const analytics = desktopAnalytics.scope();
+    const port = props.port;
     let operationSucceeded = false;
     setSavingId(memory.id);
     setError(null);
     try {
-      await props.port.remove(memory.id);
+      await port.remove(memory.id);
       analytics.track("memory_action", { action: "delete", result: "succeeded" });
       operationSucceeded = true;
       if (editingId() === memory.id) setEditingId(null);
+      // One tap deletes, so the toast keeps the text for a while and can write it again.
+      actionToast.success(t("memory.deleted"), {
+        duration: UNDO_DELETE_MS,
+        action: { label: t("memory.undo"), onClick: () => void restoreMemory(port, memory.text) },
+      });
       await loadMemories(false);
     } catch (caught) {
       if (!operationSucceeded) {
@@ -179,6 +234,17 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
     } finally {
       setSavingId(null);
     }
+  }
+
+  /** Writes a deleted memory again. It gets a new date and counts as added by hand. */
+  async function restoreMemory(port: MemoriesPort, text: string): Promise<void> {
+    try {
+      await port.create(text);
+    } catch (caught) {
+      actionToast.error(errorMessage(caught, t("memory.undoFailed")));
+      return;
+    }
+    if (props.port.ownerId === port.ownerId) await loadMemories(false);
   }
 
   async function clearMemories(): Promise<void> {
@@ -210,7 +276,7 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
 
   return (
     <>
-      <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
+      <Dialog.Root open={props.open} onOpenChange={(open) => (open ? props.onOpenChange(true) : requestClose())}>
         <Dialog.Portal>
           <Dialog.Overlay class="agent-memories-overlay" />
           <Dialog.Content
@@ -238,7 +304,7 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
                 >
                   <Plus />
                 </IconButton>
-                <IconButton label={t("memory.close")} variant="ghost" onClick={() => props.onOpenChange(false)}>
+                <IconButton label={t("memory.close")} variant="ghost" onClick={requestClose}>
                   <X />
                 </IconButton>
               </div>
@@ -252,6 +318,7 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
                     class="agent-memory-input"
                     rows="2"
                     maxlength={INPUT_LIMITS.agentMemoryText}
+                    limitNote={limitNote}
                     value={newText()}
                     placeholder={t("memory.newPlaceholder")}
                     aria-label={t("memory.new")}
@@ -260,7 +327,7 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
                       if (event.key === "Escape") {
                         event.preventDefault();
                         event.stopPropagation();
-                        cancelAddComposer();
+                        guard.request(cancelAddComposer);
                       }
                       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
                         event.preventDefault();
@@ -349,6 +416,7 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
                                 class="agent-memory-input"
                                 rows="2"
                                 maxlength={INPUT_LIMITS.agentMemoryText}
+                                limitNote={limitNote}
                                 value={editingText()}
                                 aria-label={t("memory.edit")}
                                 onValueChange={setEditingText}
@@ -356,7 +424,7 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
                                   if (event.key !== "Escape") return;
                                   event.preventDefault();
                                   event.stopPropagation();
-                                  setEditingId(null);
+                                  guard.request(() => setEditingId(null));
                                 }}
                               />
                               <div class="agent-memory-editor-actions">
@@ -409,6 +477,7 @@ export function AgentMemoriesModal(props: AgentMemoriesModalProps) {
         error={error()}
         initialFocus="cancel"
       />
+      <DiscardChangesDialog guard={guard} description={t("memory.discardDescription")} />
     </>
   );
 }

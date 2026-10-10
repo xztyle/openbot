@@ -1,3 +1,4 @@
+import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import type { AgentSummary, ConversationMessage, QueueDeliveryStatus } from "@openbot/contracts/ipc";
 import {
@@ -18,8 +19,10 @@ import type {
   AgentMessagePlan,
   AgentProfile,
   ChatActionMarkerModel,
+  MessageEventCheckOrigin,
 } from "@openbot/ui/data";
 import { formatChatTimestamp } from "@openbot/ui/features/conversation/chat-timestamp";
+import { silentAgentAnswer } from "@openbot/ui/features/conversation/new-message-tally";
 import type { TaskListItem } from "@openbot/ui/features/conversation/TaskList";
 import { currentText } from "@openbot/ui/text";
 import { isRoutineEventItem } from "./features/conversation/conversation-read-state";
@@ -183,6 +186,206 @@ export function toAgentMessages(messages: ConversationMessage[], ownerAgentId?: 
     result.push(thinking);
   }
   return result;
+}
+
+/** The stored wake-up of an event check. It carries no text of its own and draws no row. */
+export function isEventCheckMarkerMessage(message: AgentMessage): boolean {
+  return message.actionMarker?.kind === "event-check";
+}
+
+/** A message that draws a bubble of the agent: the rows that can carry the chip. */
+function carriesEventCheckOrigin(message: AgentMessage): boolean {
+  return (
+    message.author === "agent" &&
+    (message.kind === undefined || message.kind === "text") &&
+    !message.actionMarker &&
+    !message.questionPrompt &&
+    !message.plan &&
+    !message.id.startsWith("ui-") &&
+    chatVisualReply(message) === null &&
+    !silentAgentAnswer(message)
+  );
+}
+
+/** Output of the agent, drawn or not. It shows that a turn already ran before a marker. */
+function isAgentOutput(message: AgentMessage): boolean {
+  return message.author === "agent" && !message.actionMarker && !message.id.startsWith("ui-");
+}
+
+/** A message the person wrote that the agent read. One cancelled in the queue never reached it. */
+function isPersonPrompt(message: AgentMessage): boolean {
+  return message.author === "you" && message.cancelled !== true;
+}
+
+/** A prompt that the agent did not get from the person or an event check, and that starts a turn. */
+function startsOtherTurn(message: AgentMessage): boolean {
+  return message.exchange?.direction === "incoming" || message.routine !== undefined;
+}
+
+/**
+ * Whether the turn of a marker was already running when its event arrived: an earlier message of
+ * the same turn exists, an agent message, a message of the person, or another event check. The
+ * marker then sits in the middle of that turn. It needs a turn id on the marker.
+ */
+function arrivedInRunningTurn(messages: readonly AgentMessage[], markerIndex: number, turn: string): boolean {
+  for (let index = markerIndex - 1; index >= 0; index -= 1) {
+    const row = messages[index];
+    if (row?.turnId === undefined) continue;
+    const prompt = isPersonPrompt(row) || isEventCheckMarkerMessage(row);
+    if (row.turnId === turn) {
+      if (prompt || isAgentOutput(row)) return true;
+      continue;
+    }
+    // Another turn is behind this one: nothing before it can belong to this turn.
+    if (prompt || isAgentOutput(row)) return false;
+  }
+  return false;
+}
+
+interface EventCheckInteraction {
+  first: number;
+  last: number;
+  /** The person wrote in the turn, or another event reached it, before its last agent message. */
+  interrupted: boolean;
+  /** The turn is not over, so its last message is not known yet. */
+  open: boolean;
+}
+
+/**
+ * The agent messages that answer one marker, or `null` when it has none yet.
+ *
+ * The turn id of the marker says which messages belong to its turn. A marker without one, because
+ * its delivery has not started, falls back to message order: the interaction runs until the next
+ * message of the person, the next event check, or the next prompt that is not theirs.
+ */
+function eventCheckInteraction(
+  messages: readonly AgentMessage[],
+  markerIndex: number,
+  activeTurnId: string | null | undefined,
+): EventCheckInteraction | null {
+  let turn = messages[markerIndex]?.turnId;
+  let first = -1;
+  let last = -1;
+  let interrupted = false;
+  let personWrote = false;
+  // A message of another turn came first, so a message without a turn id cannot be attributed.
+  let foreignSeen = false;
+  for (let index = markerIndex + 1; index < messages.length; index += 1) {
+    const row = messages[index];
+    if (!row) continue;
+    if (isEventCheckMarkerMessage(row)) {
+      if (turn === undefined) break;
+      if (row.turnId === turn) {
+        // Another event reached the same turn: it owns the messages from here on.
+        if (first >= 0) interrupted = true;
+        break;
+      }
+      if (first >= 0) break;
+      foreignSeen = true;
+      continue;
+    }
+    if (isPersonPrompt(row)) {
+      if (turn === undefined) break;
+      if (row.turnId === undefined || row.turnId === turn) {
+        personWrote = true;
+        continue;
+      }
+      if (first >= 0) break;
+      foreignSeen = true;
+      continue;
+    }
+    if (turn === undefined && startsOtherTurn(row)) break;
+    if (!carriesEventCheckOrigin(row)) continue;
+    if (turn === undefined) turn = row.turnId;
+    else if (row.turnId === undefined) {
+      if (foreignSeen) continue;
+    } else if (row.turnId !== turn) {
+      if (first >= 0) break;
+      foreignSeen = true;
+      continue;
+    }
+    if (first < 0) first = index;
+    last = index;
+    if (personWrote) interrupted = true;
+  }
+  if (first < 0) return null;
+  const lastRow = messages[last];
+  const open = lastRow?.streaming === true || (turn !== undefined && activeTurnId === turn);
+  return { first, last, interrupted, open };
+}
+
+/**
+ * Which messages carry the chip of an event check, by message id.
+ *
+ * An event check writes a marker message into the chat when it wakes the agent. The marker draws no
+ * row. The agent messages of the interaction carry its name instead: the first one, and the last
+ * one once the turn is over. When the person writes in the turn, or the event reaches a turn that
+ * already runs, only the first agent message carries it, because the turn is no longer the answer
+ * to this event alone. A marker with no agent message yet carries nothing: the chip appears with
+ * the first one, a streaming message included.
+ *
+ * It reads the whole ordered list, because the first and last message need look-ahead, and it
+ * returns a map so a message that streams is never copied: the timeline passes the entry to the row.
+ */
+export function eventCheckOrigins(
+  messages: readonly AgentMessage[],
+  options: { activeTurnId?: string | null | undefined } = {},
+): Map<string, MessageEventCheckOrigin> {
+  const origins = new Map<string, MessageEventCheckOrigin>();
+  messages.forEach((marker, markerIndex) => {
+    const model = marker.actionMarker;
+    if (model?.kind !== "event-check") return;
+    const turn = marker.turnId;
+    // A delivery that has not started while another turn runs: that turn's output is not its answer.
+    if (turn === undefined && options.activeTurnId != null) return;
+    const interaction = eventCheckInteraction(messages, markerIndex, options.activeTurnId);
+    if (!interaction) return;
+    const firstMessage = messages[interaction.first];
+    if (!firstMessage) return;
+    const origin = (position: MessageEventCheckOrigin["position"]): MessageEventCheckOrigin => ({
+      name: model.name,
+      checkId: model.checkId,
+      timestamp: model.timestamp,
+      position,
+    });
+    const midTurn = turn !== undefined && arrivedInRunningTurn(messages, markerIndex, turn);
+    if (midTurn || interaction.interrupted) {
+      origins.set(firstMessage.id, origin("only"));
+      return;
+    }
+    if (interaction.open) {
+      origins.set(firstMessage.id, origin("start"));
+      return;
+    }
+    if (interaction.first === interaction.last) {
+      origins.set(firstMessage.id, origin("only"));
+      return;
+    }
+    origins.set(firstMessage.id, origin("start"));
+    const lastMessage = messages[interaction.last];
+    if (lastMessage) origins.set(lastMessage.id, origin("end"));
+  });
+  return origins;
+}
+
+/** Whether two results name the same chips, so a streamed token does not redraw them. */
+export function eventCheckOriginsEqual(
+  left: ReadonlyMap<string, MessageEventCheckOrigin>,
+  right: ReadonlyMap<string, MessageEventCheckOrigin>,
+): boolean {
+  if (left.size !== right.size) return false;
+  for (const [id, origin] of left) {
+    const other = right.get(id);
+    if (
+      !other ||
+      other.name !== origin.name ||
+      other.checkId !== origin.checkId ||
+      other.timestamp !== origin.timestamp ||
+      other.position !== origin.position
+    )
+      return false;
+  }
+  return true;
 }
 
 export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boolean {

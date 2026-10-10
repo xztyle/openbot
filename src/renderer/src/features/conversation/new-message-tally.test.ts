@@ -115,6 +115,22 @@ describe("countableTimelineMessage", () => {
     ).toBe(false);
   });
 
+  it("does not count the marker of an event check, which has no row", () => {
+    expect(
+      countableTimelineMessage(
+        message({
+          kind: "action-marker",
+          actionMarker: {
+            kind: "event-check",
+            name: "Slack mentions and DMs",
+            checkId: "slack-check",
+            timestamp: "2026-09-13T21:03:00.000Z",
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it("counts a marker that carries an exchange", () => {
     const exchange: AgentExchangeSummary = {
       direction: "incoming",

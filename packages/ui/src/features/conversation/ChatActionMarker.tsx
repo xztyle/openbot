@@ -63,9 +63,13 @@ export const STATUS_LABELS = {
   unavailable: "chat.marker.status.unavailable",
 } as const satisfies Record<ChatActionMarkerStatus, AppTextKey>;
 
+/*
+ * An event-check marker has no row: the agent messages of its interaction carry its chip, and the
+ * timeline leaves the marker out, so this component is never asked to draw one.
+ */
 type SingleChatActionMarkerModel = Exclude<
   ChatActionMarkerModel,
-  { kind: "agent-message-group" } | { kind: "routine-run-group" }
+  { kind: "agent-message-group" } | { kind: "routine-run-group" } | { kind: "event-check" }
 >;
 type AgentMessageGroupMarkerModel = Extract<ChatActionMarkerModel, { kind: "agent-message-group" }>;
 type RoutineRunGroupMarkerModel = Extract<ChatActionMarkerModel, { kind: "routine-run-group" }>;
@@ -79,7 +83,9 @@ function routineRunGroup(marker: ChatActionMarkerModel): RoutineRunGroupMarkerMo
 }
 
 function singleMarker(marker: ChatActionMarkerModel): SingleChatActionMarkerModel | undefined {
-  return marker.kind === "agent-message-group" || marker.kind === "routine-run-group" ? undefined : marker;
+  return marker.kind === "agent-message-group" || marker.kind === "routine-run-group" || marker.kind === "event-check"
+    ? undefined
+    : marker;
 }
 
 export function ChatActionMarker(props: ChatActionMarkerProps) {
@@ -771,7 +777,6 @@ const SKILL_ACTION_LABELS = {
 } as const satisfies Record<Extract<ChatActionMarkerModel, { kind: "skill-lifecycle" }>["action"], AppTextKey>;
 
 function markerLabel(marker: SingleChatActionMarkerModel, t: AppTranslate): string {
-  if (marker.kind === "event-check") return t("chat.marker.eventCheck", { name: marker.name });
   if (marker.kind === "unavailable") return marker.label;
   if (marker.kind === "context-reset") return t("chat.marker.contextReset");
   if (marker.kind === "marketplace-suggestion") return t("chat.marker.marketplaceSuggestion");
@@ -836,7 +841,6 @@ function agentTargetsStyle(agents: Array<AgentProfile | undefined>): string | un
 
 function markerAccessibleLabel(marker: SingleChatActionMarkerModel, agents: AgentProfile[], t: AppTranslate): string {
   const label = markerLabel(marker, t);
-  if (marker.kind === "event-check") return label;
   if (marker.kind === "unavailable" || marker.kind === "context-reset" || marker.kind === "marketplace-suggestion")
     return label;
   if (marker.kind === "skill-lifecycle") return t("chat.marker.accessible.named", { label, name: marker.skillName });

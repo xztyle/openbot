@@ -2,10 +2,12 @@ import { Heading, Text } from "@openbot/ui";
 import type { AgentMessage, AgentProfile, ChatActionMarkerModel } from "@openbot/ui/data";
 import { AgentMessageDialog } from "@openbot/ui/features/conversation/AgentMessageDialog";
 import { ChatActionMarker } from "@openbot/ui/features/conversation/ChatActionMarker";
-import { createSignal } from "solid-js";
+import { ChatMessageRow } from "@openbot/ui/features/conversation/ChatMessageRow";
+import { createSignal, For } from "solid-js";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { AgentSkillsModal } from "../src/features/conversation/AgentSkillsModal";
+import { requireFixture, STORY_AGENTS } from "./fixtures";
 
 const agents: AgentProfile[] = [
   agent("research", "Research"),
@@ -106,6 +108,63 @@ export const AllStates: Story = {
     </main>
   ),
 };
+
+/**
+ * An event check has no row of its own. The first and the last agent message of the interaction
+ * carry a chip on the top edge of the bubble, and a long name is cut with an ellipsis.
+ */
+export const EventCheckOrigin: Story = {
+  render: () => {
+    const chief = requireFixture(STORY_AGENTS[0], "Story agent 0");
+    const origin = { name: "Slack mentions and DMs", checkId: "slack", timestamp: "2026-09-13T21:03:00.000Z" };
+    const rows: Array<{ message: AgentMessage; chip?: "start" | "end" | "only"; name?: string }> = [
+      {
+        message: storyMessage("start", "Two new mentions in the release channel. I am opening both threads."),
+        chip: "start",
+      },
+      { message: storyMessage("middle", "The first one asks for the changelog link. I sent it.") },
+      {
+        message: storyMessage("end", "Done. Both threads have an answer and nothing else is waiting."),
+        chip: "end",
+      },
+      {
+        message: storyMessage("long", "A check with a very long name keeps the chip inside the chat."),
+        chip: "only",
+        name: "Slack mentions, direct messages and every channel the team added this quarter",
+      },
+    ];
+    return (
+      <main class="conversation-panel" aria-label="Conversation" style={{ height: "100dvh" }}>
+        <section class="conversation-scroll" aria-label="Messages">
+          <div class="virtual-chat-list virtual-chat-list-static">
+            <For each={rows}>
+              {(row, index) => (
+                <div class="virtual-chat-row" data-grouped={index() === 1 ? "sender" : undefined}>
+                  <ChatMessageRow
+                    message={row.message}
+                    author={{ kind: "agent", name: chief.name, agent: chief }}
+                    agents={STORY_AGENTS}
+                    eventCheckOrigin={
+                      row.chip ? { ...origin, name: row.name ?? origin.name, position: row.chip } : undefined
+                    }
+                    onSelectAgent={onSelectAgent}
+                    onOpenLink={fn()}
+                    onPreview={fn()}
+                    onAttachmentAction={fn()}
+                  />
+                </div>
+              )}
+            </For>
+          </div>
+        </section>
+      </main>
+    );
+  },
+};
+
+function storyMessage(id: string, body: string): AgentMessage {
+  return { id, author: "agent", body, time: "9:03 PM", createdAt: "2026-09-13T21:03:00.000Z" };
+}
 
 export const CompactAndUnavailable: Story = {
   render: () => (

@@ -1,7 +1,6 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("chat", {
-  "chat.marker.eventCheck": "Event check: {name} — triggered",
   "chat.activity.workingOnIt": "Working on it…",
   "chat.activity.thinking": "Thinking it through…",
   "chat.activity.connectingDots": "Connecting the dots…",
@@ -244,6 +243,7 @@ export const messages = defineMessages("chat", {
   "chat.row.agentReaction": "{name} reacted with {emoji}",
   "chat.row.removeReaction": "Remove your reaction {emoji}",
   "chat.row.unavailable": "This message could not be shown",
+  "chat.row.eventCheckOrigin": "Event check: {name} · {time}",
   "chat.day.today": "Today {time}",
   "chat.day.yesterday": "Yesterday {time}",
   "chat.day.date": "{date} {time}",

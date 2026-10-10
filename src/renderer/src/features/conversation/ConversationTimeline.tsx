@@ -110,6 +110,7 @@ export function ConversationTimeline() {
     newMessageCount,
     timelineMessages,
     timelineIndexById,
+    eventCheckOriginById,
     unreadBoundaryMessageId,
     moveChatSearch,
     openExternalMessageUrl,
@@ -696,6 +697,7 @@ export function ConversationTimeline() {
                             skills={installedSkills()}
                             referencedMessage={referencedMessage()}
                             referencedAuthorName={referencedAuthorName()}
+                            eventCheckOrigin={eventCheckOriginById().get(message()?.id ?? initialMessage.id)}
                             reactions={displayedReactions()}
                             reactionOverflowCount={message()?.reactionSummary?.overflowCount}
                             onRemoveReaction={() => {

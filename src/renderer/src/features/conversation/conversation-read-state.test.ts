@@ -1,3 +1,4 @@
+import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import type { ConversationMessage } from "@openbot/contracts/ipc";
 import {
   hostedSiteConversationEventItemType,
@@ -6,7 +7,8 @@ import {
   routineRunConversationEventItemType,
 } from "@openbot/contracts/ipc";
 import { describe, expect, it } from "vitest";
-import { decideAgentAutoRead, readStateForMessages } from "./conversation-read-state";
+import { toAgentMessages } from "../../app-message-projection";
+import { decideAgentAutoRead, latestVisibleAgentMessageId, readStateForMessages } from "./conversation-read-state";
 
 describe("readStateForMessages", () => {
   it("does not count response attachments as unread replies", () => {
@@ -87,6 +89,40 @@ describe("readStateForMessages", () => {
     expect(
       readStateForMessages({ unreadCount: 0, firstUnreadMessageId: null, throughMessageId: null }, messages),
     ).toMatchObject({ unreadCount: 0, firstUnreadMessageId: null });
+  });
+});
+
+describe("event check markers", () => {
+  const messages: ConversationMessage[] = [
+    {
+      id: "event",
+      turnId: "t1",
+      author: "system",
+      source: "system",
+      text: "Slack mentions and DMs",
+      createdAt: "2026-08-30T11:00:00.000Z",
+      status: "completed",
+      itemType: `${EVENT_CHECK_ITEM_TYPE_PREFIX}slack-check:execution-1`,
+    },
+    {
+      id: "answer",
+      turnId: "t1",
+      author: "assistant",
+      text: "Two new mentions.",
+      createdAt: "2026-08-30T11:00:05.000Z",
+      status: "completed",
+    },
+  ];
+
+  it("does not count the marker as an unread reply, and the answer still counts", () => {
+    expect(
+      readStateForMessages({ unreadCount: 0, firstUnreadMessageId: null, throughMessageId: null }, messages),
+    ).toMatchObject({ unreadCount: 1, firstUnreadMessageId: "answer" });
+  });
+
+  it("does not move the read boundary to the marker", () => {
+    expect(latestVisibleAgentMessageId(toAgentMessages(messages.slice(0, 1)))).toBeNull();
+    expect(latestVisibleAgentMessageId(toAgentMessages(messages))).toBe("answer");
   });
 });
 

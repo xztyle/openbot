@@ -47,7 +47,8 @@ export function renderChatSearchHighlights(matches: ChatSearchMatch[], currentIn
   registry.set(CURRENT_HIGHLIGHT, active);
 }
 
-const HIDDEN_TEXT = '[aria-hidden="true"], .sr-only, .message-actions';
+/** The chip of an event check names where a message came from. It is not part of the message. */
+const HIDDEN_TEXT = '[aria-hidden="true"], .sr-only, .message-actions, .message-origin-chip';
 
 /** Elements that start a new rendered line. */
 const LINE_CONTAINER_TAGS = new Set([

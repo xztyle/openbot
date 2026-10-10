@@ -132,6 +132,19 @@ export type ChatActionMarkerModel =
       timestamp: string;
     };
 
+/**
+ * The event check whose wake-up a message answers, drawn as a small chip on the top edge of its
+ * bubble. `start` is the first agent message of the interaction and an `end` chip follows it, `end`
+ * is the last one, and `only` is the single chip of an interaction. The projection computes it from
+ * the ordered conversation; the stored marker message itself draws no row.
+ */
+export interface MessageEventCheckOrigin {
+  name: string;
+  checkId: string;
+  timestamp: string;
+  position: "start" | "end" | "only";
+}
+
 export interface MessageCitation {
   number: number;
   label: string;

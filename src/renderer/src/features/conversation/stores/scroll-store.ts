@@ -20,6 +20,7 @@ import {
 import { currentText } from "@openbot/ui/text";
 import type { VirtualItem } from "@tanstack/virtual-core";
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { eventCheckOrigins, eventCheckOriginsEqual, isEventCheckMarkerMessage } from "../../../app-message-projection";
 import { useShowAgentMessages, useShowAgentReasoning } from "../../../chat-visibility-preferences";
 import { groupAgentMessageMarkers } from "../agent-message-timeline";
 import type { ConversationProps, ConversationTarget } from "../conversation-types";
@@ -79,17 +80,28 @@ export function createScrollStore(deps: ScrollStoreDeps) {
   let newMessages: NewMessageTally = { count: 0, anchorId: undefined };
   let talliedConversationIdentity: string | undefined;
 
+  /*
+   * An event check writes a marker when it wakes the agent. The marker stays in the conversation, so
+   * read state and counts see it as before, but it has no row: the agent messages of its interaction
+   * carry a chip with the name of the check instead.
+   */
   const drawnMessages = createMemo(() => [
     ...summarizeRoutineRunMessages(
       deps.props.messages.filter(
         (message) =>
           !hiddenThinking(message, deps.props.activeTurnId) &&
+          !isEventCheckMarkerMessage(message) &&
           !silentAgentAnswer(message) &&
           !switchedOff(message, showReasoning(), showAgentMessages()),
       ),
     ),
     ...deps.pendingMessages(),
   ]);
+  /* The chip of an event check, by the id of the agent message that carries it. */
+  const eventCheckOriginById = createMemo(
+    () => eventCheckOrigins(deps.props.messages, { activeTurnId: deps.props.activeTurnId }),
+    { equals: eventCheckOriginsEqual },
+  );
   /*
    * The unread divider sits on the first unread row the timeline draws. A silent answer has no row,
    * so the divider moves to the next row that has one; read state keeps the stored message. A
@@ -296,6 +308,7 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     messageVirtualizer,
     timelineMessages,
     timelineIndexById,
+    eventCheckOriginById,
     unreadBoundaryMessageId,
     updateScrollFade,
     updateVirtualScrollMargin,

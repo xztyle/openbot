@@ -372,6 +372,44 @@
   outline: none;
 }
 
+/*
+ * The chip of the event check that woke the agent. It hangs on the top edge of the bubble the way a
+ * reaction hangs on the bottom one, so the message reads as the answer to that event without a row
+ * of its own. The chip stands above the bubble, so the shell keeps a gap from the name or time
+ * above it and from the message before. A bubble with no padding makes room for it too.
+ */
+.message-origin-chip {
+  width: max-content;
+  max-width: min(240px, calc(100vw - var(--openbot-space-6) * 2));
+  min-width: 0;
+  gap: var(--openbot-space-1);
+  padding: 2px var(--openbot-space-2);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+.message-origin-chip svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  flex: 0 0 auto;
+}
+
+.message-origin-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-shell:has(.message-origin-chip) {
+  margin-top: calc(var(--openbot-space-3) + var(--openbot-space-1));
+}
+
+.ui-bubble-variant-ghost:has(> .message-origin-chip) > .ui-bubble-content {
+  padding-top: var(--openbot-space-2);
+}
+
 .chat-action-entry-animated {
   width: 100%;
   animation: message-in var(--openbot-duration-normal) cubic-bezier(0.23, 1, 0.32, 1) both;

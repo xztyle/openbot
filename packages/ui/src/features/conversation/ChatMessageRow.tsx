@@ -1,5 +1,6 @@
 import type { AttachmentSummary, ConversationReaction, InstalledSkill } from "@openbot/contracts/ipc";
 import {
+  Bell,
   Bubble,
   BubbleContent,
   BubbleReactions,
@@ -13,9 +14,10 @@ import {
 import type { JSX } from "@solidjs/web";
 import { createMemo, For, Show } from "solid-js";
 import { avatarHeadColor } from "../../bloub-avatar";
-import type { AgentMessage, AgentProfile } from "../../data";
+import type { AgentMessage, AgentProfile, MessageEventCheckOrigin } from "../../data";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
+import { formatChatTimestamp } from "./chat-timestamp";
 import { conversationBubbleVariant, MessageBody } from "./MessageRendering";
 
 /**
@@ -54,6 +56,11 @@ export interface ChatMessageRowProps {
   referencedAuthorName?: string;
   reactions?: readonly ConversationReaction[];
   reactionOverflowCount?: number;
+  /**
+   * The event check that woke the agent for this message. It draws a small chip on the top edge of
+   * the bubble with the name of the check, so the reader knows where the message came from.
+   */
+  eventCheckOrigin?: MessageEventCheckOrigin | undefined;
   onRemoveReaction?: () => void;
   actions?: JSX.Element;
   footer?: JSX.Element;
@@ -81,7 +88,7 @@ export interface ChatMessageRowProps {
  * conversation arrives as a prop.
  */
 export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
-  const { t } = useText();
+  const { t, format } = useText();
   const own = () => props.author.kind === "you";
   const member = () => props.author.kind === "member";
   const person = () => own() || member();
@@ -95,6 +102,12 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
     const currentSeed = seed();
     if (own() || currentSeed === undefined) return undefined;
     return `--message-author-color: ${avatarHeadColor(currentSeed, props.author.agent?.avatarHue ?? null)}`;
+  };
+  // "Event check: Slack mentions and DMs · 09:03 PM", for the tooltip and the screen reader.
+  const originLabel = (origin: MessageEventCheckOrigin) => {
+    const date = new Date(origin.timestamp);
+    const time = Number.isNaN(date.getTime()) ? t("chat.marker.unknownTime") : formatChatTimestamp(date, format);
+    return t("chat.row.eventCheckOrigin", { name: origin.name, time });
   };
   return (
     <Message
@@ -187,6 +200,22 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
               />
               {props.children}
             </BubbleContent>
+            <Show when={props.eventCheckOrigin}>
+              {(origin) => (
+                <BubbleReactions
+                  class="message-origin-chip"
+                  side="top"
+                  align="start"
+                  role="note"
+                  title={originLabel(origin())}
+                  aria-label={originLabel(origin())}
+                  data-position={origin().position}
+                >
+                  <Bell aria-hidden="true" />
+                  <span class="message-origin-name">{origin().name}</span>
+                </BubbleReactions>
+              )}
+            </Show>
             <Show when={(props.reactions?.length ?? 0) > 0}>
               <BubbleReactions
                 class="message-reaction-anchor"

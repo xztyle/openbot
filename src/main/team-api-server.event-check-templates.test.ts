@@ -161,6 +161,38 @@ it("lists choices through the host route for an administrator only, with fixed e
     const unknown = await send("discover", { ...draft({ FIXTURE_API_TOKEN: bad }), slug: "nothing" });
     expect(unknown.status).toBe(400);
     expect(await unknown.text()).not.toContain(bad);
+
+    // A refusal of install, adopt or update is an expected error: 400 with its fixed text, never 500.
+    const install = {
+      slug: "fixture",
+      agentId: "chief",
+      name: "Fixture check",
+      accountLabel: "Work",
+      instruction: "Look.",
+      timezone: "UTC",
+      intervalSeconds: 60,
+      accountActorIds: [],
+      configuration: {},
+    };
+    const unknownInstall = await send("install", { ...install, slug: "nothing" });
+    expect(unknownInstall.status).toBe(400);
+    expect(await unknownInstall.text()).toContain("This host does not have that event check template.");
+    const installed = await send("install", install);
+    expect(installed.status).toBe(200);
+    const { id } = await installed.json();
+    const target = { agentId: "chief", id };
+    const current = await send("update", target);
+    expect(current.status).toBe(400);
+    expect(await current.text()).toContain("This event check already uses the latest version of its template.");
+    const unknownAdopt = await send("adopt", { ...target, slug: "nothing" });
+    expect(unknownAdopt.status).toBe(400);
+    expect(await unknownAdopt.text()).toContain("This host does not have that event check template.");
+    const linked = store.get("chief", id);
+    if (linked.source.kind !== "api") throw new Error("The installed check must read an API program.");
+    store.save({ ...linked, source: { ...linked.source, template: undefined } }, new Date());
+    const notLinked = await send("update", target);
+    expect(notLinked.status).toBe(400);
+    expect(await notLinked.text()).toContain("This event check did not come from a template.");
   } finally {
     database.close();
   }

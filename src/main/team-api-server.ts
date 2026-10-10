@@ -87,6 +87,7 @@ import { Deferred, Effect, Exit, Scope } from "effect";
 import type * as Ws from "ws";
 import { AgentDuplicationFailed, duplicateAgentIntoLayout } from "../backend/agent/duplication-gate";
 import { runCauseEffect } from "../backend/effect-boundary";
+import { EventCheckRefusal } from "../backend/event-check-refusal";
 import { McpServerError } from "../backend/mcp-server-store";
 import { StoredStateFailure } from "../backend/stored-state-effects";
 import type { TeamChatStore } from "../backend/team-chat-store";
@@ -735,7 +736,9 @@ export class TeamApiServer {
         error instanceof TeamStoreError ||
         error instanceof McpServerError ||
         error instanceof RemoteMcpSignInError ||
-        error instanceof AnalyticsInputError;
+        error instanceof AnalyticsInputError ||
+        // Its message is fixed localized text that names a field or a step and holds no value.
+        error instanceof EventCheckRefusal;
       const status =
         error instanceof HttpError || error instanceof RemoteScreenError ? error.status : expected ? 400 : 500;
       const message = expected ? error.message : sourceText("error.team.requestFailed");

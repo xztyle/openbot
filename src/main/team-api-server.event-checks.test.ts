@@ -78,6 +78,13 @@ it("requires administrator login and negotiated capability and round-trips setti
     expect((await send("save", { ...definition, source: { ...definition.source, argumentsJson: "[]" } })).status).toBe(
       400,
     );
+    // A refusal is an expected error: 400 with its fixed text that names the field and not the value.
+    const typed = "Bearer abcdefghijklmnopqrstuvwxyz0123456789";
+    const refused = await send("save", { ...definition, instruction: `Read new tickets with ${typed}` });
+    expect(refused.status).toBe(400);
+    const refusedText = await refused.text();
+    expect(refusedText).toContain("The “instruction” field looks like a credential, so it was not saved.");
+    expect(refusedText).not.toContain(typed);
     const { schedule: _schedule, ...defaultDefinition } = definition;
     const saved = await send("save", defaultDefinition);
     expect(saved.status).toBe(200);

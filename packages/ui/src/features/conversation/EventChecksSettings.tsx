@@ -21,6 +21,7 @@ import {
   Check,
   ChevronRight,
   CirclePause,
+  Field,
   Input,
   Minus,
   Plus,
@@ -37,13 +38,21 @@ import {
   TriangleAlert,
   X,
 } from "@openbot/ui";
-import { createEffect, createStore, For, onCleanup, Show, snapshot } from "solid-js";
+import { createEffect, createStore, For, onCleanup, Show, snapshot, untrack } from "solid-js";
 import { createScrollFades } from "../../components/createScrollFades";
 import { SettingsBackIcon, SettingsForwardIcon } from "../../components/SettingsPanel";
 import { useText } from "../../text";
+import { createUnsavedGuard, DiscardChangesDialog } from "../settings/unsaved-changes";
 import { EventCheckEnvironmentSettings } from "./EventCheckEnvironmentSettings";
 import { itemFiltersFromText, itemFiltersToText } from "./event-check-item-filters";
 import type { PickerBinding } from "./event-check-picker";
+import {
+  emptyVariableDraft,
+  hasVariableChanges,
+  type VariableDraft,
+  variableChanges,
+  writeVariables,
+} from "./event-check-variables";
 import { RoutineSchedulePicker } from "./RoutineSchedulePicker";
 import type { RoutineScheduleDraft } from "./routine-schedule-draft";
 import { ROUTINE_SAVED_DRAFT_KINDS, routineScheduleFromDraft, routineScheduleToDraft } from "./routine-schedule-saved";
@@ -69,6 +78,13 @@ interface Props {
   onBack(): void;
   onClose(): void;
   onCountChange(count: number): void;
+  /** Called when the editor gains or loses changes that were not saved, so the owner can keep it open. */
+  onUnsavedChange?(unsaved: boolean): void;
+  /**
+   * Ask the browser to confirm when the tab or window closes with unsaved changes. A web page sets
+   * it; a desktop window closes without a prompt.
+   */
+  warnOnPageClose?: boolean | undefined;
 }
 interface Editor {
   value: EventCheckInput;
@@ -103,11 +119,39 @@ interface State {
   templateVariables: { name: string; label: string }[] | null;
   /** The status of the private variables of the open check, or null while that is not known. */
   environment: EventCheckEnvironmentStatus[] | null;
+  /** The values typed in the private variable fields and the removals. Saved with the check. */
+  variables: VariableDraft;
+  /** The fields that the person has reached, so an empty one says it is required only then. */
+  touched: { name: boolean; program: boolean; instruction: boolean };
+  /** A save worked and nothing was edited since: it is announced as "Saved". */
+  saved: boolean;
+  /** Save is writing the check and its private values: the masked fields are off until it ends. */
+  saving: boolean;
 }
 /** The list answer carries `health`. It is not part of what the user edits or saves. */
 function withoutHealth(check: EventCheck): EventCheck {
   const { health: _health, ...rest } = check;
   return rest;
+}
+/**
+ * What the person can edit in a check, as text. The host sets the revision, the times, the author and
+ * the program digest by itself, so a change of those is not an edit.
+ */
+function editableJson(
+  value: EventCheckInput & Partial<Pick<EventCheck, "revision" | "nextCheckAt" | "createdAt" | "updatedAt" | "health">>,
+): string {
+  const {
+    health: _health,
+    revision: _revision,
+    nextCheckAt: _next,
+    createdAt: _created,
+    updatedAt: _updated,
+    lastSavedBy: _author,
+    ...rest
+  } = value;
+  if (rest.source.kind !== "api") return JSON.stringify(rest);
+  const { programDigest: _digest, ...source } = rest.source;
+  return JSON.stringify({ ...rest, source });
 }
 const DIGEST_CHOICES = [0, 60, 300, 900, 3600] as const;
 function apiSource(source: EventCheckSource) {
@@ -241,9 +285,26 @@ export function EventChecksSettings(props: Props) {
     fields: {},
     templateVariables: null,
     environment: null,
+    variables: emptyVariableDraft(),
+    touched: { name: false, program: false, instruction: false },
+    saved: false,
+    saving: false,
   });
+  /**
+   * The agent whose checks the panel shows. It follows `props.agentId`, except while the person still
+   * edits a check of the agent they left: that editor keeps its own agent until they decide. It is
+   * not state: each reader is an action that needs the value now, not after the next flush.
+   */
+  let shownAgent = untrack(() => props.agentId);
   const scrollFades = createScrollFades();
-  onCleanup(scrollFades.stop);
+  onCleanup(() => {
+    scrollFades.stop();
+    // The typed values live only here. They are gone when the panel closes.
+    setState((draft) => {
+      draft.variables = emptyVariableDraft();
+    });
+    props.onUnsavedChange?.(false);
+  });
   createEffect(
     () => [state.current?.value.id, state.checks.length, state.history.length, state.historyOpen, state.error] as const,
     () => {
@@ -267,17 +328,18 @@ export function EventChecksSettings(props: Props) {
   /** The lists that pickers loaded, by check and setting. A remounted field starts from its list. */
   const loadedLists = new Map<string, EventCheckPickerOptions>();
   const listKey = (checkId: string, field: string) => `${checkId}:${field}`;
-  async function reload() {
+  async function reload(agentId = shownAgent) {
     const requested = ++epoch;
     try {
-      const checks = await props.api.list({ agentId: props.agentId });
+      const checks = await props.api.list({ agentId });
       if (requested !== epoch) return;
       setState((draft) => {
         draft.checks = checks;
         draft.loading = false;
         draft.loadError = "";
       });
-      props.onCountChange(checks.length);
+      // The count belongs to the agent of the panel, not to the one an unsaved editor still holds.
+      if (agentId === props.agentId) props.onCountChange(checks.length);
       return checks;
     } catch (error) {
       if (requested !== epoch) return;
@@ -300,36 +362,34 @@ export function EventChecksSettings(props: Props) {
     });
     void reload();
   }
-  let lastAgentId: string | undefined;
-  createEffect(
-    () => [props.api, props.agentId] as const,
-    ([, agentId]) => {
-      // Another agent starts over. The same agent with another api object only reads the lists again:
-      // the check that is open and its unsaved edits stay.
-      const agentChanged = agentId !== lastAgentId;
-      lastAgentId = agentId;
-      if (agentChanged) {
-        loadedLists.clear();
+  function readAccounts(agentId: string) {
+    void props.api
+      .accounts({ agentId })
+      .then((accounts) => {
+        if (agentId !== shownAgent) return;
         setState((draft) => {
-          draft.current = null;
-          draft.error = "";
-          draft.checks = [];
-          draft.accounts = [];
-          draft.loading = true;
-          draft.loadError = "";
+          draft.accounts = accounts;
         });
-      }
-      void reload();
-      void props.api
-        .accounts({ agentId })
-        .then((accounts) =>
-          setState((draft) => {
-            draft.accounts = accounts;
-          }),
-        )
-        .catch((error) => fail(error, t("agentSettings.eventCheck.accountsFailed")));
-    },
-  );
+      })
+      .catch((error) => fail(error, t("agentSettings.eventCheck.accountsFailed")));
+  }
+  /** Starts over for another agent: its list, its accounts, and no open editor. */
+  function startAgent(agentId: string) {
+    loadedLists.clear();
+    shownAgent = agentId;
+    setState((draft) => {
+      draft.current = null;
+      draft.error = "";
+      draft.checks = [];
+      draft.accounts = [];
+      draft.loading = true;
+      draft.loadError = "";
+      draft.variables = emptyVariableDraft();
+      draft.saved = false;
+    });
+    void reload(agentId);
+    readAccounts(agentId);
+  }
   // The templates are read once for this panel, and only for a check that came from one.
   let templatesRead: Promise<EventCheckTemplate[]> | null = null;
   /**
@@ -374,8 +434,11 @@ export function EventChecksSettings(props: Props) {
       templatesRead = null;
     }
   }
+  /** The editor of a new check as it opened. A new check with no edit has nothing to lose. */
+  let newBaseline = "";
   async function open(check?: EventCheck) {
-    const next = editor(props.agentId, check, apiPrograms());
+    const next = editor(shownAgent, check, apiPrograms());
+    newBaseline = check ? "" : JSON.stringify(next);
     setState((draft) => {
       draft.current = next;
       draft.historyOpen = false;
@@ -387,6 +450,9 @@ export function EventChecksSettings(props: Props) {
       draft.fields = {};
       draft.templateVariables = null;
       draft.environment = null;
+      draft.variables = emptyVariableDraft();
+      draft.touched = { name: false, program: false, instruction: false };
+      draft.saved = false;
     });
     if (check?.id) void loadTemplateSettings(check);
     // A store write is visible only after the next flush, so the new editor, not the store, names the account.
@@ -397,11 +463,15 @@ export function EventChecksSettings(props: Props) {
     setState((draft) => {
       draft.current = null;
       draft.error = "";
+      draft.variables = emptyVariableDraft();
+      draft.saved = false;
     });
+    // The person left the agent while the editor was open and chose to keep editing: now they follow.
+    if (props.agentId !== shownAgent) startAgent(props.agentId);
   }
   async function loadTools(connectionId: string) {
     try {
-      const tools = await props.api.tools({ agentId: props.agentId, connectionId });
+      const tools = await props.api.tools({ agentId: shownAgent, connectionId });
       if (state.current?.value.source.connectionId === connectionId)
         setState((draft) => {
           draft.tools = tools;
@@ -428,7 +498,7 @@ export function EventChecksSettings(props: Props) {
   }
   async function save() {
     const current = state.current;
-    if (!current) return;
+    if (!current || state.busy) return;
     const schedule =
       current.timing === "interval"
         ? {
@@ -452,18 +522,92 @@ export function EventChecksSettings(props: Props) {
       deliveryAvailable() && (current.digestSeconds > 0 || filters.length > 0 || current.value.delivery)
         ? { delivery: { digestSeconds: current.digestSeconds, itemFilters: filters } }
         : {};
-    await action(async () => {
-      const check = await props.api.save({ ...snapshot(current.value), schedule, ...delivery });
+    const agentId = shownAgent;
+    const declared = current.value.source.kind === "api" ? current.value.source.variables : [];
+    const changes = variableChanges(snapshot(state.variables), declared);
+    const checkChanged = checkDirty();
+    setState((draft) => {
+      draft.busy = true;
+      draft.saving = true;
+      draft.error = "";
+      draft.saved = false;
+    });
+    try {
+      // The check first: a private value is written to the saved check, so it must exist and be current.
+      let checkId = current.value.id;
+      if (checkChanged) {
+        const check = await props.api.save({ ...snapshot(current.value), schedule, ...delivery });
+        checkId = check.id;
+        setState((draft) => {
+          draft.current = editor(agentId, check, apiPrograms());
+        });
+      }
+      let failure: { name: string; error: unknown } | undefined;
+      if (changes.length > 0 && checkId) {
+        // A failure stops the run. The value that failed and the ones after it stay typed.
+        const outcome = await writeVariables(props.api, { agentId, id: checkId }, changes, (change, variables) =>
+          setState((draft) => {
+            draft.variables.values[change.name] = "";
+            draft.variables.removed[change.name] = false;
+            draft.environment = variables;
+          }),
+        );
+        failure = outcome.failed;
+      }
+      const checks = await reload(agentId);
+      const updated = checks?.find((entry) => entry.id === checkId);
+      if (updated && state.current?.value.id === checkId)
+        setState((draft) => {
+          draft.current = editor(agentId, updated, apiPrograms());
+        });
+      if (failure) {
+        const name = failure.name;
+        const reason = errorMessage(failure.error, t("agentSettings.eventCheck.failed"));
+        setState((draft) => {
+          draft.error = t("agentSettings.eventCheck.variableFailed", {
+            name: variableLabels()[name] ?? name,
+            reason,
+          });
+        });
+      } else if (checks) {
+        setState((draft) => {
+          draft.saved = true;
+        });
+        // The Save button is gone, and focus with it: it moves to the editor, not to the page.
+        queueMicrotask(() => {
+          if (!document.activeElement || document.activeElement === document.body) editorRoot?.focus();
+        });
+      }
+    } catch (error) {
+      fail(error, t("agentSettings.eventCheck.saveFailed"));
+    } finally {
       setState((draft) => {
-        draft.current = editor(props.agentId, check, apiPrograms());
+        draft.busy = false;
+        draft.saving = false;
       });
-    }, t("agentSettings.eventCheck.saveFailed"));
+    }
+  }
+  /** Puts the editor back to the saved check, and drops the typed private values and removals. */
+  function reset() {
+    const current = state.current;
+    if (!current || state.busy) return;
+    const saved = savedCheck();
+    if (current.value.id && !saved) return;
+    const next = editor(shownAgent, current.value.id ? saved : undefined, apiPrograms());
+    if (!current.value.id) newBaseline = JSON.stringify(next);
+    setState((draft) => {
+      draft.current = next;
+      draft.variables = emptyVariableDraft();
+      draft.touched = { name: false, program: false, instruction: false };
+      draft.error = "";
+      draft.saved = false;
+    });
   }
   async function history() {
     const id = state.current?.value.id;
     if (!id) return;
     try {
-      const runs = await props.api.history({ agentId: props.agentId, id });
+      const runs = await props.api.history({ agentId: shownAgent, id });
       setState((draft) => {
         draft.history = runs;
         draft.historyOpen = true;
@@ -478,32 +622,70 @@ export function EventChecksSettings(props: Props) {
    * history, the tools and the lists of the pickers stay. An editor with an edit keeps the draft.
    */
   async function variablesChanged(id: string) {
-    const clean = state.current?.value.id === id && !dirty();
+    const clean = state.current?.value.id === id && !checkDirty();
     const before = clean ? JSON.stringify(snapshot(state.current)) : "";
     const checks = await reload();
     const updated = checks?.find((entry) => entry.id === id);
     if (!updated || state.current?.value.id !== id) return;
     if (clean && JSON.stringify(snapshot(state.current)) === before)
       setState((draft) => {
-        draft.current = editor(props.agentId, updated, apiPrograms());
+        draft.current = editor(shownAgent, updated, apiPrograms());
       });
   }
-  const dirty = () => {
+  /** The check differs from the saved one. The private values are not part of it. */
+  const checkDirty = () => {
     const current = state.current;
-    const saved = state.checks.find((check) => check.id === current?.value.id);
-    if (!current || !saved || JSON.stringify(current.value) !== JSON.stringify(withoutHealth(saved))) return true;
+    if (!current) return false;
+    // A new check has no saved one: it is unsaved once it differs from the blank form that opened.
+    // The store is read directly, not through `snapshot`: only a read here is tracked.
+    if (!current.value.id) return JSON.stringify(current) !== newBaseline;
+    const saved = state.checks.find((check) => check.id === current.value.id);
+    if (!saved || editableJson(current.value) !== editableJson(saved)) return true;
     if (
       current.digestSeconds !== (saved.delivery?.digestSeconds ?? 0) ||
       current.filtersText.trim() !== itemFiltersToText(saved.delivery?.itemFilters ?? [])
     )
       return true;
     if (current.timing === "interval")
-      return saved.schedule.kind !== "interval" || current.seconds !== editor(props.agentId, saved).seconds;
+      return saved.schedule.kind !== "interval" || current.seconds !== editor(shownAgent, saved).seconds;
     return (
       saved.schedule.kind === "interval" ||
-      JSON.stringify(snapshot(current.calendar)) !== JSON.stringify(routineScheduleToDraft(saved.schedule))
+      JSON.stringify(current.calendar) !== JSON.stringify(routineScheduleToDraft(saved.schedule))
     );
   };
+  /** Anything the person typed or changed and Save has not written: the check, a value, or a removal. */
+  const unsaved = () => checkDirty() || hasVariableChanges(state.variables);
+  const guard = createUnsavedGuard({
+    dirty: unsaved,
+    warnOnPageClose: () => props.warnOnPageClose === true,
+  });
+  createEffect(
+    () => unsaved(),
+    (value) => {
+      props.onUnsavedChange?.(value);
+    },
+  );
+  createEffect(
+    () => [props.api, props.agentId] as const,
+    ([, agentId]) => {
+      if (agentId !== shownAgent) {
+        // Another agent starts over. An editor with unsaved changes asks first: the person may have
+        // changed agent by accident, and what they typed, private values included, would be lost.
+        // Keep editing leaves the editor on the agent it was opened for.
+        if (state.current !== null && unsaved())
+          guard.request(() => {
+            startAgent(props.agentId);
+            props.onBack();
+          });
+        else startAgent(agentId);
+        return;
+      }
+      // The same agent with another api object only reads the lists again: the check that is open
+      // and its unsaved edits stay.
+      void reload(agentId);
+      readAccounts(agentId);
+    },
+  );
   /** Each picker setting of the open check, with the call that reads its list from the saved check. */
   const pickerBindings = (): Record<string, PickerBinding> => {
     const discover = props.pickers?.discoverCheck;
@@ -515,7 +697,7 @@ export function EventChecksSettings(props: Props) {
         field,
         {
           picker,
-          load: () => discover({ agentId: props.agentId, id, field }),
+          load: () => discover({ agentId: shownAgent, id, field }),
           blocked:
             missing === null
               ? undefined
@@ -554,6 +736,25 @@ export function EventChecksSettings(props: Props) {
     });
   /** The saved check that the open editor edits, with its health. Absent for a check that is not saved yet. */
   const savedCheck = () => state.checks.find((check) => check.id === state.current?.value.id);
+  const touch = (field: keyof State["touched"]) =>
+    setState((draft) => {
+      draft.touched[field] = true;
+    });
+  /** An empty required field says so once the person has reached it. */
+  const fieldError = (field: keyof State["touched"], value: string) =>
+    state.touched[field] && !value.trim() ? t("agentSettings.eventCheck.required") : undefined;
+  const setVariable = (name: string, value: string) =>
+    setState((draft) => {
+      draft.variables.values[name] = value;
+      draft.saved = false;
+    });
+  const removeVariable = (name: string, remove: boolean) =>
+    setState((draft) => {
+      draft.variables.removed[name] = remove;
+      // A value that is marked for removal is not also a new value.
+      if (remove) draft.variables.values[name] = "";
+      draft.saved = false;
+    });
   const failing = () => {
     const health = savedCheck()?.health;
     return health && health.consecutiveErrors > 0 ? health : undefined;
@@ -576,22 +777,23 @@ export function EventChecksSettings(props: Props) {
   /** The interval, in seconds, that the saved check has: a longer one than the editor offers stays valid. */
   const savedIntervalSeconds = () => {
     const saved = savedCheck();
-    return saved ? editor(props.agentId, saved).seconds : 0;
+    return saved ? editor(shownAgent, saved).seconds : 0;
   };
   const intervalProblem = () => state.current?.timing === "interval" && !intervalValid(state.current.seconds);
   /** Why Check now is off, or null when it is on. */
   const checkNowReason = () =>
-    dirty()
+    unsaved()
       ? t("agentSettings.eventCheck.runNeedsSave")
       : state.current?.value.active
         ? null
         : t("agentSettings.eventCheck.runNeedsActive");
-  const testReason = () => (dirty() ? t("agentSettings.eventCheck.runNeedsSave") : null);
+  const testReason = () => (unsaved() ? t("agentSettings.eventCheck.runNeedsSave") : null);
   const saveReason = () => {
     const missing = missingForSave();
     return missing.length > 0 ? t("agentSettings.eventCheck.saveNeeds", { fields: format.list(missing) }) : null;
   };
   let focusDeleteButton = false;
+  let editorRoot: HTMLDivElement | undefined;
   /** The confirmation swaps the buttons. Focus follows the swap, so a keyboard user is not left on nothing. */
   const focusWhenShown = (element: HTMLElement) => queueMicrotask(() => element.focus());
   return (
@@ -603,7 +805,7 @@ export function EventChecksSettings(props: Props) {
           class="settings-panel-nav-button"
           aria-label={state.current ? t("agentSettings.eventCheck.all") : t("agentSettings.backToSettings")}
           disabled={state.busy && Boolean(state.current)}
-          onClick={() => (state.current ? closeEditor() : props.onBack())}
+          onClick={() => (state.current ? guard.request(closeEditor) : props.onBack())}
         >
           <SettingsBackIcon />
         </Button>
@@ -624,7 +826,8 @@ export function EventChecksSettings(props: Props) {
               type="button"
               class="settings-panel-nav-button"
               aria-label={t("common.close")}
-              onClick={props.onClose}
+              disabled={state.busy}
+              onClick={() => guard.request(props.onClose)}
             >
               <SettingsForwardIcon />
             </Button>
@@ -753,7 +956,11 @@ export function EventChecksSettings(props: Props) {
           }
         >
           {(current) => (
-            <div class="agent-routine-editor event-check-editor">
+            <div
+              ref={(element) => (editorRoot = element)}
+              tabindex="-1"
+              class="agent-routine-editor event-check-editor"
+            >
               <Show when={failing()}>
                 {(health) => (
                   <Text
@@ -800,7 +1007,7 @@ export function EventChecksSettings(props: Props) {
                           disabled={state.busy}
                           onClick={() =>
                             void action(async () => {
-                              await props.api.remove({ agentId: props.agentId, id: current().value.id ?? "" });
+                              await props.api.remove({ agentId: shownAgent, id: current().value.id ?? "" });
                               loadedLists.clear();
                               closeEditor();
                             }, t("agentSettings.eventCheck.deleteFailed"))
@@ -847,37 +1054,28 @@ export function EventChecksSettings(props: Props) {
                         {t("common.delete")}
                       </Button>
                     </Show>
-                    <Button
-                      type="button"
-                      size="sm"
-                      aria-describedby={saveReason() ? "event-check-save-reason" : undefined}
-                      disabled={state.busy || missingForSave().length > 0 || intervalProblem()}
-                      onClick={() => void save()}
-                    >
-                      {t("common.save")}
-                    </Button>
                   </Show>
                 </div>
               </div>
-              <Show when={saveReason()}>
-                {(reason) => (
-                  <Text as="p" variant="caption" tone="muted" id="event-check-save-reason" class="event-check-help">
-                    {reason()}
-                  </Text>
-                )}
-              </Show>
-              <label class="settings-field">
-                <span>{t("agentSettings.eventCheck.name")}</span>
+              <Field
+                class="settings-field event-check-field"
+                label={t("agentSettings.eventCheck.name")}
+                required
+                error={fieldError("name", current().value.name)}
+              >
                 <Input
                   value={current().value.name}
                   maxlength={256}
                   onInput={(e) =>
                     setState((s) => {
                       if (s.current) s.current.value.name = e.currentTarget.value;
+                      s.touched.name = true;
+                      s.saved = false;
                     })
                   }
+                  onBlur={() => touch("name")}
                 />
-              </label>
+              </Field>
               <Show when={templateLink(current().value.source)}>
                 {(link) => (
                   <Text as="p" variant="caption" tone="muted" class="event-check-help">
@@ -939,6 +1137,8 @@ export function EventChecksSettings(props: Props) {
                       pickers={pickerBindings()}
                       fields={state.fields}
                       source={source()}
+                      programError={fieldError("program", source().toolName)}
+                      onProgramBlur={() => touch("program")}
                       change={(value) =>
                         setState((draft) => {
                           if (draft.current) draft.current.value.source = value;
@@ -963,7 +1163,13 @@ export function EventChecksSettings(props: Props) {
                       api={props.api}
                       check={check()}
                       labels={variableLabels()}
-                      disabled={dirty()}
+                      values={state.variables.values}
+                      removed={state.variables.removed}
+                      busy={state.saving}
+                      saveAction={t("common.save")}
+                      approveBlocked={checkDirty()}
+                      onValue={setVariable}
+                      onRemove={removeVariable}
                       onStatus={(status) => {
                         if (state.current?.value.id === check().id)
                           setState((draft) => {
@@ -975,18 +1181,25 @@ export function EventChecksSettings(props: Props) {
                   )}
                 </Show>
               </Show>
-              <label class="settings-field agent-routine-instruction-field">
-                <span>{t("agentSettings.eventCheck.instruction")}</span>
+              <Field
+                class="settings-field agent-routine-instruction-field event-check-field"
+                label={t("agentSettings.eventCheck.instruction")}
+                required
+                error={fieldError("instruction", current().value.instruction)}
+              >
                 <Textarea
                   value={current().value.instruction}
                   maxlength={16000}
                   onInput={(e) =>
                     setState((s) => {
                       if (s.current) s.current.value.instruction = e.currentTarget.value;
+                      s.touched.instruction = true;
+                      s.saved = false;
                     })
                   }
+                  onBlur={() => touch("instruction")}
                 />
-              </label>
+              </Field>
               <section class="event-check-section" aria-labelledby="event-check-timing-heading">
                 <h3 id="event-check-timing-heading">{t("agentSettings.eventCheck.timing")}</h3>
                 <div class="event-check-segmented">
@@ -1025,37 +1238,38 @@ export function EventChecksSettings(props: Props) {
                     </div>
                   }
                 >
-                  <label class="settings-field">
-                    <span>{t("agentSettings.eventCheck.seconds")}</span>
-                    <Input
-                      type="number"
-                      min={MIN_INTERVAL_SECONDS}
-                      // An interval that was saved above the day still opens as valid.
-                      max={Math.max(MAX_INTERVAL_SECONDS, savedIntervalSeconds())}
-                      aria-invalid={intervalProblem() ? "true" : undefined}
-                      aria-describedby={intervalProblem() ? "event-check-interval-error" : undefined}
-                      value={current().secondsText}
-                      onInput={(e) =>
-                        setState((s) => {
-                          if (!s.current) return;
-                          const text = e.currentTarget.value;
-                          s.current.secondsText = text;
-                          s.current.seconds = text.trim() === "" ? Number.NaN : Number(text);
-                        })
-                      }
-                    />
-                  </label>
-                  <Show when={intervalProblem()}>
-                    <Text
-                      as="p"
-                      variant="caption"
-                      id="event-check-interval-error"
-                      role="alert"
-                      class="event-check-help event-check-failing"
-                    >
-                      {t("agentSettings.eventCheck.intervalInvalid", { min: MIN_INTERVAL_SECONDS })}
-                    </Text>
-                  </Show>
+                  <Field
+                    class="settings-field event-check-field"
+                    label={t("agentSettings.eventCheck.seconds")}
+                    description={t("agentSettings.eventCheck.intervalHelp", { min: MIN_INTERVAL_SECONDS })}
+                    error={
+                      intervalProblem()
+                        ? t("agentSettings.eventCheck.intervalInvalid", { min: MIN_INTERVAL_SECONDS })
+                        : undefined
+                    }
+                  >
+                    <div class="event-check-unit-row">
+                      <Input
+                        type="number"
+                        min={MIN_INTERVAL_SECONDS}
+                        // An interval that was saved above the day still opens as valid.
+                        max={Math.max(MAX_INTERVAL_SECONDS, savedIntervalSeconds())}
+                        value={current().secondsText}
+                        onInput={(e) =>
+                          setState((s) => {
+                            if (!s.current) return;
+                            const text = e.currentTarget.value;
+                            s.current.secondsText = text;
+                            s.current.seconds = text.trim() === "" ? Number.NaN : Number(text);
+                            s.saved = false;
+                          })
+                        }
+                      />
+                      <span class="event-check-unit" aria-hidden="true">
+                        {t("agentSettings.eventCheck.secondsUnit")}
+                      </span>
+                    </div>
+                  </Field>
                 </Show>
                 <label class="settings-field">
                   <span>{t("agentSettings.eventCheck.timezone")}</span>
@@ -1225,7 +1439,7 @@ export function EventChecksSettings(props: Props) {
                         disabled={state.busy || checkNowReason() !== null}
                         onClick={() =>
                           void action(async () => {
-                            await props.api.checkNow({ agentId: props.agentId, id: id() });
+                            await props.api.checkNow({ agentId: shownAgent, id: id() });
                             await history();
                           }, t("agentSettings.eventCheck.checkNowFailed"))
                         }
@@ -1241,7 +1455,7 @@ export function EventChecksSettings(props: Props) {
                           disabled={state.busy || testReason() !== null || !props.api.test}
                           onClick={() =>
                             void action(async () => {
-                              const target = { agentId: props.agentId, id: id() };
+                              const target = { agentId: shownAgent, id: id() };
                               await props.api.test?.(target);
                               await history();
                             }, t("agentSettings.eventCheck.testFailed"))
@@ -1313,15 +1527,66 @@ export function EventChecksSettings(props: Props) {
                   </section>
                 )}
               </Show>
+              <div class="event-check-save-region">
+                <Show when={state.error}>
+                  <p class="agent-settings-save-error" role="alert">
+                    {state.error}
+                  </p>
+                </Show>
+                {/* Always present, so a screen reader hears the text when it is set. */}
+                <p role="status" class="event-check-saved">
+                  {state.saved && !unsaved() ? t("agentSettings.eventCheck.saved") : ""}
+                </p>
+                <Show when={unsaved()}>
+                  <div class="event-check-save-bar">
+                    <Show when={hasVariableChanges(state.variables)}>
+                      <Text as="p" variant="caption" tone="muted" class="event-check-save-note">
+                        {t("agentSettings.eventCheck.variablesPause")}
+                      </Text>
+                    </Show>
+                    <Show when={saveReason()}>
+                      {(reason) => (
+                        <Text
+                          as="p"
+                          variant="caption"
+                          tone="muted"
+                          id="event-check-save-reason"
+                          class="event-check-save-note"
+                        >
+                          {reason()}
+                        </Text>
+                      )}
+                    </Show>
+                    <div class="event-check-save-actions">
+                      <Button variant="ghost" type="button" size="sm" disabled={state.busy} onClick={reset}>
+                        {t("agentSettings.eventCheck.reset")}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        aria-describedby={saveReason() ? "event-check-save-reason" : undefined}
+                        disabled={state.busy || missingForSave().length > 0 || intervalProblem()}
+                        onClick={() => void save()}
+                      >
+                        {t("common.save")}
+                      </Button>
+                    </div>
+                  </div>
+                </Show>
+              </div>
             </div>
           )}
         </Show>
-        <Show when={state.error}>
+        <Show when={state.error && !state.current}>
           <p class="agent-settings-save-error" role="alert">
             {state.error}
           </p>
         </Show>
       </div>
+      <DiscardChangesDialog
+        guard={guard}
+        description={hasVariableChanges(state.variables) ? t("agentSettings.eventCheck.discardDescription") : undefined}
+      />
     </section>
   );
 }

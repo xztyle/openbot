@@ -46,6 +46,71 @@
   font-family: var(--openbot-font-mono);
 }
 
+/* A shared Field inside the panel keeps the panel's label look, so it sits with the plain fields. */
+.event-check-field > .ui-label {
+  margin: 0 0 6px 8px;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-regular);
+  line-height: 18px;
+}
+
+.event-check-field > .ui-field-description,
+.event-check-field > .ui-field-error {
+  margin-inline: var(--openbot-space-2);
+}
+
+/* The unit sits beside the number it belongs to. */
+.event-check-unit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.event-check-unit-row > input {
+  flex: 1 1 auto;
+}
+
+.event-check-unit {
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+}
+
+/* Save and Reset stay in view at the foot of the editor while there is something to save. */
+.event-check-save-region {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  gap: var(--openbot-space-2);
+}
+
+.event-check-save-bar {
+  display: grid;
+  gap: var(--openbot-space-2);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-3);
+}
+
+.event-check-save-note {
+  margin: 0;
+  line-height: var(--openbot-leading-md);
+}
+
+.event-check-save-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--openbot-space-2);
+}
+
+.event-check-saved {
+  margin: 0 var(--openbot-space-2);
+  color: var(--openbot-success-text);
+  font-size: var(--openbot-text-sm);
+}
+
 .event-check-variable-set {
   color: var(--openbot-success-text);
 }

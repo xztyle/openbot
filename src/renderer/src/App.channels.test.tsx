@@ -1205,3 +1205,9 @@ it("names the member who works and the member who waits for a free place", async
   ).toBeInTheDocument();
   expect(within(chat).getByText("Chief is working · Sales Outbound queued")).toBeVisible();
 });
+
+it("does not make the whole channel transcript a live region", async () => {
+  const chat = await openChannelWithMessages([storedMessage("a1", 1, chiefAuthor, "The totals match.")]);
+  const transcript = await within(chat).findByRole("region", { name: "Shared messages" });
+  expect(transcript).not.toHaveAttribute("aria-live");
+});

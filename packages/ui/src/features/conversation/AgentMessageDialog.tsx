@@ -113,6 +113,10 @@ export function AgentMessageDialog(props: AgentMessageDialogProps) {
                 <X aria-hidden="true" />
               </Button>
             </header>
+            <Show when={props.entries.length === 0}>
+              {/* The marker is in the chat, but its message is not loaded here: say so, not nothing. */}
+              <p class="agent-message-dialog-empty">{t("chat.messageDialog.notLoaded")}</p>
+            </Show>
             <ol class="agent-message-dialog-list">
               <For each={props.entries} keyed={(entry) => entry.message.id}>
                 {(entry) => (

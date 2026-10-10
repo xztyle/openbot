@@ -420,6 +420,14 @@ export function ChannelConversation(props: ChannelConversationProps) {
       updateUnreadDividerVisibility();
     });
   };
+  /** The newest question that no one answered, for the one status of the transcript. */
+  const questionAnnouncement = createMemo(() => {
+    const pending = timeline().findLast(
+      (entry) => entry.message.questionPrompt && !entry.message.questionPrompt.resolution,
+    );
+    const question = pending?.message.questionPrompt?.questions[0]?.question;
+    return question ? t("prompt.inputRequiredAnnouncement", { question }) : "";
+  });
   /** The channel is read as far as its newest message: that is what the page counts through. */
   const markChannelRead = async () => {
     const page = channels.state.page;
@@ -725,10 +733,17 @@ export function ChannelConversation(props: ChannelConversationProps) {
               </div>
               <div class="conversation-header-actions no-drag">{props.headerActions}</div>
             </header>
+            {/*
+              One status for the whole transcript, as the agent chat has: a live region on the
+              transcript itself reads every row that streams or scrolls in. An action row announces
+              itself, and a question from an agent is announced here.
+            */}
+            <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+              {questionAnnouncement()}
+            </span>
             <section
               class="conversation-scroll"
               aria-label={t("channel.conversation.messages")}
-              aria-live="polite"
               ref={(element) => {
                 messageList = element;
                 rail.ref(element);

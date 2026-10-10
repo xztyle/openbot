@@ -56,6 +56,7 @@ export const messages = defineMessages("chat", {
   "chat.messageDialog.open": "Open conversation",
   "chat.messageDialog.openWith": "Open conversation with {name}",
   "chat.messageDialog.empty": "This message has no text.",
+  "chat.messageDialog.notLoaded": "This message is not loaded in this chat yet.",
   "chat.marker.status.unavailable": "Unavailable",
   "chat.marker.openSkill": "Open skill {name}",
   "chat.marker.hideHistory": "Hide history for {name}",

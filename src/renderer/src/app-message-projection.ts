@@ -141,51 +141,207 @@ function cancelledByUser(message: ConversationMessage): boolean {
   return message.delivery?.status === "cancelled" && message.author === "user" && !message.exchange && !message.routine;
 }
 
+/** A message the list leaves out: waiting or cancelled in the queue, and not the person's own. */
+function hiddenFromTranscript(message: ConversationMessage): boolean {
+  return (
+    (message.delivery?.status === "queued" ||
+      (message.delivery?.status === "cancelled" && !cancelledByUser(message))) &&
+    !message.routine &&
+    !message.itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX)
+  );
+}
+
+function isCommentary(message: ConversationMessage): boolean {
+  return message.author === "assistant" && message.itemType === "commentary";
+}
+
+/** The reasoning of one turn as one message: the cleaned text and the id of each step. */
+function thinkingMessage(
+  key: string,
+  first: ConversationMessage,
+  members: readonly ConversationMessage[],
+): AgentMessage {
+  return {
+    id: `thinking:${key}`,
+    turnId: first.turnId,
+    author: "agent",
+    body: "",
+    time: formatMessageTime(first.createdAt),
+    createdAt: first.createdAt,
+    streaming: members.some((member) => member.status === "streaming"),
+    itemType: "commentary",
+    kind: "thinking",
+    items: members.map((member) => cleanAgentMessageText(member.text)),
+    itemIds: members.map((member) => member.id),
+  };
+}
+
 export function toAgentMessages(messages: ConversationMessage[], ownerAgentId?: string): AgentMessage[] {
-  const result: AgentMessage[] = [];
-  const thinkingByTurn = new Map<string, AgentMessage>();
-  for (const message of messages) {
-    if (
-      (message.delivery?.status === "queued" ||
-        (message.delivery?.status === "cancelled" && !cancelledByUser(message))) &&
-      !message.routine &&
-      !message.itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX)
-    ) {
-      continue;
-    }
-    if (message.author !== "assistant" || message.itemType !== "commentary") {
-      result.push(toAgentMessage(message, ownerAgentId));
-      continue;
-    }
+  return projectMessages(messages, ownerAgentId, undefined);
+}
 
+function projectMessages(
+  messages: readonly ConversationMessage[],
+  ownerAgentId: string | undefined,
+  cache: MessageProjectionCache | undefined,
+): AgentMessage[] {
+  const visible = messages.filter((message) => !hiddenFromTranscript(message));
+  // The commentary of one turn joins into one message, at the place of its first step.
+  const groups = new Map<string, ConversationMessage[]>();
+  for (const message of visible) {
+    if (!isCommentary(message)) continue;
     const key = message.turnId ?? message.id;
-    const existing = thinkingByTurn.get(key);
-    if (existing) {
-      const text = cleanAgentMessageText(message.text);
-      existing.items = [...(existing.items ?? []), text];
-      existing.itemIds = [...(existing.itemIds ?? []), message.id];
-      existing.streaming = existing.streaming || message.status === "streaming";
+    const group = groups.get(key);
+    if (group) group.push(message);
+    else groups.set(key, [message]);
+  }
+  const result: AgentMessage[] = [];
+  const emitted = new Set<string>();
+  for (const message of visible) {
+    if (!isCommentary(message)) {
+      result.push(cache ? cache.message(message, ownerAgentId) : toAgentMessage(message, ownerAgentId));
       continue;
     }
-
-    const text = cleanAgentMessageText(message.text);
-    const thinking: AgentMessage = {
-      id: `thinking:${key}`,
-      turnId: message.turnId,
-      author: "agent",
-      body: "",
-      time: formatMessageTime(message.createdAt),
-      createdAt: message.createdAt,
-      streaming: message.status === "streaming",
-      itemType: "commentary",
-      kind: "thinking",
-      items: [text],
-      itemIds: [message.id],
-    };
-    thinkingByTurn.set(key, thinking);
-    result.push(thinking);
+    const key = message.turnId ?? message.id;
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    const members = groups.get(key) ?? [message];
+    result.push(cache ? cache.thinking(key, message, members) : thinkingMessage(key, message, members));
   }
   return result;
+}
+
+/**
+ * Which locale and day the strings of a projection follow. `time` reads both, so a row that was
+ * cached under another context is made again.
+ */
+function projectionContext(ownerAgentId: string | undefined): string {
+  const { format } = currentText();
+  const today = new Date();
+  return [
+    ownerAgentId ?? "",
+    format.locale,
+    // The date conventions of `intlLocale` are not on the format, so a fixed date shows them.
+    format.date(CONTEXT_PROBE_DATE, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }),
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  ].join("\u0000");
+}
+
+const CONTEXT_PROBE_DATE = new Date(Date.UTC(2001, 8, 17, 15, 4, 5));
+
+/** The fields of a message whose own value, or its reference, an `AgentMessage` is made from. */
+const PROJECTED_FIELDS = [
+  "id",
+  "turnId",
+  "author",
+  "text",
+  "createdAt",
+  "status",
+  "itemType",
+  "source",
+  "senderAgentId",
+  "replyToMessageId",
+  "attachments",
+  "imageGeneration",
+  "questionPrompt",
+  "reaction",
+  "reactions",
+] as const satisfies readonly (keyof ConversationMessage)[];
+
+/**
+ * The fields that the projection copies into a new object. A change inside them does not change
+ * their reference, so they are compared by value.
+ */
+const DERIVED_FIELDS = [
+  "senderMember",
+  "delivery",
+  "exchange",
+  "routine",
+  "plan",
+] as const satisfies readonly (keyof ConversationMessage)[];
+
+interface MessageSnapshot {
+  context: string;
+  fields: unknown[];
+  derived: (string | undefined)[];
+}
+
+function snapshotMessage(message: ConversationMessage, context: string): MessageSnapshot {
+  return {
+    context,
+    fields: PROJECTED_FIELDS.map((field) => message[field]),
+    derived: DERIVED_FIELDS.map((field) => {
+      const value = message[field];
+      return value === undefined ? undefined : JSON.stringify(value);
+    }),
+  };
+}
+
+function snapshotsMatch(left: MessageSnapshot, right: MessageSnapshot): boolean {
+  return (
+    left.context === right.context &&
+    left.fields.every((value, index) => value === right.fields[index]) &&
+    left.derived.every((value, index) => value === right.derived[index])
+  );
+}
+
+export interface MessageProjectionCache {
+  message: (message: ConversationMessage, ownerAgentId: string | undefined) => AgentMessage;
+  thinking: (key: string, first: ConversationMessage, members: readonly ConversationMessage[]) => AgentMessage;
+}
+
+/**
+ * `toAgentMessages` that keeps the object of a message whose source did not change. A row that
+ * reads the object then does not run again when only the message that streams has a new delta.
+ * The output is the same as `toAgentMessages`: a message is made again when a field it reads, the
+ * interface language, the day, or the owner changed.
+ *
+ * It keys the cache on the source object, so a store that keeps its items (as a Solid store does)
+ * gets the reuse, and a page that a read replaced is made again whole.
+ */
+export function createMessageProjector(): (
+  messages: readonly ConversationMessage[],
+  ownerAgentId?: string,
+) => AgentMessage[] {
+  const entries = new WeakMap<ConversationMessage, { snapshot: MessageSnapshot; value: AgentMessage }>();
+  let thinkingEntries = new Map<
+    string,
+    { members: ConversationMessage[]; snapshots: MessageSnapshot[]; value: AgentMessage }
+  >();
+  return (messages, ownerAgentId) => {
+    const context = projectionContext(ownerAgentId);
+    const nextThinking: typeof thinkingEntries = new Map();
+    const cache: MessageProjectionCache = {
+      message(message, owner) {
+        const snapshot = snapshotMessage(message, context);
+        const cached = entries.get(message);
+        if (cached && snapshotsMatch(cached.snapshot, snapshot)) return cached.value;
+        const value = toAgentMessage(message, owner);
+        entries.set(message, { snapshot, value });
+        return value;
+      },
+      thinking(key, first, members) {
+        const snapshots = members.map((member) => snapshotMessage(member, context));
+        const cached = thinkingEntries.get(key);
+        const reusable =
+          cached &&
+          cached.members.length === members.length &&
+          cached.members.every((member, index) => member === members[index]) &&
+          cached.snapshots.every((snapshot, index) => {
+            const next = snapshots[index];
+            return next !== undefined && snapshotsMatch(snapshot, next);
+          });
+        const value = reusable ? cached.value : thinkingMessage(key, first, members);
+        nextThinking.set(key, { members: [...members], snapshots, value });
+        return value;
+      },
+    };
+    const result = projectMessages(messages, ownerAgentId, cache);
+    thinkingEntries = nextThinking;
+    return result;
+  };
 }
 
 /** The stored wake-up of an event check. It carries no text of its own and draws no row. */

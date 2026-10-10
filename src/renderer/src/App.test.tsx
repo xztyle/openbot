@@ -798,6 +798,16 @@ describe("OpenBot connected desktop shell", () => {
     await screen.findByRole("dialog", { name: "Memories" });
   });
 
+  it("opens the menu of the open chat from its button, for a screen with no right click", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Agent actions" }));
+    const menu = await screen.findByRole("menu", { name: "Agent actions" });
+    expect(within(menu).getByRole("menuitem", { name: "Pin" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Duplicate agent" })).toBeInTheDocument();
+  });
+
   it("closes global search with Escape and a backdrop press", async () => {
     render(() => <App />);
     await screen.findByRole("heading", { name: "Chief" });

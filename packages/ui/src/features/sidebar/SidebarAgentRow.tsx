@@ -5,7 +5,7 @@
  * group is not a place in the layout, and its tooltip says what the agent waits for.
  */
 
-import { Badge, buttonVariants, Clock3, ContextMenu, Lock, Tooltip } from "@openbot/ui";
+import { Badge, buttonVariants, Clock3, ContextMenu, Ellipsis, IconButton, Lock, Tooltip } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { createStore, Show } from "solid-js";
 import type { AgentProfile } from "../../data";
@@ -51,6 +51,22 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
     return rowProps.waiting && current?.kind === "waiting" ? current : undefined;
   };
   const [overlay, setOverlay] = createStore({ tooltipOpen: false, menuOpen: false });
+  let rowElement: HTMLButtonElement | undefined;
+  /**
+   * The row's menu opens from a long press or a right click, which a person on a touch screen may
+   * not know. This button asks the row for the same menu at its own position.
+   */
+  function openRowMenu(button: HTMLElement): void {
+    const box = button.getBoundingClientRect();
+    rowElement?.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: box.left + box.width / 2,
+        clientY: box.top + box.height / 2,
+      }),
+    );
+  }
   const limit = () => {
     const current = state();
     return current?.kind === "limited" ? current : undefined;
@@ -74,6 +90,9 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
     >
       <ContextMenu.Trigger
         as="button"
+        ref={(element: HTMLButtonElement) => {
+          rowElement = element;
+        }}
         type="button"
         class={[
           buttonVariants({ variant: "ghost" }),
@@ -201,6 +220,18 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
             </Tooltip.Portal>
           </Tooltip.Root>
         )}
+      </Show>
+      {/* Only the open chat shows it, so the list does not carry one button for each row. The
+          stylesheet shows it for a coarse pointer only. */}
+      <Show when={!rowProps.waiting && props.activeAgentId === rowProps.agent.id && !props.compact}>
+        <IconButton
+          class="agent-row-menu-button"
+          label={t("sidebar.agentMenu.label")}
+          aria-haspopup="menu"
+          onClick={(event: MouseEvent & { currentTarget: HTMLElement }) => openRowMenu(event.currentTarget)}
+        >
+          <Ellipsis aria-hidden="true" />
+        </IconButton>
       </Show>
     </div>
   );

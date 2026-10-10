@@ -27,3 +27,27 @@
   height: var(--openbot-icon-sm);
   flex: none;
 }
+
+/* The open chat's menu button. A long press opens that menu, which a touch screen does not show. */
+.agent-row-menu-button {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .agent-row-menu-button {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: var(--openbot-space-1);
+    z-index: 1;
+    display: inline-flex;
+    height: var(--openbot-control-xl);
+    width: var(--openbot-control-xl);
+    margin-block: auto;
+    color: var(--openbot-text-muted);
+  }
+
+  /* The time sits under the button, so the row reserves its place. */
+  .sidebar-agent-item:has(.agent-row-menu-button) .agent-row {
+    padding-inline-end: calc(var(--openbot-control-xl) + var(--openbot-space-1));
+  }
+}

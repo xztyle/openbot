@@ -1,6 +1,6 @@
 /** The server name, the marketplace or expand toggle, and new agent - plus the window drag region. */
 
-import { Bot, Button, DropdownMenu, FolderPlus, Hash, Puzzle } from "@openbot/ui";
+import { Bot, Button, CheckCheck, DropdownMenu, FolderPlus, Hash, Puzzle, Trash2 } from "@openbot/ui";
 import { Show } from "solid-js";
 import { useText } from "../../text";
 import { ServerMenu } from "../servers/ServerMenu";
@@ -62,7 +62,15 @@ export function SidebarTopbar() {
             </Show>
           </Button>
         </Show>
-        <Show when={props.createSupported !== false || props.onCreateChannel || layoutMutable()}>
+        <Show
+          when={
+            props.createSupported !== false ||
+            props.onCreateChannel ||
+            layoutMutable() ||
+            props.onMarkAllRead ||
+            props.onToggleArchivedChannels
+          }
+        >
           <DropdownMenu.Root placement="bottom-end" gutter={4}>
             <DropdownMenu.Trigger
               class="sidebar-icon-button sidebar-new-button no-drag"
@@ -102,6 +110,26 @@ export function SidebarTopbar() {
                     <FolderPlus aria-hidden="true" />
                     {t("sidebar.new.section")}
                   </DropdownMenu.Item>
+                </Show>
+                {/* The list's right-click menu holds these too. A touch screen has no right click. */}
+                <Show when={props.onMarkAllRead || props.onToggleArchivedChannels}>
+                  <Show when={props.createSupported !== false || props.onCreateChannel || layoutMutable()}>
+                    <DropdownMenu.Separator />
+                  </Show>
+                  <Show when={props.onMarkAllRead}>
+                    <DropdownMenu.Item disabled={!props.hasUnread} onSelect={() => props.onMarkAllRead?.()}>
+                      <CheckCheck aria-hidden="true" />
+                      {t("sidebar.markAllRead")}
+                    </DropdownMenu.Item>
+                  </Show>
+                  <Show when={props.onToggleArchivedChannels}>
+                    <DropdownMenu.Item onSelect={() => props.onToggleArchivedChannels?.()}>
+                      <Trash2 aria-hidden="true" />
+                      {props.showingArchivedChannels
+                        ? t("sidebar.deletedChannels.hide")
+                        : t("sidebar.deletedChannels.title")}
+                    </DropdownMenu.Item>
+                  </Show>
                 </Show>
               </DropdownMenu.Content>
             </DropdownMenu.Portal>

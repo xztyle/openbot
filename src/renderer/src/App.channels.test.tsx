@@ -838,6 +838,15 @@ it("keeps deleted channel history for preview below active chats", async () => {
   expect(screen.getByRole("button", { name: /^Chief, Chief of staff/ })).toBeInTheDocument();
 });
 
+it("offers Mark all as read and Deleted channels in the New menu, not only in the right-click menu", async () => {
+  await openSavedChannel();
+  await fireEvent.pointerDown(await screen.findByRole("button", { name: "New agent or channel" }), { button: 0 });
+  const menu = await screen.findByRole("menu");
+  expect(within(menu).getByRole("menuitem", { name: "Mark all as read" })).toBeInTheDocument();
+  await fireEvent.pointerUp(within(menu).getByRole("menuitem", { name: "Deleted channels" }), { button: 0 });
+  await screen.findByRole("region", { name: "Deleted channels" });
+});
+
 it("closes a channel deleted from another connection", async () => {
   await openSavedChannel();
   await window.openbot.agent.deleteChannel("channel-test");

@@ -20,10 +20,16 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.variableSet": "Set",
   "agentSettings.eventCheck.variableMissing": "Missing",
   "agentSettings.eventCheck.variablePlaceholder": "Enter a new value; saved values are hidden",
-  "agentSettings.eventCheck.saveVariable": "Save value",
   "agentSettings.eventCheck.removeVariable": "Remove value",
+  "agentSettings.eventCheck.keepVariable": "Keep value",
+  "agentSettings.eventCheck.variablePending": "This value is saved when you press {action}.",
+  "agentSettings.eventCheck.variableRemoving": "This value is removed when you press {action}.",
+  "agentSettings.eventCheck.variablesPause":
+    "Saving a new or removed private value pauses this check and resets its baseline. Turn the check on again after you save.",
+  "agentSettings.eventCheck.variableFailed": "{name} was not saved. {reason}",
   "agentSettings.eventCheck.saveBeforeVariables": "Save this check paused, then enter its private variable here.",
   "agentSettings.eventCheck.environmentDisabled": "Save your other changes first.",
+  "agentSettings.eventCheck.discardDescription": "Your unsaved changes and the private values you typed will be lost.",
   "agentSettings.eventCheck.picker.load": "Load my conversations",
   "agentSettings.eventCheck.picker.reload": "Reload the list",
   "agentSettings.eventCheck.picker.loading": "Loading your conversations…",
@@ -56,7 +62,7 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.picker.idDuplicate": "This ID is already chosen.",
   "agentSettings.eventCheck.picker.invalidValue":
     "The saved value is not a list of ID and mode pairs. Edit it as text, or clear it.",
-  "agentSettings.eventCheck.picker.needSaved": "Save {name} in the private variables first. The list is read with it.",
+  "agentSettings.eventCheck.picker.needSaved": "Save {name} first. The list is read with the saved value.",
   "agentSettings.eventCheck.picker.needTyped":
     "Add {name} above to load your conversations. It is used once and not saved here.",
   "agentSettings.eventCheck.test": "Test without AI",
@@ -99,6 +105,11 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.interval": "Repeat interval",
   "agentSettings.eventCheck.calendar": "Calendar timing",
   "agentSettings.eventCheck.seconds": "Every (seconds)",
+  "agentSettings.eventCheck.secondsUnit": "seconds",
+  "agentSettings.eventCheck.intervalHelp": "At least {min} seconds.",
+  "agentSettings.eventCheck.required": "This field is required.",
+  "agentSettings.eventCheck.saved": "Saved",
+  "agentSettings.eventCheck.reset": "Reset",
   "agentSettings.eventCheck.skipSelf": "Skip my account’s changes",
   "agentSettings.eventCheck.selfHelp":
     "On by default. Use the person who made the change, not the item’s creator or assignee. Missing author data makes the check fail quietly. Turn this off only when you want self-events, such as a test.",

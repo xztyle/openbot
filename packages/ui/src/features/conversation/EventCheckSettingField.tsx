@@ -11,8 +11,9 @@ export interface EventCheckSettingFieldProps {
   label: string;
   description: string;
   /**
-   * Whether the install needs the setting. `false` marks the label as optional. Absent when the
-   * template of the check is not known: the label is then shown without a marker.
+   * Whether the install needs the setting. `true` marks the label with `*` and `false` marks it as
+   * optional. A switch has no marker: it always holds a value. Absent when the template of the check
+   * is not known: the label is then shown without a marker.
    */
   required?: boolean | undefined;
   /** `boolean` settings hold the text `true` or `false` and are shown as a switch. */
@@ -28,17 +29,37 @@ export interface EventCheckSettingFieldProps {
   multiline?: boolean | undefined;
   /** What is wrong with the value, said under the field. Only the `form` layout shows it. */
   error?: JSX.Element;
+  /** The id of the text box of the `form` layout, so the owner can move focus to it. */
+  controlId?: string | undefined;
 }
 
-/** The label of a setting. A setting that the install does not need says so. */
-function SettingLabel(props: { label: string; required: boolean | undefined }) {
+/** `Optional. Pick a channel.` says it twice when the label already carries the chip. */
+function withoutOptionalWord(description: string): string {
+  return description.replace(/^optional[.:]\s+/iu, "");
+}
+
+/** `Labels (optional)` says it twice when the label already carries the chip. */
+function withoutOptionalSuffix(label: string): string {
+  return label.replace(/\s*\(optional\)\s*$/iu, "");
+}
+
+/**
+ * The label of a setting: `*` for a setting that the install needs, and a chip for one that it does
+ * not. `marker` is off where a `Field` draws the `*` itself.
+ */
+function SettingLabel(props: { label: string; required: boolean | undefined; marker: boolean }) {
   const { t } = useText();
   return (
     <>
-      {props.label}
+      {props.required === false ? withoutOptionalSuffix(props.label) : props.label}
       <Show when={props.required === false}>
         {" "}
         <span class="marketplace-install-optional">{t("marketplace.eventCheck.optional")}</span>
+      </Show>
+      <Show when={props.required === true && props.marker}>
+        <span class="ui-field-required" aria-hidden="true">
+          *
+        </span>
       </Show>
     </>
   );
@@ -60,7 +81,11 @@ function Row(props: { panel: boolean; children: JSX.Element }) {
  */
 export function EventCheckSettingField(props: EventCheckSettingFieldProps) {
   const descriptionId = () => `event-check-config-${props.name}`;
-  const label = () => <SettingLabel label={props.label} required={props.required} />;
+  const isSwitch = () => props.type === "boolean";
+  // A switch is never marked: it holds a value whether or not the person touches it.
+  const mark = () => (isSwitch() ? undefined : props.required);
+  const label = (marker: boolean) => <SettingLabel label={props.label} required={mark()} marker={marker} />;
+  const description = () => (mark() === false ? withoutOptionalWord(props.description) : props.description);
   const panel = () => props.layout === "panel";
   return (
     <Switch>
@@ -68,8 +93,8 @@ export function EventCheckSettingField(props: EventCheckSettingFieldProps) {
         <Row panel={panel()}>
           <SwitchField
             class={panel() ? undefined : "marketplace-install-switch"}
-            label={label()}
-            description={props.description}
+            label={label(true)}
+            description={description()}
             checked={props.value === "true"}
             disabled={props.disabled}
             onChange={(on) => props.onChange(on ? "true" : "false")}
@@ -80,8 +105,8 @@ export function EventCheckSettingField(props: EventCheckSettingFieldProps) {
         {(binding) => (
           <Row panel={panel()}>
             <EventCheckPickerField
-              label={label()}
-              description={props.description}
+              label={label(true)}
+              description={description()}
               picker={binding().picker}
               value={props.value}
               disabled={props.disabled}
@@ -97,24 +122,31 @@ export function EventCheckSettingField(props: EventCheckSettingFieldProps) {
       <Match when={panel()}>
         <div class="event-check-config-field">
           <label class="settings-field">
-            <span>{label()}</span>
+            <span>{label(true)}</span>
             <Input
               value={props.value}
               maxlength={8192}
+              required={props.required === true}
               disabled={props.disabled}
-              aria-describedby={props.description ? descriptionId() : undefined}
+              aria-describedby={description() ? descriptionId() : undefined}
               onInput={(event) => props.onChange(event.currentTarget.value)}
             />
           </label>
-          <Show when={props.description}>
+          <Show when={description()}>
             <Text as="small" variant="caption" tone="muted" id={descriptionId()} class="event-check-field-help">
-              {props.description}
+              {description()}
             </Text>
           </Show>
         </div>
       </Match>
       <Match when={true}>
-        <Field label={label()} description={props.description} required={props.required} error={props.error}>
+        <Field
+          label={label(false)}
+          description={description()}
+          required={props.required === true}
+          htmlFor={props.controlId}
+          error={props.error}
+        >
           <Show
             when={props.multiline}
             fallback={

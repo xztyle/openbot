@@ -337,7 +337,7 @@ export const messages = defineMessages("marketplace", {
   "marketplace.eventCheck.optional": "Optional",
   "marketplace.eventCheck.dialog.draftTitle": "To load your list",
   "marketplace.eventCheck.dialog.draftHelp":
-    "These private values are used once to read your list. They are not saved here. You save them for the check in the next step.",
+    "These private values are used once to read your list. They are saved for the check when you press Done in the next step.",
   "marketplace.eventCheck.need.nothing": "This event check needs no private variable and no setting.",
   "marketplace.eventCheck.need.interval": "Checks every {interval} by default.",
   "marketplace.eventCheck.forApp": "Event checks for this app",
@@ -388,12 +388,14 @@ export const messages = defineMessages("marketplace", {
   "marketplace.eventCheck.dialog.installing": "Installing…",
   "marketplace.eventCheck.dialog.done.title": "Add the private variables",
   "marketplace.eventCheck.dialog.done.paused":
-    "The checks were created paused. Enter the private variables below. Then test each check and enable it in agent settings, Event checks.",
+    "The checks were created paused. Enter the private variables below, then press Done to save them. Then test each check and enable it in agent settings, Event checks.",
   "marketplace.eventCheck.dialog.done.noVariables":
     "The checks were created paused. This event check needs no private variable. Test each check and enable it in agent settings, Event checks.",
   "marketplace.eventCheck.dialog.done.check": "{agent} · {name}",
   "marketplace.eventCheck.dialog.failedTitle": "Could not install on some agents",
   "marketplace.eventCheck.dialog.failedFor": "{agent}: {reason}",
+  "marketplace.eventCheck.dialog.valuesFailedTitle": "Could not save some private values",
+  "marketplace.eventCheck.dialog.discardValues": "The checks stay, but the private values you typed will not be saved.",
   "marketplace.eventCheck.dialog.retryFailed": "Try the failed agents again",
   "marketplace.eventCheck.dialog.finish": "Done",
 

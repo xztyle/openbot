@@ -728,4 +728,43 @@ describe("AgentSettingsPanel", () => {
     expect(await screen.findByText(/Claude acts without asking for approval/)).toBeInTheDocument();
     expect(screen.queryByText(/may ask for approval first/)).not.toBeInTheDocument();
   });
+
+  it("keeps an event check editor with unsaved changes open when the agent changes, and asks first", async () => {
+    mock = createMockOpenBot();
+    window.openbot = mock.api;
+    const [agent, setAgent] = createSignal(firstAgent);
+    render(() => (
+      <AgentSettingsPanel
+        onOpenUsage={vi.fn()}
+        agent={agent()}
+        runtimeSettings={{ provider: "codex", model: "gpt-5.6-sol", reasoningEffort: "high" }}
+        agentStatus={STORY_AGENT_STATUS}
+        modelOptions={STORY_MODELS}
+        working={false}
+        maxWidth={() => 640}
+        onClose={vi.fn()}
+        onWidthChange={vi.fn()}
+        onUpdateAgent={vi.fn(async () => undefined)}
+        onUpdateRuntimeSettings={vi.fn(async () => true)}
+        onSetAgentAvatar={vi.fn(async () => undefined)}
+        eventChecksAvailable
+      />
+    ));
+
+    await fireEvent.click(await screen.findByRole("button", { name: /^Event checks/u }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Add event check" }));
+    await fireEvent.input(await screen.findByRole("textbox", { name: "Name" }), { target: { value: "Draft check" } });
+
+    setAgent(secondAgent);
+    await screen.findByRole("alertdialog");
+    await fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Draft check");
+
+    // A change of agent with nothing unsaved leaves the editor, as before.
+    await fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).toBeNull());
+    setAgent(firstAgent);
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Name" })).toBeNull());
+  });
 });

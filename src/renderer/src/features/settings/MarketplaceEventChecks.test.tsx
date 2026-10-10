@@ -150,15 +150,57 @@ describe("Marketplace event check templates", () => {
     expect(other).toBeDefined();
     expect(field).toHaveAttribute("type", "password");
     if (!field) throw new Error("The masked field is missing.");
+    expect(screen.queryByRole("button", { name: "Save value" })).toBeNull();
     fireEvent.input(field, { target: { value: SECRET } });
-    const [save] = screen.getAllByRole("button", { name: "Save value" });
-    if (!save) throw new Error("The save button is missing.");
-    await waitFor(() => expect(save).toBeEnabled());
-    fireEvent.click(save);
+    expect(screen.getByText(/The checks were created paused/u)).toBeInTheDocument();
+    // Done writes the typed value for the check that has one, then closes the dialog.
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(setEnvironment).toHaveBeenCalledTimes(1));
     expect(setEnvironment).toHaveBeenCalledWith(expect.objectContaining({ name: "SAMPLE_API_TOKEN", value: SECRET }));
     expect(JSON.stringify(install.mock.calls)).not.toContain(SECRET);
-    expect(screen.getByText(/The checks were created paused/u)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText(/The checks were created paused/u)).toBeNull());
+  });
+
+  it("keeps the dialog open with what was typed when a private value cannot be saved on Done", async () => {
+    const { setEnvironment } = setup();
+    setEnvironment.mockRejectedValueOnce(new Error("The host did not keep the value."));
+    await openInstallDialog();
+    type(/^Account label/u, "Work");
+    type(/^Team key/u, "ENG");
+    fireEvent.click(screen.getByRole("button", { name: "Install on 1 agent" }));
+    const field = await screen.findByLabelText(/SAMPLE_API_TOKEN/u);
+    fireEvent.input(field, { target: { value: SECRET } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText(/Alpha: .*was not saved\. The host did not keep the value\./u)).toBeInTheDocument();
+    expect(screen.getByLabelText(/SAMPLE_API_TOKEN/u)).toHaveValue(SECRET);
+    // A second try writes the value that stayed, and closes.
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(setEnvironment).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByLabelText(/SAMPLE_API_TOKEN/u)).toBeNull());
+  });
+
+  it("asks before Cancel drops typed values, and keeps the form on Keep editing", async () => {
+    setup();
+    await openInstallDialog();
+    type(/^Account label/u, "Work");
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Discard changes?");
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByRole("textbox", { name: /^Account label/u })).toHaveValue("Work");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard changes" }));
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: /^Account label/u })).toBeNull());
+  });
+
+  it("moves focus to the first field with an error when Install finds one", async () => {
+    setup();
+    await openInstallDialog();
+    fireEvent.click(await screen.findByRole("button", { name: "Install on 1 agent" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /^Account label/u })).toHaveFocus());
+    type(/^Account label/u, "Work");
+    fireEvent.click(screen.getByRole("button", { name: "Install on 1 agent" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /^Team key$/u })).toHaveFocus());
   });
 
   it("keeps the checks that were created when one agent fails, and retries only the failed agent", async () => {
@@ -276,7 +318,7 @@ describe("Marketplace event check templates", () => {
       fireEvent.click(screen.getByRole("button", { name: "Install on 1 agent" }));
       await waitFor(() => expect(install).toHaveBeenCalledTimes(1));
       expect(install.mock.calls[0]?.[0].configuration.watchedConversations).toBe("ENG:all,ALICE:mentions");
-      // The typed value is in no install request, and nothing was saved until the user presses Save.
+      // The typed value is in no install request, and nothing was saved until the user presses Done.
       expect(JSON.stringify(install.mock.calls)).not.toContain(SECRET);
       expect(setEnvironment).not.toHaveBeenCalled();
 

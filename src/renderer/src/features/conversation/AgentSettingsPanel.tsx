@@ -70,7 +70,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     tables: { count: 0, open: false },
     memories: { count: 0, open: false },
     routines: { count: 0, open: false },
-    checks: { count: 0, open: false },
+    checks: { count: 0, open: false, unsaved: false },
     files: { open: false },
     skills: { count: 0, open: false, reopenAfterMarketplace: false },
   });
@@ -139,7 +139,9 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
         state.tables.open = false;
         state.memories.open = false;
         state.routines.open = false;
-        state.checks.open = false;
+        // An event check with unsaved changes stays open. Its editor asks to discard them, so a
+        // change of agent does not drop what the person typed, private values included.
+        if (!state.checks.unsaved) state.checks.open = false;
         state.files.open = false;
         state.skills.open = false;
         state.skills.reopenAfterMarketplace = false;
@@ -397,6 +399,13 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   draft.checks.count = count;
                 })
               }
+              onUnsavedChange={(unsaved) =>
+                setDraft((draft) => {
+                  draft.checks.unsaved = unsaved;
+                })
+              }
+              // The web page can be closed with the editor open. A desktop window closes without a prompt.
+              warnOnPageClose={props.remoteClient === true}
               onBack={() =>
                 setDraft((draft) => {
                   draft.checks.open = false;

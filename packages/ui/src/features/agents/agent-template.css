@@ -80,6 +80,17 @@
   line-clamp: 4;
 }
 
+/* What is published, and who can reach it, in words. It is the dialog description. */
+.agent-template-scope {
+  display: grid;
+  gap: var(--openbot-space-1);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+  text-align: center;
+  text-wrap: pretty;
+}
+
 .agent-template-rows {
   display: grid;
   overflow: hidden;

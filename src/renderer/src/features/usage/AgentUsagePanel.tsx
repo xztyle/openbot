@@ -137,11 +137,24 @@ export function AgentUsagePanel(props: AgentUsagePanelProps) {
   });
   // The filter and the per-agent table both name an agent by id, and props.agentName only
   // names the panel's own agent, so it must not label another agent's row.
+  // An id that the agent list does not carry belongs to an agent that was deleted after it ran.
+  // The report never shows that id. Several deleted agents get a number, so their rows differ.
+  const deletedAgentIds = () =>
+    (state.result?.agents ?? []).map((row) => row.agentId).filter((id) => !state.agents.some((a) => a.id === id));
   const agentLabel = (id: string): UsageAgentLabel => {
     const agent = state.agents.find((candidate) => candidate.id === id);
+    if (agent) return { name: agent.name, provider: agent.provider };
+    const own = id === props.agentId ? props.agentName : undefined;
+    // Until the agent list arrives, a missing agent is not known to be deleted.
+    if (own || state.phase !== "ready") return { name: own ?? "", provider: "" };
+    const deleted = deletedAgentIds();
+    const index = deleted.indexOf(id);
     return {
-      name: agent?.name ?? (id === props.agentId ? props.agentName : undefined) ?? id,
-      provider: agent?.provider ?? "",
+      name:
+        deleted.length > 1 && index >= 0
+          ? t("usage.deletedAgentNumbered", { number: index + 1 })
+          : t("usage.deletedAgent"),
+      provider: "",
     };
   };
   let reportBody: HTMLDivElement | undefined;

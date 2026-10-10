@@ -71,6 +71,7 @@ import {
 } from "solid-js";
 import { useText } from "../../text";
 import { AVATAR_HUE_LABEL } from "../agents/avatar-hue-label";
+import { limitNoteText } from "../settings/limit-note";
 
 export interface AgentRuntimeSettings {
   provider: AgentProviderId;
@@ -175,7 +176,47 @@ interface AgentSettingsDraft {
   /** Widening to full access waits here for the confirmation. */
   confirmingFullAccess: boolean;
   runtime: AgentRuntimeSettings;
-  saveError: string | null;
+  /** The name was left empty. An agent needs a name, so nothing is saved until there is one. */
+  nameMissing: boolean;
+  saveError: SaveFailure | null;
+}
+
+/**
+ * The setting that a failed save belongs to. The failure shows next to that control and names it,
+ * so it is not lost at the end of a long panel.
+ */
+type SaveField =
+  | "avatar"
+  | "avatarFace"
+  | "avatarColor"
+  | "name"
+  | "title"
+  | "description"
+  | "runtime"
+  | "notifications"
+  | "access"
+  | "computerUse"
+  | "automation"
+  | "busyMessage";
+
+const SAVE_FAILED_TEXT = {
+  avatar: "agentSettings.avatar.saveFailed",
+  avatarFace: "agentSettings.saveFailed.avatarFace",
+  avatarColor: "agentSettings.saveFailed.avatarColor",
+  name: "agentSettings.saveFailed.name",
+  title: "agentSettings.saveFailed.title",
+  description: "agentSettings.saveFailed.instructions",
+  runtime: "agentSettings.saveFailed.runtime",
+  notifications: "agentSettings.saveFailed.notifications",
+  access: "agentSettings.saveFailed.access",
+  computerUse: "agentSettings.saveFailed.computerUse",
+  automation: "agentSettings.saveFailed.automation",
+  busyMessage: "agentSettings.saveFailed.busyMessage",
+} as const satisfies Record<SaveField, AppTextKey>;
+
+interface SaveFailure {
+  field: SaveField | null;
+  message: string;
 }
 
 interface TextSaveRequest {
@@ -186,7 +227,8 @@ interface TextSaveRequest {
 }
 
 export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
-  const { t, errorMessage } = useText();
+  const { t, format, errorMessage } = useText();
+  const limitNote = limitNoteText(t, format);
   const [newChatOpen, setNewChatOpen] = createSignal(false);
   const [newChatError, setNewChatError] = createSignal<string | null>(null);
   async function startNewChat(start: () => Promise<void>): Promise<void> {
@@ -216,6 +258,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     busyMessage: "default",
     confirmingFullAccess: false,
     runtime: untrack(() => ({ ...props.runtimeSettings })),
+    nameMissing: false,
     saveError: null,
   });
   const avatarUrl = () => props.agent.avatarUrl ?? null;
@@ -263,11 +306,34 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     }
   }
 
-  /** The message under the form: every save path clears it first and reports its failure through it. */
-  function setSaveError(message: string | null): void {
+  /** The failure under the control: every save path clears it first and reports its failure through it. */
+  function setSaveError(message: string | null, field: SaveField | null = null): void {
     setDraft((state) => {
-      state.saveError = message;
+      state.saveError = message === null ? null : { field, message };
     });
+  }
+
+  /** What failed, then why when the error gives a reason a person can read. */
+  function failureText(field: SaveField | null, error: unknown): string {
+    return failureWithReason(t(field ? SAVE_FAILED_TEXT[field] : "agentSettings.saveFailed"), error);
+  }
+
+  function failureWithReason(what: string, error: unknown): string {
+    const reason = errorMessage(error, what);
+    return reason === what ? what : `${what} ${reason}`;
+  }
+
+  /** The failed save of one control, shown right under it. */
+  function SaveError(errorProps: { field: SaveField }): JSX.Element {
+    return (
+      <Show when={draft.saveError?.field === errorProps.field ? draft.saveError.message : null}>
+        {(message) => (
+          <p class="agent-settings-save-error" role="alert">
+            {message()}
+          </p>
+        )}
+      </Show>
+    );
   }
 
   const selectedModel = createMemo(() =>
@@ -340,6 +406,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
             state.dirty.description = false;
             state.dirty.name = false;
             state.dirty.title = false;
+            state.nameMissing = false;
           }
           if (!keep.name) state.fields.name = agent.name;
           if (!keep.title) state.fields.title = agent.title;
@@ -384,6 +451,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   async function saveAgentPatch(
     updates: Omit<UpdateAgentInput, "agentId">,
     agentId = props.agent.id,
+    field: SaveField | null = null,
   ): Promise<boolean> {
     if (!disposed && props.agent.id === agentId) setSaveError(null);
     try {
@@ -391,7 +459,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       return true;
     } catch (error) {
       if (!disposed && props.agent.id === agentId) {
-        setSaveError(errorMessage(error, t("agentSettings.saveFailed")));
+        setSaveError(failureText(field, error), field);
       }
       return false;
     }
@@ -406,12 +474,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       agentId,
       draftValue,
       field,
-      storedValue:
-        field === "name"
-          ? draftValue.trim() || t("agent.setup.nameFallback")
-          : field === "title"
-            ? draftValue.trim()
-            : draftValue,
+      storedValue: field === "name" || field === "title" ? draftValue.trim() : draftValue,
     };
   }
 
@@ -431,6 +494,8 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   }
 
   function queueTextSave(request: TextSaveRequest): void {
+    // An agent with no name is not saved as "New agent" in silence: the field shows the problem.
+    if (request.field === "name" && !request.storedValue) return;
     if (
       activeTextSave?.agentId === request.agentId &&
       activeTextSave.field === request.field &&
@@ -449,7 +514,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     const [key, request] = entry;
     pendingTextSaves.delete(key);
     activeTextSave = request;
-    const saved = await saveAgentPatch(textSavePatch(request), request.agentId);
+    const saved = await saveAgentPatch(textSavePatch(request), request.agentId, request.field);
     if (
       !disposed &&
       saved &&
@@ -494,11 +559,11 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     setSaveError(null);
     try {
       const saved = await props.onUpdateRuntimeSettings(agentId, settings, updates);
-      if (!saved && props.agent.id === agentId) setSaveError(t("agentSettings.saveFailed"));
+      if (!saved && props.agent.id === agentId) setSaveError(t(SAVE_FAILED_TEXT.runtime), "runtime");
       return saved;
     } catch (error) {
       if (props.agent.id === agentId) {
-        setSaveError(errorMessage(error, t("agentSettings.saveFailed")));
+        setSaveError(failureText("runtime", error), "runtime");
       }
       return false;
     }
@@ -513,9 +578,10 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
 
   function saveName(): void {
     if (windowInactive()) return;
-    const value = draft.fields.name.trim() || t("agent.setup.nameFallback");
+    const value = draft.fields.name.trim();
     setDraft((state) => {
       state.fields.name = value;
+      state.nameMissing = value === "";
     });
     queueTextSave(textSaveRequest("name", props.agent.id));
   }
@@ -544,7 +610,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       await props.onSetAgentAvatar(props.agent.id, image);
       return true;
     } catch (error) {
-      setSaveError(errorMessage(error, t("agentSettings.avatar.saveFailed")));
+      setSaveError(failureText("avatar", error), "avatar");
       return false;
     } finally {
       setDraft((state) => {
@@ -563,7 +629,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       const image = await normalizeAvatarFile(file);
       await props.onSetAgentAvatar(props.agent.id, image);
     } catch (error) {
-      setSaveError(errorMessage(error, t("agentSettings.avatar.processFailed")));
+      setSaveError(failureWithReason(t("agentSettings.avatar.processFailed"), error), "avatar");
     } finally {
       setDraft((state) => {
         state.avatar.uploadBusy = false;
@@ -573,11 +639,47 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   }
 
   async function selectGeneratedAvatar(seed: string): Promise<void> {
+    const agentId = props.agent.id;
     if (avatarUrl() && !(await setCustomAvatar(null))) return;
+    const previous = draft.avatar.seed;
     setDraft((state) => {
       state.avatar.seed = seed;
     });
-    await saveAgentPatch({ avatarSeed: seed });
+    if (await saveAgentPatch({ avatarSeed: seed }, agentId, "avatarFace")) return;
+    // The face on screen must be the saved one, so a failed save puts the old face back.
+    if (!disposed && props.agent.id === agentId && draft.avatar.seed === seed) {
+      setDraft((state) => {
+        state.avatar.seed = previous;
+      });
+    }
+  }
+
+  async function selectAvatarHue(next: AvatarHue | null): Promise<void> {
+    const agentId = props.agent.id;
+    const previous = draft.avatar.hue;
+    setDraft((state) => {
+      state.avatar.hue = next;
+    });
+    if (await saveAgentPatch({ avatarHue: next }, agentId, "avatarColor")) return;
+    if (!disposed && props.agent.id === agentId && draft.avatar.hue === next) {
+      setDraft((state) => {
+        state.avatar.hue = previous;
+      });
+    }
+  }
+
+  async function saveNotifications(next: boolean): Promise<void> {
+    const agentId = props.agent.id;
+    const previous = draft.notifications;
+    setDraft((state) => {
+      state.notifications = next;
+    });
+    if (await saveAgentPatch({ notifications: next }, agentId, "notifications")) return;
+    if (!disposed && props.agent.id === agentId && draft.notifications === next) {
+      setDraft((state) => {
+        state.notifications = previous;
+      });
+    }
   }
 
   async function selectModel(nextModel: AgentModelId, nextProvider: AgentProviderId): Promise<void> {
@@ -640,7 +742,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     setDraft((state) => {
       state.access = nextAccess;
     });
-    if (await saveAgentPatch({ access: nextAccess }, agentId)) return;
+    if (await saveAgentPatch({ access: nextAccess }, agentId, "access")) return;
     if (!disposed && props.agent.id === agentId && draft.access === nextAccess) {
       setDraft((state) => {
         state.access = previousAccess;
@@ -654,7 +756,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     setDraft((state) => {
       state.busyMessage = next;
     });
-    if (await saveAgentPatch({ busyMessageMode: next === "default" ? null : next }, agentId)) return;
+    if (await saveAgentPatch({ busyMessageMode: next === "default" ? null : next }, agentId, "busyMessage")) return;
     if (!disposed && props.agent.id === agentId && draft.busyMessage === next) {
       setDraft((state) => {
         state.busyMessage = previous;
@@ -674,7 +776,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     setDraft((state) => {
       state.computerUse = next;
     });
-    if (await saveAgentPatch({ computerUse: next }, agentId)) return;
+    if (await saveAgentPatch({ computerUse: next }, agentId, "computerUse")) return;
     if (!disposed && props.agent.id === agentId && draft.computerUse === next) {
       setDraft((state) => {
         state.computerUse = !next;
@@ -687,7 +789,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     setDraft((state) => {
       state.allowAutomation = next;
     });
-    if (await saveAgentPatch({ allowAutomation: next }, agentId)) return;
+    if (await saveAgentPatch({ allowAutomation: next }, agentId, "automation")) return;
     if (!disposed && props.agent.id === agentId && draft.allowAutomation === next) {
       setDraft((state) => {
         state.allowAutomation = !next;
@@ -759,7 +861,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                       ref={(element) => (avatarFileInput = element)}
                       class="sr-only"
                       type="file"
-                      aria-label={t("agentSettings.avatar.attachFiles")}
+                      aria-label={t("agentSettings.avatar.uploadImage")}
                       accept="image/png,image/jpeg,image/webp"
                       onChange={(event) => void uploadAgentAvatar(event.currentTarget.files?.[0])}
                     />
@@ -875,12 +977,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                         aria-label={t("agentSettings.avatar.autoColor")}
                         aria-pressed={draft.avatar.hue === null ? "true" : "false"}
                         data-cuelume-tap="select"
-                        onClick={() => {
-                          setDraft((state) => {
-                            state.avatar.hue = null;
-                          });
-                          void saveAgentPatch({ avatarHue: null });
-                        }}
+                        onClick={() => void selectAvatarHue(null)}
                       >
                         <span class="avatar-color-swatch avatar-color-swatch-auto">
                           {t("agentSettings.avatar.autoInitial")}
@@ -898,12 +995,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                             aria-label={t("agentSettings.avatar.hueColor", { hue: t(AVATAR_HUE_LABEL[option.hue]) })}
                             aria-pressed={draft.avatar.hue === option.hue ? "true" : "false"}
                             data-cuelume-tap="select"
-                            onClick={() => {
-                              setDraft((state) => {
-                                state.avatar.hue = option.hue;
-                              });
-                              void saveAgentPatch({ avatarHue: option.hue });
-                            }}
+                            onClick={() => void selectAvatarHue(option.hue)}
                           >
                             <span class="avatar-color-swatch" style={{ background: avatarHueSwatch(option.hue) }} />
                           </Button>
@@ -913,26 +1005,40 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   </Popover.Content>
                 </Popover.Root>
               </div>
+              <SaveError field="avatar" />
+              <SaveError field="avatarFace" />
+              <SaveError field="avatarColor" />
               <SettingsField label={t("agentSettings.name")}>
                 <Input
                   value={draft.fields.name}
                   aria-label={t("agentSettings.nameLabel")}
                   maxlength={INPUT_LIMITS.agentName}
+                  limitNote={limitNote}
+                  invalid={draft.nameMissing}
+                  aria-describedby={draft.nameMissing ? "agent-settings-name-missing" : undefined}
                   onValueChange={(value) =>
                     setDraft((state) => {
                       state.fields.name = value;
                       state.dirty.name = true;
+                      if (value.trim()) state.nameMissing = false;
                     })
                   }
                   onBlur={saveName}
                 />
+                <Show when={draft.nameMissing}>
+                  <small id="agent-settings-name-missing" class="agent-settings-field-error" role="alert">
+                    {t("agentSettings.nameMissing")}
+                  </small>
+                </Show>
               </SettingsField>
+              <SaveError field="name" />
               <SettingsField label={t("agentSettings.agentTitle")}>
                 <Input
                   value={draft.fields.title}
                   aria-label={t("agentSettings.agentTitleLabel")}
                   placeholder={t("agentSettings.agentTitlePlaceholder")}
                   maxlength={INPUT_LIMITS.agentTitle}
+                  limitNote={limitNote}
                   onValueChange={(value) =>
                     setDraft((state) => {
                       state.fields.title = value;
@@ -942,6 +1048,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   onBlur={saveTitle}
                 />
               </SettingsField>
+              <SaveError field="title" />
               <SettingsField label={t("agentSettings.instructions")}>
                 <Textarea
                   class="settings-instructions-input"
@@ -950,6 +1057,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   aria-label={t("agentSettings.instructionsLabel")}
                   placeholder={t("agentSettings.instructionsPlaceholder")}
                   maxlength={INPUT_LIMITS.agentDescription}
+                  limitNote={limitNote}
                   onValueChange={(value) => {
                     setDraft((state) => {
                       state.fields.description = value;
@@ -960,6 +1068,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   onBlur={saveDescription}
                 />
               </SettingsField>
+              <SaveError field="description" />
               <SettingsLinkGroup inset class="agent-settings-runtime-rows" title={t("agentSettings.groups.brain")}>
                 <ProviderModelPicker
                   variant="field"
@@ -1022,6 +1131,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   <SelectContent />
                 </Select>
               </SettingsLinkGroup>
+              <SaveError field="runtime" />
               {props.links}
               <SettingsLinkGroup inset title={t("agentSettings.groups.rules")}>
                 <SettingsLinkRow
@@ -1042,12 +1152,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                     size="sm"
                     aria-label={t("agentSettings.notifications.title")}
                     checked={draft.notifications}
-                    onChange={(next) => {
-                      setDraft((state) => {
-                        state.notifications = next;
-                      });
-                      void saveAgentPatch({ notifications: next });
-                    }}
+                    onChange={(next) => void saveNotifications(next)}
                   />
                 </div>
                 <SettingsLinkRow
@@ -1057,6 +1162,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   onClick={() => openPage("advanced")}
                 />
               </SettingsLinkGroup>
+              <SaveError field="notifications" />
             </Show>
             <Show when={page() === "permissions"}>
               <Show when={props.accessEditable}>
@@ -1091,6 +1197,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                     <SelectContent />
                   </Select>
                 </SettingsLinkGroup>
+                <SaveError field="access" />
               </Show>
               <Text as="p" class="agent-settings-runtime-note" variant="caption" tone="muted">
                 <Show
@@ -1121,6 +1228,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                     onChange={(next) => void saveComputerUse(next)}
                   />
                 </div>
+                <SaveError field="computerUse" />
               </Show>
               <Show when={props.automationEditable}>
                 <div class="agent-settings-notifications">
@@ -1135,6 +1243,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                     onChange={(next) => void saveAllowAutomation(next)}
                   />
                 </div>
+                <SaveError field="automation" />
               </Show>
             </Show>
             <Show when={page() === "advanced"}>
@@ -1173,6 +1282,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   </span>
                 </div>
               </SettingsLinkGroup>
+              <SaveError field="busyMessage" />
               <Show when={props.busyMessageModeEditable && steerUnsupported()}>
                 <Text as="p" class="agent-settings-runtime-note" variant="caption" tone="muted">
                   {t("agentSettings.busyMessage.steerUnsupported", {
@@ -1185,12 +1295,18 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                   <div>
                     <strong>{t("agentSettings.newChat.title")}</strong>
                     <span>{t("agentSettings.newChat.description")}</span>
+                    <Show when={props.working}>
+                      <span id="agent-settings-new-chat-busy" class="agent-settings-disabled-reason">
+                        {t("agentSettings.newChat.busy")}
+                      </span>
+                    </Show>
                   </div>
                   <Button
                     variant="outline"
                     type="button"
                     aria-label={t("agentSettings.newChat.confirm")}
                     aria-haspopup="dialog"
+                    aria-describedby={props.working ? "agent-settings-new-chat-busy" : undefined}
                     disabled={props.working}
                     onClick={() => {
                       setNewChatError(null);
@@ -1202,7 +1318,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                 </div>
               </Show>
             </Show>
-            <Show when={draft.saveError}>
+            <Show when={draft.saveError?.field === null ? draft.saveError.message : null}>
               {(message) => (
                 <p class="agent-settings-save-error" role="alert">
                   {message()}

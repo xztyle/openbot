@@ -1191,3 +1191,26 @@
   font-size: var(--openbot-text-sm);
   line-height: var(--openbot-leading-sm);
 }
+
+/* The reason a control is off, in the place where its description is. */
+.agent-settings-notifications div > .agent-settings-disabled-reason {
+  color: var(--openbot-text-muted);
+}
+
+/* The problem of one field, under that field. */
+.settings-field > .agent-settings-field-error {
+  display: block;
+  margin: var(--openbot-space-1) var(--openbot-space-2) 0;
+  color: var(--openbot-danger);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+/* The reason that the model cannot change, under the model row of the settings panel. */
+.provider-model-picker > .provider-model-disabled-reason {
+  display: block;
+  padding: 0 var(--openbot-space-3) var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}

@@ -26,7 +26,6 @@ export const messages = {
 
   "agentSettings.avatar.edit": "エージェントのアバターを編集",
   "agentSettings.avatar.editor": "アバターエディター",
-  "agentSettings.avatar.attachFiles": "ファイルを添付",
   "agentSettings.avatar.image": "画像",
   "agentSettings.avatar.replaceImage": "画像を置き換える",
   "agentSettings.avatar.uploadImage": "画像をアップロード",

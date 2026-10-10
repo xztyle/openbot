@@ -24,7 +24,6 @@ export const messages = {
   "agentSettings.instructionsPlaceholder": "Para que serve este agente",
   "agentSettings.avatar.edit": "Editar avatar do agente",
   "agentSettings.avatar.editor": "Editor de avatar",
-  "agentSettings.avatar.attachFiles": "Anexar arquivos",
   "agentSettings.avatar.image": "Imagem",
   "agentSettings.avatar.replaceImage": "Substituir imagem",
   "agentSettings.avatar.uploadImage": "Enviar imagem",

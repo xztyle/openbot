@@ -5,6 +5,10 @@
 //
 // The message was encrypted by the host for this browser. It holds the agent's name, a fixed phrase
 // for the kind of event, and ids. It never holds the text of a chat.
+//
+// Each push shows a notification. WebKit (iPhone and iPad) takes back the push permission of a site that
+// receives a push and shows nothing. So a push that arrives while the user looks at the app shows its
+// notification and closes it at once.
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -12,6 +16,12 @@ self.addEventListener("install", () => {
 
 self.addEventListener("push", (event) => {
   event.waitUntil(showNotification(event));
+});
+
+// The push service gave the browser another address. The page tells the host the new one: the host cannot
+// reach this browser until then. A page that is not open does it when it opens, as it does at each connect.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(tellPages());
 });
 
 self.addEventListener("notificationclick", (event) => {
@@ -33,16 +43,25 @@ async function showNotification(event) {
   }
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   // A page that the user looks at shows the event itself, with its own sound.
-  if (windows.some((client) => client.visibilityState === "visible" && client.focused)) return;
+  const watched = windows.some((client) => client.visibilityState === "visible" && client.focused);
   const agentId = text(message.agentId, 128);
+  const tag = agentId ? `agent:${agentId}` : "openbot";
   await self.registration.showNotification(text(message.title, 120) || "OpenBot", {
     body: text(message.body, 200),
     icon: "/icon-192x192.png",
     // One notification for each agent: a newer event of the same agent replaces the older one.
-    tag: agentId ? `agent:${agentId}` : "openbot",
-    renotify: true,
+    tag,
+    renotify: !watched,
+    silent: watched,
     data: { hostId: text(message.hostId, 128), agentId },
   });
+  if (!watched) return;
+  for (const notification of await self.registration.getNotifications({ tag })) notification.close();
+}
+
+async function tellPages() {
+  const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  for (const client of windows) client.postMessage({ type: "openbot:push-changed", scope: self.registration.scope });
 }
 
 async function openChat(hostId, agentId) {

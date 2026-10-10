@@ -2,8 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMockWebRuntime } from "../../preview/mock-web-runtime";
 import { WebApp } from "./WebApp";
+import type { WebRuntimeEvents } from "./web-runtime";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  localStorage.clear();
+});
 function setup() {
   let changed: (() => void) | null = null;
   const posted = vi.fn();
@@ -156,5 +160,87 @@ describe("browser account UI", () => {
       }),
     );
     expect(mock.posted).toHaveBeenCalledWith("session-changed");
+  });
+
+  it("keeps unsent text through a host list read and a retry that bring a new host object", async () => {
+    setup();
+    let events: WebRuntimeEvents | undefined;
+    let hostIsOffline = false;
+    const listHosts = vi.fn();
+    const view = render(() => (
+      <WebApp
+        createRuntime={(...args) => {
+          const runtime = createMockWebRuntime(...args);
+          events = args[1];
+          listHosts.mockImplementation(async () =>
+            (await runtime.listHosts()).map((host) => ({ ...host, memberLimit: 5 })),
+          );
+          return {
+            ...runtime,
+            listHosts,
+            connect: async (host) => {
+              if (hostIsOffline) throw new Error("Host is offline.");
+              return runtime.connect(host);
+            },
+          };
+        }}
+      />
+    ));
+    const composer = await screen.findByRole("textbox", { name: /^Message / });
+    composer.textContent = "Half a thought";
+    await fireEvent.input(composer);
+    const reads = listHosts.mock.calls.length;
+    window.dispatchEvent(new Event("focus"));
+    await waitFor(() => expect(listHosts.mock.calls.length).toBeGreaterThan(reads));
+
+    hostIsOffline = true;
+    events?.connection({ hostId: "preview-host", state: "offline", message: null });
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    hostIsOffline = false;
+    await fireEvent.click(retry);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument());
+    // The stored drafts are the ones that the controller holds. A page that goes away writes at once.
+    view.unmount();
+    expect(window.localStorage.getItem("openbot:composer-drafts:account")).toContain("Half a thought");
+  });
+
+  it("stores unsent text for the account, brings it back after a reload and drops it at sign-out", async () => {
+    const mock = setup();
+    // Each read needs its own response: a body is read once.
+    mock.fetch.mockImplementation(async () => Response.json({ user: { id: "account", email: "test@example.test" } }));
+    const key = "openbot:composer-drafts:account";
+    const first = render(() => <WebApp createRuntime={createMockWebRuntime} />);
+    const composer = await screen.findByRole("textbox", { name: /^Message / });
+    composer.textContent = "Do not lose this";
+    await fireEvent.input(composer);
+    // A page that goes away writes at once.
+    first.unmount();
+    expect(window.localStorage.getItem(key)).toContain("Do not lose this");
+
+    render(() => <WebApp createRuntime={createMockWebRuntime} />);
+    await waitFor(() =>
+      expect(screen.getByRole("textbox", { name: /^Message / })).toHaveTextContent("Do not lose this"),
+    );
+
+    mock.fetch.mockImplementation(async () => Response.json({ signedOut: true }));
+    await fireEvent.click(screen.getByRole("button", { name: "Open account actions" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
+    await screen.findByRole("textbox", { name: "Email" });
+    expect(window.localStorage.getItem(key)).toBeNull();
+  });
+
+  it("does not check the session of a signed-in page while the browser is offline", async () => {
+    const mock = setup();
+    render(() => <WebApp createRuntime={createMockWebRuntime} />);
+    await screen.findByRole("button", { name: "Open account actions" });
+    const sessionReads = () => mock.fetch.mock.calls.filter(([url]) => url === "/api/browser/session").length;
+    const before = sessionReads();
+    const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    try {
+      window.dispatchEvent(new Event("focus"));
+      expect(sessionReads()).toBe(before);
+    } finally {
+      online.mockRestore();
+    }
   });
 });

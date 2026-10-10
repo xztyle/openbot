@@ -20,6 +20,10 @@ import { WEB_APP_BILLING_PARAM } from "./web-billing";
 import type { WebRuntimeFactory } from "./web-client-context";
 import { takeHostingReturn } from "./web-hosted-servers";
 import { createWebLanguagePreference } from "./web-language-preference";
+import { webNetworkFailureMessage } from "./web-network-error";
+
+/** An account request that has no answer by now is over, so the screen shows Retry and not a wait without end. */
+const ACCOUNT_REQUEST_TIMEOUT_MS = 15_000;
 
 /** A sign-in refusal that the login form already shows. */
 class SignInIssueShown extends Error {}
@@ -149,13 +153,21 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     path: string,
     body?: { email: string } | { challengeId: string | null; code: string } | Record<string, never>,
   ) {
-    const response = await accountFetch(`/api/browser/${path}`, {
-      method: body ? "POST" : "GET",
-      credentials: "same-origin",
-      cache: "no-store",
-      headers: body ? { "Content-Type": "application/json", "X-OpenBot-Browser": "1" } : {},
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    let response: Response;
+    try {
+      response = await accountFetch(`/api/browser/${path}`, {
+        method: body ? "POST" : "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: body ? { "Content-Type": "application/json", "X-OpenBot-Browser": "1" } : {},
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(ACCOUNT_REQUEST_TIMEOUT_MS),
+      });
+    } catch (error) {
+      // The browser's own words ("Load failed") say nothing to a reader.
+      const message = webNetworkFailureMessage(error);
+      throw message ? new Error(message, { cause: error }) : error;
+    }
     const value = await response.json();
     if (!response.ok) {
       if (path === "email/start" || path === "email/verify") {
@@ -209,6 +221,8 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     };
   }
   async function checkSession() {
+    // A signed-in page that is offline keeps its session. The check would only fail, and show a toast.
+    if (state.account && !navigator.onLine) return;
     const generation = sessionGeneration;
     try {
       const account = accountFrom(await request("session"));

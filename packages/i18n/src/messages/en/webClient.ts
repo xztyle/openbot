@@ -41,6 +41,8 @@ export const messages = defineMessages("webClient", {
   "webClient.notice.download": "Download OpenBot",
   "webClient.notice.join": "Join with invitation",
   "webClient.notice.refreshHosts": "Refresh hosts",
+  "webClient.notice.reloadHint": "If this does not end, reload the app to get the newest version.",
+  "webClient.notice.reload": "Reload app",
   "webClient.agent.modelsFailed": "Could not load the host models.",
   "webClient.agent.refreshFailed":
     "The agent was created, but the workspace could not refresh. Reload before trying again.",
@@ -52,6 +54,8 @@ export const messages = defineMessages("webClient", {
   "webClient.error.checkConversation": "Check the conversation before sending again.",
   "webClient.error.hostReported": "The host reported an error. Check the conversation and host status.",
   "webClient.error.requestFailed": "The request failed.",
+  "webClient.error.offline": "You are offline. Check your connection and try again.",
+  "webClient.error.timeout": "The server did not answer in time. Try again.",
   "webClient.error.accessEnded": "Access to this host has ended.",
   "webClient.error.hostsFailed": "Could not load your hosts.",
   "webClient.error.enterInvitation": "Enter an invitation link.",

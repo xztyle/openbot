@@ -8,6 +8,14 @@ import type { ComposerDraft } from "./conversation-types";
 const COMPOSER_DRAFTS_STORAGE_KEY = "openbot:composer-drafts";
 const WRITE_DELAY_MS = 300;
 
+/**
+ * The storage key of one account in a browser. A browser profile can hold several accounts, so the web
+ * client keeps each account's drafts apart from the others and from the desktop key.
+ */
+export function accountComposerDraftsKey(accountId: string): string {
+  return `${COMPOSER_DRAFTS_STORAGE_KEY}:${accountId}`;
+}
+
 type Drafts = Record<string, ComposerDraft>;
 
 export interface StoredComposerDrafts {
@@ -33,9 +41,9 @@ interface ComposerDraftOwner {
  * kept either, because the message it names may not be loaded, and the user could not see or cancel
  * the reply.
  */
-export function readStoredComposerDrafts(): StoredComposerDrafts {
+export function readStoredComposerDrafts(storageKey = COMPOSER_DRAFTS_STORAGE_KEY): StoredComposerDrafts {
   try {
-    return decodeStoredDrafts(JSON.parse(window.localStorage.getItem(COMPOSER_DRAFTS_STORAGE_KEY) ?? "null"));
+    return decodeStoredDrafts(JSON.parse(window.localStorage.getItem(storageKey) ?? "null"));
   } catch {
     return { agents: {}, channels: {} };
   }
@@ -52,12 +60,20 @@ function decodeStoredDrafts(value: unknown): StoredComposerDrafts {
  *
  * A queue edit stores its own draft (`QUEUE_EDIT_STORAGE_KEY`), so for that conversation this keeps
  * the draft the edit restores when it ends.
+ *
+ * `discard` removes the stored drafts and stops every later write. Sign-out calls it, so the next
+ * person who uses this browser finds no text of the account that left.
  */
-export function writeComposerDraftsOnChange(owner: ComposerDraftOwner): void {
+export function writeComposerDraftsOnChange(
+  owner: ComposerDraftOwner,
+  storageKey = COMPOSER_DRAFTS_STORAGE_KEY,
+): { discard: () => void } {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let discarded = false;
   const write = () => {
     clearTimeout(timer);
     timer = undefined;
+    if (discarded) return;
     const agents = { ...owner.drafts() };
     const editAgentId = owner.editingAgentId();
     const editServerId = owner.editingServerId();
@@ -72,7 +88,7 @@ export function writeComposerDraftsOnChange(owner: ComposerDraftOwner): void {
     }
     try {
       window.localStorage.setItem(
-        COMPOSER_DRAFTS_STORAGE_KEY,
+        storageKey,
         JSON.stringify({ agents: storableDrafts(agents), channels: storableDrafts(owner.channelDrafts()) }),
       );
     } catch {
@@ -90,7 +106,7 @@ export function writeComposerDraftsOnChange(owner: ComposerDraftOwner): void {
       ] as const,
     () => {
       clearTimeout(timer);
-      timer = setTimeout(write, WRITE_DELAY_MS);
+      if (!discarded) timer = setTimeout(write, WRITE_DELAY_MS);
     },
     { defer: true },
   );
@@ -102,6 +118,18 @@ export function writeComposerDraftsOnChange(owner: ComposerDraftOwner): void {
     window.removeEventListener("pagehide", flush);
     flush();
   });
+  return {
+    discard() {
+      discarded = true;
+      clearTimeout(timer);
+      timer = undefined;
+      try {
+        window.localStorage.removeItem(storageKey);
+      } catch {
+        // Storage is unavailable, so nothing was stored.
+      }
+    },
+  };
 }
 
 function storableDrafts(drafts: Drafts): Record<string, { text: string }> {

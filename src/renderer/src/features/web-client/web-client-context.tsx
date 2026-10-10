@@ -21,6 +21,7 @@ import type {
   TeamPresenceSnapshot,
   TeamRealtimeEvent,
 } from "@openbot/contracts/ipc";
+import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
 import type { RemoteTeamHost } from "@openbot/team-client/remote-directory";
 import { createRemoteConnectionRecovery, type RemoteRecoveryStatus } from "@openbot/team-client/remote-recovery";
@@ -35,6 +36,7 @@ import { createHostRestartToasts } from "../updates/host-restart-toast";
 import type { WebHostNotice } from "./web-host-connections";
 import { createWebHostLifecycle } from "./web-host-lifecycle";
 import type { WebHostState } from "./web-host-lock";
+import { webNetworkFailureMessage } from "./web-network-error";
 import {
   createWebWorkspaceRuntime,
   WebHostConnectionError,
@@ -133,6 +135,16 @@ function setUnread(draft: WebWorkspaceState, agentId: string, count: number): vo
 
 /** Events that change unread counts come in bursts. A read starts this long after the first. */
 const READS_DELAY_MS = 1_000;
+/** A page that was hidden for longer than this renews its connection path when it comes back. */
+const BACKGROUND_REFRESH_MS = 10_000;
+/**
+ * A host that announced a restart into an update is away for about a minute. It gets one attempt in each
+ * of these intervals (a flat wait, not the doubling wait of other outages) for as long as the restart
+ * notice stays, which is `RESTART_NOTICE_MS` of the restart toast.
+ */
+const RESTART_RETRY_MIN_MS = 3_000;
+const RESTART_RETRY_SPREAD_MS = 2_000;
+const RESTART_RETRY_WINDOW_MS = 10 * 60_000;
 
 export type WebWorkspace = ReturnType<typeof createWebWorkspace>;
 
@@ -225,6 +237,20 @@ export function createWebWorkspace(
   const hostEventListeners = new Set<(event: AgentEvent | TeamRealtimeEvent) => void>();
   let connectionPromise: { hostId: string; opened: boolean; promise: Promise<void> } | null = null;
   let recoveryBlocked = false;
+  /** When the opened host announced its restart, or null. Cleared with `state.hostRestart`. */
+  let restartSince: number | null = null;
+  let restartTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * True from the connection loss of the opened host until its workspace is loaded again. A store read
+   * right after a write shows the old value, so the retry policy keeps its own copy.
+   */
+  let hostAway = false;
+  /** The time the page was hidden, or null while it is visible. */
+  let hiddenAt: number | null = null;
+  /** The read of the host's state after a return from the background, or after a window focus. */
+  let resyncPromise: Promise<void> | null = null;
+  /** The agents whose queue was not read at the last resync. Selecting one of them reads it. */
+  const staleQueues = new Set<string>();
   let recovery = makeRecovery();
   function makeRecovery() {
     return createRemoteConnectionRecovery(
@@ -245,8 +271,50 @@ export function createWebWorkspace(
   }
   function recover() {
     if (disposed || !hostId || recoveryBlocked) return;
+    // A host that restarts for an update comes back in a minute, so it is asked at a flat interval.
+    if (hostAway && restartActive()) {
+      scheduleRestartRetry(0);
+      return;
+    }
     recovery.offline();
     recovery.setActive(!document.hidden);
+  }
+  function restartActive(): boolean {
+    return restartSince !== null && Date.now() - restartSince < RESTART_RETRY_WINDOW_MS;
+  }
+  function stopRestartRetry() {
+    clearTimeout(restartTimer);
+    restartTimer = undefined;
+  }
+  function scheduleRestartRetry(delay = RESTART_RETRY_MIN_MS + Math.random() * RESTART_RETRY_SPREAD_MS) {
+    if (restartTimer !== undefined || disposed) return;
+    restartTimer = setTimeout(() => {
+      restartTimer = undefined;
+      void retryRestartedHost();
+    }, delay);
+  }
+  /** One attempt for a host that is restarting. A page in the background waits: `recover` runs on return. */
+  async function retryRestartedHost() {
+    const host = state.host;
+    if (disposed || recoveryBlocked || !host || !hostAway || document.hidden) return;
+    if (restartActive()) {
+      try {
+        await attemptConnection(host);
+      } catch {
+        // The next interval asks again.
+      }
+    }
+    if (disposed || recoveryBlocked || !hostAway || hostId !== host.hostId) return;
+    if (restartActive()) {
+      scheduleRestartRetry();
+      return;
+    }
+    // The host did not come back in time. It is offline as any other host, with the usual recovery.
+    restartSince = null;
+    setState((draft) => {
+      draft.hostRestart = null;
+    });
+    recover();
   }
   const hostLifecycle = createWebHostLifecycle({
     accountFetch: props.accountFetch,
@@ -292,7 +360,8 @@ export function createWebWorkspace(
         if (disposed || update.hostId !== hostId) return;
         if (recoveryBlocked && update.state === "offline" && !update.code) return;
         // A host that announced a restart comes back by itself; a wake is only for a stopped server.
-        const unavailable = update.state === "offline" && !update.code && !state.hostRestart;
+        const unavailable = update.state === "offline" && !update.code && !restartActive();
+        if (update.state !== "online") hostAway = true;
         setState((draft) => {
           if (update.state !== "online") draft.status = update.state;
           if (update.state !== "online")
@@ -305,8 +374,8 @@ export function createWebWorkspace(
                 : "server.compatibility.unsafeDataDescription",
             );
           if (update.state !== "online") {
-            draft.approvals = [];
-            draft.prompts = [];
+            // The approvals and prompts stay: the host's snapshot replaces them when it is back, so a
+            // short loss does not make a pending request disappear and come again.
             draft.progress = {};
             draft.takeovers = [];
             draft.browserControlState = { sessions: [] };
@@ -347,7 +416,7 @@ export function createWebWorkspace(
           void hostLifecycle.hostUnavailable(update.hostId, connectionPromise?.opened ?? false).then((retry) => {
             if (retry && !disposed && current === generation) recover();
           });
-        } else if (state.hostRestart && update.state === "offline") recover();
+        } else if (restartSince !== null && update.state === "offline") recover();
         if (update.state === "online" && update.resync && !connectionPromise) recover();
       },
       event(id, event) {
@@ -357,10 +426,13 @@ export function createWebWorkspace(
           setState((draft) => {
             draft.presence = event.snapshot;
           });
-        if (event.type === "host-restart")
+        if (event.type === "host-restart") {
+          restartSince = event.state === "none" ? null : (restartSince ?? Date.now());
+          if (event.state === "none") stopRestartRetry();
           setState((draft) => {
             draft.hostRestart = event.state === "none" ? null : { state: event.state, version: event.version };
           });
+        }
         if (event.type === "status") hooks.onStatus?.(event.status);
         if (event.type === "runtime-snapshot") {
           const { attentionComplete } = event.snapshot;
@@ -464,6 +536,7 @@ export function createWebWorkspace(
         if (event.type === "queue-changed") {
           const { snapshot } = event;
           queueRevisions.set(snapshot.agentId, (queueRevisions.get(snapshot.agentId) ?? 0) + 1);
+          staleQueues.delete(snapshot.agentId);
           setState((draft) => {
             draft.queues[snapshot.agentId] = snapshot;
           });
@@ -474,18 +547,20 @@ export function createWebWorkspace(
           setState((draft) => {
             if (event.layout.revision >= draft.sidebarLayout.revision) draft.sidebarLayout = event.layout;
           });
-        if (
-          [
-            "conversation",
-            "conversation-page",
-            "conversation-invalidated",
-            "turn-started",
-            "turn-completed",
-            "prompt",
-            "agent-input-resolved",
-          ].includes(event.type)
-        )
-          void refresh();
+        // Only the opened chat reads its page. Another agent's event changes nothing that this page shows.
+        const pageAgentId =
+          event.type === "conversation"
+            ? event.snapshot.agentId
+            : event.type === "conversation-page"
+              ? event.page.agentId
+              : event.type === "conversation-invalidated" ||
+                  event.type === "turn-started" ||
+                  event.type === "turn-completed" ||
+                  event.type === "prompt" ||
+                  event.type === "agent-input-resolved"
+                ? event.agentId
+                : null;
+        if (pageAgentId !== null && pageAgentId === selectedId) void refresh();
       },
     },
     props.accountFetch,
@@ -509,7 +584,9 @@ export function createWebWorkspace(
   function report(error: unknown) {
     if (!disposed)
       setState((draft) => {
-        draft.error = error instanceof Error ? error.message : currentText().t("webClient.error.requestFailed");
+        draft.error =
+          webNetworkFailureMessage(error) ??
+          (error instanceof Error ? error.message : currentText().t("webClient.error.requestFailed"));
       });
   }
   async function run(action: () => Promise<void>) {
@@ -593,6 +670,10 @@ export function createWebWorkspace(
           recovery = makeRecovery();
           hostLifecycle.endSleep();
           selectedId = null;
+          restartSince = null;
+          hostAway = false;
+          stopRestartRetry();
+          staleQueues.clear();
           setState((draft) => {
             draft.host = null;
             draft.workspaceLoaded = false;
@@ -615,6 +696,7 @@ export function createWebWorkspace(
             draft.sidebarLayout = defaultSidebarLayout();
             draft.duplicatingAgentIds = [];
             draft.capabilities = [];
+            draft.hostRestart = null;
             draft.status = "offline";
             draft.error = leftHostIds.has(refreshHostId) ? null : currentText().t("webClient.error.accessEnded");
           });
@@ -644,7 +726,9 @@ export function createWebWorkspace(
         if (!disposed) runtime.hosts?.setHosts(hosts);
       } catch (error) {
         if (!disposed) {
-          const message = error instanceof Error ? error.message : currentText().t("webClient.error.hostsFailed");
+          const message =
+            webNetworkFailureMessage(error) ??
+            (error instanceof Error ? error.message : currentText().t("webClient.error.hostsFailed"));
           setState((draft) => {
             draft.hostsError = message;
           });
@@ -799,18 +883,37 @@ export function createWebWorkspace(
     hostId = host.hostId;
     writeWebServerSelection(props.accountId, host.hostId);
     if (!keepWorkspace) selectedId = null;
-    if (!sameHost) hostLifecycle.endSleep();
+    if (!sameHost) {
+      hostLifecycle.endSleep();
+      restartSince = null;
+      stopRestartRetry();
+      staleQueues.clear();
+    }
     setState((draft) => {
-      draft.host = host;
+      // The same host keeps its object and takes the fields of the directory copy. A new object for each
+      // attempt would look like a host change to everything that reads `state.host`.
+      if (sameHost && draft.host?.hostId === host.hostId) {
+        draft.host.name = host.name;
+        draft.host.logoKey = host.logoKey;
+        draft.host.devicePublicKey = host.devicePublicKey;
+        draft.host.membershipId = host.membershipId;
+        draft.host.role = host.role;
+        if (host.memberLimit === undefined) delete draft.host.memberLimit;
+        else draft.host.memberLimit = host.memberLimit;
+      } else draft.host = host;
       draft.recovery = null;
       draft.connectionError = null;
       if (!sameHost) {
         draft.workspaceLoaded = false;
         draft.agentStatus = null;
         draft.models = [];
+        // A restart that the previous host announced says nothing about this one. For the same host the
+        // notice stays until the host is online again.
+        draft.hostRestart = null;
+        draft.approvals = [];
+        draft.prompts = [];
       }
       draft.status = "connecting";
-      draft.hostRestart = null;
       draft.memberId = sameHost ? draft.memberId : null;
       if (!keepWorkspace) {
         draft.agents = [];
@@ -825,8 +928,7 @@ export function createWebWorkspace(
         draft.failedTurns = {};
         draft.hiddenIds = [];
       }
-      draft.approvals = [];
-      draft.prompts = [];
+      // The approvals and prompts of the same host stay until its snapshot replaces them.
       draft.takeovers = [];
       draft.browserControlState = { sessions: [] };
       if (!keepWorkspace) {
@@ -860,7 +962,12 @@ export function createWebWorkspace(
         draft.models = models;
         draft.connectionError = null;
         draft.status = "online";
+        // The host is back, so a restart that it announced is over.
+        draft.hostRestart = null;
       });
+      restartSince = null;
+      stopRestartRetry();
+      hostAway = false;
       void loadPanels(
         capabilities,
         agents.map((agent) => agent.id),
@@ -891,6 +998,7 @@ export function createWebWorkspace(
       if (first) await select(first.id);
     } catch (error) {
       if (disposed || current !== generation) return;
+      hostAway = true;
       setState((draft) => {
         draft.status = "offline";
         // The workspace shows an incompatible host in full, so it is not also reported as an error.
@@ -915,7 +1023,8 @@ export function createWebWorkspace(
         setState((draft) => {
           draft.connectionError = currentText().t("server.connection.reconnecting", { name: host.name });
         });
-        await hostLifecycle.hostUnavailable(host.hostId, opened);
+        // A host that restarts for an update is not asleep, so the account service is not asked about it.
+        if (!restartActive()) await hostLifecycle.hostUnavailable(host.hostId, opened);
       }
       throw error;
     }
@@ -1081,6 +1190,7 @@ export function createWebWorkspace(
           const revision = queueRevisions.get(id) ?? 0;
           const queue = await runtime.queue(id);
           if (disposed || load.generation !== generation || (queueRevisions.get(id) ?? 0) !== revision) continue;
+          staleQueues.delete(id);
           setState((draft) => {
             draft.queues[id] = queue;
           });
@@ -1145,6 +1255,8 @@ export function createWebWorkspace(
   async function select(id: string) {
     const current = generation;
     selectedId = id;
+    // A resync after the background read only the queue of the opened chat. This one is read now.
+    if (staleQueues.delete(id)) loadQueue(id);
     setState((draft) => {
       draft.selectedId = id;
       draft.conversations[id] ??= {
@@ -1164,7 +1276,20 @@ export function createWebWorkspace(
       report(error);
     }
   }
-  async function resync() {
+  /**
+   * Reads what the page may have missed: the agents, the layout, the unread counts and the opened chat. The
+   * queue of the opened chat is read here; the other queues come with their events, or when their chat opens.
+   * A read that is already running is shared.
+   */
+  function resync(): Promise<void> {
+    if (resyncPromise) return resyncPromise;
+    const promise = readAgentsAgain().finally(() => {
+      if (resyncPromise === promise) resyncPromise = null;
+    });
+    resyncPromise = promise;
+    return promise;
+  }
+  async function readAgentsAgain() {
     const current = generation;
     try {
       const agents = await runtime.listAgents();
@@ -1178,13 +1303,35 @@ export function createWebWorkspace(
       setState((draft) => {
         if (sidebarLayout.revision >= draft.sidebarLayout.revision) draft.sidebarLayout = sidebarLayout;
       });
-      for (const agent of agents) loadQueue(agent.id);
+      staleQueues.clear();
+      for (const agent of agents) if (agent.id !== selectedId) staleQueues.add(agent.id);
+      if (selectedId) loadQueue(selectedId);
       loadReads();
       if (!selectedId && agents[0]) await select(agents[0].id);
       await refresh();
     } catch (error) {
       if (current === generation) report(error);
     }
+  }
+  /**
+   * The page comes back after a while in the background. The connection can look online and be dead: the
+   * phone slept, or the network changed. The peer renews its path first, then one small request tells whether
+   * the host answers. A host that does not answer starts a new connection; one that does is read again.
+   */
+  async function returnFromBackground() {
+    const current = generation;
+    runtime.networkRestored?.();
+    try {
+      // The compatibility read is the smallest one. A runtime without raw requests reads the status.
+      const probe = runtime.admin?.request;
+      if (probe) await probe("GET", TEAM_API_ROUTES.compatibility, () => undefined);
+      else await runtime.status();
+    } catch {
+      if (!disposed && current === generation && state.status === "online") recover();
+      return;
+    }
+    if (disposed || current !== generation) return;
+    await resync();
   }
   // Coalesce event bursts; an event during a read schedules one further authoritative read.
   async function refresh() {
@@ -1339,15 +1486,21 @@ export function createWebWorkspace(
     };
     const visibility = () => {
       if (document.hidden) {
+        hiddenAt ??= Date.now();
         hostLifecycle.cancelPending();
         if (hostId && state.status !== "online") generation += 1;
         recovery.setActive(false);
       } else {
+        const away = hiddenAt === null ? 0 : Date.now() - hiddenAt;
+        hiddenAt = null;
         hostLifecycle.resume();
         if (state.status !== "online" && state.recovery?.phase !== "suspended") {
           recover();
           // The user is back, so a wait that grew while the page was hidden is over. One attempt, not a loop.
           recovery.networkRestored();
+        } else if (state.status === "online" && away > BACKGROUND_REFRESH_MS) {
+          // The page was away long enough for the connection to die without a sign.
+          void returnFromBackground();
         }
       }
     };
@@ -1364,6 +1517,7 @@ export function createWebWorkspace(
       disposed = true;
       generation += 1;
       clearTimeout(readsTimer);
+      stopRestartRetry();
       recovery.dispose();
       hostLifecycle.dispose();
       document.removeEventListener("visibilitychange", visibility);

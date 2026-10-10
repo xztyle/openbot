@@ -100,6 +100,24 @@ function type(name: RegExp, value: string) {
   fireEvent.input(screen.getByRole("textbox", { name }), { target: { value } });
 }
 
+// The private fields carry the template label, as the first step does. Other controls name it too
+// (the remove button), so the fields are the password inputs among the matches.
+const passwordFields = () =>
+  screen.queryAllByLabelText(/Sample API token/u).filter((element) => element.getAttribute("type") === "password");
+async function findStepTwoFields(count = 1) {
+  await screen.findByRole("button", { name: "Done" });
+  return waitFor(() => {
+    const fields = passwordFields();
+    if (fields.length < count) throw new Error("The masked fields are not shown yet.");
+    return fields;
+  });
+}
+async function findStepTwoField() {
+  const [field] = await findStepTwoFields();
+  if (!field) throw new Error("The masked field is missing.");
+  return field;
+}
+
 describe("Marketplace event check templates", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -146,7 +164,7 @@ describe("Marketplace event check templates", () => {
     expect(setEnvironment).not.toHaveBeenCalled();
 
     // Second step: one masked field for each created check. The value goes to `setEnvironment` only.
-    const [field, other] = await screen.findAllByLabelText(/SAMPLE_API_TOKEN/u);
+    const [field, other] = await findStepTwoFields(2);
     expect(other).toBeDefined();
     expect(field).toHaveAttribute("type", "password");
     if (!field) throw new Error("The masked field is missing.");
@@ -168,15 +186,15 @@ describe("Marketplace event check templates", () => {
     type(/^Account label/u, "Work");
     type(/^Team key/u, "ENG");
     fireEvent.click(screen.getByRole("button", { name: "Install on 1 agent" }));
-    const field = await screen.findByLabelText(/SAMPLE_API_TOKEN/u);
+    const field = await findStepTwoField();
     fireEvent.input(field, { target: { value: SECRET } });
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(await screen.findByText(/Alpha: .*was not saved\. The host did not keep the value\./u)).toBeInTheDocument();
-    expect(screen.getByLabelText(/SAMPLE_API_TOKEN/u)).toHaveValue(SECRET);
+    expect(passwordFields()[0]).toHaveValue(SECRET);
     // A second try writes the value that stayed, and closes.
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     await waitFor(() => expect(setEnvironment).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByLabelText(/SAMPLE_API_TOKEN/u)).toBeNull());
+    await waitFor(() => expect(passwordFields()[0] ?? null).toBeNull());
   });
 
   it("asks before Cancel drops typed values, and keeps the form on Keep editing", async () => {
@@ -213,7 +231,7 @@ describe("Marketplace event check templates", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Install on 2 agents" }));
 
     expect(await screen.findByText("Beta: Install exploded.")).toBeInTheDocument();
-    expect(await screen.findAllByLabelText(/SAMPLE_API_TOKEN/u)).toHaveLength(1);
+    expect(await findStepTwoFields()).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Try the failed agents again" }));
     await waitFor(() => expect(install).toHaveBeenCalledTimes(3));
@@ -329,7 +347,7 @@ describe("Marketplace event check templates", () => {
       expect(setEnvironment).not.toHaveBeenCalled();
 
       // The next step opens with the value in its masked field, ready to save.
-      const field = await screen.findByLabelText(/SAMPLE_API_TOKEN/u);
+      const field = await findStepTwoField();
       expect(field).toHaveValue(SECRET);
       expect(setEnvironment).not.toHaveBeenCalled();
     });

@@ -165,6 +165,9 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
   };
   const agentName = (agentId: string) => props.agents.find((agent) => agent.id === agentId)?.name ?? agentId;
   const shown = () => state.touched;
+  // The names of the private variables as the template words them, so no raw `NAME_IN_CAPS` is shown.
+  const variableLabels = () =>
+    Object.fromEntries(props.template.variables.map((variable) => [variable.name, variable.label]));
 
   function toggleAgent(agentId: string, on: boolean) {
     setState((draft) => {
@@ -382,6 +385,7 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
                             {(api) => (
                               <EventCheckEnvironmentSettings
                                 api={api()}
+                                labels={variableLabels()}
                                 values={state.variables[created.id]?.values ?? {}}
                                 removed={state.variables[created.id]?.removed ?? {}}
                                 saveAction={t("marketplace.eventCheck.dialog.finish")}

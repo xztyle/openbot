@@ -51,3 +51,14 @@
     padding-inline-end: calc(var(--openbot-control-xl) + var(--openbot-space-1));
   }
 }
+
+/* The shortcut hint of the search field. A touch screen has no keyboard to use it with. */
+.sidebar-search-shortcut {
+  margin-inline-start: auto;
+}
+
+@media (pointer: coarse) {
+  .sidebar-search-shortcut {
+    display: none;
+  }
+}

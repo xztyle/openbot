@@ -44,9 +44,11 @@ import { useServers } from "./features/servers/servers-context";
 import { useSettings } from "./features/settings/settings-context";
 import { navItems } from "./features/settings/settings-tabs";
 import { useUsage } from "./features/usage/usage-context";
+import { keyboardShortcuts } from "./global-search-shortcut";
 import { useNavigation } from "./navigation";
 import { usePlatform } from "./platform";
 import { useProviders } from "./providers";
+import { currentDevicePlatform } from "./send-shortcut-preference";
 
 const FILE_SEARCH_LIMIT = 50;
 
@@ -333,7 +335,12 @@ export function useGlobalSearchSources(open: () => boolean) {
     { lazy: true },
   );
 
+  const shortcuts = createMemo(() =>
+    keyboardShortcuts(t, platform.appInfo()?.platform ?? currentDevicePlatform(), "desktop"),
+  );
+
   return {
+    shortcuts,
     channels: searchChannels,
     routines,
     routinesLoading,

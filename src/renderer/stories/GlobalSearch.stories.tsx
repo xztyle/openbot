@@ -6,6 +6,7 @@ import {
   type GlobalSearchFile,
   type GlobalSearchPage,
   type GlobalSearchRoutine,
+  type GlobalSearchShortcut,
 } from "@openbot/ui/components/GlobalSearch";
 import type { AgentMessage, AgentProfile } from "@openbot/ui/data";
 import { fn } from "storybook/test";
@@ -109,6 +110,14 @@ const actions: GlobalSearchAction[] = [
   { id: "appearance", label: "Appearance", detail: "App settings", group: "settings", icon: Palette, run: fn() },
 ];
 
+const shortcuts: GlobalSearchShortcut[] = [
+  { id: "search", label: "Search OpenBot", keys: "⌘K" },
+  { id: "settings", label: "Open settings", keys: "⌘," },
+  { id: "chat-search", label: "Search the open conversation", keys: "⌘F" },
+  { id: "next", label: "Next match", keys: "⌘G" },
+  { id: "previous", label: "Previous match", keys: "⇧⌘G" },
+];
+
 async function searchFiles(query: string, cursor?: string) {
   const needle = query.toLocaleLowerCase();
   return page(
@@ -160,6 +169,7 @@ const args: Parameters<typeof GlobalSearch>[0] = {
   channels,
   routines,
   actions,
+  shortcuts,
   onSearchMessages: fn(searchMessages),
   onSearchFiles: fn(searchFiles),
   onOpenChange: fn(),
@@ -179,7 +189,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Type "research" to see every group: agents, channels, messages, files, routines and settings. */
+/**
+ * Type "research" to see every group: agents, channels, messages, files, routines and settings. Type
+ * "shortcut" and open the action to see the keyboard shortcut list.
+ */
 export const Default: Story = {};
 
 /** The message search never answers, so a query shows the searching state. */
@@ -222,7 +235,13 @@ export const ManyResults: Story = {
 
 /** Only agents and messages, as on a web client host with no channels: no other filter shows. */
 export const AgentsAndMessagesOnly: Story = {
-  args: { channels: undefined, routines: undefined, actions: undefined, onSearchFiles: undefined },
+  args: {
+    channels: undefined,
+    routines: undefined,
+    actions: undefined,
+    shortcuts: undefined,
+    onSearchFiles: undefined,
+  },
 };
 
 export const NoAgents: Story = { args: { agents: [] } };

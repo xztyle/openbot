@@ -60,10 +60,11 @@ import { Effect } from "effect";
 import { createEffect, createMemo, createSignal, Loading, lazy, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { toAgentMessage } from "../../app-message-projection";
-import { isGlobalSearchShortcut } from "../../global-search-shortcut";
+import { globalSearchShortcutLabel, isGlobalSearchShortcut, keyboardShortcuts } from "../../global-search-shortcut";
 import { LayoutProvider, useLayout } from "../../layout";
 import { AgentUsagePanel } from "../../lazy-views";
 import { PlatformProvider } from "../../platform";
+import { currentDevicePlatform } from "../../send-shortcut-preference";
 import { WorkspaceFrame } from "../../WorkspaceFrame";
 import {
   ChannelCreateOverlay,
@@ -1450,6 +1451,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 compact={compact()}
                 onExpand={layout.expandSidebar}
                 onOpenSearch={() => setSearchOpen(true)}
+                searchShortcut={globalSearchShortcutLabel(currentDevicePlatform())}
                 onOpenMarketplace={() => setMarketplaceOpen(true)}
                 emptyAction={
                   firstAgent()
@@ -1687,6 +1689,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 open={searchOpen()}
                 agents={workspace.profiles()}
                 channels={channels.supported() ? globalSearchChannels(channels.state.channels) : undefined}
+                shortcuts={keyboardShortcuts(t, currentDevicePlatform(), "web")}
                 onSearchMessages={searchAllMessages}
                 onOpenChange={setSearchOpen}
                 onSelectAgent={(id) => {

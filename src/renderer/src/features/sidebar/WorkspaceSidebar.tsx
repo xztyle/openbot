@@ -6,10 +6,12 @@ import { SidebarMobileAppCard } from "@openbot/ui/features/sidebar/SidebarMobile
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import { globalSearchShortcutLabel } from "../../global-search-shortcut";
 import { useLayout } from "../../layout";
 import { DirectConversation } from "../../lazy-views";
 import { useNavigation } from "../../navigation";
 import { usePlatform } from "../../platform";
+import { currentDevicePlatform } from "../../send-shortcut-preference";
 import { useTurns } from "../../turns";
 import { useAgentActions } from "../agents/agent-actions";
 import { useAgents } from "../agents/agents-context";
@@ -217,6 +219,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
       compact={layout.leftPanelCompact()}
       onExpand={layout.expandSidebar}
       onOpenSearch={() => setGlobalSearchVisibility(true)}
+      searchShortcut={globalSearchShortcutLabel(platform.appInfo()?.platform ?? currentDevicePlatform())}
       footer={
         <Show when={!platform.landingPreview && !mobileAppDismissed()}>
           <SidebarMobileAppCard

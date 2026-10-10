@@ -15,7 +15,12 @@ export const messages = defineMessages("conversation", {
   "conversation.globalSearch.agentSettings": "Agent settings",
   "conversation.globalSearch.agentPage": "{agent}: {page}",
   "conversation.globalSearch.usage": "Usage",
+  "conversation.globalSearch.shortcuts": "Keyboard shortcuts",
+  "conversation.globalSearch.shortcut.settings": "Open settings",
+  "conversation.globalSearch.shortcut.chatSearch": "Search the open conversation",
+  "conversation.globalSearch.shortcut.server": "Switch to the server at this position",
   // Words that find a result. They are English also in other languages, so a translated label is not the only way in.
+  "conversation.globalSearch.keywords.shortcuts": "keyboard shortcut hotkey keys",
   "conversation.globalSearch.keywords.usage": "cost spend tokens money limit report",
   "conversation.globalSearch.keywords.serverGeneral": "server name logo identity publish notifications",
   "conversation.globalSearch.keywords.serverMembers": "people team invite invitation users roles admin",

@@ -817,6 +817,23 @@ describe("OpenBot connected desktop shell", () => {
     expect(await screen.findByRole("searchbox", { name: "Search messages" })).toBeInTheDocument();
   });
 
+  it("lists the keyboard shortcuts from global search, and Escape returns to the results", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+
+    await fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const input = await screen.findByRole("combobox", { name: "Search OpenBot" });
+    await fireEvent.input(input, { target: { value: "shortcut" } });
+    await fireEvent.click(await screen.findByRole("option", { name: /Keyboard shortcuts/ }));
+    const list = await screen.findByRole("region", { name: "Keyboard shortcuts" });
+    expect(within(list).getByText("Open settings")).toBeInTheDocument();
+    expect(within(list).getByText("Search the open conversation")).toBeInTheDocument();
+
+    await fireEvent.keyDown(within(list).getByRole("button", { name: "Back" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Keyboard shortcuts" })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "Search OpenBot" })).toBeInTheDocument();
+  });
+
   it("closes global search with Escape and a backdrop press", async () => {
     render(() => <App />);
     await screen.findByRole("heading", { name: "Chief" });

@@ -690,6 +690,7 @@ function GlobalMessageSearch() {
       routines={sources.routines()}
       routinesLoading={sources.routinesLoading()}
       actions={sources.actions()}
+      shortcuts={sources.shortcuts()}
       onSearchMessages={searchGlobalMessages}
       onSearchFiles={sources.searchFiles()}
       onOpenChange={setGlobalSearchVisibility}

@@ -1,6 +1,7 @@
 /** The search field, and the compact-mode button in its place. Both open the global search. */
 
-import { Button } from "@openbot/ui";
+import { Button, Kbd } from "@openbot/ui";
+import { Show } from "solid-js";
 import { useText } from "../../text";
 import { SearchIcon } from "./SidebarIcons";
 import { useSidebarScope } from "./sidebar-scope";
@@ -22,6 +23,14 @@ export function SidebarSearch() {
       >
         <SearchIcon />
         <span class="sidebar-search-placeholder">{t("common.search")}</span>
+        {/* Shown for a pointer with a keyboard. The stylesheet hides it for a coarse pointer. */}
+        <Show when={props.searchShortcut}>
+          {(shortcut) => (
+            <Kbd class="sidebar-search-shortcut" aria-hidden="true">
+              {shortcut()}
+            </Kbd>
+          )}
+        </Show>
       </Button>
       <Button
         variant="ghost"

@@ -501,6 +501,49 @@
   margin-left: calc(var(--openbot-space-0-5) * -1);
 }
 
+/* The shortcut list takes the place of the search field, the results and the footer. */
+.global-search-dialog[data-shortcuts] > :not(.global-search-shortcuts) {
+  display: none;
+}
+
+.global-search-shortcuts {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.global-search-shortcuts-header {
+  display: flex;
+  height: var(--openbot-control-xl);
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border-bottom: 1px solid var(--openbot-border);
+  padding: 0 var(--openbot-space-2);
+}
+
+.global-search-shortcuts-header h2 {
+  margin: 0;
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.global-search-shortcut-list {
+  margin: 0;
+  padding: var(--openbot-space-2) var(--openbot-space-4);
+  list-style: none;
+}
+
+.global-search-shortcut-row {
+  display: flex;
+  min-height: var(--openbot-control-lg);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-4);
+  font-size: var(--openbot-text-md);
+}
+
 @media (max-width: 640px) {
   .global-search-dialog {
     width: calc(100vw - 24px);

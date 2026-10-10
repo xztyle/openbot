@@ -32,6 +32,7 @@ import { createSearchStore } from "./stores/search-store";
 import { createSettingsStore, runtimeSettingsEqual } from "./stores/settings-store";
 import { createSkillsStore } from "./stores/skills-store";
 import { createVoiceStore } from "./stores/voice-store";
+import { createTrackedElement } from "./tracked-element";
 
 export function createConversationViewScope(props: ConversationProps) {
   const controller = useConversationController();
@@ -343,7 +344,7 @@ export function createConversationViewScope(props: ConversationProps) {
     elements: {
       scrollElement: () => scrollElement,
       virtualRoot: () => virtualRoot,
-      unreadMessagesDivider: () => unreadMessagesDivider,
+      unreadMessagesDivider: () => unreadMessagesDivider.get(),
     },
     sticky: {
       getStickToLatest: scrollFollow.stick,
@@ -565,7 +566,7 @@ export function createConversationViewScope(props: ConversationProps) {
   let agentActivitySlot: HTMLDivElement | undefined;
   let requiredInteractionElement: HTMLDivElement | undefined;
   let scrollResizeObserver: ResizeObserver | undefined;
-  let unreadMessagesDivider: HTMLDivElement | undefined;
+  const unreadMessagesDivider = createTrackedElement<HTMLDivElement>();
   let latestScrollFrame: number | undefined;
   let latestScrollSettleFrame: number | undefined;
   let currentUnreadCount = 0;
@@ -756,12 +757,19 @@ export function createConversationViewScope(props: ConversationProps) {
   });
 
   createEffect(
-    () => ({
-      request: props.messageFocusRequest,
-      agentId: props.agent?.id,
-      loaded: props.loaded,
-      messageIds: props.messages.map((message) => message.id).join("\u0000"),
-    }),
+    () => {
+      const request = props.messageFocusRequest;
+      // The ids are the signal that a message the request waits for has loaded. A request that was
+      // handled, or none, needs no list of ids, so the list changes of a streaming reply do not
+      // join every id.
+      const waiting = request ? request.nonce !== lastHandledMessageFocusNonce : false;
+      return {
+        request,
+        agentId: props.agent?.id,
+        loaded: props.loaded,
+        messageIds: waiting ? props.messages.map((message) => message.id).join("\u0000") : "",
+      };
+    },
     ({ request, agentId, loaded }) => {
       if (!request || request.agentId !== agentId || !loaded || request.nonce === lastHandledMessageFocusNonce) return;
       requestAnimationFrame(() => {
@@ -1093,7 +1101,7 @@ export function createConversationViewScope(props: ConversationProps) {
     scrollResizeObserver?.observe(element);
   };
   const setUnreadMessagesDividerElement = (element: HTMLDivElement) => {
-    unreadMessagesDivider = element;
+    unreadMessagesDivider.set(element);
   };
   const setAgentActivitySlotElement = (element: HTMLDivElement) => {
     agentActivitySlot = element;

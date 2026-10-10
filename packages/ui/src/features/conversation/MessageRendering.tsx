@@ -11,6 +11,7 @@ import { CodeBlock } from "./CodeBlock";
 import { CodePreview } from "./CodePreview";
 import { ComparisonTable } from "./ComparisonTable";
 import { CheckIcon, CopyIcon, MoreIcon, PlusIcon, ReactionIcon, ReplyIcon } from "./ConversationIcons";
+import { createContentBlockCache } from "./contentBlockCache";
 import { createSmoothHeightResize } from "./createSmoothHeightResize";
 import { DataTable, type MessageContentBlock, messageContentBlocks, reuseUnchangedBlocks } from "./DataTable";
 import { messageFileReferences } from "./FileReference";
@@ -27,18 +28,14 @@ import {
   streamingTrailReach,
 } from "./streamingReveal";
 
-let lastContentBlocks: { body: string; streaming: boolean; blocks: MessageContentBlock[] } | undefined;
-
-/**
+/*
  * The content blocks of a body. The bubble variant and the message body both split the same body
- * for each streamed step, so the last result is kept. Callers do not change the result.
+ * for each streamed step, and a list change asks for the body of each mounted row. Callers do not
+ * change the result.
  */
-function sharedContentBlocks(body: string, streaming: boolean): MessageContentBlock[] {
-  if (lastContentBlocks?.body !== body || lastContentBlocks.streaming !== streaming) {
-    lastContentBlocks = { body, streaming, blocks: messageContentBlocks(body, streaming) };
-  }
-  return lastContentBlocks.blocks;
-}
+const contentBlockCache = createContentBlockCache(messageContentBlocks);
+const sharedContentBlocks = (body: string, streaming: boolean): MessageContentBlock[] =>
+  contentBlockCache.get(body, streaming);
 
 export function conversationBubbleVariant(message: AgentMessage): BubbleVariant {
   if (message.author === "you") return "secondary";

@@ -49,8 +49,7 @@ export function createSmoothHeightResize(options: SmoothHeightResizeOptions): vo
       animation?.cancel();
       container.setAttribute("data-resizing", "true");
       const current = container.animate([{ height: `${startHeight}px` }, { height: `${nextHeight}px` }], {
-        duration: resizeDuration(),
-        easing: resizeEasing(),
+        ...resizeTiming(),
       });
       animation = current;
       void current.finished.then(() => finishAnimation(current)).catch(() => undefined);
@@ -63,16 +62,15 @@ export function createSmoothHeightResize(options: SmoothHeightResizeOptions): vo
   onCleanup(cancelAnimation);
 }
 
-function resizeDuration(): number {
-  const value = getComputedStyle(document.documentElement).getPropertyValue("--openbot-duration-overlay").trim();
-  if (value.endsWith("ms")) return Number.parseFloat(value) || 240;
-  if (value.endsWith("s")) return (Number.parseFloat(value) || 0.24) * 1_000;
-  return 240;
-}
-
-function resizeEasing(): string {
-  return (
-    getComputedStyle(document.documentElement).getPropertyValue("--openbot-ease-out").trim() ||
-    "cubic-bezier(0.23, 1, 0.32, 1)"
-  );
+/** One read of the computed style of the root for both values: each read of it can force a recalculation. */
+function resizeTiming(): { duration: number; easing: string } {
+  const style = getComputedStyle(document.documentElement);
+  const value = style.getPropertyValue("--openbot-duration-overlay").trim();
+  let duration = 240;
+  if (value.endsWith("ms")) duration = Number.parseFloat(value) || 240;
+  else if (value.endsWith("s")) duration = (Number.parseFloat(value) || 0.24) * 1_000;
+  return {
+    duration,
+    easing: style.getPropertyValue("--openbot-ease-out").trim() || "cubic-bezier(0.23, 1, 0.32, 1)",
+  };
 }

@@ -616,6 +616,39 @@ describe("OpenBotDatabase", () => {
     database.close();
   });
 
+  it("finds a capitalized non-ASCII word with a lowercase query, and keeps accents significant", async () => {
+    const database = await createDatabase();
+    const agent = testAgent();
+    database.replaceAgents("agents-unicode-search", [agent], "agents.imported");
+    const texts = ["État civil du dossier", "Álvaro llegó tarde", "\u212Aelvin report", "État\ncivil sur deux lignes"];
+    const messages: ConversationMessage[] = texts.map((text, index) => ({
+      id: `unicode-${index}`,
+      author: "user" as const,
+      text,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 0, index)).toISOString(),
+      status: "completed" as const,
+    }));
+    database.persistConversation(
+      { agentId: agent.id, threadId: agent.threadId, activeTurnId: null, revision: 0, messages },
+      "conversation.unicode-search",
+    );
+    const ids = (query: string) =>
+      database
+        .searchConversationMessages(query, agent.id)
+        .results.map((result) => result.message.id)
+        .sort();
+
+    expect(ids("état")).toEqual(["unicode-0", "unicode-3"]);
+    expect(ids("ÉTAT CIVIL")).toEqual(["unicode-0", "unicode-3"]);
+    expect(ids("álvaro")).toEqual(["unicode-1"]);
+    // The query is not accent-insensitive: "alvaro" is another word than "álvaro".
+    expect(ids("alvaro")).toEqual([]);
+    // Lowercase maps KELVIN SIGN to "k", which `LIKE` does not fold, so the ASCII pre-filter skips "k".
+    expect(ids("kelvin")).toEqual(["unicode-2"]);
+    expect(ids("100%")).toEqual([]);
+    database.close();
+  });
+
   it("pages a conversation in the order the live conversation shows it (#1540)", async () => {
     const database = await createDatabase();
     const agent = testAgent();

@@ -363,16 +363,25 @@ export class ConversationQueries {
     const offset = cursor ? decodeSearchCursor(cursor) : 0;
     const pattern = `%${escapeLike(normalized)}%`;
     const storedText = "json_extract(message.message_json, '$.text')";
-    const textMatch = `LOWER(${storedText}) LIKE ? ESCAPE '\\'`;
+    // SQLite `LOWER` changes only ASCII letters, so "état" would not find "État". The full Unicode
+    // lowercase is a JS function, which costs more for each row it runs on.
+    const textMatch = `${LOWERCASE_FUNCTION}(${storedText}) LIKE ? ESCAPE '\\'`;
     const terms = normalized.split(" ");
     // A query with a space can match across a line break. Only the rows that contain its longest
     // term pay for the whitespace call.
     const longestTerm = terms.reduce((longest, term) => (term.length > longest.length ? term : longest));
+    // `LIKE` folds ASCII case natively, so a row that cannot hold this ASCII run is dropped before the
+    // JS lowercase runs. The run is a necessary condition of the match, so the results do not change.
+    const asciiRun = asciiPrefilterRun(longestTerm);
+    const prefilter = asciiRun ? `${storedText} LIKE ? ESCAPE '\\' AND ` : "";
     const textFilter =
       terms.length > 1
-        ? `${textMatch} AND LOWER(${COLLAPSE_WHITESPACE_FUNCTION}(${storedText})) LIKE ? ESCAPE '\\'`
-        : textMatch;
-    const textParameters = terms.length > 1 ? [`%${escapeLike(longestTerm)}%`, pattern] : [pattern];
+        ? `${prefilter}${textMatch} AND ${LOWERCASE_FUNCTION}(${COLLAPSE_WHITESPACE_FUNCTION}(${storedText})) LIKE ? ESCAPE '\\'`
+        : `${prefilter}${textMatch}`;
+    const textParameters = [
+      ...(asciiRun ? [`%${escapeLike(asciiRun)}%`] : []),
+      ...(terms.length > 1 ? [`%${escapeLike(longestTerm)}%`, pattern] : [pattern]),
+    ];
     const filter = agentId ? "AND thread.agent_id = ?" : "";
     const parameters = agentId ? [...textParameters, agentId] : textParameters;
     const countRow = databaseRow(
@@ -853,4 +862,17 @@ function decodeSearchCursor(value: string): number {
 
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
+/**
+ * The longest run of ASCII characters of a lowercased search term that `LIKE` can test before the JS
+ * lowercase runs, or an empty string. Text can contain an ASCII letter that is not an ASCII letter in
+ * the stored text: lowercase maps KELVIN SIGN (U+212A) to "k" and LATIN CAPITAL LETTER I WITH DOT ABOVE
+ * (U+0130) to "i" with a combining dot. So a run never holds "i" or "k", and `LIKE` finds every row
+ * that the Unicode comparison finds.
+ */
+function asciiPrefilterRun(term: string): string {
+  let longest = "";
+  for (const run of term.split(/[^\x20-\x7e]|[ik]/giu)) if (run.length > longest.length) longest = run;
+  return longest;
 }

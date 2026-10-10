@@ -637,6 +637,9 @@ export function createConversationViewScope(props: ConversationProps) {
       // document listener that runs after this one. Closing the panel under it too discards the
       // edit the person was making.
       if (event.target instanceof Element && event.target.closest('[role="dialog"]')) return;
+      // Escape in the settings side panel belongs to the field that has focus. Closing the whole
+      // panel under it drops the draft of an event check or a routine that is open there.
+      if (event.target instanceof Element && event.target.closest(".settings-panel")) return;
       if (browserExpandedOpen() && !props.globalOverlayOpen) {
         event.preventDefault();
         setActiveRightPanel("browser");

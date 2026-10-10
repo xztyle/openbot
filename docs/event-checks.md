@@ -262,6 +262,28 @@ Hosts that have it answer `POST /v1/event-check-templates/discover` and
 `/v1/event-check-templates/discover-check` under the same `fork-host-v1` capability as the other
 template routes.
 
+Readable names. A person reads channel names, not IDs, so the check keeps the name of each chosen
+option next to the value, in `optionLabels` of the configuration entry (ID to name, at most 50,
+each name cleaned and at most 120 characters). The names are display text only: a program never
+reads them, and a change of a name never resets the baseline or the author. A save that carries no
+names keeps the saved ones, a name for an ID that left the value is dropped, and an agent cannot
+set names. A host or client from before `optionLabels` drops the field when it decodes the check.
+
+Naming and memory:
+
+- A discovery may carry `ids` (at most 50). A program that knows it names only those options, with
+  a few requests instead of a walk over the whole list. An older program ignores `ids` and lists
+  everything, which holds the names too.
+- For an installed check, the host keeps each list in memory for ten minutes (at most 32 lists,
+  one call shared by callers that ask at once). `refresh` asks it to read the app again. When the
+  app is rate limited or down, the host answers with the older list and `stale: true`. The answer
+  carries `readAt`. Nothing is written to disk, a log, a diagnostic or the audit file, no key is
+  made from a private value, and a draft discovery with a typed token is never kept. A change of a
+  private value, an approval, the program, the account or the template version drops every list.
+- The check editor loads the list when it opens, only for an installed check with all private
+  values saved, and so answers from this memory when it can. The install dialog loads the list only
+  when the person presses Load.
+
 ### Templates that ship
 
 | Template | Reads | Credential (private variable) |

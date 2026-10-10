@@ -292,6 +292,8 @@ describe("Marketplace event check templates", () => {
       expect(token).toHaveAttribute("type", "password");
       fireEvent.input(token, { target: { value: SECRET } });
       await waitFor(() => expect(load).toBeEnabled());
+      // A typed token is never sent on its own. Only the person pressing Load uses it.
+      expect(discover).not.toHaveBeenCalled();
 
       fireEvent.click(load);
       expect(await screen.findByRole("checkbox", { name: "Watch #engineering" })).toBeInTheDocument();
@@ -318,6 +320,10 @@ describe("Marketplace event check templates", () => {
       fireEvent.click(screen.getByRole("button", { name: "Install on 1 agent" }));
       await waitFor(() => expect(install).toHaveBeenCalledTimes(1));
       expect(install.mock.calls[0]?.[0].configuration.watchedConversations).toBe("ENG:all,ALICE:mentions");
+      // The names of the chosen conversations travel with the install, for the setting that holds them.
+      expect(install.mock.calls[0]?.[0].configurationLabels).toEqual({
+        watchedConversations: { ENG: "#engineering", ALICE: "@Alice Example" },
+      });
       // The typed value is in no install request, and nothing was saved until the user presses Done.
       expect(JSON.stringify(install.mock.calls)).not.toContain(SECRET);
       expect(setEnvironment).not.toHaveBeenCalled();
@@ -365,7 +371,8 @@ describe("Marketplace event check templates", () => {
       expect(await screen.findByText("The app did not accept the saved credentials.")).toBeInTheDocument();
       expect(screen.getByRole("textbox", { name: "Add by ID" })).toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: "Load my conversations" }));
+      // The button says what it does now: it tries again.
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
       expect(await screen.findByRole("checkbox", { name: "Watch #engineering" })).toBeInTheDocument();
       expect(discover).toHaveBeenCalledTimes(2);
     });

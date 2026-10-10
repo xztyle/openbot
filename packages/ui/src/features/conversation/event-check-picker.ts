@@ -27,7 +27,15 @@ export function pickerGroupKey(group: string): AppTextKey | null {
 /** What an editor needs to show one setting as a picker: how to read its list, and why it cannot yet. */
 export interface PickerBinding {
   picker: EventCheckTemplatePicker;
-  load(): Promise<EventCheckPickerOptions>;
+  load(options?: { refresh?: boolean }): Promise<EventCheckPickerOptions>;
+  /** The field loads the list by itself when it can. Only for an installed check that holds its value. */
+  autoLoad?: boolean | undefined;
+  /**
+   * Names only the given IDs, for a saved choice that has no name yet. It costs a few requests and
+   * not the whole list. Absent when the owner has no safe way to ask: a draft never reads with a
+   * token that was only typed, unless the person pressed Load.
+   */
+  resolve?(ids: string[]): Promise<EventCheckPickerOptions>;
   /** A sentence that says what is missing before the list can load. Absent when it can. */
   blocked?: string | undefined;
   /** A list that an earlier field of the same setting already loaded, so the field starts with it. */

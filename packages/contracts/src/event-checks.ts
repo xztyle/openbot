@@ -49,11 +49,24 @@ export interface EventCheckMcpSource {
   cursorArgument: string;
   nextCursorPointer: string;
 }
+/** The most names one setting keeps, as many as a picker value can hold. */
+export const EVENT_CHECK_OPTION_LABEL_MAX_ENTRIES = 50;
+/** The longest name kept for a choice. A longer name is cut with an ellipsis. */
+export const EVENT_CHECK_OPTION_LABEL_LIMIT = 120;
+/** The ID of one option of a picker: plain, one word. The same shape that a picker value holds. */
+export const EVENT_CHECK_OPTION_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 export interface EventCheckConfiguration {
   name: string;
   label: string;
   description: string;
   value: string;
+  /**
+   * The readable names of the choices that `value` holds, by ID, so a person sees a channel name and
+   * not its ID without a lookup. Display text only: no program reads it, and a change of it is never
+   * a change of what the check reads. Optional and additive: a client or host from before it drops it
+   * when it decodes the check, and the host keeps the saved names when a save carries none.
+   */
+  optionLabels?: Record<string, string>;
 }
 /** The marketplace template an installed check came from, and the version it was installed at. */
 export interface EventCheckTemplateLink {
@@ -448,16 +461,47 @@ export function decodeMcpEventCheck(value: unknown): EventCheck {
   return check;
 }
 
+/** Text from another party: no control or formatting character, one line, a bounded length. */
+export function cleanEventCheckOptionText(value: unknown, limit: number): string {
+  if (typeof value !== "string") throw new Error("Invalid picker option.");
+  const cleaned = value
+    .replace(/[\t\n\r\u2028\u2029]/g, " ")
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const characters = Array.from(cleaned);
+  return characters.length > limit ? `${characters.slice(0, limit - 1).join("")}…` : cleaned;
+}
+/**
+ * Saved names of choices, read leniently: an entry that is wrong is dropped, and a value that is not
+ * a record is none. A name never fails the check that carries it.
+ */
+export function decodeEventCheckOptionLabels(value: unknown): Record<string, string> | undefined {
+  if (!isDynamicRecord(value)) return undefined;
+  const labels: Record<string, string> = {};
+  let count = 0;
+  for (const [id, entry] of Object.entries(value)) {
+    if (count >= EVENT_CHECK_OPTION_LABEL_MAX_ENTRIES) break;
+    if (!EVENT_CHECK_OPTION_ID.test(id) || typeof entry !== "string") continue;
+    const label = cleanEventCheckOptionText(entry, EVENT_CHECK_OPTION_LABEL_LIMIT);
+    if (!label) continue;
+    labels[id] = label;
+    count++;
+  }
+  return count === 0 ? undefined : labels;
+}
 function decodeConfiguration(value: unknown): EventCheckConfiguration {
   if (!isDynamicRecord(value)) throw new Error("Invalid configuration field.");
   const name = text(value.name, 128, true);
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || ["__proto__", "constructor", "prototype"].includes(name))
     throw new Error("Invalid configuration name.");
+  const optionLabels = decodeEventCheckOptionLabels(value.optionLabels);
   return {
     name,
     label: text(value.label, 256, true),
     description: text(value.description, 2048),
     value: text(value.value, 8192),
+    ...(optionLabels ? { optionLabels } : {}),
   };
 }
 

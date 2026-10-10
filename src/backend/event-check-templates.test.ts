@@ -3,10 +3,11 @@
 // link resetting a live baseline, an update losing the user's settings, and a missing required setting.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { EventCheckTemplate } from "@openbot/contracts/event-check-templates";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { decodeEventCheckInput, type EventCheck, type EventCheckConfiguration } from "@openbot/contracts/event-checks";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { EVENT_CHECK_TOOL_DEFINITIONS } from "./agent/event-check-tools";
 import type { AgentService } from "./agent-service";
 import {
@@ -141,6 +142,7 @@ beforeEach(async () => {
   ({ root } = await startAgentTestFixture());
 });
 afterEach(async () => {
+  vi.useRealTimers();
   await stopAgentTestFixture(root, service);
   service = null;
 });
@@ -525,7 +527,8 @@ function never(): never {
 
 // A program that lists choices when it is asked to. It never prints the token, and its failure text
 // holds the token on purpose: the host must not pass that text on.
-const DISCOVERING = `let raw=''; for await (const chunk of process.stdin) raw += chunk;
+const DISCOVERING = `import fs from 'node:fs';
+let raw=''; for await (const chunk of process.stdin) raw += chunk;
 const config = JSON.parse(raw);
 if (config.discover === true) {
   const token = process.env.FIXTURE_API_TOKEN ?? '';
@@ -533,11 +536,22 @@ if (config.discover === true) {
     process.stderr.write('Fixture failed with ' + token + ' SERVER-TEXT\\nopenbot-error: auth\\n');
     process.exit(1);
   }
-  process.stdout.write(JSON.stringify({ options: [
+  const options = [
     { id: 'C1AAA', label: '#general-' + config.workspace + '\\u0007', group: 'channel' },
     { id: 'D1AAA', label: '@pat', group: 'dm' },
     { id: 'C1AAA', label: 'again', group: 'channel' },
-  ] }));
+  ];
+  // A workspace that is a path counts the runs and records what was asked, in files that a test reads.
+  // A file beside it makes the run fail with one code, as the app would when it limits or is down.
+  if (config.workspace.startsWith('/')) {
+    fs.appendFileSync(config.workspace + '.log', JSON.stringify(config.ids ?? null) + '\\n');
+    for (const code of ['rate_limited', 'upstream', 'auth'])
+      if (fs.existsSync(config.workspace + '.' + code)) {
+        process.stderr.write('Fixture failed SERVER-TEXT\\nopenbot-error: ' + code + '\\n');
+        process.exit(1);
+      }
+  }
+  process.stdout.write(JSON.stringify({ options: Array.isArray(config.ids) ? options.filter((option) => config.ids.includes(option.id)) : options }));
   process.exit(0);
 }
 process.stdout.write(JSON.stringify({items:[{id:config.workspace,revision:'1',actor:'someone'}],hasNextPage:false}));`;
@@ -567,7 +581,12 @@ function discovering(version = "1.0.0", program = DISCOVERING): EventCheckTempla
   };
 }
 const draft = (
-  overrides: Partial<{ variables: Record<string, string>; field: string; configuration: Record<string, string> }> = {},
+  overrides: Partial<{
+    variables: Record<string, string>;
+    field: string;
+    configuration: Record<string, string>;
+    ids: string[];
+  }> = {},
 ) => ({
   slug: "fixture",
   field: "rules",
@@ -744,4 +763,236 @@ it("refuses to list choices for a check that runs an earlier program, or has no 
   await expect(
     runCauseEffect(service.eventChecks.discoverCheck({ ...target, id: plain.id }, TEST_USER)),
   ).rejects.toThrow();
+});
+
+/** The fixture with a picker and no private variable, so a check can run and hold a baseline. */
+function labelled(): EventCheckTemplate {
+  const shipped = discovering();
+  return { ...shipped, variables: [] };
+}
+const rulesField = (check: EventCheck) =>
+  check.source.kind === "api" ? check.source.configuration.find((field) => field.name === "rules") : undefined;
+
+/** The check as a client sends it back: through the wire, with only the fields it edits changed. */
+function resave(check: EventCheck, edit: (field: EventCheckConfiguration) => EventCheckConfiguration) {
+  const input = decodeEventCheckInput(JSON.parse(JSON.stringify(check)));
+  if (input.source.kind !== "api") throw new Error("Expected an API check.");
+  const configuration = input.source.configuration.map((field) => (field.name === "rules" ? edit(field) : field));
+  return { ...input, source: { ...input.source, configuration } };
+}
+
+it("keeps the names of picked choices with the check, without touching the baseline, and drops names of choices that left", async () => {
+  const { service, checks } = await boot(labelled(), DISCOVERING);
+  const installed = await runCauseEffect(
+    service.eventChecks.templateInstall(
+      {
+        ...request({ workspace: "alpha", rules: "C1AAA:mentions,D1AAA:all" }),
+        // A name for an ID that the value does not hold is dropped, and so is one for a plain setting.
+        configurationLabels: { rules: { C1AAA: "#general", D1AAA: "@pat", Z9ZZZ: "#gone" }, workspace: { A1: "x" } },
+      },
+      TEST_USER,
+    ),
+  );
+  expect(rulesField(installed)?.optionLabels).toEqual({ C1AAA: "#general", D1AAA: "@pat" });
+  const active = await runCauseEffect(service.eventChecks.save({ ...installed, active: true }, TEST_USER));
+  expect((await runCauseEffect(service.eventChecks.checkNow({ agentId: "chief", id: active.id }))).status).toBe(
+    "baseline",
+  );
+  const before = checks.state(active.id);
+  expect(before.baseline).not.toBeNull();
+  // A rename is display text: the baseline stays.
+  const renamed = await runCauseEffect(
+    service.eventChecks.save(
+      resave(active, (field) => ({ ...field, optionLabels: { C1AAA: "#general-renamed" } })),
+      TEST_USER,
+    ),
+  );
+  expect(rulesField(renamed)?.optionLabels).toEqual({ C1AAA: "#general-renamed", D1AAA: "@pat" });
+  expect(checks.state(active.id)).toEqual(before);
+  // A save that carries no names (an older client) keeps the saved ones.
+  const stripped = await runCauseEffect(
+    service.eventChecks.save(
+      resave(renamed, ({ optionLabels: _names, ...rest }) => rest),
+      TEST_USER,
+    ),
+  );
+  expect(rulesField(stripped)?.optionLabels).toEqual({ C1AAA: "#general-renamed", D1AAA: "@pat" });
+  expect(checks.state(active.id)).toEqual(before);
+  // An agent cannot name choices, and its save does not remove the names.
+  const byAgent = await runCauseEffect(
+    service.eventChecks.save(
+      resave(stripped, (field) => ({ ...field, optionLabels: { C1AAA: "#other-name" } })),
+      AGENT,
+    ),
+  );
+  expect(rulesField(byAgent)?.optionLabels).toEqual({ C1AAA: "#general-renamed", D1AAA: "@pat" });
+  // A choice that leaves the value takes its name along. The value changed, so the baseline resets.
+  const narrowed = await runCauseEffect(
+    service.eventChecks.save(
+      resave(byAgent, (field) => ({ ...field, value: "C1AAA:mentions" })),
+      TEST_USER,
+    ),
+  );
+  expect(rulesField(narrowed)?.optionLabels).toEqual({ C1AAA: "#general-renamed" });
+  expect(checks.state(active.id).baseline).toBeNull();
+});
+
+it("asks the program for only the named IDs, for a draft and for an installed check", async () => {
+  const { service } = await boot(discovering(), DISCOVERING);
+  const asked = (log: string) => readFileSync(`${log}.log`, "utf8").trim().split("\n");
+  const draftLog = join(root, "draft-run");
+  const named = await runCauseEffect(
+    service.eventChecks.templateDiscover(draft({ configuration: { workspace: draftLog }, ids: ["D1AAA"] }), TEST_USER),
+  );
+  expect(named.options.map((option) => option.id)).toEqual(["D1AAA"]);
+  expect(asked(draftLog)).toEqual([JSON.stringify(["D1AAA"])]);
+  const installLog = join(root, "installed-run");
+  const installed = await runCauseEffect(
+    service.eventChecks.templateInstall(request({ workspace: installLog }), TEST_USER),
+  );
+  await runCauseEffect(
+    service.eventChecks.setEnvironment(
+      { agentId: "chief", id: installed.id, name: "FIXTURE_API_TOKEN", value: "good-stored-token" },
+      TEST_USER,
+    ),
+  );
+  const target = { agentId: "chief", id: installed.id, field: "rules" };
+  const some = await runCauseEffect(service.eventChecks.discoverCheck({ ...target, ids: ["C1AAA"] }, TEST_USER));
+  expect(some.options.map((option) => option.id)).toEqual(["C1AAA"]);
+  const all = await runCauseEffect(service.eventChecks.discoverCheck(target, TEST_USER));
+  expect(all.options.map((option) => option.id)).toEqual(["C1AAA", "D1AAA"]);
+  expect(asked(installLog)).toEqual([JSON.stringify(["C1AAA"]), "null"]);
+});
+
+/** An installed check with a saved private value, whose program counts its runs in a file. */
+async function listingCheck() {
+  const booted = await boot(discovering(), DISCOVERING);
+  const log = join(root, "runs");
+  const installed = await runCauseEffect(
+    booted.service.eventChecks.templateInstall(request({ workspace: log }), TEST_USER),
+  );
+  const setValue = (value: string | null) =>
+    runCauseEffect(
+      booted.service.eventChecks.setEnvironment(
+        { agentId: "chief", id: installed.id, name: "FIXTURE_API_TOKEN", value },
+        TEST_USER,
+      ),
+    );
+  await setValue("good-stored-token");
+  const target = { agentId: "chief", id: installed.id, field: "rules" };
+  const list = (
+    extra: { ids?: string[]; refresh?: boolean } = {},
+    actor: typeof TEST_USER | typeof AGENT = TEST_USER,
+  ) => runCauseEffect(booted.service.eventChecks.discoverCheck({ ...target, ...extra }, actor));
+  const runs = () => (existsSync(`${log}.log`) ? readFileSync(`${log}.log`, "utf8").trim().split("\n").length : 0);
+  return { ...booted, log, installed, target, setValue, list, runs };
+}
+
+it("serves a list from memory for ten minutes, names a few IDs from it, and reads the app again on refresh", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { list, runs } = await listingCheck();
+  const first = await list();
+  expect(runs()).toBe(1);
+  expect(first.readAt).toBeDefined();
+  expect(first.stale).toBeUndefined();
+  const second = await list();
+  expect(runs()).toBe(1);
+  expect(second).toEqual(first);
+  // A call for a few IDs is answered from the whole list, with no request to the app.
+  const some = await list({ ids: ["D1AAA"] });
+  expect(some.options.map((option) => option.id)).toEqual(["D1AAA"]);
+  expect(some.readAt).toBe(first.readAt);
+  expect(runs()).toBe(1);
+  await list({ refresh: true });
+  expect(runs()).toBe(2);
+  vi.setSystemTime(Date.now() + 11 * 60_000);
+  const later = await list();
+  expect(runs()).toBe(3);
+  expect(later.readAt).not.toBe(first.readAt);
+});
+
+it("shares one call between callers that ask for the same list at once", async () => {
+  const { list, runs } = await listingCheck();
+  const [one, two] = await Promise.all([list(), list()]);
+  expect(runs()).toBe(1);
+  expect(two).toEqual(one);
+});
+
+it("drops the lists when a private value changes, so an old list is not served for the new value", async () => {
+  const { list, runs, setValue } = await listingCheck();
+  await list();
+  await list();
+  expect(runs()).toBe(1);
+  await setValue("good-another-token");
+  await list();
+  expect(runs()).toBe(2);
+  // A removed value leaves nothing to list with, and nothing in memory answers for it.
+  await setValue(null);
+  await expect(list()).rejects.toThrow();
+  expect(runs()).toBe(2);
+});
+
+it("refuses an agent even while the list is in memory, and runs nothing for it", async () => {
+  const { list, runs } = await listingCheck();
+  await list();
+  await expect(list({}, AGENT)).rejects.toThrow();
+  await expect(list({ ids: ["C1AAA"] }, AGENT)).rejects.toThrow();
+  expect(runs()).toBe(1);
+});
+
+it("refuses a check that no longer runs the reviewed program, even while the list is in memory", async () => {
+  const { list, programs, runs } = await listingCheck();
+  await list();
+  await writeFile(join(programs, "fixture@1.0.0.mjs"), `${DISCOVERING}\n// edited`);
+  await expect(list()).rejects.toThrow();
+  expect(runs()).toBe(1);
+});
+
+it("keeps nothing from a draft: each draft call reads the app, and an installed check never gets its list", async () => {
+  const { service, log, list, runs } = await listingCheck();
+  const typed = "good-draft-token-PRIVATE-4412";
+  const asDraft = () =>
+    runCauseEffect(
+      service.eventChecks.templateDiscover(
+        draft({ configuration: { workspace: log }, variables: { FIXTURE_API_TOKEN: typed } }),
+        TEST_USER,
+      ),
+    );
+  await asDraft();
+  await asDraft();
+  expect(runs()).toBe(2);
+  // The check shares the program and the settings of the drafts. Its own call still reads the app.
+  await list();
+  expect(runs()).toBe(3);
+  expect(filesHolding(root, typed)).toEqual([]);
+});
+
+it("answers with the older list, marked stale, when the app is rate limited or down, and not for a refused token", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { list, log, runs } = await listingCheck();
+  const first = await list();
+  vi.setSystemTime(Date.now() + 11 * 60_000);
+  await writeFile(`${log}.rate_limited`, "");
+  const limited = await list();
+  expect(runs()).toBe(2);
+  expect(limited.stale).toBe(true);
+  expect(limited.readAt).toBe(first.readAt);
+  expect(limited.options).toEqual(first.options);
+  await rm(`${log}.rate_limited`);
+  await writeFile(`${log}.upstream`, "");
+  expect((await list({ refresh: true })).stale).toBe(true);
+  await rm(`${log}.upstream`);
+  // The token was refused: an older list would hide that, so the call fails with the fixed text.
+  await writeFile(`${log}.auth`, "");
+  const refused = await list({ refresh: true }).then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(refused).toBeInstanceOf(Error);
+  expect(refused instanceof Error ? refused.message : "").toContain("did not accept the saved credentials");
+  expect(refused instanceof Error ? refused.message : "").not.toContain("SERVER-TEXT");
+  await rm(`${log}.auth`);
+  const recovered = await list();
+  expect(recovered.stale).toBeUndefined();
+  expect(recovered.readAt).not.toBe(first.readAt);
 });

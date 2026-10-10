@@ -7,7 +7,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // One run does all its work and prints one page: it either covers the whole recent
 // window or fails with a safe message. It never prints a partial window.
 // With `discover: true` in the input it does not check for events. It lists the conversations of
-// the token's user, so that a person can pick them in the app instead of copying IDs.
+// the token's user, so that a person can pick them in the app instead of copying IDs. With `ids`
+// besides, it names only those conversations, so the app can show a saved choice by its name.
 const API = "https://slack.com/api/";
 const MAX_INPUT_BYTES = 65536;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
@@ -28,6 +29,10 @@ const MAX_LABEL = 80;
 const MAX_DESCRIPTION = 120;
 const MAX_DM_LOOKUPS = 60;
 const MAX_RESOLVE_PAGES = 5;
+// The member list is read in pages of PAGE_SIZE. A workspace of thousands of people is still bounded.
+const MAX_USER_PAGES = 15;
+// The most conversations a discovery with `ids` resolves, as many as a picker value can hold.
+const MAX_DISCOVERY_IDS = 50;
 const CONVERSATION_ID = /^[CGD][A-Z0-9]{2,20}$/;
 const USER_ID = /^[UW][A-Z0-9]{2,20}$/;
 // What a rule can ask for in a conversation: every new message, or only those that mention the person.
@@ -677,15 +682,20 @@ async function collectHistory(ctx, collector, window, channel, kind, mode = "all
   }
 }
 
-/** The display name of a person, or null when Slack has none. A failed request is thrown. */
-async function fetchPersonName(ctx, id) {
-  const body = await call(ctx, "users.info", { user: id });
-  const profile = isRecord(body.user) && isRecord(body.user.profile) ? body.user.profile : {};
-  for (const candidate of [profile.display_name, profile.real_name, body.user?.real_name, body.user?.name]) {
+/** The display name that a Slack user record holds, or null. */
+function userDisplayName(user) {
+  const profile = isRecord(user) && isRecord(user.profile) ? user.profile : {};
+  for (const candidate of [profile.display_name, profile.real_name, user?.real_name, user?.name]) {
     const name = preview(candidate);
     if (name) return name.slice(0, 80);
   }
   return null;
+}
+
+/** The display name of a person, or null when Slack has none. A failed request is thrown. */
+async function fetchPersonName(ctx, id) {
+  const body = await call(ctx, "users.info", { user: id });
+  return userDisplayName(body.user);
 }
 
 /** The display name of a person, or null. Best effort: a failed lookup never fails a check. */
@@ -797,10 +807,11 @@ function conversationKind(channel) {
  * answers most of them with a few requests, and it stops once it has them all. A conversation that
  * it does not list, such as a public channel the person has not joined, is asked for by itself.
  */
-async function resolveConversations(ctx, ids) {
+async function resolveConversations(ctx, ids, { names = false } = {}) {
   const known = new Map();
-  const wanted = new Set(ids.filter((id) => !id.startsWith("D")));
-  for (const id of ids) if (id.startsWith("D")) known.set(id, { id, name: undefined, kind: "dm" });
+  // A check needs no name for a direct conversation. A discovery that names conversations does.
+  const wanted = new Set(names ? ids : ids.filter((id) => !id.startsWith("D")));
+  if (!names) for (const id of ids) if (id.startsWith("D")) known.set(id, { id, name: undefined, kind: "dm" });
   if (wanted.size > 0) {
     let pages = 0;
     try {
@@ -817,6 +828,7 @@ async function resolveConversations(ctx, ids) {
                 id: channel.id,
                 name: typeof channel.name === "string" ? channel.name : undefined,
                 kind: conversationKind(channel),
+                user: typeof channel.user === "string" ? channel.user : undefined,
               });
           return [...wanted].every((id) => known.has(id)) || pages >= MAX_RESOLVE_PAGES ? STOP : undefined;
         },
@@ -828,12 +840,23 @@ async function resolveConversations(ctx, ids) {
   }
   for (const id of ids) {
     if (known.has(id)) continue;
-    const body = await call(ctx, "conversations.info", { channel: id });
+    let body;
+    try {
+      body = await call(ctx, "conversations.info", { channel: id });
+    } catch (error) {
+      // A check fails as a whole. A discovery names what it can and leaves the rest out.
+      if (!names) throw error;
+      if (error instanceof WatcherError && error.code === "rate_limited") throw error;
+      if (error instanceof WatcherError && error.code === "auth") break;
+      if (ctx.requests >= ctx.config.maxRequests || ctx.now() - ctx.startedAt >= RUN_BUDGET_MS) break;
+      continue;
+    }
     const channel = isRecord(body.channel) ? body.channel : {};
     known.set(id, {
       id,
       name: typeof channel.name === "string" ? channel.name : undefined,
       kind: conversationKind(channel),
+      user: typeof channel.user === "string" ? channel.user : undefined,
     });
   }
   return known;
@@ -860,10 +883,45 @@ function groupLabel(name) {
   return cleanLabel(plain.split("--").filter(Boolean).join(", "), MAX_LABEL);
 }
 
-/** The display names of some people, as far as the request cap and Slack allow. Any failure ends the lookups. */
+/**
+ * Fills `names` with the display names of `wanted` people from the member list: pages of 200, the
+ * same users:read scope as users.info. It stops once it has them all and after MAX_USER_PAGES pages.
+ * `found` holds each wanted person that the list had, named or not.
+ */
+async function listPeopleNames(ctx, wanted, names, found) {
+  const pending = new Set(wanted);
+  if (pending.size === 0) return;
+  let pages = 0;
+  await cursorPages(ctx, "users.list", { limit: PAGE_SIZE }, (body) => {
+    pages += 1;
+    if (!Array.isArray(body.members)) return STOP;
+    for (const member of body.members) {
+      if (!isRecord(member) || typeof member.id !== "string" || !pending.has(member.id)) continue;
+      pending.delete(member.id);
+      found.add(member.id);
+      const name = userDisplayName(member);
+      if (name) names.set(member.id, name);
+    }
+    return pending.size === 0 || pages >= MAX_USER_PAGES ? STOP : undefined;
+  });
+}
+
+/**
+ * The display names of some people, as far as the request cap and Slack allow. The member list gives
+ * most of them in a few requests. A person that it does not hold, such as one from another
+ * workspace, is asked for by itself, up to MAX_DM_LOOKUPS. Any failure ends the lookups.
+ */
 async function lookupNames(ctx, userIds) {
   const names = new Map();
-  for (const id of userIds.slice(0, MAX_DM_LOOKUPS)) {
+  const found = new Set();
+  try {
+    await listPeopleNames(ctx, userIds, names, found);
+  } catch (error) {
+    // A rate limit already saved its cooldown, so nothing more is sent.
+    if (error instanceof WatcherError && error.code === "rate_limited") return names;
+  }
+  const missing = userIds.filter((id) => !found.has(id)).slice(0, MAX_DM_LOOKUPS);
+  for (const id of missing) {
     if (ctx.requests >= ctx.config.maxRequests) break;
     try {
       const name = await fetchPersonName(ctx, id);
@@ -892,16 +950,84 @@ function readDiscoveryConfiguration(input) {
   };
 }
 
+/** The picker option of one conversation. `channel` has an id and, as Slack gives them, a name and a partner. */
+function optionOf(channel, group, names) {
+  let label;
+  if (group === "dm") {
+    const partner = USER_ID.test(channel.user ?? "") ? channel.user : channel.id;
+    label = `@${cleanLabel(names.get(partner) ?? partner, MAX_LABEL - 1)}`;
+  } else if (group === "group_dm") {
+    label = groupLabel(channel.name) || channel.id;
+  } else {
+    label = `#${cleanLabel(channel.name, MAX_LABEL - 1) || channel.id}`;
+  }
+  const option = { id: channel.id, label, group };
+  if (group === "channel" || group === "private_channel") {
+    const description = cleanLabel(channel.purpose?.value || channel.topic?.value, MAX_DESCRIPTION);
+    if (description) option.description = description;
+  }
+  return option;
+}
+
+/** The person that the token belongs to, so the app can say whose conversations these are. */
+function accountOf(auth) {
+  if (typeof auth.user_id !== "string" || !USER_ID.test(auth.user_id)) return undefined;
+  const user = cleanLabel(auth.user, MAX_LABEL);
+  const team = cleanLabel(auth.team, MAX_LABEL);
+  const label = user && team ? `${user} (${team})` : user || team || auth.user_id;
+  return { id: auth.user_id, label: cleanLabel(label, MAX_LABEL) };
+}
+
+/** The IDs of an input that asks for chosen conversations only, or null for the whole list. */
+function readDiscoveryIds(input) {
+  if (input.ids === undefined || input.ids === null) return null;
+  requireCondition(
+    Array.isArray(input.ids) && input.ids.length <= MAX_DISCOVERY_IDS,
+    `ids can hold at most ${MAX_DISCOVERY_IDS} conversations.`,
+    "config",
+  );
+  // An ID that cannot be a Slack conversation is left out: there is nothing to name.
+  return [...new Set(input.ids.filter((id) => typeof id === "string" && CONVERSATION_ID.test(id)))];
+}
+
+/**
+ * The names of the conversations in `ids` only: the channels, direct messages and group messages
+ * that a person already chose. It costs a few requests, not a walk over the whole list.
+ */
+async function discoverChosen(ctx, ids) {
+  const known = ids.length > 0 ? await resolveConversations(ctx, ids, { names: true }) : new Map();
+  const partners = [
+    ...new Set(
+      [...known.values()]
+        .filter((entry) => entry.kind === "dm" && USER_ID.test(entry.user ?? ""))
+        .map((entry) => entry.user),
+    ),
+  ];
+  const names = partners.length > 0 ? await lookupNames(ctx, partners) : new Map();
+  const options = [];
+  for (const id of ids) {
+    const entry = known.get(id);
+    if (entry) options.push(optionOf({ id, name: entry.name, user: entry.user }, entry.kind, names));
+  }
+  return options;
+}
+
 /**
  * The conversations that the token's user is in, for a picker: public and private channels, direct
  * messages and group direct messages. The list is bounded and cleaned. It sends no secret and no message.
+ * With `ids`, only those conversations are named.
  */
-async function discoverConversations(ctx) {
+async function discoverConversations(ctx, ids) {
   const auth = await call(ctx, "auth.test", {});
   requireCondition(
     ctx.config.userId === "" || auth.user_id === ctx.config.userId,
     "The Slack token does not belong to the configured userId.",
   );
+  const account = accountOf(auth);
+  if (ids !== null) {
+    const options = await discoverChosen(ctx, ids);
+    return account ? { options, account } : { options };
+  }
   const found = [];
   let truncated = false;
   await cursorPages(
@@ -931,23 +1057,7 @@ async function discoverConversations(ctx) {
     ),
   ];
   const names = await lookupNames(ctx, partners);
-  const options = found.map(({ channel, group }) => {
-    let label;
-    if (group === "dm") {
-      const partner = USER_ID.test(channel.user ?? "") ? channel.user : channel.id;
-      label = `@${cleanLabel(names.get(partner) ?? partner, MAX_LABEL - 1)}`;
-    } else if (group === "group_dm") {
-      label = groupLabel(channel.name) || channel.id;
-    } else {
-      label = `#${cleanLabel(channel.name, MAX_LABEL - 1) || channel.id}`;
-    }
-    const option = { id: channel.id, label, group };
-    if (group === "channel" || group === "private_channel") {
-      const description = cleanLabel(channel.purpose?.value || channel.topic?.value, MAX_DESCRIPTION);
-      if (description) option.description = description;
-    }
-    return option;
-  });
+  const options = found.map(({ channel, group }) => optionOf(channel, group, names));
   options.sort(
     (a, b) =>
       GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group) ||
@@ -955,6 +1065,7 @@ async function discoverConversations(ctx) {
       (a.id < b.id ? -1 : 1),
   );
   const result = { options };
+  if (account) result.account = account;
   if (truncated) result.truncated = true;
   // The descriptions are a convenience. Without them the list is far under the size that the host reads.
   if (Buffer.byteLength(JSON.stringify(result)) > MAX_OUTPUT_BYTES)
@@ -994,7 +1105,7 @@ export async function runDiscovery(
     startedAt: now(),
     requests: 0,
   };
-  return discoverConversations(ctx);
+  return discoverConversations(ctx, readDiscoveryIds(input));
 }
 
 export async function runWatcher(

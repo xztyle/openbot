@@ -65,7 +65,13 @@ import { WatcherProgramFields, type WatcherSettingKind } from "./WatcherProgramF
  */
 export interface EventCheckPickerSource {
   list(): Promise<EventCheckTemplate[]>;
-  discoverCheck?(input: { agentId: string; id: string; field: string }): Promise<EventCheckPickerOptions>;
+  discoverCheck?(input: {
+    agentId: string;
+    id: string;
+    field: string;
+    ids?: string[];
+    refresh?: boolean;
+  }): Promise<EventCheckPickerOptions>;
 }
 interface Props {
   api: EventCheckApi;
@@ -150,8 +156,12 @@ function editableJson(
     ...rest
   } = value;
   if (rest.source.kind !== "api") return JSON.stringify(rest);
-  const { programDigest: _digest, ...source } = rest.source;
-  return JSON.stringify({ ...rest, source });
+  // The names of picked choices are display text: a rename alone is not an edit to save.
+  const { programDigest: _digest, configuration, ...source } = rest.source;
+  return JSON.stringify({
+    ...rest,
+    source: { ...source, configuration: configuration.map(({ optionLabels: _names, ...field }) => field) },
+  });
 }
 const DIGEST_CHOICES = [0, 60, 300, 900, 3600] as const;
 function apiSource(source: EventCheckSource) {
@@ -697,7 +707,13 @@ export function EventChecksSettings(props: Props) {
         field,
         {
           picker,
-          load: () => discover({ agentId: shownAgent, id, field }),
+          load: (options?: { refresh?: boolean }) =>
+            discover({ agentId: shownAgent, id, field, ...(options?.refresh ? { refresh: true } : {}) }),
+          // The list opens with the editor when every private value is saved and approved. The host
+          // answers from its memory when it has a current list, so opening a check is not a request.
+          autoLoad: missing !== null && missing.length === 0,
+          // Names for saved choices that have none, from the saved check's own private value.
+          resolve: (ids: string[]) => discover({ agentId: shownAgent, id, field, ids }),
           blocked:
             missing === null
               ? undefined

@@ -3,6 +3,7 @@ import {
   decodeEventCheck,
   decodeEventCheckExecution,
   EVENT_CHECK_HISTORY_LIMIT,
+  EVENT_CHECK_OPTION_LABEL_MAX_ENTRIES,
   type EventCheck,
   type EventCheckExecution,
   type EventCheckHealth,
@@ -59,6 +60,37 @@ function baseline(value: unknown): CheckBaseline | null {
   }
   return { fingerprints };
 }
+/** The IDs that a setting value names: the part of each comma-separated entry before its colon. */
+function valueIds(value: string): Set<string> {
+  return new Set(value.split(",").map((part) => (part.split(":")[0] ?? "").trim()));
+}
+/**
+ * The names of the choices that a save keeps. A save that carries names for some choices wins for
+ * them, the names that the check already had stay for the others (an older client or an agent tool
+ * carries none), and a name for an ID that the value no longer holds is dropped.
+ */
+function retainOptionLabels(input: EventCheckInput, previous: EventCheck | null): EventCheckInput {
+  if (input.source.kind !== "api") return input;
+  const held = new Map(
+    previous?.source.kind === "api" ? previous.source.configuration.map((field) => [field.name, field]) : [],
+  );
+  const configuration = input.source.configuration.map((field) => {
+    const { optionLabels: _sent, ...rest } = field;
+    const ids = valueIds(field.value);
+    const merged = { ...held.get(field.name)?.optionLabels, ...field.optionLabels };
+    const kept = Object.entries(merged)
+      .filter(([id]) => ids.has(id))
+      .slice(0, EVENT_CHECK_OPTION_LABEL_MAX_ENTRIES);
+    return kept.length > 0 ? { ...rest, optionLabels: Object.fromEntries(kept) } : rest;
+  });
+  return { ...input, source: { ...input.source, configuration } };
+}
+/** The source as the check reads it: a template link and the names of choices are not part of it. */
+function readsSource(source: EventCheckInput["source"]): EventCheckInput["source"] {
+  if (source.kind !== "api") return source;
+  const { template: _link, ...rest } = source;
+  return { ...rest, configuration: source.configuration.map(({ optionLabels: _names, ...field }) => field) };
+}
 /** Owns bounded check state and atomic observation/outbox writes; never imports the service. */
 export class EventCheckStore {
   constructor(readonly database: OpenBotDatabase) {}
@@ -89,7 +121,7 @@ export class EventCheckStore {
     const previous = input.id ? this.get(input.agentId, input.id) : null;
     if (!previous && this.list().length >= 100) throw new Error("Too many event checks.");
     // A list answer carries `health`. It is never saved with the definition.
-    const definition: EventCheckInput = { ...input };
+    const definition: EventCheckInput = retainOptionLabels({ ...input }, previous);
     Reflect.deleteProperty(definition, "health");
     const delivery = input.delivery ?? previous?.delivery;
     const check: EventCheck = {
@@ -101,12 +133,9 @@ export class EventCheckStore {
       createdAt: previous?.createdAt ?? now.toISOString(),
       updatedAt: now.toISOString(),
     };
-    // A template link says where a check came from. It does not change what the check reads.
-    const reads = (check: EventCheckInput) => [
-      check.source.kind === "api" ? { ...check.source, template: undefined } : check.source,
-      check.selection,
-      check.selfEvents,
-    ];
+    // A template link says where a check came from, and the names of choices only help a person read
+    // the settings. Neither changes what the check reads, so neither resets the baseline.
+    const reads = (check: EventCheckInput) => [readsSource(check.source), check.selection, check.selfEvents];
     const reset = forceReset || !previous || JSON.stringify(reads(previous)) !== JSON.stringify(reads(input));
     return withDatabaseTransaction(this.database, () => {
       const db = this.database.connection;

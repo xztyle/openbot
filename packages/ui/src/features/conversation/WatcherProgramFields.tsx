@@ -1,4 +1,4 @@
-import type { EventCheckApiSource } from "@openbot/contracts/event-checks";
+import type { EventCheckApiSource, EventCheckConfiguration } from "@openbot/contracts/event-checks";
 import { Field, Input, Text, Textarea } from "@openbot/ui";
 import { For, Show, snapshot } from "solid-js";
 import { useText } from "../../text";
@@ -9,6 +9,20 @@ import type { PickerBinding } from "./event-check-picker";
 export interface WatcherSettingKind {
   type: "text" | "boolean";
   required: boolean;
+}
+
+/**
+ * The setting with a new value. A picker sends the names of its chosen options with the value; a
+ * text box sends none, and the saved names stay (the host drops the ones whose ID left the value).
+ */
+function withValue(
+  entry: EventCheckConfiguration,
+  value: string,
+  labels: Record<string, string> | undefined,
+): EventCheckConfiguration {
+  if (labels === undefined) return { ...entry, value };
+  const { optionLabels: _names, ...rest } = entry;
+  return Object.keys(labels).length > 0 ? { ...rest, value, optionLabels: labels } : { ...rest, value };
 }
 
 export function WatcherProgramFields(props: {
@@ -79,11 +93,12 @@ export function WatcherProgramFields(props: {
                 required={props.fields?.[field().name]?.required}
                 picker={props.pickers?.[field().name]}
                 value={field().value}
-                onChange={(value) =>
+                labels={field().optionLabels}
+                onChange={(value, labels) =>
                   props.change({
                     ...snapshot(props.source),
                     configuration: props.source.configuration.map((entry) =>
-                      entry.name === field().name ? { ...snapshot(entry), value } : snapshot(entry),
+                      entry.name === field().name ? withValue(snapshot(entry), value, labels) : snapshot(entry),
                     ),
                   })
                 }

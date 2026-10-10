@@ -19,7 +19,10 @@ export interface EventCheckSettingFieldProps {
   /** `boolean` settings hold the text `true` or `false` and are shown as a switch. */
   type?: "text" | "boolean" | undefined;
   value: string;
-  onChange(value: string): void;
+  /** The saved names of the chosen options of a picker, by ID. */
+  labels?: Record<string, string> | undefined;
+  /** The names come with a picker's value: the choices that the person made, and the names they had. */
+  onChange(value: string, labels?: Record<string, string>): void;
   disabled?: boolean | undefined;
   /** How to read the list of a setting that is a picker. Without it, the setting is a text box. */
   picker?: PickerBinding | undefined;
@@ -109,12 +112,15 @@ export function EventCheckSettingField(props: EventCheckSettingFieldProps) {
               description={description()}
               picker={binding().picker}
               value={props.value}
+              labels={props.labels}
               disabled={props.disabled}
               blocked={binding().blocked}
               initial={binding().initial}
               onLoaded={(options) => binding().onLoaded?.(options)}
-              load={() => binding().load()}
-              onChange={props.onChange}
+              load={(options) => binding().load(options)}
+              resolve={binding().resolve}
+              autoLoad={binding().autoLoad}
+              onChange={(value, labels) => props.onChange(value, labels)}
             />
           </Row>
         )}

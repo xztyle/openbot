@@ -226,6 +226,11 @@ it("marks a check that keeps failing in the list, and saves its item filters onl
   });
 });
 
+/** The calls that asked for the whole list, not for the names of some IDs. */
+function fullLists(spy: { mock: { calls: Array<[{ ids?: string[] | undefined }]> } }) {
+  return spy.mock.calls.filter(([input]) => input.ids === undefined);
+}
+
 /** A template check on `chief` with a picker setting, an optional switch and one private variable. */
 async function installSample(configuration: Record<string, string>, token?: string) {
   const api = createMockEventChecks();
@@ -268,8 +273,7 @@ it("fills a picker setting of a template check from its saved private value, and
   expect(screen.queryByRole("region", { name: "Chosen, not in the list" })).toBeNull();
   await fireEvent.input(await screen.findByLabelText(/Sample API token — Missing/), { target: { value: "tok-1" } });
   await fireEvent.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Load my conversations" })).toBeEnabled());
-  await fireEvent.click(screen.getByRole("button", { name: "Load my conversations" }));
+  // The value is saved, so the list loads by itself. Nobody presses Load.
   expect(await screen.findByRole("checkbox", { name: "Watch #design" })).toBeInTheDocument();
   expect(discoverCheck).toHaveBeenCalledWith({ agentId: "chief", id: check.id, field: "watchedConversations" });
   // A saved ID that the loaded list does not hold is shown apart, so it can be kept or removed.
@@ -291,7 +295,48 @@ it("fills a picker setting of a template check from its saved private value, and
   expect(screen.getByRole("checkbox", { name: "Watch #design" })).toBeChecked();
   expect(screen.getByRole("checkbox", { name: "Watch #engineering" })).toBeChecked();
   expect(screen.getByRole("button", { name: "Reload the list" })).toBeInTheDocument();
-  expect(discoverCheck).toHaveBeenCalledTimes(1);
+  expect(fullLists(discoverCheck)).toHaveLength(1);
+});
+
+it("saves the names of chosen conversations with the check and shows them again without loading the list", async () => {
+  const { api, templates } = await installSample({ watchedConversations: "" }, "tok-1");
+  const first = render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={templates}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  await fireEvent.click(await screen.findByRole("checkbox", { name: "Watch #design" }));
+  const save = vi.spyOn(api, "save");
+  await fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  // The names travel with the value, and the value stays the text that the program reads.
+  const saved = save.mock.calls[0]?.[0].source;
+  expect(
+    saved?.kind === "api" && saved.configuration.find((field) => field.name === "watchedConversations"),
+  ).toMatchObject({ value: "DES:all", optionLabels: { DES: "#design" } });
+  first.unmount();
+  // A reload: the host list never answers, and the chosen conversation still shows its name.
+  const pending = new Promise<never>(() => undefined);
+  render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={{ list: () => templates.list(), discoverCheck: () => pending }}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  const chosen = await screen.findByRole("region", { name: "Chosen" });
+  expect(chosen).toHaveTextContent("#design");
+  expect(chosen).not.toHaveTextContent("DES");
 });
 
 it("keeps the loaded list when a private value is saved and when the same check is opened again", async () => {
@@ -309,8 +354,6 @@ it("keeps the loaded list when a private value is saved and when the same check 
     />
   ));
   await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Load my conversations" })).toBeEnabled());
-  await fireEvent.click(screen.getByRole("button", { name: "Load my conversations" }));
   // A chosen entry that the list holds is its row, with its name, and not a raw ID.
   expect(await screen.findByRole("checkbox", { name: "Watch #engineering" })).toBeChecked();
   expect(screen.queryByRole("region", { name: "Chosen, not in the list" })).toBeNull();
@@ -323,7 +366,130 @@ it("keeps the loaded list when a private value is saved and when the same check 
   await fireEvent.click(screen.getByRole("button", { name: "All event checks" }));
   await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
   expect(await screen.findByRole("checkbox", { name: "Watch #engineering" })).toBeChecked();
+  expect(fullLists(discoverCheck)).toHaveLength(1);
+});
+
+it("names a saved choice with one call for just that ID, before any list is loaded", async () => {
+  const { api, templates, check } = await installSample({ watchedConversations: "DES:all,GONE1:mentions" }, "tok-1");
+  const answer = templates.discoverCheck;
+  const discoverCheck = vi.spyOn(templates, "discoverCheck");
+  // The names are asked for with IDs. The whole list is slow, so the names show before it.
+  discoverCheck.mockImplementation((input) => (input.ids ? answer(input) : new Promise(() => undefined)));
+  render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={templates}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  const chosen = await screen.findByRole("region", { name: "Chosen" });
+  await waitFor(() => expect(chosen).toHaveTextContent("#design"));
+  // The ID that the account no longer has stays as its ID.
+  expect(chosen).toHaveTextContent("GONE1");
+  expect(discoverCheck).toHaveBeenCalledWith({
+    agentId: "chief",
+    id: check.id,
+    field: "watchedConversations",
+    ids: ["DES", "GONE1"],
+  });
+  // The names come first, with the cheap call. The list is asked for after it.
+  expect(discoverCheck.mock.calls[0]?.[0].ids).toEqual(["DES", "GONE1"]);
+  await waitFor(() => expect(discoverCheck).toHaveBeenCalledTimes(2));
+  expect(discoverCheck.mock.calls[1]?.[0].ids).toBeUndefined();
+  // Naming a choice is not an edit: there is nothing to save.
+  expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+});
+
+it("loads the list when the editor opens, says how old it is, and reads the app again only on Reload", async () => {
+  const { api, templates, check } = await installSample({ watchedConversations: "" }, "tok-1");
+  const discoverCheck = vi.spyOn(templates, "discoverCheck");
+  render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={templates}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  expect(await screen.findByRole("checkbox", { name: "Watch #design" })).toBeInTheDocument();
+  expect(screen.getByText("Loaded just now.")).toBeInTheDocument();
+  expect(screen.getByText(/These are the conversations of preview-user/)).toBeInTheDocument();
+  // The open was answered by the host, which may hold the list. No refresh was asked for.
   expect(discoverCheck).toHaveBeenCalledTimes(1);
+  expect(discoverCheck).toHaveBeenCalledWith({ agentId: "chief", id: check.id, field: "watchedConversations" });
+  await fireEvent.click(screen.getByRole("button", { name: "Reload the list" }));
+  await waitFor(() => expect(discoverCheck).toHaveBeenCalledTimes(2));
+  expect(discoverCheck).toHaveBeenLastCalledWith({
+    agentId: "chief",
+    id: check.id,
+    field: "watchedConversations",
+    refresh: true,
+  });
+  // A second choice is made on the list that is already there.
+  await fireEvent.click(screen.getByRole("checkbox", { name: "Watch #design" }));
+  await fireEvent.click(screen.getByRole("checkbox", { name: "Watch #engineering" }));
+  expect(discoverCheck).toHaveBeenCalledTimes(2);
+});
+
+it("says that an older list is shown when the host could not read the app, and keeps the saved names on a failure", async () => {
+  const { api, templates } = await installSample({ watchedConversations: "DES:all" }, "tok-1");
+  const discoverCheck = vi.spyOn(templates, "discoverCheck");
+  const old = {
+    options: [{ id: "DES", label: "#design", group: "channel" }],
+    readAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+    stale: true,
+  };
+  discoverCheck.mockImplementation(async (input) => {
+    if (input.ids) return { options: [{ id: "DES", label: "#design", group: "channel" }] };
+    return old;
+  });
+  render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={templates}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  expect(await screen.findByText("Loaded 5 minutes ago.")).toBeInTheDocument();
+  expect(screen.getByText(/an older list/)).toBeInTheDocument();
+});
+
+it("shows the error and the saved names, with a way to try again, when the list cannot load", async () => {
+  const { api, templates } = await installSample({ watchedConversations: "DES:all" }, "tok-1");
+  const discoverCheck = vi.spyOn(templates, "discoverCheck");
+  discoverCheck.mockImplementation(async (input) => {
+    if (input.ids) return { options: [{ id: "DES", label: "#design", group: "channel" }] };
+    throw new Error("The app limited the requests. The check waits and tries again.");
+  });
+  render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={templates}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  expect(await screen.findByText(/The app limited the requests/)).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Chosen" })).toHaveTextContent("#design");
+  discoverCheck.mockImplementation(async () => ({
+    options: [{ id: "DES", label: "#design", group: "channel" }],
+  }));
+  await fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(await screen.findByRole("checkbox", { name: "Watch #design" })).toBeChecked();
 });
 
 it("shows a true-or-false setting of a template check as a switch, even for an older template version", async () => {

@@ -131,12 +131,16 @@ export function createMockEventCheckTemplates(checks: EventCheckApi): Required<E
           kind: "api",
           connectionId: request.accountLabel,
           variables: entry.variables.map((variable) => variable.name),
-          configuration: entry.configuration.map((field) => ({
-            name: field.name,
-            label: field.label,
-            description: field.description,
-            value: request.configuration[field.name] ?? field.value,
-          })),
+          configuration: entry.configuration.map((field) => {
+            const optionLabels = field.picker ? request.configurationLabels?.[field.name] : undefined;
+            return {
+              name: field.name,
+              label: field.label,
+              description: field.description,
+              value: request.configuration[field.name] ?? field.value,
+              ...(optionLabels && Object.keys(optionLabels).length > 0 ? { optionLabels } : {}),
+            };
+          }),
           toolName: entry.program.file,
           argumentsJson: entry.argumentsJson,
           cursorArgument: entry.cursorArgument,

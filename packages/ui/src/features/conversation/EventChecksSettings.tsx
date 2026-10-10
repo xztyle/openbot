@@ -150,8 +150,12 @@ function editableJson(
     ...rest
   } = value;
   if (rest.source.kind !== "api") return JSON.stringify(rest);
-  const { programDigest: _digest, ...source } = rest.source;
-  return JSON.stringify({ ...rest, source });
+  // The names of picked choices are display text: a rename alone is not an edit to save.
+  const { programDigest: _digest, configuration, ...source } = rest.source;
+  return JSON.stringify({
+    ...rest,
+    source: { ...source, configuration: configuration.map(({ optionLabels: _names, ...field }) => field) },
+  });
 }
 const DIGEST_CHOICES = [0, 60, 300, 900, 3600] as const;
 function apiSource(source: EventCheckSource) {

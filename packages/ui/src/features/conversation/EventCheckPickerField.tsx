@@ -42,7 +42,16 @@ export interface EventCheckPickerFieldProps {
   picker: EventCheckTemplatePicker;
   /** The saved text: `ID:mode,ID:mode`. */
   value: string;
-  onChange(value: string): void;
+  /**
+   * The saved names of the chosen options, by ID. They show before any list is loaded, so a person
+   * reads a channel name and not its ID.
+   */
+  labels?: Record<string, string> | undefined;
+  /**
+   * The new value, with the names of the chosen options that this field knows. The owner keeps both
+   * and saves them together: the names are display text, and the value is what the program reads.
+   */
+  onChange(value: string, labels: Record<string, string>): void;
   /** Reads the list. It can fail with a sentence that is safe to show. */
   load(): Promise<EventCheckPickerOptions>;
   /** What is missing before the list can load, as a sentence. Absent when it can load. */
@@ -101,14 +110,26 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
   // Before a list is loaded no entry is known to be outside it: each one is simply a chosen entry.
   const outside = createMemo(() => (state.listed ? entriesOutsideList(entries() ?? [], state.options) : []));
   const unlisted = createMemo(() => (state.listed ? [] : (entries() ?? [])));
-  /** The name that the field remembers for an ID, or undefined. A name is never made up from an ID. */
-  const nameOf = (optionId: string): string | undefined => state.labels[optionId];
+  /**
+   * The name that the field has for an ID, or undefined: the loaded list and chosen rows first, then
+   * the names saved with the check. A name is never made up from an ID.
+   */
+  const nameOf = (optionId: string): string | undefined => state.labels[optionId] ?? props.labels?.[optionId];
+  /** The names of the given entries, for the owner to keep with the value. */
+  const namesFor = (chosen: readonly { id: string }[]): Record<string, string> => {
+    const names: Record<string, string> = {};
+    for (const entry of chosen) {
+      const name = nameOf(entry.id);
+      if (name !== undefined) names[entry.id] = name;
+    }
+    return names;
+  };
   const labelOf = (optionId: string) => nameOf(optionId) ?? optionId;
   const modeLabel = (mode: string) => props.picker.modes.find((entry) => entry.value === mode)?.label ?? mode;
   const defaultMode = () => props.picker.modes[0]?.value ?? "all";
 
   function commit(next: readonly { id: string; mode: string }[]) {
-    props.onChange(formatEventCheckPickerValue(next));
+    props.onChange(formatEventCheckPickerValue(next), namesFor(next));
   }
   function choose(optionId: string, on: boolean, label?: string) {
     const current = entries() ?? [];
@@ -162,6 +183,11 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
         for (const option of result.options) draft.labels[option.id] = option.label;
       });
       props.onLoaded?.(result);
+      // A conversation that was renamed has its new name saved with the check from here on.
+      const chosen = entries() ?? [];
+      const listed = new Map(result.options.map((option) => [option.id, option.label]));
+      if (chosen.some((entry) => listed.has(entry.id) && listed.get(entry.id) !== props.labels?.[entry.id]))
+        props.onChange(props.value, namesFor(chosen));
     } catch (error) {
       if (requested !== generation) return;
       setState((draft) => {
@@ -302,7 +328,7 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
               maxlength={8192}
               disabled={props.disabled}
               aria-labelledby={`${id}-label`}
-              onValueChange={(value) => props.onChange(value)}
+              onValueChange={(value) => props.onChange(value, props.labels ?? {})}
             />
           </div>
         }

@@ -546,6 +546,7 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
                           required={field.required}
                           type={field.type}
                           value={state.form.configuration[field.name] ?? ""}
+                          labels={state.form.labels[field.name]}
                           disabled={state.busy}
                           multiline={isLongValue(field.value)}
                           picker={
@@ -564,9 +565,10 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
                               ? t("marketplace.eventCheck.dialog.fieldRequired")
                               : undefined
                           }
-                          onChange={(value) =>
+                          onChange={(value, labels) =>
                             setState((draft) => {
                               draft.form.configuration[field.name] = value;
+                              if (labels) draft.form.labels[field.name] = labels;
                             })
                           }
                         />

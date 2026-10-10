@@ -294,6 +294,49 @@ it("fills a picker setting of a template check from its saved private value, and
   expect(discoverCheck).toHaveBeenCalledTimes(1);
 });
 
+it("saves the names of chosen conversations with the check and shows them again without loading the list", async () => {
+  const { api, templates } = await installSample({ watchedConversations: "" }, "tok-1");
+  const first = render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={templates}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Load my conversations" })).toBeEnabled());
+  await fireEvent.click(screen.getByRole("button", { name: "Load my conversations" }));
+  await fireEvent.click(await screen.findByRole("checkbox", { name: "Watch #design" }));
+  const save = vi.spyOn(api, "save");
+  await fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  // The names travel with the value, and the value stays the text that the program reads.
+  const saved = save.mock.calls[0]?.[0].source;
+  expect(
+    saved?.kind === "api" && saved.configuration.find((field) => field.name === "watchedConversations"),
+  ).toMatchObject({ value: "DES:all", optionLabels: { DES: "#design" } });
+  first.unmount();
+  // A reload: the host list never answers, and the chosen conversation still shows its name.
+  const pending = new Promise<never>(() => undefined);
+  render(() => (
+    <EventChecksSettings
+      api={api}
+      pickers={{ list: () => templates.list(), discoverCheck: () => pending }}
+      agentId="chief"
+      onBack={vi.fn()}
+      onClose={vi.fn()}
+      onCountChange={vi.fn()}
+    />
+  ));
+  await fireEvent.click(await screen.findByRole("button", { name: /Sample/ }));
+  const chosen = await screen.findByRole("region", { name: "Chosen" });
+  expect(chosen).toHaveTextContent("#design");
+  expect(chosen).not.toHaveTextContent("DES");
+});
+
 it("keeps the loaded list when a private value is saved and when the same check is opened again", async () => {
   const { api, templates, check } = await installSample({ watchedConversations: "ENG:all" }, "tok-1");
   await api.save({ ...check, active: true });

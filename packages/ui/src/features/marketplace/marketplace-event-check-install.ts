@@ -13,6 +13,8 @@ export interface InstallForm {
   /** `null` until the user edits it: the name follows the account label. */
   name: string | null;
   configuration: Record<string, string>;
+  /** The names of the chosen options of each picker setting, by setting and then by option ID. */
+  labels: Record<string, Record<string, string>>;
   intervalSeconds: string;
   /** Comma or line separated. */
   actorIds: string;
@@ -25,6 +27,7 @@ export function initialInstallForm(template: EventCheckTemplate, agentIds: reado
     accountLabel: "",
     name: null,
     configuration: Object.fromEntries(template.configuration.map((field) => [field.name, field.value])),
+    labels: {},
     intervalSeconds: String(template.intervalSeconds),
     actorIds: "",
     instruction: template.instruction,
@@ -116,6 +119,10 @@ export function installRequests(
   const configuration = Object.fromEntries(
     template.configuration.map((field) => [field.name, form.configuration[field.name] ?? field.value]),
   );
+  // Only the settings that hold a name go in the request, so a host from before names ignores nothing.
+  const configurationLabels = Object.fromEntries(
+    Object.entries(form.labels).filter(([name, names]) => name in configuration && Object.keys(names).length > 0),
+  );
   return form.agentIds.map((agentId) => ({
     slug: template.slug,
     agentId,
@@ -126,6 +133,7 @@ export function installRequests(
     intervalSeconds: interval,
     accountActorIds: parseActorIds(form.actorIds),
     configuration,
+    ...(Object.keys(configurationLabels).length > 0 ? { configurationLabels } : {}),
   }));
 }
 

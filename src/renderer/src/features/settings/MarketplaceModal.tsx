@@ -121,7 +121,6 @@ export function MarketplaceModal(props: MarketplaceModalProps) {
           <Switch>
             <Match when={pending.flow.kind === "link"}>
               <McpSignInDialog
-                allowCancelWhileBusy={props.hostServerId !== undefined}
                 open={true}
                 subject={pending.subject}
                 onTest={controller.signInPluginApp}

@@ -12,7 +12,7 @@
  * test of any other server gives.
  */
 
-import { Button, ExternalLink } from "@openbot/ui";
+import { Button, ExternalLink, Text } from "@openbot/ui";
 import { Show } from "solid-js";
 import { useText } from "../../text";
 import { createConnectRun, type McpConnectBaseProps, McpConnectShell } from "./McpConnectShell";
@@ -26,24 +26,36 @@ export function McpSignInDialog(props: McpSignInDialogProps) {
   return (
     <McpConnectShell
       {...props}
+      /* The wait is for a browser outside this window, so the user can always stop it. */
+      allowCancelWhileBusy
       onNameChange={setName}
       state={state}
       busy={busy}
       description={t("mcp.signIn.description", { name: props.subject.name })}
       onSubmit={() => void attempt(async () => props.subject.config)}
       action={
-        <Button
-          class="mcp-connect-primary"
-          type="submit"
-          loading={busy()}
-          loadingLabel={t("mcp.signIn.waiting")}
-          disabled={busy()}
-        >
-          {state.phase === "failed" ? t("common.tryAgain") : t("mcp.signIn.continue", { name: props.subject.name })}
-          <Show when={state.phase !== "failed"}>
-            <ExternalLink aria-hidden="true" />
+        <>
+          <Button
+            class="mcp-connect-primary"
+            type="submit"
+            loading={busy()}
+            loadingLabel={t("mcp.signIn.waiting")}
+            disabled={busy()}
+          >
+            {state.phase === "failed" ? t("common.tryAgain") : t("mcp.signIn.continue", { name: props.subject.name })}
+            <Show when={state.phase !== "failed"}>
+              <ExternalLink aria-hidden="true" />
+            </Show>
+          </Button>
+          <Show when={busy()}>
+            <Text as="p" variant="caption" tone="muted">
+              {t("mcp.signIn.waitingHelp")}
+            </Text>
+            <Button type="button" variant="ghost" onClick={() => props.onCancel()}>
+              {t("common.cancel")}
+            </Button>
           </Show>
-        </Button>
+        </>
       }
     />
   );

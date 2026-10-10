@@ -585,6 +585,8 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
 
   const [connecting, setConnecting] = createSignal<PendingConnect | null>(null);
   let signInController: AbortController | null = null;
+  /** The browser sign-in of this computer that waits for its answer, which only a cancel can stop. */
+  let localSignIn: { url: string; serverId: string } | null = null;
   /** The listing the user asked to disconnect, held while the confirmation is on screen. */
   const [uninstalling, setUninstalling] = createSignal<MarketplacePluginDetail | null>(null);
 
@@ -598,6 +600,14 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         settle: (answer) => {
           signInController?.abort();
           signInController = null;
+          // The browser of this computer is outside this window: closing the dialog must stop the wait
+          // in the main process, or the next attempt starts while the old one still holds the port.
+          const waiting = localSignIn;
+          localSignIn = null;
+          if (waiting && answer === null)
+            void calls()
+              .mcp.cancelMcpSignIn?.({ url: waiting.url }, waiting.serverId)
+              .catch(() => undefined);
           setConnecting(null);
           resolve(answer);
         },
@@ -629,7 +639,14 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       signInController = new AbortController();
       return calls().mcp.signInMcpServer({ config }, serverId, signInController.signal);
     }
-    return calls().mcp.signInMcpServer({ config }, serverId);
+    // A sign-in on this computer waits in the main process, up to five minutes, for the browser.
+    const attempt = { url: config.url, serverId };
+    localSignIn = attempt;
+    try {
+      return await calls().mcp.signInMcpServer({ config }, serverId);
+    } finally {
+      if (localSignIn === attempt) localSignIn = null;
+    }
   }
 
   /** Takes back only what this attempt installed. A skill the agent already had is the user's. */

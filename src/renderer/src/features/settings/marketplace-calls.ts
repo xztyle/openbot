@@ -33,6 +33,11 @@ export interface MarketplaceCalls {
   > & {
     supportsRemoteSignIn?: () => boolean;
     signInMcpServer: (input: TestMcpServerInput, serverId: string, signal?: AbortSignal) => Promise<McpTestResult>;
+    /**
+     * Stops the browser sign-in that this computer waits for. Absent: the client has none to stop, as
+     * the browser client, whose sign-in ends through its abort signal.
+     */
+    cancelMcpSignIn?: SkillsPort["agent"]["cancelMcpSignIn"];
   };
   /** `serverId` absent: this computer, which is also the only place an installed agent is updated. */
   addAgent: (input: InstallMarketplaceAgentInput, serverId: string | undefined) => Promise<AddedAgent>;

@@ -653,6 +653,34 @@ describe("MarketplaceModal", () => {
       await waitFor(() => expect(screen.getByRole("button", { name: "Connect Aave" })).toBeEnabled());
     });
 
+    /**
+     * The browser of this computer is outside the window, and the main process waits for it for five
+     * minutes. A user who closed that tab must be able to leave, and the wait must stop with it.
+     */
+    it("cancels a browser sign-in on this computer and stops the wait in the main process", async () => {
+      const signInMcpServer = vi.fn<MarketplaceCalls["mcp"]["signInMcpServer"]>(
+        () => new Promise<McpTestResult>(() => undefined),
+      );
+      const cancelMcpSignIn = vi.fn<OpenBotDesktopApi["agent"]["cancelMcpSignIn"]>(async () => undefined);
+      const saveMcpServer = vi.fn<MarketplaceCalls["mcp"]["saveMcpServer"]>(async ({ config }) => [config]);
+      const calls = desktopMarketplaceCalls();
+      calls.mcp = { ...calls.mcp, listMcpServers: async () => [], signInMcpServer, cancelMcpSignIn, saveMcpServer };
+      renderMarketplace({ ...writer, plugins: [withLink], calls });
+      await openAppPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Connect Aave" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue to Aave" }));
+      await waitFor(() => expect(signInMcpServer).toHaveBeenCalled());
+
+      expect(await screen.findByText("Closed the browser tab? Cancel and try again.")).toBeInTheDocument();
+      const dialog = screen.getByRole("dialog", { name: "Connect Aave" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Connect Aave" })).toBeNull());
+      expect(cancelMcpSignIn).toHaveBeenCalledExactlyOnceWith({ url: appUrl }, "local");
+      expect(saveMcpServer).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByRole("button", { name: "Connect Aave" })).toBeEnabled());
+    });
+
     it("saves nothing when the connect dialog is closed", async () => {
       const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => [input.config]);
       window.openbot.agent = { ...window.openbot.agent, listMcpServers: vi.fn(async () => []), saveMcpServer };

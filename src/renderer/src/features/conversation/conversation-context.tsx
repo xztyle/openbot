@@ -38,7 +38,7 @@ import {
   messagePromptRequestKey,
   promptRequestKey,
 } from "./conversation-keys";
-import { mergeConversationPage, windowedSnapshotMessages } from "./conversation-merge";
+import { mergeConversationPage, refreshLatestPage, windowedSnapshotMessages } from "./conversation-merge";
 import { conversationPort } from "./conversation-port";
 import {
   decideAgentAutoRead,
@@ -197,7 +197,9 @@ const Conversation = createSimpleContext({
             updateConversation(agentId, (conversation) => {
               conversation.loading = false;
             });
-            const pageApplied = applyConversationPage(page, "replace", "latest");
+            // A read after a reconnect or a status change must not drop the older pages or the
+            // window around a found message that the reader has loaded.
+            const pageApplied = applyConversationPage(page, "refresh", "latest");
             if (!pageApplied) {
               if (agentChatsToMarkRead.has(trackingKey)) {
                 if (!agentChatsRetriedOnOpen.has(agentId)) {
@@ -596,9 +598,14 @@ const Conversation = createSimpleContext({
       }
     }
 
+    /**
+     * `refresh` is the latest page read again for a conversation that may already be loaded: it joins
+     * the loaded messages and keeps the window, or, when it shares no message with them, it replaces
+     * them and opens the latest window. `windowMode` is the window that a replacing page opens.
+     */
     function applyConversationPage(
       page: ConversationPage,
-      merge: "replace" | "older" | "latest",
+      merge: "replace" | "older" | "latest" | "refresh",
       windowMode?: "latest" | "around",
     ): boolean {
       if (page.revision < (conversations[page.agentId]?.revision ?? -1)) return false;
@@ -617,15 +624,27 @@ const Conversation = createSimpleContext({
           if (!agentMessagesEqual(stored, message)) updateStored(stored, { ...message, animate: stored.animate });
           return stored;
         });
-        conversation.messages = mergeConversationPage(currentMessages, pageMessages, merge);
+        const refreshed = merge === "refresh" ? refreshLatestPage(currentMessages, pageMessages) : null;
+        const replacing = merge === "replace" || (merge === "refresh" && !refreshed);
+        conversation.messages = refreshed
+          ? refreshed.messages
+          : mergeConversationPage(currentMessages, pageMessages, merge === "refresh" ? "replace" : merge);
         conversation.references = {
-          ...(merge === "replace" ? {} : conversation.references),
+          ...(replacing ? {} : conversation.references),
           ...Object.fromEntries(
             Object.entries(page.references).map(([id, message]) => [id, toAgentMessage(message, page.agentId)]),
           ),
         };
-        conversation.page = page.pageInfo;
-        if (windowMode) conversation.windowMode = windowMode;
+        // Older pages that stay above the page keep their cursor, or their end of history: the cursor
+        // of the page itself would read the messages that are already loaded again. A cursor of
+        // `null` with older messages left is only the placeholder of a trimmed conversation.
+        const loadedPage = conversation.page;
+        const keepsOlderPages =
+          refreshed?.keptOlder === true &&
+          loadedPage !== undefined &&
+          (loadedPage.olderCursor !== null || !loadedPage.hasOlder);
+        if (!keepsOlderPages) conversation.page = page.pageInfo;
+        if (windowMode && !refreshed) conversation.windowMode = windowMode;
         conversation.revision = page.revision;
         conversation.loaded = true;
       });

@@ -628,6 +628,35 @@
   animation: approval-card-in var(--openbot-duration-slow) var(--openbot-ease-out) both;
 }
 
+.approval-card-heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
+.approval-requester {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.approval-requester-avatar {
+  width: var(--openbot-space-6);
+  height: var(--openbot-space-6);
+  flex: 0 0 var(--openbot-space-6);
+}
+
+.approval-requester-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .approval-card-footer {
   display: flex;
   align-items: center;

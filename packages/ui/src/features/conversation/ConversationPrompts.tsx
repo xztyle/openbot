@@ -13,6 +13,8 @@ import { BrowserSecretCard } from "@openbot/ui/features/conversation/BrowserSecr
 import { BrowserTakeoverPreview } from "@openbot/ui/features/conversation/BrowserTakeoverPreview";
 import { type TextValue, useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Show } from "solid-js";
+import type { AgentProfile } from "../../data";
+import { AgentAvatar } from "../agents/AgentAvatar";
 import { isSendShortcutKey, type SendShortcut, sendShortcutAriaKey } from "./send-shortcut";
 
 export function ChoiceCard(props: {
@@ -124,6 +126,12 @@ export function ApprovalCard(props: {
   onAlwaysAllow?: () => Promise<boolean>;
   /** The agent this grant would cover, for the confirmation the grant deserves. */
   agentName?: string;
+  /**
+   * Who asks, when the surface holds several agents, as a channel does. The header then shows the
+   * face and the name above the title. The agent chat leaves it out: its header names the agent.
+   * `agent` is missing for a member the agent list no longer holds, and its face follows the name.
+   */
+  requester?: { name: string; agent?: AgentProfile | undefined };
 }) {
   const { t, errorMessage, sourceText } = useText();
   const [submitting, setSubmitting] = createSignal(false);
@@ -161,11 +169,27 @@ export function ApprovalCard(props: {
   return (
     <section
       class="approval-card conversation-interaction-card"
-      aria-label={t("prompt.approval.label")}
+      aria-label={
+        props.requester ? t("prompt.approval.labelFrom", { name: props.requester.name }) : t("prompt.approval.label")
+      }
       aria-busy={submitting() ? "true" : undefined}
     >
       <header class="approval-card-header conversation-interaction-header">
-        <strong>{t(approvalTitle(props.approval))}</strong>
+        <div class="approval-card-heading">
+          <Show when={props.requester}>
+            {(requester) => (
+              <span class="approval-requester">
+                <AgentAvatar
+                  agent={requester().agent}
+                  seed={requester().agent ? undefined : requester().name}
+                  class="approval-requester-avatar"
+                />
+                <span class="approval-requester-name">{requester().name}</span>
+              </span>
+            )}
+          </Show>
+          <strong>{t(approvalTitle(props.approval))}</strong>
+        </div>
         <Badge variant="warning-light" class="conversation-interaction-status" role="status">
           <LoaderCircle class="conversation-interaction-spinner" data-icon="inline-start" aria-hidden="true" />
           {t("prompt.approval.badge")}

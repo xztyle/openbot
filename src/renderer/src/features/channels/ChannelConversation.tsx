@@ -484,6 +484,17 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const name = (id: string | null) =>
     agentList().find((agent) => agent.id === id)?.name ?? t("sidebar.section.unassigned");
   /**
+   * The approval or takeover of a member, when it can be answered in this channel. One that belongs
+   * to the member's own chat is answered there, and a card for it here would not name its chat.
+   */
+  const channelPrompt = <Request extends { threadId: string }>(
+    request: Request | undefined,
+    agentId: string,
+  ): Request | undefined => {
+    const direct = agentList().find((agent) => agent.id === agentId)?.threadId;
+    return request && direct && request.threadId === direct ? undefined : request;
+  };
+  /**
    * The work that waits for the reader: one entry for each stopped run, not for each stopped task.
    *
    * A task the service stopped carries the reason it stopped, and an archived channel stops every
@@ -866,13 +877,18 @@ export function ChannelConversation(props: ChannelConversationProps) {
                   <Show
                     when={
                       !page().channel.archived &&
-                      page().tasks.some((task) => task.ownerAgentId === member.agentId && task.state === "running") &&
-                      props.pendingApprovals[member.agentId]
+                      page().tasks.some((task) => task.ownerAgentId === member.agentId && task.state === "running")
+                        ? channelPrompt(props.pendingApprovals[member.agentId], member.agentId)
+                        : undefined
                     }
                   >
                     {(approval) => (
                       <ApprovalCard
                         approval={approval()}
+                        requester={{
+                          name: name(member.agentId),
+                          agent: agentList().find((agent) => agent.id === member.agentId),
+                        }}
                         onApprove={() =>
                           channels.perform(() =>
                             runtime().agent.respondToApproval({
@@ -897,7 +913,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
               <For each={page().channel.members}>
                 {(member) => {
                   const takeover = () => {
-                    const request = props.pendingTakeovers[member.agentId];
+                    const request = channelPrompt(props.pendingTakeovers[member.agentId], member.agentId);
                     return !page().channel.archived &&
                       page().tasks.some((task) => task.ownerAgentId === member.agentId && task.state === "running")
                       ? request

@@ -912,3 +912,74 @@ it("keeps the working indicator while the coordinator chooses an owner", async (
   // decides, so the indicator is the only sign that the request is alive.
   expect(await within(chat).findByRole("status", { name: /^Chief is working: / })).toBeInTheDocument();
 });
+
+/** A channel whose task for Chief runs, so a request of Chief can be answered in the channel. */
+async function openChannelWithRunningTask() {
+  await window.openbot.agent.channelCommand({
+    type: "save",
+    operationId: "create",
+    channelId: "channel-test",
+    draft: {
+      name: "Project room",
+      title: "",
+      instructions: "",
+      members: [{ agentId: "chief" }, { agentId: "sales-outbound" }],
+      leadAgentId: "chief",
+    },
+  });
+  await window.openbot.agent.channelCommand({
+    type: "send",
+    operationId: "request",
+    channelId: "channel-test",
+    text: "Prepare the report",
+    recipientAgentId: "chief",
+    replyToMessageId: null,
+    attachmentDraftIds: [],
+  });
+  const originalRead = window.openbot.agent.readChannel;
+  vi.spyOn(window.openbot.agent, "readChannel").mockImplementation(async (input) => {
+    const page = await originalRead(input);
+    return {
+      ...page,
+      tasks: page.tasks.map((task) => ({ ...task, ownerAgentId: "chief", state: "running" as const, error: null })),
+    };
+  });
+  render(() => <App />);
+  await screen.findByRole("button", { name: /Open account (actions|menu)/ });
+  await fireEvent.click(await screen.findByRole("button", { name: /Project room/ }));
+  return screen.findByRole("main", { name: "Channel conversation" });
+}
+
+function approvalOf(requestId: number, threadId: string) {
+  return {
+    requestId,
+    agentId: "chief",
+    threadId,
+    turnId: `turn-${requestId}`,
+    kind: "command" as const,
+    command: "bun run report",
+    cwd: null,
+    reason: null,
+    grantRoot: null,
+    permissions: null,
+  };
+}
+
+it("names the agent that asks for an approval in the channel", async () => {
+  const chat = await openChannelWithRunningTask();
+  emitAgentEvent?.({ type: "approval", approval: approvalOf(31, "thread-channel-chief") });
+
+  const card = await within(chat).findByRole("region", { name: "Approval for Chief" });
+  expect(within(card).getByText("Chief")).toBeInTheDocument();
+  expect(within(card).getByRole("button", { name: "Allow" })).toBeInTheDocument();
+});
+
+it("leaves the approval of a member's own chat to that chat", async () => {
+  const chat = await openChannelWithRunningTask();
+  // `thread-chief` is the thread of the agent chat of Chief, not a thread of this channel.
+  emitAgentEvent?.({ type: "approval", approval: approvalOf(32, "thread-chief") });
+
+  await within(chat).findByRole("status", { name: /^Chief is working: / });
+  expect(within(chat).queryByRole("region", { name: /^Approval/ })).not.toBeInTheDocument();
+  expect(within(chat).queryByRole("button", { name: "Allow" })).not.toBeInTheDocument();
+});

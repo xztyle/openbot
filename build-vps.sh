@@ -112,16 +112,28 @@ build() { # build <log> <buildx args...>; the contexts and arguments every targe
     --build-context full-src="$contexts/full" \
     --build-arg "REVISION=$revision" --build-arg "PRIVATE_CONFIG_SHA=$config_sha" \
     --secret "id=private_wrangler,src=$release/wrangler.jsonc" \
-    --progress=plain "$@" "$contexts/full" > "$log" 2>&1 || { tail -40 "$log" >&2; exit 1; }
+    --progress=plain "$@" "$contexts/full" > "$log" 2>&1
+}
+# A busy host can make BuildKit drop its client session ("no active session ... deadline exceeded").
+# The finished layers are cached, so a second attempt is quick.
+attempt() { # attempt <log> <buildx args...>
+  local log=$1
+  build "$@" && return 0
+  if grep -q "no active session\|DeadlineExceeded" "$log"; then
+    echo "BuildKit session timed out; trying once more." >&2
+    build "$@" && return 0
+  fi
+  tail -40 "$log" >&2
+  exit 1
 }
 echo "Building $image (maximum build memory 8 GB)."
 if [[ $check == 1 ]]; then
-  build "$release/checks.log" --target checks
+  attempt "$release/checks.log" --target checks
   phase checks
 fi
-build "$release/build.log" --target runtime --load --tag "$image"
+attempt "$release/build.log" --target runtime --load --tag "$image"
 phase image
-build "$release/website-export.log" --target website --output "type=local,dest=$release/worker"
+attempt "$release/website-export.log" --target website --output "type=local,dest=$release/worker"
 phase website
 docker image inspect "$image" --format '{{.Architecture}}' | grep -qx amd64
 if [[ $tarball == 1 ]]; then

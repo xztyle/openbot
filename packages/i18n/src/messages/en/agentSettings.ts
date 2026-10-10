@@ -268,6 +268,9 @@ export const messages = defineMessages("agentSettings", {
     "A file edit outside asks you first, also when Auto approve is on. A command cannot write outside.",
   "agentSettings.runtime.workspaceUnlimited":
     "Computer Use and the OpenBot browser are not limited; you can turn Computer Use off below.",
+  "agentSettings.limit.count": "{length} of {max} characters",
+  "agentSettings.limit.reached": "Limit of {max} characters reached. More text is cut.",
+  "agentSettings.limit.cut": "The pasted text was cut at {max} characters.",
   "agentSettings.computerUse.title": "Computer Use",
   "agentSettings.computerUse.description": "Let this agent control apps on this computer",
   "agentSettings.automation.title": "Local scripts",

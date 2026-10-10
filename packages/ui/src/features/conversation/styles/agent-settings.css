@@ -1182,3 +1182,12 @@
   font-size: var(--openbot-text-sm);
   line-height: 15px;
 }
+
+/* The note that a `limitNote` field shows near its character limit, and after a paste was cut. */
+.ui-field-limit {
+  display: block;
+  margin: var(--openbot-space-1) var(--openbot-space-2) 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}

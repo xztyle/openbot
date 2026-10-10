@@ -413,6 +413,19 @@ describe("ServerSettingsModal", () => {
 
   // The list is read when the section opens, not when the dialog does, because most visits to this
   // dialog never reach it.
+  it.each(["mcp", "storage", "sites", "providers", "updates", "import", "routines", "connectors"] as const)(
+    "shows General when the server has no %s section to open on",
+    async (initialSection) => {
+      render(() => <ServerSettingsModal {...props({ initialSection })} />);
+      expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
+    },
+  );
+
+  it("opens the requested section when the server has it", async () => {
+    render(() => <ServerSettingsModal {...props({ initialSection: "mcp", mcpServers: [] })} />);
+    expect(screen.getByRole("tab", { name: "MCP" })).toHaveAttribute("aria-selected", "true");
+  });
+
   it("asks for the MCP list when the section is opened", async () => {
     const onMcpSectionShown = vi.fn();
     render(() => (

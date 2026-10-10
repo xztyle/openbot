@@ -782,6 +782,58 @@ describe("OpenBot connected desktop shell", () => {
     await screen.findByRole("heading", { name: "Chief" });
   });
 
+  it("finds settings pages by what they hold and opens an agent page from search", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+
+    await fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const input = await screen.findByRole("combobox", { name: "Search OpenBot" });
+    // Words that describe what a page holds find it, as the page name does not hold them.
+    await fireEvent.input(input, { target: { value: "spend" } });
+    await screen.findByRole("option", { name: /Usage/ });
+    await fireEvent.input(input, { target: { value: "api key" } });
+    await screen.findByRole("option", { name: /Providers/ });
+    await fireEvent.input(input, { target: { value: "chief: memories" } });
+    await fireEvent.click(await screen.findByRole("option", { name: /Chief: Memories/ }));
+    await screen.findByRole("dialog", { name: "Memories" });
+  });
+
+  it("opens the menu of the open chat from its button, for a screen with no right click", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Agent actions" }));
+    const menu = await screen.findByRole("menu", { name: "Agent actions" });
+    expect(within(menu).getByRole("menuitem", { name: "Pin" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Duplicate agent" })).toBeInTheDocument();
+  });
+
+  it("opens the search of the conversation from a header button, for a screen with no Cmd+F", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Search conversation" }));
+    expect(await screen.findByRole("search", { name: "Search conversation" })).toBeVisible();
+    expect(await screen.findByRole("searchbox", { name: "Search messages" })).toBeInTheDocument();
+  });
+
+  it("lists the keyboard shortcuts from global search, and Escape returns to the results", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+
+    await fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const input = await screen.findByRole("combobox", { name: "Search OpenBot" });
+    await fireEvent.input(input, { target: { value: "shortcut" } });
+    await fireEvent.click(await screen.findByRole("option", { name: /Keyboard shortcuts/ }));
+    const list = await screen.findByRole("region", { name: "Keyboard shortcuts" });
+    expect(within(list).getByText("Open settings")).toBeInTheDocument();
+    expect(within(list).getByText("Search the open conversation")).toBeInTheDocument();
+
+    await fireEvent.keyDown(within(list).getByRole("button", { name: "Back" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Keyboard shortcuts" })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "Search OpenBot" })).toBeInTheDocument();
+  });
+
   it("closes global search with Escape and a backdrop press", async () => {
     render(() => <App />);
     await screen.findByRole("heading", { name: "Chief" });

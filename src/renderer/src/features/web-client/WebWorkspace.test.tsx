@@ -8,6 +8,7 @@ import { render, waitFor } from "@solidjs/testing-library";
 import { flush } from "solid-js";
 import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { STORY_AGENT_SUMMARIES } from "../../preview/fixtures";
+import { readAgentSelection, writeAgentSelection } from "../agents/agent-selection";
 import { createWebWorkspace } from "./web-client-context";
 import { createWebConversationRuntime } from "./web-conversation-runtime";
 import { WebHostConnectionError, type WebRuntimeEvents, type WebWorkspaceRuntime } from "./web-runtime";
@@ -1036,6 +1037,75 @@ describe("web workspace state", () => {
     await waitFor(() => expect(workspace.conversation()?.page?.revision).toBe(1));
     app.events().event("host", { type: "error", code: "connection_error", message: "Old error" });
     expect(workspace.state.error).toBeNull();
+  });
+});
+
+describe("web workspace remembers the opened chat", () => {
+  const twoAgents = () => [STORY_AGENT_SUMMARIES[0], STORY_AGENT_SUMMARIES[1]];
+  const byAgent = () => vi.fn().mockImplementation(async (agentId: string) => ({ ...page, agentId }));
+
+  it("opens the saved chat of this account and host after a reload", async () => {
+    writeAgentSelection("web:account:host", "research");
+    const app = harness({ listAgents: vi.fn().mockResolvedValue(twoAgents()), conversation: byAgent() });
+    await waitFor(() => expect(app.workspace().state.selectedId).toBe("research"));
+    expect(app.runtime.conversation).toHaveBeenCalledWith("research", undefined);
+  });
+
+  it("saves each chat that opens, so the next load returns to it", async () => {
+    const app = harness({ listAgents: vi.fn().mockResolvedValue(twoAgents()), conversation: byAgent() });
+    await waitFor(() => expect(app.workspace().state.selectedId).toBe("chief"));
+    await app.workspace().select("research");
+    expect(readAgentSelection()["web:account:host"]).toBe("research");
+  });
+
+  it("falls back to the first agent in sidebar order when the saved chat is gone", async () => {
+    writeAgentSelection("web:account:host", "deleted");
+    const layout = {
+      revision: 1,
+      sections: [],
+      order: ["people", "unassigned"],
+      agentAssignments: {},
+      agentOrder: ["research", "chief"],
+    };
+    const app = harness({
+      connect: vi.fn().mockResolvedValue(["conversation-pagination", "sidebar-layout"]),
+      getSidebarLayout: vi.fn().mockResolvedValue(layout),
+      listAgents: vi.fn().mockResolvedValue(twoAgents()),
+      conversation: byAgent(),
+    });
+    await waitFor(() => expect(app.workspace().state.selectedId).toBe("research"));
+    expect(readAgentSelection()["web:account:host"]).toBe("research");
+  });
+
+  it("opens the first agent in sidebar order on a first visit", async () => {
+    const layout = {
+      revision: 1,
+      sections: [],
+      order: ["people", "unassigned"],
+      agentAssignments: {},
+      agentOrder: ["research", "chief"],
+    };
+    const app = harness({
+      connect: vi.fn().mockResolvedValue(["conversation-pagination", "sidebar-layout"]),
+      getSidebarLayout: vi.fn().mockResolvedValue(layout),
+      listAgents: vi.fn().mockResolvedValue(twoAgents()),
+      conversation: byAgent(),
+    });
+    await waitFor(() => expect(app.workspace().state.selectedId).toBe("research"));
+  });
+
+  it("keeps a separate chat for each host", async () => {
+    writeAgentSelection("web:account:host", "research");
+    const app = harness({ listAgents: vi.fn().mockResolvedValue(twoAgents()), conversation: byAgent() });
+    await waitFor(() => expect(app.workspace().state.selectedId).toBe("research"));
+    const workspace = app.workspace();
+    const host = workspace.state.host;
+    if (!host) throw new Error("Missing host");
+    await workspace.connect({ ...host, hostId: "other-host" });
+    await waitFor(() => expect(workspace.state.host?.hostId).toBe("other-host"));
+    await waitFor(() => expect(workspace.state.selectedId).toBe("chief"));
+    await workspace.connect(host);
+    await waitFor(() => expect(workspace.state.selectedId).toBe("research"));
   });
 });
 

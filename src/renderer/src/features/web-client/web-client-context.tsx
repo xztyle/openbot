@@ -29,6 +29,12 @@ import { reconcilePendingRequests } from "@openbot/team-client/runtime-attention
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, createStore, onSettled } from "solid-js";
 import { toAgentProfile } from "../../app-message-projection";
+import {
+  initialAgentId,
+  readAgentSelection,
+  webAgentSelectionKey,
+  writeAgentSelection,
+} from "../agents/agent-selection";
 import { mergeConversationPage } from "../conversation/conversation-merge";
 import { createSidebarPreferences } from "../sidebar/sidebar-preferences";
 import { defaultSidebarLayout } from "../sidebar/sidebar-sections";
@@ -945,10 +951,15 @@ export function createWebWorkspace(
     });
     try {
       const capabilities = await runtime.connect(host);
-      const [agents, agentStatus, models] = await Promise.all([
+      // With no saved chat the first one in sidebar order opens, so the layout is read with the roster.
+      // A saved chat needs no layout, which keeps the chat opening in the same turn as the roster.
+      const layoutRead =
+        !savedAgentId() && capabilities.includes("sidebar-layout") ? runtime.getSidebarLayout : undefined;
+      const [agents, agentStatus, models, openingLayout] = await Promise.all([
         runtime.listAgents(),
         runtime.status(),
         runtime.models(),
+        layoutRead ? layoutRead().catch(() => null) : Promise.resolve(null),
       ]);
       if (disposed || current !== generation) return;
       revokedReconnect = false;
@@ -994,8 +1005,25 @@ export function createWebWorkspace(
         },
         () => undefined,
       );
-      const first = agents.find((agent) => agent.id === previousSelected) ?? agents[0];
-      if (first) await select(first.id);
+      const agentIds = agents.map((agent) => agent.id);
+      const saved = savedAgentId();
+      let layout = openingLayout;
+      // A saved chat that the host no longer has needs the layout, which is read only for this case.
+      if (
+        !layout &&
+        saved &&
+        !agentIds.includes(saved) &&
+        !(previousSelected && agentIds.includes(previousSelected)) &&
+        capabilities.includes("sidebar-layout")
+      ) {
+        layout = await readSidebarLayout(capabilities, agentIds).catch(() => null);
+        if (disposed || current !== generation) return;
+      }
+      const first =
+        previousSelected && agentIds.includes(previousSelected)
+          ? previousSelected
+          : initialAgentId(agentIds, layout ?? { agentOrder: [] }, saved);
+      if (first) await select(first);
     } catch (error) {
       if (disposed || current !== generation) return;
       hostAway = true;
@@ -1252,9 +1280,14 @@ export function createWebWorkspace(
       if (current === generation) report(error);
     });
   }
+  /** The chat that this browser last opened on this host, while the host still has it. */
+  function savedAgentId(): string | null {
+    return hostId ? (readAgentSelection()[webAgentSelectionKey(props.accountId, hostId)] ?? null) : null;
+  }
   async function select(id: string) {
     const current = generation;
     selectedId = id;
+    if (hostId) writeAgentSelection(webAgentSelectionKey(props.accountId, hostId), id);
     // A resync after the background read only the queue of the opened chat. This one is read now.
     if (staleQueues.delete(id)) loadQueue(id);
     setState((draft) => {
@@ -1307,7 +1340,14 @@ export function createWebWorkspace(
       for (const agent of agents) if (agent.id !== selectedId) staleQueues.add(agent.id);
       if (selectedId) loadQueue(selectedId);
       loadReads();
-      if (!selectedId && agents[0]) await select(agents[0].id);
+      if (!selectedId) {
+        const first = initialAgentId(
+          agents.map((agent) => agent.id),
+          sidebarLayout,
+          savedAgentId(),
+        );
+        if (first) await select(first);
+      }
       await refresh();
     } catch (error) {
       if (current === generation) report(error);
@@ -1658,7 +1698,13 @@ export function createWebWorkspace(
         setState((draft) => {
           if (sidebarLayout.revision >= draft.sidebarLayout.revision) draft.sidebarLayout = sidebarLayout;
         });
-        if (wasSelected && selectedId === null && agents[0]) await select(agents[0].id);
+        if (wasSelected && selectedId === null) {
+          const first = initialAgentId(
+            agents.map((agent) => agent.id),
+            sidebarLayout,
+          );
+          if (first) await select(first);
+        }
       } catch (error) {
         if (current === generation) report(error);
         throw error;

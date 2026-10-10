@@ -297,6 +297,66 @@ describe("AgentSettingsPanel", () => {
     expect(await screen.findByRole("button", { name: /^Files/u })).toBeInTheDocument();
   });
 
+  it("shows the links to Memories, Skills and Routines before the long instructions field", async () => {
+    mock = createMockOpenBot();
+    window.openbot = mock.api;
+    render(() => (
+      <AgentSettingsPanel
+        agent={firstAgent}
+        runtimeSettings={{ provider: "codex", model: "gpt-5.6-sol", reasoningEffort: "high" }}
+        agentStatus={STORY_AGENT_STATUS}
+        modelOptions={STORY_MODELS}
+        working={false}
+        maxWidth={() => 640}
+        onClose={vi.fn()}
+        onWidthChange={vi.fn()}
+        onUpdateAgent={vi.fn(async () => undefined)}
+        onUpdateRuntimeSettings={vi.fn(async () => true)}
+        onSetAgentAvatar={vi.fn(async () => undefined)}
+      />
+    ));
+    const instructions = await screen.findByRole("textbox", { name: "Agent instructions" });
+    for (const name of [/^Memories/u, /^Skills/u, /^Routines/u]) {
+      const link = await screen.findByRole("button", { name });
+      expect(link.compareDocumentPosition(instructions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it("opens the page that a settings request names, once for each request", async () => {
+    mock = createMockOpenBot();
+    window.openbot = mock.api;
+    const [request, setRequest] = createSignal<ComponentProps<typeof AgentSettingsPanel>["pageRequest"]>({
+      agentId: firstAgent.id,
+      nonce: 7001,
+      page: "memories",
+    });
+    render(() => (
+      <AgentSettingsPanel
+        agent={firstAgent}
+        runtimeSettings={{ provider: "codex", model: "gpt-5.6-sol", reasoningEffort: "high" }}
+        agentStatus={STORY_AGENT_STATUS}
+        modelOptions={STORY_MODELS}
+        working={false}
+        maxWidth={() => 640}
+        onClose={vi.fn()}
+        onWidthChange={vi.fn()}
+        onUpdateAgent={vi.fn(async () => undefined)}
+        onUpdateRuntimeSettings={vi.fn(async () => true)}
+        onSetAgentAvatar={vi.fn(async () => undefined)}
+        pageRequest={request()}
+      />
+    ));
+    const dialog = await screen.findByRole("dialog", { name: "Memories" });
+    await fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Memories" })).toBeNull());
+
+    // The same request that is read again opens nothing. A new request opens its own page.
+    setRequest({ agentId: firstAgent.id, nonce: 7001, page: "memories" });
+    setRequest({ agentId: firstAgent.id, nonce: 7002, page: "routines" });
+    expect(await screen.findByRole("button", { name: "Back to settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Memories" })).toBeNull();
+  });
+
   it("shows the settings again when the detail that was open loses its capability", async () => {
     mock = createMockOpenBot();
     window.openbot = mock.api;

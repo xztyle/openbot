@@ -37,11 +37,18 @@ import type { ConversationRuntime } from "./conversation-runtime";
  * through only because one direction is `import type`.
  */
 
-/** Opens an agent's settings panel. A `routine` opens that routine's settings in it. */
+/** A page of the agent settings panel that a request can open: the rows under Knows and Does. */
+export type AgentSettingsPage = "eventChecks" | "routines" | "skills" | "memories" | "files";
+
+/**
+ * Opens an agent's settings panel. A `routine` opens that routine's settings in it, and a `page` opens
+ * one of its pages. The panel shows a page only when its host has it.
+ */
 export interface AgentSettingsRequest {
   agentId: string;
   nonce: number;
   routine?: { routineId: string; name: string };
+  page?: AgentSettingsPage;
 }
 
 export interface ConversationTarget {

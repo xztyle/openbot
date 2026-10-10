@@ -18,6 +18,7 @@ import { AgentRoutinesSettings, type RoutineSelectionRequest } from "./AgentRout
 import { AgentSkillsModal, type AgentSkillsMode, assignedSkillCount } from "./AgentSkillsModal";
 import { conversationPort, type SharedTableCalls } from "./conversation-port";
 import type { ConversationRuntime } from "./conversation-runtime";
+import type { AgentSettingsRequest } from "./conversation-types";
 import { agentMemoriesPort } from "./memories-port";
 import type { EventRoutinesApi } from "./routine-webhooks-api";
 import { agentRoutinesPort, eventRoutinesPort } from "./routines-port";
@@ -37,6 +38,8 @@ interface AgentSettingsPanelProps
   onOpenUsage?: (trigger: HTMLButtonElement) => void;
   onWidthChange: (width: number) => void;
   skillSelectionRequest?: { skillId: string } | null;
+  /** A settings request that names a page. The panel opens the page once for each request. */
+  pageRequest?: AgentSettingsRequest | null;
   routineSelectionRequest?: RoutineSelectionRequest | null;
   onRoutineSelectionRequestHandled?: (nonce: number) => void;
   onOpenRoutineRun?: (messageId: string) => void;
@@ -62,6 +65,12 @@ interface AgentSettingsPanelProps
 }
 
 export type { AgentSkillsMode };
+
+/**
+ * The last page request that any panel opened. The panel mounts after the request, and its request
+ * stays set while the panel is closed, so a later mount must not open the same page again.
+ */
+let lastHandledPageRequestNonce = 0;
 
 export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
   const { t } = useText();
@@ -253,6 +262,23 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
         setDraft((state) => {
           state.skills.open = true;
         });
+    },
+  );
+
+  createEffect(
+    () => ({ request: props.pageRequest, agentId: props.agent.id }),
+    ({ request, agentId }) => {
+      const page = request?.page;
+      if (!request || !page || request.agentId !== agentId || request.nonce === lastHandledPageRequestNonce) return;
+      lastHandledPageRequestNonce = request.nonce;
+      setDraft((state) => {
+        // A page that this host does not have opens nothing; the panel stays on its main view.
+        if (page === "memories" && memoriesVisible()) state.memories.open = true;
+        else if (page === "skills" && skillsMode() !== "hidden") state.skills.open = true;
+        else if (page === "routines" && routinesVisible()) state.routines.open = true;
+        else if (page === "eventChecks" && checksApi()) state.checks.open = true;
+        else if (page === "files" && props.files) state.files.open = true;
+      });
     },
   );
 

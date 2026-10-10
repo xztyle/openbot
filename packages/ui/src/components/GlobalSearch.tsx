@@ -2,6 +2,7 @@ import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references"
 import type { AppTextKey } from "@openbot/i18n";
 import {
   ArrowDown,
+  ArrowLeft,
   ArrowRightToLine,
   ArrowUp,
   Button,
@@ -14,6 +15,7 @@ import {
   Hash,
   Input,
   Kbd,
+  Keyboard,
   Search,
   type Settings,
   Spinner,
@@ -78,6 +80,16 @@ export interface GlobalSearchAction {
   run: () => void;
 }
 
+/** One row of the keyboard shortcut list. `keys` is the chord as the platform writes it, such as ⌘K. */
+export interface GlobalSearchShortcut {
+  id: string;
+  label: string;
+  keys: string;
+}
+
+/** The action that the search adds itself when it has shortcuts. It shows the list in the dialog. */
+const SHORTCUTS_ACTION_ID = "keyboard-shortcuts";
+
 type AgentResult = { kind: "agent"; agent: AgentProfile };
 type ChannelResult = { kind: "channel"; channel: GlobalSearchChannel };
 type MessageResult = { kind: "message"; agent: AgentProfile; message: AgentMessage };
@@ -124,6 +136,8 @@ interface GlobalSearchProps {
   routinesLoading?: boolean;
   /** Commands and settings pages. They show in All when the query matches. */
   actions?: GlobalSearchAction[];
+  /** The keyboard shortcuts of this client. Given, the search offers an action that lists them. */
+  shortcuts?: GlobalSearchShortcut[] | undefined;
   /** Omit to hide the Messages filter. The Messages filter loads the next page as the user scrolls. */
   onSearchMessages?: PagedSearch<MessageHit>;
   /** Omit to hide the Files filter. An empty query lists the newest files. */
@@ -643,9 +657,23 @@ export function GlobalSearch(props: GlobalSearchProps) {
       ),
     ),
   );
-  const actionItems = createMemo(() =>
-    indexed((props.actions ?? []).map((action): ActionResult => ({ kind: "action", action }))),
-  );
+  const [shortcutsShown, setShortcutsShown] = createSignal(false);
+  const actionItems = createMemo(() => {
+    const actions = props.actions ?? [];
+    const shortcuts: GlobalSearchAction[] = props.shortcuts?.length
+      ? [
+          {
+            id: SHORTCUTS_ACTION_ID,
+            label: t("conversation.globalSearch.shortcuts"),
+            keywords: t("conversation.globalSearch.keywords.shortcuts"),
+            group: "actions",
+            icon: Keyboard,
+            run: () => setShortcutsShown(true),
+          },
+        ]
+      : [];
+    return indexed([...actions, ...shortcuts].map((action): ActionResult => ({ kind: "action", action })));
+  });
   const messageItems = createMemo(() =>
     indexed(
       messageSearch.items().flatMap(({ agentId, message }): MessageResult[] => {
@@ -747,6 +775,11 @@ export function GlobalSearch(props: GlobalSearchProps) {
 
   function activate(result: GlobalSearchResult | null | undefined): void {
     if (!result) return;
+    // The shortcut list replaces the results in this dialog, so the search stays open for it.
+    if (result.kind === "action" && result.action.id === SHORTCUTS_ACTION_ID) {
+      setShortcutsShown(true);
+      return;
+    }
     resultOpened = true;
     props.onOpenChange(false);
     switch (result.kind) {
@@ -815,6 +848,11 @@ export function GlobalSearch(props: GlobalSearchProps) {
     activate(flatResults()[index]);
   }
 
+  function closeShortcuts(): void {
+    setShortcutsShown(false);
+    requestAnimationFrame(() => input?.focus());
+  }
+
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
@@ -823,8 +861,14 @@ export function GlobalSearch(props: GlobalSearchProps) {
           ref={(element) => (dialog = element)}
           class="global-search-dialog"
           aria-describedby={undefined}
+          data-shortcuts={shortcutsShown() ? "" : undefined}
           onKeyDown={(event) => {
-            if (event.key === "Escape" && !event.isComposing) props.onOpenChange(false);
+            if (event.key !== "Escape" || event.isComposing) return;
+            // The first Escape returns from the shortcut list to the results.
+            if (shortcutsShown()) {
+              event.stopPropagation();
+              closeShortcuts();
+            } else props.onOpenChange(false);
           }}
         >
           <DialogExitMotion dialog={() => dialog} />
@@ -968,6 +1012,35 @@ export function GlobalSearch(props: GlobalSearchProps) {
               </ResultsBody>
             </Combobox.Content>
           </Combobox.Root>
+          <Show when={shortcutsShown()}>
+            <section class="global-search-shortcuts" aria-label={t("conversation.globalSearch.shortcuts")}>
+              <header class="global-search-shortcuts-header">
+                <Button
+                  ref={(element: HTMLButtonElement) => {
+                    requestAnimationFrame(() => element.focus());
+                  }}
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={closeShortcuts}
+                >
+                  <ArrowLeft aria-hidden="true" />
+                  {t("common.back")}
+                </Button>
+                <h2>{t("conversation.globalSearch.shortcuts")}</h2>
+              </header>
+              <ul class="global-search-shortcut-list">
+                <For each={props.shortcuts ?? []}>
+                  {(shortcut) => (
+                    <li class="global-search-shortcut-row">
+                      <span>{shortcut.label}</span>
+                      <Kbd>{shortcut.keys}</Kbd>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </section>
+          </Show>
           <div class="global-search-footer" aria-hidden="true">
             <span class="global-search-hint">
               <Kbd>

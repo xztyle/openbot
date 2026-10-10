@@ -361,6 +361,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: (trigger: HTMLBut
               onUpdateRuntimeSettings={updateRuntimeSettings}
               onSetAgentAvatar={props.onSetAgentAvatar}
               skillSelectionRequest={skillSettingsRequest()?.agentId === agent().id ? skillSettingsRequest() : null}
+              pageRequest={props.settingsRequest?.agentId === agent().id ? props.settingsRequest : null}
               routineSelectionRequest={
                 routineSettingsRequest()?.agentId === agent().id ? routineSettingsRequest() : null
               }

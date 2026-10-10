@@ -1049,6 +1049,8 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                 />
               </SettingsField>
               <SaveError field="title" />
+              {/* Before the long instructions field, so that a phone shows them without a long scroll. */}
+              {props.links}
               <SettingsField label={t("agentSettings.instructions")}>
                 <Textarea
                   class="settings-instructions-input"
@@ -1132,7 +1134,6 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                 </Select>
               </SettingsLinkGroup>
               <SaveError field="runtime" />
-              {props.links}
               <SettingsLinkGroup inset title={t("agentSettings.groups.rules")}>
                 <SettingsLinkRow
                   ref={pageRowRef("permissions")}

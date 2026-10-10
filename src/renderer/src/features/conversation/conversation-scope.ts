@@ -639,6 +639,9 @@ export function createConversationViewScope(props: ConversationProps) {
     });
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
+      // An input method ends its candidate list with Escape. That key is not for the page, and a
+      // composing person who loses a queued edit to it loses the text they were still writing.
+      if (event.isComposing || event.keyCode === 229) return;
       // An open popover, such as a routine chip or the model picker, closes on this key from a
       // document listener that runs after this one. Closing the panel under it too discards the
       // edit the person was making.
@@ -657,8 +660,19 @@ export function createConversationViewScope(props: ConversationProps) {
         return;
       }
       if (currentEditingDeliveryId()) {
-        void cancelQueuedMessageEdit();
-        return;
+        // The edit lives in the composer. Escape from a field elsewhere on the page, such as the
+        // search of the sidebar, belongs to that field and must not discard the edit. With no
+        // focus at all, as after the button that started the edit left the page, it is the edit's.
+        const focus = keyboardTarget.activeElement;
+        const focusAway =
+          focus instanceof Element &&
+          focus !== keyboardTarget.body &&
+          focus !== keyboardTarget.documentElement &&
+          !focus.closest(".composer-wrap");
+        if (!focusAway) {
+          void cancelQueuedMessageEdit();
+          return;
+        }
       }
       setOpenReactionMessageId(null);
       setOpenMoreMessageId(null);

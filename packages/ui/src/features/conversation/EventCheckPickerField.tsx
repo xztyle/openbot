@@ -21,7 +21,17 @@ import {
   X,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { createEffect, createMemo, createStore, createUniqueId, For, onCleanup, Show, untrack } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  createStore,
+  createUniqueId,
+  For,
+  onCleanup,
+  Show,
+  untrack,
+} from "solid-js";
 import { useText } from "../../text";
 import {
   entriesOutsideList,
@@ -52,8 +62,17 @@ export interface EventCheckPickerFieldProps {
    * and saves them together: the names are display text, and the value is what the program reads.
    */
   onChange(value: string, labels: Record<string, string>): void;
-  /** Reads the list. It can fail with a sentence that is safe to show. */
-  load(): Promise<EventCheckPickerOptions>;
+  /**
+   * Reads the list. It can fail with a sentence that is safe to show. `refresh` asks the owner to
+   * read the app again and not to answer from a list that it kept.
+   */
+  load(options?: { refresh?: boolean }): Promise<EventCheckPickerOptions>;
+  /**
+   * Loads the list when the field appears and nothing blocks it, without a click. The owner sets it
+   * only where the read is safe: an installed check with its saved private value, answered from the
+   * host's memory when it has a current list. A draft never sets it.
+   */
+  autoLoad?: boolean | undefined;
   /**
    * Names the saved choices that have no name yet, with one cheap call. The field asks once, when it
    * can load and no list was loaded. A failure is silent: the choices keep showing their IDs.
@@ -70,6 +89,12 @@ export interface EventCheckPickerFieldProps {
 
 type LoadStatus = "idle" | "loading" | "loaded" | "failed";
 
+/** When a list was read, in milliseconds: the time the host gave, or now for a host that gives none. */
+function readTime(options: EventCheckPickerOptions): number {
+  const parsed = options.readAt === undefined ? Number.NaN : Date.parse(options.readAt);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
 interface PickerState {
   status: LoadStatus;
   /** Whether a list was loaded at least once. A reload or a failed reload keeps that list on screen. */
@@ -80,6 +105,10 @@ interface PickerState {
   truncated: boolean;
   /** The account that the loaded list is for, when the program said. */
   account: string;
+  /** When the loaded list was read from the app, in milliseconds. Null before any list. */
+  readAt: number | null;
+  /** The app could not be read just now, so the list on screen is an older one. */
+  stale: boolean;
   error: string;
   query: string;
   manual: string;
@@ -102,6 +131,8 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
     labels: Object.fromEntries((initial?.options ?? []).map((option) => [option.id, option.label])),
     truncated: initial?.truncated === true,
     account: initial?.account?.label ?? "",
+    readAt: initial ? readTime(initial) : null,
+    stale: initial?.stale === true,
     error: "",
     query: "",
     manual: "",
@@ -173,7 +204,20 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
     if (!failure) commit(withPickerEntry(current, manual, defaultMode()));
   }
 
-  async function load() {
+  /** One tick each half minute, so "Loaded 3 minutes ago" moves while the field is open. */
+  const [now, setNow] = createSignal(Date.now());
+  const clock = window.setInterval(() => setNow(Date.now()), 30_000);
+  onCleanup(() => window.clearInterval(clock));
+  const age = () => {
+    const readAt = state.readAt;
+    if (readAt === null) return "";
+    const minutes = Math.floor(Math.max(0, now() - readAt) / 60_000);
+    return minutes < 1
+      ? t("agentSettings.eventCheck.picker.loadedNow")
+      : t("agentSettings.eventCheck.picker.loadedAgo", { count: minutes });
+  };
+
+  async function load(refresh = false) {
     if (props.blocked || state.status === "loading" || props.disabled) return;
     const requested = ++generation;
     setState((draft) => {
@@ -181,12 +225,14 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
       draft.error = "";
     });
     try {
-      const result = await props.load();
+      const result = await props.load(refresh ? { refresh: true } : undefined);
       if (requested !== generation) return;
       setState((draft) => {
         draft.options = result.options;
         draft.truncated = result.truncated === true;
         draft.account = result.account?.label ?? "";
+        draft.readAt = readTime(result);
+        draft.stale = result.stale === true;
         draft.status = "loaded";
         draft.listed = true;
         for (const option of result.options) draft.labels[option.id] = option.label;
@@ -206,37 +252,48 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
     }
   }
 
+  /** Names the chosen options that have no name with one call that asks for just those. */
+  async function resolveNames(unnamed: string[]) {
+    const resolve = props.resolve;
+    if (!resolve) return;
+    const requested = generation;
+    try {
+      const result = await resolve(unnamed);
+      // A list that loaded meanwhile already has every name it can give.
+      if (requested !== generation || state.listed) return;
+      setState((draft) => {
+        for (const option of result.options) draft.labels[option.id] = option.label;
+      });
+      const chosen = entries() ?? [];
+      if (chosen.some((entry) => nameOf(entry.id) !== props.labels?.[entry.id]))
+        props.onChange(props.value, namesFor(chosen));
+    } catch {
+      // Names are a convenience. The IDs stay, and Load still works.
+    }
+  }
+
   /**
-   * Names the chosen options that have no name, with one call that asks for just those. It runs
-   * once, as soon as the field can load, and never while a list is on screen.
+   * Once, as soon as the field can ask: names the saved choices that have no name, with the cheap
+   * call, and then loads the list when the owner allows it. The owner answers both from the host's
+   * memory when it can. Neither runs while a list is on screen or while something blocks the field.
    */
-  let resolveStarted = false;
+  let started = false;
   createEffect(
     () => ({
-      ready: props.resolve !== undefined && !props.blocked && !props.disabled && !state.listed,
-      unnamed: (entries() ?? []).filter((entry) => nameOf(entry.id) === undefined).map((entry) => entry.id),
+      ready: entries() !== null && !props.blocked && !props.disabled && !state.listed && state.status === "idle",
+      unnamed:
+        props.resolve === undefined
+          ? []
+          : (entries() ?? []).filter((entry) => nameOf(entry.id) === undefined).map((entry) => entry.id),
+      auto: props.autoLoad === true,
     }),
-    ({ ready, unnamed }) => {
-      if (!ready || resolveStarted || unnamed.length === 0) return;
-      resolveStarted = true;
-      const resolve = props.resolve;
-      if (!resolve) return;
-      const requested = generation;
-      resolve(unnamed).then(
-        (result) => {
-          // A list that loaded meanwhile already has every name it can give.
-          if (requested !== generation || state.listed) return;
-          setState((draft) => {
-            for (const option of result.options) draft.labels[option.id] = option.label;
-          });
-          const chosen = entries() ?? [];
-          if (chosen.some((entry) => nameOf(entry.id) !== props.labels?.[entry.id]))
-            props.onChange(props.value, namesFor(chosen));
-        },
-        () => {
-          // Names are a convenience. The IDs stay, and Load still works.
-        },
-      );
+    ({ ready, unnamed, auto }) => {
+      if (!ready || started || (unnamed.length === 0 && !auto)) return;
+      started = true;
+      void (async () => {
+        if (unnamed.length > 0) await resolveNames(unnamed);
+        if (auto) await load();
+      })();
     },
   );
 
@@ -386,12 +443,16 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
                 disabled={Boolean(props.blocked) || props.disabled}
                 loading={state.status === "loading"}
                 loadingLabel={t("agentSettings.eventCheck.picker.loading")}
-                onClick={() => void load()}
+                onClick={() => void load(state.listed)}
               >
                 <Show when={state.listed}>
                   <RefreshCw aria-hidden="true" />
                 </Show>
-                {state.listed ? t("agentSettings.eventCheck.picker.reload") : t("agentSettings.eventCheck.picker.load")}
+                {state.listed
+                  ? t("agentSettings.eventCheck.picker.reload")
+                  : state.status === "failed"
+                    ? t("common.tryAgain")
+                    : t("agentSettings.eventCheck.picker.load")}
               </Button>
               <Text as="span" variant="caption" tone="muted">
                 {t("agentSettings.eventCheck.picker.selected", { count: chosen().length })}
@@ -400,6 +461,16 @@ export function EventCheckPickerField(props: EventCheckPickerFieldProps) {
             <Show when={props.blocked}>
               <Text as="p" variant="caption" tone="muted" class="event-check-picker-note">
                 {props.blocked}
+              </Text>
+            </Show>
+            <Show when={state.listed && state.readAt !== null}>
+              <Text as="p" variant="caption" tone="muted" class="event-check-picker-note">
+                {age()}
+              </Text>
+            </Show>
+            <Show when={state.listed && state.stale}>
+              <Text as="p" variant="caption" tone="muted" class="event-check-picker-note">
+                {t("agentSettings.eventCheck.picker.stale")}
               </Text>
             </Show>
             <Show when={state.listed && state.account}>

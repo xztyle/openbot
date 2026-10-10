@@ -117,8 +117,9 @@ export function EventCheckSettingField(props: EventCheckSettingFieldProps) {
               blocked={binding().blocked}
               initial={binding().initial}
               onLoaded={(options) => binding().onLoaded?.(options)}
-              load={() => binding().load()}
+              load={(options) => binding().load(options)}
               resolve={binding().resolve}
+              autoLoad={binding().autoLoad}
               onChange={(value, labels) => props.onChange(value, labels)}
             />
           </Row>

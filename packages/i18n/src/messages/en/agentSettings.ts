@@ -34,6 +34,13 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.picker.reload": "Reload the list",
   "agentSettings.eventCheck.picker.loading": "Loading your conversations…",
   "agentSettings.eventCheck.picker.failed": "The list could not be loaded.",
+  "agentSettings.eventCheck.picker.loadedNow": "Loaded just now.",
+  "agentSettings.eventCheck.picker.loadedAgo": {
+    one: "Loaded {count} minute ago.",
+    other: "Loaded {count} minutes ago.",
+  },
+  "agentSettings.eventCheck.picker.stale":
+    "The app could not be reached just now, so this is an older list. Reload to try again.",
   "agentSettings.eventCheck.picker.account": "These are the conversations of {name}.",
   "agentSettings.eventCheck.picker.empty": "No conversations were found for this account.",
   "agentSettings.eventCheck.picker.noMatch": "No conversation matches your search.",

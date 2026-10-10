@@ -70,6 +70,7 @@ export interface EventCheckPickerSource {
     id: string;
     field: string;
     ids?: string[];
+    refresh?: boolean;
   }): Promise<EventCheckPickerOptions>;
 }
 interface Props {
@@ -706,7 +707,11 @@ export function EventChecksSettings(props: Props) {
         field,
         {
           picker,
-          load: () => discover({ agentId: shownAgent, id, field }),
+          load: (options?: { refresh?: boolean }) =>
+            discover({ agentId: shownAgent, id, field, ...(options?.refresh ? { refresh: true } : {}) }),
+          // The list opens with the editor when every private value is saved and approved. The host
+          // answers from its memory when it has a current list, so opening a check is not a request.
+          autoLoad: missing !== null && missing.length === 0,
           // Names for saved choices that have none, from the saved check's own private value.
           resolve: (ids: string[]) => discover({ agentId: shownAgent, id, field, ids }),
           blocked:

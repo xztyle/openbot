@@ -119,10 +119,13 @@ export function installRequests(
   const configuration = Object.fromEntries(
     template.configuration.map((field) => [field.name, form.configuration[field.name] ?? field.value]),
   );
-  // Only the settings that hold a name go in the request, so a host from before names ignores nothing.
-  const configurationLabels = Object.fromEntries(
-    Object.entries(form.labels).filter(([name, names]) => name in configuration && Object.keys(names).length > 0),
-  );
+  // Only the settings that hold a name go in the request. The copies are plain objects: the form is a
+  // store, and a store proxy cannot cross the bridge or be cloned.
+  const configurationLabels: Record<string, Record<string, string>> = {};
+  for (const [name, names] of Object.entries(form.labels)) {
+    const copy = Object.fromEntries(Object.entries(names));
+    if (name in configuration && Object.keys(copy).length > 0) configurationLabels[name] = copy;
+  }
   return form.agentIds.map((agentId) => ({
     slug: template.slug,
     agentId,

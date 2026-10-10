@@ -1,10 +1,10 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("agentSettings", {
-  "agentSettings.eventCheck.program": "Shared watcher program",
+  "agentSettings.eventCheck.program": "Shared event check program",
   "agentSettings.eventCheck.programPlaceholder": "linear-events.mjs",
   "agentSettings.eventCheck.programHelp":
-    "The agent writes the program in OpenBot/Shared/Watchers. Several checks can reuse it with different settings and private keys.",
+    "The agent writes the event check program in the OpenBot/Shared/Watchers folder. Several checks can reuse it with different settings and private keys.",
   "agentSettings.eventCheck.accountLabel": "Account label",
   "agentSettings.eventCheck.variableNames": "Private variable names (one per line)",
   "agentSettings.eventCheck.configuration": "Configuration",

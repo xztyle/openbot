@@ -14,6 +14,12 @@ interface ChatVirtualizerOptions<TScrollElement extends Element, TItemElement ex
   getItemKey: (index: number) => string | number;
   keyVersion: () => unknown;
   scrollMargin: () => number;
+  /**
+   * Whether the list follows its end. While it returns false, an appended row and a row that grows
+   * do not move the reader, even inside the end zone. Call `syncFollow` when the answer changes.
+   * The default follows, as a list that has no reader intent to ask.
+   */
+  follow?: () => boolean;
   onChange?: (virtualizer: Virtualizer<TScrollElement, TItemElement>) => void;
 }
 
@@ -30,9 +36,19 @@ export interface ChatVirtualizer<TItemElement extends Element> {
   itemStart: (index: number) => number | undefined;
   /** Opens a row at the top of the list, rendered or not. A smooth scroll animates there. */
   scrollToIndex: (index: number, options?: { smooth?: boolean }) => void;
+  /** Applies the current answer of the `follow` option to the virtualizer. */
+  syncFollow: () => void;
 }
 
 const STATIC_CHAT_LIMIT = 100;
+/** How close to the end counts as "at the end", for following an appended or growing row. */
+const FOLLOW_END_THRESHOLD = 80;
+
+function followOptions(follow: boolean) {
+  return follow
+    ? ({ followOnAppend: "auto", scrollEndThreshold: FOLLOW_END_THRESHOLD } as const)
+    : ({ followOnAppend: false, scrollEndThreshold: 0 } as const);
+}
 
 export function createChatVirtualizer<TScrollElement extends Element, TItemElement extends Element>(
   options: ChatVirtualizerOptions<TScrollElement, TItemElement>,
@@ -54,8 +70,7 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
     scrollToFn: elementScroll,
     overscan: 5,
     anchorTo: "end",
-    followOnAppend: "auto",
-    scrollEndThreshold: 80,
+    ...untrack(() => followOptions(options.follow?.() ?? true)),
     initialRect: { width: 1, height: 600 },
   });
   let refreshQueued = false;
@@ -117,6 +132,7 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
           estimateSize: options.estimateSize,
           getItemKey: options.getItemKey,
           scrollMargin,
+          ...followOptions(options.follow?.() ?? true),
           onChange: (instance) => {
             scheduleRefresh();
             untrack(() => options.onChange?.(instance));
@@ -155,6 +171,10 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
     itemStart: (index) => virtualizer.measurementsCache[index]?.start,
     scrollToIndex: (index, scroll) =>
       virtualizer.scrollToIndex(index, { align: "start", behavior: scroll?.smooth ? "smooth" : "auto" }),
+    syncFollow: () => {
+      if (!options.follow) return;
+      untrack(() => virtualizer.setOptions({ ...virtualizer.options, ...followOptions(options.follow?.() ?? true) }));
+    },
   };
 }
 

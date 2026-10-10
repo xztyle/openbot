@@ -133,6 +133,7 @@
     "./features/conversation/UnreadMessages": "./src/features/conversation/UnreadMessages.tsx",
     "./features/conversation/activity-timing": "./src/features/conversation/activity-timing.ts",
     "./features/conversation/chat-timestamp": "./src/features/conversation/chat-timestamp.ts",
+    "./features/conversation/contentBlockCache": "./src/features/conversation/contentBlockCache.ts",
     "./features/conversation/createSmoothHeightResize": "./src/features/conversation/createSmoothHeightResize.ts",
     "./features/conversation/routine-schedule-ui": "./src/features/conversation/routine-schedule-ui.ts",
     "./features/custom-providers/CustomProviderDialog": "./src/features/custom-providers/CustomProviderDialog.tsx",

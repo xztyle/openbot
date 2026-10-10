@@ -36,6 +36,38 @@ describe("chat virtualizer", () => {
     await waitFor(() => expect(screen.getByRole("status", { name: "dynamic row 1" })).toHaveTextContent("message-1"));
   });
 
+  it("renders an appended row while the reader holds the list and applies a change of the intent", async () => {
+    let appendMessage: (() => void) | undefined;
+    let virtualizer: ReturnType<typeof createChatVirtualizer<HTMLDivElement, HTMLDivElement>> | undefined;
+    let follows = true;
+
+    function TestList() {
+      const [messageIds, setMessageIds] = createSignal(["message-0"]);
+      appendMessage = () => setMessageIds((current) => [...current, "message-1"]);
+      virtualizer = createChatVirtualizer<HTMLDivElement, HTMLDivElement>({
+        count: () => messageIds().length,
+        getScrollElement: () => null,
+        estimateSize: () => 128,
+        getItemKey: (index) => messageIds()[index] ?? index,
+        keyVersion: () => messageIds().join(":"),
+        scrollMargin: () => 0,
+        follow: () => follows,
+      });
+      const rows = createMemo(() => virtualizer?.getVirtualItems() ?? []);
+      return (
+        <For each={rows()}>{(row) => <output aria-label={`held row ${row.index}`}>{String(row.key)}</output>}</For>
+      );
+    }
+
+    render(() => <TestList />);
+    follows = false;
+    virtualizer?.syncFollow();
+    appendMessage?.();
+    await waitFor(() => expect(screen.getByRole("status", { name: "held row 1" })).toHaveTextContent("message-1"));
+    follows = true;
+    expect(() => virtualizer?.syncFollow()).not.toThrow();
+  });
+
   /*
    * The transcript of a running chat is short against its viewport, so the virtualizer renders row
    * 0 even when the reader sits at the newest message. The row index alone would then ask for the

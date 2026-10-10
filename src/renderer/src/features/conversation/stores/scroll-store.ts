@@ -35,6 +35,8 @@ interface ScrollElements {
 interface ScrollStickyState {
   getStickToLatest: () => boolean;
   setStickToLatest: (value: boolean) => void;
+  /** A smooth jump to the latest message starts. The steps of it do not change the stick. */
+  beginLatestJump: (element: HTMLElement) => void;
   getCurrentUnreadCount: () => number;
 }
 
@@ -190,6 +192,8 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     getScrollElement: () => deps.elements.scrollElement() ?? null,
     estimateSize: () => 128,
     getItemKey: (index) => timelineMessages()[index]?.id ?? index,
+    // The virtualizer follows the bottom only while the reader's intent says so.
+    follow: deps.sticky.getStickToLatest,
     keyVersion: () => `${timelineMessages()[0]?.id ?? ""}:${timelineMessages().at(-1)?.id ?? ""}`,
     scrollMargin: virtualScrollMargin,
     onChange: (instance) => {
@@ -298,6 +302,7 @@ export function createScrollStore(deps: ScrollStoreDeps) {
       await deps.props.onLoadLatest?.();
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
+    deps.sticky.beginLatestJump(scrollElement);
     scrollToLatestMessage(scrollElement);
   }
 

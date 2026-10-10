@@ -39,6 +39,26 @@ export function mergeConversationPage<Message extends { id: string }>(
 }
 
 /**
+ * The latest page, read again after a reconnect or a status change, joined to what is loaded.
+ *
+ * The page is the tail of the history. It keeps the older pages and the window that the reader
+ * loaded: what is loaded before the first message that the page shares stays, and the page
+ * replaces the rest, so a message that the host no longer sends does not stay between the page's
+ * messages. `null` means that no loaded message is in the page: the page and the loaded messages
+ * do not touch, a gap may lie between them, and the caller shows the page alone.
+ */
+export function refreshLatestPage<Message extends { id: string }>(
+  loaded: readonly Message[],
+  page: readonly Message[],
+): { messages: Message[]; keptOlder: boolean } | null {
+  const pageIds = new Set(page.map((message) => message.id));
+  const firstShared = loaded.findIndex((message) => pageIds.has(message.id));
+  if (firstShared < 0) return null;
+  const older = loaded.slice(0, firstShared);
+  return { messages: [...older, ...page], keptOlder: older.length > 0 };
+}
+
+/**
  * The part of a refreshed snapshot a conversation may show without losing its
  * window.
  *

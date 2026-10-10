@@ -1,7 +1,12 @@
-import type { AgentEvent, RespondToApprovalInput, RespondToPromptInput } from "@openbot/contracts/ipc";
-import type { AgentMessage } from "@openbot/ui/data";
+import type {
+  AgentEvent,
+  ConversationPage,
+  RespondToApprovalInput,
+  RespondToPromptInput,
+} from "@openbot/contracts/ipc";
+import type { AgentMessage, AgentProfile } from "@openbot/ui/data";
 import { createEffect, createMemo, createSignal } from "solid-js";
-import { toAgentMessage, toAgentMessages } from "../../app-message-projection";
+import { createMessageProjector, toAgentMessage } from "../../app-message-projection";
 import type { createRemoteAgentAdmin } from "../agents/remote-agent-admin";
 import type { WebWorkspace } from "./web-client-context";
 
@@ -19,9 +24,38 @@ function withPreviewUrls(message: AgentMessage, previewUrl: (attachmentId: strin
   };
 }
 
+/**
+ * `withPreviewUrls` that returns the object it made before while the message and its preview URLs
+ * are the same, so a row with a picture does not run again for a delta of another message.
+ */
+function createPreviewProjector(previewUrl: (attachmentId: string) => string | null) {
+  const cache = new WeakMap<AgentMessage, { signature: string; urls: (string | null)[]; value: AgentMessage }>();
+  return (message: AgentMessage): AgentMessage => {
+    if (!message.attachments?.length) return message;
+    // The copies hold the summaries as they were, so a change inside one is a new result too.
+    const signature = JSON.stringify(message.attachments);
+    const urls = message.attachments.map((attachment) => previewUrl(attachment.id));
+    const cached = cache.get(message);
+    if (
+      cached &&
+      cached.signature === signature &&
+      cached.urls.length === urls.length &&
+      cached.urls.every((url, index) => url === urls[index])
+    )
+      return cached.value;
+    const value = withPreviewUrls(message, previewUrl);
+    cache.set(message, { signature, urls, value });
+    return value;
+  };
+}
+
 /** The selected agent's messages, and the prompt and approval that wait for the user. */
 export function createWebConversationView(options: {
-  workspace: Pick<WebWorkspace, "state" | "selected" | "conversation" | "answer" | "approve">;
+  workspace: Pick<WebWorkspace, "answer" | "approve"> & {
+    state: Pick<WebWorkspace["state"], "approvals" | "prompts" | "selectedId" | "status">;
+    selected: () => Pick<AgentProfile, "id" | "threadId"> | undefined;
+    conversation: () => { page: ConversationPage | null } | undefined;
+  };
   remoteAgentAdmin: Pick<ReturnType<typeof createRemoteAgentAdmin>, "settings" | "update">;
   /** True when the agent form or a channel covers the conversation. */
   hidden: () => boolean;
@@ -96,11 +130,15 @@ export function createWebConversationView(options: {
       questions: message.questionPrompt.questions,
     };
   });
+  // A delta changes one message. The projector keeps the object of every other message, so the
+  // rows of those messages do not run again.
+  const projectMessages = createMessageProjector();
   const projected = createMemo(() =>
-    toAgentMessages(workspace.conversation()?.page?.messages ?? [], workspace.state.selectedId ?? undefined),
+    projectMessages(workspace.conversation()?.page?.messages ?? [], workspace.state.selectedId ?? undefined),
   );
+  const withPreviews = createPreviewProjector(previewUrl);
   // A second layer, so a picture that arrives rebuilds only the messages that have attachments.
-  const messages = createMemo(() => projected().map((message) => withPreviewUrls(message, previewUrl)));
+  const messages = createMemo(() => projected().map(withPreviews));
   /** The replied-to messages that are not on the loaded pages. The host sends them with each page. */
   const messageReferences = createMemo(() => {
     const page = workspace.conversation()?.page;

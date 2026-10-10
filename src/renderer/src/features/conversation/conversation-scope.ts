@@ -16,6 +16,7 @@ import { useConversationController } from "./conversation-controller-context";
 import { agentConversationKey, composerDraftKey } from "./conversation-keys";
 import { conversationRuntime } from "./conversation-runtime";
 import type { ComposerDraft, ConversationProps, ConversationTarget } from "./conversation-types";
+import { createScrollFollow } from "./scroll-follow";
 import { createActivityStore } from "./stores/activity-store";
 import { createBrowserStore } from "./stores/browser-store";
 import { createComposerActions } from "./stores/composer-actions";
@@ -31,10 +32,7 @@ import { createSearchStore } from "./stores/search-store";
 import { createSettingsStore, runtimeSettingsEqual } from "./stores/settings-store";
 import { createSkillsStore } from "./stores/skills-store";
 import { createVoiceStore } from "./stores/voice-store";
-
-function followConversationBottom(element: HTMLDivElement): void {
-  element.scrollTop = element.scrollHeight;
-}
+import { createTrackedElement } from "./tracked-element";
 
 export function createConversationViewScope(props: ConversationProps) {
   const controller = useConversationController();
@@ -328,6 +326,15 @@ export function createConversationViewScope(props: ConversationProps) {
       if (target && sent) pendingSends.settle(target, drawnIds);
     },
   );
+  // Who follows the newest message: the reader's input decides, and every writer reads it.
+  const scrollFollow = createScrollFollow({
+    onStickChange: () => scroll.messageVirtualizer.syncFollow(),
+    onJumpEnd: () => {
+      updateScrollFade();
+      updateUnreadDividerVisibility();
+    },
+  });
+  onCleanup(() => scrollFollow.dispose());
   const scroll = createScrollStore({
     props,
     markingRead,
@@ -337,13 +344,12 @@ export function createConversationViewScope(props: ConversationProps) {
     elements: {
       scrollElement: () => scrollElement,
       virtualRoot: () => virtualRoot,
-      unreadMessagesDivider: () => unreadMessagesDivider,
+      unreadMessagesDivider: () => unreadMessagesDivider.get(),
     },
     sticky: {
-      getStickToLatest: () => stickToLatest,
-      setStickToLatest: (value: boolean) => {
-        stickToLatest = value;
-      },
+      getStickToLatest: scrollFollow.stick,
+      setStickToLatest: scrollFollow.setStick,
+      beginLatestJump: scrollFollow.beginJump,
       getCurrentUnreadCount: () => currentUnreadCount,
     },
   });
@@ -377,9 +383,7 @@ export function createConversationViewScope(props: ConversationProps) {
     chatSearchQuery,
     activeChatSearchIndex,
     scrollElement: () => scrollElement,
-    revealMatch: () => {
-      stickToLatest = false;
-    },
+    revealMatch: () => scrollFollow.setStick(false),
     setChatSearchOpen,
     setChatSearchQuery,
     chatSearchMatches,
@@ -497,9 +501,7 @@ export function createConversationViewScope(props: ConversationProps) {
     clearConversationError,
     clearSubmittedDraft,
     setConversationError,
-    setStickToLatest: (value: boolean) => {
-      stickToLatest = value;
-    },
+    setStickToLatest: scrollFollow.setStick,
     pendingSends,
     attachmentPicker: () => attachmentPicker,
   });
@@ -571,7 +573,7 @@ export function createConversationViewScope(props: ConversationProps) {
   let agentActivitySlot: HTMLDivElement | undefined;
   let requiredInteractionElement: HTMLDivElement | undefined;
   let scrollResizeObserver: ResizeObserver | undefined;
-  let unreadMessagesDivider: HTMLDivElement | undefined;
+  const unreadMessagesDivider = createTrackedElement<HTMLDivElement>();
   let latestScrollFrame: number | undefined;
   let latestScrollSettleFrame: number | undefined;
   let currentUnreadCount = 0;
@@ -582,7 +584,6 @@ export function createConversationViewScope(props: ConversationProps) {
   let browserVisibilityFrame: number | undefined;
   let browserBoundsFrame: number | undefined;
   let browserVisibilityGeneration = 0;
-  let stickToLatest = true;
   let lastConversationIdentity: string | undefined;
   let lastPanelAgentId: string | undefined;
   let lastHandledSettingsRequestNonce: number | undefined;
@@ -646,6 +647,9 @@ export function createConversationViewScope(props: ConversationProps) {
     });
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
+      // An input method ends its candidate list with Escape. That key is not for the page, and a
+      // composing person who loses a queued edit to it loses the text they were still writing.
+      if (event.isComposing || event.keyCode === 229) return;
       // An open popover, such as a routine chip or the model picker, closes on this key from a
       // document listener that runs after this one. Closing the panel under it too discards the
       // edit the person was making.
@@ -664,8 +668,19 @@ export function createConversationViewScope(props: ConversationProps) {
         return;
       }
       if (currentEditingDeliveryId()) {
-        void cancelQueuedMessageEdit();
-        return;
+        // The edit lives in the composer. Escape from a field elsewhere on the page, such as the
+        // search of the sidebar, belongs to that field and must not discard the edit. With no
+        // focus at all, as after the button that started the edit left the page, it is the edit's.
+        const focus = keyboardTarget.activeElement;
+        const focusAway =
+          focus instanceof Element &&
+          focus !== keyboardTarget.body &&
+          focus !== keyboardTarget.documentElement &&
+          !focus.closest(".composer-wrap");
+        if (!focusAway) {
+          void cancelQueuedMessageEdit();
+          return;
+        }
       }
       setOpenReactionMessageId(null);
       setOpenMoreMessageId(null);
@@ -721,7 +736,7 @@ export function createConversationViewScope(props: ConversationProps) {
     window.addEventListener("pointerdown", closeMessageMenus);
     scrollResizeObserver = new ResizeObserver(() => {
       updateVirtualScrollMargin();
-      if (scrollElement && stickToLatest) followConversationBottom(scrollElement);
+      if (scrollElement) scrollFollow.follow(scrollElement);
       updateScrollFade();
       updateUnreadDividerVisibility();
     });
@@ -732,7 +747,7 @@ export function createConversationViewScope(props: ConversationProps) {
     requestAnimationFrame(() => {
       if (!scrollElement) return;
       updateVirtualScrollMargin();
-      if (stickToLatest) scrollElement.scrollTop = scrollElement.scrollHeight;
+      scrollFollow.follow(scrollElement);
       updateScrollFade(scrollElement);
       updateUnreadDividerVisibility();
     });
@@ -749,12 +764,19 @@ export function createConversationViewScope(props: ConversationProps) {
   });
 
   createEffect(
-    () => ({
-      request: props.messageFocusRequest,
-      agentId: props.agent?.id,
-      loaded: props.loaded,
-      messageIds: props.messages.map((message) => message.id).join("\u0000"),
-    }),
+    () => {
+      const request = props.messageFocusRequest;
+      // The ids are the signal that a message the request waits for has loaded. A request that was
+      // handled, or none, needs no list of ids, so the list changes of a streaming reply do not
+      // join every id.
+      const waiting = request ? request.nonce !== lastHandledMessageFocusNonce : false;
+      return {
+        request,
+        agentId: props.agent?.id,
+        loaded: props.loaded,
+        messageIds: waiting ? props.messages.map((message) => message.id).join("\u0000") : "",
+      };
+    },
     ({ request, agentId, loaded }) => {
       if (!request || request.agentId !== agentId || !loaded || request.nonce === lastHandledMessageFocusNonce) return;
       requestAnimationFrame(() => {
@@ -765,7 +787,7 @@ export function createConversationViewScope(props: ConversationProps) {
         );
         if (!target) return;
         lastHandledMessageFocusNonce = request.nonce;
-        stickToLatest = false;
+        scrollFollow.setStick(false);
         // A page that loaded just before the request queued a scroll to the latest message. That scroll
         // must not move the transcript away from the message the user picked, so it is cancelled and
         // its other updates run here.
@@ -805,26 +827,24 @@ export function createConversationViewScope(props: ConversationProps) {
       if (conversationIdentity !== lastConversationIdentity) {
         if (lastConversationIdentity !== undefined) closeChatSearch(false);
         lastConversationIdentity = conversationIdentity;
-        stickToLatest = true;
+        scrollFollow.reset();
         setAgentActivitySpaceReserved(false);
       }
       if (latestScrollFrame !== undefined) cancelAnimationFrame(latestScrollFrame);
       if (latestScrollSettleFrame !== undefined) cancelAnimationFrame(latestScrollSettleFrame);
-      const followLatest = stickToLatest;
+      // Both frames read the intent when they run: the reader may scroll up between a delta and its
+      // frame, and a write that was queued before that must not take the reader back to the bottom.
       latestScrollFrame = requestAnimationFrame(() => {
         latestScrollFrame = undefined;
         if (!scrollElement) return;
         updateVirtualScrollMargin();
-        if (followLatest) followConversationBottom(scrollElement);
+        scrollFollow.follow(scrollElement);
         updateScrollFade(scrollElement);
         updateUnreadDividerVisibility();
         latestScrollSettleFrame = requestAnimationFrame(() => {
           latestScrollSettleFrame = undefined;
           if (!scrollElement) return;
-          if (followLatest) {
-            stickToLatest = true;
-            followConversationBottom(scrollElement);
-          }
+          scrollFollow.follow(scrollElement);
           updateScrollFade(scrollElement);
           updateUnreadDividerVisibility();
         });
@@ -1082,16 +1102,13 @@ export function createConversationViewScope(props: ConversationProps) {
     scrollFades.adopt(element);
     updateVirtualScrollMargin();
   };
-  const setStickToLatest = (value: boolean) => {
-    stickToLatest = value;
-  };
   const setVirtualRootElement = (element: HTMLDivElement) => {
     virtualRoot = element;
     updateVirtualScrollMargin();
     scrollResizeObserver?.observe(element);
   };
   const setUnreadMessagesDividerElement = (element: HTMLDivElement) => {
-    unreadMessagesDivider = element;
+    unreadMessagesDivider.set(element);
   };
   const setAgentActivitySlotElement = (element: HTMLDivElement) => {
     agentActivitySlot = element;
@@ -1117,7 +1134,7 @@ export function createConversationViewScope(props: ConversationProps) {
     setConversationPanelElement,
     setAttachmentPickerElement,
     setScrollElement,
-    setStickToLatest,
+    scrollFollow,
     setUnreadMessagesDividerElement,
     setVirtualRootElement,
     activeBrowserControl,

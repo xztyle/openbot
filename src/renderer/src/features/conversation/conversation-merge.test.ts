@@ -1,6 +1,6 @@
 import { continuesSenderRun } from "./chat-grouping";
 import { agentConversationKey, agentMessageKey, composerDraftKey } from "./conversation-keys";
-import { mergeConversationPage, windowedSnapshotMessages } from "./conversation-merge";
+import { mergeConversationPage, refreshLatestPage, windowedSnapshotMessages } from "./conversation-merge";
 
 const message = (id: string) => ({ id });
 const ids = (messages: readonly { id: string }[]) => messages.map((entry) => entry.id);
@@ -133,5 +133,47 @@ describe("continuesSenderRun", () => {
   it("opens a run when either row has no stored time", () => {
     expect(continuesSenderRun({ author: "agent" }, chatRow("agent", 1), openRow)).toBe(false);
     expect(continuesSenderRun(chatRow("agent", 0), { author: "agent" }, openRow)).toBe(false);
+  });
+});
+
+describe("refreshLatestPage", () => {
+  it("keeps the older pages above the page that was read again", () => {
+    const loaded = [message("a"), message("b"), message("c"), message("d")];
+    const page = [message("c"), message("d"), message("e")];
+
+    const refreshed = refreshLatestPage(loaded, page);
+
+    expect(refreshed && ids(refreshed.messages)).toEqual(["a", "b", "c", "d", "e"]);
+    expect(refreshed?.keptOlder).toBe(true);
+  });
+
+  it("takes the page's copy of a message that is in both", () => {
+    const refreshed = refreshLatestPage([{ id: "a", text: "streaming" }], [{ id: "a", text: "final" }]);
+
+    expect(refreshed?.messages).toEqual([{ id: "a", text: "final" }]);
+    expect(refreshed?.keptOlder).toBe(false);
+  });
+
+  it("drops a loaded message that the page's range no longer holds", () => {
+    // The host removed `x` from between the messages that it still sends.
+    const refreshed = refreshLatestPage(
+      [message("a"), message("b"), message("x"), message("c")],
+      [message("b"), message("c")],
+    );
+
+    expect(refreshed && ids(refreshed.messages)).toEqual(["a", "b", "c"]);
+  });
+
+  it("asks for a replace when the page shares no message with what is loaded", () => {
+    expect(refreshLatestPage([message("a"), message("b")], [message("y"), message("z")])).toBeNull();
+    expect(refreshLatestPage([], [message("y")])).toBeNull();
+    expect(refreshLatestPage([message("a")], [])).toBeNull();
+  });
+
+  it("keeps a window around a message when the page reaches it", () => {
+    const around = [message("m5"), message("m6"), message("m7")];
+    const refreshed = refreshLatestPage(around, [message("m7"), message("m8"), message("m9")]);
+
+    expect(refreshed && ids(refreshed.messages)).toEqual(["m5", "m6", "m7", "m8", "m9"]);
   });
 });

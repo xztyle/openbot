@@ -259,25 +259,36 @@ export function AppAction(props: {
 }
 
 /**
- * Says that the apps of the host could not be read, and offers Retry. Connect stays off until a
- * read works: the list that failed may hold the app that the user is about to connect again.
+ * What the apps of the host cannot show: that the read failed, with Retry, or that this account may
+ * not connect apps at all. Connect stays off until a read works: the list that failed may hold the
+ * app that the user is about to connect again.
  */
 export function AppsReadNotice(props: { scope: MarketplaceScope }) {
   const { t } = useText();
   const model = () => props.scope.model;
   return (
-    <Show when={model().appsRead() === "failed"}>
-      <div class="marketplace-apps-failed" role="alert">
+    <>
+      <Show when={model().appsRead() === "failed"}>
+        <div class="marketplace-apps-failed" role="alert">
+          <Text as="p" variant="body-sm" tone="muted">
+            {t("marketplace.app.readFailed", {
+              host: model().appsHostName?.() ?? t("mcp.connect.thisComputer"),
+            })}
+          </Text>
+          <Button type="button" variant="outline" size="sm" onClick={model().retryApps}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      </Show>
+      {/* A member, or an admin of a host that holds no apps for it, sees no state of any app. */}
+      <Show when={!model().canConnectApps()}>
         <Text as="p" variant="body-sm" tone="muted">
-          {t("marketplace.app.readFailed", {
-            host: model().appsHostName?.() ?? t("mcp.connect.thisComputer"),
-          })}
+          {model().appsHostName?.()
+            ? t("marketplace.app.adminOnly", { server: model().appsHostName?.() ?? "" })
+            : t("marketplace.app.adminOnlyThisServer")}
         </Text>
-        <Button type="button" variant="outline" size="sm" onClick={model().retryApps}>
-          {t("common.retry")}
-        </Button>
-      </div>
-    </Show>
+      </Show>
+    </>
   );
 }
 

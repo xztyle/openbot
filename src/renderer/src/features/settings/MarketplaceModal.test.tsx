@@ -564,6 +564,19 @@ describe("MarketplaceModal", () => {
       expect(screen.queryByRole("dialog", { name: "Connect Aave" })).toBeNull();
     });
 
+    it("tells a member who may connect apps, instead of showing each app as not connected", async () => {
+      renderMarketplace({ plugins: [plugin], serverName: "Studio" });
+      fireEvent.click(screen.getByRole("tab", { name: "Apps" }));
+
+      expect(await screen.findByText("Only an owner or admin of Studio can connect apps.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Connect/u })).toBeNull();
+      fireEvent.click(await screen.findByRole("button", { name: "Open Aave" }));
+      await screen.findByRole("heading", { name: "Aave", level: 3 });
+      // The page names no state it cannot know.
+      expect(screen.queryByText("Not connected")).toBeNull();
+      expect(screen.getByText("Only an owner or admin of Studio can connect apps.")).toBeInTheDocument();
+    });
+
     it("connects the app on the host it was given", async () => {
       const saved: McpServerConfig[] = [];
       const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => {

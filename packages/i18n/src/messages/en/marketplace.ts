@@ -109,6 +109,8 @@ export const messages = defineMessages("marketplace", {
   "marketplace.app.connectNamed": "Connect {name}",
   "marketplace.app.checking": "Checking…",
   "marketplace.app.readFailed": "Could not read apps on {host}.",
+  "marketplace.app.adminOnly": "Only an owner or admin of {server} can connect apps.",
+  "marketplace.app.adminOnlyThisServer": "Only an owner or admin of this server can connect apps.",
   "marketplace.app.reconnectNamed": "Reconnect {name}",
   "marketplace.app.connected": "Connected",
   "marketplace.app.attention": "Needs attention",

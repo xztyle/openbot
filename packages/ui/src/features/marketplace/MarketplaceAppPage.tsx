@@ -176,8 +176,13 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
         name={props.app.name}
         status={pillStatus(props.app.status)}
         statusLabel={
-          // Before the host answers, "Not connected" would be a guess that a Connect press acts on.
-          model().appsRead() === "loading" ? t("marketplace.app.checking") : t(STATUS_LABEL[props.app.status])
+          // Before the host answers, "Not connected" would be a guess that a Connect press acts on. An
+          // app that this account cannot read has no state to name.
+          props.app.status === "unknown"
+            ? ""
+            : model().appsRead() === "loading"
+              ? t("marketplace.app.checking")
+              : t(STATUS_LABEL[props.app.status])
         }
         subtitle={props.app.tagline}
         actions={

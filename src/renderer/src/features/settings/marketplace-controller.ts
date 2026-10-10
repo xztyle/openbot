@@ -77,6 +77,11 @@ export interface MarketplaceControllerProps {
   pluginServerId?: string | undefined;
   /** The joined server that keeps an app's credential. Absent when this computer keeps it. */
   pluginHostName?: string | undefined;
+  /**
+   * The name of the server that the Marketplace is for, when this account cannot connect apps on it.
+   * The sentence that says who can connect them names it.
+   */
+  serverName?: string | undefined;
   /** The joined server whose agents `agents` lists, when this account manages it. Absent: this computer. */
   hostServerId?: string | undefined;
   /** The joined server that a marketplace agent is added to. Absent: this computer. */
@@ -541,7 +546,9 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
           name: plugin.name,
           tagline: plugin.tagline,
           category: plugin.category,
-          status: pluginStatus(plugin),
+          // An account that cannot read the host's apps knows neither that the app is connected nor that
+          // it is not.
+          status: props.pluginServerId ? pluginStatus(plugin) : "unknown",
           accountCount: pluginRows(plugin).length,
           plugin,
         }),
@@ -1305,7 +1312,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     canConnectApps: () => Boolean(props.pluginServerId),
     appsRead,
     retryApps,
-    appsHostName: () => props.pluginHostName,
+    appsHostName: () => (props.pluginServerId ? props.pluginHostName : props.serverName),
     appBusy: (id) => Boolean(busy[`app:${id}`]),
     pluginSkillAgents: (app) => (app.kind === "plugin" ? pluginSkillAgents(app.plugin) : []),
     setPluginSkills,

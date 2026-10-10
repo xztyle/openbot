@@ -621,6 +621,40 @@ describe("OpenBot connected desktop shell", () => {
     );
   });
 
+  it("moves a queued message up or down with buttons, for a touch screen", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+    const first = queuedDelivery("delivery-first", "First work", 1);
+    const second = queuedDelivery("delivery-second", "Second work", 2);
+    const third = queuedDelivery("delivery-third", "Third work", 3);
+    emitAgentEvent?.({
+      type: "queue-changed",
+      snapshot: {
+        agentId: "chief",
+        deliveries: [
+          queuedDelivery("delivery-running", "Running", null, { status: "running", turnId: "turn-1" }),
+          first,
+          second,
+          third,
+        ],
+      },
+    });
+
+    // Nothing can move above the first message or below the last one.
+    await screen.findByRole("group", { name: "Queued message 1: First work" });
+    expect(screen.getByRole("button", { name: "Move queued message 1 up" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move queued message 3 down" })).toBeDisabled();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Move queued message 2 up" }));
+    await waitFor(() =>
+      expect(window.openbot.agent.reorderQueue).toHaveBeenCalledWith({
+        agentId: "chief",
+        deliveryIds: ["delivery-second", "delivery-first", "delivery-third"],
+      }),
+    );
+    expect(await screen.findByText("Moved queued message to position 1 of 3.")).toBeInTheDocument();
+  });
+
   it("keeps foreground starts out of Queue and hides waiting work between turns", async () => {
     render(() => <App />);
     await screen.findByRole("heading", { name: "Chief" });

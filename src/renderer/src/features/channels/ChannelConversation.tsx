@@ -537,9 +537,10 @@ export function ChannelConversation(props: ChannelConversationProps) {
   /**
    * The work that waits for the reader: one entry for each stopped run, not for each stopped task.
    *
-   * A task the service stopped carries the reason it stopped, and an archived channel stops every
-   * task without one, so the reason is what tells the two apart. A failed task belongs here too: it
-   * carries its own reason, its parent waits for it, and nothing but the reader starts it again.
+   * A task the service stopped carries the reason it stopped. A task the reader stopped has none:
+   * `stop` clears it, and the card says "Stopped by you". An archived channel has no cards, because
+   * the whole channel is past work. A failed task belongs here too: it carries its own reason, its
+   * parent waits for it, and nothing but the reader starts it again.
    * The assignment limit stops a whole tree at once, and `resume` starts a task with everything
    * under it, so the entry has to be the root: a reader who continues a child would leave the root
    * stopped, and a card for each task would repeat one reason several times.
@@ -547,7 +548,11 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const pausedTasks = createMemo(() => {
     const page = channels.state.page;
     if (!page || page.channel.archived) return [];
-    const stopped = page.tasks.filter((task) => (task.state === "paused" || task.state === "failed") && task.error);
+    // A task the reader stopped is paused with no reason: `stop` clears the error. It is still a run
+    // that waits for them, so it stays here with a reason of its own that the card words.
+    const stopped = page.tasks.filter(
+      (task) => (task.state === "paused" || task.state === "failed") && (task.error || task.state === "paused"),
+    );
     const roots = new Map<string, (typeof stopped)[number]>();
     for (const task of stopped) {
       const known = roots.get(task.rootTaskId);
@@ -1024,12 +1029,24 @@ export function ChannelConversation(props: ChannelConversationProps) {
             </Show>
             <Show when={!page().channel.archived}>
               <div class="composer-wrap">
-                <AwaitingReplies items={awaitingSubtasks()} title={t("chat.awaiting.subtasks")} />
+                <AwaitingReplies
+                  items={awaitingSubtasks()}
+                  title={t("chat.awaiting.subtasks")}
+                  onOpenAgent={(id) => {
+                    channels.close();
+                    selectAgent(id);
+                  }}
+                />
                 <ChannelStoppedTasks
                   tasks={pausedTasks()}
                   members={page().channel.members}
+                  agents={agentList()}
                   name={name}
                   onResume={resumeTask}
+                  onOpenChat={(id) => {
+                    channels.close();
+                    selectAgent(id);
+                  }}
                 />
                 <form
                   class="composer"

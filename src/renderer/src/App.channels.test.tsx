@@ -658,7 +658,9 @@ it("shows a channel read that lands while more changes are still arriving", asyn
   for (const release of gates) release();
 });
 
-async function openChannelWithStoppedTask(options: { withChild?: boolean; state?: "paused" | "failed" } = {}) {
+async function openChannelWithStoppedTask(
+  options: { withChild?: boolean; state?: "paused" | "failed"; error?: string | null } = {},
+) {
   await window.openbot.agent.channelCommand({
     type: "save",
     operationId: "create",
@@ -689,7 +691,7 @@ async function openChannelWithStoppedTask(options: { withChild?: boolean; state?
     const stopped = page.tasks.map((task) => ({
       ...task,
       state: options.state ?? ("paused" as const),
-      error: STOPPED_TASK_REASON,
+      error: options.error === undefined ? STOPPED_TASK_REASON : options.error,
     }));
     // The assignment limit stops the root task and everything under it, so the child arrives
     // stopped with the same reason on it.
@@ -1134,4 +1136,26 @@ it("keeps the unread divider while the channel is read, and drops it when the re
   const again = await screen.findByRole("main", { name: "Channel conversation" });
   await within(again).findByText("Second new answer.");
   expect(within(again).queryByRole("separator", { name: "New messages" })).not.toBeInTheDocument();
+});
+
+it("keeps a task the reader stopped, says so, and names its owner and request", async () => {
+  const { notice, command, state } = await openChannelWithStoppedTask({ error: null });
+  expect(notice).toHaveTextContent("Stopped by you.");
+  expect(within(notice).getByText("Chief")).toBeInTheDocument();
+  expect(within(notice).getByText("Prepare the report")).toBeInTheDocument();
+  expect(within(notice).getByRole("button", { name: "Open the chat of Chief" })).toBeInTheDocument();
+
+  await fireEvent.click(within(notice).getByRole("button", { name: "Continue" }));
+  await waitFor(() =>
+    expect(command).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "resume", taskId: state.taskId, recipientAgentId: null }),
+    ),
+  );
+  await waitFor(() => expect(screen.queryByRole("region", { name: "Stopped task for Chief" })).not.toBeInTheDocument());
+});
+
+it("opens the chat of the owner of a stopped task", async () => {
+  const { notice } = await openChannelWithStoppedTask();
+  await fireEvent.click(within(notice).getByRole("button", { name: "Open the chat of Chief" }));
+  await screen.findByRole("main", { name: "Conversation" });
 });

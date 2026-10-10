@@ -46,6 +46,31 @@
   justify-content: space-between;
   padding: var(--openbot-space-2) var(--openbot-space-3);
 }
+/* Who owned the task and what it was, on a line of its own above the reason and the actions. */
+.channel-paused-task-owner {
+  display: flex;
+  min-width: 0;
+  flex: 1 0 100%;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  font-size: var(--openbot-text-sm);
+}
+.channel-paused-task-avatar {
+  width: var(--openbot-space-6);
+  height: var(--openbot-space-6);
+  flex: 0 0 var(--openbot-space-6);
+}
+.channel-paused-task-name {
+  flex: 0 0 auto;
+  font-weight: var(--openbot-weight-medium);
+}
+.channel-paused-task-instruction {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
 .channel-paused-task + .channel-paused-task {
   border-top: 1px solid var(--openbot-accent-soft);
 }

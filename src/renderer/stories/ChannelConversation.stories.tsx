@@ -125,6 +125,7 @@ function StoppedTaskConversation(props: {
     tasks: (props.noStopped ? [] : props.multiple ? [chief, sales, research] : [chief]).map((agent) => ({
       id: `stopped-${agent.id}`,
       ownerAgentId: agent.id,
+      instruction: "Prepare the launch report from the source data\nInclude the pricing table",
       error: props.expanded
         ? "The automatic assignment limit was reached. Continue or reassign this task. The source report still needs review before the team can complete the work."
         : "The agent could not complete this task.",
@@ -141,6 +142,8 @@ function StoppedTaskConversation(props: {
         <AwaitingReplies items={props.waiting ? waitingSubtasks : []} title="Waiting for sub-tasks" />
         <ChannelStoppedTasks
           tasks={state.tasks}
+          agents={STORY_AGENTS}
+          onOpenChat={fn()}
           members={STORY_AGENTS.map((agent) => ({ agentId: agent.id }))}
           name={(id) => STORY_AGENTS.find((agent) => agent.id === id)?.name ?? "Unassigned"}
           onResume={async (id) => {

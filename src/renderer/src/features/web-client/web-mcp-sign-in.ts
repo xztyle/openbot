@@ -15,6 +15,18 @@ import { currentText } from "@openbot/ui/text";
 function cancelled(): Error {
   return new Error(currentText().t("mcp.remote.cancelled"));
 }
+function timedOut(): Error {
+  return new Error(currentText().t("mcp.remote.timedOut"));
+}
+function windowClosed(): Error {
+  return new Error(currentText().t("mcp.remote.windowClosed"));
+}
+/**
+ * How long a closed pop-up may stay closed before the sign-in fails. The page that the provider
+ * returns to posts its answer and closes itself, and the answer reaches this window a moment later.
+ */
+const CLOSED_WINDOW_GRACE_MS = 1500;
+
 function checkActive(signal: AbortSignal): void {
   if (signal.aborted) throw cancelled();
 }
@@ -47,6 +59,7 @@ export async function signInWebMcp(
   let channel: BroadcastChannel | null = null;
   const callback: { value: McpOAuthReturn | null } = { value: null };
   let sent = false;
+  let closedSince: number | null = null;
   try {
     const started = await request("POST", MCP_OAUTH_ROUTES.start, decodeMcpOAuthStart, {
       url: config.url,
@@ -56,7 +69,7 @@ export async function signInWebMcp(
     attemptId = started.attemptId;
     for (;;) {
       checkActive(signal);
-      if (Date.now() >= started.expiresAt) throw cancelled();
+      if (Date.now() >= started.expiresAt) throw timedOut();
       const status = await request("POST", MCP_OAUTH_ROUTES.status, decodeMcpOAuthStatus, { attemptId });
       checkActive(signal);
       if (status.kind === "complete") return { toolCount: status.toolCount, error: status.error };
@@ -82,6 +95,12 @@ export async function signInWebMcp(
         });
         callback.value = null;
       }
+      // A window that the user closed before the provider answered never answers: say so now, not
+      // after the host's attempt expires.
+      if (popup.closed && !callback.value && !sent) {
+        closedSince ??= Date.now();
+        if (Date.now() - closedSince >= CLOSED_WINDOW_GRACE_MS) throw windowClosed();
+      } else closedSince = null;
       await pollDelay(signal);
     }
   } finally {

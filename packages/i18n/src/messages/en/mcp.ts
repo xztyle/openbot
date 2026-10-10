@@ -70,6 +70,8 @@ export const messages = defineMessages("mcp", {
   "mcp.remote.popupBlocked": "Allow pop-ups for OpenBot, then try connecting again.",
   "mcp.remote.denied": "The app sign-in was cancelled or refused.",
   "mcp.remote.cancelled": "The app sign-in was cancelled.",
+  "mcp.remote.timedOut": "The app sign-in took too long. Try again.",
+  "mcp.remote.windowClosed": "Sign-in window closed. Try again.",
   "mcp.panel.description":
     "Model Context Protocol servers give this server’s agents extra tools. Claude and Codex agents get only the servers in this list; OpenCode and Grok agents can also start servers from their own configuration files.",
   "mcp.panel.connectCustom": "Connect a custom MCP",

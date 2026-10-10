@@ -30,6 +30,7 @@ import {
   ComposerUsageLimitNotice,
 } from "@openbot/ui/features/conversation/ComposerNotice";
 import { CloseIcon, StopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
+import { keepComposerFocusOnSendPress } from "@openbot/ui/features/conversation/composer-focus";
 import { RichMessageText } from "@openbot/ui/features/conversation/RichMessageText";
 import { SavedReplies } from "@openbot/ui/features/conversation/SavedReplies";
 import { VoiceRecordingMorph } from "@openbot/ui/features/conversation/VoiceRecordingMorph";
@@ -247,6 +248,7 @@ export function ConversationComposer() {
             voicePhase() === "requesting" ||
             voicePhase() === "transcribing"
           }
+          onPointerDown={keepComposerFocusOnSendPress}
           onClick={submit}
         >
           <Show when={submitting()} fallback={<ArrowUp aria-hidden="true" />}>

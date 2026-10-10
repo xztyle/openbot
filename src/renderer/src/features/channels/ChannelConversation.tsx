@@ -32,6 +32,7 @@ import {
 import { ComposerEditor, expandComposerMentions } from "@openbot/ui/features/conversation/ComposerEditor";
 import { CloseIcon, StopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
 import { ApprovalCard, BrowserTakeoverCard } from "@openbot/ui/features/conversation/ConversationPrompts";
+import { keepComposerFocusOnSendPress } from "@openbot/ui/features/conversation/composer-focus";
 import {
   calculateChatScrollMargin,
   createChatVirtualizer,
@@ -1203,6 +1204,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
                             aria-label={t("channel.composer.send")}
                             aria-keyshortcuts={sendShortcutAriaKey(deviceSendShortcut(props.platform))}
                             title={t(sendShortcutHintKey(deviceSendShortcut(props.platform), "send"))}
+                            onPointerDown={keepComposerFocusOnSendPress}
                             disabled={
                               props.connectionReady === false ||
                               channels.state.pending ||

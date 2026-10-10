@@ -321,9 +321,9 @@ export function ChannelConversation(props: ChannelConversationProps) {
   };
   /**
    * Everyone the channel waits on: the owner of a running task, the author of a message that is
-   * still arriving, and the lead while it chooses an owner. They read as one row under the
-   * transcript, because a channel runs several agents at once and a row for each would push the
-   * messages off the screen.
+   * still arriving, and the lead while it chooses an owner, and then the owners of queued tasks,
+   * marked as queued. They read as one row under the transcript, because a channel runs several
+   * agents at once and a row for each would push the messages off the screen.
    *
    * The lead is the coordinator, and its routing turn moves no task out of `queued` and writes no
    * message of its own. Without it the transcript stands still for as long as the coordinator
@@ -342,11 +342,21 @@ export function ChannelConversation(props: ChannelConversationProps) {
     // the coordinator's reason under the transcript, and that notice is the indicator from then on.
     if (lead && page.tasks.some((task) => !task.ownerAgentId && (task.state === "queued" || task.state === "waiting")))
       ids.add(lead);
-    return [...ids].map((id) => {
+    // A task that has an owner and waits for a free place: the reader sees who comes next.
+    const queued = new Set<string>();
+    for (const task of page.tasks)
+      if (task.state === "queued" && task.ownerAgentId && !ids.has(task.ownerAgentId)) queued.add(task.ownerAgentId);
+    const worker = (id: string, waiting: boolean): ChannelWorker => {
       const agent = agentList().find((candidate) => candidate.id === id);
       const authored = page.messages.find((entry) => entry.author.id === id);
-      return { id, name: agent?.name ?? authored?.author.name ?? t("chat.activity.agentFallback"), agent };
-    });
+      return {
+        id,
+        name: agent?.name ?? (authored?.author.name.trim() || t("channel.members.former")),
+        agent,
+        ...(waiting ? { queued: true } : {}),
+      };
+    };
+    return [...[...ids].map((id) => worker(id, false)), ...[...queued].map((id) => worker(id, true))];
   });
   const messageVirtualizer = createChatVirtualizer<HTMLElement, HTMLElement>({
     count: () => timeline().length,

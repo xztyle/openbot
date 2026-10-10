@@ -1159,3 +1159,49 @@ it("opens the chat of the owner of a stopped task", async () => {
   await fireEvent.click(within(notice).getByRole("button", { name: "Open the chat of Chief" }));
   await screen.findByRole("main", { name: "Conversation" });
 });
+
+it("names the member who works and the member who waits for a free place", async () => {
+  await window.openbot.agent.channelCommand({
+    type: "save",
+    operationId: "create",
+    channelId: "channel-test",
+    draft: {
+      name: "Project room",
+      title: "",
+      instructions: "",
+      members: [{ agentId: "chief" }, { agentId: "sales-outbound" }],
+      leadAgentId: "chief",
+    },
+  });
+  await window.openbot.agent.channelCommand({
+    type: "send",
+    operationId: "request",
+    channelId: "channel-test",
+    text: "Prepare the report",
+    recipientAgentId: "chief",
+    replyToMessageId: null,
+    attachmentDraftIds: [],
+  });
+  const originalRead = window.openbot.agent.readChannel;
+  vi.spyOn(window.openbot.agent, "readChannel").mockImplementation(async (input) => {
+    const page = await originalRead(input);
+    const [first] = page.tasks;
+    if (!first) return page;
+    return {
+      ...page,
+      tasks: [
+        { ...first, ownerAgentId: "chief", state: "running" as const, error: null },
+        { ...first, id: "task-queued", ownerAgentId: "sales-outbound", state: "queued" as const, error: null },
+      ],
+    };
+  });
+  render(() => <App />);
+  await screen.findByRole("button", { name: /Open account (actions|menu)/ });
+  await fireEvent.click(await screen.findByRole("button", { name: /Project room/ }));
+  const chat = await screen.findByRole("main", { name: "Channel conversation" });
+
+  expect(
+    await within(chat).findByRole("status", { name: /^Chief is working · Sales Outbound queued: / }),
+  ).toBeInTheDocument();
+  expect(within(chat).getByText("Chief is working · Sales Outbound queued")).toBeVisible();
+});

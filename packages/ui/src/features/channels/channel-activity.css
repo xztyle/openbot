@@ -10,8 +10,21 @@
   flex: 0 0 auto;
   align-items: center;
 }
-.channel-activity-faces .agent-activity-avatar + .agent-activity-avatar {
+.channel-activity-faces .channel-activity-face + .channel-activity-face {
   margin-left: calc(-1 * var(--openbot-space-2));
+}
+/* A queued member has no turn yet, so its face is dim and still. */
+.channel-activity-face[data-queued="true"] {
+  opacity: 0.5;
+}
+/* The names read as one line. A long list clips here and carries the whole sentence as its title. */
+.channel-activity-names {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--openbot-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Reserve space outside the transcript. Only the panel's padded lower edge sits behind the composer.

@@ -79,6 +79,7 @@ export const messages = defineMessages("composer", {
   "composer.upload.cancel": "Cancel upload",
   "composer.upload.progress": "Uploading {current} of {total}",
   "composer.voice.progress": "Downloading voice model {progress}%",
+  "composer.voice.retry": "Retry transcription",
   "composer.voice.recording": "Voice recording",
   "composer.queueEdit.label": "Editing queued message",
   "composer.queueEdit.cancelLabel": "Cancel editing the queued message",

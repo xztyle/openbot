@@ -1,6 +1,6 @@
 import { VOICE_AUDIO_LIMITS } from "@openbot/contracts/ipc";
 import { currentText } from "@openbot/ui/text";
-import { onCleanup } from "solid-js";
+import { createSignal, onCleanup } from "solid-js";
 import { desktopAnalytics } from "../../../analytics";
 import { appendVoiceTranscript, recordingToWav } from "../../../voice-recording";
 import { EMPTY_DRAFT } from "../composer-draft";
@@ -84,8 +84,25 @@ export interface VoiceStoreDeps {
   hooks: VoiceSubmitHooks;
 }
 
+/** The last recording, kept after its transcription failed so the person can try it again. */
+interface KeptRecording {
+  chunks: Blob[];
+  mimeType: string;
+  target: ConversationTarget;
+  /** What the live preview heard. It went into the draft as a fallback, when it was not empty. */
+  liveText: string;
+}
+
 export function createVoiceStore(deps: VoiceStoreDeps) {
   const { resources } = deps;
+  // The recording that failed to transcribe stays until the next one starts or a retry succeeds.
+  let keptRecording: KeptRecording | undefined;
+  const [voiceRetryAvailable, setVoiceRetryAvailable] = createSignal(false);
+  let lastLiveText = "";
+  const keepRecording = (recording: KeptRecording | undefined) => {
+    keptRecording = recording;
+    setVoiceRetryAvailable(recording !== undefined);
+  };
 
   async function startVoiceRecording(): Promise<void> {
     const agentId = deps.props.agent?.id;
@@ -93,6 +110,9 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     if (!agentId || deps.voicePhase() !== "idle") return;
     const target = { agentId, serverId };
     deps.clearConversationError(target);
+    // The next recording replaces the kept one.
+    keepRecording(undefined);
+    lastLiveText = "";
     resources.voiceSubmitRequest = undefined;
     deps.setComposerError(null);
     const generation = ++resources.voiceRequestGeneration;
@@ -252,8 +272,10 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     try {
       const audio = await recordingToWav(new Blob(resources.voiceChunks, { type: recorder.mimeType }));
       const result = await conversationRuntime(deps.props).voice.transcribe({ audio });
-      if (resources.voiceRecorder === recorder && !resources.voiceDisposed)
-        deps.setVoiceLiveTranscript({ ...target, text: result.text.trim() });
+      if (resources.voiceRecorder === recorder && !resources.voiceDisposed) {
+        lastLiveText = result.text.trim();
+        deps.setVoiceLiveTranscript({ ...target, text: lastLiveText });
+      }
     } catch {
       // The final transcription reports its own error.
     }
@@ -276,6 +298,7 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     const analytics = desktopAnalytics.scope();
     const audioDurationSeconds = deps.voiceElapsedSeconds();
     const startedAt = performance.now();
+    const liveText = lastLiveText;
     try {
       // The voice host takes one request at a time; the live pass is at most a second of work.
       await resources.voiceLiveRequest;
@@ -288,6 +311,7 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
         audio_duration_seconds: audioDurationSeconds,
         duration_ms: Math.max(0, Math.round(performance.now() - startedAt)),
       });
+      keepRecording(undefined);
       if (resources.voiceDisposed) return;
       const recordingTarget = { agentId: targetAgentId, serverId: targetServerId };
       deps.clearConversationError(recordingTarget);
@@ -325,6 +349,10 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
       });
       if (!resources.voiceDisposed) {
         const target = { agentId: targetAgentId, serverId: targetServerId };
+        // The recording is the person's words. Keep it for a retry, and put what the preview heard in
+        // the draft now, so the failure leaves them with text to edit rather than nothing.
+        if (chunks.length > 0) keepRecording({ chunks, mimeType, target, liveText });
+        if (liveText) deps.hooks.restoreTranscript(target, liveText);
         deps.setConversationErrors((current) => ({
           ...current,
           [composerDraftKey(target)]: voiceTranscriptionError(error),
@@ -335,6 +363,40 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
         deps.setVoiceLiveTranscript(null);
         deps.setVoicePhase("idle");
       }
+    }
+  }
+
+  /** Sends the kept recording to transcription again. The result replaces the fallback text, or joins the draft. */
+  async function retryVoiceTranscription(): Promise<void> {
+    const kept = keptRecording;
+    if (!kept || deps.voicePhase() !== "idle" || resources.voiceDisposed) return;
+    const { t } = currentText();
+    deps.clearConversationError(kept.target);
+    deps.setVoicePhase("transcribing");
+    try {
+      const audio = await recordingToWav(new Blob(kept.chunks, { type: kept.mimeType }));
+      const result = await conversationRuntime(deps.props).voice.transcribe({ audio });
+      const transcript = result.text.trim();
+      if (!transcript) throw new Error(t("composer.voice.noSpeechDetected"));
+      if (resources.voiceDisposed) return;
+      if (keptRecording !== kept) return;
+      keepRecording(undefined);
+      const key = composerDraftKey(kept.target);
+      const draft = deps.drafts()[key] ?? EMPTY_DRAFT;
+      const at = kept.liveText ? draft.text.lastIndexOf(kept.liveText) : -1;
+      if (at >= 0) {
+        // The fallback text is still there: the better transcript takes its place.
+        const text = `${draft.text.slice(0, at)}${transcript}${draft.text.slice(at + kept.liveText.length)}`;
+        deps.setDrafts((current) => ({ ...current, [key]: { ...(current[key] ?? EMPTY_DRAFT), text } }));
+      } else {
+        deps.hooks.restoreTranscript(kept.target, transcript);
+      }
+      if (deps.props.agent?.id === kept.target.agentId && (deps.props.server?.id ?? "local") === kept.target.serverId)
+        deps.setComposerFocusRequest((current) => current + 1);
+    } catch (error) {
+      if (!resources.voiceDisposed) deps.setConversationError(kept.target, voiceTranscriptionError(error));
+    } finally {
+      if (!resources.voiceDisposed) deps.setVoicePhase("idle");
     }
   }
 
@@ -365,6 +427,8 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     stopVoiceRecording,
     cancelVoiceRecording,
     finishVoiceRecording,
+    retryVoiceTranscription,
+    voiceRetryAvailable,
     stopVoiceStream,
     startVoiceElapsedTimer,
     stopVoiceElapsedTimer,

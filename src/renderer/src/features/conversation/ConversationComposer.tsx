@@ -83,6 +83,8 @@ export function ConversationComposer() {
     startVoiceRecording,
     stopVoiceRecording,
     cancelVoiceRecording,
+    retryVoiceTranscription,
+    voiceRetryAvailable,
     submitComposer,
     submitting,
     unreferencedDraftAttachments,
@@ -629,6 +631,11 @@ export function ConversationComposer() {
                     {t("composer.upload.cancel")}
                   </Button>
                 )}
+              </Show>
+              <Show when={voiceAvailable() && voiceRetryAvailable() && voicePhase() === "idle"}>
+                <Button variant="ghost" type="button" onClick={() => void retryVoiceTranscription()}>
+                  {t("composer.voice.retry")}
+                </Button>
               </Show>
               <Show when={voiceAvailable() && voicePhase() === "preparing"}>
                 <span class="voice-model-progress" role="status">

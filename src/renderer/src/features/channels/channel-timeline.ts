@@ -10,6 +10,8 @@
 
 import type { ChannelMessage, ChannelPage } from "@openbot/contracts/ipc";
 import { channelRoutingConversationEvent } from "@openbot/contracts/ipc";
+import type { AppTranslate } from "@openbot/i18n";
+import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
 import type { AgentMessage, AgentProfile, ChatActionMarkerModel } from "@openbot/ui/data";
 import type { ChatMessageAuthor } from "@openbot/ui/features/conversation/ChatMessageRow";
 import { type DayMarkerOptions, dayMarkerLabel } from "@openbot/ui/features/conversation/chat-day-markers";
@@ -27,8 +29,14 @@ export interface ChannelTimelineEntry {
   showAuthor: boolean;
   /** The separator above the row, or `null` when the row stays on the day above it. */
   dayMarker: string | null;
+  /** The task changed after this answer, so a later answer takes its place. The row stays, muted. */
+  superseded: boolean;
+  /** The first message of the row. A row of reasoning holds several; this is the first of them. */
   source: ChannelMessage;
 }
+
+/** The id of a routine that wrote into the channel. Its author is a routine, not a person. */
+const ROUTINE_AUTHOR_PREFIX = "routine:";
 
 /** A row with no text, no attachment and no question has nothing to draw. */
 function hasContent(entry: ChannelMessage): boolean {
@@ -47,10 +55,19 @@ function channelRoutingMarker(entry: ChannelMessage): ChatActionMarkerModel | nu
   return event ? { ...event, kind: "channel-routing", timestamp: entry.message.createdAt } : null;
 }
 
+/**
+ * What the model said while it worked. The agent chat draws it as a Thinking row, and so does a
+ * channel, so the work of a turn does not read as a series of answers.
+ */
+function isCommentary(entry: ChannelMessage): boolean {
+  return entry.message.author === "assistant" && entry.message.itemType === "commentary";
+}
+
 function toAgentMessage(entry: ChannelMessage, own: boolean, options: DayMarkerOptions): AgentMessage {
   const message = entry.message;
   const actionMarker = channelRoutingMarker(entry);
-  const plan = actionMarker ? null : messagePlan(message);
+  const commentary = !actionMarker && isCommentary(entry);
+  const plan = actionMarker || commentary ? null : messagePlan(message);
   const time = { hour: "numeric", minute: "2-digit" } as const;
   const createdAt = new Date(message.createdAt);
   return {
@@ -58,7 +75,10 @@ function toAgentMessage(entry: ChannelMessage, own: boolean, options: DayMarkerO
     author: own ? "you" : "agent",
     ...(actionMarker ? { kind: "action-marker" as const, actionMarker } : {}),
     ...(plan ? { kind: "plan" as const, plan } : {}),
-    body: message.text,
+    ...(commentary
+      ? { kind: "thinking" as const, items: [cleanAgentMessageText(message.text)], itemIds: [entry.id] }
+      : {}),
+    body: commentary ? "" : message.text,
     // Intl throws on an invalid date, where `toLocaleTimeString` returns text.
     time:
       options.format && !Number.isNaN(createdAt.getTime())
@@ -74,6 +94,34 @@ function toAgentMessage(entry: ChannelMessage, own: boolean, options: DayMarkerO
     imageGeneration: message.imageGeneration,
     questionPrompt: message.questionPrompt,
     turnId: message.turnId,
+  };
+}
+
+/**
+ * Who a row draws as.
+ *
+ * Another person of the team draws as a member, the way the agent chat draws them: their name, and
+ * a face that follows their id. A routine that wrote into the channel is an author with a name and
+ * a `routine:` id; it keeps the agent look, so it does not read as a person. A name that is gone
+ * falls back to a word, never to an id.
+ */
+function channelRowAuthor(
+  source: ChannelMessage,
+  own: boolean,
+  agent: AgentProfile | undefined,
+  t: AppTranslate,
+): ChatMessageAuthor {
+  if (own) return { kind: "you", name: t("chat.message.you") };
+  const { author } = source;
+  const storedName = author.name.trim();
+  if (author.kind === "member" && !author.id.startsWith(ROUTINE_AUTHOR_PREFIX)) {
+    return { kind: "member", name: storedName || t("chat.message.memberFallback"), avatarSeed: author.id };
+  }
+  return {
+    kind: "agent",
+    name: agent?.name ?? (storedName || t("channel.members.former")),
+    agent,
+    avatarSeed: agent ? undefined : author.id,
   };
 }
 
@@ -99,11 +147,17 @@ export function channelTimelineEntries(
   let previousAuthored: ChannelTimelineEntry | undefined;
   for (const source of page.messages) {
     if (!hasContent(source)) continue;
+    const thinking = channelRoutingMarker(source) === null && isCommentary(source);
+    // Reasoning that follows reasoning of the same author is one row: it holds every step.
+    if (thinking && previous?.message.kind === "thinking" && previous.authorId === source.author.id) {
+      previous.message.items = [...(previous.message.items ?? []), cleanAgentMessageText(source.message.text)];
+      previous.message.itemIds = [...(previous.message.itemIds ?? []), source.id];
+      previous.message.streaming = previous.message.streaming === true || source.message.status === "streaming";
+      continue;
+    }
     const own = source.author.kind === "member" && isOwnMessage(source.author.id);
     const agent = agents.find((candidate) => candidate.id === source.author.id);
-    const author: ChatMessageAuthor = own
-      ? { kind: "you", name: t("chat.message.you") }
-      : { kind: "agent", name: source.author.name, agent, avatarSeed: agent ? undefined : source.author.id };
+    const author = channelRowAuthor(source, own, agent, t);
     const dayMarker = dayMarkerLabel(previous?.message.createdAt, source.message.createdAt, options);
     const marker = channelRoutingMarker(source);
     const sameAuthor =
@@ -115,13 +169,14 @@ export function channelTimelineEntries(
       authorId: source.author.id,
       author,
       message: toAgentMessage(source, own, options),
-      showAuthor: marker === null && !(sameAuthor && withinWindow && dayMarker === null),
+      showAuthor: marker === null && !thinking && !(sameAuthor && withinWindow && dayMarker === null),
       dayMarker,
+      superseded: source.superseded,
       source,
     };
     entries.push(entry);
     previous = entry;
-    if (marker === null) previousAuthored = entry;
+    if (marker === null && !thinking) previousAuthored = entry;
   }
   return entries;
 }
@@ -139,8 +194,15 @@ export function firstUnreadChannelMessageId(entries: ChannelTimelineEntry[], unr
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
     if (!entry) continue;
-    // The count from the channel list leaves out activity rows and plans, so the walk back leaves them out.
-    if (entry.author.kind === "you" || entry.message.actionMarker || entry.message.kind === "plan") continue;
+    // The count from the channel list leaves out activity rows, plans and reasoning, so the walk
+    // back leaves them out.
+    if (
+      entry.author.kind === "you" ||
+      entry.message.actionMarker ||
+      entry.message.kind === "plan" ||
+      entry.message.kind === "thinking"
+    )
+      continue;
     remaining -= 1;
     if (remaining === 0) return entry.id;
   }

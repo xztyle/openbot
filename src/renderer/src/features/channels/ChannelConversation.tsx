@@ -45,6 +45,7 @@ import {
   tallyNewMessages,
 } from "@openbot/ui/features/conversation/new-message-tally";
 import { TaskList } from "@openbot/ui/features/conversation/TaskList";
+import { ThinkingDisclosure } from "@openbot/ui/features/conversation/ThinkingDisclosure";
 import {
   scrollToUnreadBoundary,
   UnreadMessagesBanner,
@@ -67,6 +68,7 @@ import {
 } from "solid-js";
 import { planItems, planTitle } from "../../app-message-projection";
 import { channelAwaitingReplies } from "../../awaiting-replies";
+import { useShowAgentReasoning } from "../../chat-visibility-preferences";
 import { writeClipboardText } from "../../clipboard";
 import { createSettingsPanelWidth, saveSettingsPanelWidth } from "../../components/settings-panel-width";
 import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../../send-shortcut-preference";
@@ -81,7 +83,7 @@ import { channelMemoriesPort } from "../conversation/memories-port";
 import { desktopEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import { channelRoutinesPort, eventRoutinesPort } from "../conversation/routines-port";
 import { ChannelEditor } from "./ChannelEditor";
-import { channelTimelineEntries, firstUnreadChannelMessageId } from "./channel-timeline";
+import { type ChannelTimelineEntry, channelTimelineEntries, firstUnreadChannelMessageId } from "./channel-timeline";
 import { useChannels } from "./channels-context";
 
 const ChannelFilePreviewPanel = lazy(() => import("../conversation/FilePreviewPanel"));
@@ -108,6 +110,7 @@ export interface ChannelConversationProps {
 export function ChannelConversation(props: ChannelConversationProps) {
   const channels = useChannels();
   const { t, format, sourceText } = useText();
+  const showAgentReasoning = useShowAgentReasoning();
   const runtime = () => channels.port();
   const agentList = channels.agents;
   const isOwnMessage = (authorId: string) => props.isOwnMessage(authorId);
@@ -481,8 +484,28 @@ export function ChannelConversation(props: ChannelConversationProps) {
     if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
     if (unreadVisibilityFrame !== undefined) cancelAnimationFrame(unreadVisibilityFrame);
   });
-  const name = (id: string | null) =>
-    agentList().find((agent) => agent.id === id)?.name ?? t("sidebar.section.unassigned");
+  /*
+   * A name for an agent id. The agent list names a member who is there; a member who left is named
+   * by what they last signed a message with, and only then by a word. Never by the id.
+   */
+  const name = (id: string | null) => {
+    if (id === null) return t("sidebar.section.unassigned");
+    const known = agentList().find((agent) => agent.id === id)?.name;
+    if (known) return known;
+    const authored = channels.state.page?.messages.findLast((entry) => entry.author.id === id)?.author.name.trim();
+    return authored || t("channel.members.former");
+  };
+  /** The note under an answer that is not the final word: replaced by a newer one, or cut short. */
+  const rowNote = (entry: ChannelTimelineEntry) => {
+    const key = entry.superseded
+      ? "channel.message.superseded"
+      : entry.source.message.status === "interrupted"
+        ? "channel.message.interrupted"
+        : entry.source.message.status === "failed"
+          ? "channel.message.failed"
+          : null;
+    return key ? <span class="channel-message-note">{t(key)}</span> : undefined;
+  };
   /**
    * The approval or takeover of a member, when it can be answered in this channel. One that belongs
    * to the member's own chat is answered there, and a card for it here would not name its chat.
@@ -781,6 +804,23 @@ export function ChannelConversation(props: ChannelConversationProps) {
                                 }}
                               />
                             </article>
+                          ) : initialEntry.message.kind === "thinking" ? (
+                            // The reasoning of a turn is one quiet row, closed, as in the agent chat. With
+                            // the switch off it shows no preview line, and it still opens.
+                            <article>
+                              <ThinkingDisclosure
+                                items={entry()?.message.items ?? initialEntry.message.items ?? []}
+                                showPreview={showAgentReasoning()}
+                                agents={agentList()}
+                                onSelectAgent={(id) => {
+                                  channels.close();
+                                  selectAgent(id);
+                                }}
+                                onOpenLink={(url) => {
+                                  void runtime().openUrl(url);
+                                }}
+                              />
+                            </article>
                           ) : initialEntry.message.plan ? (
                             <article class={{ "message-entry-animated": animate }}>
                               <Show when={entry()?.message.plan ?? initialEntry.message.plan}>
@@ -800,6 +840,8 @@ export function ChannelConversation(props: ChannelConversationProps) {
                               showAuthor={entry()?.showAuthor ?? initialEntry.showAuthor}
                               showTime={entry()?.showAuthor ?? initialEntry.showAuthor}
                               animate={animate}
+                              class={entry()?.superseded ? "message-entry-superseded" : undefined}
+                              footer={rowNote(entry() ?? initialEntry)}
                               agents={agentList()}
                               referencedMessage={referenced()?.message}
                               referencedAuthorName={referenced()?.author.name}

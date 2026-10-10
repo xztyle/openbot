@@ -413,6 +413,35 @@ describe("shared channel coordination", () => {
     expect(service.store.list(actor.id)[0]).toMatchObject({ unreadCount: 1 });
     expect(service.store.list(actor.id)[0]?.lastMessage).toMatchObject({ text: "theirs-again" });
   });
+  it("leaves the reasoning of an agent out of the unread count and the sidebar preview", () => {
+    const entry = (id: string, itemType: string | undefined, text: string): ChannelMessage => ({
+      id,
+      channelId: "channel-1",
+      sequence: 0,
+      author: { kind: "agent", id: "agent-a", name: "A" },
+      taskId: null,
+      superseded: false,
+      message: {
+        id,
+        author: "assistant",
+        text,
+        createdAt: new Date().toISOString(),
+        status: "completed",
+        ...(itemType ? { itemType } : {}),
+      },
+    });
+    service.store.update(service.store.get("channel-1"), {
+      messages: [
+        entry("answer", undefined, "The report is ready."),
+        entry("thought", "commentary", "I read the file."),
+      ],
+    });
+
+    expect(service.store.list(actor.id)[0]).toMatchObject({ unreadCount: 1 });
+    expect(service.store.list(actor.id)[0]?.lastMessage).toMatchObject({ text: "The report is ready." });
+    // The reasoning stays in the channel, so the transcript can draw it.
+    expect(service.store.messages("channel-1").map((message) => message.id)).toEqual(["answer", "thought"]);
+  });
   it("keeps an uncertain accepted turn paused after restart", async () => {
     await send("Write a file");
     const assignment = required(service.store.assignments("channel-1")[0]);

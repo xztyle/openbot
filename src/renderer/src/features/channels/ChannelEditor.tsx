@@ -95,6 +95,13 @@ export function ChannelEditor(props: ChannelEditorProps) {
     },
   );
 
+  /**
+   * A member the agent list no longer holds is named by what they last signed a message with. A
+   * channel that never heard from them has only a word, never their id.
+   */
+  const formerName = (agentId: string) =>
+    channels.state.page?.messages.findLast((entry) => entry.author.id === agentId)?.author.name.trim() ||
+    t("channel.members.former");
   const members = () =>
     (channel()?.members ?? []).map((member) => ({
       agentId: member.agentId,
@@ -341,7 +348,7 @@ export function ChannelEditor(props: ChannelEditorProps) {
             {(entry) => (
               <ChannelMemberRow
                 agent={entry.agent}
-                fallbackName={t("channel.members.unavailable", { id: entry.agentId })}
+                fallbackName={formerName(entry.agentId)}
                 actions={
                   <ItemActions>
                     <Show when={entry.agent}>
@@ -388,7 +395,7 @@ export function ChannelEditor(props: ChannelEditorProps) {
                       aria-label={
                         entry.agent
                           ? t("channel.members.remove", { name: entry.agent.name })
-                          : t("channel.members.removeUnavailable", { id: entry.agentId })
+                          : t("channel.members.remove", { name: formerName(entry.agentId) })
                       }
                       onClick={() => void commit((draft) => toggleChannelMember(draft, entry.agentId, false))}
                     >

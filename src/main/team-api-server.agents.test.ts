@@ -512,6 +512,49 @@ describe("TeamApiServer agents", () => {
     expect(warn).toHaveBeenCalledTimes(2);
   });
 
+  // The hidden set is a trust filter and is reused between requests. It must follow the roster at
+  // once, with no event to clear it, so an agent that becomes unrepresentable is never shown from a
+  // stale answer, and one that becomes representable is shown again.
+  it("never serves a stale answer of which agents a protocol cannot describe", async () => {
+    const source = opencodeFixture[0];
+    if (!isAgentSummary(source)) throw new Error("Invalid agent fixture.");
+    const plain: AgentSummary = { ...source, id: "plain", provider: "claude", model: "claude-opus-5-5" };
+    const other: AgentSummary = { ...plain, id: "other" };
+    let roster: AgentSummary[] = [plain, other];
+    const warn = vi.fn();
+    const { start, signIn } = await createTeamApiFixture("hidden-agents-follow-roster", { configure: true });
+    const { base } = await start({
+      appVersion: "1.0.0",
+      logger: { trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn, error: vi.fn() },
+      agents: createAgents({ listAgents: () => roster }),
+    });
+    const token = await signIn({ protocol: 4, appVersion: "1.0.0" });
+    const ids = async (protocol: number): Promise<string[]> => {
+      const response = await fetch(`${base}/v1/agents`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          [TEAM_PROTOCOL_VERSION_HEADER]: String(protocol),
+          [TEAM_APP_VERSION_HEADER]: "1.0.0",
+        },
+      });
+      expect(response.status).toBe(200);
+      return (await response.json()).map((agent: AgentSummary) => agent.id);
+    };
+
+    expect(await ids(3)).toEqual(["plain", "other"]);
+    expect(await ids(3)).toEqual(["plain", "other"]);
+    // Protocols 1-3 do not accept brackets in a model id. The same agent id, changed in place.
+    roster = [plain, { ...other, model: "claude-opus-5-5[1m]" }];
+    expect(await ids(3)).toEqual(["plain"]);
+    expect(await ids(4)).toEqual(["plain", "other"]);
+    expect(await ids(3)).toEqual(["plain"]);
+    roster = [plain, other];
+    expect(await ids(3)).toEqual(["plain", "other"]);
+    roster = [{ ...plain, model: "claude-opus-5-5[1m]" }, other];
+    expect(await ids(3)).toEqual(["other"]);
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
   // A host that wakes publishes before its agents load. An empty roster then opens the provider
   // setup on the peer as if the server had no agents. The protocol 5 projection must also see the
   // loaded roster, or an agent that the frozen codec cannot describe turns the list into a 500.

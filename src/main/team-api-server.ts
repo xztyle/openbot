@@ -235,6 +235,8 @@ export class TeamApiServer {
   #sidebarLayoutListener: ((layout: SidebarLayoutSnapshot) => void) | null = null;
   #localTypingAgentId: string | null = null;
   readonly #reportedUnrepresentableAgents = new Set<string>();
+  /** Per protocol view, whether the codec can describe an agent, by the agent's exact content. */
+  readonly #agentRepresentability = new Map<string, Map<string, boolean>>();
   #nextRateLimitSweepAt = 0;
 
   constructor(options: TeamApiOptions) {
@@ -1417,19 +1419,35 @@ export class TeamApiServer {
     const codec = teamHttpCodec(protocol);
     const options = { preserveSemanticTags: supportsTeamSemanticTags(capabilities) };
     const hidden = new Set<string>();
+    // This set is a trust filter, so the memo is keyed by what the codec reads: the whole content of
+    // the agent, the protocol and the semantic tags option. A changed agent has another key and is
+    // encoded again, so no event has to clear it and no stale answer can show a hidden agent.
+    // Only the agents of this call stay in the memo, which bounds its size by the roster.
+    const memoKey = `${protocol}:${options.preserveSemanticTags}`;
+    const known = this.#agentRepresentability.get(memoKey);
+    const current = new Map<string, boolean>();
     for (const agent of agents) {
-      try {
-        codec.encodeResponse("GET", TEAM_API_ROUTES.agents.all, 200, [agent], options);
-      } catch {
-        hidden.add(agent.id);
-        const key = `${protocol}:${agent.id}`;
-        if (this.#reportedUnrepresentableAgents.has(key)) continue;
-        this.#reportedUnrepresentableAgents.add(key);
-        (this.#options.logger ?? logger).warn(
-          `Team API protocol ${protocol} cannot describe agent ${agent.id}; it is hidden from these clients.`,
-        );
+      const content = JSON.stringify(agent);
+      let representable = current.get(content) ?? known?.get(content);
+      if (representable === undefined) {
+        try {
+          codec.encodeResponse("GET", TEAM_API_ROUTES.agents.all, 200, [agent], options);
+          representable = true;
+        } catch {
+          representable = false;
+          const key = `${protocol}:${agent.id}`;
+          if (!this.#reportedUnrepresentableAgents.has(key)) {
+            this.#reportedUnrepresentableAgents.add(key);
+            (this.#options.logger ?? logger).warn(
+              `Team API protocol ${protocol} cannot describe agent ${agent.id}; it is hidden from these clients.`,
+            );
+          }
+        }
       }
+      current.set(content, representable);
+      if (!representable) hidden.add(agent.id);
     }
+    this.#agentRepresentability.set(memoKey, current);
     return hidden;
   }
 

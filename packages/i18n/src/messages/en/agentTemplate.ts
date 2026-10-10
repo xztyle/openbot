@@ -31,7 +31,7 @@ export const messages = defineMessages("agentTemplate", {
   "agentTemplate.publish.unpublishing": "Unpublishing…",
   "agentTemplate.publish.unpublishTitle": "Unpublish {name}?",
   "agentTemplate.publish.unpublishDescription":
-    "The link stops working for everyone who has it. People who already added this agent keep their copy. You can publish it again later.",
+    "The link stops working for everyone who has it. You can publish it again later.",
   "agentTemplate.publish.audience": "Anyone who has the link can read this and add a copy of this agent.",
   "agentTemplate.publish.unpublishFailed": "Could not unpublish the agent.",
   "agentTemplate.publish.lastUpdated": "Last updated {date}",

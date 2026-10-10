@@ -580,15 +580,40 @@ export function createComposerActions(deps: ComposerActionsDeps) {
     if (target) deps.pendingSends.retry(target, clientMessageId);
   }
 
-  /** Puts a failed message back in the composer. The composer must be empty, so nothing is lost. */
+  /**
+   * Puts a held or failed message back in the composer, ahead of what is written there, and keeps its
+   * files. Nothing the person wrote is replaced or cut: when the two together would pass a limit, the
+   * message stays where it is and the composer says why.
+   */
   function editPendingSend(clientMessageId: string): void {
     const target = deps.currentTarget();
+    // A queued message that is open for edit owns the composer; the row says so and offers no Edit.
     if (!target || deps.currentEditingDeliveryId()) return;
+    const pending = deps.pendingSends
+      .list(target)
+      .find((send) => send.clientMessageId === clientMessageId && (send.state === "held" || send.state === "failed"));
+    if (!pending) return;
     const current = deps.currentDraft();
-    if (current.text.trim() || current.attachments.length > 0) return;
+    const text = [pending.draft.text, current.text].filter((part) => part.trim()).join("\n\n");
+    const attachmentIds = new Set(pending.draft.attachments.map((attachment) => attachment.id));
+    const attachments = [
+      ...pending.draft.attachments,
+      ...current.attachments.filter((attachment) => !attachmentIds.has(attachment.id)),
+    ];
+    if (text.length > INPUT_LIMITS.messageText || attachments.length > INPUT_LIMITS.attachments) {
+      deps.setComposerError(t("chat.send.restoreTooLarge"), target);
+      return;
+    }
     const removed = deps.pendingSends.remove(target, clientMessageId);
     if (!removed) return;
-    deps.setDrafts((drafts) => ({ ...drafts, [composerDraftKey(target)]: removed.draft }));
+    deps.setDrafts((drafts) => ({
+      ...drafts,
+      [composerDraftKey(target)]: {
+        text,
+        attachments,
+        replyToMessageId: current.replyToMessageId ?? removed.draft.replyToMessageId,
+      },
+    }));
     deps.setComposerFocusRequest((value) => value + 1);
   }
 

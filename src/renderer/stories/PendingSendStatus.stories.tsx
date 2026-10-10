@@ -27,8 +27,13 @@ export const Waiting: Story = { args: { state: "waiting" } };
 
 export const Failed: Story = { args: { state: "failed", error: "The host is offline." } };
 
-/** The composer holds other text, so Edit would replace it. */
-export const FailedWithDraft: Story = { args: { state: "failed", canEdit: false } };
+/** A queued message is open in the composer, so the failed message cannot join it. */
+export const FailedWhileEditingQueued: Story = {
+  args: { state: "failed", canEdit: false, editBlockedReason: "Finish or cancel the queued message edit first." },
+};
+
+/** Undo puts the held message back in the composer, ahead of what is written there. */
+export const Held: Story = { args: { state: "held", onUndo: fn() } };
 
 /** An older host cannot drop a repeated send, so there is no Retry: the first one may have arrived. */
 export const Unconfirmed: Story = { args: { state: "failed", retrySafe: false } };

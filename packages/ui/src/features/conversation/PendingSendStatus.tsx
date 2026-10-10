@@ -1,7 +1,7 @@
 import { Button } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
-import { Show } from "solid-js";
+import { createUniqueId, Show } from "solid-js";
 
 export interface PendingSendStatusProps {
   /**
@@ -15,12 +15,17 @@ export interface PendingSendStatusProps {
   updateRequired?: boolean;
   /** The host drops a repeated send of this message, so Retry cannot store it twice. */
   retrySafe: boolean;
-  /** Edit needs an empty composer, so the failed message replaces nothing the user wrote. */
+  /**
+   * Whether Undo and Edit can put the message back in the composer, ahead of what is written there.
+   * False while the composer holds a queued message that is being edited.
+   */
   canEdit: boolean;
+  /** Why Undo and Edit are off, shown as text so a touch screen sees it too. */
+  editBlockedReason?: string | null | undefined;
   onRetry: () => void;
   onEdit: () => void;
   onDismiss: () => void;
-  /** Takes back a held message. The message goes, and so do the files it carried. */
+  /** Takes back a held message: it returns to the composer with the files it carried. */
   onUndo?: () => void;
 }
 
@@ -31,6 +36,8 @@ export interface PendingSendStatusProps {
  */
 export function PendingSendStatus(props: PendingSendStatusProps): JSX.Element {
   const { t } = useText();
+  const noteId = `pending-send-note-${createUniqueId()}`;
+  const blocked = () => !props.canEdit && Boolean(props.editBlockedReason);
   const label = () => {
     if (props.state === "held") return t("chat.send.held");
     if (props.state === "waiting") return t("chat.send.waiting");
@@ -47,11 +54,28 @@ export function PendingSendStatus(props: PendingSendStatusProps): JSX.Element {
           </Show>
         </span>
       </Show>
+      <Show when={blocked() && (props.state === "held" || props.state === "failed")}>
+        <span class="pending-send-note" id={noteId}>
+          {props.editBlockedReason}
+        </span>
+      </Show>
       <Show when={props.state === "held"}>
-        <Button variant="ghost" size="xs" onClick={() => props.onUndo?.()}>
+        <Button
+          variant="ghost"
+          size="xs"
+          disabled={!props.canEdit}
+          aria-describedby={blocked() ? noteId : undefined}
+          onClick={() => props.onUndo?.()}
+        >
           {t("chat.send.undo")}
         </Button>
-        <Button variant="ghost" size="xs" disabled={!props.canEdit} onClick={() => props.onEdit()}>
+        <Button
+          variant="ghost"
+          size="xs"
+          disabled={!props.canEdit}
+          aria-describedby={blocked() ? noteId : undefined}
+          onClick={() => props.onEdit()}
+        >
           {t("chat.send.edit")}
         </Button>
       </Show>
@@ -61,7 +85,13 @@ export function PendingSendStatus(props: PendingSendStatusProps): JSX.Element {
             {t("common.retry")}
           </Button>
         </Show>
-        <Button variant="ghost" size="xs" disabled={!props.canEdit} onClick={() => props.onEdit()}>
+        <Button
+          variant="ghost"
+          size="xs"
+          disabled={!props.canEdit}
+          aria-describedby={blocked() ? noteId : undefined}
+          onClick={() => props.onEdit()}
+        >
           {t("chat.send.edit")}
         </Button>
         <Button variant="ghost" size="xs" onClick={() => props.onDismiss()}>

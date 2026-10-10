@@ -101,7 +101,6 @@ export function ConversationTimeline() {
     chatSearchTotal,
     clearNewMessages,
     closeChatSearch,
-    composerHasContent,
     copiedMessageId,
     dismissPendingSend,
     editingDeliveryId,
@@ -735,7 +734,8 @@ export function ConversationTimeline() {
                                   updateRequired={Boolean(providerUpdateRequired())}
                                   error={pendingSend()?.error ?? null}
                                   retrySafe={pendingRetrySafe()}
-                                  canEdit={!composerHasContent() && !editingDeliveryId()}
+                                  canEdit={!editingDeliveryId()}
+                                  editBlockedReason={editingDeliveryId() ? t("chat.send.editBlocked") : null}
                                   onRetry={() => {
                                     const send = pendingSend();
                                     if (send) retryPendingSend(send.clientMessageId);
@@ -750,7 +750,7 @@ export function ConversationTimeline() {
                                   }}
                                   onUndo={() => {
                                     const send = pendingSend();
-                                    if (send) dismissPendingSend(send.clientMessageId);
+                                    if (send) editPendingSend(send.clientMessageId);
                                   }}
                                 />
                               ) : message()?.cancelled ? (

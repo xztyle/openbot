@@ -98,6 +98,68 @@ describe("OpenBot connected desktop shell", () => {
     restarted.unmount();
   });
 
+  it("puts a held message back ahead of what is written now, with its files", async () => {
+    // A message to a working agent is held only where the agent steers rather than queues.
+    vi.mocked(window.openbot.getBusyMessageModePreference).mockResolvedValue({ mode: "steer" });
+    render(() => <App />);
+    await confirmOnboardingModel();
+    const composer = await screen.findByRole("textbox", { name: "Message Chief" });
+    await screen.findByRole("heading", { name: "Chief" });
+    emitAgentEvent?.({
+      type: "conversation",
+      snapshot: { agentId: "chief", threadId: "thread-chief", activeTurnId: "turn-live", revision: 1, messages: [] },
+    });
+    // A running turn is what holds the message: the stop button names it.
+    await screen.findByRole("button", { name: "Stop agent" });
+    emitAttachmentImport?.({ type: "started", requestId: "held-paste", serverId: "local" });
+    emitAttachmentImport?.({
+      type: "completed",
+      requestId: "held-paste",
+      serverId: "local",
+      attachments: [attachment("held-1", "report.pdf", "pdf")],
+    });
+    await screen.findByRole("button", { name: "Remove report.pdf" });
+    composer.textContent = "Steer the run";
+    await fireEvent.input(composer);
+    await fireEvent.keyDown(composer, { key: "Enter" });
+    await screen.findByText("Sending in a few seconds");
+    expect(screen.queryByRole("button", { name: "Remove report.pdf" })).not.toBeInTheDocument();
+
+    // The person kept typing: Undo must not replace it.
+    composer.textContent = "Second thought";
+    await fireEvent.input(composer);
+    const undo = screen.getByRole("button", { name: "Undo" });
+    expect(undo).toBeEnabled();
+    await fireEvent.click(undo);
+
+    await waitFor(() => expect(composer).toHaveTextContent(/Steer the run\s*Second thought/));
+    expect(screen.getByRole("button", { name: "Remove report.pdf" })).toBeInTheDocument();
+    expect(screen.queryByText("Sending in a few seconds")).not.toBeInTheDocument();
+    expect(window.openbot.agent.sendMessage).not.toHaveBeenCalled();
+    expect(window.openbot.agent.discardDraftAttachment).not.toHaveBeenCalled();
+  });
+
+  it("puts a failed message back ahead of what is written now", async () => {
+    vi.mocked(window.openbot.agent.sendMessage).mockRejectedValueOnce(new Error("Mailbox unavailable"));
+    render(() => <App />);
+    await confirmOnboardingModel();
+    const composer = await screen.findByRole("textbox", { name: "Message Chief" });
+    composer.textContent = "Run this Monday";
+    await fireEvent.input(composer);
+    await fireEvent.keyDown(composer, { key: "Enter" });
+    await screen.findByText("Mailbox unavailable");
+    composer.textContent = "Another draft";
+    await fireEvent.input(composer);
+
+    const edit = screen.getByRole("button", { name: "Edit" });
+    expect(edit).toBeEnabled();
+    await fireEvent.click(edit);
+
+    await waitFor(() => expect(composer).toHaveTextContent(/Run this Monday\s*Another draft/));
+    expect(screen.queryByText("Mailbox unavailable")).not.toBeInTheDocument();
+    expect(window.openbot.agent.sendMessage).toHaveBeenCalledOnce();
+  });
+
   it("does not read an earlier agent reply again after sending a message", async () => {
     render(() => <App />);
     await screen.findByRole("heading", { name: "Chief" });

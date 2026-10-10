@@ -105,7 +105,7 @@ export function channelAwaitingReplies(input: ChannelAwaitingInput): AwaitingRep
         agent: input.agents.find((candidate) => candidate.id === task.ownerAgentId),
         name: input.name(task.ownerAgentId),
         state,
-        preview: previewText(task.instruction),
+        preview: taskPreview(task.instruction),
         ...(state === "replied" && parent.ownerAgentId
           ? { detail: t("chat.awaiting.readsNext", { name: input.name(parent.ownerAgentId) }) }
           : {}),
@@ -134,4 +134,21 @@ function replyResult(text: string): string {
 
 function previewText(text: string): string {
   return markdownPreviewText(text).slice(0, PREVIEW_LIMIT);
+}
+
+/**
+ * The first line of a task instruction, cut at a word with an ellipsis when it is long. An
+ * instruction is a brief of several lines, and the row has room for one.
+ */
+function taskPreview(instruction: string): string {
+  const line = instruction
+    .split(/\r?\n/u)
+    .map((part) => part.trim())
+    .find((part) => part.length > 0);
+  const text = line ? markdownPreviewText(line).trim() : "";
+  const characters = Array.from(text);
+  if (characters.length <= PREVIEW_LIMIT) return text;
+  const cut = characters.slice(0, PREVIEW_LIMIT).join("");
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > PREVIEW_LIMIT / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }

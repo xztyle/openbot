@@ -1,7 +1,9 @@
+import type { ChannelMessage } from "@openbot/contracts/ipc";
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { assert, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { emitAgentEvent, installOpenbotStub, testServer } from "./app-test-harness";
+import { setShowAgentReasoning } from "./chat-visibility-preferences";
 import { CHANNEL_SELECTION_STORAGE_KEY } from "./features/channels/channel-selection";
 import { AccountDock } from "./lazy-views";
 
@@ -656,7 +658,9 @@ it("shows a channel read that lands while more changes are still arriving", asyn
   for (const release of gates) release();
 });
 
-async function openChannelWithStoppedTask(options: { withChild?: boolean; state?: "paused" | "failed" } = {}) {
+async function openChannelWithStoppedTask(
+  options: { withChild?: boolean; state?: "paused" | "failed"; error?: string | null } = {},
+) {
   await window.openbot.agent.channelCommand({
     type: "save",
     operationId: "create",
@@ -687,7 +691,7 @@ async function openChannelWithStoppedTask(options: { withChild?: boolean; state?
     const stopped = page.tasks.map((task) => ({
       ...task,
       state: options.state ?? ("paused" as const),
-      error: STOPPED_TASK_REASON,
+      error: options.error === undefined ? STOPPED_TASK_REASON : options.error,
     }));
     // The assignment limit stops the root task and everything under it, so the child arrives
     // stopped with the same reason on it.
@@ -911,4 +915,299 @@ it("keeps the working indicator while the coordinator chooses an owner", async (
   // The lead is the coordinator. Its routing turn holds the task and posts nothing until it
   // decides, so the indicator is the only sign that the request is alive.
   expect(await within(chat).findByRole("status", { name: /^Chief is working: / })).toBeInTheDocument();
+});
+
+/** A channel whose task for Chief runs, so a request of Chief can be answered in the channel. */
+async function openChannelWithRunningTask() {
+  await window.openbot.agent.channelCommand({
+    type: "save",
+    operationId: "create",
+    channelId: "channel-test",
+    draft: {
+      name: "Project room",
+      title: "",
+      instructions: "",
+      members: [{ agentId: "chief" }, { agentId: "sales-outbound" }],
+      leadAgentId: "chief",
+    },
+  });
+  await window.openbot.agent.channelCommand({
+    type: "send",
+    operationId: "request",
+    channelId: "channel-test",
+    text: "Prepare the report",
+    recipientAgentId: "chief",
+    replyToMessageId: null,
+    attachmentDraftIds: [],
+  });
+  const originalRead = window.openbot.agent.readChannel;
+  vi.spyOn(window.openbot.agent, "readChannel").mockImplementation(async (input) => {
+    const page = await originalRead(input);
+    return {
+      ...page,
+      tasks: page.tasks.map((task) => ({ ...task, ownerAgentId: "chief", state: "running" as const, error: null })),
+    };
+  });
+  render(() => <App />);
+  await screen.findByRole("button", { name: /Open account (actions|menu)/ });
+  await fireEvent.click(await screen.findByRole("button", { name: /Project room/ }));
+  return screen.findByRole("main", { name: "Channel conversation" });
+}
+
+function approvalOf(requestId: number, threadId: string) {
+  return {
+    requestId,
+    agentId: "chief",
+    threadId,
+    turnId: `turn-${requestId}`,
+    kind: "command" as const,
+    command: "bun run report",
+    cwd: null,
+    reason: null,
+    grantRoot: null,
+    permissions: null,
+  };
+}
+
+it("names the agent that asks for an approval in the channel", async () => {
+  const chat = await openChannelWithRunningTask();
+  emitAgentEvent?.({ type: "approval", approval: approvalOf(31, "thread-channel-chief") });
+
+  const card = await within(chat).findByRole("region", { name: "Approval for Chief" });
+  expect(within(card).getByText("Chief")).toBeInTheDocument();
+  expect(within(card).getByRole("button", { name: "Allow" })).toBeInTheDocument();
+});
+
+it("leaves the approval of a member's own chat to that chat", async () => {
+  const chat = await openChannelWithRunningTask();
+  // `thread-chief` is the thread of the agent chat of Chief, not a thread of this channel.
+  emitAgentEvent?.({ type: "approval", approval: approvalOf(32, "thread-chief") });
+
+  await within(chat).findByRole("status", { name: /^Chief is working: / });
+  expect(within(chat).queryByRole("region", { name: /^Approval/ })).not.toBeInTheDocument();
+  expect(within(chat).queryByRole("button", { name: "Allow" })).not.toBeInTheDocument();
+});
+
+/** A channel message, as the host stores it. A test adds it to the page the stub returns. */
+function storedMessage(
+  id: string,
+  sequence: number,
+  author: ChannelMessage["author"],
+  text: string,
+  overrides: Partial<ChannelMessage["message"]> & { superseded?: boolean } = {},
+): ChannelMessage {
+  const { superseded, ...message } = overrides;
+  return {
+    id,
+    channelId: "channel-test",
+    sequence,
+    author,
+    taskId: null,
+    superseded: superseded ?? false,
+    message: {
+      id,
+      author: author.kind === "member" ? "user" : "assistant",
+      text,
+      createdAt: new Date(2026, 8, 9, 12, sequence).toISOString(),
+      status: "completed",
+      ...message,
+    },
+  };
+}
+
+/**
+ * Opens a saved channel whose page also holds the given messages, with `unread` of them unread.
+ * The unread count of the list is `unread.count`, so a test can move it the way reading does.
+ */
+async function openChannelWithMessages(messages: ChannelMessage[], unreadCount = 0) {
+  const unread = { count: unreadCount };
+  await window.openbot.agent.channelCommand({
+    type: "save",
+    operationId: "create",
+    channelId: "channel-test",
+    draft: {
+      name: "Project room",
+      title: "",
+      instructions: "",
+      members: [{ agentId: "chief" }, { agentId: "sales-outbound" }],
+      leadAgentId: "chief",
+    },
+  });
+  const originalRead = window.openbot.agent.readChannel;
+  vi.spyOn(window.openbot.agent, "readChannel").mockImplementation(async (input) => {
+    const page = await originalRead(input);
+    return { ...page, messages, throughSequence: messages.at(-1)?.sequence ?? 0 };
+  });
+  const originalList = window.openbot.agent.listChannels;
+  vi.spyOn(window.openbot.agent, "listChannels").mockImplementation(async () =>
+    (await originalList()).map((channel) => ({ ...channel, unreadCount: unread.count })),
+  );
+  render(() => <App />);
+  await screen.findByRole("button", { name: /Open account (actions|menu)/ });
+  await fireEvent.click(await screen.findByRole("button", { name: /Project room/ }));
+  const chat = await screen.findByRole("main", { name: "Channel conversation" });
+  return Object.assign(chat, { unread });
+}
+
+const chiefAuthor = { kind: "agent" as const, id: "chief", name: "Chief" };
+
+it("draws the reasoning of an agent as one closed Thinking row in the channel", async () => {
+  const chat = await openChannelWithMessages([
+    storedMessage("t1", 1, chiefAuthor, "Reading the report.", { itemType: "commentary" }),
+    storedMessage("t2", 2, chiefAuthor, "Checking the totals.", { itemType: "commentary" }),
+    storedMessage("a3", 3, chiefAuthor, "The totals match."),
+  ]);
+
+  const thinking = await within(chat).findByRole("button", { name: /^Thinking/ });
+  expect(within(chat).getAllByRole("button", { name: /^Thinking/ })).toHaveLength(1);
+  expect(thinking).toHaveAttribute("aria-expanded", "false");
+  expect(within(chat).getByText("The totals match.")).toBeInTheDocument();
+  expect(within(chat).queryByText("Reading the report.")).not.toBeInTheDocument();
+
+  await fireEvent.click(thinking);
+  expect(await within(chat).findByText("Reading the report.")).toBeInTheDocument();
+  expect(within(chat).getByText("Checking the totals.")).toBeInTheDocument();
+});
+
+it("shows a closed Thinking row with no preview line when reasoning is switched off", async () => {
+  setShowAgentReasoning(false);
+  try {
+    const chat = await openChannelWithMessages([
+      storedMessage("t1", 1, chiefAuthor, "Reading the report.", { itemType: "commentary" }),
+      storedMessage("a2", 2, chiefAuthor, "The totals match."),
+    ]);
+    const thinking = await within(chat).findByRole("button", { name: "Thinking" });
+    expect(thinking).toHaveAttribute("aria-expanded", "false");
+    await fireEvent.click(thinking);
+    expect(await within(chat).findByText("Reading the report.")).toBeInTheDocument();
+  } finally {
+    setShowAgentReasoning(true);
+  }
+});
+
+it("draws a teammate as a member and an earlier answer muted with a note", async () => {
+  const chat = await openChannelWithMessages([
+    storedMessage("m1", 1, { kind: "member", id: "member-2", name: "Ada" }, "Please add the totals."),
+    storedMessage("a2", 2, chiefAuthor, "First draft.", { superseded: true }),
+    storedMessage("a3", 3, chiefAuthor, "Second draft.", { status: "interrupted" }),
+  ]);
+
+  const teammate = await within(chat).findByRole("article", { name: "Message from Ada" });
+  expect(teammate).toHaveTextContent("Please add the totals.");
+  expect(within(chat).queryByRole("button", { name: /Open Ada's chat/ })).not.toBeInTheDocument();
+  const earlier = within(chat).getByText("First draft.").closest<HTMLElement>('[role="article"]');
+  assert(earlier);
+  expect(within(earlier).getByText("Earlier answer. The task changed after it.")).toBeInTheDocument();
+  const cut = within(chat).getByText("Second draft.").closest<HTMLElement>('[role="article"]');
+  assert(cut);
+  expect(within(cut).getByText("This answer stopped before it was done.")).toBeInTheDocument();
+});
+
+it("keeps the unread divider while the channel is read, and drops it when the reader leaves", async () => {
+  const command = vi.spyOn(window.openbot.agent, "channelCommand");
+  const chat = await openChannelWithMessages(
+    [
+      storedMessage("a1", 1, chiefAuthor, "Already read."),
+      storedMessage("a2", 2, chiefAuthor, "First new answer."),
+      storedMessage("a3", 3, chiefAuthor, "Second new answer."),
+    ],
+    2,
+  );
+  const divider = await within(chat).findByRole("separator", { name: "New messages" });
+  expect(within(chat).getByText("NEW")).toBeInTheDocument();
+
+  // The channel is in front, so it is marked read. The count of the list falls to zero.
+  await waitFor(() => expect(command).toHaveBeenCalledWith(expect.objectContaining({ type: "read" })));
+  chat.unread.count = 0;
+  const read = vi.spyOn(window.openbot.agent, "readChannel");
+  read.mockClear();
+  await fireEvent.focus(window);
+  await waitFor(() => expect(read).toHaveBeenCalled());
+
+  // The divider stays where the unread part began.
+  expect(within(chat).getByRole("separator", { name: "New messages" })).toBeInTheDocument();
+  const row = within(chat).getByText("First new answer.");
+  expect(row.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+
+  // Another chat and back is a new opening, and nothing is unread now.
+  await fireEvent.click(screen.getByRole("button", { name: /^Chief, Chief of staff/ }));
+  await screen.findByRole("main", { name: "Conversation" });
+  await fireEvent.click(await screen.findByRole("button", { name: /Project room/ }));
+  const again = await screen.findByRole("main", { name: "Channel conversation" });
+  await within(again).findByText("Second new answer.");
+  expect(within(again).queryByRole("separator", { name: "New messages" })).not.toBeInTheDocument();
+});
+
+it("keeps a task the reader stopped, says so, and names its owner and request", async () => {
+  const { notice, command, state } = await openChannelWithStoppedTask({ error: null });
+  expect(notice).toHaveTextContent("Stopped by you.");
+  expect(within(notice).getByText("Chief")).toBeInTheDocument();
+  expect(within(notice).getByText("Prepare the report")).toBeInTheDocument();
+  expect(within(notice).getByRole("button", { name: "Open the chat of Chief" })).toBeInTheDocument();
+
+  await fireEvent.click(within(notice).getByRole("button", { name: "Continue" }));
+  await waitFor(() =>
+    expect(command).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "resume", taskId: state.taskId, recipientAgentId: null }),
+    ),
+  );
+  await waitFor(() => expect(screen.queryByRole("region", { name: "Stopped task for Chief" })).not.toBeInTheDocument());
+});
+
+it("opens the chat of the owner of a stopped task", async () => {
+  const { notice } = await openChannelWithStoppedTask();
+  await fireEvent.click(within(notice).getByRole("button", { name: "Open the chat of Chief" }));
+  await screen.findByRole("main", { name: "Conversation" });
+});
+
+it("names the member who works and the member who waits for a free place", async () => {
+  await window.openbot.agent.channelCommand({
+    type: "save",
+    operationId: "create",
+    channelId: "channel-test",
+    draft: {
+      name: "Project room",
+      title: "",
+      instructions: "",
+      members: [{ agentId: "chief" }, { agentId: "sales-outbound" }],
+      leadAgentId: "chief",
+    },
+  });
+  await window.openbot.agent.channelCommand({
+    type: "send",
+    operationId: "request",
+    channelId: "channel-test",
+    text: "Prepare the report",
+    recipientAgentId: "chief",
+    replyToMessageId: null,
+    attachmentDraftIds: [],
+  });
+  const originalRead = window.openbot.agent.readChannel;
+  vi.spyOn(window.openbot.agent, "readChannel").mockImplementation(async (input) => {
+    const page = await originalRead(input);
+    const [first] = page.tasks;
+    if (!first) return page;
+    return {
+      ...page,
+      tasks: [
+        { ...first, ownerAgentId: "chief", state: "running" as const, error: null },
+        { ...first, id: "task-queued", ownerAgentId: "sales-outbound", state: "queued" as const, error: null },
+      ],
+    };
+  });
+  render(() => <App />);
+  await screen.findByRole("button", { name: /Open account (actions|menu)/ });
+  await fireEvent.click(await screen.findByRole("button", { name: /Project room/ }));
+  const chat = await screen.findByRole("main", { name: "Channel conversation" });
+
+  expect(
+    await within(chat).findByRole("status", { name: /^Chief is working · Sales Outbound queued: / }),
+  ).toBeInTheDocument();
+  expect(within(chat).getByText("Chief is working · Sales Outbound queued")).toBeVisible();
+});
+
+it("does not make the whole channel transcript a live region", async () => {
+  const chat = await openChannelWithMessages([storedMessage("a1", 1, chiefAuthor, "The totals match.")]);
+  const transcript = await within(chat).findByRole("region", { name: "Shared messages" });
+  expect(transcript).not.toHaveAttribute("aria-live");
 });

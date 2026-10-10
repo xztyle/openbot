@@ -46,10 +46,10 @@ export const messages = defineMessages("settings", {
     "New messages join the agent’s current work, not the queue. Works with ChatGPT and Claude.",
   "settings.showAgentReasoning.title": "Show agent reasoning",
   "settings.showAgentReasoning.description":
-    "Show a Thinking row after each turn, and let the activity line open what the agent is thinking. This setting is for this device only.",
+    "Show a line of what the agent thought in each Thinking row. When off, the Thinking row stays closed, with no line, and you can still open it. This setting is for this device only.",
   "settings.showAgentMessages.title": "Show messages between agents",
   "settings.showAgentMessages.description":
-    "Show a row in the chat when one agent messages another. Click the row to peek at the message. This setting is for this device only.",
+    "Show each message between agents as its own row, with its files. When off, the messages stay in the chat as one collapsed row, and you can still open each one. This setting is for this device only.",
   "settings.agentMemoryLimit.title": "Memories per agent",
   "settings.agentMemoryLimit.description":
     "How many memories each agent on this computer can keep. A larger number makes each prompt longer.",

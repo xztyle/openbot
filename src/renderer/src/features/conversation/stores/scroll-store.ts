@@ -22,7 +22,7 @@ import type { VirtualItem } from "@tanstack/virtual-core";
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { eventCheckOrigins, eventCheckOriginsEqual, isEventCheckMarkerMessage } from "../../../app-message-projection";
 import { useShowAgentMessages, useShowAgentReasoning } from "../../../chat-visibility-preferences";
-import { groupAgentMessageMarkers } from "../agent-message-timeline";
+import { collapseThinkingRuns, groupAgentMessageMarkers } from "../agent-message-timeline";
 import type { ConversationProps, ConversationTarget } from "../conversation-types";
 import { groupRoutineRunMarkers, summarizeRoutineRunMessages } from "../routine-run-timeline";
 
@@ -58,8 +58,9 @@ function hiddenThinking(message: AgentMessage, activeTurnId: string | null | und
 }
 
 /**
- * A row the person switched off: the reasoning of a turn, or a message between agents. The message
- * stays in the conversation, so read state still reaches it; the timeline draws no row for it.
+ * A row the person switched off: the reasoning of a turn, or a message between agents. The timeline
+ * draws it collapsed, so nothing is left out. The count of new messages still skips it, as it did
+ * when the row was left out, so a switch does not change what the count says.
  */
 function switchedOff(message: AgentMessage, showReasoning: boolean, showAgentMessages: boolean): boolean {
   if (message.kind === "thinking") return !showReasoning;
@@ -91,8 +92,7 @@ export function createScrollStore(deps: ScrollStoreDeps) {
         (message) =>
           !hiddenThinking(message, deps.props.activeTurnId) &&
           !isEventCheckMarkerMessage(message) &&
-          !silentAgentAnswer(message) &&
-          !switchedOff(message, showReasoning(), showAgentMessages()),
+          !silentAgentAnswer(message),
       ),
     ),
     ...deps.pendingMessages(),
@@ -114,13 +114,18 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     const drawn = new Set(drawnMessages().map((message) => message.id));
     return deps.props.messages.slice(start).find((message) => drawn.has(message.id))?.id ?? null;
   });
-  /* A group of agent messages or routine runs stops at the unread divider, so the divider keeps its row. */
-  const timelineMessages = createMemo(() =>
-    groupRoutineRunMarkers(
-      groupAgentMessageMarkers(drawnMessages(), unreadBoundaryMessageId()),
-      unreadBoundaryMessageId(),
-    ),
-  );
+  /*
+   * A group of agent messages or routine runs stops at the unread divider, so the divider keeps its
+   * row. A switch that is off collapses its rows into one row per run; it never removes them.
+   */
+  const timelineMessages = createMemo(() => {
+    const boundary = unreadBoundaryMessageId();
+    const rows = showReasoning() ? drawnMessages() : collapseThinkingRuns(drawnMessages(), boundary);
+    return groupRoutineRunMarkers(
+      groupAgentMessageMarkers(rows, boundary, { collapsed: !showAgentMessages() }),
+      boundary,
+    );
+  });
   /*
    * A row finds its message by id. The virtualizer gives a row its new index one tick after the list
    * changes, so a lookup by index draws the neighbouring message in the row for that tick.

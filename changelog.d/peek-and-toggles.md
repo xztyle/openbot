@@ -8,8 +8,8 @@
 - Two switches, "Show agent reasoning" and "Show messages between agents", both on by default. Find
   them in Settings > General on the desktop, and in Account settings > Preferences in the web
   client. They apply at once and are kept for this browser or desktop profile only. With the first
-  off, the chat has no Thinking rows and the activity line is plain text. With the second off, the
-  chat has no rows for messages between agents, and no peek.
+  off, each Thinking row stays closed with no preview line. With the second off, messages between
+  agents are one collapsed row for each run, and the peek still opens. Nothing is removed.
 
 ### Changed
 

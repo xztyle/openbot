@@ -26,6 +26,7 @@ export const messages = defineMessages("prompt", {
   "prompt.approval.answerFailed": "Could not answer this approval. Try again.",
   "prompt.approval.grantFailed": "Could not save the standing approval. Try again.",
   "prompt.approval.label": "Agent approval",
+  "prompt.approval.labelFrom": "Approval for {name}",
   "prompt.approval.badge": "Approval",
   "prompt.approval.files": "Files",
   "prompt.approval.agentWorkspace": "Agent workspace",

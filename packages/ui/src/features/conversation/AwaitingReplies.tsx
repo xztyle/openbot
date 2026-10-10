@@ -1,4 +1,4 @@
-import { IconButton, X } from "@openbot/ui";
+import { Button, IconButton, X } from "@openbot/ui";
 import { createSignal, createUniqueId, For, Show, untrack } from "solid-js";
 import type { AgentProfile } from "../../data";
 import { useText } from "../../text";
@@ -27,6 +27,8 @@ export interface AwaitingReplyListProps {
   defaultOpen?: boolean;
   /** Hides the block. It has a close button only when this is set and no agent still works. */
   onDismiss?: () => void;
+  /** Opens the chat of a row's agent. A row with no profile has no such button. */
+  onOpenAgent?: ((agentId: string) => void) | undefined;
   class?: string;
 }
 
@@ -118,7 +120,22 @@ function AwaitingReplyList(props: AwaitingReplyListProps) {
                   class="awaiting-replies-avatar"
                 />
                 <span class="awaiting-replies-text">
-                  <span class="awaiting-replies-name">{item().name}</span>
+                  <Show
+                    when={props.onOpenAgent && item().agent}
+                    fallback={<span class="awaiting-replies-name">{item().name}</span>}
+                  >
+                    {(agent) => (
+                      <Button
+                        variant="ghost"
+                        type="button"
+                        class="awaiting-replies-name message-author-name-button"
+                        aria-label={t("chat.row.openChat", { name: item().name })}
+                        onClick={() => props.onOpenAgent?.(agent().id)}
+                      >
+                        {item().name}
+                      </Button>
+                    )}
+                  </Show>
                   <Show when={item().preview}>
                     {(preview) => <span class="awaiting-replies-preview">{preview()}</span>}
                   </Show>

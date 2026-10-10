@@ -239,9 +239,11 @@ characters when an item completes, and when a turn is read back from a provider.
 not redacted one by one, because a secret can split across two pieces; the completed item replaces
 them. The renderer joins the commentary of one turn into one `thinking` message. While the turn runs,
 the activity line opens it. After the turn, a "Thinking" row above the answer opens it. The switch
-"Show agent reasoning" (on by default) hides both. It is a view choice of the browser or desktop
-profile, in local storage (`chat-visibility-preferences.ts`); the host and the stored messages do not
-change.
+"Show agent reasoning" (on by default) collapses it and hides nothing: with the switch off, a run of
+Thinking rows is one closed row with no preview line, and it still opens. It is a view choice of the
+browser or desktop profile, in local storage (`chat-visibility-preferences.ts`); the host and the
+stored messages do not change. A channel draws the commentary of its agents the same way, and its
+unread count and sidebar preview leave commentary out.
 
 ### Messages between agents in the chat
 
@@ -249,9 +251,9 @@ A message from one agent to another draws one compact row: "Messaged" or "Messag
 agent and the time. The row draws no text of the message. The whole row is one button; a click or
 Enter opens a translucent peek over the chat (`AgentMessageDialog`). The peek shows who messaged whom,
 the full text, the message it answers, its replies, and "Open conversation", which goes to the chat
-of the other agent. The switch "Show messages between agents" (on by default) removes these rows
-from the timeline, so there is no row and no peek. It is kept in local storage like the reasoning
-switch.
+of the other agent. The switch "Show messages between agents" (on by default) collapses these rows
+and removes none: with the switch off, a run of messages is one group row, also when a message
+carries files, and the peek opens as before. It is kept in local storage like the reasoning switch.
 
 ### Failed tool calls
 

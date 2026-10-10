@@ -1242,46 +1242,50 @@ describe("OpenBot connected desktop shell", () => {
       await waitFor(() => expect(screen.getByRole("button", { name: /^Show the message/ })).toHaveFocus());
     });
 
-    it("leaves out the messages between agents when the person turns them off, and brings them back", async () => {
+    it("keeps the messages between agents when the person turns them off, and the peek still opens", async () => {
       chatWithThoughtAndAgentMessage();
       render(() => <App />);
       expect(await screen.findByRole("button", { name: /^Show the message/ })).toBeInTheDocument();
 
       setShowAgentMessages(false);
 
-      await waitFor(() => expect(screen.queryByRole("button", { name: /^Show the message/ })).toBeNull());
-      expect(screen.queryByRole("button", { name: "Open chat with Sales Outbound" })).toBeNull();
+      const row = await screen.findByRole("button", { name: /^Show the message/ });
       expect(screen.getByText("Sales Outbound reports that the pipeline is ready.")).toBeInTheDocument();
+      await fireEvent.click(row);
+      const peek = await screen.findByRole("dialog", { name: "Message between agents" });
+      expect(within(peek).getByText("RAW_COLLABORATOR_RESULT")).toBeInTheDocument();
 
+      // Turning the switch back on does not close a peek that is open.
       setShowAgentMessages(true);
-
-      expect(await screen.findByRole("button", { name: /^Show the message/ })).toBeInTheDocument();
+      expect(screen.getByRole("dialog", { name: "Message between agents" })).toBeInTheDocument();
     });
 
-    it("leaves out the reasoning when the person turns it off, and brings it back", async () => {
+    it("keeps a closed Thinking row, without its line, when the person turns reasoning off", async () => {
       chatWithThoughtAndAgentMessage();
       render(() => <App />);
-      expect(await screen.findByRole("button", { name: /Thinking/ })).toBeInTheDocument();
+      expect(
+        await screen.findByRole("button", { name: /Thinking.*I read the pipeline report first/ }),
+      ).toBeInTheDocument();
 
       setShowAgentReasoning(false);
 
-      await waitFor(() => expect(screen.queryByRole("button", { name: /Thinking/ })).toBeNull());
+      const row = await screen.findByRole("button", { name: "Thinking" });
+      expect(row).toHaveAttribute("aria-expanded", "false");
       expect(screen.getByText("Sales Outbound reports that the pipeline is ready.")).toBeInTheDocument();
 
-      setShowAgentReasoning(true);
-
-      expect(await screen.findByRole("button", { name: /Thinking/ })).toBeInTheDocument();
+      await fireEvent.click(row);
+      expect(await screen.findByText("I read the pipeline report first.")).toBeInTheDocument();
     });
 
-    it("starts without the rows when the saved choice is off", async () => {
+    it("starts with collapsed rows when the saved choice is off", async () => {
       setShowAgentMessages(false);
       setShowAgentReasoning(false);
       chatWithThoughtAndAgentMessage();
       render(() => <App />);
 
       expect(await screen.findByText("Sales Outbound reports that the pipeline is ready.")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /^Show the message/ })).toBeNull();
-      expect(screen.queryByRole("button", { name: /Thinking/ })).toBeNull();
+      expect(screen.getByRole("button", { name: /^Show the message/ })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Thinking" })).toBeInTheDocument();
     });
   });
 

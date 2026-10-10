@@ -38,6 +38,8 @@ function message(overrides: {
   status?: ChannelMessage["message"]["status"];
   /** Set for a routing receipt, which the service writes as a `system` message with an item type. */
   assignedAgentId?: string;
+  /** The model's reasoning, which the service captures as a `commentary` item of the turn. */
+  commentary?: boolean;
 }): ChannelMessage {
   const entry: ChannelMessage = {
     id: overrides.id,
@@ -54,7 +56,9 @@ function message(overrides: {
       status: overrides.status ?? "completed",
       itemType: overrides.assignedAgentId
         ? channelRoutingConversationEventItemType("assigned", overrides.assignedAgentId)
-        : undefined,
+        : overrides.commentary
+          ? "commentary"
+          : undefined,
     },
   };
   return entry;
@@ -118,7 +122,74 @@ describe("channelTimelineEntries", () => {
       (id) => id === "local",
       options,
     );
-    expect(entries[0]?.author).toMatchObject({ kind: "agent", name: "Ada" });
+    // A teammate is a member row, as in the agent chat: their name, and a face that follows their id.
+    expect(entries[0]?.author).toMatchObject({ kind: "member", name: "Ada", avatarSeed: "member-2" });
+    expect(entries[0]?.author.agent).toBeUndefined();
+  });
+
+  it("keeps the agent look for a routine that wrote into the channel", () => {
+    const entries = channelTimelineEntries(
+      page([
+        message({
+          id: "m1",
+          sequence: 1,
+          author: { kind: "member", id: "routine:daily", name: "Daily summary" },
+          createdAt: new Date(2026, 8, 9, 12, 0),
+        }),
+      ]),
+      [],
+      (id) => id === "local",
+      options,
+    );
+    expect(entries[0]?.author).toMatchObject({ kind: "agent", name: "Daily summary", avatarSeed: "routine:daily" });
+  });
+
+  it("names a teammate and a deleted agent by a word when no name is stored, never by an id", () => {
+    const entries = channelTimelineEntries(
+      page([
+        message({
+          id: "m1",
+          sequence: 1,
+          author: { kind: "member", id: "member-7", name: "  " },
+          createdAt: new Date(2026, 8, 9, 12, 0),
+        }),
+        message({
+          id: "m2",
+          sequence: 2,
+          author: { kind: "agent", id: "agent-gone", name: "" },
+          createdAt: new Date(2026, 8, 9, 12, 1),
+        }),
+      ]),
+      [],
+      () => false,
+      options,
+    );
+    expect(entries.map((entry) => entry.author.name)).toEqual(["Team member", "Former member"]);
+  });
+
+  it("carries a superseded answer into its row", () => {
+    const superseded = message({
+      id: "m1",
+      sequence: 1,
+      author: { kind: "agent", id: chief.id, name: "Chief" },
+      createdAt: new Date(2026, 8, 9, 12, 0),
+    });
+    superseded.superseded = true;
+    const entries = channelTimelineEntries(
+      page([
+        superseded,
+        message({
+          id: "m2",
+          sequence: 2,
+          author: { kind: "agent", id: chief.id, name: "Chief" },
+          createdAt: new Date(2026, 8, 9, 12, 1),
+        }),
+      ]),
+      [chief],
+      () => false,
+      options,
+    );
+    expect(entries.map((entry) => entry.superseded)).toEqual([true, false]);
   });
 
   it("draws the lead routing dispatch as activity that names the member it went to", () => {
@@ -317,6 +388,91 @@ describe("channelTimelineEntries", () => {
           assignedAgentId: "ada",
           createdAt: new Date(2026, 8, 9, 12, 1),
         }),
+        message({ id: "m3", sequence: 3, author, createdAt: new Date(2026, 8, 9, 12, 2) }),
+      ]),
+      [chief],
+      () => false,
+      options,
+    );
+    expect(firstUnreadChannelMessageId(entries, 2)).toBe("m1");
+  });
+
+  it("joins consecutive reasoning of one author into one thinking row", () => {
+    const author = { kind: "agent" as const, id: chief.id, name: "Chief" };
+    const entries = channelTimelineEntries(
+      page([
+        message({
+          id: "t1",
+          sequence: 1,
+          author,
+          text: "Reading the file.",
+          commentary: true,
+          createdAt: new Date(2026, 8, 9, 12, 0),
+        }),
+        message({
+          id: "t2",
+          sequence: 2,
+          author,
+          text: "Checking totals.",
+          commentary: true,
+          createdAt: new Date(2026, 8, 9, 12, 1),
+        }),
+        message({ id: "m3", sequence: 3, author, text: "The totals match.", createdAt: new Date(2026, 8, 9, 12, 2) }),
+        message({
+          id: "t4",
+          sequence: 4,
+          author,
+          text: "One more look.",
+          commentary: true,
+          createdAt: new Date(2026, 8, 9, 12, 3),
+        }),
+      ]),
+      [chief],
+      () => false,
+      options,
+    );
+    expect(entries.map((entry) => entry.id)).toEqual(["t1", "m3", "t4"]);
+    expect(entries[0]?.message).toMatchObject({
+      kind: "thinking",
+      items: ["Reading the file.", "Checking totals."],
+      itemIds: ["t1", "t2"],
+    });
+    expect(entries[1]?.message.kind).toBeUndefined();
+    // The answer after the reasoning names its author again: the thinking row breaks the run.
+    expect(entries[1]?.showAuthor).toBe(true);
+  });
+
+  it("keeps the reasoning of two authors in two rows", () => {
+    const entries = channelTimelineEntries(
+      page([
+        message({
+          id: "t1",
+          sequence: 1,
+          author: { kind: "agent", id: chief.id, name: "Chief" },
+          commentary: true,
+          createdAt: new Date(2026, 8, 9, 12, 0),
+        }),
+        message({
+          id: "t2",
+          sequence: 2,
+          author: { kind: "agent", id: "agent-ada", name: "Ada" },
+          commentary: true,
+          createdAt: new Date(2026, 8, 9, 12, 1),
+        }),
+      ]),
+      [chief],
+      () => false,
+      options,
+    );
+    expect(entries.map((entry) => entry.message.kind)).toEqual(["thinking", "thinking"]);
+  });
+
+  it("skips reasoning while it counts back to the unread boundary, because the channel count leaves it out", () => {
+    const author = { kind: "agent" as const, id: chief.id, name: "Chief" };
+    const entries = channelTimelineEntries(
+      page([
+        message({ id: "m1", sequence: 1, author, createdAt: new Date(2026, 8, 9, 12, 0) }),
+        message({ id: "t2", sequence: 2, author, commentary: true, createdAt: new Date(2026, 8, 9, 12, 1) }),
         message({ id: "m3", sequence: 3, author, createdAt: new Date(2026, 8, 9, 12, 2) }),
       ]),
       [chief],

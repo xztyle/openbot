@@ -132,6 +132,16 @@ describe("the peek at a message between agents", () => {
     await waitFor(() => expect(openRow()).toHaveFocus());
   });
 
+  it("says that a message is not loaded when the chat holds none of its thread", async () => {
+    render(() => <Chat messages={[]} />);
+    await fireEvent.click(openRow());
+
+    const peek = await screen.findByRole("dialog", { name: "Message between agents" });
+
+    expect(within(peek).getByText("This message is not loaded in this chat yet.")).toBeInTheDocument();
+    expect(within(peek).queryByRole("listitem")).not.toBeInTheDocument();
+  });
+
   it("closes with its button", async () => {
     render(() => <Chat messages={[request]} />);
     await fireEvent.click(openRow());

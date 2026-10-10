@@ -45,6 +45,7 @@ import {
   tallyNewMessages,
 } from "@openbot/ui/features/conversation/new-message-tally";
 import { TaskList } from "@openbot/ui/features/conversation/TaskList";
+import { ThinkingDisclosure } from "@openbot/ui/features/conversation/ThinkingDisclosure";
 import {
   scrollToUnreadBoundary,
   UnreadMessagesBanner,
@@ -67,6 +68,7 @@ import {
 } from "solid-js";
 import { planItems, planTitle } from "../../app-message-projection";
 import { channelAwaitingReplies } from "../../awaiting-replies";
+import { useShowAgentReasoning } from "../../chat-visibility-preferences";
 import { writeClipboardText } from "../../clipboard";
 import { createSettingsPanelWidth, saveSettingsPanelWidth } from "../../components/settings-panel-width";
 import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../../send-shortcut-preference";
@@ -81,7 +83,7 @@ import { channelMemoriesPort } from "../conversation/memories-port";
 import { desktopEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import { channelRoutinesPort, eventRoutinesPort } from "../conversation/routines-port";
 import { ChannelEditor } from "./ChannelEditor";
-import { channelTimelineEntries, firstUnreadChannelMessageId } from "./channel-timeline";
+import { type ChannelTimelineEntry, channelTimelineEntries, firstUnreadChannelMessageId } from "./channel-timeline";
 import { useChannels } from "./channels-context";
 
 const ChannelFilePreviewPanel = lazy(() => import("../conversation/FilePreviewPanel"));
@@ -108,6 +110,7 @@ export interface ChannelConversationProps {
 export function ChannelConversation(props: ChannelConversationProps) {
   const channels = useChannels();
   const { t, format, sourceText } = useText();
+  const showAgentReasoning = useShowAgentReasoning();
   const runtime = () => channels.port();
   const agentList = channels.agents;
   const isOwnMessage = (authorId: string) => props.isOwnMessage(authorId);
@@ -289,7 +292,21 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const unreadCount = createMemo(
     () => channels.state.channels.find((channel) => channel.id === channels.state.selectedId)?.unreadCount ?? 0,
   );
-  const firstUnreadId = createMemo(() => firstUnreadChannelMessageId(timeline(), unreadCount()));
+  /*
+   * The divider stands where the unread part began when the reader opened the channel, and stays
+   * there while they read: the channel is marked read as it is in front, so the live count is zero
+   * a moment later. Messages that arrived after the opening are below the divider, not part of it.
+   * Without a kept record (nothing unread at the opening, or the reader released it) the live count
+   * decides, as before.
+   */
+  const firstUnreadId = createMemo(() => {
+    const held = channels.state.unread;
+    if (!held || held.channelId !== channels.state.selectedId) {
+      return firstUnreadChannelMessageId(timeline(), unreadCount());
+    }
+    const opened = timeline().filter((entry) => entry.sequence <= held.throughSequence);
+    return firstUnreadChannelMessageId(opened, held.count);
+  });
   /* A row finds its entry by id: the virtualizer gives a row its new index one tick after the list changes. */
   const timelineIndexById = createMemo(
     () => new Map<VirtualItem["key"], number>(timeline().map((entry, index) => [entry.id, index])),
@@ -304,9 +321,9 @@ export function ChannelConversation(props: ChannelConversationProps) {
   };
   /**
    * Everyone the channel waits on: the owner of a running task, the author of a message that is
-   * still arriving, and the lead while it chooses an owner. They read as one row under the
-   * transcript, because a channel runs several agents at once and a row for each would push the
-   * messages off the screen.
+   * still arriving, and the lead while it chooses an owner, and then the owners of queued tasks,
+   * marked as queued. They read as one row under the transcript, because a channel runs several
+   * agents at once and a row for each would push the messages off the screen.
    *
    * The lead is the coordinator, and its routing turn moves no task out of `queued` and writes no
    * message of its own. Without it the transcript stands still for as long as the coordinator
@@ -325,11 +342,21 @@ export function ChannelConversation(props: ChannelConversationProps) {
     // the coordinator's reason under the transcript, and that notice is the indicator from then on.
     if (lead && page.tasks.some((task) => !task.ownerAgentId && (task.state === "queued" || task.state === "waiting")))
       ids.add(lead);
-    return [...ids].map((id) => {
+    // A task that has an owner and waits for a free place: the reader sees who comes next.
+    const queued = new Set<string>();
+    for (const task of page.tasks)
+      if (task.state === "queued" && task.ownerAgentId && !ids.has(task.ownerAgentId)) queued.add(task.ownerAgentId);
+    const worker = (id: string, waiting: boolean): ChannelWorker => {
       const agent = agentList().find((candidate) => candidate.id === id);
       const authored = page.messages.find((entry) => entry.author.id === id);
-      return { id, name: agent?.name ?? authored?.author.name ?? t("chat.activity.agentFallback"), agent };
-    });
+      return {
+        id,
+        name: agent?.name ?? (authored?.author.name.trim() || t("channel.members.former")),
+        agent,
+        ...(waiting ? { queued: true } : {}),
+      };
+    };
+    return [...[...ids].map((id) => worker(id, false)), ...[...queued].map((id) => worker(id, true))];
   });
   const messageVirtualizer = createChatVirtualizer<HTMLElement, HTMLElement>({
     count: () => timeline().length,
@@ -379,7 +406,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const updateUnreadDividerVisibility = () => {
     setUnreadDividerVisible(
       Boolean(
-        unreadCount() > 0 &&
+        firstUnreadId() !== null &&
           messageList &&
           unreadMessagesDivider &&
           unreadMessagesDividerIsVisible(messageList, unreadMessagesDivider),
@@ -393,16 +420,26 @@ export function ChannelConversation(props: ChannelConversationProps) {
       updateUnreadDividerVisibility();
     });
   };
+  /** The newest question that no one answered, for the one status of the transcript. */
+  const questionAnnouncement = createMemo(() => {
+    const pending = timeline().findLast(
+      (entry) => entry.message.questionPrompt && !entry.message.questionPrompt.resolution,
+    );
+    const question = pending?.message.questionPrompt?.questions[0]?.question;
+    return question ? t("prompt.inputRequiredAnnouncement", { question }) : "";
+  });
   /** The channel is read as far as its newest message: that is what the page counts through. */
   const markChannelRead = async () => {
     const page = channels.state.page;
     if (!page) return;
-    await channels.command({
+    const read = await channels.command({
       type: "read",
       channelId: page.channel.id,
       throughSequence: page.throughSequence,
       operationId: crypto.randomUUID(),
     });
+    // "Mark read" is the reader saying they are done with the divider.
+    if (read) channels.releaseUnread();
   };
   const jumpToUnreadMessages = () => {
     if (!messageList || !unreadMessagesDivider) return;
@@ -415,6 +452,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const jumpToLatestMessage = () => {
     if (!messageList) return;
     stickToLatest = true;
+    channels.releaseUnread();
     clearNewMessages();
     scrollToLatestMessage(messageList);
   };
@@ -481,14 +519,46 @@ export function ChannelConversation(props: ChannelConversationProps) {
     if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
     if (unreadVisibilityFrame !== undefined) cancelAnimationFrame(unreadVisibilityFrame);
   });
-  const name = (id: string | null) =>
-    agentList().find((agent) => agent.id === id)?.name ?? t("sidebar.section.unassigned");
+  /*
+   * A name for an agent id. The agent list names a member who is there; a member who left is named
+   * by what they last signed a message with, and only then by a word. Never by the id.
+   */
+  const name = (id: string | null) => {
+    if (id === null) return t("sidebar.section.unassigned");
+    const known = agentList().find((agent) => agent.id === id)?.name;
+    if (known) return known;
+    const authored = channels.state.page?.messages.findLast((entry) => entry.author.id === id)?.author.name.trim();
+    return authored || t("channel.members.former");
+  };
+  /** The note under an answer that is not the final word: replaced by a newer one, or cut short. */
+  const rowNote = (entry: ChannelTimelineEntry) => {
+    const key = entry.superseded
+      ? "channel.message.superseded"
+      : entry.source.message.status === "interrupted"
+        ? "channel.message.interrupted"
+        : entry.source.message.status === "failed"
+          ? "channel.message.failed"
+          : null;
+    return key ? <span class="channel-message-note">{t(key)}</span> : undefined;
+  };
+  /**
+   * The approval or takeover of a member, when it can be answered in this channel. One that belongs
+   * to the member's own chat is answered there, and a card for it here would not name its chat.
+   */
+  const channelPrompt = <Request extends { threadId: string }>(
+    request: Request | undefined,
+    agentId: string,
+  ): Request | undefined => {
+    const direct = agentList().find((agent) => agent.id === agentId)?.threadId;
+    return request && direct && request.threadId === direct ? undefined : request;
+  };
   /**
    * The work that waits for the reader: one entry for each stopped run, not for each stopped task.
    *
-   * A task the service stopped carries the reason it stopped, and an archived channel stops every
-   * task without one, so the reason is what tells the two apart. A failed task belongs here too: it
-   * carries its own reason, its parent waits for it, and nothing but the reader starts it again.
+   * A task the service stopped carries the reason it stopped. A task the reader stopped has none:
+   * `stop` clears it, and the card says "Stopped by you". An archived channel has no cards, because
+   * the whole channel is past work. A failed task belongs here too: it carries its own reason, its
+   * parent waits for it, and nothing but the reader starts it again.
    * The assignment limit stops a whole tree at once, and `resume` starts a task with everything
    * under it, so the entry has to be the root: a reader who continues a child would leave the root
    * stopped, and a card for each task would repeat one reason several times.
@@ -496,7 +566,11 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const pausedTasks = createMemo(() => {
     const page = channels.state.page;
     if (!page || page.channel.archived) return [];
-    const stopped = page.tasks.filter((task) => (task.state === "paused" || task.state === "failed") && task.error);
+    // A task the reader stopped is paused with no reason: `stop` clears the error. It is still a run
+    // that waits for them, so it stays here with a reason of its own that the card words.
+    const stopped = page.tasks.filter(
+      (task) => (task.state === "paused" || task.state === "failed") && (task.error || task.state === "paused"),
+    );
     const roots = new Map<string, (typeof stopped)[number]>();
     for (const task of stopped) {
       const known = roots.get(task.rootTaskId);
@@ -659,10 +733,17 @@ export function ChannelConversation(props: ChannelConversationProps) {
               </div>
               <div class="conversation-header-actions no-drag">{props.headerActions}</div>
             </header>
+            {/*
+              One status for the whole transcript, as the agent chat has: a live region on the
+              transcript itself reads every row that streams or scrolls in. An action row announces
+              itself, and a question from an agent is announced here.
+            */}
+            <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+              {questionAnnouncement()}
+            </span>
             <section
               class="conversation-scroll"
               aria-label={t("channel.conversation.messages")}
-              aria-live="polite"
               ref={(element) => {
                 messageList = element;
                 rail.ref(element);
@@ -770,6 +851,23 @@ export function ChannelConversation(props: ChannelConversationProps) {
                                 }}
                               />
                             </article>
+                          ) : initialEntry.message.kind === "thinking" ? (
+                            // The reasoning of a turn is one quiet row, closed, as in the agent chat. With
+                            // the switch off it shows no preview line, and it still opens.
+                            <article>
+                              <ThinkingDisclosure
+                                items={entry()?.message.items ?? initialEntry.message.items ?? []}
+                                showPreview={showAgentReasoning()}
+                                agents={agentList()}
+                                onSelectAgent={(id) => {
+                                  channels.close();
+                                  selectAgent(id);
+                                }}
+                                onOpenLink={(url) => {
+                                  void runtime().openUrl(url);
+                                }}
+                              />
+                            </article>
                           ) : initialEntry.message.plan ? (
                             <article class={{ "message-entry-animated": animate }}>
                               <Show when={entry()?.message.plan ?? initialEntry.message.plan}>
@@ -789,6 +887,8 @@ export function ChannelConversation(props: ChannelConversationProps) {
                               showAuthor={entry()?.showAuthor ?? initialEntry.showAuthor}
                               showTime={entry()?.showAuthor ?? initialEntry.showAuthor}
                               animate={animate}
+                              class={entry()?.superseded ? "message-entry-superseded" : undefined}
+                              footer={rowNote(entry() ?? initialEntry)}
                               agents={agentList()}
                               referencedMessage={referenced()?.message}
                               referencedAuthorName={referenced()?.author.name}
@@ -866,13 +966,18 @@ export function ChannelConversation(props: ChannelConversationProps) {
                   <Show
                     when={
                       !page().channel.archived &&
-                      page().tasks.some((task) => task.ownerAgentId === member.agentId && task.state === "running") &&
-                      props.pendingApprovals[member.agentId]
+                      page().tasks.some((task) => task.ownerAgentId === member.agentId && task.state === "running")
+                        ? channelPrompt(props.pendingApprovals[member.agentId], member.agentId)
+                        : undefined
                     }
                   >
                     {(approval) => (
                       <ApprovalCard
                         approval={approval()}
+                        requester={{
+                          name: name(member.agentId),
+                          agent: agentList().find((agent) => agent.id === member.agentId),
+                        }}
                         onApprove={() =>
                           channels.perform(() =>
                             runtime().agent.respondToApproval({
@@ -897,7 +1002,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
               <For each={page().channel.members}>
                 {(member) => {
                   const takeover = () => {
-                    const request = props.pendingTakeovers[member.agentId];
+                    const request = channelPrompt(props.pendingTakeovers[member.agentId], member.agentId);
                     return !page().channel.archived &&
                       page().tasks.some((task) => task.ownerAgentId === member.agentId && task.state === "running")
                       ? request
@@ -949,12 +1054,24 @@ export function ChannelConversation(props: ChannelConversationProps) {
             </Show>
             <Show when={!page().channel.archived}>
               <div class="composer-wrap">
-                <AwaitingReplies items={awaitingSubtasks()} title={t("chat.awaiting.subtasks")} />
+                <AwaitingReplies
+                  items={awaitingSubtasks()}
+                  title={t("chat.awaiting.subtasks")}
+                  onOpenAgent={(id) => {
+                    channels.close();
+                    selectAgent(id);
+                  }}
+                />
                 <ChannelStoppedTasks
                   tasks={pausedTasks()}
                   members={page().channel.members}
+                  agents={agentList()}
                   name={name}
                   onResume={resumeTask}
+                  onOpenChat={(id) => {
+                    channels.close();
+                    selectAgent(id);
+                  }}
                 />
                 <form
                   class="composer"

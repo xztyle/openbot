@@ -7,6 +7,8 @@ import { ThinkingText, type ThinkingTextProps } from "./ThinkingText";
 export interface ThinkingDisclosureProps extends Omit<ThinkingTextProps, "streaming"> {
   /** Starts open. A finished turn starts closed. */
   defaultOpen?: boolean | undefined;
+  /** Shows a line of the last step while closed. Off, the closed row is only its label. Default on. */
+  showPreview?: boolean | undefined;
 }
 
 /** The longest preview the closed row keeps. The row clips it to one line anyway. */
@@ -40,7 +42,7 @@ export function ThinkingDisclosure(props: ThinkingDisclosureProps) {
       >
         <ChevronDown class="thinking-disclosure-chevron" aria-hidden="true" />
         <span class="thinking-disclosure-label">{t("chat.thinking.label")}</span>
-        <Show when={!open() && preview()}>
+        <Show when={!open() && props.showPreview !== false && preview()}>
           <span class="thinking-disclosure-preview">{preview()}</span>
         </Show>
       </Button>

@@ -430,3 +430,14 @@
   line-height: var(--openbot-leading-sm);
   text-align: center;
 }
+
+/* An answer that a later one replaced stays in the transcript, muted, with a note under it. */
+.message-entry-superseded .message-shell {
+  opacity: 0.6;
+}
+
+.channel-message-note {
+  display: block;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}

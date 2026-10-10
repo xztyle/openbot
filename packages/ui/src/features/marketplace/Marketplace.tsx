@@ -186,6 +186,14 @@ function MarketplaceWindow(props: MarketplaceProps) {
             )}
           </Show>
         </div>
+        {/* Said by the live region below too, so a reader hears it once. This line is for the eyes. */}
+        <Show when={props.model.notice()}>
+          {(message) => (
+            <div class="skills-marketplace-notice" aria-hidden="true">
+              <span>{message()}</span>
+            </div>
+          )}
+        </Show>
         <Show when={props.model.error()}>
           {(message) => (
             <div class="skills-marketplace-error">

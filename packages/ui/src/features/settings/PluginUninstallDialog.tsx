@@ -28,6 +28,8 @@ export interface PluginUninstallPlan {
   skillSlugs: readonly string[];
   /** The agent the skills come off, named only when there are skills to take. */
   agentName: string;
+  /** The joined server that holds the apps. Absent: this computer holds them. */
+  hostName?: string | undefined;
 }
 
 export function PluginUninstallDialog(props: {
@@ -45,7 +47,11 @@ export function PluginUninstallDialog(props: {
       // A removal that is running is not cancellable: half of it has already happened.
       pending={props.busy}
       title={t("plugin.uninstallDialog.title", { name: props.plan.pluginName })}
-      description={t("plugin.uninstallDialog.description", { name: props.plan.pluginName })}
+      description={
+        props.plan.hostName
+          ? t("plugin.uninstallDialog.descriptionOnHost", { name: props.plan.pluginName, host: props.plan.hostName })
+          : t("plugin.uninstallDialog.description", { name: props.plan.pluginName })
+      }
       confirmLabel={t("plugin.uninstallDialog.confirm")}
       onCancel={props.onCancel}
       onConfirm={props.onConfirm}

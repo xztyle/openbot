@@ -21,6 +21,8 @@ export const messages = defineMessages("plugin", {
   "plugin.uninstallDialog.title": "Disconnect {name}?",
   "plugin.uninstallDialog.description":
     "This removes what {name} installed on this computer. Nothing else on this host or on this agent changes.",
+  "plugin.uninstallDialog.descriptionOnHost":
+    "This removes what {name} installed on {host}. Nothing else on this host or on this agent changes.",
   "plugin.uninstallDialog.confirm": "Disconnect",
   "plugin.uninstallDialog.appsLabel": "Apps to remove, {number}",
   "plugin.uninstallDialog.appsTitle": "Apps removed from this host",

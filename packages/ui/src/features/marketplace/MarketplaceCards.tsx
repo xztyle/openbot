@@ -176,6 +176,17 @@ export function AppAction(props: {
         if (connected) props.onConnected?.();
       });
   };
+  /* The host's list of apps is not read yet, or could not be. An app that is connected already reads
+   * as not connected until then, and Connect would add a second account of it. A sign-in that is
+   * running waits for its answer. */
+  const unread = () => props.app.kind === "plugin" && model().appsRead() !== "loaded";
+  const waiting = () => unread() || props.app.status === "connecting";
+  /** What the disabled button says: the wait, or Connect itself after a failed read. */
+  const waitingText = () => {
+    if (props.app.status === "connecting") return t("marketplace.app.connecting");
+    if (unread() && model().appsRead() === "loading") return t("marketplace.app.checking");
+    return null;
+  };
   /* An app whose accounts are off is not offered again: Connect would add an account. Its page turns
    * them on. */
   const held = () => props.app.status === "connected" || props.app.status === "disabled";
@@ -184,49 +195,100 @@ export function AppAction(props: {
   const review = () => attention() && props.app.kind === "plugin" && model().appConnections(props.app).length > 0;
   return (
     <Show
-      when={!review()}
+      when={!waiting()}
       fallback={
-        <Show when={props.size}>
+        <Show when={model().canConnectApps()}>
           <Button
             type="button"
-            variant="outline"
+            variant={props.variant ?? (props.size ? "outline" : "default")}
             size={props.size}
-            aria-label={t("marketplace.app.reviewNamed", { name: props.app.name })}
-            onClick={() => props.scope.nav.go({ kind: "app", id: props.app.id })}
+            disabled
+            aria-label={waitingText() ?? label()}
           >
-            {t("marketplace.app.review")}
+            {waitingText() ?? (props.named ? label() : t("marketplace.app.connect"))}
           </Button>
         </Show>
       }
     >
       <Show
-        when={!held()}
+        when={!review()}
         fallback={
           <Show when={props.size}>
-            <Show
-              when={props.app.status === "connected"}
-              fallback={<Badge variant="outline">{t("marketplace.app.disabled")}</Badge>}
+            <Button
+              type="button"
+              variant="outline"
+              size={props.size}
+              aria-label={t("marketplace.app.reviewNamed", { name: props.app.name })}
+              onClick={() => props.scope.nav.go({ kind: "app", id: props.app.id })}
             >
-              <Done>{t("marketplace.app.connected")}</Done>
-            </Show>
+              {t("marketplace.app.review")}
+            </Button>
           </Show>
         }
       >
-        {/* A custom server is turned on in Server settings › MCP, not here. */}
-        <Show when={model().canConnectApps() && props.app.kind !== "custom"}>
-          <Button
-            type="button"
-            variant={props.variant ?? (props.size ? "outline" : "default")}
-            size={props.size}
-            loading={model().appBusy(props.app.id)}
-            aria-label={label()}
-            onClick={connect}
-          >
-            {props.named ? label() : attention() ? t("marketplace.app.reconnect") : t("marketplace.app.connect")}
-          </Button>
+        <Show
+          when={!held()}
+          fallback={
+            <Show when={props.size}>
+              <Show
+                when={props.app.status === "connected"}
+                fallback={<Badge variant="outline">{t("marketplace.app.disabled")}</Badge>}
+              >
+                <Done>{t("marketplace.app.connected")}</Done>
+              </Show>
+            </Show>
+          }
+        >
+          {/* A custom server is turned on in Server settings › MCP, not here. */}
+          <Show when={model().canConnectApps() && props.app.kind !== "custom"}>
+            <Button
+              type="button"
+              variant={props.variant ?? (props.size ? "outline" : "default")}
+              size={props.size}
+              loading={model().appBusy(props.app.id)}
+              aria-label={label()}
+              onClick={connect}
+            >
+              {props.named ? label() : attention() ? t("marketplace.app.reconnect") : t("marketplace.app.connect")}
+            </Button>
+          </Show>
         </Show>
       </Show>
     </Show>
+  );
+}
+
+/**
+ * What the apps of the host cannot show: that the read failed, with Retry, or that this account may
+ * not connect apps at all. Connect stays off until a read works: the list that failed may hold the
+ * app that the user is about to connect again.
+ */
+export function AppsReadNotice(props: { scope: MarketplaceScope }) {
+  const { t } = useText();
+  const model = () => props.scope.model;
+  return (
+    <>
+      <Show when={model().appsRead() === "failed"}>
+        <div class="marketplace-apps-failed" role="alert">
+          <Text as="p" variant="body-sm" tone="muted">
+            {t("marketplace.app.readFailed", {
+              host: model().appsHostName?.() ?? t("mcp.connect.thisComputer"),
+            })}
+          </Text>
+          <Button type="button" variant="outline" size="sm" onClick={model().retryApps}>
+            {t("common.retry")}
+          </Button>
+        </div>
+      </Show>
+      {/* A member, or an admin of a host that holds no apps for it, sees no state of any app. */}
+      <Show when={!model().canConnectApps()}>
+        <Text as="p" variant="body-sm" tone="muted">
+          {model().appsHostName?.()
+            ? t("marketplace.app.adminOnly", { server: model().appsHostName?.() ?? "" })
+            : t("marketplace.app.adminOnlyThisServer")}
+        </Text>
+      </Show>
+    </>
   );
 }
 

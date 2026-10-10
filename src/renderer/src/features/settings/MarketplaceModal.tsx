@@ -38,7 +38,9 @@ export function MarketplaceModal(props: MarketplaceModalProps) {
   const startConnect = (slug: string) => {
     const model = controller.model;
     const app = model.apps().find((candidate) => candidate.id === slug);
-    if (!app || app.status === "connected") return;
+    /* Only an app that is not connected is connected. Every other state, such as one that needs
+       attention, is decided on its page, which is open now. */
+    if (app?.status !== "idle") return;
     // GitHub signs in with a device code, and its page, which is open now, shows that dialog.
     if (app.kind === "github") model.github?.().onConnect();
     else if (app.kind === "plugin" && model.canConnectApps()) void model.connectApp(app);
@@ -119,7 +121,6 @@ export function MarketplaceModal(props: MarketplaceModalProps) {
           <Switch>
             <Match when={pending.flow.kind === "link"}>
               <McpSignInDialog
-                allowCancelWhileBusy={props.hostServerId !== undefined}
                 open={true}
                 subject={pending.subject}
                 onTest={controller.signInPluginApp}

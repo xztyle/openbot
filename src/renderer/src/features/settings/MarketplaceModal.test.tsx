@@ -234,6 +234,62 @@ describe("MarketplaceModal", () => {
     });
   });
 
+  describe("skill removal", () => {
+    /**
+     * A clear on "All agents" is a loop over the agents. It asks first, and the agent whose copy has
+     * changed files is named in the question, so the backend's refusal to delete them is answered.
+     */
+    it("asks before it removes a skill from several agents and then removes the changed files too", async () => {
+      const uninstall = vi.fn(async () => undefined);
+      window.openbot.skills = {
+        ...window.openbot.skills,
+        listInstalled: vi.fn(async (agentId) => [
+          installedSkill("release-notes", "Release Notes", agentId === "research" ? { state: "modified" } : {}),
+        ]),
+        uninstall,
+      };
+      renderMarketplace({
+        agents: [agentRow("writer", "Writer"), agentRow("research", "Research")],
+        activeAgentId: "writer",
+      });
+      fireEvent.click(screen.getByRole("tab", { name: "Skills" }));
+      fireEvent.pointerDown(await screen.findByRole("button", { name: "All agents have Release Notes. Change" }), {
+        button: 0,
+      });
+      fireEvent.pointerUp(await screen.findByRole("menuitemcheckbox", { name: "All agents" }), { button: 0 });
+
+      const confirm = await screen.findByRole("alertdialog", {
+        name: "Remove Release Notes from Writer and Research?",
+      });
+      expect(uninstall).not.toHaveBeenCalled();
+      fireEvent.click(within(confirm).getByRole("button", { name: "Remove skill" }));
+
+      await waitFor(() => expect(uninstall).toHaveBeenCalledTimes(2));
+      expect(uninstall).toHaveBeenCalledWith({ agentId: "writer", skillId: "release-notes", removeModified: true });
+      expect(uninstall).toHaveBeenCalledWith({ agentId: "research", skillId: "release-notes", removeModified: true });
+    });
+
+    it("removes the skill of one unchanged agent at once", async () => {
+      const uninstall = vi.fn(async () => undefined);
+      window.openbot.skills = {
+        ...window.openbot.skills,
+        listInstalled: vi.fn(async () => [installedSkill("release-notes", "Release Notes")]),
+        uninstall,
+      };
+      renderMarketplace({ agents: [agentRow("writer", "Writer")], activeAgentId: "writer" });
+      fireEvent.click(screen.getByRole("tab", { name: "Skills" }));
+      fireEvent.pointerDown(await screen.findByRole("button", { name: "Writer has Release Notes. Change" }), {
+        button: 0,
+      });
+      fireEvent.pointerUp(await screen.findByRole("menuitemcheckbox", { name: /^Writer/u }), { button: 0 });
+
+      await waitFor(() =>
+        expect(uninstall).toHaveBeenCalledExactlyOnceWith({ agentId: "writer", skillId: "release-notes" }),
+      );
+      expect(screen.queryByRole("alertdialog")).toBeNull();
+    });
+  });
+
   describe("agents", () => {
     const detail: MarketplaceAgentDetail = {
       id: "research-agent",
@@ -445,6 +501,82 @@ describe("MarketplaceModal", () => {
       await screen.findByRole("heading", { name, level: 3 });
     }
 
+    /**
+     * The host's list arrives after the window opens. Until then an installed app reads as not
+     * connected, and a press on Connect would save "Aave — 2" beside the account that is there.
+     */
+    it("keeps Connect off until the host's list of apps is read", async () => {
+      let answer: (rows: McpServerConfig[]) => void = () => undefined;
+      const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => [input.config]);
+      window.openbot.agent = {
+        ...window.openbot.agent,
+        listMcpServers: vi.fn(() => new Promise<McpServerConfig[]>((resolve) => (answer = resolve))),
+        saveMcpServer,
+      };
+      renderMarketplace({ ...writer, plugins: [plugin] });
+      fireEvent.click(screen.getByRole("tab", { name: "Apps" }));
+
+      const checking = await screen.findByRole("button", { name: "Checking…" });
+      expect(checking).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Connect Aave" })).toBeNull();
+      fireEvent.click(checking);
+      expect(saveMcpServer).not.toHaveBeenCalled();
+
+      answer([hostApp()]);
+      expect(await screen.findByText("Connected")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Connect Aave" })).toBeNull();
+      expect(saveMcpServer).not.toHaveBeenCalled();
+    });
+
+    it("names a failed read of the apps, keeps Connect off and reads again on Retry", async () => {
+      const listMcpServers = vi
+        .fn<OpenBotDesktopApi["agent"]["listMcpServers"]>()
+        .mockRejectedValueOnce(new Error("The host did not answer."))
+        .mockResolvedValue([hostApp()]);
+      window.openbot.agent = { ...window.openbot.agent, listMcpServers, saveMcpServer: vi.fn() };
+      renderMarketplace({ ...writer, plugins: [plugin] });
+      fireEvent.click(screen.getByRole("tab", { name: "Apps" }));
+
+      expect(await screen.findByText("Could not read apps on this computer.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Connect Aave" })).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+      expect(await screen.findByText("Connected")).toBeInTheDocument();
+      expect(screen.queryByText("Could not read apps on this computer.")).toBeNull();
+      expect(listMcpServers).toHaveBeenCalledTimes(2);
+      expect(window.openbot.agent.saveMcpServer).not.toHaveBeenCalled();
+    });
+
+    it("does not connect from a chat card when the app is already held but needs attention", async () => {
+      // The app row is here and its skill is not: a partial install, which its page repairs.
+      const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => [input.config]);
+      window.openbot.agent = {
+        ...window.openbot.agent,
+        listMcpServers: vi.fn(async () => [hostApp()]),
+        saveMcpServer,
+      };
+      window.openbot.skills = { ...window.openbot.skills, listInstalled: vi.fn(async () => []), install: vi.fn() };
+      renderMarketplace({ ...writer, plugins: [withSkill], initialPluginSlug: "aave", initialPluginConnect: true });
+
+      expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+      expect(saveMcpServer).not.toHaveBeenCalled();
+      expect(window.openbot.skills.install).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog", { name: "Connect Aave" })).toBeNull();
+    });
+
+    it("tells a member who may connect apps, instead of showing each app as not connected", async () => {
+      renderMarketplace({ plugins: [plugin], serverName: "Studio" });
+      fireEvent.click(screen.getByRole("tab", { name: "Apps" }));
+
+      expect(await screen.findByText("Only an owner or admin of Studio can connect apps.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Connect/u })).toBeNull();
+      fireEvent.click(await screen.findByRole("button", { name: "Open Aave" }));
+      await screen.findByRole("heading", { name: "Aave", level: 3 });
+      // The page names no state it cannot know.
+      expect(screen.queryByText("Not connected")).toBeNull();
+      expect(screen.getByText("Only an owner or admin of Studio can connect apps.")).toBeInTheDocument();
+    });
+
     it("connects the app on the host it was given", async () => {
       const saved: McpServerConfig[] = [];
       const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => {
@@ -471,6 +603,21 @@ describe("MarketplaceModal", () => {
       );
       expect(await screen.findByRole("button", { name: "Disconnect" })).toBeInTheDocument();
       await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Aave connected."));
+    });
+
+    it("shows the result of a connect on screen, not only in the live region", async () => {
+      window.openbot.agent = {
+        ...window.openbot.agent,
+        listMcpServers: vi.fn(async () => []),
+        saveMcpServer: vi.fn(async (input) => [input.config]),
+      };
+      renderMarketplace({ ...writer, plugins: [plugin] });
+      await openAppPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Connect Aave" }));
+
+      // The live region is for a screen reader. A sighted user needs the same words in view.
+      expect(await screen.findByText("Aave connected.", { ignore: "[role='status']" })).toBeVisible();
+      expect(screen.getByRole("status")).toHaveTextContent("Aave connected.");
     });
 
     it("saves the configuration the connect dialog proved", async () => {
@@ -588,6 +735,69 @@ describe("MarketplaceModal", () => {
       expect(signInMcpServer.mock.lastCall?.[2]?.aborted).toBe(true);
       expect(saveMcpServer).not.toHaveBeenCalled();
       await waitFor(() => expect(screen.getByRole("button", { name: "Connect Aave" })).toBeEnabled());
+    });
+
+    /**
+     * The browser of this computer is outside the window, and the main process waits for it for five
+     * minutes. A user who closed that tab must be able to leave, and the wait must stop with it.
+     */
+    it("cancels a browser sign-in on this computer and stops the wait in the main process", async () => {
+      const signInMcpServer = vi.fn<MarketplaceCalls["mcp"]["signInMcpServer"]>(
+        () => new Promise<McpTestResult>(() => undefined),
+      );
+      const cancelMcpSignIn = vi.fn<OpenBotDesktopApi["agent"]["cancelMcpSignIn"]>(async () => undefined);
+      const saveMcpServer = vi.fn<MarketplaceCalls["mcp"]["saveMcpServer"]>(async ({ config }) => [config]);
+      const calls = desktopMarketplaceCalls();
+      calls.mcp = { ...calls.mcp, listMcpServers: async () => [], signInMcpServer, cancelMcpSignIn, saveMcpServer };
+      renderMarketplace({ ...writer, plugins: [withLink], calls });
+      await openAppPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Connect Aave" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue to Aave" }));
+      await waitFor(() => expect(signInMcpServer).toHaveBeenCalled());
+
+      expect(await screen.findByText("Closed the browser tab? Cancel and try again.")).toBeInTheDocument();
+      const dialog = screen.getByRole("dialog", { name: "Connect Aave" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Connect Aave" })).toBeNull());
+      expect(cancelMcpSignIn).toHaveBeenCalledExactlyOnceWith({ url: appUrl }, "local");
+      expect(saveMcpServer).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByRole("button", { name: "Connect Aave" })).toBeEnabled());
+    });
+
+    /** A sign-in that this computer lost is not a working connection, whatever the host row says. */
+    it("marks an account whose sign-in is gone and signs it in again under the same row", async () => {
+      let signedIn = false;
+      const signInMcpServer = vi.fn<MarketplaceCalls["mcp"]["signInMcpServer"]>(async () => {
+        signedIn = true;
+        return { toolCount: 4, error: null };
+      });
+      const saveMcpServer = vi.fn<MarketplaceCalls["mcp"]["saveMcpServer"]>(async ({ config }) => [config]);
+      const calls = desktopMarketplaceCalls();
+      calls.mcp = {
+        ...calls.mcp,
+        listMcpServers: async () => [hostApp()],
+        listMcpSignIns: async () => [{ mcpServerId: "mcp-1", signedIn }],
+        signInMcpServer,
+        saveMcpServer,
+      };
+      renderMarketplace({ ...writer, plugins: [withLink], calls });
+      await openAppPage();
+
+      expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+      // The page header has an action for the state it names.
+      expect(screen.getByRole("button", { name: "Review accounts" })).toBeInTheDocument();
+      expect(await screen.findByText("Sign in to aave again")).toBeInTheDocument();
+      // The alert at the top and the account row both offer the sign-in.
+      const [signIn] = screen.getAllByRole("button", { name: "Sign in again to aave" });
+      if (!signIn) throw new Error("The sign-in button is missing.");
+      fireEvent.click(signIn);
+      fireEvent.click(await screen.findByRole("button", { name: "Continue to Aave" }));
+
+      await waitFor(() => expect(signInMcpServer).toHaveBeenCalled());
+      expect(signInMcpServer.mock.lastCall?.[0].config.id).toBe("mcp-1");
+      expect(await screen.findByText("Connected")).toBeInTheDocument();
+      expect(screen.queryByText("Sign in to aave again")).toBeNull();
     });
 
     it("saves nothing when the connect dialog is closed", async () => {
@@ -752,10 +962,10 @@ describe("MarketplaceModal", () => {
         renderMarketplace({ ...writer, plugins: [withSkill] });
         await openAppPage();
         const account = await screen.findByRole("group", { name: appName });
-        fireEvent.click(within(account).getByRole("button", { name: "Disconnect account" }));
+        fireEvent.click(within(account).getByRole("button", { name: "Remove account" }));
         const confirm = await screen.findByRole("alertdialog", { name: `Remove ${appName}?` });
         expect(removeMcpServer).not.toHaveBeenCalled();
-        fireEvent.click(within(confirm).getByRole("button", { name: remove ? "Disconnect account" : "Cancel" }));
+        fireEvent.click(within(confirm).getByRole("button", { name: remove ? "Remove account" : "Cancel" }));
 
         await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
         if (remove) {
@@ -766,6 +976,33 @@ describe("MarketplaceModal", () => {
         expect(uninstall).not.toHaveBeenCalled();
       },
     );
+
+    it("lists what removing an account takes and does not show an earlier failure", async () => {
+      const writeText = vi.fn().mockRejectedValue(new DOMException("Document is not focused.", "NotAllowedError"));
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+      Object.defineProperty(document, "execCommand", { configurable: true, value: vi.fn(() => false) });
+      try {
+        window.openbot.agent = {
+          ...window.openbot.agent,
+          listMcpServers: vi.fn(async () => [hostApp()]),
+          removeMcpServer: vi.fn(async () => []),
+        };
+        renderMarketplace({ ...writer, plugins: [plugin] });
+        await openAppPage();
+        // An earlier failure, still on screen: it belongs to the copy, not to this question.
+        fireEvent.click(await screen.findByRole("button", { name: "Copy link" }));
+        await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Could not copy the link."));
+        const account = await screen.findByRole("group", { name: appName });
+        fireEvent.click(within(account).getByRole("button", { name: "Remove account" }));
+
+        const confirm = await screen.findByRole("alertdialog", { name: `Remove ${appName}?` });
+        expect(within(confirm).getByText(/saved sign-in or key is deleted/u)).toBeInTheDocument();
+        expect(within(confirm).getByText(/Chats can no longer use it/u)).toBeInTheDocument();
+        expect(within(confirm).queryByText("Could not copy the link.")).toBeNull();
+      } finally {
+        Reflect.deleteProperty(document, "execCommand");
+      }
+    });
 
     /**
      * A cleanup that half works. The skill must still go even though the app row refused, and the

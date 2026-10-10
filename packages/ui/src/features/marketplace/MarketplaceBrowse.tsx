@@ -3,7 +3,7 @@ import { Button, Input, Search, Skeleton, SlidingTabs, Text } from "@openbot/ui"
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, For, Show } from "solid-js";
-import { AgentGrid, AppCard, SkillGrid } from "./MarketplaceCards";
+import { AgentGrid, AppCard, AppsReadNotice, SkillGrid } from "./MarketplaceCards";
 import { EventCheckGrid, EventCheckPanel, matchesTemplate } from "./MarketplaceEventChecks";
 import { type FilterGroup, MarketplaceFilter } from "./MarketplaceFilter";
 import { outdatedAgentIds, SkillUpdates, skillAgents } from "./MarketplaceInstallSkill";
@@ -437,6 +437,7 @@ export function MarketplaceBrowse(props: { scope: MarketplaceScope }) {
           </SlidingTabs.Content>
           <SlidingTabs.Content value="apps">
             <div class="marketplace-stack">
+              <AppsReadNotice scope={props.scope} />
               <Show when={state().missingApp}>
                 <div class="marketplace-empty" role="alert">
                   <Text as="p" variant="body-sm" tone="muted">

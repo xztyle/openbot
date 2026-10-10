@@ -83,7 +83,16 @@ interface StoryProps {
 }
 
 function account(id: string, name: string): MarketplaceAccount {
-  return { id, name, enabled: true, renamable: true, outdated: false, reconnect: "sign-in", check: { phase: "idle" } };
+  return {
+    id,
+    name,
+    enabled: true,
+    renamable: true,
+    outdated: false,
+    reconnect: "sign-in",
+    signedOut: false,
+    check: { phase: "idle" },
+  };
 }
 
 /** The real window on fixtures. Each action changes the fixture state, so the states can be tried. */
@@ -193,6 +202,8 @@ function MarketplaceStory(props: StoryProps) {
 
     apps: () => state.apps,
     canConnectApps: () => !member,
+    appsRead: () => "loaded",
+    retryApps: () => undefined,
     appBusy: () => false,
     appConnections: (app) => state.accounts[app.id] ?? [],
     pluginSkillAgents: () => [],

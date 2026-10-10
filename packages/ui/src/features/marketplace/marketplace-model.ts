@@ -25,10 +25,19 @@ export type AgentListingState = "add" | "added" | "update";
 export type SkillRead = "idle" | "loading" | "loaded" | "failed";
 
 /**
- * `disabled`: the host holds the app, and every account of it is turned off. No agent can use it.
- * `attention`: something is left from a partial install, or a check of an account failed.
+ * How far the read of the apps that the host holds got. Before `loaded`, an installed app reads as
+ * not connected, so nothing may offer Connect: it would add a second account.
  */
-export type MarketplaceAppStatus = "connected" | "attention" | "disabled" | "idle";
+export type AppsRead = "loading" | "loaded" | "failed";
+
+/**
+ * `disabled`: the host holds the app, and every account of it is turned off. No agent can use it.
+ * `attention`: something is left from a partial install, a check of an account failed, or the
+ * sign-in of an account is gone.
+ * `connecting`: a sign-in that the user started is waiting for the service.
+ * `unknown`: this account cannot read what the host holds, so the app is neither connected nor not.
+ */
+export type MarketplaceAppStatus = "connected" | "attention" | "disabled" | "idle" | "connecting" | "unknown";
 
 interface AppBase {
   id: string;
@@ -59,6 +68,8 @@ export interface MarketplaceAccount {
   outdated: boolean;
   /** How to get this account working again without a new connection: sign in again, or give a new key. */
   reconnect: "sign-in" | "key" | null;
+  /** This computer holds no sign-in for the account any more, so it cannot reach the service until the user signs in again. */
+  signedOut: boolean;
   check: MarketplaceAccountCheck;
 }
 
@@ -130,6 +141,8 @@ export interface MarketplaceModel {
     skill: Pick<MarketplaceSkillSummary, "id" | "name">,
     agentIds: readonly string[],
     on: boolean,
+    /** `removeModified`: the user confirmed that files they changed go with the skill. */
+    options?: { removeModified?: boolean },
   ) => Promise<boolean>;
   /**
    * The installed skills that have a newer version, with the agents that hold the old one. It reads
@@ -148,7 +161,12 @@ export interface MarketplaceModel {
   /** The agents that hold every skill that the plugin pins. */
   pluginSkillAgents: (app: MarketplaceApp) => readonly string[];
   /** Installs the plugin's pinned skills on each agent, or removes them. True when every agent changed. */
-  setPluginSkills: (app: MarketplaceApp, agentIds: readonly string[], on: boolean) => Promise<boolean>;
+  setPluginSkills: (
+    app: MarketplaceApp,
+    agentIds: readonly string[],
+    on: boolean,
+    options?: { removeModified?: boolean },
+  ) => Promise<boolean>;
   /** Whether an action on the account is running. */
   accountBusy: (accountId: string) => boolean;
   /** Turns an account on or off for every agent. */
@@ -167,6 +185,15 @@ export interface MarketplaceModel {
   chatAccess: MarketplaceChatAccess;
   /** False for a member of a joined server, who browses and connects nothing. */
   canConnectApps: () => boolean;
+  /**
+   * Whether the list of apps that the host holds was read. Connect waits for `loaded`, so an app
+   * that is already connected is not connected a second time.
+   */
+  appsRead: () => AppsRead;
+  /** Reads the apps of the host again after a failed read. */
+  retryApps: () => void;
+  /** The name of the server that holds the apps, for a sentence. Absent when this computer holds them. */
+  appsHostName?: (() => string | undefined) | undefined;
   appBusy: (id: string) => boolean;
   /** Runs the connect step of the app. False when the user closed it. */
   connectApp: (app: MarketplaceApp) => Promise<boolean>;

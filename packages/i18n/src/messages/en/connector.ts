@@ -360,5 +360,10 @@ export const messages = defineMessages("connector", {
   "connector.bitwarden.disconnect": "Disconnect Bitwarden",
   "connector.bitwarden.connected": "Connected",
   "connector.bitwarden.disconnected": "Not connected",
+  "connector.bitwarden.statusUnknown": "Could not read status",
+  "connector.bitwarden.statusFailed": "OpenBot could not read whether Bitwarden is connected.",
+  "connector.bitwarden.disconnectTitle": "Disconnect Bitwarden",
+  "connector.bitwarden.disconnectSummary":
+    "OpenBot forgets the session key and stops filling logins from Bitwarden. Your vault stays as it is.",
   "connector.bitwarden.failed": "Could not connect to Bitwarden.",
 });

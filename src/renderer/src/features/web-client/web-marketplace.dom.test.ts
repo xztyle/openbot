@@ -18,7 +18,10 @@ const config: McpServerConfig = {
   headers: [],
 };
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(window, "closed");
+});
 
 function signInFixture(cancel = false) {
   const signal = new AbortController();
@@ -59,4 +62,45 @@ it("cancels the host attempt and closes the sign-in window", async () => {
   await expect(f.calls.mcp.signInMcpServer({ config }, "host-one", f.signal.signal)).rejects.toThrow();
   expect(f.sent.at(-1)).toEqual({ path: MCP_OAUTH_ROUTES.cancel, body: { attemptId: "attempt-one" } });
   expect(f.close).toHaveBeenCalled();
+});
+
+/** A sign-in window that the page opened, and a host that keeps waiting for the provider. */
+function waitingFixture(options: { closed: boolean; expiresIn: number }) {
+  // The page that opened the window stands in for it, as in the fixture above.
+  vi.spyOn(window, "close").mockImplementation(() => undefined);
+  vi.spyOn(window, "open").mockReturnValue(window);
+  Object.defineProperty(window, "closed", { configurable: true, get: () => options.closed });
+  const request: TeamApiRequest = async (_method, path, decode) => {
+    if (path === MCP_OAUTH_ROUTES.start)
+      return decode({ attemptId: "attempt-one", expiresAt: Date.now() + options.expiresIn });
+    if (path === MCP_OAUTH_ROUTES.status)
+      return decode({ kind: "waiting", authorizationUrl: null, state: null, expiresAt: Date.now() + 60_000 });
+    return decode(undefined);
+  };
+  return createWebMarketplaceCalls(
+    fetch,
+    () => request,
+    () => [MCP_OAUTH_CAPABILITY],
+  );
+}
+
+it("fails at once when the user closed the sign-in window, not when the attempt expires", async () => {
+  vi.useFakeTimers();
+  try {
+    const calls = waitingFixture({ closed: true, expiresIn: 5 * 60_000 });
+    const result = expect(
+      calls.mcp.signInMcpServer({ config }, "host-one", new AbortController().signal),
+    ).rejects.toThrow("Sign-in window closed. Try again.");
+    await vi.advanceTimersByTimeAsync(10_000);
+    await result;
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("says that the sign-in timed out, not that it was cancelled", async () => {
+  const calls = waitingFixture({ closed: false, expiresIn: -1 });
+  await expect(calls.mcp.signInMcpServer({ config }, "host-one", new AbortController().signal)).rejects.toThrow(
+    "The app sign-in took too long. Try again.",
+  );
 });

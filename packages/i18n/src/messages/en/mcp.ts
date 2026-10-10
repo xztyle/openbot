@@ -2,7 +2,7 @@ import { defineMessages } from "../../message";
 
 export const messages = defineMessages("mcp", {
   "mcp.connection.accounts": "Accounts",
-  "mcp.connection.remove": "Disconnect account",
+  "mcp.connection.remove": "Remove account",
   "mcp.chat.title": "Apps for this chat",
   "mcp.chat.description": "Choose the accounts this chat can use. These choices also apply to its scheduled work.",
   "mcp.chat.off": "Off",
@@ -36,6 +36,7 @@ export const messages = defineMessages("mcp", {
   "mcp.signIn.description":
     "Sign in to your {name} account. OpenBot gets the tools that account can reach, and no password.",
   "mcp.signIn.waiting": "Waiting for the browser…",
+  "mcp.signIn.waitingHelp": "Closed the browser tab? Cancel and try again.",
   "mcp.signIn.continue": "Continue to {name}",
   "mcp.server.loadFailed": "The MCP servers could not load.",
   "mcp.test.connected": { one: "Connected · {count} tool", other: "Connected · {count} tools" },
@@ -69,6 +70,8 @@ export const messages = defineMessages("mcp", {
   "mcp.remote.popupBlocked": "Allow pop-ups for OpenBot, then try connecting again.",
   "mcp.remote.denied": "The app sign-in was cancelled or refused.",
   "mcp.remote.cancelled": "The app sign-in was cancelled.",
+  "mcp.remote.timedOut": "The app sign-in took too long. Try again.",
+  "mcp.remote.windowClosed": "Sign-in window closed. Try again.",
   "mcp.panel.description":
     "Model Context Protocol servers give this server’s agents extra tools. Claude and Codex agents get only the servers in this list; OpenCode and Grok agents can also start servers from their own configuration files.",
   "mcp.panel.connectCustom": "Connect a custom MCP",

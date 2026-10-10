@@ -1,5 +1,11 @@
 import { pluginLinkText } from "@openbot/contracts/plugin-links";
 import {
+  Alert,
+  AlertActions,
+  AlertContent,
+  AlertDescription,
+  AlertIcon,
+  AlertTitle,
   Button,
   ConfirmDialog,
   ExternalLink,
@@ -13,15 +19,16 @@ import {
   Plug,
   SettingsSection,
   Text,
+  TriangleAlert,
 } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, Match, onSettled, Show, Switch } from "solid-js";
 import { BitwardenConnectorPanel } from "../settings/BitwardenConnectorPanel";
 import { GitHubConnectorPanel } from "../settings/GitHubConnectorPanel";
-import { DangerZone, DetailHeader, WizardDialog } from "../settings/IntegrationLayout";
+import { DangerZone, DetailHeader, type IntegrationStatus, WizardDialog } from "../settings/IntegrationLayout";
 import { OnePasswordConnectorPanel } from "../settings/OnePasswordConnectorPanel";
 import { AccountsSection, AllowForAgent, ChatAccessSection } from "./MarketplaceAccounts";
-import { AppAction } from "./MarketplaceCards";
+import { AppAction, AppsReadNotice } from "./MarketplaceCards";
 import { RelatedEventChecks } from "./MarketplaceEventChecks";
 import { AgentMenu } from "./MarketplaceInstallSkill";
 import { AppMark, TryCard } from "./MarketplaceParts";
@@ -38,11 +45,16 @@ const STATUS_LABEL = {
   attention: "marketplace.app.attention",
   disabled: "marketplace.app.disabled",
   idle: "marketplace.app.notConnected",
+  connecting: "marketplace.app.connecting",
+  unknown: "marketplace.app.notConnected",
 } as const satisfies Record<MarketplaceAppStatus, string>;
 
-/** The status pill has no state of its own for an app that is turned off: it reads as not in use. */
-function pillStatus(status: MarketplaceAppStatus) {
-  return status === "disabled" ? "idle" : status;
+/**
+ * The status pill has no state of its own for an app that is turned off, or that waits for a
+ * sign-in: they read as not in use.
+ */
+function pillStatus(status: MarketplaceAppStatus): IntegrationStatus {
+  return status === "connected" || status === "attention" ? status : "idle";
 }
 
 interface AccountRemovalProps {
@@ -50,9 +62,33 @@ interface AccountRemovalProps {
   connection: { id: string; name: string };
 }
 
+/**
+ * What removing one account takes, said before it goes: the chats that lose it, and the saved
+ * sign-in or key. The app and its other accounts stay. The chat access is read for the page already,
+ * so the names are the real ones; before that read the dialog says it in general words.
+ */
 function AccountRemovalConfirmation(props: AccountRemovalProps & { onCancel: () => void }) {
-  const { t } = useText();
+  const { t, format } = useText();
   const model = () => props.scope.model;
+  const access = () => model().chatAccess;
+  /* An earlier failure belongs to that action, not to this question. */
+  onSettled(() => {
+    model().clearError();
+  });
+  const chatsKnown = () =>
+    access().supported() &&
+    model().agents().length > 0 &&
+    model()
+      .agents()
+      .every((agent) => access().readState(agent.id) === "loaded");
+  const chats = () =>
+    model()
+      .agents()
+      .filter(
+        (agent) =>
+          access().listed(agent.id, props.connection.id) && access().mode(agent.id, props.connection.id) !== "off",
+      )
+      .map((agent) => agent.name);
   const remove = async () => {
     if (await model().removeServer(props.connection.id)) props.onCancel();
   };
@@ -61,20 +97,42 @@ function AccountRemovalConfirmation(props: AccountRemovalProps & { onCancel: () 
       open
       initialFocus="cancel"
       title={t("mcp.panel.removeTitle", { name: props.connection.name })}
-      description={t("mcp.panel.removeDescription")}
+      description={t("marketplace.account.removeDescription", {
+        name: props.connection.name,
+        host: model().appsHostName?.() ?? t("mcp.connect.thisComputer"),
+      })}
       confirmLabel={t("mcp.connection.remove")}
       error={model().error()}
       onCancel={props.onCancel}
       onConfirm={remove}
-    />
+    >
+      <ul class="marketplace-remove-list">
+        <li>
+          {chatsKnown()
+            ? chats().length > 0
+              ? t("marketplace.account.removeChats", { agents: format.list(chats()) })
+              : t("marketplace.account.removeChatsNone")
+            : t("marketplace.account.removeChatsUnknown")}
+        </li>
+        <li>{t("marketplace.account.removeSignIn")}</li>
+      </ul>
+    </ConfirmDialog>
   );
 }
+
+/** Where "Review accounts" goes. One app page is open at a time. */
+const ACCOUNTS_ANCHOR = "marketplace-app-accounts";
 
 function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
   const { t } = useText();
   const model = () => props.scope.model;
   const plugin = () => props.app.plugin;
   const accounts = () => model().appConnections(props.app);
+  /** The accounts that this computer cannot sign in for any more, which the user can sign in to again. */
+  const signedOut = () =>
+    model().canConnectApps()
+      ? accounts().filter((account) => account.signedOut && account.reconnect === "sign-in")
+      : [];
   /** The account the user asked to disconnect, held while the confirmation is on screen. */
   const [removing, setRemoving] = createSignal<MarketplaceAccount | null>(null);
   /* The access controls need each agent's choices, read once when the page shows an account. */
@@ -105,6 +163,11 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
       { label: t("plugin.link.privacyPolicy"), url: plugin().privacyPolicyUrl },
       { label: t("plugin.link.terms"), url: plugin().termsUrl },
     ].flatMap((link) => (link.url ? [{ label: link.label, url: link.url, text: pluginLinkText(link.url) }] : []));
+  const reviewAccounts = () => {
+    const section = document.getElementById(ACCOUNTS_ANCHOR);
+    section?.scrollIntoView({ block: "start" });
+    section?.focus({ preventScroll: true });
+  };
   const runPrompt = () => {
     const run = model().runPrompt;
     if (!run) return undefined;
@@ -120,7 +183,15 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
         logo={<AppMark app={props.app} />}
         name={props.app.name}
         status={pillStatus(props.app.status)}
-        statusLabel={t(STATUS_LABEL[props.app.status])}
+        statusLabel={
+          // Before the host answers, "Not connected" would be a guess that a Connect press acts on. An
+          // app that this account cannot read has no state to name.
+          props.app.status === "unknown"
+            ? ""
+            : model().appsRead() === "loading"
+              ? t("marketplace.app.checking")
+              : t(STATUS_LABEL[props.app.status])
+        }
         subtitle={props.app.tagline}
         actions={
           <>
@@ -129,6 +200,12 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
               {t("plugin.copyLink")}
             </Button>
             <AppAction scope={props.scope} app={props.app} />
+            {/* "Needs attention" says what is wrong in the accounts below, so the action goes there. */}
+            <Show when={props.app.status === "attention" && accounts().length > 0}>
+              <Button type="button" onClick={reviewAccounts}>
+                {t("marketplace.app.reviewAccounts")}
+              </Button>
+            </Show>
             <Show
               when={(props.app.status === "connected" || props.app.status === "disabled") && model().canConnectApps()}
             >
@@ -143,6 +220,32 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
           </>
         }
       />
+      <AppsReadNotice scope={props.scope} />
+      {/* Like the GitHub page: the sign-in is gone, and the way back is one press away. */}
+      <For each={signedOut()}>
+        {(account) => (
+          <Alert tone="warning">
+            <AlertIcon>
+              <TriangleAlert />
+            </AlertIcon>
+            <AlertContent>
+              <AlertTitle>{t("marketplace.account.signedOutTitle", { name: account.name })}</AlertTitle>
+              <AlertDescription>{t("marketplace.account.signedOutDescription")}</AlertDescription>
+            </AlertContent>
+            <AlertActions>
+              <Button
+                type="button"
+                size="sm"
+                disabled={model().accountBusy(account.id) || model().appBusy(props.app.id)}
+                aria-label={t("marketplace.account.signInNamed", { name: account.name })}
+                onClick={() => void model().reconnectAccount(props.app, account.id)}
+              >
+                {t("marketplace.account.signIn")}
+              </Button>
+            </AlertActions>
+          </Alert>
+        )}
+      </For>
       <AllowForAgent scope={props.scope} app={props.app} />
       <Show when={plugin().prompts.length > 0}>
         <TryCard
@@ -186,10 +289,13 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
                 name={t("plugin.skillsName", { name: plugin().name })}
                 has={(id) => model().pluginSkillAgents(props.app).includes(id)}
                 known={(id) => model().skillRead(id) === "loaded"}
+                modified={(id) =>
+                  plugin().skills.some((skill) => model().installedSkill(id, skill.id)?.state === "modified")
+                }
                 busy={model().appBusy(props.app.id)}
                 activeAgentId={model().activeAgentId()}
                 onOpen={() => model().readSkills()}
-                onChange={(agentIds, on) => void model().setPluginSkills(props.app, agentIds, on)}
+                onChange={(agentIds, on, options) => void model().setPluginSkills(props.app, agentIds, on, options)}
               />
             </Show>
           }
@@ -211,7 +317,7 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
           </ItemGroup>
         </SettingsSection>
       </Show>
-      <AccountsSection scope={props.scope} app={props.app} onDisconnect={setRemoving} />
+      <AccountsSection scope={props.scope} app={props.app} anchorId={ACCOUNTS_ANCHOR} onDisconnect={setRemoving} />
       <ChatAccessSection scope={props.scope} app={props.app} />
       <RelatedEventChecks scope={props.scope} appId={props.app.id} />
       <AppInformation
@@ -224,7 +330,14 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
       <Show when={props.app.status !== "idle" && model().canConnectApps()}>
         <DangerZone
           title={t("marketplace.app.disconnect.title")}
-          description={t("marketplace.app.disconnect.description", { name: props.app.name })}
+          description={
+            model().appsHostName?.()
+              ? t("marketplace.app.disconnect.descriptionOnHost", {
+                  name: props.app.name,
+                  host: model().appsHostName?.() ?? "",
+                })
+              : t("marketplace.app.disconnect.description", { name: props.app.name })
+          }
           action={t("marketplace.app.disconnect.action")}
           busy={model().appBusy(props.app.id)}
           // A plugin opens its own uninstall dialog, which lists the apps and skills it removes.
@@ -466,8 +579,11 @@ export function MarketplaceAppPage(props: { scope: MarketplaceScope; id: string 
             <BitwardenConnectorPanel
               status={panel()().status}
               busy={panel()().busy}
+              statusFailed={panel()().statusFailed}
               onConnect={(key) => panel()().onConnect(key)}
               onDisconnect={() => panel()().onDisconnect()}
+              onCancel={() => panel()().onCancel?.()}
+              onRetryStatus={() => panel()().onRetryStatus?.()}
             />
           )}
         </Match>

@@ -43,19 +43,23 @@
 
 .integration-detail-header {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--openbot-space-3);
   align-items: center;
 }
 
+/* The basis is what makes the actions wrap under the name: with a basis of 0 the name would shrink to
+   a few pixels beside three buttons instead. */
 .integration-detail-copy {
   display: grid;
-  flex: 1;
+  flex: 1 1 12rem;
   gap: var(--openbot-space-1);
   min-width: 0;
 }
 
 .integration-detail-title {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--openbot-space-2);
   align-items: center;
 }
@@ -63,7 +67,19 @@
 .integration-detail-actions {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   gap: var(--openbot-space-2);
+}
+
+/* A phone: the actions take the row under the name, and share it. */
+@media (max-width: 560px) {
+  .integration-detail-actions {
+    flex: 1 0 100%;
+  }
+
+  .integration-detail-actions > * {
+    flex: 1 1 auto;
+  }
 }
 
 /* ------------------------------------------------ connect dialog */

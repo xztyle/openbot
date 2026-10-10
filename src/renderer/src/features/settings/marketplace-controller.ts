@@ -14,6 +14,7 @@ import type { McpChatSnapshot } from "@openbot/contracts/team-protocol/mcp-chat-
 import { safeBrowserUrl } from "@openbot/ui/features/conversation/RichMessageText";
 import type {
   AgentListingState,
+  AppsRead,
   ChatAccessMode,
   MarketplaceAccount,
   MarketplaceAccountCheck,
@@ -47,6 +48,9 @@ import { createPluginAppConfig } from "./marketplace-plugin-catalog";
 import { localizedPlugin } from "./marketplace-plugin-text";
 import { agentHomeCache, marketplaceErrorMessage, skillHomeCache } from "./marketplace-shared";
 
+/** How long a result stays on screen. */
+const NOTICE_MS = 6000;
+
 const ACCESS_MODE_LABEL = {
   off: "mcp.chat.off",
   read: "mcp.chat.read",
@@ -73,6 +77,11 @@ export interface MarketplaceControllerProps {
   pluginServerId?: string | undefined;
   /** The joined server that keeps an app's credential. Absent when this computer keeps it. */
   pluginHostName?: string | undefined;
+  /**
+   * The name of the server that the Marketplace is for, when this account cannot connect apps on it.
+   * The sentence that says who can connect them names it.
+   */
+  serverName?: string | undefined;
   /** The joined server whose agents `agents` lists, when this account manages it. Absent: this computer. */
   hostServerId?: string | undefined;
   /** The joined server that a marketplace agent is added to. Absent: this computer. */
@@ -119,6 +128,18 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
 
   const [error, setError] = createSignal<string | null>(null);
   const [notice, setNotice] = createSignal("");
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * The result of an action, said to a screen reader and shown for a few seconds. A notice that only
+   * the live region held would leave a sighted user with no sign that the action did anything. The
+   * text is cleared when the time ends, so the same result later is a new change.
+   */
+  function announce(text: string) {
+    setNotice(text);
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => setNotice(""), NOTICE_MS);
+  }
+  onCleanup(() => clearTimeout(noticeTimer));
   /** The actions in flight: `agent:<listing>`, `skill:<skill>` and `app:<app id>`. */
   const [busy, setBusy] = createStore<Record<string, true>>({});
   const mark = (key: string, on: boolean) =>
@@ -185,7 +206,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     setAdded((draft) => {
       draft[listing.id] = { agent, serverId };
     });
-    setNotice(t(copy ? "marketplace.notice.agentUpdated" : "marketplace.notice.agentAdded", { name: agent.name }));
+    announce(t(copy ? "marketplace.notice.agentUpdated" : "marketplace.notice.agentAdded", { name: agent.name }));
     return true;
   }
 
@@ -284,6 +305,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     skill: Pick<MarketplaceSkillSummary, "id" | "name">,
     agentIds: readonly string[],
     on: boolean,
+    options: { removeModified?: boolean } = {},
   ) {
     const key = `skill:${skill.id}`;
     if (agentIds.length === 0 || busy[key]) return false;
@@ -296,7 +318,12 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       const analytics = desktopAnalytics.scope();
       try {
         if (on) await skillCalls().install({ agentId, skillId: skill.id, replaceModified: false });
-        else await skillCalls().uninstall({ agentId, skillId: skill.id });
+        else
+          await skillCalls().uninstall({
+            agentId,
+            skillId: skill.id,
+            ...(options.removeModified ? { removeModified: true } : {}),
+          });
         analytics.track("marketplace_action", {
           entity: "skill",
           action,
@@ -319,7 +346,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, false);
     const changed = agentIds.length - failed.length;
     if (changed > 0)
-      setNotice(
+      announce(
         t(on ? "marketplace.notice.skillInstalled" : "marketplace.notice.skillRemoved", {
           name: skill.name,
           count: changed,
@@ -353,7 +380,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     for (const skill of todo) if (!(await setSkill(skill, skill.agentIds, true))) failed.push(skill.name);
     setSkillsUpdating(false);
     if (failed.length > 0) setError(t("marketplace.error.updateAllPartial", { skills: format.list(failed) }));
-    else setNotice(t("marketplace.notice.skillsUpdated", { count: todo.length }));
+    else announce(t("marketplace.notice.skillsUpdated", { count: todo.length }));
   }
 
   async function loadSkill(id: string) {
@@ -376,6 +403,21 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
    * a name alone cannot say which row an app's name belongs to.
    */
   const [servers, setServers] = createSignal<readonly McpServerConfig[]>([]);
+  /**
+   * Which http rows this computer holds a sign-in for, by row id. Only this computer answers: a
+   * joined server signs in for itself. A row that is not here is not known to be signed out.
+   */
+  const [signIns, setSignIns] = createSignal<Readonly<Record<string, boolean>>>({});
+  async function readSignIns(serverId: string): Promise<Record<string, boolean>> {
+    if (props.hostServerId) return {};
+    // A badge beside the list, not the list: a failed read marks no account rather than failing the apps.
+    try {
+      const states = await calls().mcp.listMcpSignIns?.(serverId);
+      return Object.fromEntries((states ?? []).map((state) => [state.mcpServerId, state.signedIn]));
+    } catch {
+      return {};
+    }
+  }
   /** The row this app installed as, or nothing: a name on its own is not enough to claim a row. */
   const heldApp = (app: MarketplacePluginApp) => servers().find((held) => isPluginAppConfig(held, app));
   /** The agent that a plugin's skills go to: the open conversation, else the first agent. */
@@ -397,7 +439,8 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     if (parts.length === 0 || !parts.every(Boolean)) return parts.some(Boolean) ? "attention" : "idle";
     const rows = pluginRows(plugin);
     if (rows.length > 0 && rows.every((row) => !row.enabled)) return "disabled";
-    if (rows.some((row) => row.enabled && checks[row.id]?.phase === "failed")) return "attention";
+    if (rows.some((row) => row.enabled && (checks[row.id]?.phase === "failed" || signedOut(plugin, row))))
+      return "attention";
     return "connected";
   }
 
@@ -415,6 +458,11 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     if (flow?.kind !== "link") return null;
     return !props.hostServerId || calls().mcp.supportsRemoteSignIn?.() ? "sign-in" : null;
   }
+  /** A sign-in that the host held and no longer holds: only a row the browser signs in for can be that. */
+  function signedOut(plugin: MarketplacePluginDetail, row: McpServerConfig): boolean {
+    if (!row.enabled || row.transport !== "http" || signIns()[row.id] !== false) return false;
+    return listingAppOf(plugin, row)?.server.auth?.[0]?.kind === "link";
+  }
   function accountsOf(plugin: MarketplacePluginDetail): MarketplaceAccount[] {
     return pluginRows(plugin).map((row) => {
       const listing = listingAppOf(plugin, row);
@@ -425,6 +473,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         renamable: row.id.startsWith("mcpacct-"),
         outdated: listing ? isOutdatedPluginAppConfig(row, listing) : false,
         reconnect: listing ? reconnectKind(listing) : null,
+        signedOut: signedOut(plugin, row),
         check: checks[row.id] ?? { phase: "idle" },
       };
     });
@@ -455,7 +504,14 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
               name: t("connector.github.title"),
               tagline: t("marketplace.app.githubTagline"),
               category: "coding",
-              status: githubState === "connected" ? "connected" : githubState === "expired" ? "attention" : "idle",
+              status:
+                githubState === "connected"
+                  ? "connected"
+                  : githubState === "expired"
+                    ? "attention"
+                    : githubState === "pending"
+                      ? "connecting"
+                      : "idle",
             } satisfies MarketplaceApp,
           ]
         : []),
@@ -490,7 +546,9 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
           name: plugin.name,
           tagline: plugin.tagline,
           category: plugin.category,
-          status: pluginStatus(plugin),
+          // An account that cannot read the host's apps knows neither that the app is connected nor that
+          // it is not.
+          status: props.pluginServerId ? pluginStatus(plugin) : "unknown",
           accountCount: pluginRows(plugin).length,
           plugin,
         }),
@@ -512,26 +570,55 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   });
 
   let serversRead = 0;
-  /** The server whose MCP servers `servers` holds. Null before the first read ends, and while a new read runs. */
+  /** The server whose MCP servers `servers` holds. Null before the first read ends. */
   const [serversReadFor, setServersReadFor] = createSignal<string | null>(null);
+  /** The server whose first read failed. A later read that works clears it. */
+  const [serversFailedFor, setServersFailedFor] = createSignal<string | null>(null);
   async function readServers(serverId: string) {
     const request = ++serversRead;
-    setServersReadFor(null);
-    const configs = await run(() => calls().mcp.listMcpServers(serverId));
-    if (!configs || request !== serversRead) return;
-    setServers(configs);
-    setServersReadFor(serverId);
+    if (untrack(serversReadFor) !== serverId) {
+      // Another host starts again: the rows of the old one must not show as this host's apps.
+      setServersReadFor(null);
+      setServers([]);
+    }
+    setServersFailedFor(null);
+    try {
+      const [configs, states] = await Promise.all([calls().mcp.listMcpServers(serverId), readSignIns(serverId)]);
+      if (request !== serversRead) return;
+      setServers(configs);
+      setSignIns(states);
+      setServersReadFor(serverId);
+    } catch (cause) {
+      if (request !== serversRead) return;
+      // A first read that fails is not an empty list: the apps say so and offer Retry. Rows that
+      // were read before stay, and the failure of a later read is the banner.
+      if (untrack(serversReadFor) === serverId) setError(marketplaceErrorMessage(cause));
+      else setServersFailedFor(serverId);
+    }
   }
   /**
-   * True when each app shows what the host holds: its MCP servers and, for a plugin with skills, the
-   * agent's skills. Before that an installed app reads as idle. A failed read stays false.
+   * How far the read of what the host holds got: its MCP servers and, for a plugin with skills, the
+   * agent's skills. Before `loaded` an installed app reads as not connected, so Connect waits.
    */
-  const appStatesRead = () => {
-    if (props.pluginServerId && serversReadFor() !== props.pluginServerId) return false;
+  const appsRead = (): AppsRead => {
+    const serverId = props.pluginServerId;
+    if (!serverId) return "loaded";
+    if (serversFailedFor() === serverId) return "failed";
+    if (serversReadFor() !== serverId) return "loading";
     const agentId = pluginAgentId();
-    if (!agentId || !props.plugins?.some((plugin) => plugin.skills.length > 0)) return true;
-    return skills.read[agentId] === "loaded";
+    if (!agentId || !props.plugins?.some((plugin) => plugin.skills.length > 0)) return "loaded";
+    const skillsRead = skills.read[agentId];
+    if (skillsRead === "failed") return "failed";
+    return skillsRead === "loaded" ? "loaded" : "loading";
   };
+  const appStatesRead = () => appsRead() === "loaded";
+  function retryApps() {
+    const serverId = props.pluginServerId;
+    if (!serverId) return;
+    void readServers(serverId);
+    const agentId = pluginAgentId();
+    if (agentId && skills.read[agentId] === "failed") void readInstalled(agentId);
+  }
   /* The apps read the host's MCP servers while the window is open, and again for another host. */
   createEffect(
     () => (props.open ? props.pluginServerId : undefined),
@@ -549,6 +636,8 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
 
   const [connecting, setConnecting] = createSignal<PendingConnect | null>(null);
   let signInController: AbortController | null = null;
+  /** The browser sign-in of this computer that waits for its answer, which only a cancel can stop. */
+  let localSignIn: { url: string; serverId: string } | null = null;
   /** The listing the user asked to disconnect, held while the confirmation is on screen. */
   const [uninstalling, setUninstalling] = createSignal<MarketplacePluginDetail | null>(null);
 
@@ -562,6 +651,14 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         settle: (answer) => {
           signInController?.abort();
           signInController = null;
+          // The browser of this computer is outside this window: closing the dialog must stop the wait
+          // in the main process, or the next attempt starts while the old one still holds the port.
+          const waiting = localSignIn;
+          localSignIn = null;
+          if (waiting && answer === null)
+            void calls()
+              .mcp.cancelMcpSignIn?.({ url: waiting.url }, waiting.serverId)
+              .catch(() => undefined);
           setConnecting(null);
           resolve(answer);
         },
@@ -593,7 +690,14 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       signInController = new AbortController();
       return calls().mcp.signInMcpServer({ config }, serverId, signInController.signal);
     }
-    return calls().mcp.signInMcpServer({ config }, serverId);
+    // A sign-in on this computer waits in the main process, up to five minutes, for the browser.
+    const attempt = { url: config.url, serverId };
+    localSignIn = attempt;
+    try {
+      return await calls().mcp.signInMcpServer({ config }, serverId);
+    } finally {
+      if (localSignIn === attempt) localSignIn = null;
+    }
   }
 
   /** Takes back only what this attempt installed. A skill the agent already had is the user's. */
@@ -687,7 +791,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     if (installed && plugin.skills.length > 0) await readInstalled(agentId);
     mark(key, false);
     if (installed) {
-      setNotice(t("marketplace.notice.appConnected", { name: plugin.name }));
+      announce(t("marketplace.notice.appConnected", { name: plugin.name }));
       /* The new account starts Off for every chat. The page offers one explicit step to allow it. */
       setJustConnected(connectedAccount);
       void chatAccess.refresh();
@@ -709,6 +813,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       ),
       skillSlugs: plugin.skills.filter((skill) => pluginSkillHeld(skill.id)).map((skill) => skill.slug),
       agentName: agentName(pluginAgentId()),
+      hostName: props.pluginHostName,
     };
   }
 
@@ -764,7 +869,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, false);
     if (failures.length > 0)
       setError(t("marketplace.error.uninstallPartial", { name: plugin.name, failures: failures.join(" ") }));
-    else setNotice(t("marketplace.notice.appDisconnected", { name: plugin.name }));
+    else announce(t("marketplace.notice.appDisconnected", { name: plugin.name }));
   }
 
   async function removeServer(id: string) {
@@ -777,7 +882,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     const next = await run(() => calls().mcp.removeMcpServer({ mcpServerId: id }, serverId));
     if (!next) return false;
     setServers(next);
-    setNotice(t("marketplace.notice.serverRemoved", { name }));
+    announce(t("marketplace.notice.serverRemoved", { name }));
     return true;
   }
 
@@ -794,7 +899,12 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
    * The app is host-global and its skills are per agent, so this is how a second agent gets the
    * instructions for an app that is already connected. A failure on one agent does not stop the rest.
    */
-  async function setPluginSkills(app: MarketplaceApp, agentIds: readonly string[], on: boolean) {
+  async function setPluginSkills(
+    app: MarketplaceApp,
+    agentIds: readonly string[],
+    on: boolean,
+    options: { removeModified?: boolean } = {},
+  ) {
     if (app.kind !== "plugin" || agentIds.length === 0) return false;
     const plugin = app.plugin;
     const key = `app:${plugin.slug}`;
@@ -807,7 +917,12 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
       try {
         for (const skill of plugin.skills) {
           if (on) await skillCalls().install({ agentId, skillId: skill.id, versionId: skill.versionId });
-          else if (installedSkill(agentId, skill.id)) await skillCalls().uninstall({ agentId, skillId: skill.id });
+          else if (installedSkill(agentId, skill.id))
+            await skillCalls().uninstall({
+              agentId,
+              skillId: skill.id,
+              ...(options.removeModified ? { removeModified: true } : {}),
+            });
         }
       } catch (cause) {
         failed.push(agentName(agentId));
@@ -818,7 +933,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, false);
     const changed = agentIds.length - failed.length;
     if (changed > 0)
-      setNotice(
+      announce(
         t(on ? "marketplace.notice.skillInstalled" : "marketplace.notice.skillRemoved", {
           name: plugin.name,
           count: changed,
@@ -866,7 +981,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     if (next) {
       setServers(next);
       clearCheck(id);
-      setNotice(
+      announce(
         t(enabled ? "marketplace.notice.accountEnabled" : "marketplace.notice.accountDisabled", { name: row.name }),
       );
       /* The host drops the grants of a disabled account the next time it saves a chat's choices. */
@@ -891,7 +1006,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     mark(key, false);
     if (!saved) return false;
     setServers(saved);
-    setNotice(t("marketplace.notice.accountRenamed", { name: next }));
+    announce(t("marketplace.notice.accountRenamed", { name: next }));
     await chatAccess.refresh();
     return true;
   }
@@ -915,7 +1030,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     setChecks((draft) => {
       draft[id] = found;
     });
-    setNotice(
+    announce(
       found.phase === "ok"
         ? t("marketplace.notice.accountChecked", { name: row.name, count: found.toolCount })
         : t("marketplace.notice.accountCheckFailed", { name: row.name }),
@@ -941,10 +1056,11 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         setServers(await calls().mcp.saveMcpServer({ config: { ...connected, id: row.id } }, serverId));
       return true;
     });
+    if (done) setSignIns(await readSignIns(serverId));
     mark(key, false);
     if (done) {
       clearCheck(id);
-      setNotice(t("marketplace.notice.accountReconnected", { name: row.name }));
+      announce(t("marketplace.notice.accountReconnected", { name: row.name }));
     }
     return done === true;
   }
@@ -990,7 +1106,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     });
     mark(key, false);
     if (updated !== undefined)
-      setNotice(
+      announce(
         t(updated.signIn ? "marketplace.notice.appUpdatedSignIn" : "marketplace.notice.appUpdated", {
           name: app.plugin.name,
           count: updated.moved,
@@ -1094,7 +1210,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
         }
       });
       if (next)
-        setNotice(
+        announce(
           t("marketplace.notice.accessSet", {
             agent: agentName(agentId),
             account: name,
@@ -1195,6 +1311,9 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
 
     apps,
     canConnectApps: () => Boolean(props.pluginServerId),
+    appsRead,
+    retryApps,
+    appsHostName: () => (props.pluginServerId ? props.pluginHostName : props.serverName),
     appBusy: (id) => Boolean(busy[`app:${id}`]),
     pluginSkillAgents: (app) => (app.kind === "plugin" ? pluginSkillAgents(app.plugin) : []),
     setPluginSkills,

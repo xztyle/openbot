@@ -154,6 +154,7 @@ export function MarketplaceOverlay(props: {
             manage() && serverCanAdminister(props.server, MCP_SERVERS_CAPABILITY) ? props.server?.id : undefined
           }
           pluginHostName={manage() ? remoteAdminServer(props.server, MCP_SERVERS_CAPABILITY)?.name : undefined}
+          serverName={props.server?.name}
           onRunPluginPrompt={
             composerFree()
               ? (agentId, prompt) =>

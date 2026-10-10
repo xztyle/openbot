@@ -131,7 +131,10 @@ export function DetailHeader(props: {
           <Heading as="h3" size="md">
             {props.name}
           </Heading>
-          <StatusPill status={props.status} label={props.statusLabel} />
+          {/* An empty label is a page with no status to claim. */}
+          <Show when={props.statusLabel}>
+            <StatusPill status={props.status} label={props.statusLabel} />
+          </Show>
         </div>
         <Text variant="caption" tone="muted">
           {props.subtitle}

@@ -268,6 +268,9 @@ function CheckLine(props: { account: MarketplaceAccount }) {
           </ItemDescription>
         )}
       </Match>
+      <Match when={props.account.check.phase === "idle" && props.account.signedOut}>
+        <ItemDescription class="marketplace-account-failed">{t("marketplace.account.signedOut")}</ItemDescription>
+      </Match>
       <Match when={props.account.check.phase === "failed" && props.account.check}>
         {(check) => (
           <ItemDescription class="marketplace-account-failed">
@@ -332,7 +335,8 @@ function AccountRow(props: {
   const account = () => props.account;
   const [renaming, setRenaming] = createSignal(false);
   const busy = () => model().accountBusy(account().id) || model().appBusy(props.app.id);
-  const failed = () => account().check.phase === "failed";
+  /** A check that failed, or a sign-in that is gone: the way back in is the main action of the row. */
+  const failed = () => account().check.phase === "failed" || account().signedOut;
   return (
     <Item class="settings-modal-row marketplace-account" role="group" aria-label={account().name}>
       <ItemContent>
@@ -431,6 +435,8 @@ function AccountRow(props: {
 export function AccountsSection(props: {
   scope: MarketplaceScope;
   app: PluginApp;
+  /** The id of the section, so that an action in the page header can bring the user to it. */
+  anchorId?: string;
   onDisconnect: (account: MarketplaceAccount) => void;
 }) {
   const { t } = useText();
@@ -439,7 +445,7 @@ export function AccountsSection(props: {
   const outdated = () => accounts().filter((account) => account.outdated);
   return (
     <Show when={accounts().length > 0}>
-      <SettingsSection title={t("mcp.connection.accounts")}>
+      <SettingsSection id={props.anchorId} tabindex={-1} title={t("mcp.connection.accounts")}>
         <Show when={outdated().length > 0 && model().canConnectApps()}>
           <section
             class="marketplace-update"

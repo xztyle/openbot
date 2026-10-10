@@ -3,12 +3,14 @@
 /* ---------------------------------------------------------------- window */
 
 .skills-marketplace-backdrop {
+  /* The space between the window and the screen. It is smaller on a phone. */
+  --marketplace-gutter: var(--openbot-space-4);
   position: fixed;
   inset: 0;
   z-index: var(--openbot-layer-dialog-host);
   display: grid;
   place-items: center;
-  padding: var(--openbot-space-4);
+  padding: var(--marketplace-gutter);
 }
 
 .skills-marketplace {
@@ -16,8 +18,9 @@
   --marketplace-inset: var(--openbot-space-6);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(1040px, calc(100vw - 32px));
-  height: min(704px, calc(100vh - 32px));
+  width: min(1040px, calc(100vw - var(--marketplace-gutter) * 2));
+  /* The dynamic height: on a phone the browser bars change it, and 100vh runs under them. */
+  height: min(704px, calc(100dvh - var(--marketplace-gutter) * 2));
   overflow: hidden;
   border: 1px solid var(--openbot-border-grouped);
   border-radius: var(--openbot-radius-card);
@@ -90,6 +93,24 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   background: var(--openbot-bg-control);
   color: var(--openbot-danger);
   box-shadow: 0 12px 32px var(--openbot-shadow-dialog);
+}
+
+/* What an action did, for a few seconds. It sits where the error does, in the neutral colors. */
+.skills-marketplace-notice {
+  position: sticky;
+  bottom: var(--openbot-space-4);
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  margin: 0 auto var(--openbot-space-4);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-primary);
+  box-shadow: 0 12px 32px var(--openbot-shadow-dialog);
+  overflow-wrap: anywhere;
 }
 
 .marketplace-visually-hidden {
@@ -671,6 +692,16 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   }
 }
 
+@media (max-width: 560px) {
+  .skills-marketplace-backdrop {
+    --marketplace-gutter: var(--openbot-space-1);
+  }
+
+  .skills-marketplace {
+    --marketplace-inset: var(--openbot-space-3);
+  }
+}
+
 /* ---------------------------------------------------------------- event checks */
 
 .marketplace-event-check-description {
@@ -843,6 +874,15 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   margin-inline-start: var(--openbot-space-2);
 }
 
+/* What removing an account takes, in the confirmation. */
+.marketplace-remove-list {
+  display: grid;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  padding-inline-start: var(--openbot-space-4);
+  text-align: start;
+}
+
 .marketplace-account-failed {
   color: var(--openbot-danger);
   overflow-wrap: anywhere;
@@ -890,7 +930,8 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   margin: 0;
 }
 
-.marketplace-access-failed {
+.marketplace-access-failed,
+.marketplace-apps-failed {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

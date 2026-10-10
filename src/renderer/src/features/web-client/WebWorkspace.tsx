@@ -81,8 +81,14 @@ import { readChannelSelection, writeChannelSelection } from "../channels/channel
 import { ChannelsControllerProvider } from "../channels/channels-context";
 import { createChannelsController } from "../channels/channels-controller";
 import { globalSearchChannels } from "../channels/global-search-channels";
-import { Conversation, createConversationController } from "../conversation/Conversation";
+import { Conversation } from "../conversation/Conversation";
 import { clearStoredQueueEdit } from "../conversation/composer-draft";
+import {
+  accountComposerDraftsKey,
+  readStoredComposerDrafts,
+  writeComposerDraftsOnChange,
+} from "../conversation/composer-draft-storage";
+import { createServerConversationState, createStableConversationState } from "../conversation/conversation-controller";
 import { ConversationControllerProvider } from "../conversation/conversation-controller-context";
 import { composerDraftKey } from "../conversation/conversation-keys";
 import { createMarketplaceAppAccess } from "../conversation/marketplace-app-access";
@@ -233,7 +239,31 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   function setTyping(agentId: string, typing: boolean): void {
     workspace.runtime.setTyping(typing ? agentId : null, typing);
   }
-  const controller = createConversationController({ onTypingChange: setTyping });
+  // The same controller as `createConversationController`, but its drafts are stored under this account's
+  // key, so a reload, an evicted tab or an expired session does not lose unsent text.
+  const controller = {
+    ...createStableConversationState({ onTypingChange: setTyping }),
+    ...createServerConversationState(),
+  };
+  const draftsKey = accountComposerDraftsKey(props.accountId);
+  const storedDrafts = readStoredComposerDrafts(draftsKey);
+  // After the first render: a signal that a component body writes would run the body again.
+  onSettled(() => {
+    // A restored queue edit keeps its own draft for the chat that it holds.
+    controller.setDrafts((current) => ({ ...storedDrafts.agents, ...current }));
+    controller.setChannelDrafts(storedDrafts.channels);
+  });
+  const draftStorage = writeComposerDraftsOnChange(
+    {
+      drafts: controller.drafts,
+      channelDrafts: controller.channelDrafts,
+      editingAgentId: controller.editingAgentId,
+      editingServerId: controller.editingServerId,
+      editingDraftBackup: controller.editingDraftBackup,
+      unsentTexts: controller.pendingSends.unsentTexts,
+    },
+    draftsKey,
+  );
   /**
    * Releases an open queue edit on the connected host first, so its message can run after sign-out.
    * When the host does not confirm, the stored edit stays for this account, which can release it after sign-in.
@@ -259,6 +289,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       }
     }
     await props.onLogout();
+    // After the sign-out: a sign-out that fails keeps the account, so it keeps its drafts too.
+    draftStorage.discard();
   }
   /** The host list was read and holds no computer to connect to. */
   const noHost = () => !workspace.state.host && (workspace.state.hostsLoaded || Boolean(workspace.state.hostsError));
@@ -279,14 +311,23 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         }
       : null;
   });
+  // A solid effect runs its body for each new compute result, and the compute result is a new object each
+  // time. The body compares with the last values itself: a retry that replaces the host object, or a
+  // window focus that reads the host list again, must not clear what the user typed.
   let resetRevocation = workspace.state.revocationRevision;
+  /** Undefined until the effect ran once; null while no host is open. */
+  let resetHostId: string | null | undefined;
   createEffect(
-    () => ({ host: workspace.state.host?.hostId, revocation: workspace.state.revocationRevision }),
-    ({ revocation }) => {
+    () => ({ host: workspace.state.host?.hostId ?? null, revocation: workspace.state.revocationRevision }),
+    ({ host, revocation }) => {
       const revoked = revocation !== resetRevocation;
+      // The first host of the page is no change: drafts that the browser restored belong to it.
+      const hostChanged = resetHostId !== undefined && resetHostId !== null && host !== resetHostId;
       resetRevocation = revocation;
+      resetHostId = host;
       controller.setComposerErrors({});
       controller.setConversationErrors({});
+      if (!revoked && !hostChanged) return;
       controller.setChannelDrafts({});
       // A queue edit holds its message on its host until Save or Cancel. Keep the edit and its draft
       // after a reload or a host change, so the user can release the hold on that host.
@@ -429,6 +470,29 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     const current = server();
     return current?.state === "incompatible" ? current : null;
   });
+  /** The line under the title of the connection notice. A restart that the host announced says why it is away. */
+  function connectionDetail(): string | null {
+    const current = workspace.state;
+    if (current.hostedSleep || current.hostedIssue) return null;
+    if (current.recovery?.phase === "suspended") return current.connectionError;
+    if (current.hostRestart) return t("server.restartNotice.restartingTitle", { name: current.host?.name ?? "" });
+    return null;
+  }
+  /**
+   * A web build that is older than its host, or a connection that no retry can fix, ends only with a new
+   * page. The cached page can be that old build, so the notice offers a reload.
+   */
+  const reloadSuggested = () => {
+    if (noHost() || workspace.state.status === "online") return false;
+    if (blockedServer()) return workspace.state.incompatibility?.code === "client_update_required";
+    // The full-screen notice of a workspace that never loaded has its own actions.
+    return (
+      workspace.state.workspaceLoaded &&
+      workspace.state.recovery?.phase === "suspended" &&
+      !workspace.state.hostedSleep &&
+      !workspace.state.hostedIssue
+    );
+  };
   // A phone shows the sidebar as a full pane, so it is never compact there.
   const phoneQuery = window.matchMedia?.(PHONE_QUERY);
   const [phone, setPhone] = createSignal(phoneQuery?.matches ?? false);
@@ -438,8 +502,13 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     return () => phoneQuery?.removeEventListener("change", update);
   });
   const compact = () => !phone() && layout.leftPanelCompact();
-  // On a phone the back button goes from a chat to the list of agents, as in a native app.
-  const paneHistory = createWebPaneHistory({ pane: mobilePane, setPane: setMobilePane });
+  // On a phone the back button goes from a chat to the list of agents, as in a native app. It also closes
+  // a dialog, the settings or the usage report that covers the pane, before it leaves the pane.
+  const paneHistory = createWebPaneHistory({
+    pane: mobilePane,
+    setPane: setMobilePane,
+    closeOverlay: closeOverlays,
+  });
   createEffect(phone, (onPhone) => {
     if (onPhone) paneHistory.start();
     else paneHistory.stop();
@@ -1109,6 +1178,36 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     setMobilePane("conversation");
     setProfileRequest({ agentId, nonce: Date.now() });
   }
+  /** Whether something covers the pane, so the history holds an entry for it. */
+  const overlayOpen = () =>
+    usage() !== null ||
+    accountSettingsOpen() ||
+    joinOpen() ||
+    addServer() !== null ||
+    billingOpen() ||
+    marketplaceOpen() ||
+    searchOpen() ||
+    leaveRequest() !== null ||
+    serverSettings.state.open ||
+    chatApps.state.open ||
+    Boolean(props.agentTemplateId);
+  function closeOverlays(): void {
+    if (usage() !== null) closeUsage();
+    setAccountSettingsOpen(false);
+    if (joinOpen()) {
+      setJoinOpen(false);
+      props.onInviteClose?.();
+    }
+    setAddServer(null);
+    setBillingOpen(false);
+    setMarketplaceOpen(false);
+    setSearchOpen(false);
+    setLeaveRequest(null);
+    if (serverSettings.state.open) serverSettings.setOpen(false);
+    if (chatApps.state.open) chatApps.close();
+    if (props.agentTemplateId) props.onAgentTemplateClose?.();
+  }
+  createEffect(overlayOpen, (open) => paneHistory.syncOverlay(open));
   const unavailable = async (): Promise<never> => {
     throw new Error(t("webClient.error.desktopOnly"));
   };
@@ -1134,13 +1233,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   name={workspace.state.host?.name ?? t("webClient.notice.findingHosts")}
                   initial={!workspace.state.workspaceLoaded}
                   issue={workspace.state.hostedIssue}
-                  detail={
-                    workspace.state.recovery?.phase === "suspended" &&
-                    !workspace.state.hostedSleep &&
-                    !workspace.state.hostedIssue
-                      ? workspace.state.connectionError
-                      : null
-                  }
+                  detail={connectionDetail()}
                   phase={
                     workspace.state.hostedSleep ??
                     (workspace.state.recovery?.phase === "suspended"
@@ -1152,14 +1245,29 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                           : "connecting")
                   }
                   remainingSeconds={
-                    workspace.state.recovery?.phase === "waiting" || workspace.state.recovery?.phase === "cooldown"
+                    // A restarting host is asked at a short, flat interval, so no countdown is shown.
+                    !workspace.state.hostRestart &&
+                    (workspace.state.recovery?.phase === "waiting" || workspace.state.recovery?.phase === "cooldown")
                       ? workspace.state.recovery.remainingSeconds
                       : 0
                   }
-                  busy={workspace.state.status === "connecting" || !workspace.state.host}
-                  onRetry={() => void workspace.run(workspace.reconnect)}
+                  // Retry stays available while the hosts load, so a wait without end has a way out.
+                  busy={Boolean(workspace.state.host) && workspace.state.status === "connecting"}
+                  onRetry={() =>
+                    void workspace.run(workspace.state.host ? workspace.reconnect : workspace.refreshHosts)
+                  }
                   onManage={() => setBillingOpen(true)}
                 />
+              </Show>
+              <Show when={reloadSuggested()}>
+                <section class="server-connection-notice" role="status">
+                  <p class="server-connection-detail">{t("webClient.notice.reloadHint")}</p>
+                  <div class="server-connection-actions">
+                    <Button variant="outline" onClick={() => window.location.reload()}>
+                      {t("webClient.notice.reload")}
+                    </Button>
+                  </div>
+                </section>
               </Show>
               <Show when={workspace.state.status === "online" && workspace.state.panelsFailed}>
                 <ServerPanelLoadNotice
@@ -1767,7 +1875,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               remoteDesktopSessionActive={false}
               remoteDesktopVisible={false}
               prompt={view.prompt()}
-              approval={view.approval()}
+              // The card stays in the state while the host is away, and shows again with the host's snapshot.
+              approval={workspace.state.status === "online" ? view.approval() : undefined}
               browserTakeover={browserTakeover()}
               onSelectAgent={(id) => {
                 setMobilePane("conversation");

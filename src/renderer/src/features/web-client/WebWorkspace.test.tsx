@@ -1047,3 +1047,135 @@ describe("web workspace recovery", () => {
     }
   });
 });
+
+describe("web workspace after a long time in the background", () => {
+  it("renews the path, probes the host, and reads the opened chat's queue and the other agents' reads", async () => {
+    vi.useFakeTimers();
+    try {
+      const [chief, scout] = STORY_AGENT_SUMMARIES;
+      assert(chief && scout);
+      const request = vi.fn().mockResolvedValue(undefined);
+      const networkRestored = vi.fn();
+      const app = harness({
+        listAgents: vi.fn().mockResolvedValue([chief, scout]),
+        conversation: vi.fn().mockImplementation(async (agentId) => ({ ...page, agentId })),
+        networkRestored,
+        admin: {
+          request,
+          team: {
+            getPresence: vi.fn().mockRejectedValue(new Error("No presence.")),
+            listMembers: vi.fn(),
+            listInvites: vi.fn(),
+            createInvite: vi.fn(),
+            updateMember: vi.fn(),
+            removeMember: vi.fn(),
+            revokeInvite: vi.fn(),
+          },
+        },
+      });
+      await vi.waitFor(() => expect(app.workspace().state.status).toBe("online"));
+      await vi.waitFor(() => expect(app.runtime.queue).toHaveBeenCalledTimes(2));
+      const listed = vi.mocked(app.runtime.listAgents).mock.calls.length;
+      const reads = vi.mocked(app.runtime.conversationReads).mock.calls.length;
+
+      const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+      document.dispatchEvent(new Event("visibilitychange"));
+      vi.setSystemTime(Date.now() + 30_000);
+      hidden.mockReturnValue(false);
+      document.dispatchEvent(new Event("visibilitychange"));
+
+      await vi.waitFor(() => expect(vi.mocked(app.runtime.listAgents).mock.calls.length).toBeGreaterThan(listed));
+      expect(networkRestored).toHaveBeenCalledOnce();
+      expect(request).toHaveBeenCalledWith("GET", "/v1/compatibility", expect.any(Function));
+      await vi.waitFor(() => expect(vi.mocked(app.runtime.conversationReads).mock.calls.length).toBeGreaterThan(reads));
+      // Only the opened chat's queue is read again. The other one is read when its chat opens.
+      expect(app.runtime.queue).toHaveBeenCalledTimes(3);
+      hidden.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does nothing for a short time in the background", async () => {
+    const networkRestored = vi.fn();
+    const app = harness({ networkRestored });
+    await connected(app);
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event("visibilitychange"));
+    hidden.mockRestore();
+    expect(networkRestored).not.toHaveBeenCalled();
+  });
+});
+
+describe("web workspace host restart", () => {
+  it("keeps the restart notice while attempts fail, retries at a flat interval and ends it when online", async () => {
+    vi.useFakeTimers();
+    try {
+      let hostIsBack = false;
+      const connect = vi.fn(async () => {
+        if (!hostIsBack && connect.mock.calls.length > 1) throw new Error("Host is restarting.");
+        return ["conversation-pagination"];
+      });
+      const app = harness({ connect });
+      await vi.waitFor(() => expect(app.workspace().state.status).toBe("online"));
+      app.events().event("host", { type: "host-restart", state: "restarting", version: "1.2.3" });
+      app.events().connection({ hostId: "host", state: "offline", message: null });
+      await vi.waitFor(() => expect(connect.mock.calls.length).toBeGreaterThan(1));
+      const attempts = connect.mock.calls.length;
+      // The notice outlives each failed attempt, and each interval brings one more attempt.
+      for (let interval = 1; interval <= 3; interval += 1) {
+        await vi.advanceTimersByTimeAsync(5_000);
+        flush();
+        expect(app.workspace().state.hostRestart).toEqual({ state: "restarting", version: "1.2.3" });
+      }
+      expect(connect.mock.calls.length).toBeGreaterThanOrEqual(attempts + 3);
+
+      hostIsBack = true;
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.waitFor(() => expect(app.workspace().state.status).toBe("online"));
+      expect(app.workspace().state.hostRestart).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("web workspace other agents' events", () => {
+  it("reads the opened chat again only for an event of that chat", async () => {
+    const app = harness({
+      conversation: vi.fn().mockImplementation(async (agentId) => ({ ...page, agentId })),
+    });
+    await connected(app);
+    const reads = vi.mocked(app.runtime.conversation).mock.calls.length;
+    app.events().event("host", { type: "conversation-invalidated", agentId: "scout", revision: 5 });
+    app.events().event("host", { type: "turn-started", agentId: "scout", threadId: "thread-scout", turnId: "turn" });
+    expect(app.runtime.conversation).toHaveBeenCalledTimes(reads);
+
+    app.events().event("host", { type: "conversation-invalidated", agentId: "chief", revision: 5 });
+    expect(app.runtime.conversation).toHaveBeenCalledTimes(reads + 1);
+  });
+
+  it("keeps pending approvals while the host is away, and lets its snapshot replace them", async () => {
+    const app = harness();
+    const workspace = await connected(app);
+    const approval = {
+      requestId: "approval-one",
+      agentId: "chief",
+      threadId: "thread-chief",
+      turnId: "turn-one",
+      kind: "command" as const,
+      command: "pwd",
+      cwd: null,
+      reason: "Check",
+      grantRoot: null,
+      permissions: null,
+    };
+    app.events().event("host", { type: "approval", approval });
+    await waitFor(() => expect(workspace.state.approvals).toEqual([approval]));
+    app.events().connection({ hostId: "host", state: "offline", message: null });
+    flush();
+    expect(workspace.state.approvals).toEqual([approval]);
+  });
+});

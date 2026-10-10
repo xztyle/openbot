@@ -18,10 +18,26 @@ function takeOlderWindow(target: ChannelPage, source: ChannelPage): void {
 
 import type { ChannelsPort } from "./channels-port";
 
+/**
+ * What was unread when the reader opened a channel. The read pointer moves as the channel is read
+ * while it is in front, so the live count is zero a moment after the first page arrives. The
+ * divider follows this record instead, until the reader leaves the channel, jumps to the latest
+ * message, or marks the channel read.
+ */
+export interface HeldUnread {
+  channelId: string;
+  /** The unread count of the channel summary at the time the first page arrived. */
+  count: number;
+  /** The newest sequence of that first page. Messages after it arrived while the reader was here. */
+  throughSequence: number;
+}
+
 interface ChannelsState {
   channels: ChannelSummary[];
   selectedId: string | null;
   page: ChannelPage | null;
+  /** Null when nothing was unread at the opening, or after the reader released it. */
+  unread: HeldUnread | null;
   loading: boolean;
   pending: boolean;
   error: string | null;
@@ -59,6 +75,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     channels: [],
     selectedId: null,
     page: null,
+    unread: null,
     loading: false,
     pending: false,
     error: null,
@@ -71,6 +88,8 @@ export function createChannelsController(env: ChannelsEnvironment) {
   let refreshId = 0;
   let failedCommand: ChannelCommand | null = null;
   const readThrough = new Map<string, number>();
+  /** The channel whose unread part was kept for this opening, so a refresh does not keep it again. */
+  let unreadKeptFor: string | null = null;
 
   const supported = env.supported;
   /**
@@ -138,6 +157,8 @@ export function createChannelsController(env: ChannelsEnvironment) {
         if (selected && !selectedExists) {
           state.selectedId = null;
           state.editing = null;
+          state.unread = null;
+          unreadKeptFor = null;
           readThrough.delete(selected);
           if (failedCommand?.channelId === selected) failedCommand = null;
         }
@@ -148,6 +169,13 @@ export function createChannelsController(env: ChannelsEnvironment) {
           Object.assign(state.page, { channel: page.channel, throughSequence: page.throughSequence });
           if (merged.takeFetchedCursor) takeOlderWindow(state.page, page);
         } else state.page = page;
+        // The first page of an opening holds the unread part; every later read has already marked
+        // the channel read, so only this one can say where it started.
+        if (page && selected && unreadKeptFor !== selected) {
+          unreadKeptFor = selected;
+          const count = channels.find((channel) => channel.id === selected)?.unreadCount ?? 0;
+          state.unread = count > 0 ? { channelId: selected, count, throughSequence: page.throughSequence } : null;
+        }
         state.loading = false;
         if (!failedCommand) state.error = null;
       });
@@ -179,9 +207,10 @@ export function createChannelsController(env: ChannelsEnvironment) {
   async function open(channelId: string) {
     env.beforeOpen();
     env.writeSelection(channelId);
+    unreadKeptFor = null;
     flush(() =>
       setState((state) => {
-        Object.assign(state, { selectedId: channelId, page: null, editing: null, loading: true });
+        Object.assign(state, { selectedId: channelId, page: null, unread: null, editing: null, loading: true });
       }),
     );
     await refreshAfter();
@@ -297,6 +326,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
         const selected = next.supported ? env.readSelection(next.scope) : null;
         refreshId += 1;
         readThrough.clear();
+        unreadKeptFor = null;
         failedCommand = null;
         pendingCommands = 0;
         flush(() =>
@@ -305,6 +335,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
               channels: [],
               selectedId: selected,
               page: null,
+              unread: null,
               pending: false,
               error: null,
               editing: null,
@@ -325,9 +356,10 @@ export function createChannelsController(env: ChannelsEnvironment) {
       // As `open`, but the read gets the channel as an argument: a store write in an effect shows only
       // after the flush, so a read that takes the selection from the store reads the old one.
       env.beforeOpen();
+      unreadKeptFor = null;
       flush(() =>
         setState((state) => {
-          Object.assign(state, { selectedId: saved, page: null, editing: null, loading: true });
+          Object.assign(state, { selectedId: saved, page: null, unread: null, editing: null, loading: true });
         }),
       );
       void refresh(saved);
@@ -367,6 +399,10 @@ export function createChannelsController(env: ChannelsEnvironment) {
         await refreshAfter();
         throw failure.reason;
       }
+      // Reading every channel is also reading the one that is open.
+      setState((state) => {
+        state.unread = null;
+      });
     });
   }
   return {
@@ -402,10 +438,16 @@ export function createChannelsController(env: ChannelsEnvironment) {
     loadOlder,
     close: () => {
       env.writeSelection(null);
+      unreadKeptFor = null;
       setState((state) => {
-        Object.assign(state, { selectedId: null, page: null, editing: null });
+        Object.assign(state, { selectedId: null, page: null, unread: null, editing: null });
       });
     },
+    /** The reader jumped to the latest message or marked the channel read: the divider has done its job. */
+    releaseUnread: () =>
+      setState((state) => {
+        state.unread = null;
+      }),
     edit: () =>
       setState((state) => {
         if (!state.page?.channel.archived) Object.assign(state, { editing: "settings" });

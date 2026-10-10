@@ -1013,8 +1013,12 @@ function storedMessage(
   };
 }
 
-/** Opens a saved channel whose page also holds the given messages, with `unread` of them unread. */
-async function openChannelWithMessages(messages: ChannelMessage[], unread = 0) {
+/**
+ * Opens a saved channel whose page also holds the given messages, with `unread` of them unread.
+ * The unread count of the list is `unread.count`, so a test can move it the way reading does.
+ */
+async function openChannelWithMessages(messages: ChannelMessage[], unreadCount = 0) {
+  const unread = { count: unreadCount };
   await window.openbot.agent.channelCommand({
     type: "save",
     operationId: "create",
@@ -1034,12 +1038,13 @@ async function openChannelWithMessages(messages: ChannelMessage[], unread = 0) {
   });
   const originalList = window.openbot.agent.listChannels;
   vi.spyOn(window.openbot.agent, "listChannels").mockImplementation(async () =>
-    (await originalList()).map((channel) => ({ ...channel, unreadCount: unread })),
+    (await originalList()).map((channel) => ({ ...channel, unreadCount: unread.count })),
   );
   render(() => <App />);
   await screen.findByRole("button", { name: /Open account (actions|menu)/ });
   await fireEvent.click(await screen.findByRole("button", { name: /Project room/ }));
-  return screen.findByRole("main", { name: "Channel conversation" });
+  const chat = await screen.findByRole("main", { name: "Channel conversation" });
+  return Object.assign(chat, { unread });
 }
 
 const chiefAuthor = { kind: "agent" as const, id: "chief", name: "Chief" };
@@ -1094,4 +1099,39 @@ it("draws a teammate as a member and an earlier answer muted with a note", async
   const cut = within(chat).getByText("Second draft.").closest<HTMLElement>('[role="article"]');
   assert(cut);
   expect(within(cut).getByText("This answer stopped before it was done.")).toBeInTheDocument();
+});
+
+it("keeps the unread divider while the channel is read, and drops it when the reader leaves", async () => {
+  const command = vi.spyOn(window.openbot.agent, "channelCommand");
+  const chat = await openChannelWithMessages(
+    [
+      storedMessage("a1", 1, chiefAuthor, "Already read."),
+      storedMessage("a2", 2, chiefAuthor, "First new answer."),
+      storedMessage("a3", 3, chiefAuthor, "Second new answer."),
+    ],
+    2,
+  );
+  const divider = await within(chat).findByRole("separator", { name: "New messages" });
+  expect(within(chat).getByText("NEW")).toBeInTheDocument();
+
+  // The channel is in front, so it is marked read. The count of the list falls to zero.
+  await waitFor(() => expect(command).toHaveBeenCalledWith(expect.objectContaining({ type: "read" })));
+  chat.unread.count = 0;
+  const read = vi.spyOn(window.openbot.agent, "readChannel");
+  read.mockClear();
+  await fireEvent.focus(window);
+  await waitFor(() => expect(read).toHaveBeenCalled());
+
+  // The divider stays where the unread part began.
+  expect(within(chat).getByRole("separator", { name: "New messages" })).toBeInTheDocument();
+  const row = within(chat).getByText("First new answer.");
+  expect(row.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+
+  // Another chat and back is a new opening, and nothing is unread now.
+  await fireEvent.click(screen.getByRole("button", { name: /^Chief, Chief of staff/ }));
+  await screen.findByRole("main", { name: "Conversation" });
+  await fireEvent.click(await screen.findByRole("button", { name: /Project room/ }));
+  const again = await screen.findByRole("main", { name: "Channel conversation" });
+  await within(again).findByText("Second new answer.");
+  expect(within(again).queryByRole("separator", { name: "New messages" })).not.toBeInTheDocument();
 });

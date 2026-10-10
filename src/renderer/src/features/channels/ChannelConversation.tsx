@@ -292,7 +292,21 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const unreadCount = createMemo(
     () => channels.state.channels.find((channel) => channel.id === channels.state.selectedId)?.unreadCount ?? 0,
   );
-  const firstUnreadId = createMemo(() => firstUnreadChannelMessageId(timeline(), unreadCount()));
+  /*
+   * The divider stands where the unread part began when the reader opened the channel, and stays
+   * there while they read: the channel is marked read as it is in front, so the live count is zero
+   * a moment later. Messages that arrived after the opening are below the divider, not part of it.
+   * Without a kept record (nothing unread at the opening, or the reader released it) the live count
+   * decides, as before.
+   */
+  const firstUnreadId = createMemo(() => {
+    const held = channels.state.unread;
+    if (!held || held.channelId !== channels.state.selectedId) {
+      return firstUnreadChannelMessageId(timeline(), unreadCount());
+    }
+    const opened = timeline().filter((entry) => entry.sequence <= held.throughSequence);
+    return firstUnreadChannelMessageId(opened, held.count);
+  });
   /* A row finds its entry by id: the virtualizer gives a row its new index one tick after the list changes. */
   const timelineIndexById = createMemo(
     () => new Map<VirtualItem["key"], number>(timeline().map((entry, index) => [entry.id, index])),
@@ -382,7 +396,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const updateUnreadDividerVisibility = () => {
     setUnreadDividerVisible(
       Boolean(
-        unreadCount() > 0 &&
+        firstUnreadId() !== null &&
           messageList &&
           unreadMessagesDivider &&
           unreadMessagesDividerIsVisible(messageList, unreadMessagesDivider),
@@ -400,12 +414,14 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const markChannelRead = async () => {
     const page = channels.state.page;
     if (!page) return;
-    await channels.command({
+    const read = await channels.command({
       type: "read",
       channelId: page.channel.id,
       throughSequence: page.throughSequence,
       operationId: crypto.randomUUID(),
     });
+    // "Mark read" is the reader saying they are done with the divider.
+    if (read) channels.releaseUnread();
   };
   const jumpToUnreadMessages = () => {
     if (!messageList || !unreadMessagesDivider) return;
@@ -418,6 +434,7 @@ export function ChannelConversation(props: ChannelConversationProps) {
   const jumpToLatestMessage = () => {
     if (!messageList) return;
     stickToLatest = true;
+    channels.releaseUnread();
     clearNewMessages();
     scrollToLatestMessage(messageList);
   };

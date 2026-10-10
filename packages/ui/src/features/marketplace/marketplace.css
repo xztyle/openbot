@@ -3,12 +3,14 @@
 /* ---------------------------------------------------------------- window */
 
 .skills-marketplace-backdrop {
+  /* The space between the window and the screen. It is smaller on a phone. */
+  --marketplace-gutter: var(--openbot-space-4);
   position: fixed;
   inset: 0;
   z-index: var(--openbot-layer-dialog-host);
   display: grid;
   place-items: center;
-  padding: var(--openbot-space-4);
+  padding: var(--marketplace-gutter);
 }
 
 .skills-marketplace {
@@ -16,8 +18,9 @@
   --marketplace-inset: var(--openbot-space-6);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(1040px, calc(100vw - 32px));
-  height: min(704px, calc(100vh - 32px));
+  width: min(1040px, calc(100vw - var(--marketplace-gutter) * 2));
+  /* The dynamic height: on a phone the browser bars change it, and 100vh runs under them. */
+  height: min(704px, calc(100dvh - var(--marketplace-gutter) * 2));
   overflow: hidden;
   border: 1px solid var(--openbot-border-grouped);
   border-radius: var(--openbot-radius-card);
@@ -686,6 +689,16 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
 
   .marketplace-head {
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 560px) {
+  .skills-marketplace-backdrop {
+    --marketplace-gutter: var(--openbot-space-1);
+  }
+
+  .skills-marketplace {
+    --marketplace-inset: var(--openbot-space-3);
   }
 }
 

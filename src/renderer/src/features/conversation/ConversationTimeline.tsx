@@ -22,7 +22,7 @@ import { ThinkingText } from "@openbot/ui/features/conversation/ThinkingText";
 import { UnreadMessagesBanner, UnreadMessagesDivider } from "@openbot/ui/features/conversation/UnreadMessages";
 import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, For, Loading, lazy, Show, untrack } from "solid-js";
+import { createMemo, createSignal, For, Loading, lazy, onCleanup, Show, untrack } from "solid-js";
 import { planItems, planTitle } from "../../app-message-projection";
 import { useShowAgentReasoning } from "../../chat-visibility-preferences";
 import { deviceSendShortcut } from "../../send-shortcut-preference";
@@ -35,6 +35,7 @@ import { useConversationViewScope } from "./conversation-scope";
 import type { ConversationProps } from "./conversation-types";
 import { MarketplaceSuggestionChatCard, marketplaceSuggestionKnown } from "./MarketplaceSuggestionChatCard";
 import { RoutineChatCard } from "./RoutineChatCard";
+import { listenForScrollIntent } from "./scroll-follow";
 import { PENDING_SEND_ID_PREFIX, pendingSendRetrySafe } from "./stores/pending-send-store";
 
 /**
@@ -153,7 +154,7 @@ export function ConversationTimeline() {
     setAgentActivitySlotElement,
     setChatSearchInputElement,
     setScrollElement,
-    setStickToLatest,
+    scrollFollow,
     setUnreadMessagesDividerElement,
     setVirtualRootElement,
   } = useConversationViewScope();
@@ -231,7 +232,7 @@ export function ConversationTimeline() {
     unloaded: () => props.unloadedHistory,
     virtualizer: messageVirtualizer,
     onLoadOlder: () => props.onLoadOlder?.(),
-    onJump: () => setStickToLatest(false),
+    onJump: () => scrollFollow.setStick(false),
   });
   let cachedPrompt: { key: string; prompt: NonNullable<ConversationProps["prompt"]> } | null = null;
   const keyedPrompt = createMemo(() => {
@@ -279,10 +280,12 @@ export function ConversationTimeline() {
         ref={(element) => {
           setScrollElement(element);
           rail.ref(element);
+          // The reader's input, not the position alone, decides whether the transcript follows.
+          onCleanup(listenForScrollIntent(element, scrollFollow));
         }}
         onScroll={(event) => {
           const element = event.currentTarget;
-          setStickToLatest(element.scrollHeight - element.scrollTop - element.clientHeight <= 80);
+          scrollFollow.scroll(element);
           updateScrollFade(element);
           updateUnreadDividerVisibility();
         }}

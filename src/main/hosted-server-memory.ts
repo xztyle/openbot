@@ -4,6 +4,13 @@ import { causeHelpers } from "../backend/effect-boundary";
 import type { HostMemory, HostMemoryLevel } from "../backend/host-memory";
 
 const SAMPLE_INTERVAL_MS = 5_000;
+/**
+ * The walk of `/proc` reads one file for every process of the machine, so it runs less often than
+ * the memory reading. A new child can wait this long for its OOM value.
+ */
+const OOM_WALK_INTERVAL_MS = 30_000;
+/** At most this many `/proc` reads and writes are in flight, so the walk never floods the file system. */
+const PROC_CONCURRENCY = 8;
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
 /** A turn that starts counts this much until its provider processes have grown. */
@@ -25,6 +32,8 @@ export interface HostedServerMemoryOptions {
   readText?: (path: string) => Promise<string>;
   /** Tests only. Set to false to leave the OOM values of the child processes alone. */
   adjustChildOomScores?: boolean;
+  /** Tests only. The directory that holds the process files, and the process that is main. */
+  proc?: { root: string; pid: number };
 }
 
 interface MemorySample {
@@ -34,8 +43,8 @@ interface MemorySample {
 
 /**
  * Owns the memory reading of a hosted server and of a self-hosted server, also one in Docker. Every
- * 5 seconds it reads the memory of the systemd unit or container (cgroup v2) and of the machine, and
- * gives each new child process of main a high OOM value.
+ * 5 seconds it reads the memory of the systemd unit or container (cgroup v2) and of the machine. Every
+ * 30 seconds it gives each new child process of main a high OOM value.
  * The backend reads the level through `HostMemory` and holds new turns while it is not "ok".
  */
 export class HostedServerMemory implements HostMemory {
@@ -48,6 +57,13 @@ export class HostedServerMemory implements HostMemory {
   #sample: MemorySample | null = null;
   #level: HostMemoryLevel = "ok";
   #readErrorLogged = false;
+  /** When the `/proc` walk last started, or null before the first one. */
+  #lastOomWalkAt: number | null = null;
+  /**
+   * The children that already have their OOM value, with the start time of each. The start time is
+   * part of the identity, so a new process that reuses the number of one that ended is still adjusted.
+   */
+  readonly #adjusted = new Map<number, string>();
 
   constructor(options: HostedServerMemoryOptions) {
     this.#options = options;
@@ -113,7 +129,7 @@ export class HostedServerMemory implements HostMemory {
   #tick = Effect.fn("HostedServerMemory.tick")(function* (this: HostedServerMemory) {
     this.#sample = yield* this.#read();
     this.#level = this.#nextLevel();
-    if (this.#options.adjustChildOomScores !== false) yield* raiseChildOomScores();
+    if (this.#options.adjustChildOomScores !== false && this.#oomWalkDue()) yield* this.#raiseChildOomScores();
     for (const listener of this.#listeners) {
       try {
         listener();
@@ -161,6 +177,22 @@ export class HostedServerMemory implements HostMemory {
     if (free < low) return "low";
     if (this.#level !== "ok" && free < low + RECOVER_MARGIN_BYTES) return "low";
     return "ok";
+  }
+
+  #oomWalkDue(): boolean {
+    const last = this.#lastOomWalkAt;
+    const now = this.#now();
+    // A clock that went back starts a walk too, so the walk cannot wait for a time that has passed.
+    return last === null || now < last || now - last >= OOM_WALK_INTERVAL_MS;
+  }
+
+  #raiseChildOomScores(): Effect.Effect<void> {
+    this.#lastOomWalkAt = this.#now();
+    return raiseChildOomScores(
+      this.#options.proc?.root ?? "/proc",
+      this.#options.proc?.pid ?? process.pid,
+      this.#adjusted,
+    );
   }
 
   #now(): number {
@@ -212,45 +244,71 @@ const readUnitMemory = Effect.fn("HostedServerMemory.readUnit")(function* (read:
  * process itself, and the zygotes and the GPU broker keep the -500 of main. `app.getAppMetrics()` does
  * not list the zygotes or the broker, so the binary is the test: with 500, the OOM killer could kill a
  * zygote, and then no new renderer can start.
+ *
+ * `adjusted` holds the children that are done. A process that is not done is looked at again on the
+ * next walk: an Electron one, because a child that has forked and not yet executed shows the binary of
+ * main, and one whose value could not be written.
  */
-const raiseChildOomScores = Effect.fn("HostedServerMemory.raiseChildOomScores")(function* () {
-  const electron = yield* optionalMemoryIO(() => readlink("/proc/self/exe"));
+const raiseChildOomScores = Effect.fn("HostedServerMemory.raiseChildOomScores")(function* (
+  root: string,
+  mainPid: number,
+  adjusted: Map<number, string>,
+) {
+  const electron = yield* optionalMemoryIO(() => readlink(`${root}/self/exe`));
   const children = new Map<number, number[]>();
-  const entries = yield* optionalMemoryIO(() => readdir("/proc"));
+  const startTimes = new Map<number, string>();
+  const entries = yield* optionalMemoryIO(() => readdir(root));
   yield* Effect.forEach(
     entries ?? [],
     (entry) =>
       Effect.gen(function* () {
         if (!/^\d+$/.test(entry)) return;
-        const stat = yield* optionalMemoryIO(() => readFile(`/proc/${entry}/stat`, "utf8"));
+        const stat = yield* optionalMemoryIO(() => readFile(`${root}/${entry}/stat`, "utf8"));
         if (stat === null) return;
-        // The name can hold spaces, so the fields start after the last ")".
-        const parent = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+        // The name can hold spaces, so the fields start after the last ")". Field 4 is the parent and
+        // field 22 is the start time.
+        const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+        const parent = Number(fields[1]);
         if (!Number.isInteger(parent)) return;
         const siblings = children.get(parent) ?? [];
         siblings.push(Number(entry));
         children.set(parent, siblings);
+        startTimes.set(Number(entry), fields[19] ?? "");
       }),
-    { concurrency: "unbounded", discard: true },
+    { concurrency: PROC_CONCURRENCY, discard: true },
   );
   const descendants: number[] = [];
-  const pending = [...(children.get(process.pid) ?? [])];
+  const pending = [...(children.get(mainPid) ?? [])];
   for (let pid = pending.pop(); pid !== undefined; pid = pending.pop()) {
     descendants.push(pid);
     pending.push(...(children.get(pid) ?? []));
+  }
+  // A process that is gone or has another start time is no longer done.
+  const alive = new Set(descendants);
+  for (const [pid, startedAt] of adjusted) {
+    if (!alive.has(pid) || startTimes.get(pid) !== startedAt) adjusted.delete(pid);
   }
   yield* Effect.forEach(
     descendants,
     (pid) =>
       Effect.gen(function* () {
-        if (electron === null || (yield* optionalMemoryIO(() => readlink(`/proc/${pid}/exe`))) === electron) return;
-        const path = `/proc/${pid}/oom_score_adj`;
+        const startedAt = startTimes.get(pid) ?? "";
+        if (startedAt !== "" && adjusted.get(pid) === startedAt) return;
+        if (electron === null || (yield* optionalMemoryIO(() => readlink(`${root}/${pid}/exe`))) === electron) return;
+        const path = `${root}/${pid}/oom_score_adj`;
         const text = yield* optionalMemoryIO(() => readFile(path, "utf8"));
-        if (text !== null && Number(text.trim()) < CHILD_OOM_SCORE_ADJ) {
-          yield* optionalMemoryIO(() => writeFile(path, String(CHILD_OOM_SCORE_ADJ)));
+        if (text === null) return;
+        if (Number(text.trim()) >= CHILD_OOM_SCORE_ADJ) {
+          if (startedAt !== "") adjusted.set(pid, startedAt);
+          return;
         }
+        const written = yield* memoryIO(() => writeFile(path, String(CHILD_OOM_SCORE_ADJ))).pipe(
+          Effect.as(true),
+          Effect.catch(() => Effect.succeed(false)),
+        );
+        if (written && startedAt !== "") adjusted.set(pid, startedAt);
       }),
-    { concurrency: "unbounded", discard: true },
+    { concurrency: PROC_CONCURRENCY, discard: true },
   );
 });
 

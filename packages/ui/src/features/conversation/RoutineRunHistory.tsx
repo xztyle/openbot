@@ -1,7 +1,7 @@
 import { isRoutineRun, type RoutineRunFields } from "@openbot/contracts/ipc";
 import type { EventActivity, EventRoutineRef, ListEventActivityInput } from "@openbot/contracts/ipc-events";
 import type { AppTextKey } from "@openbot/i18n";
-import { Button, Check, CirclePause, Clock3, Minus, Text, TriangleAlert, X } from "@openbot/ui";
+import { Button, Check, CirclePause, Clock3, Minus, OctagonX, Text, TriangleAlert, X } from "@openbot/ui";
 import { createEffect, createSignal, For, Match, Show, Switch, untrack } from "solid-js";
 import { type TextValue, useText } from "../../text";
 
@@ -124,16 +124,31 @@ export function RoutineRunHistory(props: RoutineRunHistoryProps) {
   );
 }
 
+/** A result a person must read: the run did not do its work, or waits for them. */
+function showsReason(status: RoutineRunFields["status"]): boolean {
+  return status === "failed" || status === "needs-attention";
+}
+
 function RunRow(props: { run: RoutineRunFields; onOpenRun?: ((messageId: string) => void) | undefined }) {
   const text = useText();
-  const { t } = text;
+  const { t, sourceText } = text;
   const label = () =>
     props.run.kind === "manual"
       ? t("routine.history.manualRun", { time: formatRoutineRunTime(props.run.scheduledFor, text) })
       : formatRoutineRunTime(props.run.scheduledFor, text);
+  // The host's words, kept short: a long provider error would push the list down.
+  const reason = () => (showsReason(props.run.status) && props.run.error ? sourceText(props.run.error) : null);
   const content = (
     <>
-      <span>{label()}</span>
+      <span class="agent-routine-run-body">
+        <span class="agent-routine-run-heading">
+          <span>{label()}</span>
+          <span class={`agent-routine-run-status agent-routine-run-status-${props.run.status}`}>
+            {t(RUN_STATUS_LABEL[props.run.status])}
+          </span>
+        </span>
+        <Show when={reason()}>{(message) => <span class="agent-routine-run-error">{message()}</span>}</Show>
+      </span>
       <RoutineRunStatus status={props.run.status} />
     </>
   );
@@ -162,16 +177,10 @@ function ignoredNote(item: EventActivity, text: Pick<TextValue, "t">): string {
   return text.t(item.reason ? IGNORED_REASON_LABELS[item.reason] : "routine.history.ignored");
 }
 
+/** The mark of a result. The row already says the result in words, so the mark is decoration. */
 function RoutineRunStatus(props: { status: RoutineRunFields["status"] }) {
-  const { t } = useText();
-  const label = () => t(RUN_STATUS_LABEL[props.status]);
   return (
-    <span
-      class={`agent-routine-run-icon agent-routine-run-icon-${props.status}`}
-      role="img"
-      aria-label={label()}
-      title={label()}
-    >
+    <span class={`agent-routine-run-icon agent-routine-run-icon-${props.status}`} aria-hidden="true">
       <Show when={props.status === "succeeded"}>
         <Check aria-hidden="true" />
       </Show>
@@ -184,8 +193,11 @@ function RoutineRunStatus(props: { status: RoutineRunFields["status"] }) {
       <Show when={props.status === "queued" || props.status === "running"}>
         <Clock3 aria-hidden="true" />
       </Show>
-      <Show when={props.status === "interrupted" || props.status === "cancelled"}>
+      <Show when={props.status === "interrupted"}>
         <CirclePause aria-hidden="true" />
+      </Show>
+      <Show when={props.status === "cancelled"}>
+        <OctagonX aria-hidden="true" />
       </Show>
     </span>
   );

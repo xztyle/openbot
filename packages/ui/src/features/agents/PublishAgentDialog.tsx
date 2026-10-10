@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   ChevronRight,
+  ConfirmDialog,
   Copy,
   Dialog,
   Heading,
@@ -33,7 +34,7 @@ export interface PublishAgentDialogProps {
 }
 
 type View = "summary" | "context" | "routines";
-type Pending = "publish" | "unpublish" | null;
+type Pending = "publish" | null;
 
 /**
  * Publishes one agent as a link-only template: its instructions, skills and routines. Files and
@@ -44,9 +45,13 @@ export function PublishAgentDialog(props: PublishAgentDialogProps) {
   const { t, format, errorMessage } = useText();
   const [view, setView] = createSignal<View>("summary");
   const [pending, setPending] = createSignal<Pending>(null);
+  const [confirmingUnpublish, setConfirmingUnpublish] = createSignal(false);
+  const [unpublishError, setUnpublishError] = createSignal<string | null>(null);
   const published = () => props.preview?.publication ?? null;
+  const agentName = () => props.preview?.name ?? t("agentTemplate.publish.nameFallback");
   let content: HTMLElement | undefined;
   let closeButton: HTMLButtonElement | undefined;
+  let unpublishButton: HTMLButtonElement | undefined;
   let primaryButton: HTMLButtonElement | undefined;
 
   /**
@@ -74,6 +79,20 @@ export function PublishAgentDialog(props: PublishAgentDialogProps) {
     }
   }
 
+  /**
+   * Unpublishing breaks the link for everyone who has it, so it asks first. A failure stays in the
+   * question, where the person is looking, and the question stays open.
+   */
+  async function unpublish(): Promise<void> {
+    setUnpublishError(null);
+    try {
+      await props.onUnpublish();
+      setConfirmingUnpublish(false);
+    } catch (error) {
+      setUnpublishError(errorMessage(error, t("agentTemplate.publish.unpublishFailed")));
+    }
+  }
+
   /** A copy takes no time and changes nothing, so it has no pending state that could dim the buttons. */
   async function copyLink(): Promise<void> {
     if (pending()) return;
@@ -87,155 +106,186 @@ export function PublishAgentDialog(props: PublishAgentDialogProps) {
   }
 
   function changeOpen(open: boolean): void {
-    if (!open) setView("summary");
+    if (!open) {
+      setView("summary");
+      setConfirmingUnpublish(false);
+      setUnpublishError(null);
+    }
     props.onOpenChange(open);
   }
 
   return (
-    <Dialog.Root open={props.open} onOpenChange={changeOpen}>
-      <Dialog.Portal>
-        <Dialog.Overlay class="agent-template-backdrop">
-          <Dialog.Content
-            ref={content}
-            as="section"
-            class="agent-template-dialog"
-            aria-busy={pending() ? "true" : undefined}
-            onOpenAutoFocus={(event) => {
-              // Unpublish is the first control in the corner; the first focus must not land on it.
-              event.preventDefault();
-              closeButton?.focus({ preventScroll: true });
-            }}
-          >
-            <Dialog.Title class="sr-only">
-              {t("agentTemplate.publish.title", {
-                name: props.preview?.name ?? t("agentTemplate.publish.nameFallback"),
-              })}
-            </Dialog.Title>
-            <Dialog.Description class="sr-only">{t("agentTemplate.publish.description")}</Dialog.Description>
-            <Show when={published() && view() === "summary"}>
-              <Badge variant="success-light" class="agent-template-status">
-                {t("agentTemplate.publish.published")}
-              </Badge>
-            </Show>
-            <div class="agent-template-corner-actions">
-              <Show when={published() && view() === "summary"}>
-                <IconButton
-                  label={
-                    pending() === "unpublish"
-                      ? t("agentTemplate.publish.unpublishing")
-                      : t("agentTemplate.publish.unpublish")
-                  }
-                  variant="ghost"
-                  disabled={pending() === "unpublish"}
-                  onClick={() => void run("unpublish", props.onUnpublish, t("agentTemplate.publish.unpublishFailed"))}
-                >
-                  <Link2Off />
-                </IconButton>
-              </Show>
-              <IconButton ref={closeButton} label={t("common.close")} variant="ghost" onClick={() => changeOpen(false)}>
-                <X />
-              </IconButton>
-            </div>
-
-            <Show
-              when={props.preview}
-              fallback={
-                <div class="agent-template-body">
-                  <Text tone="muted" role="status">
-                    {props.loading ? t("agentTemplate.install.loading") : ""}
-                  </Text>
-                </div>
-              }
+    <>
+      <Dialog.Root open={props.open} onOpenChange={changeOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay class="agent-template-backdrop">
+            <Dialog.Content
+              ref={content}
+              as="section"
+              class="agent-template-dialog"
+              aria-busy={pending() ? "true" : undefined}
+              onOpenAutoFocus={(event) => {
+                // Unpublish is the first control in the corner; the first focus must not land on it.
+                event.preventDefault();
+                closeButton?.focus({ preventScroll: true });
+              }}
             >
-              {(preview) => (
-                <Show
-                  when={view() === "summary"}
-                  fallback={
-                    <TemplateDetailView
-                      view={view() === "context" ? "context" : "routines"}
-                      preview={preview()}
-                      onBack={() => setView("summary")}
-                    />
-                  }
+              <Dialog.Title class="sr-only">{t("agentTemplate.publish.title", { name: agentName() })}</Dialog.Title>
+              {/* The summary shows this text. Every other state keeps it for assistive technology. */}
+              <Show when={!(props.preview && view() === "summary")}>
+                <Dialog.Description class="sr-only">{t("agentTemplate.publish.description")}</Dialog.Description>
+              </Show>
+              <Show when={published() && view() === "summary"}>
+                <Badge variant="success-light" class="agent-template-status">
+                  {t("agentTemplate.publish.published")}
+                </Badge>
+              </Show>
+              <div class="agent-template-corner-actions">
+                <Show when={published() && view() === "summary"}>
+                  <IconButton
+                    ref={unpublishButton}
+                    label={t("agentTemplate.publish.unpublish")}
+                    variant="ghost"
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      setUnpublishError(null);
+                      setConfirmingUnpublish(true);
+                    }}
+                  >
+                    <Link2Off />
+                  </IconButton>
+                </Show>
+                <IconButton
+                  ref={closeButton}
+                  label={t("common.close")}
+                  variant="ghost"
+                  onClick={() => changeOpen(false)}
                 >
+                  <X />
+                </IconButton>
+              </div>
+
+              <Show
+                when={props.preview}
+                fallback={
                   <div class="agent-template-body">
-                    <header class="agent-template-identity">
-                      <AgentAvatar agent={preview()} motion="idle" class="agent-template-avatar" />
-                      <Heading as="h2" size="md" class="agent-template-name">
-                        {preview().name}
-                      </Heading>
-                      <Show when={preview().updatedAt}>
-                        {(updatedAt) => (
-                          <Text tone="muted" variant="caption">
-                            {t("agentTemplate.publish.lastUpdated", { date: formatShortDate(updatedAt(), format) })}
-                          </Text>
-                        )}
-                      </Show>
-                      <Text tone="secondary" class="agent-template-description">
-                        {preview().description}
-                      </Text>
-                    </header>
-
-                    <ItemGroup surface="subtle" class="agent-template-rows">
-                      <TemplateRow
-                        title={t("agentTemplate.publish.context")}
-                        detail={contextSummary(preview(), t)}
-                        onClick={() => setView("context")}
-                      />
-                      <TemplateRow
-                        title={t("agentTemplate.section.routines")}
-                        detail={routinesSummary(preview().routines, t)}
-                        onClick={() => setView("routines")}
-                      />
-                    </ItemGroup>
+                    <Text tone="muted" role="status">
+                      {props.loading ? t("agentTemplate.install.loading") : ""}
+                    </Text>
                   </div>
+                }
+              >
+                {(preview) => (
+                  <Show
+                    when={view() === "summary"}
+                    fallback={
+                      <TemplateDetailView
+                        view={view() === "context" ? "context" : "routines"}
+                        preview={preview()}
+                        onBack={() => setView("summary")}
+                      />
+                    }
+                  >
+                    <div class="agent-template-body">
+                      <header class="agent-template-identity">
+                        <AgentAvatar agent={preview()} motion="idle" class="agent-template-avatar" />
+                        <Heading as="h2" size="md" class="agent-template-name">
+                          {preview().name}
+                        </Heading>
+                        <Show when={preview().updatedAt}>
+                          {(updatedAt) => (
+                            <Text tone="muted" variant="caption">
+                              {t("agentTemplate.publish.lastUpdated", { date: formatShortDate(updatedAt(), format) })}
+                            </Text>
+                          )}
+                        </Show>
+                        <Text tone="secondary" class="agent-template-description">
+                          {preview().description}
+                        </Text>
+                      </header>
 
-                  <footer class="agent-template-actions">
-                    <Show
-                      when={published()}
-                      fallback={
+                      <div class="agent-template-scope">
+                        <Dialog.Description>{t("agentTemplate.publish.description")}</Dialog.Description>
+                        <Text tone="muted" variant="caption">
+                          {t("agentTemplate.publish.audience")}
+                        </Text>
+                      </div>
+
+                      <ItemGroup surface="subtle" class="agent-template-rows">
+                        <TemplateRow
+                          title={t("agentTemplate.publish.context")}
+                          detail={contextSummary(preview(), t)}
+                          onClick={() => setView("context")}
+                        />
+                        <TemplateRow
+                          title={t("agentTemplate.section.routines")}
+                          detail={routinesSummary(preview().routines, t)}
+                          onClick={() => setView("routines")}
+                        />
+                      </ItemGroup>
+                    </div>
+
+                    <footer class="agent-template-actions">
+                      <Show
+                        when={published()}
+                        fallback={
+                          <Button
+                            ref={primaryButton}
+                            type="button"
+                            variant="default"
+                            disabled={pending() === "publish"}
+                            onClick={() =>
+                              void run("publish", props.onPublish, t("agentTemplate.publish.publishFailed"))
+                            }
+                          >
+                            {pending() === "publish"
+                              ? t("agentTemplate.publish.publishing")
+                              : t("agentTemplate.publish.publish")}
+                          </Button>
+                        }
+                      >
+                        <Button
+                          type="button"
+                          variant="outline"
+                          class="agent-template-copy"
+                          onClick={() => void copyLink()}
+                        >
+                          <Copy class="size-4" aria-hidden="true" />
+                          {t("agentTemplate.publish.copyLink")}
+                        </Button>
                         <Button
                           ref={primaryButton}
                           type="button"
                           variant="default"
                           disabled={pending() === "publish"}
-                          onClick={() => void run("publish", props.onPublish, t("agentTemplate.publish.publishFailed"))}
+                          onClick={() => void run("publish", props.onPublish, t("agentTemplate.publish.updateFailed"))}
                         >
                           {pending() === "publish"
-                            ? t("agentTemplate.publish.publishing")
-                            : t("agentTemplate.publish.publish")}
+                            ? t("agentTemplate.publish.updating")
+                            : t("agentTemplate.publish.update")}
                         </Button>
-                      }
-                    >
-                      <Button
-                        type="button"
-                        variant="outline"
-                        class="agent-template-copy"
-                        onClick={() => void copyLink()}
-                      >
-                        <Copy class="size-4" aria-hidden="true" />
-                        {t("agentTemplate.publish.copyLink")}
-                      </Button>
-                      <Button
-                        ref={primaryButton}
-                        type="button"
-                        variant="default"
-                        disabled={pending() === "publish"}
-                        onClick={() => void run("publish", props.onPublish, t("agentTemplate.publish.updateFailed"))}
-                      >
-                        {pending() === "publish"
-                          ? t("agentTemplate.publish.updating")
-                          : t("agentTemplate.publish.update")}
-                      </Button>
-                    </Show>
-                  </footer>
-                </Show>
-              )}
-            </Show>
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
+                      </Show>
+                    </footer>
+                  </Show>
+                )}
+              </Show>
+            </Dialog.Content>
+          </Dialog.Overlay>
+        </Dialog.Portal>
+      </Dialog.Root>
+      <ConfirmDialog
+        open={confirmingUnpublish()}
+        onCancel={() => setConfirmingUnpublish(false)}
+        onConfirm={unpublish}
+        title={t("agentTemplate.publish.unpublishTitle", { name: agentName() })}
+        description={t("agentTemplate.publish.unpublishDescription")}
+        confirmLabel={t("agentTemplate.publish.unpublish")}
+        pendingLabel={t("agentTemplate.publish.unpublishing")}
+        error={unpublishError() ?? undefined}
+        initialFocus="cancel"
+        restoreFocusTarget={published() ? unpublishButton : closeButton}
+      />
+    </>
   );
 }
 

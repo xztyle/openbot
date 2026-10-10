@@ -10,8 +10,9 @@ import {
   routineScheduleFromDraft,
   routineScheduleToDraft,
 } from "@openbot/ui/features/conversation/routine-schedule-saved";
-import { type TextValue, useText } from "@openbot/ui/text";
+import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal } from "solid-js";
+import { routineNextRunLabel, routineTimeZoneLabel } from "./routine-next-run";
 import { agentRoutinesPort } from "./routines-port";
 
 export interface RoutineChatCardProps {
@@ -117,8 +118,15 @@ export function RoutineChatCard(props: RoutineChatCardProps) {
       kinds={ROUTINE_SAVED_DRAFT_KINDS}
       state={state()}
       errorText={errorText()}
-      nextRunLabel={nextRunLabel(routine(), text)}
-      timeZoneLabel={timeZoneLabel(routine(), text)}
+      nextRunLabel={routineNextRunLabel(
+        {
+          active: routine().active,
+          timezone: routine().timezone,
+          nextRunAt: routine().trigger.nextRunAt,
+        },
+        text,
+      )}
+      timeZoneLabel={routineTimeZoneLabel(routine().timezone, text)}
       onChange={(next) => {
         pending = next;
         setDraft(next);
@@ -150,38 +158,4 @@ export function RoutineChatCard(props: RoutineChatCardProps) {
 /** Both come from `routineScheduleFromDraft`, so their keys are in the same order. */
 function sameSchedule(left: RoutineSchedule, right: RoutineSchedule): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function localTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-}
-
-/** "Thu, Sep 25 at 8:20 AM", in the zone the routine runs in. */
-function nextRunLabel(routine: RoutineFields, text: Pick<TextValue, "t" | "format">): string | undefined {
-  const nextRunAt = routine.trigger.nextRunAt;
-  if (!routine.active || !nextRunAt) return undefined;
-  const date = new Date(nextRunAt);
-  if (Number.isNaN(date.getTime())) return undefined;
-  const timeZone = knownTimeZone(routine.timezone) ?? localTimeZone();
-  const day = text.format.date(date, { weekday: "short", month: "short", day: "numeric", timeZone });
-  const time = text.format.date(date, { hour: "numeric", minute: "2-digit", timeZone });
-  return text.t("routine.card.nextRunAt", { day, time });
-}
-
-/** "Warsaw time", only when the routine does not run in the viewer's zone. */
-function timeZoneLabel(routine: RoutineFields, text: Pick<TextValue, "t">): string | undefined {
-  const timeZone = knownTimeZone(routine.timezone);
-  if (!timeZone || timeZone === localTimeZone()) return undefined;
-  const city = timeZone.split("/").at(-1)?.replaceAll("_", " ");
-  return text.t("routine.card.timeZone", { city: city ?? timeZone });
-}
-
-function knownTimeZone(timeZone: string | undefined): string | undefined {
-  if (!timeZone) return undefined;
-  try {
-    new Intl.DateTimeFormat(undefined, { timeZone });
-    return timeZone;
-  } catch {
-    return undefined;
-  }
 }

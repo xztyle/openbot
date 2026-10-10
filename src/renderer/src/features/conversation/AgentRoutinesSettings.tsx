@@ -50,11 +50,13 @@ import {
   routineScheduleToDraft,
 } from "@openbot/ui/features/conversation/routine-schedule-saved";
 import { type RoutineText, routineScheduleSummary } from "@openbot/ui/features/conversation/routine-schedule-ui";
+import { limitNoteText } from "@openbot/ui/features/settings/limit-note";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createSignal, createStore, For, onCleanup, Show, untrack } from "solid-js";
 import { type DesktopAnalyticsScope, desktopAnalytics } from "../../analytics";
 import { writeClipboardText } from "../../clipboard";
+import { localTimeZone, routineNextRunLabel, routineZoneName } from "./routine-next-run";
 import type { RoutineEditorRecord, RoutinesPort } from "./routines-port";
 
 export interface RoutineSelectionRequest {
@@ -93,6 +95,12 @@ const LIMIT_POLICY_LABELS = {
   skip: "routine.settings.limitPolicy.skip",
 } as const satisfies Record<RoutineLimitPolicy, AppTextKey>;
 
+/** A last run that the list row calls out. Other results are not worth a line in a list. */
+const LAST_RUN_PROBLEM = {
+  failed: "routine.settings.lastRunFailed",
+  "needs-attention": "routine.settings.lastRunNeedsAttention",
+} as const satisfies Partial<Record<RoutineRunFields["status"], AppTextKey>>;
+
 const NEW_ROUTINE_SCHEDULE: RoutineScheduleDraft = { kind: "daily", days: ROUTINE_EVERY_DAY, time: "09:00" };
 
 interface AgentRoutinesSettingsProps {
@@ -108,10 +116,14 @@ interface AgentRoutinesSettingsProps {
 
 export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
   const text = useText();
-  const { t, errorMessage } = text;
+  const { t, format, errorMessage } = text;
+  const limitNote = limitNoteText(t, format);
   const [routines, setRoutines] = createSignal<RoutineEditorRecord[]>([]);
   const [draft, setDraft] = createSignal<RoutineDraft | null>(null);
   const [runs, setRuns] = createSignal<RoutineRunFields[]>([]);
+  // The newest result of each routine whose runs were loaded in this panel. The list row reads it,
+  // so a routine that was opened shows "Last run failed" after the person goes back to the list.
+  const [lastRunStatus, setLastRunStatus] = createSignal<Record<string, RoutineRunFields["status"]>>({});
   // Webhook state that is not part of the saved routine. `secret` is the one-time reveal after a save or a regeneration.
   const [webhook, setWebhook] = createStore<WebhookEditorState>({
     secret: null,
@@ -158,7 +170,16 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
 
   async function loadRuns(routineId: string): Promise<void> {
     try {
-      setRuns(await props.port.listRuns(routineId, 10));
+      const next = await props.port.listRuns(routineId, 10);
+      setRuns(next);
+      const latest = next.reduce<RoutineRunFields | undefined>(
+        (best, run) => (!best || Date.parse(run.scheduledFor) > Date.parse(best.scheduledFor) ? run : best),
+        undefined,
+      );
+      setLastRunStatus((current) => {
+        const { [routineId]: _previous, ...others } = current;
+        return latest ? { ...others, [routineId]: latest.status } : others;
+      });
     } catch (caught) {
       setError(errorMessage(caught, t("routine.settings.loadRunsFailed")));
     }
@@ -178,6 +199,7 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
     () => props.port.ownerId,
     () => {
       closeEditor();
+      setLastRunStatus({});
       setLoading(true);
       setRoutinesLoaded(false);
       void untrack(loadRoutines);
@@ -368,6 +390,34 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
   function discardChanges(): void {
     const target = pendingExit();
     if (target) performExit(target);
+  }
+
+  /**
+   * Why the draft cannot be saved, in plain words, or null. It is the same test as `validDraft`, in
+   * the order of the form: name, instruction, then when it runs.
+   */
+  function draftProblem(current: RoutineDraft): string | null {
+    if (!current.name.trim()) return t("routine.settings.problemName");
+    if (!current.instruction.trim()) return t("routine.settings.problemInstruction");
+    if (current.triggerKind === "webhook") {
+      return eventFilterDraftsValid(current.eventFilters) ? null : t("routine.settings.problemFilters");
+    }
+    return routineDraftProblem(current.scheduleDraft, t);
+  }
+
+  /** "Next run Thu, Sep 25 at 8:20 AM · Warsaw time", or only the zone when no next run is known yet. */
+  function scheduleNote(current: RoutineDraft): string {
+    const saved = savedRoutine();
+    const timezone = (current.id ? saved?.timezone : undefined) ?? localTimeZone();
+    const zone = routineZoneName(timezone, text);
+    // The host's next run belongs to the saved schedule. A schedule that was edited has none yet.
+    const unchanged =
+      saved !== undefined &&
+      current.active === saved.active &&
+      JSON.stringify(current.schedule) === JSON.stringify(routineScheduleOf(saved));
+    const nextRunAt = unchanged && "nextRunAt" in saved.trigger ? saved.trigger.nextRunAt : undefined;
+    const when = routineNextRunLabel({ active: current.active, timezone, nextRunAt }, text);
+    return when ? `${t("routine.card.nextRun", { when })} · ${zone}` : t("routine.settings.timeZoneNote", { zone });
   }
 
   function changeDraft(change: (current: RoutineDraft) => RoutineDraft): void {
@@ -611,6 +661,9 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                             <small>
                               {routine.active ? routineListSummary(routine, text) : t("routine.settings.paused")}
                             </small>
+                            <Show when={lastRunProblemKey(lastRunStatus()[routine.id])}>
+                              {(key) => <small class="agent-routine-row-alert">{t(key())}</small>}
+                            </Show>
                           </span>
                         </Button>
                       )}
@@ -640,18 +693,21 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                     when={!confirmDelete()}
                     fallback={
                       <>
+                        <Button
+                          ref={(element) => queueMicrotask(() => element.focus())}
+                          variant="secondary"
+                          type="button"
+                          size="sm"
+                          onClick={() => setConfirmDelete(false)}
+                        >
+                          {t("common.cancel")}
+                        </Button>
                         <Button variant="destructive" type="button" size="sm" onClick={() => void deleteRoutine()}>
                           {t("routine.settings.deleteNow")}
-                        </Button>
-                        <Button variant="secondary" type="button" size="sm" onClick={() => setConfirmDelete(false)}>
-                          {t("common.cancel")}
                         </Button>
                       </>
                     }
                   >
-                    <Button variant="destructive" type="button" size="sm" onClick={() => setConfirmDelete(true)}>
-                      {t("common.delete")}
-                    </Button>
                     <Show
                       when={dirty()}
                       fallback={
@@ -668,6 +724,7 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                             disabled={!current().id || testing() || !validDraft(current())}
                             loading={testing()}
                             loadingLabel={t("routine.settings.starting")}
+                            aria-describedby={!current().id ? "agent-routine-action-note" : undefined}
                             onClick={() => void testRun()}
                           >
                             {t("routine.settings.testRun")}
@@ -681,21 +738,61 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                         disabled={saving() || !validDraft(current())}
                         loading={saving()}
                         loadingLabel={t("common.saving")}
+                        aria-describedby={draftProblem(current()) ? "agent-routine-action-note" : undefined}
                         onClick={() => void saveDraft()}
                       >
                         {t("common.save")}
                       </Button>
                     </Show>
+                    {/* Delete comes last, away from Save, and it asks again before it acts. */}
+                    <Button variant="destructive" type="button" size="sm" onClick={() => setConfirmDelete(true)}>
+                      {t("common.delete")}
+                    </Button>
                   </Show>
                 </div>
               </div>
+              {/* Why Save or Test run is off, and what Delete does, in the place of the buttons. */}
+              <Show
+                when={
+                  confirmDelete()
+                    ? t(current().id ? "routine.settings.deleteConsequence" : "routine.settings.discardNew", {
+                        name: current().name.trim() || t("routine.settings.unnamed"),
+                      })
+                    : (draftProblem(current()) ?? (!current().id ? t("routine.settings.testNeedsSave") : null))
+                }
+              >
+                {(note) => (
+                  <Text
+                    id="agent-routine-action-note"
+                    variant="caption"
+                    tone={confirmDelete() ? "danger" : "muted"}
+                    role={confirmDelete() ? "alert" : "status"}
+                  >
+                    {note()}
+                  </Text>
+                )}
+              </Show>
+              <Show when={error()}>
+                {(message) => (
+                  <p class="agent-settings-save-error" role="alert">
+                    {message()}
+                  </p>
+                )}
+              </Show>
 
               <label class="settings-field">
-                <span>{t("routine.settings.name")}</span>
+                <span>
+                  {t("routine.settings.name")}{" "}
+                  <span class="agent-routine-required" aria-hidden="true">
+                    {t("routine.settings.required")}
+                  </span>
+                </span>
                 <Input
                   value={current().name}
                   placeholder={t("routine.settings.namePlaceholder")}
+                  aria-required="true"
                   maxlength={INPUT_LIMITS.routineName}
+                  limitNote={limitNote}
                   onValueChange={(name) => changeDraft((value) => ({ ...value, name }))}
                 />
               </label>
@@ -732,11 +829,23 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
                     }
                   />
                 </Show>
+                <Show when={current().triggerKind === "schedule"}>
+                  <Text class="agent-routine-next-run" variant="caption" tone="muted">
+                    {scheduleNote(current())}
+                  </Text>
+                </Show>
               </section>
               <div class="settings-field agent-routine-instruction-field">
-                <span id="agent-routine-instruction-label">{t("routine.settings.instruction")}</span>
+                <span id="agent-routine-instruction-label">
+                  {t("routine.settings.instruction")}{" "}
+                  <span class="agent-routine-required" aria-hidden="true">
+                    {t("routine.settings.required")}
+                  </span>
+                </span>
                 <Textarea
                   aria-labelledby="agent-routine-instruction-label"
+                  aria-required="true"
+                  limitNote={limitNote}
                   value={current().instruction}
                   placeholder={
                     props.port.ownerNoun === "channel"
@@ -785,7 +894,7 @@ export function AgentRoutinesSettings(props: AgentRoutinesSettingsProps) {
             </div>
           )}
         </Show>
-        <Show when={error()}>
+        <Show when={!draft() ? error() : null}>
           {(message) => (
             <p class="agent-settings-save-error" role="alert">
               {message()}
@@ -822,6 +931,10 @@ function routineListSummary(routine: RoutineEditorRecord, text: RoutineText): st
   const draft = routineScheduleToDraft(schedule);
   if (draft.kind === "custom") return routineScheduleSummary(schedule, false, text);
   return routineDraftSummary(draft, text);
+}
+
+function lastRunProblemKey(status: RoutineRunFields["status"] | undefined): AppTextKey | null {
+  return status === "failed" || status === "needs-attention" ? LAST_RUN_PROBLEM[status] : null;
 }
 
 function isEventRoutine(routine: RoutineEditorRecord): routine is EventRoutine {

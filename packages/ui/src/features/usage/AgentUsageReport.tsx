@@ -1,5 +1,5 @@
 import type { AnalyticsTotals, HostAnalytics } from "@openbot/contracts/ipc";
-import type { AppTextKey } from "@openbot/i18n";
+import type { AppFormat, AppTextKey } from "@openbot/i18n";
 import { Button, SlidingTabs } from "@openbot/ui";
 import { createMemo, createStore, For, onSettled, Show } from "solid-js";
 import { useText } from "../../text";
@@ -45,6 +45,14 @@ const UPDATED_AT_FORMAT: Intl.DateTimeFormatOptions = {
   minute: "numeric",
   second: "numeric",
 };
+
+/** `2026-08-25` as "Aug 25, 2026". The day has no zone, so the date is built from its parts, not parsed as UTC. */
+function formatUsageDay(value: string, format: AppFormat): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
+  if (!match) return value;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? value : format.date(date, { dateStyle: "medium" });
+}
 
 function Amount(props: { value: number | null; cost?: boolean }) {
   const text = useText();
@@ -303,7 +311,7 @@ export function AgentUsageReport(props: {
                   <For each={[...props.result.daily].reverse()}>
                     {(day) => (
                       <tr>
-                        <th scope="row">{day.date}</th>
+                        <th scope="row">{formatUsageDay(day.date, format)}</th>
                         <td>{usageExactCost(day.estimatedCostUsd, text)}</td>
                         <td>{usageNumber(day.processedTokens, text)}</td>
                       </tr>

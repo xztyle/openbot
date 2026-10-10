@@ -193,6 +193,8 @@
     "./features/settings/SettingsMobileConnectTab": "./src/features/settings/SettingsMobileConnectTab.tsx",
     "./features/settings/SettingsProfileTab": "./src/features/settings/SettingsProfileTab.tsx",
     "./features/settings/SettingsUpdatesTab": "./src/features/settings/SettingsUpdatesTab.tsx",
+    "./features/settings/limit-note": "./src/features/settings/limit-note.ts",
+    "./features/settings/unsaved-changes": "./src/features/settings/unsaved-changes.tsx",
     "./features/settings/app-settings": "./src/features/settings/app-settings.ts",
     "./features/settings/marketplace-plugins": "./src/features/settings/marketplace-plugins.ts",
     "./features/settings/mcp-connect-auth": "./src/features/settings/mcp-connect-auth.ts",

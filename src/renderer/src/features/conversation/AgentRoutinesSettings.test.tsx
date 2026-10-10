@@ -1,5 +1,5 @@
 import type { Routine, RoutineFields, RoutineRun } from "@openbot/contracts/ipc";
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMockOpenBot, type MockOpenBotControls } from "../../preview/mock-openbot";
@@ -256,7 +256,7 @@ describe("AgentRoutinesSettings", () => {
     render(() => <AgentRoutinesSettings port={agentRoutinesPort("chief")} onCountChange={vi.fn()} />);
 
     await fireEvent.click(await screen.findByRole("button", { name: /Morning brief/ }));
-    expect(await screen.findByRole("img", { name: "Needs attention" })).toBeInTheDocument();
+    expect(await screen.findByText("Needs attention")).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("switch", { name: "Routine active" }));
     expect(updateRoutine).not.toHaveBeenCalled();
@@ -273,6 +273,91 @@ describe("AgentRoutinesSettings", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Delete now" }));
     await waitFor(() => expect(deleteRoutine).toHaveBeenCalledWith({ agentId: "chief", routineId: "routine-1" }));
     expect(await screen.findByText("No routines yet.")).toBeInTheDocument();
+  });
+
+  it("marks the required fields and names the first problem that keeps Save off", async () => {
+    setupOpenBot();
+    render(() => <AgentRoutinesSettings port={agentRoutinesPort("chief")} onCountChange={vi.fn()} />);
+
+    await screen.findByText("No routines yet.");
+    await fireEvent.click(screen.getByRole("button", { name: "Create Routine" }));
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeRequired();
+    expect(screen.getByRole("textbox", { name: "Instruction" })).toBeRequired();
+    expect(screen.getByText("Enter a name to save this routine.")).toBeInTheDocument();
+    // A new routine has no id, so the test run waits for a save. The reason is the same sentence.
+    expect(screen.getByRole("button", { name: "Test run" })).toBeDisabled();
+
+    await fireEvent.input(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Morning brief" } });
+    expect(screen.getByText("Write what the agent should do to save this routine.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    await fireEvent.input(screen.getByRole("textbox", { name: "Instruction" }), {
+      target: { value: "Summarize the overnight changes." },
+    });
+    expect(screen.queryByText("Write what the agent should do to save this routine.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    expect(screen.getByText(/^Runs use .* time\.$/)).toBeInTheDocument();
+  });
+
+  it("shows the next run and the time zone of a saved routine", async () => {
+    setupOpenBot({ routines: { chief: [routine] } });
+    render(() => <AgentRoutinesSettings port={agentRoutinesPort("chief")} onCountChange={vi.fn()} />);
+
+    await fireEvent.click(await screen.findByRole("button", { name: /Morning brief/ }));
+    expect(await screen.findByText(/^Next run .* · Warsaw time$/)).toBeInTheDocument();
+    // An edit makes the host's next run stale, so the line keeps only the zone until the save.
+    await fireEvent.click(screen.getByRole("switch", { name: "Routine active" }));
+    expect(screen.queryByText(/^Next run /)).not.toBeInTheDocument();
+    expect(screen.getByText("Runs use Warsaw time.")).toBeInTheDocument();
+  });
+
+  it("shows each run's result in words, why a run failed, and the failure in the list", async () => {
+    const failed: RoutineRun = {
+      ...run,
+      id: "run-failed",
+      scheduledFor: "2026-08-26T05:00:00.000Z",
+      status: "failed",
+      error: "The provider is signed out.",
+    };
+    const cancelled: RoutineRun = { ...run, id: "run-cancelled", status: "cancelled" };
+    const interrupted: RoutineRun = {
+      ...run,
+      id: "run-interrupted",
+      scheduledFor: "2026-08-24T05:00:00.000Z",
+      status: "interrupted",
+    };
+    const mock = setupOpenBot({ routines: { chief: [routine] } });
+    vi.spyOn(mock.api.agent, "listRoutineRuns").mockResolvedValue([cancelled, failed, interrupted]);
+    render(() => <AgentRoutinesSettings port={agentRoutinesPort("chief")} onCountChange={vi.fn()} />);
+
+    await fireEvent.click(await screen.findByRole("button", { name: /Morning brief/ }));
+    const history = await screen.findByRole("region", { name: "History" });
+    expect(within(history).getByText("Failed")).toBeInTheDocument();
+    expect(within(history).getByText("The provider is signed out.")).toBeInTheDocument();
+    expect(within(history).getByText("Cancelled")).toBeInTheDocument();
+    expect(within(history).getByText("Interrupted")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Routines" }));
+    expect(await screen.findByText("Last run failed")).toBeInTheDocument();
+  });
+
+  it("puts Delete after Save, and says what Delete removes before it acts", async () => {
+    const mock = setupOpenBot({ routines: { chief: [routine] } });
+    const deleteRoutine = vi.spyOn(mock.api.agent, "deleteRoutine");
+    render(() => <AgentRoutinesSettings port={agentRoutinesPort("chief")} onCountChange={vi.fn()} />);
+
+    await fireEvent.click(await screen.findByRole("button", { name: /Morning brief/ }));
+    await fireEvent.click(screen.getByRole("switch", { name: "Routine active" }));
+    const save = screen.getByRole("button", { name: "Save" });
+    const remove = screen.getByRole("button", { name: "Delete" });
+    expect(save.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await fireEvent.click(remove);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Delete “Morning brief”? It stops running and its run history is removed. You cannot undo this.",
+    );
+    expect(deleteRoutine).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus());
   });
 
   it("tells the user how a routine stays silent when there is nothing to report", async () => {

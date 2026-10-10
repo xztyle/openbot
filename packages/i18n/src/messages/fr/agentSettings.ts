@@ -26,7 +26,6 @@ export const messages = {
 
   "agentSettings.avatar.edit": "Modifier l’avatar de l’agent",
   "agentSettings.avatar.editor": "Éditeur d’avatar",
-  "agentSettings.avatar.attachFiles": "Joindre des fichiers",
   "agentSettings.avatar.image": "Image",
   "agentSettings.avatar.replaceImage": "Remplacer l’image",
   "agentSettings.avatar.uploadImage": "Importer une image",

@@ -24,7 +24,6 @@ export const messages = {
   "agentSettings.instructionsPlaceholder": "Bu ajanın amacı nedir",
   "agentSettings.avatar.edit": "Ajan avatarını düzenle",
   "agentSettings.avatar.editor": "Avatar düzenleyici",
-  "agentSettings.avatar.attachFiles": "Dosya ekle",
   "agentSettings.avatar.image": "Görsel",
   "agentSettings.avatar.replaceImage": "Görseli değiştir",
   "agentSettings.avatar.uploadImage": "Görsel yükle",

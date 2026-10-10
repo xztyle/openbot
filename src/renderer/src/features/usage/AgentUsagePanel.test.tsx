@@ -49,11 +49,12 @@ describe("Agent usage", () => {
     const summary = await screen.findByRole("region", { name: "Usage summary" });
     expect(summary).toHaveTextContent("3 sessions");
     // A report row names an agent by id, so the table has to join it to the agent list the
-    // panel read, and still name an agent the list does not carry.
+    // panel read. An agent the list does not carry was deleted, and its id is never shown.
     await fireEvent.click(screen.getByRole("tab", { name: "Agent" }));
     const agents = await screen.findByRole("table", { name: "Usage by agent" });
     expect(within(agents).getByRole("rowheader", { name: "Chief" })).toBeInTheDocument();
-    expect(within(agents).getByRole("rowheader", { name: "ghost-agent" })).toBeInTheDocument();
+    expect(within(agents).getByRole("rowheader", { name: "Deleted agent" })).toBeInTheDocument();
+    expect(within(agents).queryByText("ghost-agent")).not.toBeInTheDocument();
     await pick("Usage agents", "Chief");
     await vi.waitFor(() =>
       expect(screen.getByRole("region", { name: "Usage summary" })).toHaveTextContent("1 session"),
@@ -82,6 +83,21 @@ describe("Agent usage", () => {
       expect(screen.getByRole("region", { name: "Usage summary" })).toHaveTextContent("4 sessions"),
     );
     expect(screen.getByRole("table", { name: "Daily usage and cost" })).toBe(day);
+  });
+  it("says the cost is an estimate and writes each day as a date, not as an ISO string", async () => {
+    const data = result();
+    data.totals = { ...data.totals, turns: 1, estimatedCostUsd: 0.5 };
+    data.daily = [{ ...emptyAnalyticsTotals(), estimatedCostUsd: 0.5, processedTokens: 10, date: "2026-08-25" }];
+    vi.mocked(window.openbot.agent.getHostAnalytics).mockResolvedValue(data);
+    show();
+
+    const summary = await screen.findByRole("region", { name: "Usage summary" });
+    expect(summary).toHaveTextContent("Estimate in USD, not a bill");
+    await fireEvent.click(screen.getByRole("tab", { name: "Day" }));
+    const table = await screen.findByRole("table", { name: "Daily usage and cost" });
+    expect(within(table).queryByText("2026-08-25")).not.toBeInTheDocument();
+    expect(within(table).getByRole("rowheader")).toHaveTextContent(/2026/);
+    expect(within(table).getByRole("rowheader")).toHaveTextContent(/25/);
   });
   it("loads usage, switches the period, and shows empty data", async () => {
     // Electron must clone this payload before it can reach the main process.

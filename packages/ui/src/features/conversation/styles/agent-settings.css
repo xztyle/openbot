@@ -287,6 +287,7 @@
 .agent-routine-editor-actions {
   display: flex;
   min-height: 34px;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -306,7 +307,7 @@
 
 .agent-routine-action-buttons {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 7px;
 }
@@ -462,9 +463,64 @@
 
 .agent-routine-run-icon-running,
 .agent-routine-run-icon-queued,
-.agent-routine-run-icon-interrupted,
 .agent-routine-run-icon-cancelled {
   color: var(--openbot-text-muted);
+}
+
+/* Interrupted work did not finish and nobody chose that, so it is not drawn like a chosen stop. */
+.agent-routine-run-icon-interrupted {
+  color: var(--openbot-warning);
+}
+
+/* The time and the result in words, and under them why a failed run failed. */
+.agent-routine-run-body {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: var(--openbot-space-0-5);
+}
+
+.agent-routine-run-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--openbot-space-2);
+}
+
+.agent-routine-run-status {
+  color: var(--openbot-text-muted);
+}
+
+.agent-routine-run-status-failed {
+  color: var(--openbot-danger);
+}
+
+.agent-routine-run-status-needs-attention,
+.agent-routine-run-status-interrupted {
+  color: var(--openbot-warning);
+}
+
+.agent-routine-run-error {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--openbot-text-secondary);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+/* Required marks, the next run under a schedule, and a list row that needs a look. */
+.agent-routine-required {
+  color: var(--openbot-text-muted);
+}
+
+.agent-routine-next-run {
+  margin: var(--openbot-space-1-5) var(--openbot-space-2) 0;
+}
+
+.agent-routine-row small.agent-routine-row-alert {
+  color: var(--openbot-danger);
 }
 
 .agent-memories-overlay {
@@ -1181,4 +1237,36 @@
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   line-height: 15px;
+}
+
+/* The note that a `limitNote` field shows near its character limit, and after a paste was cut. */
+.ui-field-limit {
+  display: block;
+  margin: var(--openbot-space-1) var(--openbot-space-2) 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+/* The reason a control is off, in the place where its description is. */
+.agent-settings-notifications div > .agent-settings-disabled-reason {
+  color: var(--openbot-text-muted);
+}
+
+/* The problem of one field, under that field. */
+.settings-field > .agent-settings-field-error {
+  display: block;
+  margin: var(--openbot-space-1) var(--openbot-space-2) 0;
+  color: var(--openbot-danger);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+/* The reason that the model cannot change, under the model row of the settings panel. */
+.provider-model-picker > .provider-model-disabled-reason {
+  display: block;
+  padding: 0 var(--openbot-space-3) var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
 }

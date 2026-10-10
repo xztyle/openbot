@@ -53,6 +53,98 @@ describe("AgentSettingsPanel", () => {
     }
   });
 
+  const renderShared = (onUpdateAgent: ComponentProps<typeof SharedAgentSettingsPanel>["onUpdateAgent"]) =>
+    render(() => (
+      <SharedAgentSettingsPanel
+        agent={firstAgent}
+        runtimeSettings={{ provider: "codex", model: "gpt-5.6-sol", reasoningEffort: "high" }}
+        agentStatus={STORY_AGENT_STATUS}
+        modelOptions={STORY_MODELS}
+        working={false}
+        width={296}
+        maxWidth={() => 640}
+        onClose={vi.fn()}
+        onResize={vi.fn()}
+        onResizeEnd={vi.fn()}
+        onUpdateAgent={onUpdateAgent}
+        onUpdateRuntimeSettings={vi.fn(async () => true)}
+        onSetAgentAvatar={vi.fn(async () => undefined)}
+      />
+    ));
+
+  it("puts the notifications switch back when the save fails, and says which setting failed", async () => {
+    const onUpdateAgent = vi.fn(async () => {
+      throw new Error("Error invoking remote method 'agent:update': Error: SQLITE_BUSY");
+    });
+    renderShared(onUpdateAgent);
+    const notifications = await screen.findByRole("switch", { name: "Notifications" });
+    const before = notifications.getAttribute("aria-checked");
+    await fireEvent.click(notifications);
+    expect(onUpdateAgent).toHaveBeenCalledWith(firstAgent.id, { notifications: before !== "true" });
+    expect(
+      await screen.findByText("Could not save the notifications setting. The saved setting is back."),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: "Notifications" })).toHaveAttribute("aria-checked", before ?? ""),
+    );
+  });
+
+  it("shows the saved avatar color again when saving a new color fails", async () => {
+    const onUpdateAgent = vi.fn(async () => {
+      throw new Error("The host is offline.");
+    });
+    renderShared(onUpdateAgent);
+    await fireEvent.click(await screen.findByRole("button", { name: "Edit agent avatar" }));
+    await screen.findByRole("button", { name: "Automatic avatar color" });
+    const colors = screen.getAllByRole("button", { name: / avatar color$/ });
+    const saved = colors.find((button) => button.getAttribute("aria-pressed") === "true");
+    const other = colors.find((button) => button.getAttribute("aria-pressed") === "false");
+    assert(saved);
+    assert(other);
+    await fireEvent.click(other);
+    await waitFor(() => expect(onUpdateAgent).toHaveBeenCalled());
+    await waitFor(() => expect(other).toHaveAttribute("aria-pressed", "false"));
+    expect(saved).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps the saved generated face when saving a new face fails", async () => {
+    const onUpdateAgent = vi.fn(async () => {
+      throw new Error("The host is offline.");
+    });
+    renderShared(onUpdateAgent);
+    await fireEvent.click(await screen.findByRole("button", { name: "Edit agent avatar" }));
+    const faces = await screen.findByRole("group", { name: "Generated avatar faces" });
+    const choice = within(faces).getAllByRole("button", { name: /^Avatar option/ })[0];
+    assert(choice);
+    await fireEvent.click(choice);
+    await waitFor(() =>
+      expect(onUpdateAgent).toHaveBeenCalledWith(
+        firstAgent.id,
+        expect.objectContaining({ avatarSeed: expect.any(String) }),
+      ),
+    );
+    expect(await screen.findByText(/Could not save the avatar face\. The saved face is back\./)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(faces).getAllByRole("button", { name: /^Avatar option/ })[0]).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      ),
+    );
+  });
+
+  it("shows an empty name as a field error and does not save a fallback name", async () => {
+    const onUpdateAgent = vi.fn(async () => undefined);
+    vi.spyOn(document, "hasFocus").mockReturnValue(true);
+    const view = renderShared(onUpdateAgent);
+    const name = await screen.findByRole("textbox", { name: "Agent name" });
+    await fireEvent.input(name, { target: { value: "   " } });
+    await fireEvent.blur(name);
+    expect(await screen.findByText(/Enter a name/)).toBeInTheDocument();
+    expect(name).toBeInvalid();
+    view.unmount();
+    expect(onUpdateAgent).not.toHaveBeenCalled();
+  });
+
   it("saves edited instructions while the field stays focused", async () => {
     vi.useFakeTimers();
     try {
@@ -532,6 +624,27 @@ describe("AgentSettingsPanel", () => {
     );
   });
 
+  it("returns the focus to the skill that asked when its confirmation is cancelled", async () => {
+    mock = createMockOpenBot();
+    window.openbot = mock.api;
+    const installed = await mock.api.skills.listInstalled("chief");
+    const original = installed.find((item) => item.skillId === "skill-release-notes");
+    if (!original) throw new Error("Missing skill fixture");
+    const first = { ...original, state: "modified" as const };
+    // Rows are sorted by name, so the second row is the last one that renders.
+    const second = { ...first, skillId: "skill-zeta", slug: "skill-zeta", name: "Zeta notes" };
+    vi.spyOn(mock.api.skills, "listInstalled").mockResolvedValue([first, second]);
+    render(() => (
+      <AgentSkillsModal open agentId="chief" agentName="Chief" onOpenChange={vi.fn()} onCountChange={vi.fn()} />
+    ));
+    const firstMore = await screen.findByRole("button", { name: `More for ${first.name}` });
+    await fireEvent.pointerDown(firstMore, { button: 0 });
+    await fireEvent.pointerUp(await screen.findByRole("menuitem", { name: "Repair" }), { button: 0 });
+    const confirm = await screen.findByRole("alertdialog", { name: "Replace local changes?" });
+    await fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(firstMore).toHaveFocus());
+  });
+
   it("lists a workspace skill folder read-only with its problem", async () => {
     mock = createMockOpenBot();
     window.openbot = mock.api;
@@ -648,7 +761,9 @@ describe("AgentSettingsPanel", () => {
     );
     await fireEvent.keyDown(dialog, { key: "Escape" });
 
-    expect(await screen.findByText("Could not save agent settings.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Could not save the model or reasoning level. The saved setting is back."),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Agent model: GPT-5.6 Sol" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Agent reasoning level/ })).toHaveTextContent("Extra high");
     await fireEvent.click(screen.getByRole("button", { name: "Advanced" }));

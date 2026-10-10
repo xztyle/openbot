@@ -5,9 +5,11 @@ import type {
   DeleteAgentMemoryInput,
   UpdateAgentMemoryInput,
 } from "@openbot/contracts/ipc";
+import { Toaster, toast } from "@openbot/ui";
 import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import type { Mock } from "vitest";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { type AnalyticsEventName, type DesktopAnalyticsEvents, desktopAnalytics } from "../../analytics";
 import { createMockOpenBot, type MockOpenBotControls } from "../../preview/mock-openbot";
 import { AgentMemoriesModal } from "./AgentMemoriesModal";
@@ -41,6 +43,7 @@ function trackScopedMemoryAnalytics<Name extends AnalyticsEventName>(
 }
 
 afterEach(() => {
+  toast.dismiss();
   activeMock?.dispose();
   activeMock = undefined;
 });
@@ -140,7 +143,7 @@ describe("AgentMemoriesModal", () => {
     expect(onCountChange).toHaveBeenLastCalledWith(2);
   });
 
-  it("edits a memory and deletes it without confirmation", async () => {
+  it("edits a memory and deletes it with one tap", async () => {
     memoryState = [{ ...firstMemory }];
     render(() => (
       <AgentMemoriesModal
@@ -168,6 +171,107 @@ describe("AgentMemoriesModal", () => {
     await waitFor(() => expect(deleteMemory).toHaveBeenCalledWith({ agentId: "chief", memoryId: "memory-1" }));
     expect(screen.queryByRole("dialog", { name: "Delete this memory?" })).not.toBeInTheDocument();
     expect(await screen.findByText("This agent has no saved memories yet.")).toBeInTheDocument();
+  });
+
+  it("brings a deleted memory back from the Undo toast", async () => {
+    memoryState = [{ ...firstMemory }, { ...firstMemory, id: "memory-2", text: "Prefers short status reports." }];
+    const onCountChange = vi.fn();
+    render(() => (
+      <>
+        <Toaster />
+        <AgentMemoriesModal
+          port={agentMemoriesPort("chief", "Chief", 64)}
+          open
+          onOpenChange={vi.fn()}
+          onCountChange={onCountChange}
+        />
+      </>
+    ));
+
+    expect(await screen.findByText("Uses metric units.")).toBeInTheDocument();
+    const [firstDelete] = screen.getAllByRole("button", { name: "Delete memory" });
+    assert(firstDelete);
+    await fireEvent.click(firstDelete);
+    await waitFor(() => expect(onCountChange).toHaveBeenLastCalledWith(1));
+    expect(screen.queryByText("Uses metric units.")).not.toBeInTheDocument();
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(createMemory).toHaveBeenCalledWith({ agentId: "chief", text: "Uses metric units." }));
+    expect(await screen.findByText("Uses metric units.")).toBeInTheDocument();
+    expect(onCountChange).toHaveBeenLastCalledWith(2);
+  });
+
+  it("asks before another memory or the add button replaces a changed draft", async () => {
+    memoryState = [{ ...firstMemory }, { ...firstMemory, id: "memory-2", text: "Prefers short status reports." }];
+    render(() => (
+      <AgentMemoriesModal
+        port={agentMemoriesPort("chief", "Chief", 64)}
+        open
+        onOpenChange={vi.fn()}
+        onCountChange={vi.fn()}
+      />
+    ));
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Edit memory: Uses metric units." }));
+    await fireEvent.input(screen.getByRole("textbox", { name: "Edit memory" }), {
+      target: { value: "Uses SI units." },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Edit memory: Prefers short status reports." }));
+    const question = await screen.findByRole("alertdialog", { name: "Discard changes?" });
+    await fireEvent.click(within(question).getByRole("button", { name: "Keep editing" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog", { name: "Discard changes?" })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("textbox", { name: "Edit memory" })).toHaveValue("Uses SI units.");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add memory" }));
+    await fireEvent.click(
+      within(await screen.findByRole("alertdialog", { name: "Discard changes?" })).getByRole("button", {
+        name: "Discard changes",
+      }),
+    );
+    expect(await screen.findByRole("textbox", { name: "New memory" })).toHaveValue("");
+    expect(screen.queryByRole("textbox", { name: "Edit memory" })).not.toBeInTheDocument();
+    expect(updateMemory).not.toHaveBeenCalled();
+  });
+
+  it("asks before it closes over a new memory, and keeps the text when the host closes it", async () => {
+    const onOpenChange = vi.fn();
+    const [open, setOpen] = createSignal(true);
+    render(() => (
+      <AgentMemoriesModal
+        port={agentMemoriesPort("chief", "Chief", 64)}
+        open={open()}
+        onOpenChange={onOpenChange}
+        onCountChange={vi.fn()}
+      />
+    ));
+
+    await screen.findByText("This agent has no saved memories yet.");
+    await fireEvent.click(screen.getByRole("button", { name: "Add memory" }));
+    await fireEvent.input(screen.getByRole("textbox", { name: "New memory" }), {
+      target: { value: "Works from Berlin." },
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Close memories" }));
+    const question = await screen.findByRole("alertdialog", { name: "Discard changes?" });
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await fireEvent.click(within(question).getByRole("button", { name: "Keep editing" }));
+    expect(screen.getByRole("textbox", { name: "New memory" })).toHaveValue("Works from Berlin.");
+
+    // The host closes the modal and opens it again for the same agent: the draft stays.
+    setOpen(false);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Memories" })).not.toBeInTheDocument());
+    setOpen(true);
+    expect(await screen.findByRole("textbox", { name: "New memory" })).toHaveValue("Works from Berlin.");
+
+    await fireEvent.click(screen.getByRole("button", { name: "Close memories" }));
+    await fireEvent.click(
+      within(await screen.findByRole("alertdialog", { name: "Discard changes?" })).getByRole("button", {
+        name: "Discard changes",
+      }),
+    );
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it("requires confirmation before clearing all memories", async () => {

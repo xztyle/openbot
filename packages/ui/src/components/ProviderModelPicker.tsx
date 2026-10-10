@@ -40,7 +40,17 @@ import {
 import { ContentExitMotion } from "@openbot/ui/menu-motion";
 import { cx } from "@openbot/ui/utils";
 import type { JSX } from "@solidjs/web";
-import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  onCleanup,
+  onSettled,
+  Show,
+  untrack,
+} from "solid-js";
 import { currentText, type TextValue, useText } from "../text";
 import { createScrollFades } from "./createScrollFades";
 import {
@@ -283,6 +293,10 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
 
   const triggerModelName = () => displayModelName(selectedModel()?.name, props.value);
   const field = () => props.variant === "field";
+  // Why model changes are off. A field shows it as a caption. The compact trigger keeps it for
+  // assistive technology and the tooltip, so the header does not change height.
+  const reasonId = createUniqueId();
+  const lockedReason = () => (props.disabled || props.modelChangesDisabled ? props.disabledReason : undefined);
   const showsReasoningEffort = () => props.reasoningEffort !== undefined && props.onReasoningEffortChange !== undefined;
   /** An OpenCode model with variants: the chosen variant is its effort, and its name says so. */
   const selectedHasVariants = createMemo(
@@ -315,6 +329,7 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
           type="button"
           class={["provider-model-trigger", { "provider-model-trigger-field": field() }]}
           aria-label={`${props.ariaLabel ?? t("provider.picker.agentModel")}: ${triggerSummary()}`}
+          aria-describedby={lockedReason() ? reasonId : undefined}
           disabled={props.disabled}
           title={
             props.disabled || props.modelChangesDisabled
@@ -732,6 +747,13 @@ export function ProviderModelPicker(props: ProviderModelPickerProps) {
           </Tabs.Root>
         </Popover.Content>
       </Popover.Root>
+      <Show when={lockedReason()}>
+        {(reason) => (
+          <span id={reasonId} class={field() ? "provider-model-disabled-reason" : "sr-only"}>
+            {reason()}
+          </span>
+        )}
+      </Show>
       <StandingApprovalConfirmation
         open={grantConfirmation() !== null}
         agentName={grantConfirmation()?.name}

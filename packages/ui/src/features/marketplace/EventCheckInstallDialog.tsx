@@ -1,4 +1,4 @@
-import type { EventCheckTemplate, EventCheckTemplateField } from "@openbot/contracts/event-check-templates";
+import type { EventCheckTemplate } from "@openbot/contracts/event-check-templates";
 import type { EventCheck } from "@openbot/contracts/event-checks";
 import {
   Alert,
@@ -14,7 +14,6 @@ import {
   Heading,
   IconButton,
   Input,
-  SwitchField,
   Text,
   Textarea,
   TriangleAlert,
@@ -22,9 +21,9 @@ import {
 } from "@openbot/ui";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { useText } from "@openbot/ui/text";
-import { createStore, createUniqueId, For, Match, onCleanup, Show, Switch } from "solid-js";
+import { createStore, createUniqueId, For, onCleanup, Show } from "solid-js";
 import { EventCheckEnvironmentSettings } from "../conversation/EventCheckEnvironmentSettings";
-import { EventCheckPickerField } from "../conversation/EventCheckPickerField";
+import { EventCheckSettingField } from "../conversation/EventCheckSettingField";
 import {
   checkName,
   type InstallForm,
@@ -68,20 +67,6 @@ interface DialogState {
    * call, and fill the fields of the next step. They are never part of an install request.
    */
   draft: Record<string, string>;
-}
-
-/** The label of a setting. A setting that the install does not need says so. */
-function FieldLabel(props: { field: EventCheckTemplateField }) {
-  const { t } = useText();
-  return (
-    <>
-      {props.field.label}
-      <Show when={!props.field.required}>
-        {" "}
-        <span class="marketplace-install-optional">{t("marketplace.eventCheck.optional")}</span>
-      </Show>
-    </>
-  );
 }
 
 /** A value that is long, or has line breaks, is edited in a text area. */
@@ -422,83 +407,37 @@ export function EventCheckInstallDialog(props: EventCheckInstallDialogProps) {
                           </For>
                         </fieldset>
                       </Show>
-                      <Switch>
-                        <Match when={field.type === "boolean"}>
-                          <SwitchField
-                            class="marketplace-install-switch"
-                            label={<FieldLabel field={field} />}
-                            description={field.description}
-                            checked={state.form.configuration[field.name] === "true"}
-                            disabled={state.busy}
-                            onChange={(on) =>
-                              setState((draft) => {
-                                draft.form.configuration[field.name] = on ? "true" : "false";
-                              })
-                            }
-                          />
-                        </Match>
-                        <Match when={field.picker !== undefined && canPick() ? field.picker : undefined}>
-                          {(picker) => (
-                            <EventCheckPickerField
-                              label={<FieldLabel field={field} />}
-                              description={field.description}
-                              picker={picker()}
-                              value={state.form.configuration[field.name] ?? ""}
-                              disabled={state.busy}
-                              blocked={
-                                missingDraft()
+                      <EventCheckSettingField
+                        name={field.name}
+                        label={field.label}
+                        description={field.description}
+                        required={field.required}
+                        type={field.type}
+                        value={state.form.configuration[field.name] ?? ""}
+                        disabled={state.busy}
+                        multiline={isLongValue(field.value)}
+                        picker={
+                          field.picker !== undefined && canPick()
+                            ? {
+                                picker: field.picker,
+                                load: pickerLoad(field.name),
+                                blocked: missingDraft()
                                   ? t("agentSettings.eventCheck.picker.needTyped", { name: missingDraft() ?? "" })
-                                  : undefined
+                                  : undefined,
                               }
-                              load={pickerLoad(field.name)}
-                              onChange={(value) =>
-                                setState((draft) => {
-                                  draft.form.configuration[field.name] = value;
-                                })
-                              }
-                            />
-                          )}
-                        </Match>
-                        <Match when={true}>
-                          <Field
-                            label={<FieldLabel field={field} />}
-                            description={field.description}
-                            required={field.required}
-                            error={
-                              shown() && errors().fields.includes(field.name)
-                                ? t("marketplace.eventCheck.dialog.fieldRequired")
-                                : undefined
-                            }
-                          >
-                            <Show
-                              when={isLongValue(field.value)}
-                              fallback={
-                                <Input
-                                  value={state.form.configuration[field.name] ?? ""}
-                                  maxlength={8192}
-                                  disabled={state.busy}
-                                  onValueChange={(value) =>
-                                    setState((draft) => {
-                                      draft.form.configuration[field.name] = value;
-                                    })
-                                  }
-                                />
-                              }
-                            >
-                              <Textarea
-                                value={state.form.configuration[field.name] ?? ""}
-                                maxlength={8192}
-                                disabled={state.busy}
-                                onValueChange={(value) =>
-                                  setState((draft) => {
-                                    draft.form.configuration[field.name] = value;
-                                  })
-                                }
-                              />
-                            </Show>
-                          </Field>
-                        </Match>
-                      </Switch>
+                            : undefined
+                        }
+                        error={
+                          shown() && errors().fields.includes(field.name)
+                            ? t("marketplace.eventCheck.dialog.fieldRequired")
+                            : undefined
+                        }
+                        onChange={(value) =>
+                          setState((draft) => {
+                            draft.form.configuration[field.name] = value;
+                          })
+                        }
+                      />
                     </>
                   )}
                 </For>

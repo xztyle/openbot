@@ -41,6 +41,8 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.picker.group.other": "Other",
   "agentSettings.eventCheck.picker.watch": "Watch {name}",
   "agentSettings.eventCheck.picker.mode": "What to watch in {name}",
+  "agentSettings.eventCheck.picker.chosen": "Chosen",
+  "agentSettings.eventCheck.picker.chosenHelp": "Load the list to see the names of the conversations you chose.",
   "agentSettings.eventCheck.picker.outside": "Chosen, not in the list",
   "agentSettings.eventCheck.picker.outsideHelp":
     "These IDs are saved, but the list does not show them. Keep them or remove them.",

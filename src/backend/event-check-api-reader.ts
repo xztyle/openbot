@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { type BigIntStats, readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, isAbsolute, join } from "node:path";
 import type { EventCheck, EventCheckInput } from "@openbot/contracts/event-checks";
 import { sourceText } from "@openbot/i18n/source";
@@ -11,13 +11,34 @@ import { EventCheckRefusal } from "./event-check-refusal";
 import { type McpOperationError, mcpSync } from "./mcp-effects";
 import { isPathInside } from "./path-containment";
 
+/**
+ * A file whose change time is this recent is hashed again each time. A write in the same clock tick
+ * as the one the cache saw would leave the same stat, and the clocks of some file systems tick in
+ * seconds. After this window a changed file always has another change time.
+ */
+const RECENTLY_CHANGED_MS = 5_000;
+
+/** The numbers that tell one state of a file from another. A write moves `ctimeNs` and cannot be set back. */
+function fingerprint(stat: BigIntStats): string {
+  return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+}
+
 /** Shared API programs, separate check instances and credentials. No model calls at this boundary. */
 export class EventCheckApiReader {
+  /**
+   * The digest of each program file by its resolved path, with the fingerprint it had when it was
+   * hashed. The stale check of a running program asks for the digest every 250 ms, and the bytes are
+   * read again only when the fingerprint moved.
+   */
+  readonly #hashed = new Map<string, { fingerprint: string; digest: string }>();
+
   constructor(
     readonly environment: EventCheckEnvironment,
     readonly programsRoot: string,
     readonly current: (check: EventCheck) => boolean,
     readonly nodeExecutable = "/usr/bin/node",
+    /** Tests only. */
+    readonly now: () => number = Date.now,
   ) {}
   #program(input: EventCheckInput): { path: string; digest: string } {
     return this.#programAt(input.source.toolName);
@@ -27,9 +48,21 @@ export class EventCheckApiReader {
       throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgram"));
     const root = realpathSync(this.programsRoot),
       path = realpathSync(join(root, name));
-    if (!isPathInside(root, path) || !statSync(path).isFile() || statSync(path).size > 1_048_576)
+    // The containment, type and size checks run on every call. Only the read and the hash are skipped.
+    const before = statSync(path, { bigint: true });
+    if (!isPathInside(root, path) || !before.isFile() || before.size > 1_048_576n)
       throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgram"));
-    return { path, digest: createHash("sha256").update(readFileSync(path)).digest("hex") };
+    const state = fingerprint(before);
+    const known = this.#hashed.get(path);
+    if (known?.fingerprint === state) return { path, digest: known.digest };
+    const digest = createHash("sha256").update(readFileSync(path)).digest("hex");
+    // Kept only when the file did not move during the read and has not changed lately.
+    const quiet =
+      fingerprint(statSync(path, { bigint: true })) === state &&
+      this.now() - Number(before.ctimeNs / 1_000_000n) >= RECENTLY_CHANGED_MS;
+    if (quiet) this.#hashed.set(path, { fingerprint: state, digest });
+    else this.#hashed.delete(path);
+    return { path, digest };
   }
   /**
    * Runs one program of the shared folder once, with `discover: true`, for a person who is filling a

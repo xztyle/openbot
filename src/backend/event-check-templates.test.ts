@@ -6,6 +6,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { EventCheckTemplate } from "@openbot/contracts/event-check-templates";
+import { decodeEventCheckInput, type EventCheck, type EventCheckConfiguration } from "@openbot/contracts/event-checks";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { EVENT_CHECK_TOOL_DEFINITIONS } from "./agent/event-check-tools";
 import type { AgentService } from "./agent-service";
@@ -744,4 +745,76 @@ it("refuses to list choices for a check that runs an earlier program, or has no 
   await expect(
     runCauseEffect(service.eventChecks.discoverCheck({ ...target, id: plain.id }, TEST_USER)),
   ).rejects.toThrow();
+});
+
+/** The fixture with a picker and no private variable, so a check can run and hold a baseline. */
+function labelled(): EventCheckTemplate {
+  const shipped = discovering();
+  return { ...shipped, variables: [] };
+}
+const rulesField = (check: EventCheck) =>
+  check.source.kind === "api" ? check.source.configuration.find((field) => field.name === "rules") : undefined;
+
+/** The check as a client sends it back: through the wire, with only the fields it edits changed. */
+function resave(check: EventCheck, edit: (field: EventCheckConfiguration) => EventCheckConfiguration) {
+  const input = decodeEventCheckInput(JSON.parse(JSON.stringify(check)));
+  if (input.source.kind !== "api") throw new Error("Expected an API check.");
+  const configuration = input.source.configuration.map((field) => (field.name === "rules" ? edit(field) : field));
+  return { ...input, source: { ...input.source, configuration } };
+}
+
+it("keeps the names of picked choices with the check, without touching the baseline, and drops names of choices that left", async () => {
+  const { service, checks } = await boot(labelled(), DISCOVERING);
+  const installed = await runCauseEffect(
+    service.eventChecks.templateInstall(
+      {
+        ...request({ workspace: "alpha", rules: "C1AAA:mentions,D1AAA:all" }),
+        // A name for an ID that the value does not hold is dropped, and so is one for a plain setting.
+        configurationLabels: { rules: { C1AAA: "#general", D1AAA: "@pat", Z9ZZZ: "#gone" }, workspace: { A1: "x" } },
+      },
+      TEST_USER,
+    ),
+  );
+  expect(rulesField(installed)?.optionLabels).toEqual({ C1AAA: "#general", D1AAA: "@pat" });
+  const active = await runCauseEffect(service.eventChecks.save({ ...installed, active: true }, TEST_USER));
+  expect((await runCauseEffect(service.eventChecks.checkNow({ agentId: "chief", id: active.id }))).status).toBe(
+    "baseline",
+  );
+  const before = checks.state(active.id);
+  expect(before.baseline).not.toBeNull();
+  // A rename is display text: the baseline stays.
+  const renamed = await runCauseEffect(
+    service.eventChecks.save(
+      resave(active, (field) => ({ ...field, optionLabels: { C1AAA: "#general-renamed" } })),
+      TEST_USER,
+    ),
+  );
+  expect(rulesField(renamed)?.optionLabels).toEqual({ C1AAA: "#general-renamed", D1AAA: "@pat" });
+  expect(checks.state(active.id)).toEqual(before);
+  // A save that carries no names (an older client) keeps the saved ones.
+  const stripped = await runCauseEffect(
+    service.eventChecks.save(
+      resave(renamed, ({ optionLabels: _names, ...rest }) => rest),
+      TEST_USER,
+    ),
+  );
+  expect(rulesField(stripped)?.optionLabels).toEqual({ C1AAA: "#general-renamed", D1AAA: "@pat" });
+  expect(checks.state(active.id)).toEqual(before);
+  // An agent cannot name choices, and its save does not remove the names.
+  const byAgent = await runCauseEffect(
+    service.eventChecks.save(
+      resave(stripped, (field) => ({ ...field, optionLabels: { C1AAA: "#other-name" } })),
+      AGENT,
+    ),
+  );
+  expect(rulesField(byAgent)?.optionLabels).toEqual({ C1AAA: "#general-renamed", D1AAA: "@pat" });
+  // A choice that leaves the value takes its name along. The value changed, so the baseline resets.
+  const narrowed = await runCauseEffect(
+    service.eventChecks.save(
+      resave(byAgent, (field) => ({ ...field, value: "C1AAA:mentions" })),
+      TEST_USER,
+    ),
+  );
+  expect(rulesField(narrowed)?.optionLabels).toEqual({ C1AAA: "#general-renamed" });
+  expect(checks.state(active.id).baseline).toBeNull();
 });

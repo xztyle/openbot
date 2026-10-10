@@ -99,6 +99,12 @@ function keepTemplateLink(input: EventCheckInput, previous: EventCheck | null): 
     return input;
   return { ...input, source: { ...input.source, template: previous.source.template } };
 }
+/** The same input without the names of choices, which only a person's client may supply. */
+function withoutOptionLabels(input: EventCheckInput): EventCheckInput {
+  if (input.source.kind !== "api") return input;
+  const configuration = input.source.configuration.map(({ optionLabels: _names, ...rest }) => rest);
+  return { ...input, source: { ...input.source, configuration } };
+}
 /** Owns deterministic polls and durable wakeups. Empty checks never enter the agent runtime. */
 export class EventCheckScheduler implements RoutineDueSource {
   readonly #mutations = Semaphore.makeUnsafe(1);
@@ -302,8 +308,16 @@ export class EventCheckScheduler implements RoutineDueSource {
       Object.entries(record)
         .filter(([, value]) => value !== undefined)
         .sort(([left], [right]) => left.localeCompare(right));
+    // The names of choices are display text. Saving them does not change who last changed the check.
     const source =
-      check.source.kind === "api" ? { ...check.source, programDigest: undefined, template: undefined } : check.source;
+      check.source.kind === "api"
+        ? {
+            ...check.source,
+            programDigest: undefined,
+            template: undefined,
+            configuration: check.source.configuration.map(({ optionLabels: _names, ...rest }) => rest),
+          }
+        : check.source;
     return JSON.stringify([check.name, check.instruction, sorted(source), sorted(check.selection)]);
   }
   /**
@@ -339,8 +353,11 @@ export class EventCheckScheduler implements RoutineDueSource {
     action?: string,
   ) {
     // Only a person approves a program. The flag is never stored, and an agent tool cannot use it.
-    const { approveProgram, ...requested } = request;
+    const { approveProgram, ...asked } = request;
     const approving = approveProgram === true && actor.kind !== "agent";
+    // The names of choices come from the person's own lists. An agent cannot put names on settings,
+    // so the host keeps the names the check already had.
+    const requested = actor.kind === "agent" ? withoutOptionLabels(asked) : asked;
     const previous = yield* mcpSync(() =>
       requested.id ? this.options.store.get(requested.agentId, requested.id) : null,
     );

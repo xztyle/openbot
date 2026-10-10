@@ -4,6 +4,7 @@ import {
   decodeEventCheckExecution,
   decodeEventCheckInput,
   EVENT_CHECK_ITEM_FILTER_LIMIT,
+  EVENT_CHECK_OPTION_LABEL_MAX_ENTRIES,
 } from "./event-checks";
 
 const stored = {
@@ -74,5 +75,52 @@ describe("event check wire compatibility", () => {
     expect(() =>
       decodeEventCheck({ ...stored, health: { consecutiveErrors: 1, lastError: null, lastStatus: "odd" } }),
     ).toThrow();
+  });
+
+  it("reads the saved names of choices leniently: bad entries drop, the check never fails, the text is cleaned", () => {
+    const api = {
+      ...stored,
+      source: {
+        kind: "api",
+        connectionId: "work",
+        variables: [],
+        configuration: [
+          {
+            name: "rules",
+            label: "Rules",
+            description: "",
+            value: "C1AAA:all",
+            optionLabels: {
+              C1AAA: "  #general\u0007\n ",
+              "bad id": "x",
+              D1AAA: 7,
+              E1AAA: "   ",
+              F1AAA: "x".repeat(300),
+            },
+          },
+          { name: "plain", label: "Plain", description: "", value: "", optionLabels: "not a record" },
+        ],
+        toolName: "program.mjs",
+        argumentsJson: "{}",
+        cursorArgument: "cursor",
+        nextCursorPointer: "/cursor",
+      },
+    };
+    const check = decodeEventCheck(api);
+    if (check.source.kind !== "api") throw new Error("Expected an API source.");
+    const [rules, plain] = check.source.configuration;
+    expect(rules?.optionLabels).toMatchObject({ C1AAA: "#general" });
+    expect(Object.keys(rules?.optionLabels ?? {}).sort()).toEqual(["C1AAA", "F1AAA"]);
+    expect(Array.from(rules?.optionLabels?.F1AAA ?? "")).toHaveLength(120);
+    expect(plain).not.toHaveProperty("optionLabels");
+    const many = Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`C${index}`, `name ${index}`]));
+    const capped = decodeEventCheck({
+      ...api,
+      source: { ...api.source, configuration: [{ ...api.source.configuration[0], optionLabels: many }] },
+    });
+    if (capped.source.kind !== "api") throw new Error("Expected an API source.");
+    expect(Object.keys(capped.source.configuration[0]?.optionLabels ?? {})).toHaveLength(
+      EVENT_CHECK_OPTION_LABEL_MAX_ENTRIES,
+    );
   });
 });

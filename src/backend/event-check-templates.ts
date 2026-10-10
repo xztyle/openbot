@@ -138,7 +138,15 @@ export class EventCheckTemplates {
           throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplatePicker", { name: field.label }));
         }
       }
-      return { name: field.name, label: field.label, description: field.description, value };
+      const labels = field.picker ? request.configurationLabels?.[field.name] : undefined;
+      return {
+        name: field.name,
+        label: field.label,
+        description: field.description,
+        value,
+        // The store drops a name whose ID the value does not hold.
+        ...(labels && Object.keys(labels).length > 0 ? { optionLabels: labels } : {}),
+      };
     });
     return {
       agentId: request.agentId,
@@ -220,16 +228,20 @@ export class EventCheckTemplates {
       throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateNotLinked"));
     if (source.template.version === template.version)
       throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateCurrent"));
-    const held = new Map(source.configuration.map((field) => [field.name, field.value]));
+    const held = new Map(source.configuration.map((field) => [field.name, field]));
     const next: EventCheckApiSource = {
       ...source,
       variables: template.variables.map((variable) => variable.name),
-      configuration: template.configuration.map((field) => ({
-        name: field.name,
-        label: field.label,
-        description: field.description,
-        value: held.get(field.name) ?? field.value,
-      })),
+      configuration: template.configuration.map((field) => {
+        const previous = held.get(field.name);
+        return {
+          name: field.name,
+          label: field.label,
+          description: field.description,
+          value: previous?.value ?? field.value,
+          ...(previous?.optionLabels ? { optionLabels: previous.optionLabels } : {}),
+        };
+      }),
       toolName: this.place(template),
       argumentsJson: template.argumentsJson,
       cursorArgument: template.cursorArgument,

@@ -1,5 +1,8 @@
 import {
+  cleanEventCheckOptionText,
+  decodeEventCheckOptionLabels,
   decodeEventCheckTarget,
+  EVENT_CHECK_OPTION_ID,
   type EventCheck,
   type EventCheckSelection,
   environmentName,
@@ -130,6 +133,11 @@ export interface EventCheckTemplateInstallInput {
   intervalSeconds: number;
   accountActorIds: string[];
   configuration: Record<string, string>;
+  /**
+   * The readable names of the choices in a picker setting, by setting name and then by option ID.
+   * Optional and additive: a host from before it ignores it, and the install is the same without it.
+   */
+  configurationLabels?: Record<string, Record<string, string>>;
 }
 export interface EventCheckTemplateApi {
   list(): Promise<EventCheckTemplate[]>;
@@ -175,7 +183,7 @@ function decodeVariable(value: unknown): EventCheckTemplateVariable {
   };
 }
 const PICKER_MODE = /^[a-z][a-z0-9_-]{0,31}$/;
-const PICKER_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+const PICKER_ID = EVENT_CHECK_OPTION_ID;
 const PICKER_GROUP = /^[a-z][a-z0-9_]{0,31}$/;
 function decodePicker(value: unknown): EventCheckTemplatePicker {
   if (!isDynamicRecord(value) || value.optionsFrom !== "program") throw new Error("Invalid template picker.");
@@ -309,6 +317,7 @@ export function decodeEventCheckTemplateInstallInput(value: unknown): EventCheck
       throw new Error("Invalid template install.");
     configuration[name] = text(entry, 8192);
   }
+  const configurationLabels = decodeConfigurationLabels(value.configurationLabels);
   return {
     slug: slug(value.slug),
     agentId: text(value.agentId, 128, true),
@@ -319,7 +328,23 @@ export function decodeEventCheckTemplateInstallInput(value: unknown): EventCheck
     intervalSeconds: interval,
     accountActorIds: list(value.accountActorIds, 20, (id) => text(id, 512, true)),
     configuration,
+    ...(configurationLabels ? { configurationLabels } : {}),
   };
+}
+/** Names of choices by setting. Lenient like the labels of a saved check: a bad entry is dropped. */
+function decodeConfigurationLabels(value: unknown): Record<string, Record<string, string>> | undefined {
+  if (!isDynamicRecord(value)) return undefined;
+  const result: Record<string, Record<string, string>> = {};
+  let count = 0;
+  for (const [name, entry] of Object.entries(value)) {
+    if (count >= 30) break;
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || ["__proto__", "constructor", "prototype"].includes(name)) continue;
+    const labels = decodeEventCheckOptionLabels(entry);
+    if (!labels) continue;
+    result[name] = labels;
+    count++;
+  }
+  return count === 0 ? undefined : result;
 }
 export function decodeEventCheckTemplateAdoptInput(value: unknown): { agentId: string; id: string; slug: string } {
   if (!isDynamicRecord(value)) throw new Error("Invalid template link.");
@@ -328,24 +353,13 @@ export function decodeEventCheckTemplateAdoptInput(value: unknown): { agentId: s
 
 const OPTION_LABEL_LIMIT = 120;
 const OPTION_DESCRIPTION_LIMIT = 200;
-/** Text from another party: no control or formatting character, one line, a bounded length. */
-function cleanOptionText(value: unknown, limit: number): string {
-  if (typeof value !== "string") throw new Error("Invalid picker option.");
-  const cleaned = value
-    .replace(/[\t\n\r\u2028\u2029]/g, " ")
-    .replace(/[\p{Cc}\p{Cf}]/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const characters = Array.from(cleaned);
-  return characters.length > limit ? `${characters.slice(0, limit - 1).join("")}…` : cleaned;
-}
 function decodePickerOption(value: unknown): EventCheckPickerOption {
   if (!isDynamicRecord(value) || typeof value.id !== "string" || !PICKER_ID.test(value.id))
     throw new Error("Invalid picker option.");
   if (typeof value.group !== "string" || !PICKER_GROUP.test(value.group)) throw new Error("Invalid picker option.");
-  const label = cleanOptionText(value.label, OPTION_LABEL_LIMIT) || value.id;
+  const label = cleanEventCheckOptionText(value.label, OPTION_LABEL_LIMIT) || value.id;
   const description =
-    value.description === undefined ? "" : cleanOptionText(value.description, OPTION_DESCRIPTION_LIMIT);
+    value.description === undefined ? "" : cleanEventCheckOptionText(value.description, OPTION_DESCRIPTION_LIMIT);
   return { id: value.id, label, group: value.group, ...(description ? { description } : {}) };
 }
 /**

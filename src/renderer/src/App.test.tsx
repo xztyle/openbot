@@ -808,6 +808,15 @@ describe("OpenBot connected desktop shell", () => {
     expect(within(menu).getByRole("menuitem", { name: "Duplicate agent" })).toBeInTheDocument();
   });
 
+  it("opens the search of the conversation from a header button, for a screen with no Cmd+F", async () => {
+    render(() => <App />);
+    await screen.findByRole("heading", { name: "Chief" });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Search conversation" }));
+    expect(await screen.findByRole("search", { name: "Search conversation" })).toBeVisible();
+    expect(await screen.findByRole("searchbox", { name: "Search messages" })).toBeInTheDocument();
+  });
+
   it("closes global search with Escape and a backdrop press", async () => {
     render(() => <App />);
     await screen.findByRole("heading", { name: "Chief" });

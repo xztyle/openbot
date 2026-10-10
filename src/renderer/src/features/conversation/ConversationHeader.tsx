@@ -27,6 +27,7 @@ export function ConversationHeader() {
     settingsReasoning,
     showBrowserPanel,
     filesOpen,
+    handleChatSearchShortcut,
     toggleFilesPanel,
   } = useConversationViewScope();
   const changeAutoApprove = createMemo(() => {
@@ -50,6 +51,10 @@ export function ConversationHeader() {
       agent={props.agent}
       onSettingsIntent={() => void loadAgentSettingsPanel()}
       onOpenSettings={() => setActiveRightPanel("settings")}
+      // The scope exposes the search through its shortcut handler, so the button sends the same key.
+      onOpenSearch={() =>
+        handleChatSearchShortcut(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, cancelable: true }))
+      }
       modelPicker={{
         provider: settingsProvider(),
         value: settingsModel(),

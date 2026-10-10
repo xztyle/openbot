@@ -1,4 +1,4 @@
-import { Button, Folder, Lock } from "@openbot/ui";
+import { Button, Folder, Lock, Search } from "@openbot/ui";
 import { ProviderModelPicker } from "@openbot/ui/components/ProviderModelPicker";
 import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
@@ -14,6 +14,11 @@ export interface ConversationHeaderProps {
   modelPicker: ComponentProps<typeof ProviderModelPicker>;
   onSettingsIntent: () => void;
   onOpenSettings: () => void;
+  /**
+   * Opens the search of this conversation. A phone has no Cmd+F, so the header offers a button.
+   * Left out where the client has no conversation search.
+   */
+  onOpenSearch?: (() => void) | undefined;
   remoteControl?: {
     enabled: boolean;
     active: boolean;
@@ -68,6 +73,18 @@ export function ConversationHeader(props: ConversationHeaderProps) {
         {props.actions}
         <Show when={props.agent}>
           <ProviderModelPicker {...props.modelPicker} />
+        </Show>
+        <Show when={props.onOpenSearch && props.agent}>
+          <Button
+            variant="ghost"
+            type="button"
+            class="header-panel-toggle"
+            aria-label={t("chat.search.label")}
+            onClick={() => props.onOpenSearch?.()}
+            data-cuelume-tap="open"
+          >
+            <Search aria-hidden="true" class="size-[14px]" />
+          </Button>
         </Show>
         <Show when={props.remoteControl}>
           {(control) => (

@@ -30,4 +30,8 @@ export const messages = defineMessages("common", {
   "common.download": "Download",
   "common.removing": "Removing…",
   "common.sending": "Sending…",
+  "common.unsaved.title": "Discard changes?",
+  "common.unsaved.description": "Your unsaved changes will be lost.",
+  "common.unsaved.discard": "Discard changes",
+  "common.unsaved.keepEditing": "Keep editing",
 });

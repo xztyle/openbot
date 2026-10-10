@@ -890,7 +890,8 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   margin: 0;
 }
 
-.marketplace-access-failed {
+.marketplace-access-failed,
+.marketplace-apps-failed {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

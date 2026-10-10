@@ -18,10 +18,10 @@ import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal, For, Match, Show, Switch } from "solid-js";
 import { BitwardenConnectorPanel } from "../settings/BitwardenConnectorPanel";
 import { GitHubConnectorPanel } from "../settings/GitHubConnectorPanel";
-import { DangerZone, DetailHeader, WizardDialog } from "../settings/IntegrationLayout";
+import { DangerZone, DetailHeader, type IntegrationStatus, WizardDialog } from "../settings/IntegrationLayout";
 import { OnePasswordConnectorPanel } from "../settings/OnePasswordConnectorPanel";
 import { AccountsSection, AllowForAgent, ChatAccessSection } from "./MarketplaceAccounts";
-import { AppAction } from "./MarketplaceCards";
+import { AppAction, AppsReadNotice } from "./MarketplaceCards";
 import { RelatedEventChecks } from "./MarketplaceEventChecks";
 import { AgentMenu } from "./MarketplaceInstallSkill";
 import { AppMark, TryCard } from "./MarketplaceParts";
@@ -38,11 +38,16 @@ const STATUS_LABEL = {
   attention: "marketplace.app.attention",
   disabled: "marketplace.app.disabled",
   idle: "marketplace.app.notConnected",
+  connecting: "marketplace.app.connecting",
+  unknown: "marketplace.app.notConnected",
 } as const satisfies Record<MarketplaceAppStatus, string>;
 
-/** The status pill has no state of its own for an app that is turned off: it reads as not in use. */
-function pillStatus(status: MarketplaceAppStatus) {
-  return status === "disabled" ? "idle" : status;
+/**
+ * The status pill has no state of its own for an app that is turned off, or that waits for a
+ * sign-in: they read as not in use.
+ */
+function pillStatus(status: MarketplaceAppStatus): IntegrationStatus {
+  return status === "connected" || status === "attention" ? status : "idle";
 }
 
 interface AccountRemovalProps {
@@ -120,7 +125,10 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
         logo={<AppMark app={props.app} />}
         name={props.app.name}
         status={pillStatus(props.app.status)}
-        statusLabel={t(STATUS_LABEL[props.app.status])}
+        statusLabel={
+          // Before the host answers, "Not connected" would be a guess that a Connect press acts on.
+          model().appsRead() === "loading" ? t("marketplace.app.checking") : t(STATUS_LABEL[props.app.status])
+        }
         subtitle={props.app.tagline}
         actions={
           <>
@@ -143,6 +151,7 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
           </>
         }
       />
+      <AppsReadNotice scope={props.scope} />
       <AllowForAgent scope={props.scope} app={props.app} />
       <Show when={plugin().prompts.length > 0}>
         <TryCard

@@ -193,6 +193,8 @@ function MarketplaceStory(props: StoryProps) {
 
     apps: () => state.apps,
     canConnectApps: () => !member,
+    appsRead: () => "loaded",
+    retryApps: () => undefined,
     appBusy: () => false,
     appConnections: (app) => state.accounts[app.id] ?? [],
     pluginSkillAgents: () => [],

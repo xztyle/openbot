@@ -136,11 +136,16 @@ export function appGroups(
       key: "marketplace.app.yourApps",
       apps: [
         ...apps.filter((app) => app.status === "attention"),
+        ...apps.filter((app) => app.status === "connecting"),
         ...apps.filter((app) => app.status === "connected"),
         ...apps.filter((app) => app.status === "disabled"),
       ],
     },
-    { id: "marketplace-apps-more", key: "marketplace.app.moreApps", apps: apps.filter((app) => app.status === "idle") },
+    {
+      id: "marketplace-apps-more",
+      key: "marketplace.app.moreApps",
+      apps: apps.filter((app) => app.status === "idle" || app.status === "unknown"),
+    },
   ];
   return groups.filter((group) => group.apps.length > 0);
 }

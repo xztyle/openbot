@@ -14,6 +14,7 @@ import type { McpChatSnapshot } from "@openbot/contracts/team-protocol/mcp-chat-
 import { safeBrowserUrl } from "@openbot/ui/features/conversation/RichMessageText";
 import type {
   AgentListingState,
+  AppsRead,
   ChatAccessMode,
   MarketplaceAccount,
   MarketplaceAccountCheck,
@@ -455,7 +456,14 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
               name: t("connector.github.title"),
               tagline: t("marketplace.app.githubTagline"),
               category: "coding",
-              status: githubState === "connected" ? "connected" : githubState === "expired" ? "attention" : "idle",
+              status:
+                githubState === "connected"
+                  ? "connected"
+                  : githubState === "expired"
+                    ? "attention"
+                    : githubState === "pending"
+                      ? "connecting"
+                      : "idle",
             } satisfies MarketplaceApp,
           ]
         : []),
@@ -512,26 +520,54 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
   });
 
   let serversRead = 0;
-  /** The server whose MCP servers `servers` holds. Null before the first read ends, and while a new read runs. */
+  /** The server whose MCP servers `servers` holds. Null before the first read ends. */
   const [serversReadFor, setServersReadFor] = createSignal<string | null>(null);
+  /** The server whose first read failed. A later read that works clears it. */
+  const [serversFailedFor, setServersFailedFor] = createSignal<string | null>(null);
   async function readServers(serverId: string) {
     const request = ++serversRead;
-    setServersReadFor(null);
-    const configs = await run(() => calls().mcp.listMcpServers(serverId));
-    if (!configs || request !== serversRead) return;
-    setServers(configs);
-    setServersReadFor(serverId);
+    if (untrack(serversReadFor) !== serverId) {
+      // Another host starts again: the rows of the old one must not show as this host's apps.
+      setServersReadFor(null);
+      setServers([]);
+    }
+    setServersFailedFor(null);
+    try {
+      const configs = await calls().mcp.listMcpServers(serverId);
+      if (request !== serversRead) return;
+      setServers(configs);
+      setServersReadFor(serverId);
+    } catch (cause) {
+      if (request !== serversRead) return;
+      // A first read that fails is not an empty list: the apps say so and offer Retry. Rows that
+      // were read before stay, and the failure of a later read is the banner.
+      if (untrack(serversReadFor) === serverId) setError(marketplaceErrorMessage(cause));
+      else setServersFailedFor(serverId);
+    }
   }
   /**
-   * True when each app shows what the host holds: its MCP servers and, for a plugin with skills, the
-   * agent's skills. Before that an installed app reads as idle. A failed read stays false.
+   * How far the read of what the host holds got: its MCP servers and, for a plugin with skills, the
+   * agent's skills. Before `loaded` an installed app reads as not connected, so Connect waits.
    */
-  const appStatesRead = () => {
-    if (props.pluginServerId && serversReadFor() !== props.pluginServerId) return false;
+  const appsRead = (): AppsRead => {
+    const serverId = props.pluginServerId;
+    if (!serverId) return "loaded";
+    if (serversFailedFor() === serverId) return "failed";
+    if (serversReadFor() !== serverId) return "loading";
     const agentId = pluginAgentId();
-    if (!agentId || !props.plugins?.some((plugin) => plugin.skills.length > 0)) return true;
-    return skills.read[agentId] === "loaded";
+    if (!agentId || !props.plugins?.some((plugin) => plugin.skills.length > 0)) return "loaded";
+    const skillsRead = skills.read[agentId];
+    if (skillsRead === "failed") return "failed";
+    return skillsRead === "loaded" ? "loaded" : "loading";
   };
+  const appStatesRead = () => appsRead() === "loaded";
+  function retryApps() {
+    const serverId = props.pluginServerId;
+    if (!serverId) return;
+    void readServers(serverId);
+    const agentId = pluginAgentId();
+    if (agentId && skills.read[agentId] === "failed") void readInstalled(agentId);
+  }
   /* The apps read the host's MCP servers while the window is open, and again for another host. */
   createEffect(
     () => (props.open ? props.pluginServerId : undefined),
@@ -1195,6 +1231,8 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
 
     apps,
     canConnectApps: () => Boolean(props.pluginServerId),
+    appsRead,
+    retryApps,
     appBusy: (id) => Boolean(busy[`app:${id}`]),
     pluginSkillAgents: (app) => (app.kind === "plugin" ? pluginSkillAgents(app.plugin) : []),
     setPluginSkills,

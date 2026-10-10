@@ -445,6 +445,69 @@ describe("MarketplaceModal", () => {
       await screen.findByRole("heading", { name, level: 3 });
     }
 
+    /**
+     * The host's list arrives after the window opens. Until then an installed app reads as not
+     * connected, and a press on Connect would save "Aave — 2" beside the account that is there.
+     */
+    it("keeps Connect off until the host's list of apps is read", async () => {
+      let answer: (rows: McpServerConfig[]) => void = () => undefined;
+      const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => [input.config]);
+      window.openbot.agent = {
+        ...window.openbot.agent,
+        listMcpServers: vi.fn(() => new Promise<McpServerConfig[]>((resolve) => (answer = resolve))),
+        saveMcpServer,
+      };
+      renderMarketplace({ ...writer, plugins: [plugin] });
+      fireEvent.click(screen.getByRole("tab", { name: "Apps" }));
+
+      const checking = await screen.findByRole("button", { name: "Checking…" });
+      expect(checking).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Connect Aave" })).toBeNull();
+      fireEvent.click(checking);
+      expect(saveMcpServer).not.toHaveBeenCalled();
+
+      answer([hostApp()]);
+      expect(await screen.findByText("Connected")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Connect Aave" })).toBeNull();
+      expect(saveMcpServer).not.toHaveBeenCalled();
+    });
+
+    it("names a failed read of the apps, keeps Connect off and reads again on Retry", async () => {
+      const listMcpServers = vi
+        .fn<OpenBotDesktopApi["agent"]["listMcpServers"]>()
+        .mockRejectedValueOnce(new Error("The host did not answer."))
+        .mockResolvedValue([hostApp()]);
+      window.openbot.agent = { ...window.openbot.agent, listMcpServers, saveMcpServer: vi.fn() };
+      renderMarketplace({ ...writer, plugins: [plugin] });
+      fireEvent.click(screen.getByRole("tab", { name: "Apps" }));
+
+      expect(await screen.findByText("Could not read apps on this computer.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Connect Aave" })).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+      expect(await screen.findByText("Connected")).toBeInTheDocument();
+      expect(screen.queryByText("Could not read apps on this computer.")).toBeNull();
+      expect(listMcpServers).toHaveBeenCalledTimes(2);
+      expect(window.openbot.agent.saveMcpServer).not.toHaveBeenCalled();
+    });
+
+    it("does not connect from a chat card when the app is already held but needs attention", async () => {
+      // The app row is here and its skill is not: a partial install, which its page repairs.
+      const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => [input.config]);
+      window.openbot.agent = {
+        ...window.openbot.agent,
+        listMcpServers: vi.fn(async () => [hostApp()]),
+        saveMcpServer,
+      };
+      window.openbot.skills = { ...window.openbot.skills, listInstalled: vi.fn(async () => []), install: vi.fn() };
+      renderMarketplace({ ...writer, plugins: [withSkill], initialPluginSlug: "aave", initialPluginConnect: true });
+
+      expect(await screen.findByText("Needs attention")).toBeInTheDocument();
+      expect(saveMcpServer).not.toHaveBeenCalled();
+      expect(window.openbot.skills.install).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog", { name: "Connect Aave" })).toBeNull();
+    });
+
     it("connects the app on the host it was given", async () => {
       const saved: McpServerConfig[] = [];
       const saveMcpServer: OpenBotDesktopApi["agent"]["saveMcpServer"] = vi.fn(async (input) => {

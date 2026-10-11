@@ -3,7 +3,13 @@ import type { AgentSummary } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import { ManagedSkillService } from "./managed-skill-service";
 
-const SLUGS = ["openbot-site-hosting", "openbot-skill-creator", "openbot-data", "openbot-event-checks"];
+const SLUGS = [
+  "openbot-site-hosting",
+  "openbot-skill-creator",
+  "openbot-data",
+  "openbot-event-checks",
+  "openbot-host-apps",
+];
 
 /** Use the same protected skill installation for current agents and newly created agents. */
 export function createApplicationManagedSkills(root: string) {

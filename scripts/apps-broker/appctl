@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""appctl: deploy and operate apps and databases on the OpenBot host.
+
+Talks to the host apps broker over a unix socket. Run `appctl help` for the command list.
+Python standard library only.
+"""
+
+import argparse
+import http.client
+import json
+import os
+import socket
+import sys
+import time
+import urllib.parse
+
+SOCKET = os.environ.get("APPCTL_SOCKET") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "appctl.sock")
+
+
+class UnixConnection(http.client.HTTPConnection):
+    def __init__(self, path):
+        super().__init__("broker", timeout=300)
+        self.path = path
+
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self.path)
+
+
+def call(method, path, body=None, query=None):
+    if query:
+        path += "?" + urllib.parse.urlencode(query)
+    conn = UnixConnection(SOCKET)
+    try:
+        data = json.dumps(body).encode() if body is not None else None
+        conn.request(method, "/v1" + path, body=data, headers={"Content-Type": "application/json"})
+        response = conn.getresponse()
+        payload = json.loads(response.read() or b"{}")
+    except (OSError, http.client.HTTPException) as err:
+        sys.exit(f"appctl: cannot reach the apps broker at {SOCKET}: {err}")
+    finally:
+        conn.close()
+    if response.status >= 400:
+        sys.exit(f"appctl: {payload.get('error', 'request failed')}")
+    return payload
+
+
+def out(value, as_json, text=None):
+    if as_json or text is None:
+        print(json.dumps(value, indent=2))
+    else:
+        print(text)
+
+
+def cell(row, column):
+    value = row.get(column)
+    if isinstance(value, list):
+        value = ",".join(str(v) for v in value)
+    return "" if value is None else str(value)
+
+
+def table(rows, columns):
+    if not rows:
+        return "(none)"
+    widths = [max(len(c), *(len(cell(r, c)) for r in rows)) for c in columns]
+    lines = ["  ".join(c.upper().ljust(w) for c, w in zip(columns, widths))]
+    for r in rows:
+        lines.append("  ".join(cell(r, c).ljust(w) for c, w in zip(columns, widths)))
+    return "\n".join(lines)
+
+
+def follow_job(job_id, wait):
+    deadline = time.time() + wait
+    offset = 0
+    while True:
+        info = call("GET", f"/jobs/{job_id}", query={"offset": offset})
+        if info["log"]:
+            sys.stdout.write(info["log"])
+            sys.stdout.flush()
+        offset = info["next"]
+        if info["status"] != "running":
+            if info["status"] == "ok":
+                print(f"\nDone (job {job_id}).")
+                return 0
+            print(f"\nFailed (job {job_id}): {info['error']}")
+            return 1
+        if time.time() > deadline:
+            print(f"\nStill running. Continue with: appctl job {job_id} --wait 300")
+            return 2
+        time.sleep(2)
+
+
+def build_parser():
+    p = argparse.ArgumentParser(prog="appctl", description="Deploy and operate apps and databases on the OpenBot host.")
+    p.add_argument("--json", action="store_true", help="print raw JSON")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("help")
+    sub.add_parser("overview", help="limits, memory budget and counts")
+    sub.add_parser("list", help="all apps")
+    d = sub.add_parser("deploy", help="build and start (or replace) an app")
+    d.add_argument("app")
+    d.add_argument("--src", help="folder under /data/OpenBot containing a Dockerfile (default /data/OpenBot/Shared/apps/<app>)")
+    d.add_argument("--port", type=int, help="port the app listens on inside its container (default 3000, or app.json)")
+    d.add_argument("--health", help="HTTP path that must answer 200-399 (default: any answer below 500 on /)")
+    d.add_argument("--memory", type=int, help="memory limit in MB (default 1024, max 4096)")
+    d.add_argument("--cpus", type=float, help="CPU limit (default 1, max 4)")
+    d.add_argument("--detach", action="store_true", help="return the job id immediately")
+    d.add_argument("--wait", type=int, default=110, help="seconds to wait for the job (default 110)")
+    for name in ("status", "stop", "start", "rollback"):
+        s = sub.add_parser(name)
+        s.add_argument("app")
+    r = sub.add_parser("restart")
+    r.add_argument("app")
+    r.add_argument("--recreate", action="store_true", help="recreate the container so changed env or databases apply")
+    lg = sub.add_parser("logs", help="app logs (or build logs with --build)")
+    lg.add_argument("app")
+    lg.add_argument("--tail", type=int, default=200)
+    lg.add_argument("--since", help="30s, 10m, 2h, 1d")
+    lg.add_argument("--build", action="store_true")
+    de = sub.add_parser("delete", help="remove an app (data is archived for 30 days)")
+    de.add_argument("app")
+    de.add_argument("--confirm", required=True, help="repeat the app name")
+    e = sub.add_parser("env", help="environment variables")
+    es = e.add_subparsers(dest="env_cmd", required=True)
+    el = es.add_parser("list")
+    el.add_argument("app")
+    ee = es.add_parser("set")
+    ee.add_argument("app")
+    ee.add_argument("pairs", nargs="+", metavar="NAME=value")
+    eu = es.add_parser("unset")
+    eu.add_argument("app")
+    eu.add_argument("name")
+    j = sub.add_parser("job", help="follow a deploy job")
+    j.add_argument("id")
+    j.add_argument("--wait", type=int, default=0)
+    db = sub.add_parser("db", help="databases")
+    ds = db.add_subparsers(dest="db_cmd", required=True)
+    ds.add_parser("list")
+    dc = ds.add_parser("create")
+    dc.add_argument("name")
+    dc.add_argument("--engine", default="postgres", choices=["postgres", "mariadb", "redis"])
+    for name in ("status", "backup"):
+        x = ds.add_parser(name)
+        x.add_argument("name")
+    dq = ds.add_parser("query", help="run SQL (or a redis command)")
+    dq.add_argument("name")
+    dq.add_argument("sql")
+    dr = ds.add_parser("restore")
+    dr.add_argument("name")
+    dr.add_argument("file")
+    dr.add_argument("--yes", action="store_true")
+    for name in ("attach", "detach"):
+        x = ds.add_parser(name)
+        x.add_argument("name")
+        x.add_argument("app")
+    dd = ds.add_parser("delete")
+    dd.add_argument("name")
+    dd.add_argument("--confirm", required=True)
+    return p
+
+
+HELP = """appctl: deploy and operate apps and databases on the OpenBot host
+
+  appctl deploy <app> [--src DIR] [--port N] [--health /path] [--memory MB] [--cpus N] [--detach]
+  appctl list | status <app> | logs <app> [--tail N] [--since 10m] [--build]
+  appctl restart <app> [--recreate] | stop <app> | start <app> | rollback <app>
+  appctl env list|set|unset <app> ...
+  appctl delete <app> --confirm <app>
+  appctl db create <name> [--engine postgres|mariadb|redis]
+  appctl db list | status <name> | query <name> "<sql>" | backup <name>
+  appctl db attach|detach <name> <app> | restore <name> <file> --yes | delete <name> --confirm <name>
+  appctl job <id> [--wait SECONDS]
+  appctl overview
+
+Add --json before the command for machine-readable output."""
+
+
+def main():
+    args = build_parser().parse_args()
+    j = args.json
+    c = args.cmd
+    if c == "help":
+        print(HELP)
+    elif c == "overview":
+        out(call("GET", "/overview"), j)
+    elif c == "list":
+        apps = call("GET", "/apps")["apps"]
+        out(apps, j, table(apps, ["name", "state", "http", "restarts", "memory_limit_mb", "url"]))
+    elif c == "deploy":
+        fields = dict(src=args.src, port=args.port, health=args.health, memory_mb=args.memory, cpus=args.cpus)
+        body = {k: v for k, v in fields.items() if v is not None}
+        job = call("POST", f"/apps/{args.app}/deploy", body)["job"]
+        if args.detach:
+            print(f"Started job {job}. Follow with: appctl job {job} --wait 300")
+        else:
+            sys.exit(follow_job(job, args.wait))
+    elif c == "job":
+        sys.exit(follow_job(args.id, args.wait))
+    elif c == "status":
+        out(call("GET", f"/apps/{args.app}"), True)
+    elif c == "logs":
+        q = {"tail": args.tail}
+        if args.since:
+            q["since"] = args.since
+        if args.build:
+            q["build"] = "1"
+        sys.stdout.write(call("GET", f"/apps/{args.app}/logs", query=q)["log"])
+    elif c in ("stop", "start", "rollback"):
+        out(call("POST", f"/apps/{args.app}/{c}", {}), True)
+    elif c == "restart":
+        out(call("POST", f"/apps/{args.app}/{'recreate' if args.recreate else 'restart'}", {}), True)
+    elif c == "delete":
+        out(call("DELETE", f"/apps/{args.app}", {"confirm": args.confirm}), True)
+    elif c == "env":
+        if args.env_cmd == "list":
+            out(call("GET", f"/apps/{args.app}/env"), True)
+        elif args.env_cmd == "set":
+            pairs = {}
+            for item in args.pairs:
+                if "=" not in item:
+                    sys.exit(f"appctl: expected NAME=value, got {item!r}")
+                key, value = item.split("=", 1)
+                pairs[key] = value
+            out(call("POST", f"/apps/{args.app}/env", {"set": pairs}), True)
+        else:
+            out(call("DELETE", f"/apps/{args.app}/env", {"name": args.name}), True)
+    elif c == "db":
+        x = args.db_cmd
+        if x == "list":
+            dbs = call("GET", "/dbs")["databases"]
+            out(dbs, j, table(dbs, ["name", "engine", "state", "data_mb", "attached_apps"]))
+        elif x == "create":
+            out(call("POST", f"/dbs/{args.name}", {"engine": args.engine}), True)
+        elif x == "status":
+            out(call("GET", f"/dbs/{args.name}"), True)
+        elif x == "query":
+            r = call("POST", f"/dbs/{args.name}/query", {"sql": args.sql})
+            sys.stdout.write(r["output"])
+            sys.exit(0 if r["ok"] else 1)
+        elif x == "backup":
+            out(call("POST", f"/dbs/{args.name}/backup", {}), True)
+        elif x == "restore":
+            out(call("POST", f"/dbs/{args.name}/restore", {"file": args.file, "yes": args.yes}), True)
+        elif x in ("attach", "detach"):
+            out(call("POST", f"/dbs/{args.name}/{x}", {"app": args.app}), True)
+        elif x == "delete":
+            out(call("DELETE", f"/dbs/{args.name}", {"confirm": args.confirm}), True)
+
+
+if __name__ == "__main__":
+    main()

@@ -18,9 +18,9 @@ Deploying, replacing, stopping, and deleting are changes on the user's server. D
 1. Put the app in `/data/OpenBot/Shared/apps/<name>/` (or work in your own workspace and pass `--src <folder under /data/OpenBot>`). The folder needs a `Dockerfile` at its top level.
 2. `appctl deploy <name> [--port N] [--health /path] [--memory MB] [--cpus N]`. It builds, starts, and waits for the app to answer HTTP. A failed new version is rolled back to the previous one automatically.
 3. Check the result: `appctl status <name>`, then `appctl logs <name>`. Keep going until the app answers and its logs are quiet.
-4. Tell the user the URL that `appctl status` prints.
+4. Open the app yourself with its `internal_url` (for example `http://app-notes:3000`), from your shell with `curl` or in your browser tool. It works on this server with no DNS and no Cloudflare setup. Tell the user what the app is called and what it does.
 
-The same command redeploys: edit the folder, run `appctl deploy <name>` again. The URL, data, environment, and attached databases stay.
+The same command redeploys: edit the folder, run `appctl deploy <name>` again. The address, data, environment, and attached databases stay.
 
 An optional `app.json` next to the Dockerfile holds the defaults: `{"port": 8080, "health": "/healthz", "memory_mb": 512, "cpus": 0.5}`. Flags override it.
 
@@ -61,7 +61,9 @@ Defaults are 1 GB of memory and 1 CPU per app, at most 4 GB and 4 CPUs, 20 apps,
 
 ## Access
 
-Every app is served at `https://<name>.<apps domain>`, only through the user's Cloudflare setup. Whether an app is private or public is the user's setting on Cloudflare, not yours: do not promise that a URL is public, and do not tell people to share it. If the user wants an app public, say it is a change they make in Cloudflare.
+- `internal_url` (`http://app-<name>:<port>`) is the normal way to use an app. It works only from this server: from your shell and your browser tool. Use it for the tools you build to organize your work. Apps cannot call each other; an app reaches only its own databases.
+- `public_url` (`https://<name>.<apps domain>`) works only after the user sets up Cloudflare for the apps domain. Whether an app is private or public there is the user's setting, not yours: do not promise that a URL is public, and do not tell people to share it. If the user wants an app public, say it is a change they make in Cloudflare.
+- The user can also open an app from their own computer with an SSH tunnel to its `local_url`. Offer this only when asked.
 
 ## Troubleshooting
 

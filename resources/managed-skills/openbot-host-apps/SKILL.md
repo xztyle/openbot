@@ -64,6 +64,7 @@ Defaults are 1 GB of memory and 1 CPU per app, at most 4 GB and 4 CPUs, 20 apps,
 - `internal_url` (`http://app-<name>:<port>`) is the normal way to use an app. It works only from this server: from your shell and your browser tool. Use it for the tools you build to organize your work. Apps cannot call each other; an app reaches only its own databases.
 - `public_url` (`https://<name>.<apps domain>`) works only after the user sets up Cloudflare for the apps domain. Whether an app is private or public there is the user's setting, not yours: do not promise that a URL is public, and do not tell people to share it. If the user wants an app public, say it is a change they make in Cloudflare.
 - The user can also open an app from their own computer with an SSH tunnel to its `local_url`. Offer this only when asked.
+- A public TCP port for an app (for example a TLS websocket for a worker on the user's own computer) is set on the host by the user, never by you. `appctl status` lists it under `public_ports`. If you need one, say which app, which container port, and why. Authenticate every connection on a public port yourself, with a secret the user sets, and treat it as a hostile network.
 
 ## Troubleshooting
 

@@ -56,6 +56,8 @@ DEFAULT_CONFIG = {
     "build_timeout_s": 1200,
     "db_backup_keep": 7,
     "agent_container": "openbot",
+    # Host-owned: { "<app>": [ { "host_port": 8050, "container_port": 8443 } ] }. Agents cannot set it.
+    "public_ports": {},
     "deleted_keep_days": 30,
 }
 
@@ -456,6 +458,37 @@ def allocate_port(cfg):
     raise ApiError("No free host port is left in the app range.", 500)
 
 
+# Ports this host already serves, and the ranges the broker and TURN use. A public mapping may not take them.
+RESERVED_PUBLIC_PORTS = {22, 53, 80, 443, 3478, 5349, 8080, 8081}
+
+
+def public_mappings(name):
+    """The public TCP ports the user mapped to this app on the host. Agents cannot change them.
+
+    Docker publishes these on every interface and bypasses ufw, so each one is validated and the
+    set is limited to what `config.json` lists for this exact app name.
+    """
+    cfg = load_config()
+    low, high = cfg["port_range"]
+    result, seen = [], set()
+    for other, entries in (cfg.get("public_ports") or {}).items():
+        for entry in entries if isinstance(entries, list) else []:
+            try:
+                host_port, container_port = int(entry["host_port"]), int(entry["container_port"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not (1024 <= host_port <= 65535 and 1 <= container_port <= 65535):
+                continue
+            if host_port in RESERVED_PUBLIC_PORTS or low <= host_port <= high or 49152 <= host_port <= 49215:
+                continue
+            if host_port in seen:
+                continue
+            seen.add(host_port)
+            if other == name:
+                result.append({"host_port": host_port, "container_port": container_port})
+    return result
+
+
 def db_urls(app):
     urls, first_sql = {}, None
     for db_name in app.get("dbs", []):
@@ -508,6 +541,7 @@ def start_container(app, image):
         "create", "--name", cname, "--init", "--restart", "unless-stopped",
         "--network", f"appnet-{name}",
         "-p", f"127.0.0.1:{app['host_port']}:{app['port']}",
+        *sum((["-p", f"{m['host_port']}:{m['container_port']}/tcp"] for m in public_mappings(name)), []),
         "--memory", mem, "--memory-swap", mem, "--cpus", str(app["cpus"]), "--pids-limit", "256",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
         "--user", f"{APP_UID}:{APP_UID}",
@@ -675,6 +709,7 @@ def app_status(name, brief=False):
         "internal_url": f"http://app-{name}:{app['port']}",
         "public_url": f"https://{name}.{cfg['domain']}",
         "local_url": f"http://127.0.0.1:{app['host_port']}",
+        "public_ports": public_mappings(name),
         "port": app["port"],
         "host_port": app["host_port"],
         "image": app.get("image"),

@@ -164,6 +164,35 @@ class Databases(unittest.TestCase):
             appsd.create_db("mydb", "oracle")
 
 
+class PublicPorts(unittest.TestCase):
+    def write(self, public_ports):
+        appsd.write_json(appsd.BASE / "config.json", {"public_ports": public_ports})
+
+    def tearDown(self):
+        (appsd.BASE / "config.json").unlink(missing_ok=True)
+
+    def test_only_the_named_app_gets_its_mapping(self):
+        self.write({"tts-gateway": [{"host_port": 8050, "container_port": 8443}]})
+        self.assertEqual(appsd.public_mappings("tts-gateway"), [{"host_port": 8050, "container_port": 8443}])
+        self.assertEqual(appsd.public_mappings("other-app"), [])
+
+    def test_reserved_and_broker_ports_are_refused(self):
+        for port in (22, 80, 443, 3478, 5349, 8081, 20001, 49160, 80000, 0, 1023):
+            self.write({"tts-gateway": [{"host_port": port, "container_port": 8443}]})
+            self.assertEqual(appsd.public_mappings("tts-gateway"), [], port)
+
+    def test_a_port_belongs_to_one_app(self):
+        self.write({
+            "first-app": [{"host_port": 8050, "container_port": 1}],
+            "second-app": [{"host_port": 8050, "container_port": 2}],
+        })
+        self.assertEqual(len(appsd.public_mappings("first-app")) + len(appsd.public_mappings("second-app")), 1)
+
+    def test_malformed_entries_are_ignored(self):
+        self.write({"tts-gateway": [{"host_port": "x"}, "nope", {"host_port": 8050}]})
+        self.assertEqual(appsd.public_mappings("tts-gateway"), [])
+
+
 class Routes(unittest.TestCase):
     def test_unknown(self):
         with self.assertRaises(appsd.ApiError) as ctx:

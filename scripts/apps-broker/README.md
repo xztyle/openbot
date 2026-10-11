@@ -41,6 +41,20 @@ Inside the container the agents use `python3 /opt/appctl/appctl help`.
 - Secret environment values (names with KEY, TOKEN, SECRET, PASSWORD, AUTH, COOKIE, SESSION) are
   user-only: `printf %s "$VALUE" | sudo python3 /opt/openbot/apps/appsd.py env-set <app> <NAME>`.
 
+## Public TCP ports (host-owned)
+
+An app can be given a public TCP port for something that is not HTTP behind Cloudflare, such as a
+TLS websocket for a remote worker. Only the host config does this; agents cannot:
+
+```json
+"public_ports": { "tts-gateway": [ { "host_port": 8050, "container_port": 8443 } ] }
+```
+
+Put it in `/opt/openbot/apps/config.json` and run `appctl restart <app> --recreate` (or redeploy).
+Rules: host port 1024-65535, not 22/53/80/443/3478/5349/8080/8081, not the broker's 20000-20999
+range or TURN's 49152-49215, and one app per host port. Docker publishes on every interface and
+**bypasses ufw**, so the rule above is the only gate. `appctl status <app>` lists the mapping.
+
 ## Safety properties
 
 - Source folders must resolve inside `/opt/openbot/data/OpenBot`. The build runs on a copy.

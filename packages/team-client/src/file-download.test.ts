@@ -111,6 +111,26 @@ describe("mobile attachment downloads", () => {
     receiver.clear();
     await expect(result).rejects.toThrow("connection closed");
   });
+
+  it("accepts a file above the phone limit when the peer raises its own limit", async () => {
+    const frames: string[] = [];
+    const receiver = createRemoteFileReceiver(
+      (data: string): Effect.Effect<void, FileTransferError> =>
+        Effect.tryPromise({
+          try: () =>
+            (async (data: string) => {
+              frames.push(data);
+            })(data),
+          catch: fileTransferError,
+        }),
+      { maxBytes: MOBILE_ATTACHMENT_BYTES * 4 },
+    );
+    await runTeamEffect(receiver.receive(encodeTeamProtocolV2Frame({ ...open, size: MOBILE_ATTACHMENT_BYTES * 3 })));
+    expect(frames.map(decodeTeamProtocolV2FileControlFrame)).toEqual([
+      { version: 2, type: "file-ack", transferId, receivedThrough: 0 },
+    ]);
+    receiver.clear();
+  });
 });
 
 it("keeps a progressing download alive beyond sixty seconds", async () => {

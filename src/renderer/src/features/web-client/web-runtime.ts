@@ -72,7 +72,7 @@ import {
   type TeamProtocolSupportV1,
   teamProtocolUpdateDirection,
 } from "@openbot/contracts/team-protocol/v1";
-import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
+import { TEAM_PROTOCOL_V2_MAX_FILE_BYTES, type TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { TEAM_PROTOCOL_V3 } from "@openbot/contracts/team-protocol/v3";
 import {
   WORKSPACE_DIRECTORY_CAPABILITY,
@@ -284,7 +284,8 @@ export function createWebWorkspaceRuntime(
   events: WebRuntimeEvents,
   accountFetch: typeof fetch,
   dependencies: WebConnectionDependencies = {
-    createPeer: createRemoteTeamPeer,
+    // A browser on a computer takes a file up to the protocol limit; a phone keeps the 10 MB default.
+    createPeer: (actions) => createRemoteTeamPeer(actions, { downloadLimitBytes: TEAM_PROTOCOL_V2_MAX_FILE_BYTES }),
     acquireHostLock: acquireWebHostLock,
     openHostChannel: openWebHostChannel,
   },

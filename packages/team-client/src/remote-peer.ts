@@ -274,7 +274,11 @@ class RemotePeerIO extends Context.Service<
   }
 }
 
-export function createRemoteTeamPeer(actions: ActionsRef) {
+/**
+ * `downloadLimitBytes` is the largest file this peer accepts from the host. A phone keeps the 10 MB
+ * default, because it holds the whole file in memory.
+ */
+export function createRemoteTeamPeer(actions: ActionsRef, options: { downloadLimitBytes?: number } = {}) {
   const runtime = ManagedRuntime.make(RemotePeerIO.layer(actions));
   const workScope = Scope.makeUnsafe();
   const running = new Set<Promise<unknown>>();
@@ -302,13 +306,15 @@ export function createRemoteTeamPeer(actions: ActionsRef) {
       }),
     () => createTeamRequestId((size) => crypto.getRandomValues(new Uint8Array(size))),
   );
-  const downloads = createRemoteFileReceiver((data) =>
-    Effect.suspend(() => {
-      const state = peer;
-      if (!state || !isPeerOnline(state))
-        return Effect.fail(new RemotePeerError({ message: sourceText("error.remote.selectedServerOffline") }));
-      return sendPayload(state, "files", data);
-    }),
+  const downloads = createRemoteFileReceiver(
+    (data) =>
+      Effect.suspend(() => {
+        const state = peer;
+        if (!state || !isPeerOnline(state))
+          return Effect.fail(new RemotePeerError({ message: sourceText("error.remote.selectedServerOffline") }));
+        return sendPayload(state, "files", data);
+      }),
+    options.downloadLimitBytes === undefined ? {} : { maxBytes: options.downloadLimitBytes },
   );
   const closingSessions = new Map<string, Deferred.Deferred<void>>();
   // A failed attempt keeps its session for the next attempt on the same host. Ending it each time

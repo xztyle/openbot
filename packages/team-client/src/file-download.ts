@@ -23,7 +23,12 @@ interface Download {
 }
 
 /** Receives the released file protocol; bytes are exposed only after digest validation. */
-export function createRemoteFileReceiver<E, R>(send: (data: string) => Effect.Effect<void, E, R>) {
+export function createRemoteFileReceiver<E, R>(
+  send: (data: string) => Effect.Effect<void, E, R>,
+  options: { maxBytes?: number } = {},
+) {
+  // A phone holds the whole file in memory, so 10 MB is the default. A browser on a computer opts in to more.
+  const maxBytes = options.maxBytes ?? MOBILE_ATTACHMENT_BYTES;
   const downloads = new Map<string, Download>();
   const waiters = new Map<
     string,
@@ -121,17 +126,13 @@ export function createRemoteFileReceiver<E, R>(send: (data: string) => Effect.Ef
     if (frame.type === "file-open") {
       if (downloads.has(frame.transferId)) return yield* transferFailure("The host repeated an attachment transfer.");
       const total = [...downloads.values()].reduce((sum, entry) => sum + entry.bytes.length, 0);
-      if (
-        frame.size > MOBILE_ATTACHMENT_BYTES ||
-        total + frame.size > MOBILE_ATTACHMENT_BYTES * 2 ||
-        downloads.size >= 10
-      ) {
+      if (frame.size > maxBytes || total + frame.size > maxBytes * 2 || downloads.size >= 10) {
         yield* sendFrame(
           encodeTeamProtocolV2Frame({
             version: 2,
             type: "file-cancel",
             transferId: frame.transferId,
-            reason: "Attachments must be 10 MB or smaller. Download fewer files at once.",
+            reason: `Attachments must be ${Math.floor(maxBytes / (1024 * 1024))} MB or smaller. Download fewer files at once.`,
           }),
         );
         return true;

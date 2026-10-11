@@ -1101,6 +1101,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         redactMcp: (text) => this.#mcp.redact(text),
         runsTurn: (agentId) => this.#runsTurn(agentId),
+        steerWhenBusy: (agentId, deliveryId) => this.#steerAgentMessage(agentId, deliveryId),
         interrupt: (agentId, turnId, mayStop) =>
           this.#interruptTurn(agentId, turnId, undefined, mayStop).pipe(toToolOperationFailed),
         turnActivity: (agentId, turnId) => ({
@@ -2864,13 +2865,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           (failure) => new AgentLifecycleFailed({ operation: "update message preview", cause: failure.cause }),
         ),
       );
-    // A turn the user stopped is ending, and a message steered into it would end with it.
-    const steerTurnId =
-      snapshot.activeTurnId &&
-      snapshot.activeTurnId !== this.#stoppedTurns.get(agent.id) &&
-      (agent.busyMessageMode ?? this.#busyMessageMode()) === "steer"
-        ? snapshot.activeTurnId
-        : null;
+    const steerTurnId = this.#steerTurnId(agent, snapshot.activeTurnId);
     const steers = steerTurnId !== null && agentProviderDescriptor(providerForAgent(agent)).steer === "native";
     if (steerTurnId && !steers) yield* this.#markSteerFallback(agent.id, delivery.delivery.id, "provider-unsupported");
     this.#emit({ type: "agents-changed", agents: this.listAgents() });
@@ -2911,6 +2906,40 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         }),
       ),
     );
+  });
+
+  /**
+   * The turn that a new message may join: the running one, when the agent steers by default. A turn
+   * the user stopped is ending, and a message steered into it would end with it.
+   */
+  #steerTurnId(agent: AgentSummary, activeTurnId: string | null): string | null {
+    return activeTurnId &&
+      activeTurnId !== this.#stoppedTurns.get(agent.id) &&
+      (agent.busyMessageMode ?? this.#busyMessageMode()) === "steer"
+      ? activeTurnId
+      : null;
+  }
+
+  /**
+   * A message from another agent joins the running turn of a busy agent, as a message from the user
+   * does, under the same preference. It is queued already, so a refusal leaves it there with its
+   * reason on the row. The sender is answered without the wait for the provider.
+   */
+  readonly #steerAgentMessage = Effect.fn("AgentService.steerAgentMessage")(function* (
+    this: AgentService,
+    agentId: string,
+    deliveryId: string,
+  ) {
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    if (!agent || this.#mailbox.getDelivery(deliveryId)?.delivery.status !== "queued") return;
+    const turnId = this.#steerTurnId(agent, this.#conversation.ensureSnapshot(agent.id, agent.threadId).activeTurnId);
+    if (!turnId) return;
+    if (agentProviderDescriptor(providerForAgent(agent)).steer !== "native") {
+      yield* this.#markSteerFallback(agent.id, deliveryId, "provider-unsupported");
+      this.#mailboxSync.emitQueue(agent.id);
+      return;
+    }
+    yield* this.#steerSentMessage(agent, deliveryId, turnId).pipe(Effect.forkIn(this.#scope));
   });
 
   /** The reason is a label on the queue row, so a failed write leaves the message queued without it. */

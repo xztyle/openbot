@@ -1409,6 +1409,24 @@ describe.sequential("AgentService: queue", () => {
       expect(steer?.params).toMatchObject({ expectedTurnId: turnId, clientUserMessageId: receipt.deliveries[0]?.id });
     });
 
+    it("joins the running turn when another agent sends the message", async () => {
+      const { service: agentService, client, store, turnId } = await startBusyAgent("codex");
+      await runCauseEffect(store.getOrCreate("worker"));
+      await runCauseEffect(agentService.sendMessage({ agentId: "worker", text: "Check staging." }));
+      await waitForQueue(agentService, "worker", (queue) => queue.deliveries[0]?.status === "running");
+      const workerThreadId = store.activeProviderSession("worker")?.externalSessionId;
+      assert(workerThreadId);
+
+      await callOpenBotTool(client, workerThreadId, "send_message", {
+        recipientAgentIds: ["chief"],
+        text: "Use staging",
+      });
+
+      await waitForQueue(agentService, "chief", (queue) => queue.deliveries[1]?.status === "running");
+      const steer = client.requests.find((request) => request.method === "turn/steer");
+      expect(steer?.params).toMatchObject({ expectedTurnId: turnId });
+    });
+
     it("waits in the queue with a reason on a provider that cannot steer, then starts", async () => {
       const { service: agentService, client, completeTurn } = await startBusyAgent("opencode");
       await runCauseEffect(agentService.sendMessage({ agentId: "chief", text: "Use staging" }));

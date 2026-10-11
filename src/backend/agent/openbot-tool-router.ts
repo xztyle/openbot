@@ -119,6 +119,8 @@ export interface OpenBotToolRouterHooks {
   redactMcp(text: string): string;
   /** True while the provider runs a turn for this agent, a context compaction included. */
   runsTurn(agentId: string): boolean;
+  /** Takes a queued message into the running turn of a busy agent, when that agent steers by default. */
+  steerWhenBusy(agentId: string, deliveryId: string): Effect.Effect<void>;
   /** `false` when the turn no longer runs or `mayStop` refuses, so no stop was sent. */
   interrupt(agentId: string, turnId: string, mayStop: () => boolean): Effect.Effect<boolean, ToolOperationFailed>;
   /** Epoch milliseconds from the turn lifecycle; null when this process has not seen the event. */
@@ -1198,6 +1200,10 @@ export class OpenBotToolRouter {
           idempotencyKey,
         })
         .pipe(toToolOperationFailed);
+      // Like a message from the user, a message from an agent joins the turn that runs now.
+      for (const delivery of receipt.deliveries) {
+        yield* this.#hooks.steerWhenBusy(delivery.recipientAgentId, delivery.id);
+      }
       for (const recipient of recipientValues) {
         this.#mailboxSync.emitQueue(recipient);
         this.#drain.scheduleDrain(recipient);

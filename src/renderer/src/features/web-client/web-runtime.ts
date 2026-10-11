@@ -985,9 +985,10 @@ export function createWebWorkspaceRuntime(
 function decodeWebFile(value: unknown): WebFile {
   if (!isDynamicRecord(value)) throw new Error("The host returned an invalid file.");
   const base64 = requiredString(value, "base64");
-  if (base64.length > Math.ceil(MOBILE_ATTACHMENT_BYTES / 3) * 4)
-    throw new Error(currentText().t("error.remote.attachmentTooLarge"));
-  if (atob(base64).length > MOBILE_ATTACHMENT_BYTES)
+  // A browser on a computer takes a file up to the protocol limit, the same limit the peer applies.
+  // The decoded size comes from the length: `atob` would copy a file of 100 MB only to measure it.
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  if ((base64.length / 4) * 3 - padding > TEAM_PROTOCOL_V2_MAX_FILE_BYTES)
     throw new Error(currentText().t("error.remote.attachmentTooLarge"));
   return {
     name: requiredString(value, "name"),

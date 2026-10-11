@@ -349,17 +349,17 @@ describe("browser workspace runtime", () => {
     expect(peer.execute).not.toHaveBeenCalled();
     await runtime.dispose();
   });
-  it("preserves downloaded bytes and rejects files above the browser limit", async () => {
+  it("preserves downloaded bytes, including files above the phone limit", async () => {
     const runtime = create();
     await runtime.connect(host);
     const file = { name: "fixture.txt", mimeType: "text/plain", base64: btoa("download fixture") };
     peer.execute.mockResolvedValue({ ok: true, status: 200, body: file });
     await expect(runtime.download("attachment")).resolves.toEqual(file);
-    const limit = 10 * 1024 * 1024;
-    for (const size of [limit, limit + 1, limit + 3]) {
+    // A browser takes a file up to the protocol limit, so the 10 MB limit of a phone does not apply.
+    const phoneLimit = 10 * 1024 * 1024;
+    for (const size of [phoneLimit, phoneLimit + 1, phoneLimit + 3, 3 * phoneLimit]) {
       peer.execute.mockResolvedValue({ ok: true, status: 200, body: { ...file, base64: btoa("a".repeat(size)) } });
-      if (size === limit) await expect(runtime.download("attachment")).resolves.toMatchObject({ name: file.name });
-      else await expect(runtime.download("attachment")).rejects.toThrow("10 MB");
+      await expect(runtime.download("attachment")).resolves.toMatchObject({ name: file.name });
     }
     await runtime.dispose();
   });

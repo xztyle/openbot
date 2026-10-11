@@ -186,7 +186,7 @@ def main():
         out(call("GET", "/overview"), j)
     elif c == "list":
         apps = call("GET", "/apps")["apps"]
-        out(apps, j, table(apps, ["name", "state", "http", "restarts", "memory_limit_mb", "url"]))
+        out(apps, j, table(apps, ["name", "state", "http", "restarts", "memory_limit_mb", "internal_url"]))
     elif c == "deploy":
         fields = dict(src=args.src, port=args.port, health=args.health, memory_mb=args.memory, cpus=args.cpus)
         body = {k: v for k, v in fields.items() if v is not None}

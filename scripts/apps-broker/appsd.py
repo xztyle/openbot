@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
     "min_free_build_mb": 8000,
     "build_timeout_s": 1200,
     "db_backup_keep": 7,
+    "agent_container": "openbot",
     "deleted_keep_days": 30,
 }
 
@@ -206,6 +207,15 @@ def ensure_network(name, internal=False):
     if internal:
         args.append("--internal")
     docker(*args, name)
+
+
+def attach_agent_container(network):
+    """Put the OpenBot container on an app network so agents reach the app by name, with no DNS."""
+    agent = load_config().get("agent_container", "openbot")
+    info = container_info(agent)
+    if not info or network in info["NetworkSettings"]["Networks"]:
+        return
+    docker("network", "connect", network, agent, check=False)
 
 
 def free_memory_mb():
@@ -508,6 +518,7 @@ def start_container(app, image):
         if container_info(f"db-{db_name}"):
             docker("network", "connect", f"dbnet-{db_name}", cname)
     docker("start", cname)
+    attach_agent_container(f"appnet-{name}")
 
 
 def probe_http(app):
@@ -658,7 +669,9 @@ def app_status(name, brief=False):
     state = "not-created"
     out = {
         "name": name,
-        "url": f"https://{name}.{cfg['domain']}",
+        "internal_url": f"http://app-{name}:{app['port']}",
+        "public_url": f"https://{name}.{cfg['domain']}",
+        "local_url": f"http://127.0.0.1:{app['host_port']}",
         "port": app["port"],
         "host_port": app["host_port"],
         "image": app.get("image"),
@@ -745,6 +758,7 @@ def delete_app(name, confirm):
         graveyard = BACKUPS / "_deleted" / f"app-{name}-{stamp}"
         graveyard.mkdir(parents=True, exist_ok=True)
         docker("rm", "-f", f"app-{name}", check=False)
+        docker("network", "disconnect", "-f", f"appnet-{name}", load_config().get("agent_container", "openbot"), check=False)
         docker("network", "rm", f"appnet-{name}", check=False)
         data = BASE / "data" / name
         if data.exists():
@@ -1052,6 +1066,7 @@ def watchdog_once():
         app = read_json(app_path(name))
         if not app or not app.get("image") or app.get("desired") == "stopped":
             continue
+        attach_agent_container(f"appnet-{name}")
         info = container_info(f"app-{name}")
         key = None
         if not info:

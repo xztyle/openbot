@@ -530,8 +530,12 @@ def wait_healthy(app, job, seconds=90):
     deadline = time.time() + seconds
     while time.time() < deadline:
         info = container_info(f"app-{app['name']}")
-        if not info or not info["State"]["Running"]:
-            return False, "the container exited"
+        if not info:
+            return False, "the container is gone"
+        if info["RestartCount"] >= 2:
+            return False, "the container keeps crashing; read its logs"
+        if info["State"]["Status"] in ("exited", "dead"):
+            return False, f"the container exited (exit code {info['State'].get('ExitCode')})"
         code = probe_http(app)
         if code and code > 0:
             return True, f"answering HTTP {code}"

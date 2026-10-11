@@ -9,20 +9,35 @@ import type { WebFile, WebWorkspaceRuntime } from "./web-runtime";
  * connection: saved as a download, or previewed from its bytes.
  */
 export function createWebAttachmentFiles(
-  remote: Pick<WebWorkspaceRuntime, "download" | "sharedFile" | "workspaceFile">,
+  remote: Pick<WebWorkspaceRuntime, "download" | "sharedFile" | "workspaceFile" | "fileLink">,
 ) {
   const save = createWebFileSaver();
+  // The link is the host's own download address, so the browser saves the file with its own download
+  // manager: no size limit in memory, and it resumes.
+  const open = (ticket: { url: string; name: string }) => {
+    const link = document.createElement("a");
+    link.href = ticket.url;
+    link.download = ticket.name;
+    link.rel = "noopener";
+    link.click();
+  };
   return {
     async download(id: string): Promise<void> {
+      const ticket = await remote.fileLink({ kind: "attachment", attachmentId: id });
+      if (ticket) return open(ticket);
       save(await remote.download(id));
     },
     async preview(attachment: AttachmentSummary): Promise<FilePreview> {
       return filePreview(await remote.download(attachment.id));
     },
     async saveShared(path: string): Promise<void> {
+      const ticket = await remote.fileLink({ kind: "shared", path });
+      if (ticket) return open(ticket);
       save(await remote.sharedFile(path));
     },
     async saveWorkspace(agentId: string, path: string): Promise<void> {
+      const ticket = await remote.fileLink({ kind: "workspace", agentId, path });
+      if (ticket) return open(ticket);
       save(await remote.workspaceFile(agentId, path));
     },
     // The host sends a shared or workspace file as `application/octet-stream`, so its name gives the type.

@@ -87,6 +87,7 @@ function runtimeFixture(
     cancelUpload: async () => {},
     discard: async () => {},
     download: async () => ({ name: "unused", mimeType: "text/plain", base64: "" }),
+    fileLink: async () => null,
     sharedFile: async () => ({ name: "unused", mimeType: "text/plain", base64: "" }),
     workspaceFile: async () => ({ name: "unused", mimeType: "text/plain", base64: "" }),
     workspaceDirectory: async () => ({

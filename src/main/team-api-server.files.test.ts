@@ -33,6 +33,49 @@ describe("TeamApiServer files", () => {
     expect(await original.text()).toBe("full attachment bytes");
   });
 
+  it("gives a download link for one file only to a member, and only with a download address", async () => {
+    const { root, start, signIn } = await createTeamApiFixture("file-ticket", { configure: true });
+    const path = join(root, "final.mov");
+    await writeFile(path, "video bytes");
+    const minted: Array<{ path: string; name: string }> = [];
+    const { base } = await start({
+      mailbox: {
+        resolveAttachment: () => Effect.sync(() => ({ path, mimeType: "video/quicktime", name: "final.mov" })),
+      },
+      downloadTickets: {
+        mint: (file) => {
+          minted.push(file);
+          return { url: "https://dl.example.com/d/ticket", expiresAt: 123 };
+        },
+      },
+    });
+    const send = (token: string | null, capabilities = "fork-host-v1") =>
+      fetch(`${base}/v1/file-tickets`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "OpenBot-Capabilities": capabilities,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ kind: "attachment", attachmentId: "video", agentId: null, path: null }),
+      });
+
+    expect((await send(null)).status).toBe(401);
+    const token = await signIn();
+    // A host that does not advertise the capability to this client is refused, so the client falls back.
+    expect((await send(token, "")).status).toBe(400);
+    expect(minted).toEqual([]);
+    const response = await send(token);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      url: "https://dl.example.com/d/ticket",
+      name: "final.mov",
+      size: 11,
+      expiresAt: 123,
+    });
+    expect(minted).toEqual([{ path, name: "final.mov" }]);
+  });
+
   it("downloads authenticated shared files through the remote API", async () => {
     const { root, start, signIn } = await createTeamApiFixture("shared-file", { configure: true });
     const filePath = join(root, "report.csv");

@@ -65,6 +65,7 @@ export const messages = defineMessages("error.team", {
   "error.team.agentImportUnsupported": "Importing agents is not supported by this connection.",
   "error.team.liveActivityUnsupported": "This host cannot update the Live Activity of a phone.",
   "error.team.webPushUnsupported": "This host cannot send push messages to a browser.",
+  "error.team.fileTicketUnsupported": "This host has no download address for large files.",
   "error.team.webPushEndpointRefused": "This host sends push messages only to the push service of a browser.",
   "error.team.webPushLimit": "This host has reached its limit of browsers that get push messages.",
   "error.team.agentUpdateTargetRequired": "An agent to update is required.",

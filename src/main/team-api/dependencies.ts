@@ -43,6 +43,7 @@ import type { StorageUsageService } from "../../backend/storage-usage";
 import type { TeamChatStore } from "../../backend/team-chat-store";
 import type { AgentImportService } from "../agent-import-service";
 import type { BrowserViewGateway } from "../browser-view-gateway";
+import type { DownloadTickets } from "../download-tickets";
 import type { HostedSiteDesktopService } from "../hosted-site-service";
 import type { McpToolRuntimePreparation } from "../ipc/mcp-server-handlers";
 import type { LiveActivityPushService } from "../live-activity-push";
@@ -253,6 +254,8 @@ export interface TeamApiOptions {
   securityAudit?: Pick<SecurityAuditLog, "read">;
   /** `web-push-v1`: a member's browser gives its push subscription, and the host sends it push messages. */
   webPush?: Pick<WebPushService, "publicKey" | "register" | "remove">;
+  /** `file-tickets-v1`: signed links that a browser downloads from the host's own download address. */
+  downloadTickets?: Pick<DownloadTickets, "mint">;
   /** Starts and waits for the managed tool runtimes behind the MCP save, enable, and test routes. */
   mcpToolRuntimePreparation?: McpToolRuntimePreparation;
   storage?: TeamApiStorage;

@@ -793,7 +793,11 @@ export class TeamApiServer {
   }
 
   #routeFiles(context: TeamApiRequestContext): Promise<RouteOutcome> {
-    return routeFiles(context, { agents: this.#options.agents, mailbox: this.#options.mailbox });
+    return routeFiles(context, {
+      agents: this.#options.agents,
+      mailbox: this.#options.mailbox,
+      tickets: this.#options.downloadTickets,
+    });
   }
 
   #routeAgents(context: TeamApiRequestContext): Promise<RouteOutcome> {

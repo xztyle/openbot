@@ -131,6 +131,7 @@ import {
   type DevelopmentRemoteRole,
   startDevelopmentRemoteRole,
 } from "./development-remote-bootstrap";
+import { DownloadTickets } from "./download-tickets";
 import { performDynamicIslandCriticalAction } from "./dynamic-island-actions";
 import { DynamicIslandFailed, DynamicIslandWindowController, toDynamicIslandFailed } from "./dynamic-island-window";
 import { githubAppConfig } from "./github-connector-config";
@@ -1633,6 +1634,10 @@ export async function createApplicationServices({
     logger,
   });
   teardown.push(TEARDOWN_ORDER.webPush, "the web push service", () => webPush.dispose());
+  const downloadTickets = new DownloadTickets({
+    keyPath: join(app.getPath("userData"), "download-ticket.key"),
+    baseUrlPath: join(app.getPath("userData"), "download-base-url"),
+  });
   const host = new HostService({
     appVersion: app.getVersion(),
     store: teamStore,
@@ -1655,6 +1660,9 @@ export async function createApplicationServices({
     // Present, so the host advertises the push routes. The key pair and the subscriptions are in a file
     // of this profile, not in the database.
     webPush,
+    // Signed links for large downloads from the operator's download host. Without the address file the
+    // route answers 400 and the browser keeps using the connection.
+    downloadTickets,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.

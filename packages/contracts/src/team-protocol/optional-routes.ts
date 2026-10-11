@@ -13,6 +13,7 @@ import { EVENT_CHECK_API_CODECS } from "./event-check-api-v1";
 import { EVENT_CHECK_TEMPLATES_CODECS } from "./event-check-templates-v1";
 import { EVENT_CHECKS_CODECS } from "./event-checks-v1";
 import { EVENTS_CODECS } from "./events-v1";
+import { FILE_TICKETS_CODECS } from "./file-tickets-v1";
 import { HOST_ADMIN_CODECS } from "./host-admin-v1";
 import { HOST_MEMBER_UPDATE_CODECS } from "./host-member-update-v1";
 import { HOST_RELEASE_CODECS } from "./host-release-v1";
@@ -62,6 +63,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WORKSPACE_DIRECTORY_CODECS,
   ...AGENT_HOST_SETTINGS_CODECS,
   ...WEB_PUSH_CODECS,
+  ...FILE_TICKETS_CODECS,
 ]);
 
 export function optionalRouteCodec(path: string): OptionalRouteCodec | undefined {

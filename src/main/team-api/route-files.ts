@@ -15,20 +15,22 @@
 // hold 1 GB in main. An upload must be in memory, because `prepareImportedAttachments` takes bytes,
 // so `attachmentUploads` lets only a small number of them read a body at the same time.
 
-import { open } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import type { OutgoingHttpHeaders, ServerResponse } from "node:http";
 import { basename } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { ATTACHMENT_LIMITS, INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { FILE_TICKET_ROUTES, FILE_TICKETS_CAPABILITY } from "@openbot/contracts/team-protocol/file-tickets-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect } from "effect";
 import { runCauseEffect } from "../../backend/effect-boundary";
+import type { DownloadTickets } from "../download-tickets";
 import { remoteCall } from "../remote-service-effects";
 import type { TeamApiAgents, TeamApiMailbox } from "./dependencies";
 import { HttpError } from "./http-error";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
-import { pathIdentifier, readBinary } from "./request-helpers";
+import { pathIdentifier, readBinary, readJson } from "./request-helpers";
 import { rethrowWorkspacePathError } from "./route-workspace-directory";
 
 // Each upload holds its body, up to 100 MB, until the attachment is on disk. Two at a time keep that
@@ -83,13 +85,15 @@ export interface FileRouteDependencies {
     "prepareImportedAttachments" | "discardDraftAttachment" | "resolveSharedFile" | "resolveWorkspaceFile"
   >;
   mailbox: TeamApiMailbox;
+  /** `file-tickets-v1`: absent when the host has no download address, so the route answers 400. */
+  tickets?: Pick<DownloadTickets, "mint">;
 }
 
 export async function routeFiles(
   context: TeamApiRequestContext,
-  { agents, mailbox }: FileRouteDependencies,
+  { agents, mailbox, tickets }: FileRouteDependencies,
 ): Promise<RouteOutcome> {
-  const { method, url, request, response, json, empty } = context;
+  const { method, url, request, response, json, empty, capabilities } = context;
 
   if (method === "POST" && url.pathname === TEAM_API_ROUTES.attachments) {
     const name = url.searchParams.get("name")?.trim();
@@ -166,6 +170,49 @@ export async function routeFiles(
       "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(workspaceFile.name)}`,
       "X-Content-Type-Options": "nosniff",
     }));
+  }
+
+  if (method === "POST" && url.pathname === FILE_TICKET_ROUTES.create) {
+    // A link to one file the caller may already read. The file is resolved by the same calls as the
+    // three reads above, so a ticket can never name a file that those routes would refuse.
+    if (!tickets || !capabilities.has(FILE_TICKETS_CAPABILITY))
+      throw new HttpError(400, sourceText("error.team.fileTicketUnsupported"));
+    const body = await readJson(request);
+    const text = (field: string): string => {
+      const value = body[field];
+      if (typeof value !== "string" || !value || value.length > INPUT_LIMITS.path)
+        throw new HttpError(400, `${field} is required.`);
+      return value;
+    };
+    let file: { path: string; name: string; size: number };
+    if (body.kind === "attachment") {
+      const attachmentId = pathIdentifier(text("attachmentId"), "attachmentId");
+      const attachment = await runCauseEffect(mailbox.resolveAttachment(attachmentId));
+      if (!attachment) throw new HttpError(404, sourceText("error.team.attachmentNotFound"));
+      const info = await stat(attachment.path).catch(() => null);
+      if (!info?.isFile()) throw new HttpError(404, sourceText("error.team.attachmentNotFound"));
+      file = { path: attachment.path, name: basename(attachment.path), size: info.size };
+    } else if (body.kind === "shared") {
+      const resolved = await runCauseEffect(agents.resolveSharedFile(text("path")));
+      file = { path: resolved.path, name: resolved.name, size: resolved.size };
+    } else if (body.kind === "workspace") {
+      const agentId = text("agentId");
+      if (agentId.length > INPUT_LIMITS.identifier) throw new HttpError(400, "A valid agent id is required.");
+      const resolved = await runCauseEffect(agents.resolveWorkspaceFile(agentId, text("path"))).catch(
+        rethrowWorkspacePathError,
+      );
+      file = { path: resolved.path, name: resolved.name, size: resolved.size };
+    } else {
+      throw new HttpError(400, "kind is not valid.");
+    }
+    let ticket: { url: string; expiresAt: number } | null = null;
+    try {
+      ticket = tickets.mint({ path: file.path, name: file.name });
+    } catch {
+      // A key that cannot be read is the same as no download address: the client uses the connection.
+    }
+    if (!ticket) throw new HttpError(400, sourceText("error.team.fileTicketUnsupported"));
+    return json(200, { url: ticket.url, name: file.name, size: file.size, expiresAt: ticket.expiresAt });
   }
 
   return "unmatched";

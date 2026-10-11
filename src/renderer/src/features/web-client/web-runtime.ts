@@ -68,6 +68,11 @@ import {
   TEAM_TEXT_ATTACHMENTS_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
 import {
+  FILE_TICKET_ROUTES,
+  type FileTicket,
+  type FileTicketSource,
+} from "@openbot/contracts/team-protocol/file-tickets-v1";
+import {
   decodeTeamProtocolSupportV1,
   type TeamProtocolSupportV1,
   teamProtocolUpdateDirection,
@@ -205,6 +210,11 @@ export interface WebWorkspaceRuntime {
   cancelUpload(): Promise<void>;
   discard(attachmentId: string): Promise<void>;
   download(attachmentId: string): Promise<WebFile>;
+  /**
+   * A link that the browser downloads from the host's own download address, so a file of any size
+   * streams to disk and not through the connection. `null` when the host has none.
+   */
+  fileLink(source: FileTicketSource): Promise<FileTicket | null>;
   /** A file under the host's shared folder. */
   sharedFile(path: string): Promise<WebFile>;
   /** A file in one agent's workspace on the host. */
@@ -889,6 +899,22 @@ export function createWebWorkspaceRuntime(
     async download(id) {
       return decodeWebFile(await request("GET", TEAM_API_ROUTES.attachment(id)));
     },
+    async fileLink(source) {
+      try {
+        return decodeFileTicket(
+          await request("POST", FILE_TICKET_ROUTES.create, {
+            kind: source.kind,
+            attachmentId: source.kind === "attachment" ? source.attachmentId : null,
+            agentId: source.kind === "workspace" ? source.agentId : null,
+            path: source.kind === "attachment" ? null : source.path,
+          }),
+        );
+      } catch {
+        // No download address, or an older host: the file comes through the connection, which also
+        // reports a missing file in its own words.
+        return null;
+      }
+    },
     async sharedFile(path) {
       const query = new URLSearchParams({ path });
       return decodeWebFile(await request("GET", `${TEAM_API_ROUTES.sharedFiles}?${query}`));
@@ -995,6 +1021,16 @@ function decodeWebFile(value: unknown): WebFile {
     mimeType: requiredString(value, "mimeType"),
     base64,
   };
+}
+
+function decodeFileTicket(value: unknown): FileTicket {
+  if (!isDynamicRecord(value)) throw new Error("The host returned an invalid download link.");
+  const url = requiredString(value, "url");
+  if (!url.startsWith("https://")) throw new Error("The host returned an invalid download link.");
+  const { size, expiresAt } = value;
+  if (typeof size !== "number" || typeof expiresAt !== "number")
+    throw new Error("The host returned an invalid download link.");
+  return { url, name: requiredString(value, "name"), size, expiresAt };
 }
 
 /** The host's own reason for a refusal. It redacts it; a server failure keeps the generic text. */

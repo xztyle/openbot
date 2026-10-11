@@ -215,7 +215,10 @@ def attach_agent_container(network):
     info = container_info(agent)
     if not info or network in info["NetworkSettings"]["Networks"]:
         return
-    docker("network", "connect", network, agent, check=False)
+    # A low gateway priority keeps the container's default route on its own network. Without it, an
+    # app network that sorts before `openbot-private` takes the default route, and the detach that
+    # follows breaks the live connections of OpenBot (Signal, TURN, the account service).
+    docker("network", "connect", "--gw-priority", "-100", network, agent, check=False)
 
 
 def free_memory_mb():

@@ -1,8 +1,10 @@
 export type ExternalLinkTarget = "Default browser" | "OpenBot";
 
 import {
+  type AgentCreationLimit,
   type AgentMemoryLimit,
   type BusyMessageMode,
+  DEFAULT_AGENT_CREATION_LIMIT,
   DEFAULT_AGENT_MEMORY_LIMIT,
   DEFAULT_BUSY_MESSAGE_MODE,
 } from "@openbot/contracts/ipc";
@@ -43,6 +45,8 @@ export interface GeneralSettingsValue {
   busyMessageMode: BusyMessageMode;
   /** How many memories one agent on this computer can hold. */
   agentMemoryLimit: AgentMemoryLimit;
+  /** How many agents agents on this computer may create in 24 hours. `null` is no limit. */
+  agentCreationLimit: AgentCreationLimit;
   /** Keep each joined server's connection between runs of the app, so the start is faster. */
   keepRemoteSessions: boolean;
   /** Short sounds that confirm the user's own actions, such as a click or a sent message. */
@@ -80,6 +84,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsValue = {
   showAgentMessages: true,
   busyMessageMode: DEFAULT_BUSY_MESSAGE_MODE,
   agentMemoryLimit: DEFAULT_AGENT_MEMORY_LIMIT,
+  agentCreationLimit: DEFAULT_AGENT_CREATION_LIMIT,
   keepRemoteSessions: true,
   soundFeedback: false,
   soundTheme: "default",

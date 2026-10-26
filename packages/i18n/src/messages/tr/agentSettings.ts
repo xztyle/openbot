@@ -14,6 +14,7 @@ export const messages = {
   "agentSettings.groups.does": "Görevler",
   "agentSettings.groups.rules": "Kurallar",
   "agentSettings.saveFailed": "Ajan ayarları kaydedilemedi.",
+  "agentSettings.saveFailed.background": "Arka plan ayarı kaydedilemedi. Kayıtlı ayar geri geldi.",
   "agentSettings.name": "Ad",
   "agentSettings.nameLabel": "Ajan adı",
   "agentSettings.agentTitle": "Başlık",
@@ -103,6 +104,9 @@ export const messages = {
   "agentSettings.automation.title": "Yerel betikler",
   "agentSettings.automation.description":
     "Bu bilgisayardaki betiklerin bu ajanın rutinlerini çalıştırmasına izin verin",
+  "agentSettings.background.title": "Arka plan takım arkadaşı",
+  "agentSettings.background.description":
+    "Bu ajanı ajan listelerinizden gizleyin. Diğer ajanlarınızla çalışmaya devam eder. Kenar çubuğunun sonundaki Arka plan takım arkadaşları bölümünden açın.",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Tüm {provider} süreci bir korumalı alanda (sandbox) çalışır, bu nedenle dışarıya yazma işlemi başarısız olur. Yalnızca macOS'ta kullanılabilir.",
 } as const satisfies PartialTranslation<typeof source>;

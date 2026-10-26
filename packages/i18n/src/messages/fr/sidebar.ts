@@ -66,6 +66,11 @@ export const messages = {
   "sidebar.state.waitingDetail": "{state} : {detail}",
   "sidebar.waiting.title": "Besoin de vous",
   "sidebar.waiting.label": { one: "Besoin de vous, {count} agent", other: "Besoin de vous, {count} agents" },
+  "sidebar.background.title": {
+    one: "Coéquipier en arrière-plan ({count})",
+    other: "Coéquipiers en arrière-plan ({count})",
+  },
+  "sidebar.background.waiting": { one: "{count} a besoin de vous", other: "{count} ont besoin de vous" },
   "sidebar.waiting.action.question": "Répondre",
   "sidebar.waiting.action.approval": "Examiner",
   "sidebar.waiting.action.takeover": "Prendre la main",

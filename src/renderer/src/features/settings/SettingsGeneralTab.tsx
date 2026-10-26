@@ -1,4 +1,15 @@
-import { AGENT_MEMORY_LIMITS, type AgentMemoryLimit, type AppVariant } from "@openbot/contracts/ipc";
+import {
+  AGENT_CREATION_LIMITS,
+  AGENT_MEMORY_LIMITS,
+  type AgentCreationLimit,
+  type AgentMemoryLimit,
+  type AppVariant,
+} from "@openbot/contracts/ipc";
+
+/** The creation cap as a select option. Kobalte reads a null value as no selection. */
+type AgentCreationLimitOption = Exclude<AgentCreationLimit, null> | "unlimited";
+const AGENT_CREATION_LIMIT_OPTIONS: AgentCreationLimitOption[] = ["unlimited", ...AGENT_CREATION_LIMITS];
+
 import type { AppTextKey } from "@openbot/i18n";
 import {
   ConfirmDialog,
@@ -52,6 +63,8 @@ export function SettingsGeneralTab(props: SettingsGeneralTabProps) {
   const i18n = useI18n();
   const linkTargetLabel = (value: GeneralSettingsValue["externalLinkTarget"] | undefined) =>
     value === undefined ? "" : i18n.t(LINK_TARGET_KEYS[value]);
+  const creationLimitLabel = (value: AgentCreationLimitOption | undefined) =>
+    value === undefined ? "" : value === "unlimited" ? i18n.t("settings.agentCreationLimit.unlimited") : String(value);
   const [confirmingTurbo, setConfirmingTurbo] = createSignal(false);
   const logoColor = useLogoColorChoice();
   return (
@@ -132,6 +145,33 @@ export function SettingsGeneralTab(props: SettingsGeneralTabProps) {
               >
                 <SelectTrigger size="sm" aria-label={i18n.t("settings.agentMemoryLimit.title")}>
                   <SelectValue<AgentMemoryLimit>>{(state) => String(state.selectedOption() ?? "")}</SelectValue>
+                </SelectTrigger>
+                <SelectContent mount={props.selectMount} />
+              </Select>
+            </ItemActions>
+          </Item>
+          <Item class="settings-modal-row">
+            <ItemContent>
+              <ItemTitle>{i18n.t("settings.agentCreationLimit.title")}</ItemTitle>
+              <ItemDescription>{i18n.t("settings.agentCreationLimit.description")}</ItemDescription>
+            </ItemContent>
+            <ItemActions>
+              <Select<AgentCreationLimitOption>
+                class="settings-modal-select"
+                options={AGENT_CREATION_LIMIT_OPTIONS}
+                value={props.value.agentCreationLimit ?? "unlimited"}
+                onChange={(value) =>
+                  value && props.onUpdateSetting("agentCreationLimit", value === "unlimited" ? null : value)
+                }
+                placement="bottom-end"
+                itemComponent={(selectProps) => (
+                  <SelectItem item={selectProps.item}>{creationLimitLabel(selectProps.item.rawValue)}</SelectItem>
+                )}
+              >
+                <SelectTrigger size="sm" aria-label={i18n.t("settings.agentCreationLimit.title")}>
+                  <SelectValue<AgentCreationLimitOption>>
+                    {(state) => creationLimitLabel(state.selectedOption())}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent mount={props.selectMount} />
               </Select>

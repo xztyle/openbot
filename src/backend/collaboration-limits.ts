@@ -1,3 +1,5 @@
+import { AGENT_CREATION_WINDOW_HOURS } from "@openbot/contracts/ipc";
+
 /**
  * Limits for the traffic between agents. They are named so a test, the docs and the code read one
  * value. Each one is generous: it stops a loop, not a team that works fast.
@@ -13,6 +15,8 @@ export const AGENT_MESSAGE_WINDOW_MS = 10 * 60_000;
  */
 export const ANSWER_HOLD_LIMIT_MS = 20 * 60_000;
 
-/** How many agents all agents together may create inside `AGENT_CREATION_WINDOW_MS`. */
-export const AGENT_CREATION_LIMIT = 20;
-export const AGENT_CREATION_WINDOW_MS = 24 * 60 * 60_000;
+/**
+ * The window of the user's optional cap on how many agents all agents together may create. The cap
+ * itself is a setting (`AgentCreationLimitPreference`); there is none by default.
+ */
+export const AGENT_CREATION_WINDOW_MS = AGENT_CREATION_WINDOW_HOURS * 60 * 60_000;

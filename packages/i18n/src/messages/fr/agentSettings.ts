@@ -14,6 +14,8 @@ export const messages = {
   "agentSettings.groups.does": "Fait",
   "agentSettings.groups.rules": "Règles",
   "agentSettings.saveFailed": "Impossible d’enregistrer les réglages de l’agent.",
+  "agentSettings.saveFailed.background":
+    "Impossible d’enregistrer le réglage d’arrière-plan. Le réglage enregistré est rétabli.",
 
   "agentSettings.name": "Nom",
   "agentSettings.nameLabel": "Nom de l’agent",
@@ -110,6 +112,9 @@ export const messages = {
     "Computer Use et le navigateur OpenBot ne sont pas limités ; vous pouvez désactiver Computer Use ci-dessous.",
   "agentSettings.computerUse.title": "Computer Use",
   "agentSettings.computerUse.description": "Autoriser cet agent à contrôler les apps de cet ordinateur",
+  "agentSettings.background.title": "Coéquipier en arrière-plan",
+  "agentSettings.background.description":
+    "Masquez cet agent dans vos listes d’agents. Il travaille toujours avec vos autres agents. Ouvrez-le depuis Coéquipiers en arrière-plan, en bas de la barre latérale.",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Tout le processus {provider} s’exécute dans un bac à sable : une écriture à l’extérieur échoue donc. Disponible sur macOS uniquement.",
 } as const satisfies PartialTranslation<typeof source>;

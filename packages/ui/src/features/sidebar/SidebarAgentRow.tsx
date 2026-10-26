@@ -29,9 +29,10 @@ const SIDEBAR_WAIT_TOOLTIP_OPEN_DELAY = 350;
 
 /**
  * `waiting` is set by the "Needs you" group. The row reads it rather than the agent's state, because
- * the group holds its members still during a drag while the state moves on.
+ * the group holds its members still during a drag while the state moves on. `fixed` is set by the
+ * background group, which is not a place in the layout either, so its rows do not drag.
  */
-export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boolean }) {
+export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boolean; fixed?: boolean }) {
   const {
     dragOffset,
     draggedChatId,
@@ -183,8 +184,8 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
         },
       ]}
       style={`--sidebar-drag-y: ${dragOffset(rowProps.agent.id).y}px;`}
-      data-chat-id={rowProps.waiting ? undefined : rowProps.agent.id}
-      draggable={!layoutMutable() || props.compact || rowProps.waiting ? "false" : "true"}
+      data-chat-id={rowProps.waiting || rowProps.fixed ? undefined : rowProps.agent.id}
+      draggable={!layoutMutable() || props.compact || rowProps.waiting || rowProps.fixed ? "false" : "true"}
       onDragStart={(event: DragEvent & { currentTarget: HTMLElement }) => startChatDragging(event, rowProps.agent.id)}
       onDragEnd={endChatDragging}
     >

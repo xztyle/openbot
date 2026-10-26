@@ -86,6 +86,18 @@ export const messages = {
     many: "Нужны вы: {count} агентов",
     other: "Нужны вы: {count} агента",
   },
+  "sidebar.background.title": {
+    one: "Фоновый участник ({count})",
+    few: "Фоновые участники ({count})",
+    many: "Фоновые участники ({count})",
+    other: "Фоновые участники ({count})",
+  },
+  "sidebar.background.waiting": {
+    one: "{count} ждёт вас",
+    few: "{count} ждут вас",
+    many: "{count} ждут вас",
+    other: "{count} ждут вас",
+  },
   "sidebar.waiting.action.question": "Ответить",
   "sidebar.waiting.action.approval": "Проверить",
   "sidebar.waiting.action.takeover": "Взять управление",

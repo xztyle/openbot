@@ -85,6 +85,9 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   allowAutomation?: boolean;
   // Absent means the app default, as for every agent stored before the setting existed.
   busyMessageMode?: BusyMessageMode;
+  // Written only as `true`. Absent on every agent stored before the setting existed, which keeps it
+  // in the user's lists.
+  background?: boolean;
 };
 type StoredAgentBase = Omit<PersistedStoredAgent, "avatarSeed" | "avatarHue"> & DynamicRecord;
 
@@ -353,6 +356,11 @@ export class AgentStore {
       const record = this.#createRecord(`agent-${randomUUID()}`, name, "", description);
       record.avatarSeed = input.avatarSeed;
       record.avatarHue = input.avatarHue;
+      // A background teammate works for other agents, so it does not notify the user by default.
+      if (input.background === true) {
+        record.background = true;
+        record.notifications = false;
+      }
       if (profileOperationId) yield* this.#profileCreationRecovery.begin(record.id, profileOperationId);
       yield* storedIO(() => mkdir(record.workspacePath, { recursive: true, mode: 0o700 }));
       this.#state.agents.unshift(record);
@@ -405,6 +413,7 @@ export class AgentStore {
       record.access = source.access;
       record.computerUse = source.computerUse;
       if (source.busyMessageMode) record.busyMessageMode = source.busyMessageMode;
+      if (source.background === true) record.background = true;
       record.avatarSeed = source.avatarSeed;
       record.avatarHue = source.avatarHue;
 
@@ -675,6 +684,11 @@ export class AgentStore {
         if (!isBusyMessageMode(input.busyMessageMode)) throw new Error("Invalid busy message mode.");
         next.busyMessageMode = input.busyMessageMode;
       }
+      if (input.background !== undefined) {
+        if (!isBoolean(input.background)) throw new Error("Invalid background value.");
+        if (input.background) next.background = true;
+        else delete next.background;
+      }
       if (input.avatarSeed !== undefined) {
         if (!isAvatarSeed(input.avatarSeed)) throw new Error("Invalid avatar seed.");
         next.avatarSeed = input.avatarSeed;
@@ -701,11 +715,13 @@ export class AgentStore {
       Object.assign(agent, next);
       // A copy cannot remove a field, and `null` above returned the agent to the app default.
       if (next.busyMessageMode === undefined) delete agent.busyMessageMode;
+      if (next.background === undefined) delete agent.background;
       try {
         this.#persist(modelChange ? "agent.model-changed" : "agent.updated", modelChange);
       } catch (error) {
         Object.assign(agent, previous);
         if (previous.busyMessageMode === undefined) delete agent.busyMessageMode;
+        if (previous.background === undefined) delete agent.background;
         throw error;
       }
       return { ...agent };
@@ -1666,6 +1682,7 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
     (record.computerUse === undefined || isBoolean(record.computerUse)) &&
     (record.allowAutomation === undefined || isBoolean(record.allowAutomation)) &&
     (record.busyMessageMode === undefined || isBusyMessageMode(record.busyMessageMode)) &&
+    (record.background === undefined || isBoolean(record.background)) &&
     isAvatarSeed(record.avatarSeed) &&
     (record.avatarHue === null || isAvatarHue(record.avatarHue)) &&
     isMarketplaceSource(record.marketplaceSource)
@@ -1728,6 +1745,9 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     value.busyMessageMode === undefined || isBusyMessageMode(value.busyMessageMode)
       ? value.busyMessageMode
       : reset("busyMessageMode", undefined);
+  // Only `true` is kept. Anything else reads as an agent the user sees, which is how it was stored.
+  const background =
+    value.background === undefined || isBoolean(value.background) ? value.background : reset("background", undefined);
   // Dropped silently when unreadable: it only labels where an agent came from.
   const createdBy: AgentCreator | undefined =
     isRecord(value.createdBy) && isString(value.createdBy.agentId) && isString(value.createdBy.at)
@@ -1766,6 +1786,7 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(computerUse === undefined ? {} : { computerUse }),
     ...(allowAutomation === undefined ? {} : { allowAutomation }),
     ...(busyMessageMode === undefined ? {} : { busyMessageMode }),
+    ...(background === true ? { background } : {}),
     ...(createdBy === undefined ? {} : { createdBy }),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),
   };

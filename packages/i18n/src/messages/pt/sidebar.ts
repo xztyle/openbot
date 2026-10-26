@@ -63,6 +63,8 @@ export const messages = {
   "sidebar.state.waitingDetail": "{state}: {detail}",
   "sidebar.waiting.title": "Precisa de você",
   "sidebar.waiting.label": { one: "Precisa de você, {count} agente", other: "Precisam de você, {count} agentes" },
+  "sidebar.background.title": { one: "Colega em segundo plano ({count})", other: "Colegas em segundo plano ({count})" },
+  "sidebar.background.waiting": { one: "{count} precisa de você", other: "{count} precisam de você" },
   "sidebar.waiting.action.question": "Responder",
   "sidebar.waiting.action.approval": "Revisar",
   "sidebar.waiting.action.takeover": "Assumir controle",

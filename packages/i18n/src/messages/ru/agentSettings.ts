@@ -14,6 +14,8 @@ export const messages = {
   "agentSettings.groups.does": "Делает",
   "agentSettings.groups.rules": "Правила",
   "agentSettings.saveFailed": "Не удалось сохранить настройки агента.",
+  "agentSettings.saveFailed.background":
+    "Не удалось сохранить настройку фонового режима. Восстановлена сохранённая настройка.",
 
   "agentSettings.name": "Имя",
   "agentSettings.nameLabel": "Имя агента",
@@ -133,6 +135,9 @@ export const messages = {
   "agentSettings.automation.title": "Локальные скрипты",
   "agentSettings.automation.description":
     "Разрешить скриптам на этом компьютере запускать регулярные задачи этого агента",
+  "agentSettings.background.title": "Фоновый участник команды",
+  "agentSettings.background.description":
+    "Скрыть этого агента из ваших списков агентов. Он продолжит работать с другими вашими агентами. Откройте его в разделе «Фоновые участники» в конце боковой панели.",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Весь процесс {provider} работает в песочнице, поэтому запись за пределами не удастся. Доступно только в macOS.",
 } as const satisfies PartialTranslation<typeof source>;

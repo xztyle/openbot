@@ -67,6 +67,7 @@ export function decodeAgentSummary(value: unknown): AgentSummary {
     avatarSeed: candidate.avatarSeed,
     avatarHue: candidate.avatarHue,
     avatarUrl: candidate.avatarUrl,
+    ...(candidate.background === true ? { background: true } : {}),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),
   };
 }

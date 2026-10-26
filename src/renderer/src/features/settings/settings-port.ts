@@ -6,6 +6,7 @@ import type { OpenBotDesktopApi } from "@openbot/contracts/ipc";
  */
 export interface SettingsPort {
   getAgentMemoryLimitPreference: OpenBotDesktopApi["getAgentMemoryLimitPreference"];
+  getAgentCreationLimitPreference: OpenBotDesktopApi["getAgentCreationLimitPreference"];
   getAnalyticsPreference: OpenBotDesktopApi["getAnalyticsPreference"];
   getApprovalAutomation: OpenBotDesktopApi["getApprovalAutomation"];
   getBusyMessageModePreference: OpenBotDesktopApi["getBusyMessageModePreference"];
@@ -13,6 +14,7 @@ export interface SettingsPort {
   onApprovalAutomation: OpenBotDesktopApi["onApprovalAutomation"];
   onOpenSettings: OpenBotDesktopApi["onOpenSettings"];
   setAgentMemoryLimitPreference: OpenBotDesktopApi["setAgentMemoryLimitPreference"];
+  setAgentCreationLimitPreference: OpenBotDesktopApi["setAgentCreationLimitPreference"];
   setAnalyticsPreference: OpenBotDesktopApi["setAnalyticsPreference"];
   setApprovalAutomation: OpenBotDesktopApi["setApprovalAutomation"];
   setBusyMessageModePreference: OpenBotDesktopApi["setBusyMessageModePreference"];

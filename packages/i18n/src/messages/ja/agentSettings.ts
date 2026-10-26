@@ -14,6 +14,7 @@ export const messages = {
   "agentSettings.groups.does": "実行",
   "agentSettings.groups.rules": "ルール",
   "agentSettings.saveFailed": "エージェントの設定を保存できませんでした。",
+  "agentSettings.saveFailed.background": "バックグラウンドの設定を保存できませんでした。保存済みの設定に戻しました。",
 
   "agentSettings.name": "名前",
   "agentSettings.nameLabel": "エージェント名",
@@ -109,6 +110,9 @@ export const messages = {
     "Computer Use と OpenBot ブラウザーは制限されません。Computer Use は下でオフにできます。",
   "agentSettings.computerUse.title": "Computer Use",
   "agentSettings.computerUse.description": "このエージェントにこのコンピューターのアプリの操作を許可します",
+  "agentSettings.background.title": "バックグラウンドのチームメイト",
+  "agentSettings.background.description":
+    "このエージェントをエージェント一覧に表示しません。ほかのエージェントとの作業は続きます。サイドバーの最後にある「バックグラウンドのチームメイト」から開けます。",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "{provider} のプロセス全体がサンドボックス内で実行されるため、外部への書き込みは失敗します。macOS でのみ利用できます。",
 } as const satisfies PartialTranslation<typeof source>;

@@ -170,7 +170,9 @@ const Agents = createSimpleContext({
       setActiveAgentId((current) => {
         // Validate the saved choice before it can trigger conversation requests.
         const preferred = current || savedAgentId;
-        return profiles.some((agent) => agent.id === preferred) ? preferred : (profiles[0]?.id ?? "");
+        if (profiles.some((agent) => agent.id === preferred)) return preferred;
+        // A background teammate opens only when the user asks for it.
+        return (profiles.find((agent) => agent.background !== true) ?? profiles[0])?.id ?? "";
       });
       if (profiles.length === 0 && !agentSetupOpen()) {
         setAgentSetupDraft(createFirstAgentDraft());

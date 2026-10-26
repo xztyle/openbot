@@ -90,6 +90,12 @@ export interface AgentSummary {
    * app default.
    */
   busyMessageMode?: BusyMessageMode;
+  /**
+   * A background teammate: the user's agent lists and pickers leave it out, and it stays a full
+   * teammate for other agents. Absent means false. A remote host sends it beside the frozen agent
+   * projection; see `agent-background-v1.ts`.
+   */
+  background?: boolean;
   threadId: string | null;
   workspacePath: string;
   preview: string;
@@ -121,6 +127,7 @@ export function isAgentSummary(value: unknown): value is AgentSummary {
     (value.computerUse === undefined || isBoolean(value.computerUse)) &&
     (value.allowAutomation === undefined || isBoolean(value.allowAutomation)) &&
     (value.busyMessageMode === undefined || isBusyMessageMode(value.busyMessageMode)) &&
+    (value.background === undefined || isBoolean(value.background)) &&
     (value.threadId === null || isIdentifier(value.threadId)) &&
     isBoundedString(value.workspacePath, INPUT_LIMITS.path) &&
     isBoundedString(value.preview, INPUT_LIMITS.messageText) &&
@@ -147,6 +154,11 @@ export interface CreateAgentInput {
   provider?: AgentProviderId;
   model?: AgentModelId;
   reasoningEffort?: AgentReasoningEffort;
+  /**
+   * Starts the agent as a background teammate with notifications off. Only the `create_agent` tool
+   * sets it; the IPC and Team API create requests do not carry it.
+   */
+  background?: boolean;
 }
 
 export interface UpdateAgentInput {
@@ -163,6 +175,8 @@ export interface UpdateAgentInput {
   allowAutomation?: boolean;
   /** `null` returns the agent to the app default. */
   busyMessageMode?: BusyMessageMode | null;
+  /** True makes the agent a background teammate; false shows it in the user's lists again. */
+  background?: boolean;
   avatarSeed?: string;
   avatarHue?: AvatarHue | null;
 }
@@ -180,4 +194,28 @@ export interface AvatarImageInput {
 export interface SetAgentAvatarInput {
   agentId: string;
   image: AvatarImageInput | null;
+}
+
+/** True for a background teammate: the user's agent lists and pickers leave it out. */
+export function isBackgroundAgent(agent: Pick<AgentSummary, "background">): boolean {
+  return agent.background === true;
+}
+
+/**
+ * The choices for how many agents other agents may create on this computer in
+ * `AGENT_CREATION_WINDOW_HOURS`. `null` is no limit, the default. The user's own creations never
+ * count.
+ */
+export const AGENT_CREATION_LIMITS = [5, 10, 20, 50, 100] as const;
+export type AgentCreationLimit = (typeof AGENT_CREATION_LIMITS)[number] | null;
+export const DEFAULT_AGENT_CREATION_LIMIT: AgentCreationLimit = null;
+export const AGENT_CREATION_WINDOW_HOURS = 24;
+
+export function isAgentCreationLimit(value: unknown): value is AgentCreationLimit {
+  return value === null || isOneOf(AGENT_CREATION_LIMITS, value);
+}
+
+/** The app setting, as it is stored and as it crosses IPC. */
+export interface AgentCreationLimitPreference {
+  limit: AgentCreationLimit;
 }

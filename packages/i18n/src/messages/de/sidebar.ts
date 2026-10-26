@@ -78,6 +78,11 @@ export const messages = {
     one: "Braucht dich, {count} Agent",
     other: "Brauchen dich, {count} Agenten",
   },
+  "sidebar.background.title": {
+    one: "Hintergrund-Teammitglied ({count})",
+    other: "Hintergrund-Teammitglieder ({count})",
+  },
+  "sidebar.background.waiting": { one: "{count} braucht dich", other: "{count} brauchen dich" },
   "sidebar.waiting.action.question": "Antworten",
   "sidebar.waiting.action.approval": "Prüfen",
   "sidebar.waiting.action.takeover": "Übernehmen",

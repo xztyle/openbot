@@ -191,6 +191,7 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.saveFailed.access": "Could not save the access setting. The saved setting is back.",
   "agentSettings.saveFailed.computerUse": "Could not save the Computer Use setting. The saved setting is back.",
   "agentSettings.saveFailed.automation": "Could not save the local scripts setting. The saved setting is back.",
+  "agentSettings.saveFailed.background": "Could not save the background setting. The saved setting is back.",
   "agentSettings.saveFailed.busyMessage":
     "Could not save the setting for messages while the agent works. The saved setting is back.",
 
@@ -296,6 +297,9 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.computerUse.description": "Let this agent control apps on this computer",
   "agentSettings.automation.title": "Local scripts",
   "agentSettings.automation.description": "Let scripts on this computer run this agent's routines",
+  "agentSettings.background.title": "Background teammate",
+  "agentSettings.background.description":
+    "Hide this agent from your agent lists. It still works with your other agents. Open it from Background teammates at the end of the sidebar.",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "The whole {provider} process runs in a sandbox, so a write outside fails. Available on macOS only.",
 });

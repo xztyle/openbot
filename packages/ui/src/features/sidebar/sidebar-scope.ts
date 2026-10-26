@@ -27,6 +27,7 @@ export function createSidebarScope(props: SidebarProps) {
   let dragActive = () => false;
   const {
     assignedSectionId,
+    backgroundAgents,
     chatKind,
     chatName,
     chatPinnedItems,
@@ -158,6 +159,7 @@ export function createSidebarScope(props: SidebarProps) {
     dropSidebarNativeDrag,
     emptyPinnedDropVisible: dragState.emptyPinnedDropVisible,
     endChatDragging,
+    backgroundAgents,
     filteredAgents,
     filteredChats,
     filteredChatsBySection,

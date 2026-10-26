@@ -43,6 +43,10 @@ export const messages = {
   "settings.agentMemoryLimit.title": "エージェントごとのメモリー数",
   "settings.agentMemoryLimit.description":
     "このコンピューターの各エージェントが保存できるメモリーの数です。数を増やすと、各プロンプトが長くなります。",
+  "settings.agentCreationLimit.title": "エージェントが作成できるエージェント",
+  "settings.agentCreationLimit.description":
+    "エージェントが24時間に作成できる新しいエージェントの数です。あなたが作成したエージェントは数えません。",
+  "settings.agentCreationLimit.unlimited": "制限なし",
   "settings.permissions.title": "権限",
   "settings.turbo.title": "ターボモード",
   "settings.turbo.description":

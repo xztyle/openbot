@@ -7,6 +7,7 @@
 import { Bot, CheckCheck, ContextMenu, FolderPlus, Hash } from "@openbot/ui";
 import { For, Show } from "solid-js";
 import { useText } from "../../text";
+import { SidebarBackgroundGroup } from "./SidebarBackgroundGroup";
 import { SidebarChannelRow } from "./SidebarChannelRow";
 import { SidebarEmptyState } from "./SidebarEmptyState";
 import { SidebarPinnedGroup } from "./SidebarPinnedGroup";
@@ -16,6 +17,7 @@ import { useSidebarScope } from "./sidebar-scope";
 
 export function SidebarNav() {
   const {
+    backgroundAgents,
     draggingKind,
     dropSidebarNativeDrag,
     filteredChats,
@@ -50,6 +52,7 @@ export function SidebarNav() {
             resolvedPinnedItems().length === 0 &&
             waitingAgents().length === 0 &&
             filteredChats().length === 0 &&
+            backgroundAgents().length === 0 &&
             (props.showPeople === false || orderedPeople().length === 0) &&
             pending.sectionEditor?.target.kind !== "create"
           }
@@ -59,6 +62,7 @@ export function SidebarNav() {
         <SidebarPinnedGroup />
         <SidebarWaitingGroup />
         <SidebarSectionList />
+        <SidebarBackgroundGroup />
         <Show when={props.showingArchivedChannels}>
           <section class="sidebar-chat-group sidebar-section" aria-label={t("sidebar.deletedChannels.title")}>
             <h2 class="sidebar-section-name">{t("sidebar.deletedChannels.title")}</h2>

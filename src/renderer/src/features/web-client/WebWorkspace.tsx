@@ -8,6 +8,7 @@ import {
   type AppInfo,
   type BrowserTakeoverRequest,
   CHANNEL_CHATS_CAPABILITY,
+  isBackgroundAgent,
   type ServerConnectionState,
   type ServerSummary,
 } from "@openbot/contracts/ipc";
@@ -1036,11 +1037,21 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     };
   });
   const sidebarAgentStates = createMemo(() => computeSidebarAgentStates(sidebarActivity()));
-  /** The agents that wait for the user or have a new reply. The tab title and the Agents tab show it. */
-  const attentionCount = createMemo(
-    () =>
-      Object.values(sidebarAgentStates()).filter((state) => state.kind === "waiting" || state.kind === "unread").length,
-  );
+  /**
+   * The agents that wait for the user or have a new reply. The tab title and the Agents tab show it.
+   * A new reply of a background teammate does not count: the user does not talk to it.
+   */
+  const attentionCount = createMemo(() => {
+    const background = new Set(
+      workspace
+        .profiles()
+        .filter(isBackgroundAgent)
+        .map((agent) => agent.id),
+    );
+    return Object.entries(sidebarAgentStates()).filter(
+      ([agentId, state]) => state.kind === "waiting" || (state.kind === "unread" && !background.has(agentId)),
+    ).length;
+  });
   const baseTitle = document.title;
   createEffect(attentionCount, (count) => {
     document.title = count > 0 ? t("webClient.title.attention", { count, title: baseTitle }) : baseTitle;

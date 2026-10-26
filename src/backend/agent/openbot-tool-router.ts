@@ -14,6 +14,7 @@ import type {
 } from "@openbot/contracts/ipc";
 import {
   agentComputerUseEnabled,
+  isBackgroundAgent,
   isMessageReaction,
   marketplaceSuggestionItemType,
   skillConversationEventItemType,
@@ -30,12 +31,7 @@ import type { AgentTables } from "../agent-data/agent-tables";
 import type { AgentStore } from "../agent-store";
 import { OPENBOT_BROWSER_NAMESPACE } from "../browser-tools";
 import type { ChannelService } from "../channel-service";
-import {
-  AGENT_CREATION_LIMIT,
-  AGENT_CREATION_WINDOW_MS,
-  AGENT_MESSAGE_LIMIT,
-  AGENT_MESSAGE_WINDOW_MS,
-} from "../collaboration-limits";
+import { AGENT_CREATION_WINDOW_MS, AGENT_MESSAGE_LIMIT, AGENT_MESSAGE_WINDOW_MS } from "../collaboration-limits";
 import type { EventCheckScheduler } from "../event-check-scheduler";
 import type { MailboxStore } from "../mailbox-store";
 import { agentMcpServers } from "../mcp-provider-shapes";
@@ -129,6 +125,8 @@ export interface OpenBotToolRouterHooks {
   lastTurnFailed(agentId: string): boolean;
   /** The plan limit that holds this agent, with its reset in epoch seconds when the provider gave one. */
   usageLimit(agentId: string): { resetsAt: number | null } | null;
+  /** How many agents other agents may create in `AGENT_CREATION_WINDOW_MS`, or null for no limit. */
+  agentCreationLimit(): number | null;
 }
 
 export interface OpenBotToolRouterOptions {
@@ -464,6 +462,7 @@ export class OpenBotToolRouter {
       access: workspaceAccessEnforced(agent) ? "workspace" : "full",
       computerUse,
       notifications: agent.notifications,
+      background: isBackgroundAgent(agent),
       autoApprove: this.#approvalAutomation.autoApproves(agent.id),
       ...(skills ? { skills } : { skillsError }),
       routines: this.#routines.list(agent.id).map((routine) => ({
@@ -677,6 +676,7 @@ export class OpenBotToolRouter {
           name: agent.name,
           title: agent.title,
           description: agent.description,
+          ...(isBackgroundAgent(agent) ? { background: true } : {}),
           status: working ? "working" : queuedMessages > 0 ? "queued" : "ready",
           queuedMessages,
           ...(working && startedAt !== null ? { turnStartedAt: new Date(startedAt).toISOString() } : {}),
@@ -889,16 +889,20 @@ export class OpenBotToolRouter {
       const args = createAgentToolSchema.parse(params.arguments, { reportInput: true });
       const hue = args.avatarHue ?? null;
       const caller = this.#requireAgent(senderAgentId);
-      // An agent that creates agents in a loop fills the host. The user's own creations do not count.
-      const createdRecently = this.#store.createdByAgentsSince(new Date(Date.now() - AGENT_CREATION_WINDOW_MS));
-      if (createdRecently >= AGENT_CREATION_LIMIT) {
-        return openBotToolFailure(
-          sourceText("error.agent.creationLimit", {
-            made: createdRecently,
-            hours: AGENT_CREATION_WINDOW_MS / 3_600_000,
-            limit: AGENT_CREATION_LIMIT,
-          }),
-        );
+      // The user can cap how many agents agents create, so a loop cannot fill the host. There is no
+      // cap by default. The user's own creations do not count.
+      const creationLimit = this.#hooks.agentCreationLimit();
+      if (creationLimit !== null) {
+        const createdRecently = this.#store.createdByAgentsSince(new Date(Date.now() - AGENT_CREATION_WINDOW_MS));
+        if (createdRecently >= creationLimit) {
+          return openBotToolFailure(
+            sourceText("error.agent.creationLimit", {
+              made: createdRecently,
+              hours: AGENT_CREATION_WINDOW_MS / 3_600_000,
+              limit: creationLimit,
+            }),
+          );
+        }
       }
       const listed = this.#hooks.listModels();
       // Checked before the agent exists: a named model the provider does not list, or an effort the
@@ -929,6 +933,7 @@ export class OpenBotToolRouter {
             name: args.name,
             description: args.description,
             initialMessage: args.initialMessage,
+            ...(args.background ? { background: true } : {}),
             avatarSeed: args.avatarSeed ?? randomUUID(),
             avatarHue: hue,
             ...(requested
@@ -1071,6 +1076,7 @@ export class OpenBotToolRouter {
               access: workspaceAccessEnforced(updated) ? "workspace" : "full",
               computerUse: agentComputerUseEnabled(updated),
               notifications: updated.notifications,
+              background: isBackgroundAgent(updated),
             }),
           },
         ],

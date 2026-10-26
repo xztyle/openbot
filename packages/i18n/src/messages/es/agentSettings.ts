@@ -14,6 +14,8 @@ export const messages = {
   "agentSettings.groups.does": "Hace",
   "agentSettings.groups.rules": "Reglas",
   "agentSettings.saveFailed": "No se pudieron guardar los ajustes del agente.",
+  "agentSettings.saveFailed.background":
+    "No se pudo guardar el ajuste de segundo plano. Se restauró el ajuste guardado.",
   "agentSettings.name": "Nombre",
   "agentSettings.nameLabel": "Nombre del agente",
   "agentSettings.agentTitle": "Título",
@@ -115,6 +117,9 @@ export const messages = {
   "agentSettings.computerUse.description": "Permitir que este agente controle apps en este equipo",
   "agentSettings.automation.title": "Scripts locales",
   "agentSettings.automation.description": "Permitir que los scripts de este equipo ejecuten las rutinas de este agente",
+  "agentSettings.background.title": "Compañero en segundo plano",
+  "agentSettings.background.description":
+    "Oculta este agente de tus listas de agentes. Sigue trabajando con tus otros agentes. Ábrelo desde Compañeros en segundo plano, al final de la barra lateral.",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Todo el proceso de {provider} se ejecuta en un entorno aislado, por lo que la escritura fuera falla. Solo disponible en macOS.",
 } as const satisfies PartialTranslation<typeof source>;

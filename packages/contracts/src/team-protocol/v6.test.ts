@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAgentSummary } from "../ipc-agents";
+import { type AgentSummary, isAgentSummary } from "../ipc-agents";
 import request from "./fixtures/v6/client-http-request.json";
 import response from "./fixtures/v6/host-http-response.json";
 import models from "./fixtures/v6/host-models-response.json";
@@ -140,6 +140,61 @@ describe("Team protocol v6", () => {
         kind: "invalid",
         type: "turn-completed",
       });
+    }
+  });
+
+  it("carries the background mark beside the frozen agent projection, and older readers drop it", () => {
+    const [first, ...rest]: AgentSummary[] = response.map((agent) => {
+      if (!isAgentSummary(agent)) throw new Error("Invalid v6 fixture.");
+      return agent;
+    });
+    if (!first) throw new Error("Invalid v6 fixture.");
+    const agents = [{ ...first, background: true }, ...rest];
+    for (const wire of [
+      JSON.parse(encodeTeamProtocolV6CurrentHttpResponse("GET", "/v1/agents", 200, agents)),
+      encodeTeamProtocolV6WebRtcHttpResponse("GET", "/v1/agents", 200, agents),
+    ]) {
+      expect(wire[0].background).toBe(true);
+      expect(decodeTeamProtocolV6CurrentHttpResponse("GET", "/v1/agents", 200, wire)).toEqual(agents);
+    }
+    const patched = JSON.parse(
+      encodeTeamProtocolV6CurrentHttpResponse("PATCH", `/v1/agents/${first.id}`, 200, agents[0]),
+    );
+    expect(decodeTeamProtocolV6CurrentHttpResponse("PATCH", `/v1/agents/${first.id}`, 200, patched)).toEqual(agents[0]);
+
+    const event = { type: "agents-changed" as const, agents };
+    const wireEvent = JSON.parse(encodeTeamProtocolV6BaseCurrentEvent(event) ?? "null");
+    expect(wireEvent.bots[0].background).toBe(true);
+    expect(decodeTeamProtocolV6BaseCurrentEvent(wireEvent)).toEqual({ kind: "known", event });
+    expect(decodeTeamProtocolV6BaseEvent(wireEvent)).toMatchObject({ kind: "known" });
+    expect(
+      decodeTeamProtocolV6BaseCurrentEvent({ ...wireEvent, bots: [{ ...wireEvent.bots[0], background: "yes" }] }),
+    ).toEqual({
+      kind: "invalid",
+      type: "bots-changed",
+    });
+
+    const update = JSON.parse(
+      encodeTeamProtocolV6CurrentHttpRequest("PATCH", `/v1/agents/${first.id}`, {
+        agentId: first.id,
+        background: true,
+      }),
+    );
+    expect(update).toMatchObject({ background: true });
+    expect(decodeTeamProtocolV6CurrentHttpRequest("PATCH", `/v1/agents/${first.id}`, update)).toMatchObject({
+      background: true,
+    });
+    const renamed = JSON.parse(
+      encodeTeamProtocolV6CurrentHttpRequest("PATCH", `/v1/agents/${first.id}`, {
+        agentId: first.id,
+        name: "Helper",
+        background: false,
+      }),
+    );
+    expect(renamed).toEqual({ name: "Helper", background: false });
+    expect(decodeTeamProtocolV6CurrentHttpRequest("PATCH", `/v1/agents/${first.id}`, renamed)).toEqual(renamed);
+    for (const body of [{ background: "yes" }, { name: "Helper", background: 1 }]) {
+      expect(() => decodeTeamProtocolV6CurrentHttpRequest("PATCH", `/v1/agents/${first.id}`, body)).toThrow();
     }
   });
 });

@@ -78,6 +78,7 @@ import type {
   PublishAgentTemplateInput,
 } from "./ipc-agent-templates";
 import type {
+  AgentCreationLimitPreference,
   AgentSummary,
   AvatarImageInput,
   CreateAgentInput,
@@ -469,6 +470,10 @@ export const IPC_ENDPOINTS = {
     getAgentMemoryLimitPreference: request<undefined, AgentMemoryLimitPreference>()("app:get-agent-memory-limit"),
     setAgentMemoryLimitPreference: request<AgentMemoryLimitPreference, AgentMemoryLimitPreference>()(
       "app:set-agent-memory-limit",
+    ),
+    getAgentCreationLimitPreference: request<undefined, AgentCreationLimitPreference>()("app:get-agent-creation-limit"),
+    setAgentCreationLimitPreference: request<AgentCreationLimitPreference, AgentCreationLimitPreference>()(
+      "app:set-agent-creation-limit",
     ),
     getRemoteSessionReusePreference: request<undefined, RemoteSessionReusePreference>()("app:get-remote-session-reuse"),
     setRemoteSessionReusePreference: request<RemoteSessionReusePreference, RemoteSessionReusePreference>()(

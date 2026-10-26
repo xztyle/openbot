@@ -44,6 +44,10 @@ export const messages = {
   "settings.agentMemoryLimit.title": "Записей памяти на агента",
   "settings.agentMemoryLimit.description":
     "Сколько записей памяти может хранить каждый агент на этом компьютере. Чем больше число, тем длиннее каждый промпт.",
+  "settings.agentCreationLimit.title": "Сколько агентов могут создать агенты",
+  "settings.agentCreationLimit.description":
+    "Сколько новых агентов ваши агенты могут создать за 24 часа. Агенты, которых создаёте вы, не считаются.",
+  "settings.agentCreationLimit.unlimited": "Без ограничений",
   "settings.keepRemoteSessions.title": "Быстрое подключение к серверам",
   "settings.keepRemoteSessions.description":
     "Сохранять подключение к серверам между запусками. OpenBot запускается примерно на секунду быстрее. При выходе из OpenBot сервис OpenBot не закрывает подключение.",

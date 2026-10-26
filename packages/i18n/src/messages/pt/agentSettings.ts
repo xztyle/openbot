@@ -14,6 +14,8 @@ export const messages = {
   "agentSettings.groups.does": "Faz",
   "agentSettings.groups.rules": "Regras",
   "agentSettings.saveFailed": "Não foi possível salvar as configurações do agente.",
+  "agentSettings.saveFailed.background":
+    "Não foi possível salvar a configuração de segundo plano. A configuração salva voltou.",
   "agentSettings.name": "Nome",
   "agentSettings.nameLabel": "Nome do agente",
   "agentSettings.agentTitle": "Título",
@@ -102,6 +104,9 @@ export const messages = {
     "O Uso do computador e o navegador do OpenBot não são limitados; você pode desativar o Uso do computador abaixo.",
   "agentSettings.computerUse.title": "Uso do computador",
   "agentSettings.computerUse.description": "Permitir que este agente controle aplicativos neste computador",
+  "agentSettings.background.title": "Colega em segundo plano",
+  "agentSettings.background.description":
+    "Oculte este agente das suas listas de agentes. Ele continua trabalhando com seus outros agentes. Abra-o em Colegas em segundo plano, no fim da barra lateral.",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Todo o processo do {provider} é executado em um ambiente isolado, por isso a gravação fora desses locais falha. Disponível somente no macOS.",
 } as const satisfies PartialTranslation<typeof source>;

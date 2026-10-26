@@ -44,6 +44,10 @@ export const messages = {
   "settings.agentMemoryLimit.title": "Erinnerungen pro Agent",
   "settings.agentMemoryLimit.description":
     "Wie viele Erinnerungen jeder Agent auf diesem Computer behalten kann. Eine größere Zahl macht jeden Prompt länger.",
+  "settings.agentCreationLimit.title": "Agenten, die Agenten erstellen können",
+  "settings.agentCreationLimit.description":
+    "Wie viele neue Agenten deine Agenten in 24 Stunden erstellen können. Agenten, die du erstellst, zählen nicht.",
+  "settings.agentCreationLimit.unlimited": "Kein Limit",
   "settings.keepRemoteSessions.title": "Schnelle Verbindung zu Servern",
   "settings.keepRemoteSessions.description":
     "Die Verbindung zu deinen beigetretenen Servern zwischen Starts beibehalten. OpenBot startet etwa eine Sekunde schneller. Wenn du OpenBot beendest, schließt der OpenBot-Dienst die Verbindung nicht.",

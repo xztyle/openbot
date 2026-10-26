@@ -43,6 +43,10 @@ export const messages = {
   "settings.agentMemoryLimit.title": "Souvenirs par agent",
   "settings.agentMemoryLimit.description":
     "Nombre de souvenirs que chaque agent de cet ordinateur peut garder. Un nombre plus élevé allonge chaque prompt.",
+  "settings.agentCreationLimit.title": "Agents que les agents peuvent créer",
+  "settings.agentCreationLimit.description":
+    "Nombre de nouveaux agents que vos agents peuvent créer en 24 heures. Les agents que vous créez ne comptent pas.",
+  "settings.agentCreationLimit.unlimited": "Aucune limite",
   "settings.permissions.title": "Autorisations",
   "settings.turbo.title": "Mode Turbo",
   "settings.turbo.description":

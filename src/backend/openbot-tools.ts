@@ -161,7 +161,7 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "list_agents",
     description:
-      "List local OpenBot agents with their name, title, description, and progress: status (working, queued, or ready), queuedMessages, turnStartedAt while working, and lastActivityAt. OpenBot does not track which files an agent changed.",
+      "List local OpenBot agents with their name, title, description, background (true for a teammate hidden from the user's lists), and progress: status (working, queued, or ready), queuedMessages, turnStartedAt while working, and lastActivityAt. OpenBot does not track which files an agent changed.",
     shape: {},
   },
   {
@@ -185,13 +185,13 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   {
     name: "create_agent",
     description:
-      "Create a persistent local OpenBot agent when the user asks for a new teammate. Choose its profile from the user's request and supply its first task. The new agent gets your provider, model, and reasoning effort. Set provider, model, or reasoningEffort only when the user asks for different ones; call list_models first. Use update_profile for an existing agent. After it exists, add skills with install_local_skill and routines with create_routine as needed. A new agent gets your own access and Computer Use limits.",
+      "Create a persistent local OpenBot agent when the user asks for a new teammate. Choose its profile from the user's request and supply its first task. The new agent gets your provider, model, and reasoning effort. Set provider, model, or reasoningEffort only when the user asks for different ones; call list_models first. Use update_profile for an existing agent. After it exists, add skills with install_local_skill and routines with create_routine as needed. A new agent gets your own access and Computer Use limits. Set background to true for a helper the user does not talk to directly.",
     shape: createAgentToolSchema.shape,
   },
   {
     name: "update_profile",
     description:
-      "Update a local OpenBot agent’s name, title, instructions, avatar, provider, model, reasoning effort, access, Computer Use, or notifications from the user’s request. You can restrict access to workspace and turn Computer Use off; only the user can widen them again. For an uploaded or local image, use avatarPath. Prepare a PNG, JPEG, or WebP copy up to 512 KB with your available tools if needed. Call list_models before you change a model. A new model applies from the agent's next turn. A provider change fails while the agent has a turn or queued messages; try again when it is ready.",
+      "Update a local OpenBot agent’s name, title, instructions, avatar, provider, model, reasoning effort, access, Computer Use, notifications, or background from the user’s request. You can restrict access to workspace and turn Computer Use off; only the user can widen them again. For an uploaded or local image, use avatarPath. Prepare a PNG, JPEG, or WebP copy up to 512 KB with your available tools if needed. Call list_models before you change a model. A new model applies from the agent's next turn. A provider change fails while the agent has a turn or queued messages; try again when it is ready.",
     shape: updateProfileToolSchema.shape,
   },
   {

@@ -95,6 +95,8 @@ export interface AgentSettingsPanelProps {
   automationEditable?: boolean;
   /** The busy-message setting is local-only too: the Team API does not carry it. */
   busyMessageModeEditable?: boolean;
+  /** A remote host must be a fork host (`fork-host-v1`) to store the background setting. */
+  backgroundEditable?: boolean;
   /** The app default an agent without its own busy-message setting follows. */
   defaultBusyMessageMode?: BusyMessageMode;
   providerRuntimeStatuses?: Partial<Record<AgentProviderId, ProviderRuntimeStatus>>;
@@ -171,6 +173,7 @@ interface AgentSettingsDraft {
   access: AgentAccess;
   computerUse: boolean;
   allowAutomation: boolean;
+  background: boolean;
   /** `default` follows the app setting. */
   busyMessage: BusyMessageChoice;
   /** Widening to full access waits here for the confirmation. */
@@ -197,6 +200,7 @@ type SaveField =
   | "access"
   | "computerUse"
   | "automation"
+  | "background"
   | "busyMessage";
 
 const SAVE_FAILED_TEXT = {
@@ -211,6 +215,7 @@ const SAVE_FAILED_TEXT = {
   access: "agentSettings.saveFailed.access",
   computerUse: "agentSettings.saveFailed.computerUse",
   automation: "agentSettings.saveFailed.automation",
+  background: "agentSettings.saveFailed.background",
   busyMessage: "agentSettings.saveFailed.busyMessage",
 } as const satisfies Record<SaveField, AppTextKey>;
 
@@ -255,6 +260,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     access: DEFAULT_AGENT_ACCESS,
     computerUse: true,
     allowAutomation: false,
+    background: false,
     busyMessage: "default",
     confirmingFullAccess: false,
     runtime: untrack(() => ({ ...props.runtimeSettings })),
@@ -374,6 +380,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
           agent.access ?? DEFAULT_AGENT_ACCESS,
           String(agentComputerUseEnabled(agent)),
           String(agentAutomationAllowed(agent)),
+          String(agent.background === true),
           agent.busyMessageMode ?? "default",
           runtimeSettings.provider,
           runtimeSettings.model,
@@ -415,6 +422,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
           state.access = agent.access ?? DEFAULT_AGENT_ACCESS;
           state.computerUse = agentComputerUseEnabled(agent);
           state.allowAutomation = agentAutomationAllowed(agent);
+          state.background = agent.background === true;
           state.busyMessage = agent.busyMessageMode ?? "default";
           if (agentChanged) state.confirmingFullAccess = false;
           state.runtime.provider = runtimeSettings.provider;
@@ -780,6 +788,19 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     if (!disposed && props.agent.id === agentId && draft.computerUse === next) {
       setDraft((state) => {
         state.computerUse = !next;
+      });
+    }
+  }
+
+  async function saveBackground(next: boolean): Promise<void> {
+    const agentId = props.agent.id;
+    setDraft((state) => {
+      state.background = next;
+    });
+    if (await saveAgentPatch({ background: next }, agentId, "background")) return;
+    if (!disposed && props.agent.id === agentId && draft.background === next) {
+      setDraft((state) => {
+        state.background = !next;
       });
     }
   }
@@ -1290,6 +1311,21 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                     provider: agentProviderName(draft.runtime.provider),
                   })}
                 </Text>
+              </Show>
+              <Show when={props.backgroundEditable}>
+                <div class="agent-settings-notifications">
+                  <div>
+                    <strong>{t("agentSettings.background.title")}</strong>
+                    <span>{t("agentSettings.background.description")}</span>
+                  </div>
+                  <Switch
+                    size="sm"
+                    aria-label={t("agentSettings.background.title")}
+                    checked={draft.background}
+                    onChange={(next) => void saveBackground(next)}
+                  />
+                </div>
+                <SaveError field="background" />
               </Show>
               <Show when={props.onStartNewChat}>
                 <div class="agent-settings-notifications">

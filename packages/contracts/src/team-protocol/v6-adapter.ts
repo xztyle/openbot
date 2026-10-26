@@ -2,6 +2,13 @@ import { decodeAgentAnalytics } from "../ipc-agent-analytics";
 import { BROWSER_SECRET_RESPONSE_PATH, parseBrowserSecretResponse } from "../ipc-browser-secret";
 import { decodeHostAnalytics } from "../ipc-host-analytics";
 import { isBoolean, isDynamicRecord, isOneOf, isString } from "../runtime-values";
+import {
+  decodeAgentBackgroundRequest,
+  isAgentSummaryResponseRoute,
+  isAgentUpdateRoute,
+  isBackgroundOnlyUpdate,
+  withAgentBackground,
+} from "./agent-background-v1";
 import { decodeAnalyticsV1Response } from "./analytics-v1";
 import {
   decodeBrowserDisplayResponse,
@@ -196,6 +203,14 @@ export function encodeTeamProtocolV6CurrentHttpRequest(
       const projected = JSON.parse(encodeTeamProtocolV6BaseCurrentHttpRequest(method, path, value, options));
       return JSON.stringify({ ...projected, ...messageTimezone(value), ...decodeMessageClientId(value) });
     }
+    // `background` rides beside the frozen update projection; an older host drops it. See
+    // `agent-background-v1.ts`.
+    if (isAgentUpdateRoute(method, path) && isBackgroundOnlyUpdate(value))
+      return JSON.stringify(decodeAgentBackgroundRequest(value));
+    if (isAgentUpdateRoute(method, path)) {
+      const projected = JSON.parse(encodeTeamProtocolV6BaseCurrentHttpRequest(method, path, value, options));
+      return JSON.stringify({ ...projected, ...decodeAgentBackgroundRequest(value) });
+    }
     return encodeTeamProtocolV6BaseCurrentHttpRequest(method, path, value, options);
   }
   // The duplicate route reaches the frozen v3 codec directly, so the vocabulary swap happens here.
@@ -220,6 +235,7 @@ export function decodeTeamProtocolV6CurrentHttpRequest(
   if (scopedUsageRoute(method, path)) {
     return decodeScopedUsageRequest(value);
   }
+  if (isAgentUpdateRoute(method, path) && isBackgroundOnlyUpdate(value)) return decodeAgentBackgroundRequest(value);
   if (!duplicateRoute(method, path)) {
     const decoded = options.preserveSemanticTags
       ? decodeTeamProtocolV6BaseCurrentHttpRequest(method, path, value)
@@ -239,6 +255,7 @@ export function decodeTeamProtocolV6CurrentHttpRequest(
     }
     if (isAgentMessageRoute(method, path))
       return { ...decoded, ...messageTimezone(value), ...decodeMessageClientId(value) };
+    if (isAgentUpdateRoute(method, path)) return { ...decoded, ...decodeAgentBackgroundRequest(value) };
     return decoded;
   }
   return toCurrentAgentKeysObjectForPath(path, structuredClone(decodeTeamProtocolV6HttpRequest(method, path, value)));
@@ -297,11 +314,15 @@ export function encodeTeamProtocolV6CurrentHttpResponse(
     return encodeTeamProtocolV6BaseCurrentHttpResponse(method, "/v1/agents/usage", status, value, options);
   }
   if (!duplicateRoute(method, path)) {
-    return encodeTeamProtocolV6BaseCurrentHttpResponse(method, path, status, value, options);
+    const encoded = encodeTeamProtocolV6BaseCurrentHttpResponse(method, path, status, value, options);
+    return isAgentSummaryResponseRoute(method, path) && status < 400
+      ? JSON.stringify(withAgentBackground(JSON.parse(encoded), value))
+      : encoded;
   }
   // The duplicate route reaches the frozen v3 codec directly, so the vocabulary swap happens here.
   const currentValue: TeamProtocolV6BaseJsonValue = JSON.parse(JSON.stringify(value ?? null));
-  return JSON.stringify(decodeTeamProtocolV6HttpResponse(method, path, status, toWireAgentKeys(currentValue)));
+  const projected = decodeTeamProtocolV6HttpResponse(method, path, status, toWireAgentKeys(currentValue));
+  return JSON.stringify(status < 400 ? withAgentBackground(projected, value) : projected);
 }
 
 export function decodeTeamProtocolV6CurrentHttpResponse(
@@ -343,8 +364,12 @@ export function decodeTeamProtocolV6CurrentHttpResponse(
   if (scopedUsageRoute(method, path) || isAgentAnalyticsRoute(method, path) || isHostAnalyticsRoute(method, path)) {
     return decodeTeamProtocolV6BaseCurrentHttpResponse(method, "/v1/agents/usage", status, value);
   }
-  if (!duplicateRoute(method, path)) return decodeTeamProtocolV6BaseCurrentHttpResponse(method, path, status, value);
-  return toCurrentAgentKeys(structuredClone(decodeTeamProtocolV6HttpResponse(method, path, status, value)));
+  if (!duplicateRoute(method, path)) {
+    const decoded = decodeTeamProtocolV6BaseCurrentHttpResponse(method, path, status, value);
+    return isAgentSummaryResponseRoute(method, path) && status < 400 ? withAgentBackground(decoded, value) : decoded;
+  }
+  const decoded = toCurrentAgentKeys(structuredClone(decodeTeamProtocolV6HttpResponse(method, path, status, value)));
+  return status < 400 ? withAgentBackground(decoded, value) : decoded;
 }
 
 /**

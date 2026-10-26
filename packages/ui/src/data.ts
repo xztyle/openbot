@@ -215,6 +215,8 @@ export interface AgentProfile {
   allowAutomation?: boolean;
   /** Absent means the app default. Absent for an agent on a remote host too, which does not share it. */
   busyMessageMode?: AgentSummary["busyMessageMode"];
+  /** A background teammate: the sidebar lists it in its own collapsed group. Absent means false. */
+  background?: boolean;
   threadId: string | null;
   /** The agent's working directory. Absent for profiles built before it was tracked. */
   workspacePath?: string;

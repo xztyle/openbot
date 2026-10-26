@@ -2,6 +2,21 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/customProvider";
 
 export const messages = {
+  "customProvider.registry.title": "Реестр ACP",
+  "customProvider.registry.description":
+    "Устанавливайте агентов на этот сервер. При удалении среды выполнения настройки агента, учётные данные и диалоги сохраняются.",
+  "customProvider.registry.search": "Поиск в реестре",
+  "customProvider.registry.empty": "Нет агентов, подходящих под запрос.",
+  "customProvider.registry.agentId": "ID пользовательского агента",
+  "customProvider.registry.install": "Установить",
+  "customProvider.registry.update": "Обновить",
+  "customProvider.registry.remove": "Удалить среду выполнения",
+  "customProvider.registry.searchFailed": "Не удалось выполнить поиск в реестре. Повторите попытку.",
+  "customProvider.registry.statusFailed": "Не удалось проверить ход установки. OpenBot повторит попытку.",
+  "customProvider.registry.installFailed": "Не удалось установить агента. Повторите попытку.",
+  "customProvider.registry.updateFailed": "Не удалось обновить агента. Повторите попытку.",
+  "customProvider.registry.removeFailed": "Не удалось удалить среду выполнения. Повторите попытку.",
+  "customProvider.registry.cancelFailed": "Не удалось отменить установку. Повторите попытку.",
   "customProvider.error.providerIdRequired": "Введите ID провайдера.",
   "customProvider.error.providerIdPattern":
     "Используйте строчные буквы, цифры, дефисы или подчёркивания; начинаться ID должен с буквы или цифры.",
@@ -42,6 +57,7 @@ export const messages = {
   "customProvider.removeUnavailable": "Эта сборка не может удалять эндпоинты.",
 
   "customProvider.form.title": "Добавить своего провайдера",
+  "customProvider.form.editTitle": "Изменить своего провайдера",
   "customProvider.form.description": "Опишите эндпоинт, совместимый с OpenAI, и модели, которые он предоставляет.",
   "customProvider.form.heading": "Свой провайдер",
   "customProvider.form.subtitle": "Любой эндпоинт, совместимый с OpenAI.",
@@ -149,6 +165,9 @@ export const messages = {
   "customProvider.acp.commandHint": "Программа для запуска. OpenBot ищет её в вашем PATH.",
   "customProvider.acp.args": "Аргументы",
   "customProvider.acp.argsHint": "Разделяйте аргументы пробелами. Аргумент с пробелами возьмите в кавычки.",
+  "customProvider.acp.usagePrompt": "Команда использования",
+  "customProvider.acp.usagePromptHint":
+    "OpenBot отправляет её не чаще чем раз в 5 минут и показывает последний ответ. Используйте команду, на которую агент отвечает сам, например /usage.",
   "customProvider.acp.env": "Переменные окружения",
   "customProvider.acp.env.name": "Имя переменной {number}",
   "customProvider.acp.env.value": "Значение переменной {number}",
@@ -161,6 +180,12 @@ export const messages = {
   "customProvider.acp.checkOk": "{name} ответил",
   "customProvider.acp.checkOkVersion": "{name} {version} ответил",
   "customProvider.acp.checkProtocol": "Версия ACP: {version}",
+  "customProvider.acp.checkModels": {
+    one: "{count} модель: {models}",
+    few: "{count} модели: {models}",
+    many: "{count} моделей: {models}",
+    other: "{count} модели: {models}",
+  },
   "customProvider.acp.checkFailed": "Агент не ответил",
   "customProvider.acp.trustTitle": "Эта команда выполняется на вашем компьютере",
   "customProvider.acp.trustDescription":
@@ -176,6 +201,7 @@ export const messages = {
   "customProvider.acp.error.envDuplicate": "Этот агент уже задаёт переменную {name}.",
   "customProvider.acp.error.envValueRequired": "Введите значение этой переменной.",
   "customProvider.acp.error.envValueLength": "Значение должно быть короче {max} символов.",
+  "customProvider.acp.error.usagePromptInvalid": "Используйте одну строку не длиннее {max} символов.",
   "customProvider.acp.error.agentIdPattern":
     "Используйте строчные буквы, цифры или дефисы; ID должен начинаться с буквы или цифры. Не более 40 символов.",
 
@@ -211,6 +237,7 @@ export const messages = {
   "customProvider.list.empty": "Своих эндпоинтов пока нет.",
   "customProvider.list.label": "Свои эндпоинты",
   "customProvider.list.apiKeySaved": "API-ключ сохранён",
+  "customProvider.list.editLabel": "Изменить: {name}",
   "customProvider.list.deleteLabel": "Удалить: {name}",
   "customProvider.list.confirmTitle": "Удалить «{name}»?",
   "customProvider.list.confirmDescription":

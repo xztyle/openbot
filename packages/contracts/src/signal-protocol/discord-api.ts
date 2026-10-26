@@ -17,11 +17,23 @@ export const DISCORD_MESSAGE_TEXT_LIMIT = 2_000;
 /** The most messages one `listMessages` call returns. Discord's own page limit. */
 export const DISCORD_LIST_MESSAGES_LIMIT = 100;
 
+/** The most channels and threads one `listChannels` call returns. */
+export const DISCORD_LIST_CHANNELS_LIMIT = 500;
+
 /** The largest file a host uploads through Signal: Discord's default upload limit for a bot. */
 export const DISCORD_UPLOAD_BYTES_LIMIT = 10 * 1024 * 1024;
 
 /** The most attachments Signal passes on with one message. Discord's own limit. */
 export const DISCORD_ATTACHMENTS_LIMIT = 10;
+
+/** The most roles a guild has, and so the most a member or `listRoles` can name. Discord's own limit. */
+export const DISCORD_ROLES_LIMIT = 250;
+
+/** The longest text of a replied-to message that Signal passes on. Discord's limit is 4,000 with Nitro. */
+export const DISCORD_QUOTE_TEXT_LIMIT = 4_000;
+
+/** The longest replied-to text a host accepts: a later Signal can pass more without breaking a host. */
+const QUOTE_DECODE_LIMIT = 8_000;
 
 export interface DiscordInboundAttachment {
   id: string;
@@ -32,20 +44,45 @@ export interface DiscordInboundAttachment {
   url: string;
 }
 
+/**
+ * The message that a person's message replies to, when a person wrote it. Discord gives its text only
+ * when the bot has the Message Content intent, or when that message mentions OpenBot.
+ */
+export interface DiscordInboundQuote {
+  authorId: string;
+  authorName: string;
+  /** Discord markdown. Mentions stay as `<@id>`. Empty when the message has only attachments. */
+  content: string;
+  sentAt: string;
+  /** Empty from an older Signal. */
+  attachments: DiscordInboundAttachment[];
+}
+
 /** One guild message that mentions OpenBot. */
 export interface DiscordInboundMessage {
   id: string;
   channelId: string;
   authorId: string;
   authorName: string;
+  /**
+   * The author's role ids in the guild. Null from a Signal older than role lists: a host with a
+   * role list then refuses the message.
+   */
+  authorRoleIds: string[] | null;
   /** Discord markdown. Mentions stay as `<@id>`. */
   content: string;
   /**
    * The message this one replies to. `rootId` is the message that the replied-to message itself
    * replies to, when OpenBot wrote it: OpenBot replies to the first message of a conversation, so
-   * that names the conversation.
+   * that names the conversation. `quote` is null when OpenBot wrote it, when Discord gave no text,
+   * or from an older Signal.
    */
-  replyTo: { messageId: string; authorIsBot: boolean; rootId: string | null } | null;
+  replyTo: {
+    messageId: string;
+    authorIsBot: boolean;
+    rootId: string | null;
+    quote: DiscordInboundQuote | null;
+  } | null;
   attachments: DiscordInboundAttachment[];
   sentAt: string;
 }
@@ -103,6 +140,13 @@ export type DiscordApiRequest =
   | { op: "listMessages"; guildId: string; channelId: string; after: string; limit: number }
   | { op: "member"; guildId: string; userId: string }
   | { op: "channel"; guildId: string; channelId: string }
+  /** The guild's text and announcement channels and its active threads. */
+  | { op: "listChannels"; guildId: string }
+  /**
+   * The guild's roles that a person can have, highest first. Leaves out `@everyone` and the roles
+   * that an integration manages. An older Signal answers `invalid_request`.
+   */
+  | { op: "listRoles"; guildId: string }
   /** A reply that only the person who pressed a button sees. */
   | { op: "interactionReply"; guildId: string; interactionId: string; content: string }
   /**
@@ -119,6 +163,21 @@ export interface DiscordHistoryMessage {
   content: string;
   replyToId: string | null;
   sentAt: string;
+  /** Empty from an older Signal. */
+  attachments: DiscordInboundAttachment[];
+}
+
+/** One place of `listChannels`. A thread is a channel too: a post to its id goes into the thread. */
+export interface DiscordChannelSummary {
+  id: string;
+  name: string;
+  kind: "channel" | "thread";
+}
+
+/** One role of `listRoles`. */
+export interface DiscordRoleSummary {
+  id: string;
+  name: string;
 }
 
 export const DISCORD_API_ERROR_CODES = [
@@ -176,6 +235,35 @@ function attachment(value: unknown): DiscordInboundAttachment {
   };
 }
 
+function roleIds(value: unknown): string[] | null {
+  // An older Signal sends no roles.
+  if (value === undefined || value === null) return null;
+  if (!Array.isArray(value) || value.length > DISCORD_ROLES_LIMIT) invalid();
+  return value.map(snowflake);
+}
+
+function quote(value: unknown): DiscordInboundQuote | null {
+  // An older Signal sends no quote.
+  if (value === undefined || value === null) return null;
+  const item = record(value);
+  const content = text(item.content);
+  if (content.length > QUOTE_DECODE_LIMIT) invalid();
+  return {
+    authorId: snowflake(item.authorId),
+    authorName: text(item.authorName),
+    content,
+    sentAt: text(item.sentAt),
+    attachments: attachments(item.attachments),
+  };
+}
+
+function attachments(value: unknown): DiscordInboundAttachment[] {
+  // An older Signal sends no attachments.
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > DISCORD_ATTACHMENTS_LIMIT) invalid();
+  return value.map(attachment);
+}
+
 function inboundMessage(value: unknown): DiscordInboundMessage {
   const item = record(value);
   let replyTo: DiscordInboundMessage["replyTo"] = null;
@@ -186,6 +274,7 @@ function inboundMessage(value: unknown): DiscordInboundMessage {
       messageId: snowflake(reply.messageId),
       authorIsBot: reply.authorIsBot,
       rootId: nullableSnowflake(reply.rootId),
+      quote: quote(reply.quote),
     };
   }
   if (!Array.isArray(item.attachments) || item.attachments.length > DISCORD_ATTACHMENTS_LIMIT) invalid();
@@ -194,6 +283,7 @@ function inboundMessage(value: unknown): DiscordInboundMessage {
     channelId: snowflake(item.channelId),
     authorId: snowflake(item.authorId),
     authorName: text(item.authorName),
+    authorRoleIds: roleIds(item.authorRoleIds),
     content: text(item.content),
     replyTo,
     attachments: item.attachments.map(attachment),
@@ -252,7 +342,27 @@ export function decodeDiscordHistory(value: unknown): DiscordHistoryMessage[] {
       content: text(item.content),
       replyToId: nullableSnowflake(item.replyToId),
       sentAt: text(item.sentAt),
+      attachments: attachments(item.attachments),
     };
+  });
+}
+
+export function decodeDiscordChannels(value: unknown): DiscordChannelSummary[] {
+  const channels = record(value).channels;
+  if (!Array.isArray(channels) || channels.length > DISCORD_LIST_CHANNELS_LIMIT) invalid();
+  return channels.map((entry) => {
+    const item = record(entry);
+    if (item.kind !== "channel" && item.kind !== "thread") invalid();
+    return { id: snowflake(item.id), name: text(item.name), kind: item.kind };
+  });
+}
+
+export function decodeDiscordRoles(value: unknown): DiscordRoleSummary[] {
+  const roles = record(value).roles;
+  if (!Array.isArray(roles) || roles.length > DISCORD_ROLES_LIMIT) invalid();
+  return roles.map((entry) => {
+    const item = record(entry);
+    return { id: snowflake(item.id), name: text(item.name) };
   });
 }
 

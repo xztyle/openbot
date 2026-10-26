@@ -5,7 +5,6 @@ import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { FirstRunPlanStep } from "../src/features/onboarding/FirstRunPlanStep";
 import { createSetupProviders, type SetupProviderProps } from "../src/features/onboarding/SetupProviderPicker";
-import { createFakeCodeLogin } from "./code-login-fixture";
 import { createStoryDetection, STORY_DETECTED_PROVIDERS } from "./detected-providers-fixture";
 import { STORY_AGENT_STATUS } from "./fixtures";
 import {
@@ -15,6 +14,7 @@ import {
   MockedOnboardingApi,
   noProvidersConnectedAgentStatus,
 } from "./onboarding-fixture";
+import { createFakeConnection } from "./provider-connection-fixture";
 
 /** OpenCode installed with no account of its own: enough to run an endpoint that brings its own key. */
 const openCodeInstalledAgentStatus: AgentStatus = {
@@ -230,7 +230,7 @@ export const NarrowProviderVersions: Story = {
 export const NoProvidersConnected: Story = {
   args: {
     agentStatus: noProvidersConnectedAgentStatus,
-    onConnectProvider: fn(),
+    connection: createFakeConnection({ browser: fn(), alternative: [] }),
     onRefreshProviders: fn(),
   },
 };
@@ -243,9 +243,8 @@ export const NoProvidersConnected: Story = {
 export const SignInWithCode: Story = {
   args: {
     agentStatus: noProvidersConnectedAgentStatus,
-    onConnectProvider: fn(),
+    connection: createFakeConnection({ browser: fn(), finishAfterMs: 0 }),
     onRefreshProviders: fn(),
-    codeLogin: createFakeCodeLogin({ finishAfterMs: 0 }),
   },
 };
 
@@ -253,7 +252,7 @@ export const RefreshingProviders: Story = {
   args: {
     agentStatus: checkingProvidersAgentStatus,
     refreshingProviders: true,
-    onConnectProvider: fn(),
+    connection: createFakeConnection({ browser: fn(), alternative: [] }),
     onRefreshProviders: fn(),
   },
 };
@@ -271,7 +270,7 @@ export const ConnectedWithRefreshWarning: Story = {
           : provider,
       ),
     },
-    onConnectProvider: fn(),
+    connection: createFakeConnection({ browser: fn(), alternative: [] }),
     onRefreshProviders: fn(),
   },
 };
@@ -284,7 +283,7 @@ export const ConnectingChatGPT: Story = {
         provider.id === "codex" ? { ...provider, connectionState: "connecting", message: null } : provider,
       ),
     },
-    onConnectProvider: fn(),
+    connection: createFakeConnection({ browser: fn(), alternative: [] }),
     onRefreshProviders: fn(),
   },
 };
@@ -297,7 +296,7 @@ export const ConnectingClaude: Story = {
         provider.id === "claude" ? { ...provider, connectionState: "connecting", message: null } : provider,
       ),
     },
-    onConnectProvider: fn(),
+    connection: createFakeConnection({ browser: fn(), alternative: [] }),
     onRefreshProviders: fn(),
   },
 };
@@ -305,7 +304,7 @@ export const ConnectingClaude: Story = {
 export const ConnectingBoth: Story = {
   args: {
     agentStatus: bothConnectingAgentStatus,
-    onConnectProvider: fn(),
+    connection: createFakeConnection({ browser: fn(), alternative: [] }),
     onRefreshProviders: fn(),
   },
 };
@@ -313,7 +312,7 @@ export const ConnectingBoth: Story = {
 export const RefreshResettingConnections: Story = {
   args: {
     agentStatus: bothConnectingAgentStatus,
-    onConnectProvider: fn(),
+    connection: createFakeConnection({ browser: fn(), alternative: [] }),
     onRefreshProviders: fn(),
   },
   render: (storyArgs) => <RefreshResettingPlanStep args={storyArgs} />,
@@ -322,7 +321,7 @@ export const RefreshResettingConnections: Story = {
 export const ConnectedWithReconnect: Story = {
   args: {
     agentStatus: STORY_AGENT_STATUS,
-    onConnectProvider: fn(),
+    connection: createFakeConnection({ browser: fn(), alternative: [] }),
     onRefreshProviders: fn(),
   },
 };

@@ -42,6 +42,10 @@ export function hostedServerIpcHandlers({
         (value) => requireString(value, "serverId", INPUT_LIMITS.identifier),
         (serverId) => runCauseEffect(hostedServers.wake(serverId)),
       ),
+      restart: payloadHandler(
+        (value) => requireString(value, "serverId", INPUT_LIMITS.identifier),
+        (serverId) => runCauseEffect(hostedServers.restart(serverId)),
+      ),
     },
   };
 }

@@ -58,11 +58,11 @@ export interface MarketplaceSkillPage {
 }
 
 export interface MarketplaceSkillQuery {
-  query?: string;
+  query?: string | undefined;
   category?: SkillCategory;
   featured?: boolean;
-  sort?: "installs";
-  cursor?: string;
+  sort?: "installs" | undefined;
+  cursor?: string | undefined;
   limit?: number;
 }
 
@@ -103,6 +103,17 @@ export interface SubmitSkillInput {
  * agent workspace that OpenBot did not install. OpenBot lists it read-only and never writes to it.
  */
 export const INSTALLED_SKILL_ORIGINS = ["marketplace", "managed", "local", "workspace"] as const;
+
+/**
+ * The id of a skill in the host user's `~/.agents/skills` is `home:<slug>`. Only the `$` list of a
+ * host has these skills, with the `workspace` origin, so an older client decodes them. They are the
+ * same for every agent and are not in the agent's workspace.
+ */
+export const HOME_SKILL_ID_PREFIX = "home:";
+
+export function isHomeSkillId(skillId: string): boolean {
+  return skillId.startsWith(HOME_SKILL_ID_PREFIX);
+}
 export type InstalledSkillOrigin = (typeof INSTALLED_SKILL_ORIGINS)[number];
 
 /**
@@ -275,7 +286,7 @@ export interface ReviseLocalSkillInput extends CreateLocalSkillInput {
 }
 export interface LocalSkillRevisionInput {
   skillId: string;
-  revision?: number;
+  revision?: number | undefined;
 }
 /** Installs one exact revision, so the agent gets the copy the user read. */
 export type InstallLocalSkillInput = LocalSkillRevisionInput & { agentId: string; revision: number };

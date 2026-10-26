@@ -41,7 +41,33 @@ export const messages = {
   "error.import.empty": "Экспорт пуст.",
   "error.import.remoteZipTooLarge":
     "Чтобы импортировать на подключённый сервер, экспорт должен быть файлом .zip размером до 100 МБ.",
-  "error.import.hostBusy": "Сервер читает другие экспорты. Повторите через несколько минут.",
+  "error.import.hostBusy": "Сервер читает другие экспорты. Повторите попытку через несколько минут.",
   "error.import.skillKept":
     "{name}: на сервере уже есть навык «{skill}», поэтому агент использует его. Попросите администратора обновить его.",
+  "error.import.transferRemoteTooLarge":
+    "Файл переноса для присоединённого сервера должен быть меньше 100 МБ. Выключите файлы рабочих пространств или экспортируйте меньше агентов.",
+  "error.import.transferNotFile": "Это не файл переноса OpenBot.",
+  "error.import.transferNewer": "Этот файл создан более новой версией OpenBot. Обновите OpenBot и повторите попытку.",
+  "error.import.transferEmpty": "В файле нет ни агентов, ни настроек.",
+  "error.import.transferTooLarge":
+    "Файл переноса должен быть меньше 2 ГБ и содержать меньше 50 000 файлов. Выключите файлы рабочих пространств или экспортируйте меньше агентов.",
+  "error.import.transferAgentInvalid": "Агент {number} в файле некорректен, поэтому он пропущен.",
+  "error.import.transferSettingsInvalid": "Настройки приложения в файле некорректны, поэтому они не импортированы.",
+  "error.import.transferModelMissing":
+    "{name}: модель «{model}» здесь пока недоступна, поэтому агент использует модель по умолчанию. Выберите модель снова, когда её провайдер будет готов.",
+  "error.import.transferSettingSkipped": "{name}: не импортировано. {reason}",
+  "error.import.transferRoutineFlowSkipped": "Схема регулярной задачи не импортирована. {reason}",
+  "error.import.transferCustomAgentCommand":
+    "{name}: собственные агенты не импортируются, потому что они запускают команду. Проверьте команду «{command}» и снова добавьте агента в настройках.",
+  "error.import.transferSkillLimit":
+    "{name}: в файле только первые {limit} из {total} навыков, потому что у агента может быть не больше {limit} навыков.",
+  "error.import.transferFilesGone": "Файлы ({number}) были удалены во время экспорта, поэтому их нет в файле.",
+  "error.import.transferProviderKey": "{name}: снова введите API-ключ в настройках.",
+  "error.import.transferAgentEnv": "{name}: снова введите значения {names} в настройках.",
+  "error.import.transferMcpValues":
+    "{name}: сервер MCP добавлен выключенным. Проверьте его команду, снова введите значения и полный адрес и включите его в настройках MCP.",
+  "error.import.transferValuesCleared":
+    "{name}: значения, которые могут содержать секрет, удалены из аргументов или адреса. Снова введите их в настройках.",
+  "error.import.transferSharedKept":
+    "Файлы в общей папке ({number}) уже есть здесь, поэтому они оставлены без изменений.",
 } as const satisfies PartialTranslation<typeof source>;

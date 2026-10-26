@@ -16,7 +16,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isOneOf } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
-import { databaseRow, databaseRows } from "../database/database-rows";
+import { databaseRow, databaseRows, placeholders } from "../database/database-rows";
 import type { OpenBotDatabase } from "../openbot-database";
 import { routineFlowConnectProblem, routineFlowDepths } from "./routine-flow-graph";
 
@@ -289,11 +289,28 @@ export class RoutineFlowStore {
     return Number(result.changes) > 0;
   }
 
-  /** Ids of the runs whose flow changed since `since`: the ones that may have a next step to send. */
-  runIdsWithStepsSince(since: string): string[] {
+  /**
+   * Ids of the runs with a handoff not sent yet: a link whose sending agent's step ended since `since`
+   * and whose next agent has no step. Every run that can have a next step to send is one of these. A run
+   * whose flow is done, or whose routine has no links, is not, so a sweep does not read it again (#2283).
+   */
+  runIdsWithPendingHandoff(since: string): string[] {
     return databaseRows(
       this.#database.connection
-        .prepare("SELECT DISTINCT run_id FROM routine_flow_steps WHERE updated_at >= ? ORDER BY run_id")
+        .prepare(
+          // CROSS JOIN keeps the steps first, so the read starts at the recent steps on their `updated_at`
+          // index. Without it, SQLite reads every run ever stored in `run_id` order.
+          `SELECT DISTINCT run.run_id FROM routine_flow_steps AS source
+           CROSS JOIN projection_routine_runs AS run ON run.run_id = source.run_id
+           JOIN routine_flow_links AS link ON link.routine_id = run.routine_id
+             AND link.from_agent_id = source.agent_id AND link.created_at <= run.created_at
+           WHERE source.updated_at >= ? AND source.status <> 'running'
+             AND NOT EXISTS (
+               SELECT 1 FROM routine_flow_steps AS target
+               WHERE target.run_id = run.run_id AND target.agent_id = link.to_agent_id
+             )
+           ORDER BY run.run_id`,
+        )
         .all(since),
     ).map((row) => String(row.run_id));
   }
@@ -341,10 +358,6 @@ function strandedLinks(owner: string | null, links: readonly RoutineFlowLink[]):
   if (!owner) return [];
   const reached = routineFlowDepths(owner, links);
   return links.filter((link) => !reached.has(link.fromAgentId));
-}
-
-function placeholders(values: readonly unknown[]): string {
-  return values.map(() => "?").join(", ");
 }
 
 function nullableString(value: unknown): string | null {

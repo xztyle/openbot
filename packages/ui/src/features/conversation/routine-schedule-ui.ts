@@ -40,6 +40,18 @@ export function routineScheduleSummary(
 ): string {
   const { t } = text;
   switch (schedule.kind) {
+    case "once": {
+      const [year = 0, month = 1, day = 1] = schedule.date.split("-").map(Number);
+      // UTC noon, so that no zone moves the saved date to another day.
+      const date = text.format.date(Date.UTC(year, month - 1, day, 12), {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+      return t("routine.draftSummary.once", { date, time: formatRoutineClock(schedule.time, text) });
+    }
     case "hourly":
       return t("routine.summary.hourly", { minute: String(schedule.minute).padStart(2, "0") });
     case "daily": {

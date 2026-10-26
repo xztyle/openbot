@@ -1,6 +1,6 @@
-import { Badge, Button, Check, IconButton, Lock, X } from "@openbot/ui";
+import { Button, Check, IconButton, Lock, Spinner, X } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { createUniqueId, Match, onSettled, Show, Switch } from "solid-js";
+import { createSignal, createStore, createUniqueId, onCleanup, onSettled, Show } from "solid-js";
 import { useText } from "../../text";
 import { PluginIcon } from "../marketplace/PluginIcon";
 
@@ -60,6 +60,9 @@ export function MarketplaceSuggestionCard(props: MarketplaceSuggestionCardProps)
   /* Dismiss and Undo replace each other, so the focus moves to the control that is there now. */
   let dismissButton: HTMLButtonElement | undefined;
   let undoButton: HTMLButtonElement | undefined;
+  /* The action animates only a change that the user started here. A card that opens connected, or
+     that reads its state late, shows the state with no motion. */
+  const [moving, setMoving] = createSignal(false);
   return (
     <Show
       when={!props.dismissed}
@@ -83,7 +86,12 @@ export function MarketplaceSuggestionCard(props: MarketplaceSuggestionCardProps)
         </div>
       }
     >
-      <article class="conversation-interaction-card marketplace-suggestion" aria-labelledby={titleId}>
+      <article
+        class="conversation-interaction-card marketplace-suggestion"
+        aria-labelledby={titleId}
+        data-state={props.state}
+        data-motion={moving() ? "" : undefined}
+      >
         <header class="marketplace-suggestion-header">
           <Show
             when={props.mark}
@@ -114,13 +122,16 @@ export function MarketplaceSuggestionCard(props: MarketplaceSuggestionCardProps)
             <span class="marketplace-suggestion-description">{props.description}</span>
           </div>
           <div class="marketplace-suggestion-action" role="status">
-            <SuggestionAction {...props} />
+            <SuggestionAction {...props} onStart={() => setMoving(true)} />
           </div>
-          <Show when={props.onDismiss && props.state !== "connected"}>
+          {/* A connected card has nothing to dismiss. The stylesheet folds the button away, so the
+              action moves to the edge instead of a jump. */}
+          <Show when={props.onDismiss}>
             <IconButton
               label={t("chat.suggestion.dismissNamed", { name: props.name })}
               variant="ghost"
               size="icon-xs"
+              class="marketplace-suggestion-dismiss"
               ref={(element) => (dismissButton = element)}
               onClick={() => {
                 props.onDismiss?.();
@@ -148,11 +159,22 @@ export function MarketplaceSuggestionCard(props: MarketplaceSuggestionCardProps)
   );
 }
 
-/** Connect or Install, or the connected badge. */
-function SuggestionAction(props: MarketplaceSuggestionCardProps) {
+/**
+ * Connect or Install. The same button shows the busy step and then turns green with a check, so the
+ * focus stays on it. Each label keeps its width, and the button takes the width of the label on screen.
+ */
+function SuggestionAction(props: MarketplaceSuggestionCardProps & { onStart: () => void }) {
   const { t } = useText();
   const app = () => props.kind === "app";
+  const done = () => props.state === "connected";
+  const busy = () => props.state === "busy";
+  const startable = () => props.state === "available" || props.state === "attention";
+  /** Connected, and turned off or not allowed in this chat: the user decides on the app's page. */
+  const managed = () => props.state === "off" || props.state === "disabled";
+  const shown = () => done() || Boolean(props.onConnect && props.state !== "unavailable" && !managed());
+  const variant = () => (props.state === "attention" ? "outline" : "default");
   const label = () => {
+    if (done()) return undefined;
     if (!app()) return t("chat.suggestion.installNamed", { name: props.name });
     return props.state === "attention"
       ? t("marketplace.app.reconnectNamed", { name: props.name })
@@ -162,15 +184,34 @@ function SuggestionAction(props: MarketplaceSuggestionCardProps) {
     if (!app()) return t("chat.suggestion.install");
     return props.state === "attention" ? t("marketplace.app.reconnect") : t("marketplace.app.connect");
   };
+  const doneText = () => (app() ? t("marketplace.app.connected") : t("chat.suggestion.installed"));
+  const [widths, setWidths] = createStore({ start: 0, done: 0 });
+  // `Show` builds the button again when it comes back, so a layer drops the observer of its old element.
+  const observers: Partial<Record<"start" | "done", ResizeObserver>> = {};
+  onCleanup(() => {
+    observers.start?.disconnect();
+    observers.done?.disconnect();
+  });
+  const measure = (layer: "start" | "done") => (element: HTMLElement) => {
+    observers[layer]?.disconnect();
+    const observer = new ResizeObserver(() =>
+      setWidths((draft) => {
+        draft[layer] = element.offsetWidth;
+      }),
+    );
+    observer.observe(element);
+    observers[layer] = observer;
+  };
+  // A busy or connected button does nothing, so it makes no tap sound, as a loading button does not.
+  const tapCue = () => (startable() ? "" : undefined);
+  const stageStyle = () => {
+    const width = widths[done() ? "done" : "start"];
+    return width > 0 ? { width: `${width}px` } : undefined;
+  };
   return (
-    <Switch>
-      <Match when={props.state === "connected"}>
-        <Badge variant="success-light" class="marketplace-suggestion-done">
-          <Check aria-hidden="true" />
-          {app() ? t("marketplace.app.connected") : t("chat.suggestion.installed")}
-        </Badge>
-      </Match>
-      <Match when={props.onManage && (props.state === "off" || props.state === "disabled")}>
+    <Show
+      when={!(props.onManage && managed())}
+      fallback={
         <Button
           type="button"
           variant="default"
@@ -184,21 +225,50 @@ function SuggestionAction(props: MarketplaceSuggestionCardProps) {
         >
           {props.state === "off" ? t("chat.suggestion.allow") : t("chat.suggestion.turnOn")}
         </Button>
-      </Match>
-      <Match
-        when={props.onConnect && props.state !== "unavailable" && props.state !== "off" && props.state !== "disabled"}
-      >
+      }
+    >
+      <Show when={shown()}>
         <Button
           type="button"
-          variant={props.state === "attention" ? "outline" : "default"}
+          variant={variant()}
           size="sm"
-          loading={props.state === "busy"}
+          class="marketplace-suggestion-button"
+          data-state={props.state}
+          data-cuelume-tap={tapCue()}
+          data-disabled={busy() ? "" : undefined}
+          aria-busy={busy() ? "true" : undefined}
+          aria-disabled={busy() || done() ? "true" : undefined}
           aria-label={label()}
-          onClick={() => props.onConnect?.()}
+          onClick={() => {
+            if (!startable()) return;
+            props.onStart();
+            props.onConnect?.();
+          }}
         >
-          {text()}
+          <span class="marketplace-suggestion-stage" style={stageStyle()}>
+            <span
+              class="marketplace-suggestion-layer"
+              data-layer="start"
+              ref={measure("start")}
+              aria-hidden={done() ? "true" : undefined}
+            >
+              <span class="marketplace-suggestion-spinner">
+                <Spinner size="sm" />
+              </span>
+              {text()}
+            </span>
+            <span
+              class="marketplace-suggestion-layer"
+              data-layer="done"
+              ref={measure("done")}
+              aria-hidden={done() ? undefined : "true"}
+            >
+              <Check aria-hidden="true" />
+              {doneText()}
+            </span>
+          </span>
         </Button>
-      </Match>
-    </Switch>
+      </Show>
+    </Show>
   );
 }

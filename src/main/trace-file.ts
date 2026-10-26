@@ -8,12 +8,12 @@ import { analyticsIO } from "./analytics-effects";
 
 /**
  * One timed operation. The name is a fixed string - an IPC channel, a turn origin, a crash origin, a
- * remote connection phase - and the outcome is a status word. A span holds no payload, message, path,
+ * remote connection phase, the reason the app quits - and the outcome is a status word. A span holds no payload, message, path,
  * URL or identifier, so the file can go into a diagnostics export under the same promise as the rest of
  * it.
  */
 export interface TraceSpan {
-  kind: "ipc" | "turn" | "crash" | "connect";
+  kind: "ipc" | "turn" | "crash" | "connect" | "exit";
   name: string;
   durationMs: number;
   outcome: string;
@@ -106,13 +106,16 @@ export class TraceFile {
     const lines = this.#pending;
     this.#pending = [];
     this.#writingLines += lines.length;
-    yield* this.#writes.withPermit(lines.length ? this.#append(lines).pipe(Effect.ignore) : Effect.void).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          this.#writingLines -= lines.length;
-        }),
-      ),
-    );
+    const file = { directory: this.#directory, path: this.#path, maxBytes: MAX_FILE_BYTES };
+    yield* this.#writes
+      .withPermit(lines.length ? appendRotatingLines(file, lines).pipe(Effect.ignore) : Effect.void)
+      .pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            this.#writingLines -= lines.length;
+          }),
+        ),
+      );
   }, Effect.uninterruptible);
 
   /** Writes the pending lines and waits for every write that `record` started. */
@@ -158,18 +161,22 @@ export class TraceFile {
       })
       .sort((left, right) => left.kind.localeCompare(right.kind) || left.name.localeCompare(right.name));
   });
-
-  #append = Effect.fn("TraceFile.append")(function* (this: TraceFile, lines: string[]) {
-    yield* analyticsIO(() => mkdir(this.#directory, { recursive: true }));
-    yield* analyticsIO(() => stat(this.#path)).pipe(
-      Effect.flatMap((stats) =>
-        stats.size >= MAX_FILE_BYTES ? analyticsIO(() => rename(this.#path, `${this.#path}.1`)) : Effect.void,
-      ),
-      Effect.catch(() => Effect.void),
-    );
-    yield* analyticsIO(() => appendFile(this.#path, `${lines.join("\n")}\n`, { encoding: "utf8", mode: 0o600 }));
-  });
 }
+
+/** Appends NDJSON lines to a private file. A file at `maxBytes` first becomes `.1`, so two files at most. */
+export const appendRotatingLines = Effect.fn("TraceFile.appendRotatingLines")(function* (
+  file: { directory: string; path: string; maxBytes: number },
+  lines: readonly string[],
+) {
+  yield* analyticsIO(() => mkdir(file.directory, { recursive: true }));
+  yield* analyticsIO(() => stat(file.path)).pipe(
+    Effect.flatMap((stats) =>
+      stats.size >= file.maxBytes ? analyticsIO(() => rename(file.path, `${file.path}.1`)) : Effect.void,
+    ),
+    Effect.catch(() => Effect.void),
+  );
+  yield* analyticsIO(() => appendFile(file.path, `${lines.join("\n")}\n`, { encoding: "utf8", mode: 0o600 }));
+});
 
 const readOptional = Effect.fn("TraceFile.readOptional")((path: string) =>
   analyticsIO(() => readFile(path, "utf8")).pipe(Effect.catch(() => Effect.succeed(""))),
@@ -186,7 +193,7 @@ function parseLine(line: string): TraceSpan | null {
   }
   if (!isDynamicRecord(parsed)) return null;
   const { kind, name, durationMs, outcome } = parsed;
-  if (kind !== "ipc" && kind !== "turn" && kind !== "crash" && kind !== "connect") return null;
+  if (kind !== "ipc" && kind !== "turn" && kind !== "crash" && kind !== "connect" && kind !== "exit") return null;
   if (typeof name !== "string" || typeof outcome !== "string" || typeof durationMs !== "number") return null;
   return { kind, name, durationMs, outcome };
 }

@@ -1,8 +1,13 @@
-import type { BrowserTarget } from "@openbot/contracts/ipc";
-import { Deferred, Effect, Fiber } from "effect";
-import type { WebContents } from "electron";
+import type { BrowserSnapshot, BrowserTarget } from "@openbot/contracts/ipc";
+import { Context, Deferred, Effect, Fiber } from "effect";
 import { type BrowserOperationError, browserFailure, browserSync } from "./browser-effects";
-import { type BrowserHostTab, type KeepQueueBlocked, restoreWebContentsFocus } from "./browser-host-tab";
+import {
+  BrowserFillFieldsFailure,
+  type BrowserFillFieldsProgress,
+  type BrowserFillFieldsReason,
+  fillFieldsFailure,
+} from "./browser-fill-fields";
+import type { BrowserHostTab, KeepQueueBlocked } from "./browser-host-tab";
 import { describeBrowserTarget } from "./browser-navigation";
 import { TimeoutError, withTimeout } from "./with-timeout";
 
@@ -11,12 +16,32 @@ const OPERATION_UNWIND_GRACE_MS = 1_000;
 // Let an operation report its own deadline before the transport backstop wins.
 const OPERATION_DEADLINE_BACKSTOP_MS = 250;
 
+/**
+ * Whether a person controls a tab. Only the agent tool paths provide it, so a person's own actions and
+ * the host's internal work still run while the person holds the tab.
+ */
+export const BrowserToolHold = Context.Reference<(tabId: string) => boolean>("openbot/BrowserToolHold", {
+  defaultValue: () => () => false,
+});
+
+/** An agent tool operation reached a tab that a person controls. The caller waits for the release. */
+export class BrowserUserControlHeld extends Error {
+  readonly tabId: string;
+  constructor(tabId: string) {
+    super("A person controls this browser tab. Wait for the release, then take a fresh snapshot.");
+    this.name = "BrowserUserControlHeld";
+    this.tabId = tabId;
+  }
+}
+
 /** Return the response when ready; retain the queue until all owned work drains. */
 export const enqueueTabOperation = Effect.fn("BrowserTab.enqueue")(function* <A>(
   tab: BrowserHostTab,
   operation: (tab: BrowserHostTab, keepQueueBlocked: KeepQueueBlocked) => Effect.Effect<A, BrowserOperationError>,
   allowProtected = false,
 ) {
+  // Read in the caller's fiber: the queued work below runs in the tab scope.
+  const heldByUser = yield* BrowserToolHold;
   const previous = tab.queue;
   const drained = Deferred.makeUnsafe<void>();
   const response = Deferred.makeUnsafe<A, BrowserOperationError>();
@@ -31,6 +56,8 @@ export const enqueueTabOperation = Effect.fn("BrowserTab.enqueue")(function* <A>
         Effect.gen(function* () {
           yield* Deferred.await(previous);
           if (cancelled) return yield* Effect.interrupt;
+          // An operation that was queued before the person took the tab must not act on it.
+          if (heldByUser(tab.id)) return yield* browserFailure(new BrowserUserControlHeld(tab.id));
           if (tab.secret?.submitted && !allowProtected) {
             return yield* browserFailure(
               new Error("Browser inspection is protected during authentication. Use takeover."),
@@ -133,7 +160,6 @@ const unwindStalledOperation = Effect.fn("BrowserTab.unwind")(function* <A>(
 export const runTabAction = Effect.fn("BrowserTab.action")(
   (
     tab: BrowserHostTab,
-    focusedOutsideTabs: () => WebContents | null,
     action: string,
     target: BrowserTarget | undefined,
     operation: (
@@ -150,7 +176,6 @@ export const runTabAction = Effect.fn("BrowserTab.action")(
           return yield* browserFailure(
             new Error("Browser inspection is protected during authentication. Use takeover."),
           );
-        const previouslyFocused = focusedOutsideTabs();
         const deadline = Date.now() + timeoutMs;
         const timeoutMessage = `Browser ${action} timed out.`;
         let actionRecorded = false;
@@ -161,7 +186,7 @@ export const runTabAction = Effect.fn("BrowserTab.action")(
           Effect.gen(function* () {
             let highlighted = false;
             yield* Effect.gen(function* () {
-              tab.contents.focus();
+              // CDP emulates page focus. Native focus would interrupt typing in another chat.
               if (target && target.kind !== "point")
                 highlighted = yield* tab.engine.highlight(target).pipe(
                   Effect.as(true),
@@ -268,11 +293,6 @@ export const runTabAction = Effect.fn("BrowserTab.action")(
               return yield* error;
             }),
           ),
-          Effect.ensuring(
-            Effect.sync(() => {
-              if (!tab.closing) restoreWebContentsFocus(previouslyFocused, tab.contents);
-            }),
-          ),
         );
       }),
     ),
@@ -317,6 +337,140 @@ export const runTabEvaluation = Effect.fn("BrowserTab.evaluate")(
           ),
         ),
       ),
+    ),
+);
+
+export interface BrowserFillFieldsResult {
+  tabId: string;
+  status: "completed" | "refused" | "partial" | "snapshot_failed";
+  inputCompleted: boolean;
+  confirmed: number[];
+  failedIndex: number | null;
+  uncertainIndex: number | null;
+  reason?: BrowserFillFieldsReason;
+  snapshot?: BrowserSnapshot;
+}
+
+/** One queue slot owns all input, one final capture, and any work that survives its deadline. */
+export const runTabFillFields = Effect.fn("BrowserTab.fillFields")(
+  (
+    tab: BrowserHostTab,
+    revision: number,
+    fields: readonly { ref: string; text: string }[],
+    timeoutMs: number,
+    requirePolicy: () => void,
+  ) =>
+    enqueueTabOperation(tab, (_tab, keepQueueBlocked) =>
+      Effect.gen(function* () {
+        const deadline = Date.now() + timeoutMs;
+        const progress: BrowserFillFieldsProgress = {
+          confirmed: [],
+          failedIndex: null,
+          uncertainIndex: null,
+          stopped: false,
+        };
+        const checkPolicy = () => {
+          try {
+            requirePolicy();
+          } catch {
+            throw fillFieldsFailure("policy_changed");
+          }
+        };
+        let inputCompleted = false;
+        const result = (reason?: BrowserFillFieldsReason, snapshot?: BrowserSnapshot): BrowserFillFieldsResult => ({
+          tabId: tab.id,
+          status: !reason
+            ? "completed"
+            : inputCompleted
+              ? "snapshot_failed"
+              : progress.confirmed.length || progress.uncertainIndex !== null
+                ? "partial"
+                : "refused",
+          inputCompleted,
+          confirmed: [...progress.confirmed],
+          failedIndex: progress.failedIndex,
+          uncertainIndex: progress.uncertainIndex,
+          ...(reason ? { reason } : {}),
+          ...(snapshot ? { snapshot } : {}),
+        });
+        return yield* Effect.gen(function* () {
+          yield* browserSync(checkPolicy);
+          const completion = yield* Effect.forkIn(
+            tab.engine.fillFields(revision, fields, deadline, progress, checkPolicy),
+            tab.scope,
+            { startImmediately: true },
+          );
+          // Always await native input cleanup, including an external debugger's unabortable
+          // command. A response deadline must not release this queue slot early.
+          keepQueueBlocked(Fiber.await(completion));
+          yield* withTimeout(
+            Fiber.join(completion),
+            yield* browserSync(() => remainingTime(deadline, "Browser fill_fields timed out.")),
+            "Browser fill_fields timed out.",
+          ).pipe(
+            Effect.onInterrupt(() =>
+              Effect.sync(() => {
+                progress.stopped = true;
+                if (tab.engine.cancelPendingCommands()) completion.interruptUnsafe();
+              }),
+            ),
+            Effect.catch((error) => {
+              progress.stopped = true;
+              if (error instanceof TimeoutError) {
+                if (tab.engine.cancelPendingCommands()) completion.interruptUnsafe();
+                return Effect.fail(browserFailure(error));
+              }
+              return Effect.fail(error);
+            }),
+          );
+          inputCompleted = true;
+          yield* browserSync(checkPolicy);
+          const settleTimeout = yield* browserSync(() => remainingTime(deadline, "Browser fill_fields timed out."));
+          yield* boundEngineOperation(
+            tab,
+            tab.engine.settle(settleTimeout),
+            settleTimeout,
+            "Browser fill_fields timed out.",
+            keepQueueBlocked,
+          );
+          yield* browserSync(checkPolicy);
+          const captured = yield* readTabSnapshot(
+            tab,
+            tab.revision + 1,
+            keepQueueBlocked,
+            yield* browserSync(() => remainingTime(deadline, "Browser fill_fields timed out.")),
+            "Browser fill_fields timed out.",
+          );
+          // A card or takeover that appeared during capture must never release that capture.
+          yield* browserSync(checkPolicy);
+          tab.diagnostics.action({ action: "fill_fields", outcome: "success" });
+          return result(undefined, captured.snapshot);
+        }).pipe(
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              progress.stopped = true;
+              tab.diagnostics.action({ action: "fill_fields", outcome: "error", detail: "interrupted" });
+            }),
+          ),
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              progress.stopped = true;
+              const reason: BrowserFillFieldsReason =
+                tab.closing || tab.contents.isDestroyed()
+                  ? "tab_closed"
+                  : error.cause instanceof BrowserFillFieldsFailure
+                    ? error.cause.reason
+                    : isTimeoutError(error.cause)
+                      ? "deadline"
+                      : inputCompleted
+                        ? "snapshot_failed"
+                        : "input_failed";
+              tab.diagnostics.action({ action: "fill_fields", outcome: "error", detail: reason });
+              return result(reason);
+            }),
+          ),
+        );
+      }),
     ),
 );
 

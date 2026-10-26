@@ -57,7 +57,7 @@ const args = (connections: MessagingConnection[], busy = false) => ({
   agents: [ORCHESTRATOR, ...AGENTS],
   connections,
   busy,
-  onConnectChat: fn(),
+  onConnectChat: fn(async () => true),
   onDisconnectChat: fn(),
   onReconnect: fn(),
   onSetEnabled: fn(),
@@ -91,7 +91,7 @@ const dialogArgs = (connections: MessagingConnection[]) => ({
   connections,
   agents: [ORCHESTRATOR, ...AGENTS],
   busy: false,
-  onConnectChat: fn(),
+  onConnectChat: fn(async () => true),
   onAddOrchestrator: fn(),
   onClose: fn(),
 });

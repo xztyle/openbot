@@ -16,9 +16,10 @@ export const messages = {
   "update.provider.checking": "Buscando actualizaciones de {name}",
   "update.provider.available": "Actualización de {name} disponible",
   "update.provider.updating": "Actualizando {name}",
+  "update.provider.waiting": "Actualización de {name} en espera",
   "update.provider.failed": "La actualización de {name} falló",
   "update.provider.settingUp": "Configurando",
-  "update.provider.interrupted": "La actualización se interrumpió. Vuelve a intentarlo.",
+  "update.provider.failedRetry": "La actualización falló. Vuelve a intentarlo.",
   "update.provider.unknownVersion": "versión desconocida",
   "update.provider.remoteHost":
     "Las actualizaciones de las CLI de los proveedores se ejecutan en el equipo que las aloja.",
@@ -31,7 +32,7 @@ export const messages = {
   "update.scheduled.automaticTitle": "OpenBot instala una actualización",
   "update.scheduled.whenIdle": "OpenBot se reinicia cuando los agentes están inactivos.",
   "update.scheduled.now": "OpenBot se reinicia cuando se descarga la actualización.",
-  "update.scheduled.cancel": "Cancelar actualización",
+  "update.scheduled.cancel": "Cancelar",
   "update.scheduled.cancelFailed": "No se pudo cancelar la actualización.",
   "update.idleRestart.relaunchTitle": "OpenBot se reinicia cuando los agentes están inactivos",
   "update.idleRestart.updateTitle": "OpenBot instala la actualización cuando los agentes están inactivos",
@@ -61,6 +62,7 @@ export const messages = {
   "update.whatsNew.empty.title": "No hay funciones nuevas en esta versión",
   "update.whatsNew.empty.body":
     "Esta versión no tiene notas que mostrar aquí. El registro de cambios completo muestra todos los cambios.",
-  "update.whatsNew.changelog": "Registro de cambios completo",
+  "update.whatsNew.changelog": "Todos los cambios",
+  "update.whatsNew.changelogFailed": "OpenBot no pudo abrir el registro de cambios.",
   "update.whatsNew.done": "Entendido",
 } as const satisfies PartialTranslation<typeof source>;

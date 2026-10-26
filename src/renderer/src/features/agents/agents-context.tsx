@@ -1,18 +1,22 @@
+import { isKnownAgentProvider } from "@openbot/contracts/agent-providers";
 import type {
-  AgentModelOption,
   AgentStatus,
-  AgentSummary,
   AvatarImageInput,
+  ClientAgentModelOption,
+  ClientAgentSummary,
+  HiddenAgent,
   UpdateAgentInput,
 } from "@openbot/contracts/ipc";
+import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import type { AgentProfile } from "@openbot/ui/data";
 import { createFirstAgentDraft, type FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
 import { currentText } from "@openbot/ui/text";
-import { createMemo, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 import { desktopAnalytics } from "../../analytics";
 import { FALLBACK_STATUS } from "../../app-defaults";
 import { agentProfilesEqual, toAgentProfile } from "../../app-message-projection";
 import { createStoredProfile, updateStored } from "../../app-stored-values";
+import { usePlatform } from "../../platform";
 import { createScopeGuard } from "../../scope-lifetime";
 import { createSimpleContext } from "../../simple-context";
 import { useUiErrors } from "../../ui-errors";
@@ -20,10 +24,16 @@ import type { AgentSettingsRequest } from "../conversation/conversation-types";
 import { useDirectMessages } from "../conversation/direct-messages-context";
 import { remoteAdminServer } from "../servers/server-capabilities";
 import { useServers } from "../servers/servers-context";
-import { useUsage } from "../usage/usage-context";
-import type { CreationPreference } from "./agent-creation-model";
-import { readAgentSelection, writeAgentSelection } from "./agent-selection";
+import { useWindowPage } from "../window/window-page-context";
+import type { CreationPreference, DevelopmentCreation } from "./agent-creation-model";
+import { AGENT_SELECTION_STORAGE_KEY, readAgentSelection, writeAgentSelection } from "./agent-selection";
 import { agentsPort } from "./agents-port";
+import {
+  createHostAccounts,
+  withHostAccounts,
+  withHostAgentAccount,
+  withHostProfileAccount,
+} from "./host-provider-accounts";
 
 /**
  * The agents on the active server: the roster, which one is open, the provider
@@ -66,17 +76,19 @@ const Agents = createSimpleContext({
   init: () => {
     const { activeServer, activeServerId } = useServers();
     const { activeDirectMember, setDirectTyping } = useDirectMessages();
-    const { dismissUsage } = useUsage();
+    const windowPage = useWindowPage();
     const { uiErrors, setUiErrors, appendUiError } = useUiErrors();
 
     const [agentList, setAgentList] = createSignal<AgentProfile[]>([]);
     /** The first roster read of this scope succeeded. */
     const [agentListSettled, setAgentListSettled] = createSignal(false);
     const [duplicatingAgentIds, setDuplicatingAgentIds] = createSignal<Set<string>>(new Set());
-    const [modelOptions, setModelOptions] = createSignal<AgentModelOption[]>([]);
+    const [modelOptions, setModelOptions] = createSignal<ClientAgentModelOption[]>([]);
     const selectionServerId = untrack(activeServerId);
     const scopeIsCurrent = createScopeGuard();
-    let savedAgentId = readAgentSelection()[selectionServerId] ?? "";
+    // A chat window shows its one agent, and keeps the choice of the main window as it is.
+    const chatWindowAgentId = usePlatform().chatWindow?.agentId;
+    let savedAgentId = chatWindowAgentId ?? readAgentSelection(AGENT_SELECTION_STORAGE_KEY)[selectionServerId] ?? "";
     const [activeAgentId, updateActiveAgentId] = createSignal("");
     const [agentChatOpenRevision, setAgentChatOpenRevision] = createSignal(0);
     const [agentSetupOpen, setAgentSetupOpen] = createSignal(false);
@@ -119,8 +131,54 @@ const Agents = createSimpleContext({
       );
     });
     const [settingsRequest, setSettingsRequest] = createSignal<AgentSettingsRequest | null>(null);
-    const [agentStatus, setAgentStatus] = createSignal<AgentStatus>(FALLBACK_STATUS);
+    const [providerStatus, setAgentStatus] = createSignal<AgentStatus>(FALLBACK_STATUS);
+    /**
+     * The accounts of a joined server's providers, and the agents on an account after the first. None
+     * on this computer, whose status and agents carry them, and on a host without `provider-accounts-v1`.
+     */
+    const hostAccounts = createHostAccounts({
+      serverId: createMemo(() => remoteAdminServer(activeServer(), PROVIDER_ACCOUNTS_CAPABILITY)?.id),
+      accounts: (serverId) => agentsPort().providerAdmin.accounts(serverId),
+      usage: (serverId) => agentsPort().providerAdmin.accountUsage(serverId),
+      applied: (host) => {
+        for (const profile of agentList()) {
+          const next = withHostProfileAccount(profile, host);
+          if (next !== profile) updateStored(profile, next);
+        }
+      },
+    });
+    const agentStatus = createMemo(() => withHostAccounts(providerStatus(), hostAccounts.host()));
+    const platform = usePlatform();
+    /**
+     * A development build's own server starts a new agent on the development default, as its backend does.
+     * The status is read here, not in `providerAvailable`, so a provider that becomes available resolves
+     * the new-agent form again.
+     */
+    const developmentCreation = createMemo((): DevelopmentCreation | null => {
+      if (activeServer()?.kind !== "local" || platform.appInfo()?.variant !== "dev") return null;
+      const available = new Set(
+        agentStatus()
+          .providers?.filter((row) => row.state === "available")
+          .map((row) => row.id),
+      );
+      return { providerAvailable: (provider) => available.has(provider) };
+    });
+    createEffect(providerStatus, hostAccounts.schedule);
     let openedAgentChatId: string | null = null;
+    /** Agents whose delete can still be undone. Main still has them, so each roster read leaves them out. */
+    const hiddenAgentIds = new Set<string>();
+    /**
+     * The agents that a user hid on this server. They stay in the roster: the sidebar shows them in its
+     * Hidden group, and an open chat stays open. Not the same as `hiddenAgentIds` above.
+     */
+    const [userHiddenAgents, setUserHiddenAgents] = createSignal<HiddenAgent[]>([]);
+    const userHiddenAgentIds = createMemo(() => new Set(userHiddenAgents().map((agent) => agent.agentId)));
+
+    /** Applies the whole hidden list of this server, from a read, an event or a write. */
+    function applyUserHiddenAgents(agents: HiddenAgent[]): void {
+      if (!scopeIsCurrent()) return;
+      setUserHiddenAgents(agents);
+    }
 
     const activeAgent = createMemo(() => {
       if (activeDirectMember()) return undefined;
@@ -132,7 +190,7 @@ const Agents = createSimpleContext({
       updateActiveAgentId((current) => {
         const next = typeof value === "function" ? value(current) : value;
         savedAgentId = "";
-        writeAgentSelection(selectionServerId, next);
+        if (!chatWindowAgentId) writeAgentSelection(AGENT_SELECTION_STORAGE_KEY, selectionServerId, next);
         return next;
       });
     }
@@ -149,21 +207,24 @@ const Agents = createSimpleContext({
       const agent = agentList().find((candidate) => candidate.id === agentId);
       if (!agent) return null;
       return {
-        provider: agent.provider,
+        // Analytics names only the providers that this build knows.
+        ...(isKnownAgentProvider(agent.provider) ? { provider: agent.provider } : {}),
         model: agent.model,
         reasoning_effort: agent.reasoningEffort,
         server_kind: activeServer()?.kind ?? ("unknown" as const),
       };
     }
 
-    function applyStoredAgents(storedAgents: AgentSummary[]): void {
+    function applyStoredAgents(storedAgents: ClientAgentSummary[]): void {
       const currentById = new Map(agentList().map((agent) => [agent.id, agent]));
-      const profiles = storedAgents.map((stored) => {
-        const next = toAgentProfile(stored);
+      const host = untrack(hostAccounts.host);
+      const profiles = storedAgents.flatMap((stored) => {
+        if (hiddenAgentIds.has(stored.id)) return [];
+        const next = toAgentProfile(withHostAgentAccount(stored, host));
         const existing = currentById.get(next.id);
-        if (!existing) return createStoredProfile(next);
+        if (!existing) return [createStoredProfile(next)];
         if (!agentProfilesEqual(existing, next)) updateStored(existing, next);
-        return existing;
+        return [existing];
       });
       setAgentList(profiles);
       setAgentListSettled(true);
@@ -171,24 +232,58 @@ const Agents = createSimpleContext({
         // Validate the saved choice before it can trigger conversation requests.
         const preferred = current || savedAgentId;
         if (profiles.some((agent) => agent.id === preferred)) return preferred;
+        const hidden = untrack(userHiddenAgentIds);
         // A background teammate opens only when the user asks for it.
-        return (profiles.find((agent) => agent.background !== true) ?? profiles[0])?.id ?? "";
+        return (
+          (
+            profiles.find((agent) => !hidden.has(agent.id) && agent.background !== true) ??
+            profiles.find((agent) => !hidden.has(agent.id)) ??
+            profiles[0]
+          )?.id ?? ""
+        );
       });
       if (profiles.length === 0 && !agentSetupOpen()) {
         setAgentSetupDraft(createFirstAgentDraft());
         setAgentSetupError(null);
         setAgentSetupOpen(true);
       }
+      // An agent event can be a provider or an account change made elsewhere.
+      hostAccounts.schedule();
     }
 
-    function openBotSetup(): void {
-      // The form renders in the workspace content the Usage report covers, and the
+    /**
+     * Takes the agent off the roster while its delete can still be undone. Returns the function that
+     * puts it back at the same place, or null when the roster has no such agent.
+     */
+    function hideAgent(agentId: string): (() => void) | null {
+      const index = agentList().findIndex((agent) => agent.id === agentId);
+      const agent = agentList()[index];
+      if (!agent) return null;
+      hiddenAgentIds.add(agentId);
+      setAgentList((current) => current.filter((candidate) => candidate.id !== agentId));
+      return () => {
+        if (!hiddenAgentIds.delete(agentId)) return;
+        setAgentList((current) =>
+          current.some((candidate) => candidate.id === agentId)
+            ? current
+            : [...current.slice(0, index), agent, ...current.slice(index)],
+        );
+      };
+    }
+
+    /** The delete is done: main no longer has the agent, so the roster has nothing to leave out. */
+    function forgetHiddenAgent(agentId: string): void {
+      hiddenAgentIds.delete(agentId);
+    }
+
+    function openAgentSetup(): void {
+      // The form renders in the workspace content that a rail page covers, and the
       // sidebar button that asks for it is outside that markup. Above the guard
       // below, so a second press reveals a form that is already open rather than
       // doing nothing visible; the guard still protects the draft from a reset.
       // The automatic open above is deliberately not this: a server with no agents
       // must not take the report away from a user who asked for it.
-      dismissUsage();
+      windowPage.showAgents();
       if (agentSetupOpen()) return;
       setDirectTyping(false);
       setAgentSetupDraft(createFirstAgentDraft());
@@ -215,6 +310,7 @@ const Agents = createSimpleContext({
           ...updates,
         });
         const next = toAgentProfile(stored);
+        if (updates.provider !== undefined || updates.providerAccountId !== undefined) hostAccounts.schedule();
         setAgentList((current) => {
           const existingIndex = current.findIndex((agent) => agent.id === agentId);
           if (existingIndex === -1) return [...current, createStoredProfile(next)];
@@ -306,11 +402,20 @@ const Agents = createSimpleContext({
       setSettingsRequest,
       agentStatus,
       setAgentStatus,
+      developmentCreation,
+      hostAccountLimits: hostAccounts.limits,
+      refreshHostAccounts: hostAccounts.refresh,
+      refreshHostAccountUsage: hostAccounts.refreshUsage,
       explicitlyOpenedAgentChatId,
       setExplicitlyOpenedAgentChatId,
       analyticsAgentProperties,
       applyStoredAgents,
-      openBotSetup,
+      hideAgent,
+      forgetHiddenAgent,
+      userHiddenAgents,
+      userHiddenAgentIds,
+      applyUserHiddenAgents,
+      openAgentSetup,
       cancelAgentSetup,
       updateAgent,
       setAgentAvatar,

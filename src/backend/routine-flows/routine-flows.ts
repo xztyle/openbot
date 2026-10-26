@@ -38,8 +38,9 @@ import type {
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, redactText } from "@openbot/logging";
-import { nextValidRoutineOccurrence } from "@openbot/team-client/routine-schedule";
+import { nextValidRoutineOccurrence, routineOnceInstant } from "@openbot/team-client/routine-schedule";
 import { Context, Effect, Exit, Layer, ManagedRuntime, Schema, Scope, Semaphore } from "effect";
+import { coalescedPasses } from "../coalesced-passes";
 import { routineFlowDepths } from "./routine-flow-graph";
 import { RoutineFlowError, type RoutineFlowRun, type RoutineFlowStore } from "./routine-flow-store";
 
@@ -61,7 +62,7 @@ class RoutineFlowFailed extends Schema.TaggedError<RoutineFlowFailed>()("Routine
 }) {}
 
 /** A delivery as the runtime reads it: whether it ended, and the turn that answered it. */
-export interface RoutineFlowDelivery {
+interface RoutineFlowDelivery {
   status: QueueDeliveryStatus;
   turnId: string | null;
   error: string | null;
@@ -101,6 +102,12 @@ export interface RoutineFlowsShape {
   connect(input: ConnectRoutineFlowInput): Effect.Effect<RoutineFlowLink, RoutineFlowFailed>;
   disconnect(input: DisconnectRoutineFlowInput): Effect.Effect<void, RoutineFlowFailed>;
   updateLink(input: UpdateRoutineFlowLinkInput): Effect.Effect<RoutineFlowLink, RoutineFlowFailed>;
+  /**
+   * Every agent a routine touches, or the routine of a link touches: its own agent and both agents of
+   * each of its links. Null when the routine or link does not exist. A joined member may change a
+   * flow only when all of them are visible to the member.
+   */
+  agentsOf(ref: { routineId: string } | { linkId: string }): Effect.Effect<string[] | null, RoutineFlowFailed>;
   /** Moves every flow that can move now. */
   sweep(): Effect.Effect<void>;
   /** Asks for a sweep when an agent event may have ended a step. Returns at once. */
@@ -116,9 +123,6 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
         const lock = yield* Semaphore.make(1);
         const { store } = dependencies;
         const now = () => (dependencies.now ?? (() => new Date()))();
-        /** A sweep running, and whether another was asked for while it ran. */
-        let sweeping = false;
-        let again = false;
         /** Runs whose owner has the report, so a sweep does not look them up again. */
         const reported = new Set<string>();
 
@@ -178,6 +182,8 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
 
         const savePosition = Effect.fn("RoutineFlows.savePosition")(function* (input: SaveRoutineFlowPositionInput) {
           yield* attempt(() => store.savePosition(input.agentId, input.nodeKey, input.x, input.y));
+          // Another client with this canvas open shows a placed or moved agent without a reload.
+          dependencies.changed([input.agentId]);
         });
 
         const removePosition = Effect.fn("RoutineFlows.removePosition")(function* (
@@ -213,6 +219,15 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
           dependencies.changed(removed.affected);
         });
 
+        const agentsOf = Effect.fn("RoutineFlows.agentsOf")(function* (
+          ref: { routineId: string } | { linkId: string },
+        ) {
+          return yield* attempt(() => {
+            const routineId = "routineId" in ref ? ref.routineId : store.link(ref.linkId)?.routineId;
+            return routineId && store.routineOwner(routineId) ? agentsOfRoutine(routineId) : null;
+          });
+        });
+
         /** The routine's own agent's part of a run that ended: its answer, or why there is none. */
         const recordOwnerStep = (run: RoutineFlowRun): boolean => {
           const delivery = run.deliveryId ? dependencies.delivery(run.deliveryId) : null;
@@ -246,6 +261,9 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
           const delivery = dependencies.delivery(step.deliveryId);
           if (!delivery)
             return store.settleStep(step.id, "failed", null, sourceText("error.backend.routineFlowLinkGone"));
+          // An error on a completed delivery is a failure the agent reported (`routine_report_failure`).
+          if (delivery.status === "completed" && delivery.error !== null)
+            return store.settleStep(step.id, "failed", null, delivery.error);
           if (delivery.status === "completed") {
             const output = delivery.turnId ? dependencies.turnAnswer(step.agentId, delivery.turnId) : null;
             return store.settleStep(step.id, "succeeded", output, null);
@@ -388,8 +406,8 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
               runIds.add(step.runId);
             }
           }
-          // Also every run with a recent step: a restart between an answer and its handoff resumes here.
-          for (const runId of store.runIdsWithStepsSince(since)) runIds.add(runId);
+          // Also every run with a handoff not sent yet: a restart between an answer and its handoff resumes here.
+          for (const runId of store.runIdsWithPendingHandoff(since)) runIds.add(runId);
           for (const runId of runIds) {
             const run = store.run(runId);
             if (!run) continue;
@@ -400,27 +418,14 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
           if (changed.size > 0) dependencies.changed([...changed]);
         });
 
-        const sweep = Effect.fn("RoutineFlows.sweep")(function* () {
-          if (sweeping) {
-            again = true;
-            return;
-          }
-          sweeping = true;
-          try {
-            do {
-              again = false;
-              yield* lock
-                .withPermit(sweepOnce())
-                .pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.sync(() => logger.warn("A routine flow sweep failed.", { cause: String(cause) })),
-                  ),
-                );
-            } while (again);
-          } finally {
-            sweeping = false;
-          }
-        });
+        const sweep = coalescedPasses(() =>
+          lock.withPermit(sweepOnce()).pipe(
+            Effect.catchCause((cause) =>
+              Effect.sync(() => logger.warn("A routine flow sweep failed.", { cause: String(cause) })),
+            ),
+            Effect.withSpan("RoutineFlows.sweep"),
+          ),
+        );
 
         const notice = Effect.fn("RoutineFlows.notice")(function* (event: AgentEvent) {
           if (event.type !== "turn-completed" && event.type !== "queue-changed" && event.type !== "routines-changed")
@@ -435,6 +440,7 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
           connect,
           disconnect,
           updateLink,
+          agentsOf,
           sweep,
           notice,
         });
@@ -512,6 +518,11 @@ function upcoming(routine: RoutineFlowRoutineInfo, from: Date): string[] {
   if (routine.trigger.kind !== "schedule") return [];
   const schedule = routine.trigger.schedule;
   const end = from.getTime() + UPCOMING_WINDOW_MS;
+  if (schedule.kind === "once") {
+    // A one-time routine has at most one time, and none after it ran.
+    const at = routineOnceInstant(schedule, routine.timezone).getTime();
+    return at > from.getTime() && at < end ? [new Date(at).toISOString()] : [];
+  }
   const times: string[] = [];
   try {
     for (

@@ -2,7 +2,7 @@ import type { PartialTranslation } from "../../../message";
 import type { messages as source } from "../../en/mobile/app";
 
 export const messages = {
-  "mobile.app.route.scanQrCode": "QRコードをスキャン",
+  "mobile.app.route.scanQrCode": "QR コードをスキャン",
   "mobile.app.route.actionsNeeded": "必要な操作",
   "mobile.app.route.newChannel": "新しいチャンネル",
   "mobile.app.route.createAgent": "エージェントを作成",
@@ -14,6 +14,7 @@ export const messages = {
   "mobile.app.route.about": "情報",
   "mobile.app.route.support": "サポート",
   "mobile.app.route.hiddenChats": "非表示のチャット",
+  "mobile.app.route.share": "共有",
   "mobile.app.route.deletedChannels": "削除したチャンネル",
   "mobile.app.route.cropPhoto": "移動と拡大縮小",
   "mobile.app.route.queuedMessages": "待機中のメッセージ",
@@ -25,11 +26,10 @@ export const messages = {
   "mobile.app.route.hostedServerSetup": "セットアップ",
   "mobile.app.route.routines": "ルーティン",
   "mobile.app.route.routine": "ルーティン",
+  "mobile.app.route.tasks": "タスク",
+  "mobile.app.route.task": "タスク",
   "mobile.app.route.usage": "使用量",
-  "mobile.app.route.message": "メッセージ",
-  "mobile.app.messageActions.reply": "返信",
-  "mobile.app.messageActions.selectText": "テキストを選択",
-  "mobile.app.messageActions.copied": "メッセージをコピーしました",
-  "mobile.app.messageActions.copy": "メッセージをコピー",
-  "mobile.app.messageActions.text": "メッセージのテキスト",
+  "mobile.app.route.marketplace": "マーケットプレイス",
+  "mobile.app.quickAction.routines": "ルーティン",
+  "mobile.app.quickAction.search": "検索",
 } as const satisfies PartialTranslation<typeof source>;

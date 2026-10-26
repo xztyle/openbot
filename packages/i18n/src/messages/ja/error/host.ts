@@ -4,6 +4,9 @@ import type { messages as source } from "../../en/error/host";
 export const messages = {
   // Errors from host setup, publishing, and host maintenance.
   "error.host.iceServersMissing": "Remote Signal が ICE サーバーを提供していません。",
+  "error.host.keyRotationUnavailable": "このサーバーはアカウントサービスなしではキーを変更できません。",
+  "error.host.keyRotationRefused":
+    "アカウントサービスが新しいサーバーキーを受け入れませんでした。現在のキーを引き続き使用します。",
   "error.host.webRtcNotConfigured": "WebRTC ホストサービスが設定されていません。",
   "error.host.runtimeNotInstalled": "リモートデスクトップのランタイムがインストールされていません。",
   "error.host.setupUnavailable": "権限の設定を利用できません。",
@@ -19,6 +22,7 @@ export const messages = {
   "error.host.mobileConnectHostChanged": "Mobile Connect のホストが変わりました。再試行してください。",
   "error.host.noServer": "このコンピューターには変更できるサーバーがありません。",
   "error.host.identityLocalOnly": "サーバーの名前とロゴは、サーバーを実行しているコンピューターでのみ変更できます。",
+  "error.host.timezoneInvalid": "このタイムゾーンは不明です。",
   "error.host.maintenanceInterrupted":
     "ホストのメンテナンスが中断されました。再試行する前に、アプリケーションを確認し、ホストの状態をリセットしてください。",
   "error.host.updateFailed":

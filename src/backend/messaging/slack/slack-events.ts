@@ -36,6 +36,7 @@ export function slackInboundMessage(payload: unknown, workspaceId: string, botUs
     platformMessageId: ts,
     authorId: user,
     text: plainText(isString(event.text) ? event.text : "", botUserId),
+    mentionedUserIds: slackMentionIds(isString(event.text) ? event.text : "", botUserId),
     files: inboundFiles(event.files),
   };
   if (event.type === "app_mention") {
@@ -116,6 +117,12 @@ function inboundFiles(value: unknown): InboundFile[] {
   );
 }
 
+/** The users that Slack markup mentions, without OpenBot. `plainText` writes each as `@<id>`. */
+export function slackMentionIds(text: string, botUserId: string): string[] {
+  const ids = [...text.matchAll(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g)].map((match) => match[1] ?? "");
+  return [...new Set(ids)].filter((id) => id && id !== botUserId);
+}
+
 /**
  * Slack's markup as plain text: OpenBot's own mention goes, other mentions stay as ids, a
  * channel link keeps its name, a link keeps its label and address, and the three escaped
@@ -125,8 +132,16 @@ export function plainText(text: string, botUserId: string): string {
   return text
     .replaceAll(`<@${botUserId}>`, "")
     .replace(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g, "@$1")
+    .replace(
+      /<!subteam\^([A-Z0-9]+)(?:\|([^>]+))?>/g,
+      (_match, id: string, label: string | undefined) => label ?? `@group:${id}`,
+    )
     .replace(/<#[A-Z0-9]+\|([^>]*)>/g, "#$1")
     .replace(/<!(here|channel|everyone)>/g, "@$1")
+    .replace(/<mailto:([^|>]+)\|([^>]+)>/g, (_match, address: string, label: string) =>
+      label === address ? address : `${label} (${address})`,
+    )
+    .replace(/<mailto:([^>]+)>/g, "$1")
     .replace(/<(https?:[^|>]+)\|([^>]+)>/g, "$2 ($1)")
     .replace(/<(https?:[^>]+)>/g, "$1")
     .replaceAll("&lt;", "<")

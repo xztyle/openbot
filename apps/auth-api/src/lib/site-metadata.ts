@@ -11,7 +11,7 @@ export const OPENBOT_SITE_TITLE = "OpenBot: Run a team of AI agents on your comp
 export const OPENBOT_SITE_DESCRIPTION =
   "A free desktop app that runs AI agents as a team on your own computer, with the ChatGPT, Claude, Gemini or Grok plan you already pay for, or your own model.";
 export const OPENBOT_SOCIAL_IMAGE_URL = `${OPENBOT_SITE_URL}openbot-social.png`;
-/** The account `OPENBOT_LINKS.contact` opens, which a shared card names. */
+/** The account `OPENBOT_LINKS.x` opens, which a shared card names. */
 export const OPENBOT_X_HANDLE = "@OpenBot_";
 const OPENBOT_X_URL = "https://x.com/OpenBot_";
 const OPENBOT_REPOSITORY_URL = "https://github.com/nightly-labs/openbot";

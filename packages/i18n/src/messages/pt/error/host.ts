@@ -3,6 +3,9 @@ import type { messages as source } from "../../en/error/host";
 
 export const messages = {
   "error.host.iceServersMissing": "O Remote Signal não forneceu servidores ICE.",
+  "error.host.keyRotationUnavailable": "Este servidor não pode alterar a chave sem o serviço de contas.",
+  "error.host.keyRotationRefused":
+    "O serviço de contas não aceitou a nova chave do servidor. A chave atual continua em uso.",
   "error.host.webRtcNotConfigured": "O serviço WebRTC do computador anfitrião não está configurado.",
   "error.host.runtimeNotInstalled": "O ambiente de execução da área de trabalho remota não está instalado.",
   "error.host.setupUnavailable": "A configuração de permissões não está disponível.",
@@ -18,6 +21,7 @@ export const messages = {
   "error.host.mobileConnectHostChanged": "O computador anfitrião de Conectar celular mudou. Tente novamente.",
   "error.host.noServer": "Este computador não tem um servidor para alterar.",
   "error.host.identityLocalOnly": "O nome e o logotipo do servidor só podem ser alterados no computador que o executa.",
+  "error.host.timezoneInvalid": "Este fuso horário não é conhecido.",
   "error.host.maintenanceInterrupted":
     "A manutenção do computador anfitrião foi interrompida. Verifique o aplicativo e redefina o estado do computador anfitrião antes de tentar novamente.",
   "error.host.updateFailed":

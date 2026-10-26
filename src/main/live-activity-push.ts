@@ -35,10 +35,12 @@ const KEEPALIVE_MS = 10 * 60 * 1000;
 /** A failed send is tried again, first after this time, and then after double the time. */
 const RETRY_MS = 15_000;
 const RETRY_MAX_MS = 5 * 60 * 1000;
-/** iOS ends a Live Activity after 8 hours, and removes it from the Lock Screen 4 hours later. */
-const REGISTRATION_LIFETIME_MS = 12 * 60 * 60 * 1000;
+/** iOS ends a Live Activity after 8 hours, and ignores updates after that. */
+const ACTIVITY_LIFETIME_MS = 8 * 60 * 60 * 1000;
+/** iOS removes an ended Live Activity from the Lock Screen 4 hours later. */
+const REGISTRATION_LIFETIME_MS = ACTIVITY_LIFETIME_MS + 4 * 60 * 60 * 1000;
 
-export type LiveActivityPushAgents = Pick<TeamApiAgents, "on" | "off" | "getRuntimeSnapshot" | "listConversationReads">;
+type LiveActivityPushAgents = Pick<TeamApiAgents, "on" | "off" | "getRuntimeSnapshot" | "listConversationReads">;
 
 export interface LiveActivityPushOptions {
   agents: LiveActivityPushAgents;
@@ -66,6 +68,10 @@ interface Registration {
   photos: Map<string, string>;
   coordinator: DynamicIslandCoordinator;
   expiresAt: number;
+  /** When this host first got the token. A host restart moves it later, so the start from the phone wins. */
+  startedAt: number;
+  /** The next update lights up the screen and plays this sound, in place of a notification. */
+  alert: LiveActivityRelayPush["alert"];
   /** `false` after the connection of the session closed, as when iOS suspends the app. */
   connected: boolean;
   timer: { handle: ReturnType<typeof setTimeout>; at: number } | null;
@@ -109,6 +115,7 @@ export class LiveActivityPushService {
     const same = previous?.value.token === value.token && previous.value.secret === value.secret;
     if (previous) this.#clearTimer(previous);
     if (previous && !same) this.#stop(previous);
+    const now = this.#now();
     const registration: Registration = {
       sessionId,
       viewer,
@@ -119,7 +126,11 @@ export class LiveActivityPushService {
         same && previous
           ? previous.coordinator
           : new DynamicIslandCoordinator(() => liveActivityIslandText(phoneText(value.locale))),
-      expiresAt: this.#now() + REGISTRATION_LIFETIME_MS,
+      expiresAt: now + REGISTRATION_LIFETIME_MS,
+      // The same token is the same activity.
+      startedAt: same && previous ? previous.startedAt : now,
+      // The phone shows its own state now, so an alert from before is old.
+      alert: null,
       // The request came over the connection of this session, so it is open.
       connected: true,
       timer: null,
@@ -140,6 +151,24 @@ export class LiveActivityPushService {
     if (!registration) return;
     registration.connected = false;
     this.#schedule(registration, 0);
+  }
+
+  /**
+   * Whether the phone of the session shows an activity of this host that iOS still updates, so the
+   * activity shows an event in place of a notification. With `alert`, its next update lights up the
+   * screen and plays the sound. `startedAt` is the start that the phone gives, in milliseconds, or
+   * `null`. iOS does not tell when the user removes the activity, so until the app runs again an
+   * event can go to an activity that is gone.
+   */
+  showsEvent(sessionId: string, alert: LiveActivityRelayPush["alert"], startedAt: number | null): boolean {
+    const registration = this.#registrations.get(sessionId);
+    if (!registration || !away(registration)) return false;
+    if (this.#now() >= (startedAt ?? registration.startedAt) + ACTIVITY_LIFETIME_MS) return false;
+    if (alert) {
+      registration.alert = alert;
+      this.#schedule(registration, EVENT_DELAY_MS);
+    }
+    return true;
   }
 
   /** The phone turned Live Activities off, signed out, or chose another server. */
@@ -195,11 +224,13 @@ export class LiveActivityPushService {
     const mode = props?.mode ?? null;
     const key = JSON.stringify(props);
     const sent = registration.sent;
-    if (sent && sent.key === key && now - sent.at < KEEPALIVE_MS) {
+    // An alert goes at once, also when the view did not change.
+    const alert = props ? registration.alert : null;
+    if (!alert && sent && sent.key === key && now - sent.at < KEEPALIVE_MS) {
       if (props) this.#schedule(registration, sent.at + KEEPALIVE_MS - now);
       return;
     }
-    if (sent && sent.mode === mode && now - sent.at < SAME_MODE_INTERVAL_MS) {
+    if (!alert && sent && sent.mode === mode && now - sent.at < SAME_MODE_INTERVAL_MS) {
       this.#schedule(registration, sent.at + SAME_MODE_INTERVAL_MS - now);
       return;
     }
@@ -210,7 +241,8 @@ export class LiveActivityPushService {
       sealed: props ? this.#sealToFit(props, registration.keys) : null,
       timestamp: Math.floor(now / 1000),
       staleAt: props ? Math.floor((now + STALE_AFTER_MS) / 1000) : null,
-      priority: sent?.mode === mode ? 5 : 10,
+      priority: !alert && sent?.mode === mode ? 5 : 10,
+      alert,
     };
     registration.sending = true;
     registration.sent = { key, mode, at: now };
@@ -219,6 +251,7 @@ export class LiveActivityPushService {
         Effect.sync(() => {
           registration.failures = 0;
           registration.retryAt = 0;
+          if (registration.alert === alert) registration.alert = null;
           // Apple refused the token: the activity ended, or the app was removed.
           if (result === "gone" || !props) this.#stop(registration);
           else this.#schedule(registration, KEEPALIVE_MS);

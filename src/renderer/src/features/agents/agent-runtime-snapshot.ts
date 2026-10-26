@@ -1,6 +1,8 @@
 import type { AgentApproval, AgentEvent, AgentRuntimeSnapshot } from "@openbot/contracts/ipc";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
+import { reconcilePendingRequests } from "@openbot/team-client/runtime-attention";
 import type { AgentMessage } from "@openbot/ui/data";
+import { createStoredMessage } from "../../app-stored-values";
 import { promptRequestKey } from "../conversation/conversation-keys";
 
 type PromptEvent = Extract<AgentEvent, { type: "prompt" }>;
@@ -78,19 +80,19 @@ export function seededAttentionPrompts(
 }
 
 export function reconcileAttentionApprovals(
-  current: Record<string, AgentApproval | undefined>,
+  current: readonly AgentApproval[],
   snapshot: Pick<AgentRuntimeSnapshot, "attentionComplete" | "pendingApprovals">,
-): Record<string, AgentApproval | undefined> {
-  return {
-    ...(snapshot.attentionComplete ? {} : current),
-    ...Object.fromEntries(snapshot.pendingApprovals.map((approval) => [approval.agentId, approval])),
-  };
+): AgentApproval[] {
+  return reconcilePendingRequests(current, snapshot.pendingApprovals, snapshot.attentionComplete);
 }
 
 /**
  * The tail of each agent's transcript, as the snapshot last saw it. A message
  * the renderer already has stays as it is: it may be further along than the
  * snapshot's copy, which is capped at `AGENT_RUNTIME_TEXT_LIMIT`.
+ *
+ * An appended message is only the start of the reply, so it is a stored message: the conversation
+ * snapshot, delta or page that follows must be able to replace its body.
  */
 export function appendLatestRuntimeMessages(
   current: Record<string, AgentMessage[]>,
@@ -102,13 +104,13 @@ export function appendLatestRuntimeMessages(
     if (messages.some((candidate) => candidate.id === message.id)) continue;
     next[message.agentId] = [
       ...messages,
-      {
+      createStoredMessage({
         id: message.id,
         author: "agent",
         body: cleanAgentMessageText(message.text),
         time: message.createdAt,
         createdAt: message.createdAt,
-      },
+      }),
     ];
   }
   return next;

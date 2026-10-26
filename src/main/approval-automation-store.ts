@@ -4,7 +4,6 @@ import {
   agentAutoApprovalEnabled,
   DEFAULT_APPROVAL_AUTOMATION_PREFERENCE,
   isApprovalAutomationPreference,
-  type SetApprovalAutomationInput,
 } from "@openbot/contracts/ipc";
 import { isBoolean, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
@@ -14,70 +13,89 @@ import { LOCAL_USER_ACTOR, type SecurityActor } from "../backend/security-actor"
 import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "../backend/security-audit-log";
 import { PreferenceFileFailure, readPreferenceFile, writePreferenceFile } from "./preference-file";
 
-/** Missing settings use the product default; invalid settings always require approval. */
+const DENY_ALL: ApprovalAutomationPreference = { defaultAutoApprove: false, autoApproveOverrides: {} };
+
+/** Turbo mode gave every agent Full access, so a file that had it on keeps that for each agent. */
+const TURBO_ON: ApprovalAutomationPreference = { defaultAutoApprove: true, autoApproveOverrides: {} };
+
+/**
+ * Missing settings use the product default; invalid settings always require approval.
+ *
+ * Older files stay in place, so a downgraded build still reads its own version. `legacyPaths` lists
+ * them newest first: the v2 file, then the v1 file.
+ */
 export const readApprovalAutomation = Effect.fn("ApprovalAutomation.read")(function* (
   path: string,
   knownAgentIds: Iterable<string>,
-  legacyPath?: string,
+  legacyPaths: readonly string[] = [],
 ): Effect.fn.Return<ApprovalAutomationPreference, PreferenceFileFailure> {
   const loaded = yield* Effect.result(
-    readPreferenceFile(path, (value) => value).pipe(
-      Effect.catch((failure) =>
-        isMissingFileError(failure.cause) && legacyPath
-          ? readPreferenceFile(legacyPath, (value) => value)
-          : Effect.fail(failure),
-      ),
+    legacyPaths.reduce(
+      (read, legacyPath) =>
+        read.pipe(
+          Effect.catch((failure) =>
+            isMissingFileError(failure.cause) ? readPreferenceFile(legacyPath, (value) => value) : Effect.fail(failure),
+          ),
+        ),
+      readPreferenceFile(path, (value) => value),
     ),
   );
   if (Result.isFailure(loaded)) {
     const error = loaded.failure.cause;
     if (isMissingFileError(error)) return { ...DEFAULT_APPROVAL_AUTOMATION_PREFERENCE, autoApproveOverrides: {} };
-    if (error instanceof SyntaxError) return { turbo: false, defaultAutoApprove: false, autoApproveOverrides: {} };
+    if (error instanceof SyntaxError) return DENY_ALL;
     return yield* loaded.failure;
   }
   const parsed = loaded.success;
-  if (isDynamicRecord(parsed) && parsed.version === 2 && isApprovalAutomationPreference(parsed)) {
-    return {
-      turbo: parsed.turbo,
-      defaultAutoApprove: parsed.defaultAutoApprove,
-      autoApproveOverrides: parsed.autoApproveOverrides,
-    };
+  if (!isDynamicRecord(parsed)) return DENY_ALL;
+  if (parsed.version === 3 && isApprovalAutomationPreference(parsed)) {
+    return { defaultAutoApprove: parsed.defaultAutoApprove, autoApproveOverrides: parsed.autoApproveOverrides };
   }
-  if (isDynamicRecord(parsed) && parsed.version === 1 && isBoolean(parsed.turbo)) {
+  if (parsed.version === 2 && isBoolean(parsed.turbo) && isApprovalAutomationPreference(parsed)) {
+    if (parsed.turbo) return TURBO_ON;
+    return { defaultAutoApprove: parsed.defaultAutoApprove, autoApproveOverrides: parsed.autoApproveOverrides };
+  }
+  if (parsed.version === 1 && isBoolean(parsed.turbo)) {
     const ids = parsed.autoApproveAgentIds;
     if (Array.isArray(ids) && ids.length <= INPUT_LIMITS.agents && ids.every(isString)) {
+      if (parsed.turbo) return yield* writeApprovalAutomation(path, TURBO_ON);
       const granted = new Set(ids);
       // Snapshot every existing choice before enabling the default for future agents.
       return yield* writeApprovalAutomation(path, {
-        turbo: parsed.turbo,
         defaultAutoApprove: true,
         autoApproveOverrides: Object.fromEntries([...knownAgentIds].map((id) => [id, granted.has(id)])),
       });
     }
   }
-  return { turbo: false, defaultAutoApprove: false, autoApproveOverrides: {} };
+  return DENY_ALL;
 });
 
-export const writeApprovalAutomation = Effect.fn("ApprovalAutomation.write")(function* (
+const writeApprovalAutomation = Effect.fn("ApprovalAutomation.write")(function* (
   path: string,
   preference: ApprovalAutomationPreference,
 ) {
-  yield* writePreferenceFile(path, { version: 2, ...preference });
+  yield* writePreferenceFile(path, { version: 3, ...preference });
   return { ...preference, autoApproveOverrides: { ...preference.autoApproveOverrides } };
 });
+
+/** One agent's Full access grant. */
+export interface AgentApprovalGrant {
+  agentId: string;
+  autoApprove: boolean;
+}
 
 export interface ApprovalAutomationOptions {
   path: string;
   initial: ApprovalAutomationPreference;
   /** Agent ids that still exist. A grant for an agent the user deleted is dropped rather than kept. */
   knownAgentIds: () => Iterable<string>;
-  /** Receives every change of the global or per-agent grant. */
+  /** Receives every change of a per-agent grant. */
   audit?: SecurityAuditSink;
 }
 
 /**
  * Owns the preference in memory so the approval path can read it without waiting on a file, and
- * applies one field at a time on behalf of the renderer.
+ * applies one agent's grant at a time.
  *
  * Writes are chained for the reason `update-preference-store.ts` chains its own: each one renames
  * its temporary file into place, so two quick toggles could otherwise land in the wrong order and
@@ -104,7 +122,6 @@ export class ApprovalAutomation {
   current(): ApprovalAutomationPreference {
     const known = new Set(this.#knownAgentIds());
     return {
-      turbo: this.#preference.turbo,
       defaultAutoApprove: this.#preference.defaultAutoApprove,
       autoApproveOverrides: Object.fromEntries(
         Object.entries(this.#preference.autoApproveOverrides).filter(([id]) => known.has(id)),
@@ -120,10 +137,6 @@ export class ApprovalAutomation {
     );
   }
 
-  turboEnabled(): boolean {
-    return this.#preference.turbo;
-  }
-
   /**
    * Called after each saved change. A remote admin can change a grant through `agent-admin-v1`, so
    * the local window cannot rely on its own writes to know the current value.
@@ -135,11 +148,11 @@ export class ApprovalAutomation {
 
   /** `actor` is who asked: the app for the user, or a team member through the admin routes. */
   set(
-    input: SetApprovalAutomationInput,
+    input: AgentApprovalGrant,
     actor: SecurityActor = LOCAL_USER_ACTOR,
   ): Effect.Effect<ApprovalAutomationPreference, PreferenceFileFailure> {
     return Effect.suspend(() => {
-      if (input.autoApprove && input.agentId && this.#deletingAgentIds.has(input.agentId)) {
+      if (input.autoApprove && this.#deletingAgentIds.has(input.agentId)) {
         return Effect.fail(
           new PreferenceFileFailure({ cause: new Error(sourceText("error.agent.approvalWhileDeleting")) }),
         );
@@ -149,21 +162,15 @@ export class ApprovalAutomation {
     });
   }
 
-  #record(input: SetApprovalAutomationInput, before: ApprovalAutomationPreference, actor: SecurityActor) {
-    const rows: Array<{ action: string; agentId?: string; value: boolean }> = [];
-    if (input.turbo !== undefined && input.turbo !== before.turbo)
-      rows.push({ action: "approval.turbo", value: input.turbo });
-    if (
-      input.agentId !== undefined &&
-      input.autoApprove !== undefined &&
-      agentAutoApprovalEnabled(before, input.agentId) !== input.autoApprove
-    )
+  #record(input: AgentApprovalGrant, before: ApprovalAutomationPreference, actor: SecurityActor) {
+    const rows: Array<{ action: string; agentId: string; value: boolean }> = [];
+    if (agentAutoApprovalEnabled(before, input.agentId) !== input.autoApprove)
       rows.push({ action: "approval.auto-approve", agentId: input.agentId, value: input.autoApprove });
     return Effect.forEach(rows, (row) =>
       this.#audit.record({
         actor: auditActor(actor),
         action: row.action,
-        target: row.agentId === undefined ? { kind: "host" } : { kind: "agent", id: row.agentId },
+        target: { kind: "agent", id: row.agentId },
         names: [row.value ? "on" : "off"],
       }),
     );
@@ -193,10 +200,7 @@ export class ApprovalAutomation {
     }).pipe(Effect.uninterruptible);
   }
 
-  #apply = Effect.fn("ApprovalAutomation.apply")(function* (
-    this: ApprovalAutomation,
-    input: SetApprovalAutomationInput,
-  ) {
+  #apply = Effect.fn("ApprovalAutomation.apply")(function* (this: ApprovalAutomation, input: AgentApprovalGrant) {
     const next = this.#next(input);
     // Apply the new choice while the file write is pending; restore it when the write fails.
     const previous = this.#preference;
@@ -211,14 +215,11 @@ export class ApprovalAutomation {
     return current;
   }, Effect.uninterruptible);
 
-  #next(input: SetApprovalAutomationInput): ApprovalAutomationPreference {
+  #next(input: AgentApprovalGrant): ApprovalAutomationPreference {
     const known = new Set(this.#knownAgentIds());
     const overrides = new Map(Object.entries(this.#preference.autoApproveOverrides).filter(([id]) => known.has(id)));
-    if (input.agentId !== undefined && input.autoApprove !== undefined && known.has(input.agentId)) {
-      overrides.set(input.agentId, input.autoApprove);
-    }
+    if (known.has(input.agentId)) overrides.set(input.agentId, input.autoApprove);
     return {
-      turbo: input.turbo ?? this.#preference.turbo,
       defaultAutoApprove: this.#preference.defaultAutoApprove,
       autoApproveOverrides: Object.fromEntries(overrides),
     };

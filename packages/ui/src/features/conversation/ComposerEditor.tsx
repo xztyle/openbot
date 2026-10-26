@@ -1,19 +1,32 @@
+import { rankAgentMentions } from "@openbot/contracts/agent-mention-rank";
 import { attachmentReferenceIds } from "@openbot/contracts/attachment-references";
 import { serializeChatTagReference } from "@openbot/contracts/chat-tag-references";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import type { DraftAttachment, InstalledSkill, McpServerConfig } from "@openbot/contracts/ipc";
+import type { DraftAttachment } from "@openbot/contracts/ipc";
 import { Badge, Blocks, Listbox, Puzzle } from "@openbot/ui";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import { Dynamic, Portal } from "@solidjs/web";
-import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, onSettled, Show } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  onCleanup,
+  onSettled,
+  Show,
+  untrack,
+} from "solid-js";
 import { createScrollFades } from "../../components/createScrollFades";
-import type { AgentProfile } from "../../data";
+import type { ComposerAgent, ComposerMcpServer, ComposerSkill } from "../../data";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
 import { AnchoredTooltip } from "./AnchoredTooltip";
 import { AttachmentReferenceVisual } from "./AttachmentReference";
 import {
   automaticMentionSpaceAtCaretBoundary,
+  type ComposerPasteResult,
+  type ComposerSelection,
   editorText,
   editorTextOffset,
   insertLineBreak,
@@ -21,9 +34,11 @@ import {
   mentionTokenAtCaretBoundary,
   placeCaretAtChildOffset,
   placeCaretAtEnd,
+  placeSerializedCaret,
   rangeFromTextOffsets,
   readEditorSelection,
   restoreEditorSelection,
+  serializedEditorSelection,
   serializeEditor,
 } from "./composer-dom";
 import { shouldRestoreComposerFocus } from "./composer-focus";
@@ -44,6 +59,7 @@ import {
   createAttachmentToken,
   createMcpToken,
   createMentionToken,
+  createQuoteToken,
   createSkillToken,
   MENTION_PATTERN,
   renderEditorValue,
@@ -56,10 +72,10 @@ import { isSendShortcutKey, type SendShortcut, sendShortcutEnterKeyHint } from "
 
 interface ComposerEditorProps {
   agentId: string | undefined;
-  agents: AgentProfile[];
-  skills?: InstalledSkill[];
+  agents: ComposerAgent[];
+  skills?: ComposerSkill[] | undefined;
   /** The host's MCP servers, offered by the same `$` the skills answer. */
-  mcpServers?: McpServerConfig[];
+  mcpServers?: ComposerMcpServer[] | undefined;
   attachments?: DraftAttachment[];
   value: string;
   placeholder: string;
@@ -70,9 +86,15 @@ interface ComposerEditorProps {
    * eye only, so a reader hears it as the description of the disabled field.
    */
   disabledReason?: string | undefined;
-  focusRequest?: number;
+  /** `compact` is one short line, as in the floating composer over a browser page. */
+  size?: "default" | "compact";
+  focusRequest?: number | undefined;
   /** Raised by one to open the skill picker at the caret, as a typed `$` does. */
   skillPickerRequest?: number;
+  /** A new id puts a quote chip for the text at the caret, or at the end when the caret is unknown. */
+  quoteRequest?: QuoteRequest | undefined;
+  /** Opens the passage that a quote chip in the draft points to. */
+  onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
   /** The last skill list request failed, so an empty picker says so instead of "no skills". */
   skillsLoadFailed?: boolean;
   onValueChange: (value: string) => void;
@@ -81,12 +103,40 @@ interface ComposerEditorProps {
    * Which chord sends the message. Enter keeps the current behavior; the platform modifier with
    * Enter sends and plain Enter adds a line. The renderer resolves the platform and passes it.
    */
-  sendShortcut?: SendShortcut;
+  sendShortcut?: SendShortcut | undefined;
   onOpenAttachment?: (attachment: DraftAttachment) => void;
   /** Receives pasted files. Without it, a file paste does nothing here; the desktop preload imports it. */
-  onPasteFiles?: (files: File[]) => void;
+  onPasteFiles?: (files: File[], selection: ComposerSelection) => undefined | Promise<ComposerPasteResult | undefined>;
+  onPasteAttachments?: (
+    clipboard: DataTransfer,
+    selection: ComposerSelection,
+  ) => Promise<ComposerPasteResult | undefined> | undefined;
+  /**
+   * Writes a copy or cut that includes attachments. Other selections use the native copy. After a cut
+   * removed the selection, `remaining` is the value that stays, so the draft can let go of the files
+   * that the cut moved.
+   */
+  onCopyAttachments?: (
+    clipboard: DataTransfer,
+    text: string,
+    attachments: DraftAttachment[],
+    remaining: string | undefined,
+  ) => void;
   /** Told when the mention picker opens or closes, so the queue panel can give up the same space. */
   onPickerOpenChange?: (open: boolean) => void;
+  /**
+   * The words heard so far while the user dictates. `final` is set while the recording turns into
+   * the final text. See `dictationWords` for how they show.
+   */
+  dictation?: { text: string; final: boolean };
+}
+
+export type { ComposerPasteResult, ComposerSelection } from "./composer-dom";
+
+export interface QuoteRequest {
+  id: number;
+  messageId: string;
+  text: string;
 }
 
 interface MentionContext {
@@ -95,6 +145,8 @@ interface MentionContext {
   end: number;
   trigger: "@" | "$";
 }
+
+const DICTATION_INTERIM_WORDS = 2;
 
 export function expandComposerMentions(value: string): string {
   return value.replace(MENTION_PATTERN, (match, name: string, target: string) => {
@@ -138,15 +190,12 @@ export function ComposerEditor(props: ComposerEditorProps) {
     { equals: (previous, next) => previous.mount === next.mount && previous.bottom === next.bottom },
   );
   const matchingAgents = createMemo(() => {
-    const query = mention()?.query.trim().toLocaleLowerCase() ?? "";
+    const query = mention()?.query ?? "";
     // A background teammate is offered only to a typed name, so the open list stays short.
-    return props.agents.filter(
-      (agent) =>
-        agent.id !== props.agentId &&
-        (query
-          ? `${agent.name} ${agent.title} ${agent.description}`.toLocaleLowerCase().includes(query)
-          : agent.background !== true),
+    const others = props.agents.filter(
+      (agent) => agent.id !== props.agentId && (query.trim() !== "" || agent.background !== true),
     );
+    return rankAgentMentions(others, query);
   });
   const matchingAttachments = createMemo(() => {
     const query = mention()?.query.trim().toLocaleLowerCase() ?? "";
@@ -255,6 +304,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
   let lastEmittedValue = "";
   let lastFocusRequest = 0;
   let lastSkillPickerRequest = 0;
+  // A request made before this editor existed belongs to an earlier one, which inserted it.
+  let lastQuoteRequest = untrack(() => props.quoteRequest?.id ?? 0);
+  /* Where the caret was when the editor last had it. A selection in a message takes the caret away. */
+  let savedCaret: number | null = null;
   let isComposing = false;
   const [compositionRevision, setCompositionRevision] = createSignal(0);
   const attachmentTokenActions: AttachmentTokenActions = {
@@ -293,8 +346,21 @@ export function ComposerEditor(props: ComposerEditorProps) {
       attachments: props.attachments ?? [],
       focusRequest: props.focusRequest ?? 0,
       skillPickerRequest: props.skillPickerRequest ?? 0,
+      quoteRequest: props.quoteRequest,
+      disabled: props.disabled,
     }),
-    ({ agentId, value, agents, skills, mcpServers, attachments, focusRequest, skillPickerRequest }) => {
+    ({
+      agentId,
+      value,
+      agents,
+      skills,
+      mcpServers,
+      attachments,
+      focusRequest,
+      skillPickerRequest,
+      quoteRequest,
+      disabled,
+    }) => {
       if (!editor || (isComposing && agentId === lastAgentId)) return;
       const attachmentKey = attachments.map((attachment) => `${attachment.id}:${attachment.name}`).join("|");
       const skillKey = skills
@@ -321,6 +387,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
       const skillsChanged = skillKey !== lastSkillKey;
       const mcpChanged = mcpKey !== lastMcpKey;
       const focusRequested = focusRequest > lastFocusRequest;
+      if (draftChanged) savedCaret = null;
       if (contentChanged) {
         lastAgentId = agentId;
         lastEmittedValue = value;
@@ -342,16 +409,52 @@ export function ComposerEditor(props: ComposerEditorProps) {
       lastMcpKey = mcpKey;
       if (focusRequested) {
         lastFocusRequest = focusRequest;
+        // Text that the user selected in the draft stays selected, for example when they click Reply on a message.
+        const draftSelection = contentChanged ? null : readEditorSelection(editor);
         editor.focus({ preventScroll: true });
-        placeCaretAtEnd(editor);
+        if (!draftSelection || draftSelection.anchor === draftSelection.focus) placeCaretAtEnd(editor);
         scheduleCaretScroll();
       }
       if (skillPickerRequest > lastSkillPickerRequest) {
         lastSkillPickerRequest = skillPickerRequest;
         openSkillPicker();
       }
+      // A locked composer keeps the quote until it opens again.
+      if (quoteRequest && quoteRequest.id > lastQuoteRequest && !disabled) {
+        lastQuoteRequest = quoteRequest.id;
+        insertQuote(quoteRequest.messageId, quoteRequest.text);
+      }
     },
   );
+
+  /*
+   * Live dictation continues the draft's last line, where the final text lands, so nothing moves
+   * when the recording finishes. The editor's text offsets and serializer must never see these
+   * words, so a read-only copy of the draft takes the editor's place while they show.
+   */
+  const dictationWords = createMemo(() => props.dictation?.text.trim().split(/\s+/u).filter(Boolean) ?? []);
+  const dictating = () => dictationWords().length > 0;
+  let dictationView: HTMLDivElement | undefined;
+  let dictationDraft: HTMLDivElement | undefined;
+  createEffect(
+    () => ({
+      shown: dictating(),
+      value: props.value,
+      agents: props.agents,
+      skills: props.skills ?? [],
+      mcpServers: props.mcpServers ?? [],
+      attachments: props.attachments ?? [],
+    }),
+    ({ shown, value, agents, skills, mcpServers, attachments }) => {
+      if (!shown || !dictationDraft) return;
+      renderEditorValue(dictationDraft, value, agents, skills, mcpServers, attachments, attachmentTokenActions);
+      // The editor needs a closing <br> to show an empty last line; inline, it would push the words a line down.
+      if (value.endsWith("\n")) dictationDraft.lastChild?.remove();
+    },
+  );
+  createEffect(dictationWords, () => {
+    if (dictationView) dictationView.scrollTop = dictationView.scrollHeight;
+  });
 
   // Coming back to the window puts the caret back here, so the first keys are not lost. A touch
   // device would open its keyboard instead, and focus leaving an embedded frame (an HTML preview)
@@ -408,6 +511,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const document = editor.ownerDocument;
     const view = document.defaultView;
     const selectionChanged = () => {
+      if (editor && document.activeElement === editor) savedCaret = readEditorSelection(editor)?.focus ?? savedCaret;
       // A dismissed picker stays closed until the user types or clicks again.
       if (mention()) updateMention();
     };
@@ -577,6 +681,38 @@ export function ComposerEditor(props: ComposerEditorProps) {
     editor.focus();
   }
 
+  function insertQuote(messageId: string, text: string) {
+    if (!editor || props.disabled) return;
+    editor.focus({ preventScroll: true });
+    const value = editorText(editor);
+    const offset = savedCaret !== null && savedCaret <= value.length ? savedCaret : value.length;
+    const range = rangeFromTextOffsets(editor, offset, offset);
+    if (!range) return;
+    const trailingSpace = document.createTextNode(" ");
+    range.insertNode(trailingSpace);
+    range.insertNode(createQuoteToken(messageId, text));
+    const beforeCaret = value.slice(0, offset);
+    if (beforeCaret && !/\s$/u.test(beforeCaret)) range.insertNode(document.createTextNode(" "));
+    range.setStartAfter(trailingSpace);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    setMention(null);
+    emitValue();
+    scheduleCaretScroll();
+  }
+
+  function handleEditorClick(event: MouseEvent) {
+    const quote = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-quote-message-id]") : null;
+    const messageId = quote?.dataset.quoteMessageId;
+    if (messageId && props.onOpenQuote) {
+      props.onOpenQuote(messageId, quote.dataset.quoteText ?? "");
+      return;
+    }
+    updateMention();
+  }
+
   function ensureEditorSelection() {
     if (!editor) return;
     if (!readEditorSelection(editor)) placeCaretAtEnd(editor);
@@ -741,6 +877,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
     const clipboard = event.clipboardData;
     if (!clipboard) return;
+    const selection = serializedEditorSelection(editor);
+    const pasted = props.onPasteAttachments?.(clipboard, selection);
+    if (pasted) {
+      event.stopPropagation();
+      finishPaste(pasted);
+      return;
+    }
     const files =
       clipboard.files.length > 0
         ? Array.from(clipboard.files)
@@ -749,7 +892,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
             return file ? [file] : [];
           });
     if (files.length > 0) {
-      props.onPasteFiles?.(files);
+      if (props.onPasteFiles) {
+        event.stopPropagation();
+        finishPaste(props.onPasteFiles(files, selection));
+      }
       return;
     }
 
@@ -762,9 +908,47 @@ export function ComposerEditor(props: ComposerEditorProps) {
     updateMention();
   }
 
+  function finishPaste(pasted: undefined | Promise<ComposerPasteResult | undefined>) {
+    if (!pasted) return;
+    const agentId = props.agentId;
+    const surface = editor;
+    void pasted.then((result) => {
+      if (!result) return;
+      onSettled(() => {
+        if (!surface?.isConnected || editor !== surface || props.agentId !== agentId || props.value !== result.value)
+          return;
+        if (surface.ownerDocument.activeElement !== surface) return;
+        placeSerializedCaret(surface, result.caret);
+        scheduleCaretScroll();
+      });
+    });
+  }
+
+  function handleCopy(event: ClipboardEvent, cut = false) {
+    if (!editor || !event.clipboardData || !props.onCopyAttachments) return;
+    const selection = serializedEditorSelection(editor);
+    if (selection.start === selection.end) return;
+    const value = serializeEditor(editor);
+    const text = value.slice(selection.start, selection.end);
+    const ids = attachmentReferenceIds(text);
+    const all = selection.start === 0 && selection.end === value.length;
+    const attachments = (props.attachments ?? []).filter((attachment) => all || ids.has(attachment.id));
+    // Without an attachment, the native copy keeps its rich text.
+    if (!attachments.length) return;
+    event.preventDefault();
+    let remaining: string | undefined;
+    if (cut && !props.disabled) {
+      insertPlainText(editor, "");
+      emitValue();
+      updateMention();
+      remaining = serializeEditor(editor);
+    }
+    props.onCopyAttachments(event.clipboardData, text, attachments, remaining);
+  }
+
   return (
-    <div class="composer-editor-root">
-      <Show when={!props.value}>
+    <div class="composer-editor-root" data-size={props.size ?? "default"} data-dictating={dictating() ? "" : undefined}>
+      <Show when={!props.value && !dictating()}>
         <span class="composer-editor-placeholder" aria-hidden="true">
           {props.placeholder}
         </span>
@@ -797,7 +981,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
           emitValue();
           updateMention();
         }}
-        onClick={updateMention}
+        onClick={handleEditorClick}
         onKeyDown={handleKeyDown}
         onBeforeInput={handleBeforeInput}
         onCompositionStart={() => {
@@ -808,6 +992,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
           setCompositionRevision((revision) => revision + 1);
         }}
         onPaste={handlePaste}
+        onCopy={(event) => handleCopy(event)}
+        onCut={(event) => handleCopy(event, true)}
         onBlur={() => {
           isComposing = false;
           // A menu can return the focus to the editor within this delay; keep the picker it opened.
@@ -817,8 +1003,48 @@ export function ComposerEditor(props: ComposerEditorProps) {
           }, 100);
         }}
       />
+      <Show when={dictating()}>
+        <div
+          ref={(element) => (dictationView = element)}
+          class="composer-editor-surface composer-dictation"
+          data-final={props.dictation?.final ? "" : undefined}
+          // The editor under this copy takes the keys, so a click here gives it the focus.
+          onPointerDown={(event) => {
+            event.preventDefault();
+            if (!editor) return;
+            editor.focus({ preventScroll: true });
+            placeCaretAtEnd(editor);
+          }}
+        >
+          <div
+            ref={(element) => (dictationDraft = element)}
+            class="composer-dictation-draft"
+            aria-hidden="true"
+            inert
+          />
+          <span aria-live="polite">
+            {props.value && !/\s$/u.test(props.value) ? " " : ""}
+            <For each={dictationWords()}>
+              {(word, index) => (
+                <span
+                  class="composer-dictation-word"
+                  // The last words are the ones the next live pass is most likely to change.
+                  data-interim={
+                    !props.dictation?.final && index() >= dictationWords().length - DICTATION_INTERIM_WORDS
+                      ? ""
+                      : undefined
+                  }
+                >
+                  {index() === 0 ? word : ` ${word}`}
+                </span>
+              )}
+            </For>
+          </span>
+          <span class="composer-dictation-caret" aria-hidden="true" />
+        </div>
+      </Show>
       <Show when={pickerOpen()}>
-        <Portal mount={pickerFrame().mount}>
+        <Portal mount={pickerFrame().mount ?? document.body}>
           <div
             class="mention-picker"
             style={{

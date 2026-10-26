@@ -1,4 +1,10 @@
-import type { MobileConnectedDevice, MobileConnectTicket } from "@openbot/contracts/ipc";
+import type {
+  MobileConnectedDevice,
+  MobileConnectLink,
+  MobileConnectTicket,
+  RemoteNetworkRoute,
+  RemoteNetworkRouteState,
+} from "@openbot/contracts/ipc";
 import { createEffect, createMemo, createSignal, createStore, onCleanup, untrack } from "solid-js";
 import { currentText } from "../../../text";
 
@@ -9,8 +15,14 @@ const MOBILE_CONNECT_PENDING_REFRESH_INTERVAL_MS = 5_000;
 interface MobileConnectStoreProps {
   open: boolean;
   onCreateMobileConnect?: () => Promise<MobileConnectTicket>;
+  onCancelMobileConnect?: () => Promise<void>;
+  onGetMobileConnectLink?: () => Promise<MobileConnectLink | null>;
+  onCreateMobileConnectLink?: () => Promise<MobileConnectLink>;
+  onRevokeMobileConnectLink?: () => Promise<void>;
   onListMobileConnectedDevices?: () => Promise<MobileConnectedDevice[]>;
   onRevokeMobileConnectedDevice?: (sessionId: string) => Promise<void>;
+  onGetRemoteNetworkRoute?: () => Promise<RemoteNetworkRouteState>;
+  onSetRemoteNetworkRoute?: (route: RemoteNetworkRoute) => Promise<RemoteNetworkRouteState>;
 }
 
 /** A generated Mobile Connect code, from the moment it is displayed until it is cleared. */
@@ -28,6 +40,7 @@ interface MobileConnectSession {
 
 interface MobileConnectPanel {
   busy: boolean;
+  cancelling: boolean;
   error: string | null;
   /** Carries `startedAt`, so neither can exist without the other. */
   session: MobileConnectSession | null;
@@ -42,9 +55,34 @@ interface MobileDeviceList {
   revokingSessionId: string | null;
 }
 
+/** The persistent link: made once, shown again each time the tab opens, until it is revoked. */
+interface MobileConnectLinkPanel {
+  link: MobileConnectLink | null;
+  loaded: boolean;
+  busy: "create" | "revoke" | null;
+  /** The action that waits for the user to confirm it. */
+  confirm: "replace" | "revoke" | null;
+  /** The link and its QR code stay hidden until the user shows them, as on a shared screen. */
+  revealed: boolean;
+  /** When the link was shown. A device that connects after this is shown as connected with the link. */
+  revealedAt: number | null;
+  successDeviceName: string | null;
+  error: string | null;
+}
+
+/** How devices that connect to this computer send chats and files. */
+interface RemoteNetworkRoutePanel {
+  /** Null until main answers. */
+  current: RemoteNetworkRouteState | null;
+  busy: boolean;
+  error: string | null;
+}
+
 interface SettingsMobileConnectPanels {
   connect: MobileConnectPanel;
   devices: MobileDeviceList;
+  link: MobileConnectLinkPanel;
+  route: RemoteNetworkRoutePanel;
 }
 
 /**
@@ -53,8 +91,19 @@ interface SettingsMobileConnectPanels {
  */
 export function createSettingsMobileConnectStore(props: MobileConnectStoreProps, isActive: () => boolean) {
   const [panels, setPanels] = createStore<SettingsMobileConnectPanels>({
-    connect: { busy: false, error: null, session: null },
+    connect: { busy: false, cancelling: false, error: null, session: null },
     devices: { devices: [], error: null, loaded: false, loading: false, revokingSessionId: null },
+    link: {
+      link: null,
+      loaded: false,
+      busy: null,
+      confirm: null,
+      revealed: false,
+      revealedAt: null,
+      successDeviceName: null,
+      error: null,
+    },
+    route: { current: null, busy: false, error: null },
   });
   /** A clock, not panel state: it ticks the code's countdown and the device list's "3m ago" labels. */
   const [now, setNow] = createSignal(Date.now());
@@ -66,6 +115,9 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
   let baselineSessionIds = new Set<string>();
   let successTimer: number | undefined;
   let cleanupTimer: number | undefined;
+  let linkBaselineSessionIds = new Set<string>();
+  let linkSuccessTimer: number | undefined;
+  let linkCleanupTimer: number | undefined;
 
   createEffect(
     () => ({
@@ -74,6 +126,7 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
       visible: pageVisible(),
       list: props.onListMobileConnectedDevices,
       ticketExpiresAt: panels.connect.session?.ticket.expiresAt ?? null,
+      linkRevealed: panels.link.revealed,
     }),
     ({ open, active, visible, list }) => {
       devicesRequestRevision += 1;
@@ -81,11 +134,11 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
       let running = true;
       let timer: number | undefined;
 
-      // Only a live code polls, to see the phone that uses it. Otherwise the list loads when the tab
-      // opens or the window is shown again: an idle poll cost one account Worker request a minute.
+      // Only a live code or a shown link polls, to see the phone that uses it. Otherwise the list loads
+      // when the tab opens or the window is shown again: an idle poll cost one account Worker request a minute.
       const scheduleRefresh = () => {
         const ticket = panels.connect.session?.ticket;
-        if (!ticket || ticket.expiresAt <= Date.now()) return;
+        if ((!ticket || ticket.expiresAt <= Date.now()) && !panels.link.revealed) return;
         timer = window.setTimeout(async () => {
           await refreshDevices(false);
           if (running) scheduleRefresh();
@@ -101,6 +154,93 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
       };
     },
   );
+
+  createEffect(
+    () => ({ open: props.open, active: isActive(), get: props.onGetMobileConnectLink }),
+    ({ open, active, get }) => {
+      if (!open || !active || !get) return;
+      let current = true;
+      // Each visit starts with the link hidden.
+      hideLink();
+      setPanels((state) => {
+        state.link.confirm = null;
+      });
+      void untrack(async () => {
+        try {
+          const link = await get();
+          if (!current) return;
+          setPanels((state) => {
+            state.link.link = link;
+            state.link.loaded = true;
+          });
+        } catch (error) {
+          if (!current) return;
+          setPanels((state) => {
+            const text = currentText();
+            state.link.error = text.errorMessage(error, text.t("settings.mobileConnect.link.error.load"));
+          });
+        }
+      });
+      return () => {
+        current = false;
+      };
+    },
+  );
+
+  // Each visit reads the route again, so a Tailscale that started since the last visit shows.
+  createEffect(
+    () => ({ open: props.open, active: isActive(), get: props.onGetRemoteNetworkRoute }),
+    ({ open, active, get }) => {
+      if (!open || !active || !get) return;
+      let current = true;
+      void untrack(async () => {
+        try {
+          const route = await get();
+          if (!current) return;
+          setPanels((state) => {
+            state.route.current = route;
+            state.route.error = null;
+          });
+        } catch (error) {
+          if (!current) return;
+          setPanels((state) => {
+            const text = currentText();
+            state.route.error = text.errorMessage(error, text.t("settings.mobileConnect.route.error.load"));
+          });
+        }
+      });
+      return () => {
+        current = false;
+      };
+    },
+  );
+
+  async function setRoute(route: RemoteNetworkRoute) {
+    const set = props.onSetRemoteNetworkRoute;
+    const previous = panels.route.current;
+    if (!set || !previous || panels.route.busy || previous.route === route) return;
+    setPanels((state) => {
+      state.route.current = { ...previous, route };
+      state.route.busy = true;
+      state.route.error = null;
+    });
+    try {
+      const saved = await set(route);
+      setPanels((state) => {
+        state.route.current = saved;
+      });
+    } catch (error) {
+      setPanels((state) => {
+        const text = currentText();
+        state.route.current = previous;
+        state.route.error = text.errorMessage(error, text.t("settings.mobileConnect.route.error.save"));
+      });
+    } finally {
+      setPanels((state) => {
+        state.route.busy = false;
+      });
+    }
+  }
 
   const secondsRemaining = createMemo(() =>
     Math.max(0, Math.ceil(((panels.connect.session?.ticket.expiresAt ?? 0) - now()) / 1_000)),
@@ -164,6 +304,40 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
     }
   }
 
+  /** Spends the code on the account service, then closes it like a used code. */
+  async function cancelTicket(): Promise<void> {
+    if (panels.connect.busy || panels.connect.cancelling || !panels.connect.session || !props.onCancelMobileConnect)
+      return;
+    clearFeedbackTimers();
+    setPanels((state) => {
+      state.connect.cancelling = true;
+      state.connect.error = null;
+    });
+    try {
+      await props.onCancelMobileConnect();
+      setPanels((state) => {
+        if (state.connect.session) {
+          state.connect.session.collapsing = true;
+          state.connect.session.startedAt = null;
+        }
+      });
+      cleanupTimer = window.setTimeout(() => {
+        setPanels((state) => {
+          state.connect.session = null;
+        });
+      }, MOBILE_CONNECT_COLLAPSE_MS);
+    } catch (error) {
+      setPanels((state) => {
+        const text = currentText();
+        state.connect.error = text.errorMessage(error, text.t("settings.mobileConnect.error.cancel"));
+      });
+    } finally {
+      setPanels((state) => {
+        state.connect.cancelling = false;
+      });
+    }
+  }
+
   async function refreshDevices(showLoading: boolean): Promise<MobileConnectedDevice[] | null> {
     const list = props.onListMobileConnectedDevices;
     if (!list || panels.devices.revokingSessionId) return null;
@@ -183,6 +357,8 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
       });
       setNow(Date.now());
       if (connectedDevice) showSuccess(connectedDevice);
+      const linkDevice = newlyConnectedLinkDevice(devices);
+      if (linkDevice) showLinkSuccess(linkDevice);
       return devices;
     } catch (error) {
       if (revision !== devicesRequestRevision) return null;
@@ -214,6 +390,7 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
     return (
       devices.find(
         (device) =>
+          device.via === "code" &&
           !baselineSessionIds.has(device.sessionId) &&
           (panels.devices.loaded || device.connectedAt >= startedAt - 5_000),
       ) ?? null
@@ -236,6 +413,66 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
       }, MOBILE_CONNECT_COLLAPSE_MS);
     }, MOBILE_CONNECT_SUCCESS_FEEDBACK_MS);
   }
+
+  function newlyConnectedLinkDevice(devices: MobileConnectedDevice[]): MobileConnectedDevice | null {
+    const { revealed, revealedAt, successDeviceName } = panels.link;
+    if (!revealed || revealedAt === null || successDeviceName) return null;
+    return (
+      devices.find(
+        (device) =>
+          device.via === "link" &&
+          !linkBaselineSessionIds.has(device.sessionId) &&
+          device.connectedAt >= revealedAt - 5_000,
+      ) ?? null
+    );
+  }
+
+  function showLinkSuccess(device: MobileConnectedDevice): void {
+    clearLinkFeedbackTimers();
+    setPanels((state) => {
+      state.link.successDeviceName = device.name;
+    });
+    linkSuccessTimer = window.setTimeout(() => {
+      setPanels((state) => {
+        state.link.revealed = false;
+        state.link.revealedAt = null;
+      });
+      // The name stays until the region has collapsed, so the success state does not flash back to the code.
+      linkCleanupTimer = window.setTimeout(() => {
+        setPanels((state) => {
+          state.link.successDeviceName = null;
+        });
+      }, MOBILE_CONNECT_COLLAPSE_MS);
+    }, MOBILE_CONNECT_SUCCESS_FEEDBACK_MS);
+  }
+
+  function showLink(): void {
+    clearLinkFeedbackTimers();
+    linkBaselineSessionIds = new Set(panels.devices.devices.map((device) => device.sessionId));
+    setPanels((state) => {
+      state.link.revealed = true;
+      state.link.revealedAt = Date.now();
+      state.link.successDeviceName = null;
+    });
+  }
+
+  function hideLink(): void {
+    clearLinkFeedbackTimers();
+    setPanels((state) => {
+      state.link.revealed = false;
+      state.link.revealedAt = null;
+      state.link.successDeviceName = null;
+    });
+  }
+
+  function clearLinkFeedbackTimers(): void {
+    if (linkSuccessTimer !== undefined) window.clearTimeout(linkSuccessTimer);
+    if (linkCleanupTimer !== undefined) window.clearTimeout(linkCleanupTimer);
+    linkSuccessTimer = undefined;
+    linkCleanupTimer = undefined;
+  }
+
+  onCleanup(clearLinkFeedbackTimers);
 
   function clearFeedbackTimers(): void {
     if (successTimer !== undefined) window.clearTimeout(successTimer);
@@ -271,6 +508,61 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
     }
   }
 
+  async function createLink(): Promise<void> {
+    if (panels.link.busy || !props.onCreateMobileConnectLink) return;
+    setPanels((state) => {
+      state.link.busy = "create";
+      state.link.error = null;
+    });
+    try {
+      const link = await props.onCreateMobileConnectLink();
+      setPanels((state) => {
+        state.link.link = link;
+        state.link.loaded = true;
+        state.link.confirm = null;
+      });
+      showLink();
+    } catch (error) {
+      setPanels((state) => {
+        const text = currentText();
+        state.link.error = text.errorMessage(error, text.t("settings.mobileConnect.link.error.create"));
+        state.link.confirm = null;
+      });
+    } finally {
+      setPanels((state) => {
+        state.link.busy = null;
+      });
+    }
+  }
+
+  async function revokeLink(): Promise<void> {
+    if (panels.link.busy || !props.onRevokeMobileConnectLink) return;
+    setPanels((state) => {
+      state.link.busy = "revoke";
+      state.link.error = null;
+    });
+    try {
+      await props.onRevokeMobileConnectLink();
+      hideLink();
+      setPanels((state) => {
+        state.link.link = null;
+        state.link.confirm = null;
+      });
+      // The phones that the link signed in are signed out with it.
+      void refreshDevices(false);
+    } catch (error) {
+      setPanels((state) => {
+        const text = currentText();
+        state.link.error = text.errorMessage(error, text.t("settings.mobileConnect.link.error.revoke"));
+        state.link.confirm = null;
+      });
+    } finally {
+      setPanels((state) => {
+        state.link.busy = null;
+      });
+    }
+  }
+
   function deviceTimeLabel(timestamp: number): string {
     const { t, format } = currentText();
     const elapsedSeconds = Math.max(0, Math.floor((now() - timestamp) / 1_000));
@@ -282,7 +574,24 @@ export function createSettingsMobileConnectStore(props: MobileConnectStoreProps,
     return format.date(timestamp, { dateStyle: "medium" });
   }
 
-  return { createTicket, deviceTimeLabel, expired, expiryLabel, revokeDevice, secondsRemaining, state: panels };
+  return {
+    cancelTicket,
+    createLink,
+    createTicket,
+    deviceTimeLabel,
+    expired,
+    expiryLabel,
+    revokeDevice,
+    revokeLink,
+    secondsRemaining,
+    setRoute,
+    setLinkConfirm: (confirm: MobileConnectLinkPanel["confirm"]) =>
+      setPanels((state) => {
+        state.link.confirm = confirm;
+      }),
+    toggleLinkRevealed: () => (panels.link.revealed ? hideLink() : showLink()),
+    state: panels,
+  };
 }
 
 export type SettingsMobileConnectStore = ReturnType<typeof createSettingsMobileConnectStore>;

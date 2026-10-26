@@ -1,6 +1,14 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import { isRoutineSchedule, ROUTINE_MINIMUM_INTERVAL_MINUTES, type RoutineSchedule } from "@openbot/contracts/ipc";
-import { type DynamicRecord, isString } from "@openbot/contracts/runtime-values";
+import {
+  isRoutineSchedule,
+  ROUTINE_LIMIT_POLICIES,
+  ROUTINE_MINIMUM_INTERVAL_MINUTES,
+  ROUTINE_MISSED_POLICIES,
+  type RoutineLimitPolicy,
+  type RoutineMissedPolicy,
+  type RoutineSchedule,
+} from "@openbot/contracts/ipc";
+import { type DynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { RoutineInputError } from "@openbot/team-client/routine-schedule";
 import { isRecord } from "../protocol";
 
@@ -21,6 +29,24 @@ export function routineToolString(value: unknown, field: string, limit: number, 
   if (!isString(value) || !value.trim()) throw new RoutineInputError(requiredMessage);
   if (value.length > limit) throw new RoutineInputError(`${field} is too long.`);
   return value;
+}
+
+/** The recovery policies a routine tool call sets. A field the call leaves out stays out. */
+export function routineToolPolicies(args: DynamicRecord): {
+  limitPolicy?: RoutineLimitPolicy;
+  missedPolicy?: RoutineMissedPolicy;
+} {
+  const { limitPolicy, missedPolicy } = args;
+  if (limitPolicy !== undefined && !isOneOf(ROUTINE_LIMIT_POLICIES, limitPolicy)) {
+    throw new RoutineInputError(`limitPolicy must be one of: ${ROUTINE_LIMIT_POLICIES.join(", ")}.`);
+  }
+  if (missedPolicy !== undefined && !isOneOf(ROUTINE_MISSED_POLICIES, missedPolicy)) {
+    throw new RoutineInputError(`missedPolicy must be one of: ${ROUTINE_MISSED_POLICIES.join(", ")}.`);
+  }
+  return {
+    ...(limitPolicy === undefined ? {} : { limitPolicy }),
+    ...(missedPolicy === undefined ? {} : { missedPolicy }),
+  };
 }
 
 export function siteToolString(value: unknown, field: string, limit: number): string {

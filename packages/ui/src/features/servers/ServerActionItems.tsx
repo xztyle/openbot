@@ -1,16 +1,6 @@
-import type { ServerNotificationLevel, ServerSummary } from "@openbot/contracts/ipc";
+import { canAdministerServer, type ServerNotificationLevel, type ServerSummary } from "@openbot/contracts/ipc";
 import type { AppFormat, AppTextKey, AppTranslate } from "@openbot/i18n";
-import {
-  Bell,
-  BellOff,
-  CalendarClock,
-  ChartArea,
-  Check,
-  ChevronRight,
-  type ContextMenu,
-  LogOut,
-  Trash2,
-} from "@openbot/ui";
+import { Bell, BellOff, Check, ChevronRight, type ContextMenu, LogOut, RotateCcw, Trash2 } from "@openbot/ui";
 import { For, Show } from "solid-js";
 import { useText } from "../../text";
 
@@ -62,8 +52,6 @@ export type ServerActionMenu = Pick<
 export interface ServerActionCallbacks {
   onSetMuted?: ((serverId: string, muted: boolean, durationMs?: number) => void) | undefined;
   onSetNotificationLevel?: ((serverId: string, level: ServerNotificationLevel) => void) | undefined;
-  onOpenUsage?: ((serverId: string, trigger: HTMLElement | null) => void) | undefined;
-  onOpenSchedule?: ((serverId: string, trigger: HTMLElement | null) => void) | undefined;
   onOpenSettings?: ((serverId: string, trigger: HTMLElement | null) => void) | undefined;
   /** Asks to leave a joined server. The menu shows it for a remote server that the user does not own. */
   onLeave?: ((serverId: string, trigger: HTMLElement | null) => void) | undefined;
@@ -72,14 +60,20 @@ export interface ServerActionCallbacks {
   onRemove?: ((serverId: string, trigger: HTMLElement | null) => void) | undefined;
   canRemove?: ((serverId: string) => boolean) | undefined;
   canDelete?: ((serverId: string) => boolean) | undefined;
+  /**
+   * Asks to restart a hosted server. The menu shows it to the owner and the admins of a server that the
+   * account server marks as hosted, or that `canRestart` accepts.
+   */
+  onRestart?: ((serverId: string, trigger: HTMLElement | null) => void) | undefined;
+  canRestart?: ((serverId: string) => boolean) | undefined;
 }
 
-/** Mute, notification level, usage, schedule, settings, and leave or delete for one server. */
+/** Mute, notification level, settings, restart, and leave or delete for one server. */
 export function ServerActionItems(
   props: ServerActionCallbacks & {
     menu: ServerActionMenu;
     server: ServerSummary;
-    /** The element that focus and the settings or usage panel return to. */
+    /** The element that focus and the settings page return to. */
     trigger: () => HTMLElement | null;
   },
 ) {
@@ -94,6 +88,14 @@ export function ServerActionItems(
     props.server.kind === "remote" &&
     props.server.role === "owner" &&
     Boolean(props.canRemove?.(props.server.id));
+  // A restart while the machine starts would stop it and begin the start again. A running machine whose
+  // OpenBot does not answer can restart.
+  const canRestart = () =>
+    Boolean(props.onRestart) &&
+    props.server.kind === "remote" &&
+    canAdministerServer(props.server.role) &&
+    !(props.server.hostedSleep === "waking" && props.server.hostedStart?.step !== "openbot") &&
+    (props.server.hosted === true || Boolean(props.canRestart?.(props.server.id)));
   // A component, so the JSX below can use it as a tag. The menu does not change after render.
   const Menu = props.menu;
   return (
@@ -170,26 +172,20 @@ export function ServerActionItems(
       <Show when={props.onSetMuted || props.onSetNotificationLevel}>
         <Menu.Separator />
       </Show>
-      <Show when={props.onOpenUsage}>
-        <Menu.Item onSelect={() => props.onOpenUsage?.(props.server.id, props.trigger())}>
-          <ChartArea class="agent-context-icon size-4" aria-hidden="true" />
-          <span>{t("server.rail.usage")}</span>
-        </Menu.Item>
-      </Show>
-      <Show when={props.onOpenSchedule}>
-        <Menu.Item onSelect={() => props.onOpenSchedule?.(props.server.id, props.trigger())}>
-          <CalendarClock class="agent-context-icon size-4" aria-hidden="true" />
-          <span>{t("server.rail.schedule")}</span>
-        </Menu.Item>
-      </Show>
       <Show when={props.onOpenSettings}>
         <Menu.Item onSelect={() => props.onOpenSettings?.(props.server.id, props.trigger())}>
           <ServerSettingsGlyph />
           <span>{t("server.rail.settings")}</span>
         </Menu.Item>
       </Show>
-      <Show when={canLeave() || canDelete() || canRemove()}>
+      <Show when={canRestart() || canLeave() || canDelete() || canRemove()}>
         <Menu.Separator />
+        <Show when={canRestart()}>
+          <Menu.Item onSelect={() => props.onRestart?.(props.server.id, props.trigger())}>
+            <RotateCcw class="agent-context-icon size-4" aria-hidden="true" />
+            <span>{t("server.rail.restart")}</span>
+          </Menu.Item>
+        </Show>
         <Show when={canLeave()}>
           <Menu.Item
             class="ui-action-menu-danger agent-context-danger"

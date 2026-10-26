@@ -33,8 +33,8 @@ commands continue to use that file.
 
 ### Stripe sandbox
 
-`bun run api:stripe:bootstrap` creates the six plan Prices (lookup keys `openbot_{plan}_{month|year}`)
-and the Customer Portal settings in the Stripe account of `STRIPE_SECRET_KEY`. It is safe to run
+`bun run api:stripe:bootstrap` creates the six plan Prices (lookup keys `openbot_{plan}_{month|year}`),
+the license Price (`openbot_license_month`) and the Customer Portal settings in the Stripe account of `STRIPE_SECRET_KEY`. It is safe to run
 again: a changed amount makes a new Price and moves the lookup key to it. In the Portal, an upgrade
 is charged at once, and a downgrade or a shorter interval starts at the next period.
 
@@ -52,11 +52,15 @@ also sets the allow list from `HOSTED_SERVERS_TEST_ALLOW_LIST` and the developer
 `HOSTED_SERVERS_DEVELOPER_KEY` from `.env.dev`.
 
 `scripts/stripe-flows-e2e.ts` checks the plan flows against the sandbox and a local Worker: renewal,
-failed renewal, cancel at the period end, plan change, renew, delete, another account's server, and a
-deleted customer. Each scenario uses a Stripe test clock and deletes it at the end. Start the Worker
+failed renewal, cancel at the period end, plan change, renew, delete, another account's server, a
+deleted customer, a refund, a dispute, and the welcome email of a first plan. The `license-*`
+scenarios check the license: buy, Checkout, one open Checkout page, change users, the user count,
+renewal, failed renewal, currency, isolation from the server plans, and the user limit at a join. Each scenario uses a Stripe
+test clock and deletes it at the end. Start the Worker
 with `HOSTED_SERVERS_ENABLED=true`, `HOSTED_SERVERS_ALLOWED_USER_IDS` set to the output of
-`bun scripts/stripe-flows-e2e.ts --print-user-ids`, and `BOAT_API_KEY=e2e-invalid-key`, and forward
-the webhooks to it. A value in the shell overrides `.env.dev`; without the fake key, each paid
+`bun scripts/stripe-flows-e2e.ts --print-user-ids`, `HOSTED_SERVER_TEMPLATE=e2e-template`, and
+`BOAT_API_KEY=e2e-invalid-key`, and forward the webhooks to it. Without a template, hosting is off and
+each server scenario fails with `hosting_unavailable`. A value in the shell overrides `.env.dev`; without the fake key, each paid
 scenario creates a real boat VM. Then, from the
 repository root:
 
@@ -117,6 +121,22 @@ article uses. `content-art/manifest.json` records a hash of the inputs of each
 image. The build compares those hashes with the articles and fails when an image
 is missing, out of date, or belongs to no article.
 
+## Home page beam
+
+The home page beam is a SolidJS port of
+[LaserFlow from React Bits](https://reactbits.dev/animations/laser-flow). Its license lets the
+website use it, but does not let this public repository contain it. The port is in the private
+`nightly-labs/openbot-laser-flow` repository. Git ignores its path here, and a checkout without it
+builds a home page with no beam. To see the beam locally, clone it into that path:
+
+```bash
+git clone git@github.com:nightly-labs/openbot-laser-flow.git apps/auth-api/src/vendor/laser-flow
+```
+
+CI checks it out with the read-only deploy key in the `LASER_FLOW_DEPLOY_KEY` secret. Pull request
+previews from forks have no beam. A production deploy, from CI or from `bun run deploy`, stops
+before any change when the port is missing. Never copy the file into this repository.
+
 ## Email delivery
 
 Private Email SMTP is the primary delivery method. Use a separate app password.
@@ -147,6 +167,11 @@ For a deployed Worker, `bun run api:deploy` decrypts `.env.production`. It sends
 builds and deploys the Worker. Production deployment preserves `HOSTED_SERVER_TEMPLATE`; the
 desktop release workflow owns that setting. Test deployment can still set its own template.
 
+Production also requires `OPENPANEL_CLIENT_ID` and `OPENPANEL_CLIENT_SECRET` from an OpenPanel
+write-only server client. Keep both in the encrypted `.env.production` for local deployment and in
+the `cloudflare-production` GitHub Environment for CI. Both deployment paths check these values
+before remote changes. Test deployments do not send account analytics.
+
 `GITHUB_APP_PRIVATE_KEY` is the OpenBot GitHub App's private key as a PKCS #8 PEM. GitHub gives a
 PKCS #1 key; convert it with `openssl pkcs8 -topk8 -nocrypt -in <key>.pem`. With the key, the
 Worker gives the desktop installation tokens, so GitHub shows `openbotgit[bot]` as the author of an
@@ -156,8 +181,11 @@ Secrets are never passed as process arguments. The other values are Worker
 variables. The SMTP connection uses TLS from the start and accepts only port 465.
 
 GitHub Actions reads the remote-control secrets, `SKILLS_ADMIN_TOKEN`, `SITE_REPORT_HASH_SECRET`, and the optional
-`SITE_OPERATIONS_ADMIN_TOKEN` from the `cloudflare-production` Environment. It includes them in Wrangler's temporary
-runtime secrets file.
+`SITE_OPERATIONS_ADMIN_TOKEN` and `SERVER_CLAIMS_ADMIN_TOKEN` from the `cloudflare-production` Environment. It includes
+them in Wrangler's temporary runtime secrets file.
+
+`SERVER_CLAIMS_ADMIN_TOKEN` lets an operator sign a new server in for a user without an email code: see
+[server claims](../../docs/self-hosted-server.md#sign-in-with-a-server-claim). Without it, the endpoint answers 401.
 
 Use `bun run api:deploy:test` for the isolated `openbot-auth-api-test` Worker
 and the `openbot-auth-test` D1 database.
@@ -181,6 +209,13 @@ answers 429 `email_delivery_rate_limited` instead of 502, for a sign-in code and
 for a team invitation. The message is never sent in that case, so the app can
 ask again later. Namecheap Private Email allows 500 messages an hour for each
 mailbox, and every sign-in code and invitation spends that same quota.
+
+The contact form on `/contact` posts to `/v1/contact`. The Worker sends each message to
+`EMAIL_FROM` through SMTP, with the visitor's address in `Reply-To`, and stores nothing.
+The D1 counter of sign-in allows 3 messages for each IP address and 15 in total in each 15-minute
+window, so the form cannot spend the quota that sign-in codes need. A Cloudflare rate-limit binding
+counts in each location separately, so it cannot hold a total. Without SMTP the route answers 503
+`email_delivery_not_configured`, and the form tells the visitor to write to `hello@openbot.run`.
 
 ## Cloudflare deployment
 
@@ -236,12 +271,19 @@ requests. It does not carry Team API or Remote Desktop data.
 To deploy your own copy of this Worker with your own Signal, see
 [Self-hosted remote access](../../docs/self-hosting.md).
 
-### Live Activity relay
+### Live Activity and notification relay
 
 `POST /v2/remote/hosts/:hostId/live-activity` forwards a sealed iPhone Live Activity update from a
 host to Apple Push Notification service. The host seals the content for the phone, so the Worker
 cannot read it. The Worker checks the host credential and `LIVE_ACTIVITY_RATE_LIMITER`, makes the
-APNs payload itself with no alert text, and stores and logs nothing.
+APNs payload itself, and stores and logs nothing. An update that shows an event that notifies the
+member has an `alert` with the sound of the phone and "OpenBot" as its only text (iOS shows the text
+on Apple Watch only); a host cannot give the text.
+
+`POST /v2/remote/hosts/:hostId/notification` forwards a sealed iPhone notification in the same way.
+It has its own key in `LIVE_ACTIVITY_RATE_LIMITER`, and it sends nothing for a device session that
+has ended (`RemoteControlPlane.sessionOpen`), because the host does not learn about the end. The
+alert has "OpenBot" as its only text and `mutable-content`; the app opens the sealed bytes.
 
 The relay is off until `APNS_PRIVATE_KEY` (the `.p8` key text) and `APNS_KEY_ID` are set. Create
 the key in Apple Developer > Keys with the Apple Push Notifications service, then add both to the
@@ -254,3 +296,12 @@ sets `APNS_ORIGIN` and forwards the Worker's request to Apple from Node
 (`dev-apns-proxy.ts`). The Worker still checks the host and the limit, makes the payload and signs
 the token. Only a loopback caller can use the forwarder, and the Worker accepts only a loopback
 `APNS_ORIGIN`.
+
+`POST /v2/remote/hosts/:hostId/android-notification` forwards a sealed Android notification to
+Firebase Cloud Messaging in the same way, with the same limit and session check. The Worker sends a
+data message with the sealed bytes and the sound only; the app opens the seal. The relay is off until
+`FCM_SERVICE_ACCOUNT` is set: the service account key file (JSON) of the Firebase project of the app,
+from Firebase console > Project settings > Service accounts > Generate new private key. Put it into
+the encrypted environment as one line (`jq -c . <file>.json`) and into the `cloudflare-production`
+GitHub environment. A deployment stops before remote changes when the value is not a service account
+key file. The local Worker sends to Firebase directly.

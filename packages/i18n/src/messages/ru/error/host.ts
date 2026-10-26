@@ -3,6 +3,9 @@ import type { messages as source } from "../../en/error/host";
 
 export const messages = {
   "error.host.iceServersMissing": "Remote Signal не передал ICE-серверы.",
+  "error.host.keyRotationUnavailable": "Этот сервер не может сменить ключ без службы учётных записей.",
+  "error.host.keyRotationRefused":
+    "Служба учётных записей не приняла новый ключ сервера. Текущий ключ остаётся в работе.",
   "error.host.webRtcNotConfigured": "Служба хоста WebRTC не настроена.",
   "error.host.runtimeNotInstalled": "Среда удалённого рабочего стола не установлена.",
   "error.host.setupUnavailable": "Настройка разрешений недоступна.",
@@ -19,6 +22,7 @@ export const messages = {
   "error.host.mobileConnectHostChanged": "Хост Mobile Connect изменился. Повторите попытку.",
   "error.host.noServer": "На этом компьютере нет сервера, который можно изменить.",
   "error.host.identityLocalOnly": "Название и логотип сервера можно изменить только на компьютере, где он работает.",
+  "error.host.timezoneInvalid": "Этот часовой пояс неизвестен.",
   "error.host.maintenanceInterrupted":
     "Обслуживание хоста прервано. Проверьте приложение и сбросьте состояние хоста, прежде чем повторять.",
   "error.host.updateFailed":

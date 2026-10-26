@@ -1,6 +1,7 @@
 import { ComposerErrorBanner } from "@openbot/ui/features/conversation/ComposerErrorBanner";
 import { ComposerUsageLimitNotice } from "@openbot/ui/features/conversation/ComposerNotice";
 import type { JSX } from "@solidjs/web";
+import { createSignal, Show } from "solid-js";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 
@@ -44,8 +45,7 @@ export const ProviderError: Story = {
  */
 export const DroppedTransport: Story = {
   args: {
-    message:
-      "Falling back from WebSockets to HTTPS transport. stream disconnected before completion: Connection refused (os error 61)",
+    message: "stream disconnected before completion: Connection refused (os error 61)",
   },
   render: (args) => (
     <ComposerStack>
@@ -79,13 +79,18 @@ export const AuthenticationFailed: Story = {
 
 /**
  * The two blocks the composer column can carry together, in the order the reader meets them: the
- * un-actionable state first, then the dismissible report of one failed turn.
+ * quota reading first, then the report of one failed turn. Each notice closes independently.
  */
 export const BesideTheUsageLimit: Story = {
-  render: (args) => (
-    <ComposerStack>
-      <ComposerUsageLimitNotice provider="codex" resetsAt={USAGE_RESETS_AT} />
-      <ComposerErrorBanner {...args} />
-    </ComposerStack>
-  ),
+  render: (args) => {
+    const [dismissed, setDismissed] = createSignal(false);
+    return (
+      <ComposerStack>
+        <Show when={!dismissed()}>
+          <ComposerUsageLimitNotice provider="codex" resetsAt={USAGE_RESETS_AT} onDismiss={() => setDismissed(true)} />
+        </Show>
+        <ComposerErrorBanner {...args} />
+      </ComposerStack>
+    );
+  },
 };

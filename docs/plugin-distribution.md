@@ -53,8 +53,9 @@ A plugin is one developer's bundle. It contains:
 - the listing text: name, tagline, description, example prompts, icon, category, version, and the
   developer's website, privacy policy and terms links.
 
-The types in `src/renderer/src/features/settings/marketplace-plugins.ts` are the start shape.
-They are local to the renderer today.
+The types in `packages/ui/src/features/settings/marketplace-plugins.ts` are the start shape.
+`@openbot/ui` owns them today, and the renderer imports them from there. They are not in
+`packages/contracts`.
 
 ## 2. Catalog delivery
 
@@ -137,7 +138,7 @@ The detail gives the shape of the MCP server. It never gives a secret value.
 ```
 
 `auth` lists the ways into the server, as `McpConnectFlow[]` in
-`packages/ui/src/features/settings/mcp-connect-auth.ts` declares them: a `"link"` flow signs in
+`packages/contracts/src/mcp-connect-flows.ts` declares them: a `"link"` flow signs in
 through the browser, a `"key"` flow names each field and where its value goes, and a `"local"` flow
 lists the steps that turn on a server that another app runs on this computer. Only a `"local"` flow
 can use a plain `http` address, and only on a loopback host. It is the only flow of its server. The user types the value in the
@@ -169,8 +170,8 @@ The build script refuses:
 | A skill `versionId` that is not published | The install would fail for all users. |
 | More than one app in a plugin | Version 1 keeps the install simple. The array stays for later. |
 
-A `--check` mode fails when the generated module is not the same as a fresh build. CI runs it, so a
-hand-edited generated file cannot ship.
+A `--check` mode fails when the generated module is not the same as a fresh build. No CI job runs it
+now, so CI does not stop a hand-edited generated file.
 
 Publish order: publish the skills first with `scripts/publish-production-catalog.ts`, then deploy the
 Worker. The build script tests that each pinned skill version exists.
@@ -314,7 +315,7 @@ The chat access of an agent uses the released `mcp-chat-v1` routes. No capabilit
 
 ### 4.1 The page
 
-`apps/auth-api/src/routes/plugins/$slug/index.tsx` shows one plugin. `apps/auth-api/src/routes/plugins/index.tsx`
+`apps/auth-api/src/routes/plugins/$slug.tsx` shows one plugin. `apps/auth-api/src/routes/plugins/index.tsx`
 lists them. Both read the same generated module as the JSON routes, so there is one source.
 
 The page follows `apps/auth-api/src/routes/guides/$slug.tsx`:
@@ -323,7 +324,8 @@ The page follows `apps/auth-api/src/routes/guides/$slug.tsx`:
   true 404. The page for a missing plugin gives a next step: the plugin list, and the download link;
 - the head tags follow `articleHead` in `apps/auth-api/src/lib/content-metadata.ts`. The canonical
   URL comes from the site URL of the server that answers, so a preview does not name production;
-- `SoftwareApplication` structured data gives the name, the description and the version;
+- `SoftwareApplication` structured data gives the name, the description and the version. When the
+  plugin has a written guide, `FAQPage` structured data gives the guide's questions;
 - `contentSitemapXml()` in `apps/auth-api/src/server/content-feed.ts` gets `/plugins` and one entry
   for each plugin. The JSON URLs stay out of the sitemap, because they are data and not pages.
 
@@ -333,6 +335,16 @@ plugin link holds no secret.
 The page shows the listing text, the example prompts as text, the apps, the skills, the developer,
 the version, and the developer's links. It does not show install counts, account state, or the MCP
 server address. A reader must not learn how to add the server by hand and miss the app's checks.
+
+Two sections come between the listing text and the example prompts. "What an agent can do" comes
+from the written guide. "How to connect" is built from the catalog's `auth` entries only, by
+`pluginConnectSteps` in `apps/auth-api/src/lib/plugins.ts`. It never reads the server address. The
+guide's questions and sources come after the information table.
+
+The written guide for a plugin is `apps/auth-api/src/content/plugins/<slug>.ts`, listed in `index.ts`
+there. Add one when you add a listing. Each statement in it needs a vendor page in `sources`. A
+listing with no guide still gets the generated "How to connect" section, but no uses, questions or
+sources, and nothing warns about it.
 
 The page has one main button, `Open in OpenBot`, and a second button, `Download OpenBot`.
 
@@ -373,6 +385,7 @@ export type DeepLink = { kind: "invite"; url: string } | { kind: "plugin"; slug:
 | `invite` | `openbot://join?…` | Opens the join dialog, as today. |
 | `plugin` | `openbot://plugins/<slug>` | Opens the marketplace listing. |
 | `agent-template` | `openbot://agents/<id>` | Opens the agent template preview. See [architecture/agents.md](architecture/agents.md#agent-templates). |
+| `mcp-auth`, `slack-workspace`, `discord-guild` | `openbot://mcp-auth?…`, `openbot://slack-workspace?…`, `openbot://discord-guild?…` | Returns an MCP sign-in or a Slack or Discord grant to the app. |
 | other | — | The URL is dropped without a message, as today. |
 
 The invite parser runs first, so an invite URL never reaches the plugin parser. `src/main/index.ts`
@@ -406,7 +419,7 @@ fetch, so the `connect-src` policy does not change. Two states follow:
 user trusts. The clipboard gets exactly `https://openbot.run/plugins/<slug>`, with no query and no
 tracking field.
 
-The button becomes the existing `CopyButton` in `src/renderer/src/components/ui/button.tsx`, which
+The button becomes the existing `CopyButton` in `packages/ui/src/button.tsx`, which
 holds the copied state and announces "Link copied".
 
 ### 4.6 External links
@@ -442,17 +455,12 @@ Degraded conditions:
 ## 6. Tests that are mandatory
 
 This work changes the renderer-to-main boundary and the IPC contracts, so `AGENTS.md` makes tests
-mandatory.
+mandatory. Check the link forms, the page, the install and the uninstall end to end with
+`bun run dev:automation`; the ones below are vitest files.
 
 | File | What it proves |
 | --- | --- |
-| `packages/contracts/src/plugin-links.test.ts` | Both forms are built and read again. A wrong origin, `http:`, a second path segment, `..`, a query, a hash, a port, a user name, an upper-case slug and a long slug are refused. An invite URL is refused. |
-| `src/main/deep-link-router.test.ts` | The kind table. An invite still reads as an invite. An unknown `openbot://` URL gives nothing. |
-| `src/main/ipc/plugin-handlers.test.ts` | The sender check runs before the payload is read. A bad slug is refused. The pending link is given one time. |
-| `src/main/plugin-catalog-service.test.ts` | A 304 answer, a wrong hash, the offline fallback, the choice between the snapshot and the cache, and a part-completed install. |
 | `src/main/ipc-channel-coverage.test.ts` | Exists. It fails until the channels are in the contracts, the preload and the mock. |
-| `src/renderer/src/features/settings/MarketplaceModal.test.tsx` | A slug opens the app's page, no install call is made, an unknown slug shows the `missing` state, and `Copy link` writes the canonical URL. For the uninstall: the confirmation names the app and the skill and removes neither, a confirmed uninstall removes the host row before the agent's skill, a cancel removes nothing, and a failed app removal still takes the skill, is reported, and still offers the uninstall, and a server that only shares the app's name is neither read as installed nor removable. |
-| `apps/auth-api/test/` page and metadata tests | The page shows the listing and both buttons. The canonical URL and the sitemap are correct. An unknown slug gives a 404. |
 
 ## 7. Open questions
 
@@ -476,11 +484,11 @@ Ordered by cost.
 ## 8. Order of work
 
 1. ~~Correct the fixture host to `openbot.run`, and build the share URL from the slug.~~ Done:
-   `createPluginShareUrl` in `src/renderer/src/features/settings/marketplace-plugins.ts`.
+   `createPluginShareUrl` in `packages/contracts/src/plugin-links.ts`.
 2. ~~`marketplace/plugin-catalog/` and `scripts/build-plugin-catalog.ts`, with fixtures and `--check`.~~ Done:
-   the source holds 14 listings (no-auth, header key, stdio env key, and OAuth
+   the source holds 17 listings (no-auth, header key, stdio env key, and OAuth
    over HTTP, which the main process signs in to itself), and the build writes the renderer literal,
-   the Worker module, and the offline snapshot, with `--check` for CI.
+   the Worker module, and the offline snapshot. No CI job runs `--check` yet.
 3. The Worker routes: the JSON first, then the page and the sitemap entries. Partly done: the pages
    (`apps/auth-api/src/routes/plugins/`) and the sitemap entries (`apps/auth-api/src/server/content-feed.ts`)
    read the generated catalog. The JSON route does not exist.
@@ -501,5 +509,5 @@ Ordered by cost.
 8. ~~The deep-link router and the share link.~~ Done. `src/main/deep-link-router.ts` decides which
    kind an `openbot://` link is, `openbot://plugins/<slug>` opens that app's page in the Apps tab
    and installs nothing, and `openbot.run/plugins/<slug>` now answers, so the detail page offers
-   `Copy link` again. The public pages read the same catalog the tab reads, from
-   `packages/contracts/src/plugin-catalog.ts`.
+   `Copy link` again. The public pages read the same catalog source as the tab, through the generated
+   `apps/auth-api/src/lib/plugin-catalog.generated.ts`.

@@ -12,6 +12,8 @@ export interface MotionPreferences {
   composerResize: boolean;
   /** A reply types out and its new words fade in. */
   textReveal: boolean;
+  /** Search results and search messages fade in and out with a short blur when they change. */
+  searchTransitions: boolean;
 }
 
 export type MotionPreference = keyof MotionPreferences;
@@ -22,6 +24,7 @@ const DEFAULTS: MotionPreferences = {
   agentFaces: true,
   composerResize: true,
   textReveal: true,
+  searchTransitions: true,
 };
 export const MOTION_PREFERENCE_NAMES: readonly MotionPreference[] = [
   "allAnimations",
@@ -29,6 +32,7 @@ export const MOTION_PREFERENCE_NAMES: readonly MotionPreference[] = [
   "agentFaces",
   "composerResize",
   "textReveal",
+  "searchTransitions",
 ];
 
 export const useMotionPreferences = create<MotionPreferences & { ready: boolean }>(() => ({

@@ -5,7 +5,7 @@ import { useUniwind } from "uniwind";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { SettingsSwitch } from "@/features/settings/components/settings-controls";
-import { type MobileAgent, useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { type MobileAgent, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 
@@ -15,7 +15,7 @@ import { currentText, useText } from "@/shared/lib/text";
  */
 export function AgentNotificationsRow({ agent, available }: { agent: MobileAgent; available: boolean }) {
   const { t } = useText();
-  const { updateAgent } = useMobileWorkspace();
+  const { updateAgent } = useMobileWorkspaceActions();
   const { theme } = useUniwind();
   // The requested value shows until the host answers, so the switch does not move back during the save.
   const [pending, setPending] = useState<boolean | null>(null);
@@ -60,7 +60,7 @@ export function AgentNotificationsRow({ agent, available }: { agent: MobileAgent
  */
 export function AgentNewChatSection({ agent, available }: { agent: MobileAgent; available: boolean }) {
   const { t } = useText();
-  const { startNewChat } = useMobileWorkspace();
+  const { startNewChat } = useMobileWorkspaceActions();
   const [starting, setStarting] = useState(false);
 
   function start(): void {

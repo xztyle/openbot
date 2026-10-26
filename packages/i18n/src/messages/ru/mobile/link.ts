@@ -11,6 +11,8 @@ export const messages = {
   "mobile.link.pairing.alreadySignedIn": "Вы уже вошли. Выйдите в настройках, прежде чем подключать другой аккаунт.",
   "mobile.link.pairing.description":
     "Продолжайте, только если вы сами запросили эту ссылку Mobile Connect на компьютере.",
+  "mobile.link.pairing.accountService":
+    "Эта ссылка подключает к сервису аккаунтов {origin}, а не к сервису аккаунтов OpenBot.",
   "mobile.link.pairing.connect": "Подключить",
   "mobile.link.plugin.title": "Открыть страницу плагина",
   "mobile.link.plugin.description": "Посмотреть этот плагин на сайте OpenBot.",

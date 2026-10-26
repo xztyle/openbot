@@ -24,8 +24,8 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-describe("Event check migration 32", () => {
-  it.each(Array.from({ length: 23 }, (_, index) => index + 8))(
+describe("Event check migration 47", () => {
+  it.each(Array.from({ length: 39 }, (_, index) => index + 8))(
     "preserves saved data when upgrading schema version %i",
     (source) => {
       const database = sourceDatabase(source);
@@ -33,20 +33,20 @@ describe("Event check migration 32", () => {
       const before = captureRows(database);
       migrateOpenBotDatabase(database, { appliedAt });
       expectCapturedRows(database, before);
-      expect(database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 32 });
+      expect(database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 47 });
       expectHealthy(database);
       expect(database.prepare("PRAGMA foreign_key_list(projection_event_checks)").all()).toEqual([]);
     },
   );
 
   it.each(["ddl", "marker"] as const)("rolls back a failed %s write and succeeds on retry", (failure) => {
-    const database = sourceDatabase(30);
-    seedExistingData(database, 30);
+    const database = sourceDatabase(46);
+    seedExistingData(database, 46);
     const before = captureRows(database);
     addMigrationFailure(database, failure);
-    expect(() => migrateOpenBotDatabase(database, { appliedAt })).toThrow("migration to version 32 failed");
+    expect(() => migrateOpenBotDatabase(database, { appliedAt })).toThrow("migration to version 47 failed");
     expectCapturedRows(database, before);
-    expect(database.prepare("SELECT version FROM schema_migrations WHERE version = 32").get()).toBeUndefined();
+    expect(database.prepare("SELECT version FROM schema_migrations WHERE version = 47").get()).toBeUndefined();
     expect(database.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'projection_event_check%'").all()).toEqual(
       [],
     );
@@ -60,9 +60,9 @@ describe("Event check migration 32", () => {
 
   it("rejects newer and incomplete migration histories without changing user rows", () => {
     for (const invalid of ["newer", "missing"] as const) {
-      const database = sourceDatabase(30);
-      seedExistingData(database, 30);
-      if (invalid === "newer") database.prepare("INSERT INTO schema_migrations VALUES (33, ?)").run(appliedAt);
+      const database = sourceDatabase(46);
+      seedExistingData(database, 46);
+      if (invalid === "newer") database.prepare("INSERT INTO schema_migrations VALUES (48, ?)").run(appliedAt);
       else database.exec("DELETE FROM schema_migrations WHERE version = 29");
       const before = captureRows(database);
       expect(() => migrateOpenBotDatabase(database, { appliedAt })).toThrow(
@@ -76,7 +76,7 @@ describe("Event check migration 32", () => {
   });
 
   it("rejects invalid check child references and preserves records on repeated startup", () => {
-    const database = sourceDatabase(30);
+    const database = sourceDatabase(46);
     migrateOpenBotDatabase(database, { appliedAt });
     seedCheck(database, "persisted-check", "retained-agent");
     const before = captureRows(database);
@@ -124,7 +124,7 @@ function seedExistingData(database: DatabaseSync, version: number): void {
   seedConversation(database);
   seedRoutine(database);
   if (version >= 20) seedMcpAccount(database);
-  if (version === 30) seedWebhook(database);
+  if (version >= 30) seedWebhook(database);
 }
 
 function seedConversation(database: DatabaseSync): void {
@@ -235,7 +235,7 @@ function addMigrationFailure(database: DatabaseSync, failure: "ddl" | "marker"):
   else
     database.exec(`
     CREATE TEMP TRIGGER reject_event_check_marker BEFORE INSERT ON schema_migrations
-    WHEN NEW.version = 32 BEGIN SELECT RAISE(ABORT, 'reject event check migration'); END;
+    WHEN NEW.version = 47 BEGIN SELECT RAISE(ABORT, 'reject event check migration'); END;
   `);
 }
 

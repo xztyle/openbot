@@ -2,7 +2,7 @@ import type { Accessor } from "solid-js";
 import type { ServerSettingsModalProps } from "./ServerSettingsModal";
 
 /**
- * What the server settings dialog gives each section it builds. A section's panel unmounts while
+ * What the server settings give each section it builds. A section's panel unmounts while
  * another tab is selected, so the dialog creates each section once and the section keeps its state
  * here, not in the panel.
  */

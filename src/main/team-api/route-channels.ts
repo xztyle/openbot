@@ -2,6 +2,8 @@ import {
   CHANNEL_CHATS_CAPABILITY,
   CHANNEL_DELETE_CAPABILITY,
   type ChannelCommand,
+  canAdministerServer,
+  isReleasedRoutineSchedule,
   parseChannelCommand,
   parseChannelRead,
 } from "@openbot/contracts/ipc";
@@ -23,7 +25,7 @@ import {
 import type { TeamApiAgents } from "./dependencies";
 import { HttpError } from "./http-error";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
-import { readJson, stringField } from "./request-helpers";
+import { readJson, requireAgentLevel, requireReleasedSchedule, stringField } from "./request-helpers";
 
 /**
  * The settings half of a channel is served from `AgentService`, the same object the IPC handlers
@@ -70,15 +72,20 @@ export async function routeChannels(
   if (remove) {
     if (!capabilities.has(CHANNEL_DELETE_CAPABILITY))
       throw new HttpError(400, sourceText("error.team.channelDeleteUnsupported"));
-    if (member.role === "member") throw new HttpError(403, sourceText("error.team.membersCannotDeleteChannels"));
+    if (!canAdministerServer(member.role))
+      throw new HttpError(403, sourceText("error.team.membersCannotDeleteChannels"));
     const body = await readJson(request);
     await runCauseEffect(channels.deleteChannel(channelId(body)));
     return empty(204);
   }
   if (settings) return routeChannelSettings(context, agents);
   const input = parseChannelCommand(channelRequest(url.pathname, await readJson(request)));
-  if (input.type === "archive" && member.role === "member")
+  if (input.type === "archive" && !canAdministerServer(member.role))
     throw new HttpError(403, sourceText("error.team.membersCannotArchiveChannels"));
+  // A restore undoes a delete, so only the people who can delete a channel can restore it.
+  if (input.type === "restore" && !canAdministerServer(member.role))
+    throw new HttpError(403, sourceText("error.team.membersCannotRestoreChannels"));
+  if (input.type === "save") requireChatForAddedAgents(context, input, channels, hiddenAgentIds);
   return json(
     200,
     await runCauseEffect(
@@ -115,6 +122,25 @@ function keepHiddenMembers(
   return { ...input, draft: { ...input.draft, members: [...input.draft.members, ...kept], leadAgentId } };
 }
 
+/** An agent that a save adds to a channel talks there, so the member needs `chat` for it. */
+function requireChatForAddedAgents(
+  context: TeamApiRequestContext,
+  input: Extract<ChannelCommand, { type: "save" }>,
+  channels: ChannelService,
+  hiddenAgentIds: ReadonlySet<string>,
+): void {
+  const stored = new Set(
+    channels.store.exists(input.channelId)
+      ? channels.store.get(input.channelId).members.map((item) => item.agentId)
+      : [],
+  );
+  for (const { agentId } of input.draft.members) {
+    if (stored.has(agentId)) continue;
+    if (hiddenAgentIds.has(agentId)) throw new HttpError(404, sourceText("error.team.agentNotFound"));
+    requireAgentLevel(context, agentId, "chat");
+  }
+}
+
 async function routeChannelSettings(
   context: TeamApiRequestContext,
   agents: ChannelSettingsAgents,
@@ -137,11 +163,27 @@ async function routeChannelSettings(
       agents.clearChannelMemories(channelId(body));
       return empty(204);
     case CHANNEL_ROUTES.routines:
-      return json(200, agents.listChannelRoutines(channelId(body)));
-    case CHANNEL_ROUTES.routineCreate:
-      return json(201, agents.createChannelRoutine(parseCreateChannelRoutine(body)));
-    case CHANNEL_ROUTES.routineUpdate:
-      return json(200, agents.updateChannelRoutine(parseUpdateChannelRoutine(body)));
+      // A `once` routine stays on this computer: the channel codec rejects its schedule.
+      return json(
+        200,
+        agents
+          .listChannelRoutines(channelId(body))
+          .filter((routine) => isReleasedRoutineSchedule(routine.trigger.schedule)),
+      );
+    case CHANNEL_ROUTES.routineCreate: {
+      const input = parseCreateChannelRoutine(body);
+      requireReleasedSchedule(input.schedule);
+      return json(201, agents.createChannelRoutine(input));
+    }
+    case CHANNEL_ROUTES.routineUpdate: {
+      const input = parseUpdateChannelRoutine(body);
+      requireReleasedSchedule(input.schedule);
+      const hidden = agents
+        .listChannelRoutines(input.channelId)
+        .some((routine) => routine.id === input.routineId && !isReleasedRoutineSchedule(routine.trigger.schedule));
+      if (hidden) throw new HttpError(404, sourceText("error.backend.routineGone"));
+      return json(200, agents.updateChannelRoutine(input));
+    }
     case CHANNEL_ROUTES.routineDelete:
       agents.deleteChannelRoutine(parseDeleteChannelRoutine(body));
       return empty(204);

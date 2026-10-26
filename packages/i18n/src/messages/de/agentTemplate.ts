@@ -17,7 +17,7 @@ export const messages = {
     "Lies die Anweisungen, Fähigkeiten und Routinen dieses geteilten Agenten, bevor du ihn hinzufügst.",
   "agentTemplate.install.loading": "Agent wird geladen…",
   "agentTemplate.install.pending": "Wird hinzugefügt…",
-  "agentTemplate.install.action": "Agent hinzufügen",
+  "agentTemplate.install.action": "Agenten hinzufügen",
   "agentTemplate.install.failed": "Der Agent konnte nicht hinzugefügt werden.",
   "agentTemplate.install.readFailed": "Der geteilte Agent konnte nicht gelesen werden.",
   "agentTemplate.install.addedTo": "{name} zu {server} hinzugefügt",
@@ -28,8 +28,8 @@ export const messages = {
   "agentTemplate.publish.description":
     "Teile diesen Agenten als Vorlage. Seine Anweisungen, Fähigkeiten und Routinen werden veröffentlicht. Dateien und Erinnerungen werden nicht veröffentlicht.",
   "agentTemplate.publish.published": "Veröffentlicht",
-  "agentTemplate.publish.unpublish": "Veröffentlichung zurückziehen",
-  "agentTemplate.publish.unpublishing": "Veröffentlichung wird zurückgezogen…",
+  "agentTemplate.publish.unpublish": "Zurückziehen",
+  "agentTemplate.publish.unpublishing": "Wird zurückgezogen…",
   "agentTemplate.publish.unpublishFailed": "Die Veröffentlichung des Agenten konnte nicht zurückgezogen werden.",
   "agentTemplate.publish.lastUpdated": "Zuletzt aktualisiert: {date}",
   "agentTemplate.publish.context": "Kontext",
@@ -55,7 +55,7 @@ export const messages = {
   "agentTemplate.publish.updated": "Agent aktualisiert",
   "agentTemplate.publish.publishedToast": "Agent veröffentlicht",
   "agentTemplate.publish.linkCopied": "Der Link wurde kopiert.",
-  "agentTemplate.publish.copyHint": "Verwende Link kopieren, um ihn zu teilen.",
+  "agentTemplate.publish.copyHint": "Verwende „Link kopieren“, um ihn zu teilen.",
   "agentTemplate.publish.unpublished": "Veröffentlichung des Agenten zurückgezogen",
   "agentTemplate.publish.linkRemoved": "Der Link funktioniert nicht mehr.",
 } as const satisfies PartialTranslation<typeof source>;

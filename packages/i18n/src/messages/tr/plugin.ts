@@ -16,10 +16,10 @@ export const messages = {
   "plugin.info.version": "Sürüm",
 
   // Kaldırma onayı. {number} burada çoğul formu olmayan bir sayıdır.
-  "plugin.uninstallDialog.title": "{name} kaldırılsın mı?",
+  "plugin.uninstallDialog.title": "{name} bağlantısı kesilsin mi?",
   "plugin.uninstallDialog.description":
     "Bu işlem, {name} tarafından bu bilgisayara yüklenenleri kaldırır. Bu ana makinede veya bu ajanda başka hiçbir şey değişmez.",
-  "plugin.uninstallDialog.confirm": "Kaldır",
+  "plugin.uninstallDialog.confirm": "Bağlantıyı kes",
   "plugin.uninstallDialog.appsLabel": "Kaldırılacak uygulamalar, {number}",
   "plugin.uninstallDialog.appsTitle": "Bu ana makineden kaldırılan uygulamalar",
   "plugin.uninstallDialog.appsNote":

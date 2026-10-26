@@ -7,6 +7,11 @@ export type MobileAgentWaitReason = "question" | "approval" | "takeover";
 export interface MobileAgentActivity {
   agentId?: string;
   turnId: string | null;
+  /**
+   * The thread of the turn, when an event named it. A turn on another thread than the agent's own,
+   * such as the work of a channel, is not the work of its chat.
+   */
+  threadId?: string;
   phase: "working" | "responding" | "waiting";
   detail: string | null;
   /** Set only while `phase` is `waiting`. */
@@ -14,6 +19,20 @@ export interface MobileAgentActivity {
 }
 
 export type MobileAgentActivities = Record<string, MobileAgentActivity>;
+
+/**
+ * The live activity, unless the conversation already shows its turn as finished. Turn events and
+ * conversation reads arrive by separate channels, so `turn-started` can arrive after the read that
+ * holds the finished reply. A turn with messages that is not the active turn has ended.
+ */
+export function openTurnActivity(
+  activity: MobileAgentActivity | undefined,
+  conversation: { activeTurnId: string | null; messages: readonly { turnId?: string | null }[] } | undefined,
+): MobileAgentActivity | undefined {
+  const turnId = activity?.turnId;
+  if (!turnId || !conversation || conversation.activeTurnId === turnId) return activity;
+  return conversation.messages.some((message) => message.turnId === turnId) ? undefined : activity;
+}
 
 /**
  * The face an avatar wears for an activity. An agent that waits on an answer holds its resting
@@ -33,6 +52,7 @@ function sameActivity(left: MobileAgentActivity | undefined, right: MobileAgentA
     left !== undefined &&
     left.agentId === right.agentId &&
     left.turnId === right.turnId &&
+    left.threadId === right.threadId &&
     left.phase === right.phase &&
     left.detail === right.detail &&
     left.reason === right.reason
@@ -66,7 +86,7 @@ export function reduceAgentActivity(
       next[turn.agentId] =
         previous?.turnId === turn.turnId && previous.phase !== "waiting"
           ? previous
-          : { turnId: turn.turnId, phase: "working", detail: null };
+          : { turnId: turn.turnId, threadId: turn.threadId, phase: "working", detail: null };
     }
     for (const work of event.snapshot.work) {
       if (work.status === "failed") continue;
@@ -79,9 +99,24 @@ export function reduceAgentActivity(
       ...event.snapshot.pendingPrompts.map((request) => ({ request, reason: "question" as const })),
     ];
     for (const { request, reason } of waits) {
-      next[request.agentId] = { turnId: request.turnId, phase: "waiting", detail: null, reason };
+      next[request.agentId] = {
+        turnId: request.turnId,
+        threadId: request.threadId,
+        phase: "waiting",
+        detail: null,
+        reason,
+      };
     }
     return sameActivities(current, next) ? current : next;
+  }
+  if (event.type === "agent-tasks-changed") {
+    // A turn that started before the phone knew its task belongs to the task, not to the chat.
+    const { agentId, tasks } = event.snapshot;
+    const activity = current[agentId];
+    if (!activity?.turnId || !tasks.some((task) => task.activeTurnId === activity.turnId)) return current;
+    const next = { ...current };
+    delete next[agentId];
+    return next;
   }
   if (event.type === "agents-changed") {
     const ids = new Set(event.agents.map((agent) => agent.id));
@@ -94,6 +129,7 @@ export function reduceAgentActivity(
       return current;
     return withActivity(current, event.agentId, {
       turnId: event.turnId,
+      threadId: event.threadId,
       phase: event.type === "conversation-delta" ? "responding" : "working",
       detail:
         event.type === "turn-progress" ? event.detail : previous?.turnId === event.turnId ? previous.detail : null,
@@ -114,12 +150,15 @@ export function reduceAgentActivity(
         message.author === "assistant" &&
         message.itemType !== "commentary" &&
         message.itemType !== "plan" &&
+        message.itemType !== "subagents" &&
         message.status === "streaming" &&
         message.text.trim().length > 0,
     );
     const kept = previous?.turnId === activeTurnId ? previous : undefined;
+    const threadId = event.snapshot.threadId ?? kept?.threadId;
     return withActivity(current, agentId, {
       turnId: activeTurnId,
+      ...(threadId ? { threadId } : {}),
       phase: responding ? "responding" : (kept?.phase ?? "working"),
       detail: kept?.detail ?? null,
       ...(!responding && kept?.reason ? { reason: kept.reason } : {}),
@@ -143,6 +182,7 @@ export function reduceAgentActivity(
         : reason;
     return withActivity(current, request.agentId, {
       turnId: request.turnId,
+      threadId: request.threadId,
       phase: "waiting",
       detail: null,
       reason: kept,
@@ -154,6 +194,7 @@ export function reduceAgentActivity(
       return withActivity(current, event.agentId, {
         ...(activity.agentId ? { agentId: activity.agentId } : {}),
         turnId: activity.turnId,
+        ...(activity.threadId ? { threadId: activity.threadId } : {}),
         phase: "working",
         detail: null,
       });

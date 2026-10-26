@@ -30,29 +30,32 @@ export function createSearchStore(deps: SearchStoreDeps) {
   let chatSearchRequest = 0;
   let lastChatSearchQuery = "";
 
-  function searchMessageSignature(): string {
-    if (!deps.chatSearchOpen() || !deps.chatSearchQuery().trim()) return "";
-    return deps.props.messages
-      .map((message) => `${message.id}:${message.body}:${message.items?.join("\u0000") ?? ""}`)
-      .join("\u0001");
-  }
-
   createEffect(
-    () => ({
-      open: deps.chatSearchOpen(),
-      query: deps.chatSearchQuery(),
-      // Read the messages only while a search runs. A closed search then does not run again, or
-      // join every message, for each streamed delta.
-      messageSignature: searchMessageSignature(),
-      remoteMessageIds: deps.chatSearchMessageIds(),
-      activeRemoteIndex: deps.activeChatSearchIndex(),
-    }),
+    () => {
+      const open = deps.chatSearchOpen();
+      const query = deps.chatSearchQuery();
+      return {
+        open,
+        query,
+        // Read the transcript only while a search runs, so a closed search does not join it on each stream chunk.
+        messageSignature:
+          open && query.trim()
+            ? deps.props.messages
+                .map((message) => `${message.id}:${message.body}:${message.items?.join("\u0000") ?? ""}`)
+                .join("\u0001")
+            : "",
+        remoteMessageIds: deps.chatSearchMessageIds(),
+        activeRemoteIndex: deps.activeChatSearchIndex(),
+      };
+    },
     ({ open, query, remoteMessageIds, activeRemoteIndex }) => {
       if (chatSearchFrame !== undefined) cancelAnimationFrame(chatSearchFrame);
       if (chatSearchTimer !== undefined) clearTimeout(chatSearchTimer);
       const queryChanged = query !== lastChatSearchQuery;
       lastChatSearchQuery = query;
       if (!open || !query.trim()) {
+        // A response for an earlier query must not reopen a hit after close or a cleared query.
+        chatSearchRequest += 1;
         if (deps.chatSearchMatches().length > 0) deps.setChatSearchMatches([]);
         if (remoteMessageIds.length > 0) deps.setChatSearchMessageIds([]);
         deps.setChatSearchTotal(0);
@@ -132,6 +135,7 @@ export function createSearchStore(deps: SearchStoreDeps) {
   );
 
   onCleanup(() => {
+    chatSearchRequest += 1;
     if (chatSearchFrame !== undefined) cancelAnimationFrame(chatSearchFrame);
     if (chatSearchTimer !== undefined) clearTimeout(chatSearchTimer);
     clearChatSearchHighlights();
@@ -149,6 +153,7 @@ export function createSearchStore(deps: SearchStoreDeps) {
   }
 
   function closeChatSearch(restoreFocus = true): void {
+    chatSearchRequest += 1;
     deps.setChatSearchOpen(false);
     deps.setChatSearchQuery("");
     deps.setChatSearchMatches([]);
@@ -178,6 +183,8 @@ export function createSearchStore(deps: SearchStoreDeps) {
   }
 
   function handleChatSearchShortcut(event: KeyboardEvent): void {
+    // A control that used the key, such as the search of a trace dialog, keeps it.
+    if (event.defaultPrevented) return;
     const primaryModifier = event.metaKey || event.ctrlKey;
     const key = event.key.toLocaleLowerCase();
     if (primaryModifier && !event.altKey && !event.shiftKey && key === "f") {

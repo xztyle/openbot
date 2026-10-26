@@ -1,17 +1,18 @@
 import type {
   AccountUsage,
-  AgentModelOption,
   AgentStatus,
   AgentSubmission,
-  AgentSummary,
   AttachmentSummary,
   BrowserControlState,
   BrowserTab,
+  ClientAgentModelOption,
+  ClientAgentSummary,
   ConversationMessage,
   ConversationPlan,
   ConversationSnapshot,
   DirectConversationSnapshot,
   DirectThreadSummary,
+  ForeignProviderId,
   HostedSiteSummary,
   HostStatus,
   InstalledSkill,
@@ -33,14 +34,21 @@ import type {
   TeamSessionSummary,
   UpdateStatus,
 } from "@openbot/contracts/ipc";
-import { CONVERSATION_PLAN_ITEM_TYPE, conversationPlanText } from "@openbot/contracts/ipc";
+import {
+  CONVERSATION_PLAN_ITEM_TYPE,
+  conversationPlanText,
+  isAgentStatus,
+  isForeignProviderId,
+  isKnownAgentProvider,
+} from "@openbot/contracts/ipc";
 import type { AgentProfile } from "@openbot/ui/data";
+import type { AgentRuntimeSettings } from "@openbot/ui/features/conversation/AgentSettingsPanel";
 import type { MarketplacePluginDetail } from "@openbot/ui/features/settings/marketplace-plugins";
 import type { McpServerConfig } from "../features/servers/mcp-servers";
 
 const STORY_NOW = "2026-08-19T10:00:00.000Z";
 
-export const STORY_AGENT_SUMMARIES: AgentSummary[] = [
+export const STORY_AGENT_SUMMARIES: ClientAgentSummary[] = [
   {
     id: "chief",
     provider: "codex",
@@ -106,8 +114,8 @@ export const STORY_AGENTS: AgentProfile[] = STORY_AGENT_SUMMARIES.map((agent, in
   notifications: agent.notifications,
   model: agent.model,
   reasoningEffort: agent.reasoningEffort,
-  access: agent.access,
-  computerUse: agent.computerUse,
+  ...(agent.access === undefined ? {} : { access: agent.access }),
+  ...(agent.computerUse === undefined ? {} : { computerUse: agent.computerUse }),
   threadId: agent.threadId,
   workspacePath: agent.workspacePath,
   avatarSeed: agent.avatarSeed,
@@ -126,6 +134,12 @@ export function requireFixture<T>(value: T | undefined, name: string): T {
 /** The agent that single-agent stories show. */
 export const STORY_AGENT: AgentProfile = requireFixture(STORY_AGENTS[0], "Story agent");
 
+/** The runtime settings of a story agent. A story agent uses a provider that this build knows. */
+export function storyRuntimeSettings(agent: AgentProfile): AgentRuntimeSettings {
+  if (!isKnownAgentProvider(agent.provider)) throw new Error(`Story agent ${agent.id} has an unknown provider.`);
+  return { provider: agent.provider, model: agent.model, reasoningEffort: agent.reasoningEffort };
+}
+
 export const STORY_SHARED_TABLES: SharedTable[] = [
   { name: "citations", ownerAgentId: "research", rowCount: null },
   { name: "companies", ownerAgentId: "chief", rowCount: 37 },
@@ -135,7 +149,7 @@ export const STORY_SHARED_TABLES: SharedTable[] = [
   { name: "touchpoints", ownerAgentId: "chief", rowCount: 1_902 },
 ];
 
-export const STORY_MODELS: AgentModelOption[] = [
+export const STORY_MODELS: ClientAgentModelOption[] = [
   {
     provider: "codex",
     id: "gpt-6-luna",
@@ -143,6 +157,7 @@ export const STORY_MODELS: AgentModelOption[] = [
     description: "Fast and efficient for everyday agent work.",
     defaultReasoningEffort: "medium",
     supportedReasoningEfforts: ["low", "medium", "high"],
+    fastServiceTier: "priority",
   },
   {
     provider: "codex",
@@ -167,6 +182,7 @@ export const STORY_MODELS: AgentModelOption[] = [
     description: "Most capable for complex, long-running work.",
     defaultReasoningEffort: "high",
     supportedReasoningEfforts: ["medium", "high", "xhigh"],
+    fastServiceTier: "priority",
   },
   {
     provider: "claude",
@@ -181,6 +197,14 @@ export const STORY_MODELS: AgentModelOption[] = [
     id: "claude-opus-5-5",
     name: "Claude Opus 5.5",
     description: "Most capable Claude model for complex work.",
+    defaultReasoningEffort: "high",
+    supportedReasoningEfforts: ["low", "medium", "high"],
+  },
+  {
+    provider: "claude",
+    id: "claude-fable-5",
+    name: "Claude Fable 5",
+    description: "Fast Claude model for everyday agent work.",
     defaultReasoningEffort: "high",
     supportedReasoningEfforts: ["low", "medium", "high"],
   },
@@ -216,6 +240,14 @@ export const STORY_MODELS: AgentModelOption[] = [
     defaultReasoningEffort: "medium",
     supportedReasoningEfforts: ["low", "medium", "high"],
   },
+  {
+    provider: "antigravity",
+    id: "gemini-3.1-pro",
+    name: "Gemini 3.1 Pro",
+    description: "Discovered from the Antigravity ACP server.",
+    defaultReasoningEffort: "high",
+    supportedReasoningEfforts: ["low", "high"],
+  },
 ];
 
 export const STORY_AGENT_STATUS: AgentStatus = {
@@ -250,6 +282,51 @@ export const STORY_AGENT_STATUS: AgentStatus = {
   fullAccess: true,
 };
 
+/**
+ * A Team API v8 host can run a provider that this build does not know. The preview's team server
+ * has one such agent, its model and its status row, so the pickers show the update hint.
+ */
+export const STORY_FOREIGN_SERVER_ID = "team";
+
+function requireForeignProvider(id: string): ForeignProviderId {
+  if (!isForeignProviderId(id)) throw new Error(`${id} is a provider that this build knows.`);
+  return id;
+}
+
+const STORY_FOREIGN_PROVIDER = requireForeignProvider("omp");
+
+export const STORY_FOREIGN_AGENT: ClientAgentSummary = {
+  ...requireFixture(STORY_AGENT_SUMMARIES[0], "Story agent summary"),
+  id: "omp-helper",
+  name: "Oh My Pi helper",
+  title: "Coding agent",
+  provider: STORY_FOREIGN_PROVIDER,
+  model: "omp/default",
+};
+
+export const STORY_FOREIGN_MODEL: ClientAgentModelOption = {
+  provider: STORY_FOREIGN_PROVIDER,
+  id: "omp/default",
+  name: "Default",
+  description: "Served by the host's Oh My Pi.",
+  defaultReasoningEffort: "medium",
+  supportedReasoningEfforts: ["medium"],
+};
+
+/** `status` with the foreign provider's row, as a v8 host sends it. */
+export function withStoryForeignProvider(status: AgentStatus): AgentStatus {
+  const value = {
+    ...status,
+    providers: [
+      ...(status.providers ?? []),
+      { id: "omp", displayName: "Oh My Pi", state: "available", version: "18.8.4", message: null, email: null },
+    ],
+  };
+  // The status decoder keeps a row whose id this build does not know, as it does for a host's status.
+  if (!isAgentStatus(value)) throw new Error("The foreign story status is not valid.");
+  return value;
+}
+
 export const STORY_USAGE: AccountUsage = {
   limits: [
     {
@@ -266,6 +343,11 @@ export const STORY_USAGE: AccountUsage = {
       id: "grok",
       primary: null,
       secondary: { usedPercent: 22, windowDurationMins: 10_080, resetsAt: 1_787_040_000 },
+    },
+    {
+      id: "cursor",
+      primary: { usedPercent: 37, windowDurationMins: 43_200, resetsAt: 1_788_220_800 },
+      secondary: { usedPercent: 82, windowDurationMins: 43_200, resetsAt: 1_788_220_800 },
     },
   ],
 };
@@ -548,7 +630,7 @@ export const STORY_DIRECT_SNAPSHOTS: Record<string, DirectConversationSnapshot> 
   },
 };
 
-export const STORY_SERVERS: ServerSummary[] = [
+export const STORY_SERVERS: [ServerSummary, ...ServerSummary[]] = [
   {
     id: "local",
     name: "Local",
@@ -593,6 +675,7 @@ export const STORY_SERVERS: ServerSummary[] = [
     active: false,
     hostedSleep: "sleeping",
     hostedIssue: null,
+    hostedStart: null,
   },
 ];
 

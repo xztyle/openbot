@@ -39,32 +39,6 @@ The account service has a second, unrelated database — Cloudflare D1 — and i
 shape: those migrations are reversible but race a deploy. `apps/auth-api/AGENTS.md` owns it — nothing in this
 directory touches `apps/auth-api/migrations/`.
 
-## Waiting in a backend test
-
-`*.test.ts` here runs in the `node` vitest project with no DOM. The barriers this directory already
-offers, in order of preference:
-
-| Barrier | Use it for |
-| --- | --- |
-| `waitForQueue(service, agentId, check)` — `agent-service-test-harness.ts` | A queue state, such as a delivery that completed. It checks now and on each `queue-changed` event, not on a timer. A change after the call without an event times out; a change before the call passes with no event. |
-| `waitFor(predicate)` — same file | Anything else driven by the fake provider process. Polls to a deadline and fails naming *the predicate that never held*, printing the source of the check. |
-| `nextRoutinesChanged(service, agentId)` — same file | One named `AgentEvent`. Resolves on the event; the pattern generalizes to any other event you need. |
-| `callOpenBotTool(...)` / `expectOpenBotToolError(...)` | A tool round trip. Both already contain the wait. |
-| `await service.someMethod()` | A promise the code under test already returns. Prefer it over observing a side effect of the same call. |
-| `vi.waitFor(() => expect(...))` | A spy or a fake reaching a count, where there is no domain event to hang off. |
-| `vi.useFakeTimers()` + `vi.advanceTimersByTime(n)` | A debounce, a retry backoff, a schedule. Advancing the clock is input, not waiting. |
-
-`test-deadlines.ts` is why `waitFor` reports before vitest does: `TEST_TIMEOUT_MS` is derived
-from `HARNESS_WAIT_TIMEOUT_MS` rather than written down twice, so a stalled wait fails with the
-condition rather than with vitest's generic "test timed out". Never raise a `vi.waitFor` timeout to
-make a test pass — a longer timeout is the sleep the `no-sleep-in-tests` rule rejected, one layer
-down. Find the barrier, or add one.
-
-**A fixed delay is only ever right as input**, never as a wait: modelling latency in a fake, testing
-that a debounce does *not* fire early, and mtime granularity on a filesystem. All three read as
-"this delay is the thing under test". If the delay is there so the code has time to finish, it is
-wrong.
-
 ## Size
 
 `mailbox-store.ts` owns mailbox state and database writes. `attachment-files.ts` owns draft and
@@ -74,7 +48,7 @@ and mailbox commit succeeds. Keep deletion-outbox completion in the store, after
 
 The two that used to be larger are both worth copying. `agent-service.ts` was split into one
 controller per concern, each constructed and owned by the service; `openbot-database.ts` was split
-into modules under `database/`, leaving a ~300-line facade that had to keep its class name, instance
+into modules under `database/`, leaving a ~560-line facade that had to keep its class name, instance
 identity, constructor signature and public surface because callers reach past it into `connection`
 and `dispatch`. The shape in both: one class per file, kebab-case, `<Name>Options` + `<Name>`,
 `readonly #` fields, a constructor that only assigns, and a doc comment saying what the class

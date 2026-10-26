@@ -1,13 +1,12 @@
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
-import type { InstalledSkill, QueueDelivery, QueueHold, QueueSteerFallback } from "@openbot/contracts/ipc";
+import type { QueueDelivery, QueueHold, QueueSteerFallback } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
-import { Button, ChevronDown, ChevronUp, ConfirmDialog } from "@openbot/ui";
+import { Button, ChevronDown, ChevronUp, ConfirmDialog, LabelTooltip, LabelTooltipTrigger, Plus } from "@openbot/ui";
 import { prefersReducedMotion } from "@openbot/ui/utils";
-import { createEffect, createMemo, createSignal, createUniqueId, For, onCleanup, Show, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js";
 import { createVerticalDragPreview } from "../../components/createVerticalDragPreview";
-import type { AgentProfile } from "../../data";
+import type { ComposerAgent, ComposerSkill } from "../../data";
 import { useText } from "../../text";
-import { AnchoredTooltip } from "./AnchoredTooltip";
 import { fileBadge } from "./AttachmentCards";
 import { EditIcon, QueueIcon, SteerIcon, TrashIcon } from "./ConversationIcons";
 import { createSmoothHeightResize } from "./createSmoothHeightResize";
@@ -15,12 +14,14 @@ import { createSmoothHeightResize } from "./createSmoothHeightResize";
 interface QueuePanelProps {
   deliveries: QueueDelivery[];
   /** Why the queue is waiting, when the cause is not a turn this conversation can show. */
-  hold?: QueueHold | null;
-  agents?: AgentProfile[];
-  skills?: InstalledSkill[];
-  editingDeliveryId?: string | null;
+  hold?: QueueHold | null | undefined;
+  agents?: ComposerAgent[];
+  skills?: ComposerSkill[] | undefined;
+  editingDeliveryId?: string | null | undefined;
   canSteer: boolean;
   onSteer: (deliveryId: string) => void;
+  /** Starts a separate task with a queued message. Absent where the host keeps no tasks. */
+  onRunAsTask?: ((deliveryId: string) => void) | undefined;
   onCancel: (deliveryId: string) => void;
   /**
    * Cancels every queued message and then stops the running turn. The caller orders the two: the
@@ -29,6 +30,8 @@ interface QueuePanelProps {
   onStopAndClear?: (() => void) | undefined;
   onEdit: (delivery: QueueDelivery) => void;
   onReorder: (deliveryIds: string[]) => void;
+  /** `floating` is the glass queue over a browser page, with quiet glass row actions. */
+  variant?: "docked" | "floating";
 }
 
 interface DragSlot {
@@ -47,8 +50,6 @@ export function QueuePanel(props: QueuePanelProps) {
   const [removingIds, setRemovingIds] = createSignal<ReadonlySet<string>>(new Set());
   const [editingExitId, setEditingExitId] = createSignal<string | null>(null);
   const [hiddenEditingId, setHiddenEditingId] = createSignal<string | null>(null);
-  const actionTooltipId = `queue-action-tooltip-${createUniqueId()}`;
-  const [actionTooltip, setActionTooltip] = createSignal<{ anchor: HTMLElement; content: string } | null>(null);
   let queueList: HTMLDivElement | undefined;
   let queueResizeContainer: HTMLDivElement | undefined;
   let dragSlots: DragSlot[] = [];
@@ -364,9 +365,10 @@ export function QueuePanel(props: QueuePanelProps) {
   function messagePreview(delivery: QueueDelivery): string {
     const agentNames = new Map((props.agents ?? []).map((agent) => [agent.id, agent.name]));
     const skillNames = new Map((props.skills ?? []).map((skill) => [skill.skillId, skill.name]));
-    const text = expandChatTagReferences(delivery.text.trim(), (reference) =>
-      reference.kind === "agent" ? agentNames.get(reference.id) : skillNames.get(reference.id),
-    );
+    const text = expandChatTagReferences(delivery.text.trim(), (reference) => {
+      if (reference.kind === "quote") return `“${reference.name}”`;
+      return reference.kind === "agent" ? agentNames.get(reference.id) : skillNames.get(reference.id);
+    });
     return text || delivery.attachments.map((attachment) => attachment.name).join(", ") || t("queue.attachment");
   }
 
@@ -375,18 +377,6 @@ export function QueuePanel(props: QueuePanelProps) {
     return name
       ? t("queue.hold.named", { name, channel: hold.channelName })
       : t("queue.hold.unnamed", { channel: hold.channelName });
-  }
-
-  function openActionTooltip(anchor: HTMLElement, content: string) {
-    setActionTooltip({ anchor, content });
-  }
-
-  function closeActionTooltip(anchor: HTMLElement) {
-    if (actionTooltip()?.anchor === anchor) setActionTooltip(null);
-  }
-
-  function closeActionTooltipOnEscape(event: KeyboardEvent) {
-    if (event.key === "Escape" && event.currentTarget instanceof HTMLElement) closeActionTooltip(event.currentTarget);
   }
 
   return (
@@ -398,6 +388,7 @@ export function QueuePanel(props: QueuePanelProps) {
             "agent-queue-panel-dragging": Boolean(draggedId()),
           },
         ]}
+        data-variant={props.variant ?? "docked"}
         aria-label={t("queue.label")}
         onDragOver={(event) => {
           if (!draggedId()) return;
@@ -540,74 +531,69 @@ export function QueuePanel(props: QueuePanelProps) {
                           </span>
                         )}
                       </Show>
-                      <Button
-                        variant="ghost"
-                        type="button"
-                        class="agent-queue-steer"
-                        disabled={!props.canSteer || !actionable}
-                        aria-describedby={actionTooltipId}
-                        aria-label={t("queue.item.steerLabel", { position: delivery.position ?? "" })}
-                        onPointerEnter={(event) => openActionTooltip(event.currentTarget, t("queue.item.steerTooltip"))}
-                        onMouseEnter={(event) => openActionTooltip(event.currentTarget, t("queue.item.steerTooltip"))}
-                        onPointerLeave={(event) => closeActionTooltip(event.currentTarget)}
-                        onMouseLeave={(event) => closeActionTooltip(event.currentTarget)}
-                        onFocus={(event) => openActionTooltip(event.currentTarget, t("queue.item.steerTooltip"))}
-                        onBlur={(event) => closeActionTooltip(event.currentTarget)}
-                        onKeyDown={closeActionTooltipOnEscape}
-                        onClick={() => {
-                          setActionTooltip(null);
-                          props.onSteer(delivery.id);
-                        }}
-                      >
-                        <SteerIcon />
-                        <span>{delivery.status === "starting" ? t("queue.item.steering") : t("queue.item.steer")}</span>
-                      </Button>
-                      <Button
-                        variant="destructive-ghost"
-                        type="button"
-                        class="agent-queue-icon-button agent-queue-delete"
-                        disabled={delivery.status !== "queued"}
-                        data-cuelume-tap="close"
-                        aria-describedby={actionTooltipId}
-                        aria-label={t("queue.item.deleteLabel", { position: delivery.position ?? "" })}
-                        onPointerEnter={(event) =>
-                          openActionTooltip(event.currentTarget, t("queue.item.deleteTooltip"))
-                        }
-                        onMouseEnter={(event) => openActionTooltip(event.currentTarget, t("queue.item.deleteTooltip"))}
-                        onPointerLeave={(event) => closeActionTooltip(event.currentTarget)}
-                        onMouseLeave={(event) => closeActionTooltip(event.currentTarget)}
-                        onFocus={(event) => openActionTooltip(event.currentTarget, t("queue.item.deleteTooltip"))}
-                        onBlur={(event) => closeActionTooltip(event.currentTarget)}
-                        onKeyDown={closeActionTooltipOnEscape}
-                        onClick={() => {
-                          setActionTooltip(null);
-                          if (editing) setDeleteHeldId(delivery.id);
-                          else requestCancel(delivery.id);
-                        }}
-                      >
-                        <TrashIcon />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        type="button"
-                        class="agent-queue-icon-button agent-queue-edit"
-                        disabled={!actionable}
-                        aria-describedby={actionTooltipId}
-                        aria-label={t("queue.item.editLabel", { position: delivery.position ?? "" })}
-                        onPointerEnter={(event) => openActionTooltip(event.currentTarget, t("queue.item.editTooltip"))}
-                        onMouseEnter={(event) => openActionTooltip(event.currentTarget, t("queue.item.editTooltip"))}
-                        onPointerLeave={(event) => closeActionTooltip(event.currentTarget)}
-                        onMouseLeave={(event) => closeActionTooltip(event.currentTarget)}
-                        onFocus={(event) => openActionTooltip(event.currentTarget, t("queue.item.editTooltip"))}
-                        onBlur={(event) => closeActionTooltip(event.currentTarget)}
-                        onKeyDown={closeActionTooltipOnEscape}
-                        onClick={() => {
-                          setActionTooltip(null);
-                          props.onEdit(delivery);
-                        }}
-                      >
-                        <EditIcon />
-                      </Button>
+                      <LabelTooltip content={t("queue.item.steerTooltip")}>
+                        <LabelTooltipTrigger
+                          as={Button}
+                          variant="ghost"
+                          type="button"
+                          class="agent-queue-steer"
+                          disabled={!props.canSteer || !actionable}
+                          aria-label={t("queue.item.steerLabel", { position: delivery.position ?? "" })}
+                          onClick={() => props.onSteer(delivery.id)}
+                        >
+                          <SteerIcon />
+                          <span>
+                            {delivery.status === "starting" ? t("queue.item.steering") : t("queue.item.steer")}
+                          </span>
+                        </LabelTooltipTrigger>
+                      </LabelTooltip>
+                      <Show when={props.onRunAsTask}>
+                        {(runAsTask) => (
+                          <LabelTooltip content={t("queue.item.runAsTask")}>
+                            <LabelTooltipTrigger
+                              as={Button}
+                              variant="ghost"
+                              type="button"
+                              class="agent-queue-icon-button agent-queue-run-as-task"
+                              disabled={!actionable}
+                              aria-label={t("queue.item.runAsTaskLabel", { position: delivery.position ?? "" })}
+                              onClick={() => runAsTask()(delivery.id)}
+                            >
+                              <Plus aria-hidden="true" />
+                            </LabelTooltipTrigger>
+                          </LabelTooltip>
+                        )}
+                      </Show>
+                      <LabelTooltip content={t("queue.item.deleteTooltip")}>
+                        <LabelTooltipTrigger
+                          as={Button}
+                          variant="destructive-ghost"
+                          type="button"
+                          class="agent-queue-icon-button agent-queue-delete"
+                          disabled={delivery.status !== "queued"}
+                          data-cuelume-tap="close"
+                          aria-label={t("queue.item.deleteLabel", { position: delivery.position ?? "" })}
+                          onClick={() => {
+                            if (editing) setDeleteHeldId(delivery.id);
+                            else requestCancel(delivery.id);
+                          }}
+                        >
+                          <TrashIcon />
+                        </LabelTooltipTrigger>
+                      </LabelTooltip>
+                      <LabelTooltip content={t("queue.item.editTooltip")}>
+                        <LabelTooltipTrigger
+                          as={Button}
+                          variant="ghost"
+                          type="button"
+                          class="agent-queue-icon-button agent-queue-edit"
+                          disabled={!actionable}
+                          aria-label={t("queue.item.editLabel", { position: delivery.position ?? "" })}
+                          onClick={() => props.onEdit(delivery)}
+                        >
+                          <EditIcon />
+                        </LabelTooltipTrigger>
+                      </LabelTooltip>
                     </div>
                   </fieldset>
                 );
@@ -659,9 +645,6 @@ export function QueuePanel(props: QueuePanelProps) {
         cancelLabel={t("queue.deleteHeld.keep")}
         initialFocus="cancel"
       />
-      <Show when={actionTooltip()}>
-        {(current) => <AnchoredTooltip id={actionTooltipId} anchor={current().anchor} content={current().content} />}
-      </Show>
     </>
   );
 }

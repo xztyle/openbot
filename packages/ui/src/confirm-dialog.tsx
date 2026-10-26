@@ -10,8 +10,15 @@ export type ConfirmDialogTone = "destructive" | "default";
 
 export interface ConfirmDialogProps {
   open: boolean;
-  /** Escape, an overlay click and Cancel call this. It is not called while the confirmation is pending. */
+  /**
+   * Escape, an overlay click and Cancel call this. It is not called while the confirmation is pending,
+   * unless `dismissWhilePending` is set.
+   */
   onCancel: () => void;
+  /** Keeps Cancel and Escape active while pending, for an action that continues after the dialog closes. */
+  dismissWhilePending?: boolean;
+  /** Removes Cancel, for example when the action is done and only the confirm button remains. */
+  hideCancel?: boolean;
   /**
    * A returned promise keeps the dialog pending until it settles. Handle a failure in the caller and
    * show it through `error`; the caller also closes the dialog on success.
@@ -23,6 +30,8 @@ export interface ConfirmDialogProps {
   children?: JSX.Element;
   /** Replaces the tone icon, for example with an agent avatar. */
   media?: JSX.Element;
+  /** Replaces the tone icon in the same frame. */
+  icon?: JSX.Element;
   tone?: ConfirmDialogTone;
   /** A string, or a `StableLabel` when the label changes while the dialog is open. */
   confirmLabel: JSX.Element;
@@ -34,6 +43,8 @@ export interface ConfirmDialogProps {
   error?: JSX.Element;
   /** The button that gets focus when the dialog opens. */
   initialFocus?: "confirm" | "cancel";
+  /** Receives the confirm button, so that the caller can move focus to it after a change. */
+  confirmRef?: (element: HTMLButtonElement) => void;
   /** Gets focus when the dialog closes, when the element that opened it closes with it, such as a menu item. */
   restoreFocusTarget?: HTMLElement | null | undefined;
 }
@@ -43,6 +54,7 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
   const [running, setRunning] = createSignal(false);
   const pending = () => Boolean(props.pending) || running();
   const tone = () => props.tone ?? "destructive";
+  const cancelDisabled = () => pending() && !props.dismissWhilePending;
   let confirmButton: HTMLButtonElement | undefined;
   let cancelButton: HTMLButtonElement | undefined;
   // A controlled dialog has no Kobalte trigger, so it keeps the element that opened it itself.
@@ -68,7 +80,7 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
     <AlertDialog.Root
       open={props.open}
       onOpenChange={(open) => {
-        if (!open && !pending()) props.onCancel();
+        if (!open && !cancelDisabled()) props.onCancel();
       }}
     >
       <AlertDialog.Portal>
@@ -80,7 +92,7 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
               event.preventDefault();
               const opener = document.activeElement;
               restoreTarget = opener instanceof HTMLElement && opener !== document.body ? opener : undefined;
-              const target = props.initialFocus === "cancel" ? cancelButton : confirmButton;
+              const target = props.initialFocus === "cancel" && !props.hideCancel ? cancelButton : confirmButton;
               target?.focus({ preventScroll: true });
             }}
             onCloseAutoFocus={(event) => {
@@ -101,7 +113,7 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
                 when={props.media}
                 fallback={
                   <span class="ui-confirm-dialog-icon" aria-hidden="true">
-                    {tone() === "destructive" ? <Trash2 /> : <ShieldCheck />}
+                    {props.icon ?? (tone() === "destructive" ? <Trash2 /> : <ShieldCheck />)}
                   </span>
                 }
               >
@@ -132,21 +144,24 @@ export function ConfirmDialog(props: ConfirmDialogProps): JSX.Element {
               </div>
             </div>
             <footer class="ui-confirm-dialog-actions">
-              <Button
-                ref={(element: HTMLButtonElement) => {
-                  cancelButton = element;
-                }}
-                variant="ghost"
-                type="button"
-                data-cuelume-tap="close"
-                disabled={pending()}
-                onClick={() => props.onCancel()}
-              >
-                {props.cancelLabel ?? t("common.cancel")}
-              </Button>
+              <Show when={!props.hideCancel}>
+                <Button
+                  ref={(element: HTMLButtonElement) => {
+                    cancelButton = element;
+                  }}
+                  variant="ghost"
+                  type="button"
+                  data-cuelume-tap="close"
+                  disabled={cancelDisabled()}
+                  onClick={() => props.onCancel()}
+                >
+                  {props.cancelLabel ?? t("common.cancel")}
+                </Button>
+              </Show>
               <Button
                 ref={(element: HTMLButtonElement) => {
                   confirmButton = element;
+                  props.confirmRef?.(element);
                 }}
                 variant={tone() === "destructive" ? "destructive" : "default"}
                 type="button"

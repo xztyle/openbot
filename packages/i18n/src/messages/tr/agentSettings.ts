@@ -2,6 +2,14 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/agentSettings";
 
 export const messages = {
+  "agentSettings.session.title": "Sağlayıcı ayarları",
+  "agentSettings.session.readFailed": "Sağlayıcı ayarları okunamadı.",
+  "agentSettings.session.pending": "Kaydedilen değişiklikler sonraki turdan önce uygulanır.",
+  "agentSettings.session.unavailable":
+    "Kaydedilen {value} değeri kullanılamıyor. Başka bir değer seçin veya sıfırlayın.",
+  "agentSettings.session.effective": "Geçerli sağlayıcı değeri: {value}",
+  "agentSettings.session.reset": "Ayarı sıfırla",
+  "agentSettings.session.resetNamed": "{name} ayarını sıfırla",
   "agentSettings.label": "Ajan ayarları",
   "agentSettings.title": "Ayarlar",
   "agentSettings.backToDetails": "Ayrıntılara geri dön",
@@ -9,6 +17,27 @@ export const messages = {
   "agentSettings.backToSettings": "Ayarlara dön",
   "agentSettings.permissions.title": "İzinler",
   "agentSettings.advanced.title": "Gelişmiş",
+  "agentSettings.backupModels.title": "Yedek modeller",
+  "agentSettings.backupModels.valueAsk": "Önce sor",
+  "agentSettings.backupModels.valueAutomatic": "Otomatik",
+  "agentSettings.backupModels.valueCount": { one: "{mode} · {count}", other: "{mode} · {count}" },
+  "agentSettings.backupModels.intro":
+    "{model}, {name} yazmaya başlamadan önce kullanım sınırına ulaşırsa {name} hangi modelin kullanılacağını size sorar.",
+  "agentSettings.backupModels.introAutomatic":
+    "{model}, {name} yazmaya başlamadan önce kullanım sınırına ulaşırsa veya bir sağlayıcı hatasıyla başarısız olursa {name} sıradaki ilk uygun modele geçer.",
+  "agentSettings.backupModels.ask": "Değiştirmeden önce sor",
+  "agentSettings.backupModels.order": "Sıra",
+  "agentSettings.backupModels.listLabel": "Yedek modeller, sırayla",
+  "agentSettings.backupModels.empty": "Sıra ayarlanmadı. {name} uygun her modeli sunar.",
+  "agentSettings.backupModels.add": "Yedek model ekle",
+  "agentSettings.backupModels.moveUp": "{model} modelini yukarı taşı",
+  "agentSettings.backupModels.moveDown": "{model} modelini aşağı taşı",
+  "agentSettings.backupModels.remove": "{model} modelini kaldır",
+  "agentSettings.backupModels.limited": "Kullanım sınırına ulaşıldı · atlandı",
+  "agentSettings.backupModels.unavailable": "Şu an uygun değil · atlandı",
+  "agentSettings.backupModels.withAccount": "{model} · {account}",
+  "agentSettings.backupModels.note":
+    "{name} yazmaya başladıktan sonra asla model değiştirmez. Sınır bittiğinde veya bir sağlayıcı hatasından 10 dakika sonra {model} modeline geri döner.",
   "agentSettings.groups.brain": "Beyin",
   "agentSettings.groups.knows": "Bilgi",
   "agentSettings.groups.does": "Görevler",
@@ -28,7 +57,7 @@ export const messages = {
   "agentSettings.avatar.image": "Görsel",
   "agentSettings.avatar.replaceImage": "Görseli değiştir",
   "agentSettings.avatar.uploadImage": "Görsel yükle",
-  "agentSettings.avatar.imageHint": "PNG, JPEG veya WebP · kare kırpma",
+  "agentSettings.avatar.imageHint": "PNG, JPEG, GIF veya WebP · kare kırpma",
   "agentSettings.avatar.generatedFace": "Oluşturulan yüz",
   "agentSettings.avatar.resetToId": "Kimliğe sıfırla",
   "agentSettings.avatar.newSet": "Yeni küme",
@@ -43,9 +72,8 @@ export const messages = {
   "agentSettings.avatar.saveFailed": "Ajan avatarı kaydedilemedi.",
   "agentSettings.avatar.processFailed": "Ajan avatarı işlenemedi.",
   "agentSettings.runtime.model": "Ajan modeli",
-  "agentSettings.runtime.modelBusy": "Model değiştirmeden önce mevcut çalışmanın bitmesini bekleyin.",
   "agentSettings.runtime.modelUnavailable": "Modeller bir ajan CLI'sı bağlandıktan sonra kullanılabilir.",
-  "agentSettings.runtime.reasoning": "Akıl Yürütme",
+  "agentSettings.runtime.reasoning": "Akıl yürütme",
   "agentSettings.runtime.reasoningLabel": "Ajan akıl yürütme düzeyi",
   "agentSettings.runtime.selectReasoning": "Akıl yürütmeyi seçin",
   "agentSettings.runtime.reasoningSetByProvider": "{provider} belirler",
@@ -53,13 +81,17 @@ export const messages = {
   "agentSettings.runtime.accessLabel": "Ajan erişimi",
   "agentSettings.runtime.busyMessage": "Çalışırken",
   "agentSettings.runtime.busyMessageLabel": "Ajan çalışırken gönderilen mesajlar",
+  "agentSettings.runtime.taskLimit": "Eş zamanlı görev",
+  "agentSettings.runtime.taskLimitLabel": "Aynı anda çalışan görevler",
   "agentSettings.runtime.workingDirectory": "Çalışma dizini",
   "agentSettings.runtime.notAvailable": "Henüz kullanılamıyor",
   "agentSettings.runtime.fullAccessNote":
     "Ajan, çalışma alanından ve paylaşılan klasörden tam bilgisayar erişimiyle çalışır.",
-  "agentSettings.runtime.claudeApprovalNote": "Claude, size sorduğu sorular hariç, onay istemeden hareket eder.",
-  "agentSettings.runtime.providerApprovalNote": "Sağlayıcıya bağlı olarak, hassas komutlar önce onay isteyebilir.",
+  "agentSettings.runtime.askNote":
+    "Bir OpenBot aracı kullanmadan veya bir site yayımlamadan önce ve sağlayıcısı onay istediğinde size sorar.",
+  "agentSettings.runtime.fullNote": "Size sorduğu sorular hariç, sormadan hareket eder.",
   "agentSettings.access.workspace": "Yalnızca çalışma alanı",
+  "agentSettings.access.ask": "Önce sor",
   "agentSettings.access.full": "Tam erişim",
   "agentSettings.busyMessage.appDefaultQueue": "Uygulama varsayılanı (Kuyruk)",
   "agentSettings.busyMessage.appDefaultSteer": "Uygulama varsayılanı (Yönlendir)",
@@ -67,6 +99,9 @@ export const messages = {
   "agentSettings.busyMessage.steer": "Yönlendir",
   "agentSettings.busyMessage.steerUnsupported":
     "{provider} çalışan bir turu yönlendiremez. Çalışırken gönderilen mesajlar kuyrukta bekler.",
+  "agentSettings.taskLimit.default": "Varsayılan ({count})",
+  "agentSettings.taskLimit.oneTurn":
+    "{provider} aynı anda bir tur çalıştırır. Bu ajanın görevleri ve sohbeti birbirini bekler.",
   "agentSettings.notifications.title": "Bildirimler",
   "agentSettings.newChat.title": "Yeni sohbet",
   "agentSettings.newChat.description": "Ajan bu sohbeti unutur. Yapılandırması kalır.",
@@ -77,36 +112,53 @@ export const messages = {
   "agentSettings.newChat.confirm": "Yeni sohbet başlat",
   "agentSettings.newChat.failed": "Yeni bir sohbet başlatılamadı.",
   "agentSettings.fullAccess.title": "Bu ajana tam erişim verilsin mi?",
+  "agentSettings.fullAccess.askTitle": "Bu ajan çalışma alanının dışında çalışabilsin mi?",
   "agentSettings.fullAccess.description":
     "Ajan, kullanıcı hesabınızın erişebileceği herhangi bir dosyayı okuyabilir, değiştirebilir ve silebilir, herhangi bir komutu çalıştırabilir ve ağı kullanabilir. Yanlış anlaşılan bir talimat veya kötü amaçlı bir web sayfası kişisel dosyalarınıza ulaşabilir.",
-  "agentSettings.fullAccess.cancel": "Yalnızca çalışma alanını koru",
+  "agentSettings.fullAccess.noApproval":
+    "Ajan bundan sonra size önce sormadan komut çalıştırır, dosyaları değiştirir, araç kullanır ve site yayımlar.",
   "agentSettings.fullAccess.confirm": "Tam erişime izin ver",
+  "agentSettings.fullAccess.askConfirm": "Önce sor",
   "agentSettings.links.usage": "Kullanım",
   "agentSettings.links.memories": "Bellekler",
-  "agentSettings.links.memoriesCount": { one: "{count} kaydedildi", other: "{count} kaydedildi" },
+  "agentSettings.links.memoriesCount": { one: "{count} kayıtlı", other: "{count} kayıtlı" },
   "agentSettings.links.skills": "Beceriler",
-  "agentSettings.links.skillsCount": { one: "{count} atandı", other: "{count} atandı" },
+  "agentSettings.links.skillsCount": { one: "{count} atanmış", other: "{count} atanmış" },
   "agentSettings.links.tables": "Tablolar",
   "agentSettings.links.tablesCount": { one: "{count} tablo", other: "{count} tablo" },
   "agentSettings.links.files": "Dosyalar",
   "agentSettings.links.routines": "Rutinler",
-  "agentSettings.links.routinesCount": { one: "{count} yapılandırıldı", other: "{count} yapılandırıldı" },
+  "agentSettings.links.routinesCount": { one: "{count} yapılandırılmış", other: "{count} yapılandırılmış" },
   "agentSettings.runtime.workspaceNote":
     "Yalnızca çalışma alanı, yazma işlemlerini bu ajanın çalışma alanı, paylaşılan klasör ve geçici klasörlerle sınırlar. Okuma ve ağ erişimi kullanılabilir kalır.",
-  "agentSettings.runtime.workspaceEnforcedCommand":
-    "Dışarıya yazması gereken bir komut, Otomatik onay açık olsa bile önce size sorar.",
+  "agentSettings.runtime.workspaceEnforcedCommand": "Dışarıya yazması gereken bir komut önce size sorar.",
   "agentSettings.runtime.workspaceEnforcedClaude":
-    "Dışarıdaki bir dosya düzenlemesi, Otomatik onay açık olsa bile önce size sorar. Bir komut dışarıya yazamaz.",
+    "Dışarıdaki bir dosya düzenlemesi önce size sorar. Bir komut dışarıya yazamaz.",
   "agentSettings.runtime.workspaceUnlimited":
     "Bilgisayar Kullanımı ve OpenBot tarayıcısı sınırlandırılmamıştır; Bilgisayar Kullanımını aşağıdan kapatabilirsiniz.",
   "agentSettings.computerUse.title": "Bilgisayar Kullanımı",
   "agentSettings.computerUse.description": "Bu ajanın bu bilgisayardaki uygulamaları kontrol etmesine izin verin",
   "agentSettings.automation.title": "Yerel betikler",
   "agentSettings.automation.description":
-    "Bu bilgisayardaki betiklerin bu ajanın rutinlerini çalıştırmasına izin verin",
+    "Ana makinedeki betiklerin mesaj göndermesine, rutinleri çalıştırmasına, soruları yanıtlamasına ve onay isteklerini kabul etmesine veya reddetmesine izin verin",
   "agentSettings.background.title": "Arka plan takım arkadaşı",
   "agentSettings.background.description":
     "Bu ajanı ajan listelerinizden gizleyin. Diğer ajanlarınızla çalışmaya devam eder. Kenar çubuğunun sonundaki Arka plan takım arkadaşları bölümünden açın.",
+  "agentSettings.agentNewChat.title": "Ajan yeni sohbetler başlatır",
+  "agentSettings.agentNewChat.description":
+    "Sohbeti uzadığında ajanın yeni bir sohbet başlatmasına izin verir. Önce notlarını kaydeder.",
+  "agentSettings.quickAcknowledgement.title": "Uzun görevlerden önce planı göster",
+  "agentSettings.quickAcknowledgement.description":
+    "Uzun bir görevden önce ajan planını gösterir. 10 sn sonra veya Başlat'a bastığınızda başlar.",
+  "agentSettings.browserProfile.label": "Tarayıcı profili",
+  "agentSettings.browserProfile.shared": "Paylaşılan",
+  "agentSettings.browserProfile.agent": "Yalnızca bu ajan",
+  "agentSettings.browserProfile.missing": "Silinmiş profil",
+  "agentSettings.browserProfile.new": "Yeni profil",
+  "agentSettings.browserProfile.manageTitle": "Tarayıcı profilleri",
+  "agentSettings.browserProfile.manageDescription":
+    "Her profil kendi oturum açma bilgilerini ve çerezlerini tutar. Bir değişiklik ajanın açık sekmelerini kapatır.",
+  "agentSettings.browserProfile.manage": "Yönet",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Tüm {provider} süreci bir korumalı alanda (sandbox) çalışır, bu nedenle dışarıya yazma işlemi başarısız olur. Yalnızca macOS'ta kullanılabilir.",
 } as const satisfies PartialTranslation<typeof source>;

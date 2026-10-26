@@ -1,6 +1,8 @@
 import { Effect } from "effect";
 import { routeRequest as routeHostedSiteRequest } from "../../../site-router/src/index";
 import { type AuthRetentionResult, pruneExpiredAuthData } from "./auth-data-retention";
+import { BillingSales } from "./billing-sales";
+import { captureBillingSnapshot } from "./billing-snapshots";
 import { canonicalHostRedirect, permanentTrailingSlashRedirect } from "./canonical-redirect";
 import { runApiEffect } from "./effect-runtime";
 import { createHostedBilling } from "./hosted-billing";
@@ -8,7 +10,8 @@ import type { HostedServerBindings } from "./hosted-server-service";
 import { HostedSiteService } from "./hosted-site-service";
 import { enforceMarketplaceIngress, MarketplaceRateLimitError } from "./marketplace-request-policy";
 import { pageMarkdownResponse } from "./page-markdown";
-import { deliverPendingRemoteAuthEvents, RemoteControlPlane } from "./remote-control-plane";
+import { deliverPendingRemoteAuthEvents, RemoteControlPlane, type RemoteFailure } from "./remote-control-plane";
+import { SalesAnalyticsDelivery } from "./sales-analytics-delivery";
 import type { WorkerBindings } from "./types";
 
 type WorkerFetch = (request: Request) => Response | Promise<Response>;
@@ -27,11 +30,16 @@ export function createWorkerHandler(
     async fetch(
       request: Request,
       bindings: Pick<WorkerBindings, "MARKETPLACE_INGRESS_RATE_LIMITER"> &
-        Partial<Pick<WorkerBindings, "SITES" | "SITE_LOCAL_ORIGIN">>,
+        Partial<
+          Pick<WorkerBindings, "SITES" | "SITE_LOCAL_ORIGIN" | "DB" | "OPENPANEL_CLIENT_ID" | "OPENPANEL_CLIENT_SECRET">
+        >,
       context?: WorkerExecutionContext,
     ) {
       const hostRedirect = canonicalHostRedirect(request);
       if (hostRedirect) return hostRedirect;
+      if (request.method === "GET" && new URL(request.url).pathname === "/billing/checkout-return") {
+        return runApiEffect(checkoutReturnResponse(request, bindings));
+      }
       const earlyResponse = await runApiEffect(
         Effect.gen(function* () {
           const localSiteResponse = yield* serveLocalHostedSite(request, bindings);
@@ -99,11 +107,12 @@ export function createWorkerHandler(
             Effect.exit(
               bindings.SITES ? new HostedSiteService(bindings.DB, bindings.SITES).cleanup(now) : Effect.succeed(null),
             ),
+            Effect.exit(tickSalesAnalytics(bindings, now)),
           ],
           { concurrency: "unbounded" },
         ).pipe(
-          Effect.flatMap(([retentionExit, deliveryExit, sitesExit]) =>
-            Effect.all([retentionExit, deliveryExit, sitesExit]),
+          Effect.flatMap(([retentionExit, deliveryExit, sitesExit, salesExit]) =>
+            Effect.all([retentionExit, deliveryExit, sitesExit, salesExit]),
           ),
         ),
       );
@@ -112,6 +121,64 @@ export function createWorkerHandler(
     },
   } satisfies ExportedHandler<WorkerBindings>;
 }
+
+type SalesBindings = Pick<WorkerBindings, "DB"> &
+  Partial<Pick<WorkerBindings, "STRIPE_SECRET_KEY" | "OPENPANEL_CLIENT_ID" | "OPENPANEL_CLIENT_SECRET">>;
+
+const tickSalesAnalytics = Effect.fn("SalesAnalytics.tick")(function* (bindings: SalesBindings, now: number) {
+  if (!bindings.OPENPANEL_CLIENT_ID?.trim() || !bindings.OPENPANEL_CLIENT_SECRET?.trim()) return;
+  const options = {
+    database: bindings.DB,
+    clientId: bindings.OPENPANEL_CLIENT_ID,
+    clientSecret: bindings.OPENPANEL_CLIENT_SECRET,
+    fetch: (input: string, init: RequestInit) => fetch(input, init),
+  };
+  const payments = yield* Effect.exit(new BillingSales(options).processPending());
+  const snapshot = yield* Effect.exit(captureBillingSnapshot(bindings, now));
+  const result = yield* new SalesAnalyticsDelivery(options).drain();
+  console.info("Sales analytics delivery completed.", result);
+  yield* payments;
+  yield* snapshot;
+});
+
+const checkoutReturnResponse = Effect.fn("BillingSales.returnResponse")(function* (
+  request: Request,
+  bindings: Partial<SalesBindings>,
+) {
+  const url = new URL(request.url);
+  const token = url.searchParams.get("token");
+  // Only a server plan Checkout has a return token, so the fallback page names that kind.
+  let destination = "/billing/return?kind=plan";
+  if (token && bindings.DB && bindings.OPENPANEL_CLIENT_ID && bindings.OPENPANEL_CLIENT_SECRET) {
+    const sales = new BillingSales({
+      database: bindings.DB,
+      clientId: bindings.OPENPANEL_CLIENT_ID,
+      clientSecret: bindings.OPENPANEL_CLIENT_SECRET,
+      fetch: (input, init) => fetch(input, init),
+    });
+    destination =
+      (yield* sales.returned(token).pipe(
+        Effect.catch(() =>
+          Effect.sync(() => {
+            console.warn("Checkout return analytics failed.");
+            return null;
+          }),
+        ),
+      )) ?? destination;
+  }
+  // Stripe opens this endpoint only as the cancel URL of Checkout. The stored return URL already has
+  // the flag; the fallback page needs it too, so that it does not say that billing changed.
+  const location = new URL(destination, url.origin);
+  location.searchParams.set("cancelled", "1");
+  return new Response(null, {
+    status: 303,
+    headers: {
+      Location: location.href,
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+    },
+  });
+});
 
 type HostedServerTickBindingKey =
   | Exclude<keyof HostedServerBindings, "DB">
@@ -128,8 +195,15 @@ function tickHostedServers(
     Partial<Pick<WorkerBindings, HostedServerTickBindingKey>>,
   now: number,
 ) {
-  const remote = new RemoteControlPlane(bindings);
-  // The cron waits for the analytics sends itself. They never reject.
+  // The check sends the queued auth events once, after its last change. A delivery reads the time when
+  // it starts, so it reads every event that the check queued.
+  let authEvents: Effect.Effect<void, RemoteFailure> | null = null;
+  const remote = new RemoteControlPlane(bindings, {
+    schedule: (delivery) => {
+      authEvents = delivery;
+    },
+  });
+  // The cron waits for the analytics sends and server start commands itself. They never reject.
   const sends: Effect.Effect<void>[] = [];
   return Effect.gen(function* () {
     const result = yield* createHostedBilling(bindings, {
@@ -139,7 +213,20 @@ function tickHostedServers(
     }).hosting.tick(now);
     return result;
   }).pipe(
-    Effect.ensuring(Effect.suspend(() => Effect.all(sends, { concurrency: "unbounded", discard: true }))),
+    Effect.ensuring(
+      Effect.suspend(() =>
+        Effect.all(
+          [
+            ...sends,
+            // The next cron sends the events again.
+            (authEvents ?? Effect.void).pipe(
+              Effect.catch(() => Effect.sync(() => console.warn("Remote auth event delivery failed."))),
+            ),
+          ],
+          { concurrency: "unbounded", discard: true },
+        ),
+      ),
+    ),
     Effect.catch(() =>
       Effect.sync(() => {
         console.warn("Hosted server check failed.");
@@ -172,7 +259,7 @@ function serveLocalHostedSite(
   hostedUrl.port = "";
   return routeHostedSiteRequest(
     new Request(hostedUrl, request),
-    { SITES: bindings.SITES, SITE_SERVE_ENABLED: "true" },
+    { SITES: bindings.SITES, SITE_SERVE_ENABLED: "true", ACCOUNT_ORIGIN: configuredOrigin.origin },
     Date.now(),
   );
 }

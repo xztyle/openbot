@@ -1,9 +1,11 @@
-import type { AccountUsage, AvatarImageInput, CentralAuthState } from "@openbot/contracts/ipc";
+import type { AccountUsage, AccountUsageLimit, AvatarImageInput, CentralAuthState } from "@openbot/contracts/ipc";
 import { currentText } from "@openbot/ui/text";
 import { createMemo, createSignal, createStore, flush, onCleanup, onSettled } from "solid-js";
-import { desktopAnalytics } from "../../analytics";
+import { type DesktopAnalyticsProperties, desktopAnalytics } from "../../analytics";
 import { createSimpleContext } from "../../simple-context";
 import { accountPort } from "./account-port";
+
+type MobileConnectAction = DesktopAnalyticsProperties<"mobile_connect_action">["action"];
 
 /** How long the sign-in success animation holds the account out of the view. */
 const AUTH_SUCCESS_HOLD_MS = 600;
@@ -68,6 +70,8 @@ const Auth = createSimpleContext({
     /** The providers an event updated while the current refresh runs. Their rows are newer than it. */
     let accountUsageEventIds = new Set<string>();
     let authSuccessTimer: ReturnType<typeof setTimeout> | undefined;
+    /** The phones of the last list for this account. A phone that is new in a later list connected since then. */
+    let knownMobileDevices: ReadonlySet<string> | null = null;
 
     onCleanup(() => {
       if (authSuccessTimer !== undefined) clearTimeout(authSuccessTimer);
@@ -82,6 +86,7 @@ const Auth = createSimpleContext({
      */
     function applyCentralAuthState(state: CentralAuthState): void {
       desktopAnalytics.setUser(state.status === "signed_in" ? state.user : null);
+      if (state.status !== "signed_in") knownMobileDevices = null;
       const completedCodeChallenge = centralAuth().status === "code_sent" && state.status === "signed_in";
       if (state.status !== "signed_in") {
         if (authSuccessTimer !== undefined) clearTimeout(authSuccessTimer);
@@ -187,13 +192,18 @@ const Auth = createSimpleContext({
 
     const accountUsage = () => accountUsageState.data;
     const accountUsageRefreshRevision = () => accountUsageState.refreshRevision;
+    const accountUsageTargetKey = () => accountUsageState.targetKey;
 
+    /**
+     * Selects the target of the reading. The reading stays until a refresh for the new target replaces it,
+     * so the rail rings do not go away while providers finish their checks. `invalidateAccountUsage`
+     * drops it.
+     */
     function selectAccountUsageTarget(targetKey: string | null): void {
       if (accountUsageState.targetKey === targetKey) return;
       accountUsageRequestGeneration += 1;
       setAccountUsageState((state) => {
         state.targetKey = targetKey;
-        state.data = null;
       });
     }
 
@@ -213,10 +223,10 @@ const Auth = createSimpleContext({
         });
         return;
       }
-      for (const limit of usage.limits) accountUsageEventIds.add(limit.id);
+      for (const limit of usage.limits) accountUsageEventIds.add(usageLimitKey(limit));
       setAccountUsageState((state) => {
-        const byId = new Map((state.data?.limits ?? []).map((limit) => [limit.id, limit]));
-        for (const limit of usage.limits) byId.set(limit.id, limit);
+        const byId = new Map((state.data?.limits ?? []).map((limit) => [usageLimitKey(limit), limit]));
+        for (const limit of usage.limits) byId.set(usageLimitKey(limit), limit);
         state.data = { limits: [...byId.values()] };
       });
     }
@@ -230,9 +240,10 @@ const Auth = createSimpleContext({
         // The refresh reads every provider, so a row it omits has stopped reporting, such as a revoked
         // OpenCode Go key. It keeps only the rows an event updated after it started.
         setAccountUsageState((state) => {
-          const byId = new Map(usage.limits.map((limit) => [limit.id, limit]));
+          const byId = new Map(usage.limits.map((limit) => [usageLimitKey(limit), limit]));
           for (const limit of state.data?.limits ?? []) {
-            if (accountUsageEventIds.has(limit.id)) byId.set(limit.id, limit);
+            const key = usageLimitKey(limit);
+            if (accountUsageEventIds.has(key)) byId.set(key, limit);
           }
           state.data = { limits: [...byId.values()] };
         });
@@ -240,16 +251,40 @@ const Auth = createSimpleContext({
       return usage;
     }
 
-    function createMobileConnect() {
-      return accountPort().auth.createMobileConnect();
+    /** Runs a Mobile Connect call and records its result. A failure still rejects for the panel. */
+    function trackMobileConnect<Result>(action: MobileConnectAction, call: () => Promise<Result>): Promise<Result> {
+      return call().then(
+        (result) => {
+          desktopAnalytics.track("mobile_connect_action", { action, result: "succeeded" });
+          return result;
+        },
+        (error: unknown) => {
+          desktopAnalytics.track("mobile_connect_action", { action, result: "failed" });
+          throw error;
+        },
+      );
     }
 
-    function listMobileConnectedDevices() {
-      return accountPort().auth.listMobileConnectedDevices();
+    function createMobileConnect() {
+      return trackMobileConnect("code_shown", () => accountPort().auth.createMobileConnect());
+    }
+
+    async function listMobileConnectedDevices() {
+      const devices = await accountPort().auth.listMobileConnectedDevices();
+      const ids = new Set(devices.map((device) => device.sessionId));
+      const known = knownMobileDevices;
+      if (known) {
+        for (const id of ids) {
+          if (!known.has(id))
+            desktopAnalytics.track("mobile_connect_action", { action: "connected", result: "succeeded" });
+        }
+      }
+      knownMobileDevices = ids;
+      return devices;
     }
 
     function revokeMobileConnectedDevice(sessionId: string) {
-      return accountPort().auth.revokeMobileConnectedDevice(sessionId);
+      return trackMobileConnect("revoked", () => accountPort().auth.revokeMobileConnectedDevice(sessionId));
     }
 
     const signedInAccount = createMemo(() => {
@@ -265,6 +300,7 @@ const Auth = createSimpleContext({
       visibleSignedInAccount,
       accountUsage,
       accountUsageRefreshRevision,
+      accountUsageTargetKey,
       selectAccountUsageTarget,
       invalidateAccountUsage,
       applyAccountUsage,
@@ -276,6 +312,12 @@ const Auth = createSimpleContext({
       updateAccountName,
       updateAccountAvatar,
       createMobileConnect,
+      cancelMobileConnect: () => trackMobileConnect("cancelled", () => accountPort().auth.cancelMobileConnect()),
+      getMobileConnectLink: () => accountPort().auth.getMobileConnectLink(),
+      createMobileConnectLink: () =>
+        trackMobileConnect("link_created", () => accountPort().auth.createMobileConnectLink()),
+      revokeMobileConnectLink: () =>
+        trackMobileConnect("link_revoked", () => accountPort().auth.revokeMobileConnectLink()),
       listMobileConnectedDevices,
       revokeMobileConnectedDevice,
       listAccountSessions: () => accountPort().auth.listAccountSessions(),
@@ -286,3 +328,8 @@ const Auth = createSimpleContext({
 
 export const AuthProvider = Auth.provider;
 export const useAuth = Auth.use;
+
+/** One row for each account of a provider: the provider's own sign-in has no account. */
+function usageLimitKey(limit: AccountUsageLimit): string {
+  return `${limit.id}\n${limit.accountId ?? ""}`;
+}

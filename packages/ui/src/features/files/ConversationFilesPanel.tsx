@@ -1,7 +1,8 @@
 import { Button, Folder, X } from "@openbot/ui";
 import type { AgentProfile } from "@openbot/ui/data";
 import { useText } from "@openbot/ui/text";
-import { Show } from "solid-js";
+import { onSettled, Show } from "solid-js";
+import { createScrollFades } from "../../components/createScrollFades";
 import { FileList } from "./FileList";
 import { fileCountLabel, type StoredFileAction, type StoredFileRow } from "./files-view";
 
@@ -31,6 +32,8 @@ export interface ConversationFilesPanelProps {
  */
 export function ConversationFilesPanel(props: ConversationFilesPanelProps) {
   const { t, format } = useText();
+  const fades = createScrollFades();
+  onSettled(() => fades.stop);
   return (
     <aside
       class="browser-panel conversation-files-panel"
@@ -38,8 +41,8 @@ export function ConversationFilesPanel(props: ConversationFilesPanelProps) {
       style={props.width ? { "--browser-panel-width": `${props.width}px` } : undefined}
     >
       <header class="file-preview-header conversation-files-header">
-        <Folder class="file-preview-file-icon" aria-hidden="true" />
-        <h2>{t("files.conversation.title")}</h2>
+        <Folder class="file-preview-file-icon side-panel-pane-title" aria-hidden="true" />
+        <h2 class="side-panel-pane-title">{t("files.conversation.title")}</h2>
         <Show when={!props.loading}>
           <span class="conversation-files-summary">
             {t("files.conversation.summary", {
@@ -51,7 +54,7 @@ export function ConversationFilesPanel(props: ConversationFilesPanelProps) {
         <Button
           variant="ghost"
           type="button"
-          class="browser-toolbar-button"
+          class="browser-toolbar-button side-panel-pane-close"
           aria-label={t("files.conversation.close")}
           data-cuelume-tap="close"
           onClick={() => props.onClose()}
@@ -59,25 +62,28 @@ export function ConversationFilesPanel(props: ConversationFilesPanelProps) {
           <X class="browser-toolbar-icon" />
         </Button>
       </header>
-      <div class="conversation-files-content">
-        <FileList
-          label={t("files.conversation.label", { title: props.conversationTitle })}
-          files={props.files}
-          agents={props.agents}
-          showConversation={false}
-          compact
-          groupByDay
-          groupHeadingLevel={3}
-          loading={props.loading}
-          error={props.error}
-          onRetry={props.onRetry}
-          now={props.now}
-          canDelete={props.canDelete}
-          emptyTitle={t("files.conversation.emptyTitle")}
-          emptyDescription={t("files.conversation.emptyDescription")}
-          onPreview={props.onPreviewFile}
-          onAction={props.onFileAction}
-        />
+      <div class={["conversation-files-content", fades.classes()]} ref={fades.bind} onScroll={fades.measure}>
+        {/* Files load after the panel opens and change the scroll height while the body keeps its size. */}
+        <div ref={fades.watch}>
+          <FileList
+            label={t("files.conversation.label", { title: props.conversationTitle })}
+            files={props.files}
+            agents={props.agents}
+            showConversation={false}
+            compact
+            groupByDay
+            groupHeadingLevel={3}
+            loading={props.loading}
+            error={props.error}
+            onRetry={props.onRetry}
+            now={props.now}
+            canDelete={props.canDelete}
+            emptyTitle={t("files.conversation.emptyTitle")}
+            emptyDescription={t("files.conversation.emptyDescription")}
+            onPreview={props.onPreviewFile}
+            onAction={props.onFileAction}
+          />
+        </div>
       </div>
     </aside>
   );

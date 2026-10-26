@@ -83,7 +83,8 @@ function decodeSession(value: unknown): AccountSession {
     (value.kind !== "desktop" && value.kind !== "mobile") ||
     !isBoolean(value.current) ||
     !isNumber(value.connectedAt) ||
-    !isNumber(value.lastActiveAt)
+    !isNumber(value.lastActiveAt) ||
+    (value.hostedServer !== undefined && !isBoolean(value.hostedServer))
   )
     throw new Error(errorMessage(null));
   return {
@@ -93,5 +94,6 @@ function decodeSession(value: unknown): AccountSession {
     current: value.current,
     connectedAt: value.connectedAt,
     lastActiveAt: value.lastActiveAt,
+    ...(value.hostedServer === undefined ? {} : { hostedServer: value.hostedServer }),
   };
 }

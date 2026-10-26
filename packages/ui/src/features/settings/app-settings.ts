@@ -1,12 +1,14 @@
-export type ExternalLinkTarget = "Default browser" | "OpenBot";
-
 import {
   type AgentCreationLimit,
+  type AgentDefaults,
   type AgentMemoryLimit,
   type BusyMessageMode,
   DEFAULT_AGENT_CREATION_LIMIT,
+  DEFAULT_AGENT_DEFAULTS,
   DEFAULT_AGENT_MEMORY_LIMIT,
   DEFAULT_BUSY_MESSAGE_MODE,
+  DEFAULT_EXTERNAL_LINK_PREFERENCE,
+  type ExternalLinkTarget,
 } from "@openbot/contracts/ipc";
 /** Which chord sends a message. Re-exported here so settings state can name the same type. */
 import type { SendShortcutMode } from "../conversation/send-shortcut";
@@ -20,13 +22,19 @@ export type SoundTheme = (typeof SOUND_THEMES)[number];
 export type SoundChoice = "off" | SoundTheme;
 
 export interface GeneralSettingsValue {
-  launchAtLogin: boolean;
-  keepRunningInBackground: boolean;
+  /** Null hides the switch: a development run and a server cannot open at login. */
+  launchAtLogin: boolean | null;
+  /** Null hides the switch: macOS always keeps running, and a server has no window. */
+  keepRunningInBackground: boolean | null;
+  /** Null hides the switch: Linux does not report a change of the power source, and a server never sleeps. */
+  keepAwake: boolean | null;
+  /** Null where `keepAwake` is null. */
+  keepAwakeOnBattery: boolean | null;
   restoreLastWorkspace: boolean;
   externalLinkTarget: ExternalLinkTarget;
   desktopNotifications: boolean;
-  /** Puts the question or the approval reason in a notification. Off: a lock screen can show it. */
-  notificationText: boolean;
+  /** Notifications show the start of the agent's reply, question or command. */
+  notificationPreview: boolean;
   macBookNotch: boolean;
   macBookNotchHaptics: boolean;
   macBookNotchIdle: boolean;
@@ -34,6 +42,10 @@ export interface GeneralSettingsValue {
   /** The compact Dynamic Island size, as percents of the default. */
   macBookNotchWidthPercent: number;
   macBookNotchHeightPercent: number;
+  /** The user's choice for each server, by server id. A server with no choice uses `macBookNotchNewServers`. */
+  macBookNotchServers: Record<string, boolean>;
+  /** Whether the island shows a server with no choice of its own, such as a server added later. */
+  macBookNotchNewServers: boolean;
   taskCompletionSound: boolean;
   /** How the user sends a message: plain Enter, or the platform modifier with Enter. */
   sendShortcut: SendShortcutMode;
@@ -41,9 +53,13 @@ export interface GeneralSettingsValue {
   showAgentReasoning: boolean;
   /** Draw a row in the chat when one agent messages another, with the peek that opens from it. */
   showAgentMessages: boolean;
+  /** The steps of an agent's turn (thinking, progress, memory changes) are open at first. */
+  showAgentSteps: boolean;
   /** What a message sent to a busy agent does, unless the agent or the message sets its own. */
   busyMessageMode: BusyMessageMode;
-  /** How many memories one agent on this computer can hold. */
+  /** What an agent of this computer does when it has no value of its own for the setting. */
+  agentDefaults: AgentDefaults;
+  /** How many memories one agent on this computer can hold. Read only here: Server settings set it. */
   agentMemoryLimit: AgentMemoryLimit;
   /** How many agents agents on this computer may create in 24 hours. `null` is no limit. */
   agentCreationLimit: AgentCreationLimit;
@@ -52,11 +68,6 @@ export interface GeneralSettingsValue {
   /** Short sounds that confirm the user's own actions, such as a click or a sent message. */
   soundFeedback: boolean;
   soundTheme: SoundTheme;
-  /**
-   * Turbo mode. Agents run commands and change files without asking. Permission grants and site
-   * publishing still ask, so this is not the same as "no boundary at all".
-   */
-  turboMode: boolean;
   autoDownloadUpdates: boolean;
   /** Owners and admins of a joined server can start an update of this computer. */
   allowRemoteUpdates: boolean;
@@ -66,29 +77,34 @@ export interface GeneralSettingsValue {
 }
 
 export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsValue = {
-  launchAtLogin: true,
-  keepRunningInBackground: false,
+  launchAtLogin: null,
+  keepRunningInBackground: null,
+  keepAwake: null,
+  keepAwakeOnBattery: null,
   restoreLastWorkspace: true,
-  externalLinkTarget: "Default browser",
+  externalLinkTarget: DEFAULT_EXTERNAL_LINK_PREFERENCE.target,
   desktopNotifications: true,
-  notificationText: false,
+  notificationPreview: true,
   macBookNotch: true,
   macBookNotchHaptics: true,
   macBookNotchIdle: true,
   macBookNotchAdditionalDisplays: true,
   macBookNotchWidthPercent: 100,
   macBookNotchHeightPercent: 100,
+  macBookNotchServers: {},
+  macBookNotchNewServers: true,
   taskCompletionSound: true,
   sendShortcut: "enter",
   showAgentReasoning: true,
   showAgentMessages: true,
+  showAgentSteps: false,
   busyMessageMode: DEFAULT_BUSY_MESSAGE_MODE,
+  agentDefaults: DEFAULT_AGENT_DEFAULTS,
   agentMemoryLimit: DEFAULT_AGENT_MEMORY_LIMIT,
   agentCreationLimit: DEFAULT_AGENT_CREATION_LIMIT,
   keepRemoteSessions: true,
   soundFeedback: false,
   soundTheme: "default",
-  turboMode: false,
   autoDownloadUpdates: true,
   allowRemoteUpdates: true,
   autoInstallUpdates: false,

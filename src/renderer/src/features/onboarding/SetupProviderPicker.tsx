@@ -10,16 +10,27 @@ import {
   type SaveCustomProviderInput,
 } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
-import { ProviderCodeLoginDialog } from "@openbot/ui/components/ProviderCodeLoginDialog";
-import { freeModelsReady, ProviderPicker, type ProviderPickerOption } from "@openbot/ui/components/ProviderPicker";
+import {
+  type ProviderConnection,
+  ProviderPicker,
+  type ProviderPickerOption,
+} from "@openbot/ui/components/ProviderPicker";
+import { freeModelsReady } from "@openbot/ui/components/provider-row";
 import { CustomProviderDialog } from "@openbot/ui/features/custom-providers/CustomProviderDialog";
 import { CustomProviderListDialog } from "@openbot/ui/features/custom-providers/CustomProviderListDialog";
 import { DetectedProviders } from "@openbot/ui/features/custom-providers/DetectedProviders";
 import type { DetectedProviderApi, ProviderDetection } from "@openbot/ui/features/custom-providers/detected-providers";
-import { OpenCodeKeyDialog, type ProviderKeyApi } from "@openbot/ui/features/settings/OpenCodeKeyDialog";
+import {
+  isKeyDialogProvider,
+  type KeyDialogProvider,
+  OpenCodeKeyDialog,
+  type ProviderKeyApi,
+} from "@openbot/ui/features/settings/OpenCodeKeyDialog";
 import { useText } from "@openbot/ui/text";
+import { errorReference, type UserErrorDetails } from "@openbot/user-errors";
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js";
-import type { ProviderCodeLoginApi } from "../../components/provider-code-login-api";
+import { ProviderSignInDialogs } from "../../components/ProviderSignInDialogs";
+import type { ProviderConnectionApi } from "../../components/provider-connection-api";
 import { createCustomProviderHostState } from "../custom-providers/custom-provider-host-state";
 import { FREE_PROVIDER, onboardingProviderRows } from "./onboarding-provider-rows";
 import { fallbackProviderState } from "./onboarding-provider-state";
@@ -37,7 +48,7 @@ export interface SetupProviderProps {
   /** The newer runtime main offers per provider; the row's actions menu offers it as in Settings. */
   providerAvailableVersions?: Partial<Record<AgentProviderId, string | null>> | undefined;
   onUpdateProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
-  onConnectProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
+  onCancelProviderSignIn?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onDownloadProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onCancelProviderDownload?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onInstallProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
@@ -48,10 +59,10 @@ export interface SetupProviderProps {
    */
   providerKeys?: ProviderKeyApi | undefined;
   /**
-   * The sign-in finished on another device. First run is where it is needed most: the browser this
-   * computer opens is the part of the hand-off that is most likely to be missing or wrong here.
+   * How each row signs in. First run needs its ⋯ menu most: the browser this computer opens is the
+   * part of the hand-off that is most likely to be missing or wrong here.
    */
-  codeLogin?: ProviderCodeLoginApi | undefined;
+  connection?: ProviderConnectionApi | undefined;
   onRefreshProviders?: (() => void | Promise<void>) | undefined;
   /** Accepts a described endpoint. Without it the step offers no custom provider at all. */
   onAddCustomProvider?: ((value: SaveCustomProviderInput) => Promise<CustomProviderRestart>) | undefined;
@@ -112,6 +123,9 @@ const PROVIDER_DESCRIPTION_KEYS: Readonly<Record<string, AppTextKey>> = {
   "Google AI Pro or Ultra plan": "onboarding.provider.googlePlan",
   "Cursor plan or API key": "onboarding.provider.cursorPlan",
   "Free models with a Cline account": "onboarding.provider.clineAccount",
+  "Mercury models with an Inception API key": "onboarding.provider.inceptionKey",
+  "DeepSeek models with a DeepSeek API key": "onboarding.provider.deepseekKey",
+  "Many models with an OpenRouter API key": "onboarding.provider.openrouterKey",
 };
 
 /**
@@ -165,8 +179,15 @@ export function createSetupProviders(
   const [providerSelectedByUser, setProviderSelectedByUser] = createSignal(Boolean(initial?.provider));
   /** The user chose a row on this screen, so a late saved choice does not replace it. */
   let choiceChanged = false;
-  const [openCodeKeyOpen, setOpenCodeKeyOpen] = createSignal(false);
-  const [error, setError] = createSignal("");
+  const [keyProvider, setKeyProvider] = createSignal<KeyDialogProvider | null>(null);
+  const [error, setErrorText] = createSignal("");
+  const [errorCode, setErrorCode] = createSignal<UserErrorDetails | null>(null);
+  /** Shows `message`, with the code of `cause` when a failure gave one. */
+  const setError = (message: string, cause?: unknown) => {
+    setErrorText(message);
+    const reference = cause === undefined ? null : errorReference(cause);
+    setErrorCode(reference ? { message, reference } : null);
+  };
   const [providerErrors, setProviderErrors] = createSignal<Partial<Record<AgentProviderId, string>>>({});
   const visibleError = createMemo(
     () => error() || SETUP_PROVIDERS.map((provider) => providerErrors()[provider.id]).find(Boolean) || "",
@@ -402,6 +423,16 @@ export function createSetupProviders(
         focusRefreshTimer = setTimeout(synchronize, 250);
         return;
       }
+      // A refresh cancels a sign-in that OpenBot runs, such as Gemini's Google sign-in. The browser
+      // takes focus, so the user often comes back before the sign-in is complete. That sign-in
+      // reports its own result.
+      const signingIn = props.agentStatus.providers?.some(
+        (status) => providersAwaitingFocusRefresh.has(status.id) && status.connectionState === "connecting",
+      );
+      if (signingIn) {
+        blurredAfterProviderConnect = false;
+        return;
+      }
       providersAwaitingFocusRefresh.clear();
       blurredAfterProviderConnect = false;
       void refreshProviders();
@@ -433,19 +464,23 @@ export function createSetupProviders(
     setError("");
     try {
       await action(provider);
-    } catch {
+    } catch (cause) {
       setError(
         kind === "install"
           ? t("onboarding.error.installGuide", { provider: providerName(provider) })
           : t("onboarding.error.signInGuide", { provider: providerName(provider) }),
+        cause,
       );
     }
   }
 
-  /** OpenCode signs in with a pasted key, so its row opens the key dialog; the rest open a guide. */
+  /**
+   * OpenCode, Muse and Gemini sign in with a pasted key, so their rows open the key dialog; the rest
+   * open a guide. Claude's key is an option on its Providers page, so its Sign in stays the guide.
+   */
   function signInProvider(provider: AgentProviderId): void {
-    if (provider === "opencode" && props.providerKeys) {
-      setOpenCodeKeyOpen(true);
+    if (isKeyDialogProvider(provider) && provider !== "claude" && props.providerKeys) {
+      setKeyProvider(provider);
       return;
     }
     void openProviderGuide(provider, props.onSignInProvider, "sign-in");
@@ -453,7 +488,14 @@ export function createSetupProviders(
 
   /** Resolves `false` when the request failed; the error then says why. */
   async function connectProvider(provider: AgentProviderId): Promise<boolean> {
-    if (!props.onConnectProvider || props.refreshingProviders) return true;
+    const connection = props.connection;
+    const kind = connection?.connectKind(provider);
+    if (!connection || !kind || props.refreshingProviders) return true;
+    // A dialog sign-in reports itself in its dialog. The browser sign-in reports in the row.
+    if (kind === "dialog") {
+      await connection.connect(provider);
+      return true;
+    }
     keepProviderRows();
     setError("");
     setProviderErrors((current) => ({ ...current, [provider]: undefined }));
@@ -464,11 +506,11 @@ export function createSetupProviders(
       props.agentStatus.providers?.find((candidate) => candidate.id === provider)?.message ?? null,
     );
     try {
-      await props.onConnectProvider(provider);
+      await connection.connect(provider);
       return true;
-    } catch {
+    } catch (cause) {
       providersAwaitingFocusRefresh.delete(provider);
-      setError(t("onboarding.error.connect", { provider: providerName(provider) }));
+      setError(t("onboarding.error.connect", { provider: providerName(provider) }), cause);
       return false;
     }
   }
@@ -484,8 +526,8 @@ export function createSetupProviders(
     try {
       await props.onDownloadProvider(provider);
       return true;
-    } catch {
-      setError(t("onboarding.error.download", { provider: providerName(provider) }));
+    } catch (cause) {
+      setError(t("onboarding.error.download", { provider: providerName(provider) }), cause);
       return false;
     }
   }
@@ -495,8 +537,8 @@ export function createSetupProviders(
     setError("");
     try {
       await props.onCancelProviderDownload(provider);
-    } catch {
-      setError(t("onboarding.error.cancelDownload", { provider: providerName(provider) }));
+    } catch (cause) {
+      setError(t("onboarding.error.cancelDownload", { provider: providerName(provider) }), cause);
     }
   }
 
@@ -511,8 +553,8 @@ export function createSetupProviders(
     }
     try {
       await props.onRefreshProviders();
-    } catch {
-      setError(t("onboarding.error.refresh"));
+    } catch (cause) {
+      setError(t("onboarding.error.refresh"), cause);
     }
   }
 
@@ -529,13 +571,18 @@ export function createSetupProviders(
     selectedProviderConnected,
     /** A provider action's error, or the message of a connection that ended without success. */
     error: visibleError,
+    /** The code of the shown error, when a failure gave one. */
+    errorReference: () => {
+      const code = errorCode();
+      return code && code.message === visibleError() ? code.reference : null;
+    },
     setError,
     clearErrors: () => {
       setError("");
       setProviderErrors({});
     },
-    openCodeKeyOpen,
-    closeOpenCodeKey: () => setOpenCodeKeyOpen(false),
+    keyProvider,
+    closeKeyDialog: () => setKeyProvider(null),
     host,
     chooseProvider,
     chooseMoreCustom,
@@ -575,6 +622,20 @@ export function SetupProviderPicker(props: SetupProviderPickerProps) {
   const { t } = useText();
   const source = () => props.providers.props;
   const lazyProviderMode = () => Boolean(source().providerRuntimeStatuses || source().onDownloadProvider);
+  /** The rows' Connect goes through the step, which follows the browser sign-in it starts. */
+  const connection = createMemo((): ProviderConnection | undefined => {
+    const api = source().connection;
+    return api
+      ? {
+          connectKind: api.connectKind,
+          alternativeKind: api.alternativeKind,
+          alternative: api.alternative,
+          connect: async (provider) => {
+            await props.providers.connectProvider(provider);
+          },
+        }
+      : undefined;
+  });
   return (
     <>
       <ProviderPicker
@@ -587,13 +648,8 @@ export function SetupProviderPicker(props: SetupProviderPickerProps) {
         focusFirst
         disabled={props.disabled}
         refreshingProviders={source().refreshingProviders}
-        onConnectProvider={
-          source().onConnectProvider
-            ? async (provider) => {
-                await props.providers.connectProvider(provider);
-              }
-            : undefined
-        }
+        connection={connection()}
+        onCancelProviderSignIn={source().onCancelProviderSignIn}
         onDownloadProvider={
           source().onDownloadProvider
             ? async (provider) => {
@@ -612,8 +668,6 @@ export function SetupProviderPicker(props: SetupProviderPickerProps) {
         onSignInProvider={
           source().onSignInProvider || source().providerKeys ? props.providers.signInProvider : undefined
         }
-        onSignInWithCodeProvider={source().codeLogin?.start}
-        codeSignInProviders={source().codeLogin?.providers()}
         onUpdateProvider={source().onUpdateProvider}
         menuMount={props.menuMount}
         onRefreshProviders={
@@ -683,35 +737,29 @@ export function SetupProviderPicker(props: SetupProviderPickerProps) {
           onClose={props.providers.host.closeList}
         />
       </Show>
-      <Show when={props.providers.openCodeKeyOpen() && source().providerKeys}>
-        {(api) => (
-          <OpenCodeKeyDialog
-            api={api()}
-            onClose={props.providers.closeOpenCodeKey}
-            onReconnect={
-              source().onConnectProvider
-                ? async () => {
-                    await props.providers.connectProvider("opencode");
-                  }
-                : undefined
-            }
-          />
+      <Show when={props.providers.keyProvider()} keyed>
+        {(provider) => (
+          <Show when={source().providerKeys}>
+            {(api) => (
+              <OpenCodeKeyDialog
+                api={api()}
+                provider={provider}
+                onClose={props.providers.closeKeyDialog}
+                onReconnect={
+                  source().connection?.connectKind(provider) === "browser"
+                    ? async () => {
+                        await props.providers.connectProvider(provider);
+                      }
+                    : undefined
+                }
+              />
+            )}
+          </Show>
         )}
       </Show>
       {/* Sits beside the picker it was started from, so the code covers the row rather
           than a step the user has not reached. */}
-      <Show when={source().codeLogin?.provider() ? source().codeLogin : undefined}>
-        {(api) => (
-          <ProviderCodeLoginDialog
-            open={true}
-            providerName={SETUP_PROVIDERS.find((candidate) => candidate.id === api().provider())?.name ?? ""}
-            state={api().state()}
-            onOpenVerificationUrl={api().openVerificationUrl}
-            onCancel={api().cancel}
-            onSubmitCode={api().submit}
-          />
-        )}
-      </Show>
+      <ProviderSignInDialogs api={source().connection} />
     </>
   );
 }

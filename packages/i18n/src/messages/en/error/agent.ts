@@ -1,6 +1,10 @@
 import { defineMessages } from "../../../message";
 
 export const messages = defineMessages("error.agent", {
+  "error.agent.historyUnavailable":
+    "History is unavailable for this request. Read recent history again, or use channel_history for channel work.",
+  "error.agent.toolRequestInvalid":
+    "Invalid tool discovery arguments. Use the declared schema and an original qualified tool name.",
   // Agent errors that the main process and the backend send.
   "error.agent.approvalWhileDeleting": "Cannot grant approval while the agent is being deleted.",
   "error.agent.accessLocalOnly": "Agent access can only be changed on the computer that runs the agent.",
@@ -40,7 +44,11 @@ export const messages = defineMessages("error.agent", {
   "error.agent.noStartingModel":
     "{provider} has no model available, and no other signed-in provider has one. Sign in to a provider, or change the default provider in Providers & permissions.",
   "error.agent.waitBeforeProviderChange": "Wait for the active turn and queue to finish before changing provider.",
+  "error.agent.waitForTasksBeforeProviderChange":
+    "Tasks of this agent are running. Wait for them to finish, or stop them, before changing provider.",
   "error.agent.waitBeforeClearContext": "Wait for the active turn and queue to finish before starting a new chat.",
+  "error.agent.waitBeforeCompactContext": "Wait for the active turn and queue to finish before compacting the context.",
+  "error.agent.compactContextUnavailable": "This agent cannot compact its context now.",
   "error.agent.unknown": "Unknown agent: {id}",
   "error.agent.onlyUserWidensSettings":
     "Only the user can give an agent Full access or turn Computer Use on. Ask the user to change it in the agent's settings.",
@@ -58,6 +66,8 @@ export const messages = defineMessages("error.agent", {
   "error.agent.duplicateIds": "Agent state contains duplicate agent ids; refusing to overwrite it.",
   "error.agent.copyNameFailed": "OpenBot could not create a unique agent copy name.",
   "error.agent.endpointRemoved": "The endpoint this agent used was removed. Choose another model for it.",
+  "error.agent.turnStalled":
+    "{provider} stopped responding, so OpenBot ended this turn. Send the message again, or choose another model.",
   "error.agent.selectedGone": "The selected agent no longer exists.",
   "error.agent.profileEndpointsChanged": "The custom endpoints changed while this was generating. Try again.",
   "error.agent.profileInvalid": "The provider returned an invalid profile. Try revising your prompt.",
@@ -84,8 +94,17 @@ export const messages = defineMessages("error.agent", {
   "error.agent.queueEditRejected": "Queue edit rejected: {reason}",
   "error.agent.computerUseLocalOnly": "Computer Use can only be changed on the computer that runs the agent.",
   "error.agent.automationLocalOnly": "Local scripts can only be allowed on the computer that runs the agent.",
+  "error.agent.newChatLocalOnly": "Only the computer that runs the agent can let it start new chats.",
+  "error.agent.quickAcknowledgementLocalOnly": "Only the computer that runs the agent can change this setting.",
+  "error.agent.sideQuestionBusy": "Too many side questions are running. Try again shortly.",
+  "error.agent.sideQuestionFailed": "The agent could not answer the side question. Try again.",
   "error.agent.busyMessageModeLocalOnly":
     "What messages do while the agent works can only be set on the computer that runs the agent.",
+  "error.agent.backupModelsLocalOnly": "Backup models can only be set on the computer that runs the agent.",
+  "error.agent.taskLimitLocalOnly": "The task limit can only be set on the computer that runs the agent.",
+  "error.agent.localScriptsOff": "This agent does not allow local scripts.",
+  "error.agent.localScriptsRateLimited":
+    "Local scripts sent this agent {limit} message or routine requests in the last hour. Try again later.",
   "error.agent.automationOff": "This agent does not allow local scripts to run its routines.",
   "error.agent.automationPayloadTooLong": "The payload is longer than {limit} characters.",
   "error.agent.automationRateLimited":
@@ -94,6 +113,30 @@ export const messages = defineMessages("error.agent", {
     "Workspace only is available for this provider on macOS only. Choose Full access in the agent settings.",
   "error.agent.lowMemory":
     "This server is low on memory. Your message waits in the queue and starts when memory is free. A larger plan gives the server more memory.",
+  "error.agent.lowMemoryServer":
+    "This server is low on memory. Your message waits in the queue and starts when memory is free.",
   "error.agent.workspaceOnlyToolMissing":
     "Workspace only needs {tool}, which OpenBot did not find. Install it, or choose Full access in the agent settings.",
+  "error.agent.screenCaptureOff":
+    "Screen capture is off for this agent. The user can turn on Computer Use in the agent settings.",
+  "error.agent.screenCaptureUnavailable": "Screen capture is not available on this computer.",
+  "error.agent.screenCaptureShared":
+    "Screen capture does not work in a Slack, Discord or Telegram conversation, because other people get its files.",
+  "error.agent.screenCaptureDeclined": "The user did not allow this screen capture. Nothing was captured.",
+  "error.agent.mcpServerDeclined": "The user did not allow this MCP server change. Nothing changed.",
+  "error.agent.mcpServerNotSaved": "The MCP server did not answer, so it was not saved. {error}",
+  "error.agent.mcpServerKeysMove":
+    "The MCP server {name} holds keys for its current server. Ask the user to change its address, command, arguments or transport in Server settings, MCP.",
+  "error.agent.mcpServerUnknown": "No MCP server is named {name}. Call list_mcp_servers for the names.",
+  "error.agent.screenCaptureWindowMissing":
+    "That window is not open now. Call list_capture_sources to get the current window ids.",
+  "error.agent.screenCaptureDisplayMissing":
+    "That display is not connected now. Call list_capture_sources to get the current display ids.",
+  "error.agent.screenCaptureRegionOutside":
+    "The region is not inside one display. Use desktop points inside the bounds of one display from list_capture_sources.",
+  "error.agent.screenCapturePermissionMissing":
+    "OpenBot does not have the Screen Recording permission. Ask the user to open System Settings > Privacy & Security > Screen & System Audio Recording, turn on OpenBot, then quit and open OpenBot again.",
+  "error.agent.screenCaptureEmptyWindows":
+    "Windows gave an empty image. Ask the user to unlock the computer and close protected content. A policy of the organization can also stop screen capture.",
+  "error.agent.screenCaptureFailed": "The screen capture failed. Try again.",
 });

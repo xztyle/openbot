@@ -5,13 +5,21 @@ import {
   type BillingPlanId,
   billingLookupKey,
 } from "@openbot/contracts/billing";
+import {
+  LICENSE_INCLUDED_USERS,
+  LICENSE_LOOKUP_KEY,
+  LICENSE_METADATA,
+  LICENSE_METADATA_KIND,
+  LICENSE_PRICES,
+  LICENSE_PRODUCT_ID,
+} from "@openbot/contracts/license";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { z } from "zod";
 
 /**
  * Creates the Stripe catalog that the account server reads: one Product for each plan, and one Price
- * for each plan and interval with the lookup key `openbot_{plan}_{interval}`. It also sets the
- * Customer Portal features. Run it again at any time: it changes only what differs.
+ * for each plan and interval with the lookup key `openbot_{plan}_{interval}`. It also creates the
+ * license Product and its tiered monthly Price, and sets the Customer Portal features. Run it again at any time: it changes only what differs.
  *
  *   STRIPE_SECRET_KEY=sk_test_... bun scripts/stripe-bootstrap.ts [--live] [--webhook-url <url>]
  *
@@ -48,6 +56,11 @@ export const BILLING_WEBHOOK_EVENTS = [
   "invoice.paid",
   "invoice.payment_failed",
   "checkout.session.expired",
+  "refund.created",
+  "refund.updated",
+  "refund.failed",
+  "charge.dispute.created",
+  "charge.dispute.closed",
 ] as const;
 
 export interface PriceAmounts {
@@ -72,6 +85,7 @@ const priceSchema = z.object({
   unit_amount: z.number().int().nullable(),
   recurring: z.object({ interval: z.string() }).nullable(),
   currency_options: z.record(z.string(), z.object({ unit_amount: z.number().int().nullable() })).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
 });
 type Price = z.infer<typeof priceSchema>;
 const priceListSchema = z.object({ data: z.array(priceSchema) });
@@ -183,6 +197,71 @@ async function ensurePrice(
   });
   const created = await stripe.request("POST", "/v1/prices", body, priceSchema);
   logger.info(`${current ? "Replaced" : "Created"} price ${lookupKey}.`);
+  return created.id;
+}
+
+/** The license amounts as one metadata value, so a run can see that the Price is up to date. */
+function licensePriceSignature(): string {
+  return Object.entries(LICENSE_PRICES)
+    .map(([currency, price]) => `${currency}:${price.base}+${price.extraUser}`)
+    .join(",");
+}
+
+async function ensureLicenseProduct(stripe: StripeAdmin): Promise<void> {
+  const body = new URLSearchParams({
+    name: "OpenBot commercial license",
+    active: "true",
+    [`metadata[${LICENSE_METADATA.kind}]`]: LICENSE_METADATA_KIND,
+  });
+  if (await stripe.findProduct(LICENSE_PRODUCT_ID)) {
+    await stripe.request("POST", `/v1/products/${LICENSE_PRODUCT_ID}`, body, productSchema);
+    logger.info(`Product ${LICENSE_PRODUCT_ID} is up to date.`);
+    return;
+  }
+  body.set("id", LICENSE_PRODUCT_ID);
+  await stripe.request("POST", "/v1/products", body, productSchema);
+  logger.info(`Created product ${LICENSE_PRODUCT_ID}.`);
+}
+
+/**
+ * One graduated tiered monthly Price. The quantity is the number of users: the first tier is the base
+ * amount for the included users, and the second tier is the amount of each extra user. EUR is the base
+ * currency, and USD and PLN are currency options with the same tiers.
+ */
+async function ensureLicensePrice(stripe: StripeAdmin, existing: readonly Price[]): Promise<string> {
+  const signature = licensePriceSignature();
+  const current = existing.find((price) => price.lookup_key === LICENSE_LOOKUP_KEY);
+  if (
+    current &&
+    current.product === LICENSE_PRODUCT_ID &&
+    current.currency === "eur" &&
+    current.recurring?.interval === "month" &&
+    current.metadata?.openbot_license_prices === signature
+  ) {
+    logger.info(`Price ${LICENSE_LOOKUP_KEY} is up to date.`);
+    return current.id;
+  }
+  const body = new URLSearchParams({
+    product: LICENSE_PRODUCT_ID,
+    currency: "eur",
+    billing_scheme: "tiered",
+    tiers_mode: "graduated",
+    "recurring[interval]": "month",
+    lookup_key: LICENSE_LOOKUP_KEY,
+    transfer_lookup_key: "true",
+    [`metadata[${LICENSE_METADATA.kind}]`]: LICENSE_METADATA_KIND,
+    "metadata[openbot_license_prices]": signature,
+  });
+  for (const [currency, price] of Object.entries(LICENSE_PRICES)) {
+    const prefix = currency === "eur" ? "tiers" : `currency_options[${currency}][tiers]`;
+    body.set(`${prefix}[0][up_to]`, String(LICENSE_INCLUDED_USERS));
+    body.set(`${prefix}[0][flat_amount]`, String(price.base));
+    body.set(`${prefix}[0][unit_amount]`, "0");
+    body.set(`${prefix}[1][up_to]`, "inf");
+    body.set(`${prefix}[1][unit_amount]`, String(price.extraUser));
+  }
+  const created = await stripe.request("POST", "/v1/prices", body, priceSchema);
+  logger.info(`${current ? "Replaced" : "Created"} price ${LICENSE_LOOKUP_KEY}.`);
   return created.id;
 }
 
@@ -323,6 +402,7 @@ export async function bootstrapStripe(options: StripeBootstrapOptions): Promise<
   for (const plan of BILLING_PLAN_IDS) {
     for (const interval of BILLING_INTERVALS) query.append("lookup_keys[]", billingLookupKey(plan, interval));
   }
+  query.append("lookup_keys[]", LICENSE_LOOKUP_KEY);
   query.append("expand[]", "data.currency_options");
   const existing = (await stripe.request("GET", `/v1/prices?${query}`, null, priceListSchema)).data;
 
@@ -333,6 +413,10 @@ export async function bootstrapStripe(options: StripeBootstrapOptions): Promise<
   }
 
   for (const plan of BILLING_PLAN_IDS) logger.info(`Prices ${productId(plan)}: ${prices[plan].join(", ")}`);
+
+  // The license is not in the Portal product list, so the Portal cannot change its users or price.
+  await ensureLicenseProduct(stripe);
+  logger.info(`Price ${LICENSE_PRODUCT_ID}: ${await ensureLicensePrice(stripe, existing)}`);
 
   await updatePortalConfiguration(stripe, prices);
   return webhookUrl ? await ensureWebhookEndpoint(stripe, webhookUrl, options.replaceWebhook ?? false) : null;

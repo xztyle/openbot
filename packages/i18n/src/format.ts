@@ -1,13 +1,7 @@
+import { formatTranslation } from "./format-catalogs";
 import type { TranslatedLocale } from "./locale";
 import { createTranslate } from "./message";
-import { messages as de } from "./messages/de/format";
 import { messages as en } from "./messages/en/format";
-import { messages as es } from "./messages/es/format";
-import { messages as fr } from "./messages/fr/format";
-import { messages as ja } from "./messages/ja/format";
-import { messages as pt } from "./messages/pt/format";
-import { messages as ru } from "./messages/ru/format";
-import { messages as tr } from "./messages/tr/format";
 
 /**
  * Numbers, dates, lists and sizes in the interface language.
@@ -36,8 +30,6 @@ export interface AppFormat {
   fileSize: (bytes: number) => string;
 }
 
-const catalogs = { en, de, es, fr, ja, pt, ru, tr } as const;
-
 const numberFormats = new Map<string, Intl.NumberFormat>();
 
 function numberFormat(locale: string | undefined, options: Intl.NumberFormatOptions | undefined): Intl.NumberFormat {
@@ -53,9 +45,9 @@ const dateFormats = new Map<string, Intl.DateTimeFormat>();
 let dateFormatConstructor: typeof Intl.DateTimeFormat | undefined;
 
 /**
- * A formatter per locale and options: a message list formats one time for each message. A
- * formatter keeps the time zone that was current when it was made, so the key holds the offset of
- * now, and a change of the computer's zone makes a new one.
+ * A date format is slow to create, mostly on Hermes, and a list writes one date for each row. The
+ * time zone offset is part of the key: a format keeps the time zone of the moment it was created.
+ * A replaced `Intl.DateTimeFormat` (a test stub) clears the cache.
  */
 function dateFormat(locale: string | undefined, options: Intl.DateTimeFormatOptions | undefined): Intl.DateTimeFormat {
   if (dateFormatConstructor !== Intl.DateTimeFormat) {
@@ -107,7 +99,8 @@ export function createFormat(locale: TranslatedLocale, intlLocale: string | null
   const cached = formats.get(cacheKey);
   if (cached) return cached;
   const tag = intlLocale ?? undefined;
-  const t = createTranslate({ source: en, translation: catalogs[locale], locale, sourceLocale: "en" });
+  const translation = formatTranslation(locale);
+  const t = createTranslate({ source: en, translation, locale, sourceLocale: "en" });
   const oneDecimal = (value: number) =>
     numberFormat(tag, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false }).format(value);
 
@@ -139,6 +132,8 @@ export function createFormat(locale: TranslatedLocale, intlLocale: string | null
       return t("format.fileSize.terabytes", { size: oneDecimal(bytes / 1024 ** 4) });
     },
   };
-  formats.set(cacheKey, format);
+  // A language that is not loaded yet formats with English words, and the next call after the load
+  // makes the format again.
+  if (translation) formats.set(cacheKey, format);
   return format;
 }

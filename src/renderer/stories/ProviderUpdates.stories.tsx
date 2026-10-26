@@ -1,5 +1,6 @@
 import { isManagedRuntimeProvider, type ManagedProviderId } from "@openbot/contracts/agent-providers";
 import type { AgentProviderId, ProviderRuntimeStatus } from "@openbot/contracts/ipc";
+import { sourceText } from "@openbot/i18n/source";
 import { Button, Checkbox, Heading, Text, Toaster, toast } from "@openbot/ui";
 import type { ProviderPickerOption } from "@openbot/ui/components/ProviderPicker";
 import { ProviderPicker } from "@openbot/ui/components/ProviderPicker";
@@ -12,7 +13,7 @@ import {
   showProviderUpdateToast,
 } from "../src/features/provider-updates/provider-update-toast";
 
-const PROVIDERS = ["codex", "claude", "grok", "opencode", "antigravity", "cursor", "cline"] as const;
+const PROVIDERS = ["codex", "claude", "grok", "opencode", "antigravity", "cursor", "cline", "pi", "muse"] as const;
 const NAMES: Record<ManagedProviderId, string> = {
   codex: "ChatGPT",
   claude: "Claude",
@@ -21,6 +22,8 @@ const NAMES: Record<ManagedProviderId, string> = {
   antigravity: "Gemini",
   cursor: "Cursor",
   cline: "Cline",
+  pi: "Pi",
+  muse: "Muse",
 };
 const INSTALLED: Record<ManagedProviderId, string> = {
   codex: "0.149.1",
@@ -30,6 +33,8 @@ const INSTALLED: Record<ManagedProviderId, string> = {
   antigravity: "1.2.1",
   cursor: "2026.09.28-64d2043",
   cline: "3.0.68",
+  pi: "1.1.0",
+  muse: "1.4.4-R5419.1",
 };
 
 /** Only Claude has a newer runtime: the quiet rows are half of what the flow has to show. */
@@ -41,6 +46,8 @@ const AVAILABLE: Record<ManagedProviderId, string | null> = {
   antigravity: null,
   cursor: null,
   cline: null,
+  pi: null,
+  muse: null,
 };
 
 /** Fast enough to finish in a couple of seconds, slow enough to read. */
@@ -57,6 +64,8 @@ function readyRuntimes(): Record<ManagedProviderId, ProviderRuntimeStatus> {
     antigravity: { phase: "ready", progress: 100, message: null, version: INSTALLED.antigravity },
     cursor: { phase: "ready", progress: 100, message: null, version: INSTALLED.cursor },
     cline: { phase: "ready", progress: 100, message: null, version: INSTALLED.cline },
+    pi: { phase: "ready", progress: 100, message: null, version: INSTALLED.pi },
+    muse: { phase: "ready", progress: 100, message: null, version: INSTALLED.muse },
   };
 }
 
@@ -72,6 +81,8 @@ function ProviderUpdateFlow(props: {
   failure?: string;
   /** Two other notifications open beside the update, so the stack has something to make room for. */
   companions?: boolean;
+  /** Each update first waits this long for the provider's turn to end, as main reports it. */
+  waitMs?: number;
 }) {
   const [runtimes, setRuntimes] = createSignal(readyRuntimes());
   const [provider, setProvider] = createSignal<AgentProviderId>("claude");
@@ -110,6 +121,16 @@ function ProviderUpdateFlow(props: {
     const update = updates().find((update) => update.provider === id);
     if (update) showProviderUpdateToast(update, () => startUpdate(id));
     running.add(id);
+    const waitMs = props.waitMs;
+    if (waitMs === undefined) {
+      runDownload(id);
+      return;
+    }
+    setRuntime(id, { phase: "downloading", progress: 0, message: sourceText("status.provider.updateWaiting") });
+    timers.add(window.setTimeout(() => runDownload(id), waitMs));
+  }
+
+  function runDownload(id: ManagedProviderId): void {
     setRuntime(id, { phase: "downloading", progress: 0, message: null });
     let progress = 0;
     const interval = window.setInterval(() => {
@@ -274,6 +295,11 @@ export const Playground: Story = {
 
 /** The offer, on both surfaces at once. */
 export const UpdateAvailable: Story = {};
+
+/** Press Update: Claude runs a turn, so the update waits for it on both surfaces, then downloads. */
+export const WaitsForTurn: Story = {
+  render: () => <ProviderUpdateFlow controls waitMs={3_000} />,
+};
 
 /**
  * Text that `userErrorMessage` lets through: under its length limit, with no path or stack trace,

@@ -7,10 +7,13 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   CancelMcpSignInInput,
+  CompleteMcpSignInRelayInput,
   McpKeyValue,
   McpServerConfig,
+  McpSignInAppInput,
   RemoveMcpServerInput,
   SaveMcpServerInput,
+  SaveMcpSignInAppInput,
   SetMcpServerEnabledInput,
   TestMcpServerInput,
 } from "@openbot/contracts/ipc";
@@ -36,6 +39,33 @@ export function parseRemoveMcpServer(value: unknown): RemoveMcpServerInput {
 export function parseCancelMcpSignIn(value: unknown): CancelMcpSignInInput {
   if (!isObject(value)) throw new Error("An MCP server is required.");
   return { url: requireString(value.url, "Address", INPUT_LIMITS.mcpUrl) };
+}
+
+export function parseCompleteMcpSignInRelay(value: unknown): CompleteMcpSignInRelayInput {
+  if (!isObject(value)) throw new Error("An MCP server is required.");
+  return {
+    url: requireString(value.url, "Address", INPUT_LIMITS.mcpUrl),
+    address: requireString(value.address, "Address", INPUT_LIMITS.signInRelayAddress),
+  };
+}
+
+export function parseMcpSignInApp(value: unknown): McpSignInAppInput {
+  if (!isObject(value)) throw new Error("An MCP server is required.");
+  return { mcpServerId: requireString(value.mcpServerId, "MCP server") };
+}
+
+/** The secret is never quoted, as every value here; `null` keeps the one on file. */
+export function parseSaveMcpSignInApp(value: unknown): SaveMcpSignInAppInput {
+  if (!isObject(value)) throw new Error("An MCP server is required.");
+  return {
+    mcpServerId: requireString(value.mcpServerId, "MCP server"),
+    clientId: boundedText(value.clientId, "Client ID", INPUT_LIMITS.mcpClientId),
+    clientSecret:
+      value.clientSecret === null
+        ? null
+        : boundedText(value.clientSecret, "Client secret", INPUT_LIMITS.mcpClientSecret),
+    scope: boundedText(value.scope, "Scope", INPUT_LIMITS.mcpScope),
+  };
 }
 
 export function parseSetMcpServerEnabled(value: unknown): SetMcpServerEnabledInput {

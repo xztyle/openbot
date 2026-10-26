@@ -27,6 +27,7 @@ export function browserControlAction(call: BrowserToolCall): BrowserControlActio
     case "click":
       return "click";
     case "type":
+    case "fill_fields":
       return "type";
     case "press":
       return "key";

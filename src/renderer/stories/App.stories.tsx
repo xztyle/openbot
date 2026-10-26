@@ -42,41 +42,22 @@ export const Playground: Story = {
   render: () => <OpenBotPlayground />,
 };
 
-export const AccountMenu: Story = {
+export const ExpandedSidebar: Story = {
   render: () => <SidebarStatePlayground compact={false} />,
 };
 
-/** The servers in the menu on the server name, instead of the rail. Click the server name to open it. */
-export const ServerMenuView: Story = {
-  render: () => <SidebarStatePlayground compact={false} serverView="menu" />,
+/** The servers in a rail at the left of the sidebar, instead of the server menu. */
+export const ServerRailView: Story = {
+  render: () => <SidebarStatePlayground compact={false} serverView="rail" />,
 };
 
-export const CompactAccountMenu: Story = {
+export const CompactSidebar: Story = {
   render: () => <SidebarStatePlayground compact={true} />,
 };
 
-export const LinuxAccountMenu: Story = {
+export const LinuxWindow: Story = {
   render: () => (
     <SidebarStatePlayground compact={false} options={{ appInfo: { ...STORY_APP_INFO, platform: "linux" } }} />
-  ),
-};
-
-export const LongAccountEmail: Story = {
-  render: () => (
-    <SidebarStatePlayground
-      compact={false}
-      options={{
-        authState: {
-          status: "signed_in",
-          user: {
-            id: "user-long-name",
-            email: "norbert.bodziony.with.a.very.long.workspace.profile@example.com",
-            name: "Norbert Bodziony",
-            avatarUrl: null,
-          },
-        },
-      }}
-    />
   ),
 };
 
@@ -149,6 +130,32 @@ export const DifferentRemoteVersions: Story = {
                 "remote-desktop",
                 "sidebar-layout",
               ],
+            },
+            connectionSequence: 1,
+          },
+        ],
+      }}
+    />
+  ),
+};
+
+/** A joined server has a new OpenBot version. Entering it opens the update dialog each time. */
+export const RemoteHostUpdate: Story = {
+  render: () => (
+    <OpenBotPlayground
+      options={{
+        servers: [
+          storyLocalServer,
+          {
+            ...storyRemoteServer,
+            active: false,
+            compatibility: {
+              localAppVersion: "0.24.0",
+              hostAppVersion: "0.23.0",
+              localProtocol: { minimum: 1, maximum: 1 },
+              hostProtocol: { minimum: 1, maximum: 1 },
+              negotiatedProtocol: 1,
+              capabilities: ["host-admin-v1", "host-update-v1", "host-release-v1", "sidebar-layout"],
             },
             connectionSequence: 1,
           },

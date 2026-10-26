@@ -2,11 +2,13 @@ import type { RoutineSchedule } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import {
   addCalendarDays,
+  addCalendarMonths,
   type CalendarDay,
   calendarDayDate,
   calendarDayOf,
   calendarDays,
   calendarHourOf,
+  calendarMonthStart,
   calendarWeekStart,
   clockChangeDay,
 } from "@openbot/team-client/routine-calendar-dates";
@@ -17,7 +19,6 @@ import {
   AlertDescription,
   ArrowLeft,
   Button,
-  CalendarClock,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -31,6 +32,7 @@ import { createMemo, createStore, For, Match, onSettled, Show, Switch, untrack }
 import type { AgentProfile } from "../../data";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
+import { RoutineCalendarEmpty } from "./RoutineCalendarEmpty";
 import { routineScheduleSummary } from "./routine-schedule-ui";
 
 /**
@@ -38,7 +40,7 @@ import { routineScheduleSummary } from "./routine-schedule-ui";
  * routine still shows its runs, so the person sees what resuming it brings back.
  */
 export type RoutineCalendarStatus = "active" | "paused" | "failed" | "completed";
-export type RoutineCalendarView = "week" | "day";
+export type RoutineCalendarView = "month" | "week" | "day";
 export type RoutineCalendarAgent = Pick<AgentProfile, "id" | "name" | "avatarSeed" | "avatarHue" | "avatarUrl">;
 
 export interface RoutineCalendarRoutine {
@@ -73,7 +75,8 @@ export interface RoutineCalendarProps {
   onOpenRoutine: (routineId: string) => void;
   onOpenAgent: (agentId: string) => void;
   onRetry?: () => void;
-  onCreateRoutine?: () => void;
+  /** Starts a new routine for the agent. Without it, the empty calendar has no action. */
+  onCreateRoutine?: (agentId: string) => void;
   /** A full-pane calendar has a way back. With it, the heading takes focus when the calendar opens. */
   onBack?: () => void;
   /** The host whose routines show, after the title. */
@@ -86,8 +89,8 @@ interface CalendarEntry {
   agents: RoutineCalendarAgent[];
 }
 
-/** A week day shows this many runs. The rest are one step away, in the day view. */
-const WEEK_DAY_LIMIT = 4;
+/** A day cell shows this many runs. The rest are one step away, in the day view. */
+const DAY_CELL_LIMIT = { week: 4, month: 3 } as const;
 const UPCOMING_LIMIT = 6;
 
 const STATUS_LABEL = {
@@ -96,6 +99,18 @@ const STATUS_LABEL = {
   failed: "routine.runStatus.failed",
   completed: "routine.calendar.completed",
 } as const satisfies Record<RoutineCalendarStatus, AppTextKey>;
+
+const PREVIOUS_LABEL = {
+  month: "routine.calendar.previousMonth",
+  week: "routine.calendar.previousWeek",
+  day: "routine.calendar.previousDay",
+} as const satisfies Record<RoutineCalendarView, AppTextKey>;
+
+const NEXT_LABEL = {
+  month: "routine.calendar.nextMonth",
+  week: "routine.calendar.nextWeek",
+  day: "routine.calendar.nextDay",
+} as const satisfies Record<RoutineCalendarView, AppTextKey>;
 
 export function RoutineCalendar(props: RoutineCalendarProps) {
   const text = useText();
@@ -109,8 +124,19 @@ export function RoutineCalendar(props: RoutineCalendarProps) {
     })),
   );
 
-  const daysFor = (anchor: CalendarDay, view: RoutineCalendarView) =>
-    view === "week" ? calendarDays(calendarWeekStart(anchor, props.weekStartsOn ?? 1), 7) : [anchor];
+  const daysFor = (anchor: CalendarDay, view: RoutineCalendarView) => {
+    if (view === "day") return [anchor];
+    const weekStartsOn = props.weekStartsOn ?? 1;
+    if (view === "week") return calendarDays(calendarWeekStart(anchor, weekStartsOn), 7);
+    // Whole weeks, from the week of the first day to the week of the last day: four to six rows.
+    const next = addCalendarMonths(anchor, 1);
+    const days: CalendarDay[] = [];
+    for (let week = calendarWeekStart(calendarMonthStart(anchor), weekStartsOn); week < next; ) {
+      days.push(...calendarDays(week, 7));
+      week = addCalendarDays(week, 7);
+    }
+    return days;
+  };
   const visibleDays = createMemo(() => daysFor(state.anchor, state.view));
 
   const entries = createMemo(() => {
@@ -143,7 +169,15 @@ export function RoutineCalendar(props: RoutineCalendarProps) {
       .slice(0, UPCOMING_LIMIT),
   );
 
-  const clockChange = createMemo(() => clockChangeDay(visibleDays(), props.timeZone));
+  /** A month grid fills its first and last rows with days of the months next to it. */
+  const outsideMonth = (day: CalendarDay) =>
+    state.view === "month" && calendarMonthStart(day) !== calendarMonthStart(state.anchor);
+  const clockChange = createMemo(() =>
+    clockChangeDay(
+      visibleDays().filter((day) => !outsideMonth(day)),
+      props.timeZone,
+    ),
+  );
 
   const dayText = (day: CalendarDay, options: Intl.DateTimeFormatOptions) =>
     format.date(calendarDayDate(day), { ...options, timeZone: "UTC" });
@@ -157,6 +191,7 @@ export function RoutineCalendar(props: RoutineCalendarProps) {
     const first = days[0] ?? state.anchor;
     const last = days.at(-1) ?? state.anchor;
     if (state.view === "day") return longDay(first);
+    if (state.view === "month") return dayText(state.anchor, { month: "long", year: "numeric" });
     return t("routine.calendar.range", {
       start: dayText(first, { month: "short", day: "numeric" }),
       end: dayText(last, { month: "short", day: "numeric", year: "numeric" }),
@@ -180,7 +215,15 @@ export function RoutineCalendar(props: RoutineCalendarProps) {
     heading?.focus();
   };
   const step = (direction: -1 | 1) =>
-    moveTo(addCalendarDays(state.anchor, direction * (state.view === "week" ? 7 : 1)));
+    moveTo(
+      state.view === "month"
+        ? addCalendarMonths(state.anchor, direction)
+        : addCalendarDays(state.anchor, direction * (state.view === "week" ? 7 : 1)),
+    );
+  const showsToday = () =>
+    state.view === "month"
+      ? calendarMonthStart(state.anchor) === calendarMonthStart(today())
+      : visibleDays().includes(today());
 
   const upcomingWhen = (at: string) => {
     const day = calendarDayOf(new Date(at), props.timeZone);
@@ -193,9 +236,22 @@ export function RoutineCalendar(props: RoutineCalendarProps) {
     });
   };
 
+  /** The month grid names the weekdays once, above its columns. */
+  const weekdayHeads = () => (
+    <Show when={state.view === "month"}>
+      <div class="routine-planner-weekdays" aria-hidden="true">
+        <For each={visibleDays().slice(0, 7)}>{(day) => <span>{dayText(day, { weekday: "short" })}</span>}</For>
+      </div>
+    </Show>
+  );
+
   onSettled(() => {
     if (untrack(() => props.onBack)) heading?.focus();
   });
+
+  /** With no routine, there is nothing to move through: the calendar shows its pitch on a faint month. */
+  const empty = () => (props.state ?? "ready") === "ready" && props.routines.length === 0;
+  const emptyMonth = createMemo(() => daysFor(today(), "month"));
 
   return (
     <section class="routine-planner" aria-labelledby="routine-planner-heading" data-view={state.view}>
@@ -228,48 +284,51 @@ export function RoutineCalendar(props: RoutineCalendarProps) {
           </div>
           <p>{t("routine.calendar.timeZone", { zone: props.timeZone.replaceAll("_", " ") })}</p>
         </div>
-        <div class="routine-planner-toolbar">
-          <div class="routine-planner-nav">
-            <IconButton
-              variant="ghost"
-              label={t(state.view === "week" ? "routine.calendar.previousWeek" : "routine.calendar.previousDay")}
-              data-cuelume-tap="navigate"
-              onClick={() => step(-1)}
+        <Show when={!empty()}>
+          <div class="routine-planner-toolbar">
+            <div class="routine-planner-nav">
+              <IconButton
+                variant="ghost"
+                label={t(PREVIOUS_LABEL[state.view])}
+                data-cuelume-tap="navigate"
+                onClick={() => step(-1)}
+              >
+                <ChevronLeft aria-hidden="true" />
+              </IconButton>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={showsToday()}
+                data-cuelume-tap="navigate"
+                onClick={() => moveFrom(today())}
+              >
+                {t("routine.calendar.today")}
+              </Button>
+              <IconButton
+                variant="ghost"
+                label={t(NEXT_LABEL[state.view])}
+                data-cuelume-tap="navigate"
+                onClick={() => step(1)}
+              >
+                <ChevronRight aria-hidden="true" />
+              </IconButton>
+              <p class="routine-planner-range" aria-live="polite">
+                {rangeLabel()}
+              </p>
+            </div>
+            <SlidingTabs.Root
+              value={state.view}
+              onChange={(value) => moveTo(state.anchor, value === "day" || value === "month" ? value : "week")}
             >
-              <ChevronLeft aria-hidden="true" />
-            </IconButton>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={visibleDays().includes(today())}
-              data-cuelume-tap="navigate"
-              onClick={() => moveFrom(today())}
-            >
-              {t("routine.calendar.today")}
-            </Button>
-            <IconButton
-              variant="ghost"
-              label={t(state.view === "week" ? "routine.calendar.nextWeek" : "routine.calendar.nextDay")}
-              data-cuelume-tap="navigate"
-              onClick={() => step(1)}
-            >
-              <ChevronRight aria-hidden="true" />
-            </IconButton>
-            <p class="routine-planner-range" aria-live="polite">
-              {rangeLabel()}
-            </p>
+              <SlidingTabs.List aria-label={t("routine.calendar.view")}>
+                <SlidingTabs.Trigger value="day">{t("routine.calendar.viewDay")}</SlidingTabs.Trigger>
+                <SlidingTabs.Trigger value="week">{t("routine.calendar.viewWeek")}</SlidingTabs.Trigger>
+                <SlidingTabs.Trigger value="month">{t("routine.calendar.viewMonth")}</SlidingTabs.Trigger>
+              </SlidingTabs.List>
+            </SlidingTabs.Root>
           </div>
-          <SlidingTabs.Root
-            value={state.view}
-            onChange={(value) => moveTo(state.anchor, value === "day" ? "day" : "week")}
-          >
-            <SlidingTabs.List aria-label={t("routine.calendar.view")}>
-              <SlidingTabs.Trigger value="day">{t("routine.calendar.viewDay")}</SlidingTabs.Trigger>
-              <SlidingTabs.Trigger value="week">{t("routine.calendar.viewWeek")}</SlidingTabs.Trigger>
-            </SlidingTabs.List>
-          </SlidingTabs.Root>
-        </div>
-        <Show when={clockChange()}>
+        </Show>
+        <Show when={!empty() && clockChange()}>
           {(day) => (
             <p class="routine-planner-clock-change">{t("routine.calendar.clockChange", { day: longDay(day()) })}</p>
           )}
@@ -282,16 +341,19 @@ export function RoutineCalendar(props: RoutineCalendarProps) {
             <p class="sr-only" role="status">
               {t("routine.calendar.loading")}
             </p>
-            <div class="routine-planner-week routine-planner-loading">
-              <For each={visibleDays()}>
-                {() => (
-                  <div class="routine-planner-day">
-                    <Skeleton class="routine-planner-skeleton-heading" />
-                    <Skeleton class="routine-planner-skeleton-run" />
-                    <Skeleton class="routine-planner-skeleton-run" />
-                  </div>
-                )}
-              </For>
+            <div class="routine-planner-grid">
+              {weekdayHeads()}
+              <div class="routine-planner-week routine-planner-loading">
+                <For each={visibleDays()}>
+                  {(day) => (
+                    <div class="routine-planner-day" data-outside={outsideMonth(day) ? "" : undefined}>
+                      <Skeleton class="routine-planner-skeleton-heading" />
+                      <Skeleton class="routine-planner-skeleton-run" />
+                      <Skeleton class="routine-planner-skeleton-run" />
+                    </div>
+                  )}
+                </For>
+              </div>
             </div>
           </div>
         </Match>
@@ -309,21 +371,18 @@ export function RoutineCalendar(props: RoutineCalendarProps) {
             </Show>
           </Alert>
         </Match>
-        <Match when={props.routines.length === 0}>
-          <div class="routine-planner-empty">
-            <CalendarClock aria-hidden="true" />
-            <p>{t("routine.calendar.empty")}</p>
-            <Show when={props.onCreateRoutine}>
-              <Button size="sm" onClick={() => props.onCreateRoutine?.()}>
-                {t("routine.settings.create")}
-              </Button>
-            </Show>
-          </div>
+        <Match when={empty()}>
+          <RoutineCalendarEmpty
+            days={emptyMonth()}
+            today={today()}
+            agents={props.agents}
+            onCreateRoutine={props.onCreateRoutine}
+          />
         </Match>
         <Match when={true}>
           <div class="routine-planner-body">
             <Show
-              when={state.view === "week"}
+              when={state.view !== "day"}
               fallback={
                 <RoutineCalendarDay
                   entries={entriesByDay().get(state.anchor) ?? []}
@@ -335,76 +394,81 @@ export function RoutineCalendar(props: RoutineCalendarProps) {
                 />
               }
             >
-              <ol class="routine-planner-week">
-                <For each={visibleDays()}>
-                  {(day) => {
-                    const dayEntries = () => entriesByDay().get(day) ?? [];
-                    const hidden = () => Math.max(0, dayEntries().length - WEEK_DAY_LIMIT);
-                    return (
-                      <li
-                        class="routine-planner-day"
-                        aria-current={day === today() ? "date" : undefined}
-                        data-past={day < today() ? "" : undefined}
-                      >
-                        <h3 class="routine-planner-day-heading">
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            class="routine-planner-day-button"
-                            aria-label={t("routine.calendar.openDay", { day: longDay(day) })}
-                            data-cuelume-tap="navigate"
-                            onClick={() => moveFrom(day, "day")}
-                          >
-                            <span>{dayText(day, { weekday: "short" })}</span>
-                            <strong>{dayText(day, { day: "numeric" })}</strong>
-                          </Button>
-                        </h3>
-                        <Show when={dayEntries().length > 0}>
-                          <ul class="routine-planner-runs">
-                            <For each={dayEntries().slice(0, WEEK_DAY_LIMIT)}>
-                              {(entry) => (
-                                <li>
-                                  <Button
-                                    variant="ghost"
-                                    class="routine-planner-run"
-                                    data-status={entry.run.status}
-                                    aria-label={t("routine.calendar.runLabel", {
-                                      name: entry.routine.name,
-                                      time: timeText(entry.run.at),
-                                      status: statusText(entry.run.status),
-                                    })}
-                                    onClick={() => props.onOpenRoutine(entry.routine.id)}
-                                  >
-                                    <RoutineCalendarStatusMark status={entry.run.status} />
-                                    <span class="routine-planner-run-time">{timeText(entry.run.at)}</span>
-                                    <span class="routine-planner-run-name">{entry.routine.name}</span>
-                                    <RoutineCalendarAvatars agents={entry.agents} />
-                                  </Button>
-                                </li>
-                              )}
-                            </For>
-                          </ul>
-                        </Show>
-                        <Show when={hidden() > 0}>
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            class="routine-planner-more"
-                            aria-label={t("routine.calendar.showAll", {
-                              count: dayEntries().length,
-                              day: longDay(day),
-                            })}
-                            data-cuelume-tap="navigate"
-                            onClick={() => moveFrom(day, "day")}
-                          >
-                            {t("routine.calendar.more", { count: hidden() })}
-                          </Button>
-                        </Show>
-                      </li>
-                    );
-                  }}
-                </For>
-              </ol>
+              <div class="routine-planner-grid">
+                {weekdayHeads()}
+                <ol class="routine-planner-week">
+                  <For each={visibleDays()}>
+                    {(day) => {
+                      const dayEntries = () => entriesByDay().get(day) ?? [];
+                      const limit = () => (state.view === "month" ? DAY_CELL_LIMIT.month : DAY_CELL_LIMIT.week);
+                      const hidden = () => Math.max(0, dayEntries().length - limit());
+                      return (
+                        <li
+                          class="routine-planner-day"
+                          aria-current={day === today() ? "date" : undefined}
+                          data-past={day < today() ? "" : undefined}
+                          data-outside={outsideMonth(day) ? "" : undefined}
+                        >
+                          <h3 class="routine-planner-day-heading">
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              class="routine-planner-day-button"
+                              aria-label={t("routine.calendar.openDay", { day: longDay(day) })}
+                              data-cuelume-tap="navigate"
+                              onClick={() => moveFrom(day, "day")}
+                            >
+                              <span>{dayText(day, { weekday: "short" })}</span>
+                              <strong>{dayText(day, { day: "numeric" })}</strong>
+                            </Button>
+                          </h3>
+                          <Show when={dayEntries().length > 0}>
+                            <ul class="routine-planner-runs">
+                              <For each={dayEntries().slice(0, limit())}>
+                                {(entry) => (
+                                  <li>
+                                    <Button
+                                      variant="ghost"
+                                      class="routine-planner-run"
+                                      data-status={entry.run.status}
+                                      aria-label={t("routine.calendar.runLabel", {
+                                        name: entry.routine.name,
+                                        time: timeText(entry.run.at),
+                                        status: statusText(entry.run.status),
+                                      })}
+                                      onClick={() => props.onOpenRoutine(entry.routine.id)}
+                                    >
+                                      <RoutineCalendarStatusMark status={entry.run.status} />
+                                      <span class="routine-planner-run-time">{timeText(entry.run.at)}</span>
+                                      <span class="routine-planner-run-name">{entry.routine.name}</span>
+                                      <RoutineCalendarAvatars agents={entry.agents} />
+                                    </Button>
+                                  </li>
+                                )}
+                              </For>
+                            </ul>
+                          </Show>
+                          <Show when={hidden() > 0}>
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              class="routine-planner-more"
+                              aria-label={t("routine.calendar.showAll", {
+                                count: dayEntries().length,
+                                day: longDay(day),
+                              })}
+                              data-cuelume-tap="navigate"
+                              onClick={() => moveFrom(day, "day")}
+                            >
+                              {t("routine.calendar.more", { count: hidden() })}
+                            </Button>
+                          </Show>
+                        </li>
+                      );
+                    }}
+                  </For>
+                </ol>
+              </div>
             </Show>
 
             <aside class="routine-planner-upcoming" aria-labelledby="routine-planner-upcoming-heading">

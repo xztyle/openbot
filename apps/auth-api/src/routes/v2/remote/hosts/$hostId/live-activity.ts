@@ -7,7 +7,7 @@ import { readLiveActivityRelayPush } from "../../../../../server/live-activity-r
 import {
   apiError,
   remoteControlPlaneErrorResponse,
-  requestLiveActivityRelay,
+  requestApnsRelay,
   requestRemoteControlPlane,
 } from "../../../../../server/request-auth";
 
@@ -27,7 +27,7 @@ export const Route = createFileRoute("/v2/remote/hosts/$hostId/live-activity")({
             const push = readLiveActivityRelayPush(body);
             if (!push) return apiError(400, "invalid_live_activity", "The Live Activity update is invalid.");
             yield* requestRemoteControlPlane().authenticateHost(params.hostId, body.machineToken);
-            const relay = requestLiveActivityRelay();
+            const relay = requestApnsRelay();
             if (!relay) return apiError(503, "live_activity_unavailable", "Live Activity updates are not available.");
             if (!(yield* relay.allow(params.hostId))) {
               return apiError(429, "rate_limited", "Too many Live Activity updates.");

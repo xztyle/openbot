@@ -1,4 +1,4 @@
-import { Button } from "@openbot/ui";
+import { IconButton, Pencil, RotateCcw, TriangleAlert, Undo2, X } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createUniqueId, Show } from "solid-js";
@@ -30,73 +30,73 @@ export interface PendingSendStatusProps {
 }
 
 /**
- * The delivery line under a message the host has not stored yet. The status text is a polite live
- * region, so a reader hears the message go from sending to failed without moving focus. A message
- * whose repeat the host cannot detect offers no Retry: the first send may have arrived.
+ * The delivery status beside the time of a message the host has not stored yet. A send in flight
+ * shows nothing; only a held message (with Undo and Edit) and a failure show. The status text is a polite live region that stays while the
+ * send runs, so a reader hears the failure without moving focus. A message whose repeat the host
+ * cannot detect offers no Retry: the first send may have arrived.
  */
 export function PendingSendStatus(props: PendingSendStatusProps): JSX.Element {
   const { t } = useText();
   const noteId = `pending-send-note-${createUniqueId()}`;
+  const failed = () => props.state === "failed";
+  const held = () => props.state === "held";
   const blocked = () => !props.canEdit && Boolean(props.editBlockedReason);
-  const label = () => {
-    if (props.state === "held") return t("chat.send.held");
-    if (props.state === "waiting") return t("chat.send.waiting");
-    if (props.state === "sending") return t("chat.send.sending");
-    return props.retrySafe ? t("chat.send.failed") : t("chat.send.unconfirmed");
-  };
   return (
     <div class="pending-send-status" data-state={props.state}>
-      <Show when={!props.updateRequired || props.state !== "failed"}>
-        <span role="status" class="pending-send-label">
-          {label()}
-          <Show when={props.state === "failed" && props.error}>
-            {(error) => <span class="pending-send-error">{error()}</span>}
-          </Show>
-        </span>
-      </Show>
-      <Show when={blocked() && (props.state === "held" || props.state === "failed")}>
+      <span role="status" class="pending-send-label">
+        <Show when={held()}>{t("chat.send.held")}</Show>
+        <Show when={failed() && !props.updateRequired}>
+          <TriangleAlert aria-hidden="true" />
+          {props.retrySafe ? t("chat.send.failed") : t("chat.send.unconfirmed")}
+          <Show when={props.error}>{(error) => <span class="pending-send-error">{error()}</span>}</Show>
+        </Show>
+      </span>
+      <Show when={blocked() && (held() || failed())}>
         <span class="pending-send-note" id={noteId}>
           {props.editBlockedReason}
         </span>
       </Show>
-      <Show when={props.state === "held"}>
-        <Button
+      <Show when={held()}>
+        <IconButton
           variant="ghost"
-          size="xs"
+          size="icon-xs"
+          label={t("chat.send.undo")}
           disabled={!props.canEdit}
           aria-describedby={blocked() ? noteId : undefined}
           onClick={() => props.onUndo?.()}
         >
-          {t("chat.send.undo")}
-        </Button>
-        <Button
+          <Undo2 aria-hidden="true" />
+        </IconButton>
+        <IconButton
           variant="ghost"
-          size="xs"
+          size="icon-xs"
+          label={t("chat.send.edit")}
           disabled={!props.canEdit}
           aria-describedby={blocked() ? noteId : undefined}
           onClick={() => props.onEdit()}
         >
-          {t("chat.send.edit")}
-        </Button>
+          <Pencil aria-hidden="true" />
+        </IconButton>
       </Show>
-      <Show when={props.state === "failed"}>
+      <Show when={failed()}>
         <Show when={props.retrySafe && !props.updateRequired}>
-          <Button variant="ghost" size="xs" onClick={() => props.onRetry()}>
-            {t("common.retry")}
-          </Button>
+          <IconButton variant="ghost" size="icon-xs" label={t("common.retry")} onClick={() => props.onRetry()}>
+            <RotateCcw aria-hidden="true" />
+          </IconButton>
         </Show>
-        <Button
+        <IconButton
           variant="ghost"
-          size="xs"
+          size="icon-xs"
+          label={t("chat.send.edit")}
           disabled={!props.canEdit}
           aria-describedby={blocked() ? noteId : undefined}
           onClick={() => props.onEdit()}
         >
-          {t("chat.send.edit")}
-        </Button>
-        <Button variant="ghost" size="xs" onClick={() => props.onDismiss()}>
-          {t("chat.send.dismiss")}
-        </Button>
+          <Pencil aria-hidden="true" />
+        </IconButton>
+        <IconButton variant="ghost" size="icon-xs" label={t("chat.send.dismiss")} onClick={() => props.onDismiss()}>
+          <X aria-hidden="true" />
+        </IconButton>
       </Show>
     </div>
   );

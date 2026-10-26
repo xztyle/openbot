@@ -4,16 +4,16 @@ const NOTIFICATION_TEXT_STORAGE_KEY = "openbot.web.notification-text";
 let unsavedPreference: boolean | undefined;
 
 /**
- * Whether a browser notification shows the question or the approval reason of an agent. Off unless
- * the user turned it on: a notification can show on a lock screen. Reading `window.localStorage`
- * throws when the browser blocks storage, so it is read inside the guard.
+ * Whether a browser notification shows a preview: the question or the approval reason of an agent.
+ * On unless the user turned it off, as the desktop `messagePreview` preference is. Reading
+ * `window.localStorage` throws when the browser blocks storage, so it is read inside the guard.
  */
 export function isNotificationTextEnabled(storage?: Pick<Storage, "getItem">): boolean {
   if (unsavedPreference !== undefined) return unsavedPreference;
   try {
-    return (storage ?? window.localStorage).getItem(NOTIFICATION_TEXT_STORAGE_KEY) === "true";
+    return (storage ?? window.localStorage).getItem(NOTIFICATION_TEXT_STORAGE_KEY) !== "false";
   } catch {
-    return false;
+    return true;
   }
 }
 

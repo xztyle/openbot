@@ -13,11 +13,16 @@
  *
  * The `boat` scenario runs only when named. It makes a real VM: the Worker needs the real `BOAT_API_KEY`
  * and `HOSTED_SERVER_TEMPLATE`, and the template must know a public origin of this Worker. It waits
- * until OpenBot in the VM redeems its claim and publishes its host. Then it waits for the idle stop
+ * until OpenBot in the VM redeems its claim and publishes its host. Then it keeps a focused web client
+ * open with no input for 20 minutes and checks that the server stays on, waits for the idle stop
  * (about 15 minutes), starts the server, changes the plan, ends it, renews it, and deletes the server.
  * `--checkout` pays each Checkout page with a test card in the local Chrome. The web client then
  * connects to the server over Signal, and the screenshots go to `.openbot-build/`.
  * `--remote-d1` reads the D1 of the deployed `test` Worker; pass its origin as `--api`.
+ *
+ * The `license-*` scenarios check the commercial license: its tiered Price, Checkout, users, the count
+ * of people on the owner's servers, renewal, currency, and that the server plans do not change. They need
+ * `bun run api:stripe:bootstrap` to have made the license Price in the sandbox.
  */
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
@@ -25,7 +30,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import type { BillingPortalRequest } from "@openbot/contracts/billing";
+import { BILLING_CURRENCIES, type BillingPortalRequest } from "@openbot/contracts/billing";
+import {
+  LICENSE_PRICES,
+  type LicenseCheckoutRequest,
+  type LicenseRenewalRequest,
+  type LicenseUsersRequest,
+  licenseAmount,
+} from "@openbot/contracts/license";
 import { type Browser, chromium } from "playwright-core";
 import { z } from "zod";
 import { STRIPE_API_VERSION } from "../apps/auth-api/src/server/stripe-client";
@@ -42,11 +54,26 @@ const SCENARIOS = [
   "delete",
   "foreign",
   "customer-deleted",
+  "refund",
+  "dispute",
   "portal",
+  "welcome",
   "boat",
+  "license-buy",
+  "license-checkout",
+  "license-double-checkout",
+  "license-users",
+  "license-count",
+  "license-renewal",
+  "license-failed-renewal",
+  "license-currency",
+  "license-isolation",
+  "license-limit",
 ] as const;
 type Scenario = (typeof SCENARIOS)[number];
 const DAY = 86_400;
+/** `WELCOME_EMAIL_CLAIM_PREFIX` of `billing-service.ts`. That module needs the Worker types. */
+const WELCOME_EMAIL_CLAIM_PREFIX = "openbot_welcome_email:";
 
 const stepSchema = z.object({
   scenario: z.enum(SCENARIOS),
@@ -68,7 +95,9 @@ const subscriptionSchema = z.object({
   items: z.object({ data: z.array(z.object({ id: z.string() })) }),
 });
 const invoiceListSchema = z.object({
-  data: z.array(z.object({ billing_reason: z.string().nullable(), status: z.string(), amount_paid: z.number() })),
+  data: z.array(
+    z.object({ id: z.string(), billing_reason: z.string().nullable(), status: z.string(), amount_paid: z.number() }),
+  ),
 });
 const checkoutSessionSchema = z.object({ status: z.string().nullable(), customer: z.string().nullable() });
 const scheduleSchema = z.object({
@@ -116,12 +145,69 @@ const hostSchema = z.object({
 const commandSchema = z.object({ exitCode: z.number().nullable().optional(), stdout: z.string().optional() });
 const sandboxSchema = z.object({ sandbox: z.object({ state: z.string(), type: z.string().optional() }) });
 const portalSchema = z.object({ url: z.string() });
+const invoicePaymentsSchema = z.object({
+  data: z.array(z.object({ payment: z.object({ payment_intent: z.string().nullable().optional() }) })),
+});
+const refundSchema = z.object({ id: z.string(), status: z.string() });
+const disputeListSchema = z.object({ data: z.array(z.object({ id: z.string(), status: z.string() })) });
+const eventListSchema = z.object({
+  data: z.array(z.object({ id: z.string(), data: z.object({ object: z.object({ id: z.string() }) }) })),
+});
+const factSchema = z.object({ source_key: z.string(), fact_type: z.string(), attributes_json: z.string() });
+const licenseStateSchema = z.object({
+  available: z.boolean(),
+  currency: z.string().nullable(),
+  license: z
+    .object({
+      subscriptionId: z.string(),
+      users: z.number(),
+      currency: z.string(),
+      amount: z.number(),
+      status: z.string(),
+      currentPeriodEnd: z.number().nullable(),
+      cancelAtPeriodEnd: z.boolean(),
+    })
+    .nullable(),
+  used: z.number(),
+  users: z.array(
+    z.object({ name: z.string().nullable(), email: z.string(), servers: z.array(z.string()), owner: z.boolean() }),
+  ),
+  coveredBy: z.array(z.object({ ownerName: z.string().nullable(), ownerEmail: z.string() })),
+});
+type LicenseView = z.infer<typeof licenseStateSchema>;
+const licenseCheckoutSchema = z.object({ url: z.string() });
+const tierSchema = z.object({
+  up_to: z.number().nullable(),
+  flat_amount: z.number().nullable(),
+  unit_amount: z.number().nullable(),
+});
+const licensePriceSchema = z.object({
+  id: z.string(),
+  currency: z.string(),
+  tiers_mode: z.string().nullable(),
+  tiers: z.array(tierSchema).optional(),
+  currency_options: z.record(z.string(), z.object({ tiers: z.array(tierSchema).optional() })).optional(),
+});
+const checkoutLinesSchema = z.object({
+  status: z.string().nullable(),
+  currency: z.string().nullable(),
+  line_items: z.object({
+    data: z.array(
+      z.object({ quantity: z.number().nullable(), price: z.object({ lookup_key: z.string().nullable() }) }),
+    ),
+  }),
+});
 
 /** The request bodies of the browser API routes that this check calls. */
 type BrowserApiBody =
-  | { name: string; plan: "starter"; interval: "month"; currency: "eur" }
+  | { name: string; plan: "standard"; interval: "month"; currency: "eur" }
   | { confirmName: string }
   | BillingPortalRequest
+  | LicenseCheckoutRequest
+  | LicenseUsersRequest
+  | LicenseRenewalRequest
+  | { role: "member"; reactivate?: true }
+  | { token: string }
   | Record<string, never>;
 
 function print(line: string) {
@@ -242,8 +328,13 @@ class Account {
       [
         `DELETE FROM hosted_servers WHERE owner_user_id = ${id}`,
         `DELETE FROM billing_subscriptions WHERE user_id = ${id}`,
+        `DELETE FROM licenses WHERE user_id = ${id}`,
+        // The servers and members that a license scenario adds. Deleting a host deletes its memberships.
+        `DELETE FROM remote_hosts WHERE host_id LIKE ${quote(`e2e-${this.scenario}-%`)}`,
+        `DELETE FROM users WHERE id LIKE ${quote(`${this.id}-member-%`)}`,
         `DELETE FROM billing_customers WHERE user_id = ${id}`,
         `DELETE FROM auth_sessions WHERE user_id = ${id}`,
+        `DELETE FROM billing_webhook_events WHERE event_id = ${quote(`${WELCOME_EMAIL_CLAIM_PREFIX}${this.id}`)}`,
         `INSERT OR IGNORE INTO users(id, identity_key, email, name, created_at, updated_at)
          VALUES (${id}, ${quote(`e2e:${this.id}`)}, ${quote(`${this.id}@example.com`)}, 'Stripe e2e', ${now}, ${now})`,
         `INSERT INTO auth_sessions(id, user_id, token_hash, expires_at, created_at, last_used_at)
@@ -274,15 +365,16 @@ class Account {
   }
 
   async request(
-    method: "GET" | "POST" | "DELETE",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     body?: BrowserApiBody,
     headers: Record<string, string> = {},
+    token = this.token,
   ) {
     const response = await fetch(`${this.api}/api/browser/${path}`, {
       method,
       headers: {
-        Cookie: `__Host-openbot-web=${this.token}`,
+        Cookie: `__Host-openbot-web=${token}`,
         ...(method === "GET" ? {} : { Origin: this.api, "X-OpenBot-Browser": "1", "Content-Type": "application/json" }),
         ...headers,
       },
@@ -296,7 +388,7 @@ class Account {
     const response = await this.request(
       "POST",
       "v2/hosting/servers",
-      { name, plan: "starter", interval: "month", currency: "eur" },
+      { name, plan: "standard", interval: "month", currency: "eur" },
       { "Idempotency-Key": `e2e-${this.scenario}-${randomBytes(8).toString("hex")}` },
     );
     if (response.status !== 201) throw new Error(`create ${response.status}: ${response.code}`);
@@ -353,7 +445,7 @@ class Account {
     if (session) await stripe("POST", `/v1/checkout/sessions/${session}/expire`, idSchema).catch(() => null);
     const subscription = await stripe("POST", "/v1/subscriptions", idSchema, {
       customer: this.customer,
-      "items[0][price]": await priceId("starter", "month"),
+      "items[0][price]": await priceId("standard", "month"),
       currency: "eur",
       "metadata[openbot_user_id]": this.id,
       "metadata[openbot_server_id]": serverId,
@@ -368,6 +460,101 @@ class Account {
       "invoice_settings[default_payment_method]": attached.id,
     });
     return attached.id;
+  }
+
+  async license(): Promise<LicenseView> {
+    return licenseStateSchema.parse((await this.request("GET", "v1/me/license")).body);
+  }
+
+  /**
+   * Buys a license as a completed Checkout page does: a subscription of the license Price, with the
+   * user count as its quantity and the license metadata.
+   */
+  async buyLicense(users: number, currency: "eur" | "usd" | "pln" = "eur") {
+    const created = await stripe("POST", "/v1/subscriptions", idSchema, {
+      customer: this.customer,
+      "items[0][price]": await priceId("license", "month"),
+      "items[0][quantity]": String(users),
+      currency,
+      "metadata[openbot_user_id]": this.id,
+      "metadata[openbot_kind]": "license",
+      payment_behavior: "error_if_incomplete",
+    });
+    return created.id;
+  }
+
+  /**
+   * Adds servers that this account owns, with members. A member is a new account; `active: false` adds
+   * a revoked membership. The same key on two servers is one person.
+   */
+  addServers(servers: { name: string; members: { key: string; active?: boolean }[] }[]) {
+    const now = Date.now();
+    const statements: string[] = [];
+    const people = new Set<string>();
+    servers.forEach((server, index) => {
+      const hostId = `e2e-${this.scenario}-${index}`;
+      statements.push(
+        `INSERT INTO remote_hosts(host_id, owner_user_id, name, created_at, updated_at)
+         VALUES (${quote(hostId)}, ${quote(this.id)}, ${quote(server.name)}, ${now}, ${now})`,
+        // The owner's own membership. It must not count twice.
+        `INSERT INTO remote_memberships(membership_id, host_id, user_id, role, status, created_at, updated_at)
+         VALUES (${quote(crypto.randomUUID())}, ${quote(hostId)}, ${quote(this.id)}, 'owner', 'active', ${now}, ${now})`,
+      );
+      for (const member of server.members) {
+        const memberId = this.memberId(member.key);
+        if (!people.has(memberId)) {
+          people.add(memberId);
+          statements.push(
+            `INSERT OR IGNORE INTO users(id, identity_key, email, name, created_at, updated_at)
+             VALUES (${quote(memberId)}, ${quote(`e2e:${memberId}`)}, ${quote(`${memberId}@example.com`)},
+                     ${quote(`Member ${member.key}`)}, ${now}, ${now})`,
+          );
+        }
+        statements.push(
+          `INSERT INTO remote_memberships(membership_id, host_id, user_id, role, status, created_at, updated_at)
+           VALUES (${quote(crypto.randomUUID())}, ${quote(hostId)}, ${quote(memberId)}, 'member',
+                   ${member.active === false ? "'revoked'" : "'active'"}, ${now}, ${now})`,
+        );
+      }
+    });
+    d1(statements.join("; "), z.unknown());
+  }
+
+  memberId(key: string) {
+    return `${this.id}-member-${key}`;
+  }
+
+  /** A browser session of a member of this account's servers. A new key is a new account. */
+  memberSession(key: string) {
+    const token = randomBytes(24).toString("base64url");
+    const now = Date.now();
+    const memberId = this.memberId(key);
+    d1(
+      `INSERT OR IGNORE INTO users(id, identity_key, email, name, created_at, updated_at)
+       VALUES (${quote(memberId)}, ${quote(`e2e:${memberId}`)}, ${quote(`${memberId}@example.com`)},
+               ${quote(`Member ${key}`)}, ${now}, ${now});
+       INSERT INTO auth_sessions(id, user_id, token_hash, expires_at, created_at, last_used_at)
+       VALUES (${quote(crypto.randomUUID())}, ${quote(memberId)},
+               ${quote(createHash("sha256").update(token).digest("base64url"))}, ${now + DAY * 1_000}, ${now}, ${now})`,
+      z.unknown(),
+    );
+    return token;
+  }
+
+  /** The license state that a member of this account's servers sees. */
+  async memberLicense(key: string): Promise<LicenseView> {
+    return licenseStateSchema.parse(
+      (await this.request("GET", "v1/me/license", undefined, {}, this.memberSession(key))).body,
+    );
+  }
+
+  /** A member opens a new member invitation of the server at this `addServers` index. */
+  async memberJoins(key: string, server: number) {
+    const invite = await this.request("POST", `v2/remote/hosts/e2e-${this.scenario}-${server}/invites`, {
+      role: "member",
+    });
+    const token = z.object({ token: z.string() }).parse(invite.body).token;
+    return this.request("POST", "v2/remote/invites/accept", { token }, {}, this.memberSession(key));
   }
 
   /** Moves the test clock and waits until Stripe has run everything that the move made due. */
@@ -478,9 +665,10 @@ const peersSchema = z.array(
 
 /**
  * Opens the web client as the account, waits until it shows the server and a peer connection is
- * connected, and then waits for the server's next activity report. Closing the page ends the use.
+ * connected, and then waits for the server's next activity report. With `holdMs`, it keeps the focused
+ * page open with no input for that long and reads the server row each minute. Closing the page ends the use.
  */
-async function connectWeb(account: Account, serverId: string, name: string, screenshot: string) {
+async function connectWeb(account: Account, serverId: string, name: string, screenshot: string, holdMs = 0) {
   const context = await (await browser()).newContext();
   try {
     await context.addCookies([
@@ -522,7 +710,24 @@ async function connectWeb(account: Account, serverId: string, name: string, scre
       },
       180_000,
     ).catch(() => null);
-    return { connectMs: connectedAt - start, peers, activityReportedAfterMs: reported ? reported - connectedAt : null };
+    const held: { atMinute: number; desiredState: string | null; lastActiveAt: number | null; focused: boolean }[] = [];
+    if (holdMs > 0) await page.bringToFront();
+    while (Date.now() - connectedAt < holdMs) {
+      await sleep(60_000);
+      const row = account.row(serverId);
+      held.push({
+        atMinute: Math.round((Date.now() - connectedAt) / 60_000),
+        desiredState: row?.desired_state ?? null,
+        lastActiveAt: row?.last_active_at ?? null,
+        focused: await page.evaluate(() => !document.hidden && document.hasFocus()),
+      });
+    }
+    return {
+      connectMs: connectedAt - start,
+      peers,
+      activityReportedAfterMs: reported ? reported - connectedAt : null,
+      held,
+    };
   } finally {
     await context.close();
   }
@@ -546,12 +751,61 @@ async function priceId(plan: string, interval: string): Promise<string> {
 const subscription = (id: string) => stripe("GET", `/v1/subscriptions/${id}`, subscriptionSchema);
 
 async function invoices(subscriptionId: string) {
-  const list = await stripe("GET", "/v1/invoices", invoiceListSchema, { subscription: subscriptionId, limit: "3" });
+  const list = await stripe("GET", "/v1/invoices", invoiceListSchema, { subscription: subscriptionId, limit: "10" });
   return list.data.map((invoice) => ({
+    id: invoice.id,
     reason: invoice.billing_reason,
     status: invoice.status,
     amount: invoice.amount_paid,
   }));
+}
+
+/** The PaymentIntent that paid the latest invoice of the plan. */
+async function paymentIntent(subscriptionId: string) {
+  const invoice = (await subscription(subscriptionId)).latest_invoice;
+  if (!invoice) throw new Error("No invoice");
+  const payments = await stripe("GET", "/v1/invoice_payments", invoicePaymentsSchema, { invoice });
+  const intent = payments.data[0]?.payment.payment_intent;
+  if (!intent) throw new Error("The invoice has no PaymentIntent");
+  return { invoice, intent };
+}
+
+/** Waits until Stripe sent the event of this type about this object and the Worker applied it. */
+async function applied(type: string, objectId: string, timeoutMs = 120_000) {
+  // A test refund fails about two minutes after Stripe accepts it.
+  const event = await waitFor(
+    `${type} ${objectId}`,
+    async () => {
+      const list = await stripe("GET", "/v1/events", eventListSchema, { type, limit: "20" });
+      return list.data.find((entry) => entry.data.object.id === objectId) ?? null;
+    },
+    timeoutMs,
+  );
+  await waitFor(
+    `Worker applied ${event.id}`,
+    async () =>
+      d1(`SELECT 1 AS seen FROM billing_webhook_events WHERE event_id = ${quote(event.id)}`, z.unknown()).length > 0,
+    timeoutMs,
+  );
+  return event.id;
+}
+
+/** The sales facts of an invoice. The Worker records them only when OpenPanel is set. */
+function facts(invoiceId: string) {
+  return d1(
+    `SELECT source_key, fact_type, attributes_json FROM billing_sales_facts
+     WHERE invoice_id = ${quote(invoiceId)} ORDER BY event_timestamp, source_key`,
+    factSchema,
+  );
+}
+
+/** True when the Worker records sales facts: the paid invoice gets its fact soon after the payment. */
+async function recordsSales(invoiceId: string) {
+  return waitFor(
+    "payment fact",
+    async () => facts(invoiceId).some((fact) => fact.fact_type === "payment_succeeded"),
+    20_000,
+  ).catch(() => false);
 }
 
 async function waitFor<T>(label: string, check: () => Promise<T | null | undefined | false>, timeoutMs = 60_000) {
@@ -594,11 +848,88 @@ function rowWhere(account: Account, serverId: string, label: string, test: (row:
   );
 }
 
+/** The claim that the Worker records when it sends the welcome email of an account. */
+function welcomeClaims(account: Account) {
+  return d1(
+    `SELECT event_id, type, received_at FROM billing_webhook_events
+     WHERE event_id = ${quote(`${WELCOME_EMAIL_CLAIM_PREFIX}${account.id}`)}`,
+    welcomeClaimSchema,
+  );
+}
+
+const observabilitySchema = z.object({ result: z.object({ rows: z.array(z.tuple([z.string()])) }) });
+
+/**
+ * The welcome email results that a local Worker logged since `since`: one line for each send. Only
+ * `bun run dev:api` has this log query, so `--remote-d1` reads nothing.
+ */
+async function welcomeSends(api: string, since: number) {
+  const response = await fetch(`${api}/cdn-cgi/local/explorer/api/local/observability/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sql: `SELECT message FROM logs WHERE message LIKE '%billing: welcome email%' AND ts_ms >= ${since}`,
+    }),
+  });
+  return observabilitySchema.parse(await response.json()).result.rows.map(([message]) => message);
+}
+
 function planWhere(account: Account, subscriptionId: string, label: string, test: (plan: Plan) => boolean) {
   return waitFor(label, async () => {
     const plan = await account.plan(subscriptionId);
     return plan && test(plan) ? plan : null;
   });
+}
+
+const welcomeClaimSchema = z.object({ event_id: z.string(), type: z.string(), received_at: z.number() });
+
+function licenseWhere(account: Account, label: string, test: (state: LicenseView) => boolean, timeoutMs?: number) {
+  return waitFor(
+    label,
+    async () => {
+      const state = await account.license();
+      return test(state) ? state : null;
+    },
+    timeoutMs,
+  );
+}
+
+/** The license rows in `billing_subscriptions`. There must be none: a license has its own table. */
+function licenseInPlans(subscriptionId: string) {
+  return d1(
+    `SELECT stripe_subscription_id FROM billing_subscriptions WHERE stripe_subscription_id = ${quote(subscriptionId)}`,
+    z.unknown(),
+  ).length;
+}
+
+/** The Checkout Session ID in a Checkout page URL. */
+function checkoutSessionId(url: string) {
+  const id = /\/(cs_test_[A-Za-z0-9]+)/u.exec(url)?.[1];
+  if (!id) throw new Error("No Checkout Session ID in the URL");
+  return id;
+}
+
+const openSessionsSchema = z.object({
+  data: z.array(z.object({ id: z.string(), metadata: z.record(z.string(), z.string()).nullable() })),
+});
+
+/** The open license Checkout pages of the account's customer. */
+async function openLicensePages(account: Account) {
+  const listed = await stripe("GET", "/v1/checkout/sessions", openSessionsSchema, {
+    customer: account.customer,
+    status: "open",
+    limit: "100",
+  });
+  return listed.data.filter((session) => session.metadata?.openbot_kind === "license").map((session) => session.id);
+}
+
+async function expireCheckout(url: string) {
+  await stripe("POST", `/v1/checkout/sessions/${checkoutSessionId(url)}/expire`, idSchema).catch(() => null);
+}
+
+/** The amount of the latest invoice of a subscription. */
+async function latestInvoiceAmount(subscriptionId: string) {
+  return (await invoices(subscriptionId))[0]?.amount ?? null;
 }
 
 const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
@@ -908,7 +1239,7 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
       account,
       server.serverId,
       "Portal upgrade",
-      (row) => row.plan !== "starter",
+      (row) => row.plan !== "standard",
       600_000,
     );
     record("portal", "Portal plan change: the server plan follows, and an upgrade is invoiced at once", true, {
@@ -936,6 +1267,145 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
         page.customer === stored?.stripe_customer_id,
       { oldReplaced: stored?.stripe_customer_id !== old },
     );
+  },
+  async refund(account) {
+    // A partial refund keeps the plan. The second refund makes the payment refunded in full and ends it.
+    const { server } = await account.createServer("Refund");
+    const sub = await account.pay(server.serverId);
+    await provisioned(account, server.serverId);
+    const paid = await paymentIntent(sub);
+    const sales = await recordsSales(paid.invoice);
+    const partial = await stripe("POST", "/v1/refunds", refundSchema, { payment_intent: paid.intent, amount: "100" });
+    await applied("refund.created", partial.id);
+    const plan = await account.plan(sub);
+    const row = account.row(server.serverId);
+    record(
+      "refund",
+      "a partial refund keeps the plan and the server",
+      plan?.status === "active" && row?.desired_state === "running" && row.observed_error !== "plan_ended",
+      { refund: partial.status, plan, row },
+    );
+    const rest = await stripe("POST", "/v1/refunds", refundSchema, { payment_intent: paid.intent });
+    await applied("refund.created", rest.id);
+    const ended = await rowWhere(account, server.serverId, "plan ended", (row) => row.desired_state === "stopped");
+    const stripeSub = await subscription(sub);
+    record(
+      "refund",
+      "a full refund of the current invoice cancels the plan now; the server stops with plan_ended and is kept",
+      stripeSub.status === "canceled" && ended.observed_error === "plan_ended" && ended.deleted_at === null,
+      { refund: rest.status, stripeStatus: stripeSub.status, row: ended },
+    );
+    if (sales) {
+      const recorded = facts(paid.invoice);
+      record(
+        "refund",
+        "each refund is a payment_refunded sales fact",
+        recorded.some((fact) => fact.source_key === `refund:${partial.id}:succeeded`) &&
+          recorded.some((fact) => fact.source_key === `refund:${rest.id}:succeeded`),
+        recorded,
+      );
+    } else {
+      print("SKIP [refund] sales facts: the Worker has no OpenPanel client");
+    }
+    // This test card makes the refund fail after Stripe accepts it. The refund is partial, so the plan stays.
+    const second = await account.createServer("Refund fails");
+    await account.useCard("pm_card_refundFail");
+    const secondSub = await account.pay(second.server.serverId);
+    await provisioned(account, second.server.serverId);
+    const secondPaid = await paymentIntent(secondSub);
+    const failing = await stripe("POST", "/v1/refunds", refundSchema, {
+      payment_intent: secondPaid.intent,
+      amount: "100",
+    });
+    await applied("refund.failed", failing.id, 180_000);
+    const failedRow = account.row(second.server.serverId);
+    record(
+      "refund",
+      "a failed refund keeps the plan and the server",
+      (await account.plan(secondSub))?.status === "active" && failedRow?.desired_state === "running",
+      { row: failedRow },
+    );
+    if (sales) {
+      const recorded = facts(secondPaid.invoice);
+      // Stripe says this refund starts as succeeded, so both facts exist; the order of their events can vary.
+      record(
+        "refund",
+        "a failed refund is a refund_failed fact",
+        recorded.some((fact) => fact.source_key === `refund:${failing.id}:failed`),
+        recorded,
+      );
+    }
+  },
+
+  async dispute(account) {
+    const { server } = await account.createServer("Dispute");
+    // This test card makes the issuer open a dispute soon after the payment.
+    await account.useCard("pm_card_createDispute");
+    const sub = await account.pay(server.serverId);
+    const paid = await paymentIntent(sub);
+    const sales = await recordsSales(paid.invoice);
+    const disputed = await waitFor("dispute", async () => {
+      const list = await stripe("GET", "/v1/disputes", disputeListSchema, { payment_intent: paid.intent });
+      return list.data[0] ?? null;
+    });
+    await applied("charge.dispute.created", disputed.id);
+    const ended = await rowWhere(account, server.serverId, "plan ended", (row) => row.desired_state === "stopped");
+    const stripeSub = await subscription(sub);
+    record(
+      "dispute",
+      "a dispute cancels the plan now; the server stops with plan_ended and is kept",
+      stripeSub.status === "canceled" && ended.observed_error === "plan_ended" && ended.deleted_at === null,
+      { dispute: disputed.status, stripeStatus: stripeSub.status, row: ended },
+    );
+    // This evidence text makes the test dispute close as lost.
+    await stripe("POST", `/v1/disputes/${disputed.id}`, idSchema, {
+      "evidence[uncategorized_text]": "losing_evidence",
+      submit: "true",
+    });
+    await applied("charge.dispute.closed", disputed.id, 180_000);
+    if (sales) {
+      const recorded = facts(paid.invoice);
+      record(
+        "dispute",
+        "the dispute and its loss are payment_disputed and dispute_lost facts",
+        recorded.some((fact) => fact.source_key === `dispute:${disputed.id}:created`) &&
+          recorded.some((fact) => fact.source_key === `dispute:${disputed.id}:lost`),
+        recorded,
+      );
+    } else {
+      print("SKIP [dispute] sales facts: the Worker has no OpenPanel client");
+    }
+  },
+
+  // The Worker claims the welcome email before it sends it, and logs one line for each send.
+  async welcome(account) {
+    const since = Date.now();
+    const first = await account.createServer("Welcome");
+    record("welcome", "a server that is not paid gets no welcome email", welcomeClaims(account).length === 0, null);
+    const sub = await account.pay(first.server.serverId);
+    await applied("customer.subscription.created", sub);
+    await provisioned(account, first.server.serverId);
+    const claimed = await waitFor("welcome claim", async () => welcomeClaims(account)[0]);
+    record(
+      "welcome",
+      "the first plan of the account claims the welcome email",
+      claimed.type === "welcome_email",
+      claimed,
+    );
+    const second = await account.createServer("Welcome second");
+    const secondSub = await account.pay(second.server.serverId);
+    await applied("customer.subscription.created", secondSub);
+    await provisioned(account, second.server.serverId);
+    await stripe("DELETE", `/v1/subscriptions/${sub}`, idSchema);
+    await rowWhere(account, first.server.serverId, "ended", (row) => row.desired_state === "stopped");
+    await account.pay(first.server.serverId);
+    await rowWhere(account, first.server.serverId, "running again", (row) => row.desired_state === "running");
+    if (REMOTE_D1) {
+      print("SKIP [welcome] send count: the remote Worker log is not available");
+      return;
+    }
+    const sends = await welcomeSends(account.api, since);
+    record("welcome", "a second server and a renewed plan send no second welcome email", sends.length === 1, sends);
   },
   async boat(account) {
     const name = "Boat e2e";
@@ -1054,12 +1524,27 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
         output: restarted,
       });
 
-      const web = await connectWeb(account, serverId, name, "boat-e2e-web-connected.png");
+      // The focused page sends `focus-use-v1` pings and no input. The idle stop would come after 15 to 20 minutes.
+      const web = await connectWeb(account, serverId, name, "boat-e2e-web-connected.png", 20 * 60_000);
       record(
         "boat",
         "the web client connects to the server over Signal, and the server reports the use",
         web.peers.some((peer) => peer.state === "connected") && web.activityReportedAfterMs !== null,
         web,
+      );
+      const reports = new Set(web.held.map((sample) => sample.lastActiveAt).filter((at) => at !== null));
+      // Without focus the page sends no ping, so a failure below would not be about the server.
+      record(
+        "boat",
+        "the held web page has focus",
+        web.held.length > 0 && web.held.every((sample) => sample.focused),
+        web.held,
+      );
+      record(
+        "boat",
+        "a focused web client with no input keeps the server running for 20 minutes",
+        web.held.length > 0 && web.held.every((sample) => sample.desiredState === "running") && reports.size >= 3,
+        { reports: reports.size, held: web.held },
       );
 
       // The page is closed, so the server reports no use. It stops 15 minutes after its last use.
@@ -1096,23 +1581,23 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
         { status: woken.status, row: awake, web: again },
       );
 
-      // A plan change: Starter (small) to Standard (default). The server stops and resumes on the new type.
+      // A plan change: Standard (default) to Pro (large). The server stops and resumes on the new type.
       const sub = await openPlan();
       const item = (await subscription(sub)).items.data[0]?.id;
       if (!item) throw new Error("No subscription item");
       await stripe("POST", `/v1/subscriptions/${sub}`, idSchema, {
         "items[0][id]": item,
-        "items[0][price]": await priceId("standard", "month"),
+        "items[0][price]": await priceId("pro", "month"),
         proration_behavior: "always_invoice",
       });
-      const resized = await runningRow("resized", (row) => row.size === "default");
+      const resized = await runningRow("resized", (row) => row.size === "large");
       const resizedBoat = await sandbox(sandboxId);
       const resizedWeb = await connectWeb(account, serverId, name, "boat-e2e-web-after-resize.png");
       record(
         "boat",
-        "Starter to Standard: the server moves to the boat default type, and the web client connects again",
-        resized.plan === "standard" &&
-          resizedBoat.type === "default" &&
+        "Standard to Pro: the server moves to the boat large type, and the web client connects again",
+        resized.plan === "pro" &&
+          resizedBoat.type === "large" &&
           resized.provider_sandbox_id === sandboxId &&
           resizedWeb.peers.some((peer) => peer.state === "connected"),
         { row: resized, boat: resizedBoat, web: resizedWeb },
@@ -1176,6 +1661,482 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
     } finally {
       if (!deleted) await account.request("DELETE", `v2/hosting/servers/${serverId}`, { confirmName: name });
     }
+  },
+
+  async "license-buy"(account) {
+    const price = await stripe("GET", `/v1/prices/${await priceId("license", "month")}`, licensePriceSchema, {
+      "expand[0]": "tiers",
+      "expand[1]": "currency_options.usd.tiers",
+      "expand[2]": "currency_options.pln.tiers",
+    });
+    const tiers = {
+      eur: price.tiers,
+      usd: price.currency_options?.usd?.tiers,
+      pln: price.currency_options?.pln?.tiers,
+    };
+    record(
+      "license-buy",
+      "the license Price is graduated, with the base and extra-user tiers of LICENSE_PRICES in EUR, USD and PLN",
+      price.currency === "eur" &&
+        price.tiers_mode === "graduated" &&
+        BILLING_CURRENCIES.every((currency) => {
+          const amounts = LICENSE_PRICES[currency];
+          const [base, extra] = tiers[currency] ?? [];
+          return (
+            base?.up_to === 5 &&
+            base.flat_amount === amounts.base &&
+            (base.unit_amount ?? 0) === 0 &&
+            extra?.up_to === null &&
+            extra.unit_amount === amounts.extraUser
+          );
+        }),
+      tiers,
+    );
+    const before = await account.license();
+    record(
+      "license-buy",
+      "an account with no license sees an available license and nothing to pay",
+      before.available && before.license === null && before.used === 1,
+      before,
+    );
+    const sub = await account.buyLicense(7);
+    const bought = await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    record(
+      "license-buy",
+      "7 users in EUR: the license shows 7 users and the list price €130",
+      bought.license?.users === 7 &&
+        bought.license.currency === "eur" &&
+        bought.license.amount === licenseAmount(7, "eur") &&
+        bought.currency === "eur",
+      bought,
+    );
+    record(
+      "license-buy",
+      "Stripe charged the tiered amount for 7 users",
+      (await latestInvoiceAmount(sub)) === licenseAmount(7, "eur"),
+      await invoices(sub),
+    );
+    const plans = await account.billing();
+    record(
+      "license-buy",
+      "the server plans do not show the license, and billing_subscriptions has no license row",
+      plans.length === 0 && licenseInPlans(sub) === 0,
+      { plans },
+    );
+    record(
+      "license-buy",
+      "a license is not a first server plan: no welcome email",
+      welcomeClaims(account).length === 0,
+      {
+        claims: welcomeClaims(account),
+      },
+    );
+  },
+
+  async "license-checkout"(account) {
+    const opened = await account.request("POST", "v1/me/license/checkout", { users: 7, currency: "eur" });
+    const url = licenseCheckoutSchema.safeParse(opened.body).data?.url ?? "";
+    const session = url
+      ? await stripe("GET", `/v1/checkout/sessions/${checkoutSessionId(url)}`, checkoutLinesSchema, {
+          "expand[0]": "line_items",
+          "expand[1]": "line_items.data.price",
+        })
+      : null;
+    const line = session?.line_items.data[0];
+    record(
+      "license-checkout",
+      "the Worker gives a checkout.stripe.com page for the license Price with quantity 7 in EUR",
+      opened.status === 200 &&
+        new URL(url).host === "checkout.stripe.com" &&
+        line?.quantity === 7 &&
+        line.price.lookup_key === "openbot_license_month" &&
+        session?.currency === "eur",
+      { status: opened.status, code: opened.code, session: session && { status: session.status, line } },
+    );
+    if (REAL_CHECKOUT) {
+      const returned = await payCheckout(url, account.api, "license-e2e-checkout.png");
+      const paid = await licenseWhere(account, "license paid", (state) => state.license?.status === "active", 120_000);
+      record(
+        "license-checkout",
+        "the paid Checkout page makes an active license of 7 users",
+        paid.license?.users === 7,
+        {
+          returned,
+          license: paid.license,
+        },
+      );
+    } else {
+      await expireCheckout(url);
+      await account.buyLicense(7);
+      await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    }
+    const second = await account.request("POST", "v1/me/license/checkout", { users: 5, currency: "eur" });
+    record("license-checkout", "a second license: 409 license_exists", second.status === 409, {
+      status: second.status,
+      code: second.code,
+    });
+    const tooMany = await account.request("POST", "v1/me/license/checkout", { users: 26, currency: "eur" });
+    const tooFew = await account.request("POST", "v1/me/license/checkout", { users: 4, currency: "eur" });
+    record(
+      "license-checkout",
+      "26 or 4 users: 400, because the app sells 5 to 25",
+      tooMany.status === 400 && tooFew.status === 400,
+      { tooMany: tooMany.code, tooFew: tooFew.code },
+    );
+  },
+
+  async "license-double-checkout"(account) {
+    const body = { users: 5, currency: "eur" } as const;
+    const pair = await Promise.all([
+      account.request("POST", "v1/me/license/checkout", body),
+      account.request("POST", "v1/me/license/checkout", body),
+    ]);
+    const third = await account.request("POST", "v1/me/license/checkout", body);
+    const urls = [...pair, third].map((response) => licenseCheckoutSchema.safeParse(response.body).data?.url ?? "");
+    const open = await openLicensePages(account);
+    record(
+      "license-double-checkout",
+      "two requests at once and a third one leave one open license page, the page of the last response",
+      [...pair, third].every((response) => response.status === 200) &&
+        open.length === 1 &&
+        urls[2] !== "" &&
+        open[0] === checkoutSessionId(urls[2] ?? ""),
+      {
+        statuses: [...pair, third].map((response) => response.status),
+        sameConcurrentPage: urls[0] === urls[1],
+        returned: urls.map((url) => (url ? checkoutSessionId(url) : null)),
+        open,
+      },
+    );
+
+    // A license that Stripe has but D1 does not, as before its webhook arrives.
+    const sub = await account.buyLicense(5);
+    await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    d1(`DELETE FROM licenses WHERE user_id = ${quote(account.id)}`, z.unknown());
+    const before = d1(`SELECT stripe_subscription_id FROM licenses WHERE user_id = ${quote(account.id)}`, z.unknown());
+    const refused = await account.request("POST", "v1/me/license/checkout", body);
+    const after = await account.license();
+    const left = await openLicensePages(account);
+    record(
+      "license-double-checkout",
+      "a license in Stripe but not in D1: 409 license_exists, no open license page, and D1 has the license again",
+      before.length === 0 &&
+        refused.status === 409 &&
+        refused.code === "license_exists" &&
+        left.length === 0 &&
+        after.license?.subscriptionId === sub,
+      { rowsBefore: before.length, status: refused.status, code: refused.code, open: left, license: after.license },
+    );
+  },
+
+  async "license-users"(account) {
+    // 6 members on one server: the license counts 7 people with the owner.
+    account.addServers([{ name: "Office", members: ["a", "b", "c", "d", "e", "f"].map((key) => ({ key })) }]);
+    const sub = await account.buyLicense(9);
+    await licenseWhere(account, "license active", (state) => state.license?.users === 9);
+    const invoicesBefore = (await invoices(sub)).length;
+    const more = await account.request("POST", "v1/me/license/users", { users: 11 });
+    const moreInvoices = await invoices(sub);
+    record(
+      "license-users",
+      "9 → 11 users: the license shows 11, and Stripe invoices and charges the prorated amount at once",
+      more.status === 200 &&
+        licenseStateSchema.parse(more.body).license?.users === 11 &&
+        moreInvoices.length === invoicesBefore + 1 &&
+        moreInvoices[0]?.reason === "subscription_update" &&
+        moreInvoices[0].status === "paid" &&
+        moreInvoices[0].amount > 0,
+      { status: more.status, invoices: moreInvoices },
+    );
+    const fewer = await account.request("POST", "v1/me/license/users", { users: 8 });
+    const fewerInvoices = await invoices(sub);
+    const item = await stripe(
+      "GET",
+      `/v1/subscriptions/${sub}`,
+      z.object({ items: z.object({ data: z.array(z.object({ quantity: z.number() })) }) }),
+    );
+    record(
+      "license-users",
+      "11 → 8 users: no new invoice and no refund; the Stripe quantity is 8 for the next invoice",
+      fewer.status === 200 && fewerInvoices.length === moreInvoices.length && item.items.data[0]?.quantity === 8,
+      { status: fewer.status, invoices: fewerInvoices, quantity: item.items.data[0]?.quantity },
+    );
+    const inUse = await account.request("POST", "v1/me/license/users", { users: 6 });
+    record("license-users", "6 users while 7 people use it: 409 license_users_in_use", inUse.status === 409, {
+      status: inUse.status,
+      code: inUse.code,
+    });
+    const over = await account.request("POST", "v1/me/license/users", { users: 26 });
+    record("license-users", "26 users: 400", over.status === 400, { status: over.status, code: over.code });
+    await account.useCard("pm_card_chargeCustomerFail");
+    const declined = await account.request("POST", "v1/me/license/users", { users: 12 });
+    const after = await account.license();
+    record(
+      "license-users",
+      "an increase with a failing card: 402 license_payment_failed, and the license keeps 8 users",
+      declined.status === 402 && declined.code === "license_payment_failed" && after.license?.users === 8,
+      { status: declined.status, code: declined.code, users: after.license?.users },
+    );
+    await account.useCard("pm_card_visa");
+    const paidBack = await account.request("POST", "v1/me/license/users", { users: 10 });
+    const paidBackInvoices = await invoices(sub);
+    record(
+      "license-users",
+      "8 → 10 users in the period that paid for 11: no new invoice",
+      paidBack.status === 200 && paidBackInvoices.length === moreInvoices.length,
+      { status: paidBack.status, invoices: paidBackInvoices },
+    );
+    const extra = await account.request("POST", "v1/me/license/users", { users: 12 });
+    const extraInvoices = await invoices(sub);
+    record(
+      "license-users",
+      "10 → 12 users: one paid invoice for the 12th user only, less than the 9 → 11 invoice",
+      extra.status === 200 &&
+        licenseStateSchema.parse(extra.body).license?.users === 12 &&
+        extraInvoices.length === paidBackInvoices.length + 1 &&
+        extraInvoices[0]?.status === "paid" &&
+        extraInvoices[0].amount > 0 &&
+        extraInvoices[0].amount < (moreInvoices[0]?.amount ?? 0),
+      { status: extra.status, invoices: extraInvoices },
+    );
+  },
+
+  async "license-limit"(account) {
+    // Servers with no plan take 3 active members, so each has the owner and one member: the license
+    // stops a join before the member limit does. The owner and a, b, c, lab use all 5 users.
+    account.addServers([
+      { name: "Office", members: [{ key: "a" }] },
+      { name: "Studio", members: [{ key: "b" }, { key: "gone", active: false }] },
+      { name: "Shop", members: [{ key: "c" }] },
+      { name: "Lab", members: [{ key: "lab" }] },
+    ]);
+    await account.buyLicense(5);
+    await licenseWhere(account, "license active", (state) => state.license?.users === 5 && state.used === 5);
+    const refused = await account.memberJoins("new", 0);
+    record(
+      "license-limit",
+      "5 of 5 users: a new person cannot join, 409 license_users_full",
+      refused.status === 409 && refused.code === "license_users_full",
+      { status: refused.status, code: refused.code },
+    );
+    const counted = await account.memberJoins("lab", 0);
+    record("license-limit", "5 of 5 users: a member of another server of the owner joins", counted.status === 200, {
+      status: counted.status,
+      code: counted.code,
+    });
+    const [gone] = d1(
+      `SELECT membership_id FROM remote_memberships
+        WHERE host_id = ${quote(`e2e-${account.scenario}-1`)} AND user_id = ${quote(account.memberId("gone"))}`,
+      z.object({ membership_id: z.string() }),
+    );
+    const reactivate = () =>
+      account.request("PATCH", `v2/remote/hosts/e2e-${account.scenario}-1/members/${gone?.membership_id}`, {
+        role: "member",
+        reactivate: true,
+      });
+    const reactivated = await reactivate();
+    record(
+      "license-limit",
+      "5 of 5 users: the owner cannot reactivate a removed member, 409 license_users_full",
+      reactivated.status === 409 && reactivated.code === "license_users_full",
+      { status: reactivated.status, code: reactivated.code },
+    );
+    const more = await account.request("POST", "v1/me/license/users", { users: 6 });
+    const joined = await account.memberJoins("new", 2);
+    const state = await account.license();
+    record(
+      "license-limit",
+      "after the owner adds a user to the license, the new person joins and uses it",
+      more.status === 200 && joined.status === 200 && state.used === 6,
+      { users: more.status, join: joined.status, code: joined.code, used: state.used },
+    );
+    const again = await reactivate();
+    record(
+      "license-limit",
+      "6 of 6 users: the reactivation is refused again",
+      again.status === 409 && again.code === "license_users_full",
+      { status: again.status, code: again.code },
+    );
+  },
+
+  async "license-count"(account) {
+    account.addServers([
+      { name: "Office", members: [{ key: "shared" }, { key: "office" }, { key: "gone", active: false }] },
+      { name: "Lab", members: [{ key: "shared" }, { key: "lab" }] },
+    ]);
+    const state = await account.license();
+    const shared = state.users.find((user) => user.email === `${account.memberId("shared")}@example.com`);
+    record(
+      "license-count",
+      "the owner plus 3 distinct active members: used is 4; a revoked member and the owner's memberships do not count",
+      state.used === 4 && state.users.filter((user) => user.owner).length === 1,
+      { used: state.used, users: state.users },
+    );
+    record(
+      "license-count",
+      "a member of two servers is one user with both server names",
+      shared?.servers.length === 2 && shared.servers.includes("Office") && shared.servers.includes("Lab"),
+      shared,
+    );
+    const before = await account.memberLicense("office");
+    await account.buyLicense(5);
+    await licenseWhere(account, "license active", (current) => current.license?.status === "active");
+    const covered = await account.memberLicense("office");
+    record(
+      "license-count",
+      "a member sees the owner's license only when it is open, and buys nothing",
+      before.coveredBy.length === 0 &&
+        covered.coveredBy.some((entry) => entry.ownerEmail === `${account.id}@example.com`) &&
+        covered.license === null,
+      { before: before.coveredBy, after: covered.coveredBy },
+    );
+    const revoked = await account.memberLicense("gone");
+    record("license-count", "a revoked member is not covered", revoked.coveredBy.length === 0, revoked.coveredBy);
+  },
+
+  async "license-renewal"(account) {
+    const sub = await account.buyLicense(5);
+    await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    const cancel = await account.request("POST", "v1/me/license/renewal", { cancel: true });
+    const cancelled = licenseStateSchema.parse(cancel.body);
+    record(
+      "license-renewal",
+      "cancel: the license ends at the period end, and Stripe has cancel_at_period_end",
+      cancel.status === 200 &&
+        cancelled.license?.cancelAtPeriodEnd === true &&
+        (await subscription(sub)).cancel_at_period_end,
+      cancelled.license,
+    );
+    const renew = await account.request("POST", "v1/me/license/renewal", { cancel: false });
+    record(
+      "license-renewal",
+      "renew: the license continues",
+      renew.status === 200 && licenseStateSchema.parse(renew.body).license?.cancelAtPeriodEnd === false,
+      { status: renew.status },
+    );
+    await account.request("POST", "v1/me/license/renewal", { cancel: true });
+    await account.advance(32);
+    const ended = await licenseWhere(
+      account,
+      "license ended",
+      (state) => state.license?.status === "canceled",
+      120_000,
+    );
+    record(
+      "license-renewal",
+      "at the period end the license ends and stays in the state as ended",
+      true,
+      ended.license,
+    );
+    const again = await account.request("POST", "v1/me/license/checkout", { users: 5, currency: "eur" });
+    const url = licenseCheckoutSchema.safeParse(again.body).data?.url;
+    record("license-renewal", "an ended license: the account can buy a new one", again.status === 200 && Boolean(url), {
+      status: again.status,
+      code: again.code,
+    });
+    if (url) await expireCheckout(url);
+    const noLicense = await account.request("POST", "v1/me/license/users", { users: 6 });
+    record("license-renewal", "change users of an ended license: 404 no_license", noLicense.status === 404, {
+      status: noLicense.status,
+      code: noLicense.code,
+    });
+  },
+
+  async "license-failed-renewal"(account) {
+    const sub = await account.buyLicense(5);
+    await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    await account.useCard("pm_card_chargeCustomerFail");
+    await account.advance(32);
+    const due = await licenseWhere(account, "past_due", (state) => state.license?.status === "past_due", 120_000);
+    record("license-failed-renewal", "a failed renewal shows the license as past_due", true, due.license);
+    const second = await account.request("POST", "v1/me/license/checkout", { users: 5, currency: "eur" });
+    record("license-failed-renewal", "a past_due license is open: no second license", second.status === 409, {
+      status: second.status,
+      code: second.code,
+    });
+    const good = await account.useCard("pm_card_visa");
+    const current = await subscription(sub);
+    if (!current.latest_invoice) throw new Error("No open invoice");
+    await stripe("POST", `/v1/invoices/${current.latest_invoice}/pay`, idSchema, { payment_method: good });
+    const recovered = await licenseWhere(account, "active again", (state) => state.license?.status === "active");
+    record("license-failed-renewal", "paying the open invoice makes the license active again", true, recovered.license);
+  },
+
+  async "license-currency"(account) {
+    const { server } = await account.createServer("Currency");
+    const planSub = await account.pay(server.serverId);
+    await planWhere(account, planSub, "plan", () => true);
+    const state = await account.license();
+    record(
+      "license-currency",
+      "an account with an EUR server plan has its license currency locked to EUR",
+      state.currency === "eur",
+      {
+        currency: state.currency,
+      },
+    );
+    const usd = await account.request("POST", "v1/me/license/checkout", { users: 5, currency: "usd" });
+    record("license-currency", "a USD license: 409 license_currency", usd.status === 409, {
+      status: usd.status,
+      code: usd.code,
+    });
+    const eur = await account.request("POST", "v1/me/license/checkout", { users: 5, currency: "eur" });
+    const url = licenseCheckoutSchema.safeParse(eur.body).data?.url;
+    record("license-currency", "an EUR license gives a Checkout page", eur.status === 200 && Boolean(url), {
+      status: eur.status,
+    });
+    if (url) await expireCheckout(url);
+  },
+
+  async "license-isolation"(account) {
+    const { server } = await account.createServer("Isolation");
+    const planSub = await account.pay(server.serverId);
+    const row = await provisioned(account, server.serverId);
+    const planBefore = await planWhere(account, planSub, "plan", () => true);
+    const claims = welcomeClaims(account).length;
+    const licenseSub = await account.buyLicense(7);
+    await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    const plans = await account.billing();
+    const rowAfter = account.row(server.serverId);
+    record(
+      "license-isolation",
+      "a license next to a server plan: the plan list, the plan and the server do not change",
+      plans.length === 1 &&
+        plans[0]?.subscriptionId === planSub &&
+        plans[0].plan === planBefore.plan &&
+        plans[0].status === planBefore.status &&
+        rowAfter?.desired_state === row.desired_state &&
+        rowAfter.plan === row.plan &&
+        licenseInPlans(licenseSub) === 0,
+      { plans, rowBefore: row, rowAfter },
+    );
+    record("license-isolation", "the license sends no second welcome email", welcomeClaims(account).length === claims, {
+      before: claims,
+      after: welcomeClaims(account).length,
+    });
+    await stripe("DELETE", `/v1/subscriptions/${planSub}`, idSchema);
+    const ended = await rowWhere(
+      account,
+      server.serverId,
+      "plan ended",
+      (current) => current.desired_state === "stopped",
+    );
+    const license = await account.license();
+    record(
+      "license-isolation",
+      "the server plan ends: the server stops with plan_ended, and the license stays active",
+      ended.observed_error === "plan_ended" && license.license?.status === "active",
+      { row: ended, license: license.license },
+    );
+    await stripe("DELETE", `/v1/subscriptions/${licenseSub}`, idSchema);
+    const licenseEnded = await licenseWhere(account, "license ended", (state) => state.license?.status === "canceled");
+    const stillStopped = account.row(server.serverId);
+    record(
+      "license-isolation",
+      "the license ends: the server row does not change",
+      stillStopped?.desired_state === "stopped" && stillStopped.deleted_at === null,
+      { license: licenseEnded.license, row: stillStopped },
+    );
   },
 };
 

@@ -1,26 +1,17 @@
-import { prefersReducedMotion } from "@openbot/ui/utils";
 import type { JSX } from "@solidjs/web";
-import { children, createSignal, onSettled, Show } from "solid-js";
+import { children, Show } from "solid-js";
 import { ArticleGradient } from "./ArticleGradient";
 
-// Pictures, animations and video inside an article. A body is plain TSX, so a bare
+// Pictures inside an article. A body is plain TSX, so a bare
 // <img> would already render; these exist so that every picture carries the things
 // that cannot be added to it afterwards: a text alternative, its own size — so the
-// prose under it does not jump when the file lands — a caption where it needs one,
-// and, for anything that moves, a way to stop it.
+// prose under it does not jump when the file lands — and a caption where it needs one.
 //
 // Each file is imported rather than written as a path, and lives beside the body
 // that uses it in `src/content/<collection>/media/<slug>/`. Vite then fingerprints
 // it and fails the build on a file that is not there, so a renamed picture cannot
 // ship as a broken one, and a replaced picture is never served from a cache under
 // the name of the old one.
-//
-// Motion starts from the reader's own setting. That setting cannot be read on the
-// server, so the markup takes the safe side of the question — an animated image
-// leaves the choice to a media query, and a clip simply does not start — and the
-// component takes the answer over once the page has hydrated. From that point the
-// reader can also overrule it in either direction, which is the part a media query
-// cannot do.
 
 /** How much of the card gradient shows around a mounted picture. */
 export type ArticleMountPad = "tight" | "roomy";
@@ -74,158 +65,10 @@ export function ArticleImage(props: ArticleImageProps) {
   );
 }
 
-export interface ArticleGifProps extends ArticleMediaBase {
-  /** The moving file: a GIF, or an animated WebP. */
-  src: string;
-  /**
-   * One frame of it. It is what a reader who asked for less motion is given, and
-   * what the picture returns to when the reader stops the animation. A GIF has no
-   * way to stop itself, so this second file is the stop.
-   */
-  still: string;
-  /** What the animation shows, for a reader who cannot see it. */
-  alt: string;
-}
-
-export function ArticleGif(props: ArticleGifProps) {
-  const [decided, setDecided] = createSignal(false);
-  const [playing, setPlaying] = createSignal(true);
-
-  onSettled(() => {
-    setPlaying(!prefersReducedMotion());
-    setDecided(true);
-  });
-
-  return (
-    <ArticleFigure {...figureMount(props)}>
-      <div class="post-media-frame">
-        <picture>
-          {/* Before the script runs this is the whole of the answer, and it stays
-              the whole of it for a reader with no script at all. It goes once the
-              component holds the preference itself, because a <source> that
-              matches outranks the src beneath it, and from then on the reader is
-              allowed to ask for the animation in spite of the setting. */}
-          <Show when={!decided()}>
-            <source media="(prefers-reduced-motion: reduce)" srcset={props.still} />
-          </Show>
-          <img
-            class="post-media"
-            src={playing() ? props.src : props.still}
-            alt={props.alt}
-            width={props.width}
-            height={props.height}
-            style={mediaShape(props)}
-            loading="lazy"
-            decoding="async"
-          />
-        </picture>
-        <Show when={decided()}>
-          <MotionToggle playing={playing()} onToggle={() => setPlaying(!playing())} />
-        </Show>
-      </div>
-    </ArticleFigure>
-  );
-}
-
-export interface ArticleClipProps extends ArticleMediaBase {
-  /** The imported MP4. A clip carries no sound: it is a GIF that compresses. */
-  src: string;
-  /** Its opening frame, shown before the clip loads and whenever it is stopped. */
-  poster: string;
-  /** What the clip shows, for a reader who cannot see it. */
-  label: string;
-}
-
-/**
- * A silent clip on a loop — what a GIF is usually asked to do, at a fraction of
- * the bytes. It plays only while it is on screen and only while the reader wants
- * it to, and it downloads nothing until the first of those is true.
- */
-export function ArticleClip(props: ArticleClipProps) {
-  let video: HTMLVideoElement | undefined;
-  let onScreen = false;
-  const [decided, setDecided] = createSignal(false);
-  const [playing, setPlaying] = createSignal(false);
-
-  const sync = () => {
-    if (!video) return;
-    if (playing() && onScreen) {
-      // A browser can still refuse — iOS in Low Power Mode refuses even a muted
-      // clip. Answer that by showing the reader a Play button rather than a
-      // control that says Pause over a picture that is not moving. A start that
-      // was cut short because the clip left the screen is not a refusal: the
-      // pause below cancels it, and the reader's choice has to stand for when the
-      // clip comes back.
-      void video.play().catch(() => {
-        if (onScreen) setPlaying(false);
-      });
-      return;
-    }
-    if (!video.paused) video.pause();
-  };
-
-  onSettled(() => {
-    const element = video;
-    if (!element) return;
-    // `muted` is a property rather than an attribute, and an unmuted clip is not
-    // allowed to start on its own. Set it before anything is asked to play.
-    element.muted = true;
-    setPlaying(!prefersReducedMotion());
-    setDecided(true);
-
-    // Without an observer there is no way to tell whether the clip is on screen,
-    // and a page of clips all playing at once is what that would cost. In that
-    // case the clip waits to be asked.
-    if (!globalThis.IntersectionObserver) return;
-    const observer = new IntersectionObserver((entries) => {
-      onScreen = entries.some((entry) => entry.isIntersecting);
-      sync();
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  });
-
-  return (
-    <ArticleFigure {...figureMount(props)}>
-      <div class="post-media-frame">
-        {/* A clip with no controls is a moving picture, and that is how it is
-            announced — but the role and the text alternative go on the frame
-            around it, because a <video> is an interactive element and must not be
-            relabelled as a still one. The reader's control over it is the button
-            below. */}
-        <div role="img" aria-label={props.label}>
-          <video
-            ref={video}
-            class="post-media"
-            src={props.src}
-            poster={props.poster}
-            width={props.width}
-            height={props.height}
-            style={mediaShape(props)}
-            muted
-            loop
-            playsinline
-            preload="none"
-          />
-        </div>
-        <Show when={decided()}>
-          <MotionToggle
-            playing={playing()}
-            onToggle={() => {
-              setPlaying(!playing());
-              sync();
-            }}
-          />
-        </Show>
-      </div>
-    </ArticleFigure>
-  );
-}
-
 function figureMount(props: ArticleMediaBase): {
-  caption?: JSX.Element;
-  mountOn?: string;
-  mountPad?: ArticleMountPad;
+  caption?: JSX.Element | undefined;
+  mountOn?: string | undefined;
+  mountPad?: ArticleMountPad | undefined;
   wide: boolean;
 } {
   return {
@@ -237,9 +80,9 @@ function figureMount(props: ArticleMediaBase): {
 }
 
 function ArticleFigure(props: {
-  caption?: JSX.Element;
-  mountOn?: string;
-  mountPad?: ArticleMountPad;
+  caption?: JSX.Element | undefined;
+  mountOn?: string | undefined;
+  mountPad?: ArticleMountPad | undefined;
   wide?: boolean;
   children: JSX.Element;
 }) {
@@ -264,21 +107,6 @@ function ArticleFigure(props: {
       </Show>
       <Show when={props.caption}>{(caption) => <figcaption class="post-figure-caption">{caption()}</figcaption>}</Show>
     </figure>
-  );
-}
-
-function MotionToggle(props: { playing: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      class="post-media-toggle"
-      data-state={props.playing ? "playing" : "paused"}
-      aria-label={props.playing ? "Pause animation" : "Play animation"}
-      onClick={props.onToggle}
-    >
-      <span class="post-media-toggle-icon" aria-hidden="true" />
-      {props.playing ? "Pause" : "Play"}
-    </button>
   );
 }
 

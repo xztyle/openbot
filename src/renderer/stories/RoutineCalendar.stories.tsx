@@ -178,7 +178,7 @@ const meta = {
   },
   argTypes: {
     state: { control: "inline-radio", options: ["ready", "loading", "error"] },
-    initialView: { control: "inline-radio", options: ["week", "day"] },
+    initialView: { control: "inline-radio", options: ["month", "week", "day"] },
   },
   parameters: { layout: "fullscreen", a11y: { test: "error" } },
 } satisfies Meta<typeof RoutineCalendar>;
@@ -191,6 +191,9 @@ export const Week: Story = {};
 
 /** One day by the hour. Each run opens its routine; each avatar opens its agent. */
 export const Day: Story = { args: { initialView: "day" } };
+
+/** October in whole weeks. The days of September and November only fill the first and last rows. */
+export const Month: Story = { args: { initialView: "month" } };
 
 /**
  * The clocks in Warsaw go back on Sunday. The morning brief stays at 7:00 AM on both sides of
@@ -212,10 +215,19 @@ export const ManyRoutinesDay: Story = {
   args: { ...ManyRoutines.args, initialView: "day" },
 };
 
+/** A month day shows three runs and a count. */
+export const ManyRoutinesMonth: Story = {
+  args: { ...ManyRoutines.args, initialView: "month" },
+};
+
 /** Routines exist, but none of them runs in this range. */
 export const NoRunsThisWeek: Story = { args: { runs: [] } };
 
+/** No routine yet: sample runs land on a faint month and write what they did. Create Routine asks for the agent. */
 export const Empty: Story = { args: { routines: [], runs: [] } };
+
+/** With one agent, Create Routine opens that agent at once. */
+export const EmptyOneAgent: Story = { args: { routines: [], runs: [], agents: STORY_AGENTS.slice(0, 1) } };
 
 export const Loading: Story = { args: { state: "loading" } };
 
@@ -229,3 +241,9 @@ export const Narrow: Story = {
     </main>
   ),
 };
+
+/** The month becomes a list of its own days. */
+export const NarrowMonth: Story = { ...Narrow, args: { initialView: "month" } };
+
+/** The pitch comes first; the sample runs land in rows below it. */
+export const EmptyNarrow: Story = { ...Narrow, args: { routines: [], runs: [] } };

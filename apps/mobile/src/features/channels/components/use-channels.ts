@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 
 export function useChannels(serverId: string, channelId?: string) {
-  const { channelStore } = useMobileWorkspace();
+  const { channelStore } = useMobileWorkspaceActions();
   const subscribe = useCallback(
     (listener: () => void) => channelStore.subscribe(serverId, listener),
     [channelStore, serverId],

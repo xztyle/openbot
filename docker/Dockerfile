@@ -10,10 +10,7 @@
 ARG BASE=ubuntu:24.04@sha256:a853f94d226358a79c740cfc7bce0c289748f3fe3488d921d038ccd752c61b60
 
 FROM ${BASE} AS release
-# The AppImage runtime loads libz.so to unpack itself. Unpacked, the release needs no FUSE.
-RUN apt-get update \
-  && apt-get install --yes --no-install-recommends zlib1g-dev \
-  && rm -rf /var/lib/apt/lists/*
+# The static AppImage runtime unpacks itself with no system library. Unpacked, the release needs no FUSE.
 COPY OpenBot.AppImage /tmp/OpenBot.AppImage
 WORKDIR /tmp
 RUN chmod 0700 OpenBot.AppImage \
@@ -37,6 +34,9 @@ RUN apt-get update \
 RUN userdel --remove ubuntu \
   && useradd --uid 1000 --user-group --home-dir /data --create-home --shell /bin/bash openbot \
   && install -d -o openbot -g openbot -m 0700 /run/openbot
+# Mount points of the update folders that docker/instances/compose.yaml gives an instance. Its root
+# file system is read-only. With no folders mounted, OpenBot offers no update.
+RUN install -d -m 0755 /var/lib/openbot-update/requests /var/lib/openbot-update/status
 # Root owns the release, so the user and its agents cannot change it. chrome-sandbox has no SUID bit:
 # the sandbox uses user namespaces, which the seccomp profile in docker/ permits.
 COPY --from=release /tmp/squashfs-root /opt/OpenBot/app

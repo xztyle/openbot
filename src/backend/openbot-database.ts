@@ -11,9 +11,10 @@ import type {
   ConversationSnapshot,
   HostedSiteConversationEventStatus,
 } from "@openbot/contracts/ipc";
+import { AgentHistoryQueries, type AgentHistorySelection } from "./database/agent-history-queries";
 import { type AgentModelChange, AgentRoster } from "./database/agent-roster";
 import { AgentUsage } from "./database/agent-usage";
-import { ConversationQueries } from "./database/conversation-queries";
+import { type ConversationMarkerExclusions, ConversationQueries } from "./database/conversation-queries";
 import { ConversationWriter } from "./database/conversation-writer";
 import { DatabaseCore, type OrchestrationEventInput } from "./database/database-core";
 import {
@@ -21,13 +22,18 @@ import {
   HostedSiteEventLog,
   type PendingHostedSiteTerminalEvent,
 } from "./database/hosted-site-event-log";
-import { MailboxProjection, type MailboxProjectionState } from "./database/mailbox-projection";
+import {
+  MailboxProjection,
+  type MailboxProjectionChanges,
+  type MailboxProjectionState,
+} from "./database/mailbox-projection";
 import {
   type ProviderHistoryImportState,
   type ProviderHistorySessionInput,
   type ProviderHistoryStagedItem,
   type ProviderHistoryStagedTurn,
   type ProviderHistoryStagedTurnPage,
+  type ProviderHistoryStageResult,
   ProviderHistoryStore,
   type ProviderHistoryTurnCursor,
 } from "./database/provider-history-store";
@@ -49,6 +55,7 @@ export type {
   ProviderHistoryStagedItem,
   ProviderHistoryStagedTurn,
   ProviderHistoryStagedTurnPage,
+  ProviderHistoryStageResult,
   ProviderHistoryTurnCursor,
 } from "./database/provider-history-store";
 export type { ProviderSession } from "./database/provider-sessions";
@@ -70,6 +77,7 @@ export class OpenBotDatabase {
   readonly #hostedSiteEvents: HostedSiteEventLog;
   readonly #mailbox: MailboxProjection;
   readonly #sessions: ProviderSessions;
+  readonly #agentHistory: AgentHistoryQueries;
   readonly #providerHistory: ProviderHistoryStore;
   readonly #summaries: ThreadSummaries;
 
@@ -82,6 +90,7 @@ export class OpenBotDatabase {
     this.#replay = new ThreadReplay({ core: this.#core, conversations: this.#conversations });
     this.#hostedSiteEvents = new HostedSiteEventLog({ core: this.#core });
     this.#mailbox = new MailboxProjection({ core: this.#core });
+    this.#agentHistory = new AgentHistoryQueries(this.#core);
     this.#sessions = new ProviderSessions({ core: this.#core });
     this.#providerHistory = new ProviderHistoryStore({ core: this.#core });
     this.#summaries = new ThreadSummaries({ core: this.#core });
@@ -183,6 +192,10 @@ export class OpenBotDatabase {
     return this.#conversations.readActiveTurnId(agentId, threadId);
   }
 
+  readRunningTurnIds(): Map<string, string[]> {
+    return this.#conversations.readRunningTurnIds();
+  }
+
   readConversationRevision(agentId: string, threadId: string | null): number {
     return this.#conversations.readConversationRevision(agentId, threadId);
   }
@@ -192,6 +205,10 @@ export class OpenBotDatabase {
     threadId: string | null,
   ): { activeTurnId: string | null; latestMessage: ConversationMessage | null } {
     return this.#conversations.readConversationRuntime(agentId, threadId);
+  }
+
+  readAgentHistory(agentId: string, threadId: string, selection: AgentHistorySelection) {
+    return this.#agentHistory.read(agentId, threadId, selection);
   }
 
   readConversationMessages(
@@ -215,12 +232,7 @@ export class OpenBotDatabase {
     threadId: string | null,
     anchor: ConversationPageAnchor = { type: "latest" },
     requestedLimit = 50,
-    options: {
-      excludeRoutineEvents?: boolean;
-      excludeRoutineRunEvents?: boolean;
-      excludeHostedSiteEvents?: boolean;
-      excludeEventCheckEvents?: boolean;
-    } = {},
+    options: ConversationMarkerExclusions = {},
   ): ConversationPage {
     return this.#conversations.readConversationPage(agentId, threadId, anchor, requestedLimit, options);
   }
@@ -228,12 +240,7 @@ export class OpenBotDatabase {
   supportedConversationCursor(
     threadId: string,
     throughMessageId: string | null,
-    options: {
-      excludeRoutineEvents?: boolean;
-      excludeRoutineRunEvents?: boolean;
-      excludeHostedSiteEvents?: boolean;
-      excludeEventCheckEvents?: boolean;
-    } = {},
+    options: ConversationMarkerExclusions = {},
   ): string | null {
     return this.#conversations.supportedConversationCursor(threadId, throughMessageId, options);
   }
@@ -281,6 +288,10 @@ export class OpenBotDatabase {
     commandId?: string;
   }): number {
     return this.#conversationWrites.appendConversationMessage(input);
+  }
+
+  changedConversationMessages(threadId: string, messages: readonly ConversationMessage[]): ConversationMessage[] {
+    return this.#conversationWrites.changedConversationMessages(threadId, messages);
   }
 
   persistConversationChanges(input: {
@@ -374,12 +385,18 @@ export class OpenBotDatabase {
     eventType: string,
     payload: unknown,
     mailboxState: MailboxProjectionState,
+    mailboxChanges: MailboxProjectionChanges,
     mailboxEventType: string,
   ): ConversationSnapshot {
     const db = this.connection;
     db.exec("BEGIN IMMEDIATE");
     try {
-      this.replaceMailboxState(`mailbox:${mailboxEventType}:${randomUUID()}`, mailboxState, mailboxEventType);
+      this.applyMailboxChanges(
+        `mailbox:${mailboxEventType}:${randomUUID()}`,
+        mailboxState,
+        mailboxChanges,
+        mailboxEventType,
+      );
       if (!snapshot.threadId) {
         db.exec("COMMIT");
         return structuredClone(snapshot);
@@ -407,6 +424,10 @@ export class OpenBotDatabase {
 
   listProviderSessions(threadId: string): ProviderSession[] {
     return this.#sessions.listProviderSessions(threadId);
+  }
+
+  listProviderSessionIds(externalSessionId?: string): string[] {
+    return this.#sessions.listProviderSessionIds(externalSessionId);
   }
 
   listExternalSessionIds(): string[] {
@@ -448,7 +469,7 @@ export class OpenBotDatabase {
     sessionId: string;
     fragment: import("./provider-history").ProviderHistoryFragment;
     cursor?: unknown;
-  }): ProviderHistoryImportState {
+  }): ProviderHistoryStageResult {
     return this.#providerHistory.stageProviderHistoryFragment(input);
   }
 
@@ -512,8 +533,18 @@ export class OpenBotDatabase {
     eventType: string,
     fileDeletions: string[] = [],
     rebaseHistory = false,
-  ): void {
-    this.#mailbox.replaceMailboxState(commandId, state, eventType, fileDeletions, rebaseHistory);
+  ): boolean {
+    return this.#mailbox.replaceMailboxState(commandId, state, eventType, fileDeletions, rebaseHistory);
+  }
+
+  applyMailboxChanges(
+    commandId: string,
+    state: MailboxProjectionState,
+    changes: MailboxProjectionChanges,
+    eventType: string,
+    fileDeletions: string[] = [],
+  ): boolean {
+    return this.#mailbox.applyMailboxChanges(commandId, state, changes, eventType, fileDeletions);
   }
 
   pendingFileDeletions(): Array<{ id: string; path: string }> {

@@ -14,7 +14,7 @@ import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { TeamStore } from "../team-store";
-import type { TeamApiRemoteScreen } from "./dependencies";
+import type { TeamApiBrowser, TeamApiBrowserView, TeamApiRemoteScreen } from "./dependencies";
 import { HttpError } from "./http-error";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
 import { nullableString, pathIdentifier, readJson, requireAdmin, stringField } from "./request-helpers";
@@ -34,7 +34,12 @@ export interface TeamRouteDependencies {
     | "revokeSession"
   >;
   remoteScreen?: Pick<TeamApiRemoteScreen, "revokeTeamSession" | "revokeMember">;
+  /** A session or a member that ends gives back the browser tabs it controls. */
+  browser?: Pick<TeamApiBrowser, "releaseUserControlHeldBy">;
+  browserView?: Pick<TeamApiBrowserView, "revokeTeamSession">;
   createInvite?: TeamApiOptions["createInvite"];
+  updateMember?: TeamApiOptions["updateMember"];
+  removeMember?: TeamApiOptions["removeMember"];
   onSessionRevoked?: TeamApiOptions["onSessionRevoked"];
   getPresence: () => TeamPresenceSnapshot;
   refreshPresence: () => void;
@@ -42,14 +47,36 @@ export interface TeamRouteDependencies {
 
 export async function routeTeam(
   context: TeamApiRequestContext,
-  { store, remoteScreen, createInvite, onSessionRevoked, getPresence, refreshPresence }: TeamRouteDependencies,
+  {
+    store,
+    remoteScreen,
+    browser,
+    browserView,
+    createInvite,
+    updateMember,
+    removeMember: removeHostMember,
+    onSessionRevoked,
+    getPresence,
+    refreshPresence,
+  }: TeamRouteDependencies,
 ): Promise<RouteOutcome> {
   const { method, url, request, response, member, token, sessionId, json, empty } = context;
 
   /** What removing a member does, whether an admin removes them or they leave. */
+  /**
+   * Whether the host service makes the change, so that it also reaches the account directory. The
+   * owner and an unknown member stay with the team store, which refuses them with its released error.
+   */
+  function hostChanges(memberId: string): boolean {
+    const target = store.listMembers().find((candidate) => candidate.id === memberId);
+    return target !== undefined && target.role !== "owner";
+  }
+
   async function removeMember(memberId: string): Promise<void> {
+    if (removeHostMember && hostChanges(memberId)) return runCauseEffect(removeHostMember(memberId));
     await runCauseEffect(store.removeMember(memberId));
     await (remoteScreen ? runCauseEffect(remoteScreen.revokeMember(memberId)) : undefined);
+    browser?.releaseUserControlHeldBy({ kind: "member", memberId });
     refreshPresence();
   }
 
@@ -60,6 +87,8 @@ export async function routeTeam(
   if (method === "POST" && url.pathname === TEAM_API_ROUTES.auth.logout) {
     await runCauseEffect(store.logout(token));
     await (remoteScreen ? runCauseEffect(remoteScreen.revokeTeamSession(sessionId)) : undefined);
+    browser?.releaseUserControlHeldBy({ kind: "session", sessionId });
+    await (browserView ? runCauseEffect(browserView.revokeTeamSession(sessionId)) : undefined);
     refreshPresence();
     return empty(204);
   }
@@ -73,6 +102,7 @@ export async function routeTeam(
       ),
     );
     await (remoteScreen ? runCauseEffect(remoteScreen.revokeMember(member.id)) : undefined);
+    browser?.releaseUserControlHeldBy({ kind: "member", memberId: member.id });
     refreshPresence();
     return empty(204);
   }
@@ -126,13 +156,18 @@ export async function routeTeam(
     if (disabled !== undefined && !isBoolean(disabled)) {
       throw new HttpError(400, "disabled must be a boolean.");
     }
-    const updated = await runCauseEffect(
-      store.updateMember(pathIdentifier(memberMatch[1], "memberId"), {
-        ...(role ? { role } : {}),
-        ...(disabled === undefined ? {} : { disabled }),
-      }),
-    );
-    if (updated.disabled) await (remoteScreen ? runCauseEffect(remoteScreen.revokeMember(updated.id)) : undefined);
+    const memberId = pathIdentifier(memberMatch[1], "memberId");
+    const patch: { role?: "admin" | "member"; disabled?: boolean } = {
+      ...(role ? { role } : {}),
+      ...(disabled === undefined ? {} : { disabled }),
+    };
+    if (updateMember && hostChanges(memberId))
+      return json(200, await runCauseEffect(updateMember({ memberId, ...patch })));
+    const updated = await runCauseEffect(store.updateMember(memberId, patch));
+    if (updated.disabled) {
+      await (remoteScreen ? runCauseEffect(remoteScreen.revokeMember(updated.id)) : undefined);
+      browser?.releaseUserControlHeldBy({ kind: "member", memberId: updated.id });
+    }
     refreshPresence();
     return json(200, updated);
   }
@@ -176,9 +211,17 @@ export async function routeTeam(
   if (method === "DELETE" && sessionMatch) {
     requireAdmin(member);
     const revokedSessionId = pathIdentifier(sessionMatch[1], "sessionId");
+    // Admins manage members, not the owner: only the owner ends the owner's sessions.
+    const target = store.listSessions().find((session) => session.id === revokedSessionId);
+    const targetMember = target && store.listMembers().find((candidate) => candidate.id === target.memberId);
+    if (member.role !== "owner" && targetMember?.role === "owner") {
+      throw new HttpError(400, sourceText("error.team.ownerCannotChange"));
+    }
     await runCauseEffect(store.revokeSession(revokedSessionId));
     await (onSessionRevoked ? runCauseEffect(onSessionRevoked(revokedSessionId)) : undefined);
     await (remoteScreen ? runCauseEffect(remoteScreen.revokeTeamSession(revokedSessionId)) : undefined);
+    browser?.releaseUserControlHeldBy({ kind: "session", sessionId: revokedSessionId });
+    await (browserView ? runCauseEffect(browserView.revokeTeamSession(revokedSessionId)) : undefined);
     refreshPresence();
     return empty(204);
   }

@@ -4,8 +4,8 @@ import { type Accessor, createEffect, createMemo, createSignal, onCleanup, untra
 import type { WebWorkspace } from "./web-client-context";
 
 /**
- * The account usage reading of the connected host, for the account dock and the composer's usage-limit
- * notice. As on desktop, a reading is for one host and one set of connected providers.
+ * The account usage reading of the connected host, for the page rail and the composer's usage-limit
+ * notice. As on desktop, a reading is for one host and is taken again for each set of connected providers.
  */
 export function createWebAccountUsage(options: {
   workspace: Pick<WebWorkspace, "state" | "runtime" | "onHostEvent">;
@@ -15,20 +15,21 @@ export function createWebAccountUsage(options: {
   const { workspace, status } = options;
   const [accountUsage, setAccountUsage] = createSignal<AccountUsage | null>(null);
   let usageGeneration = 0;
+  /** The host that the reading is for, while it is online. */
+  const usageHostId = createMemo(() => {
+    const hostId = workspace.state.host?.hostId;
+    return hostId && workspace.runtime.accountUsage && workspace.state.status === "online" ? hostId : null;
+  });
   /* As in the desktop dock: the reading is taken again when a provider connects or disconnects. */
   const usageTargetKey = createMemo(() => {
-    const hostId = workspace.state.host?.hostId;
-    if (!hostId || !workspace.runtime.accountUsage || workspace.state.status !== "online") return null;
+    const hostId = usageHostId();
+    if (!hostId) return null;
     const connected = (status().providers ?? [])
       .filter((item) => item.state === "available" && item.connectionState !== "connecting")
       .map((item) => item.id)
       .sort()
       .join(",");
     return `${hostId}:${connected}`;
-  });
-  // As on desktop: a reading is for one host and one set of connected providers.
-  createEffect(usageTargetKey, () => {
-    setAccountUsage(null);
   });
   const usageReady = createMemo(() => {
     const current = status();
@@ -38,9 +39,31 @@ export function createWebAccountUsage(options: {
         Boolean(current.providers?.some((item) => item.state === "available" && item.connectionState !== "connecting")))
     );
   });
-  // The composer shows the usage-limit notice with the account menu closed, so read once for each target.
+  /** As on desktop: a provider still starts or checks its sign-in, so a new target and its reading follow. */
+  const providersLoading = createMemo(() => {
+    const current = status();
+    return (
+      current.phase === "starting" ||
+      current.phase === "restarting" ||
+      Boolean(current.providers?.some((item) => item.state === "checking" || item.connectionState === "connecting"))
+    );
+  });
+  // As on desktop: a reading is for one host. On that host, the reading stays until the refresh for the new
+  // target replaces it, so the rail rings do not blink while models load. It goes when no refresh follows.
+  createEffect(usageHostId, () => {
+    reset();
+  });
   createEffect(
-    () => (usageReady() ? usageTargetKey() : null),
+    () => usageReady() || providersLoading(),
+    (refreshFollows) => {
+      if (!refreshFollows) reset();
+    },
+  );
+  // The composer shows the usage-limit notice with the Usage page closed, so read once for each target.
+  // As on desktop, while a reading shows, the read waits for the provider checks to end.
+  const hasReading = createMemo(() => (accountUsage()?.limits.length ?? 0) > 0);
+  createEffect(
+    () => (usageReady() && !(hasReading() && providersLoading()) ? usageTargetKey() : null),
     (target) => {
       if (target) void refreshUsage().catch(() => undefined);
     },
@@ -62,7 +85,7 @@ export function createWebAccountUsage(options: {
     if (generation === usageGeneration) setAccountUsage(usage);
     return usage;
   }
-  /** Drops the reading and any read in flight, for a host change. */
+  /** Drops the reading and any read in flight. */
   function reset(): void {
     usageGeneration += 1;
     setAccountUsage(null);

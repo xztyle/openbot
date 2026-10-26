@@ -9,7 +9,7 @@ export const messages = {
   "mobile.channel.route.routine": "Rotina",
   "mobile.channel.list.deleteTitle": "Excluir {name}?",
   "mobile.channel.list.deleteBody":
-    "Isso interrompe o canal. Seu histórico fica em Canais excluídos apenas para visualização. Você não pode restaurá-lo. Os agentes são mantidos.",
+    "Isso para o canal. O histórico continua em Canais excluídos, somente para visualização. Você pode restaurá-lo de lá. Os agentes membros são mantidos.",
   "mobile.channel.list.deleteFailed": "Não foi possível excluir o canal",
   "mobile.channel.list.deleteFailedBody": "Não foi possível excluir este canal. Tente novamente.",
   "mobile.channel.list.open": "Abrir canal {name}",
@@ -29,10 +29,14 @@ export const messages = {
   "mobile.channel.actions.none": "Nenhuma ação necessária.",
   "mobile.channel.actions.loading": "Carregando ações…",
   "mobile.channel.deleted.note":
-    "Os canais excluídos estão disponíveis apenas para visualização. Você não pode restaurá-los.",
+    "Os canais excluídos estão disponíveis apenas para visualização. Restaure um canal para usá-lo novamente.",
   "mobile.channel.deleted.loading": "Carregando canais excluídos…",
   "mobile.channel.deleted.empty": "Nenhum canal excluído.",
   "mobile.channel.deleted.preview": "Visualizar {name}",
+  "mobile.channel.deleted.restore": "Restaurar",
+  "mobile.channel.deleted.restoreNamed": "Restaurar {name}",
+  "mobile.channel.deleted.restoreFailed": "Não foi possível restaurar o canal",
+  "mobile.channel.deleted.restoreFailedBody": "Não foi possível restaurar este canal. Tente novamente.",
   "mobile.channel.chat.fallbackName": "Canal",
   "mobile.channel.chat.deletedNotice": "Canal excluído. Apenas visualização.",
   "mobile.channel.records.connect": "Conecte-se ao servidor para editar este canal.",
@@ -67,7 +71,7 @@ export const messages = {
   "mobile.channel.form.routines": "Rotinas",
   "mobile.channel.form.deleteTitle": "Excluir canal?",
   "mobile.channel.form.deleteBody":
-    "Isso interrompe o canal. Seu histórico fica em Canais excluídos apenas para visualização. Você não pode restaurá-lo. Os agentes são mantidos.",
+    "Isso para o canal. O histórico continua em Canais excluídos, somente para visualização. Você pode restaurá-lo de lá. Os agentes membros são mantidos.",
   "mobile.channel.form.delete": "Excluir canal",
   "mobile.channel.form.unavailable":
     "Conecte-se a um servidor de computador compatível com canais para fazer alterações.",

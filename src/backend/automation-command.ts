@@ -22,6 +22,8 @@ interface AutomationRunCommandInput {
   agentId: string;
   routineId: string;
   payload: string;
+  /** The open wait the event continues. */
+  waitId?: string;
   platform: NodeJS.Platform;
 }
 
@@ -33,7 +35,9 @@ interface AutomationRunCommandInput {
 export function automationRunCommand(input: AutomationRunCommandInput): string {
   const path = automationRunPath(input.agentId, input.routineId);
   const url = join(input.root, AUTOMATION_URL_FILE);
-  const body = JSON.stringify({ payload: input.payload });
+  const body = JSON.stringify(
+    input.waitId ? { payload: input.payload, waitId: input.waitId } : { payload: input.payload },
+  );
   if (input.platform === "win32") {
     return [
       "Invoke-RestMethod -Method Post",

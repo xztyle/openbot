@@ -38,6 +38,7 @@ export const messages = defineMessages("mcp", {
   "mcp.signIn.waiting": "Waiting for the browser…",
   "mcp.signIn.waitingHelp": "Closed the browser tab? Cancel and try again.",
   "mcp.signIn.continue": "Continue to {name}",
+  "mcp.signIn.pageDescription": "This page is open in the browser on {host}. Sign in here.",
   "mcp.server.loadFailed": "The MCP servers could not load.",
   "mcp.test.connected": { one: "Connected · {count} tool", other: "Connected · {count} tools" },
   "mcp.status.testing": "Testing…",
@@ -131,4 +132,47 @@ export const messages = defineMessages("mcp", {
     one: "Finish the sign-in in your browser. OpenBot stops waiting after {count} minute.",
     other: "Finish the sign-in in your browser. OpenBot stops waiting after {count} minutes.",
   },
+  "mcp.panel.signInWaitingOn": {
+    one: "Opening the sign-in page on {host}. OpenBot stops waiting after {count} minute.",
+    other: "Opening the sign-in page on {host}. OpenBot stops waiting after {count} minutes.",
+  },
+  "mcp.panel.appTitle": "Sign-in app",
+  "mcp.panel.appDescription":
+    "Use an OAuth app that you registered with the server’s provider. OpenBot uses it when the server cannot register OpenBot by itself. Leave it empty to let OpenBot register.",
+  "mcp.panel.appSaveFirst": "Save this server first. Then you can add a sign-in app.",
+  "mcp.panel.appUrlChanged": "Save the new server URL first. The sign-in app belongs to the saved URL.",
+  "mcp.panel.appLoadFailed": "Could not read the sign-in app.",
+  "mcp.panel.callbackUrl": "Callback URL",
+  "mcp.panel.callbackUrlDescription": "Add this exact URL to the allowed redirect URLs of the app.",
+  "mcp.panel.callbackUrlOnHost":
+    "{host} signs in with its own browser, so this URL is on {host}. Add this exact URL to the allowed redirect URLs of the app.",
+  "mcp.panel.callbackUrlUnavailable": "No callback URL is available.",
+  "mcp.panel.copyCallbackUrl": "Copy callback URL",
+  "mcp.panel.clientId": "Client ID",
+  "mcp.panel.clientSecret": "Client secret",
+  "mcp.panel.clientSecretDescription": "Optional. Only for an app that has a secret.",
+  "mcp.panel.clientSecretSaved": "Secret saved. Enter a new secret to replace it.",
+  "mcp.panel.clientSecretRemoved": "The secret is removed when you save the app.",
+  "mcp.panel.removeClientSecret": "Remove secret",
+  "mcp.panel.scopes": "Scopes",
+  "mcp.panel.scopesDescription": "Optional. Separate scopes with spaces.",
+  "mcp.panel.saveApp": "Save app",
+  "mcp.panel.removeApp": "Remove app",
+  "mcp.panel.appSaved": "App saved. Sign in to use it.",
+  "mcp.panel.appRemoved": "App removed.",
+  "mcp.signIn.relayDescription":
+    "Check that the sign-in page is on {page}, then open it in your browser. When you finish, OpenBot sends the sign-in to {host}.",
+  "mcp.signIn.relayOpenDescription":
+    "Open the sign-in page of {page} in your browser. When you finish, paste the address that the browser shows here. OpenBot then sends the sign-in to {host}.",
+  "mcp.signIn.relayDeviceDescription":
+    "Check that the sign-in page is on {page}, then open it in your browser and finish there. {host} sees the sign-in by itself.",
+  "mcp.signIn.relayOpen": "Open sign-in page",
+  "mcp.signIn.relayPasteHint":
+    "If the browser does not come back to OpenBot, copy the address that it shows and paste it here.",
+  "mcp.signIn.relayPasteRequired":
+    "OpenBot cannot get the sign-in from the browser by itself. When you finish, copy the address that the browser shows and paste it here.",
+  "mcp.signIn.relayAddress": "Browser address",
+  "mcp.signIn.relaySend": "Send",
+  "mcp.panel.callbackUrlRelayed":
+    "The sign-in page opens in your browser, and OpenBot on your computer sends the sign-in to {host}. Add this exact URL to the allowed redirect URLs of the app.",
 });

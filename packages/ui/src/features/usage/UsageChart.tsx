@@ -73,6 +73,9 @@ export function UsageChart(props: { result: HostAnalytics; metric: UsageMetric }
           axisLine={false}
           width={80}
           tickCount={4}
+          // Every tick at its own grid line. The default fit moves the top label into the plot and then
+          // drops the zero label, which it finds too close.
+          interval={0}
           stroke="var(--openbot-text-muted)"
           tickFormatter={(value) =>
             props.metric === "cost" ? usageCost(Number(value), text) : usageCompact(Number(value), text)

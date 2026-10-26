@@ -33,6 +33,7 @@ const developmentRemoteServerConnectionSchema: z.ZodType<DevelopmentRemoteServer
   publicKey: z.string().min(1),
   username: z.string().min(1),
   sessionToken: z.string().min(1),
+  role: z.enum(["owner", "admin", "member"]).optional(),
 });
 
 export interface DevelopmentRemoteAccountOptions {
@@ -95,7 +96,7 @@ export const startDevelopmentRemoteRole = Effect.fn("DevelopmentRemote.startRole
   yield* connectDevelopmentRemoteServer(remoteServers);
 });
 
-export const ensureDevelopmentAccount = Effect.fn("DevelopmentRemote.ensureAccount")(function* (
+const ensureDevelopmentAccount = Effect.fn("DevelopmentRemote.ensureAccount")(function* (
   manager: Pick<CentralAuthManager, "initialize" | "logout" | "requestEmailCode" | "verifyEmailCode">,
   email: string,
 ) {

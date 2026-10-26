@@ -14,7 +14,6 @@ export const messages = defineMessages("skill", {
   "skill.emptyEnabled": "This agent has no enabled skills.",
   "skill.emptyAssigned": "This agent has no assigned skills yet.",
   "skill.folderSkill": "OpenBot did not install this skill. Edit or remove it in {location}.",
-  "skill.localOnHost": "This local skill is stored on the host. Open its details on that computer.",
   "skill.moreFor": "More for {name}",
   "skill.update": "Update",
   "skill.updateName": "Update {name}",

@@ -13,11 +13,9 @@ const message: AgentMessage = {
 const args: Parameters<typeof MessageActions>[0] = {
   message,
   pickerOpen: false,
-  moreOpen: false,
   expandedEmoji: false,
   copied: false,
   onTogglePicker: fn(),
-  onToggleMore: fn(),
   onExpandEmoji: fn(),
   onReact: fn(),
   onReply: fn(),
@@ -40,8 +38,8 @@ export const ReactionPicker: Story = {
   args: { pickerOpen: true },
 };
 
-export const MoreMenu: Story = {
-  args: { moreOpen: true },
+export const Copied: Story = {
+  args: { copied: true },
 };
 
 export const PreviewOnly: Story = {

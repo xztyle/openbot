@@ -3,6 +3,7 @@ import type { ChangelogGroup, ChangelogGroupType, ChangelogRelease as Release } 
 import { formatArticleDate } from "../../lib/content-collection";
 import { createLandingReveal } from "../landing/createLandingReveal";
 import { ChangelogInline } from "./ChangelogInline";
+import { ChangelogStores } from "./ChangelogStores";
 
 /** The file's headings, in the words a reader of release notes expects. */
 const GROUP_LABELS: Record<Exclude<ChangelogGroupType, "other">, string> = {
@@ -52,6 +53,7 @@ export function ChangelogRelease(props: ChangelogReleaseProps) {
           <Show when={props.latest}>
             <span class="changelog-release-badge">Latest</span>
           </Show>
+          <ChangelogStores stores={props.release.stores} />
         </div>
         <h2 class="changelog-release-title" id={titleId()}>
           <a class="changelog-release-anchor" href={`#${props.release.anchor}`}>

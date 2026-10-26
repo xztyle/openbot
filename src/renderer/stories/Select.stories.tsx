@@ -11,13 +11,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function ReasoningSelect(props: { size?: "sm" | "md"; disabled?: boolean }) {
+function ReasoningSelect(props: { size?: "sm" | "md" | undefined; disabled?: boolean | undefined }) {
   const [value, setValue] = createSignal("Medium");
   return (
     <Select<string>
       options={options}
       value={value()}
-      disabled={props.disabled}
+      disabled={props.disabled === true}
       onChange={(next) => next && setValue(next)}
       itemComponent={(item) => <SelectItem item={item.item}>{item.item.rawValue}</SelectItem>}
     >

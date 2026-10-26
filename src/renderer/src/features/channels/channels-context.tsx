@@ -5,7 +5,7 @@ import { useAgents } from "../agents/agents-context";
 import { useDirectMessages } from "../conversation/direct-messages-context";
 import { serverRoleCanAdminister } from "../servers/server-capabilities";
 import { useServers } from "../servers/servers-context";
-import { useUsage } from "../usage/usage-context";
+import { useWindowPage } from "../window/window-page-context";
 import { readChannelSelection, writeChannelSelection } from "./channel-selection";
 import { type ChannelsController, createChannelsController } from "./channels-controller";
 import { channelsPort } from "./channels-port";
@@ -30,7 +30,7 @@ export function ChannelsProvider(props: ParentProps) {
   const { activeServer, activeServerId, activeServerSupportsCapability } = useServers();
   const { agentList, setAgentSetupOpen } = useAgents();
   const { clearDirectSelection, setDirectTyping } = useDirectMessages();
-  const usage = useUsage();
+  const windowPage = useWindowPage();
   const { centralAuth } = useAuth();
   const selectionServerId = untrack(activeServerId);
   const accountKey = () => {
@@ -60,12 +60,12 @@ export function ChannelsProvider(props: ParentProps) {
       // navigation; this is the same exchange the other way round.
       setDirectTyping(false);
       clearDirectSelection();
-      usage.dismissUsage();
+      windowPage.showAgents();
     },
-    // The Usage report covers the workspace content and marks it inert, so a message that
+    // A rail page, such as Usage or Settings, covers the workspace content, so a message that
     // arrives behind it was never seen, however focused the window is. The channel stays
     // selected under the report, which is the state this read has to refuse.
-    canMarkRead: () => document.hasFocus() && !usage.state.serverId,
+    canMarkRead: () => document.hasFocus() && !windowPage.conversationCovered(),
   });
   return <ChannelsControllerProvider controller={controller}>{props.children}</ChannelsControllerProvider>;
 }

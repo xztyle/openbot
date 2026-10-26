@@ -6,7 +6,7 @@ export const messages = {
   "mobile.workspace.status.online": "オンライン",
   "mobile.workspace.status.offline": "オフライン",
   "mobile.workspace.status.error": "接続エラー",
-  "mobile.workspace.status.reconnecting": "再接続しています",
+  "mobile.workspace.status.reconnecting": "再接続中",
   "mobile.workspace.status.attempt": "試行 {attempt}/{limit}",
   "mobile.workspace.status.attemptPrefix": "試行 ",
   "mobile.workspace.status.retryIn": "{seconds} 秒後に再試行します",

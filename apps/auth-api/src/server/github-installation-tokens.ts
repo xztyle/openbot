@@ -13,7 +13,7 @@ import { importPKCS8, SignJWT } from "jose";
  * The Worker keeps nothing: it does not store or log a token.
  */
 
-export type GitHubFetch = (input: string, init: RequestInit) => Promise<Response>;
+type GitHubFetch = (input: string, init: RequestInit) => Promise<Response>;
 
 export interface GitHubInstallationToken {
   installationId: number;

@@ -3,8 +3,14 @@ import { decodeSignalServerMessage } from "@openbot/contracts/signal-protocol/de
 import { type DiscordApiRequest, decodeDiscordApiError } from "@openbot/contracts/signal-protocol/discord-api";
 import { DISCORD_API_PATH } from "@openbot/contracts/signal-protocol/discord-route";
 import {
+  INGRESS_QUEUE_CAPABILITY,
+  openQueuedDelivery,
+  type QueuedSignalMessage,
+} from "@openbot/contracts/signal-protocol/ingress-queue";
+import {
   SIGNAL_PROTOCOL_VERSION,
   type SignalClientMessage,
+  type SignalServerMessage,
   SLACK_DELIVERY_RESPONSE_BYTES_LIMIT,
   type WebhookDeliveryStatus,
 } from "@openbot/contracts/signal-protocol/messages";
@@ -15,7 +21,7 @@ import {
   type TelegramCallResult,
 } from "@openbot/contracts/signal-protocol/telegram-route";
 import { createOpenBotLogger } from "@openbot/logging";
-import { Context, Effect, Exit, Layer, ManagedRuntime, Option, Result, Scope } from "effect";
+import { Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Option, Result, Scope, Semaphore } from "effect";
 import WebSocket from "ws";
 import {
   DiscordApiError,
@@ -28,15 +34,25 @@ import {
   TelegramCallError,
   type TelegramGateway,
 } from "../backend/messaging/messaging-types";
+import type { IngressQueueKey } from "./ingress-queue-key";
 import { type RemoteWorkflowError, remoteDecode } from "./remote-service-effects";
 import { downloadTelegramFile, signalHttpOrigin, uploadTelegramFile } from "./telegram-files";
 
 const logger = createOpenBotLogger("signal-ingress");
 
+/** The route of a kept delivery, as Signal keeps its order: one Slack team, Discord guild or Telegram chat. */
+function queuedRoute(message: QueuedSignalMessage): string {
+  if (message.type === "slack-delivery") return `slack:${message.teamId}`;
+  if (message.type === "discord-delivery") return `discord:${message.guildId}`;
+  return `telegram:${message.chatId}`;
+}
+
 const BACKOFF_START_MS = 2_000;
 const BACKOFF_LIMIT_MS = 5 * 60_000;
 const PING_INTERVAL_MS = 30_000;
 const PONG_TIMEOUT_MS = 10_000;
+/** How long a new socket waits for the upgrade and then for Signal's `ready`. */
+const READY_TIMEOUT_MS = 15_000;
 /** How long a Discord call waits for the session of a socket that is still connecting. */
 const DISCORD_SESSION_WAIT_MS = 15_000;
 /** Signal gives a Discord call about 10 seconds, and an upload carries up to 10 MB. */
@@ -62,6 +78,11 @@ export interface SignalIngressOptions {
    * again later.
    */
   issueTelegramRoute?(hostId: string): Effect.Effect<string, RemoteWorkflowError>;
+  /**
+   * The lasting queue key of this host, or null. With it, Signal keeps the events of a hosted server
+   * that sleeps, sealed, and sends them when the socket connects.
+   */
+  queueKey?(): Effect.Effect<IngressQueueKey | null>;
 }
 
 class SignalIngressAccount extends Context.Service<
@@ -142,6 +163,7 @@ export class SignalIngress implements MessagingIngress {
   #socket: WebSocket | null = null;
   #retry: ReturnType<typeof setTimeout> | null = null;
   #ping: ReturnType<typeof setInterval> | null = null;
+  #readyDeadline: ReturnType<typeof setTimeout> | null = null;
   #backoffMs = BACKOFF_START_MS;
   #generation = 0;
   #apiUrl: string | null = null;
@@ -162,10 +184,26 @@ export class SignalIngress implements MessagingIngress {
   /** The HTTPS origin of the Signal of the open socket, for Telegram files. */
   #signalOrigin: string | null = null;
   readonly #telegramCalls = new Map<string, (answer: TelegramCallAnswer) => void>();
+  /** `null` until it is loaded, and when this host has none. */
+  #queueKey: IngressQueueKey | null = null;
+  readonly #queuedOrder = Semaphore.makeUnsafe(1);
+  /** The last kept delivery of each route, by `queuedRoute`. A later one of the route waits for it. */
+  readonly #queuedRoutes = new Map<string, Deferred.Deferred<void>>();
+
+  readonly #loadQueueKey: Effect.Effect<IngressQueueKey | null>;
 
   constructor(options: SignalIngressOptions) {
     this.#options = options;
+    this.#loadQueueKey = Effect.runSync(Effect.cached(options.queueKey?.() ?? Effect.succeed(null)));
     this.#runtime = ManagedRuntime.make(SignalIngressAccount.layer(options));
+  }
+
+  /**
+   * Whether the last Signal said that it starts this host for a connector event and keeps the event,
+   * and this host sent it a queue key. Only then may a hosted server with a live connection sleep.
+   */
+  queueReady(): boolean {
+    return Boolean(this.#queueKey) && this.#capabilities.has(INGRESS_QUEUE_CAPABILITY);
   }
 
   acquire(platform: MessagingPlatform): () => void {
@@ -394,12 +432,21 @@ export class SignalIngress implements MessagingIngress {
       ...(webhookRoute === null ? {} : { webhookRoute }),
       ...(telegramRoute === null ? {} : { telegramRoute }),
     };
+    // Loaded once: two opens at the same time must not make two keys.
+    const queueKey = yield* this.#loadQueueKey;
+    this.#queueKey = queueKey;
     if (generation !== this.#generation || (this.#held() === 0 && this.#webhookHolders === 0)) return;
     this.#webhookMissing = webhooks && webhookRoute === null;
     this.#telegramMissing = telegram && telegramRoute === null;
     if (telegram && telegramRoute !== null) this.#telegramBackoffMs = BACKOFF_START_MS;
     const socket = new WebSocket(bootstrap.signalUrl);
     this.#socket = socket;
+    // A socket that stalls before `ready` closes, so that the retry opens a new one.
+    this.#clearReadyDeadline();
+    this.#readyDeadline = setTimeout(() => {
+      this.#readyDeadline = null;
+      if (socket === this.#socket) socket.terminate();
+    }, READY_TIMEOUT_MS);
     this.#apiUrl = discordApiUrl(bootstrap.signalUrl);
     this.#signalOrigin = signalHttpOrigin(bootstrap.signalUrl);
     socket.on("open", () => {
@@ -409,10 +456,11 @@ export class SignalIngress implements MessagingIngress {
         peer: "ingress",
         token: bootstrap.ticket,
         ...routes,
+        ...(queueKey ? { queueKey: queueKey.publicKey } : {}),
       };
       socket.send(JSON.stringify(hello));
     });
-    socket.on("message", (data) => this.#run(this.#receive(socket, data.toString())));
+    socket.on("message", (data) => this.#run(this.#receive(socket, hostId, data.toString())));
     socket.on("pong", () => pongs.set(socket, true));
     socket.on("close", () => {
       if (socket !== this.#socket) return;
@@ -420,6 +468,7 @@ export class SignalIngress implements MessagingIngress {
       this.#discordSession = null;
       this.#endTelegram();
       this.#stopPing();
+      this.#clearReadyDeadline();
       this.#webhookReady = false;
       if (this.#held() > 0 || this.#webhookHolders > 0) this.#wait("unavailable");
     });
@@ -431,17 +480,73 @@ export class SignalIngress implements MessagingIngress {
   readonly #receive = Effect.fn("SignalIngress.receive")(function* (
     this: SignalIngress,
     socket: WebSocket,
+    hostId: string,
     text: string,
   ) {
-    if (this.#disposing || socket !== this.#socket) return;
+    if (this.#disposing) return;
     const decoded = yield* remoteDecode(() => decodeSignalServerMessage(JSON.parse(text))).pipe(Effect.result);
     if (Result.isFailure(decoded)) {
-      socket.close(1002);
+      if (socket === this.#socket) socket.close(1002);
       return;
     }
     const message = decoded.success;
-    if (!message || socket !== this.#socket) return;
+    if (!message) return;
+    if (message.type !== "queued-delivery") {
+      if (socket === this.#socket) yield* this.#dispatch(socket, message, false);
+      return;
+    }
+    // A delivery that Signal kept while this host started. Signal already answered the platform, so it
+    // is handled also when this socket closed meanwhile. The kept deliveries are opened one at a time,
+    // in the order that Signal sent them. Signal keeps the order of each route, so a delivery waits only
+    // for the earlier ones of its route: a connection that is not available does not hold back the
+    // others. Each is acknowledged so that Signal stops keeping it.
+    const { id, sealed } = message;
+    const turn = yield* this.#queuedOrder.withPermit(
+      Effect.gen({ self: this }, function* () {
+        const key = this.#queueKey;
+        const opened = key
+          ? yield* Effect.tryPromise(() => openQueuedDelivery(key.privateKey, hostId, sealed)).pipe(
+              Effect.catch(() => Effect.succeed(null)),
+            )
+          : null;
+        if (!opened) return null;
+        const route = queuedRoute(opened);
+        const previous = this.#queuedRoutes.get(route);
+        const done = Deferred.makeUnsafe<void>();
+        this.#queuedRoutes.set(route, done);
+        return { opened, route, previous, done };
+      }),
+    );
+    yield* Effect.gen({ self: this }, function* () {
+      if (turn) {
+        if (turn.previous) yield* Deferred.await(turn.previous);
+        yield* this.#dispatch(socket, turn.opened, true);
+      } else logger.warn("A kept delivery from Signal could not be opened, and is dropped.");
+      // An acknowledgement that cannot be sent now is not needed: Signal sends the delivery again on
+      // the next hello, and the transports drop an event that they already handled.
+      const current = this.#socket;
+      if (current?.readyState !== WebSocket.OPEN || !this.#capabilities.has(INGRESS_QUEUE_CAPABILITY)) return;
+      const ack: SignalClientMessage = { type: "queued-delivery-ack", version: SIGNAL_PROTOCOL_VERSION, id };
+      current.send(JSON.stringify(ack));
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (!turn) return;
+          Deferred.doneUnsafe(turn.done, Effect.void);
+          if (this.#queuedRoutes.get(turn.route) === turn.done) this.#queuedRoutes.delete(turn.route);
+        }),
+      ),
+    );
+  });
+
+  readonly #dispatch = Effect.fn("SignalIngress.dispatch")(function* (
+    this: SignalIngress,
+    socket: WebSocket,
+    message: Exclude<SignalServerMessage, { type: "queued-delivery" }>,
+    queued: boolean,
+  ) {
     if (message.type === "ready") {
+      this.#clearReadyDeadline();
       this.#capabilities = new Set(message.capabilities ?? []);
       this.#backoffMs = BACKOFF_START_MS;
       this.#startPing(socket);
@@ -473,7 +578,7 @@ export class SignalIngress implements MessagingIngress {
       // Discord gets no answer: Signal already acknowledged a button press.
       const handler = this.#handler;
       if (handler)
-        yield* handler(message.guildId, { platform: "discord", delivery: message.delivery }).pipe(
+        yield* handler(message.guildId, { platform: "discord", delivery: message.delivery, queued }).pipe(
           Effect.catch(() => Effect.void),
         );
       return;
@@ -491,6 +596,7 @@ export class SignalIngress implements MessagingIngress {
           botId: message.botId,
           body: Buffer.from(message.bodyBase64, "base64"),
           linked: message.linked === true,
+          queued,
         }).pipe(Effect.catch(() => Effect.void));
       return;
     }
@@ -523,9 +629,10 @@ export class SignalIngress implements MessagingIngress {
           kind: message.kind,
           retryNum: message.retryNum,
           body: Buffer.from(message.bodyBase64, "base64"),
+          queued,
         }).pipe(Effect.catch(() => Effect.succeed<IngressAnswer>({ status: 503 })))
       : { status: 503 };
-    if (socket.readyState !== WebSocket.OPEN) return;
+    if (queued || socket.readyState !== WebSocket.OPEN) return;
     const body =
       answer.contentType && answer.body !== undefined && answer.body.length <= SLACK_DELIVERY_RESPONSE_BYTES_LIMIT
         ? { contentType: answer.contentType, body: answer.body }
@@ -642,6 +749,7 @@ export class SignalIngress implements MessagingIngress {
     this.#generation += 1;
     this.#clearRetry();
     this.#stopPing();
+    this.#clearReadyDeadline();
     this.#endTelegram();
     const socket = this.#socket;
     this.#socket = null;
@@ -663,6 +771,11 @@ export class SignalIngress implements MessagingIngress {
   #clearRetry(): void {
     if (this.#retry) clearTimeout(this.#retry);
     this.#retry = null;
+  }
+
+  #clearReadyDeadline(): void {
+    if (this.#readyDeadline) clearTimeout(this.#readyDeadline);
+    this.#readyDeadline = null;
   }
 
   #startPing(socket: WebSocket): void {

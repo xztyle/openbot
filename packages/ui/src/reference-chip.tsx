@@ -1,6 +1,8 @@
+import type { AppTextKey } from "@openbot/i18n";
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import { Button } from "./button";
+import { useText } from "./text";
 
 export const referenceChipClasses = {
   root: "reference-chip",
@@ -9,14 +11,23 @@ export const referenceChipClasses = {
 };
 
 /** What a reader hears before the name, so a chip is not just a word in the sentence. */
-const CHIP_KIND_LABELS: Record<ReferenceChipKind, string> = {
-  agent: "Agent ",
-  mcp: "MCP server ",
-  plugin: "Plugin ",
-  skill: "Skill ",
-};
+const CHIP_KIND_LABELS = {
+  agent: "chat.reference.kind.agent",
+  mcp: "chat.reference.kind.mcp",
+  plugin: "chat.reference.kind.plugin",
+  quote: "chat.reference.kind.quote",
+  skill: "chat.reference.kind.skill",
+} as const satisfies Record<ReferenceChipKind, AppTextKey>;
 
-export type ReferenceChipKind = "agent" | "mcp" | "plugin" | "skill";
+const CHIP_OPEN_LABELS = {
+  agent: "chat.reference.open.agent",
+  mcp: "chat.reference.open.mcp",
+  plugin: "chat.reference.open.plugin",
+  quote: "chat.reference.open.quote",
+  skill: "chat.reference.open.skill",
+} as const satisfies Record<ReferenceChipKind, string>;
+
+export type ReferenceChipKind = "agent" | "mcp" | "plugin" | "quote" | "skill";
 
 /** Shared appearance for rendered references and contenteditable tokens. */
 export function ReferenceChip(props: {
@@ -25,10 +36,11 @@ export function ReferenceChip(props: {
   kind: ReferenceChipKind;
   class?: string;
   style?: JSX.CSSProperties;
-  onClick?: (event: MouseEvent) => void;
+  onClick?: ((event: MouseEvent) => void) | undefined;
   /** Sound cue for the click. The default is `open`. */
   "data-cuelume-tap"?: string;
 }) {
+  const { t } = useText();
   const content = () => (
     <>
       <span class={referenceChipClasses.icon} aria-hidden="true">
@@ -47,7 +59,7 @@ export function ReferenceChip(props: {
           style={props.style}
           title={props.name}
         >
-          <span class="sr-only">{CHIP_KIND_LABELS[props.kind]}</span>
+          <span class="sr-only">{`${t(CHIP_KIND_LABELS[props.kind])} `}</span>
           {content()}
         </span>
       }
@@ -58,7 +70,7 @@ export function ReferenceChip(props: {
         data-kind={props.kind}
         style={props.style}
         title={props.name}
-        aria-label={`Open ${props.kind} ${props.name}`}
+        aria-label={t(CHIP_OPEN_LABELS[props.kind], { name: props.name })}
         data-cuelume-tap={props["data-cuelume-tap"] ?? "open"}
         onClick={(event) => props.onClick?.(event)}
       >

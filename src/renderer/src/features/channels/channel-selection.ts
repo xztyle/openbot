@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const CHANNEL_SELECTION_STORAGE_KEY = "openbot:selected-channel:v1";
+const CHANNEL_SELECTION_STORAGE_KEY = "openbot:selected-channel:v1";
 
 export type ChannelSelectionsByAccount = Record<string, Record<string, string>>;
 

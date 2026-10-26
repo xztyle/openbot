@@ -76,6 +76,11 @@ export interface OnePasswordConnectInput {
   accountId: string | null;
 }
 
+/** A service account token for a joined server's connection (`onepassword-connector-v1`). */
+export interface OnePasswordHostConnectInput {
+  token: string;
+}
+
 function parseOnePasswordAccount(value: unknown): OnePasswordAccount | null {
   if (!isDynamicRecord(value) || !isString(value.id) || !isString(value.label)) return null;
   return { id: value.id, label: value.label };
@@ -126,6 +131,32 @@ export function parseOnePasswordConnectorStatus(value: unknown): OnePasswordConn
     accounts,
     vaultNames: [...value.vaultNames],
     loginCount: value.loginCount,
+    error: value.error,
+  };
+}
+
+/**
+ * The status of a joined server's connection (`onepassword-connector-v1`), in the desktop shape. The
+ * host connects with a token only, so the status has no setup steps and no accounts. A state that this
+ * build does not know shows as not connected. Throws for a value that is not a host status.
+ */
+export function decodeHostOnePasswordConnectorStatus(value: unknown): OnePasswordConnectorStatus {
+  if (
+    !isDynamicRecord(value) ||
+    !isString(value.state) ||
+    !Array.isArray(value.vaultNames) ||
+    !value.vaultNames.every(isString) ||
+    !(value.loginCount === null || isNumber(value.loginCount)) ||
+    !(value.error === null || isString(value.error))
+  ) {
+    throw new Error("Invalid 1Password connector response.");
+  }
+  const state = value.state === "connecting" || value.state === "connected" ? value.state : "disconnected";
+  return {
+    ...DISCONNECTED_ONEPASSWORD_CONNECTOR,
+    state,
+    vaultNames: state === "connected" ? [...value.vaultNames] : [],
+    loginCount: state === "connected" ? value.loginCount : null,
     error: value.error,
   };
 }

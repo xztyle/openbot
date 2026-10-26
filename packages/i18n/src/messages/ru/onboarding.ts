@@ -2,6 +2,10 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/onboarding";
 
 export const messages = {
+  "onboarding.readFailed.title": "OpenBot не удалось прочитать вашу настройку.",
+  "onboarding.readFailed.description":
+    "Ваши локальные данные не изменились. Повторите попытку. Если проблема не исчезнет, настройте OpenBot заново.",
+  "onboarding.readFailed.setUpAgain": "Настроить заново",
   "onboarding.setup.saveFailed": "OpenBot не удалось сохранить локальную настройку.",
   "onboarding.setup.verifyFailed": "OpenBot не удалось проверить это приглашение.",
   "onboarding.setup.connectFailed": "OpenBot не удалось подключиться к этому хосту.",
@@ -39,6 +43,9 @@ export const messages = {
   "onboarding.provider.googlePlan": "Тариф Google AI Pro или Ultra",
   "onboarding.provider.cursorPlan": "Тариф Cursor или API-ключ",
   "onboarding.provider.clineAccount": "Бесплатные модели с аккаунтом Cline",
+  "onboarding.provider.inceptionKey": "Модели Mercury с ключом API Inception",
+  "onboarding.provider.deepseekKey": "Модели DeepSeek с ключом API DeepSeek",
+  "onboarding.provider.openrouterKey": "Множество моделей с ключом API OpenRouter",
   "onboarding.provider.tryFree": "Попробовать бесплатно",
   "onboarding.provider.noSignIn": "Вход не нужен",
   "onboarding.provider.more": "Другие провайдеры",
@@ -60,10 +67,10 @@ export const messages = {
   "onboarding.next.connect": "Подключите {provider}, чтобы продолжить.",
   "onboarding.error.installGuide": "OpenBot не удалось открыть руководство по установке {provider}.",
   "onboarding.error.signInGuide": "OpenBot не удалось открыть руководство по входу в {provider}.",
-  "onboarding.error.connect": "OpenBot не удалось подключить {provider}. Повторите.",
-  "onboarding.error.download": "OpenBot не удалось скачать {provider}. Повторите.",
-  "onboarding.error.cancelDownload": "OpenBot не удалось отменить загрузку {provider}. Повторите.",
-  "onboarding.error.refresh": "OpenBot не удалось обновить ваших локальных провайдеров ИИ. Повторите.",
+  "onboarding.error.connect": "OpenBot не удалось подключить {provider}. Повторите попытку.",
+  "onboarding.error.download": "OpenBot не удалось скачать {provider}. Повторите попытку.",
+  "onboarding.error.cancelDownload": "OpenBot не удалось отменить загрузку {provider}. Повторите попытку.",
+  "onboarding.error.refresh": "OpenBot не удалось обновить ваших локальных провайдеров ИИ. Повторите попытку.",
   "onboarding.error.finish": "OpenBot не удалось завершить настройку.",
   "onboarding.toast.connecting": "Подключение {provider}. Если откроется окно браузера, завершите вход.",
   "onboarding.progress": "Знакомство: шаг {step} из {total}",

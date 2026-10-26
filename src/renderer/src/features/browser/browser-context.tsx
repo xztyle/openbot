@@ -7,7 +7,7 @@ import { createSimpleContext } from "../../simple-context";
 import { serverSupportsCapability } from "../servers/server-capabilities";
 import { useServerSwitch } from "../servers/server-switch";
 import { useServers } from "../servers/servers-context";
-import { useUsage } from "../usage/usage-context";
+import { useWindowPage } from "../window/window-page-context";
 import { browserPort } from "./browser-port";
 import { activeTabAfterLoad, browserTabsAfterClose } from "./browser-tab-reconciliation";
 
@@ -42,11 +42,11 @@ const BrowserTabs = createSimpleContext({
     const { landingPreview } = usePlatform();
     const { currentServerSelection } = useServers();
     const { browserVisibilitySuspended: switchHidesBrowser } = useServerSwitch();
-    const usage = useUsage();
+    const windowPage = useWindowPage();
     // The browser is a separate Electron view, so hiding renderer content leaves it painted
-    // over whatever replaced the conversation. Usage suspends it for the same reason a server
+    // over whatever replaced the conversation. A rail page, such as Usage or Settings, suspends it for the same reason a server
     // switch does, and Back restores it because this is derived rather than set.
-    const browserVisibilitySuspended = () => switchHidesBrowser() || !!usage.state.serverId;
+    const browserVisibilitySuspended = () => switchHidesBrowser() || windowPage.conversationCovered();
     const scopeIsCurrent = createScopeGuard();
 
     const [browserTabs, setBrowserTabs] = createSignal<BrowserTab[]>([]);

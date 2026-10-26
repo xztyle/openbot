@@ -1,3 +1,9 @@
+import {
+  type AgentSessionSettings,
+  type HiddenAgentsSnapshot,
+  isAgentSessionSettings,
+  isHiddenAgentsSnapshot,
+} from "@openbot/contracts/ipc";
 // What main answers for agents: provider status, models, the agents themselves, memories, routines,
 // shared tables and the sidebar layout.
 //
@@ -7,26 +13,39 @@
 import {
   type AccountUsage,
   type AgentMemory,
-  type AgentModelOption,
+  type AgentMemorySelectionState,
+  type AgentRuntimeSnapshot,
   type AgentStatus,
-  type AgentSummary,
+  type ClientAgentModelOption,
+  type ClientAgentSummary,
   type DuplicateAgentResult,
   decodeOptionalAgentAnalytics,
   decodeOptionalHostAnalytics,
+  decodeProviderUsageResetOutcome,
+  decodeProviderUsageResets,
+  type HostProviderAccounts,
   isAccountUsage,
+  isAgentHostSettings,
   isAgentMemory,
-  isAgentModelOption,
+  isAgentMemorySelectionState,
   isAgentProvider,
+  isAgentRuntimeSnapshot,
   isAgentStatus,
-  isAgentSummary,
+  isClientAgentModelOption,
+  isClientAgentSummary,
+  isProviderAccountId,
+  isProviderAccountStatus,
   isRoutine,
   isRoutineCalendar,
   isRoutineFeed,
   isRoutineRun,
   isSharedTable,
   isSidebarLayoutSnapshot,
+  MAX_PROVIDER_ACCOUNTS,
   type ProviderApiKeyState,
   type ProviderCodeLoginStart,
+  type ProviderUsageResetOutcome,
+  type ProviderUsageResets,
   type SharedTable,
   type SidebarLayoutSnapshot,
 } from "@openbot/contracts/ipc";
@@ -34,10 +53,12 @@ import { decodeRecord, guardedDecoder, guardedListDecoder } from "@openbot/contr
 import { isDynamicRecord, isHttpsUrl, isNumber, isOneOf, isString } from "@openbot/contracts/runtime-values";
 
 export const decodeRoutine = guardedDecoder(isRoutine, "routine response");
+export const decodeAgentHostSettingsFromMain = guardedDecoder(isAgentHostSettings, "agent host settings response");
 export const decodeRoutines = guardedListDecoder(isRoutine, "routine list response");
 export const decodeRoutineRun = guardedDecoder(isRoutineRun, "routine run response");
 export const decodeRoutineRuns = guardedListDecoder(isRoutineRun, "routine history response");
 export const decodeAutomationRunCommand = guardedDecoder(isString, "run command response");
+export const decodeSideQuestionAnswer = guardedDecoder(isString, "side question answer");
 export const decodeRoutineCalendar = guardedDecoder(isRoutineCalendar, "routine calendar response");
 export const decodeRoutineFeed = guardedDecoder(isRoutineFeed, "routine feed response");
 
@@ -89,29 +110,70 @@ export function decodeAgentStatusFromMain(value: unknown): AgentStatus {
   return value;
 }
 
+export function decodeAgentRuntimeSnapshot(value: unknown): AgentRuntimeSnapshot | null {
+  if (value !== null && !isAgentRuntimeSnapshot(value)) throw new Error("Invalid agent runtime snapshot response.");
+  return value;
+}
+
 export function decodeAccountUsageFromMain(value: unknown): AccountUsage {
   if (!isAccountUsage(value)) throw new Error("Invalid agent usage response.");
   return value;
+}
+
+/** Main has already left out the providers that this build does not know, so each one must be known. */
+export function decodeProviderUsageResetsFromMain(value: unknown): ProviderUsageResets[] {
+  const resets = decodeProviderUsageResets(value);
+  // The shared decoder leaves an unknown provider out; here that row is invalid.
+  if (!Array.isArray(value) || resets.length !== value.length)
+    throw new Error("Invalid provider usage resets response.");
+  return resets;
+}
+
+export function decodeProviderUsageResetOutcomeFromMain(value: unknown): ProviderUsageResetOutcome {
+  return decodeProviderUsageResetOutcome(value);
+}
+
+/** Main has already left out the providers that this build does not know, so each one must be known. */
+export function decodeHostProviderAccountsFromMain(value: unknown): HostProviderAccounts {
+  const invalid = () => new Error("Invalid provider accounts response.");
+  if (!isDynamicRecord(value) || !Array.isArray(value.providers) || !Array.isArray(value.agents)) throw invalid();
+  const providers = value.providers.map((row: unknown) => {
+    if (
+      !isDynamicRecord(row) ||
+      !isAgentProvider(row.provider) ||
+      !Array.isArray(row.accounts) ||
+      row.accounts.length > MAX_PROVIDER_ACCOUNTS ||
+      !row.accounts.every(isProviderAccountStatus)
+    )
+      throw invalid();
+    return { provider: row.provider, accounts: row.accounts };
+  });
+  const agents = value.agents.map((row: unknown) => {
+    if (!isDynamicRecord(row) || !isString(row.agentId) || !row.agentId || !isProviderAccountId(row.accountId))
+      throw invalid();
+    return { agentId: row.agentId, accountId: row.accountId };
+  });
+  return { providers, agents };
 }
 
 // Fails closed on a member for the same reason as `decodeAgentModelOptions` in the main process, and
 // it is the local half of the same payload: `isAgentModel` gaining square brackets is what stopped a
 // provider CLI's `claude-fable-5-1[1m]` from emptying this app's own model picker, not a decoder
 // willing to hand the renderer a list shorter than the one the main process sent.
-export function decodeAgentModels(value: unknown): AgentModelOption[] {
-  if (!Array.isArray(value) || !value.every(isAgentModelOption)) {
+export function decodeAgentModels(value: unknown): ClientAgentModelOption[] {
+  if (!Array.isArray(value) || !value.every(isClientAgentModelOption)) {
     throw new Error("Invalid agent model response.");
   }
   return value;
 }
 
-export function decodeAgent(value: unknown): AgentSummary {
-  if (!isAgentSummary(value)) throw new Error("Invalid agent response.");
+export function decodeAgent(value: unknown): ClientAgentSummary {
+  if (!isClientAgentSummary(value)) throw new Error("Invalid agent response.");
   return value;
 }
 
-export function decodeAgents(value: unknown): AgentSummary[] {
-  if (!Array.isArray(value) || !value.every(isAgentSummary)) {
+export function decodeAgents(value: unknown): ClientAgentSummary[] {
+  if (!Array.isArray(value) || !value.every(isClientAgentSummary)) {
     throw new Error("Invalid agent list response.");
   }
   return value;
@@ -148,4 +210,22 @@ export function decodeAgentAnalyticsFromMain(value: unknown) {
 
 export function decodeHostAnalyticsFromMain(value: unknown) {
   return decodeOptionalHostAnalytics(value);
+}
+
+export function decodeMemorySelection(value: unknown): AgentMemorySelectionState {
+  if (!isAgentMemorySelectionState(value)) throw new Error("Invalid agent memory selection response.");
+  return value;
+}
+
+export function decodeOptionalMemorySelection(value: unknown): AgentMemorySelectionState | null {
+  return value === null ? null : decodeMemorySelection(value);
+}
+export function decodeAgentSessionSettingsFromMain(value: unknown): AgentSessionSettings {
+  if (!isAgentSessionSettings(value)) throw new Error("Invalid session settings response.");
+  return value;
+}
+
+export function decodeHiddenAgentsFromMain(value: unknown): HiddenAgentsSnapshot {
+  if (!isHiddenAgentsSnapshot(value)) throw new Error("Invalid hidden agents response.");
+  return value;
 }

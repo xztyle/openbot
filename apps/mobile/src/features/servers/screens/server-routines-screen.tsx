@@ -1,4 +1,3 @@
-import { MenuView } from "@expo/ui/community/menu";
 import type { RoutineCalendarRoutine, RoutineCalendarRun, RoutineCalendarRunStatus } from "@openbot/contracts/ipc";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import {
@@ -12,22 +11,23 @@ import {
 import { useQueries } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
-import { Check, ChevronDown, CirclePause, X } from "lucide-react-native";
+import Check from "lucide-react-native/icons/check";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
+import CirclePause from "lucide-react-native/icons/circle-pause";
+import X from "lucide-react-native/icons/x";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { useCSSVariable, useUniwind } from "uniwind";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
-import { useMobileSession } from "@/features/auth/context/mobile-session-context";
+import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { useChannels } from "@/features/channels/components/use-channels";
 import { DAY_STRIP_LENGTH, DayStrip } from "@/features/servers/components/day-strip";
-import {
-  SettingsContent,
-  SettingsNote,
-  SettingsRow,
-  SettingsSection,
-} from "@/features/settings/components/settings-content";
+import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { queryKeys } from "@/features/workspace/model/query-keys";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
+import { LargeTitleScrollView } from "@/shared/components/large-title";
+import { MenuView } from "@/shared/components/menu-view";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
@@ -38,6 +38,8 @@ const WEEK_DAY_LIMIT = 4;
 const UPCOMING_LIMIT = 6;
 const AVATAR_LIMIT = 3;
 const AVATAR_SIZE = 26;
+/** The grouped content of the settings sheets, under the big header. */
+const PAGE_CONTENT = "gap-7 px-4 pt-3";
 
 type CalendarView = "week" | "day";
 
@@ -94,7 +96,7 @@ export function ServerRoutinesScreen() {
   const { theme } = useUniwind();
   const foreground = String(useCSSVariable("--openbot-text-primary"));
   const { serverId } = useLocalSearchParams<{ serverId: string }>();
-  const { session, sessionScope } = useMobileSession();
+  const queryScope = useQueryScope();
   const { servers, agents, loadRoutineCalendar } = useMobileWorkspace();
   const { channels } = useChannels(serverId);
   const server = servers.find((item) => item.id === serverId);
@@ -120,7 +122,7 @@ export function ServerRoutinesScreen() {
     queries: loadedWeeks.map((weekStart) => {
       const range = rangeAround(weekStart, addCalendarDays(weekStart, 6));
       return {
-        queryKey: ["server-routines", session?.apiUrl, session?.user.id, sessionScope, serverId, range.from, range.to],
+        queryKey: queryKeys.serverRoutines(queryScope, serverId, range.from, range.to),
         enabled: online,
         retry: false,
         // Host events refresh a week; a swipe back to a loaded week does not ask the host again.
@@ -328,17 +330,18 @@ export function ServerRoutinesScreen() {
     </Stack.Toolbar>
   );
 
+  const title = t("mobile.app.route.routines");
   if (!server)
     return (
-      <SettingsContent>
+      <LargeTitleScrollView title={title} contentContainerClassName={PAGE_CONTENT}>
         <SettingsNote>{t("mobile.server.unavailable")}</SettingsNote>
-      </SettingsContent>
+      </LargeTitleScrollView>
     );
 
   return (
     <>
       {header}
-      <SettingsContent>
+      <LargeTitleScrollView title={title} caption={server.name} contentContainerClassName={PAGE_CONTENT}>
         <View className="gap-2">
           <Typography.Paragraph
             weight="medium"
@@ -432,7 +435,7 @@ export function ServerRoutinesScreen() {
         <Typography.Paragraph type="body-xs" className="px-4 text-grouped-secondary">
           {t("mobile.server.routines.timeZone", { zone: timeZone.replaceAll("_", " ") })}
         </Typography.Paragraph>
-      </SettingsContent>
+      </LargeTitleScrollView>
     </>
   );
 }

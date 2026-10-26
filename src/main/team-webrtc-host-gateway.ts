@@ -1,4 +1,5 @@
 import { sourceText } from "@openbot/i18n/source";
+import { createOpenBotLogger } from "@openbot/logging";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, ManagedRuntime, Scope } from "effect";
 import { RemoteWorkflowError } from "./remote-service-effects";
 import type { TeamWebRtcBridge } from "./team-webrtc-bridge";
@@ -6,8 +7,13 @@ import { type IncomingConnection, TeamWebRtcHostPeer, type TeamWebRtcHostPeerOpt
 
 interface TeamWebRtcHostGatewayOptions extends TeamWebRtcHostPeerOptions {
   renewSignal?: (hostId: string) => Effect.Effect<{ signalUrl: string; ticket: string }, RemoteWorkflowError>;
-  onSignalRecoveryFailure?: (error: Error) => void;
+  /** `reason` names the last Signal close or error code for the log, never its text. */
+  onSignalRecoveryFailure?: (error: Error, reason: string) => void;
+  /** Whether devices may connect only over a private network, such as the Wi-Fi or Tailscale. */
+  privateNetwork?: () => boolean;
 }
+
+const logger = createOpenBotLogger("team-webrtc-host");
 
 class HostSignal extends Context.Service<
   HostSignal,
@@ -20,6 +26,7 @@ class HostSignal extends Context.Service<
     bridge: TeamWebRtcBridge,
     scope: Scope.Scope,
     pendingConnections: Set<Fiber.Fiber<void, RemoteWorkflowError>>,
+    privateNetwork: () => boolean,
   ) {
     return Layer.succeed(
       HostSignal,
@@ -42,12 +49,16 @@ class HostSignal extends Context.Service<
             }),
             () =>
               Effect.gen(function* () {
+                // The route is read after the bridge starts: a change before that finds no port to post to.
                 const connecting = yield* Effect.forkIn(
-                  bridge
-                    .connect({ peerId, signalUrl, token, peer: "host" })
-                    .pipe(
-                      Effect.tapError((error) => Effect.sync(() => Deferred.doneUnsafe(ready, Effect.fail(error)))),
+                  bridge.start().pipe(
+                    Effect.andThen(
+                      Effect.suspend(() =>
+                        bridge.connect({ peerId, signalUrl, token, peer: "host", privateNetwork: privateNetwork() }),
+                      ),
                     ),
+                    Effect.tapError((error) => Effect.sync(() => Deferred.doneUnsafe(ready, Effect.fail(error)))),
+                  ),
                   scope,
                   { startImmediately: false },
                 );
@@ -86,6 +97,8 @@ export class TeamWebRtcHostGateway {
   readonly #retiring = new Set<Fiber.Fiber<void>>();
   readonly #peers = new Map<string, TeamWebRtcHostPeer>();
   #hostId: string | null = null;
+  // The last close or error code of the host's own Signal socket, such as `close 4000`.
+  #lastSignalEnd: string | null = null;
   #localApiPort: number | null = null;
   #connecting: Fiber.Fiber<void, RemoteWorkflowError> | null = null;
   #signalRecovery: Fiber.Fiber<void> | null = null;
@@ -96,11 +109,17 @@ export class TeamWebRtcHostGateway {
     this.#options = options;
     this.#bridge = options.bridge;
     this.#runtime = ManagedRuntime.make(
-      HostSignal.layer(options.bridge, this.#connectionScope, this.#pendingConnections),
+      HostSignal.layer(
+        options.bridge,
+        this.#connectionScope,
+        this.#pendingConnections,
+        () => options.privateNetwork?.() ?? false,
+      ),
     );
     this.#bridge.on("incoming", this.#onIncoming);
     this.#bridge.on("disconnected", this.#onDisconnected);
     this.#bridge.on("error", this.#onError);
+    this.#bridge.on("signalClosed", this.#onSignalClosed);
   }
 
   #provide<A>(operation: Effect.Effect<A, RemoteWorkflowError, HostSignal>): Effect.Effect<A, RemoteWorkflowError> {
@@ -117,6 +136,7 @@ export class TeamWebRtcHostGateway {
     },
   ) {
     this.#hostId = input.hostId;
+    this.#lastSignalEnd = null;
     this.#localApiPort = input.localApiPort;
     const connecting = yield* Effect.forkIn(
       this.#provide(HostSignal.use((signal) => signal.connect(input.hostId, input.signalUrl, input.ticket))),
@@ -156,6 +176,11 @@ export class TeamWebRtcHostGateway {
     );
   }, Effect.uninterruptible).bind(this);
 
+  /** Applies a changed network route to the connected host. A later connection reads it itself. */
+  readonly applyNetworkRoute = Effect.fn("HostGateway.applyNetworkRoute")(function* (this: TeamWebRtcHostGateway) {
+    if (this.#hostId) yield* this.#bridge.setPrivateNetwork(this.#hostId, this.#options.privateNetwork?.() ?? false);
+  }).bind(this);
+
   readonly revokeSession = Effect.fn("HostGateway.revokeSession")((sessionId: string) =>
     Effect.forEach([...this.#peers.values()], (peer) => peer.revokeSession(sessionId), {
       concurrency: "unbounded",
@@ -178,6 +203,7 @@ export class TeamWebRtcHostGateway {
           this.#bridge.off("incoming", this.#onIncoming);
           this.#bridge.off("disconnected", this.#onDisconnected);
           this.#bridge.off("error", this.#onError);
+          this.#bridge.off("signalClosed", this.#onSignalClosed);
           yield* Fiber.awaitAll([...this.#operations]);
           yield* Scope.close(this.#connectionScope, Exit.void);
           yield* this.#runtime.disposeEffect;
@@ -222,6 +248,14 @@ export class TeamWebRtcHostGateway {
       const fiber = this.#runtime.runFork(this.#clearPeers());
       this.#operations.add(fiber);
       fiber.addObserver(() => this.#operations.delete(fiber));
+      // The bridge does not reconnect a host peer that Signal closed for good, such as with code
+      // 4000 or after a `protocol_error`. Report it like a failed recovery, so the host leaves
+      // `online` and a hosted server publishes again. A start or a recovery reports its own failure.
+      if (!this.#connecting && !this.#signalRecovery)
+        this.#options.onSignalRecoveryFailure?.(
+          new Error(sourceText("error.remote.signalRecoveryFailed")),
+          this.#lastSignalEnd ?? "peer closed",
+        );
     } else {
       const peer = this.#peers.get(peerId);
       if (peer) this.#retire(peer);
@@ -229,7 +263,21 @@ export class TeamWebRtcHostGateway {
     }
   };
 
-  readonly #onError = (peerId: string, code: string): void => {
+  // One line for each close: a socket that connects again does so on the backoff steps.
+  readonly #onSignalClosed = (peerId: string, code: string, terminal: boolean): void => {
+    if (peerId !== this.#hostId) return;
+    this.#lastSignalEnd = `close ${code}`;
+    if (terminal) logger.warn(`Host Signal socket closed with code ${code}; it does not connect again.`);
+    else logger.info(`Host Signal socket closed with code ${code}; it connects again.`);
+  };
+
+  readonly #onError = (peerId: string, code: string, _message: string, terminal = false): void => {
+    // The message text can come from Signal, so only the code is logged. A late relayed frame gets
+    // `permission_denied` for each ICE candidate and does not touch the registration.
+    if (peerId === this.#hostId && (terminal || code !== "permission_denied")) {
+      this.#lastSignalEnd = `error ${code}`;
+      logger.warn(`Host Signal error ${code}; ${terminal ? "the socket does not connect again" : "the socket stays"}.`);
+    }
     if (
       peerId !== this.#hostId ||
       !this.#options.renewSignal ||
@@ -244,6 +292,7 @@ export class TeamWebRtcHostGateway {
             if (this.#hostId === peerId)
               this.#options.onSignalRecoveryFailure?.(
                 cause instanceof Error ? cause : new Error(sourceText("error.remote.signalRecoveryFailed")),
+                `recovery failed after ${this.#lastSignalEnd ?? "a Signal error"}`,
               );
           }),
         ),

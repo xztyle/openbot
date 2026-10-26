@@ -16,6 +16,8 @@ export const INPUT_LIMITS = {
   // adapter already accepts 160 — so the agent-name limit would reject a model list a shipped peer
   // is entitled to send.
   modelName: 160,
+  // A provider service tier id, such as Codex `priority`.
+  serviceTier: 64,
   agentTitle: 120,
   agentDescription: 2_000,
   // The default of the app setting `AGENT_MEMORY_LIMITS`; a user can raise it.
@@ -26,6 +28,9 @@ export const INPUT_LIMITS = {
   // Half the default agent cap. A channel packet is rebuilt every turn and the memories block is paid in
   // full each time, against `ChannelHistory.prepare`'s hard character budget.
   channelMemories: 32,
+  // The facts of one messaging connection. Like a channel packet, every external message pays for the
+  // whole block, so the cap matches the channel one.
+  messagingMemories: 32,
   agentMemoryText: 500,
   agentRoutines: 64,
   routineName: 80,
@@ -33,13 +38,47 @@ export const INPUT_LIMITS = {
   routineRunsPage: 100,
   // Handoffs inside one routine. A flow wider than this is no longer readable on one canvas.
   routineFlowLinks: 50,
+  // One workflow graph. Far more than one canvas shows at a readable zoom; the wire codec keeps its
+  // own copies of these numbers.
+  workflowNodes: 200,
+  workflowEdges: 400,
+  workflowNodeFields: 32,
+  workflowNodeText: 20_000,
+  workflowStrokes: 500,
+  workflowStrokePoints: 2_000,
+  workflowTitle: 160,
+  // The JSON of one saved graph. A workflow and its triggers must fit one WebRTC frame (1.5 MiB of
+  // body) when a member reads it.
+  workflowGraphBytes: 1024 * 1024,
+  workflowRunsPage: 50,
+  // The input of one step: the outputs of the steps before it, joined.
+  workflowStepInput: 32_000,
+  // The body of a webhook that starts a workflow, as the first step reads it.
+  workflowWebhookPayload: 64_000,
+  // The reason an agent gives when it reports that its routine run failed.
+  routineFailureReason: 500,
+  // Open waits of one agent. A wait is a request the agent has not finished, and more than this many
+  // at once is a loop that opens waits, not work.
+  agentWaits: 20,
+  agentWaitNote: 500,
+  // Tasks of one agent in one list: the open ones, then the newest closed ones.
+  agentTasks: 50,
+  agentTaskTitle: 120,
+  agentTaskProgress: 500,
+  agentTaskError: 2_000,
   // The text a local script adds to a routine run through the automation server.
   automationPayload: 4_000,
-  // Six weeks: the longest range the routine calendar reads, with room for a month view.
-  routineCalendarDays: 42,
+  // The longest range the routine calendar reads: a six-week month view, with one day before it and
+  // two after it for the viewer's time zone.
+  routineCalendarDays: 44,
   routineCron: 255,
   messageText: 100_000,
   directMessageText: 20_000,
+  // A side question carries its earlier questions and answers, because nothing on the host keeps them.
+  sideQuestionTurns: 20,
+  sideQuestionAnswer: 32_000,
+  /** The start of each earlier side question and answer that the prompt reads. */
+  sideQuestionEarlierText: 4_000,
   promptQuestions: 32,
   promptOptions: 5,
   promptHeader: 120,
@@ -77,6 +116,13 @@ export const INPUT_LIMITS = {
   mcpUrl: 2_048,
   mcpToolCount: 10_000,
   mcpErrorText: 2_000,
+  // A sign-in app (`mcp-sign-in-app-v1`). Generous for every provider checked; the wire codec keeps
+  // its own copies of these numbers.
+  mcpClientId: 1_024,
+  mcpClientSecret: 4_096,
+  mcpScope: 2_048,
+  // A relayed sign-in (`sign-in-relay-v1`): the page address and the callback the browser came back to.
+  signInRelayAddress: 8_192,
   teamMembers: 100,
   activeInvites: 100,
   // Permanent links accept unlimited joins until revoked, so a leaked link is open

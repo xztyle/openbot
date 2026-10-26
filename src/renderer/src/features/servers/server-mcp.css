@@ -163,6 +163,20 @@
   width: 100%;
 }
 
+/* The exact address an OAuth app must allow, with its copy button. */
+.server-mcp-callback {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  min-width: 0;
+}
+
+.server-mcp-callback-url {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--openbot-font-mono);
+}
+
 /* The modal footer belongs to the General tab, so the form carries its own bar at its foot. */
 @media (max-width: 520px) {
   .server-mcp-repeat-row-pair {

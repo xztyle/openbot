@@ -44,19 +44,29 @@ const Sidebar = createSimpleContext({
 
     const sidebarPeopleOrder = createMemo(() => sidebarPeopleOrderByServer()[activeServerId()] ?? []);
 
-    /** The layout read for a server load, answering the default where the host has no layout to give. */
-    function loadLayout(server: ServerSummary | undefined): Promise<SidebarLayoutSnapshot> {
+    /**
+     * The layout read for a server load, answering the default where the host has no layout to give.
+     * A remote host that has connected but not yet answered the handshake answers null: its
+     * capabilities are not known, so the current layout stays until the negotiated load reads it.
+     */
+    function loadLayout(server: ServerSummary | undefined): Promise<SidebarLayoutSnapshot | null> {
+      if (server?.kind === "remote" && server.compatibility?.hostAppVersion === null) return Promise.resolve(null);
       return serverSupportsCapability(server, "sidebar-layout")
         ? sidebarPort().agent.getSidebarLayout()
         : Promise.resolve(defaultSidebarLayout());
     }
 
-    async function mutateSidebarLayout(action: SidebarLayoutAction): Promise<void> {
+    async function applySidebarLayoutAction(action: SidebarLayoutAction): Promise<SidebarLayoutSnapshot> {
       if (!activeServerSupportsCapability("sidebar-layout")) {
         throw new Error(currentText().t("sidebar.section.layoutUnsupported"));
       }
       const layout = await sidebarPort().agent.mutateSidebarLayout(action);
       setSidebarLayout(layout);
+      return layout;
+    }
+
+    async function mutateSidebarLayout(action: SidebarLayoutAction): Promise<void> {
+      await applySidebarLayoutAction(action);
     }
 
     function reorderSidebarPeople(memberIds: string[]): void {
@@ -76,6 +86,7 @@ const Sidebar = createSimpleContext({
       setSidebarLayout,
       loadLayout,
       mutateSidebarLayout,
+      applySidebarLayoutAction,
       ...preferences,
       sidebarPeopleOrder,
       reorderSidebarPeople,

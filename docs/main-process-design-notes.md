@@ -19,37 +19,15 @@ The payload binding types make `(input: unknown) => Result` incompatible with th
 `() => Result` form. This requires an explicit decoder. Decoding follows sender validation so an
 untrusted frame cannot reach a parser.
 
-`ipc-channel-coverage.test.ts` restricts the name `ipcMain` to `ipc/define-ipc-group.ts`. An aliased
-import elsewhere could otherwise register a handler without a sender check. The test restricts the
-trusted wrapper names to that file too: the wrappers accept string channels, so direct use could
-create an endpoint outside the declared groups. Direct `IPC_ENDPOINTS.group.name` references keep
+`ipc-channel-coverage.test.ts` restricts the name `ipcMain` to `trusted-ipc.ts`, which holds the
+sender check. An aliased import elsewhere could otherwise register a handler without a sender check.
+The test restricts the trusted wrapper names to `ipc/define-ipc-group.ts`: the wrappers accept string
+channels, so direct use could create an endpoint outside the declared groups. Direct `IPC_ENDPOINTS.group.name` references keep
 renderer sends visible to the same coverage checks.
 
 `index.ts` calls `app.setPath`, `app.enableSandbox` and
 `protocol.registerSchemesAsPrivileged` at module scope. Tests that import it need an Electron mock.
-Source coverage tests read the file instead. A service without an Electron dependency can use
-ordinary unit tests; an unnecessary import would force it into the Electron mock setup.
-
-## Test harnesses
-
-The remote-server suite once had eight separate socket fakes. Five declared `readonly readyState`,
-so closing the fake left it OPEN. The event stream's two `readyState !== WebSocket.OPEN` guards
-could not run in the tests that appeared to cover them. `FakeEventSocket` in
-`remote-server-test-harness.ts` now models that transition in one place. The harness is a plain
-`.ts` module with no test cases, like `src/backend/agent-service-test-harness.ts`.
-
-Remote-server modules each have a matching test file. The backend's `agent-service.*.test.ts`
-pattern splits tests of one large class and is not the model for this module family.
-
-`TeamApiServer` is different: its cases call routes through real HTTP listeners. Route domains are
-the useful test boundary, so `team-api-server.*.test.ts` follows that split. Its shared harness
-requires explicit choices where defaults would change what a case tests. `host-service.test.ts`
-was separated because those cases test another class.
-
-Service events, returned promises, listener callbacks and harness barriers identify the state a
-test needs. `waitForServer` reports differences against the complete server summary.
-`deferredRoute` separates request arrival from its response. Fixed elapsed time cannot provide
-those guarantees under runner load. Use fake timers for behavior whose input is elapsed time.
+Source coverage tests read the file instead.
 
 ## Construction and shutdown
 
@@ -140,5 +118,6 @@ methods remain on `RemoteTeamDirectory` because they contact a different server 
 
 `ipc-channel-coverage.test.ts` checks a name bijection between `decode*FromHost` under `src/main`
 and `decode*FromMain` in the preload. This prevents deleting one side and redirecting its callers
-to the other, which could apply trusted-main validation to a remote server. The test only checks
-names: review must still detect two names that refer to one decoder.
+to the other, which could apply trusted-main validation to a remote server. A second test rejects a
+decoder that is a bare alias of its twin. Review must still detect a wrapper that calls the other
+decoder.

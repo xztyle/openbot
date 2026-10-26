@@ -226,7 +226,7 @@ export async function routeFiles(
  * Before the head is written, an error goes to the dispatcher as before. After the head, the only
  * thing left to do is to close the socket: a client that closes the download is not an error.
  */
-async function sendFile(
+export async function sendFile(
   response: ServerResponse,
   path: string,
   tooLarge: string | null,

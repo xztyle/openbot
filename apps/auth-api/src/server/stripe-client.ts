@@ -54,6 +54,10 @@ const checkoutSessionSchema = Schema.Struct({
   subscription: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type StripeCheckoutSession = typeof checkoutSessionSchema.Type;
+const checkoutSessionListSchema = Schema.Struct({
+  data: Schema.Array(Schema.Struct({ ...checkoutSessionSchema.fields, created: Schema.Int, metadata: Metadata })),
+});
+export type StripeOpenCheckoutSession = (typeof checkoutSessionListSchema.Type)["data"][number];
 const priceSchema = Schema.Struct({
   id: Schema.String,
   lookup_key: Schema.NullOr(Schema.String),
@@ -63,6 +67,7 @@ const priceSchema = Schema.Struct({
 });
 export type StripePrice = typeof priceSchema.Type;
 const priceListSchema = Schema.Struct({ data: Schema.Array(priceSchema) });
+const expandable = Schema.Union([Schema.String, Schema.Struct({ id: Schema.String })]);
 const subscriptionSchema = Schema.Struct({
   id: Schema.String,
   customer: Schema.Union([Schema.String, Schema.Struct({ id: Schema.String })]),
@@ -72,9 +77,11 @@ const subscriptionSchema = Schema.Struct({
   cancel_at: Schema.optional(Schema.NullOr(Schema.Int)),
   metadata: Metadata,
   current_period_end: Schema.optional(Schema.Int),
+  latest_invoice: Schema.optional(Schema.NullOr(expandable)),
   items: Schema.Struct({
     data: Schema.Array(
       Schema.Struct({
+        id: Schema.String,
         current_period_end: Schema.optional(Schema.Int),
         quantity: Schema.optional(Schema.Int),
         price: Schema.Struct({
@@ -90,6 +97,26 @@ const subscriptionSchema = Schema.Struct({
   }),
 });
 export type StripeSubscription = typeof subscriptionSchema.Type;
+const subscriptionListSchema = Schema.Struct({ data: Schema.Array(subscriptionSchema) });
+const invoicePaymentListSchema = Schema.Struct({ data: Schema.Array(Schema.Struct({ invoice: expandable })) });
+const invoiceSchema = Schema.Struct({
+  id: Schema.String,
+  billing_reason: Schema.optional(Schema.NullOr(Schema.String)),
+  parent: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        subscription_details: Schema.optional(
+          Schema.NullOr(Schema.Struct({ subscription: Schema.optional(Schema.NullOr(expandable)) })),
+        ),
+      }),
+    ),
+  ),
+});
+const paymentIntentSchema = Schema.Struct({
+  latest_charge: Schema.optional(
+    Schema.NullOr(Schema.Union([Schema.String, Schema.Struct({ refunded: Schema.Boolean })])),
+  ),
+});
 const eventSchema = Schema.Struct({
   id: Schema.String,
   type: Schema.String,
@@ -153,11 +180,43 @@ export class StripeClient {
     subscriptionId: string,
     cancelAtPeriodEnd: boolean,
   ): Effect.fn.Return<StripeSubscription, StripeRequestError | StripeTransportError> {
-    const body = new URLSearchParams({ cancel_at_period_end: String(cancelAtPeriodEnd) });
-    if (!cancelAtPeriodEnd) body.set("cancel_at", "");
+    // Stripe refuses both parameters in one request. An empty `cancel_at` clears a period-end cancel
+    // and a dated cancel from the Customer Portal.
+    const body = new URLSearchParams(cancelAtPeriodEnd ? { cancel_at_period_end: "true" } : { cancel_at: "" });
     return yield* this.#requestEffect(
       "POST",
       `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      body,
+      subscriptionSchema,
+    );
+  }).bind(this);
+
+  /**
+   * Sets the quantity of one subscription item. With `always_invoice`, Stripe invoices the prorated
+   * difference now and refuses the change when that payment fails, so the quantity never goes up unpaid.
+   * With `none`, the new quantity applies from the next invoice.
+   */
+
+  readonly setSubscriptionQuantity = Effect.fn("StripeClient.setSubscriptionQuantity")(function* (
+    this: StripeClient,
+    input: {
+      subscriptionId: string;
+      itemId: string;
+      quantity: number;
+      proration: "always_invoice" | "none";
+      metadata?: Readonly<Record<string, string>>;
+    },
+  ): Effect.fn.Return<StripeSubscription, StripeRequestError | StripeTransportError> {
+    const body = new URLSearchParams({
+      "items[0][id]": input.itemId,
+      "items[0][quantity]": String(input.quantity),
+      proration_behavior: input.proration,
+    });
+    for (const [key, value] of Object.entries(input.metadata ?? {})) body.set(`metadata[${key}]`, value);
+    if (input.proration === "always_invoice") body.set("payment_behavior", "error_if_incomplete");
+    return yield* this.#requestEffect(
+      "POST",
+      `/v1/subscriptions/${encodeURIComponent(input.subscriptionId)}`,
       body,
       subscriptionSchema,
     );
@@ -205,9 +264,9 @@ export class StripeClient {
   }).bind(this);
 
   /**
-   * A subscription Checkout for one server. The metadata goes on the session and on the subscription, so
-   * the webhook links the subscription to the account and the server. Each call makes a new page, so it
-   * takes no idempotency key: the caller closes the previous page.
+   * A subscription Checkout for one server, or for the license when `serverId` is absent. The metadata goes
+   * on the session and on the subscription, so the webhook links the subscription to the account and the
+   * server. Each call makes a new page, so it takes no idempotency key: the caller closes the other pages.
    */
 
   readonly createCheckoutSession = Effect.fn("StripeClient.createCheckoutSession")(function* (
@@ -217,7 +276,11 @@ export class StripeClient {
       priceId: string;
       currency: BillingCurrency;
       userId: string;
-      serverId: string;
+      serverId?: string;
+      /** The number of units. A server plan is 1. A license is its number of users. */
+      quantity?: number;
+      /** More metadata for the session and the subscription. */
+      metadata?: Readonly<Record<string, string>>;
       successUrl: string;
       cancelUrl: string;
       nowSeconds: number;
@@ -227,18 +290,19 @@ export class StripeClient {
       mode: "subscription",
       customer: input.customerId,
       "line_items[0][price]": input.priceId,
-      "line_items[0][quantity]": "1",
+      "line_items[0][quantity]": String(input.quantity ?? 1),
       currency: input.currency,
       // Card collection stays on, so a plan that a code discounts only at the start can still renew.
       allow_promotion_codes: "true",
-      client_reference_id: input.serverId,
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       expires_at: String(input.nowSeconds + CHECKOUT_LIFETIME_SECONDS),
     });
+    if (input.serverId) body.set("client_reference_id", input.serverId);
     for (const prefix of ["metadata", "subscription_data[metadata]"]) {
       body.set(`${prefix}[${BILLING_METADATA.userId}]`, input.userId);
-      body.set(`${prefix}[${BILLING_METADATA.serverId}]`, input.serverId);
+      if (input.serverId) body.set(`${prefix}[${BILLING_METADATA.serverId}]`, input.serverId);
+      for (const [key, value] of Object.entries(input.metadata ?? {})) body.set(`${prefix}[${key}]`, value);
     }
     const session = yield* this.#requestEffect("POST", "/v1/checkout/sessions", body, checkoutSessionSchema);
     if (!session.url) return yield* new StripeRequestError(200, "invalid_response", "missing_url");
@@ -263,6 +327,28 @@ export class StripeClient {
     return yield* this.#requestEffect("GET", path, null, checkoutSessionSchema);
   }).bind(this);
 
+  /** The open Checkout pages of a customer, with their metadata. */
+
+  readonly listOpenCheckoutSessions = Effect.fn("StripeClient.listOpenCheckoutSessions")(function* (
+    this: StripeClient,
+    customerId: string,
+  ): Effect.fn.Return<StripeOpenCheckoutSession[], StripeRequestError | StripeTransportError> {
+    const query = new URLSearchParams({ customer: customerId, status: "open", limit: "100" });
+    return [
+      ...(yield* this.#requestEffect("GET", `/v1/checkout/sessions?${query}`, null, checkoutSessionListSchema)).data,
+    ];
+  }).bind(this);
+
+  /** All subscriptions of a customer, also the ended ones. */
+
+  readonly listCustomerSubscriptions = Effect.fn("StripeClient.listCustomerSubscriptions")(function* (
+    this: StripeClient,
+    customerId: string,
+  ): Effect.fn.Return<StripeSubscription[], StripeRequestError | StripeTransportError> {
+    const query = new URLSearchParams({ customer: customerId, status: "all", limit: "100" });
+    return [...(yield* this.#requestEffect("GET", `/v1/subscriptions?${query}`, null, subscriptionListSchema)).data];
+  }).bind(this);
+
   /** Cancels a subscription now. Stripe gives no refund and no credit for the rest of the period. */
 
   readonly cancelSubscription = Effect.fn("StripeClient.cancelSubscription")(function* (
@@ -275,6 +361,50 @@ export class StripeClient {
       null,
       subscriptionSchema,
     );
+  }).bind(this);
+
+  /**
+   * The invoice that a PaymentIntent paid, the subscription of that invoice and why Stripe made it. Null for
+   * a payment of no subscription invoice. From API version 2025-03-31 a charge does not name its invoice.
+   */
+
+  readonly getPaymentInvoice = Effect.fn("StripeClient.getPaymentInvoice")(function* (
+    this: StripeClient,
+    paymentIntentId: string,
+  ): Effect.fn.Return<
+    { invoiceId: string; subscriptionId: string; billingReason: string | null } | null,
+    StripeRequestError | StripeTransportError
+  > {
+    const query = new URLSearchParams({
+      "payment[type]": "payment_intent",
+      "payment[payment_intent]": paymentIntentId,
+      limit: "1",
+    });
+    const payments = yield* this.#requestEffect("GET", `/v1/invoice_payments?${query}`, null, invoicePaymentListSchema);
+    const invoice = payments.data[0]?.invoice;
+    if (!invoice) return null;
+    const invoiceId = typeof invoice === "string" ? invoice : invoice.id;
+    const path = `/v1/invoices/${encodeURIComponent(invoiceId)}`;
+    const invoiceRecord = yield* this.#requestEffect("GET", path, null, invoiceSchema);
+    const subscription = invoiceRecord.parent?.subscription_details?.subscription;
+    if (!subscription) return null;
+    return {
+      invoiceId,
+      subscriptionId: typeof subscription === "string" ? subscription : subscription.id,
+      billingReason: invoiceRecord.billing_reason ?? null,
+    };
+  }).bind(this);
+
+  /** True when the refunds of the PaymentIntent's charge add up to its full amount. */
+
+  readonly isPaymentRefunded = Effect.fn("StripeClient.isPaymentRefunded")(function* (
+    this: StripeClient,
+    paymentIntentId: string,
+  ): Effect.fn.Return<boolean, StripeRequestError | StripeTransportError> {
+    const query = new URLSearchParams({ "expand[]": "latest_charge" });
+    const path = `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}?${query}`;
+    const charge = (yield* this.#requestEffect("GET", path, null, paymentIntentSchema)).latest_charge;
+    return typeof charge === "object" && charge !== null && charge.refunded;
   }).bind(this);
 
   readonly #requestEffect = Effect.fn("StripeClient.request")(function* <T>(
@@ -341,6 +471,13 @@ export function subscriptionAmount(subscription: StripeSubscription): number | n
   if (unitAmount === null) return null;
   const amount = unitAmount * (item.quantity ?? 1);
   return Number.isSafeInteger(amount) && amount >= 0 ? amount : null;
+}
+
+/** The ID of the subscription's latest invoice, or null before its first invoice. */
+export function subscriptionLatestInvoiceId(subscription: StripeSubscription): string | null {
+  const invoice = subscription.latest_invoice;
+  if (!invoice) return null;
+  return typeof invoice === "string" ? invoice : invoice.id;
 }
 
 export function subscriptionCustomerId(subscription: StripeSubscription): string {

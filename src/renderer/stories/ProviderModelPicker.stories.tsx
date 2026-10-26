@@ -25,7 +25,7 @@ export const Pill: Story = {
   args: { reasoningEffort: "medium", onReasoningEffortChange: fn() },
 };
 
-/** A Claude model with every effort level, and the auto-approve switch. */
+/** A Claude model with every effort level. */
 export const AllEffortLevels: Story = {
   args: {
     provider: "claude",
@@ -37,8 +37,6 @@ export const AllEffortLevels: Story = {
     ),
     reasoningEffort: "high",
     onReasoningEffortChange: fn(),
-    agentName: "Researcher",
-    onAutoApproveChange: fn(),
   },
 };
 
@@ -50,23 +48,36 @@ export const Disabled: Story = {
   args: { disabled: true, disabledReason: "Choose a provider first." },
 };
 
+/** Providers that cannot run stay off the rail. The agent's own provider stays, with its message. */
 export const UnavailableProvidersOpen: Story = {
   args: {
-    modelOptions: STORY_MODELS.filter((model) => model.provider === "codex"),
+    modelOptions: STORY_MODELS.filter((model) => model.provider === "claude"),
     agentStatus: {
       ...STORY_AGENT_STATUS,
       providers: STORY_AGENT_STATUS.providers?.map((provider) =>
-        provider.id === "codex"
+        provider.id === "claude"
           ? provider
           : {
               ...provider,
               state: "not-installed" as const,
               version: null,
-              message:
-                provider.id === "grok"
-                  ? "Run `grok login` or set XAI_API_KEY to use Grok."
-                  : "Run `claude auth login` to use Claude.",
+              message: provider.id === "codex" ? "Run `codex login` to use Codex." : null,
             },
+      ),
+    },
+  },
+};
+
+/** Signed-out providers stay off the rail, and the plus opens the settings. */
+export const ConnectedProvidersOnly: Story = {
+  args: {
+    onManageProviders: fn(),
+    agentStatus: {
+      ...STORY_AGENT_STATUS,
+      providers: STORY_AGENT_STATUS.providers?.map((provider) =>
+        provider.id === "codex" || provider.id === "claude"
+          ? provider
+          : { ...provider, state: "sign-in-required" as const },
       ),
     },
   },

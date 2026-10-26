@@ -64,7 +64,7 @@ Three separate hazards; check all three.
     shape is untouched. Diff the request parsers and route registrations, not only the responses.
 
 ```bash
-bun run --cwd apps/auth-api test:server test/mobile-auth-migration.test.ts
+bun run --cwd apps/auth-api test -- test/mobile-auth-migration.test.ts
 ```
 
 `apps/auth-api` has its own vitest config, so `bun run test:desktop` does not reach it. Run the

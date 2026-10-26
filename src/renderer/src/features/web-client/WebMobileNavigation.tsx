@@ -1,5 +1,5 @@
 import type { AppTextKey } from "@openbot/i18n";
-import { Bot, Button, MessageCircle } from "@openbot/ui";
+import { Bot, Button, MessageCircle, Workflow } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { Dynamic } from "@solidjs/web";
 import { createSignal, For, onSettled, Show } from "solid-js";
@@ -8,16 +8,20 @@ export type WebMobilePane = "conversation" | "workspace";
 
 interface WebMobileNavigationProps {
   activePane: WebMobilePane;
+  /** The Routines view is on: the conversation pane shows the routine canvas. */
+  routines?: boolean;
   onChange: (pane: WebMobilePane) => void;
   /** The agents that need the user or have a new reply. The Agents tab shows a dot while there is one. */
   attentionCount?: number;
 }
 
-const PANES: ReadonlyArray<{
+interface PaneButton {
   id: WebMobilePane;
   label: AppTextKey;
   Icon: typeof MessageCircle;
-}> = [
+}
+
+const PANES: ReadonlyArray<PaneButton> = [
   { id: "conversation", label: "webClient.pane.chat", Icon: MessageCircle },
   { id: "workspace", label: "webClient.pane.agents", Icon: Bot },
 ];
@@ -78,6 +82,8 @@ function createKeyboardOpen() {
 export function WebMobileNavigation(props: WebMobileNavigationProps) {
   const { t } = useText();
   const keyboardOpen = createKeyboardOpen();
+  const shown = (pane: PaneButton): PaneButton =>
+    pane.id === "conversation" && props.routines ? { ...pane, label: "webClient.pane.routines", Icon: Workflow } : pane;
   return (
     <nav
       class="web-mobile-navigation"
@@ -95,8 +101,8 @@ export function WebMobileNavigation(props: WebMobileNavigationProps) {
               aria-pressed={props.activePane === pane.id ? "true" : "false"}
               onClick={() => props.onChange(pane.id)}
             >
-              <Dynamic component={pane.Icon} aria-hidden="true" />
-              <span>{t(pane.label)}</span>
+              <Dynamic component={shown(pane).Icon} aria-hidden="true" />
+              <span>{t(shown(pane).label)}</span>
               <Show when={pane.id === "workspace" && (props.attentionCount ?? 0) > 0}>
                 <span
                   class="web-mobile-navigation-dot"

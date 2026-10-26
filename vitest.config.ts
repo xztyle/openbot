@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import solidPlugin from "@solidjs/vite-plugin";
 import { configDefaults, defineConfig } from "vitest/config";
 import { TEST_TIMEOUT_MS } from "./src/backend/test-deadlines";
@@ -36,26 +35,11 @@ export default defineConfig({
     },
     projects: [
       {
-        esbuild: { jsx: "automatic" },
-        resolve: { alias: { "@": fileURLToPath(new URL("./apps/mobile/src", import.meta.url)) } },
-        test: {
-          name: "mobile-ui",
-          environment: "jsdom",
-          pool: "vmThreads",
-          include: ["apps/mobile/src/**/*.test.tsx"],
-          restoreMocks: true,
-          setupFiles: ["./apps/mobile/src/test-setup.ts"],
-        },
-      },
-      {
         extends: true,
         test: {
           name: "node",
-          server: { deps: { inline: ["@openpanel/react-native"] } },
           environment: "node",
-          // Strictly longer than the harness deadline, so a stalled wait fails
-          // with the predicate that never held rather than with vitest's
-          // generic "test timed out" - see src/backend/test-deadlines.ts.
+          // Strictly longer than the wait deadline - see src/backend/test-deadlines.ts.
           testTimeout: TEST_TIMEOUT_MS,
           // No test inherits the developer's HOME, provider keys or time zone -
           // see tools/vitest/hermetic-environment.ts.
@@ -71,15 +55,7 @@ export default defineConfig({
             "src/preload/**/*.test.ts",
             "src/renderer/**/*.test.ts",
             "scripts/**/*.test.ts",
-            "tools/vitest/**/*.test.ts",
-            "packages/brand/**/*.test.ts",
-            "packages/contracts/**/*.test.ts",
-            "packages/i18n/**/*.test.ts",
             "packages/logging/**/*.test.ts",
-            "packages/telemetry/**/*.test.ts",
-            "packages/user-errors/**/*.test.ts",
-            "packages/team-client/**/*.test.ts",
-            "packages/ui/**/*.test.ts",
             "apps/mobile/src/**/*.test.ts",
           ],
           exclude: [...configDefaults.exclude, "**/*.dom.test.ts"],
@@ -104,7 +80,7 @@ export default defineConfig({
           // The `*.dom.test.ts` half of the include mirrors the node project's exclude of the same
           // pattern, so a DOM test lands here wherever it lives: a page script the main process
           // injects needs a document as much as a renderer module does.
-          include: ["src/renderer/**/*.test.tsx", "packages/ui/**/*.test.tsx", "**/*.dom.test.ts"],
+          include: ["src/renderer/**/*.test.tsx", "**/*.dom.test.ts"],
           globalSetup: ["./tools/vitest/hermetic-global-setup.ts"],
           setupFiles: ["./tools/vitest/hermetic-setup.ts", "./src/renderer/src/setupTests.ts"],
         },

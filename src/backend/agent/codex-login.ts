@@ -1,6 +1,7 @@
 import type { ProviderCodeLoginStart } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
-import { Effect, Result, Schema } from "effect";
+import { classifyUserError } from "@openbot/user-errors";
+import { Deferred, Effect, Result, Schema } from "effect";
 import type { AgentClient } from "./../agent-client";
 import { type CodexCliInfo, resolveCodexCli } from "./../cli";
 import { causeHelpers } from "../effect-boundary";
@@ -23,6 +24,8 @@ interface PendingCodexLogin {
   loginId: string;
   timer: NodeJS.Timeout;
   completing: boolean;
+  /** Settles when the login ends: true when it signed Codex in. */
+  ended: Deferred.Deferred<boolean>;
 }
 
 /** What the ChatGPT sign-in needs from the provider runtime that owns the Codex status and client. */
@@ -67,6 +70,7 @@ export class CodexLoginFlow {
     this.#pending = null;
     if (!pending) return null;
     clearTimeout(pending.timer);
+    end(pending, false);
     return pending.client;
   }
 
@@ -161,6 +165,7 @@ export class CodexLoginFlow {
         })
         .pipe(toCodexLoginFailed);
       if (this.#pending === pending) this.#pending = null;
+      end(pending, true);
     }).pipe(Effect.catch(() => this.#fail(pending, UNVERIFIED_MESSAGE)));
   }, Effect.uninterruptible).bind(this);
 
@@ -179,6 +184,7 @@ export class CodexLoginFlow {
     if (!pending || (expected && pending !== expected)) return;
     this.#pending = null;
     clearTimeout(pending.timer);
+    end(pending, false);
     yield* pending.client
       .request("account/login/cancel", { loginId: pending.loginId }, decodeRecordResponse)
       .pipe(toCodexLoginFailed)
@@ -187,6 +193,16 @@ export class CodexLoginFlow {
     if (message) this.#host.setFailure(new Error(message), pending.cli.version);
     else this.#host.clearConnectionState();
   }, Effect.uninterruptible).bind(this);
+
+  /**
+   * Waits until the pending login ends, and answers whether it signed Codex in. `null` when no login
+   * is pending: it did not start, or it already ended.
+   */
+  readonly settled = Effect.fn("CodexLogin.settled")(function* (this: CodexLoginFlow) {
+    const pending = this.#pending;
+    if (!pending) return null;
+    return yield* Deferred.await(pending.ended);
+  }).bind(this);
 
   /** Keeps a login the user already finished, and cancels one they did not, before a provider refresh. */
 
@@ -209,6 +225,7 @@ export class CodexLoginFlow {
         return true;
       }),
     );
+    end(pending, Result.isSuccess(activated) && activated.success);
     if (Result.isSuccess(activated) && activated.success) return;
     yield* pending.client
       .request("account/login/cancel", { loginId: pending.loginId }, decodeRecordResponse)
@@ -257,7 +274,15 @@ export class CodexLoginFlow {
             if (!this.#host.hasActiveClient()) {
               const existing = yield* client
                 .request("account/read", { refreshToken: false }, decodeAccountReadResult)
-                .pipe(toCodexLoginFailed);
+                .pipe(
+                  toCodexLoginFailed,
+                  // An expired sign-in fails this check too, such as "workspace routing discovery
+                  // unauthorized (401)". Read it as no account, so that the new sign-in can start.
+                  Effect.catchIf(
+                    (failure) => classifyUserError(failure.cause) === "auth",
+                    () => Effect.succeed({ account: null }),
+                  ),
+                );
               const account = existing.account;
               if (account?.type === "chatgpt") {
                 yield* this.#host.activate(client, resolved, account).pipe(toCodexLoginFailed);
@@ -292,7 +317,7 @@ export class CodexLoginFlow {
       Effect.runFork(this.cancel("ChatGPT connection timed out. Try again.", pending));
     }, CODEX_LOGIN_TIMEOUT_MS);
     timer.unref?.();
-    pending = { client, cli, loginId, timer, completing: false };
+    pending = { client, cli, loginId, timer, completing: false, ended: Deferred.makeUnsafe<boolean>() };
     this.#pending = pending;
     recordRestartActivity();
     client.once("exit", () => {
@@ -311,9 +336,14 @@ export class CodexLoginFlow {
     if (this.#pending !== pending) return;
     clearTimeout(pending.timer);
     this.#pending = null;
+    end(pending, false);
     yield* pending.client.stop().pipe(toCodexLoginFailed).pipe(Effect.ignore);
     this.#host.setFailure(new Error(message), pending.cli.version);
   }, Effect.uninterruptible);
+}
+
+function end(pending: PendingCodexLogin, signedIn: boolean): void {
+  Deferred.doneUnsafe(pending.ended, Effect.succeed(signedIn));
 }
 
 export class CodexLoginFailed extends Schema.TaggedError<CodexLoginFailed>()("CodexLoginFailed", {

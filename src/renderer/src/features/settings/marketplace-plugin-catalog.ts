@@ -199,6 +199,46 @@ const NOTION: MarketplacePluginDetail = {
   shareUrl: "https://openbot.run/plugins/notion",
 };
 
+const COBRAIN: MarketplacePluginDetail = {
+  id: "plugin-cobrain",
+  slug: "cobrain",
+  name: "Cobrain",
+  tagline: "Shared memory for your AI agents",
+  description:
+    "Cobrain is a Markdown memory that every AI you connect can read and write. Agents load the context of a client or project before working, search past notes and decisions, and save what they learn so the next thread starts where the last one ended. Each user signs in to their own Cobrain account.",
+  category: "productivity",
+  creatorName: "cobrain.space",
+  iconUrl: "https://cobrain.space/apple-icon.png",
+  version: "1.0.0",
+  prompts: [
+    { id: "prompt-start-session", text: "Load my Cobrain context for this project before we start." },
+    { id: "prompt-search-decision", text: "Search my Cobrain notes for what we decided about pricing." },
+    { id: "prompt-save-note", text: "Save a note in Cobrain with what we did today and what is left." },
+  ],
+  apps: [
+    {
+      id: "app-cobrain-mcp",
+      name: "Cobrain",
+      description: "Read, search and write notes in your Cobrain brain over one MCP server.",
+      iconUrl: "https://cobrain.space/apple-icon.png",
+      server: {
+        name: "cobrain",
+        transport: "http",
+        url: "https://cobrain.space/mcp",
+        auth: [{ id: "cobrain-oauth", kind: "link", label: "Sign in" }],
+      },
+    },
+  ],
+  websiteUrl: "https://cobrain.space",
+  privacyPolicyUrl: "https://cobrain.space/privacy",
+  termsUrl: "https://cobrain.space/terms",
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/cobrain",
+};
+
 const FIGMA: MarketplacePluginDetail = {
   id: "plugin-figma",
   slug: "figma",
@@ -290,6 +330,45 @@ const PAPER: MarketplacePluginDetail = {
   shareUrl: "https://openbot.run/plugins/paper",
 };
 
+const APPLE_APPS: MarketplacePluginDetail = {
+  id: "plugin-apple-apps",
+  slug: "apple-apps",
+  name: "Apple apps",
+  tagline: "Mail, Calendar and more on your Mac",
+  description:
+    "Apple apps lets agents use Mail, Calendar, Contacts, Reminders, Notes, Messages and Safari on this Mac. It works on macOS only. OpenBot starts mcp-icloud, a community server that is not made by Apple or OpenBot. The server controls the apps through AppleScript, on this computer, and needs no account and no key. The first time an agent uses an app, macOS asks if OpenBot can control it. To change this later, open System Settings › Privacy & Security › Automation. Agents can send email and iMessages, and change or delete events, contacts and reminders, so review each write before you approve it. What the tools read, such as email text, goes to the model provider of the agent.",
+  category: "productivity",
+  creatorName: "github.com/MrGo2",
+  iconUrl: "https://www.apple.com/favicon.ico",
+  version: "1.0.0",
+  prompts: [
+    { id: "prompt-unread", text: "Summarize my unread email in Apple Mail from today." },
+    { id: "prompt-today", text: "What is on my Apple Calendar today and tomorrow?" },
+    {
+      id: "prompt-schedule",
+      text: "Find the latest email about the project meeting and add the meeting to my calendar.",
+    },
+  ],
+  apps: [
+    {
+      id: "app-apple-apps-mcp",
+      name: "Apple apps",
+      description:
+        "Mail, Calendar, Contacts, Reminders, Notes, Messages and Safari, over the local mcp-icloud server. Needs macOS and Automation access.",
+      iconUrl: "https://www.apple.com/favicon.ico",
+      server: { name: "apple-apps", transport: "stdio", command: "npx", args: ["-y", "mcp-icloud@2.1.3"] },
+    },
+  ],
+  websiteUrl: "https://github.com/MrGo2/icloud-mcp",
+  privacyPolicyUrl: "https://github.com/MrGo2/icloud-mcp/blob/main/PRIVACY.md",
+  termsUrl: "https://github.com/MrGo2/icloud-mcp/blob/main/LICENSE",
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/apple-apps",
+};
+
 const SENTRY: MarketplacePluginDetail = {
   id: "plugin-sentry",
   slug: "sentry",
@@ -328,6 +407,169 @@ const SENTRY: MarketplacePluginDetail = {
   featured: false,
   updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/sentry",
+};
+
+const VERCEL: MarketplacePluginDetail = {
+  id: "plugin-vercel",
+  slug: "vercel",
+  name: "Vercel",
+  tagline: "Deployments, build logs and projects",
+  description:
+    "Vercel lets agents list projects and recent deployments, read build and runtime logs, and find why a build failed. Each user signs in to their own Vercel account through the browser and chooses the teams that agents can use. In those teams, agents get the same rights as the user's account. They can also change environment variables, domains, DNS records and deployments, and buy domains.",
+  category: "coding",
+  creatorName: "vercel.com",
+  iconUrl: "https://vercel.com/favicon.ico",
+  version: "1.0.0",
+  prompts: [
+    { id: "prompt-failed-build", text: "Why did the last production deployment fail?" },
+    { id: "prompt-recent-deployments", text: "List the deployments from today and their status." },
+    { id: "prompt-runtime-errors", text: "Which routes had runtime errors in the last hour?" },
+  ],
+  apps: [
+    {
+      id: "app-vercel-mcp",
+      name: "Vercel",
+      description:
+        "Projects, deployments, build logs, and runtime logs, over Vercel's MCP server with browser sign-in.",
+      iconUrl: "https://vercel.com/favicon.ico",
+      server: {
+        name: "vercel",
+        transport: "http",
+        url: "https://mcp.vercel.com",
+        auth: [{ id: "vercel-oauth", kind: "link", label: "Sign in" }],
+      },
+    },
+  ],
+  websiteUrl: "https://vercel.com",
+  privacyPolicyUrl: "https://vercel.com/legal/privacy-notice",
+  termsUrl: "https://vercel.com/legal/terms",
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/vercel",
+};
+
+const CLOUDFLARE: MarketplacePluginDetail = {
+  id: "plugin-cloudflare",
+  slug: "cloudflare",
+  name: "Cloudflare",
+  tagline: "Workers, DNS, storage and logs",
+  description:
+    "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
+  category: "coding",
+  creatorName: "cloudflare.com",
+  iconUrl: "https://www.cloudflare.com/favicon.ico",
+  version: "1.0.0",
+  prompts: [
+    { id: "prompt-workers", text: "Which Workers are deployed in my Cloudflare account?" },
+    { id: "prompt-errors", text: "Which Cloudflare Workers logged errors in the last hour?" },
+    { id: "prompt-dns", text: "List the DNS records of each zone in my Cloudflare account." },
+  ],
+  apps: [
+    {
+      id: "app-cloudflare-mcp",
+      name: "Cloudflare",
+      description:
+        "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
+      iconUrl: "https://www.cloudflare.com/favicon.ico",
+      server: {
+        name: "cloudflare",
+        transport: "http",
+        url: "https://mcp.cloudflare.com/mcp",
+        auth: [
+          {
+            id: "cloudflare-key",
+            kind: "key",
+            label: "API key",
+            fields: [
+              {
+                id: "token",
+                label: "Cloudflare API token",
+                header: "Authorization",
+                prefix: "Bearer ",
+                hint: "Cloudflare → Profile → API tokens. Limit resources and permissions.",
+              },
+            ],
+            docsUrl: "https://github.com/cloudflare/mcp",
+            docsLabel: "Setup instructions",
+          },
+        ],
+      },
+    },
+  ],
+  websiteUrl: "https://www.cloudflare.com",
+  privacyPolicyUrl: "https://www.cloudflare.com/privacypolicy/",
+  termsUrl: "https://www.cloudflare.com/website-terms/",
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/cloudflare",
+};
+
+const SUPABASE: MarketplacePluginDetail = {
+  id: "plugin-supabase",
+  slug: "supabase",
+  name: "Supabase",
+  tagline: "Databases, logs and edge functions",
+  description:
+    "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
+  category: "coding",
+  creatorName: "supabase.com",
+  iconUrl: "https://supabase.com/favicon/favicon.ico",
+  version: "1.0.0",
+  prompts: [
+    { id: "prompt-projects", text: "Which projects are in my Supabase organization?" },
+    { id: "prompt-tables", text: "List the tables and columns of my Supabase database." },
+    { id: "prompt-errors", text: "Which errors did my Supabase project log in the last hour?" },
+  ],
+  apps: [
+    {
+      id: "app-supabase-mcp",
+      name: "Supabase",
+      description:
+        "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
+      iconUrl: "https://supabase.com/favicon/favicon.ico",
+      server: {
+        name: "supabase",
+        transport: "http",
+        url: "https://mcp.supabase.com/mcp",
+        auth: [
+          {
+            id: "supabase-key",
+            kind: "key",
+            label: "API key",
+            fields: [
+              {
+                id: "url",
+                label: "Project MCP URL",
+                url: true,
+                placeholder: "https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT&read_only=true",
+              },
+              {
+                id: "token",
+                label: "Supabase personal access token",
+                header: "Authorization",
+                prefix: "Bearer ",
+                hint: "Supabase dashboard → Account → Access tokens",
+              },
+            ],
+            docsUrl: "https://supabase.com/docs/guides/ai-tools/mcp",
+            docsLabel: "Setup instructions",
+          },
+        ],
+      },
+    },
+  ],
+  websiteUrl: "https://supabase.com",
+  privacyPolicyUrl: "https://supabase.com/privacy",
+  termsUrl: "https://supabase.com/terms",
+  skills: [],
+  installs: 0,
+  featured: false,
+  updatedAt: "2026-10-08T00:00:00.000Z",
+  shareUrl: "https://openbot.run/plugins/supabase",
 };
 
 const CONTEXT7: MarketplacePluginDetail = {
@@ -681,11 +923,11 @@ const COMPOSIO: MarketplacePluginDetail = {
   name: "Composio",
   tagline: "Many apps through your own Composio link",
   description:
-    "Composio connects agents to Gmail, Slack, GitHub, and hundreds of other apps through one MCP server. Create the server in your Composio account, add the apps you want to it, and paste its link here. Add an API key only if your server requires one.",
+    "Composio connects agents to Gmail, Slack, GitHub, and hundreds of other apps through one MCP server. Connect the apps you want in your Composio account, then paste its MCP URL and API key here.",
   category: "automation",
   creatorName: "composio.dev",
   iconUrl: "https://composio.dev/favicon.ico",
-  version: "1.0.0",
+  version: "1.1.0",
   prompts: [
     { id: "prompt-inbox", text: "Summarize my unread email and draft replies to the urgent ones." },
     { id: "prompt-handoff", text: "Post a summary of this pull request to our team channel." },
@@ -711,19 +953,19 @@ const COMPOSIO: MarketplacePluginDetail = {
                 id: "url",
                 label: "MCP URL",
                 url: true,
-                placeholder: "https://backend.composio.dev/v3/mcp/…",
+                placeholder: "https://connect.composio.dev/mcp",
                 hint: "The URL of an MCP server in your Composio account",
               },
               {
                 id: "api-key",
                 label: "API key",
-                header: "x-api-key",
-                hint: "Only if your server requires one. Find it in your Composio account settings.",
-                optional: true,
+                header: "x-consumer-api-key",
+                placeholder: "ck_…",
+                hint: "Find it in your Composio account, in Settings > Sessions & API Key.",
               },
             ],
-            docsUrl: "https://docs.composio.dev/docs/single-toolkit-mcp",
-            docsLabel: "Create a server",
+            docsUrl: "https://docs.composio.dev/kb/guide/consumer-project-boundaries-and-auth-selection",
+            docsLabel: "Get a key",
           },
         ],
       },
@@ -847,60 +1089,6 @@ const SLACK: MarketplacePluginDetail = {
   shareUrl: "https://openbot.run/plugins/slack",
 };
 
-const CLOUDFLARE: MarketplacePluginDetail = {
-  id: "plugin-cloudflare",
-  slug: "cloudflare",
-  name: "Cloudflare",
-  tagline: "Manage Cloudflare resources",
-  description:
-    "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
-  category: "coding",
-  creatorName: "cloudflare.com",
-  iconUrl: "https://cloudflare.com/favicon.ico",
-  version: "1.0.0",
-  prompts: [{ id: "prompt-inspect", text: "Show what I can access through Cloudflare. Do not change anything." }],
-  apps: [
-    {
-      id: "app-cloudflare-mcp",
-      name: "Cloudflare",
-      description:
-        "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
-      iconUrl: "https://cloudflare.com/favicon.ico",
-      server: {
-        name: "cloudflare",
-        transport: "http",
-        url: "https://mcp.cloudflare.com/mcp",
-        auth: [
-          {
-            id: "cloudflare-key",
-            kind: "key",
-            label: "API key",
-            fields: [
-              {
-                id: "token",
-                label: "Cloudflare API token",
-                header: "Authorization",
-                prefix: "Bearer ",
-                hint: "Cloudflare → Profile → API tokens. Limit resources and permissions.",
-              },
-            ],
-            docsUrl: "https://github.com/cloudflare/mcp",
-            docsLabel: "Setup instructions",
-          },
-        ],
-      },
-    },
-  ],
-  websiteUrl: "https://github.com/cloudflare/mcp",
-  privacyPolicyUrl: null,
-  termsUrl: null,
-  skills: [],
-  installs: 0,
-  featured: false,
-  updatedAt: "2026-10-08T00:00:00.000Z",
-  shareUrl: "https://openbot.run/plugins/cloudflare",
-};
-
 const RENDER: MarketplacePluginDetail = {
   id: "plugin-render",
   slug: "render",
@@ -953,66 +1141,6 @@ const RENDER: MarketplacePluginDetail = {
   featured: false,
   updatedAt: "2026-10-08T00:00:00.000Z",
   shareUrl: "https://openbot.run/plugins/render",
-};
-
-const SUPABASE: MarketplacePluginDetail = {
-  id: "plugin-supabase",
-  slug: "supabase",
-  name: "Supabase",
-  tagline: "Database and project tools",
-  description:
-    "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
-  category: "coding",
-  creatorName: "supabase.com",
-  iconUrl: "https://supabase.com/favicon.ico",
-  version: "1.0.0",
-  prompts: [{ id: "prompt-inspect", text: "Show what I can access through Supabase. Do not change anything." }],
-  apps: [
-    {
-      id: "app-supabase-mcp",
-      name: "Supabase",
-      description:
-        "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
-      iconUrl: "https://supabase.com/favicon.ico",
-      server: {
-        name: "supabase",
-        transport: "http",
-        url: "https://mcp.supabase.com/mcp",
-        auth: [
-          {
-            id: "supabase-key",
-            kind: "key",
-            label: "API key",
-            fields: [
-              {
-                id: "url",
-                label: "Project MCP URL",
-                url: true,
-                placeholder: "https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT&read_only=true",
-              },
-              {
-                id: "token",
-                label: "Supabase personal access token",
-                header: "Authorization",
-                prefix: "Bearer ",
-                hint: "Supabase dashboard → Account → Access tokens",
-              },
-            ],
-            docsUrl: "https://supabase.com/docs/guides/ai-tools/mcp",
-            docsLabel: "Setup instructions",
-          },
-        ],
-      },
-    },
-  ],
-  websiteUrl: "https://supabase.com/docs/guides/ai-tools/mcp",
-  privacyPolicyUrl: null,
-  termsUrl: null,
-  skills: [],
-  installs: 0,
-  featured: false,
-  updatedAt: "2026-10-08T00:00:00.000Z",
-  shareUrl: "https://openbot.run/plugins/supabase",
 };
 
 const EXA: MarketplacePluginDetail = {
@@ -1106,9 +1234,14 @@ export const MARKETPLACE_PLUGINS: MarketplacePluginDetail[] = [
   CANVA,
   LINEAR,
   NOTION,
+  COBRAIN,
   FIGMA,
   PAPER,
+  APPLE_APPS,
   SENTRY,
+  VERCEL,
+  CLOUDFLARE,
+  SUPABASE,
   CONTEXT7,
   STRIPE,
   POSTHOG,
@@ -1119,9 +1252,7 @@ export const MARKETPLACE_PLUGINS: MarketplacePluginDetail[] = [
   COMPOSIO,
   GITHUB_DIRECT,
   SLACK,
-  CLOUDFLARE,
   RENDER,
-  SUPABASE,
   EXA,
   TAVILY,
 ];

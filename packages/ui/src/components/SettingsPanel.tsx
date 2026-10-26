@@ -1,11 +1,12 @@
 import { Button, ChevronRight, FieldContext } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { createUniqueId, Show } from "solid-js";
+import { createUniqueId, onSettled, Show } from "solid-js";
 import { useText } from "../text";
+import { createScrollFades } from "./createScrollFades";
 import { PanelResizer } from "./PanelResizer";
 
 /** The default is also the minimum: a narrower panel breaks the avatar editor and the setting rows. */
-export const SETTINGS_PANEL_DEFAULT = 296;
+export const SETTINGS_PANEL_DEFAULT = 360;
 export const SETTINGS_PANEL_MAX = 1600;
 /** What the chat under the panel keeps for itself, however far the panel is dragged. */
 const CONVERSATION_PANEL_MIN = 96;
@@ -72,13 +73,15 @@ export interface SettingsPanelHeaderProps {
   backLabel?: string;
   onClose: () => void;
   closeLabel: string;
+  /** The first page of a side panel pane. There, the tab names and closes the pane, so this header hides. */
+  paneRoot?: boolean;
 }
 
 /** Fixed 3-column header keeps title centred. */
 export function SettingsPanelHeader(props: SettingsPanelHeaderProps): JSX.Element {
   const { t } = useText();
   return (
-    <header class="settings-panel-header">
+    <header class={["settings-panel-header", { "side-panel-pane-header": props.paneRoot === true }]}>
       <Show when={props.onBack} fallback={<span />}>
         <Button
           variant="ghost"
@@ -95,7 +98,7 @@ export function SettingsPanelHeader(props: SettingsPanelHeaderProps): JSX.Elemen
       <Button
         variant="ghost"
         type="button"
-        class="settings-panel-nav-button"
+        class="settings-panel-nav-button side-panel-pane-close"
         aria-label={props.closeLabel}
         data-cuelume-tap="close"
         onClick={() => props.onClose()}
@@ -106,8 +109,16 @@ export function SettingsPanelHeader(props: SettingsPanelHeaderProps): JSX.Elemen
   );
 }
 
+/** The scrolling body of the panel. It fades at an edge that has more content past it. */
 export function SettingsPanelContent(props: { children: JSX.Element }): JSX.Element {
-  return <div class="settings-panel-content">{props.children}</div>;
+  const fades = createScrollFades();
+  onSettled(() => fades.stop);
+  return (
+    <div class={["settings-panel-content", fades.classes()]} ref={fades.bind} onScroll={fades.measure}>
+      {/* A page change or an opened section changes the scroll height while the body keeps its size. */}
+      <div ref={fades.watch}>{props.children}</div>
+    </div>
+  );
 }
 
 export interface SettingsFieldProps {

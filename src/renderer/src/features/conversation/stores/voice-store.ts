@@ -1,8 +1,12 @@
-import { VOICE_AUDIO_LIMITS } from "@openbot/contracts/ipc";
+import { VOICE_AUDIO_LIMITS, VOICE_MODELS, VOICE_STREAM_LIMITS, type VoiceModelId } from "@openbot/contracts/ipc";
+import { VOICE_LIMIT_WARNING_SECONDS } from "@openbot/ui/features/conversation/VoiceRecordingMorph";
 import { currentText } from "@openbot/ui/text";
 import { createSignal, onCleanup } from "solid-js";
 import { desktopAnalytics } from "../../../analytics";
-import { appendVoiceTranscript, recordingToWav } from "../../../voice-recording";
+import { unlockCompletionSound } from "../../../completion-sound";
+import { playVoiceLimitStop, playVoiceLimitWarning } from "../../../voice-limit-sound";
+import { appendVoiceTranscript, encodePcm16, recordingToSamples, recordingToWav } from "../../../voice-recording";
+import { forgetDictatedMessage, noteDictatedMessage, stopSpokenReply } from "../../speech/speech-replies";
 import { EMPTY_DRAFT } from "../composer-draft";
 import { composerDraftKey } from "../conversation-keys";
 import { conversationRuntime } from "../conversation-runtime";
@@ -15,6 +19,8 @@ import { voiceCaptureError, voiceTranscriptionError } from "../voice-status";
  * and a pass that is still running makes the next tick wait instead of queueing behind it.
  */
 const LIVE_TRANSCRIPT_INTERVAL_MS = 1_000;
+/** How often a streamed dictation sends the new audio to ElevenLabs. */
+const STREAM_INTERVAL_MS = 250;
 
 /** The recording waveform: how many level samples it shows, and how often a new one arrives. */
 export const VOICE_LEVEL_COUNT = 24;
@@ -28,6 +34,15 @@ const VOICE_NOISE_RISE_DB = 0.1;
 const VOICE_NOISE_MARGIN_DB = 6;
 const VOICE_PEAK_FALL_DB = 0.05;
 const VOICE_MIN_RANGE_DB = 12;
+
+/** A dictation that streams to ElevenLabs through main. */
+export interface VoiceCloudStream {
+  streamId: string;
+  /** How many 16 kHz samples main has received. */
+  sentSamples: number;
+  /** Stops the transcript events of this stream. */
+  stopTranscript: () => void;
+}
 
 interface VoiceSubmitHooks {
   saveEdit: (
@@ -43,8 +58,14 @@ interface VoiceSubmitHooks {
   restoreTranscript: (target: ConversationTarget, transcript: string) => void;
 }
 
+/** What the voice store reads from its view: the agent and server it dictates for, and the runtime. */
+type VoiceStoreProps = Pick<ConversationProps, "runtime"> & {
+  agent: Pick<NonNullable<ConversationProps["agent"]>, "id"> | undefined;
+  server: Pick<NonNullable<ConversationProps["server"]>, "id"> | undefined;
+};
+
 export interface VoiceStoreDeps {
-  props: ConversationProps;
+  props: VoiceStoreProps;
   resources: {
     voiceSubmitRequest:
       | undefined
@@ -62,6 +83,7 @@ export interface VoiceStoreDeps {
     voiceElapsedTimer: ReturnType<typeof setInterval> | undefined;
     voiceChunks: Blob[];
     voiceLiveRequest: Promise<void> | undefined;
+    voiceCloudStream: VoiceCloudStream | undefined;
     voiceMeterStop: (() => void) | undefined;
     voiceAgentId: string | undefined;
     voiceServerId: string | undefined;
@@ -81,6 +103,8 @@ export interface VoiceStoreDeps {
   clearConversationError: (target: ConversationTarget) => void;
   setConversationError: (target: ConversationTarget, message: string) => void;
   viewIsMounted: () => boolean;
+  /** Shows or ends the notice that the recording of this conversation stopped at the time limit. */
+  setVoiceLimitReached?: (target: ConversationTarget, reached: boolean) => void;
   hooks: VoiceSubmitHooks;
 }
 
@@ -95,6 +119,10 @@ interface KeptRecording {
 
 export function createVoiceStore(deps: VoiceStoreDeps) {
   const { resources } = deps;
+  /** The model that `prepareModel` downloads, so the progress of another model is not shown. */
+  let preparingModelId: VoiceModelId | null = null;
+  /** The recording that is being transcribed stopped at the time limit, not at the user's click. */
+  let stoppedAtLimit = false;
   // The recording that failed to transcribe stays until the next one starts or a retry succeeds.
   let keptRecording: KeptRecording | undefined;
   const [voiceRetryAvailable, setVoiceRetryAvailable] = createSignal(false);
@@ -108,7 +136,12 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     const agentId = deps.props.agent?.id;
     const serverId = deps.props.server?.id ?? "local";
     if (!agentId || deps.voicePhase() !== "idle") return;
+    // The user speaks again: the reply that is read aloud stops.
+    stopSpokenReply();
+    // The limit cues play up to two minutes after this click, and audio starts surely only from one.
+    unlockCompletionSound();
     const target = { agentId, serverId };
+    deps.setVoiceLimitReached?.(target, false);
     deps.clearConversationError(target);
     // The next recording replaces the kept one.
     keepRecording(undefined);
@@ -118,8 +151,22 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     const generation = ++resources.voiceRequestGeneration;
     deps.setVoicePhase("preparing");
     deps.setVoiceModelProgress(0);
+    let stream: MediaStream | undefined;
+    let cloud: VoiceCloudStream | undefined;
     try {
-      const modelStatus = await conversationRuntime(deps.props).voice.prepareModel();
+      const voice = conversationRuntime(deps.props).voice;
+      let livePreview = true;
+      let streamed = false;
+      // The settings answer at once; a download reports progress only after that.
+      const [, modelStatus] = await Promise.all([
+        voice.getSettings().then((settings) => {
+          preparingModelId = settings.modelId;
+          const model = VOICE_MODELS.find((candidate) => candidate.id === settings.modelId);
+          livePreview = model?.livePreview ?? true;
+          streamed = model?.kind === "cloud";
+        }),
+        voice.prepareModel(),
+      ]);
       if (resources.voiceDisposed || resources.voiceRequestGeneration !== generation) return;
       if (modelStatus.phase !== "ready") {
         deps.setVoicePhase("idle");
@@ -137,10 +184,15 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
       }
       deps.setVoicePhase("requesting");
       deps.setVoiceModelProgress(null);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       if (resources.voiceDisposed || !deps.viewIsMounted() || resources.voiceRequestGeneration !== generation) {
         for (const track of stream.getTracks()) track.stop();
         if (!resources.voiceDisposed && resources.voiceRequestGeneration === generation) deps.setVoicePhase("idle");
+        return;
+      }
+      cloud = streamed ? await openCloudStream(target, generation) : undefined;
+      if (streamed && !cloud) {
+        for (const track of stream.getTracks()) track.stop();
         return;
       }
       const recorder = new MediaRecorder(stream);
@@ -155,8 +207,9 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
         if (event.data.size === 0 || resources.voiceRecorder !== recorder) return;
         resources.voiceChunks.push(event.data);
         // The last chunk arrives after Stop, and the final pass already covers it.
-        if (recorder.state === "recording" && !resources.voiceLiveRequest) {
-          resources.voiceLiveRequest = refreshLiveTranscript(recorder, target).finally(() => {
+        if (livePreview && recorder.state === "recording" && !resources.voiceLiveRequest) {
+          const request = cloud ? streamNewAudio(recorder, cloud) : refreshLiveTranscript(recorder, target);
+          resources.voiceLiveRequest = request.finally(() => {
             resources.voiceLiveRequest = undefined;
           });
         }
@@ -164,19 +217,103 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
       recorder.addEventListener("stop", () => {
         if (resources.voiceRecorder === recorder) void finishVoiceRecording(recorder.mimeType);
       });
-      recorder.start(LIVE_TRANSCRIPT_INTERVAL_MS);
+      recorder.start(cloud ? STREAM_INTERVAL_MS : LIVE_TRANSCRIPT_INTERVAL_MS);
       startVoiceMeter(stream);
       startVoiceElapsedTimer();
       deps.setVoicePhase("recording");
-      resources.voiceRecordingTimer = setTimeout(stopVoiceRecording, VOICE_AUDIO_LIMITS.maximumSeconds * 1_000);
+      resources.voiceRecordingTimer = setTimeout(stopVoiceRecordingAtLimit, VOICE_AUDIO_LIMITS.maximumSeconds * 1_000);
     } catch (error) {
+      // The recorder failed after the microphone opened: release it, or the OS keeps it in use.
+      if (stream) {
+        for (const track of stream.getTracks()) track.stop();
+        if (resources.voiceStream === stream) {
+          resources.voiceStream = undefined;
+          resources.voiceRecorder = undefined;
+        }
+      }
+      // A stream that no recording uses would take the next recording's audio.
+      if (cloud && resources.voiceCloudStream === cloud) cancelCloudStream();
       if (resources.voiceRequestGeneration === generation) deps.setVoicePhase("idle");
       deps.setConversationError(target, voiceCaptureError(error));
     }
   }
 
+  /**
+   * Opens the ElevenLabs stream after the microphone. Answers nothing when the stream cannot open or
+   * the request was replaced; the phase and the error are then already set.
+   */
+  async function openCloudStream(
+    target: ConversationTarget,
+    generation: number,
+  ): Promise<VoiceCloudStream | undefined> {
+    const voice = conversationRuntime(deps.props).voice;
+    let streamId: string;
+    try {
+      ({ streamId } = await voice.startStream());
+    } catch (error) {
+      if (resources.voiceRequestGeneration === generation) deps.setVoicePhase("idle");
+      deps.setConversationError(target, voiceTranscriptionError(error));
+      return undefined;
+    }
+    if (resources.voiceDisposed || !deps.viewIsMounted() || resources.voiceRequestGeneration !== generation) {
+      void voice.cancelStream({ streamId }).catch(() => {});
+      if (!resources.voiceDisposed && resources.voiceRequestGeneration === generation) deps.setVoicePhase("idle");
+      return undefined;
+    }
+    const stopTranscript = voice.onStreamTranscript((event) => {
+      if (event.streamId === streamId && !resources.voiceDisposed) {
+        lastLiveText = event.text.trim();
+        deps.setVoiceLiveTranscript({ ...target, text: lastLiveText });
+      }
+    });
+    const cloud = { streamId, sentSamples: 0, stopTranscript };
+    resources.voiceCloudStream = cloud;
+    return cloud;
+  }
+
+  /** Sends the audio that main does not have yet. Each pass decodes the whole recording again. */
+  async function sendCloudAudio(cloud: VoiceCloudStream, samples: Float32Array): Promise<void> {
+    const pcm = encodePcm16(samples.subarray(cloud.sentSamples));
+    cloud.sentSamples = Math.max(cloud.sentSamples, samples.length);
+    const voice = conversationRuntime(deps.props).voice;
+    // A copy for each part, because IPC would copy the whole buffer of a view.
+    for (let offset = 0; offset < pcm.byteLength; offset += VOICE_STREAM_LIMITS.maximumChunkBytes)
+      await voice.appendStream({
+        streamId: cloud.streamId,
+        pcm: pcm.slice(offset, offset + VOICE_STREAM_LIMITS.maximumChunkBytes),
+      });
+  }
+
+  /** A failed stream does not hear the rest: Stop now, and the final pass reports the failure. */
+  async function streamNewAudio(recorder: MediaRecorder, cloud: VoiceCloudStream): Promise<void> {
+    let samples: Float32Array;
+    try {
+      samples = await recordingToSamples(new Blob(resources.voiceChunks, { type: recorder.mimeType }));
+    } catch {
+      // The next pass, or the final one, decodes the recording again.
+      return;
+    }
+    try {
+      await sendCloudAudio(cloud, samples);
+    } catch {
+      if (resources.voiceRecorder === recorder) stopVoiceRecording();
+    }
+  }
+
+  /** Ends the stream in main and drops its text. */
+  function cancelCloudStream(): void {
+    const cloud = resources.voiceCloudStream;
+    if (!cloud) return;
+    resources.voiceCloudStream = undefined;
+    cloud.stopTranscript();
+    void conversationRuntime(deps.props)
+      .voice.cancelStream({ streamId: cloud.streamId })
+      .catch(() => {});
+  }
+
   const removeVoiceModelListener = conversationRuntime(deps.props).voice.onModelStatus((status) => {
-    if (deps.voicePhase() !== "preparing") return;
+    // Settings can download another model at the same time.
+    if (deps.voicePhase() !== "preparing" || status.modelId !== preparingModelId) return;
     deps.setVoiceModelProgress(status.progress);
   });
   onCleanup(removeVoiceModelListener);
@@ -189,6 +326,14 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     resources.voiceRecordingTimer = undefined;
     resources.voiceRecorder.stop();
     stopVoiceStream();
+  }
+
+  /** The recording reached the time limit: a chime says so, as the user may not look at the screen. */
+  function stopVoiceRecordingAtLimit(): void {
+    if (deps.voicePhase() !== "recording" || !resources.voiceRecorder) return;
+    playVoiceLimitStop();
+    stoppedAtLimit = true;
+    stopVoiceRecording();
   }
 
   /** Discards the recording: nothing is transcribed and the draft stays as it was. */
@@ -205,6 +350,7 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     resources.voiceSubmitRequest = undefined;
     recorder.stop();
     stopVoiceStream();
+    cancelCloudStream();
     deps.setVoiceLiveTranscript(null);
     deps.setVoicePhase("idle");
   }
@@ -286,6 +432,10 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     const targetServerId = resources.voiceServerId;
     const chunks = resources.voiceChunks;
     const submitRequest = resources.voiceSubmitRequest;
+    const atLimit = stoppedAtLimit;
+    stoppedAtLimit = false;
+    const cloud = resources.voiceCloudStream;
+    resources.voiceCloudStream = undefined;
     resources.voiceRecorder = undefined;
     resources.voiceAgentId = undefined;
     resources.voiceServerId = undefined;
@@ -294,7 +444,15 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     // The recorder also stops by itself, for example when the microphone is disconnected.
     stopVoiceElapsedTimer();
     stopVoiceStream();
-    if (!targetAgentId || !targetServerId || resources.voiceDisposed) return;
+    if (!targetAgentId || !targetServerId || resources.voiceDisposed) {
+      if (cloud) {
+        cloud.stopTranscript();
+        void conversationRuntime(deps.props)
+          .voice.cancelStream({ streamId: cloud.streamId })
+          .catch(() => {});
+      }
+      return;
+    }
     const analytics = desktopAnalytics.scope();
     const audioDurationSeconds = deps.voiceElapsedSeconds();
     const startedAt = performance.now();
@@ -302,9 +460,23 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     try {
       // The voice host takes one request at a time; the live pass is at most a second of work.
       await resources.voiceLiveRequest;
-      if (chunks.length === 0) throw new Error(currentText().t("composer.voice.noSpeechRecorded"));
-      const audio = await recordingToWav(new Blob(chunks, { type: mimeType }));
-      const result = await conversationRuntime(deps.props).voice.transcribe({ audio });
+      const voice = conversationRuntime(deps.props).voice;
+      let result: { text: string };
+      if (cloud) {
+        // Main ends the stream when it finishes, also when it fails.
+        try {
+          if (chunks.length > 0)
+            await sendCloudAudio(cloud, await recordingToSamples(new Blob(chunks, { type: mimeType })));
+        } catch (error) {
+          void voice.cancelStream({ streamId: cloud.streamId }).catch(() => {});
+          throw error;
+        }
+        result = await voice.finishStream({ streamId: cloud.streamId });
+      } else {
+        if (chunks.length === 0) throw new Error(currentText().t("composer.voice.noSpeechRecorded"));
+        const audio = await recordingToWav(new Blob(chunks, { type: mimeType }));
+        result = await voice.transcribe({ audio });
+      }
       if (!result.text.trim()) throw new Error(currentText().t("composer.voice.noSpeechDetected"));
       analytics.track("voice_transcription", {
         result: "succeeded",
@@ -317,8 +489,11 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
       deps.clearConversationError(recordingTarget);
       const draft = submitRequest?.draft ?? deps.drafts()[composerDraftKey(recordingTarget)] ?? EMPTY_DRAFT;
       const transcribedDraft = { ...draft, text: appendVoiceTranscript(draft.text, result.text) };
+      // Only the desktop app reads replies aloud; the web client has its own runtime.
+      const spokenReply = !deps.props.runtime;
       if (submitRequest) {
         const target = { agentId: submitRequest.agentId, serverId: submitRequest.serverId };
+        if (spokenReply) noteDictatedMessage(target, result.text);
         let delivered: boolean;
         if (submitRequest.queuedEdit) {
           delivered = await deps.hooks.saveEdit(
@@ -332,10 +507,15 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
         } else {
           delivered = await deps.hooks.submit(transcribedDraft, target, submitRequest.draft);
         }
-        if (!delivered) deps.hooks.restoreTranscript(target, result.text);
+        if (!delivered) {
+          if (spokenReply) forgetDictatedMessage(target);
+          deps.hooks.restoreTranscript(target, result.text);
+        }
       } else {
+        if (spokenReply) noteDictatedMessage(recordingTarget, result.text);
         const key = composerDraftKey(recordingTarget);
         deps.setDrafts((current) => ({ ...current, [key]: transcribedDraft }));
+        if (atLimit) deps.setVoiceLimitReached?.(recordingTarget, true);
         if (deps.props.agent?.id === targetAgentId && (deps.props.server?.id ?? "local") === targetServerId) {
           deps.setComposerFocusRequest((current) => current + 1);
         }
@@ -359,6 +539,7 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
         }));
       }
     } finally {
+      cloud?.stopTranscript();
       if (!resources.voiceDisposed) {
         deps.setVoiceLiveTranscript(null);
         deps.setVoicePhase("idle");
@@ -409,11 +590,15 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
   function startVoiceElapsedTimer(): void {
     stopVoiceElapsedTimer();
     const startedAt = Date.now();
+    let warned = false;
     deps.setVoiceElapsedSeconds(0);
     resources.voiceElapsedTimer = setInterval(() => {
-      deps.setVoiceElapsedSeconds(
-        Math.min(VOICE_AUDIO_LIMITS.maximumSeconds, Math.floor((Date.now() - startedAt) / 1_000)),
-      );
+      const elapsed = Math.min(VOICE_AUDIO_LIMITS.maximumSeconds, Math.floor((Date.now() - startedAt) / 1_000));
+      deps.setVoiceElapsedSeconds(elapsed);
+      if (!warned && elapsed >= VOICE_AUDIO_LIMITS.maximumSeconds - VOICE_LIMIT_WARNING_SECONDS) {
+        warned = true;
+        playVoiceLimitWarning();
+      }
     }, 250);
   }
 
@@ -430,6 +615,7 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     retryVoiceTranscription,
     voiceRetryAvailable,
     stopVoiceStream,
+    cancelCloudStream,
     startVoiceElapsedTimer,
     stopVoiceElapsedTimer,
   };

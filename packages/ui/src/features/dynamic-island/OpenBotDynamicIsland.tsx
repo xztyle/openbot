@@ -28,6 +28,7 @@ import {
   type DynamicIslandNotchSize,
   type DynamicIslandStateChangeReason,
   type DynamicIslandViewState,
+  ErrorReference,
   ExternalLink,
   IconButton,
   Input,
@@ -39,6 +40,7 @@ import {
 } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { prefersReducedMotion } from "@openbot/ui/utils";
+import type { UserErrorDetails } from "@openbot/user-errors";
 import { Dynamic, type JSX } from "@solidjs/web";
 import {
   createEffect,
@@ -88,7 +90,7 @@ export interface OpenBotDynamicIslandProps {
   /** Resolves `false` when the action failed, so a reply field keeps its draft. */
   onAction: (action: DynamicIslandAction) => Promise<boolean> | undefined;
   /** Shown next to the actions of an attention panel when the last action failed. */
-  actionError?: string | undefined;
+  actionError?: UserErrorDetails | undefined;
   onHaptic?: () => void;
   /** Lets the user reply to, answer and stop an agent on the island, so the main window stays where it is. */
   inlineReply?: boolean | undefined;
@@ -514,9 +516,12 @@ export function OpenBotDynamicIsland(props: OpenBotDynamicIslandProps): JSX.Elem
     },
   );
 
+  // Only a new presentation from the props starts a change. This effect is the one writer of
+  // `visiblePresentation`, so it reads it untracked and does not run again on its own write.
   createEffect(
-    () => ({ nextPresentation: props.presentation, currentPresentation: visiblePresentation() }),
-    ({ nextPresentation, currentPresentation }) => {
+    () => props.presentation,
+    (nextPresentation) => {
+      const currentPresentation = untrack(visiblePresentation);
       if (nextPresentation.mode === currentPresentation.mode) {
         setVisiblePresentation(nextPresentation);
         if (untrack(() => props.state) === "compact") setCompactLayoutPresentation(nextPresentation);
@@ -752,8 +757,8 @@ function IslandModeSwap(props: IslandModeSwapProps): JSX.Element {
 
 function CompactLeading(props: {
   presentation: DynamicIslandPresentation;
-  displayMode?: "notch" | "island";
-  variant?: AppVariant;
+  displayMode?: "notch" | "island" | undefined;
+  variant?: AppVariant | undefined;
 }): JSX.Element {
   const statusAgent = () => compactStatusAgent(props.presentation);
   const working = () => (props.presentation.mode === "working" ? props.presentation.working : []);
@@ -812,7 +817,7 @@ function CompactTrailing(props: { presentation: DynamicIslandPresentation }): JS
 
 function CompactAgentIdentity(props: {
   agent: DynamicIslandAgentIdentity;
-  displayMode?: "notch" | "island";
+  displayMode?: "notch" | "island" | undefined;
   working?: boolean;
 }): JSX.Element {
   return (
@@ -826,7 +831,7 @@ function CompactAgentIdentity(props: {
   );
 }
 
-function CompactAgentName(props: { name: string; displayMode?: "notch" | "island" }): JSX.Element {
+function CompactAgentName(props: { name: string; displayMode?: "notch" | "island" | undefined }): JSX.Element {
   const nameMaxWidth = () =>
     props.displayMode === "island" ? STATUS_COMPACT_NAME_MAX_WIDTH.island : STATUS_COMPACT_NAME_MAX_WIDTH.notch;
   return (
@@ -964,11 +969,11 @@ function IdleGreetingEmoji(): JSX.Element {
 
 function ExpandedContent(props: {
   presentation: DynamicIslandPresentation;
-  displayMode?: "notch" | "island";
+  displayMode?: "notch" | "island" | undefined;
   inlineReply?: boolean | undefined;
   onAction: (action: DynamicIslandAction) => Promise<boolean> | undefined;
-  actionError?: string | undefined;
-  onHaptic?: () => void;
+  actionError?: UserErrorDetails | undefined;
+  onHaptic?: (() => void) | undefined;
   onClose: () => void;
 }): JSX.Element {
   const { t } = useText();
@@ -1137,7 +1142,7 @@ function ExpandedContent(props: {
 function FailureContent(props: {
   item: DynamicIslandFailureItem;
   serverId: string;
-  actionError?: string | undefined;
+  actionError?: UserErrorDetails | undefined;
   onAction: (action: DynamicIslandAction) => Promise<boolean> | undefined;
 }): JSX.Element {
   const { t } = useText();
@@ -1186,7 +1191,7 @@ function FailureContent(props: {
 function TakeoverContent(props: {
   item: DynamicIslandTakeoverItem;
   serverId: string;
-  actionError?: string | undefined;
+  actionError?: UserErrorDetails | undefined;
   onAction: (action: DynamicIslandAction) => Promise<boolean> | undefined;
 }): JSX.Element {
   const { t } = useText();
@@ -1221,7 +1226,7 @@ function NotificationContent(props: {
   name: string;
   status: string;
   description: string;
-  actionError?: string | undefined;
+  actionError?: UserErrorDetails | undefined;
   action: JSX.Element;
 }): JSX.Element {
   return (
@@ -1242,7 +1247,7 @@ export function ApprovalContent(props: {
   serverId: string;
   remainingCount: number;
   allowDesktopReview?: boolean;
-  actionError?: string | undefined;
+  actionError?: UserErrorDetails | undefined;
   onAction: (action: DynamicIslandAction) => Promise<boolean> | undefined;
 }): JSX.Element {
   const { t, sourceText } = useText();
@@ -1307,9 +1312,9 @@ function QuestionContent(props: {
   serverId: string;
   remainingCount: number;
   inlineReply?: boolean | undefined;
-  actionError?: string | undefined;
+  actionError?: UserErrorDetails | undefined;
   onAction: (action: DynamicIslandAction) => Promise<boolean> | undefined;
-  onHaptic?: () => void;
+  onHaptic?: (() => void) | undefined;
   onClose: () => void;
 }): JSX.Element {
   const { t } = useText();
@@ -1571,12 +1576,13 @@ function IslandReplyField(props: {
   );
 }
 
-function IslandActionError(props: { message: string | undefined }): JSX.Element {
+function IslandActionError(props: { message: UserErrorDetails | undefined }): JSX.Element {
   return (
     <Show when={props.message}>
-      {(message) => (
+      {(failure) => (
         <p class="dynamic-island-surface-action-error" role="alert">
-          {message()}
+          {failure().message}
+          <ErrorReference reference={failure().reference} />
         </p>
       )}
     </Show>
@@ -1764,7 +1770,7 @@ function ApprovalContext(props: { item: DynamicIslandApprovalItem }): JSX.Elemen
   );
 }
 
-function IslandAvatar(props: { agent: DynamicIslandAgentIdentity; working?: boolean }): JSX.Element {
+function IslandAvatar(props: { agent: DynamicIslandAgentIdentity; working?: boolean | undefined }): JSX.Element {
   return (
     <AgentAvatar
       agent={props.agent}

@@ -41,6 +41,9 @@ export const PROVIDERS_ADMIN_ROUTES = {
   customDelete: "/v1/admin/providers/custom/delete",
 } as const;
 
+/** The providers that `codeLoginStart` signs in. The host refuses the other providers that its codec reads. */
+export const PROVIDERS_ADMIN_CODE_SIGN_IN_PROVIDERS = ["codex"] as const;
+
 const provider = oneOf("codex", "claude", "grok", "opencode");
 const byProvider = fields({ provider });
 const version = nullable(string(128));

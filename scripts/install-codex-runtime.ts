@@ -6,7 +6,13 @@ import { createOpenBotLogger } from "@openbot/logging";
 import { z } from "zod";
 import { type AgentRuntimeLock, loadAgentRuntimeLock } from "./agent-runtime-lock";
 import { rejectNonRegularFiles, sha256 } from "./remote-desktop-runtime-release";
-import { escapeRegExp, installValidatedTree, isCurrentInstallation, safeArchivePathParts } from "./runtime-install";
+import {
+  download,
+  escapeRegExp,
+  installValidatedTree,
+  isCurrentInstallation,
+  safeArchivePathParts,
+} from "./runtime-install";
 
 const logger = createOpenBotLogger("install-codex-runtime");
 
@@ -51,12 +57,11 @@ export async function installCodexRuntime(
     return "current";
   }
 
-  const response = await fetchImpl(
+  const archiveBytes = await download(
+    fetchImpl,
     `${lock.codex.repository}/releases/download/${encodeURIComponent(lock.codex.tag)}/${artifact.asset}`,
-    { headers: { "User-Agent": "OpenBot-runtime-installer" }, redirect: "follow" },
+    "Codex runtime",
   );
-  if (!response.ok) throw new Error(`Codex runtime download failed with HTTP ${response.status}.`);
-  const archiveBytes = Buffer.from(await response.arrayBuffer());
   if (sha256(archiveBytes) !== artifact.assetSha256) {
     throw new Error(`The ${target} Codex runtime archive checksum is invalid.`);
   }
@@ -170,12 +175,11 @@ async function writeMetadata(root: string, lock: AgentRuntimeLock, fetchImpl: ty
     // Download the pinned license below.
   }
   if (currentLicense !== lock.codex.licenseSha256) {
-    const response = await fetchImpl(`${lock.codex.repository}/raw/${encodeURIComponent(lock.codex.tag)}/LICENSE`, {
-      headers: { "User-Agent": "OpenBot-runtime-installer" },
-      redirect: "follow",
-    });
-    if (!response.ok) throw new Error(`Codex license download failed with HTTP ${response.status}.`);
-    const bytes = Buffer.from(await response.arrayBuffer());
+    const bytes = await download(
+      fetchImpl,
+      `${lock.codex.repository}/raw/${encodeURIComponent(lock.codex.tag)}/LICENSE`,
+      "Codex license",
+    );
     if (sha256(bytes) !== lock.codex.licenseSha256) throw new Error("The Codex license checksum is invalid.");
     await writeFile(licensePath, bytes);
   }

@@ -239,12 +239,14 @@ export class GitHubConnectorService {
 
   /**
    * Starts the device flow and opens GitHub's code page. Returns at once with the user code; the
-   * wait for the user runs in the background and reports through `onChanged`.
+   * wait for the user runs in the background and reports through `onChanged`. With `opensPage` false
+   * no page opens here: the client of a joined server opens it in its own browser.
    */
 
   readonly connect = Effect.fn("GitHubConnector.connect")(
     function* (
       this: GitHubConnectorService,
+      opensPage: boolean,
     ): Effect.fn.Return<GitHubConnectorStatus, GitHubOperationError, GitHubPlatform> {
       const app = this.#app;
       if (!app)
@@ -270,7 +272,7 @@ export class GitHubConnectorService {
       pending.device = attempt0.success;
       if (this.#pending !== pending) return this.status();
       this.#emitStatus();
-      yield* Effect.forkIn(this.openVerification(), this.#scope);
+      if (opensPage) yield* Effect.forkIn(this.openVerification(), this.#scope);
       yield* Effect.forkIn(this.#owned(this.#finishSignIn(app, pending, pending.device)), this.#scope);
       return this.status();
     },
@@ -287,12 +289,13 @@ export class GitHubConnectorService {
 
   /**
    * Forgets the sign-in. GitHub revokes a token only with the client secret, which OpenBot does not
-   * hold, so the GitHub page where the user can revoke it opens as well.
+   * hold, so the GitHub page where the user can revoke it opens as well, unless `opensPage` is false.
    */
 
   readonly disconnect = Effect.fn("GitHubConnector.disconnect")(
     function* (
       this: GitHubConnectorService,
+      opensPage: boolean,
     ): Effect.fn.Return<GitHubConnectorStatus, GitHubOperationError, GitHubPlatform> {
       this.#pending?.controller.abort();
       this.#pending = null;
@@ -310,16 +313,8 @@ export class GitHubConnectorService {
       this.#error = null;
       this.#emitStatus();
       this.#syncAgentAccess();
-      if (hadRecord && this.#app) {
-        yield* Effect.forkIn(
-          this.#owned(
-            this.#open(
-              `https://github.com/settings/connections/applications/${encodeURIComponent(this.#app.clientId)}`,
-            ),
-          ),
-          this.#scope,
-        );
-      }
+      const { revokeUrl } = this.pages();
+      if (hadRecord && revokeUrl && opensPage) yield* Effect.forkIn(this.#owned(this.#open(revokeUrl)), this.#scope);
       return this.status();
     },
     (operation) => this.#owned(operation),
@@ -379,11 +374,25 @@ export class GitHubConnectorService {
     (operation) => this.#owned(operation),
   ).bind(this);
 
+  /**
+   * GitHub's page where the user picks the repositories the app may reach, and the page where they
+   * revoke the sign-in. A joined server gives them to a client, which opens them in its own browser.
+   */
+  pages(): { installUrl: string | null; revokeUrl: string | null } {
+    const app = this.#app;
+    if (!app) return { installUrl: null, revokeUrl: null };
+    return {
+      installUrl: `https://github.com/apps/${app.slug}/installations/new`,
+      revokeUrl: `https://github.com/settings/connections/applications/${encodeURIComponent(app.clientId)}`,
+    };
+  }
+
   /** GitHub's page where the user picks the repositories the app may reach. */
 
   readonly openInstall = Effect.fn("GitHubConnector.openInstall")(
     function* (this: GitHubConnectorService): Effect.fn.Return<void, GitHubOperationError, GitHubPlatform> {
-      if (this.#app) yield* this.#open(`https://github.com/apps/${this.#app.slug}/installations/new`);
+      const { installUrl } = this.pages();
+      if (installUrl) yield* this.#open(installUrl);
     },
     (operation) => this.#owned(operation),
   ).bind(this);

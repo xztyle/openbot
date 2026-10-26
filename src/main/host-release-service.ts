@@ -83,9 +83,10 @@ export class HostReleaseService {
     if (!this.#options.packaged) return "unavailable";
     if (this.#options.updateStatus().managedByHost) return "host-manager";
     if (this.#options.platform === "linux") {
-      if (this.#options.installationMode === "container") return "container";
-      // A hosted or self-installed server whose root installs updates on request.
+      // A hosted or self-installed server, or a container of openbot-instance, whose host installs
+      // updates on request.
       if (this.#options.updateStatus().phase !== "unsupported") return "self-update";
+      if (this.#options.installationMode === "container") return "container";
       if (this.#options.environment.OPENBOT_HOSTED_SERVER === "1") return "hosted";
       if (this.#options.installationMode === "self") return "system";
     }

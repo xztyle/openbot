@@ -50,7 +50,8 @@ const integerInRange =
     }
     return value;
   };
-const routineTime: AdminDecoder = (value) => {
+/** A time of day as "HH:MM". `workflows-v1` reads it too. */
+export const routineTime: AdminDecoder = (value) => {
   if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(value)) {
     throw new Error("Invalid routine schedule.");
   }
@@ -76,7 +77,8 @@ const nonEmptyString =
     if (!isString(decoded) || decoded.length === 0) throw new Error("Invalid routine schedule.");
     return decoded;
   };
-const routineSchedule = variant({
+/** A released routine schedule. `workflows-v1` reads it too. */
+export const routineSchedule = variant({
   hourly: fields({ kind: oneOf("hourly"), minute: integerInRange(0, 59) }),
   daily: fields({ kind: oneOf("daily"), time: routineTime }),
   weekdays: fields({ kind: oneOf("weekdays"), time: routineTime }),
@@ -123,7 +125,8 @@ const triggerInput = variant({
   schedule: scheduleTrigger,
   webhook: fields({ kind: oneOf("webhook"), eventType: nullable(eventType), filters }),
 });
-const trigger = variant({
+/** A routine trigger as a read answers it. `routine-flows-v1` reads it too. */
+export const routineTrigger = variant({
   schedule: scheduleTrigger,
   webhook: fields({ kind: oneOf("webhook"), url: nullable(string(2_048)), eventType: nullable(eventType), filters }),
 });
@@ -150,7 +153,7 @@ const routine = fields(
     instruction: string(100_000),
     active: boolean,
     timezone: string(128),
-    trigger,
+    trigger: routineTrigger,
     createdAt: timestamp,
     updatedAt: timestamp,
   },
@@ -186,3 +189,6 @@ export const EVENTS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
     adminRoute(fields({ owner, routineId: identifier }, { limit: count }), list(activity, 10_000)),
   ],
 ]);
+
+/** `routine-recovery-v1` reads routines with the same owner and trigger decoders. */
+export { owner as routineOwner, triggerInput as routineTriggerInput };

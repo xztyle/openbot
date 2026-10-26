@@ -1,21 +1,34 @@
 import { attachmentMimeTypeForName, playableMediaKind } from "@openbot/contracts/attachment-files";
 import { type AttachmentSummary, canPreviewAttachment } from "@openbot/contracts/ipc";
-import { AudioLines, Button, Download, ExternalLink, Film } from "@openbot/ui";
-import { createSignal, createUniqueId, For, Show } from "solid-js";
+import { AudioLines, Button, Download, ExternalLink, Film, LabelTooltip, LabelTooltipTrigger, Play } from "@openbot/ui";
+import { createSignal, For, Show } from "solid-js";
 import { useText } from "../../text";
-import { AnchoredTooltip } from "./AnchoredTooltip";
 import { attachmentReferenceTone } from "./AttachmentReference";
 import { MediaFilePreview } from "./MediaFilePreview";
 
+/**
+ * Reads attachments that have no `previewUrl`: the browser client gets none. Absent (desktop), a card
+ * shows only what its `previewUrl` gives.
+ */
+export interface AttachmentMediaSource {
+  /** The loaded URL of an attachment. Reactive. */
+  url(attachmentId: string): string | undefined;
+  /** Loads the file for inline display. Resolves false when it cannot show inline. */
+  load(attachment: AttachmentSummary): Promise<boolean>;
+  /** An image up to this size loads when its card shows. */
+  thumbnailLimit: number;
+  /** Audio or video up to this size loads on a click. Above it, the card offers only the download. */
+  mediaLimit: number;
+}
+
 export function AttachmentCards(props: {
   attachments: AttachmentSummary[];
+  mediaSource?: AttachmentMediaSource | undefined;
   /** `origin` is the clicked card, for a viewer that zooms out of it. */
   onPreview: (attachment: AttachmentSummary, origin: HTMLElement) => void;
   onAction: (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => void;
 }) {
   const { t, format } = useText();
-  const tooltipId = `attachment-action-tooltip-${createUniqueId()}`;
-  const [tooltip, setTooltip] = createSignal<{ anchor: HTMLElement; content: string } | null>(null);
   // An image whose preview does not load was deleted from the host, or never arrived. The card
   // keeps its place in the message and says so, instead of an empty frame.
   const [missing, setMissing] = createSignal<ReadonlySet<string>>(new Set());
@@ -23,22 +36,45 @@ export function AttachmentCards(props: {
     playableMediaKind(attachment.mimeType || attachmentMimeTypeForName(attachment.name));
   const isMissing = (attachment: AttachmentSummary) => missing().has(attachment.id);
   const markMissing = (attachment: AttachmentSummary) => setMissing((current) => new Set(current).add(attachment.id));
-
-  const openTooltip = (anchor: HTMLElement) => {
-    setTooltip({ anchor, content: t("attachment.openFile") });
-  };
-  const closeTooltip = (anchor: HTMLElement) => {
-    if (tooltip()?.anchor === anchor) setTooltip(null);
-  };
-  const closeTooltipOnEscape = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && event.currentTarget instanceof HTMLElement) closeTooltip(event.currentTarget);
+  const [loadingMedia, setLoadingMedia] = createSignal<ReadonlySet<string>>(new Set());
+  const [playRequested, setPlayRequested] = createSignal<ReadonlySet<string>>(new Set());
+  const sourceUrl = (attachment: AttachmentSummary) =>
+    attachment.previewUrl ? undefined : props.mediaSource?.url(attachment.id);
+  const imageUrl = (attachment: AttachmentSummary) => attachment.previewUrl ?? sourceUrl(attachment);
+  const canLoadMedia = (attachment: AttachmentSummary) =>
+    !attachment.previewUrl &&
+    Boolean(mediaKind(attachment)) &&
+    props.mediaSource !== undefined &&
+    attachment.size <= props.mediaSource.mediaLimit &&
+    !sourceUrl(attachment);
+  const loadMedia = async (attachment: AttachmentSummary) => {
+    const source = props.mediaSource;
+    if (!source || loadingMedia().has(attachment.id)) return;
+    setLoadingMedia((current) => new Set(current).add(attachment.id));
+    try {
+      if (await source.load(attachment)) setPlayRequested((current) => new Set(current).add(attachment.id));
+    } finally {
+      setLoadingMedia((current) => {
+        const next = new Set(current);
+        next.delete(attachment.id);
+        return next;
+      });
+    }
   };
 
   return (
-    <>
-      <div class="message-attachments">
-        <For each={props.attachments}>
-          {(attachment) => (
+    <div class="message-attachments">
+      <For each={props.attachments}>
+        {(attachment) => {
+          const source = props.mediaSource;
+          if (
+            source &&
+            !attachment.previewUrl &&
+            attachment.previewKind === "image" &&
+            attachment.size <= source.thumbnailLimit
+          )
+            void source.load(attachment);
+          return (
             <div
               class="message-attachment"
               data-media={mediaKind(attachment) ?? undefined}
@@ -55,7 +91,7 @@ export function AttachmentCards(props: {
                 onClick={(event) => props.onPreview(attachment, event.currentTarget)}
               >
                 <Show
-                  when={attachment.previewKind === "image" && attachment.previewUrl && !isMissing(attachment)}
+                  when={attachment.previewKind === "image" && imageUrl(attachment) && !isMissing(attachment)}
                   fallback={
                     <span
                       class="attachment-file-visual"
@@ -75,11 +111,14 @@ export function AttachmentCards(props: {
                     data-file-tone={attachmentReferenceTone(attachment.name)}
                   >
                     <img
-                      src={attachment.previewUrl ?? ""}
+                      src={imageUrl(attachment) ?? ""}
                       alt=""
                       loading="lazy"
                       decoding="async"
-                      onError={() => markMissing(attachment)}
+                      // A loaded copy exists, so its error does not mean that the host lost the file.
+                      onError={() => {
+                        if (attachment.previewUrl) markMissing(attachment);
+                      }}
                     />
                   </span>
                 </Show>
@@ -89,56 +128,56 @@ export function AttachmentCards(props: {
                 </span>
               </Button>
               <Show when={!isMissing(attachment)}>
+                <Show when={canLoadMedia(attachment)}>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    class="attachment-open-button"
+                    aria-label={t("attachment.loadMedia", { name: attachment.name })}
+                    disabled={loadingMedia().has(attachment.id)}
+                    aria-busy={loadingMedia().has(attachment.id) ? "true" : undefined}
+                    onClick={() => void loadMedia(attachment)}
+                  >
+                    <Play />
+                  </Button>
+                </Show>
                 <Button
                   variant="ghost"
                   type="button"
                   class="attachment-open-button"
                   aria-label={t("attachment.download", { name: attachment.name })}
-                  onClick={() => {
-                    setTooltip(null);
-                    props.onAction(attachment, "download");
-                  }}
+                  onClick={() => props.onAction(attachment, "download")}
                 >
                   <Download />
                 </Button>
-                <Button
-                  variant="ghost"
-                  type="button"
-                  class="attachment-open-button"
-                  aria-label={t("attachment.open", { name: attachment.name })}
-                  aria-describedby={tooltipId}
-                  onPointerEnter={(event) => openTooltip(event.currentTarget)}
-                  onMouseEnter={(event) => openTooltip(event.currentTarget)}
-                  onPointerLeave={(event) => closeTooltip(event.currentTarget)}
-                  onMouseLeave={(event) => closeTooltip(event.currentTarget)}
-                  onFocus={(event) => openTooltip(event.currentTarget)}
-                  onBlur={(event) => closeTooltip(event.currentTarget)}
-                  onKeyDown={closeTooltipOnEscape}
-                  onClick={() => {
-                    setTooltip(null);
-                    props.onAction(attachment, "open");
-                  }}
-                >
-                  <ExternalLink />
-                </Button>
+                <LabelTooltip content={t("attachment.openFile")}>
+                  <LabelTooltipTrigger
+                    as={Button}
+                    variant="ghost"
+                    type="button"
+                    class="attachment-open-button"
+                    aria-label={t("attachment.open", { name: attachment.name })}
+                    onClick={() => props.onAction(attachment, "open")}
+                  >
+                    <ExternalLink />
+                  </LabelTooltipTrigger>
+                </LabelTooltip>
               </Show>
-              <Show when={attachment.previewUrl && !isMissing(attachment)}>
+              <Show when={(attachment.previewUrl ?? sourceUrl(attachment)) && !isMissing(attachment)}>
                 <MediaFilePreview
                   kind={mediaKind(attachment)}
-                  src={attachment.previewUrl ?? ""}
+                  src={attachment.previewUrl ?? sourceUrl(attachment) ?? ""}
                   name={attachment.name}
                   class="attachment-media-player"
-                  preload="none"
+                  preload={attachment.previewUrl ? "none" : "metadata"}
+                  autoplay={playRequested().has(attachment.id)}
                 />
               </Show>
             </div>
-          )}
-        </For>
-      </div>
-      <Show when={tooltip()}>
-        {(current) => <AnchoredTooltip id={tooltipId} anchor={current().anchor} content={current().content} />}
-      </Show>
-    </>
+          );
+        }}
+      </For>
+    </div>
   );
 }
 

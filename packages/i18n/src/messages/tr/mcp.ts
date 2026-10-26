@@ -3,7 +3,7 @@ import type { messages as source } from "../en/mcp";
 
 export const messages = {
   "mcp.connect.unreachable": "O sunucuya ulaşılamadı.",
-  "mcp.connect.title": "{name} Bağlantısını Kur",
+  "mcp.connect.title": "{name} bağlantısını kur",
   "mcp.connect.notConnected": "Bağlı değil",
   "mcp.connect.close": "{name} bağlantı penceresini kapat",
   "mcp.connect.getKey": "Bir anahtar al",
@@ -22,13 +22,14 @@ export const messages = {
   "mcp.local.address": "Adres",
   "mcp.local.docs": "Kurulum kılavuzu",
   "mcp.signIn.description":
-    "{name} hesabınıza giriş yapın. OpenBot, bu hesabın erişebildiği araçları alır ve şifre almaz.",
+    "{name} hesabınızda oturum açın. OpenBot, bu hesabın erişebildiği araçları alır ve şifre almaz.",
   "mcp.signIn.waiting": "Tarayıcı bekleniyor…",
   "mcp.signIn.continue": "{name} ile devam et",
+  "mcp.signIn.pageDescription": "Bu sayfa {host} üzerindeki tarayıcıda açık. Burada oturum açın.",
   "mcp.server.loadFailed": "MCP sunucuları yüklenemedi.",
   "mcp.test.connected": { one: "Bağlandı · {count} araç", other: "Bağlandı · {count} araç" },
   "mcp.status.testing": "Test ediliyor…",
-  "mcp.status.failed": "Başarısız oldu",
+  "mcp.status.failed": "Başarısız",
   "mcp.status.enabled": "Etkin",
   "mcp.status.disabled": "Devre dışı",
   "mcp.status.signedIn": "Oturum açık",
@@ -65,7 +66,7 @@ export const messages = {
   "mcp.panel.launchTitle": "Başlatma",
   "mcp.panel.command": "Başlatılacak komut",
   "mcp.panel.commandDescription":
-    "Yalnızca program. Başlatma işlemi bu alanı komut satırı olarak okumaz, bu nedenle serve-sqlite gibi bir kelime aşağıdaki Bağımsız Değişkenler alanına girer.",
+    "Yalnızca program. Başlatma işlemi bu alanı komut satırı olarak okumaz, bu nedenle serve-sqlite gibi bir kelime aşağıdaki Bağımsız değişkenler alanına girer.",
   "mcp.panel.arguments": "Bağımsız değişkenler",
   "mcp.panel.addArgument": "Bağımsız değişken ekle",
   "mcp.panel.argument": "{position}. bağımsız değişken",
@@ -98,7 +99,7 @@ export const messages = {
   "mcp.panel.testConnection": "Bağlantıyı test et",
   "mcp.panel.notTested": "Henüz test edilmedi.",
   "mcp.panel.removeTitle": "{name} kaldırılsın mı?",
-  "mcp.panel.removeDescription": "Araçları bu sunucunun ajanlarına sunulmayı durdurur. Yapılandırma tutulmaz.",
+  "mcp.panel.removeDescription": "Araçları artık bu sunucunun ajanlarına sunulmaz. Yapılandırma tutulmaz.",
   "mcp.panel.removeConfirm": "MCP sunucusunu kaldır",
   "mcp.panel.actionsFor": "{name} için eylemler",
   "mcp.panel.testUnavailable": "Bu sunucu burada test edilemez.",
@@ -111,4 +112,46 @@ export const messages = {
     one: "Oturum açmayı tarayıcınızda tamamlayın. OpenBot {count} dakika sonra beklemeyi bırakır.",
     other: "Oturum açmayı tarayıcınızda tamamlayın. OpenBot {count} dakika sonra beklemeyi bırakır.",
   },
+  "mcp.panel.signInWaitingOn": {
+    one: "Oturum açma sayfası {host} üzerinde açılıyor. OpenBot {count} dakika sonra beklemeyi bırakır.",
+    other: "Oturum açma sayfası {host} üzerinde açılıyor. OpenBot {count} dakika sonra beklemeyi bırakır.",
+  },
+  "mcp.panel.appTitle": "Oturum açma uygulaması",
+  "mcp.panel.appDescription":
+    "Sunucunun sağlayıcısına kaydettiğiniz bir OAuth uygulamasını kullanın. Sunucu OpenBot'u kendisi kaydedemediğinde OpenBot bu uygulamayı kullanır. OpenBot'un kendini kaydetmesi için boş bırakın.",
+  "mcp.panel.appSaveFirst": "Önce bu sunucuyu kaydedin. Ardından oturum açma uygulaması ekleyebilirsiniz.",
+  "mcp.panel.appUrlChanged": "Önce yeni sunucu URL'sini kaydedin. Oturum açma uygulaması kayıtlı URL'ye aittir.",
+  "mcp.panel.appLoadFailed": "Oturum açma uygulaması okunamadı.",
+  "mcp.panel.callbackUrl": "Dönüş URL'si",
+  "mcp.panel.callbackUrlDescription": "Bu URL'yi tam olarak uygulamanın izin verilen yönlendirme URL'lerine ekleyin.",
+  "mcp.panel.callbackUrlOnHost":
+    "{host} kendi tarayıcısıyla oturum açar, bu yüzden bu URL {host} üzerindedir. Bu URL'yi tam olarak uygulamanın izin verilen yönlendirme URL'lerine ekleyin.",
+  "mcp.panel.callbackUrlUnavailable": "Kullanılabilir dönüş URL'si yok.",
+  "mcp.panel.copyCallbackUrl": "Dönüş URL'sini kopyala",
+  "mcp.panel.clientId": "İstemci kimliği",
+  "mcp.panel.clientSecret": "İstemci gizli anahtarı",
+  "mcp.panel.clientSecretDescription": "İsteğe bağlı. Yalnızca gizli anahtarı olan bir uygulama için.",
+  "mcp.panel.clientSecretSaved": "Gizli anahtar kaydedildi. Değiştirmek için yeni bir gizli anahtar girin.",
+  "mcp.panel.clientSecretRemoved": "Uygulamayı kaydettiğinizde gizli anahtar kaldırılır.",
+  "mcp.panel.removeClientSecret": "Gizli anahtarı kaldır",
+  "mcp.panel.scopes": "Kapsamlar",
+  "mcp.panel.scopesDescription": "İsteğe bağlı. Kapsamları boşlukla ayırın.",
+  "mcp.panel.saveApp": "Uygulamayı kaydet",
+  "mcp.panel.removeApp": "Uygulamayı kaldır",
+  "mcp.panel.appSaved": "Uygulama kaydedildi. Kullanmak için oturum açın.",
+  "mcp.panel.appRemoved": "Uygulama kaldırıldı.",
+  "mcp.signIn.relayDescription":
+    "Oturum açma sayfasının {page} üzerinde olduğunu kontrol edin, sonra tarayıcınızda açın. Bitirdiğinizde OpenBot oturum açmayı {host} sunucusuna gönderir.",
+  "mcp.signIn.relayOpenDescription":
+    "{page} oturum açma sayfasını tarayıcınızda açın. Bitirdiğinizde tarayıcının gösterdiği adresi buraya yapıştırın. OpenBot ardından oturum açmayı {host} sunucusuna gönderir.",
+  "mcp.signIn.relayDeviceDescription":
+    "Oturum açma sayfasının {page} üzerinde olduğunu kontrol edin, sonra tarayıcınızda açıp oturum açmayı orada bitirin. {host} oturum açmayı kendisi algılar.",
+  "mcp.signIn.relayOpen": "Oturum açma sayfasını aç",
+  "mcp.signIn.relayPasteHint": "Tarayıcı OpenBot'a geri dönmezse gösterdiği adresi kopyalayıp buraya yapıştırın.",
+  "mcp.signIn.relayPasteRequired":
+    "OpenBot oturum açmayı tarayıcıdan kendisi alamaz. Bitirdiğinizde tarayıcının gösterdiği adresi kopyalayıp buraya yapıştırın.",
+  "mcp.signIn.relayAddress": "Tarayıcı adresi",
+  "mcp.signIn.relaySend": "Gönder",
+  "mcp.panel.callbackUrlRelayed":
+    "Oturum açma sayfası tarayıcınızda açılır ve bilgisayarınızdaki OpenBot oturum açmayı {host} sunucusuna gönderir. Bu URL'yi tam olarak uygulamanın izin verilen yönlendirme URL'lerine ekleyin.",
 } as const satisfies PartialTranslation<typeof source>;

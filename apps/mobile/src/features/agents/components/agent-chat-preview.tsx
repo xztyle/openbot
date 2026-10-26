@@ -5,7 +5,8 @@ import { useState } from "react";
 import { useWindowDimensions, View } from "react-native";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { ChatMarkdown } from "@/features/chat/components/chat-markdown";
-import { type MobileAgent, useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { type MobileAgent, useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
+import { isIOS } from "@/shared/lib/platform";
 
 const HEADER_HEIGHT = 64;
 const SIDE_INSET = 16;
@@ -24,7 +25,7 @@ function previewText(preview: string): string {
 }
 
 function PreviewBubble({ text, onHeight }: { text: string; onHeight?: (height: number) => void }) {
-  const { agents } = useMobileWorkspace();
+  const agents = useMobileWorkspaceSelector((workspace) => workspace.agents);
   const foreground = useThemeColor("foreground");
   return (
     <View
@@ -44,6 +45,9 @@ function PreviewBubble({ text, onHeight }: { text: string; onHeight?: (height: n
  * wrapper component would be ignored. The native preview reads its size once, when it opens, and
  * renders its content only after that. So `measurer` lays out an invisible copy of the bubble in the
  * row when a touch starts (`onPressIn`), before the long press opens the preview.
+ *
+ * Only iOS shows the preview. On Android the hook returns no preview and measures nothing, so a tap
+ * that opens the chat does not also parse the latest message.
  */
 export function useAgentChatPreview(agent: MobileAgent) {
   const { width: screenWidth, fontScale } = useWindowDimensions();
@@ -57,7 +61,7 @@ export function useAgentChatPreview(agent: MobileAgent) {
   const estimatedBubbleHeight = bubbleHeight ?? 24 + Math.max(1, fallbackLines) * FALLBACK_LINE_HEIGHT * fontScale;
   const height = HEADER_HEIGHT + 1 + (text ? estimatedBubbleHeight + 2 * BUBBLE_MARGIN : 0);
 
-  const preview = (
+  const preview = isIOS ? (
     <Link.Preview style={{ width, height }}>
       <View className="flex-1 bg-background">
         <View className="flex-row items-center gap-3 px-4" style={{ height: HEADER_HEIGHT }}>
@@ -84,7 +88,7 @@ export function useAgentChatPreview(agent: MobileAgent) {
         ) : null}
       </View>
     </Link.Preview>
-  );
+  ) : null;
 
   const measurer =
     measuring && text ? (
@@ -98,5 +102,5 @@ export function useAgentChatPreview(agent: MobileAgent) {
       </View>
     ) : null;
 
-  return { preview, measurer, onPressIn: () => setMeasuring(true) };
+  return { preview, measurer, onPressIn: isIOS ? () => setMeasuring(true) : undefined };
 }

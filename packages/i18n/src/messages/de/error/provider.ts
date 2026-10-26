@@ -2,8 +2,11 @@ import type { PartialTranslation } from "../../../message";
 import type { messages as source } from "../../en/error/provider";
 
 export const messages = {
+  "error.provider.mcpConfig":
+    "OpenBot konnte die MCP-Server nicht in der Codex-Konfiguration registrieren. Prüfe, ob deine Codex-Datei config.toml gültig und beschreibbar ist, und starte OpenBot neu.",
   "error.provider.computerUseConfig":
-    "OpenBot konnte die Computersteuerung nicht in der Codex-Konfiguration registrieren. Prüfe, ob deine Codex-Datei config.toml gültig und beschreibbar ist, und starte OpenBot neu. Du kannst die Computersteuerung in den Einstellungen des Teamkollegen ausschalten, um ohne sie fortzufahren.",
+    "OpenBot konnte die Computersteuerung nicht in der Codex-Konfiguration registrieren. Prüfe, ob deine Codex-Datei config.toml gültig und beschreibbar ist, und starte OpenBot neu. Du kannst die Computersteuerung in den Agenteneinstellungen ausschalten, um ohne sie fortzufahren.",
+  "error.provider.codexUnresponsive": "Codex hat nicht mehr geantwortet, daher hat OpenBot den Prozess beendet.",
   "error.provider.endpointsReadOnly":
     "Die gespeicherten Endpunkte wurden mit einer neueren OpenBot-Version geschrieben oder die Datei kann nicht gelesen werden. Aktualisiere OpenBot, um sie zu ändern.",
   "error.provider.endpointNoSecureStorage":
@@ -102,6 +105,8 @@ export const messages = {
   "error.provider.localOnly": "Anbieter können nur auf dem Computer geändert werden, auf dem die Agenten laufen.",
   "error.provider.keyRequired": "Ein Anbieterschlüssel ist erforderlich.",
   "error.provider.keyTooLong": "Der Anbieterschlüssel ist zu lang.",
+  "error.provider.keyInvalidCharacters":
+    "Der Anbieterschlüssel enthält ein Leerzeichen oder ein Zeichen, das in einem Schlüssel nicht vorkommen kann.",
   "error.provider.noModel": "Der gewählte Anbieter hat kein verfügbares Modell.",
   "error.provider.noModelNamed": "{provider} hat kein verfügbares Modell.",
   "error.provider.acpNoModels": "Die ACP CLI hat keine ACP-Modelle gemeldet. OpenBot wird kein Ersatzmodell erraten.",
@@ -111,6 +116,8 @@ export const messages = {
   "error.provider.codexNotStarted": "Codex CLI wurde gefunden, konnte aber nicht gestartet werden.",
   "error.provider.codexNotStartedHint":
     "Codex CLI wurde gefunden, konnte aber nicht gestartet werden. Führe `codex --version` in einem neuen Terminal aus.",
+  "error.provider.codexManagedNotStarted":
+    "ChatGPT wurde heruntergeladen, konnte aber nicht gestartet werden. Lade es in OpenBot erneut herunter.",
   "error.provider.codexMissing": "ChatGPT wurde nicht heruntergeladen. Lade es in OpenBot herunter, um fortzufahren.",
   "error.provider.codexConfigIgnored": {
     one: "Codex hat {count} Einstellung in seiner Konfiguration ignoriert: {settings}. Korrigiere oder entferne sie oder aktualisiere Codex.",
@@ -126,6 +133,8 @@ export const messages = {
   "error.provider.claudeNotStarted": "Claude CLI wurde gefunden, konnte aber nicht gestartet werden.",
   "error.provider.claudeNotStartedHint":
     "Claude CLI wurde gefunden, konnte aber nicht gestartet werden. Führe `claude --version` in einem neuen Terminal aus.",
+  "error.provider.claudeManagedNotStarted":
+    "Claude wurde heruntergeladen, konnte aber nicht gestartet werden. Lade es in OpenBot erneut herunter.",
   "error.provider.claudeMissing": "Claude wurde nicht heruntergeladen. Lade es in OpenBot herunter, um fortzufahren.",
   "error.provider.grokOutdated": "Grok CLI {version} ist zu alt. OpenBot benötigt 1.0.5 oder neuer.",
   "error.provider.grokNotStarted": "Grok CLI wurde gefunden, konnte aber nicht gestartet werden.",
@@ -147,8 +156,17 @@ export const messages = {
     "{provider} hat nicht rechtzeitig geantwortet. Der Computer ist möglicherweise ausgelastet. OpenBot versucht es erneut.",
   "error.provider.cliTimedOutRefresh":
     "{provider} hat nicht rechtzeitig geantwortet. Der Computer ist möglicherweise ausgelastet. Aktualisiere die Anbieter, um es erneut zu versuchen.",
+  "error.provider.acpStartTimedOut":
+    "{provider} wurde nicht innerhalb von {seconds} s fertig gestartet. Der Computer ist möglicherweise ausgelastet.",
+  "error.provider.acpModelsTimedOut":
+    "{provider} hat seine Modelle nicht innerhalb von {seconds} s aufgelistet. Der Computer ist möglicherweise ausgelastet.",
+  "error.provider.startStopped":
+    "{provider} ist mehrmals hintereinander nicht gestartet, daher versucht OpenBot es nicht mehr. Aktualisiere die Anbieter, um es erneut zu versuchen.",
+  "error.provider.tempDiskSpace":
+    "{provider} braucht zum Starten mindestens 1 GB freien Speicherplatz. Gib Speicherplatz frei und aktualisiere dann die Anbieter.",
   "error.provider.noCodeSignIn": "Bei {provider} ist keine Anmeldung mit einem Code möglich.",
   "error.provider.codeLoginNoLink": "Der Anbieter hat keinen Anmeldelink angezeigt. Versuche es erneut.",
+  "error.provider.hostSignInEnded": "Die Anmeldung bei {provider} wurde nicht abgeschlossen. Versuche es erneut.",
   "error.provider.codeLoginNotWaiting": "Keine Anmeldung wartet auf einen Code. Starte die Anmeldung erneut.",
   "error.provider.codeLoginBadCode": "Füge den Code ein, den die Anmeldeseite anzeigt.",
   "error.provider.codeLoginRefused": "Der Anbieter hat den Code nicht akzeptiert. Starte die Anmeldung erneut.",
@@ -162,11 +180,19 @@ export const messages = {
     "Die CLI von {provider} bearbeitet einen Durchlauf. Warte auf den Abschluss und aktualisiere dann.",
   "error.provider.cliSelectFailed": "OpenBot konnte die installierte verwaltete CLI nicht auswählen.",
   "error.provider.noAuthenticatedAccount": "{provider} hat kein authentifiziertes Konto zurückgegeben.",
+  "error.provider.signInExpired":
+    "Deine Anmeldung bei {provider} ist abgelaufen. Melde dich erneut an, um fortzufahren.",
   "error.provider.cliActivateFailed": "OpenBot konnte die verwaltete CLI nicht aktivieren.",
   "error.provider.cliBusyReconnect":
     "Die CLI von {provider} bearbeitet einen Durchlauf. Warte auf den Abschluss und verbinde sie dann erneut.",
   "error.provider.opencodeCredentialsRejected":
     "Der Modellanbieter hat den API-Schlüssel abgelehnt. Korrigiere den OpenCode-Schlüssel in den Einstellungen oder den Anbieterschlüssel mit `opencode auth login`. Versuche es dann erneut oder wähle ein anderes Modell.\n{detail}",
+  "error.provider.opencodeAuthRequired":
+    "OpenCode hat keine Anmeldung für den Modellanbieter „{provider}“. Wähle ein Modell mit der Markierung „Kostenlos“ oder verbinde den Anbieter: Füge einen OpenCode-Go-Schlüssel in den OpenCode-Einstellungen ein oder führe `opencode auth login` in einem Terminal aus. Versuche es dann erneut.",
+  "error.provider.opencodeAuthRequiredUnknown":
+    "OpenCode hat keine Anmeldung für den Anbieter dieses Modells. Wähle ein Modell mit der Markierung „Kostenlos“ oder verbinde den Anbieter: Füge einen OpenCode-Go-Schlüssel in den OpenCode-Einstellungen ein oder führe `opencode auth login` in einem Terminal aus. Versuche es dann erneut.",
+  "error.provider.opencodeKeyExpired":
+    "Dein OpenCode-API-Schlüssel ist abgelaufen. Erstelle in der OpenCode Console einen neuen Schlüssel, füge ihn in den OpenCode-Einstellungen ein und versuche es dann erneut.",
   "error.provider.opencodeServiceFailure":
     "OpenCode konnte diesen Durchlauf nicht abschließen, da sein lokaler Dienst fehlgeschlagen ist. Versuche es erneut. Falls der Fehler weiter auftritt, verbinde OpenCode in den Einstellungen erneut.",
   "error.provider.opencodeRateLimited":
@@ -175,10 +201,20 @@ export const messages = {
     "Der Modellanbieter hat die Anfrage wegen der Kontoabrechnung abgelehnt. Warten behebt dies nicht. Füge im Anbieterkonto eine Zahlungsmethode oder Guthaben hinzu oder wähle ein anderes Modell.\n{detail}",
   "error.provider.opencodeInvalidUpload":
     "Der Modellanbieter von OpenCode hat eine ungültige Upload-Anfrage gemeldet. Wähle ein anderes Modell und fahre fort. Prüfe gespeicherte Routinen, bevor du sie erneut erstellst.\n{detail}",
+  "error.provider.opencodeUnreadableContent":
+    "Dieses Modell kann eine Datei oder ein Bild in diesem Chat nicht lesen. Wähle ein Modell, das Dateien lesen kann, und sende deine Nachricht dann erneut.",
+  "error.provider.opencodeFreeLimit":
+    "Die kostenlosen OpenCode-Modelle haben ihr Nutzungslimit erreicht. Alle kostenlosen Modelle teilen sich dieses Limit. Um weiterzumachen, füge einen OpenCode-Go-Schlüssel in den OpenCode-Einstellungen ein oder wähle ein Modell eines anderen Anbieters.",
   "error.provider.opencodeProviderFailed":
     "Beim Modellanbieter ist ein Fehler aufgetreten. Deine Verbindung ist nicht die Ursache. Versuche es später erneut oder wähle ein anderes Modell.\n{detail}",
   "error.provider.opencodeNetwork":
     "OpenCode konnte keine Verbindung zum Modellanbieter herstellen. Prüfe die Netzwerkverbindung des Computers, auf dem OpenBot läuft, und versuche es erneut.\n{detail}",
+  "error.provider.opencodeDatabaseNewer":
+    "OpenCode konnte seine Datenbank nicht öffnen, weil eine neuere OpenCode-Version sie geändert hat. Aktualisiere OpenCode auf Version 2 oder neuer und versuche es dann erneut.",
+  "error.provider.opencodeNoAnswer":
+    "Das OpenCode-Modell hat den Durchlauf ohne Antwort beendet. Versuche es erneut oder wähle ein anderes Modell.",
+  "error.provider.opencodeReasoningWithoutAnswer":
+    "Das OpenCode-Modell hat den Durchlauf nach seinem Nachdenken ohne Antwort beendet. Versuche es erneut oder wähle ein anderes Modell.",
   "error.provider.chatgptPageFailed": "OpenBot konnte die ChatGPT-Verbindungsseite nicht öffnen.",
   "error.provider.noneReady": "Kein Agentenanbieter ist bereit.",
   "error.provider.claudeTurnActive":
@@ -202,6 +238,8 @@ export const messages = {
   "error.provider.antigravitySignIn": "Melde dich mit Google an, um Gemini zu verwenden.",
   "error.provider.antigravityRateLimited":
     "Gemini hat die Anfrage abgelehnt, weil ein Ratenlimit oder das Kontingent des Tarifs erreicht ist. Warte ein paar Minuten oder wähle ein anderes Modell und versuche es dann erneut.\n{detail}",
+  "error.provider.antigravityQuotaReached":
+    "Google meldet, dass ein Gemini-Nutzungslimit erreicht ist. Das Limit kann für ein einzelnes Modell gelten, daher kann die Nutzungsseite deines Tarifs noch Rest anzeigen. Wähle ein anderes Gemini-Modell oder warte auf das Zurücksetzen.\n{detail}",
   "error.provider.antigravityModelUnavailable":
     "Gemini kann dieses Modell gerade nicht verwenden. Wähle ein anderes Modell und versuche es dann erneut.\n{detail}",
   "error.provider.antigravityServiceFailure":
@@ -225,16 +263,33 @@ export const messages = {
   "error.provider.usageLimitReached": "Das Konto hat sein Nutzungslimit erreicht.",
   "error.provider.foreignReasoning":
     "{provider} hat die früheren Überlegungen in diesem Chat nicht akzeptiert, da ein anderes Konto oder ein anderer API-Schlüssel sie erhalten hat. OpenBot hat eine neue {provider}-Sitzung mit dem Chatverlauf gestartet. Versuche es erneut.",
+  "error.provider.opencodeSessionRejected":
+    "OpenCode hat die Anfrage abgelehnt und keinen Grund genannt. Das kann in einem langen Chat oder nach einem Modellwechsel passieren. OpenBot hat eine neue OpenCode-Sitzung mit dem Chatverlauf gestartet. Versuche es erneut. Wenn der Fehler bleibt, wähle ein anderes Modell oder einen niedrigeren Aufwand.",
+  "error.provider.museMcpStartupFault":
+    "Muse konnte einen MCP-Server nicht starten und hat MCP in dieser Sitzung gesperrt. OpenBot hat eine neue Muse-Sitzung mit dem Chatverlauf gestartet. Versuche es erneut. Wenn der Fehler bleibt, schalte Computersteuerung oder den fehlerhaften MCP-Server für diesen Agenten aus.",
   "error.provider.grokSignIn": "Führe `grok login` aus oder setze XAI_API_KEY, um Grok zu verwenden.",
   "error.provider.acpSignInTimedOut": "Die Zeit für die Anmeldung ist abgelaufen.",
   "error.provider.acpSignInStopped": "Die Anmeldung wurde vor dem Abschluss gestoppt.",
+  "error.provider.geminiBrowserUnavailable":
+    "Gemini konnte die Anmeldeseite nicht öffnen. Installiere einen Browser und xdg-utils und verbinde dich dann aus einer Desktop-Sitzung auf diesem Host. Ein Server ohne Desktop kann diese Anmeldung nicht abschließen.",
   "error.provider.acpSignInFailed": "Die Anmeldung wurde nicht abgeschlossen.",
+  "error.provider.acpSignInFailedReason": "Die Anmeldung wurde nicht abgeschlossen: {reason}",
+  "error.provider.acpSignInMethodMissing":
+    "Dieser Anbieter bietet diese Anmeldung auf diesem Computer nicht an. Aktualisiere den Anbieter und versuche es dann erneut.",
+  "error.provider.httpsSignInLinkOnly": "Im Browser können nur HTTPS-Anmeldelinks geöffnet werden.",
+  "error.provider.geminiKeyRefused":
+    "Gemini hat den gespeicherten API-Schlüssel abgelehnt. Ersetze oder entferne den Schlüssel in den Einstellungen und verbinde dich dann erneut.",
+  "error.provider.keyProviderRefused":
+    "{provider} hat den gespeicherten API-Schlüssel abgelehnt. Ersetze oder entferne den Schlüssel in den Einstellungen und versuche es dann erneut.",
+  "error.provider.keyProviderNoBalance":
+    "Das {provider}-Konto des gespeicherten API-Schlüssels hat kein Guthaben. Lade Guthaben auf das Konto und versuche es dann erneut.",
   "error.provider.messageTooLarge":
     "OpenBot hat {provider} gestoppt, da eine Nachricht mit mehr als {limit} MB gesendet wurde.",
   "error.provider.customAgentIdInvalid":
     "Eine Agenten-ID darf nur Kleinbuchstaben, Ziffern oder `-` enthalten und darf nicht die ID eines integrierten Anbieters sein.",
   "error.provider.customAgentEnvInvalid":
     "Ein Variablenname darf nur Buchstaben, Ziffern oder `_` enthalten und nicht mit einer Ziffer beginnen. Verwende jeden Namen einmal und höchstens 16 Namen.",
+  "error.provider.customAgentUsagePromptInvalid": "Ein Nutzungsbefehl muss eine Zeile mit höchstens 256 Zeichen sein.",
   "error.provider.customAgentCommandInvalid":
     "Der Befehl muss ein vollständiger Pfad, ein mit ~/ beginnender Pfad oder ein Befehlsname ohne Leerzeichen sein.",
   "error.provider.customAgentArgsInvalid":
@@ -269,4 +324,93 @@ export const messages = {
   "error.provider.useSettingsReadOnly":
     "Die gespeicherten Anbietereinstellungen können nicht gelesen werden. Aktualisiere OpenBot, bevor du sie änderst.",
   "error.provider.useChangeFailed": "OpenBot konnte die Anbietereinstellung nicht ändern.",
+  "error.provider.accountsUnsupported": "{provider} unterstützt nur ein Konto.",
+  "error.provider.accountNeedsConnection": "Verbinde {provider}, bevor du ein weiteres Konto hinzufügst.",
+  "error.provider.usageResetUnsupported": "{provider} kann Nutzungslimits nicht zurücksetzen.",
+  "error.provider.usageResetNotConnected":
+    "Melde dich erneut bei diesem {provider}-Konto an, bevor du seine Nutzung zurücksetzt.",
+  "error.provider.accountLimit": "{provider} unterstützt höchstens {limit} Konten.",
+  "error.provider.accountNotFound":
+    "Dieses {provider}-Konto ist nicht auf diesem Computer. Aktualisiere und versuche es erneut.",
+  "error.provider.accountAlreadyAdded": "Dieses {provider}-Konto ist bereits verbunden.",
+  "error.provider.accountDefault": "Das erste {provider}-Konto kann nicht entfernt werden.",
+  "error.provider.accountUsesKey":
+    "Dieses {provider}-Konto verwendet den gespeicherten API-Schlüssel und hat keine Anmeldung. Ändere den Schlüssel in Servereinstellungen → Anbieter.",
+  "error.provider.accountInUse":
+    "Ein Agent mit diesem Konto arbeitet gerade. Versuche es erneut, wenn der Agent anhält.",
+  "error.provider.accountsReadOnly":
+    "Die gespeicherten Anbieterkonten können nicht gelesen werden. Aktualisiere OpenBot, bevor du sie änderst.",
+  "error.provider.accountSignedOut": "Dieses {provider}-Konto ist abgemeldet. Melde dich erneut an.",
+  "error.provider.sessionSettingUnavailable": "Diese Einstellung ist in der aktuellen Anbietersitzung nicht verfügbar.",
+  "error.provider.sessionSettingInvalid": "Dieser Wert ist für die Einstellung nicht verfügbar.",
+  "error.provider.sessionSettingsBusy":
+    "Warte, bis der aktuelle Durchlauf endet, bevor du eine Sitzungseinstellung änderst.",
+  "error.provider.piOutdated":
+    "Pi {version} ist zu alt. Installiere Pi 1.1.0 oder neuer für native RPC- und MCP-Unterstützung.",
+  "error.provider.nativeMissing": "Die {provider} CLI ist nicht installiert. Lade sie in den Einstellungen herunter.",
+  "error.provider.nativeNotStarted": "Die {provider} CLI konnte nicht starten.",
+  "error.provider.nativeVersionUnreadable": "Die Version der {provider} CLI konnte nicht gelesen werden.",
+  "error.provider.piSessionBusy": "Warte, bis der aktuelle Pi-Durchlauf endet.",
+  "error.provider.piStopped": "Pi läuft nicht. Verbinde Pi und versuche es erneut.",
+  "error.provider.piSessionMissing": "Die Pi-Sitzungsdatei ist auf diesem Computer nicht verfügbar.",
+  "error.provider.piResumeCancelled": "Pi hat das Fortsetzen der Sitzung abgebrochen. Versuche es erneut.",
+  "error.provider.piSessionIdentity":
+    "Pi hat eine andere Sitzung zurückgegeben. Die gespeicherte Sitzung wurde nicht ersetzt.",
+  "error.provider.piModelInvalid": "Wähle ein Pi-Modell, das seinen Anbieter enthält.",
+  "error.provider.piToolInvalid": "Das Werkzeug hat ein ungültiges Ergebnis zurückgegeben.",
+  "error.provider.piSignIn":
+    "Verwende /login in Pi auf dem Host-Computer. Schließe Pi, wenn die Anmeldung abgeschlossen ist.",
+  "error.provider.museBusy": "Die Muse-Sitzung ist beschäftigt.",
+  "error.provider.museStopped": "Der Muse-Client läuft nicht.",
+  "error.provider.museUnexpectedProvider": "Muse hat einen unerwarteten Modellanbieter zurückgegeben.",
+  "error.provider.museNoActiveTurn": "Muse hat keinen aktiven Durchlauf zum Steuern.",
+  "error.provider.museInvalidProtocol": "Muse hat eine ungültige Protokollantwort zurückgegeben.",
+  "error.provider.museNotStarted": "Muse wurde nicht gestartet.",
+  "error.provider.museNativeWindows": "Muse benötigt unter Windows eine native ausführbare Datei.",
+  "error.provider.museStartTimeout": "Die Initialisierung von Muse hat zu lange gedauert.",
+  "error.provider.museStartStopped": "Muse wurde während der Initialisierung beendet.",
+  "error.provider.museProtocolVersion": "Nicht unterstützte Muse-Protokollversion.",
+  "error.provider.museHistoryRequired": "Muse muss den Sitzungsverlauf behalten.",
+  "error.provider.museRequestUnsupported": "Nicht unterstützte Muse-Serveranfrage.",
+  "error.provider.museConnectionFailed":
+    "Die Verbindung zu Muse ist fehlgeschlagen. Setze die Unterhaltung fort, um ihren gespeicherten Verlauf wiederherzustellen.",
+  "error.provider.museUnknownSession": "Unbekannte Muse-Sitzung.",
+  "error.provider.museInvalidToolResult": "Ungültiges OpenBot-Werkzeugergebnis.",
+  "error.provider.museMcpRequired": "Muse muss MCP-Server pro Sitzung unterstützen.",
+  "error.provider.museSessionMismatch": "Muse hat eine andere Sitzung zurückgegeben.",
+  "error.provider.museCompactRejected": "Muse hat die Komprimierung nicht akzeptiert.",
+  "error.provider.museTurnMismatch": "Muse hat einen anderen Durchlauf zurückgegeben.",
+  "error.provider.museHistoryMismatch": "Der Muse-Verlauf hat Sitzungen überschritten.",
+  "error.provider.museRecoveryFailed": "Muse konnte die fehlenden Ereignisse nicht wiederherstellen.",
+  "error.provider.museHistoryStalled": "Der Muse-Verlaufscursor ist nicht weitergerückt.",
+  "error.provider.museApprovalUnavailable": "Muse hat diese Genehmigungsantwort nicht angeboten.",
+  "error.provider.museHistoryOwner": "Der Muse-Verlauf gehört zu einer anderen Sitzung.",
+  "error.provider.museHistoryMissing": "Muse hat keinen Sitzungsverlauf zurückgegeben.",
+  "error.provider.museEmptyInput": "Muse benötigt Text oder ein Bild.",
+  "error.provider.museMethodUnsupported": "Muse unterstützt {method} nicht.",
+  "error.provider.museTurnFailed": "Der Muse-Durchlauf ist fehlgeschlagen.",
+  "error.provider.museProfileUnsupported":
+    "Muse kann ohne Zugriff auf externe Werkzeuge kein Profil erstellen. Verwende einen anderen Anbieter, um das Profil zu erstellen, und wähle dann Muse für den Agenten.",
+  "error.provider.museAuthUnverified":
+    "Die Muse-Authentifizierung ist nicht bestätigt. Verbinde dich auf dem Host-Computer oder lege einen Meta-API-Schlüssel fest.",
+  "error.provider.museSignIn": "Melde dich auf dem Host-Computer bei Muse an, um fortzufahren.",
+  "error.provider.inceptionSignIn": "Füge einen Inception-API-Schlüssel hinzu, um fortzufahren.",
+  "error.provider.deepseekSignIn": "Füge einen DeepSeek-API-Schlüssel hinzu, um fortzufahren.",
+  "error.provider.openrouterSignIn": "Füge einen OpenRouter-API-Schlüssel hinzu, um fortzufahren.",
+  "error.provider.terminalLoginFailed":
+    "Das Anmeldeterminal konnte nicht geöffnet werden. Öffne die Anbieter-CLI auf diesem Host, melde dich dort an und aktualisiere dann die Anbieter.",
+  "error.provider.nativeArchiveInvalid": "Der Anbieter-Download enthält keine gültige Installation.",
+  "error.provider.nativeChecksum": "Die Anbieterinstallation hat die Integritätsprüfung nicht bestanden.",
+  "error.provider.registryUnavailable": "Die ACP-Registry ist nicht verfügbar. Versuche es erneut.",
+  "error.provider.registryInvalid": "Die ACP-Registry hat ungültige Daten zurückgegeben.",
+  "error.provider.registryMissing": "Dieser Agent ist nicht in der ACP-Registry.",
+  "error.provider.registryBusy": "Für diesen Agenten läuft bereits eine Installation.",
+  "error.provider.registryCancelled": "Die Installation des Agenten wurde abgebrochen.",
+  "error.provider.registryPrerequisite": "Installiere {tool} auf dem Host, bevor du diesen Agenten installierst.",
+  "error.provider.registryBindingChanged":
+    "Der benutzerdefinierte Agent hat sich während der Installation geändert. Versuche es erneut.",
+  "error.provider.registryInstallFailed":
+    "Die Installation des Agenten ist fehlgeschlagen. Die vorherige Installation ist unverändert.",
+  "error.provider.registryRemoveBusy":
+    "Warte, bis die Installation des Agenten und laufende ACP-Arbeit abgeschlossen sind, bevor du ihn entfernst.",
 } as const satisfies PartialTranslation<typeof source>;

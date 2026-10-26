@@ -2,7 +2,10 @@ import { isBoolean, isDynamicRecord } from "./runtime-values";
 
 /** The mobile features that the account server can turn on and off for each platform and app version. */
 export const MOBILE_FEATURES = [
-  /** The plans and the Stripe payment for a hosted server. */
+  /**
+   * The plans of a hosted server and the account's hosted servers. App versions up to 1.2.0 also
+   * take the Stripe payment; newer versions sell nothing.
+   */
   "cloudServers",
   /** The live view of an agent's browser tab on its host, and the controls of the tab. */
   "browser",
@@ -13,10 +16,13 @@ export type MobileFeaturePlatform = "ios" | "android";
 export type MobileFeatureFlags = Record<MobileFeature, boolean>;
 
 /**
- * The last app version of each platform that has the feature, such as "1.2.0". Versions up to it
- * have the feature, newer versions do not, and "0" turns it off for every version.
+ * The app versions of one platform that have a feature. `upTo` is the last version that has it, such
+ * as "1.2.0": newer versions do not have it, and "0" turns it off for every version. `except` lists
+ * the versions up to `upTo` that do not have it.
  */
-export type MobileFeatureConfig = Record<MobileFeature, Record<MobileFeaturePlatform, string>>;
+export type MobileFeatureVersions = { upTo: string; except?: readonly string[] };
+
+export type MobileFeatureConfig = Record<MobileFeature, Record<MobileFeaturePlatform, MobileFeatureVersions>>;
 
 export const MOBILE_FEATURES_PATH = "/v1/mobile/features";
 
@@ -31,12 +37,21 @@ function versionParts(value: string): number[] | null {
 }
 
 /** Compares two versions part by part, so "1.10.0" is after "1.9.0" and "1.2" equals "1.2.0". */
-function isAfterVersion(version: number[], last: number[]): boolean {
-  for (let index = 0; index < Math.max(version.length, last.length); index += 1) {
-    const difference = (version[index] ?? 0) - (last[index] ?? 0);
-    if (difference !== 0) return difference > 0;
+function compareVersions(version: number[], other: number[]): number {
+  for (let index = 0; index < Math.max(version.length, other.length); index += 1) {
+    const difference = (version[index] ?? 0) - (other[index] ?? 0);
+    if (difference !== 0) return difference;
   }
-  return false;
+  return 0;
+}
+
+function hasFeature(versions: MobileFeatureVersions, version: number[]): boolean {
+  const last = versionParts(versions.upTo);
+  if (!last?.some((part) => part > 0) || compareVersions(version, last) > 0) return false;
+  return !versions.except?.some((value) => {
+    const excluded = versionParts(value);
+    return excluded !== null && compareVersions(version, excluded) === 0;
+  });
 }
 
 /** The flags of one app version. A version that is missing or that the server cannot read has no feature. */
@@ -49,10 +64,7 @@ export function resolveMobileFeatures(
   if (platform !== "ios" && platform !== "android") return flags;
   const parts = version ? versionParts(version) : null;
   if (!parts) return flags;
-  for (const feature of MOBILE_FEATURES) {
-    const last = versionParts(config[feature][platform]);
-    flags[feature] = last !== null && !isAfterVersion(parts, last) && last.some((part) => part > 0);
-  }
+  for (const feature of MOBILE_FEATURES) flags[feature] = hasFeature(config[feature][platform], parts);
   return flags;
 }
 

@@ -1,11 +1,13 @@
 import type { ConversationSnapshot } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { type SourceMessages, sourceText } from "@openbot/i18n/source";
+import { errorReference } from "@openbot/user-errors/reference";
 import { Effect, Result, Schema } from "effect";
 import { runTeamEffect } from "./effect-boundary";
 
 class RemoteRecoveryError extends Schema.TaggedError<RemoteRecoveryError>()("RemoteRecoveryError", {
   message: Schema.String,
+  reference: Schema.optional(Schema.NullOr(Schema.String)),
 }) {}
 
 const recoveryCall = <A>(operation: () => Promise<A>) =>
@@ -14,6 +16,7 @@ const recoveryCall = <A>(operation: () => Promise<A>) =>
     catch: (error) =>
       new RemoteRecoveryError({
         message: error instanceof Error ? error.message : sourceText("error.remote.operationFailed"),
+        reference: errorReference(error),
       }),
   });
 
@@ -37,13 +40,7 @@ export interface RemoteRecoveryStatus {
   remainingSeconds: number;
 }
 
-export type RemoteConnectionStage =
-  | "preferences"
-  | "connection"
-  | "compatibility"
-  | "agents"
-  | "reads"
-  | "conversations";
+export type RemoteConnectionStage = "preferences" | "connection" | "compatibility" | "agents" | "reads";
 
 const CONNECTION_STAGES = {
   preferences: "status.remote.stagePreferences",
@@ -51,7 +48,6 @@ const CONNECTION_STAGES = {
   compatibility: "status.remote.stageCompatibility",
   agents: "status.remote.stageAgents",
   reads: "status.remote.stageReads",
-  conversations: "status.remote.stageConversations",
 } as const satisfies Record<RemoteConnectionStage, keyof SourceMessages>;
 
 // Only fixed protocol messages may appear in diagnostics. Arbitrary server or
@@ -61,6 +57,7 @@ const SAFE_CONNECTION_ERRORS = new Set(
     [
       "error.remote.appInBackground",
       "error.remote.connectionReplaced",
+      "error.remote.connectionDropped",
       "error.remote.selectedServerOffline",
       "error.remote.serverDisconnected",
       "error.remote.desktopOffline",
@@ -86,16 +83,61 @@ const SAFE_CONNECTION_ERRORS = new Set(
       "error.remote.channelNotOpen",
       "error.remote.signalOffline",
       "error.remote.mobileUpdateRequired",
+      "error.remote.hostBusy",
+      "error.remote.signalPermissionDenied",
+      "error.remote.signalProtocolError",
+      "error.remote.signalRefused",
+      "error.remote.signalClosed",
+      "error.remote.relayUnavailable",
+      "error.remote.iceFailed",
+      "error.remote.iceDisconnected",
+      "error.remote.directoryUnreachable",
+      "error.remote.directoryTimeout",
+      "error.remote.inviteAlreadyUsed",
+      "error.remote.inviteNotFound",
+      "error.remote.memberLimitReached",
+      "error.remote.licenseUsersFull",
+      "error.remote.hostNotRegistered",
+      "error.remote.membershipEnded",
+      "error.remote.accountSessionInactive",
+      "error.remote.hostOtherAccount",
+      "error.remote.remoteNotConfigured",
     ] as const satisfies readonly (keyof SourceMessages)[]
   ).map((key) => sourceText(key)),
 );
 
-export function remoteConnectionFailure(stage: RemoteConnectionStage, error: unknown): string {
+const NUMBER_MARK = "\u0000";
+/** A fixed message with a number in it. Only digits can fill the number, so no server text can pass. */
+function numberTemplate(text: string): RegExp {
+  const [before = "", after = ""] = text.split(NUMBER_MARK);
+  const literal = (part: string) => part.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`^${literal(before)}\\d{1,6}${literal(after)}$`, "u");
+}
+
+const SAFE_NUMBER_CONNECTION_ERRORS = [
+  numberTemplate(sourceText("error.remote.signalRateLimited", { seconds: NUMBER_MARK })),
+  numberTemplate(sourceText("error.remote.hostRefused", { status: NUMBER_MARK })),
+  numberTemplate(sourceText("error.remote.requestFailedStatus", { status: NUMBER_MARK })),
+];
+
+/** Whether a connection message is one of our fixed sentences, and not text from a peer or the browser. */
+export function isSafeConnectionError(message: string): boolean {
+  return SAFE_CONNECTION_ERRORS.has(message) || SAFE_NUMBER_CONNECTION_ERRORS.some((pattern) => pattern.test(message));
+}
+
+/** What a failed connection step shows: a fixed sentence, and the code that says where it failed. */
+export interface RemoteConnectionFailure {
+  message: string;
+  reference: string | null;
+}
+
+export function remoteConnectionFailureDetails(stage: RemoteConnectionStage, error: unknown): RemoteConnectionFailure {
   const reason =
-    error instanceof Error && SAFE_CONNECTION_ERRORS.has(error.message)
+    error instanceof Error && isSafeConnectionError(error.message)
       ? error.message
       : sourceText("error.remote.connectionStepFailed");
-  return sourceText(CONNECTION_STAGES[stage], { reason });
+  // The reference is built only from fixed identifiers, so it is safe when the text is not.
+  return { message: sourceText(CONNECTION_STAGES[stage], { reason }), reference: errorReference(error) };
 }
 
 export function remoteRecoveryMessage(status: RemoteRecoveryStatus, failure?: string | null): string | null {
@@ -137,6 +179,8 @@ export function createRemoteConnectionRecovery(
   connect: () => Promise<void>,
   onError: (error: unknown) => void,
   onStatus: (status: RemoteRecoveryStatus) => void = () => {},
+  /** The wait while the host starts, such as a hosted server after a wake. It replaces the backoff. */
+  startingRetryDelay: () => number | null = () => null,
 ) {
   let active = false;
   let disposed = false;
@@ -146,6 +190,8 @@ export function createRemoteConnectionRecovery(
   let retryRequested = false;
   let refreshRequested = false;
   let interrupted = false;
+  /** The running attempt checks a connection that was online, such as on a return to the app. */
+  let checking = false;
   let attempt = 0;
   let retryAt: number | null = null;
   /** Chosen when an attempt starts, so its status can show the wait that follows a failure. */
@@ -164,7 +210,10 @@ export function createRemoteConnectionRecovery(
   /** `start` begins the attempt that is due now: a new run, or the next pass of the run that is ending. */
   function scheduleRetry(start: () => void = startRun) {
     if (disposed || suspended) return;
-    retryAt ??= Date.now() + (retryDelay ?? remoteRetryDelay(attempt));
+    const startingDelay = startingRetryDelay();
+    retryAt ??= Date.now() + (startingDelay ?? retryDelay ?? remoteRetryDelay(attempt));
+    // A host that began to start during a longer wait does not wait for the rest of it.
+    if (startingDelay !== null) retryAt = Math.min(retryAt, Date.now() + startingDelay);
     retryDelay = null;
     if (!active) return;
     const remaining = Math.max(0, retryAt - Date.now());
@@ -203,6 +252,7 @@ export function createRemoteConnectionRecovery(
     cancelTimer();
     running = true;
     const checkingConnection = online;
+    checking = checkingConnection;
     retryRequested = false;
     refreshRequested = false;
     interrupted = false;
@@ -285,8 +335,13 @@ export function createRemoteConnectionRecovery(
       online = false;
       if (error !== undefined) onError(error);
       retryRequested = true;
-      // Losing a connection is not a failed reconnection attempt.
-      if (!running && retryAt === null) retryAt = Date.now();
+      // Losing a connection is not a failed reconnection attempt. Neither is losing the connection that
+      // a running attempt checks: as when the check fails, its replacement starts at once, so the status
+      // shows no countdown of a failed attempt.
+      if (retryAt === null && (!running || checking)) {
+        if (running) attempt = 0;
+        retryAt = Date.now();
+      }
       scheduleRetry();
     },
     /**
@@ -403,7 +458,7 @@ export function remoteWorkspaceReadTimeout(method: string, path: string): number
     route === TEAM_API_ROUTES.sidebarLayout.state ||
     route === TEAM_API_ROUTES.browser.tabs ||
     route === TEAM_API_ROUTES.agents.conversationReads ||
-    /^\/v1\/agents\/[^/]+\/conversation(?:-page)?$/.test(route ?? "")
+    /^\/v1\/agents\/[^/]+\/(?:conversation(?:-page)?|queue)$/.test(route ?? "")
     ? 15_000
     : undefined;
 }

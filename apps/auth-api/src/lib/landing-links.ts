@@ -24,10 +24,12 @@ export const OPENBOT_DOWNLOAD_PAGE_LINKS = {
 } as const;
 
 export const OPENBOT_LINKS = {
-  contact: "https://x.com/OpenBot_",
+  /** The contact form page. */
+  contact: "/contact",
+  x: "https://x.com/OpenBot_",
+  /** A Redirect Rule in the openbot.run Cloudflare zone sends this to the current Discord invite. */
+  discord: "https://discord.openbot.run",
   download: "#download",
-  /** The same anchor from a page that is not the landing page. */
-  downloadFromOtherPage: "/#download",
   news: "/news",
   guides: "/guides",
   plugins: "/plugins",
@@ -38,6 +40,8 @@ export const OPENBOT_LINKS = {
   privacy: "https://github.com/nightly-labs/openbot/blob/main/PRIVACY.md",
   documentation: "https://github.com/nightly-labs/openbot#readme",
   troubleshooting: "https://github.com/nightly-labs/openbot/blob/main/docs/TROUBLESHOOTING.md",
+  /** GitHub Pages hosts the status page, so it stays up when Cloudflare does not. */
+  status: "https://status.openbot.run",
   selfHostedServer: "https://github.com/nightly-labs/openbot/blob/main/docs/self-hosted-server.md",
   architecture: "https://github.com/nightly-labs/openbot#architecture",
   contributing: "https://github.com/nightly-labs/openbot/blob/main/CONTRIBUTING.md",
@@ -57,7 +61,19 @@ export type FooterLink =
   | {
       readonly label: string;
       readonly external: false;
-      readonly to: "/" | "/download" | "/news" | "/guides" | "/plugins" | "/changelog" | "/compare" | "/providers";
+      readonly to:
+        | "/"
+        | "/download"
+        | "/news"
+        | "/guides"
+        | "/plugins"
+        | "/changelog"
+        | "/compare"
+        | "/providers"
+        | "/teams"
+        | "/brand"
+        | "/contact"
+        | "/privacy-policy";
       readonly hash?: string;
     }
   | {
@@ -81,9 +97,12 @@ export const FOOTER_COLUMNS: readonly FooterColumn[] = [
       { label: "Guides", external: false, to: "/guides" },
       { label: "Plugins", external: false, to: "/plugins" },
       { label: "Changelog", external: false, to: "/changelog" },
+      { label: "Teams", external: false, to: "/teams" },
+      { label: "Contact", external: false, to: "/contact" },
+      { label: "Brand", external: false, to: "/brand" },
       { label: "Source code", external: true, href: OPENBOT_LINKS.repository },
       { label: "License", external: true, href: OPENBOT_LINKS.license },
-      { label: "Privacy", external: true, href: OPENBOT_LINKS.privacy },
+      { label: "Privacy policy", external: false, to: "/privacy-policy" },
     ],
   },
   {
@@ -91,11 +110,13 @@ export const FOOTER_COLUMNS: readonly FooterColumn[] = [
     links: [
       { label: "Documentation", external: true, href: OPENBOT_LINKS.documentation },
       { label: "Troubleshooting", external: true, href: OPENBOT_LINKS.troubleshooting },
+      { label: "Status", external: true, href: OPENBOT_LINKS.status },
       { label: "Self-hosted server", external: true, href: OPENBOT_LINKS.selfHostedServer },
       { label: "Architecture", external: true, href: OPENBOT_LINKS.architecture },
       { label: "Contributing", external: true, href: OPENBOT_LINKS.contributing },
       { label: "Codex", external: true, href: OPENBOT_LINKS.codex },
       { label: "Claude Code", external: true, href: OPENBOT_LINKS.claude },
+      { label: "Discord", external: true, href: OPENBOT_LINKS.discord },
     ],
   },
   {
@@ -115,14 +136,17 @@ export const FOOTER_COLUMNS: readonly FooterColumn[] = [
   {
     title: "Compare",
     links: [
-      { label: "OpenBot vs ChatGPT dots", external: false, to: "/compare/$slug", slug: "chatgpt-dots" },
       { label: "OpenBot vs Grok Bot", external: false, to: "/compare/$slug", slug: "grok-bot" },
-      { label: "OpenBot vs Muse", external: false, to: "/compare/$slug", slug: "muse" },
       { label: "OpenBot vs Hermes Agent", external: false, to: "/compare/$slug", slug: "hermes-agent" },
+      { label: "OpenBot vs Muse", external: false, to: "/compare/$slug", slug: "muse" },
       { label: "OpenBot vs OpenClaw", external: false, to: "/compare/$slug", slug: "openclaw" },
-      { label: "OpenBot vs Manus", external: false, to: "/compare/$slug", slug: "manus" },
       { label: "OpenBot vs Claude Cowork", external: false, to: "/compare/$slug", slug: "claude-cowork" },
+      { label: "OpenBot vs ChatGPT dots", external: false, to: "/compare/$slug", slug: "chatgpt-dots" },
+      { label: "OpenBot vs Manus", external: false, to: "/compare/$slug", slug: "manus" },
       { label: "OpenBot vs Devin", external: false, to: "/compare/$slug", slug: "devin" },
+      { label: "OpenBot vs Paperclip", external: false, to: "/compare/$slug", slug: "paperclip" },
+      { label: "OpenBot vs Viktor", external: false, to: "/compare/$slug", slug: "viktor" },
+      { label: "OpenBot vs Instinct", external: false, to: "/compare/$slug", slug: "instinct" },
       { label: "Best AI agent apps", external: false, to: "/compare/$slug", slug: "best-ai-agent-apps" },
       { label: "All comparisons", external: false, to: "/compare" },
     ],

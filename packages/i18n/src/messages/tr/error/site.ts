@@ -23,7 +23,7 @@ export const messages = {
   "error.site.tooManyFiles": "Bir site en fazla {limit} dosya içerebilir.",
   "error.site.hiddenFile": "Gizli dosyalara izin verilmez: {path}",
   "error.site.unsafePath": "Bu dosya yoluna izin verilmez: {path}",
-  "error.site.secretFile": "Kimlik bilgileri, özel anahtarlar ve sunucu kaynak koduna izin verilmez: {path}",
+  "error.site.secretFile": "Kimlik bilgilerine, özel anahtarlara ve sunucu kaynak koduna izin verilmez: {path}",
   "error.site.fileType": "Bu dosya türüne izin verilmez: {path}",
   "error.site.fileOutsideRoot": "Site dosyaları kaynak kökünün içinde kalmalıdır: {path}",
   "error.site.fileTooLarge": "Bir dosya 1 MB sınırını aşıyor: {path}",

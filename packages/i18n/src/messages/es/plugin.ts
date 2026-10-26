@@ -7,7 +7,7 @@ export const messages = {
   "plugin.link.terms": "Condiciones del servicio",
   "plugin.copyLink": "Copiar enlace",
   "plugin.askPrompt": "Pregunta a {name}: {prompt}",
-  "plugin.section.apps": "Aplicaciones",
+  "plugin.section.apps": "Apps",
   "plugin.section.skills": "Habilidades",
   "plugin.section.information": "Información",
   "plugin.info.developer": "Desarrollador",
@@ -17,8 +17,8 @@ export const messages = {
   "plugin.uninstallDialog.description":
     "Esto elimina lo que {name} instaló en este equipo. No cambia nada más en este host ni en este agente.",
   "plugin.uninstallDialog.confirm": "Desconectar",
-  "plugin.uninstallDialog.appsLabel": "Aplicaciones que se eliminarán: {number}",
-  "plugin.uninstallDialog.appsTitle": "Aplicaciones eliminadas de este host",
+  "plugin.uninstallDialog.appsLabel": "Apps que se eliminarán: {number}",
+  "plugin.uninstallDialog.appsTitle": "Apps eliminadas de este host",
   "plugin.uninstallDialog.appsNote":
     "Sus herramientas dejan de estar disponibles y se olvidan los datos de inicio de sesión que OpenBot guardaba para ellas.",
   "plugin.uninstallDialog.skillsLabel": "Habilidades que se eliminarán: {number}",

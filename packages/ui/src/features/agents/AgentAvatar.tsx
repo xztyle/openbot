@@ -59,7 +59,7 @@ interface AgentAvatarProps {
   agent?: Pick<AgentProfile, "avatarSeed" | "avatarHue" | "avatarUrl"> | undefined;
   seed?: string | undefined;
   hue?: AvatarHue | null;
-  url?: string | null;
+  url?: string | null | undefined;
   motion?: AvatarMotion;
   /** What the agent is doing. It chooses the face, never the silhouette. */
   mood?: AvatarMood;
@@ -271,11 +271,11 @@ function GeneratedAvatar(props: {
   hue: AvatarHue | null;
   motion: AvatarMotion;
   mood: AvatarMood;
-  cycleOffset?: number;
-  animationOffset?: number;
-  shape?: SupportedAvatarSilhouetteId;
+  cycleOffset?: number | undefined;
+  animationOffset?: number | undefined;
+  shape?: SupportedAvatarSilhouetteId | undefined;
   followPointer: boolean;
-  breathe?: string;
+  breathe?: string | undefined;
   class: string;
   style?: Record<string, string>;
 }) {

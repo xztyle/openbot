@@ -38,6 +38,26 @@ export function isGlobalSearchShortcut(input: BrowserShortcutInput): boolean {
   );
 }
 
+/**
+ * A key of the full browser view, as other browsers have them: new, reopen, close and select tab,
+ * address, reload, back and forward. The page has the focus nearly all the time, so the host sends
+ * these keys on to the window, where the view acts on them. `browser-view-shortcuts.ts` in
+ * `@openbot/ui` reads the same keys.
+ */
+export function isBrowserViewShortcut(input: BrowserShortcutInput, mac: boolean): boolean {
+  if (input.type !== "keyDown") return false;
+  const key = input.key.toLowerCase();
+  if (input.control && !input.meta && !input.alt && key === "tab") return true;
+  if (input.control && input.shift && !input.meta && !input.alt && (key === "pageup" || key === "pagedown")) {
+    return true;
+  }
+  const mod = mac ? input.meta && !input.control : input.control && !input.meta;
+  if (!mod) return false;
+  if (input.alt) return mac && !input.shift && (key === "arrowleft" || key === "arrowright");
+  if (key === "t") return true;
+  return !input.shift && (["w", "l", "r", "[", "]"].includes(key) || /^[1-9]$/.test(key));
+}
+
 export function isSelectAllShortcut(input: BrowserShortcutInput): boolean {
   return (
     input.type === "keyDown" &&

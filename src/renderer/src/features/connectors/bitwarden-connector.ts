@@ -1,110 +1,100 @@
-import type { BitwardenConnectorStatus } from "@openbot/contracts/ipc";
-import { classifyFailure } from "@openbot/telemetry";
-import { toast } from "@openbot/ui";
-import type { BitwardenConnectorPanelProps } from "@openbot/ui/features/settings/BitwardenConnectorPanel";
+import { type BitwardenConnectorStatus, DISCONNECTED_BITWARDEN_CONNECTOR } from "@openbot/contracts/ipc";
 import { currentText } from "@openbot/ui/text";
-import { createStore, onSettled } from "solid-js";
-import { bitwardenConnectorPort } from "./bitwarden-connector-port";
+import { createSignal, onCleanup, onSettled } from "solid-js";
+import { type BitwardenConnectorPort, bitwardenConnectorPort } from "./bitwarden-connector-port";
+import {
+  type ConnectorAnalyticsAction,
+  type ConnectorController,
+  createConnectorActions,
+  NO_WATCH,
+} from "./connector-controller";
 
-/** The local connection is shared by the Marketplace and server settings. */
-export function createBitwardenConnector(port = bitwardenConnectorPort): BitwardenConnectorPanelProps {
-  const [state, setState] = createStore({ status: { connected: false }, busy: false, statusFailed: false });
-  let disposed = false;
-  let attempt = 0;
-  /** A failed read is shown as unknown: it is not the answer "Not connected". */
-  const readStatus = () => {
-    const current = attempt;
+/**
+ * The Bitwarden connection of this computer or of a joined server. Reads the status once and then
+ * follows the port's `changed` event. The page asks for a session key, or on a joined server for an
+ * API key and the master password, so a card has no one-click connect.
+ */
+export function createBitwardenConnector(
+  port: () => BitwardenConnectorPort = bitwardenConnectorPort,
+  /** The joined server whose connection this is, or undefined for this computer's. */
+  hostName?: () => string | undefined,
+): ConnectorController {
+  const [status, setStatus] = createSignal<BitwardenConnectorStatus>(DISCONNECTED_BITWARDEN_CONNECTOR);
+  /** False until the first status read ends. Until then, the page does not show the default status. */
+  const [read, setRead] = createSignal(false);
+  /** Why the last status read failed, until a newer status comes. While it is set, the state is not known. */
+  const [statusError, setStatusError] = createSignal<string | null>(null);
+  const actions = createConnectorActions("connector.bitwarden.actionFailed", "bitwarden");
+  /** Counts the statuses that came, so a failed read does not hide a status that came after it started. */
+  let statuses = 0;
+  const show = (next: BitwardenConnectorStatus) => {
+    statuses += 1;
+    setStatus(next);
+    setStatusError(null);
+  };
+
+  const unsubscribe = port().onChanged((next) => {
+    if (!actions.disposed()) show(next);
+  });
+  const reload = () => {
+    const before = statuses;
     void port()
       .status()
-      .then((status) => {
-        if (!disposed && current === attempt)
-          setState((draft) => {
-            draft.status = status;
-            draft.statusFailed = false;
-          });
-      })
-      .catch(() => {
-        if (!disposed && current === attempt)
-          setState((draft) => {
-            draft.statusFailed = true;
-          });
-      });
-  };
-  onSettled(() => {
-    const unsubscribe = port().onChanged((status) => {
-      if (!disposed)
-        setState((draft) => {
-          draft.status = status;
-          draft.statusFailed = false;
-        });
-    });
-    readStatus();
-    return () => {
-      disposed = true;
-      unsubscribe();
-    };
-  });
-  const run = (action: () => Promise<BitwardenConnectorStatus>) => {
-    const current = ++attempt;
-    setState((draft) => {
-      draft.busy = true;
-    });
-    void action()
-      .then((status) => {
-        if (!disposed && current === attempt)
-          setState((draft) => {
-            draft.status = status;
-          });
+      .then((next) => {
+        if (!actions.disposed()) show(next);
       })
       .catch((error: unknown) => {
-        if (disposed || current !== attempt) return;
+        if (actions.disposed() || before !== statuses) return;
         const { t, errorMessage } = currentText();
-        toast.error(errorMessage(error, t("connector.bitwarden.failed")), {
-          report: { operation: "other", source: "system", cause_code: classifyFailure(error) },
-        });
+        setStatusError(errorMessage(error, t("connector.readFailed")));
       })
       .finally(() => {
-        if (!disposed && current === attempt)
-          setState((draft) => {
-            draft.busy = false;
-          });
+        if (!actions.disposed()) setRead(true);
       });
   };
+  onSettled(reload);
+  onCleanup(unsubscribe);
+
+  const run = (action: () => Promise<BitwardenConnectorStatus>, track: ConnectorAnalyticsAction) =>
+    actions.run(action, { done: show, track });
+
   return {
-    get status() {
-      return state.status;
+    id: "bitwarden",
+    ready: read,
+    available: () => true,
+    busy: actions.busy,
+    reload,
+    watch: NO_WATCH,
+    detail: {
+      id: "bitwarden",
+      props: {
+        get status() {
+          return status();
+        },
+        get busy() {
+          return actions.busy();
+        },
+        get statusError() {
+          return statusError();
+        },
+        get hostName() {
+          return hostName?.();
+        },
+        onRetry: reload,
+        onConnect: (key) => run(() => port().connect(key), "connected"),
+        onConnectHost: (input) => run(() => port().connectHost(input), "connected"),
+        onDisconnect: () => run(() => port().disconnect(), "disconnected"),
+        /**
+         * Stops a connect that waits for the CLI. The main process ends a pending connect when it is
+         * asked to disconnect, so that is the call. It does not wait, so the buttons free at once and the
+         * late answer of the connect is dropped. A connection that stands is ended by Disconnect, which
+         * asks first.
+         */
+        onCancel: () => {
+          if (!actions.busy() || status().connected) return;
+          actions.run(() => port().disconnect(), { waits: false, done: show });
+        },
+      },
     },
-    get busy() {
-      return state.busy;
-    },
-    get statusFailed() {
-      return state.statusFailed;
-    },
-    onConnect: (key) => {
-      if (!state.busy) run(() => port().connect(key));
-    },
-    onDisconnect: () => run(() => port().disconnect()),
-    /**
-     * Stops a connect that waits for the CLI. The main process ends a pending connect when it is asked
-     * to disconnect, so that is the call. It is made only for a connect that is pending: a connection
-     * that stands is ended by Disconnect, which asks first.
-     */
-    onCancel: () => {
-      if (!state.busy || state.status.connected) return;
-      attempt += 1;
-      setState((draft) => {
-        draft.busy = false;
-      });
-      void port()
-        .disconnect()
-        .then((status) => {
-          if (!disposed)
-            setState((draft) => {
-              draft.status = status;
-            });
-        })
-        .catch(() => undefined);
-    },
-    onRetryStatus: readStatus,
   };
 }

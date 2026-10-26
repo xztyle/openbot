@@ -66,29 +66,25 @@ export interface RespondToApprovalInput {
 }
 
 /**
- * Which agents answer approvals without asking, and whether every agent does.
+ * Which agents answer approvals without asking: the "Full access" permission level.
  *
  * This belongs to the computer that runs the agent, not to the approval, and is never carried over
  * the Team API: the released adapters freeze an approval response to `accept` or `decline`. A
- * remote host that has automation on answers its own approvals, so they never reach a client.
+ * remote host answers the approvals of its own Full access agents, so they never reach a client.
  */
 export interface ApprovalAutomationPreference {
-  /** Turbo mode. Every local agent's eligible approvals are answered automatically. */
-  turbo: boolean;
   /** Default for agents without an explicit choice. */
   defaultAutoApprove: boolean;
-  /** Saved choices survive Turbo being enabled and disabled. */
   autoApproveOverrides: Record<string, boolean>;
 }
 
 export const DEFAULT_APPROVAL_AUTOMATION_PREFERENCE: ApprovalAutomationPreference = {
-  turbo: false,
   defaultAutoApprove: true,
   autoApproveOverrides: {},
 };
 
 export function isApprovalAutomationPreference(value: unknown): value is ApprovalAutomationPreference {
-  if (!isDynamicRecord(value) || !isBoolean(value.turbo) || !isBoolean(value.defaultAutoApprove)) return false;
+  if (!isDynamicRecord(value) || !isBoolean(value.defaultAutoApprove)) return false;
   if (!isDynamicRecord(value.autoApproveOverrides)) return false;
   const entries = Object.entries(value.autoApproveOverrides);
   return (
@@ -97,30 +93,13 @@ export function isApprovalAutomationPreference(value: unknown): value is Approva
 }
 
 export function agentAutoApprovalEnabled(preference: ApprovalAutomationPreference, agentId: string): boolean {
-  if (preference.turbo) return true;
   if (!Object.hasOwn(preference.autoApproveOverrides, agentId)) return preference.defaultAutoApprove;
   return preference.autoApproveOverrides[agentId] === true;
 }
 
-/**
- * One call changes one thing: the global switch, or one agent's grant. Both are optional so a
- * caller never has to read the preference back before it can write a single field.
- */
-export interface SetApprovalAutomationInput {
-  turbo?: boolean;
-  agentId?: string;
-  autoApprove?: boolean;
-}
-
-export function isSetApprovalAutomationInput(value: unknown): value is SetApprovalAutomationInput {
-  if (!isDynamicRecord(value)) return false;
-  if (value.turbo !== undefined && !isBoolean(value.turbo)) return false;
-  // A grant needs both halves. An id without a decision says nothing, and a decision without an id
-  // would become a second, unreviewed way to write the global switch.
-  const hasGrant = value.agentId !== undefined || value.autoApprove !== undefined;
-  if (hasGrant && !(isIdentifier(value.agentId) && isBoolean(value.autoApprove))) return false;
-  return value.turbo !== undefined || hasGrant;
-}
+/** `sign-in-blocked`: the site refused the sign-in from the host's address. */
+export const BROWSER_TAKEOVER_REASONS = ["sign-in-blocked"] as const;
+export type BrowserTakeoverReason = (typeof BROWSER_TAKEOVER_REASONS)[number];
 
 export interface BrowserTakeoverRequest {
   requestId: string | number;
@@ -129,6 +108,7 @@ export interface BrowserTakeoverRequest {
   turnId: string;
   tabId: string;
   secret?: BrowserSecretRequest;
+  reason?: BrowserTakeoverReason;
 }
 
 export function isBrowserTakeoverRequest(value: unknown): value is BrowserTakeoverRequest {
@@ -139,7 +119,8 @@ export function isBrowserTakeoverRequest(value: unknown): value is BrowserTakeov
     isIdentifier(value.threadId) &&
     isIdentifier(value.turnId) &&
     isIdentifier(value.tabId) &&
-    (value.secret === undefined || isBrowserSecretRequest(value.secret))
+    (value.secret === undefined || isBrowserSecretRequest(value.secret)) &&
+    (value.reason === undefined || isOneOf(BROWSER_TAKEOVER_REASONS, value.reason))
   );
 }
 

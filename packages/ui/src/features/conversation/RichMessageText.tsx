@@ -1,12 +1,12 @@
 import { type ChatTagKind, chatTagReferences } from "@openbot/contracts/chat-tag-references";
-import type { AttachmentSummary, InstalledSkill } from "@openbot/contracts/ipc";
+import type { AttachmentSummary } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
-import { Blocks, Button, Puzzle } from "@openbot/ui";
+import { Blocks, Button, Puzzle, TextQuote } from "@openbot/ui";
 import { ReferenceChip } from "@openbot/ui/reference-chip";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, createUniqueId, For, Show, untrack } from "solid-js";
-import type { AgentProfile, MessageCitation } from "../../data";
+import type { ComposerAgent, ComposerSkill, MessageCitation } from "../../data";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
 import { AnchoredTooltip } from "./AnchoredTooltip";
@@ -23,25 +23,35 @@ import {
 
 export interface RichMessageTextProps {
   body: string;
-  agents: AgentProfile[];
-  skills?: InstalledSkill[];
-  attachments?: AttachmentSummary[];
-  citations?: MessageCitation[];
+  agents: ComposerAgent[];
+  skills?: ComposerSkill[] | undefined;
+  attachments?: AttachmentSummary[] | undefined;
+  citations?: MessageCitation[] | undefined;
   onSelectAgent: (agentId: string) => void;
   onOpenLink: (url: string) => void;
-  onOpenAttachment?: (attachment: AttachmentSummary) => void;
-  onOpenSharedFile?: (path: string) => void;
-  onOpenWorkspaceFile?: (path: string) => void;
+  onOpenAttachment?: ((attachment: AttachmentSummary) => void) | undefined;
+  onOpenSharedFile?: ((path: string) => void) | undefined;
+  onOpenWorkspaceFile?: ((path: string) => void) | undefined;
+  /** Shows the passage that a quote tag names. Without it, a quote is a chip that does nothing. */
+  onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
   showCitationFooter?: boolean;
   /** The characters of a streaming body after this text. It fades the words revealed last. */
   streamingTailAfter?: number | undefined;
+  /**
+   * False shows only the link icon, so that no linked site is asked for its favicon. Use it for
+   * text that another person wrote, such as the instructions of a shared agent.
+   */
+  linkFavicons?: boolean | undefined;
 }
 
 const UNAVAILABLE_TAG_LABELS = {
   agent: "chat.tag.unavailableAgent",
   skill: "chat.tag.unavailableSkill",
   mcp: "chat.tag.unavailableMcp",
-} as const satisfies Record<ChatTagKind, AppTextKey>;
+} as const satisfies Record<UnavailableTagKind, AppTextKey>;
+
+/* A quote carries its own text, so it never depends on something that can go away. */
+type UnavailableTagKind = Exclude<ChatTagKind, "quote">;
 
 export function RichMessageText(props: RichMessageTextProps) {
   const { t } = useText();
@@ -73,8 +83,8 @@ export function RichMessageText(props: RichMessageTextProps) {
   } | null>(null);
 
   const openTooltip = (anchor: HTMLElement, content: string, onlyWhenTruncated = false) => {
-    const label = anchor.querySelector<HTMLElement>(".inline-file-reference-name");
-    if (onlyWhenTruncated && (!label || label.scrollWidth <= label.clientWidth + 1)) {
+    // The chip, not its inline name, clips the name and shows the ellipsis.
+    if (onlyWhenTruncated && anchor.scrollWidth <= anchor.clientWidth + 1) {
       setTooltip(null);
       return;
     }
@@ -131,7 +141,12 @@ export function RichMessageText(props: RichMessageTextProps) {
           }
           if (part.url) {
             return (
-              <MessageLink url={part.url} onOpenLink={props.onOpenLink}>
+              <MessageLink
+                url={part.url}
+                title={linkTitle(part.text, part.url)}
+                favicon={props.linkFavicons !== false}
+                onOpenLink={props.onOpenLink}
+              >
                 {part.text}
               </MessageLink>
             );
@@ -154,6 +169,19 @@ export function RichMessageText(props: RichMessageTextProps) {
           }
           if (part.mcpName) {
             return <ReferenceChip class="message-reference-chip" kind="mcp" name={part.mcpName} icon={<Blocks />} />;
+          }
+          if (part.quote) {
+            const quote = part.quote;
+            const onOpenQuote = props.onOpenQuote;
+            return (
+              <ReferenceChip
+                kind="quote"
+                name={quote.text}
+                class="message-reference-chip message-quote-tag"
+                icon={<TextQuote />}
+                onClick={onOpenQuote ? () => onOpenQuote(quote.messageId, quote.text) : undefined}
+              />
+            );
           }
           if (part.unavailableKind) {
             return (
@@ -266,8 +294,11 @@ function StreamingTailText(props: { body: string; after: number }) {
 
 export function MessageLink(props: {
   url: string;
-  title?: string | null;
+  /** The native tooltip. Omit it when the link text already shows the URL. */
+  title?: string | undefined;
   children: JSX.Element;
+  /** False keeps the request for the linked site's favicon from being made. */
+  favicon?: boolean;
   onOpenLink: (url: string) => void;
 }) {
   return (
@@ -276,7 +307,7 @@ export function MessageLink(props: {
       href={props.url}
       data-cuelume-navigate=""
       data-cuelume-emphasis="subtle"
-      title={props.title ?? props.url}
+      title={props.title}
       onClick={(event) => {
         event.preventDefault();
         props.onOpenLink(props.url);
@@ -284,14 +315,16 @@ export function MessageLink(props: {
     >
       <span class="message-link-icon" aria-hidden="true">
         <LinkIcon />
-        <img
-          src={faviconUrl(props.url)}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          referrerpolicy="no-referrer"
-          onError={(event) => event.currentTarget.remove()}
-        />
+        <Show when={props.favicon !== false}>
+          <img
+            src={faviconUrl(props.url)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            referrerpolicy="no-referrer"
+            onError={(event) => event.currentTarget.remove()}
+          />
+        </Show>
       </span>
       {props.children}
     </a>
@@ -304,6 +337,7 @@ function plainTextPart(part: RichMessagePart): boolean {
     part.agent ||
     part.skill ||
     part.mcpName ||
+    part.quote ||
     part.unavailableKind ||
     part.citation ||
     part.attachment ||
@@ -313,14 +347,16 @@ function plainTextPart(part: RichMessagePart): boolean {
 
 interface RichMessagePart {
   text: string;
-  agent?: AgentProfile;
-  skill?: InstalledSkill;
+  agent?: ComposerAgent | undefined;
+  skill?: ComposerSkill;
   /**
    * An MCP server tag carries the name it was written with, and nothing looks it up. A message is a
    * record of what the user asked, and a server removed since does not make that record wrong.
    */
   mcpName?: string;
-  unavailableKind?: ChatTagKind;
+  /** Text the user quoted from a message of this chat. */
+  quote?: { messageId: string; text: string };
+  unavailableKind?: UnavailableTagKind;
   citation?: MessageCitation;
   attachment?: AttachmentSummary;
   sharedPath?: string;
@@ -329,14 +365,20 @@ interface RichMessagePart {
 
 function richMessageParts(
   body: string,
-  agents: AgentProfile[],
-  skills: InstalledSkill[],
+  agents: ComposerAgent[],
+  skills: ComposerSkill[],
   citationsByNumber: Map<number, MessageCitation>,
   attachmentsById: Map<string, AttachmentSummary>,
 ): RichMessagePart[] {
   const parts: RichMessagePart[] = [];
   for (const taggedReference of semanticTagParts(body, agents, skills)) {
-    if (taggedReference.agent || taggedReference.skill || taggedReference.mcpName || taggedReference.unavailableKind) {
+    if (
+      taggedReference.agent ||
+      taggedReference.skill ||
+      taggedReference.mcpName ||
+      taggedReference.quote ||
+      taggedReference.unavailableKind
+    ) {
       parts.push(taggedReference);
       continue;
     }
@@ -362,7 +404,7 @@ function richMessageParts(
   return parts;
 }
 
-function semanticTagParts(body: string, agents: AgentProfile[], skills: InstalledSkill[]): RichMessagePart[] {
+function semanticTagParts(body: string, agents: ComposerAgent[], skills: ComposerSkill[]): RichMessagePart[] {
   const references = chatTagReferences(body);
   if (references.length === 0) return [{ text: body }];
   const parts: RichMessagePart[] = [];
@@ -374,6 +416,8 @@ function semanticTagParts(body: string, agents: AgentProfile[], skills: Installe
       parts.push(agent ? { text: agent.name, agent } : { text: reference.name, unavailableKind: "agent" });
     } else if (reference.kind === "mcp") {
       parts.push({ text: reference.name, mcpName: reference.name });
+    } else if (reference.kind === "quote") {
+      parts.push({ text: reference.name, quote: { messageId: reference.id, text: reference.name } });
     } else {
       const skill = skills.find(
         (candidate) => candidate.skillId === reference.id && candidate.state !== "needs-repair",
@@ -447,6 +491,11 @@ function linkedMessageParts(body: string): RichMessagePart[] {
   return parts.length > 0 ? parts : [{ text: body }];
 }
 
+/** The URL as a tooltip, unless the link text is already that URL. */
+export function linkTitle(text: string, url: string): string | undefined {
+  return text === url || `${text}/` === url ? undefined : url;
+}
+
 export function safeBrowserUrl(value: string): string | null {
   try {
     const url = new URL(value);
@@ -478,12 +527,12 @@ function CitationArrowIcon() {
 
 interface AgentTagMatcher {
   expression: RegExp;
-  agentsByName: Map<string, AgentProfile>;
+  agentsByName: Map<string, ComposerAgent>;
 }
 
-const agentTagMatchers = new WeakMap<AgentProfile[], AgentTagMatcher>();
+const agentTagMatchers = new WeakMap<ComposerAgent[], AgentTagMatcher>();
 
-function agentTagMatcher(agents: AgentProfile[]): AgentTagMatcher | null {
+function agentTagMatcher(agents: ComposerAgent[]): AgentTagMatcher | null {
   if (agents.length === 0) return null;
   const cached = agentTagMatchers.get(agents);
   if (cached) return cached;
@@ -499,12 +548,12 @@ function agentTagMatcher(agents: AgentProfile[]): AgentTagMatcher | null {
   return matcher;
 }
 
-function taggedMessageParts(body: string, agents: AgentProfile[]) {
+function taggedMessageParts(body: string, agents: ComposerAgent[]) {
   if (!body.includes("@")) return [{ text: body, agent: undefined }];
   const matcher = agentTagMatcher(agents);
   if (!matcher) return [{ text: body, agent: undefined }];
   matcher.expression.lastIndex = 0;
-  const parts: Array<{ text: string; agent: AgentProfile | undefined }> = [];
+  const parts: Array<{ text: string; agent: ComposerAgent | undefined }> = [];
   let cursor = 0;
   for (const match of body.matchAll(matcher.expression)) {
     const index = match.index ?? 0;

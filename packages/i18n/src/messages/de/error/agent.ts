@@ -2,7 +2,11 @@ import type { PartialTranslation } from "../../../message";
 import type { messages as source } from "../../en/error/agent";
 
 export const messages = {
-  "error.agent.approvalWhileDeleting": "Während der Agent gelöscht wird, kann keine Freigabe erteilt werden.",
+  "error.agent.historyUnavailable":
+    "Der Verlauf ist für diese Anfrage nicht verfügbar. Lies den aktuellen Verlauf erneut oder verwende channel_history für Arbeit in Kanälen.",
+  "error.agent.toolRequestInvalid":
+    "Ungültige Argumente für die Werkzeugsuche. Verwende das deklarierte Schema und einen originalen qualifizierten Werkzeugnamen.",
+  "error.agent.approvalWhileDeleting": "Während der Agent gelöscht wird, kann keine Genehmigung erteilt werden.",
   "error.agent.accessLocalOnly":
     "Der Agentenzugriff kann nur auf dem Computer geändert werden, auf dem der Agent läuft.",
   "error.agent.duplicateCleanupFailed":
@@ -46,11 +50,16 @@ export const messages = {
     "{provider} hat kein verfügbares Modell. Auch kein anderer angemeldeter Anbieter hat eines. Melde dich bei einem Anbieter an oder ändere den Standardanbieter unter Anbieter und Berechtigungen.",
   "error.agent.waitBeforeProviderChange":
     "Warte, bis der aktive Durchlauf und die Warteschlange abgeschlossen sind, bevor du den Anbieter wechselst.",
+  "error.agent.waitForTasksBeforeProviderChange":
+    "Aufgaben dieses Agenten laufen. Warte, bis sie abgeschlossen sind, oder stoppe sie, bevor du den Anbieter wechselst.",
   "error.agent.waitBeforeClearContext":
     "Warte, bis der aktive Durchlauf und die Warteschlange abgeschlossen sind, bevor du einen neuen Chat beginnst.",
+  "error.agent.waitBeforeCompactContext":
+    "Warte, bis der aktive Durchlauf und die Warteschlange fertig sind, bevor du den Kontext komprimierst.",
+  "error.agent.compactContextUnavailable": "Dieser Agent kann seinen Kontext jetzt nicht komprimieren.",
   "error.agent.unknown": "Unbekannter Agent: {id}",
   "error.agent.onlyUserWidensSettings":
-    "Nur der Benutzer kann einem Agenten Vollzugriff geben oder die Computersteuerung aktivieren. Bitte den Benutzer, dies in den Agenteneinstellungen zu ändern.",
+    "Nur der Benutzer kann einem Agenten „Voller Zugriff“ geben oder die Computersteuerung aktivieren. Bitte den Benutzer, dies in den Agenteneinstellungen zu ändern.",
   "error.agent.queuedMessageCreateFailed": "Die Nachricht konnte nicht in die Warteschlange aufgenommen werden.",
   "error.agent.messageUnavailable": "Die Nachricht ist nicht mehr verfügbar.",
   "error.agent.hostLimit": "Ein Host kann bis zu {limit} Agenten haben.",
@@ -64,6 +73,8 @@ export const messages = {
   "error.agent.copyNameFailed": "OpenBot konnte keinen eindeutigen Namen für die Agentenkopie erstellen.",
   "error.agent.endpointRemoved":
     "Der von diesem Agenten verwendete Endpunkt wurde entfernt. Wähle ein anderes Modell für ihn.",
+  "error.agent.turnStalled":
+    "{provider} reagiert nicht mehr, daher hat OpenBot diesen Durchlauf beendet. Sende die Nachricht erneut oder wähle ein anderes Modell.",
   "error.agent.selectedGone": "Der gewählte Agent existiert nicht mehr.",
   "error.agent.profileEndpointsChanged":
     "Die benutzerdefinierten Endpunkte wurden während der Erstellung geändert. Versuche es erneut.",
@@ -97,16 +108,48 @@ export const messages = {
     "Die Computersteuerung kann nur auf dem Computer geändert werden, auf dem der Agent läuft.",
   "error.agent.automationLocalOnly":
     "Lokale Skripte können nur auf dem Computer erlaubt werden, auf dem der Agent läuft.",
+  "error.agent.newChatLocalOnly": "Nur der Computer, auf dem der Agent läuft, kann ihm neue Chats erlauben.",
+  "error.agent.quickAcknowledgementLocalOnly":
+    "Nur der Computer, auf dem der Agent läuft, kann diese Einstellung ändern.",
+  "error.agent.sideQuestionBusy": "Es laufen zu viele Nebenfragen. Versuche es gleich noch einmal.",
+  "error.agent.sideQuestionFailed": "Der Agent konnte die Nebenfrage nicht beantworten. Versuche es erneut.",
   "error.agent.busyMessageModeLocalOnly":
     "Das Verhalten von Nachrichten während der Arbeit des Agenten kann nur auf dem Computer eingestellt werden, auf dem der Agent läuft.",
+  "error.agent.backupModelsLocalOnly":
+    "Ersatzmodelle können nur auf dem Computer eingestellt werden, auf dem der Agent läuft.",
+  "error.agent.taskLimitLocalOnly":
+    "Das Aufgabenlimit lässt sich nur auf dem Computer festlegen, auf dem der Agent läuft.",
+  "error.agent.localScriptsOff": "Dieser Agent erlaubt keine lokalen Skripte.",
+  "error.agent.localScriptsRateLimited":
+    "Lokale Skripte haben diesem Agenten in der letzten Stunde {limit} Nachrichten- oder Routinenanfragen gesendet. Versuche es später erneut.",
   "error.agent.automationOff": "Dieser Agent erlaubt lokalen Skripten nicht, seine Routinen auszuführen.",
   "error.agent.automationPayloadTooLong": "Die Nutzdaten sind länger als {limit} Zeichen.",
   "error.agent.automationRateLimited":
     "Lokale Skripte haben die Routinen dieses Agenten in der letzten Stunde {limit}-mal ausgeführt. Versuche es später erneut.",
   "error.agent.workspaceOnlyMacOnly":
-    "Nur Arbeitsbereich ist für diesen Anbieter nur unter macOS verfügbar. Wähle Vollzugriff in den Agenteneinstellungen.",
+    "„Nur Arbeitsbereich“ ist für diesen Anbieter nur unter macOS verfügbar. Wähle „Voller Zugriff“ in den Agenteneinstellungen.",
   "error.agent.lowMemory":
     "Dieser Server hat wenig freien Arbeitsspeicher. Deine Nachricht wartet in der Warteschlange und startet, wenn Speicher frei ist. Ein größerer Tarif gibt dem Server mehr Arbeitsspeicher.",
+  "error.agent.lowMemoryServer":
+    "Dieser Server hat wenig freien Arbeitsspeicher. Deine Nachricht wartet in der Warteschlange und startet, wenn Speicher frei ist.",
   "error.agent.workspaceOnlyToolMissing":
-    "Nur Arbeitsbereich benötigt {tool}, das OpenBot nicht gefunden hat. Installiere es oder wähle Vollzugriff in den Agenteneinstellungen.",
+    "„Nur Arbeitsbereich“ benötigt {tool}, das OpenBot nicht gefunden hat. Installiere es oder wähle „Voller Zugriff“ in den Agenteneinstellungen.",
+  "error.agent.screenCaptureOff":
+    "Die Bildschirmaufnahme ist für diesen Agenten deaktiviert. Der Benutzer kann die Computersteuerung in den Agenteneinstellungen aktivieren.",
+  "error.agent.screenCaptureUnavailable": "Die Bildschirmaufnahme ist auf diesem Computer nicht verfügbar.",
+  "error.agent.screenCaptureShared":
+    "Die Bildschirmaufnahme funktioniert nicht in einer Slack-, Discord- oder Telegram-Unterhaltung, da andere Personen ihre Dateien erhalten.",
+  "error.agent.screenCaptureDeclined":
+    "Der Benutzer hat diese Bildschirmaufnahme nicht erlaubt. Es wurde nichts aufgenommen.",
+  "error.agent.screenCaptureWindowMissing":
+    "Dieses Fenster ist gerade nicht geöffnet. Rufe list_capture_sources auf, um die aktuellen Fenster-IDs zu erhalten.",
+  "error.agent.screenCaptureDisplayMissing":
+    "Dieser Bildschirm ist gerade nicht verbunden. Rufe list_capture_sources auf, um die aktuellen Bildschirm-IDs zu erhalten.",
+  "error.agent.screenCaptureRegionOutside":
+    "Der Bereich liegt nicht innerhalb eines Bildschirms. Verwende Desktop-Punkte innerhalb der Grenzen eines Bildschirms aus list_capture_sources.",
+  "error.agent.screenCapturePermissionMissing":
+    "OpenBot hat keine Berechtigung zur Bildschirmaufnahme. Bitte den Benutzer, Systemeinstellungen → Datenschutz & Sicherheit → Bildschirm- & Systemaudioaufnahme zu öffnen, OpenBot zu aktivieren und OpenBot dann zu beenden und neu zu öffnen.",
+  "error.agent.screenCaptureEmptyWindows":
+    "Windows hat ein leeres Bild geliefert. Bitte den Benutzer, den Computer zu entsperren und geschützte Inhalte zu schließen. Auch eine Richtlinie der Organisation kann die Bildschirmaufnahme verhindern.",
+  "error.agent.screenCaptureFailed": "Die Bildschirmaufnahme ist fehlgeschlagen. Versuche es erneut.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -19,7 +19,6 @@ export const messages = {
   "status.remote.stageCompatibility": "Desktop-Kompatibilität wird geprüft: {reason}",
   "status.remote.stageAgents": "Agenten werden geladen: {reason}",
   "status.remote.stageReads": "Lesestatus wird geladen: {reason}",
-  "status.remote.stageConversations": "Unterhaltungen werden geladen: {reason}",
   "status.remote.suspendedDetail":
     "Aktualisiere OpenBot Mobile oder die Desktop-App, bevor du dich verbindest.\n{detail}",
   "status.remote.cooldownDetail":

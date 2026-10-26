@@ -13,5 +13,7 @@ export const messages = defineMessages("error.attachment", {
     "This server does not support EML attachments. Update OpenBot on the host and retry.",
   "error.attachment.textUnsupported":
     "This server does not support this text file type. Update OpenBot on the host and retry.",
+  "error.attachment.zipUnsupported":
+    "This server does not support ZIP attachments. Update OpenBot on the host and retry.",
   "error.attachment.previewTooLarge": "The file exceeds the 100 MB limit.",
 });

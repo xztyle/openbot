@@ -1,19 +1,26 @@
-import type { MenuAction } from "@expo/ui/community/menu";
 import { SIDEBAR_UNASSIGNED_SECTION_ID } from "@openbot/contracts/ipc";
 import { Link } from "expo-router";
 import { useRef, useState } from "react";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
-import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import {
+  useMobileWorkspaceReader,
+  useMobileWorkspaceSelector,
+} from "@/features/workspace/context/mobile-workspace-context";
+import { showsOnline } from "@/features/workspace/model/server-status";
+import type { MenuAction } from "@/shared/components/menu-view";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 
 export function useChatSectionMenu(serverId: string, chatId: string) {
   const { t } = useText();
-  const { sidebarByServer, servers, mutateSidebarLayout } = useMobileWorkspace();
-  const layout = sidebarByServer[serverId]?.layout;
+  const workspace = useMobileWorkspaceReader();
+  const layout = useMobileWorkspaceSelector(({ sidebarByServer }) => sidebarByServer[serverId]?.layout);
+  const online = useMobileWorkspaceSelector(({ servers }) =>
+    servers.some((server) => server.id === serverId && showsOnline(server)),
+  );
   const pending = useRef(false);
   const [saving, setSaving] = useState(false);
-  const disabled = saving || !servers.some((server) => server.id === serverId && server.state === "online");
+  const disabled = saving || !online;
   const names = new Map(layout?.sections.map((section) => [section.id, section.name]));
   const sections = (layout?.order ?? []).flatMap((id) => {
     const name = id === SIDEBAR_UNASSIGNED_SECTION_ID ? t("mobile.agent.section.unassigned") : names.get(id);
@@ -25,7 +32,7 @@ export function useChatSectionMenu(serverId: string, chatId: string) {
     pending.current = true;
     setSaving(true);
     try {
-      await mutateSidebarLayout(serverId, {
+      await workspace().mutateSidebarLayout(serverId, {
         type: "assign",
         agentId: chatId,
         sectionId: sectionId === SIDEBAR_UNASSIGNED_SECTION_ID ? null : sectionId,
@@ -50,6 +57,7 @@ export function useChatSectionMenu(serverId: string, chatId: string) {
         {
           id: "sections",
           title: t("mobile.agent.section.moveTo"),
+          image: "folder",
           attributes: { disabled },
           subactions: sections.map((section) => ({
             id: `section:${section.id}`,

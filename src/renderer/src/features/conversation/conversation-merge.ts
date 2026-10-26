@@ -1,3 +1,5 @@
+import type { ConversationPage } from "@openbot/contracts/ipc";
+
 /**
  * Which messages a conversation shows after a page or a snapshot arrives.
  *
@@ -59,25 +61,47 @@ export function refreshLatestPage<Message extends { id: string }>(
 }
 
 /**
+ * The originals that the replies of a host page quote and that the host no longer has. A page
+ * sends each quoted original that is not on it among its references, so an original that is in
+ * neither was deleted. A live message comes with no references, so only a page can tell.
+ */
+export function missingReplyOriginals(page: Pick<ConversationPage, "messages" | "references">): Record<string, true> {
+  const pageIds = new Set(page.messages.map((message) => message.id));
+  const missing: Record<string, true> = {};
+  for (const { replyToMessageId } of page.messages) {
+    if (replyToMessageId && !pageIds.has(replyToMessageId) && !(replyToMessageId in page.references)) {
+      missing[replyToMessageId] = true;
+    }
+  }
+  return missing;
+}
+
+/**
  * The part of a refreshed snapshot a conversation may show without losing its
  * window.
  *
- * A snapshot with nothing older left to load is the whole conversation, so it
- * is shown whole. Otherwise it is the tail, and what the user is looking at
- * decides how much of it applies: a window loaded *around* a message keeps only
- * messages already on screen, because anything else in the snapshot belongs to
- * the far end of a gap. A window at the latest end keeps those, plus everything
- * after the last one it recognises - that is the new arrivals, and it is why a
- * refresh does not drop the older pages loaded above them.
+ * A snapshot that is not capped is the whole conversation, so it is shown
+ * whole. A capped one is only the tail: loaded messages before the first one it
+ * shares are older than that tail, so they stay. After them, a window at the
+ * latest end shows the snapshot from that first shared message, so a new
+ * message shows wherever it sorts. A window loaded *around* a message keeps
+ * only the messages already on screen, because the rest of the snapshot
+ * belongs to the far end of a gap.
  */
 export function windowedSnapshotMessages<Message extends { id: string }>(
   loaded: readonly Message[],
   snapshot: readonly Message[],
-  window: { hasOlder: boolean; mode: "latest" | "around" },
+  window: { mode: "latest" | "around"; capped: boolean },
 ): Message[] {
-  if (!window.hasOlder) return [...snapshot];
-  const loadedIds = new Set(loaded.map((message) => message.id));
-  if (window.mode === "around") return snapshot.filter((message) => loadedIds.has(message.id));
-  const lastLoadedIndex = snapshot.reduce((last, message, index) => (loadedIds.has(message.id) ? index : last), -1);
-  return snapshot.filter((message, index) => loadedIds.has(message.id) || index > lastLoadedIndex);
+  if (!window.capped) return [...snapshot];
+  const snapshotIds = new Set(snapshot.map((message) => message.id));
+  const firstShared = loaded.findIndex((message) => snapshotIds.has(message.id));
+  if (window.mode === "latest" && firstShared === -1) return [...snapshot];
+  const older = loaded.slice(0, firstShared === -1 ? loaded.length : firstShared);
+  if (window.mode === "around") {
+    const loadedIds = new Set(loaded.map((message) => message.id));
+    return [...older, ...snapshot.filter((message) => loadedIds.has(message.id))];
+  }
+  const firstSharedId = loaded[firstShared]?.id;
+  return [...older, ...snapshot.slice(snapshot.findIndex((message) => message.id === firstSharedId))];
 }

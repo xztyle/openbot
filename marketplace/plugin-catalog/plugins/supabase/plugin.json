@@ -1,16 +1,24 @@
 {
   "slug": "supabase",
   "name": "Supabase",
-  "tagline": "Database and project tools",
+  "tagline": "Databases, logs and edge functions",
   "description": "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
   "category": "coding",
   "creatorName": "supabase.com",
-  "iconUrl": "https://supabase.com/favicon.ico",
+  "iconUrl": "https://supabase.com/favicon/favicon.ico",
   "version": "1.0.0",
   "prompts": [
     {
-      "id": "prompt-inspect",
-      "text": "Show what I can access through Supabase. Do not change anything."
+      "id": "prompt-projects",
+      "text": "Which projects are in my Supabase organization?"
+    },
+    {
+      "id": "prompt-tables",
+      "text": "List the tables and columns of my Supabase database."
+    },
+    {
+      "id": "prompt-errors",
+      "text": "Which errors did my Supabase project log in the last hour?"
     }
   ],
   "apps": [
@@ -18,7 +26,7 @@
       "id": "app-supabase-mcp",
       "name": "Supabase",
       "description": "Connect to Supabase with a project-scoped server URL and a personal access token. Add project_ref to the URL and use read_only=true when you only need to inspect a project.",
-      "iconUrl": "https://supabase.com/favicon.ico",
+      "iconUrl": "https://supabase.com/favicon/favicon.ico",
       "server": {
         "name": "supabase",
         "transport": "http",
@@ -40,7 +48,7 @@
                 "label": "Supabase personal access token",
                 "header": "Authorization",
                 "prefix": "Bearer ",
-                "hint": "Supabase dashboard \u2192 Account \u2192 Access tokens"
+                "hint": "Supabase dashboard → Account → Access tokens"
               }
             ],
             "docsUrl": "https://supabase.com/docs/guides/ai-tools/mcp",
@@ -51,7 +59,7 @@
     }
   ],
   "skills": [],
-  "websiteUrl": "https://supabase.com/docs/guides/ai-tools/mcp",
-  "privacyPolicyUrl": null,
-  "termsUrl": null
+  "websiteUrl": "https://supabase.com",
+  "privacyPolicyUrl": "https://supabase.com/privacy",
+  "termsUrl": "https://supabase.com/terms"
 }

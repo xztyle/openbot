@@ -1,11 +1,17 @@
-import { TEAM_CONVERSATION_UNREAD_CAPABILITY } from "@openbot/contracts/team-protocol/current";
+import type { ChatWindowTarget } from "@openbot/contracts/ipc";
+import { AGENT_HIDDEN_CAPABILITY, TEAM_CONVERSATION_UNREAD_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { toast } from "@openbot/ui";
 import { computeAgentAvatarMoods } from "@openbot/ui/features/agents/agent-avatar-mood";
 import { Sidebar } from "@openbot/ui/features/sidebar/Sidebar";
+import { SidebarCommunityCard } from "@openbot/ui/features/sidebar/SidebarCommunityCard";
 import { SidebarMobileAppCard } from "@openbot/ui/features/sidebar/SidebarMobileAppCard";
-import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
+import { SidebarStorageCard } from "@openbot/ui/features/sidebar/SidebarStorageCard";
+import { computeSidebarAgentStates, sidebarChannelWaits } from "@openbot/ui/features/sidebar/sidebar-agent-states";
+import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { useText } from "@openbot/ui/text";
-import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, onSettled, Show } from "solid-js";
+import { appPort } from "../../app-port";
+import { type ChatHistoryEntry, chatHistoryKeys } from "../../chat-history";
 import { globalSearchShortcutLabel } from "../../global-search-shortcut";
 import { useLayout } from "../../layout";
 import { DirectConversation } from "../../lazy-views";
@@ -14,16 +20,23 @@ import { usePlatform } from "../../platform";
 import { currentDevicePlatform } from "../../send-shortcut-preference";
 import { useTurns } from "../../turns";
 import { useAgentActions } from "../agents/agent-actions";
+import { agentThreadAttention } from "../agents/agent-thread-attention";
 import { useAgents } from "../agents/agents-context";
 import { useChannels } from "../channels/channels-context";
 import { useConversation } from "../conversation/conversation-context";
 import { useDirectMessages } from "../conversation/direct-messages-context";
 import { useServerActions } from "../servers/server-actions";
+import { serverRoleCanAdminister } from "../servers/server-capabilities";
 import { useServerSettings } from "../servers/server-settings";
+import { serverUpdateBadge, showServerUpdate } from "../servers/server-update-flow";
 import { useServers } from "../servers/servers-context";
 import { useSettings } from "../settings/settings-context";
 import { usePresence } from "../team/team-context";
+import { SidebarUpdateIsland } from "../updates/SidebarUpdateIsland";
+import { useWindowPage } from "../window/window-page-context";
+import { createCommunityCardVisibility } from "./community-card";
 import { useSidebar } from "./sidebar-context";
+import { createStorageCard } from "./storage-card";
 
 /** Dismissing the mobile app card is a choice of this computer, like the sidebar width. The key is
  * new with the Android release, so a computer that dismissed the iPhone-only card sees it once more. */
@@ -42,10 +55,26 @@ const MOBILE_APP_DISMISSED_STORAGE_KEY = "openbot:mobile-app-card-dismissed";
 export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
   const { t } = useText();
   const layout = useLayout();
+  const windowPage = useWindowPage();
+  /** The Tasks page shows beside the list. No row is open, so a click on a row opens its chat. */
+  const tasksOpen = () => windowPage.page() === "tasks";
   const platform = usePlatform();
   const channels = useChannels();
-  const { activeServer, activeServerSupportsCapability } = useServers();
-  const { openServerSettings } = useServerSettings();
+  const { activeServer, activeServerId, activeServerSupportsCapability } = useServers();
+  // The chats that main shows in a window of their own. Main sends the list on each change.
+  const [chatWindows, setChatWindows] = createSignal<ChatWindowTarget[]>([]);
+  onSettled(() => {
+    const unsubscribe = appPort().onChatWindows(setChatWindows);
+    void appPort()
+      .getChatWindows()
+      .then(setChatWindows)
+      .catch(() => undefined);
+    return unsubscribe;
+  });
+  const windowAgentIds = createMemo(
+    () => new Set(chatWindows().flatMap((target) => (target.serverId === activeServerId() ? [target.agentId] : []))),
+  );
+  const { openServerSettings, serverSettingsOpen } = useServerSettings();
   const serverActions = useServerActions();
   const { openAppSettings, setSkillsMarketplaceOpen } = useSettings();
   const {
@@ -55,14 +84,30 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
     activeAgent,
     agentSetupDraft,
     duplicatingAgentIds,
-    openBotSetup,
+    openAgentSetup,
+    userHiddenAgents,
+    userHiddenAgentIds,
   } = useAgents();
-  const { editAgent, duplicateAgent, deleteAgent } = useAgentActions();
-  const { activeTurns, queues, failedTurns, usageLimits, pendingPrompts, pendingApprovals } = useTurns();
+  const { editAgent, duplicateAgent, duplicateSection, duplicatingSectionIds, deleteAgent, setAgentHiddenByUser } =
+    useAgentActions();
+  // The host refuses a member: a hidden agent stops for every member, as a deleted one does.
+  const hideAllowed = () =>
+    activeServerSupportsCapability(AGENT_HIDDEN_CAPABILITY) && serverRoleCanAdminister(activeServer());
+  const { activeTurns, queues, failedTurns, usageLimits, pendingPrompts, pendingApprovals, approvals } = useTurns();
   const { unreadReplies, recentReplies, markAllAgentMessagesRead, markAgentMessagesUnread } = useConversation();
   const { directPeople } = usePresence();
   const { activeDirectMember, activeDirectMemberId, directThreads } = useDirectMessages();
-  const { selectAgent, selectDirectMember, setGlobalSearchVisibility } = useNavigation();
+  const { selectAgent, selectDirectMember, setGlobalSearchVisibility, chatHistory } = useNavigation();
+  /** The name of a chat as its sidebar row shows it. */
+  const chatName = (entry: ChatHistoryEntry | undefined): { name: string } | null => {
+    if (!entry) return null;
+    if (entry.kind === "agent") return { name: agentList().find((agent) => agent.id === entry.id)?.name ?? "" };
+    if (entry.kind === "channel") {
+      return { name: channels.state.channels.find((channel) => channel.id === entry.id)?.name ?? "" };
+    }
+    const member = directPeople().find((person) => person.id === entry.id);
+    return { name: member ? teamMemberName(member) : "" };
+  };
   const {
     sidebarLayout,
     collapsedSidebarSectionIds,
@@ -78,6 +123,12 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
   const [mobileAppDismissed, setMobileAppDismissed] = createSignal(
     window.localStorage.getItem(MOBILE_APP_DISMISSED_STORAGE_KEY) === "true",
   );
+  const communityCard = createCommunityCardVisibility();
+  const storageCard = createStorageCard(activeServer);
+  // A clear in Server settings frees space, so the card reads the disk again when settings close.
+  createEffect(serverSettingsOpen, (open, wasOpen) => {
+    if (!open && wasOpen) storageCard.refresh();
+  });
 
   /* Channels reach the sidebar as data, not as a list of their own: they sit in the layout's
    * sections beside the agents, so the sidebar has to be able to order and group them. The Routines
@@ -97,26 +148,28 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
 
   /* The agent conversation shows only the waits of the agent's own thread. A wait in a channel
    * thread stays out of "Needs you", because selecting the row cannot answer it. */
-  const sidebarAgentStates = createMemo(() => {
-    const agentThreads = new Map(agentList().map((agent) => [agent.id, agent.threadId]));
-    const inAgentThread = (agentId: string, threadId: string | undefined) =>
-      threadId !== undefined && agentThreads.get(agentId) === threadId;
-    return computeSidebarAgentStates({
+  const sidebarAgentStates = createMemo(() =>
+    computeSidebarAgentStates({
       agentIds: agentList().map((agent) => agent.id),
       activeTurns: activeTurns(),
       queues: queues(),
       unreadReplies: unreadReplies(),
       recentReplies: recentReplies(),
-      pendingPrompts: Object.fromEntries(
-        Object.entries(pendingPrompts()).filter(([agentId, event]) =>
-          inAgentThread(agentId, event?.type === "prompt" ? event.threadId : event?.request.threadId),
-        ),
-      ),
-      pendingApprovals: Object.fromEntries(
-        Object.entries(pendingApprovals()).filter(([agentId, approval]) => inAgentThread(agentId, approval?.threadId)),
-      ),
+      ...agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
       failedTurns: failedTurns(),
       usageLimits: usageLimits(),
+    }),
+  );
+
+  /* A wait in a channel thread goes to the channel instead. Selecting the channel opens the view
+   * that answers it. */
+  const channelWaits = createMemo(() => {
+    const prompts = Object.values(pendingPrompts());
+    return sidebarChannelWaits({
+      channels: visibleChannels(),
+      prompts: prompts.flatMap((event) => (event?.type === "prompt" ? [event] : [])),
+      takeovers: prompts.flatMap((event) => (event?.type === "browser-takeover-requested" ? [event.request] : [])),
+      approvals: approvals(),
     });
   });
 
@@ -138,10 +191,11 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
     <Sidebar
       channels={visibleChannels()}
       deletedChannels={channelsListed() ? channels.state.channels.filter((channel) => channel.archived) : []}
-      activeChannelId={channels.state.selectedId}
+      activeChannelId={tasksOpen() ? null : channels.state.selectedId}
       onSelectChannel={(id) => void channels.open(id)}
       onEditChannel={(id) => void channels.editChannel(id)}
       onDeleteChannel={channels.deletionSupported() ? channels.remove : undefined}
+      onRestoreChannel={channels.deletionSupported() ? channels.restore : undefined}
       showingArchivedChannels={channelsListed() && channels.state.archived}
       onToggleArchivedChannels={channelsListed() ? channels.toggleArchived : undefined}
       onCreateChannel={channelsListed() ? channels.create : undefined}
@@ -149,18 +203,28 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
         void markAllAgentMessagesRead();
         void channels.markAllRead();
       }}
-      hasUnread={agentList().some((agent) => (unreadReplies()[agent.id] ?? 0) > 0) || channels.hasUnread()}
+      hasUnread={
+        agentList().some((agent) => !userHiddenAgentIds().has(agent.id) && (unreadReplies()[agent.id] ?? 0) > 0) ||
+        channels.hasUnread()
+      }
       view={layout.sidebarView()}
-      onViewChange={(view) => {
-        // An open channel would stay in the middle with no row in the list.
-        if (view === "routines") channels.close();
-        layout.setSidebarView(view);
-      }}
-      serverName={activeServer()?.name ?? "Local"}
+      serverName={activeServer()?.name ?? t("sidebar.topbar.localServer")}
       onOpenServerSettings={(trigger) => {
         const server = activeServer();
         if (server) openServerSettings(server.id, trigger);
       }}
+      chatHistory={{
+        back: chatName(chatHistory.previous()),
+        forward: chatName(chatHistory.next()),
+        keys: chatHistoryKeys(platform.appInfo()?.platform === "darwin"),
+        onBack: chatHistory.goBack,
+        onForward: chatHistory.goForward,
+      }}
+      serverUpdate={(() => {
+        const server = activeServer();
+        const badge = server ? serverUpdateBadge(server.id) : null;
+        return server && badge ? { ...badge, onOpen: () => void showServerUpdate(server.id) } : undefined;
+      })()}
       serverMenu={
         platform.appInfo()
           ? {
@@ -175,17 +239,23 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
           : undefined
       }
       agents={agentList()}
-      activeAgentId={activeDirectMember() || channels.state.selectedId ? "" : (activeAgent()?.id ?? "")}
+      activeAgentId={tasksOpen() || activeDirectMember() || channels.state.selectedId ? "" : (activeAgent()?.id ?? "")}
       showPeople={props.peopleEnabled}
       people={directPeople()}
       directThreads={directThreads()}
-      activeDirectMemberId={activeDirectMemberId()}
+      activeDirectMemberId={tasksOpen() ? null : activeDirectMemberId()}
       agentStates={sidebarAgentStates()}
+      channelWaits={channelWaits()}
       agentMoods={agentMoods()}
       layout={sidebarLayout()}
       layoutMutable={activeServerSupportsCapability("sidebar-layout")}
       collapsedSectionIds={collapsedSidebarSectionIds()}
       onMutateLayout={mutateSidebarLayout}
+      sectionDuplicateSupported={
+        activeServerSupportsCapability("agent-duplication") && activeServerSupportsCapability("sidebar-layout")
+      }
+      duplicatingSectionIds={duplicatingSectionIds()}
+      onDuplicateSection={duplicateSection}
       onToggleSection={toggleSidebarSection}
       pinnedItems={pinnedSidebarItems()}
       peopleOrder={sidebarPeopleOrder()}
@@ -198,7 +268,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
       onPreloadDirectConversation={props.peopleEnabled ? () => void DirectConversation.preload() : undefined}
       onCreateAgent={() => {
         channels.close();
-        openBotSetup();
+        openAgentSetup();
       }}
       onEditAgent={editAgent}
       onMarkAgentUnread={
@@ -216,20 +286,55 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
       duplicatingAgentIds={duplicatingAgentIds()}
       onDuplicateAgent={duplicateAgent}
       onDeleteAgent={deleteAgent}
+      userHiddenAgents={userHiddenAgents()}
+      onHideAgent={hideAllowed() ? (agentId) => void setAgentHiddenByUser(agentId, true) : undefined}
+      onRestoreAgent={hideAllowed() ? (agentId) => void setAgentHiddenByUser(agentId, false) : undefined}
+      onOpenAgentWindow={
+        platform.landingPreview
+          ? undefined
+          : (agentId) => void appPort().openChatWindow({ serverId: activeServerId(), agentId })
+      }
+      windowAgentIds={windowAgentIds()}
       compact={layout.leftPanelCompact()}
       onExpand={layout.expandSidebar}
       onOpenSearch={() => setGlobalSearchVisibility(true)}
       searchShortcut={globalSearchShortcutLabel(platform.appInfo()?.platform ?? currentDevicePlatform())}
       footer={
-        <Show when={!platform.landingPreview && !mobileAppDismissed()}>
-          <SidebarMobileAppCard
-            onOpenInstall={() => openAppSettings(null, "mobile-connect")}
-            onDismiss={() => {
-              window.localStorage.setItem(MOBILE_APP_DISMISSED_STORAGE_KEY, "true");
-              setMobileAppDismissed(true);
-            }}
-          />
-        </Show>
+        <>
+          {/* One card at a time. A disk that is almost full comes first; the community card waits
+           * until the mobile app card is dismissed. */}
+          <Show when={storageCard.card()}>
+            {(card) => (
+              <SidebarStorageCard
+                level={card().level}
+                serverName={activeServer()?.name ?? ""}
+                freeBytes={card().freeBytes}
+                totalBytes={card().totalBytes}
+                onFreeUpSpace={() => openServerSettings(card().serverId, null, "storage")}
+                onDismiss={() => storageCard.dismiss(card().serverId)}
+              />
+            )}
+          </Show>
+          <Show when={!platform.landingPreview && !storageCard.card() && !mobileAppDismissed()}>
+            <SidebarMobileAppCard
+              onOpenInstall={() => openAppSettings(null, "mobile-connect")}
+              onDismiss={() => {
+                window.localStorage.setItem(MOBILE_APP_DISMISSED_STORAGE_KEY, "true");
+                setMobileAppDismissed(true);
+              }}
+            />
+          </Show>
+          <Show
+            when={!platform.landingPreview && !storageCard.card() && mobileAppDismissed() && !communityCard.dismissed()}
+          >
+            <SidebarCommunityCard
+              onJoinDiscord={() => void appPort().openExternal("discord")}
+              onFollowX={() => void appPort().openExternal("x")}
+              onDismiss={communityCard.dismiss}
+            />
+          </Show>
+          <SidebarUpdateIsland />
+        </>
       }
       onOpenMarketplace={() => setSkillsMarketplaceOpen(true)}
       agentsConnecting={agentListConnecting()}
@@ -241,7 +346,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
               avatarHue: agentSetupDraft().avatarHue,
               onSelect: () => {
                 channels.close();
-                openBotSetup();
+                openAgentSetup();
               },
             }
           : undefined

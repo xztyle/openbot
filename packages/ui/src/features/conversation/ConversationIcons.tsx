@@ -68,16 +68,6 @@ export function ReplyIcon() {
   );
 }
 
-export function MoreIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" class="ui-glyph-20 conversation-more-icon">
-      <circle cx="5" cy="10" r="1" />
-      <circle cx="10" cy="10" r="1" />
-      <circle cx="15" cy="10" r="1" />
-    </svg>
-  );
-}
-
 export function QueueIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" class="ui-glyph-20">
@@ -170,6 +160,14 @@ export function BrowserForwardIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 20 20" class="ui-glyph-20 browser-toolbar-icon fill-none stroke-current">
       <path d="m8 4 6 6-6 6" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+export function BrowserStopIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" class="ui-glyph-20 browser-toolbar-icon fill-none stroke-current">
+      <path d="M5.5 5.5l9 9M14.5 5.5l-9 9" stroke-linecap="round" />
     </svg>
   );
 }

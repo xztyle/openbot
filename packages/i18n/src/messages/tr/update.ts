@@ -6,7 +6,7 @@ export const messages = {
   "update.action.checking": "Güncellemeler denetleniyor…",
   "update.action.download": "Güncellemeyi indir",
   "update.action.downloading": "Güncelleme indiriliyor…",
-  "update.action.restart": "Güncellemek için yeniden başlat",
+  "update.action.restart": "Yeniden başlat ve güncelle",
   "update.action.restarting": "Yeniden başlatılıyor…",
   "update.action.retryDownload": "İndirmeyi tekrar dene",
   "update.managedByHost": "Ana makine tarafından yönetiliyor",
@@ -17,9 +17,10 @@ export const messages = {
   "update.provider.checking": "{name} güncellemeleri denetleniyor",
   "update.provider.available": "{name} güncellemesi mevcut",
   "update.provider.updating": "{name} güncelleniyor",
+  "update.provider.waiting": "{name} güncellemesi bekliyor",
   "update.provider.failed": "{name} güncellemesi başarısız oldu",
   "update.provider.settingUp": "Ayarlanıyor",
-  "update.provider.interrupted": "Güncelleme kesintiye uğradı. Tekrar deneyin.",
+  "update.provider.failedRetry": "Güncelleme başarısız oldu. Tekrar deneyin.",
   "update.provider.unknownVersion": "bilinmeyen sürüm",
   "update.provider.remoteHost": "Sağlayıcı CLI güncellemeleri, onları barındıran bilgisayarda çalışır.",
   "update.provider.unavailable": "Sağlayıcı güncellemeleri kullanılamıyor.",
@@ -63,5 +64,6 @@ export const messages = {
   "update.whatsNew.empty.body":
     "Bu sürümde burada gösterilecek bir not yok. Tüm değişiklikler tam sürüm günlüğünde gösterilir.",
   "update.whatsNew.changelog": "Tam sürüm günlüğü",
+  "update.whatsNew.changelogFailed": "OpenBot sürüm günlüğünü açamadı.",
   "update.whatsNew.done": "Anladım",
 } as const satisfies PartialTranslation<typeof source>;

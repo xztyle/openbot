@@ -9,7 +9,7 @@ export const messages = {
   "mobile.channel.route.routine": "Routine",
   "mobile.channel.list.deleteTitle": "Supprimer le canal {name} ?",
   "mobile.channel.list.deleteBody":
-    "Cette action arrête le canal. Son historique reste dans Canaux supprimés, en aperçu seulement. Vous ne pouvez pas le restaurer. Les agents sont conservés.",
+    "Cette action arrête le canal. Son historique reste dans « Canaux supprimés », en aperçu uniquement. Vous pouvez le restaurer depuis cette liste. Les agents membres sont conservés.",
   "mobile.channel.list.deleteFailed": "Impossible de supprimer le canal",
   "mobile.channel.list.deleteFailedBody": "Impossible de supprimer ce canal. Réessayez.",
   "mobile.channel.list.open": "Ouvrir le canal {name}",
@@ -30,10 +30,14 @@ export const messages = {
   "mobile.channel.actions.none": "Aucune action nécessaire.",
   "mobile.channel.actions.loading": "Chargement des actions…",
   "mobile.channel.deleted.note":
-    "Les canaux supprimés sont disponibles en aperçu seulement. Vous ne pouvez pas les restaurer.",
+    "Les canaux supprimés sont disponibles en aperçu seulement. Restaurez un canal pour l’utiliser à nouveau.",
   "mobile.channel.deleted.loading": "Chargement des canaux supprimés…",
   "mobile.channel.deleted.empty": "Aucun canal supprimé.",
   "mobile.channel.deleted.preview": "Aperçu de {name}",
+  "mobile.channel.deleted.restore": "Restaurer",
+  "mobile.channel.deleted.restoreNamed": "Restaurer {name}",
+  "mobile.channel.deleted.restoreFailed": "Impossible de restaurer le canal",
+  "mobile.channel.deleted.restoreFailedBody": "Impossible de restaurer ce canal. Réessayez.",
   "mobile.channel.chat.fallbackName": "Canal",
   "mobile.channel.chat.deletedNotice": "Canal supprimé. Aperçu seulement.",
   "mobile.channel.records.connect": "Connectez-vous au serveur pour modifier ce canal.",
@@ -68,7 +72,7 @@ export const messages = {
   "mobile.channel.form.routines": "Routines",
   "mobile.channel.form.deleteTitle": "Supprimer le canal ?",
   "mobile.channel.form.deleteBody":
-    "Cette action arrête le canal. Son historique reste dans Canaux supprimés, en aperçu seulement. Vous ne pouvez pas le restaurer. Les agents sont conservés.",
+    "Cette action arrête le canal. Son historique reste dans « Canaux supprimés », en aperçu uniquement. Vous pouvez le restaurer depuis cette liste. Les agents membres sont conservés.",
   "mobile.channel.form.delete": "Supprimer le canal",
   "mobile.channel.form.unavailable":
     "Connectez-vous à un serveur de bureau qui prend en charge les canaux pour faire des modifications.",

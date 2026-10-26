@@ -10,6 +10,7 @@ import { useText } from "../../text";
 import { SidebarBackgroundGroup } from "./SidebarBackgroundGroup";
 import { SidebarChannelRow } from "./SidebarChannelRow";
 import { SidebarEmptyState } from "./SidebarEmptyState";
+import { SidebarHiddenGroup } from "./SidebarHiddenGroup";
 import { SidebarPinnedGroup } from "./SidebarPinnedGroup";
 import { SidebarSectionList } from "./SidebarSectionList";
 import { SidebarWaitingGroup } from "./SidebarWaitingGroup";
@@ -32,7 +33,8 @@ export function SidebarNav() {
     setAgentListElement,
     startCreateSection,
     updateSidebarNativeDrag,
-    waitingAgents,
+    userHiddenAgentList,
+    waitingChats,
   } = useSidebarScope();
   const { t } = useText();
   return (
@@ -50,9 +52,10 @@ export function SidebarNav() {
         <Show
           when={
             resolvedPinnedItems().length === 0 &&
-            waitingAgents().length === 0 &&
+            waitingChats().length === 0 &&
             filteredChats().length === 0 &&
             backgroundAgents().length === 0 &&
+            userHiddenAgentList().length === 0 &&
             (props.showPeople === false || orderedPeople().length === 0) &&
             pending.sectionEditor?.target.kind !== "create"
           }
@@ -63,6 +66,7 @@ export function SidebarNav() {
         <SidebarWaitingGroup />
         <SidebarSectionList />
         <SidebarBackgroundGroup />
+        <SidebarHiddenGroup />
         <Show when={props.showingArchivedChannels}>
           <section class="sidebar-chat-group sidebar-section" aria-label={t("sidebar.deletedChannels.title")}>
             <h2 class="sidebar-section-name">{t("sidebar.deletedChannels.title")}</h2>
@@ -101,7 +105,7 @@ export function SidebarNav() {
                 </ContextMenu.Item>
               </Show>
               <Show when={layoutMutable()}>
-                <ContextMenu.Item onSelect={() => startCreateSection()}>
+                <ContextMenu.Item onSelectAfterClose={() => startCreateSection()}>
                   <FolderPlus class="agent-context-icon size-4" aria-hidden="true" />
                   <span>{t("sidebar.new.section")}</span>
                 </ContextMenu.Item>

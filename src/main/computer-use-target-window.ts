@@ -9,7 +9,7 @@ const MINIMUM_TARGET_SIZE = 120;
 const DRIVER_OVERLAY_APP = "cua-driver";
 
 /** One window as the driver reports it, in desktop points with a top-left origin. */
-export interface DriverWindow {
+interface DriverWindow {
   windowId: number;
   pid: number;
   appName: string;
@@ -169,22 +169,6 @@ function actedWindow(candidates: readonly DriverWindow[], action: ObservedAction
   return frontWindow(candidates.filter((window) => window.pid === action.pid));
 }
 
-/**
- * The window in front, of those an agent could work in.
- *
- * Exported for the test: this is the rule the rim starts from, and the one a change of the driver's
- * window order would break first.
- */
-export function frontmostTarget(
-  payload: unknown,
-  ownPid: number,
-  ownCoveringWindowIds?: ReadonlySet<number>,
-): ComputerUseHighlightTarget | null {
-  const visible = visibleWindows(payload, ownPid, ownCoveringWindowIds);
-  const front = frontWindow(workableWindows(visible, ownPid));
-  return front ? asTarget(front, visible) : null;
-}
-
 function asTarget(window: DriverWindow, visible: readonly DriverWindow[]): ComputerUseHighlightTarget {
   return {
     windowId: window.windowId,
@@ -206,7 +190,7 @@ function asTarget(window: DriverWindow, visible: readonly DriverWindow[]): Compu
  * undone, which is what an even-odd rule does with two overlapping holes, so the rectangles are
  * broken into strips that meet edge to edge instead.
  */
-export function coveredAreas(window: DriverWindow, visible: readonly DriverWindow[]): Rectangle[] {
+function coveredAreas(window: DriverWindow, visible: readonly DriverWindow[]): Rectangle[] {
   const covers: Rectangle[] = [];
   for (const other of visible) {
     if (other.windowId === window.windowId || other.zIndex <= window.zIndex) continue;

@@ -21,6 +21,7 @@ import {
   type MessagingDriver,
   type MessagingDriverOptions,
   type MessagingIngress,
+  type MessagingPlace,
   type StatusReaction,
   TelegramCallError,
   type TelegramGateway,
@@ -203,6 +204,15 @@ class TelegramAdapter implements MessagingAdapter {
     return Effect.sync(() => this.#state.history(threadKey, afterId, beforeId));
   }
 
+  /** Telegram has no history API: this is what the host saw of the chat since it started. */
+  recent(
+    _platformChannelId: string,
+    threadKey: string | null,
+    limit: number,
+  ): Effect.Effect<ContextEntry[], MessagingAdapterError> {
+    return Effect.sync(() => this.#state.recent(threadKey, limit));
+  }
+
   readonly download = Effect.fnUntraced(function* (
     this: TelegramAdapter,
     file: InboundFile,
@@ -222,6 +232,11 @@ class TelegramAdapter implements MessagingAdapter {
 
   placeName(platformChannelId: string): Effect.Effect<string, MessagingAdapterError> {
     return Effect.sync(() => this.#state.title || platformChannelId);
+  }
+
+  /** One connection is one chat, and Signal lets this host post only in its linked chats. */
+  places(): Effect.Effect<MessagingPlace[], MessagingAdapterError> {
+    return Effect.sync(() => [{ id: this.#chatId, name: this.#state.title || this.#chatId, kind: "chat" }]);
   }
 
   /**
@@ -312,7 +327,8 @@ class TelegramAdapter implements MessagingAdapter {
   /** Remembers the conversation of a post, so a reply to it in a basic group finds the conversation. */
   #posted(target: MessageTarget, messageId: number | undefined): Effect.Effect<string, MessagingAdapterError> {
     if (messageId === undefined) return Effect.fail(new MessagingAdapterError({ cause: new Error("no_message_id") }));
-    this.#state.rememberThread(messageId, telegramThreadKey(target));
+    // A top-level post, such as one that an agent sends to the chat, starts its own reply chain.
+    if (target.replyThreadId !== null) this.#state.rememberThread(messageId, telegramThreadKey(target));
     return Effect.succeed(String(messageId));
   }
 

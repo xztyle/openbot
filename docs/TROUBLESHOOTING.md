@@ -50,14 +50,38 @@ Do not start OpenBot with `--no-sandbox`. It is not a supported workaround. The 
 boundary between a web renderer and the rest of your computer, and OpenBot gives its agents full
 local access on the other side of it.
 
-## Voice prompts or remote desktop are missing on Linux
+## The Linux AppImage says that no fusermount binary was found
 
-The Linux build has no voice transcription runtime, so the microphone control is not drawn.
+The AppImage mounts itself with FUSE. It does not need libfuse2, but it needs the `fusermount3`
+program. Install the `fuse3` package (`sudo pacman -S fuse3` on Arch Linux and Omarchy,
+`sudo apt install fuse3` on Ubuntu and Debian), then start the AppImage again. With no FUSE, such
+as in a container, start it with `--appimage-extract-and-run`.
+
+## Remote desktop is missing on Linux
 
 Remote desktop on Linux needs the x64 AppImage and an X11 session. Sunshine captures the X11 screen
 and sends mouse and keyboard input through the XTest extension. Under Wayland, or with no `DISPLAY`,
 remote desktop reports that it needs an X11 session. Log in with an Xorg session, or start OpenBot
 under `xvfb-run` on a server. The arm64 AppImage does not include the runtime.
+
+## Voice prompts fail on an older Linux
+
+The voice runtime of the x64 AppImage needs glibc 2.32 or later, such as Ubuntu 22.04 or Debian 12.
+On Ubuntu 20.04 or Debian 11, the dictation model downloads, but the runtime does not load, and
+voice prompts show an error. Use a newer distribution. The arm64 AppImage needs glibc 2.17 or later.
+
+## OpenBot is slow or stops because of the GPU on Linux
+
+On Linux, OpenBot uses the GPU until the GPU fails on your computer. If the GPU process crashes, or a
+start stops in its first 30 seconds, OpenBot writes `gpu-crash.json` or `gpu-start.json` in
+`~/.config/OpenBot`. While one of these files is there, OpenBot renders on the CPU. Dialogs and
+panels with a blurred background are then slower. An update with a new Chromium version tries the
+GPU again. A GPU process restart after a lost GPU context, for example after suspend, does not
+count. A server (`OPENBOT_SERVER=1` or a hosted server) always renders on the CPU.
+
+- To try the GPU again, for example after a driver update, remove the file. The log names it.
+- To always use the GPU, start OpenBot with `OPENBOT_DISABLE_GPU=0`.
+- If OpenBot stops at each start, start it with `OPENBOT_DISABLE_GPU=1` to always render on the CPU.
 
 ## Computer Use is unavailable
 
@@ -162,6 +186,30 @@ On Windows, the same file is at `%APPDATA%\OpenBot\openbot.db`.
 Report the field the message names, together with the details below. The output holds your own file
 paths, so review it before you publish it.
 
+## Routines do not run while the computer sleeps
+
+A routine runs only while the computer is awake and OpenBot is open.
+
+- After a sleep, each overdue routine runs one time, when the network is back. OpenBot does not run
+  each occurrence that it missed.
+- After OpenBot was closed, the routine setting "If OpenBot was closed at the scheduled time"
+  decides: skip the run, or run it one time when OpenBot opens.
+
+On macOS and Windows, turn on Settings → General → **Keep this computer awake**. While the computer
+is connected to power, it then does not sleep when idle. The display can still turn off. A closed
+laptop lid, or a sleep that you select, still sleeps the computer, unless macOS uses an external
+display (closed-display mode). On battery power, the computer sleeps as usual, unless you also turn
+on **Also on battery**.
+
+`pmset -g assertions` can show an OpenBot entry named `WebRTC has active PeerConnections`. It
+exists only while another device is connected to this computer, so the computer can sleep after that
+device disconnects. With the setting on, the entry is named `Electron`.
+
+To see when a Mac slept, run `pmset -g log | grep -E " Sleep | Wake "`. `logs/main/main.log` (see
+[Report a problem](#report-a-problem)) has a `Keeping this computer awake.` line when OpenBot
+starts to keep it awake. For routines that run when no computer of yours is on, use a
+[hosted server](hosted-servers.md) or a [self-hosted server](self-hosted-server.md).
+
 ## A company firewall or proxy blocks OpenBot
 
 Sign-in shows "A firewall or proxy on this network blocked OpenBot from reaching `<host>`" when a
@@ -220,7 +268,22 @@ are independent and are not removed with OpenBot.
 
 ## Report a problem
 
-Use [GitHub Issues](https://github.com/nightly-labs/openbot/issues) for reproducible bugs. Include
-the OpenBot version, the operating system and its version, the hardware, the provider and CLI
-version, and minimal reproduction steps. Never publish tokens, `~/.codex`, `~/.claude`, conversations, private files,
-Electron user data, or full unreviewed diagnostics.
+Use the [bug report form](https://github.com/nightly-labs/openbot/issues/new?template=bug_report.yml)
+for reproducible bugs. It asks for the platform, the OpenBot version (Settings → Updates on the
+desktop, Settings → About on the phone), the operating system and hardware, the provider and its CLI
+version, the steps, and the expected and actual results. When a provider row shows an error, select
+**Copy diagnostics** in its menu and paste the result into the form. On the phone, Settings →
+Support → **Save log file** makes a log that you can attach. Never publish tokens, `~/.codex`,
+`~/.claude`, conversations, private files, Electron user data, or full unreviewed diagnostics.
+
+When the desktop app closes by itself, look in the `logs` folder of its user data
+(`%APPDATA%\OpenBot\logs` on Windows, `~/Library/Application Support/OpenBot/logs` on macOS,
+`~/.config/OpenBot/logs` on Linux):
+
+- `main/main.log` has a `Quitting: <reason>.` line when OpenBot quit by itself or was closed.
+- `trace.ndjson` has an `exit` line with the same reason, and a `crash` line for each renderer or
+  helper process that stopped.
+
+A dump in the `Crashpad` folder next to `logs` means a process crashed. Tell us that a dump exists,
+but do not attach it publicly: it can hold secrets. When neither file has a reason and there is no
+dump, something outside OpenBot stopped it.

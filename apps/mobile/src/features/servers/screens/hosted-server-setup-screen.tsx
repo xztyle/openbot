@@ -3,19 +3,15 @@ import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { router, useLocalSearchParams } from "expo-router";
 import { Button, Spinner, Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { Circle, CircleCheck, CircleX } from "lucide-react-native";
+import Circle from "lucide-react-native/icons/circle";
+import CircleCheck from "lucide-react-native/icons/circle-check";
+import CircleX from "lucide-react-native/icons/circle-x";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 import { AppLogo } from "@/features/auth/components/app-logo";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
 import { hostedServerCalls } from "@/features/servers/api/hosted-servers";
-import {
-  closeHostedCheckout,
-  hostedRequestKeys,
-  knownHostedServer,
-  openHostedCheckout,
-  rememberHostedServer,
-} from "@/features/servers/model/hosted-server-checkout";
+import { knownHostedServer, rememberHostedServer } from "@/features/servers/model/hosted-server-availability";
 import {
   type HostedSetupStatus,
   hostedSetupSettled,
@@ -26,7 +22,7 @@ import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 
-/** How often the screen reads the new server while it waits for the payment and the setup. */
+/** How often the screen reads the server while it waits for the payment and the setup. */
 const POLL_INTERVAL_MS = 3_000;
 /** The setup reports only its step, so the detail lines of a step change on a timer, as on desktop. */
 const DETAIL_MS = 2_000;
@@ -71,20 +67,20 @@ const STEP_OF_STATUS: Record<Exclude<HostedSetupStatus, "error">, number> = {
 type StepState = "done" | "active" | "pending" | "failed";
 
 /**
- * The new server after its plan was chosen: the payment, then the setup until the server shows in
- * the server list of this phone. The account server goes on with the setup when this sheet closes,
- * and the plans page opens this page again for a server that is still in setup.
+ * A server of the account in setup: the payment, then the setup until the server shows in the server
+ * list of this phone. The phone does not take the payment: app store rules do not allow a purchase
+ * outside the store, so the user pays in OpenBot on the computer. The account server goes on with
+ * the setup when this sheet closes.
  */
 export function HostedServerSetupScreen() {
   const { serverId = "" } = useLocalSearchParams<{ serverId?: string }>();
-  const { t, errorMessage } = useText();
+  const { t } = useText();
   const { session } = useMobileSession();
   const { servers, refreshServers, selectServer } = useMobileWorkspace();
-  const [accent] = useThemeColor(["accent"]);
   const calls = useMemo(() => (session ? hostedServerCalls(session) : null), [session]);
   const [server, setServer] = useState<HostedServerSummary | null>(() => knownHostedServer(serverId));
   const [missing, setMissing] = useState(false);
-  const [pending, setPending] = useState<"payment" | "retry" | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const listed = servers.some((entry) => entry.id === serverId);
   const status: HostedSetupStatus | null = missing ? "error" : server ? hostedSetupStatus(server, listed) : null;
@@ -114,9 +110,6 @@ export function HostedServerSetupScreen() {
           statusRef.current === "connecting" ? refreshServersRef.current().catch(() => undefined) : undefined,
         ]);
         if (!active || !list) return;
-        // The plans page stays mounted under this page. A key whose server was paid or removed is
-        // forgotten now, so "Choose a plan" does not send the key of an expired server again.
-        hostedRequestKeys.settle(list.servers);
         const next = list.servers.find((entry) => entry.serverId === serverId);
         // An unpaid server is removed when its payment page expires.
         if (!next) {
@@ -131,7 +124,7 @@ export function HostedServerSetupScreen() {
     }
     void poll();
     const timer = setInterval(() => void poll(), POLL_INTERVAL_MS);
-    // On Android the payment page leaves the app, so the read runs again as soon as the user returns.
+    // The read runs again as soon as the user returns to the app, such as after a payment on the computer.
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") void poll();
     });
@@ -147,8 +140,6 @@ export function HostedServerSetupScreen() {
     const previous = previousStatus.current;
     previousStatus.current = status;
     if (previous === status) return;
-    // Stripe confirmed the payment, or the page expired: the open payment page has nothing more to do.
-    if (previous === "payment") closeHostedCheckout();
     if (status === "error") void haptics.notification("error");
     else if (status === "ready" || (previous === "payment" && status !== null)) void haptics.notification("success");
   }, [status]);
@@ -168,28 +159,10 @@ export function HostedServerSetupScreen() {
     return status === "error" ? "failed" : "active";
   }
 
-  async function openPayment(): Promise<void> {
-    if (!calls || pending) return;
-    void haptics.impact("medium");
-    setPending("payment");
-    setActionError(null);
-    try {
-      const checkout = await calls.checkout(serverId);
-      rememberHostedServer(checkout.server);
-      setServer(checkout.server);
-      setPending(null);
-      if (checkout.checkoutUrl) await openHostedCheckout(checkout.checkoutUrl, String(accent));
-    } catch (cause) {
-      setActionError(errorMessage(cause, t("mobile.server.hosted.paymentFailed")));
-      void haptics.notification("error");
-      setPending(null);
-    }
-  }
-
   async function retry(): Promise<void> {
-    if (!calls || pending) return;
+    if (!calls || retrying) return;
     void haptics.impact("medium");
-    setPending("retry");
+    setRetrying(true);
     setActionError(null);
     try {
       const next = await calls.wake(serverId);
@@ -199,7 +172,7 @@ export function HostedServerSetupScreen() {
       const text = currentText();
       setActionError(text.errorMessage(cause, text.t("mobile.server.hosted.wakeFailed")));
     } finally {
-      setPending(null);
+      setRetrying(false);
     }
   }
 
@@ -265,11 +238,7 @@ export function HostedServerSetupScreen() {
             {actionError}
           </Typography.Paragraph>
         ) : null}
-        {missing ? (
-          <Button size="lg" onPress={() => router.back()}>
-            <Button.Label className="font-sans font-semibold">{t("mobile.server.hosted.choosePlan")}</Button.Label>
-          </Button>
-        ) : status === "ready" ? (
+        {missing || status === "payment" ? null : status === "ready" ? (
           <Button
             size="lg"
             onPress={() => {
@@ -281,22 +250,11 @@ export function HostedServerSetupScreen() {
             <Button.Label className="font-sans font-semibold">{t("mobile.server.hosted.open")}</Button.Label>
           </Button>
         ) : status === "error" ? (
-          <Button size="lg" isDisabled={pending !== null} onPress={() => void retry()}>
+          <Button size="lg" isDisabled={retrying} onPress={() => void retry()}>
             <Button.Label className="font-sans font-semibold">
-              {pending === "retry" ? t("mobile.server.hosted.retrying") : t("common.tryAgain")}
+              {retrying ? t("mobile.server.hosted.retrying") : t("common.tryAgain")}
             </Button.Label>
           </Button>
-        ) : status === "payment" ? (
-          <>
-            <Button size="lg" isDisabled={pending !== null} onPress={() => void openPayment()}>
-              <Button.Label className="font-sans font-semibold">
-                {pending === "payment" ? t("mobile.server.hosted.openingPayment") : t("mobile.server.hosted.continue")}
-              </Button.Label>
-            </Button>
-            <Button size="lg" variant="ghost" isDisabled={pending !== null} onPress={() => router.back()}>
-              <Button.Label className="font-sans font-semibold">{t("mobile.server.hosted.otherPlan")}</Button.Label>
-            </Button>
-          </>
         ) : (
           <Typography.Paragraph type="body-xs" align="center" className="px-4 text-text-secondary">
             {t("mobile.server.hosted.closeHint")}

@@ -65,7 +65,7 @@ export const messages = {
   "marketplace.noMatch.filters": "Ничего не подходит под фильтры.",
   "marketplace.noMatch.showAgents": {
     one: "Показать {count} агента",
-    few: "Показать {count} агентов",
+    few: "Показать {count} агента",
     many: "Показать {count} агентов",
     other: "Показать {count} агента",
   },
@@ -166,6 +166,15 @@ export const messages = {
   "marketplace.plugin.notion.prompt.meetingNotes":
     "Оформите эти пункты как структурированную заметку со встречи в пространстве моей команды.",
   "marketplace.plugin.notion.prompt.updateDoc": "Добавьте в документ по онбордингу новый чек-лист релиза.",
+  "marketplace.plugin.cobrain.tagline": "Общая память для ваших ИИ-агентов",
+  "marketplace.plugin.cobrain.description":
+    "Cobrain — это память в формате Markdown, которую может читать и дополнять любой подключённый ИИ. Перед работой агенты загружают контекст клиента или проекта, ищут прошлые заметки и решения и сохраняют то, что узнали, чтобы следующий диалог начинался там, где закончился предыдущий. Каждый пользователь входит в свой аккаунт Cobrain.",
+  "marketplace.plugin.cobrain.app": "Чтение, поиск и запись заметок в вашем Cobrain через один сервер MCP.",
+  "marketplace.plugin.cobrain.prompt.startSession":
+    "Загрузите мой контекст Cobrain для этого проекта, прежде чем мы начнём.",
+  "marketplace.plugin.cobrain.prompt.searchDecision": "Найдите в моих заметках Cobrain, что мы решили насчёт цен.",
+  "marketplace.plugin.cobrain.prompt.saveNote":
+    "Сохраните в Cobrain заметку о том, что мы сделали сегодня и что осталось.",
   "marketplace.plugin.figma.tagline": "Дизайны и прототипы",
   "marketplace.plugin.figma.description":
     "Figma позволяет агентам читать файлы дизайна, изучать компоненты, стили и переменные и передавать спецификации разработчикам. Она подключается к серверу MCP в настольном приложении Figma на этом компьютере. Сервер пока может только читать дизайны; поддержка записи в разработке.",
@@ -186,6 +195,15 @@ export const messages = {
     "Используйте стили из этого репозитория и сделайте в Paper дизайн страницы настроек.",
   "marketplace.plugin.paper.prompt.tokens":
     "Перечислите токены дизайна в открытом файле Paper и сравните их с нашей темой.",
+  "marketplace.plugin.appleApps.tagline": "Почта, Календарь и другое на вашем Mac",
+  "marketplace.plugin.appleApps.description":
+    "Apple apps позволяет агентам работать с приложениями Почта, Календарь, Контакты, Напоминания, Заметки, Сообщения и Safari на этом Mac. Работает только в macOS. OpenBot запускает mcp-icloud — сервер сообщества, который не создан Apple или OpenBot. Сервер управляет приложениями через AppleScript на этом компьютере, и ему не нужны аккаунт или ключ. Когда агент впервые использует приложение, macOS спрашивает, может ли OpenBot им управлять. Чтобы изменить это позже, откройте Системные настройки › Конфиденциальность и безопасность › Автоматизация. Агенты могут отправлять письма и iMessage, а также изменять или удалять события, контакты и напоминания, поэтому проверяйте каждую запись перед подтверждением. То, что читают инструменты, например текст писем, передаётся провайдеру модели агента.",
+  "marketplace.plugin.appleApps.app":
+    "Почта, Календарь, Контакты, Напоминания, Заметки, Сообщения и Safari через локальный сервер mcp-icloud. Нужны macOS и доступ в разделе «Автоматизация».",
+  "marketplace.plugin.appleApps.prompt.unread": "Кратко перескажите мои непрочитанные письма за сегодня в Apple Почте.",
+  "marketplace.plugin.appleApps.prompt.today": "Что у меня в Календаре Apple сегодня и завтра?",
+  "marketplace.plugin.appleApps.prompt.schedule":
+    "Найдите последнее письмо о встрече по проекту и добавьте эту встречу в мой календарь.",
   "marketplace.plugin.sentry.tagline": "Разбор ошибок и сбоев",
   "marketplace.plugin.sentry.description":
     "Sentry позволяет агентам искать недавние ошибки, изучать стек вызовов и затронутые релизы и кратко описывать, что сломалось после деплоя. Каждый пользователь входит в свой аккаунт Sentry через браузер.",
@@ -195,6 +213,30 @@ export const messages = {
   "marketplace.plugin.sentry.prompt.topCrash":
     "Объясните самый частый сбой в мобильном проекте и его вероятную причину.",
   "marketplace.plugin.sentry.prompt.releaseHealth": "Насколько стабилен текущий релиз по сравнению с предыдущим?",
+  "marketplace.plugin.vercel.tagline": "Деплои, логи сборки и проекты",
+  "marketplace.plugin.vercel.description":
+    "Vercel позволяет агентам просматривать проекты и последние деплои, читать логи сборки и выполнения и выяснять, почему сборка не удалась. Каждый пользователь входит в свой аккаунт Vercel через браузер и выбирает команды, которые могут использовать агенты. В этих командах у агентов те же права, что и у аккаунта пользователя. Они также могут изменять переменные окружения, домены, DNS-записи и деплои, а также покупать домены.",
+  "marketplace.plugin.vercel.app":
+    "Проекты, деплои, логи сборки и выполнения через сервер MCP Vercel со входом через браузер.",
+  "marketplace.plugin.vercel.prompt.failedBuild": "Почему не удался последний продакшен-деплой?",
+  "marketplace.plugin.vercel.prompt.recentDeployments": "Покажите сегодняшние деплои и их статус.",
+  "marketplace.plugin.vercel.prompt.runtimeErrors": "На каких маршрутах были ошибки выполнения за последний час?",
+  "marketplace.plugin.cloudflare.tagline": "Workers, DNS, хранилища и логи",
+  "marketplace.plugin.cloudflare.description":
+    "Cloudflare позволяет агентам просматривать Workers, DNS-записи, R2, D1 и KV и управлять ими через API Cloudflare, запрашивать логи Workers и искать в документации Cloudflare. Каждый пользователь входит в свой аккаунт Cloudflare через браузер. На странице согласия Cloudflare выберите Read only: с вариантом по умолчанию, Minimal, агенты не видят Workers, логи и DNS-записи. С правами на запись агенты могут развёртывать и удалять Workers, менять DNS-записи и другие настройки аккаунта.",
+  "marketplace.plugin.cloudflare.app":
+    "Workers, DNS, хранилища и логи через MCP-сервер API Cloudflare со входом в браузере.",
+  "marketplace.plugin.cloudflare.prompt.workers": "Какие Workers развёрнуты в моём аккаунте Cloudflare?",
+  "marketplace.plugin.cloudflare.prompt.errors": "Какие Cloudflare Workers записали ошибки за последний час?",
+  "marketplace.plugin.cloudflare.prompt.dns": "Покажите DNS-записи каждой зоны в моём аккаунте Cloudflare.",
+  "marketplace.plugin.supabase.tagline": "Базы данных, логи и edge functions",
+  "marketplace.plugin.supabase.description":
+    "Supabase позволяет агентам просматривать проекты, выполнять SQL, читать схемы таблиц и логи, проверять рекомендации advisors по безопасности и производительности, управлять edge functions и ветками и искать в документации Supabase. Каждый пользователь входит в свой аккаунт Supabase через браузер и выбирает организацию. Агенты получают полный доступ: они могут выполнять SQL, который меняет или удаляет данные, применять миграции, развёртывать edge functions, создавать и приостанавливать проекты.",
+  "marketplace.plugin.supabase.app":
+    "Базы данных, логи и edge functions через MCP-сервер Supabase со входом в браузере.",
+  "marketplace.plugin.supabase.prompt.projects": "Какие проекты есть в моей организации Supabase?",
+  "marketplace.plugin.supabase.prompt.tables": "Покажите таблицы и столбцы моей базы данных Supabase.",
+  "marketplace.plugin.supabase.prompt.errors": "Какие ошибки записал мой проект Supabase за последний час?",
   "marketplace.plugin.context7.tagline": "Актуальная документация библиотек",
   "marketplace.plugin.context7.description":
     "Context7 получает актуальную документацию и справочники API для библиотек и фреймворков, чтобы ответы учитывали версию, которая действительно используется в проекте. Аккаунт и ключ не нужны.",
@@ -250,7 +292,7 @@ export const messages = {
   "marketplace.plugin.resend.prompt.template": "Составьте письмо для сброса пароля для нового сценария.",
   "marketplace.plugin.composio.tagline": "Множество приложений по вашей ссылке Composio",
   "marketplace.plugin.composio.description":
-    "Composio подключает агентов к Gmail, Slack, GitHub и сотням других приложений через один сервер MCP. Создайте сервер в своём аккаунте Composio, добавьте в него нужные приложения и вставьте сюда его ссылку. Ключ API добавляйте, только если ваш сервер его требует.",
+    "Composio подключает агентов к Gmail, Slack, GitHub и сотням других приложений через один сервер MCP. Подключите нужные приложения в своём аккаунте Composio и вставьте сюда его URL MCP и ключ API.",
   "marketplace.plugin.composio.app":
     "Приложения, которые вы добавили на свой сервер MCP Composio, по ссылке из вашего аккаунта Composio.",
   "marketplace.plugin.composio.prompt.inbox":
@@ -258,6 +300,13 @@ export const messages = {
   "marketplace.plugin.composio.prompt.handoff":
     "Опубликуйте краткое описание этого пул-реквеста в канале нашей команды.",
   "marketplace.plugin.composio.prompt.apps": "Какие приложения и действия доступны вам через Composio?",
+  "marketplace.plugin.composio.hint.url": "URL сервера MCP в вашем аккаунте Composio",
+  "marketplace.plugin.composio.hint.apiKey":
+    "Он находится в аккаунте Composio, в разделе Settings > Sessions & API Key.",
+  "marketplace.auth.apiKey": "API-ключ",
+  "marketplace.auth.personalApiKey": "Личный API-ключ",
+  "marketplace.auth.mcpUrl": "URL MCP",
+  "marketplace.auth.createKey": "Создать ключ",
   "marketplace.skill.installMenu.install": "Установить",
   "marketplace.skill.installMenu.installNamed": "Установить: {name}",
   "marketplace.skill.installMenu.allAgents": "Все агенты",

@@ -1,18 +1,16 @@
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import {
-  ArrowDownUp,
-  ArrowLeftRight,
-  ClipboardList,
-  Copy,
-  Keyboard,
-  List,
-  type LucideIcon,
-  MousePointer2,
-  SquareMousePointer,
-  Undo2,
-  ZoomIn,
-} from "lucide-react-native";
+import type { LucideIcon } from "lucide-react-native";
+import ArrowDownUp from "lucide-react-native/icons/arrow-down-up";
+import ArrowLeftRight from "lucide-react-native/icons/arrow-left-right";
+import ClipboardList from "lucide-react-native/icons/clipboard-list";
+import Copy from "lucide-react-native/icons/copy";
+import Keyboard from "lucide-react-native/icons/keyboard";
+import List from "lucide-react-native/icons/list";
+import MousePointer2 from "lucide-react-native/icons/mouse-pointer-2";
+import SquareMousePointer from "lucide-react-native/icons/square-mouse-pointer";
+import Undo2 from "lucide-react-native/icons/undo-2";
+import ZoomIn from "lucide-react-native/icons/zoom-in";
 import { SettingsContent, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { useText } from "@/shared/lib/text";
 

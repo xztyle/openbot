@@ -38,23 +38,49 @@ import {
   encodeTeamProtocolV6CurrentHttpRequest,
   encodeTeamProtocolV6CurrentHttpResponse,
 } from "./v6-adapter";
+import { TEAM_PROTOCOL_V7 } from "./v7";
+import {
+  decodeTeamProtocolV7CurrentHttpRequest,
+  decodeTeamProtocolV7CurrentHttpResponse,
+  encodeTeamProtocolV7CurrentHttpRequest,
+  encodeTeamProtocolV7CurrentHttpResponse,
+} from "./v7-adapter";
+import { TEAM_PROTOCOL_V8 } from "./v8";
+import {
+  decodeTeamProtocolV8CurrentHttpRequest,
+  decodeTeamProtocolV8CurrentHttpResponse,
+  encodeTeamProtocolV8CurrentHttpRequest,
+  encodeTeamProtocolV8CurrentHttpResponse,
+} from "./v8-adapter";
 
 export interface TeamHttpCodecOptions {
   preserveSemanticTags?: boolean;
-  /** Read only by V4, V5 and V6, which accept a model in an agent create request. */
+  /** Read only by V4 to V8, which accept a model in an agent create request. */
   agentCreateModel?: boolean;
+  /** Read only by V7 and V8 responses: the negotiated history-extent-v1 capability. */
+  historyExtent?: boolean;
+  /** Read only by V7 and V8 responses: the negotiated ui-blocks-v1 capability. */
+  uiBlocks?: boolean;
+  /** Read only by V7 and V8 responses: the negotiated subagents-v1 capability. */
+  subagents?: boolean;
+  /** Read only by V7 responses: the negotiated prompt-multi-select-v1 capability. */
+  promptMultiSelect?: boolean;
 }
 
 type DecodedRequest =
   | ReturnType<typeof decodeTeamProtocolV1CurrentHttpRequest>
   | ReturnType<typeof decodeTeamProtocolV4CurrentHttpRequest>
   | ReturnType<typeof decodeTeamProtocolV5CurrentHttpRequest>
-  | ReturnType<typeof decodeTeamProtocolV6CurrentHttpRequest>;
+  | ReturnType<typeof decodeTeamProtocolV6CurrentHttpRequest>
+  | ReturnType<typeof decodeTeamProtocolV7CurrentHttpRequest>
+  | ReturnType<typeof decodeTeamProtocolV8CurrentHttpRequest>;
 type DecodedResponse =
   | ReturnType<typeof decodeTeamProtocolV1CurrentHttpResponse>
   | ReturnType<typeof decodeTeamProtocolV4CurrentHttpResponse>
   | ReturnType<typeof decodeTeamProtocolV5CurrentHttpResponse>
-  | ReturnType<typeof decodeTeamProtocolV6CurrentHttpResponse>;
+  | ReturnType<typeof decodeTeamProtocolV6CurrentHttpResponse>
+  | ReturnType<typeof decodeTeamProtocolV7CurrentHttpResponse>
+  | ReturnType<typeof decodeTeamProtocolV8CurrentHttpResponse>;
 
 export interface TeamHttpCodec {
   encodeRequest(method: string, path: string, value: unknown, options: TeamHttpCodecOptions): string;
@@ -92,6 +118,20 @@ const V5_CODEC: TeamHttpCodec = {
   decodeResponse: decodeTeamProtocolV5CurrentHttpResponse,
 };
 
+const V7_CODEC: TeamHttpCodec = {
+  encodeRequest: encodeTeamProtocolV7CurrentHttpRequest,
+  decodeRequest: decodeTeamProtocolV7CurrentHttpRequest,
+  encodeResponse: encodeTeamProtocolV7CurrentHttpResponse,
+  decodeResponse: decodeTeamProtocolV7CurrentHttpResponse,
+};
+
+const V8_CODEC: TeamHttpCodec = {
+  encodeRequest: encodeTeamProtocolV8CurrentHttpRequest,
+  decodeRequest: decodeTeamProtocolV8CurrentHttpRequest,
+  encodeResponse: encodeTeamProtocolV8CurrentHttpResponse,
+  decodeResponse: decodeTeamProtocolV8CurrentHttpResponse,
+};
+
 const V6_CODEC: TeamHttpCodec = {
   encodeRequest: encodeTeamProtocolV6CurrentHttpRequest,
   decodeRequest: decodeTeamProtocolV6CurrentHttpRequest,
@@ -101,6 +141,8 @@ const V6_CODEC: TeamHttpCodec = {
 
 /** The HTTP adapter of a negotiated protocol. No protocol, or one older than V3, gets V1. */
 export function teamHttpCodec(protocol: number | undefined): TeamHttpCodec {
+  if (protocol === TEAM_PROTOCOL_V8) return V8_CODEC;
+  if (protocol === TEAM_PROTOCOL_V7) return V7_CODEC;
   if (protocol === TEAM_PROTOCOL_V6) return V6_CODEC;
   if (protocol === TEAM_PROTOCOL_V5) return V5_CODEC;
   if (protocol === TEAM_PROTOCOL_V4) return V4_CODEC;

@@ -20,7 +20,6 @@ export const messages = {
   "status.remote.stageCompatibility": "Verificando a compatibilidade do computador: {reason}",
   "status.remote.stageAgents": "Carregando agentes: {reason}",
   "status.remote.stageReads": "Carregando o status de leitura: {reason}",
-  "status.remote.stageConversations": "Carregando conversas: {reason}",
   "status.remote.suspendedDetail":
     "Atualize o OpenBot Mobile ou o aplicativo para computador antes de conectar.\n{detail}",
   "status.remote.cooldownDetail":

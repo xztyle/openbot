@@ -16,6 +16,7 @@ import {
   STORAGE_LIMITS,
   type StorageBreakdown,
   type StorageCategory,
+  type StorageDisk,
   type StorageUsage,
   type StoredFileRow,
 } from "@openbot/contracts/ipc";
@@ -32,7 +33,7 @@ import {
 import type { MailboxStore, MailboxStoredFile } from "./mailbox-store";
 import { StoredStateFailure, storedIO, storedSync } from "./stored-state-effects";
 
-export interface StorageRoots {
+interface StorageRoots {
   /** The SQLite file. Its `-wal` and `-shm` companions are counted with it. */
   database: string;
   downloads: string;
@@ -83,7 +84,7 @@ interface TreeSize {
  * Bytes of the regular files under `root`. A symbolic link is never followed, so a workspace that
  * links to a large folder does not count it, and a loop cannot run forever.
  */
-const measureTree = Effect.fn("StorageUsage.measureTree")(function* (
+export const measureTree = Effect.fn("StorageUsage.measureTree")(function* (
   root: string,
   entryLimit = STORAGE_WALK_ENTRY_LIMIT,
 ): Effect.fn.Return<TreeSize, StoredStateFailure> {
@@ -135,15 +136,25 @@ const logFiles = Effect.fn("StorageUsage.logFiles")((directory: string) =>
     Effect.catch(() => Effect.succeed([])),
   ),
 );
-const freeBytes = Effect.fn("StorageUsage.freeBytes")((path: string) =>
+
+function safeBytes(value: number): number | null {
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/** One statfs call and no scan, so the sidebar can ask often. */
+const diskSpace = Effect.fn("StorageUsage.diskSpace")((path: string) =>
   storedIO(() => statfs(path)).pipe(
-    Effect.map((filesystem) => {
-      const free = filesystem.bavail * filesystem.bsize;
-      return Number.isSafeInteger(free) && free >= 0 ? free : null;
-    }),
-    Effect.catch(() => Effect.succeed(null)),
+    Effect.map(
+      (filesystem): StorageDisk => ({
+        freeBytes: safeBytes(filesystem.bavail * filesystem.bsize),
+        totalBytes: safeBytes(filesystem.blocks * filesystem.bsize),
+      }),
+    ),
+    Effect.catch(() => Effect.succeed<StorageDisk>({ freeBytes: null, totalBytes: null })),
   ),
 );
+
+const freeBytes = (path: string) => diskSpace(path).pipe(Effect.map((disk) => disk.freeBytes));
 
 /** A wire identifier or nothing, so one odd id drops a link instead of failing the whole answer. */
 function wireId(value: string | null | undefined): string | null {
@@ -551,6 +562,10 @@ export class StorageUsageService {
       return yield* new StoredStateFailure({ cause: new StorageNotFoundError(sourceText("error.backend.fileGone")) });
     yield* this.#sources.mailbox.deleteStoredFile(fileId).pipe(Effect.ensuring(Effect.sync(() => this.invalidate())));
   }).bind(this);
+
+  disk() {
+    return diskSpace(this.#sources.roots.data);
+  }
 
   clear(category: ClearableStorageCategory) {
     return clearStorageCategory(this.#sources.roots, category).pipe(

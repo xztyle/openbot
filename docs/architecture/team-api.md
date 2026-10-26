@@ -2,7 +2,7 @@
 
 ## Team API compatibility boundary
 
-Current remote connections use Team API protocol v5 over three ordered WebRTC DataChannels: `rpc`,
+Current remote connections use Team API protocol v8 over three ordered WebRTC DataChannels: `rpc`,
 `events`, and `files`. A sandboxed hidden Chromium page owns each `RTCPeerConnection`. Electron main
 uses a `MessagePort` and transfers binary data as `ArrayBuffer`. Signal carries SDP and ICE only,
 except the Slack requests of an agent's Slack app (see [Messaging connections](channels-and-messaging.md#messaging-connections)).
@@ -10,19 +10,45 @@ OpenBot Mobile uses the same ticket, authentication transcript, framing, RPC cod
 In Expo Go, an Expo DOM component owns the browser `RTCPeerConnection` inside a hidden WebView and
 passes only serializable, validated commands and events to the native React UI; no native WebRTC
 module or development build is required.
+The host's network route preference (`openbot-remote-network-route-v1.json`) applies to every
+remote connection to the computer. With `private`, the host gives WebRTC no ICE servers, and the
+hidden page removes each local, remote, and SDP candidate that is not a `host` candidate on a private
+address (RFC 1918, 100.64.0.0/10, `fc00::/7`, or `.local`). A change to `private` closes the
+connected peers, so each one connects again without the relay. The Remote Desktop runtime reads its
+ICE servers from main for each stream and sends them to the viewer, so its media also has no relay.
+Its candidates are not filtered; a direct public IPv6 path stays possible.
 Mobile server labels in the drawer and connection settings describe the authenticated application
 connection, not membership or Signal presence. Each membership has its own transport and recovery controller while mobile is active.
+On a return to the app, the selected server connects first; the others become active when it is
+online, or after 3 s.
 Switching servers changes the visible workspace without closing other connections. iOS `inactive`
 transitions leave connections alone. Backgrounding retains the last connection status and pauses
 recovery; transport failures received in the background are retained for resume. Only the paired desktop is Local;
-other servers are Remote regardless of the account role. Connecting becomes Online after compatibility and workspace synchronization succeed;
-transport failures and reconnect attempts show Offline, and protocol failures show Connection error.
+other servers are Remote regardless of the account role. Connecting becomes Online after compatibility succeeds and the agents,
+the read state and the sections load. These three reads run together. Cached conversations load
+again after Online, the open conversation first; a chat that did not load then loads when it opens.
+Transport failures and reconnect attempts show Offline, and protocol failures show Connection error.
 The existing RTC connection updates and recovery controller are the source of truth; the indicator
-adds no polling or health requests. Foreground resume reuses a healthy connection without a workspace
-reload. Canceled reads and event resets request data synchronization without showing a reconnect on
-a healthy connection. Invite selection and manual refresh reuse the same controller. A transient RTC
-disconnected state has a five-second recovery window, including on resume; failed or closed states
-drive recovery immediately. Backgrounding pauses the grace timer and cancels pending reads so they cannot block resume.
+adds no polling or health requests. Foreground resume reuses a healthy connection and reads the
+workspace again without showing a reconnect. The time away decides what happens to the connection:
+after less than 30 s the path is kept. After 30 s the host stopped using the path (ICE consent), so the
+peer renews its Signal socket and restarts ICE; a host that dropped the connection answers with a new
+fingerprint, and the peer fails at once instead of after a read timeout. A connection that is lost
+while a return checks it is replaced at once, with no countdown, as when the check fails. After 160 s Signal has told
+the host to drop the connection (120 s socket idle timeout, then 30 s), so the peer is replaced on the
+same session at once, without a resume hello, and the first attempt connects. A server that was
+Online when the app left keeps its Online look during the first attempt after the return, for up to
+5 s (`QUIET_RESUME_MS` in `server-connection.tsx`): the server is `resuming`, `showsOnline` is
+true, and no reconnect status, faded avatars or faded chat show. A workspace request to a resuming
+server waits for Online instead of failing; it fails when an attempt fails, when the app leaves, or
+when the server goes. The outbox, the queue, history reloads and the browser view still read the
+live `state`. A failed attempt, a cooldown, a protocol stop or the end of the 5 s shows the normal
+reconnect status. A server that was not Online when the app left shows its status at once. Canceled reads
+and event resets request data synchronization without showing a reconnect on a healthy connection. Invite selection and manual refresh reuse the same controller. A transient RTC
+disconnected state has a 15-second recovery window, including on resume; failed or closed states
+drive recovery immediately. Signal's `rate_limited`, or a close with code 1008 and no error frame,
+makes the next Signal socket wait 60 s; another refusal with code 1008, such as an invalid ticket,
+reconnects at once. Backgrounding pauses the grace timer and cancels pending reads so they cannot block resume.
 Explicit refresh bypasses the retry cooldown without overlapping a pending connection attempt.
 The native/DOM mailbox carries concurrent commands by ID. Switching or disconnecting cancels
 pending callers immediately; peer generations reject late callbacks from a superseded host.
@@ -32,9 +58,30 @@ needs the published host. The separate development test-client role never auto-p
 Mobile Connect tickets and QR codes bind the started host ID and SHA-256 public-key fingerprint.
 Mobile verifies that binding at redemption and against the directory, pins the key, and selects
 that host rather than the first account-owned desktop. Legacy unbound QR codes require regeneration.
+A permanent Mobile Connect link uses the same URL and redemption route, so released phone apps
+accept it. It has the same host binding and redeems more than once. D1 keeps only its hash. It stops
+working when the desktop replaces or revokes it, or when the desktop session that made it ends. The
+desktop keeps the link in its encrypted session file and deletes it at sign-out.
+`mobile_auth_sessions.connect_link_host_id` records the host whose link signed in a phone. A revoke
+signs out those phones, also when the link row went with its desktop session, and the device list
+shows each phone's method. `DELETE /v1/mobile-auth/ticket?host=` spends the unused one-time codes of
+that host when the desktop cancels the code that it shows.
+A phone session is account-wide: the phone opens each host of the account directory, not only the
+host of its code. `GET /v1/mobile-auth/devices?host=` lists the account's phones only when that host
+is in the directory (an active membership and a device key), so they can open it. With no `host`,
+the route returns every phone, as before. The desktop Connected devices list sends its started host
+and shows no phones when it has no host identity. Account sessions still list and revoke each phone.
+A phone can also sign in with an email code. It requests the code through `/v1/auth/email/start` and
+verifies it through `/v1/mobile-auth/email/verify`, which writes the `auth_sessions` row and its
+`mobile_auth_sessions` row in one batch; `/v1/auth/email/verify` would make a desktop session. This
+session has no host binding: the phone stores `signIn: "email"` with it, connects to every host in
+the account directory and pins each host key on first use, as the web client does. A stored session
+with no host and no marker is still a legacy QR session and is revoked. The development LAN allow
+list keeps both email routes on loopback, because a development code follows from its challenge ID.
 Desktop invitation QR codes contain the same one-use link as Copy link. The signed-in mobile
 scanner validates that link and opens the invitation review before acceptance. These codes join
-one server; Mobile Connect codes sign in to the desktop account and select the paired host.
+one server; Mobile Connect codes sign in to the desktop account. Mobile keeps the paired host as the
+default server above the drawer divider until the user changes it, and opens on the first server.
 Both clients read account-wide membership from D1's indexed `remote_memberships` / `remote_hosts`
 join. An offline paired desktop does not remove other memberships, and mobile connects directly
 to each host independently. A cold launch refreshes the account directory. Both clients check again
@@ -44,8 +91,12 @@ iOS `inactive` transitions, including Notification Center, do not trigger a chec
 Session revocation, explicit refresh,
 and completed invitation acceptance can refresh sooner. A lost healthy connection also requests
 membership reconciliation; a transport failure alone never removes a server. Mobile member controls
-use the same account endpoints: owners and admins can invite, while only owners can change another
-member's role or remove access. D1 retains revoked membership records and invalidates affected
+use the same account endpoints: owners and admins invite, change another member's role, remove access
+and end another member's session. Nobody can change or remove the owner, and only the owner ends the
+owner's sessions. `canAdministerServer` in `packages/contracts/src/ipc-team-host.ts` is the one role
+check for the clients and the host. On a host with an account directory, the Team API member `PATCH`
+and `DELETE` write to D1 through `HostService`, so the next directory sync does not undo them; each
+sync closes the host sessions of a member that D1 removed, disabled or gave another role. D1 retains revoked membership records and invalidates affected
 sessions; both clients exclude inactive members from the active list and count. On legacy HTTP(S)
 hosts, desktop exposes inactive records separately for removal before a new invitation; it does not
 restore the pause/restore controls or change the released invitation rules. Mobile separates shareable
@@ -61,20 +112,28 @@ The native document and photo pickers and the in-chat camera panel prepare local
 uploads them to the host before one message commits the ordered draft IDs. Mobile limits each file
 to 10 MB because the native/DOM bridge copies Base64 data. Downloads use the same authenticated file
 channel, validate size, chunk order, and SHA-256, and pass verified bytes back through the command
-bridge. Mobile queues downloads to limit concurrent copies. Image previews preserve aspect ratio;
-other files use the system share sheet through a temporary cache file.
+bridge. Mobile queues downloads to limit concurrent copies. Image previews preserve aspect ratio.
+Audio and video play in the chat. Other files take the desktop preview kind from
+`filePreviewKindForFile`: Markdown, text, HTML, PDF and `.xlsx` files open on the preview screen.
+The `.xlsx` parser in `packages/contracts/src/spreadsheet-workbook.ts` runs in a DOM component,
+because it needs `DOMParser`. iOS shows a PDF in a native web view with no scripts; Android draws
+its pages with pdf.js in a DOM component. A visual reply shows its page in the chat, with no
+scripts. Files with no preview use the system share sheet through a temporary cache file.
 
 Mobile chat loads the latest 50 messages through `conversation-page` and loads older pages by cursor.
-Its `FlatList` virtualizes messages and retains the visible position when older pages are added.
+Its Legend List (`KeyboardAwareLegendList` from `@legendapp/list/keyboard`) renders only the rows near
+the viewport, gets every loaded message, and retains the visible position when older pages are added.
+A row renders again only when its message changes; other row state comes from a React context.
 Reply references travel with each page. A page with no overlap replaces the cached window so a
 reconnect cannot leave an invisible gap. Older-page responses do not advance the live revision.
 The in-memory conversation store notifies subscribers per agent and combines streamed text once
 per animation frame. Windows above 50 messages are released when their last subscriber leaves;
 the complete history remains in the host database. Connection recovery prioritizes observed chats.
-Mobile chat keeps viewport, latest-user, and composer measurements in its motion controller. The
-last user message anchors a native blank-space inset; streamed replies consume that inset without
-autoscrolling. Initial history positioning and the first-send/first-response animation are separate
-states. Pending message bubbles reconcile through the host receipt ID, not message text.
+Mobile chat keeps viewport and composer measurements in its motion controller. The last user
+message is the list's `anchoredEndSpace` anchor: the list adds a blank-space inset under it, and
+streamed replies consume that inset without autoscrolling. Initial history positioning and the
+first-send/first-response animation are separate states. Pending message bubbles reconcile through
+the host receipt ID, not message text.
 Mobile replies use the existing `replyToMessageId` field and retain their source after delivery.
 Agent bubbles support swipe-to-reply and a long-press action sheet with haptic feedback. The
 sheet has one nested native stack for actions and text selection; message text stays in memory,
@@ -92,9 +151,13 @@ The one exception is development builds: `bun run dev:mobile` opens the link wit
 and a `__DEV__` build redeems it without confirmation only when its account service is a loopback
 or private-network `http:` origin. Release builds always use the confirmed flow.
 Plugin links open their validated public page in the in-app browser. Unsupported links show a
-safe fallback. Permanent invitation metadata comes from the shared Team client; revocation stops
+safe fallback. A share from another app opens `openbot://expo-sharing` (the iOS share extension or an
+Android share intent of `expo-sharing`); the share waits in native storage through sign-in. The share
+sheet moves its files into the app cache, the user chooses an agent, and that chat's composer gets the
+text and files, which follow the attachment rules above. The phone reads the response headers of a
+shared link; a link to an image of at most 10 MB is downloaded and comes as a file instead of the link. Permanent invitation metadata comes from the shared Team client; revocation stops
 new joins without removing existing members.
-iOS associates only `https://openbot.run/join` with `run.openbot.mobile`. Changes to associated
+iOS associates `https://openbot.run/join` and `https://openbot.run/agents/*` with `run.openbot.mobile`. Changes to associated
 domains require a new native app build and deployment of the website association file. Android
 continues to open HTTPS invitations in the browser, whose button opens `openbot://join`. Enabling
 verified Android App Links requires the release app-signing certificate's SHA-256 fingerprint,
@@ -196,7 +259,45 @@ The first released Team API protocol is `1`. All later HTTP requests include `Op
 
 Each protocol has a frozen codec and adapter in `packages/contracts/src/team-protocol`. The v1 HTTP codec owns the fixed route registry and validates JSON requests and responses before the adapter converts current values. Uploads, downloads, and other binary routes use the same negotiated headers and error envelope. The host does not write current service or IPC values directly to the network. Breaking or semantic changes add a new protocol directory and registry entry. A released adapter keeps its original meaning.
 
+From protocol 8, provider ids and auth kinds are open values. A new provider is a new value, not a
+new protocol. A client keeps an agent of a provider that it does not know, and shows it disabled
+with an update prompt. See [Providers](providers.md) for the frozen lists that hide new providers
+from peers below 8, and for the local-only providers that no protocol shows.
+
 Capabilities describe additive behavior. The client sends its capability list when it sets the event scope. The host sends optional events only when the client declared the related capability. A missing capability disables only that feature. An unknown optional event is ignored. A malformed known event closes the connection as `protocol_error` because the client cannot safely apply it.
+
+The optional `agent-memories-v1` capability adds three POST routes. `/v1/agent-memories/page`
+returns up to 256 memories. `/v1/agent-memories/selection` returns up to 256 selection records,
+the agent ID, and essential-memory byte usage. Both use ascending memory IDs and an `after`
+cursor (`null` for the first page). Clients validate owner and cursor order. Edits do not move IDs
+between pages. Reads across several pages are not an atomic snapshot; the next refresh sees
+concurrent changes. `/v1/agent-memories/inclusion` changes up to 25 selections with expected
+revisions and returns an empty acknowledgement; the client then reads selection pages again.
+Each route requires authentication and a visible agent. Selection writes use the same member
+access as existing memory writes. User choices override automatic selection.
+
+The released full-list GET route, memory shapes, and 2 MiB frame limit stay unchanged. A new
+client connected to an older host keeps text editing and hides selection controls. An older
+client can edit text on a new host without changing inclusion. Storage choices remain 64, 128,
+256, and 512. Lowering the setting never deletes existing entries.
+
+Only essential memories enter startup instructions, in a block limited to 8,192 UTF-8 bytes.
+Claude gets that block with a user turn instead: the full block in the first turn and after a
+compaction, and only the change after a memory edit. A memory change then keeps the cached
+system prompt and does not restart the Claude query. A profile change still restarts it.
+Saved memories stay on the host in SQLite. Agents can use bounded local search and ID-paged
+listing to recall other entries. FTS5 uses `unicode61` and BM25. Queries match any literal term;
+equal scores use the newest update, then the memory ID. Search returns at most 10 entries,
+and maintenance pages return at most 25. Both responses are limited to 8,192 UTF-8 bytes.
+The search index stays local. Essential prompt text and requested tool results go to the active
+provider through the existing secret-redaction path.
+
+Selection metadata is separate from the released memory shape. Migration 32 preserves memory
+text, IDs, and dates, and selects recent manual entries before recent automatic entries. The same
+serializer checks the complete prompt block during migration, mutation, and prompt generation.
+Automatic text and selection changes stay pending until the turn completes successfully. Commit
+checks ownership, revisions, user choices, and capacity again. Agent tools cannot change or delete
+a user-controlled selection. The user can release that control without changing its inclusion.
 
 Team API failures use a JSON error envelope with `error` and a stable `code`. Compatibility codes are `client_update_required`, `host_update_required`, and `protocol_error`. Authentication and network failures are projected to `authentication_required` and `network_unavailable` in the desktop connection state. A confirmed compatibility or protocol error stops data-plane requests and automatic reconnect until the user selects `Retry`, restarts, or updates.
 

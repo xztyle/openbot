@@ -11,6 +11,7 @@ import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { Effect, Result, Schema } from "effect";
 import { AgentMarketplaceError } from "./agent-marketplace";
 import { encodeBase64Url } from "./crypto";
+import { marketplaceCreatorName } from "./marketplace-pagination";
 import { MarketplaceStorage } from "./marketplace-storage";
 import type { AuthUser, WorkerBindings } from "./types";
 
@@ -221,7 +222,7 @@ export class AgentTemplates {
           id: row.id,
           avatarUrl: row.avatar_key ? `/v1/agent-templates/${row.id}/avatar?v=${row.updated_at}` : null,
           cardUrl: row.card_key ? `/v1/agent-templates/${row.id}/card?v=${row.updated_at}` : null,
-          creatorName: row.creator_name?.trim() || "OpenBot user",
+          creatorName: marketplaceCreatorName(row.creator_name),
           updatedAt: new Date(row.updated_at).toISOString(),
         };
       }),

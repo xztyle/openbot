@@ -1,9 +1,16 @@
 import { isAvatarMimeType } from "@openbot/contracts/avatar-images";
 import { parseBillingPortalRequest } from "@openbot/contracts/billing";
 import { parseHostedServerLifecycleInput } from "@openbot/contracts/hosted-servers";
+import {
+  LICENSE_UNAVAILABLE_STATE,
+  parseLicenseCheckoutRequest,
+  parseLicenseRenewalRequest,
+  parseLicenseUsersRequest,
+} from "@openbot/contracts/license";
 import { type DynamicRecord, isBoolean, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { Cause, Effect } from "effect";
+import { type AccountAttribution, requestFirstTouch } from "./account-attribution";
 import { type AuthService, AuthServiceError } from "./auth-service";
 import { AvatarUploadError, readAvatarUpload, removeAccountAvatar, storeAccountAvatar } from "./avatar-storage";
 import { BILLING_UNAVAILABLE_STATE, BillingError, type BillingService } from "./billing-service";
@@ -51,16 +58,18 @@ export interface BrowserApiServices {
     | "revokeInvite"
     | "changeMembership"
     | "hostAsset"
+    | "emailableInvite"
   >;
   /** The stored logo of one host version, or null. The handler checks membership and the version first. */
   hostLogo: (hostId: string, version: string) => ReturnType<typeof readHostLogo>;
   hosting: () => Pick<
     HostedServerService,
-    "list" | "plans" | "create" | "checkout" | "delete" | "wake" | "status" | "lifecycle"
+    "list" | "plans" | "create" | "checkout" | "delete" | "wake" | "restart" | "status" | "lifecycle"
   >;
   inviteEmailDelivery: () => TeamInviteEmailDelivery | null;
+  attribution: () => Pick<AccountAttribution, "recordCheckout">;
   /** The billing service, or null when this deployment has no Stripe key. */
-  billing: () => Pick<BillingService, "getState" | "createPortal"> | null;
+  billing: () => Pick<BillingService, "getState" | "createPortal" | "license"> | null;
   avatarBucket: () => R2Bucket;
   hostedSites: () => Pick<HostedSiteService, "list" | "delete">;
   signalUrl: () => string;
@@ -105,7 +114,7 @@ function refuseWith(refusal: abstract new (...args: never) => { status: number; 
     );
 }
 
-export function browserSessionToken(request: Request): string | null {
+function browserSessionToken(request: Request): string | null {
   const values = (request.headers.get("Cookie") ?? "")
     .split(";")
     .map((part) => part.trim())
@@ -175,6 +184,8 @@ const handleBrowserOperation = Effect.fn("BrowserApi.handleOperation")(function*
       code: yield* requiredString(body, "code"),
       sourceIp: services.sourceIp(request),
       sessionLifetimeMs: BROWSER_SESSION_LIFETIME_MS,
+      surface: "web",
+      firstTouch: requestFirstTouch(body.firstTouch),
     });
     const previous = browserSessionToken(request);
     if (previous) {
@@ -187,6 +198,18 @@ const handleBrowserOperation = Effect.fn("BrowserApi.handleOperation")(function*
       `${COOKIE}=${result.sessionToken}; ${COOKIE_ATTRIBUTES}; Max-Age=${BROWSER_SESSION_LIFETIME_MS / 1_000}`,
     );
     return response;
+  }
+  if (path === "checkout-attribution" && request.method === "POST") {
+    // The page after a desktop checkout. The session ID that Stripe put in its URL is the only proof.
+    const body = yield* readJsonObject(request);
+    const firstTouch = requestFirstTouch(body.firstTouch);
+    if (isString(body.sessionId) && firstTouch) {
+      yield* services
+        .attribution()
+        .recordCheckout(body.sessionId, firstTouch)
+        .pipe(Effect.catch(() => Effect.sync(() => console.warn("Account attribution save failed."))));
+    }
+    return json({ accepted: true });
   }
   const token = browserSessionToken(request);
   const user = token ? yield* services.auth.authenticate(token) : null;
@@ -255,7 +278,7 @@ const handleBrowserOperation = Effect.fn("BrowserApi.handleOperation")(function*
     return json(yield* services.remote.acceptInvite(user, yield* requiredString(body, "token")));
   if (path === "v1/team-invitations/email") {
     yield* sendTeamInviteEmail(
-      { auth: services.auth, delivery: services.inviteEmailDelivery },
+      { auth: services.auth, remote: services.remote, delivery: services.inviteEmailDelivery },
       user,
       body,
       services.sourceIp(request),
@@ -292,7 +315,8 @@ const handleAccount = Effect.fn("BrowserApi.handleAccount")(function* (
     return json(yield* removeAccountAvatar(services.auth, services.avatarBucket(), token, user));
   if (path === "v1/me/sessions" && request.method === "GET")
     return json({ sessions: yield* services.auth.listAccountSessions(token) });
-  if (path.startsWith("v1/me/billing")) return yield* handleBilling(request, path, user, services);
+  if (path.startsWith("v1/me/billing") || path.startsWith("v1/me/license"))
+    return yield* handleBilling(request, path, user, services);
   // A session ID is a UUID, so the segment needs no decoding; the service refuses any other value.
   const [, sessionId] = /^v1\/me\/sessions\/([^/]+)$/u.exec(path) ?? [];
   if (sessionId !== undefined && request.method === "DELETE") {
@@ -303,7 +327,7 @@ const handleAccount = Effect.fn("BrowserApi.handleAccount")(function* (
 });
 
 /**
- * The bearer `/v1/me/billing...` routes for a browser. Stripe sends the user back to `/app`, not to the
+ * The bearer `/v1/me/billing...` and `/v1/me/license...` routes for a browser. Stripe sends the user back to `/app`, not to the
  * desktop return page. Returns null for any other path.
  */
 const handleBilling = Effect.fn("BrowserApi.handleBilling")(function* (
@@ -321,6 +345,26 @@ const handleBilling = Effect.fn("BrowserApi.handleBilling")(function* (
     const input = parseBillingPortalRequest(yield* readJsonObject(request));
     if (!input) return failure(400, "invalid_billing_request", "The billing request is invalid.");
     return json({ url: yield* billing.createPortal(user.id, input, "web", origin) });
+  }
+  if (path === "v1/me/license" && request.method === "GET")
+    return json(billing ? yield* billing.license.getState(user.id) : LICENSE_UNAVAILABLE_STATE);
+  if (!path.startsWith("v1/me/license/") || request.method !== "POST") return null;
+  if (!billing) return failure(503, "billing_unavailable", "Billing is not available.");
+  const body = yield* readJsonObject(request);
+  if (path === "v1/me/license/checkout") {
+    const input = parseLicenseCheckoutRequest(body);
+    if (!input) return failure(400, "invalid_billing_request", "The billing request is invalid.");
+    return json({ url: yield* billing.license.createCheckout(user, input, "web", origin) });
+  }
+  if (path === "v1/me/license/users") {
+    const input = parseLicenseUsersRequest(body);
+    if (!input) return failure(400, "invalid_billing_request", "The billing request is invalid.");
+    return json(yield* billing.license.setUsers(user.id, input.users));
+  }
+  if (path === "v1/me/license/renewal") {
+    const input = parseLicenseRenewalRequest(body);
+    if (!input) return failure(400, "invalid_billing_request", "The billing request is invalid.");
+    return json(yield* billing.license.setRenewal(user.id, input.cancel));
   }
   return null;
 }, refuseWith(BillingError));
@@ -340,19 +384,23 @@ const handleHosting = Effect.fn("BrowserApi.handleHosting")(function* (
     if (request.method !== "POST") return null;
     const body = yield* readJsonObject(request);
     return json(
-      yield* services
-        .hosting()
-        .create(
-          user,
-          { name: body.name, plan: body.plan, interval: body.interval, currency: body.currency },
-          request.headers.get("Idempotency-Key"),
-          returnTo,
-        ),
+      yield* services.hosting().create(
+        user,
+        {
+          name: body.name,
+          plan: body.plan,
+          interval: body.interval,
+          currency: body.currency,
+          entryPoint: body.entryPoint,
+        },
+        request.headers.get("Idempotency-Key"),
+        returnTo,
+      ),
       201,
     );
   }
   const [, encodedServerId, action] =
-    /^v2\/hosting\/servers\/([^/]+)(?:\/(wake|checkout|status|lifecycle))?$/u.exec(path) ?? [];
+    /^v2\/hosting\/servers\/([^/]+)(?:\/(wake|restart|checkout|status|lifecycle))?$/u.exec(path) ?? [];
   if (encodedServerId === undefined) return null;
   const serverId = decodeURIComponent(encodedServerId);
   if (action === "lifecycle" && request.method === "POST") {
@@ -363,6 +411,7 @@ const handleHosting = Effect.fn("BrowserApi.handleHosting")(function* (
     return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
   }
   if (action === "wake" && request.method === "POST") return json(yield* services.hosting().wake(user, serverId));
+  if (action === "restart" && request.method === "POST") return json(yield* services.hosting().restart(user, serverId));
   if (action === "status" && request.method === "GET") return json(yield* services.hosting().status(user, serverId));
   if (action === "checkout" && request.method === "POST") {
     return json(yield* services.hosting().checkout(user, serverId, returnTo));

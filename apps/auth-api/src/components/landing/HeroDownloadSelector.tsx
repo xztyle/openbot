@@ -7,16 +7,82 @@ import {
   type DownloadPlatform,
   detectDownloadPlatform,
 } from "../../lib/download-platforms";
+import { EXTERNAL_LINK_REL } from "../../lib/landing-links";
+import { detectMobilePlatform, MOBILE_APP_ORDER, MOBILE_APPS, type MobilePlatform } from "../../lib/mobile-apps";
 import { LandingIcon } from "./LandingIcon";
+
+type HeroPlatform = DownloadPlatform | MobilePlatform;
+
+interface HeroOffer {
+  action: string;
+  /** Missing while the installer is not out yet. */
+  href?: string;
+  label: string;
+  status: string;
+  /** A store page on another site, which opens in a new tab. */
+  external: boolean;
+}
+
+function heroOffer(platform: HeroPlatform): HeroOffer {
+  if (platform === "ios" || platform === "android") return { ...MOBILE_APPS[platform], external: true };
+  const { href, ...details } = DOWNLOAD_PLATFORMS[platform];
+  return details.available && href ? { ...details, href, external: false } : { ...details, external: false };
+}
+
+interface HeroMenuItemProps {
+  platform: HeroPlatform;
+  selected: boolean;
+  onSelect: () => void;
+}
+
+function HeroMenuItem(props: HeroMenuItemProps) {
+  const offer = () => heroOffer(props.platform);
+  return (
+    <Show
+      when={offer().href}
+      fallback={
+        <button
+          class="landing-download-menu-item"
+          type="button"
+          role="menuitem"
+          data-state="coming-soon"
+          data-selected={props.selected ? "true" : undefined}
+          onClick={() => props.onSelect()}
+        >
+          <PlatformLogo platform={props.platform} />
+          <span>{offer().label}</span>
+          <small>{offer().status}</small>
+        </button>
+      }
+    >
+      {(href) => (
+        <a
+          class="landing-download-menu-item"
+          href={href()}
+          target={offer().external ? "_blank" : undefined}
+          rel={offer().external ? EXTERNAL_LINK_REL : undefined}
+          role="menuitem"
+          data-state="available"
+          data-selected={props.selected ? "true" : undefined}
+          onClick={() => props.onSelect()}
+        >
+          <PlatformLogo platform={props.platform} />
+          <span>{offer().label}</span>
+          <small>{offer().status}</small>
+        </a>
+      )}
+    </Show>
+  );
+}
 
 export function HeroDownloadSelector() {
   const menuId = createUniqueId();
-  const [platform, setPlatform] = createSignal<DownloadPlatform>("macos");
+  const [platform, setPlatform] = createSignal<HeroPlatform>("macos");
   const [open, setOpen] = createSignal(false);
   let root: HTMLDivElement | undefined;
   let trigger: HTMLButtonElement | undefined;
 
-  const current = () => DOWNLOAD_PLATFORMS[platform()];
+  const current = () => heroOffer(platform());
   const menuItems = () => Array.from(root?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
 
   function closeMenu(restoreFocus = false): void {
@@ -33,7 +99,7 @@ export function HeroDownloadSelector() {
     });
   }
 
-  function selectPlatform(nextPlatform: DownloadPlatform): void {
+  function selectPlatform(nextPlatform: HeroPlatform): void {
     setPlatform(nextPlatform);
     landingAnalytics.trackDownloadSelected(nextPlatform, false);
     closeMenu(true);
@@ -67,7 +133,8 @@ export function HeroDownloadSelector() {
   }
 
   onSettled(() => {
-    const detected = detectDownloadPlatform(globalThis.navigator);
+    // A phone cannot run the desktop app, so a visitor on one is offered the phone app.
+    const detected = detectMobilePlatform(globalThis.navigator) ?? detectDownloadPlatform(globalThis.navigator);
     if (detected) {
       setPlatform(detected);
       // Reported separately from the click, so the offer the visitor was given can be compared with
@@ -91,7 +158,7 @@ export function HeroDownloadSelector() {
     >
       <div class="landing-download-split">
         <Show
-          when={current().available && current().href}
+          when={current().href}
           fallback={
             <span class="landing-download-primary" data-state="coming-soon" aria-disabled="true">
               <PlatformLogo platform={platform()} solid />
@@ -100,7 +167,13 @@ export function HeroDownloadSelector() {
           }
         >
           {(href) => (
-            <a class="landing-download-primary" href={href()} data-state="available">
+            <a
+              class="landing-download-primary"
+              href={href()}
+              target={current().external ? "_blank" : undefined}
+              rel={current().external ? EXTERNAL_LINK_REL : undefined}
+              data-state="available"
+            >
               <PlatformLogo platform={platform()} solid />
               {current().action}
             </a>
@@ -130,43 +203,26 @@ export function HeroDownloadSelector() {
           onKeyDown={handleKeyDown}
         >
           <For each={DOWNLOAD_PLATFORM_ORDER}>
-            {(menuPlatform) => {
-              const details = DOWNLOAD_PLATFORMS[menuPlatform];
-              return (
-                <Show
-                  when={details.available && details.href}
-                  fallback={
-                    <button
-                      class="landing-download-menu-item"
-                      type="button"
-                      role="menuitem"
-                      data-state="coming-soon"
-                      data-selected={platform() === menuPlatform ? "true" : undefined}
-                      onClick={() => selectPlatform(menuPlatform)}
-                    >
-                      <PlatformLogo platform={menuPlatform} />
-                      <span>{details.label}</span>
-                      <small>{details.status}</small>
-                    </button>
-                  }
-                >
-                  {(href) => (
-                    <a
-                      class="landing-download-menu-item"
-                      href={href()}
-                      role="menuitem"
-                      data-state="available"
-                      data-selected={platform() === menuPlatform ? "true" : undefined}
-                      onClick={() => selectPlatform(menuPlatform)}
-                    >
-                      <PlatformLogo platform={menuPlatform} />
-                      <span>{details.label}</span>
-                      <small>{details.status}</small>
-                    </a>
-                  )}
-                </Show>
-              );
-            }}
+            {(menuPlatform) => (
+              <HeroMenuItem
+                platform={menuPlatform}
+                selected={platform() === menuPlatform}
+                onSelect={() => selectPlatform(menuPlatform)}
+              />
+            )}
+          </For>
+          <hr class="landing-download-menu-separator" />
+          <span class="landing-download-menu-label" aria-hidden="true">
+            Phone apps
+          </span>
+          <For each={MOBILE_APP_ORDER}>
+            {(menuPlatform) => (
+              <HeroMenuItem
+                platform={menuPlatform}
+                selected={platform() === menuPlatform}
+                onSelect={() => selectPlatform(menuPlatform)}
+              />
+            )}
           </For>
         </div>
       </Show>

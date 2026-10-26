@@ -124,7 +124,7 @@ export function avatarObjectKey(userId: string, version: string): string {
   return `users/${userId}/${version}`;
 }
 
-export function avatarVersion(avatarUrl: string | null, expectedUserId: string): string | null {
+function avatarVersion(avatarUrl: string | null, expectedUserId: string): string | null {
   if (!avatarUrl) return null;
   try {
     const url = new URL(avatarUrl, "https://api.openbot.run");

@@ -7,6 +7,7 @@ import type { OpenBotDatabase } from "./openbot-database";
 const CHANNEL_MEMORY_TABLES: MemoryTables = {
   table: "projection_channel_memories",
   ownerColumn: "channel_id",
+  ownerKey: "channelId",
   aggregateType: "channel-memory",
   limit: () => INPUT_LIMITS.channelMemories,
   limitMessage: (limit) => sourceText("error.backend.channelMemoryLimit", { limit }),

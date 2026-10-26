@@ -8,6 +8,7 @@ import {
   decodeMarketplaceCursor,
   encodeMarketplaceCursor,
   type MarketplaceSort,
+  marketplaceCreatorName,
   marketplaceLikePattern,
   normalizeMarketplaceLimit,
   normalizeMarketplaceQuery,
@@ -41,7 +42,6 @@ interface ApprovedRow {
   icon_key: string | null;
   updated_at: number;
   creator_name: string | null;
-  creator_email: string;
 }
 
 interface SubmissionRow {
@@ -59,7 +59,7 @@ interface SubmissionRow {
   created_at: number;
 }
 
-export interface SkillArchivePreview {
+interface SkillArchivePreview {
   name: string;
   description: string;
   slug: string;
@@ -72,11 +72,11 @@ export class SkillMarketplace {
   constructor(private readonly bindings: Pick<WorkerBindings, "DB" | "SKILLS">) {}
 
   list(input: {
-    query?: string;
-    category?: string;
+    query?: string | undefined;
+    category?: string | undefined;
     featured?: boolean;
-    sort?: "installs";
-    cursor?: string;
+    sort?: "installs" | undefined;
+    cursor?: string | undefined;
     limit?: number;
   }) {
     return Effect.fn("SkillMarketplace.list")(() =>
@@ -88,7 +88,7 @@ export class SkillMarketplace {
         const queryInput = normalizeMarketplaceQuery(input.query);
         if (queryInput) {
           clauses.push(
-            "(lower(versions.name) LIKE ? ESCAPE '\\' OR lower(versions.description) LIKE ? ESCAPE '\\' OR lower(coalesce(nullif(trim(users.name), ''), users.email)) LIKE ? ESCAPE '\\')",
+            "(lower(versions.name) LIKE ? ESCAPE '\\' OR lower(versions.description) LIKE ? ESCAPE '\\' OR lower(coalesce(users.name, '')) LIKE ? ESCAPE '\\')",
           );
           const query = marketplaceLikePattern(queryInput);
           values.push(query, query, query);
@@ -125,7 +125,7 @@ export class SkillMarketplace {
             `SELECT skills.id, skills.slug, skills.installs, skills.featured, skills.updated_at,
               versions.id AS version_id, versions.name, versions.description, versions.category,
               versions.version, versions.bundle_sha256, versions.files_json, versions.icon_key,
-              skills.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name, users.email AS creator_email
+              skills.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name
        FROM marketplace_skills skills
        JOIN marketplace_skill_versions versions ON ${clauses.join(" AND ")}
        JOIN users ON users.id = skills.owner_user_id
@@ -627,7 +627,7 @@ export class SkillMarketplace {
             `SELECT skills.id, skills.slug, skills.installs, skills.featured, skills.updated_at,
               versions.id AS version_id, versions.name, versions.description, versions.category,
               versions.version, versions.bundle_key, versions.bundle_sha256, versions.files_json, versions.icon_key,
-              skills.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name, users.email AS creator_email
+              skills.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name
        FROM marketplace_skills skills
        JOIN marketplace_skill_versions versions ON versions.id = skills.approved_version_id
        JOIN users ON users.id = skills.owner_user_id
@@ -653,7 +653,7 @@ export class SkillMarketplace {
             `SELECT skills.id, skills.slug, skills.installs, skills.featured, skills.updated_at,
               versions.name, versions.description, versions.category, versions.version,
               versions.id AS version_id, versions.bundle_key, versions.bundle_sha256,
-              versions.files_json, versions.icon_key, skills.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name, users.email AS creator_email
+              versions.files_json, versions.icon_key, skills.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name
        FROM marketplace_skills skills
        JOIN marketplace_skill_versions versions ON versions.skill_id = skills.id
        JOIN users ON users.id = skills.owner_user_id
@@ -677,7 +677,7 @@ export class SkillMarketplaceError extends Schema.TaggedError<SkillMarketplaceEr
   }
 }
 
-export function enforceSubmissionLimits(input: { skillCount?: number; versionCount?: number }): void {
+function enforceSubmissionLimits(input: { skillCount?: number; versionCount?: number }): void {
   if ((input.skillCount ?? 0) >= MAX_SKILLS_PER_USER) {
     throw new SkillMarketplaceError(409, "skill_limit", `You can submit up to ${MAX_SKILLS_PER_USER} skills.`);
   }
@@ -690,7 +690,7 @@ export function enforceSubmissionLimits(input: { skillCount?: number; versionCou
   }
 }
 
-export function inspectSkillArchive(bytes: Uint8Array): SkillArchivePreview {
+function inspectSkillArchive(bytes: Uint8Array): SkillArchivePreview {
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_ARCHIVE_BYTES) {
     throw new SkillMarketplaceError(413, "bundle_too_large", "The skill bundle must be under 10 MB.");
   }
@@ -826,7 +826,7 @@ function publicSummary(row: ApprovedRow) {
     name: row.name,
     description: row.description,
     category: row.category,
-    creatorName: row.creator_name?.trim() || row.creator_email,
+    creatorName: marketplaceCreatorName(row.creator_name),
     creatorAvatarUrl: row.show_creator_avatar === 1 ? row.creator_avatar_url : null,
     version: row.version,
     installs: row.installs,

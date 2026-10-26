@@ -9,6 +9,7 @@ import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { WebWorkspace } from "../src/features/web-client/WebWorkspace";
 import type { WebRuntimeFactory } from "../src/features/web-client/web-client-context";
 import { WebHostIncompatibleError } from "../src/features/web-client/web-runtime";
+import { createBenchWebRuntime } from "../src/preview/bench-web-runtime";
 import { MOCK_HOSTED_SERVER_CATALOG } from "../src/preview/mock-hosted-servers";
 import { createMockOpenBot } from "../src/preview/mock-openbot";
 import { createMockWebRuntime } from "../src/preview/mock-web-runtime";
@@ -40,6 +41,11 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Connected: Story = {};
+
+/** A long conversation. `bun run perf:web` streams replies into it and counts the host requests. */
+export const LongConversation: Story = {
+  args: { createRuntime: createBenchWebRuntime },
+};
 
 const noHostRuntime: WebRuntimeFactory = (...args) => ({
   ...createMockWebRuntime(...args),

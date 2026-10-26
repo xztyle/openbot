@@ -4,8 +4,8 @@ import { Effect } from "effect";
 import type { CentralAuthManager } from "./central-auth-manager";
 import { RemoteWorkflowError } from "./remote-service-effects";
 
-interface MobileConnectHostDependencies {
-  centralAuth: Pick<CentralAuthManager, "createMobileConnect">;
+interface MobileConnectHostDependencies<Operation extends keyof CentralAuthManager> {
+  centralAuth: Pick<CentralAuthManager, Operation>;
   host: {
     configure(input: { serverName: string }): Effect.Effect<unknown, RemoteWorkflowError>;
     getStatus(): { configured: boolean };
@@ -26,7 +26,21 @@ interface MobileConnectHostDependencies {
 export const createHostedMobileConnect = Effect.fn("MobileConnectHost.create")(function* ({
   centralAuth,
   host,
-}: MobileConnectHostDependencies) {
+}: MobileConnectHostDependencies<"createMobileConnect">) {
+  return yield* centralAuth.createMobileConnect(yield* publishMobileConnectHost(host));
+});
+
+export const createHostedMobileConnectLink = Effect.fn("MobileConnectHost.createLink")(function* ({
+  centralAuth,
+  host,
+}: MobileConnectHostDependencies<"createMobileConnectLink">) {
+  return yield* centralAuth.createMobileConnectLink(yield* publishMobileConnectHost(host));
+});
+
+/** Starts the host, so the phone that uses the code can reach it, and returns its identity. */
+const publishMobileConnectHost = Effect.fn("MobileConnectHost.publish")(function* (
+  host: MobileConnectHostDependencies<never>["host"],
+) {
   if (!host.getStatus().configured) yield* host.configure({ serverName: "OpenBot" });
   const status = yield* host.start();
   if (!isPublishedHost(status)) {
@@ -37,7 +51,7 @@ export const createHostedMobileConnect = Effect.fn("MobileConnectHost.create")(f
   const binding = host.getMobileConnectHost();
   if (!binding || binding.hostId !== status.serverId)
     return yield* new RemoteWorkflowError({ cause: new Error(sourceText("error.host.mobileConnectHostChanged")) });
-  return yield* centralAuth.createMobileConnect(binding);
+  return binding;
 });
 
 function isPublishedHost(status: { phase: string; apiOnline: boolean; apiUrl: string | null }): boolean {

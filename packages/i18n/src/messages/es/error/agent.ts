@@ -2,6 +2,10 @@ import type { PartialTranslation } from "../../../message";
 import type { messages as source } from "../../en/error/agent";
 
 export const messages = {
+  "error.agent.historyUnavailable":
+    "El historial no está disponible para esta solicitud. Vuelve a leer el historial reciente o usa channel_history para el trabajo en canales.",
+  "error.agent.toolRequestInvalid":
+    "Los argumentos de descubrimiento de herramientas no son válidos. Usa el esquema declarado y un nombre de herramienta cualificado original.",
   "error.agent.approvalWhileDeleting": "No se puede conceder la aprobación mientras se elimina el agente.",
   "error.agent.accessLocalOnly": "El acceso del agente solo se puede cambiar en el equipo que lo ejecuta.",
   "error.agent.duplicateCleanupFailed": "No se pudo duplicar el agente ni eliminar la copia incompleta.",
@@ -40,8 +44,13 @@ export const messages = {
     "{provider} no tiene ningún modelo disponible, ni tampoco los demás proveedores con sesión iniciada. Inicia sesión en un proveedor o cambia el proveedor predeterminado en Proveedores y permisos.",
   "error.agent.waitBeforeProviderChange":
     "Espera a que terminen el turno activo y la cola antes de cambiar de proveedor.",
+  "error.agent.waitForTasksBeforeProviderChange":
+    "Hay tareas de este agente en ejecución. Espera a que terminen o detenlas antes de cambiar de proveedor.",
   "error.agent.waitBeforeClearContext":
     "Espera a que terminen el turno activo y la cola antes de iniciar un nuevo chat.",
+  "error.agent.waitBeforeCompactContext":
+    "Espera a que terminen el turno activo y la cola antes de compactar el contexto.",
+  "error.agent.compactContextUnavailable": "Este agente no puede compactar su contexto ahora.",
   "error.agent.unknown": "Agente desconocido: {id}",
   "error.agent.onlyUserWidensSettings":
     "Solo el usuario puede dar acceso completo a un agente o activar el uso del equipo. Pide al usuario que lo cambie en los ajustes del agente.",
@@ -58,6 +67,8 @@ export const messages = {
     "El estado del agente contiene identificadores de agente duplicados; no se sobrescribirá.",
   "error.agent.copyNameFailed": "OpenBot no pudo crear un nombre único para la copia del agente.",
   "error.agent.endpointRemoved": "Se eliminó el endpoint que usaba este agente. Elige otro modelo para él.",
+  "error.agent.turnStalled":
+    "{provider} dejó de responder, así que OpenBot terminó este turno. Envía el mensaje de nuevo o elige otro modelo.",
   "error.agent.selectedGone": "El agente seleccionado ya no existe.",
   "error.agent.profileEndpointsChanged":
     "Los endpoints personalizados cambiaron durante la generación. Inténtalo de nuevo.",
@@ -84,16 +95,45 @@ export const messages = {
   "error.agent.queueEditRejected": "Edición de la cola rechazada: {reason}",
   "error.agent.computerUseLocalOnly": "El uso del equipo solo se puede cambiar en el equipo que ejecuta el agente.",
   "error.agent.automationLocalOnly": "Los scripts locales solo se pueden permitir en el equipo que ejecuta el agente.",
+  "error.agent.newChatLocalOnly": "Solo el equipo que ejecuta el agente puede permitirle iniciar chats nuevos.",
+  "error.agent.quickAcknowledgementLocalOnly": "Solo el equipo que ejecuta el agente puede cambiar este ajuste.",
+  "error.agent.sideQuestionBusy": "Hay demasiadas preguntas aparte en curso. Inténtalo de nuevo en breve.",
+  "error.agent.sideQuestionFailed": "El agente no pudo responder la pregunta aparte. Inténtalo de nuevo.",
   "error.agent.busyMessageModeLocalOnly":
     "El comportamiento de los mensajes mientras trabaja el agente solo se puede configurar en el equipo que lo ejecuta.",
+  "error.agent.backupModelsLocalOnly":
+    "Los modelos de respaldo solo se pueden configurar en el equipo que ejecuta el agente.",
+  "error.agent.taskLimitLocalOnly": "El límite de tareas solo se puede configurar en el equipo que ejecuta el agente.",
+  "error.agent.localScriptsOff": "Este agente no permite scripts locales.",
+  "error.agent.localScriptsRateLimited":
+    "Los scripts locales enviaron {limit} solicitudes de mensajes o rutinas a este agente en la última hora. Inténtalo más tarde.",
   "error.agent.automationOff": "Este agente no permite que los scripts locales ejecuten sus rutinas.",
   "error.agent.automationPayloadTooLong": "El contenido supera los {limit} caracteres.",
   "error.agent.automationRateLimited":
     "Los scripts locales ejecutaron las rutinas de este agente {limit} veces en la última hora. Inténtalo más tarde.",
   "error.agent.workspaceOnlyMacOnly":
-    "Solo espacio de trabajo está disponible para este proveedor únicamente en macOS. Elige Acceso completo en los ajustes del agente.",
+    "Con este proveedor, «Solo espacio de trabajo» únicamente está disponible en macOS. Elige Acceso completo en los ajustes del agente.",
   "error.agent.lowMemory":
     "Este servidor tiene poca memoria disponible. Tu mensaje espera en la cola y se iniciará cuando se libere memoria. Un plan superior proporciona más memoria al servidor.",
+  "error.agent.lowMemoryServer":
+    "Este servidor tiene poca memoria disponible. Tu mensaje espera en la cola y se iniciará cuando se libere memoria.",
   "error.agent.workspaceOnlyToolMissing":
     "Solo espacio de trabajo requiere {tool}, que OpenBot no encontró. Instálalo o elige Acceso completo en los ajustes del agente.",
+  "error.agent.screenCaptureOff":
+    "La captura de pantalla está desactivada para este agente. El usuario puede activar el uso del equipo en los ajustes del agente.",
+  "error.agent.screenCaptureUnavailable": "La captura de pantalla no está disponible en este equipo.",
+  "error.agent.screenCaptureShared":
+    "La captura de pantalla no funciona en una conversación de Slack, Discord o Telegram, porque otras personas reciben sus archivos.",
+  "error.agent.screenCaptureDeclined": "El usuario no permitió esta captura de pantalla. No se capturó nada.",
+  "error.agent.screenCaptureWindowMissing":
+    "Esa ventana no está abierta ahora. Llama a list_capture_sources para obtener los ID de ventana actuales.",
+  "error.agent.screenCaptureDisplayMissing":
+    "Esa pantalla no está conectada ahora. Llama a list_capture_sources para obtener los ID de pantalla actuales.",
+  "error.agent.screenCaptureRegionOutside":
+    "La región no está dentro de una sola pantalla. Usa puntos del escritorio dentro de los límites de una pantalla de list_capture_sources.",
+  "error.agent.screenCapturePermissionMissing":
+    "OpenBot no tiene el permiso de grabación de pantalla. Pide al usuario que abra Ajustes del Sistema > Privacidad y seguridad > Grabación de pantalla y audio del sistema, active OpenBot y después cierre OpenBot y vuelva a abrirlo.",
+  "error.agent.screenCaptureEmptyWindows":
+    "Windows devolvió una imagen vacía. Pide al usuario que desbloquee el equipo y cierre el contenido protegido. Una directiva de la organización también puede impedir la captura de pantalla.",
+  "error.agent.screenCaptureFailed": "La captura de pantalla falló. Inténtalo de nuevo.",
 } as const satisfies PartialTranslation<typeof source>;

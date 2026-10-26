@@ -3,6 +3,7 @@ import { handleBrowserApi } from "../../../server/browser-api";
 import { readHostLogo } from "../../../server/host-logo";
 import {
   hostedServerErrorResponse,
+  requestAccountAttribution,
   requestAuthService,
   requestAvatarBucket,
   requestBillingService,
@@ -10,9 +11,9 @@ import {
   requestHostedSiteService,
   requestRemoteControlPlane,
   requestRemoteSignalUrl,
-  requestSourceIp,
   requestTeamInviteEmailDelivery,
 } from "../../../server/request-auth";
+import { requestSourceIp } from "../../../server/source-ip";
 
 function handle({ request }: { request: Request }) {
   return handleBrowserApi(request, {
@@ -21,6 +22,7 @@ function handle({ request }: { request: Request }) {
     hostLogo: (hostId, version) => readHostLogo(requestAvatarBucket(), hostId, version),
     hosting: requestHostedServerService,
     inviteEmailDelivery: requestTeamInviteEmailDelivery,
+    attribution: requestAccountAttribution,
     billing: requestBillingService,
     avatarBucket: requestAvatarBucket,
     hostedSites: requestHostedSiteService,

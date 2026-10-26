@@ -12,7 +12,6 @@ const args: Parameters<typeof ServerRail>[0] = {
   onReorder: fn(),
   onAdd: fn(),
   onOpenSettings: fn(),
-  onOpenUsage: fn(),
   onLeave: fn(),
   onDelete: fn(),
   // The stopped hosted server in `mock-hosted-servers.ts`.
@@ -67,7 +66,6 @@ function InteractiveServerRail(props: Parameters<typeof ServerRail>[0]) {
       onSetNotificationLevel={props.onSetNotificationLevel}
       onAdd={props.onAdd}
       onOpenSettings={props.onOpenSettings}
-      onOpenUsage={props.onOpenUsage}
       onLeave={props.onLeave}
       onDelete={props.onDelete}
       canDelete={props.canDelete}

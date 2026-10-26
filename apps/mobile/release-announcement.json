@@ -1,0 +1,10 @@
+{
+  "version": "1.4.1",
+  "highlights": [
+    "Channels are back: see them in the home list, open them as chats, and answer questions and approvals from your phone.",
+    "Audio files play in the chat with a waveform and speed control, and Markdown files open in a formatted preview.",
+    "Swipe through all the images of a loaded chat, and see multiple images from one reply in a compact grid.",
+    "Provider plan limits show as rings in the home header.",
+    "Android stability fixes for large images, text fields and app start."
+  ]
+}

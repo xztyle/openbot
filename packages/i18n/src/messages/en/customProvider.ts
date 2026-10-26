@@ -1,6 +1,21 @@
 import { defineMessages } from "../../message";
 
 export const messages = defineMessages("customProvider", {
+  "customProvider.registry.title": "ACP registry",
+  "customProvider.registry.description":
+    "Install agents on this server. Remove runtime keeps agent settings, credentials, and conversations.",
+  "customProvider.registry.search": "Search registry",
+  "customProvider.registry.empty": "No agents match this search.",
+  "customProvider.registry.agentId": "Custom agent ID",
+  "customProvider.registry.install": "Install",
+  "customProvider.registry.update": "Update",
+  "customProvider.registry.remove": "Remove runtime",
+  "customProvider.registry.searchFailed": "Could not search the registry. Try again.",
+  "customProvider.registry.statusFailed": "Could not check the install progress. OpenBot tries again.",
+  "customProvider.registry.installFailed": "Could not install the agent. Try again.",
+  "customProvider.registry.updateFailed": "Could not update the agent. Try again.",
+  "customProvider.registry.removeFailed": "Could not remove the runtime. Try again.",
+  "customProvider.registry.cancelFailed": "Could not cancel the install. Try again.",
   // Form validation. Each message names one field of the custom provider form.
   "customProvider.error.providerIdRequired": "Enter a provider ID.",
   "customProvider.error.providerIdPattern":
@@ -44,6 +59,7 @@ export const messages = defineMessages("customProvider", {
 
   // The add dialog.
   "customProvider.form.title": "Add a custom provider",
+  "customProvider.form.editTitle": "Edit a custom provider",
   "customProvider.form.description": "Describe an OpenAI-compatible endpoint and the models it serves.",
   "customProvider.form.heading": "Custom provider",
   "customProvider.form.subtitle": "Any OpenAI-compatible endpoint.",
@@ -148,6 +164,9 @@ export const messages = defineMessages("customProvider", {
   "customProvider.acp.commandHint": "The program to start. OpenBot looks for it on your PATH.",
   "customProvider.acp.args": "Arguments",
   "customProvider.acp.argsHint": "Separate arguments with spaces. Put quotes around an argument that has spaces.",
+  "customProvider.acp.usagePrompt": "Usage command",
+  "customProvider.acp.usagePromptHint":
+    "OpenBot sends it at most every 5 minutes and shows the last answer. Use a command that the agent answers itself, such as /usage.",
   "customProvider.acp.env": "Environment variables",
   "customProvider.acp.env.name": "Variable {number} name",
   "customProvider.acp.env.value": "Variable {number} value",
@@ -160,6 +179,10 @@ export const messages = defineMessages("customProvider", {
   "customProvider.acp.checkOk": "{name} answered",
   "customProvider.acp.checkOkVersion": "{name} {version} answered",
   "customProvider.acp.checkProtocol": "ACP version {version}",
+  "customProvider.acp.checkModels": {
+    one: "{count} model: {models}",
+    other: "{count} models: {models}",
+  },
   "customProvider.acp.checkFailed": "The agent did not answer",
   "customProvider.acp.trustTitle": "This command runs on your computer",
   "customProvider.acp.trustDescription":
@@ -175,6 +198,7 @@ export const messages = defineMessages("customProvider", {
   "customProvider.acp.error.envDuplicate": "This agent already sets {name}.",
   "customProvider.acp.error.envValueRequired": "Enter a value for this variable.",
   "customProvider.acp.error.envValueLength": "Keep the value under {max} characters.",
+  "customProvider.acp.error.usagePromptInvalid": "Use one line of at most {max} characters.",
   "customProvider.acp.error.agentIdPattern":
     "Use lowercase letters, numbers or hyphens, starting with a letter or number. Use at most 40 characters.",
 
@@ -207,6 +231,7 @@ export const messages = defineMessages("customProvider", {
   "customProvider.list.empty": "No custom endpoints yet.",
   "customProvider.list.label": "Custom endpoints",
   "customProvider.list.apiKeySaved": "API key saved",
+  "customProvider.list.editLabel": "Edit {name}",
   "customProvider.list.deleteLabel": "Delete {name}",
   "customProvider.list.confirmTitle": "Remove {name}?",
   "customProvider.list.confirmDescription":

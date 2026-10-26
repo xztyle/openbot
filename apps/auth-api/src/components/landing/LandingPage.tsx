@@ -1,29 +1,60 @@
 import { AppLogo, PlatformLogo, ProviderLogo } from "@openbot/brand";
 import { onSettled } from "solid-js";
 import { landingAnalytics } from "../../lib/analytics";
-import { EXTERNAL_LINK_REL, OPENBOT_LINKS } from "../../lib/landing-links";
-import { Button } from "../ui/button";
+import { ContentCallToAction } from "../content/ContentCallToAction";
+import { ButtonLink } from "../ui/button";
+import { AgentNetworkSection } from "./AgentNetworkSection";
 import { DownloadSection } from "./DownloadSection";
 import { FaqSection } from "./FaqSection";
 import { FeaturesSection } from "./FeaturesSection";
 import { HeroDownloadSelector } from "./HeroDownloadSelector";
 import { LandingAppPreview } from "./LandingAppPreview";
+import { LandingBeam } from "./LandingBeam";
 import { LandingFooter } from "./LandingFooter";
 import { LandingGlow } from "./LandingGlow";
 import { PricingSection } from "./PricingSection";
 import { SiteHeader } from "./SiteHeader";
+import { TeamsSection } from "./TeamsSection";
+
+/** A promise and the function that resolves it. */
+function latch(): { open: () => void; opened: Promise<void> } {
+  let open = () => {};
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { open, opened };
+}
 
 export function LandingPage() {
+  // The beam falls in when the app preview has loaded, and the preview appears as the beam hits it.
+  const previewReady = latch();
+  const beamImpact = latch();
+  let copy: HTMLDivElement | undefined;
+  let preview: HTMLElement | undefined;
+  let download: HTMLElement | undefined;
   onSettled(() => landingAnalytics.start(document, window.location.hostname));
 
   return (
     <div class="landing-page">
-      <SiteHeader page="landing" />
+      <SiteHeader
+        page="landing"
+        downloadRef={(element) => {
+          download = element;
+        }}
+      />
 
       <main>
         <section class="landing-hero" aria-labelledby="landing-title">
-          <div class="landing-hero-grid" data-slot="hero-grid" aria-hidden="true" />
-          <div class="landing-hero-copy">
+          <LandingBeam
+            surface={() => preview}
+            source={() => download}
+            avoid={() => (copy ? [...copy.children] : [])}
+            beamPosition={0.78}
+            color="#a46cf5"
+            start={previewReady.opened}
+            onImpact={beamImpact.open}
+          />
+          <div ref={copy} class="landing-hero-copy">
             <p class="landing-availability landing-hero-line" style={{ "--landing-hero-line": 0 }}>
               <span class="landing-availability-new">NEW</span>
               <span class="landing-availability-copy">Available on</span>
@@ -44,6 +75,18 @@ export function LandingPage() {
               <span class="landing-availability-platform">
                 <PlatformLogo platform="linux" solid />
                 Linux
+              </span>
+              <span class="landing-availability-divider" aria-hidden="true" />
+              <span class="landing-availability-platform">
+                <PlatformLogo platform="ios" />
+                iOS
+              </span>
+              <span class="landing-availability-separator" aria-hidden="true">
+                ·
+              </span>
+              <span class="landing-availability-platform">
+                <PlatformLogo platform="android" />
+                Android
               </span>
             </p>
 
@@ -84,26 +127,25 @@ export function LandingPage() {
 
             <div class="landing-actions landing-hero-line" style={{ "--landing-hero-line": 3 }}>
               <HeroDownloadSelector />
-              <Button
-                href={OPENBOT_LINKS.contact}
-                target="_blank"
-                rel={EXTERNAL_LINK_REL}
-                variant="secondary"
-                size="lg"
-                icon="contact"
-                class="landing-button-glass"
-              >
+              <ButtonLink to="/contact" variant="secondary" size="lg" icon="contact" class="landing-button-glass">
                 Contact
-              </Button>
+              </ButtonLink>
             </div>
           </div>
 
-          <LandingAppPreview />
+          <LandingAppPreview
+            ref={(element) => (preview = element)}
+            onReady={previewReady.open}
+            revealAfter={beamImpact.opened}
+          />
         </section>
+        <AgentNetworkSection />
         <FeaturesSection />
         <PricingSection />
+        <TeamsSection />
         <FaqSection />
         <DownloadSection />
+        <ContentCallToAction />
       </main>
       <LandingFooter />
       <LandingGlow />

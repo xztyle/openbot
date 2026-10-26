@@ -2,7 +2,7 @@ import { validateProfileName } from "@openbot/contracts/validation";
 import { router } from "expo-router";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { Camera } from "lucide-react-native";
+import Camera from "lucide-react-native/icons/camera";
 import { useRef, useState } from "react";
 import { Alert, Keyboard, Pressable, View } from "react-native";
 import { mobileUserName } from "@/features/auth/api/mobile-user-name";

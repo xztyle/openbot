@@ -1,11 +1,18 @@
 import { rm } from "node:fs/promises";
 import type {
+  AgentDefaults,
   AgentSummary,
   ConversationMessageSender,
   SaveAgentProfileInput,
   SidebarLayoutSnapshot,
 } from "@openbot/contracts/ipc";
-import { decodeSaveAgentProfileResult } from "@openbot/contracts/ipc";
+import {
+  agentAutomationAllowed,
+  agentComputerUseEnabled,
+  agentQuickAcknowledgementEnabled,
+  decodeSaveAgentProfileResult,
+  workspaceAccessEnforced,
+} from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect, Exit, Schema, Semaphore } from "effect";
 import type { AgentStore } from "../agent-store";
@@ -18,7 +25,7 @@ interface ProfileSaveHooks {
     configure: (agent: AgentSummary) => Effect.Effect<AgentSummary, ProfileSaveFailed>,
     sender: ConversationMessageSender | undefined,
   ): Effect.Effect<AgentSummary, ProfileSaveFailed>;
-  changed(agent: AgentSummary): void;
+  changed(agent: AgentSummary, previous: AgentSummary | null | undefined): void;
   delete(agent: AgentSummary): Effect.Effect<void, ProfileSaveFailed>;
 }
 
@@ -83,7 +90,7 @@ export class ProfileSave {
       )
       .pipe(toProfileSaveFailed);
     if (oldAvatar) yield* profileIo(() => rm(oldAvatar.path, { force: true })).pipe(Effect.ignore);
-    this.hooks.changed(result.agent);
+    this.hooks.changed(result.agent, previous);
     return result;
   }, Effect.uninterruptible);
 
@@ -147,3 +154,27 @@ export class ProfileSaveFailed extends Schema.TaggedError<ProfileSaveFailed>()("
 const { io: profileIo, sync: profileStep, rewrap: toProfileSaveFailed } = causeHelpers(ProfileSaveFailed);
 
 export { toProfileSaveFailed };
+
+/**
+ * Model and effort use live turn settings; these fields change standing context or access. An agent
+ * that follows an account default reads `defaults`, and `previousDefaults` before a change of them.
+ */
+export function standingProfileChanged(
+  previous: AgentSummary | null | undefined,
+  agent: AgentSummary,
+  defaults: AgentDefaults,
+  previousDefaults: AgentDefaults = defaults,
+): boolean {
+  return (
+    !previous ||
+    previous.name !== agent.name ||
+    previous.title !== agent.title ||
+    previous.description !== agent.description ||
+    previous.workspacePath !== agent.workspacePath ||
+    previous.provider !== agent.provider ||
+    workspaceAccessEnforced(previous) !== workspaceAccessEnforced(agent) ||
+    agentComputerUseEnabled(previous) !== agentComputerUseEnabled(agent) ||
+    agentAutomationAllowed(previous, previousDefaults) !== agentAutomationAllowed(agent, defaults) ||
+    agentQuickAcknowledgementEnabled(previous, previousDefaults) !== agentQuickAcknowledgementEnabled(agent, defaults)
+  );
+}

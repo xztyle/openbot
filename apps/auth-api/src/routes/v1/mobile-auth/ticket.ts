@@ -10,8 +10,8 @@ import {
   remoteControlPlaneErrorResponse,
   requestAuthService,
   requestRemoteControlPlane,
-  requestSourceIp,
 } from "../../../server/request-auth";
+import { requestSourceIp } from "../../../server/source-ip";
 
 export const Route = createFileRoute("/v1/mobile-auth/ticket")({
   server: {
@@ -33,6 +33,17 @@ export const Route = createFileRoute("/v1/mobile-auth/ticket")({
               );
             yield* requestRemoteControlPlane().validateMobileConnectHost(user.id, body.host);
             return json(yield* service.issueMobileAuthTicket(token, requestSourceIp(request), body.host));
+          }),
+          remoteControlPlaneErrorResponse,
+        ),
+      DELETE: ({ request }) =>
+        runApiResponse(
+          Effect.gen(function* () {
+            const token = bearerToken(request);
+            if (!token) return apiError(401, "unauthorized", "Sign in is required.");
+            const hostId = new URL(request.url).searchParams.get("host") ?? "";
+            yield* requestAuthService().cancelMobileAuthTickets(token, hostId);
+            return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
           }),
           remoteControlPlaneErrorResponse,
         ),

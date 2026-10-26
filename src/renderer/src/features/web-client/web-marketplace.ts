@@ -8,11 +8,13 @@ import {
   MCP_CHAT_ROUTES,
 } from "@openbot/contracts/team-protocol/mcp-chat-v1";
 import { MCP_OAUTH_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-oauth-v1";
+import { sourceText } from "@openbot/i18n";
 import { runTeamEffect } from "@openbot/team-client";
 import { eventCheckTemplatesApi } from "@openbot/team-client/event-check-templates-api";
 import { eventChecksApi } from "@openbot/team-client/event-checks-api";
 import { createMarketplaceCatalog } from "@openbot/team-client/marketplace-catalog";
 import {
+  cancelMcpSignIn,
   installAgentSkill,
   installAgentTemplate,
   installMarketplaceAgent,
@@ -30,6 +32,7 @@ import { currentText } from "@openbot/ui/text";
 import { Effect } from "effect";
 import type { AgentTemplateInstallCalls } from "../agent-templates/agent-templates-port";
 import type { MarketplaceCalls } from "../settings/marketplace-calls";
+import { webMcpRelay } from "./web-mcp-relay";
 import { signInWebMcp } from "./web-mcp-sign-in";
 
 /** No server id: the account is a member, or the host runs an OpenBot without agent-install-v1. */
@@ -49,6 +52,7 @@ export function createWebMarketplaceCalls(
   capabilities: () => readonly string[] = () => [],
 ): MarketplaceCalls {
   const catalog = createMarketplaceCatalog(accountFetch);
+  const relay = webMcpRelay();
   return {
     skills: {
       list: (query) => runTeamEffect(catalog.skills.list(query)),
@@ -70,8 +74,15 @@ export function createWebMarketplaceCalls(
     }),
     mcp: {
       supportsRemoteSignIn: () => capabilities().includes(MCP_OAUTH_CAPABILITY),
-      signInMcpServer: ({ config }, serverId, signal) =>
-        signInWebMcp(config, request(serverId), signal ?? new AbortController().signal),
+      // A host with the private OAuth callback (`mcp-oauth-v1`) finishes the sign-in itself. Otherwise the
+      // marketplace asks only a host that relays its sign-ins (`sign-in-relay-v1`): the page opens in this
+      // browser, and the user pastes the address it ends on.
+      signInMcpServer: async ({ config }, serverId, signal) => {
+        if (capabilities().includes(MCP_OAUTH_CAPABILITY))
+          return signInWebMcp(config, request(serverId), signal ?? new AbortController().signal);
+        if (!serverId) throw new Error(sourceText("error.mcp.signInOnHost"));
+        return relay.signIn(request(serverId), config);
+      },
       listMcpServers: async (serverId) =>
         runTeamEffect(listMcpServers(request(serverId)).pipe(Effect.mapError((error) => error.cause))),
       testMcpServer: async (input, serverId) =>
@@ -82,6 +93,15 @@ export function createWebMarketplaceCalls(
         runTeamEffect(removeMcpServer(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
       setMcpServerEnabled: async (input, serverId) =>
         runTeamEffect(setMcpServerEnabled(request(serverId), input).pipe(Effect.mapError((error) => error.cause))),
+    },
+    signInRelay: {
+      page: async (url) => relay.page(url),
+      // No await comes before `window.open`: a browser blocks a page that the user's click did not open.
+      open: async (url) => relay.open(url),
+      paste: (url, address) => relay.paste(url, address),
+      cancel: async (url, serverId) => {
+        await runTeamEffect(cancelMcpSignIn(request(serverId), { url }).pipe(Effect.mapError((error) => error.cause)));
+      },
     },
     // The routes answer only an administrator, and only a host that runs with chat permissions.
     chatApps: (serverId) =>
@@ -104,8 +124,9 @@ export function createWebMarketplaceCalls(
     },
     openUrl: async (url) => {
       const protocol = URL.parse(url)?.protocol;
-      if (protocol !== "https:" && protocol !== "http:")
+      if (protocol !== "https:" && protocol !== "http:") {
         throw new Error(currentText().t("webClient.error.linkBlocked"));
+      }
       window.open(url, "_blank", "noopener");
     },
     // The browser talks to one host, which the caller shows the tab for only when it serves the

@@ -2,10 +2,14 @@ import type { PartialTranslation } from "../../../message";
 import type { messages as source } from "../../en/error/agent";
 
 export const messages = {
+  "error.agent.historyUnavailable":
+    "История недоступна для этого запроса. Прочитайте недавнюю историю ещё раз или используйте channel_history для работы с каналом.",
+  "error.agent.toolRequestInvalid":
+    "Некорректные аргументы поиска инструментов. Используйте объявленную схему и исходное полное имя инструмента.",
   "error.agent.approvalWhileDeleting": "Нельзя дать подтверждение, пока агент удаляется.",
   "error.agent.accessLocalOnly": "Доступ агента можно изменить только на компьютере, где он работает.",
   "error.agent.duplicateCleanupFailed": "Не удалось дублировать агента, а неполную копию удалить не получилось.",
-  "error.agent.commitEffectsFailed": "Транзакция зафиксирована, но сохранённые последствия не выполнены.",
+  "error.agent.commitEffectsFailed": "Транзакция зафиксирована, но её сохранённые действия не удалось выполнить.",
   "error.agent.settingsLocalOnly": "Настройки агента можно изменить только на компьютере, где он работает.",
   "error.agent.skillsLocalOnly": "Навыки можно изменить только на компьютере, где работает агент.",
   "error.agent.addLocalOnly": "Агентов можно добавлять только на компьютере, где они работают.",
@@ -15,7 +19,7 @@ export const messages = {
   "error.agent.messageOrAttachmentRequired": "Нужно сообщение или вложение.",
   "error.agent.promptAnswersTooLong": "Ответы на вопросы слишком длинные.",
   "error.agent.gone": "Этого агента больше нет.",
-  "error.agent.profileGenerationBusy": "Создание профиля занято. Повторите чуть позже.",
+  "error.agent.profileGenerationBusy": "Создание профиля уже выполняется. Повторите попытку чуть позже.",
   "error.agent.initialMessageRequired": "Нужно первое сообщение.",
   "error.agent.initialMessageTooLong": "Первое сообщение слишком длинное.",
   "error.agent.setupCleanupFailed": "Не удалось настроить агента, а неполного агента удалить не получилось.",
@@ -31,15 +35,19 @@ export const messages = {
   "error.agent.providerNotListed":
     "Сейчас нет доступных моделей {provider}. Вызовите list_models, чтобы увидеть доступные модели.",
   "error.agent.reasoningEffortUnsupported":
-    "Модель «{model}» не поддерживает уровень рассуждения «{effort}». Поддерживаются: {efforts}.",
+    "Модель «{model}» не поддерживает уровень усилий «{effort}». Поддерживаются: {efforts}.",
   "error.agent.noStartingModelInSettings":
     "У {provider} нет доступных моделей, и у других подключённых провайдеров их тоже нет. Войдите в аккаунт провайдера или измените провайдера по умолчанию в разделе Настройки сервера → Провайдеры.",
   "error.agent.noStartingModel":
-    "У {provider} нет доступной модели, и ни у одного другого провайдера, в который вы вошли, её тоже нет. Войдите в провайдера или смените провайдера по умолчанию в разделе «Провайдеры и разрешения».",
+    "У {provider} нет доступной модели, и у других провайдеров, в которые вы вошли, её тоже нет. Войдите в аккаунт провайдера или смените провайдера по умолчанию в разделе «Провайдеры и разрешения».",
   "error.agent.waitBeforeProviderChange":
     "Дождитесь, пока завершатся текущий ход и очередь, прежде чем менять провайдера.",
+  "error.agent.waitForTasksBeforeProviderChange":
+    "Задачи этого агента выполняются. Дождитесь их завершения или остановите их, прежде чем менять провайдера.",
   "error.agent.waitBeforeClearContext":
     "Дождитесь, пока завершатся текущий ход и очередь, прежде чем начинать новый чат.",
+  "error.agent.waitBeforeCompactContext": "Дождитесь завершения активного хода и очереди, прежде чем сжимать контекст.",
+  "error.agent.compactContextUnavailable": "Этот агент сейчас не может сжать свой контекст.",
   "error.agent.unknown": "Неизвестный агент: {id}",
   "error.agent.onlyUserWidensSettings":
     "Только пользователь может дать агенту полный доступ или включить управление компьютером. Попросите пользователя изменить это в настройках агента.",
@@ -55,6 +63,8 @@ export const messages = {
   "error.agent.duplicateIds": "Состояние агентов содержит повторяющиеся идентификаторы; перезапись отклонена.",
   "error.agent.copyNameFailed": "OpenBot не смог подобрать уникальное имя для копии агента.",
   "error.agent.endpointRemoved": "Эндпоинт, который использовал этот агент, удалён. Выберите для него другую модель.",
+  "error.agent.turnStalled":
+    "{provider} перестал отвечать, поэтому OpenBot завершил этот ход. Отправьте сообщение ещё раз или выберите другую модель.",
   "error.agent.selectedGone": "Выбранного агента больше нет.",
   "error.agent.profileEndpointsChanged": "Пользовательские эндпоинты изменились во время создания. Повторите попытку.",
   "error.agent.profileInvalid": "Провайдер вернул некорректный профиль. Попробуйте изменить запрос.",
@@ -81,16 +91,44 @@ export const messages = {
   "error.agent.queueEditRejected": "Изменение очереди отклонено: {reason}",
   "error.agent.computerUseLocalOnly": "Управление компьютером можно изменить только на компьютере, где работает агент.",
   "error.agent.automationLocalOnly": "Локальные скрипты можно разрешить только на компьютере, где работает агент.",
+  "error.agent.newChatLocalOnly": "Разрешить агенту начинать новые чаты можно только на компьютере, где он работает.",
+  "error.agent.quickAcknowledgementLocalOnly": "Изменить этот параметр можно только на компьютере, где работает агент.",
+  "error.agent.sideQuestionBusy": "Выполняется слишком много побочных вопросов. Повторите попытку чуть позже.",
+  "error.agent.sideQuestionFailed": "Агенту не удалось ответить на побочный вопрос. Повторите попытку.",
   "error.agent.busyMessageModeLocalOnly":
     "Поведение сообщений, пока агент работает, можно задать только на компьютере, где он работает.",
+  "error.agent.backupModelsLocalOnly": "Резервные модели можно задать только на компьютере, где работает агент.",
+  "error.agent.taskLimitLocalOnly": "Лимит задач можно задать только на компьютере, где работает агент.",
+  "error.agent.localScriptsOff": "Этот агент не разрешает локальные скрипты.",
+  "error.agent.localScriptsRateLimited":
+    "За последний час локальные скрипты отправили этому агенту {limit} запросов на сообщения или регулярные задачи. Повторите попытку позже.",
   "error.agent.automationOff": "Этот агент не разрешает локальным скриптам запускать свои регулярные задачи.",
   "error.agent.automationPayloadTooLong": "Данные длиннее {limit} символов.",
   "error.agent.automationRateLimited":
-    "Локальные скрипты запускали регулярные задачи этого агента {limit} раз за последний час. Повторите позже.",
+    "Локальные скрипты запускали регулярные задачи этого агента {limit} раз за последний час. Повторите попытку позже.",
   "error.agent.workspaceOnlyMacOnly":
     "Режим «Только рабочее пространство» для этого провайдера доступен только в macOS. Выберите «Полный доступ» в настройках агента.",
   "error.agent.lowMemory":
     "На этом сервере мало памяти. Ваше сообщение ждёт в очереди и начнётся, когда память освободится. Более крупный тариф даёт серверу больше памяти.",
+  "error.agent.lowMemoryServer":
+    "На этом сервере мало памяти. Ваше сообщение ждёт в очереди и начнётся, когда память освободится.",
   "error.agent.workspaceOnlyToolMissing":
     "Для режима «Только рабочее пространство» нужен {tool}, но OpenBot его не нашёл. Установите его или выберите «Полный доступ» в настройках агента.",
+  "error.agent.screenCaptureOff":
+    "Снимки экрана для этого агента выключены. Пользователь может включить управление компьютером в настройках агента.",
+  "error.agent.screenCaptureUnavailable": "Снимки экрана недоступны на этом компьютере.",
+  "error.agent.screenCaptureShared":
+    "Снимки экрана не работают в диалогах Slack, Discord или Telegram, потому что их файлы получают другие люди.",
+  "error.agent.screenCaptureDeclined": "Пользователь не разрешил этот снимок экрана. Ничего не снято.",
+  "error.agent.screenCaptureWindowMissing":
+    "Это окно сейчас не открыто. Вызовите list_capture_sources, чтобы получить текущие ID окон.",
+  "error.agent.screenCaptureDisplayMissing":
+    "Этот дисплей сейчас не подключён. Вызовите list_capture_sources, чтобы получить текущие ID дисплеев.",
+  "error.agent.screenCaptureRegionOutside":
+    "Область не помещается в один дисплей. Используйте точки рабочего стола в границах одного дисплея из list_capture_sources.",
+  "error.agent.screenCapturePermissionMissing":
+    "У OpenBot нет разрешения «Запись экрана». Попросите пользователя открыть «Системные настройки» → «Конфиденциальность и безопасность» → «Запись экрана и системного звука», включить OpenBot, затем закрыть и снова открыть OpenBot.",
+  "error.agent.screenCaptureEmptyWindows":
+    "Windows вернула пустое изображение. Попросите пользователя разблокировать компьютер и закрыть защищённое содержимое. Снимки экрана также может запрещать политика организации.",
+  "error.agent.screenCaptureFailed": "Не удалось сделать снимок экрана. Повторите попытку.",
 } as const satisfies PartialTranslation<typeof source>;

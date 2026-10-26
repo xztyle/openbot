@@ -1,6 +1,6 @@
 import type { HostRestartEvent } from "@openbot/contracts/team-protocol/host-update-v1";
 import { optionalTeamEvent, optionalTeamEventToCurrent } from "@openbot/contracts/team-protocol/optional-events";
-import { decodeTeamProtocolV6BaseCurrentEvent } from "@openbot/contracts/team-protocol/v6-base-adapter";
+import { decodeTeamProtocolV8BaseCurrentEvent } from "@openbot/contracts/team-protocol/v8-base-adapter";
 import { Effect, Exit, Result, Scope } from "effect";
 import { RemoteWorkflowError, remoteDecode } from "./remote-service-effects";
 // The live event channel for HTTPS servers, and the reconnect policy both transports share.
@@ -35,13 +35,14 @@ import type {
 import { decodeRecord } from "@openbot/contracts/ipc-decoding";
 import { isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
-import { TEAM_CURRENT_CAPABILITIES, type TeamCurrentCapability } from "@openbot/contracts/team-protocol/current";
+import { type TeamCurrentCapability, teamCapabilitiesForProtocol } from "@openbot/contracts/team-protocol/current";
 import { TEAM_PROTOCOL_V1_WEBSOCKET } from "@openbot/contracts/team-protocol/v1";
 import {
   encodeTeamProtocolV1CurrentClientEvent,
   type TeamProtocolV1CurrentClientEvent,
 } from "@openbot/contracts/team-protocol/v1-adapter";
 import { sourceText } from "@openbot/i18n/source";
+import { referenceFrom } from "@openbot/user-errors";
 import { RemoteProtocolError, RemoteRequestError } from "./remote-server-errors";
 import { requestJson } from "./remote-server-http";
 import type { RemoteServerDirectory, StoredRemoteServerView } from "./remote-server-store";
@@ -71,10 +72,10 @@ export interface RemoteEventCompatibilitySource {
     refresh?: boolean,
   ): Effect.Effect<ServerCompatibility, RemoteWorkflowError>;
   requestProtocol(compatibility: ServerCompatibility): {
-    protocol?: number;
-    appVersion?: string;
-    capabilities?: readonly TeamCurrentCapability[];
-    preserveSemanticTags?: boolean;
+    protocol?: number | undefined;
+    appVersion?: string | undefined;
+    capabilities?: readonly TeamCurrentCapability[] | undefined;
+    preserveSemanticTags?: boolean | undefined;
   };
 }
 
@@ -85,7 +86,7 @@ export interface RemoteEventConnectionSink {
   setCompatibility(serverId: string, compatibility: ServerCompatibility): void;
   compatibilityFor(serverId: string): ServerCompatibility | null;
   reportError(serverId: string, error: unknown): void;
-  reportUnreachable(serverId: string): void;
+  reportUnreachable(serverId: string, reference?: string): void;
 }
 
 export interface RemoteEventAgentState {
@@ -120,6 +121,7 @@ export class RemoteEventStream {
   readonly #scope = Scope.makeUnsafe();
   readonly #appVersion: string | null;
   readonly #servers: RemoteServerDirectory;
+  #chatWindowServerIds: ReadonlySet<string> = new Set();
   readonly #client: RemoteEventCompatibilitySource;
   readonly #connections: RemoteEventConnectionSink;
   readonly #agents: RemoteEventAgentState;
@@ -225,6 +227,15 @@ export class RemoteEventStream {
     for (const [serverId, socket] of this.#sockets) this.#sendEventScope(serverId, socket);
   }
 
+  /**
+   * A chat window stays on its server while the main window selects another (#2964), so the host
+   * of each such server also sends chat events.
+   */
+  setChatWindowServers(serverIds: ReadonlySet<string>): void {
+    this.#chatWindowServerIds = serverIds;
+    this.syncScopes();
+  }
+
   // The transport reconnected on its own, so the backoff it earned no longer applies.
   clearReconnectBackoff(serverId: string): void {
     const reconnectTimer = this.#reconnectTimers.get(serverId);
@@ -291,6 +302,19 @@ export class RemoteEventStream {
       if (server.transport === "webrtc-v2") yield* this.ensure(server.id);
       else yield* this.restart(server.id);
     }
+  }).bind(this);
+
+  /**
+   * The user opened this host, so a reconnect that waits on its backoff runs now. The backoff keeps
+   * growing, and a suspended host stays suspended.
+   */
+  readonly retryNow = Effect.fn("RemoteEventStream.retryNow")(function* (this: RemoteEventStream, serverId: string) {
+    const reconnectTimer = this.#reconnectTimers.get(serverId);
+    if (!reconnectTimer || this.#authenticationPaused.has(serverId)) return;
+    clearTimeout(reconnectTimer);
+    this.#reconnectTimers.delete(serverId);
+    this.#offlineHosts.delete(serverId);
+    yield* this.ensure(serverId);
   }).bind(this);
 
   /** Retries each offline host once, unless Signal reported it offline within the last minute. */
@@ -436,6 +460,8 @@ export class RemoteEventStream {
     let openedAt = 0;
     let authenticationFailed = false;
     let protocolFailed = false;
+    // The close code of a socket that failed. It goes in the reference of the issue.
+    const closed: { code?: number } = {};
     const attempt0 = yield* Effect.gen({ self: this }, function* () {
       const compatibility = yield* this.#client.ensureCompatibility(server, true);
       if (controller.signal.aborted || !this.#enabled || !this.#servers.has(serverId)) {
@@ -513,7 +539,7 @@ export class RemoteEventStream {
             const optional = optionalTeamEvent(value);
             const decoded = optional
               ? { kind: "known" as const, event: optionalTeamEventToCurrent(optional) }
-              : decodeTeamProtocolV6BaseCurrentEvent(value);
+              : decodeTeamProtocolV8BaseCurrentEvent(value);
             if (decoded.kind === "unknown") return;
             if (decoded.kind === "invalid") {
               protocolFailed = true;
@@ -567,7 +593,8 @@ export class RemoteEventStream {
         );
         socket.addEventListener(
           "close",
-          () => {
+          (event) => {
+            closed.code = event.code;
             if (this.#sockets.get(serverId) === socket) {
               this.#sockets.delete(serverId);
             }
@@ -593,14 +620,24 @@ export class RemoteEventStream {
           protocolFailed = true;
           this.#connections.reportError(serverId, error);
         } else {
-          authenticationFailed = !opened && (yield* this.#hasRejectedEventCredentialsEffect(server));
+          const refused = opened ? null : yield* this.#eventCredentialsRefusalEffect(server);
+          authenticationFailed = refused !== null && (refused.status === 401 || refused.status === 403);
           if (authenticationFailed) {
             this.#connections.reportError(
               serverId,
-              new RemoteRequestError(401, sourceText("error.remote.signInAgain")),
+              new RemoteRequestError(
+                401,
+                sourceText("error.remote.signInAgain"),
+                null,
+                referenceFrom("http", refused?.status, refused?.code),
+              ),
             );
           } else {
-            this.#connections.reportUnreachable(serverId);
+            this.#connections.reportUnreachable(
+              serverId,
+              (refused ? referenceFrom("http", refused.status, refused.code) : null) ??
+                (closed.code === undefined ? undefined : `ws/close/${closed.code}`),
+            );
             this.#onOffline(serverId);
             this.#onChanged();
           }
@@ -626,18 +663,26 @@ export class RemoteEventStream {
     socket.send(
       encodeTeamProtocolV1CurrentClientEvent({
         type: "agent-event-scope",
-        includeConversations: this.#servers.activeServerId === serverId,
-        ...(this.#appVersion ? { capabilities: TEAM_CURRENT_CAPABILITIES } : {}),
+        includeConversations: this.#servers.activeServerId === serverId || this.#chatWindowServerIds.has(serverId),
+        ...(this.#appVersion
+          ? {
+              capabilities: teamCapabilitiesForProtocol(
+                this.#connections.compatibilityFor(serverId)?.negotiatedProtocol,
+              ),
+            }
+          : {}),
       }),
     );
   }
 
   // Whether the socket died because the host rejected these credentials, which is the one failure a
   // reconnect cannot fix. Asked over HTTP because a closed socket carries no status.
-  readonly #hasRejectedEventCredentialsEffect = Effect.fn("RemoteEventStream.hasRejectedEventCredentials")(function* (
+  // The host's refusal of the event credentials, read from `/me`. Null when `/me` answers, or when
+  // the host cannot be reached at all.
+  readonly #eventCredentialsRefusalEffect = Effect.fn("RemoteEventStream.eventCredentialsRefusal")(function* (
     this: RemoteEventStream,
     server: StoredRemoteServerView,
-  ): Effect.fn.Return<boolean, RemoteWorkflowError> {
+  ): Effect.fn.Return<RemoteRequestError | null, RemoteWorkflowError> {
     return yield* Effect.gen({ self: this }, function* () {
       const compatibility = yield* this.#client.ensureCompatibility(server);
       yield* requestJson(server.apiUrl, TEAM_API_ROUTES.me, (value) => decodeRecord(value, "team member"), {
@@ -651,14 +696,8 @@ export class RemoteEventStream {
             }),
         ),
       );
-      return false;
-    }).pipe(
-      Effect.catch(({ cause: error }) =>
-        Effect.sync(() => {
-          return error instanceof RemoteRequestError && (error.status === 401 || error.status === 403);
-        }),
-      ),
-    );
+      return null;
+    }).pipe(Effect.catch(({ cause: error }) => Effect.succeed(error instanceof RemoteRequestError ? error : null)));
   });
 
   #supportsCapability(serverId: string, capability: TeamCurrentCapability): boolean {

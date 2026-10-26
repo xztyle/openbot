@@ -2,7 +2,7 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/prompt";
 
 export const messages = {
-  "prompt.inputRequired": "Se necesita tu respuesta",
+  "prompt.inputRequired": "Requiere respuesta",
   "prompt.question.label": "Preguntas del agente",
   "prompt.question.cancelled": "Preguntas canceladas",
   "prompt.question.expired": "Preguntas caducadas",
@@ -56,10 +56,19 @@ export const messages = {
   "prompt.browser.pendingBody":
     "Abre la página para completar el inicio de sesión, la verificación o el consentimiento. Después, permite que {name} continúe.",
   "prompt.browser.openPage": "Abrir {title}",
-  "prompt.browser.returning": "Devolviendo el control…",
+  "prompt.browser.returning": "Volviendo…",
   "prompt.browser.done": "He terminado",
   "prompt.browser.cancelling": "Cancelando…",
   "prompt.browser.pageFallback": "Página del navegador",
   "prompt.browser.hostFallback": "el navegador",
+  "prompt.browser.signInBlocked.label": "Inicio de sesión bloqueado",
+  "prompt.browser.signInBlocked.title": "{host} bloqueó el inicio de sesión desde {server}",
+  "prompt.browser.signInBlocked.cancelledTitle": "Inicio de sesión en {host} cancelado",
+  "prompt.browser.signInBlocked.body":
+    "Inicia sesión en este ordenador. OpenBot envía solo el inicio de sesión de {host} a {server}, y {name} continúa.",
+  "prompt.browser.signInBlocked.cancelledBody": "El inicio de sesión se canceló.",
+  "prompt.browser.signInBlocked.waiting": "Esperando el inicio de sesión",
+  "prompt.browser.signInBlocked.waitingButton": "Esperando el inicio de sesión…",
+  "prompt.browser.signInBlocked.page": "{host} en {server}",
   "prompt.inputRequiredAnnouncement": "Se necesita tu respuesta. {question}",
 } as const satisfies PartialTranslation<typeof source>;

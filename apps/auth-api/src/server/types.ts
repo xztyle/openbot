@@ -4,7 +4,7 @@ import type { Effect } from "effect";
 import type { AuthStoreError } from "./d1-auth-repository";
 import { disabledObjectStorage } from "./disabled-object-storage";
 import type { EmailDeliveryError } from "./email-delivery";
-import type { SmtpFailure } from "./smtp-email-delivery";
+import type { SmtpContactMessage, SmtpFailure, SmtpWelcomeMessage } from "./smtp-email-delivery";
 
 export interface WorkerBindings {
   DB: D1Database;
@@ -32,6 +32,7 @@ export interface WorkerBindings {
   EMAIL_DELIVERY_WEBHOOK_SECRET?: string;
   SKILLS_ADMIN_TOKEN?: string;
   SITE_OPERATIONS_ADMIN_TOKEN?: string;
+  SERVER_CLAIMS_ADMIN_TOKEN?: string;
   SITE_REPORT_HASH_SECRET?: string;
   SITE_COOKIE_ISOLATION_READY?: string;
   SITE_PUBLISH_ENABLED?: string;
@@ -96,6 +97,11 @@ export interface WorkerBindings {
   APNS_TOPIC?: string;
   /** Local development only: the development server that forwards to Apple over HTTP/2. */
   APNS_ORIGIN?: string;
+  /**
+   * The Firebase service account key file (JSON) that sends Android notifications through Firebase
+   * Cloud Messaging. The Android notification relay is off without it.
+   */
+  FCM_SERVICE_ACCOUNT?: string;
 }
 
 function isWorkerBindings(value: unknown): value is WorkerBindings {
@@ -170,6 +176,8 @@ export interface MobileAuthDevice {
   platform: "ios" | "android" | "unknown";
   connectedAt: number;
   lastActiveAt: number;
+  /** How the phone signed in: a one-time code, or a permanent link. */
+  via: "code" | "link";
 }
 
 export interface MobileAuthDeviceIdentity {
@@ -196,8 +204,16 @@ export interface TeamInviteEmailDelivery {
   }): Effect.Effect<void, EmailDeliveryError | SmtpFailure>;
 }
 
+export interface WelcomeEmailDelivery {
+  send(message: SmtpWelcomeMessage): Effect.Effect<void, SmtpFailure>;
+}
+
+export interface ContactMessageDelivery {
+  send(message: SmtpContactMessage): Effect.Effect<void, SmtpFailure>;
+}
+
 export type EmailVerificationResult =
-  | { status: "verified"; session: { sessionToken: string; user: AuthUser } }
+  | { status: "verified"; session: { sessionToken: string; user: AuthUser }; created: boolean }
   | { status: "invalid" | "expired" | "too_many_attempts" };
 
 export type EmailChallengeDeliveryState = "pending" | "sent" | "failed";
@@ -233,11 +249,13 @@ export interface AuthRepository {
     state: "sent" | "failed",
     now: number,
   ): Effect.Effect<void, AuthStoreError>;
+  /** With `device`, the new session is a mobile session of that device. */
   verifyEmailChallenge(input: {
     idHash: string;
     codeHash: string;
     now: number;
     session: { id: string; token: string; expiresAt: number };
+    device?: MobileAuthDeviceIdentity;
   }): Effect.Effect<EmailVerificationResult, AuthStoreError>;
   incrementRateLimit(
     keyHash: string,
@@ -268,12 +286,19 @@ export interface AuthRepository {
     expiresAt: number;
   }): Effect.Effect<void, AuthStoreError>;
   replaceMobileAuthTicket(input: {
-    host?: import("@openbot/contracts/mobile-connect").MobileConnectHostBinding;
+    host?: import("@openbot/contracts/mobile-connect").MobileConnectHostBinding | undefined;
     ticketHash: string;
     userId: string;
     serverId: string;
     createdAt: number;
     expiresAt: number;
+  }): Effect.Effect<void, AuthStoreError>;
+  /** Spends the unused Mobile Connect tickets of the user for one desktop host. */
+  cancelMobileAuthTickets(input: {
+    userId: string;
+    serverId: string;
+    hostId: string;
+    now: number;
   }): Effect.Effect<void, AuthStoreError>;
   redeemTeamAuthTicket(input: {
     ticketHash: string;
@@ -287,7 +312,40 @@ export interface AuthRepository {
     session: { id: string; token: string; expiresAt: number };
     device: MobileAuthDeviceIdentity;
   }): Effect.Effect<MobileAuthSessionResult | null, AuthStoreError>;
+  /** Stores a new link and revokes the earlier links of the same user and host. False when the session or host does not match. */
+  replaceMobileConnectLink(input: {
+    linkHash: string;
+    desktopSessionToken: string;
+    userId: string;
+    host: import("@openbot/contracts/mobile-connect").MobileConnectHostBinding;
+    createdAt: number;
+  }): Effect.Effect<boolean, AuthStoreError>;
+  revokeMobileConnectLink(input: { userId: string; hostId: string; now: number }): Effect.Effect<void, AuthStoreError>;
+  redeemMobileConnectLink(input: {
+    linkHash: string;
+    now: number;
+    session: { id: string; token: string; expiresAt: number };
+    device: MobileAuthDeviceIdentity;
+  }): Effect.Effect<MobileAuthSessionResult | null, AuthStoreError>;
   authenticateMobileSession(sessionToken: string, now: number): Effect.Effect<AuthUser | null, AuthStoreError>;
-  listMobileAuthDevices(userId: string, now: number): Effect.Effect<MobileAuthDevice[], AuthStoreError>;
+  /** With a host, only the phones that can open it: none when the host is not in the account directory. */
+  listMobileAuthDevices(
+    userId: string,
+    now: number,
+    hostId: string | null,
+  ): Effect.Effect<MobileAuthDevice[], AuthStoreError>;
   revokeMobileAuthDevice(userId: string, sessionId: string, now: number): Effect.Effect<boolean, AuthStoreError>;
+  /** Creates the user of the email when there is none. */
+  createServerClaim(input: {
+    claimHash: string;
+    email: string;
+    createdAt: number;
+    expiresAt: number;
+  }): Effect.Effect<void, AuthStoreError>;
+  /** Spends the claim and makes a desktop session. Null when the claim is unknown, used or expired. */
+  redeemServerClaim(input: {
+    claimHash: string;
+    now: number;
+    session: { id: string; token: string; expiresAt: number };
+  }): Effect.Effect<{ sessionToken: string; user: AuthUser } | null, AuthStoreError>;
 }

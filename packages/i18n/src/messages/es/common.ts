@@ -21,7 +21,7 @@ export const messages = {
   "common.search": "Buscar",
   "common.loading": "Cargando…",
   "common.saving": "Guardando…",
-  "common.tryAgain": "Volver a intentar",
+  "common.tryAgain": "Reintentar",
   "common.connecting": "Conectando…",
   "common.download": "Descargar",
   "common.removing": "Quitando…",

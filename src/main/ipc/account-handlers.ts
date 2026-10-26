@@ -4,7 +4,7 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { CentralAuthManager } from "../central-auth-manager";
 import type { HostService } from "../host-service";
-import { createHostedMobileConnect } from "../mobile-connect-host";
+import { createHostedMobileConnect, createHostedMobileConnectLink } from "../mobile-connect-host";
 import { parseEmailCodeVerification, parseProfileName } from "./app-inputs";
 import { parseAvatarImage } from "./avatar-inputs";
 import { handler, type IpcGroupHandlers, payloadHandler } from "./define-ipc-group";
@@ -29,7 +29,15 @@ export function accountIpcHandlers({ centralAuth, host }: AccountIpcDependencies
       updateName: payloadHandler(parseProfileName, (name) => runCauseEffect(centralAuth.updateName(name))),
       updateAvatar: payloadHandler(parseAvatarImage, (parsed) => runCauseEffect(centralAuth.updateAvatar(parsed))),
       createMobileConnect: handler(() => runCauseEffect(createHostedMobileConnect({ centralAuth, host }))),
-      listMobileConnectedDevices: handler(() => runCauseEffect(centralAuth.listMobileConnectedDevices())),
+      cancelMobileConnect: handler(() => runCauseEffect(centralAuth.cancelMobileConnect(host.getMobileConnectHost()))),
+      getMobileConnectLink: handler(() => centralAuth.getMobileConnectLink(host.getMobileConnectHost())),
+      createMobileConnectLink: handler(() => runCauseEffect(createHostedMobileConnectLink({ centralAuth, host }))),
+      revokeMobileConnectLink: handler(() =>
+        runCauseEffect(centralAuth.revokeMobileConnectLink(host.getMobileConnectHost())),
+      ),
+      listMobileConnectedDevices: handler(() =>
+        runCauseEffect(centralAuth.listMobileConnectedDevices(host.getMobileConnectHost())),
+      ),
       listAccountSessions: handler(() => runCauseEffect(centralAuth.listAccountSessions())),
       revokeAccountSession: payloadHandler(stringPayload("sessionId", INPUT_LIMITS.identifier), (sessionId) =>
         runCauseEffect(centralAuth.revokeAccountSession(sessionId)),

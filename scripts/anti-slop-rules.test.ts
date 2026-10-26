@@ -42,8 +42,8 @@ const isTestFileOverride = (override: BiomeOverride) =>
 const overrides = biomeConfig.overrides ?? [];
 // The `// scope: global` line is the list the skill installer prints for other repositories. This
 // repository runs these global rules only on the code where their pattern can occur, through a
-// non-test override: `no-collections-in-stores` on SolidJS code.
-const scopedGlobalRules: readonly string[] = ["no-collections-in-stores"];
+// non-test override: `no-collections-in-stores` and `no-cleanup-in-effect-callbacks` on SolidJS code.
+const scopedGlobalRules: readonly string[] = ["no-collections-in-stores", "no-cleanup-in-effect-callbacks"];
 const globalRules = ruleNamesIn([
   ...(biomeConfig.plugins ?? []),
   ...overrides

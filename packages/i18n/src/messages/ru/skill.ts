@@ -14,7 +14,6 @@ export const messages = {
   "skill.emptyEnabled": "У этого агента нет включённых навыков.",
   "skill.emptyAssigned": "У этого агента пока нет назначенных навыков.",
   "skill.folderSkill": "OpenBot не устанавливал этот навык. Измените или удалите его здесь: {location}.",
-  "skill.localOnHost": "Этот локальный навык хранится на хосте. Откройте его сведения на том компьютере.",
   "skill.moreFor": "Ещё для {name}",
   "skill.update": "Обновить",
   "skill.updateName": "Обновить {name}",
@@ -66,7 +65,7 @@ export const messages = {
 
   "skill.preview.label": "Превью: {name}",
   "skill.preview.creator": "Автор: {name}",
-  "skill.preview.examplePrompt": "Помоги мне использовать этот навык.",
+  "skill.preview.examplePrompt": "Помогите мне использовать этот навык.",
   "skill.preview.try": "Попробовать навык",
   "skill.preview.linkFailed": "Не удалось открыть ссылку.",
 } as const satisfies PartialTranslation<typeof source>;

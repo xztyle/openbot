@@ -2,6 +2,8 @@ export const IMAGE_ATTACHMENT_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp",
 
 export const MEDIA_ATTACHMENT_EXTENSIONS = ["mp3", "mov"] as const;
 
+export const ARCHIVE_ATTACHMENT_EXTENSIONS = ["zip"] as const;
+
 export const CONTEXT_ATTACHMENT_EXTENSIONS = [
   "pdf",
   "doc",
@@ -135,18 +137,48 @@ export const EXTENDED_TEXT_ATTACHMENT_EXTENSIONS = [
 export const ATTACHMENT_FILE_EXTENSIONS = [
   ...IMAGE_ATTACHMENT_EXTENSIONS,
   ...MEDIA_ATTACHMENT_EXTENSIONS,
+  ...ARCHIVE_ATTACHMENT_EXTENSIONS,
   ...CONTEXT_ATTACHMENT_EXTENSIONS,
   ...EXTENDED_TEXT_ATTACHMENT_EXTENSIONS,
 ] as const;
 
 /**
- * What a host accepts beyond the base list. An older remote host rejects EML, MP3, MOV, and the
+ * The attachment types that the desktop app opens with the default app of the operating system:
+ * images, audio, video, documents and plain text. The operating system can run other types when
+ * it opens them, for example a script on Windows, or a page in a browser. The old Office formats
+ * (doc, xls, ppt) can hold macros. The desktop app shows those files in the file manager and does
+ * not open them. The file name can come from another member or from a remote host, so it is not
+ * trusted.
+ */
+export const OPENABLE_ATTACHMENT_EXTENSIONS = [
+  ...IMAGE_ATTACHMENT_EXTENSIONS,
+  ...MEDIA_ATTACHMENT_EXTENSIONS,
+  "pdf",
+  "docx",
+  "odt",
+  "rtf",
+  "xlsx",
+  "ods",
+  "pptx",
+  "odp",
+  "eml",
+  "txt",
+  "md",
+  "markdown",
+  "csv",
+  "log",
+] as const;
+
+/**
+ * What a host accepts beyond the base list. An older remote host rejects EML, MP3, MOV, ZIP, and the
  * extended text formats.
  */
 export interface AttachmentSupport {
   eml: boolean;
   media: boolean;
-  text: boolean;
+  zip: boolean;
+  /** Fork only: plain-text and code files. Absent means no. */
+  text?: boolean;
 }
 
 function isExtendedTextExtension(extension: string | null): boolean {
@@ -158,6 +190,7 @@ export function supportedAttachmentExtensions(support: AttachmentSupport): strin
     (extension) =>
       (support.eml || extension !== "eml") &&
       (support.media || !MEDIA_ATTACHMENT_EXTENSIONS.some((media) => media === extension)) &&
+      (support.zip || !ARCHIVE_ATTACHMENT_EXTENSIONS.some((archive) => archive === extension)) &&
       (support.text || !isExtendedTextExtension(extension)),
   );
 }
@@ -169,7 +202,7 @@ export function isExtendedTextAttachmentName(name: string): boolean {
 
 export const ATTACHMENT_FILE_ACCEPT = ATTACHMENT_FILE_EXTENSIONS.map((extension) => `.${extension}`).join(",");
 export const SUPPORTED_ATTACHMENT_DESCRIPTION =
-  "images, MP3 audio, MOV video, PDF, Office documents, EML, text, Markdown, data, or source files";
+  "images, MP3 audio, MOV video, ZIP archives, PDF, Office documents, EML, text, Markdown, data, or source files";
 
 export const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -188,6 +221,14 @@ export function isSupportedAttachmentName(name: string): boolean {
   return EXTENSIONLESS_TEXT_FILES.has(basename) || (extension !== null && SUPPORTED_EXTENSIONS.has(extension));
 }
 
+const OPENABLE_EXTENSIONS = new Set<string>(OPENABLE_ATTACHMENT_EXTENSIONS);
+
+/** Whether the desktop app can open this file with the default app. See `OPENABLE_ATTACHMENT_EXTENSIONS`. */
+export function isOpenableAttachmentName(name: string): boolean {
+  const extension = attachmentFileExtension(name);
+  return extension !== null && OPENABLE_EXTENSIONS.has(extension);
+}
+
 /**
  * The name check for a surface that picks files for one host, such as mobile. It accepts the same
  * files as the desktop picker filter that `supportedAttachmentExtensions` builds for that host.
@@ -197,7 +238,8 @@ export function isSupportedAttachmentNameFor(name: string, support: AttachmentSu
   const extension = attachmentFileExtension(name);
   if (extension === "eml") return support.eml;
   if (MEDIA_ATTACHMENT_EXTENSIONS.some((media) => media === extension)) return support.media;
-  if (isExtendedTextExtension(extension)) return support.text;
+  if (ARCHIVE_ATTACHMENT_EXTENSIONS.some((archive) => archive === extension)) return support.zip;
+  if (isExtendedTextExtension(extension)) return support.text === true;
   return true;
 }
 
@@ -231,6 +273,8 @@ export function attachmentMimeTypeForName(name: string) {
       return "audio/mpeg";
     case "mov":
       return "video/quicktime";
+    case "zip":
+      return "application/zip";
     case "pdf":
       return "application/pdf";
     // An SVG attachment is text, not a raster image: an attachment with an `image/*` type becomes

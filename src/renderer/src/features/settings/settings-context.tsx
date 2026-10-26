@@ -1,13 +1,16 @@
 import {
+  AGENT_DEFAULT_KEYS,
   type ApprovalAutomationPreference,
   agentAutoApprovalEnabled,
   type DynamicIslandGeometry,
+  type ExternalLinkTarget,
 } from "@openbot/contracts/ipc";
 import { DEFAULT_GENERAL_SETTINGS, type GeneralSettingsValue } from "@openbot/ui/features/settings/app-settings";
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createSignal, onSettled } from "solid-js";
 import { isActionSoundEnabled, readActionSoundTheme, setActionSoundChoice } from "../../action-sounds";
 import { actionToast } from "../../action-toast";
+import { readShowAgentSteps, setShowAgentSteps, useShowAgentSteps } from "../../agent-steps-preference";
 import { desktopAnalytics } from "../../analytics";
 import {
   readShowAgentMessages,
@@ -29,9 +32,23 @@ import type { SettingsTab } from "./settings-tabs";
 
 const ANALYTICS_APP_VERSION_STORAGE_KEY = "openbot:analytics-app-version";
 
+function sameExternalLinkTarget(left: ExternalLinkTarget, right: ExternalLinkTarget): boolean {
+  return left.kind === right.kind && (left.kind !== "app" || right.kind !== "app" || left.path === right.path);
+}
+
+/** Tells the user why a switch went back to its previous value. */
+function showSaveFailure(error: unknown): void {
+  const { t, errorMessage } = currentText();
+  actionToast.error(errorMessage(error, t("settings.preferences.saveFailed")), {
+    // One save can revert two switches, such as both notification switches. The id shows one toast.
+    id: "settings-preference-save-failed",
+    report: { operation: "settings", source: "action", cause_code: "unknown" },
+  });
+}
+
 /**
  * Application-wide preferences and the two surfaces that edit them: the
- * settings dialog and the skills marketplace.
+ * settings page and the skills marketplace.
  *
  * Ungated - every preference has a default the app runs on, so nothing waits
  * for the three reads below. `analyticsPreferenceLoaded()` is `null` until the
@@ -53,6 +70,12 @@ const Settings = createSimpleContext({
     const { setupState } = useSetup();
 
     const [analyticsPreferenceLoaded, setAnalyticsPreferenceLoaded] = createSignal<boolean | null>(null);
+    /**
+     * The state of the preference reads below. "failed" when one or more reads failed: the rows of
+     * that read show defaults, not the saved values, so the settings page tells the user and offers
+     * a retry.
+     */
+    const [preferencesLoad, setPreferencesLoad] = createSignal<"loading" | "loaded" | "failed">("loading");
     const [skillsMarketplaceOpen, setSkillsMarketplaceOpen] = createSignal(false);
     // Undefined until main answers. The Settings preview then draws the notch it had before.
     const [builtInDisplayGeometry, setBuiltInDisplayGeometry] = createSignal<DynamicIslandGeometry | undefined>();
@@ -73,6 +96,8 @@ const Settings = createSimpleContext({
      */
     const [pendingAgentTemplateId, setPendingAgentTemplateId] = createSignal<string | null>(null);
     const [appSettingsOpen, setAppSettingsOpen] = createSignal(false);
+    /** Counts each open request, so the settings page can tell a new request while it is open. */
+    const [appSettingsOpenRequest, setAppSettingsOpenRequest] = createSignal(0);
     /** The tab that the next opening shows. Undefined keeps the tab that was open last. */
     const [appSettingsTab, setAppSettingsTab] = createSignal<SettingsTab | undefined>();
     /** A hosted server that the server menu asked to delete. The nonce repeats a request for the same server. */
@@ -87,6 +112,7 @@ const Settings = createSimpleContext({
       sendShortcut: readSendShortcutMode(),
       showAgentReasoning: readShowAgentReasoning(),
       showAgentMessages: readShowAgentMessages(),
+      showAgentSteps: readShowAgentSteps(),
       soundFeedback: isActionSoundEnabled(),
       soundTheme: readActionSoundTheme(),
     });
@@ -100,7 +126,7 @@ const Settings = createSimpleContext({
         setGeneralSettings((current) => (current.sendShortcut === mode ? current : { ...current, sendShortcut: mode }));
       },
     );
-    // The same for the two chat switches: the web Preferences tab and another tab write them too.
+    // The same for the chat switches: the web Preferences tab and another tab write them too.
     const showAgentReasoning = useShowAgentReasoning();
     const showAgentMessages = useShowAgentMessages();
     createEffect(
@@ -113,8 +139,16 @@ const Settings = createSimpleContext({
         );
       },
     );
+    const showAgentSteps = useShowAgentSteps();
+    createEffect(
+      () => showAgentSteps(),
+      (show) => {
+        setGeneralSettings((current) =>
+          current.showAgentSteps === show ? current : { ...current, showAgentSteps: show },
+        );
+      },
+    );
     const [approvalAutomation, setApprovalAutomation] = createSignal<ApprovalAutomationPreference>({
-      turbo: false,
       defaultAutoApprove: false,
       autoApproveOverrides: {},
     });
@@ -124,14 +158,17 @@ const Settings = createSimpleContext({
     let autoDownloadUpdatesChanged = false;
     let allowRemoteUpdatesChanged = false;
     let autoInstallUpdatesChanged = false;
-    let desktopNotificationsChanged = false;
-    let notificationTextChanged = false;
+    let notificationPreferenceChanged = false;
     let busyMessageModeChanged = false;
+    let agentDefaultsChanged = false;
     let agentMemoryLimitChanged = false;
     let agentCreationLimitChanged = false;
     let keepRemoteSessionsChanged = false;
-    let turboModeChanged = false;
-    const [turboModePending, setTurboModePending] = createSignal(false);
+    let externalLinkTargetChanged = false;
+    let launchAtLoginChanged = false;
+    let keepRunningInBackgroundChanged = false;
+    let keepAwakeChanged = false;
+    let keepAwakeOnBatteryChanged = false;
 
     createEffect(
       () => ({
@@ -159,7 +196,8 @@ const Settings = createSimpleContext({
             // Version attribution is optional and must not block startup.
           }
         }
-        if (analyticsOpened) return;
+        // A chat window is not another start of the app.
+        if (analyticsOpened || platform.chatWindow) return;
         analyticsOpened = true;
         desktopAnalytics.track("desktop_app_opened", {
           setup_completed: setup.completed,
@@ -179,11 +217,13 @@ const Settings = createSimpleContext({
       ): void {
         void request
           .then((response) => setGeneralSettings((current) => ({ ...current, [key]: read(response) })))
-          .catch(() => setGeneralSettings((current) => ({ ...current, [key]: previous[key] })));
+          .catch((error: unknown) => {
+            setGeneralSettings((current) => ({ ...current, [key]: previous[key] }));
+            showSaveFailure(error);
+          });
       }
 
-      const turboMode = turboModePending() ? previous.turboMode : value.turboMode;
-      setGeneralSettings({ ...value, turboMode });
+      setGeneralSettings(value);
       if (previous.taskCompletionSound !== value.taskCompletionSound) {
         setCompletionSoundEnabled(value.taskCompletionSound);
       }
@@ -196,11 +236,14 @@ const Settings = createSimpleContext({
       if (previous.showAgentMessages !== value.showAgentMessages) {
         setShowAgentMessages(value.showAgentMessages);
       }
+      if (previous.showAgentSteps !== value.showAgentSteps) {
+        setShowAgentSteps(value.showAgentSteps);
+      }
       if (previous.soundFeedback !== value.soundFeedback || previous.soundTheme !== value.soundTheme) {
         setActionSoundChoice(value.soundFeedback ? value.soundTheme : "off");
       }
       if (previous.productAnalytics !== value.productAnalytics) {
-        desktopAnalytics.setTrackingEnabled(value.productAnalytics);
+        desktopAnalytics.setTrackingEnabled(value.productAnalytics, { recordOptOut: true });
         setAnalyticsPreferenceLoaded(value.productAnalytics);
         void settingsPort()
           .setAnalyticsPreference({ enabled: value.productAnalytics })
@@ -209,30 +252,12 @@ const Settings = createSimpleContext({
             setAnalyticsPreferenceLoaded(preference.enabled);
             setGeneralSettings((current) => ({ ...current, productAnalytics: preference.enabled }));
           })
-          .catch(() => {
+          .catch((error: unknown) => {
             desktopAnalytics.setTrackingEnabled(previous.productAnalytics);
             setAnalyticsPreferenceLoaded(previous.productAnalytics);
             setGeneralSettings((current) => ({ ...current, productAnalytics: previous.productAnalytics }));
+            showSaveFailure(error);
           });
-      }
-      if (previous.turboMode !== turboMode) {
-        turboModeChanged = true;
-        setTurboModePending(true);
-        void settingsPort()
-          .setApprovalAutomation({ turbo: turboMode })
-          .then((preference) => {
-            setGeneralSettings((current) => ({ ...current, turboMode: preference.turbo }));
-            setApprovalAutomation(preference);
-          })
-          .catch(() => {
-            setGeneralSettings((current) => ({ ...current, turboMode: previous.turboMode }));
-            const { t } = currentText();
-            actionToast.error(
-              previous.turboMode ? t("settings.turbo.turnOffFailed") : t("settings.turbo.turnOnFailed"),
-              { report: { operation: "settings", source: "action", cause_code: "unknown" } },
-            );
-          })
-          .finally(() => setTurboModePending(false));
       }
       if (previous.autoDownloadUpdates !== value.autoDownloadUpdates) {
         autoDownloadUpdatesChanged = true;
@@ -258,24 +283,21 @@ const Settings = createSimpleContext({
           (preference) => preference.autoInstall,
         );
       }
-      if (previous.desktopNotifications !== value.desktopNotifications) {
-        desktopNotificationsChanged = true;
-        persistField(
-          "desktopNotifications",
-          settingsPort().notifications.setPreference({ desktopNotifications: value.desktopNotifications }),
-          (preference) => preference.desktopNotifications,
-        );
-      }
-      if (previous.notificationText !== value.notificationText) {
-        notificationTextChanged = true;
-        persistField(
-          "notificationText",
-          settingsPort().notifications.setPreference({
-            desktopNotifications: value.desktopNotifications,
-            showText: value.notificationText,
-          }),
-          (preference) => preference.showText === true,
-        );
+      if (
+        previous.desktopNotifications !== value.desktopNotifications ||
+        previous.notificationPreview !== value.notificationPreview
+      ) {
+        notificationPreferenceChanged = true;
+        const saved = settingsPort().notifications.setPreference({
+          desktopNotifications: value.desktopNotifications,
+          messagePreview: value.notificationPreview,
+        });
+        // Each answer writes back only the switch that this change set, so that an older answer does
+        // not undo a later change of the other switch.
+        if (previous.desktopNotifications !== value.desktopNotifications)
+          persistField("desktopNotifications", saved, (preference) => preference.desktopNotifications);
+        if (previous.notificationPreview !== value.notificationPreview)
+          persistField("notificationPreview", saved, (preference) => preference.messagePreview);
       }
       if (previous.busyMessageMode !== value.busyMessageMode) {
         busyMessageModeChanged = true;
@@ -285,12 +307,52 @@ const Settings = createSimpleContext({
           (preference) => preference.mode,
         );
       }
-      if (previous.agentMemoryLimit !== value.agentMemoryLimit) {
-        agentMemoryLimitChanged = true;
+      if (AGENT_DEFAULT_KEYS.some((key) => previous.agentDefaults[key] !== value.agentDefaults[key])) {
+        agentDefaultsChanged = true;
+        persistField("agentDefaults", settingsPort().setAgentDefaults({ ...value.agentDefaults }), (saved) => saved);
+      }
+      // A hidden switch is null and cannot change.
+      if (value.launchAtLogin !== null && previous.launchAtLogin !== value.launchAtLogin) {
+        launchAtLoginChanged = true;
         persistField(
-          "agentMemoryLimit",
-          settingsPort().setAgentMemoryLimitPreference({ limit: value.agentMemoryLimit }),
-          (preference) => preference.limit,
+          "launchAtLogin",
+          settingsPort().setAppBehaviorPreference({ launchAtLogin: value.launchAtLogin }),
+          (preference) => preference.launchAtLogin,
+        );
+      }
+      if (
+        value.keepRunningInBackground !== null &&
+        previous.keepRunningInBackground !== value.keepRunningInBackground
+      ) {
+        keepRunningInBackgroundChanged = true;
+        persistField(
+          "keepRunningInBackground",
+          settingsPort().setAppBehaviorPreference({ keepRunningInBackground: value.keepRunningInBackground }),
+          (preference) => preference.keepRunningInBackground,
+        );
+      }
+      if (value.keepAwake !== null && previous.keepAwake !== value.keepAwake) {
+        keepAwakeChanged = true;
+        persistField(
+          "keepAwake",
+          settingsPort().setAppBehaviorPreference({ keepAwake: value.keepAwake }),
+          (preference) => preference.keepAwake,
+        );
+      }
+      if (value.keepAwakeOnBattery !== null && previous.keepAwakeOnBattery !== value.keepAwakeOnBattery) {
+        keepAwakeOnBatteryChanged = true;
+        persistField(
+          "keepAwakeOnBattery",
+          settingsPort().setAppBehaviorPreference({ keepAwakeOnBattery: value.keepAwakeOnBattery }),
+          (preference) => preference.keepAwakeOnBattery,
+        );
+      }
+      if (!sameExternalLinkTarget(previous.externalLinkTarget, value.externalLinkTarget)) {
+        externalLinkTargetChanged = true;
+        persistField(
+          "externalLinkTarget",
+          settingsPort().setExternalLinkPreference({ target: value.externalLinkTarget }),
+          (preference) => preference.target,
         );
       }
       if (previous.agentCreationLimit !== value.agentCreationLimit) {
@@ -315,7 +377,9 @@ const Settings = createSimpleContext({
         previous.macBookNotchIdle !== value.macBookNotchIdle ||
         previous.macBookNotchAdditionalDisplays !== value.macBookNotchAdditionalDisplays ||
         previous.macBookNotchWidthPercent !== value.macBookNotchWidthPercent ||
-        previous.macBookNotchHeightPercent !== value.macBookNotchHeightPercent
+        previous.macBookNotchHeightPercent !== value.macBookNotchHeightPercent ||
+        previous.macBookNotchServers !== value.macBookNotchServers ||
+        previous.macBookNotchNewServers !== value.macBookNotchNewServers
       ) {
         // A slider drag sends one save per step. Only the reply to the newest save may change the
         // form, or an older reply would move the slider back while the user drags.
@@ -328,6 +392,8 @@ const Settings = createSimpleContext({
             additionalDisplaysEnabled: value.macBookNotchAdditionalDisplays,
             widthPercent: value.macBookNotchWidthPercent,
             heightPercent: value.macBookNotchHeightPercent,
+            serverVisibility: value.macBookNotchServers,
+            newServersVisible: value.macBookNotchNewServers,
           })
           .then((preference) => {
             if (save !== dynamicIslandSaveCount) return;
@@ -339,10 +405,13 @@ const Settings = createSimpleContext({
               macBookNotchAdditionalDisplays: preference.additionalDisplaysEnabled,
               macBookNotchWidthPercent: preference.widthPercent,
               macBookNotchHeightPercent: preference.heightPercent,
+              macBookNotchServers: preference.serverVisibility,
+              macBookNotchNewServers: preference.newServersVisible,
             }));
           })
-          .catch(() => {
+          .catch((error: unknown) => {
             if (save !== dynamicIslandSaveCount) return;
+            showSaveFailure(error);
             setGeneralSettings((current) => ({
               ...current,
               macBookNotch: previous.macBookNotch,
@@ -351,28 +420,16 @@ const Settings = createSimpleContext({
               macBookNotchAdditionalDisplays: previous.macBookNotchAdditionalDisplays,
               macBookNotchWidthPercent: previous.macBookNotchWidthPercent,
               macBookNotchHeightPercent: previous.macBookNotchHeightPercent,
+              macBookNotchServers: previous.macBookNotchServers,
+              macBookNotchNewServers: previous.macBookNotchNewServers,
             }));
           });
       }
     }
 
-    /**
-     * Grants or revokes one agent's standing approval.
-     *
-     * Not part of `updateGeneralSettings`: the grant is per agent rather than a field of the one
-     * settings record, and it is written from the approval card as well as from Settings. The
-     * promise is returned so the approval card only accepts the pending request once the grant is
-     * stored - accepting first would leave an agent the user believes is trusted still asking.
-     */
-    async function setAgentAutoApprove(agentId: string, autoApprove: boolean): Promise<void> {
-      const preference = await settingsPort().setApprovalAutomation({ agentId, autoApprove });
-      setApprovalAutomation(preference);
-      setGeneralSettings((current) => ({ ...current, turboMode: preference.turbo }));
-    }
-
-    /** Whether this agent acts without asking, by its own grant or because Turbo covers every agent. */
+    /** Whether this agent acts without asking at Full access. */
     function agentAutoApproves(agentId: string): boolean {
-      return agentAutoApprovalEnabled({ ...approvalAutomation(), turbo: generalSettings().turboMode }, agentId);
+      return agentAutoApprovalEnabled(approvalAutomation(), agentId);
     }
 
     /** Remembers what to focus when the dialog closes; the dialog itself restores it. */
@@ -381,6 +438,7 @@ const Settings = createSimpleContext({
       appSettingsRestoreTarget = target;
       setAppSettingsTab(tab);
       setAppSettingsOpen(true);
+      setAppSettingsOpenRequest((count) => count + 1);
     }
 
     /** Opens the Hosted servers tab with the delete confirmation of one server. */
@@ -401,6 +459,11 @@ const Settings = createSimpleContext({
       const unsubscribe = settingsPort().onOpenSettings(() => openAppSettings());
       // A remote owner or admin can change an agent's grant from a phone or the web client.
       const unsubscribeApprovals = settingsPort().onApprovalAutomation(setApprovalAutomation);
+      // An admin of a joined server can change how many memories each agent of this computer keeps.
+      const unsubscribeMemoryLimit = settingsPort().onAgentMemoryLimitPreference(({ limit }) => {
+        agentMemoryLimitChanged = true;
+        setGeneralSettings((current) => ({ ...current, agentMemoryLimit: limit }));
+      });
       // An admin of a joined server can change the update switches of this computer.
       const unsubscribeUpdates = settingsPort().update.onPreference((preference) => {
         autoDownloadUpdatesChanged = true;
@@ -411,100 +474,153 @@ const Settings = createSimpleContext({
           autoInstallUpdates: preference.autoInstall,
         }));
       });
+      // A page can open from main with no click here, such as a sign-in page, so main sends the notice.
+      const unsubscribeLinkFallback = settingsPort().onExternalLinkFallback(({ name }) => {
+        const { t } = currentText();
+        actionToast.warning(t("settings.externalLinks.fallback.title", { name }), {
+          id: "external-link-fallback",
+          description: t("settings.externalLinks.fallback.description"),
+        });
+      });
       return () => {
         window.removeEventListener("keydown", handleSettingsShortcut);
+        unsubscribeLinkFallback();
         unsubscribe();
         unsubscribeApprovals();
+        unsubscribeMemoryLimit();
         unsubscribeUpdates();
       };
     });
 
+    /**
+     * Reads the saved preferences. A failed read keeps the default value of its rows, and marks the
+     * load as failed so that the settings page can show the error and read again.
+     */
+    function loadPreferences(): void {
+      setPreferencesLoad("loading");
+      void Promise.allSettled([
+        settingsPort()
+          .getAnalyticsPreference()
+          .then(
+            (preference) => {
+              setAnalyticsPreferenceLoaded(preference.enabled);
+              setGeneralSettings((current) => ({ ...current, productAnalytics: preference.enabled }));
+            },
+            (error: unknown) => {
+              // Analytics stays off until a read or the user turns it on. A retry that fails again
+              // keeps the value that is already shown.
+              if (analyticsPreferenceLoaded() === null) {
+                setAnalyticsPreferenceLoaded(false);
+                setGeneralSettings((current) => ({ ...current, productAnalytics: false }));
+              }
+              throw error;
+            },
+          ),
+        settingsPort()
+          .update.getPreference()
+          .then((preference) => {
+            // A toggle made before this read resolves has already been persisted, so the older value
+            // must not be painted back over it.
+            setGeneralSettings((current) => ({
+              ...current,
+              autoDownloadUpdates: autoDownloadUpdatesChanged ? current.autoDownloadUpdates : preference.autoDownload,
+              allowRemoteUpdates: allowRemoteUpdatesChanged
+                ? current.allowRemoteUpdates
+                : preference.allowRemoteUpdates,
+              autoInstallUpdates: autoInstallUpdatesChanged ? current.autoInstallUpdates : preference.autoInstall,
+            }));
+          }),
+        settingsPort()
+          .getBusyMessageModePreference()
+          .then((preference) => {
+            if (busyMessageModeChanged) return;
+            setGeneralSettings((current) => ({ ...current, busyMessageMode: preference.mode }));
+          }),
+        settingsPort()
+          .getAgentDefaults()
+          .then((defaults) => {
+            if (agentDefaultsChanged) return;
+            setGeneralSettings((current) => ({ ...current, agentDefaults: defaults }));
+          }),
+        settingsPort()
+          .getAgentMemoryLimitPreference()
+          .then((preference) => {
+            if (agentMemoryLimitChanged) return;
+            setGeneralSettings((current) => ({ ...current, agentMemoryLimit: preference.limit }));
+          }),
+        settingsPort()
+          .getAgentCreationLimitPreference()
+          .then((preference) => {
+            if (agentCreationLimitChanged) return;
+            setGeneralSettings((current) => ({ ...current, agentCreationLimit: preference.limit }));
+          }),
+        settingsPort()
+          .getAppBehaviorPreference()
+          .then((preference) => {
+            setGeneralSettings((current) => ({
+              ...current,
+              launchAtLogin: launchAtLoginChanged ? current.launchAtLogin : preference.launchAtLogin,
+              keepRunningInBackground: keepRunningInBackgroundChanged
+                ? current.keepRunningInBackground
+                : preference.keepRunningInBackground,
+              keepAwake: keepAwakeChanged ? current.keepAwake : preference.keepAwake,
+              keepAwakeOnBattery: keepAwakeOnBatteryChanged
+                ? current.keepAwakeOnBattery
+                : preference.keepAwakeOnBattery,
+            }));
+          }),
+        settingsPort()
+          .getExternalLinkPreference()
+          .then((preference) => {
+            if (externalLinkTargetChanged) return;
+            setGeneralSettings((current) => ({ ...current, externalLinkTarget: preference.target }));
+          }),
+        settingsPort()
+          .getRemoteSessionReusePreference()
+          .then((preference) => {
+            if (keepRemoteSessionsChanged) return;
+            setGeneralSettings((current) => ({ ...current, keepRemoteSessions: preference.keepBetweenRuns }));
+          }),
+        settingsPort()
+          .notifications.getPreference()
+          .then((preference) => {
+            if (notificationPreferenceChanged) return;
+            setGeneralSettings((current) => ({
+              ...current,
+              desktopNotifications: preference.desktopNotifications,
+              notificationPreview: preference.messagePreview,
+            }));
+          }),
+        // Main accepts island calls only from the main window, which owns the island.
+        platform.chatWindow
+          ? Promise.resolve()
+          : settingsPort()
+              .dynamicIsland.getPreference()
+              .then((preference) =>
+                setGeneralSettings((current) => ({
+                  ...current,
+                  macBookNotch: preference.enabled,
+                  macBookNotchHaptics: preference.hapticsEnabled,
+                  macBookNotchIdle: preference.idleVisible,
+                  macBookNotchAdditionalDisplays: preference.additionalDisplaysEnabled,
+                  macBookNotchWidthPercent: preference.widthPercent,
+                  macBookNotchHeightPercent: preference.heightPercent,
+                  macBookNotchServers: preference.serverVisibility,
+                  macBookNotchNewServers: preference.newServersVisible,
+                })),
+              ),
+      ]).then((results) => {
+        setPreferencesLoad(results.some((result) => result.status === "rejected") ? "failed" : "loaded");
+      });
+    }
+
     onSettled(() => {
-      void settingsPort()
-        .getAnalyticsPreference()
-        .then((preference) => {
-          setAnalyticsPreferenceLoaded(preference.enabled);
-          setGeneralSettings((current) => ({ ...current, productAnalytics: preference.enabled }));
-        })
-        .catch(() => {
-          setAnalyticsPreferenceLoaded(false);
-          setGeneralSettings((current) => ({ ...current, productAnalytics: false }));
-        });
+      loadPreferences();
       void settingsPort()
         .getApprovalAutomation()
-        .then((preference) => {
-          setApprovalAutomation(preference);
-          // A toggle made before this read resolves has already been persisted, so the older value
-          // must not be painted back over it.
-          if (turboModeChanged) return;
-          setGeneralSettings((current) => ({ ...current, turboMode: preference.turbo }));
-        })
+        .then(setApprovalAutomation)
         .catch(() => undefined);
-      void settingsPort()
-        .update.getPreference()
-        .then((preference) => {
-          // A toggle made before this read resolves has already been persisted, so the older value
-          // must not be painted back over it.
-          setGeneralSettings((current) => ({
-            ...current,
-            autoDownloadUpdates: autoDownloadUpdatesChanged ? current.autoDownloadUpdates : preference.autoDownload,
-            allowRemoteUpdates: allowRemoteUpdatesChanged ? current.allowRemoteUpdates : preference.allowRemoteUpdates,
-            autoInstallUpdates: autoInstallUpdatesChanged ? current.autoInstallUpdates : preference.autoInstall,
-          }));
-        })
-        .catch(() => undefined);
-      void settingsPort()
-        .getBusyMessageModePreference()
-        .then((preference) => {
-          if (busyMessageModeChanged) return;
-          setGeneralSettings((current) => ({ ...current, busyMessageMode: preference.mode }));
-        })
-        .catch(() => undefined);
-      void settingsPort()
-        .getAgentMemoryLimitPreference()
-        .then((preference) => {
-          if (agentMemoryLimitChanged) return;
-          setGeneralSettings((current) => ({ ...current, agentMemoryLimit: preference.limit }));
-        })
-        .catch(() => undefined);
-      void settingsPort()
-        .getAgentCreationLimitPreference()
-        .then((preference) => {
-          if (agentCreationLimitChanged) return;
-          setGeneralSettings((current) => ({ ...current, agentCreationLimit: preference.limit }));
-        })
-        .catch(() => undefined);
-      void settingsPort()
-        .getRemoteSessionReusePreference()
-        .then((preference) => {
-          if (keepRemoteSessionsChanged) return;
-          setGeneralSettings((current) => ({ ...current, keepRemoteSessions: preference.keepBetweenRuns }));
-        })
-        .catch(() => undefined);
-      void settingsPort()
-        .notifications.getPreference()
-        .then((preference) => {
-          setGeneralSettings((current) => ({
-            ...current,
-            ...(desktopNotificationsChanged ? {} : { desktopNotifications: preference.desktopNotifications }),
-            ...(notificationTextChanged ? {} : { notificationText: preference.showText === true }),
-          }));
-        })
-        .catch(() => undefined);
-      void settingsPort()
-        .dynamicIsland.getPreference()
-        .then((preference) =>
-          setGeneralSettings((current) => ({
-            ...current,
-            macBookNotch: preference.enabled,
-            macBookNotchHaptics: preference.hapticsEnabled,
-            macBookNotchIdle: preference.idleVisible,
-            macBookNotchAdditionalDisplays: preference.additionalDisplaysEnabled,
-            macBookNotchWidthPercent: preference.widthPercent,
-            macBookNotchHeightPercent: preference.heightPercent,
-          })),
-        )
-        .catch(() => undefined);
+      if (platform.chatWindow) return;
       void settingsPort()
         .dynamicIsland.getBuiltInDisplayGeometry()
         .then((geometry) => setBuiltInDisplayGeometry(geometry))
@@ -516,16 +632,17 @@ const Settings = createSimpleContext({
 
     return {
       analyticsPreferenceLoaded,
+      preferencesLoadFailed: () => preferencesLoad() === "failed",
+      reloadPreferences: loadPreferences,
       generalSettings,
       builtInDisplayGeometry,
-      turboModePending,
       updateGeneralSettings,
       sendTestNotification,
       openNotificationSettings,
-      setAgentAutoApprove,
       agentAutoApproves,
       appSettingsOpen,
       setAppSettingsOpen,
+      appSettingsOpenRequest,
       appSettingsRestoreTarget: () => appSettingsRestoreTarget,
       appSettingsTab,
       openAppSettings,

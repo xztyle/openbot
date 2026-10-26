@@ -32,6 +32,8 @@ export interface PendingSend {
   error: string | null;
   /** The host drops a second send with the same `clientMessageId`, so Retry cannot store it twice. */
   retrySafe: boolean;
+  /** What the user said, for a voice message: a local draft that Retry sends again and Dismiss discards. */
+  voiceRecordingDraftId: string | null;
 }
 
 export type DeliverPendingSend = (send: PendingSend) => Promise<SendMessageResult>;
@@ -83,8 +85,11 @@ export function createPendingSendStore() {
     publish(key);
     void deliver({ ...next })
       .catch((error: unknown) => {
+        // An error with no message of its own leaves the reason empty; the status label says enough.
         const { t, errorMessage } = currentText();
-        return { error: errorMessage(error, t("chat.send.failed")) };
+        const fallback = t("chat.send.failed");
+        const message = errorMessage(error, fallback);
+        return { error: message === fallback ? null : message };
       })
       .then((result) => {
         // Dismissed while in flight: nothing is left to update.
@@ -117,12 +122,13 @@ export function createPendingSendStore() {
   /** `holdMs` keeps the send with the client for that long first, so Undo and Edit can still take it back. */
   function add(
     target: ConversationTarget,
-    input: Pick<PendingSend, "draft" | "text" | "retrySafe">,
+    input: Pick<PendingSend, "draft" | "text" | "retrySafe"> & Partial<Pick<PendingSend, "voiceRecordingDraftId">>,
     deliver: DeliverPendingSend,
     holdMs = 0,
   ): void {
     const key = composerDraftKey(target);
     const send: PendingSend = {
+      voiceRecordingDraftId: null,
       ...input,
       clientMessageId: crypto.randomUUID(),
       createdAt: new Date().toISOString(),

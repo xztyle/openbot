@@ -148,6 +148,23 @@ export function diagramEdgePath(from: DiagramPoint, to: DiagramPoint): string {
   return `M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${to.x - bend} ${to.y}, ${to.x} ${to.y}`;
 }
 
+/** From an input port's centre to the tip of the arrow that enters it: the tip goes 1px into the 7px port's ring. */
+const DIAGRAM_ARROW_TIP_GAP = 6;
+const DIAGRAM_ARROW_LENGTH = 9;
+const DIAGRAM_ARROW_HALF_WIDTH = 5.5;
+
+/** Where a connection's line ends: at the base of its arrow, where the curve is already level. */
+export function diagramEdgeEnd(to: DiagramPoint): DiagramPoint {
+  return { x: to.x - DIAGRAM_ARROW_TIP_GAP - DIAGRAM_ARROW_LENGTH, y: to.y };
+}
+
+/** The arrowhead where a connection enters an input port, so the edge shows which way a run goes. */
+export function diagramEdgeArrow(to: DiagramPoint): string {
+  const tip = to.x - DIAGRAM_ARROW_TIP_GAP;
+  const base = tip - DIAGRAM_ARROW_LENGTH;
+  return `M ${base} ${to.y - DIAGRAM_ARROW_HALF_WIDTH} L ${tip} ${to.y} L ${base} ${to.y + DIAGRAM_ARROW_HALF_WIDTH} Z`;
+}
+
 /** The point halfway along `diagramEdgePath`, where an edge's controls sit. */
 export function diagramEdgeMidpoint(from: DiagramPoint, to: DiagramPoint): DiagramPoint {
   return { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };

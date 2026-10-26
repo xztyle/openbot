@@ -21,14 +21,18 @@ service, which passes them to this computer.
    collapsed. You can rename it or change its model in agent settings.
 4. In Slack, mention @OpenBot in any public channel, or send it a direct message.
 
+To connect another workspace, select **Add workspace**. One Slack Orchestrator answers every
+workspace, so a workspace that you add later skips step 3.
+
 OpenBot joins every public channel of the workspace when it connects, and each public channel that is
 created later. Slack shows "joined #channel" in each one. A private channel needs an invitation:
 `/invite @OpenBot`.
 
 A workspace answers to one OpenBot server. Another account cannot connect a workspace that your
 server answers until you disconnect it. **Disconnect** revokes the token, removes it from this
-computer and unlinks the workspace; the conversations stay in OpenBot, and a later **Connect Slack**
-gives them back their agents.
+computer and unlinks the workspace. When it is the last workspace, it also deletes the Slack
+Orchestrator with its conversations, and the **Integrations** section when no agent is left in it. While the orchestrator works on a turn,
+Disconnect stops with an error and changes nothing: stop the agent first.
 
 Only the computer that runs the agents can connect Slack, because Slack returns to that computer's
 browser. A joined server shows no Slack page.
@@ -44,7 +48,12 @@ browser. A joined server shows no Slack page.
   orchestrator posts it. Until you add the orchestrator, Slack gets "No agent can answer here yet".
 - Each conversation is its own OpenBot thread of that agent, so it does not mix with the agent's own
   chat.
-- The agent sees earlier messages of the thread as context, and the files of the message.
+- The agent sees earlier messages of the thread as context, and the files of the message. A
+  mention of a person shows that person's Slack name.
+- The agent can save short facts about the workspace, such as who owns a project. Every new
+  conversation of the workspace sees them, in every channel. The agent's own chat does not. A fact
+  from a direct message is not saved. See [Workspace memories](#workspace-memories).
+- The agent can read more of the channel or thread when a message refers to something earlier.
 - 👀 means the message arrived. "Working on it…" is replaced by the answer. ✅, ❌ or ⏹ shows the end.
   Every post comes from OpenBot and names no agent.
 - An approval appears in the thread with **Approve** and **Deny**. Only the person who wrote the
@@ -68,12 +77,18 @@ for it.
    **Integrations** sidebar section, as the Slack Orchestrator does.
 4. In Discord, mention @OpenBot in a channel.
 
+To connect another Discord server, select **Add Discord server**. One Discord Orchestrator answers
+every Discord server, so a server that you add later skips step 3. **Who can use OpenBot** sets, for
+each Discord server, the roles whose members can mention OpenBot. With no role, everyone can.
+
 OpenBot sees each channel that its role can view. To keep OpenBot out of a channel, remove the view
 permission of its role there.
 
 A Discord server answers to one OpenBot server. Another account cannot connect a Discord server that
 your server answers until you disconnect it. **Disconnect** unlinks the Discord server and removes it
-from this computer; the conversations stay in OpenBot. OpenBot stays a member of the Discord server
+from this computer. When it is the last Discord server, it also deletes the Discord Orchestrator with
+its conversations, as for Slack.
+OpenBot stays a member of the Discord server
 until a Discord admin removes it. When a Discord admin removes OpenBot, Signal unlinks the server, also
 when this computer is off, and the row says that the token is not accepted (for a computer that was
 off, when it connects again). **Reconnect** then starts
@@ -87,6 +102,11 @@ again.
   Discord's **@ ON** setting of a reply does this, and it is on by default. Without the mention,
   Discord does not give the text to OpenBot.
 - A mention that replies to another person's message starts a new conversation.
+- A new conversation has as context the channel's last 10 messages from the 15 minutes before it, so
+  "@OpenBot make an issue" after a screenshot of another person refers to that screenshot. The
+  agent gets the files of earlier messages with the message, after the message's own files and
+  within the attachment limits. Without the Message Content intent, Discord gives the text and files
+  only of messages that mention OpenBot.
 - A direct message to OpenBot gets one fixed answer: mention OpenBot in a server channel.
 - The rest works as in Slack: the Discord Orchestrator receives each new conversation, 👀 shows that
   the message arrived, "Working on it…" is replaced by the answer, and ✅, ❌ or ⏹️ shows the end.
@@ -113,8 +133,10 @@ this computer never has it.
 4. In the group, mention the bot (`@<bot> …`), or reply to one of its messages.
 
 A chat answers to one OpenBot server. Another account cannot link a chat that your server answers
-until you disconnect it. **Disconnect** makes the bot leave the chat and unlinks it; the
-conversations stay in OpenBot, and a later link of the same chat gives them back their agents.
+until you disconnect it. **Disconnect** makes the bot leave the chat and unlinks it. When it is the
+last linked chat, it also deletes the Telegram Orchestrator with its conversations, as for Slack.
+Otherwise the conversations stay in OpenBot, and a later link of the same chat gives them back their
+agents.
 
 ## What happens in Telegram
 
@@ -146,8 +168,9 @@ Not confirmed: this flow end to end against Telegram. The tests use a fake Signa
 
 ## Test Slack locally
 
-Slack must reach Signal over public HTTPS. `bun run dev:slack` opens a `cloudflared` tunnel to the
-local Signal and gives it the development app's signing secret.
+Slack must reach Signal and the account API over public HTTPS. `bun run dev:slack` opens two
+`cloudflared` tunnels, one to the local Signal and one to the local account API, and gives Signal the
+development app's signing secret.
 
 1. Install `cloudflared` (`brew install cloudflared`).
 2. Write `.env.slack-dev` in the worktree root. Git ignores it.
@@ -160,13 +183,14 @@ local Signal and gives it the development app's signing secret.
    `REMOTE_TICKET_PRIVATE_JWK` in `.openbot/dev-state.json`, and export
    `SLACK_ROUTE_KEY_ID=openbot-remote-1`. Development only: the
    ticket key's public key is already in the JWKS that Signal loads.
-4. Run `bun run dev:slack` (add `--shared` for the shared `OpenBot Dev` profile). Set the printed address
-   as the development app's request URL, for events and interactivity. It changes on each start.
+4. Run `bun run dev:slack` (add `--shared` for the shared `OpenBot Dev` profile). Set the printed addresses
+   as the development app's request URL, for events and interactivity, and its redirect URL. They
+   change on each start.
 
-The install itself needs an account API that Slack can send the browser back to over HTTPS. Use the
-test Worker (`bun run deploy:test`) with the development app's `SLACK_CLIENT_ID` and
-`SLACK_CLIENT_SECRET`. Not confirmed: a local install that returns to a dev app on a computer that
-also has an installed OpenBot. The operating system sends `openbot://` to the installed app.
+The install returns through the account API tunnel. The local account API needs the development
+app's `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` and `SLACK_STATE_SECRET` in local development state.
+The dev app gets the grant on a loopback port, not through `openbot://`, so an installed OpenBot on
+the same computer does not get it. Not confirmed: this install end to end.
 
 ## Troubleshooting
 
@@ -182,12 +206,57 @@ The workspace row says what is wrong.
 | Cannot receive events | This computer cannot reach Signal: it is signed out, has no name, or Signal is down. | Sign in, name this computer in **Server settings**, keep OpenBot open. |
 | "Another OpenBot server already answers this Slack workspace" | Another account connected the workspace. | Disconnect it on that server, then try again. |
 
+## Workspace memories
+
+Each connection (a Slack workspace, a Discord server or a Telegram chat) has its own list of facts.
+The agent that answers saves a fact with `openbot.messaging_remember` and deletes one with
+`openbot.messaging_forget_memory`. Every prompt of every conversation of that connection shows the
+whole list, with the ID of each fact. The prompt marks the facts as data, not instructions.
+
+- A connection keeps at most 32 facts of 500 characters each.
+- A fact is not saved from a direct message, because every channel of the workspace would see it.
+  A fact saved in a private channel is not refused: every channel and direct message of the
+  workspace sees it too. Anyone who can reach OpenBot in the workspace, in a direct message too,
+  can ask the agent to forget a fact.
+- The agent's own memories (`openbot.remember`) stay separate. They are private to the OpenBot user.
+- A disconnect keeps the facts. When you connect the same workspace again, the agent sees them again.
+- OpenBot has no screen for these facts yet. Ask the agent in the workspace to forget a fact.
+
+`openbot.messaging_history` reads the newest messages of the conversation's own channel or thread:
+30 by default, 100 at most. It reads no other place. Slack can limit it to one read a minute; it
+then fails at once, and the agent can try again. Discord gives the text only of messages that
+mention OpenBot, and of bot posts. Discord messages name their files. Telegram gives what this computer saw since it started.
+
+## Posts that an agent sends
+
+Any agent can post to a connected place on its own initiative, in any turn: in the user's own chat,
+in a routine run, or in a turn that answers a platform message. Tell it where in the request or the
+routine prompt, for example "post the summary to #bot-inflow on Discord".
+
+- `openbot.messaging_list_places` with no arguments lists the enabled connections and their IDs.
+  With `connection`, it lists the places OpenBot can post in: the Slack channels it is a member of,
+  the Discord text and announcement channels and active threads that its permissions let it view
+  and post in, or the Telegram chat itself.
+- `openbot.messaging_post` posts markdown as OpenBot to `place`. `replyTo` puts the post in a
+  thread: a Slack thread ts, a Discord message ID, a Telegram message ID, or `t<topic ID>` for a
+  Telegram forum topic. The text is redacted before it leaves this computer. A Discord post pings
+  nobody; a Telegram `@username` notifies that person. A Telegram connection posts only in its own
+  chat.
+- A long text goes in more than one post. When a later part fails, the earlier parts stay posted.
+- A routine posts only when its run calls the tool. The scheduler does not post the run's answer.
+- A reply to the post reaches an agent only as usual: it must mention OpenBot, and it goes to the
+  Orchestrator.
+- There is no list of allowed channels and no approval. Anyone who can give the agents work can ask
+  them to post in any place that OpenBot can see. A Slack private channel needs an `/invite`.
+- Discord listing needs a Signal that knows the `listChannels` call. An older Signal refuses it
+  with `invalid_request`; posting works with any Signal.
+
 ## Limits
 
 These limits are for Slack. Discord's are in [apps/discord-app/README.md](../apps/discord-app/README.md#limits-of-discord),
 and these also apply to Discord: the host must run, the queue limits, who can give work, and that a
-hosted server stays awake while a connection is live. Discord sends an event once: an event that
-arrives while this computer has no Signal connection is lost.
+hosted server that sleeps starts for a message. Discord sends an event once: an event that arrives
+while this computer has no Signal connection is lost, except for a hosted server that starts.
 
 - The host must run. Slack sends an event again after about 1 and 5 minutes when this computer does
   not answer, then drops it.
@@ -200,15 +269,21 @@ arrives while this computer has no Signal connection is lost.
 - Until the Slack Marketplace approves OpenBot, Slack limits reading a thread to 1 request per minute
   and 15 messages, so an agent can see less context.
 - Anyone who can post in the workspace, guests and Slack Connect members included, can give the
-  agents work. They run with the access you gave them. With Turbo or **Always allow**, they run
-  commands without asking.
-- A hosted server stays awake while a Slack connection is live.
+  agents work. They run with the Permissions you gave them. At **Full access**, they run commands
+  without asking.
+- A hosted server sleeps after 15 minutes with no use, also with a live connection. A mention, a
+  direct message, a thread reply or a button press starts it. Signal keeps that message, encrypted,
+  for up to 10 minutes and gives it to the server when it connects, so the answer comes after the
+  server starts (a few minutes). A restart of Signal in that time loses it. After a restart of
+  Signal, a Telegram or Discord message to a sleeping server starts it but is lost; send it again
+  when the server is on. Slack sends its message again by itself.
 - When an agent asks another OpenBot agent for something in a Slack conversation, the reply comes
   back to that conversation. The agent then posts its answer in the same thread, and the original
   message keeps its reactions.
 - A question the agent asks is answered on the host. Slack shows nothing for it.
 - Telegram does not send an update again. An update that arrives while this computer is off, or
-  while it cannot reach Signal, is lost.
+  while it cannot reach Signal, is lost. A hosted server that sleeps starts for a message or a button
+  press, and gets it when it connects.
 - In a basic Telegram group (not a supergroup), OpenBot finds the reply chain in memory. After a
   restart, a reply to an older message starts a new conversation.
 - When a Telegram group becomes a supergroup, it gets a new ID. OpenBot shows the chat as removed:
@@ -222,9 +297,11 @@ A platform is one `MessagingDriver` (`src/backend/messaging/messaging-types.ts`)
 core changes:
 
 - `createAdapter` implements `MessagingAdapter`: post, edit, react, upload, download, history,
-  author and place names, and mentions.
+  recent (for the history tool), author and place names, and mentions.
 - `createTransport` implements `MessagingTransport` and turns the platform's events into
   `InboundMessage` and `InboundAction` values. It must not need a public address on the host.
+  `InboundMessage.mentionedUserIds` lists the users that the text mentions as `@<id>`, so the core
+  can name them.
 - `requiredCredential` names the stored value without which a connection does not start.
 
 | Platform | Transport | Conversation key | Notes |

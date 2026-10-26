@@ -1,8 +1,10 @@
 import {
+  type HostedServerError,
   type HostedServerState,
   parseHostedServerStatus,
   parseHostedServerSummary,
 } from "@openbot/contracts/hosted-servers";
+import type { HostedServerStartStep } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { Deferred, Effect, Schema } from "effect";
 
@@ -10,20 +12,48 @@ class HostedServerWakeError extends Schema.TaggedError<HostedServerWakeError>()(
 
 /**
  * A hosted server in one of these states comes online without a user action, so the client reconnects.
- * A `running` server whose host is offline is still starting OpenBot, or it restarts.
+ * A `running` server whose host is offline is still starting OpenBot, or it restarts. A wake reply is
+ * `stopping` only for a server that must run (a restart, a resize, or a provider stop): the account
+ * server starts it again after the stop.
  */
 export const WAKE_RECONNECT_STATES: ReadonlySet<HostedServerState> = new Set([
   "creating",
   "starting",
   "waking",
   "running",
+  "stopping",
 ]);
-/** The reconnects for one start. With the 5 second delay of the caller, this is about 5 minutes. */
-const MAX_WAKE_ATTEMPTS = 60;
+/**
+ * How long a client waits for the host of a `running` server to connect. The account server sees only the
+ * machine, not OpenBot on it, and the host retries its own sign-in for longer than 5 minutes
+ * (`src/main/hosted-server-start-retry.ts`). A machine that still starts has no limit.
+ */
+export const HOSTED_HOST_READY_LIMIT_MS = 15 * 60_000;
+/** While a hosted server starts, the client reads its state this often, to show the step. */
+export const HOSTED_START_POLL_MS = 30_000;
+/**
+ * A start whose state the client cannot read this many times in a row ends, as a start that took too
+ * long. With `HOSTED_START_POLL_MS`, this is 5 minutes.
+ */
+export const HOSTED_START_FAILED_READS = 10;
 /** A host that is not a hosted server stays so. It is asked again after this long, not on each failure. */
 const NOT_HOSTED_RECHECK_MS = 10 * 60_000;
-/** A failure after this long with no wake request is a new outage, so its reconnects count from zero. */
+/** A failure after this long with no wake request is a new outage, so its wait for the host starts again. */
 const NEW_OUTAGE_MS = 2 * 60_000;
+/**
+ * The step of a start that the account server reports, or null when the server does not start by itself.
+ * A server whose plan ended stops, also from a start state. A `stopped` server with no error must run (the
+ * caller checks that it does not sleep): the account server starts it again, at once after a wake.
+ */
+export function hostedStartStep(server: {
+  state: HostedServerState;
+  error: HostedServerError | null;
+}): HostedServerStartStep | null {
+  if (server.state === "stopped") return server.error === null ? "machine" : null;
+  if (!WAKE_RECONNECT_STATES.has(server.state) || server.error === "plan_ended") return null;
+  if (server.state === "running") return "openbot";
+  return server.state === "waking" && server.error === "provider_limit" ? "provider_limit" : "machine";
+}
 /** The delay between a wake reply and the next connection attempt. */
 export const WAKE_RECONNECT_DELAY_MS = 5_000;
 /** A sleeping or ended server is asked again after this long, not on each failed connection. */
@@ -44,7 +74,7 @@ export interface HostedServerUnavailableOptions {
 }
 
 export interface HostedServerWakeOptions {
-  /** True for a start that the user asked for: the reconnect count of an earlier outage does not apply. */
+  /** True for a start that the user asked for: the wait of an earlier outage does not apply. */
   fresh?: boolean;
 }
 
@@ -60,15 +90,15 @@ export interface HostedServerWakeResponse {
  * server's `/v2/hosting/servers/<hostId>/wake`, which answers 404 for any other host, so a client
  * can ask for each offline host. It returns true while the server starts or runs, so the caller
  * reconnects until the host is online. It returns false when the server does not start by itself,
- * or after `MAX_WAKE_ATTEMPTS` replies in one outage.
+ * or when the server ran for `HOSTED_HOST_READY_LIMIT_MS` in one outage and its host did not connect.
  */
 export function createHostedServerWake<E, R>(
   requestWake: (hostId: string) => Effect.Effect<HostedServerWakeResponse, E, R>,
   now: () => number = Date.now,
 ) {
   const notHostedAt = new Map<string, number>();
-  /** The reconnect replies in a row for each host, and when the last one came. */
-  const attempts = new Map<string, { count: number; at: number }>();
+  /** For each host: when the server was first `running` in this outage (null before), and the last reply. */
+  const attempts = new Map<string, { runningSince: number | null; at: number }>();
   /** When the reconnects of a host stopped at the limit. The host is asked again after the recheck time. */
   const gaveUpAt = new Map<string, number>();
   /** A failed connection reports itself twice, so both reports share one request. */
@@ -110,13 +140,15 @@ export function createHostedServerWake<E, R>(
         return false;
       }
       const last = attempts.get(hostId);
-      const previous = last && time - last.at < NEW_OUTAGE_MS ? last.count : 0;
-      if (previous >= MAX_WAKE_ATTEMPTS) {
+      const since = last && time - last.at < NEW_OUTAGE_MS ? last.runningSince : null;
+      // Only the host start has a limit. A machine that still starts, or waits after a rate limit, does not.
+      const runningSince = server.state === "running" ? (since ?? time) : null;
+      if (runningSince !== null && time - runningSince >= HOSTED_HOST_READY_LIMIT_MS) {
         attempts.delete(hostId);
         gaveUpAt.set(hostId, time);
         return false;
       }
-      attempts.set(hostId, { count: previous + 1, at: time });
+      attempts.set(hostId, { runningSince, at: time });
       return true;
     }).pipe(
       Effect.onExit((exit) =>

@@ -7,12 +7,14 @@
  * could show a key would carry it into every screenshot and crash report that follows.
  */
 
+import { isKeyOnlyProvider } from "@openbot/contracts/agent-providers";
 import type {
   AgentProviderId,
   ExternalDestination,
   ProviderApiKeyState,
   ProviderApiKeyStatus,
 } from "@openbot/contracts/ipc";
+import type { AppTextKey } from "@openbot/i18n";
 import {
   Alert,
   AlertContent,
@@ -28,10 +30,67 @@ import {
 import { createSignal, onSettled, Show } from "solid-js";
 import { useText } from "../../text";
 
-const OPENCODE_GO = "OpenCode Go";
+/** The text of each provider whose key this dialog saves. Muse, Gemini and Claude also sign in without a key. */
+const KEY_TEXT = {
+  opencode: {
+    name: "OpenCode Go",
+    title: "provider.openCodeKey.title",
+    description: "provider.openCodeKey.description",
+    label: "provider.openCodeKey.label",
+  },
+  muse: {
+    name: "Muse",
+    title: "provider.museKey.title",
+    description: "provider.museKey.description",
+    label: "provider.museKey.label",
+  },
+  antigravity: {
+    name: "Gemini",
+    title: "provider.geminiKey.title",
+    description: "provider.geminiKey.description",
+    label: "provider.geminiKey.label",
+  },
+  claude: {
+    name: "Claude",
+    title: "provider.claudeKey.title",
+    description: "provider.claudeKey.description",
+    label: "provider.claudeKey.label",
+  },
+  inception: {
+    name: "Inception",
+    title: "provider.inceptionKey.title",
+    description: "provider.inceptionKey.description",
+    label: "provider.inceptionKey.label",
+  },
+  deepseek: {
+    name: "DeepSeek",
+    title: "provider.deepseekKey.title",
+    description: "provider.deepseekKey.description",
+    label: "provider.deepseekKey.label",
+  },
+  openrouter: {
+    name: "OpenRouter",
+    title: "provider.openrouterKey.title",
+    description: "provider.openrouterKey.description",
+    label: "provider.openrouterKey.label",
+  },
+} as const satisfies Record<string, { name: string; title: AppTextKey; description: AppTextKey; label: AppTextKey }>;
+
+/** A provider whose API key this dialog saves. */
+export type KeyDialogProvider = keyof typeof KEY_TEXT;
+
+/** Whether `provider` has a key in this dialog. */
+export function isKeyDialogProvider(provider: AgentProviderId): provider is KeyDialogProvider {
+  return Object.hasOwn(KEY_TEXT, provider);
+}
 
 /** The provider-key half of the desktop API, narrowed so a test can pass four functions. */
 export interface ProviderKeyApi {
+  /**
+   * Whether the host gives a saved Claude key to the Claude CLI: this computer, or a joined server
+   * with `claude-api-key-v1`. An older host stores the key and never reads it.
+   */
+  readsClaudeKey?: boolean | undefined;
   getProviderApiKeyState: (provider: AgentProviderId) => Promise<ProviderApiKeyState>;
   setProviderApiKey: (input: { provider: AgentProviderId; key: string }) => Promise<unknown>;
   clearProviderApiKey: (provider: AgentProviderId) => Promise<unknown>;
@@ -40,6 +99,7 @@ export interface ProviderKeyApi {
 
 export interface OpenCodeKeyDialogProps {
   api: ProviderKeyApi;
+  provider?: KeyDialogProvider;
   onClose: () => void;
   /**
    * Retries the connection without touching credentials. Without it a failed free provider with
@@ -53,6 +113,8 @@ type DialogPhase = "idle" | "loading" | "saving" | "removing";
 
 export function OpenCodeKeyDialog(props: OpenCodeKeyDialogProps) {
   const { t, errorMessage } = useText();
+  const provider = () => props.provider ?? "opencode";
+  const text = () => KEY_TEXT[provider()];
   const [key, setKey] = createSignal("");
   const [stored, setStored] = createSignal<ProviderApiKeyStatus>("missing");
   const [phase, setPhase] = createSignal<DialogPhase>("loading");
@@ -66,7 +128,7 @@ export function OpenCodeKeyDialog(props: OpenCodeKeyDialogProps) {
   async function readState(): Promise<void> {
     setPhase("loading");
     try {
-      setStored((await props.api.getProviderApiKeyState("opencode")).status);
+      setStored((await props.api.getProviderApiKeyState(provider())).status);
     } catch (cause) {
       setError(errorMessage(cause, t("provider.openCodeKey.readFailed")));
     } finally {
@@ -80,7 +142,7 @@ export function OpenCodeKeyDialog(props: OpenCodeKeyDialogProps) {
     setPhase("saving");
     setError(null);
     try {
-      await props.api.setProviderApiKey({ provider: "opencode", key: value });
+      await props.api.setProviderApiKey({ provider: provider(), key: value });
       // The typed key is dropped rather than kept as a draft: OpenCode has restarted with it, and
       // the dialog keeps no copy of a secret it no longer needs.
       setKey("");
@@ -96,7 +158,7 @@ export function OpenCodeKeyDialog(props: OpenCodeKeyDialogProps) {
     setPhase("removing");
     setError(null);
     try {
-      await props.api.clearProviderApiKey("opencode");
+      await props.api.clearProviderApiKey(provider());
       setKey("");
       props.onClose();
     } catch (cause) {
@@ -124,14 +186,14 @@ export function OpenCodeKeyDialog(props: OpenCodeKeyDialogProps) {
         <Dialog.Overlay class="opencode-key-backdrop">
           <Dialog.Content class="opencode-key-dialog" as="section">
             <header class="opencode-key-header">
-              <Dialog.Title class="opencode-key-title">{t("provider.openCodeKey.title")}</Dialog.Title>
+              <Dialog.Title class="opencode-key-title">{t(text().title)}</Dialog.Title>
               {/* One line that is always the dialog's whole message: the default pitch, the saved
                   fact, or the unreadable warning. A second text block would repeat it. */}
               <Dialog.Description class="opencode-key-description">
                 <Show
                   when={stored() === "saved"}
                   fallback={
-                    <Show when={stored() === "unreadable"} fallback={t("provider.openCodeKey.description")}>
+                    <Show when={stored() === "unreadable"} fallback={t(text().description)}>
                       {t("provider.openCodeKey.unreadable")}
                     </Show>
                   }
@@ -149,7 +211,7 @@ export function OpenCodeKeyDialog(props: OpenCodeKeyDialogProps) {
                 void save();
               }}
             >
-              <Field label={t("provider.openCodeKey.label")}>
+              <Field label={t(text().label)}>
                 <Input
                   type="password"
                   autocomplete="off"
@@ -168,7 +230,7 @@ export function OpenCodeKeyDialog(props: OpenCodeKeyDialogProps) {
                       <OctagonX />
                     </AlertIcon>
                     <AlertContent>
-                      <AlertTitle>{OPENCODE_GO}</AlertTitle>
+                      <AlertTitle>{text().name}</AlertTitle>
                       <AlertDescription>{message()}</AlertDescription>
                     </AlertContent>
                   </Alert>
@@ -179,7 +241,17 @@ export function OpenCodeKeyDialog(props: OpenCodeKeyDialogProps) {
                 <Button type="button" variant="ghost" disabled={busy()} onClick={props.onClose}>
                   {t("common.cancel")}
                 </Button>
-                <Show when={props.onReconnect}>
+                {/* Gemini's and Claude's reconnect is an account sign-in, which a saved key
+                    overrides. The row's Connect offers it once the key is removed. A key-only provider,
+                    such as Inception, has nothing to reconnect with until a key is saved. */}
+                <Show
+                  when={
+                    props.onReconnect &&
+                    provider() !== "antigravity" &&
+                    provider() !== "claude" &&
+                    !(isKeyOnlyProvider(provider()) && stored() === "missing")
+                  }
+                >
                   <Button type="button" variant="ghost" disabled={busy()} onClick={() => void reconnect()}>
                     {t("provider.action.reconnect")}
                   </Button>

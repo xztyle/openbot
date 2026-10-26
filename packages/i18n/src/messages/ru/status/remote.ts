@@ -12,13 +12,12 @@ export const messages = {
   "status.remote.connectingSunshine": "Подключение через Sunshine…",
   "status.remote.switchingMonitor": "Переключение общего монитора…",
   "status.remote.controlConnected": "Удалённое управление подключено.",
-  "status.remote.controlFailed": "Удалённое управление не удалось.",
+  "status.remote.controlFailed": "Сбой удалённого управления.",
   "status.remote.stagePreferences": "Загрузка локальных настроек чата: {reason}",
   "status.remote.stageConnection": "Подключение к компьютеру: {reason}",
   "status.remote.stageCompatibility": "Проверка совместимости компьютера: {reason}",
   "status.remote.stageAgents": "Загрузка агентов: {reason}",
   "status.remote.stageReads": "Загрузка статуса прочтения: {reason}",
-  "status.remote.stageConversations": "Загрузка диалогов: {reason}",
   "status.remote.suspendedDetail":
     "Обновите OpenBot Mobile или приложение для компьютера, прежде чем подключаться.\n{detail}",
   "status.remote.cooldownDetail":

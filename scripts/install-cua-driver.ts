@@ -15,7 +15,7 @@ import {
   loadCuaDriverLock,
 } from "./cua-driver-lock";
 import { sha256 } from "./remote-desktop-runtime-release";
-import { isCurrentInstallation } from "./runtime-install";
+import { download, isCurrentInstallation } from "./runtime-install";
 
 const logger = createOpenBotLogger("install-cua-driver");
 
@@ -42,7 +42,7 @@ export async function installCuaDriver(
     return "current";
   }
 
-  const archiveBytes = await download(fetchImpl, cuaDriverDownloadUrl(lock, artifact.asset));
+  const archiveBytes = await download(fetchImpl, cuaDriverDownloadUrl(lock, artifact.asset), "cua-driver");
   if (archiveBytes.byteLength !== artifact.downloadBytes) {
     throw new Error(
       `The ${target} cua-driver asset is ${archiveBytes.byteLength} bytes and not ${artifact.downloadBytes}.`,
@@ -51,7 +51,7 @@ export async function installCuaDriver(
   if (sha256(archiveBytes) !== artifact.assetSha256) {
     throw new Error(`The ${target} cua-driver asset checksum is invalid.`);
   }
-  const licenseBytes = await download(fetchImpl, cuaDriverLicenseUrl(lock));
+  const licenseBytes = await download(fetchImpl, cuaDriverLicenseUrl(lock), "cua-driver license");
   if (sha256(licenseBytes) !== lock.licenseSha256) throw new Error("The cua-driver licence checksum is invalid.");
 
   const temporaryRoot = await mkdtemp(join(tmpdir(), "openbot-cua-driver-install-"));
@@ -124,12 +124,6 @@ async function stageValidatedFiles(
     await copyFile(source, destination);
     await chmod(destination, file.executable ? 0o755 : 0o644);
   }
-}
-
-async function download(fetchImpl: typeof fetch, url: string): Promise<Buffer> {
-  const response = await fetchImpl(url, { headers: { "User-Agent": "OpenBot-runtime-installer" }, redirect: "follow" });
-  if (!response.ok) throw new Error(`The cua-driver download answered HTTP ${response.status} for ${url}.`);
-  return Buffer.from(await response.arrayBuffer());
 }
 
 if (import.meta.main) {

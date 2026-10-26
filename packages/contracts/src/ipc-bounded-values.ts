@@ -24,7 +24,7 @@ export function isRequestId(value: unknown): value is string | number {
   return isNumber(value) || isIdentifier(value);
 }
 
-// `isNumber` alone certifies NaN and the infinities, which reach AccountDock as "NaN% remaining".
+// `isNumber` alone certifies NaN and the infinities, which reach the usage rings as "NaN% remaining".
 // The released Team v1 validator already rejects them for this very payload, so accepting them here
 // would be the shared guard drifting from the wire one it is supposed to agree with.
 export function isFiniteNumber(value: unknown): value is number {

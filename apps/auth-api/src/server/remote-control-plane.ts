@@ -1,4 +1,9 @@
 import { memberLimitForPlan } from "@openbot/contracts/billing";
+import {
+  HOST_KEY_HANDOVER_LIMIT,
+  type HostKeyHandover,
+  hostKeyHandoverStatement,
+} from "@openbot/contracts/host-key-handover";
 import type { MobileConnectHostBinding } from "@openbot/contracts/mobile-connect";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import type { RemoteAuthEvent } from "@openbot/contracts/signal-protocol/auth-events";
@@ -8,6 +13,7 @@ import {
   DISCORD_ROUTE_TTL_SECONDS,
   type DiscordRouteGuild,
 } from "@openbot/contracts/signal-protocol/discord-route";
+import type { IngressRoute } from "@openbot/contracts/signal-protocol/ingress-queue";
 import {
   SLACK_ROUTE_AUDIENCE,
   SLACK_ROUTE_TEAMS_LIMIT,
@@ -42,7 +48,8 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { importJWK, type JWK, type JWTPayload, SignJWT } from "jose";
-import { getServerEntitlement } from "./billing-entitlement";
+import { getServerEntitlement, SERVER_MEMBER_LIMIT_SQL } from "./billing-entitlement";
+import { OPEN_STATUSES_SQL } from "./billing-errors";
 import { decodeBase64Url, hmacSha256, importHmacSha256Key, randomToken, sha256 } from "./crypto";
 import { readSessionMembership } from "./remote-session-membership";
 import { PERSISTENT_SESSION_EXPIRES_AT } from "./session-policy";
@@ -51,6 +58,9 @@ import type { AuthUser, WorkerBindings } from "./types";
 const TICKET_TTL_SECONDS = 180;
 const LEGACY_SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/u;
 const AUTH_EVENT_RETRY_MS = 60_000;
+const AUTH_EVENT_SEND_CONCURRENCY = 6;
+/** Longer than one drain: 50 events, 6 at a time, each with a 5 s timeout. */
+const AUTH_EVENT_CLAIM_MS = 2 * 60_000;
 const MAX_OUTSTANDING_INVITES_PER_HOST = 50;
 const MAX_PERMANENT_INVITES_PER_HOST = 5;
 const MAX_TELEGRAM_LINK_CODES_PER_HOST = 10;
@@ -59,6 +69,63 @@ const MEMBER_SEAT_AVAILABLE_SQL = `(
   EXISTS(SELECT 1 FROM remote_memberships WHERE host_id = ? AND user_id = ? AND status = 'active')
   OR (SELECT COUNT(*) FROM remote_memberships WHERE host_id = ? AND status = 'active') < ?
 )`;
+// The commercial license of the host's owner counts people across all the owner's servers: the owner,
+// and each other account with an active membership. A person who is already counted joins another
+// server of the owner freely; anyone else needs a free license user. Binds: owner, user, owner, owner,
+// license users.
+const LICENSE_SEAT_AVAILABLE_SQL = `(
+  EXISTS(SELECT 1 FROM remote_memberships m JOIN remote_hosts h ON h.host_id = m.host_id
+          WHERE h.owner_user_id = ? AND m.user_id = ? AND m.status = 'active')
+  OR (SELECT COUNT(DISTINCT m.user_id) FROM remote_memberships m JOIN remote_hosts h ON h.host_id = m.host_id
+       WHERE h.owner_user_id = ? AND m.user_id <> ? AND m.status = 'active') + 1 < ?
+)`;
+
+/** The seat checks for one user on one host: the server plan's member limit and the owner's license. */
+interface MemberSeat {
+  readonly sql: string;
+  readonly binds: readonly (string | number)[];
+  readonly limit: number;
+  readonly memberBinds: readonly (string | number)[];
+  readonly licenseBinds: readonly (string | number)[] | null;
+}
+
+/** The membership row that this accept wrote: its id and its update time. */
+const JOINED_NOW_SQL = `EXISTS(
+  SELECT 1 FROM remote_memberships
+   WHERE host_id = ? AND user_id = ? AND status = 'active' AND membership_id = ? AND updated_at = ?
+)`;
+
+// An invitation admits a user only while its creator can still invite on the host, and it never undoes
+// a removal made after the invitation: the removed member needs a new invitation or a reactivation.
+// A member who left is not removed, so an earlier invitation still admits them. A revoked row with no
+// removal time counts as a removal.
+// Binds the user ID of the account that accepts.
+const INVITE_STILL_GRANTED_SQL = `(
+  EXISTS(
+    SELECT 1 FROM remote_memberships
+     WHERE host_id = remote_invites.host_id AND user_id = remote_invites.created_by_user_id
+       AND status = 'active' AND role IN ('owner', 'admin')
+  )
+  AND NOT EXISTS(
+    SELECT 1 FROM remote_memberships
+     WHERE host_id = remote_invites.host_id AND user_id = ? AND status = 'revoked'
+       AND COALESCE(removed_at, updated_at) >= remote_invites.created_at
+  )
+)`;
+
+/**
+ * The SQL value of `removed_at` after a membership change. It is the time of the first removal by an
+ * owner or admin, 0 when the member left, and NULL for an active member. A revoked row with NULL comes
+ * from a Worker before migration 0036, so the invitation check counts it as a removal. The value reads
+ * the row as the UPDATE finds it, so a leave that races a removal cannot clear it, and a member who is
+ * already revoked cannot clear a removal by leaving again. It binds the change time when it has a
+ * placeholder.
+ */
+function removedAtAfterChange(change: { revoke: boolean; leave: boolean; activating: boolean }) {
+  if (!change.revoke) return change.activating ? "NULL" : "removed_at";
+  if (change.leave) return "CASE WHEN status = 'active' THEN 0 ELSE removed_at END";
+  return "CASE WHEN status = 'revoked' AND removed_at > 0 THEN removed_at ELSE ? END";
+}
 
 export type { RemoteMemberRole };
 
@@ -71,7 +138,7 @@ export class RemoteControlPlaneError extends Schema.TaggedError<RemoteControlPla
     super({ status, code, message });
   }
 }
-export class RemoteOperationError extends Schema.TaggedError<RemoteOperationError>()("RemoteOperationError", {}) {}
+class RemoteOperationError extends Schema.TaggedError<RemoteOperationError>()("RemoteOperationError", {}) {}
 export type RemoteFailure = RemoteControlPlaneError | RemoteOperationError;
 function remoteValidate<A>(operation: () => A): Effect.Effect<A, RemoteFailure> {
   return Effect.try({
@@ -100,6 +167,15 @@ interface RemoteHostRow {
   auth_epoch: number;
   machine_token_hash: string | null;
   device_public_key: string | null;
+}
+
+interface RemoteHostKeyHandoverRow {
+  host_id: string;
+  issued_at: number;
+  previous_public_key: string;
+  public_key: string;
+  previous_signature: string;
+  signature: string;
 }
 
 interface RemoteMembershipRow {
@@ -457,9 +533,9 @@ export class RemoteControlPlane {
         hostId: string;
         name: string;
         ownerMembershipId: string;
-        devicePublicKey?: string | null;
-        rotateCredential?: boolean;
-        machineToken?: string;
+        devicePublicKey?: string | null | undefined;
+        rotateCredential?: boolean | undefined;
+        machineToken?: string | undefined;
       },
     ) {
       const dependencies = yield* RemoteDependencies;
@@ -472,16 +548,7 @@ export class RemoteControlPlane {
       if (existing && existing.owner_user_id !== user.id) {
         return yield* new RemoteControlPlaneError(403, "host_owner_mismatch", "This host belongs to another account.");
       }
-      // The account server creates hosted server IDs, so only the account it created one for can publish it.
-      const reservation = yield* remoteCall(() =>
-        dependencies.database
-          .prepare("SELECT owner_user_id, desired_state FROM hosted_servers WHERE server_id = ? LIMIT 1")
-          .bind(hostId)
-          .first<{ owner_user_id: string; desired_state: string }>(),
-      );
-      if (reservation && (reservation.owner_user_id !== user.id || reservation.desired_state === "deleted")) {
-        return yield* new RemoteControlPlaneError(403, "host_owner_mismatch", "This host belongs to another account.");
-      }
+      yield* this.#requireHostReservation(hostId, user.id);
       const now = dependencies.now();
       const devicePublicKey = input.devicePublicKey ?? null;
       const providedMachineToken = input.machineToken;
@@ -541,8 +608,18 @@ export class RemoteControlPlane {
         Effect.mapError((error) => (error instanceof RemoteControlPlaneError ? error : new RemoteOperationError({}))),
       );
       const membershipId = ownerMembershipId;
-      const registration = yield* remoteCall(() =>
+      const [, ...registration] = yield* remoteCall(() =>
         dependencies.database.batch([
+          // A registration with another key is a new pairing. The stored handovers lead to a key that
+          // the host no longer has, and a client that follows them could not reach the next step.
+          dependencies.database
+            .prepare(
+              `DELETE FROM remote_host_key_handovers WHERE host_id = ? AND EXISTS(
+             SELECT 1 FROM remote_hosts
+             WHERE host_id = ? AND owner_user_id = ? AND device_public_key IS NOT ?
+           )`,
+            )
+            .bind(hostId, hostId, user.id, devicePublicKey),
           dependencies.database
             .prepare(
               `INSERT INTO remote_hosts(
@@ -601,13 +678,125 @@ export class RemoteControlPlane {
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
 
+  /**
+   * The host moves its identity to a new key. The previous key and the new key both signed the step,
+   * so a client that trusts the previous key can follow it to the new key. The account service only
+   * keeps and sends the steps: each client checks the signatures itself.
+   *
+   * The machine token and the auth epoch do not change, so paired devices stay signed in. Mobile
+   * Connect links pin the previous key, so they stop. A step that does not start at the stored key
+   * fails with `host_key_handover_conflict`, and the host then drops its new key.
+   */
+  readonly handOverHostKey = Effect.fn("RemoteControlPlane.handOverHostKey")(
+    function* (
+      this: RemoteControlPlane,
+      user: AuthUser,
+      input: { hostId: string; machineToken: string; handover: HostKeyHandover },
+    ): Effect.fn.Return<{ keyHandovers: HostKeyHandover[] }, RemoteFailure, RemoteDependencies> {
+      const dependencies = yield* RemoteDependencies;
+      const hostId = yield* remoteValidate(() => requiredIdentifier(input.hostId, "host ID"));
+      const { handover } = input;
+      if (handover.hostId !== hostId || handover.publicKey === handover.previousPublicKey) {
+        return yield* invalid("host key handover");
+      }
+      const host = yield* this.authenticateHost(hostId, input.machineToken);
+      if (host.owner_user_id !== user.id) {
+        return yield* new RemoteControlPlaneError(403, "host_owner_mismatch", "This host belongs to another account.");
+      }
+      yield* this.#requireHostReservation(hostId, user.id);
+      const statement = new TextEncoder().encode(hostKeyHandoverStatement(handover));
+      const signed = yield* Effect.all([
+        verifyEd25519(handover.previousPublicKey, handover.previousSignature, statement),
+        verifyEd25519(handover.publicKey, handover.signature, statement),
+      ]);
+      if (!signed.every(Boolean)) return yield* invalid("host key handover");
+
+      if (host.device_public_key === handover.publicKey) {
+        // The same request again, for example after a lost answer.
+        if (yield* this.#handoverStored(handover)) return { keyHandovers: yield* this.#keyHandovers(hostId) };
+        return yield* handoverConflict();
+      }
+      if (host.device_public_key !== handover.previousPublicKey) return yield* handoverConflict();
+
+      const now = dependencies.now();
+      const handoverId = crypto.randomUUID();
+      // The step is stored only while the host still has the previous key and this machine token, and
+      // only when it is later than every stored step, so the stored order is the order of the chain.
+      // The other statements change data only when this request stored its step.
+      const stored = `EXISTS(SELECT 1 FROM remote_host_key_handovers WHERE handover_id = ?)`;
+      const [inserted, updated] = yield* remoteCall(() =>
+        dependencies.database.batch([
+          dependencies.database
+            .prepare(
+              `INSERT INTO remote_host_key_handovers(
+             handover_id, host_id, issued_at, previous_public_key, public_key, previous_signature, signature, created_at
+           )
+           SELECT ?, host_id, ?, ?, ?, ?, ?, ?
+           FROM remote_hosts
+           WHERE host_id = ? AND owner_user_id = ? AND machine_token_hash = ? AND device_public_key = ?
+             AND NOT EXISTS(SELECT 1 FROM remote_host_key_handovers WHERE host_id = ? AND issued_at >= ?)
+           ON CONFLICT DO NOTHING`,
+            )
+            .bind(
+              handoverId,
+              handover.issuedAt,
+              handover.previousPublicKey,
+              handover.publicKey,
+              handover.previousSignature,
+              handover.signature,
+              now,
+              hostId,
+              user.id,
+              host.machine_token_hash,
+              handover.previousPublicKey,
+              hostId,
+              handover.issuedAt,
+            ),
+          dependencies.database
+            .prepare(
+              `UPDATE remote_hosts SET device_public_key = ?, updated_at = ?
+             WHERE host_id = ? AND device_public_key = ? AND ${stored}`,
+            )
+            .bind(handover.publicKey, now, hostId, handover.previousPublicKey, handoverId),
+          // A Mobile Connect QR code names the previous key, so a phone could not use it after this step.
+          dependencies.database
+            .prepare(
+              `UPDATE mobile_connect_links SET revoked_at = ? WHERE host_id = ? AND revoked_at IS NULL AND ${stored}`,
+            )
+            .bind(now, hostId, handoverId),
+          dependencies.database
+            .prepare(
+              `DELETE FROM remote_host_key_handovers
+             WHERE host_id = ? AND handover_id NOT IN (
+               SELECT handover_id FROM remote_host_key_handovers WHERE host_id = ?
+               ORDER BY issued_at DESC LIMIT ?
+             )`,
+            )
+            .bind(hostId, hostId, HOST_KEY_HANDOVER_LIMIT),
+        ]),
+      );
+      if (inserted?.meta.changes !== 1 || updated?.meta.changes !== 1) {
+        // A concurrent request can store the same step first.
+        const current = yield* this.#host(hostId);
+        if (current?.device_public_key === handover.publicKey && (yield* this.#handoverStored(handover))) {
+          return { keyHandovers: yield* this.#keyHandovers(hostId) };
+        }
+        return yield* handoverConflict();
+      }
+      return { keyHandovers: yield* this.#keyHandovers(hostId) };
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
   readonly listHosts = Effect.fn("RemoteControlPlane.listHosts")(
     function* (this: RemoteControlPlane, userId: string) {
       const dependencies = yield* RemoteDependencies;
       const result = yield* remoteCall(() =>
         dependencies.database
           .prepare(
-            `SELECT h.host_id, h.name, h.logo_key, h.device_public_key, h.auth_epoch, m.membership_id, m.role
+            `SELECT h.host_id, h.name, h.logo_key, h.device_public_key, h.auth_epoch, m.membership_id, m.role,
+           EXISTS(SELECT 1 FROM hosted_servers s WHERE s.server_id = h.host_id
+             AND s.desired_state NOT IN ('deleted', 'stopped')) AS hosted
          FROM remote_memberships m
          JOIN remote_hosts h ON h.host_id = m.host_id
          WHERE m.user_id = ? AND m.status = 'active'
@@ -622,8 +811,13 @@ export class RemoteControlPlane {
             auth_epoch: number;
             membership_id: string;
             role: RemoteMemberRole;
+            hosted: number;
           }>(),
       );
+      const keyHandovers = yield* this.#keyHandoversByHost({
+        sql: "host_id IN (SELECT host_id FROM remote_memberships WHERE user_id = ? AND status = 'active')",
+        binds: [userId],
+      });
       return yield* Effect.forEach(
         result.results ?? [],
         (row) =>
@@ -633,10 +827,13 @@ export class RemoteControlPlane {
               name: row.name,
               logoKey: row.logo_key,
               devicePublicKey: row.device_public_key,
+              keyHandovers: keyHandovers.get(row.host_id) ?? [],
               authEpoch: row.auth_epoch,
               membershipId: row.membership_id,
               role: row.role,
               memberLimit: yield* this.#memberLimit(row.host_id),
+              // A server with an ended plan is not marked: a restart needs a new plan, which only the owner buys.
+              hosted: row.hosted === 1,
             };
           }),
         { concurrency: "unbounded" },
@@ -716,34 +913,43 @@ export class RemoteControlPlane {
         }
         return { inviteId, token, expiresAt, permanent, useCount: 0 };
       }
-      const outstanding = yield* remoteCall(() =>
+      // One statement, as for a permanent link.
+      const created = yield* remoteCall(() =>
         dependencies.database
           .prepare(
-            `SELECT COUNT(*) AS count FROM remote_invites
-         WHERE host_id = ? AND max_uses IS NOT NULL
-           AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?`,
+            `INSERT INTO remote_invites(
+           invite_id, host_id, token_hash, email, role, created_by_user_id, expires_at, created_at,
+           max_uses, use_count
+         )
+         SELECT ?, ?, ?, ?, ?, ?, ?, ?, 1, 0
+         WHERE (
+           SELECT COUNT(*) FROM remote_invites
+           WHERE host_id = ? AND max_uses IS NOT NULL
+             AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?
+         ) < ?`,
           )
-          .bind(input.hostId, now)
-          .first<{ count: number }>(),
+          .bind(
+            inviteId,
+            input.hostId,
+            tokenHash,
+            email,
+            input.role,
+            user.id,
+            expiresAt,
+            now,
+            input.hostId,
+            now,
+            MAX_OUTSTANDING_INVITES_PER_HOST,
+          )
+          .run(),
       );
-      if ((outstanding?.count ?? 0) >= MAX_OUTSTANDING_INVITES_PER_HOST) {
+      if ((created.meta.changes ?? 0) !== 1) {
         return yield* new RemoteControlPlaneError(
           429,
           "invite_limit_reached",
           "Revoke or use an active invitation before creating another one.",
         );
       }
-      yield* remoteCall(() =>
-        dependencies.database
-          .prepare(
-            `INSERT INTO remote_invites(
-           invite_id, host_id, token_hash, email, role, created_by_user_id, expires_at, created_at,
-           max_uses, use_count
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
-          )
-          .bind(inviteId, input.hostId, tokenHash, email, input.role, user.id, expiresAt, now)
-          .run(),
-      );
       return { inviteId, token, expiresAt, permanent, useCount: 0 };
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
@@ -906,7 +1112,52 @@ export class RemoteControlPlane {
         emailBound: Boolean(invite.email),
         permanent: invite.max_uses === null,
         devicePublicKey: invite.device_public_key,
+        // The invitation names the key that the host had when it made the invitation.
+        keyHandovers: yield* this.#keyHandovers(invite.host_id),
       };
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /**
+   * The host name for an invitation email. The caller must be an owner or admin of the host, and
+   * the token must identify an open single-use invitation of that host for this email and role.
+   */
+  readonly emailableInvite = Effect.fn("RemoteControlPlane.emailableInvite")(
+    function* (
+      this: RemoteControlPlane,
+      userId: string,
+      input: { hostId: string; token: string; email: string; role: Exclude<RemoteMemberRole, "owner"> },
+    ) {
+      const dependencies = yield* RemoteDependencies;
+      yield* this.#requireRole(input.hostId, userId, ["owner", "admin"]);
+      const validToken = yield* remoteValidate(() => requiredText(input.token, 512, "invite token"));
+      const tokenHash = yield* sha256(validToken).pipe(
+        Effect.mapError((error) => (error instanceof RemoteControlPlaneError ? error : new RemoteOperationError({}))),
+      );
+      const invite = yield* remoteCall(() =>
+        dependencies.database
+          .prepare(
+            `SELECT i.invite_id, i.host_id, i.email, i.role, i.expires_at, i.used_at, i.revoked_at,
+                i.max_uses, i.use_count, h.name
+         FROM remote_invites i JOIN remote_hosts h ON h.host_id = i.host_id
+         WHERE i.token_hash = ? AND i.host_id = ? LIMIT 1`,
+          )
+          .bind(tokenHash, input.hostId)
+          .first<RemoteInviteRow & { name: string }>(),
+      );
+      if (
+        !invite ||
+        invite.revoked_at ||
+        invite.expires_at <= dependencies.now() ||
+        invite.used_at ||
+        invite.max_uses === null ||
+        invite.email !== input.email ||
+        invite.role !== input.role
+      ) {
+        return yield* new RemoteControlPlaneError(404, "invite_invalid", "The invitation is invalid or expired.");
+      }
+      return { hostName: invite.name };
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
@@ -941,9 +1192,11 @@ export class RemoteControlPlane {
       }
       const existingMembership = yield* remoteCall(() =>
         dependencies.database
-          .prepare("SELECT role FROM remote_memberships WHERE host_id = ? AND user_id = ? LIMIT 1")
+          .prepare(
+            "SELECT membership_id, role, status FROM remote_memberships WHERE host_id = ? AND user_id = ? LIMIT 1",
+          )
           .bind(invite.host_id, user.id)
-          .first<{ role: RemoteMemberRole }>(),
+          .first<Pick<RemoteMembershipRow, "membership_id" | "role" | "status">>(),
       );
       if (existingMembership?.role === "owner") {
         return yield* new RemoteControlPlaneError(
@@ -952,23 +1205,34 @@ export class RemoteControlPlane {
           "The owner cannot accept a member invitation.",
         );
       }
-      const limit = yield* this.#memberLimit(invite.host_id);
-      yield* this.#requireMemberSeat(invite.host_id, user.id, limit);
+      const granted = yield* remoteCall(() =>
+        dependencies.database
+          .prepare(`SELECT 1 AS granted FROM remote_invites WHERE invite_id = ? AND ${INVITE_STILL_GRANTED_SQL}`)
+          .bind(invite.invite_id, user.id)
+          .first<{ granted: number }>(),
+      );
+      if (!granted) {
+        return yield* new RemoteControlPlaneError(404, "invite_invalid", "The invitation is invalid or expired.");
+      }
+      // A member who opens a link again keeps their role and their sessions, and the invitation stays
+      // as it was. A change of role goes through `changeMembership`, which also ends the old sessions.
+      if (existingMembership?.status === "active") {
+        return {
+          hostId: invite.host_id,
+          membershipId: existingMembership.membership_id,
+          role: existingMembership.role,
+        };
+      }
+      const memberSeat = yield* this.#memberSeat(invite.host_id, user.id);
+      yield* this.#requireMemberSeat(memberSeat);
       const membershipId = crypto.randomUUID();
-      const seat = [invite.host_id, user.id, invite.host_id, limit] as const;
+      const seat = memberSeat.binds;
+      // The writes after the membership apply only when this accept made it: a new row, or the revoked
+      // row that it brought back. An accept that a concurrent one beat leaves the invitation as it was.
+      const joinedId = existingMembership?.membership_id ?? membershipId;
+      const joinedNow = [invite.host_id, user.id, joinedId, now] as const;
       const accepted = yield* remoteCall(() =>
         dependencies.database.batch([
-          dependencies.database
-            .prepare(
-              `UPDATE remote_hosts SET auth_epoch = auth_epoch + 1, updated_at = ?
-            WHERE host_id = ?
-              AND EXISTS(
-                SELECT 1 FROM remote_memberships WHERE host_id = ? AND user_id = ?
-              )
-              AND ${MEMBER_SEAT_AVAILABLE_SQL}`,
-            )
-            .bind(now, invite.host_id, invite.host_id, user.id, ...seat),
-          this.#authEpochEventStatement(invite.host_id, now),
           dependencies.database
             .prepare(
               permanent
@@ -976,54 +1240,82 @@ export class RemoteControlPlane {
                  membership_id, host_id, user_id, role, status, created_at, updated_at
                ) SELECT ?, ?, ?, ?, 'active', ?, ?
                  FROM remote_invites
-                WHERE invite_id = ? AND revoked_at IS NULL AND expires_at > ? AND ${MEMBER_SEAT_AVAILABLE_SQL}
+                WHERE invite_id = ? AND revoked_at IS NULL AND expires_at > ? AND ${memberSeat.sql}
+                  AND ${INVITE_STILL_GRANTED_SQL}
                ON CONFLICT(host_id, user_id) DO UPDATE SET
-                 role = CASE WHEN remote_memberships.role = 'owner' THEN 'owner' ELSE excluded.role END,
-                 status = 'active', updated_at = excluded.updated_at`
+                 role = excluded.role, status = 'active', updated_at = excluded.updated_at, removed_at = NULL
+                WHERE remote_memberships.status = 'revoked' AND remote_memberships.role <> 'owner'`
                 : `INSERT INTO remote_memberships(
                  membership_id, host_id, user_id, role, status, created_at, updated_at
                ) SELECT ?, ?, ?, ?, 'active', ?, ?
                  FROM remote_invites
                 WHERE invite_id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?
-                  AND ${MEMBER_SEAT_AVAILABLE_SQL}
+                  AND ${memberSeat.sql} AND ${INVITE_STILL_GRANTED_SQL}
                ON CONFLICT(host_id, user_id) DO UPDATE SET
-                 role = CASE WHEN remote_memberships.role = 'owner' THEN 'owner' ELSE excluded.role END,
-                 status = 'active', updated_at = excluded.updated_at`,
+                 role = excluded.role, status = 'active', updated_at = excluded.updated_at, removed_at = NULL
+                WHERE remote_memberships.status = 'revoked' AND remote_memberships.role <> 'owner'`,
             )
-            .bind(membershipId, invite.host_id, user.id, invite.role, now, now, invite.invite_id, now, ...seat),
+            .bind(
+              membershipId,
+              invite.host_id,
+              user.id,
+              invite.role,
+              now,
+              now,
+              invite.invite_id,
+              now,
+              ...seat,
+              user.id,
+            ),
           // A permanent link counts the join and stays live; a single-use link burns. A join that
           // lost the last seat to a concurrent one leaves the invitation as it was.
           permanent
             ? dependencies.database
                 .prepare(
                   `UPDATE remote_invites SET use_count = use_count + 1
-                WHERE invite_id = ? AND revoked_at IS NULL AND expires_at > ? AND ${MEMBER_SEAT_AVAILABLE_SQL}`,
+                WHERE invite_id = ? AND revoked_at IS NULL AND expires_at > ? AND ${memberSeat.sql}
+                  AND ${INVITE_STILL_GRANTED_SQL} AND ${JOINED_NOW_SQL}`,
                 )
-                .bind(invite.invite_id, now, ...seat)
+                .bind(invite.invite_id, now, ...seat, user.id, ...joinedNow)
             : dependencies.database
                 .prepare(
                   `UPDATE remote_invites SET used_at = ?
                 WHERE invite_id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?
-                  AND ${MEMBER_SEAT_AVAILABLE_SQL}`,
+                  AND ${memberSeat.sql} AND ${INVITE_STILL_GRANTED_SQL} AND ${JOINED_NOW_SQL}`,
                 )
-                .bind(now, invite.invite_id, now, ...seat),
+                .bind(now, invite.invite_id, now, ...seat, user.id, ...joinedNow),
           dependencies.database
-            .prepare("UPDATE remote_sessions SET ended_at = ? WHERE host_id = ? AND user_id = ? AND ended_at IS NULL")
-            .bind(now, invite.host_id, user.id),
+            .prepare(
+              `UPDATE remote_sessions SET ended_at = ? WHERE host_id = ? AND user_id = ? AND ended_at IS NULL
+                AND ${JOINED_NOW_SQL}`,
+            )
+            .bind(now, invite.host_id, user.id, ...joinedNow),
           this.#authEventStatement({ type: "account-servers-changed", userId: user.id }, now),
         ]),
       );
-      if ((accepted[2]?.meta.changes ?? 0) !== 1 || (accepted[3]?.meta.changes ?? 0) !== 1) {
-        yield* this.#requireMemberSeat(invite.host_id, user.id, limit);
+      if ((accepted[0]?.meta.changes ?? 0) !== 1 || (accepted[1]?.meta.changes ?? 0) !== 1) {
+        // A concurrent accept or reactivation made this user a member first.
+        const concurrent = yield* remoteCall(() =>
+          dependencies.database
+            .prepare(
+              "SELECT membership_id, role FROM remote_memberships WHERE host_id = ? AND user_id = ? AND status = 'active' LIMIT 1",
+            )
+            .bind(invite.host_id, user.id)
+            .first<Pick<RemoteMembershipRow, "membership_id" | "role">>(),
+        );
+        if ((accepted[0]?.meta.changes ?? 0) === 0 && concurrent && concurrent.role !== "owner") {
+          return { hostId: invite.host_id, membershipId: concurrent.membership_id, role: concurrent.role };
+        }
+        yield* this.#requireMemberSeat(memberSeat);
         return yield* new RemoteControlPlaneError(409, "invite_already_used", "The invitation was already used.");
       }
       const membership = yield* remoteCall(() =>
         dependencies.database
           .prepare(
-            "SELECT membership_id FROM remote_memberships WHERE host_id = ? AND user_id = ? AND status = 'active' LIMIT 1",
+            "SELECT membership_id, role FROM remote_memberships WHERE host_id = ? AND user_id = ? AND status = 'active' LIMIT 1",
           )
           .bind(invite.host_id, user.id)
-          .first<{ membership_id: string }>(),
+          .first<Pick<RemoteMembershipRow, "membership_id" | "role">>(),
       );
       if (!membership) {
         return yield* new RemoteControlPlaneError(
@@ -1033,7 +1325,7 @@ export class RemoteControlPlane {
         );
       }
       yield* this.#flushAuthEvents();
-      return { hostId: invite.host_id, membershipId: membership.membership_id, role: invite.role };
+      return { hostId: invite.host_id, membershipId: membership.membership_id, role: membership.role };
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
@@ -1092,7 +1384,7 @@ export class RemoteControlPlane {
         return yield* new RemoteControlPlaneError(404, "membership_not_found", "The membership does not exist.");
       }
       const leavingOwnMembership = input.revoke === true && membership.user_id === actorUserId;
-      if (!leavingOwnMembership) yield* this.#requireRole(input.hostId, actorUserId, ["owner"]);
+      if (!leavingOwnMembership) yield* this.#requireRole(input.hostId, actorUserId, ["owner", "admin"]);
       if (membership.role === "owner") {
         return yield* new RemoteControlPlaneError(
           409,
@@ -1105,59 +1397,80 @@ export class RemoteControlPlane {
       if (input.revoke && input.reactivate) return yield* invalid("member status");
       // A role change keeps an active member active, so it needs the seat as a reactivation does.
       const activating = !input.revoke && (input.reactivate === true || membership.status === "active");
-      const limit = yield* this.#memberLimit(input.hostId);
-      if (activating && membership.status !== "active") {
-        yield* this.#requireMemberSeat(input.hostId, membership.user_id, limit);
-      }
+      const memberSeat = yield* this.#memberSeat(input.hostId, membership.user_id);
+      if (activating && membership.status !== "active") yield* this.#requireMemberSeat(memberSeat);
+      const removedAt = removedAtAfterChange({
+        revoke: input.revoke === true,
+        leave: leavingOwnMembership,
+        activating,
+      });
       const now = dependencies.now();
-      const activeSessions = yield* remoteCall(() =>
-        dependencies.database
-          .prepare("SELECT session_id FROM remote_sessions WHERE host_id = ? AND user_id = ? AND ended_at IS NULL")
-          .bind(input.hostId, membership.user_id)
-          .all<{ session_id: string }>(),
-      );
       // The writes after the membership apply only when it took its seat. A refused UPDATE leaves the
-      // member inactive, so the host keeps its auth epoch and its connections.
+      // membership as it was, so the member keeps their sessions and invitations.
       const applied = activating
         ? {
             sql: "EXISTS(SELECT 1 FROM remote_memberships WHERE membership_id = ? AND status = 'active')",
             binds: [input.membershipId],
           }
         : undefined;
+      // An admin who leaves, is removed or is demoted can no longer invite, so their open invitations
+      // close. Then they leave the invitation limits and the list.
+      const closingInvites = membership.role === "admin" && (input.revoke === true || role !== "admin");
+      // Only a removal or a leave bumps the host's auth epoch. A new epoch makes Signal drop the host
+      // and every connected member. A role change or reactivation ends this member's sessions below.
+      const revokingAccess = input.revoke === true;
       const changed = yield* remoteCall(() =>
         dependencies.database.batch([
           dependencies.database
             .prepare(
-              `UPDATE remote_memberships SET role = ?, status = ?, updated_at = ?
-            WHERE membership_id = ?${activating ? ` AND ${MEMBER_SEAT_AVAILABLE_SQL}` : ""}`,
+              `UPDATE remote_memberships SET role = ?, status = ?, updated_at = ?, removed_at = ${removedAt}
+            WHERE membership_id = ?${activating ? ` AND ${memberSeat.sql}` : ""}`,
             )
             .bind(
               role,
               input.revoke ? "revoked" : activating ? "active" : membership.status,
               now,
+              ...(removedAt.includes("?") ? [now] : []),
               input.membershipId,
-              ...(activating ? [input.hostId, membership.user_id, input.hostId, limit] : []),
+              ...(activating ? memberSeat.binds : []),
             ),
+          ...(closingInvites
+            ? [
+                dependencies.database
+                  .prepare(
+                    `UPDATE remote_invites SET revoked_at = ?
+                  WHERE host_id = ? AND created_by_user_id = ? AND revoked_at IS NULL
+                    AND (used_at IS NULL OR max_uses IS NULL)${applied ? ` AND ${applied.sql}` : ""}`,
+                  )
+                  .bind(now, input.hostId, membership.user_id, ...(applied?.binds ?? [])),
+              ]
+            : []),
+          ...(revokingAccess
+            ? [
+                dependencies.database
+                  .prepare("UPDATE remote_hosts SET auth_epoch = auth_epoch + 1, updated_at = ? WHERE host_id = ?")
+                  .bind(now, input.hostId),
+              ]
+            : []),
+          // The events come from the same batch as the UPDATE below, so a session that opened during
+          // this change also ends on Signal. With no epoch bump, nothing else would drop it.
           dependencies.database
             .prepare(
-              `UPDATE remote_hosts SET auth_epoch = auth_epoch + 1, updated_at = ?
-            WHERE host_id = ?${applied ? ` AND ${applied.sql}` : ""}`,
+              `INSERT INTO remote_auth_events(event_id, payload, created_at, attempts, next_attempt_at)
+            SELECT lower(hex(randomblob(16))),
+                   json_object('type', 'remote-session-ended', 'hostId', host_id, 'sessionId', session_id),
+                   ?, 0, ?
+              FROM remote_sessions
+             WHERE host_id = ? AND user_id = ? AND ended_at IS NULL${applied ? ` AND ${applied.sql}` : ""}`,
             )
-            .bind(now, input.hostId, ...(applied?.binds ?? [])),
+            .bind(now, now, input.hostId, membership.user_id, ...(applied?.binds ?? [])),
           dependencies.database
             .prepare(
               `UPDATE remote_sessions SET ended_at = ?
             WHERE host_id = ? AND user_id = ? AND ended_at IS NULL${applied ? ` AND ${applied.sql}` : ""}`,
             )
             .bind(now, input.hostId, membership.user_id, ...(applied?.binds ?? [])),
-          ...activeSessions.results.map((session) =>
-            this.#authEventStatement(
-              { type: "remote-session-ended", hostId: input.hostId, sessionId: session.session_id },
-              now,
-              applied,
-            ),
-          ),
-          this.#authEpochEventStatement(input.hostId, now, undefined, applied),
+          ...(revokingAccess ? [this.#authEpochEventStatement(input.hostId, now)] : []),
           // The member whose membership this is, and not the owner who changed it: a revoked server
           // has to leave that member's list on every device they are signed in on.
           this.#authEventStatement({ type: "account-servers-changed", userId: membership.user_id }, now, applied),
@@ -1165,7 +1478,10 @@ export class RemoteControlPlane {
       );
       yield* this.#flushAuthEvents();
       // A concurrent join, reactivation or revoke took the seat after the check above.
-      if (activating && (changed[0]?.meta.changes ?? 0) !== 1) return yield* memberLimitReached(limit);
+      if (activating && (changed[0]?.meta.changes ?? 0) !== 1) {
+        yield* this.#requireMemberSeat(memberSeat);
+        return yield* memberLimitReached(memberSeat.limit);
+      }
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
@@ -1297,7 +1613,26 @@ export class RemoteControlPlane {
           "session_inactive",
           "The remote session does not belong to this browser session.",
         );
-      if (session.user_id !== userId) yield* this.#requireRole(session.host_id, userId, ["owner"]);
+      if (session.user_id !== userId) {
+        const actor = yield* this.#requireRole(session.host_id, userId, ["owner", "admin"]);
+        // Admins manage members, not the owner: only the owner ends the owner's sessions.
+        const target =
+          actor.role === "owner"
+            ? null
+            : yield* remoteCall(() =>
+                dependencies.database
+                  .prepare("SELECT role FROM remote_memberships WHERE host_id = ? AND user_id = ? LIMIT 1")
+                  .bind(session.host_id, session.user_id)
+                  .first<{ role: string }>(),
+              );
+        if (target?.role === "owner") {
+          return yield* new RemoteControlPlaneError(
+            409,
+            "owner_membership_protected",
+            "The owner membership cannot be changed.",
+          );
+        }
+      }
       const now = dependencies.now();
       const event = { type: "remote-session-ended" as const, hostId: session.host_id, sessionId };
       yield* remoteCall(() =>
@@ -1575,6 +1910,8 @@ export class RemoteControlPlane {
                 dependencies.database.prepare("DELETE FROM discord_guild_routes WHERE host_id = ?").bind(hostId),
                 dependencies.database.prepare("DELETE FROM telegram_chat_routes WHERE host_id = ?").bind(hostId),
                 dependencies.database.prepare("DELETE FROM telegram_link_codes WHERE host_id = ?").bind(hostId),
+                // The next registration can come with another key, so the old chain stops here.
+                dependencies.database.prepare("DELETE FROM remote_host_key_handovers WHERE host_id = ?").bind(hostId),
               ]
             : [
                 dependencies.database
@@ -1667,6 +2004,31 @@ export class RemoteControlPlane {
           return row?.app_id === team.appId && row.connected_at === team.linkedAt;
         })
         .map((team) => team.id);
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /** The host that a Slack workspace, Discord guild or Telegram chat is linked to, or null. */
+  readonly routeHost = Effect.fn("RemoteControlPlane.routeHost")(
+    function* (
+      this: RemoteControlPlane,
+      route: IngressRoute,
+    ): Effect.fn.Return<string | null, RemoteFailure, RemoteDependencies> {
+      const dependencies = yield* RemoteDependencies;
+      const statement =
+        route.platform === "slack"
+          ? dependencies.database
+              .prepare("SELECT host_id FROM slack_workspace_routes WHERE team_id = ? AND app_id = ?")
+              .bind(route.teamId, route.appId)
+          : route.platform === "discord"
+            ? dependencies.database
+                .prepare("SELECT host_id FROM discord_guild_routes WHERE guild_id = ?")
+                .bind(route.guildId)
+            : dependencies.database
+                .prepare("SELECT host_id FROM telegram_chat_routes WHERE bot_id = ? AND chat_id = ?")
+                .bind(route.botId, route.chatId);
+      const row = yield* remoteCall(() => statement.first<{ host_id: string }>());
+      return row?.host_id ?? null;
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
@@ -2280,6 +2642,40 @@ export class RemoteControlPlane {
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
 
+  /**
+   * Whether a member's device session on this host is still open: not ended, the membership active,
+   * and the account session of the device not signed out. The notification relay sends nothing for a
+   * closed one, because a host does not learn when the account service ends a session.
+   */
+  readonly sessionOpen = Effect.fn("RemoteControlPlane.sessionOpen")(
+    function* (
+      this: RemoteControlPlane,
+      hostId: string,
+      sessionId: string,
+    ): Effect.fn.Return<boolean, RemoteFailure, RemoteDependencies> {
+      const dependencies = yield* RemoteDependencies;
+      const now = dependencies.now();
+      const row = yield* remoteCall(() =>
+        dependencies.database
+          .prepare(
+            `SELECT 1 AS open FROM remote_sessions s
+           JOIN remote_memberships m
+             ON m.membership_id = s.membership_id AND m.host_id = s.host_id AND m.status = 'active'
+          WHERE s.session_id = ? AND s.host_id = ? AND s.ended_at IS NULL AND s.expires_at > ?
+            AND (s.auth_session_hash IS NULL OR EXISTS(
+              SELECT 1 FROM auth_sessions
+               WHERE token_hash = s.auth_session_hash AND user_id = s.user_id AND revoked_at IS NULL AND expires_at > ?
+            ))
+          LIMIT 1`,
+          )
+          .bind(sessionId, hostId, now, now)
+          .first<{ open: number }>(),
+      );
+      return row !== null;
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
   readonly #requireRole = Effect.fn("RemoteControlPlane.requireRole")(function* (
     this: RemoteControlPlane,
     hostId: string,
@@ -2375,31 +2771,69 @@ export class RemoteControlPlane {
     return code;
   });
 
-  readonly #requireMemberSeat = Effect.fn("RemoteControlPlane.requireMemberSeat")(function* (
+  /**
+   * The seat checks for a user who joins a host or comes back to it. The license check applies only
+   * while the owner has an open license. A lower limit removes no one: active members keep their seats.
+   */
+  readonly #memberSeat = Effect.fn("RemoteControlPlane.memberSeat")(function* (
     this: RemoteControlPlane,
     hostId: string,
     userId: string,
-    limit: number,
+  ): Effect.fn.Return<MemberSeat, RemoteFailure, RemoteDependencies> {
+    const dependencies = yield* RemoteDependencies;
+    const limit = yield* this.#memberLimit(hostId);
+    const license = yield* remoteCall(() =>
+      dependencies.database
+        .prepare(
+          `SELECT l.user_id AS owner_id, l.users FROM remote_hosts h
+             JOIN licenses l ON l.user_id = h.owner_user_id AND l.status IN ${OPEN_STATUSES_SQL}
+            WHERE h.host_id = ? ORDER BY l.updated_at DESC LIMIT 1`,
+        )
+        .bind(hostId)
+        .first<{ owner_id: string; users: number }>(),
+    );
+    const memberBinds = [hostId, userId, hostId, limit];
+    if (!license) return { sql: MEMBER_SEAT_AVAILABLE_SQL, binds: memberBinds, limit, memberBinds, licenseBinds: null };
+    const licenseBinds = [license.owner_id, userId, license.owner_id, license.owner_id, license.users];
+    return {
+      sql: `(${MEMBER_SEAT_AVAILABLE_SQL} AND ${LICENSE_SEAT_AVAILABLE_SQL})`,
+      binds: [...memberBinds, ...licenseBinds],
+      limit,
+      memberBinds,
+      licenseBinds,
+    };
+  });
+
+  readonly #requireMemberSeat = Effect.fn("RemoteControlPlane.requireMemberSeat")(function* (
+    this: RemoteControlPlane,
+    seat: MemberSeat,
   ): Effect.fn.Return<void, RemoteFailure, RemoteDependencies> {
     const dependencies = yield* RemoteDependencies;
-    const seat = yield* remoteCall(() =>
+    const available = yield* remoteCall(() =>
       dependencies.database
-        .prepare(`SELECT ${MEMBER_SEAT_AVAILABLE_SQL} AS available`)
-        .bind(hostId, userId, hostId, limit)
-        .first<{ available: number }>(),
+        .prepare(
+          `SELECT ${MEMBER_SEAT_AVAILABLE_SQL} AS member, ${seat.licenseBinds ? LICENSE_SEAT_AVAILABLE_SQL : "1"} AS license`,
+        )
+        .bind(...seat.memberBinds, ...(seat.licenseBinds ?? []))
+        .first<{ member: number; license: number }>(),
     );
-    if (!seat?.available) return yield* memberLimitReached(limit);
+    if (!available?.member) return yield* memberLimitReached(seat.limit);
+    if (!available.license) return yield* licenseUsersFull();
   });
 
   /**
-   * The active members that the host's plan allows, or the default for a host with no plan. A lower
-   * limit after a plan change removes no one: members who are active keep their seats.
+   * The active members that the host's custom limit allows, else its plan, else the default for a
+   * host with no plan. A lower limit removes no one: members who are active keep their seats.
    */
   readonly #memberLimit = Effect.fn("RemoteControlPlane.memberLimit")(function* (
     this: RemoteControlPlane,
     hostId: string,
   ): Effect.fn.Return<number, RemoteFailure, RemoteDependencies> {
     const dependencies = yield* RemoteDependencies;
+    const custom = yield* remoteCall(() =>
+      dependencies.database.prepare(SERVER_MEMBER_LIMIT_SQL).bind(hostId).first<{ member_limit: number }>(),
+    );
+    if (custom) return custom.member_limit;
     return memberLimitForPlan(
       (yield* getServerEntitlement(dependencies.database, hostId, dependencies.now()).pipe(
         Effect.mapError((error) => (error instanceof RemoteControlPlaneError ? error : new RemoteOperationError({}))),
@@ -2434,31 +2868,107 @@ export class RemoteControlPlane {
     );
   });
 
+  /** The account server creates hosted server IDs, so only the account it created one for can publish it. */
+  readonly #requireHostReservation = Effect.fn("RemoteControlPlane.requireHostReservation")(function* (
+    this: RemoteControlPlane,
+    hostId: string,
+    userId: string,
+  ): Effect.fn.Return<void, RemoteFailure, RemoteDependencies> {
+    const dependencies = yield* RemoteDependencies;
+    const reservation = yield* remoteCall(() =>
+      dependencies.database
+        .prepare("SELECT owner_user_id, desired_state FROM hosted_servers WHERE server_id = ? LIMIT 1")
+        .bind(hostId)
+        .first<{ owner_user_id: string; desired_state: string }>(),
+    );
+    if (reservation && (reservation.owner_user_id !== userId || reservation.desired_state === "deleted")) {
+      return yield* new RemoteControlPlaneError(403, "host_owner_mismatch", "This host belongs to another account.");
+    }
+  });
+
+  /** The latest key handovers of each host that `condition` selects, the earliest step first. */
+  readonly #keyHandoversByHost = Effect.fn("RemoteControlPlane.keyHandoversByHost")(function* (
+    this: RemoteControlPlane,
+    condition: SqlCondition,
+  ): Effect.fn.Return<Map<string, HostKeyHandover[]>, RemoteFailure, RemoteDependencies> {
+    const dependencies = yield* RemoteDependencies;
+    const result = yield* remoteCall(() =>
+      dependencies.database
+        .prepare(
+          `SELECT host_id, issued_at, previous_public_key, public_key, previous_signature, signature
+         FROM (
+           SELECT host_id, issued_at, previous_public_key, public_key, previous_signature, signature,
+                  ROW_NUMBER() OVER (PARTITION BY host_id ORDER BY issued_at DESC) AS position
+           FROM remote_host_key_handovers WHERE ${condition.sql}
+         )
+         WHERE position <= ?
+         ORDER BY host_id, issued_at`,
+        )
+        .bind(...condition.binds, HOST_KEY_HANDOVER_LIMIT)
+        .all<RemoteHostKeyHandoverRow>(),
+    );
+    const handovers = new Map<string, HostKeyHandover[]>();
+    for (const row of result.results ?? []) {
+      const list = handovers.get(row.host_id) ?? [];
+      list.push({
+        hostId: row.host_id,
+        issuedAt: row.issued_at,
+        previousPublicKey: row.previous_public_key,
+        publicKey: row.public_key,
+        previousSignature: row.previous_signature,
+        signature: row.signature,
+      });
+      handovers.set(row.host_id, list);
+    }
+    return handovers;
+  });
+
+  readonly #keyHandovers = Effect.fn("RemoteControlPlane.keyHandovers")(function* (
+    this: RemoteControlPlane,
+    hostId: string,
+  ): Effect.fn.Return<HostKeyHandover[], RemoteFailure, RemoteDependencies> {
+    return (yield* this.#keyHandoversByHost({ sql: "host_id = ?", binds: [hostId] })).get(hostId) ?? [];
+  });
+
+  /** Whether this exact handover is stored. */
+  readonly #handoverStored = Effect.fn("RemoteControlPlane.handoverStored")(function* (
+    this: RemoteControlPlane,
+    handover: HostKeyHandover,
+  ): Effect.fn.Return<boolean, RemoteFailure, RemoteDependencies> {
+    const dependencies = yield* RemoteDependencies;
+    const row = yield* remoteCall(() =>
+      dependencies.database
+        .prepare(
+          `SELECT 1 AS stored FROM remote_host_key_handovers
+         WHERE host_id = ? AND signature = ? AND issued_at = ? AND previous_public_key = ? AND public_key = ?
+           AND previous_signature = ?
+         LIMIT 1`,
+        )
+        .bind(
+          handover.hostId,
+          handover.signature,
+          handover.issuedAt,
+          handover.previousPublicKey,
+          handover.publicKey,
+          handover.previousSignature,
+        )
+        .first<{ stored: number }>(),
+    );
+    return row !== null;
+  });
+
   #authEventStatement(event: RemoteAuthEvent, now: number, condition?: SqlCondition): D1PreparedStatement {
     return authEventStatement(this.#database, event, now, condition);
   }
 
-  #authEpochEventStatement(
-    hostId: string,
-    now: number,
-    ownerUserId?: string,
-    condition?: SqlCondition,
-  ): D1PreparedStatement {
+  #authEpochEventStatement(hostId: string, now: number, ownerUserId?: string): D1PreparedStatement {
     return this.#database
       .prepare(
         `INSERT INTO remote_auth_events(event_id, payload, created_at, attempts, next_attempt_at)
          SELECT ?, json_object('type', 'remote-auth-changed', 'hostId', host_id, 'authEpoch', auth_epoch), ?, 0, ?
-         FROM remote_hosts WHERE host_id = ? AND (? IS NULL OR owner_user_id = ?)${condition ? ` AND ${condition.sql}` : ""}`,
+         FROM remote_hosts WHERE host_id = ? AND (? IS NULL OR owner_user_id = ?)`,
       )
-      .bind(
-        crypto.randomUUID(),
-        now,
-        now,
-        hostId,
-        ownerUserId ?? null,
-        ownerUserId ?? null,
-        ...(condition?.binds ?? []),
-      );
+      .bind(crypto.randomUUID(), now, now, hostId, ownerUserId ?? null, ownerUserId ?? null);
   }
 
   /**
@@ -2470,13 +2980,16 @@ export class RemoteControlPlane {
     this: RemoteControlPlane,
   ): Effect.fn.Return<void, RemoteFailure, RemoteDependencies> {
     const dependencies = yield* RemoteDependencies;
-    const delivery = deliverRemoteAuthEvents({
-      database: dependencies.database,
-      webhookUrl: dependencies.webhookUrl,
-      webhookSecret: dependencies.webhookSecret,
-      fetch: dependencies.fetch,
-      now: dependencies.now(),
-    });
+    // The time is read when the delivery starts, which can be later than this flush.
+    const delivery = Effect.suspend(() =>
+      deliverRemoteAuthEvents({
+        database: dependencies.database,
+        webhookUrl: dependencies.webhookUrl,
+        webhookSecret: dependencies.webhookSecret,
+        fetch: dependencies.fetch,
+        now: dependencies.now(),
+      }),
+    );
     if (!dependencies.schedule) return yield* delivery;
     dependencies.schedule(delivery);
   });
@@ -2521,6 +3034,22 @@ function memberLimitReached(limit: number): RemoteControlPlaneError {
   return new RemoteControlPlaneError(409, "member_limit_reached", `A host can have up to ${limit} members.`);
 }
 
+function handoverConflict(): RemoteControlPlaneError {
+  return new RemoteControlPlaneError(
+    409,
+    "host_key_handover_conflict",
+    "The host key handover does not start at the current host key.",
+  );
+}
+
+function licenseUsersFull(): RemoteControlPlaneError {
+  return new RemoteControlPlaneError(
+    409,
+    "license_users_full",
+    "The owner's license has no free user. The owner can add users to the license.",
+  );
+}
+
 export function deliverPendingRemoteAuthEvents(
   bindings: Pick<WorkerBindings, "DB" | "REMOTE_AUTH_WEBHOOK_URL" | "REMOTE_AUTH_WEBHOOK_SECRET">,
   now: number,
@@ -2544,52 +3073,92 @@ const deliverRemoteAuthEvents = Effect.fn("RemoteControlPlane.deliverAuthEvents"
 }) {
   const { webhookUrl, webhookSecret } = input;
   if (!webhookUrl || !webhookSecret) return;
+  // The claim moves the events out of reach of other drains until it lapses, so each drain sends its own.
   const result = yield* remoteCall(() =>
     input.database
       .prepare(
-        "SELECT event_id, payload, attempts FROM remote_auth_events WHERE next_attempt_at <= ? ORDER BY created_at LIMIT 50",
+        `UPDATE remote_auth_events SET next_attempt_at = ?
+         WHERE event_id IN (SELECT event_id FROM remote_auth_events WHERE next_attempt_at <= ? ORDER BY created_at LIMIT 50)
+         RETURNING event_id, payload, attempts`,
       )
-      .bind(input.now)
+      .bind(input.now + AUTH_EVENT_CLAIM_MS, input.now)
       .all<RemoteAuthEventRow>(),
   );
-  for (const event of result.results ?? []) {
-    const delivery = yield* Effect.result(
+  // Each event saves its result after its send, so a drain that the Worker stops keeps what it did.
+  yield* Effect.forEach(
+    result.results ?? [],
+    (event) =>
       Effect.gen(function* () {
-        const timestamp = Math.floor(input.now / 1_000).toString();
-        const signature = yield* hmacSha256(webhookSecret, `${timestamp}.${event.payload}`).pipe(
-          Effect.mapError((error) => (error instanceof RemoteControlPlaneError ? error : new RemoteOperationError({}))),
+        const delivery = yield* Effect.result(
+          Effect.gen(function* () {
+            const timestamp = Math.floor(input.now / 1_000).toString();
+            const signature = yield* hmacSha256(webhookSecret, `${timestamp}.${event.payload}`).pipe(
+              Effect.mapError((error) =>
+                error instanceof RemoteControlPlaneError ? error : new RemoteOperationError({}),
+              ),
+            );
+            const response = yield* Effect.tryPromise({
+              try: (signal) =>
+                input.fetch(webhookUrl, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "OpenBot-Timestamp": timestamp,
+                    "OpenBot-Signature": signature,
+                  },
+                  body: event.payload,
+                  signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
+                }),
+              catch: () => new RemoteOperationError({}),
+            });
+            if (!response.ok) return yield* new RemoteOperationError({});
+            yield* remoteCall(() =>
+              input.database.prepare("DELETE FROM remote_auth_events WHERE event_id = ?").bind(event.event_id).run(),
+            );
+          }),
         );
-        const response = yield* Effect.tryPromise({
-          try: (signal) =>
-            input.fetch(webhookUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "OpenBot-Timestamp": timestamp,
-                "OpenBot-Signature": signature,
-              },
-              body: event.payload,
-              signal: AbortSignal.any([signal, AbortSignal.timeout(5_000)]),
-            }),
-          catch: () => new RemoteOperationError({}),
-        });
-        if (!response.ok) return yield* new RemoteOperationError({});
-        yield* remoteCall(() =>
-          input.database.prepare("DELETE FROM remote_auth_events WHERE event_id = ?").bind(event.event_id).run(),
-        );
+        if (Result.isFailure(delivery)) {
+          const delay = Math.min(AUTH_EVENT_RETRY_MS * 2 ** Math.min(event.attempts, 6), 60 * 60_000);
+          yield* remoteCall(() =>
+            input.database
+              .prepare("UPDATE remote_auth_events SET attempts = attempts + 1, next_attempt_at = ? WHERE event_id = ?")
+              .bind(input.now + delay, event.event_id)
+              .run(),
+          );
+        }
       }),
-    );
-    if (Result.isFailure(delivery)) {
-      const delay = Math.min(AUTH_EVENT_RETRY_MS * 2 ** Math.min(event.attempts, 6), 60 * 60_000);
-      yield* remoteCall(() =>
-        input.database
-          .prepare("UPDATE remote_auth_events SET attempts = attempts + 1, next_attempt_at = ? WHERE event_id = ?")
-          .bind(input.now + delay, event.event_id)
-          .run(),
-      );
-    }
-  }
+    { concurrency: AUTH_EVENT_SEND_CONCURRENCY, discard: true },
+  );
 });
+
+const PUBLIC_KEY_HEADER = "-----BEGIN PUBLIC KEY-----";
+const PUBLIC_KEY_FOOTER = "-----END PUBLIC KEY-----";
+
+/** Whether `signature` (base64url) is a valid Ed25519 signature of `message` by the SPKI PEM key. */
+const verifyEd25519 = Effect.fn("RemoteControlPlane.verifyEd25519")(function* (
+  publicKeyPem: string,
+  signature: string,
+  message: Uint8Array<ArrayBuffer>,
+) {
+  const verified = yield* Effect.result(
+    Effect.tryPromise(async () => {
+      const key = await crypto.subtle.importKey("spki", spkiFromPem(publicKeyPem), { name: "Ed25519" }, false, [
+        "verify",
+      ]);
+      return crypto.subtle.verify({ name: "Ed25519" }, key, decodeBase64Url(signature), message);
+    }),
+  );
+  return Result.isSuccess(verified) && verified.success;
+});
+
+/** The DER bytes of a PEM public key. Throws when the text is not one PEM public key. */
+function spkiFromPem(pem: string): Uint8Array<ArrayBuffer> {
+  const trimmed = pem.trim();
+  if (!trimmed.startsWith(PUBLIC_KEY_HEADER) || !trimmed.endsWith(PUBLIC_KEY_FOOTER)) throw invalid("host public key");
+  const encoded = trimmed.slice(PUBLIC_KEY_HEADER.length, -PUBLIC_KEY_FOOTER.length).replace(/\s/gu, "");
+  if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/u.test(encoded)) throw invalid("host public key");
+  return Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+}
 
 function requiredIdentifier(value: string, name: string): string {
   if (!/^[A-Za-z0-9:_-]{1,128}$/u.test(value)) throw invalid(name);
@@ -2646,9 +3215,13 @@ function parseJwks(value: string, keyId: string): RemotePublicJwks {
   return { keys };
 }
 
+/** The private members of a JWK (RFC 7518 section 6). `/.well-known/jwks.json` never publishes them. */
+const PRIVATE_JWK_MEMBERS = new Set(["d", "p", "q", "dp", "dq", "qi", "oth", "k"]);
+
 function parsePublicJwk(value: unknown): RemotePublicJwk {
   if (!isDynamicRecord(value) || !isString(value.kid) || !isString(value.kty)) {
     throw new Error("REMOTE_TICKET_PUBLIC_JWKS is invalid.");
   }
-  return { ...value, kid: value.kid, kty: value.kty };
+  const publicMembers = Object.entries(value).filter(([name]) => !PRIVATE_JWK_MEMBERS.has(name));
+  return { ...Object.fromEntries(publicMembers), kid: value.kid, kty: value.kty };
 }

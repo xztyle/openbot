@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
-import { appendFile, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { appendFile, mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { basename, join } from "node:path";
 import type {
   IdleRestart,
   ScheduledUpdateRestart,
@@ -34,8 +34,8 @@ export type UpdateCheckOutcome = {
 
 /**
  * The subset of electron-updater this service drives. Four behaviours of the installed version are
- * load bearing here, none of them public API, all verified against 6.8.9 and pinned by
- * electron-updater-assumptions.test.ts:
+ * load bearing here, none of them public API, all verified against 6.8.11. Verify them again when
+ * electron-updater changes:
  *
  * 1. `MacUpdater.updateDownloaded` only calls `nativeUpdater.checkForUpdates()` - the call that makes
  *    Squirrel stage the ZIP and eventually emit the native `update-downloaded` - while
@@ -93,12 +93,14 @@ interface UpdateServiceOptions {
   enabled: boolean;
   autoDownload: boolean;
   beforeInstall: () => Promise<void>;
-  checkSiblingInstances?: () => Effect.Effect<readonly OpenBotSiblingInstance[], SiblingScanFailed>;
+  checkSiblingInstances?: (() => Effect.Effect<readonly OpenBotSiblingInstance[], SiblingScanFailed>) | undefined;
   /** The uid of this process. It tells a refusal in this account apart from another account. */
-  currentUid?: number;
+  currentUid?: number | undefined;
   platform?: NodeJS.Platform;
   logDirectory?: string;
-  shipItDirectory?: string;
+  shipItDirectory?: string | undefined;
+  /** electron-updater's cache directory, named by `updaterCacheDirName` in `app-update.yml`. */
+  updaterCacheDirectory?: string | undefined;
   initialCheckDelayMs?: number;
   checkIntervalMs?: number;
   checkTimeoutMs?: number;
@@ -162,6 +164,18 @@ export function supportsInstalledUpdates(
   return platform === "darwin" || platform === "win32";
 }
 
+/**
+ * Whether Nix installed this copy. The Nix store is read-only, and Nix replaces the whole package on
+ * an update, so the app must not write a new version over itself.
+ */
+export function isNixStoreInstall(executablePath: string = process.execPath): boolean {
+  return executablePath.startsWith("/nix/store/");
+}
+
+function unsupportedMessage(): string {
+  return sourceText(isNixStoreInstall() ? "error.update.managedByNix" : "error.update.unsupported");
+}
+
 export class UpdateService extends EventEmitter<UpdateServiceEvents> {
   readonly #updater: UpdateAdapter;
   readonly #options: Required<
@@ -169,7 +183,12 @@ export class UpdateService extends EventEmitter<UpdateServiceEvents> {
   > &
     Pick<
       UpdateServiceOptions,
-      "beforeInstall" | "checkSiblingInstances" | "currentUid" | "logDirectory" | "shipItDirectory"
+      | "beforeInstall"
+      | "checkSiblingInstances"
+      | "currentUid"
+      | "logDirectory"
+      | "shipItDirectory"
+      | "updaterCacheDirectory"
     > & {
       phaseTimeoutsMs: Record<UpdateBusyPhase, number>;
     };
@@ -220,7 +239,7 @@ export class UpdateService extends EventEmitter<UpdateServiceEvents> {
       availableVersion: null,
       progress: null,
       checkedAt: null,
-      message: options.enabled ? null : sourceText("error.update.unsupported"),
+      message: options.enabled ? null : unsupportedMessage(),
       errorCode: null,
     };
     this.on("diagnostic", (event) => {
@@ -277,6 +296,9 @@ export class UpdateService extends EventEmitter<UpdateServiceEvents> {
     });
     if (this.#options.platform === "darwin" && this.#options.shipItDirectory) {
       this.#fork(pruneShipItLogs(this.#options.shipItDirectory));
+    }
+    if (this.#options.updaterCacheDirectory) {
+      this.#fork(pruneInstalledUpdate(this.#options.updaterCacheDirectory, this.#options.currentVersion));
     }
 
     if (scheduleChecks && this.#options.enabled) {
@@ -491,7 +513,7 @@ export class UpdateService extends EventEmitter<UpdateServiceEvents> {
       const generation = ++this.#downloadGeneration;
       this.#activeDownload = generation;
       this.#operation = "download";
-      this.#setStatus({ phase: "downloading", progress: 0, message: null, errorCode: null });
+      this.#setStatus({ phase: "downloading", progress: null, message: null, errorCode: null });
       yield* Effect.gen({ self: this }, function* () {
         const token = yield* this.#ensureCancellationToken();
         if (this.#downloadGeneration !== generation) return;
@@ -561,7 +583,10 @@ export class UpdateService extends EventEmitter<UpdateServiceEvents> {
           if (this.#checkRequest) yield* Deferred.await(this.#checkRequest).pipe(Effect.catch(() => Effect.void));
           if (this.#installGeneration !== generation) return;
           this.#installHandedOver = true;
-          yield* updateSync(() => this.#updater.quitAndInstall(false, true));
+          // Silent, so the assisted Windows installer shows no page and opens the app again: it ignores
+          // the force-run flag in a visible run. Other updaters only relaunch, now from `true` and not
+          // from `autoRunAppAfterInstall`, which is also `true`.
+          yield* updateSync(() => this.#updater.quitAndInstall(true, true));
           this.#armPhaseTimer();
         }),
       );
@@ -873,7 +898,7 @@ function appendUpdateLog(directory: string, event: UpdateDiagnosticEvent): Effec
   }).pipe(Effect.catch(() => Effect.void));
 }
 
-export function pruneShipItLogs(directory: string): Effect.Effect<void, UpdateOperationFailure> {
+function pruneShipItLogs(directory: string): Effect.Effect<void, UpdateOperationFailure> {
   return Effect.gen(function* () {
     const entries = (yield* updateIO(() => readdir(directory, { withFileTypes: true })))
       .filter((entry) => entry.isFile() && /^ShipIt_(?:stdout|stderr)\.log\.\d+$/u.test(entry.name))
@@ -883,6 +908,31 @@ export function pruneShipItLogs(directory: string): Effect.Effect<void, UpdateOp
       concurrency: "unbounded",
       discard: true,
     });
+  }).pipe(Effect.catch(() => Effect.void));
+}
+
+const decodePendingUpdateInfo = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Struct({ fileName: Schema.String })),
+);
+
+/**
+ * electron-updater keeps the download in `pending` after the install, which leaves a full release
+ * artifact on disk until the next download (issue #2939). This removes it once the running version
+ * has caught up, and keeps a newer download that still waits for its restart. `update.zip` beside it
+ * stays: it is the base of the next differential download on macOS.
+ */
+function pruneInstalledUpdate(directory: string, currentVersion: string): Effect.Effect<void, never> {
+  return Effect.gen(function* () {
+    const pending = join(directory, "pending");
+    const text = yield* updateIO(() => readFile(join(pending, "update-info.json"), "utf8"));
+    const { fileName } = yield* decodePendingUpdateInfo(text);
+    // electron-builder.yml names each artifact `${productName}-${version}-${arch}.${ext}`.
+    const version = /-(\d+\.\d+\.\d+)-/u.exec(fileName)?.[1];
+    if (version === undefined || isNewerRelease(version, currentVersion)) return;
+    // The marker goes last: when Windows still locks the installer, the next start tries again.
+    // Only these two files go, so a download that this session has started keeps its temp file.
+    yield* updateIO(() => rm(join(pending, basename(fileName)), { force: true }));
+    yield* updateIO(() => rm(join(pending, "update-info.json"), { force: true }));
   }).pipe(Effect.catch(() => Effect.void));
 }
 
@@ -901,8 +951,9 @@ function isNewerRelease(candidate: string, current: string): boolean {
   return false;
 }
 
-function clampProgress(value: number): number {
-  return Math.max(0, Math.min(100, Number.isFinite(value) ? Math.round(value) : 0));
+/** A percent that is not a number means that the download runs but its progress is not known. */
+function clampProgress(value: number): number | null {
+  return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : null;
 }
 
 export class UpdateOperationFailure extends Schema.TaggedError<UpdateOperationFailure>()("UpdateOperationFailure", {

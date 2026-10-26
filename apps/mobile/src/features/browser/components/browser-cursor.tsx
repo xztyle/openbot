@@ -1,23 +1,21 @@
 import type { BrowserViewCursor } from "@openbot/contracts/team-protocol/browser-view-v1";
-import {
-  Ban,
-  CircleHelp,
-  Crosshair,
-  Grab,
-  Hand,
-  LoaderCircle,
-  type LucideIcon,
-  Move,
-  MoveDiagonal,
-  MoveDiagonal2,
-  MoveHorizontal,
-  MoveVertical,
-  Plus,
-  Pointer,
-  TextCursor,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react-native";
+import type { LucideIcon } from "lucide-react-native";
+import Ban from "lucide-react-native/icons/ban";
+import CircleHelp from "lucide-react-native/icons/circle-question-mark";
+import Crosshair from "lucide-react-native/icons/crosshair";
+import Hand from "lucide-react-native/icons/hand";
+import Grab from "lucide-react-native/icons/hand-grab";
+import LoaderCircle from "lucide-react-native/icons/loader-circle";
+import Move from "lucide-react-native/icons/move";
+import MoveDiagonal from "lucide-react-native/icons/move-diagonal";
+import MoveDiagonal2 from "lucide-react-native/icons/move-diagonal-2";
+import MoveHorizontal from "lucide-react-native/icons/move-horizontal";
+import MoveVertical from "lucide-react-native/icons/move-vertical";
+import Plus from "lucide-react-native/icons/plus";
+import Pointer from "lucide-react-native/icons/pointer";
+import TextCursor from "lucide-react-native/icons/text-cursor";
+import ZoomIn from "lucide-react-native/icons/zoom-in";
+import ZoomOut from "lucide-react-native/icons/zoom-out";
 import { View } from "react-native";
 import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";

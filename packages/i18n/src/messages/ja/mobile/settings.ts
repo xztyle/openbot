@@ -40,6 +40,7 @@ export const messages = {
   "mobile.settings.support.empty": "まだイベントはありません。",
   "mobile.settings.sessions.kindDesktop": "デスクトップ",
   "mobile.settings.sessions.kindMobile": "モバイル",
+  "mobile.settings.sessions.kindHostedServer": "ホスト型サーバー",
   "mobile.settings.sessions.title": "サインイン中のデバイス",
   "mobile.settings.sessions.loading": "セッションを読み込んでいます…",
   "mobile.settings.sessions.refresh": "セッションを更新",
@@ -69,7 +70,7 @@ export const messages = {
     "エージェントとのチャットで、自分のメッセージにそのエージェントの色を使います。文字が読みにくい場合はオフにしてください。",
   "mobile.settings.animations.title": "アニメーション",
   "mobile.settings.animations.footer":
-    "アニメーションをオフにすると、アプリ全体の動きを減らします。電話の設定で「視差効果を減らす」がオンのときも、アプリは動きを減らします。その場合、下のアニメーションはオフのままです。",
+    "アニメーションをオフにすると、アプリ全体の動きを減らします。スマートフォンの設定で「視差効果を減らす」がオンのときも、アプリは動きを減らします。その場合、下のアニメーションはオフのままです。",
   "mobile.settings.animations.all": "アニメーション",
   "mobile.settings.animations.chatZoom": "チャットへのズーム",
   "mobile.settings.animations.chatZoomFooter":
@@ -83,6 +84,9 @@ export const messages = {
   "mobile.settings.animations.textReveal": "返信のアニメーション",
   "mobile.settings.animations.textRevealFooter":
     "返信が一語ずつ表示され、吹き出しがなめらかに大きくなります。オフにすると、テキストは届いた時点で表示されます。",
+  "mobile.settings.animations.searchTransitions": "検索結果のアニメーション",
+  "mobile.settings.animations.searchTransitionsFooter":
+    "検索結果と検索メッセージは、変わるときに短いぼかしでフェードイン・フェードアウトします。動きを減らしているときはフェードのみです。オフにすると、すぐに切り替わります。",
   "mobile.settings.feedback.footer": "このデバイスでのアプリ操作の触覚フィードバックです。",
   "mobile.settings.feedback.haptics": "触覚フィードバック",
   "mobile.settings.feedback.retry": "触覚フィードバックの設定をもう一度保存",
@@ -91,6 +95,53 @@ export const messages = {
     "OpenBot の実行中、エージェントの作業、メッセージ、質問、承認をロック画面と Dynamic Island に表示します。",
   "mobile.settings.liveActivities.toggle": "エージェントのアクティビティを表示",
   "mobile.settings.liveActivities.retry": "ライブアクティビティの設定をもう一度保存",
+  "mobile.settings.notifications.title": "通知",
+  "mobile.settings.notifications.toggle": "通知を許可",
+  "mobile.settings.notifications.footer":
+    "エージェントが作業を終えたとき、エラーで止まったとき、または入力、承認、ブラウザーでの操作が必要なときに通知します。このアプリまたはデスクトップアプリで OpenBot を使っている間は通知しません。ライブアクティビティの表示中は、代わりにライブアクティビティに表示します。",
+  "mobile.settings.notifications.footerAndroid":
+    "エージェントが作業を終えたとき、エラーで止まったとき、または入力、承認、ブラウザーでの操作が必要なときに通知します。このアプリまたはデスクトップアプリで OpenBot を使っている間は通知しません。",
+  "mobile.settings.notifications.denied": "iOS の設定で OpenBot の通知がオフになっています。",
+  "mobile.settings.notifications.deniedAndroid": "Android の設定で OpenBot の通知がオフになっています。",
+  "mobile.settings.notifications.openSettings": "iOS の設定を開く",
+  "mobile.settings.notifications.openSettingsAndroid": "Android の設定を開く",
+  "mobile.settings.notifications.preview": "返信のプレビューを表示",
+  "mobile.settings.notifications.previewFooter":
+    "返信の冒頭、質問、または承認が必要な操作を表示します。Apple と OpenBot アカウントサービスはこの内容を読めません。",
+  "mobile.settings.notifications.previewFooterAndroid":
+    "返信の冒頭、質問、または承認が必要な操作を表示します。Google と OpenBot アカウントサービスはこの内容を読めません。",
+  "mobile.settings.notifications.sound": "サウンド",
+  "mobile.settings.notifications.playSound": "サウンドを再生",
+  "mobile.settings.notifications.sound.openbot": "OpenBot",
+  "mobile.settings.notifications.sound.warm": "あたたか",
+  "mobile.settings.notifications.sound.mech": "メカニカル",
+  "mobile.settings.notifications.sound.bubble": "バブル",
+  "mobile.settings.notifications.sound.press": "キー",
+  "mobile.settings.notifications.sound.default": "iOS のデフォルト",
+  "mobile.settings.notifications.sound.defaultAndroid": "Android のデフォルト",
+  "mobile.settings.notifications.soundFooter":
+    "通知とライブアクティビティはこのサウンドを再生します。ライブアクティビティは画面も点灯します。OpenBot のサウンドは、デスクトップアプリがタスク完了時に鳴らすサウンドです。その次の 4 つは、デスクトップアプリのサウンドテーマのサウンドです。",
+  "mobile.settings.notifications.soundFooterAndroid":
+    "通知はこのサウンドを再生します。OpenBot のサウンドは、デスクトップアプリがタスク完了時に鳴らすサウンドです。その次の 4 つは、デスクトップアプリのサウンドテーマのサウンドです。",
+  "mobile.settings.notifications.notifyAbout": "通知する内容",
+  "mobile.settings.notifications.level.all": "すべてのアクティビティ",
+  "mobile.settings.notifications.level.needsMe": "自分が必要なときのみ",
+  "mobile.settings.notifications.level.nothing": "なし",
+  "mobile.settings.notifications.mute": "ミュート",
+  "mobile.settings.notifications.mute.off": "オフ",
+  "mobile.settings.notifications.mute.for15Minutes": "15 分間",
+  "mobile.settings.notifications.mute.for1Hour": "1 時間",
+  "mobile.settings.notifications.mute.for3Hours": "3 時間",
+  "mobile.settings.notifications.mute.for8Hours": "8 時間",
+  "mobile.settings.notifications.mute.for24Hours": "24 時間",
+  "mobile.settings.notifications.mute.untilTurnedOn": "オンに戻すまで",
+  "mobile.settings.notifications.mute.until": "{time} まで",
+  "mobile.settings.notifications.serverFooter":
+    "このサーバーのどのイベントをこのスマートフォンに通知するかを選びます。デスクトップアプリには別の設定があります。",
+  "mobile.settings.notifications.serverUnsupported":
+    "このサーバーは通知を送信できません。サーバーを実行しているコンピューターで OpenBot をアップデートしてください。",
+  "mobile.settings.notifications.channel": "エージェントの通知（{sound}）",
+  "mobile.settings.notifications.channelSilent": "エージェントの通知（サウンドなし）",
   "mobile.settings.privacy.title": "プライバシー",
   "mobile.settings.privacy.footer":
     "このスマートフォンの機能の使用状況と接続結果を共有します。メッセージの内容とファイルは送信されません。",
@@ -98,7 +149,6 @@ export const messages = {
   "mobile.settings.privacy.retry": "プライバシー設定をもう一度保存",
   "mobile.settings.conversations.title": "会話",
   "mobile.settings.conversations.hiddenChats": "非表示のチャット",
-  "mobile.settings.conversations.deletedChannels": "削除したチャンネル",
   "mobile.settings.profile.nameUnsafe": "名前から改行と制御文字を削除してください。",
   "mobile.settings.profile.nameLength": "表示名は 3〜20 文字にしてください。",
   "mobile.settings.profile.saveFailed": "変更を保存できませんでした。もう一度お試しください。",

@@ -75,7 +75,9 @@ checksum. Keep the previous image until the device checks below pass. Do not pri
 variables, resume tokens, tickets, or raw connection logs.
 
 Signal replacement closes signaling WebSockets. Existing WebRTC data channels should continue while
-signaling reconnects. The first resume after a restart checks the durable control plane. Coturn stays
+signaling reconnects. The first resume after a restart checks the durable control plane. When the
+account service does not answer, Signal closes the socket with 1013 and no error frame, and the peer
+connects again after its backoff; the session does not end. Coturn stays
 running, so the update does not deliberately end its relay allocations. Validate this with an active
 connection; health checks alone do not prove it.
 

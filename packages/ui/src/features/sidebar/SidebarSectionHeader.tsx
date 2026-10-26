@@ -4,7 +4,7 @@
  * caller - both regions that show a section header reach it through here.
  */
 
-import { ArrowDown, ArrowUp, buttonVariants, ChevronDown, ContextMenu, Pencil, Trash2 } from "@openbot/ui";
+import { ArrowDown, ArrowUp, buttonVariants, ChevronDown, ContextMenu, Copy, Pencil, Trash2 } from "@openbot/ui";
 import { Show } from "solid-js";
 import { useText } from "../../text";
 import { SidebarSectionEditor } from "./SidebarSectionEditor";
@@ -13,6 +13,7 @@ import { useSidebarScope } from "./sidebar-scope";
 export function SidebarSectionHeader(headerProps: { sectionId: string; name: string }) {
   const {
     customSectionById,
+    duplicateSection,
     layoutMutable,
     moveSection,
     openDelete,
@@ -72,10 +73,23 @@ export function SidebarSectionHeader(headerProps: { sectionId: string; name: str
             <ContextMenu.Portal>
               <ContextMenu.Content class="agent-context-menu" aria-label={t("sidebar.section.actions")}>
                 <Show when={custom()}>
-                  <ContextMenu.Item onSelect={() => startRenameSection(headerProps.sectionId)}>
+                  <ContextMenu.Item onSelectAfterClose={() => startRenameSection(headerProps.sectionId)}>
                     <Pencil class="agent-context-icon size-4" aria-hidden="true" />
                     <span>{t("common.rename")}</span>
                   </ContextMenu.Item>
+                  <Show when={props.sectionDuplicateSupported && props.onDuplicateSection}>
+                    <ContextMenu.Item
+                      disabled={props.duplicatingSectionIds?.has(headerProps.sectionId) ?? false}
+                      onSelect={() => duplicateSection(headerProps.sectionId)}
+                    >
+                      <Copy class="agent-context-icon size-4" aria-hidden="true" />
+                      <span>
+                        {props.duplicatingSectionIds?.has(headerProps.sectionId)
+                          ? t("sidebar.section.duplicating")
+                          : t("sidebar.section.duplicate")}
+                      </span>
+                    </ContextMenu.Item>
+                  </Show>
                 </Show>
                 <ContextMenu.Item disabled={position() <= 0} onSelect={() => moveSection(headerProps.sectionId, "up")}>
                   <ArrowUp class="agent-context-icon size-4" aria-hidden="true" />

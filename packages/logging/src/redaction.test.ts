@@ -12,6 +12,11 @@ import {
   toLogValue,
 } from "./index";
 
+// A base64url run of a given length, for fake tokens.
+function run64(length: number): string {
+  return "Qw-_9z".repeat(length).slice(0, length);
+}
+
 describe("redactText", () => {
   it("redacts bearer tokens while keeping surrounding text", () => {
     expect(redactText("call with Bearer abcdef123456 and continue")).toBe("call with [redacted] and continue");
@@ -20,13 +25,105 @@ describe("redactText", () => {
   it("redacts provider secret prefixes", () => {
     expect(redactText("key sk-ant-abcdefgh1234 leaked")).toBe("key [redacted] leaked");
     expect(redactText("key xai-abcdefgh1234 leaked")).toBe("key [redacted] leaked");
+    expect(redactText("key sk_0123456789abcdef0123 leaked")).toBe("key [redacted] leaked");
     expect(redactText("token xoxb-1234-5678-abcdefgh leaked")).toBe("token [redacted] leaked");
     expect(redactText("token xapp-1-A0123-4567-abcdef leaked")).toBe("token [redacted] leaked");
+  });
+
+  // Fake values, built from repeated characters so that no scanner reads them as real keys.
+  it("redacts more vendor key shapes", () => {
+    const run = (length: number) => "Ab1".repeat(length).slice(0, length);
+    for (const key of [
+      `AIza${run(35)}`,
+      `glpat-${run(20)}`,
+      `npm_${run(36)}`,
+      `hf_${run(34)}`,
+      `gsk_${run(52)}`,
+      `ASIA${"A1".repeat(8)}`,
+      `rk_live_${run(24)}`,
+      `whsec_${run(32)}`,
+    ]) {
+      expect(redactText(`key ${key} leaked`)).toBe("key [redacted] leaked");
+    }
+  });
+
+  it("redacts a JSON Web Token", () => {
+    const token = `eyJ${run64(20)}.eyJ${run64(40)}.${run64(43)}`;
+    expect(redactText(`session ${token} expired`)).toBe("session [redacted] expired");
+  });
+
+  it("redacts a PEM private key with its body", () => {
+    const body = `${"MIIEvQ".repeat(10)}\n${"QUFBQQ".repeat(10)}`;
+    const pem = `-----BEGIN RSA PRIVATE KEY-----\n${body}\n-----END RSA PRIVATE KEY-----`;
+    expect(redactText(`loaded ${pem} from disk`)).toBe("loaded [redacted] from disk");
+    // The same key in JSON-escaped text, as a serialized command line carries it.
+    expect(redactText(`args ${JSON.stringify(pem).slice(1, -1)} end`)).toBe("args [redacted] end");
+    // A key that the text cuts off before its END line.
+    expect(redactText(`partial -----BEGIN PRIVATE KEY-----\n${body}`)).toBe("partial [redacted]");
+  });
+
+  it("redacts every cookie in a cookie header", () => {
+    const redacted = redactText("Cookie: session=first-value-1; csrf=second-value-2; theme=dark");
+    expect(redacted).toBe("Cookie: [redacted]");
+    expect(redactText("curl -H 'Cookie: a=one-value; b=two-value' https://example.com")).toBe(
+      "curl -H 'Cookie: [redacted]' https://example.com",
+    );
+    expect(redactText('Cookie: a=one-value; b="quoted-secret"; c=three')).toBe("Cookie: [redacted]");
+    expect(redactText('{"cookie":"a=b; s=\\"escaped-secret\\"","url":"/x"}')).not.toContain("escaped-secret");
+  });
+
+  // The scan is synchronous and runs on provider stderr: a repeated rule prefix with no value must
+  // not make each match attempt scan the rest of the line.
+  it("bounds the work of repeated cookie and query prefixes", () => {
+    const started = performance.now();
+    redactText("cookie:".repeat(20_000));
+    redactText("?key=".repeat(20_000));
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
+  it("redacts credential query values in a URL", () => {
+    expect(redactText("GET https://example.com/cb?code=oauthcode123&state=abc ok")).toBe(
+      "GET https://example.com/cb?code=[redacted]&state=abc ok",
+    );
+    expect(redactText("https://example.com/v1?alt=json&key=abcdefgh12345678")).toBe(
+      "https://example.com/v1?alt=json&key=[redacted]",
+    );
+    expect(redactText("https://example.com/login?ticket=ST-12345-abcdefgh#top")).toBe(
+      "https://example.com/login?ticket=[redacted]#top",
+    );
+    expect(redactText("https://example.com/file?sig=abcdefgh12345678")).toBe("https://example.com/file?sig=[redacted]");
+    expect(redactText("https://example.com/cb?api_key=abcdef12&code=oauthcode123")).not.toContain("oauthcode123");
+  });
+
+  it("keeps text that looks like the new secret shapes", () => {
+    for (const text of [
+      "npm_config_user_agent is set",
+      "hf_hub_download failed",
+      "ASIA-PACIFIC region is slow",
+      "paste the -----BEGIN PRIVATE KEY----- block here",
+      "https://example.com/docs?key=short&code=200",
+      "https://example.com/docs?key=YOUR_API_KEY",
+      "monkey=banana and keyboard=us",
+      "eyJhbGciOiJIUzI1NiJ9 alone",
+    ]) {
+      expect(redactText(text)).toBe(text);
+    }
+  });
+
+  it("leaves a line with the new secret shapes unchanged when it passes through twice", () => {
+    const line =
+      "Cookie: a=one-value; b=two-value\nGET /cb?code=oauthcode123&key=abcdefgh12345678 " +
+      `eyJ${run64(20)}.eyJ${run64(40)}.${run64(43)}`;
+    const once = redactText(line);
+    expect(redactText(once)).toBe(once);
   });
 
   it("leaves an ordinary word that starts like a provider prefix alone", () => {
     expect(redactText("marketplace agent risk-register failed to install")).toBe(
       "marketplace agent risk-register failed to install",
+    );
+    expect(redactText("task_scheduler_started for desk_reference_index")).toBe(
+      "task_scheduler_started for desk_reference_index",
     );
   });
 

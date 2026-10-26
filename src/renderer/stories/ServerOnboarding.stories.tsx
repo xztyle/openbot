@@ -6,8 +6,8 @@ import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { hostSetupProviderProps } from "../src/features/onboarding/host-setup-provider-props";
 import { ServerOnboarding } from "../src/features/onboarding/ServerOnboarding";
 import type { HostProviderSettings } from "../src/features/settings/ProviderSettingsSection";
-import { createFakeCodeLogin } from "./code-login-fixture";
 import { STORY_AGENT_STATUS } from "./fixtures";
+import { createFakeConnection } from "./provider-connection-fixture";
 
 /** A new hosted server: every CLI is on the host, and none is signed in. */
 const newHostStatus: AgentStatus = {
@@ -42,7 +42,7 @@ function host(agentStatus: AgentStatus): HostProviderSettings {
       opencode: ready("1.18.27"),
     },
     customProviders: [],
-    codeLogin: createFakeCodeLogin({ providers: ["codex", "claude", "grok"], finishAfterMs: 0 }),
+    connection: createFakeConnection({ connect: ["codex", "claude", "grok"], alternative: [], finishAfterMs: 0 }),
   };
 }
 

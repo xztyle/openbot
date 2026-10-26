@@ -1,4 +1,5 @@
-// The process that runs local speech recognition (NVIDIA Parakeet TDT through sherpa-onnx).
+// The process that runs local speech recognition (NVIDIA Parakeet TDT, Underdog Bark or OpenAI
+// Whisper turbo through sherpa-onnx).
 //
 // It is separate from the main process because the loaded model holds about 2 GB of memory and
 // a decode cannot be interrupted. The main process ends this process when it is idle, when a
@@ -10,26 +11,66 @@
 
 import { join } from "node:path";
 import type {
+  VoiceTranscriptionEngine,
   VoiceTranscriptionFailure,
   VoiceTranscriptionRequest,
   VoiceTranscriptionResponse,
 } from "./voice-transcription-protocol";
 
 const SAMPLE_RATE = 16_000;
+/**
+ * Whisper reads at most 30 s; sherpa-onnx cuts a longer input to its first 29.5 s. Longer audio is
+ * decoded in parts of at most this many samples.
+ */
+const WHISPER_MAXIMUM_SAMPLES = 28 * SAMPLE_RATE;
+/** A part ends at the quietest moment in its last seconds, so a cut seldom splits a word. */
+const WHISPER_SPLIT_SEARCH_SAMPLES = 4 * SAMPLE_RATE;
+const SPLIT_WINDOW_SAMPLES = SAMPLE_RATE / 50;
+/** The most leading silence a request can ask for. */
+const MAXIMUM_LEADING_SILENCE_SAMPLES = SAMPLE_RATE;
+
+/** The part of the sherpa-onnx offline recognizer configuration that OpenBot sets. */
+interface RecognizerConfig {
+  featConfig: { sampleRate: number; featureDim: number };
+  modelConfig: {
+    transducer?: { encoder: string; decoder: string; joiner: string };
+    whisper?: {
+      encoder: string;
+      decoder: string;
+      /** An empty language makes Whisper find the spoken language itself. */
+      language: string;
+      task: "transcribe";
+      tailPaddings: number;
+      enableTokenTimestamps: number;
+      enableSegmentTimestamps: number;
+    };
+    tokens: string;
+    numThreads: number;
+    provider: "cpu";
+    debug: number;
+    modelType?: "nemo_transducer";
+  };
+}
 
 /** The subset of the sherpa-onnx N-API addon that offline recognition uses. */
 interface SherpaOnnxAddon {
-  createOfflineRecognizerAsync(config: unknown): Promise<unknown>;
+  createOfflineRecognizerAsync(config: RecognizerConfig): Promise<unknown>;
   createOfflineStream(recognizer: unknown): unknown;
   acceptWaveformOffline(stream: unknown, wave: { samples: Float32Array; sampleRate: number }): void;
   decodeOfflineStreamAsync(recognizer: unknown, stream: unknown): Promise<unknown>;
   getOfflineStreamResultAsJson(stream: unknown): string;
+  /** Replaces the decoding settings of a loaded recognizer. Whisper reads its language from them. */
+  offlineRecognizerSetConfig(recognizer: unknown, config: RecognizerConfig): void;
 }
 
 interface LoadedRecognizer {
   key: string;
   addon: SherpaOnnxAddon;
   recognizer: unknown;
+  engine: VoiceTranscriptionEngine;
+  modelDirectory: string;
+  /** The Whisper language the recognizer uses now. */
+  language: string;
 }
 
 class HostFailure extends Error {
@@ -58,7 +99,9 @@ function isAddon(value: unknown): value is SherpaOnnxAddon {
     "decodeOfflineStreamAsync" in value &&
     typeof value.decodeOfflineStreamAsync === "function" &&
     "getOfflineStreamResultAsJson" in value &&
-    typeof value.getOfflineStreamResultAsJson === "function"
+    typeof value.getOfflineStreamResultAsJson === "function" &&
+    "offlineRecognizerSetConfig" in value &&
+    typeof value.offlineRecognizerSetConfig === "function"
   );
 }
 
@@ -73,36 +116,77 @@ function loadAddon(path: string): SherpaOnnxAddon {
   return module.exports;
 }
 
-async function createRecognizer(addonPath: string, modelDirectory: string): Promise<LoadedRecognizer> {
-  const addon = loadAddon(addonPath);
+function recognizerConfig(
+  engine: VoiceTranscriptionEngine,
+  modelDirectory: string,
+  language: string,
+): RecognizerConfig {
   const file = (name: string) => join(modelDirectory, name);
-  try {
-    const recognizer = await addon.createOfflineRecognizerAsync({
+  const common = { numThreads: 4, provider: "cpu", debug: 0 } as const;
+  if (engine === "whisper") {
+    return {
       featConfig: { sampleRate: SAMPLE_RATE, featureDim: 80 },
       modelConfig: {
-        transducer: {
-          encoder: file("encoder.int8.onnx"),
-          decoder: file("decoder.int8.onnx"),
-          joiner: file("joiner.int8.onnx"),
+        whisper: {
+          encoder: file("turbo-encoder.int8.onnx"),
+          decoder: file("turbo-decoder.int8.onnx"),
+          language,
+          task: "transcribe",
+          tailPaddings: -1,
+          enableTokenTimestamps: 0,
+          enableSegmentTimestamps: 0,
         },
-        tokens: file("tokens.txt"),
-        numThreads: 4,
-        provider: "cpu",
-        debug: 0,
-        modelType: "nemo_transducer",
+        tokens: file("turbo-tokens.txt"),
+        ...common,
       },
-    });
-    return { key: `${addonPath}\n${modelDirectory}`, addon, recognizer };
+    };
+  }
+  return {
+    featConfig: { sampleRate: SAMPLE_RATE, featureDim: 80 },
+    modelConfig: {
+      transducer: {
+        encoder: file("encoder.int8.onnx"),
+        decoder: file("decoder.int8.onnx"),
+        joiner: file("joiner.int8.onnx"),
+      },
+      tokens: file("tokens.txt"),
+      ...common,
+      modelType: "nemo_transducer",
+    },
+  };
+}
+
+function recognizerKey(request: VoiceTranscriptionRequest): string {
+  return `${request.addonPath}\n${request.modelDirectory}\n${request.engine}`;
+}
+
+async function createRecognizer(request: VoiceTranscriptionRequest): Promise<LoadedRecognizer> {
+  const addon = loadAddon(request.addonPath);
+  try {
+    const recognizer = await addon.createOfflineRecognizerAsync(
+      recognizerConfig(request.engine, request.modelDirectory, request.language),
+    );
+    return {
+      key: recognizerKey(request),
+      addon,
+      recognizer,
+      engine: request.engine,
+      modelDirectory: request.modelDirectory,
+      language: request.language,
+    };
   } catch {
     throw new HostFailure("model-load-failed");
   }
 }
 
-/** Loads the model once per process. A failed load is not kept, so the next request tries again. */
-function recognizerFor(addonPath: string, modelDirectory: string): Promise<LoadedRecognizer> {
-  const key = `${addonPath}\n${modelDirectory}`;
+/**
+ * Loads one model per process: a request for the other model replaces it. A failed load is not
+ * kept, so the next request tries again.
+ */
+function recognizerFor(request: VoiceTranscriptionRequest): Promise<LoadedRecognizer> {
+  const key = recognizerKey(request);
   if (loading?.key === key) return loading.promise;
-  const promise = createRecognizer(addonPath, modelDirectory);
+  const promise = createRecognizer(request);
   loading = { key, promise };
   promise.catch(() => {
     if (loading?.promise === promise) loading = null;
@@ -110,18 +194,41 @@ function recognizerFor(addonPath: string, modelDirectory: string): Promise<Loade
   return promise;
 }
 
-function toSamples(pcm: Uint8Array): Float32Array {
+/** A language change reuses the loaded Whisper model: only its decoding settings change. */
+function useLanguage(loaded: LoadedRecognizer, language: string): void {
+  if (loaded.engine !== "whisper" || loaded.language === language) return;
+  try {
+    loaded.addon.offlineRecognizerSetConfig(
+      loaded.recognizer,
+      recognizerConfig(loaded.engine, loaded.modelDirectory, language),
+    );
+  } catch {
+    throw new HostFailure("model-load-failed");
+  }
+  loaded.language = language;
+}
+
+/** Converts the PCM to samples after `leadingSilence` zero samples. */
+function toSamples(pcm: Uint8Array, leadingSilence: number): Float32Array {
   const aligned = pcm.byteOffset % 2 === 0 ? pcm : pcm.slice();
   const input = new Int16Array(aligned.buffer, aligned.byteOffset, aligned.byteLength >> 1);
-  const samples = new Float32Array(input.length);
-  for (let index = 0; index < input.length; index += 1) samples[index] = (input[index] ?? 0) / 32_768;
+  const samples = new Float32Array(leadingSilence + input.length);
+  for (let index = 0; index < input.length; index += 1) samples[leadingSilence + index] = (input[index] ?? 0) / 32_768;
   return samples;
 }
 
 async function transcribe(request: VoiceTranscriptionRequest): Promise<string> {
-  const { addon, recognizer } = await recognizerFor(request.addonPath, request.modelDirectory);
-  const samples = toSamples(request.pcm);
-  if (samples.length === 0) return "";
+  const loaded = await recognizerFor(request);
+  useLanguage(loaded, request.language);
+  if (request.pcm.byteLength < 2) return "";
+  const samples = toSamples(request.pcm, request.leadingSilenceSamples);
+  const parts = loaded.engine === "whisper" ? splitForWhisper(samples) : [samples];
+  let text = "";
+  for (const part of parts) text = joinText(text, await decode(loaded, part));
+  return text;
+}
+
+async function decode({ addon, recognizer }: LoadedRecognizer, samples: Float32Array): Promise<string> {
   try {
     const stream = addon.createOfflineStream(recognizer);
     addon.acceptWaveformOffline(stream, { samples, sampleRate: SAMPLE_RATE });
@@ -131,6 +238,46 @@ async function transcribe(request: VoiceTranscriptionRequest): Promise<string> {
     if (error instanceof HostFailure) throw error;
     throw new HostFailure("inference-failed");
   }
+}
+
+/** Splits audio into parts that Whisper reads whole, each cut at the quietest point near its end. */
+function splitForWhisper(samples: Float32Array): Float32Array[] {
+  const parts: Float32Array[] = [];
+  let start = 0;
+  while (samples.length - start > WHISPER_MAXIMUM_SAMPLES) {
+    const limit = start + WHISPER_MAXIMUM_SAMPLES;
+    let end = limit;
+    let quietest = Number.POSITIVE_INFINITY;
+    for (
+      let windowStart = limit - SPLIT_WINDOW_SAMPLES;
+      windowStart >= limit - WHISPER_SPLIT_SEARCH_SAMPLES;
+      windowStart -= SPLIT_WINDOW_SAMPLES
+    ) {
+      let energy = 0;
+      for (let index = windowStart; index < windowStart + SPLIT_WINDOW_SAMPLES; index += 1) {
+        const sample = samples[index] ?? 0;
+        energy += sample * sample;
+      }
+      if (energy < quietest) {
+        quietest = energy;
+        end = windowStart + SPLIT_WINDOW_SAMPLES / 2;
+      }
+    }
+    parts.push(samples.subarray(start, end));
+    start = end;
+  }
+  parts.push(samples.subarray(start));
+  return parts;
+}
+
+/** Scripts that write no space between words. */
+const NO_SPACE_SCRIPT =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+
+function joinText(left: string, right: string): string {
+  if (!left || !right) return left || right;
+  const noSpace = NO_SPACE_SCRIPT.test(left.at(-1) ?? "") && NO_SPACE_SCRIPT.test(right[0] ?? "");
+  return noSpace ? `${left}${right}` : `${left} ${right}`;
 }
 
 /** Reads `text` from the result JSON of the addon. */
@@ -151,6 +298,15 @@ function isRequest(value: unknown): value is VoiceTranscriptionRequest {
     typeof value.addonPath === "string" &&
     "modelDirectory" in value &&
     typeof value.modelDirectory === "string" &&
+    "engine" in value &&
+    (value.engine === "nemo-transducer" || value.engine === "whisper") &&
+    "language" in value &&
+    typeof value.language === "string" &&
+    "leadingSilenceSamples" in value &&
+    typeof value.leadingSilenceSamples === "number" &&
+    Number.isInteger(value.leadingSilenceSamples) &&
+    value.leadingSilenceSamples >= 0 &&
+    value.leadingSilenceSamples <= MAXIMUM_LEADING_SILENCE_SAMPLES &&
     "pcm" in value &&
     value.pcm instanceof Uint8Array
   );

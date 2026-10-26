@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/solid-router";
 
-export const APPLE_APP_SITE_ASSOCIATION = {
+const APPLE_APP_SITE_ASSOCIATION = {
   applinks: {
     apps: [],
     details: [
@@ -17,7 +17,7 @@ export const APPLE_APP_SITE_ASSOCIATION = {
   },
 };
 
-export function createAppleAppSiteAssociationResponse(): Response {
+function createAppleAppSiteAssociationResponse(): Response {
   return new Response(JSON.stringify(APPLE_APP_SITE_ASSOCIATION), {
     headers: {
       "Cache-Control": "public, max-age=3600",

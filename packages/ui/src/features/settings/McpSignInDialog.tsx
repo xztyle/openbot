@@ -16,12 +16,29 @@ import { Button, ExternalLink, Text } from "@openbot/ui";
 import { Show } from "solid-js";
 import { useText } from "../../text";
 import { createConnectRun, type McpConnectBaseProps, McpConnectShell } from "./McpConnectShell";
+import { McpSignInPage, McpSignInPageNote, type McpSignInPageSource } from "./McpSignInPage";
 
-export type McpSignInDialogProps = McpConnectBaseProps;
+export interface McpSignInDialogProps extends McpConnectBaseProps {
+  /**
+   * The joined server whose host signs in and keeps the grant. Absent when this computer signs in
+   * with its own browser.
+   */
+  hostName?: string | undefined;
+  /** The sign-in page on that host's browser, once the host opened it. */
+  page?: McpSignInPageSource | undefined;
+  /** Stops a joined server's sign-in, for the user who closes the dialog while the page waits. */
+  onCancelSignIn?: (() => void) | undefined;
+}
 
 export function McpSignInDialog(props: McpSignInDialogProps) {
   const { t } = useText();
   const { state, busy, attempt, setName } = createConnectRun(props);
+  const page = () => (busy() && props.hostName ? props.page : undefined);
+  /** Stops the wait: a joined server's sign-in is stopped on the host first. */
+  const cancel = () => {
+    props.onCancelSignIn?.();
+    props.onCancel();
+  };
 
   return (
     <McpConnectShell
@@ -31,32 +48,42 @@ export function McpSignInDialog(props: McpSignInDialogProps) {
       onNameChange={setName}
       state={state}
       busy={busy}
+      wide={Boolean(page())}
+      onCancelBusy={props.hostName ? props.onCancelSignIn : undefined}
       description={t("mcp.signIn.description", { name: props.subject.name })}
       onSubmit={() => void attempt(async () => props.subject.config)}
       action={
         <>
-          <Button
-            class="mcp-connect-primary"
-            type="submit"
-            loading={busy()}
-            loadingLabel={t("mcp.signIn.waiting")}
-            disabled={busy()}
-          >
-            {state.phase === "failed" ? t("common.tryAgain") : t("mcp.signIn.continue", { name: props.subject.name })}
-            <Show when={state.phase !== "failed"}>
-              <ExternalLink aria-hidden="true" />
-            </Show>
-          </Button>
+          <Show when={!page()}>
+            <Button
+              class="mcp-connect-primary"
+              type="submit"
+              loading={busy()}
+              loadingLabel={t("mcp.signIn.waiting")}
+              disabled={busy()}
+            >
+              {state.phase === "failed" ? t("common.tryAgain") : t("mcp.signIn.continue", { name: props.subject.name })}
+              {/* A joined server's page opens in this dialog, not in another app. */}
+              <Show when={state.phase !== "failed" && !props.hostName}>
+                <ExternalLink aria-hidden="true" />
+              </Show>
+            </Button>
+          </Show>
           <Show when={busy()}>
-            <Text as="p" variant="caption" tone="muted">
-              {t("mcp.signIn.waitingHelp")}
-            </Text>
-            <Button type="button" variant="ghost" onClick={() => props.onCancel()}>
+            <Show when={!props.hostName}>
+              <Text as="p" variant="caption" tone="muted">
+                {t("mcp.signIn.waitingHelp")}
+              </Text>
+            </Show>
+            <Button type="button" variant="ghost" onClick={cancel}>
               {t("common.cancel")}
             </Button>
           </Show>
         </>
       }
-    />
+    >
+      <Show when={page()}>{(source) => <McpSignInPage page={source()} />}</Show>
+      <Show when={props.hostName}>{(host) => <McpSignInPageNote hostName={host()} />}</Show>
+    </McpConnectShell>
   );
 }

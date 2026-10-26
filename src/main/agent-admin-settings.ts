@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Semaphore } from "effect";
 // Access and auto-approve of one agent, as this computer holds them. The local IPC handlers and the
 // `agent-admin-v1` host routes share this, so a remote admin changes the same state as the local
 // window does, through the same writers.
@@ -45,9 +45,12 @@ export function createAgentAdminSettings({
     return {
       access: agent.access ?? DEFAULT_AGENT_ACCESS,
       autoApprove: agentAutoApprovalEnabled(preference, agent.id),
-      autoApproveLocked: preference.turbo,
+      // Turbo mode is gone; the field stays because `agent-admin-v1` carries it.
+      autoApproveLocked: false,
     };
   }
+  // Two quick changes must not interleave their two writes, or the agent could keep half of each.
+  const writes = Semaphore.makeUnsafe(1);
   return {
     read: (agentId) => settings(requireAgent(agentId)),
     update(input, actor = LOCAL_USER_ACTOR) {
@@ -60,11 +63,24 @@ export function createAgentAdminSettings({
         try: () => requireAgent(agentId),
         catch: (cause) => new AgentSettingsFailure({ cause }),
       });
-      if (access !== undefined) agent = yield* agents.updateAgent({ agentId, access }).pipe(toAgentSettingsFailure);
-      if (autoApprove !== undefined)
-        yield* approvalAutomation.set({ agentId, autoApprove }, actor).pipe(toAgentSettingsFailure);
+      const writeAccess = Effect.fn("AgentAdminSettings.writeAccess")(function* () {
+        if (access !== undefined) agent = yield* agents.updateAgent({ agentId, access }).pipe(toAgentSettingsFailure);
+      });
+      const writeGrant = Effect.fn("AgentAdminSettings.writeGrant")(function* () {
+        if (autoApprove !== undefined)
+          yield* approvalAutomation.set({ agentId, autoApprove }, actor).pipe(toAgentSettingsFailure);
+      });
+      // Write the narrower half first. When the second write fails, or between the two writes, the
+      // agent then has less reach than the user chose, never more.
+      if (access === "workspace") {
+        yield* writeAccess();
+        yield* writeGrant();
+      } else {
+        yield* writeGrant();
+        yield* writeAccess();
+      }
       return settings(agent);
-    })().pipe(Effect.uninterruptible);
+    })().pipe(writes.withPermit, Effect.uninterruptible);
   }
 }
 

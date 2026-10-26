@@ -11,6 +11,7 @@ import {
   type OwnedRoutine,
   type OwnedRoutineRun,
   type ReceivedWebhookEvent,
+  type RoutineRunStart,
   RoutineStore,
   type WebhookReceiveResult,
 } from "./routine-store";
@@ -52,8 +53,8 @@ export class ChannelRoutineStore extends RoutineStore {
     return toChannelRoutine(this.updateRoutine(channelId, fields, now));
   }
 
-  listRuns(channelId: string, routineId: string, limit = 50): ChannelRoutineRun[] {
-    return this.listRunRows(channelId, routineId, limit).map(toChannelRun);
+  listRuns(channelId: string, routineId: string, limit = 50, withSkipped = false): ChannelRoutineRun[] {
+    return this.listRunRows(channelId, routineId, limit, withSkipped).map(toChannelRun);
   }
 
   pendingRuns(): ChannelRoutineRun[] {
@@ -77,10 +78,10 @@ export class ChannelRoutineStore extends RoutineStore {
   createRun(
     routine: Pick<ChannelRoutine, "id" | "channelId" | "name" | "instruction">,
     triggerId: string | null,
-    kind: ChannelRoutineRun["kind"],
+    start: RoutineRunStart,
     scheduledFor: string,
   ): ChannelRoutineRun {
-    return toChannelRun(this.createRunRow(runSource(routine), triggerId, kind, scheduledFor));
+    return toChannelRun(this.createRunRow(runSource(routine), triggerId, start, scheduledFor));
   }
 
   receiveWebhook(

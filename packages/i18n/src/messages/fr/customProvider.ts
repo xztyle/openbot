@@ -2,6 +2,21 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/customProvider";
 
 export const messages = {
+  "customProvider.registry.title": "Registre ACP",
+  "customProvider.registry.description":
+    "Installez des agents sur ce serveur. « Désinstaller » conserve les réglages, les identifiants et les conversations de l’agent.",
+  "customProvider.registry.search": "Rechercher dans le registre",
+  "customProvider.registry.empty": "Aucun agent ne correspond à cette recherche.",
+  "customProvider.registry.agentId": "ID de l’agent personnalisé",
+  "customProvider.registry.install": "Installer",
+  "customProvider.registry.update": "Mettre à jour",
+  "customProvider.registry.remove": "Désinstaller",
+  "customProvider.registry.searchFailed": "Impossible de rechercher dans le registre. Réessayez.",
+  "customProvider.registry.statusFailed": "Impossible de vérifier la progression de l’installation. OpenBot réessaie.",
+  "customProvider.registry.installFailed": "Impossible d’installer l’agent. Réessayez.",
+  "customProvider.registry.updateFailed": "Impossible de mettre à jour l’agent. Réessayez.",
+  "customProvider.registry.removeFailed": "Impossible de désinstaller l’agent. Réessayez.",
+  "customProvider.registry.cancelFailed": "Impossible d’annuler l’installation. Réessayez.",
   "customProvider.error.providerIdRequired": "Saisissez un ID de fournisseur.",
   "customProvider.error.providerIdPattern":
     "Utilisez des lettres minuscules, des chiffres, des tirets ou des traits de soulignement, en commençant par une lettre ou un chiffre.",
@@ -43,6 +58,7 @@ export const messages = {
   "customProvider.removeUnavailable": "Cette version ne peut pas supprimer de point de terminaison.",
 
   "customProvider.form.title": "Ajouter un fournisseur personnalisé",
+  "customProvider.form.editTitle": "Modifier un fournisseur personnalisé",
   "customProvider.form.description": "Décrivez un point de terminaison compatible OpenAI et les modèles qu’il propose.",
   "customProvider.form.heading": "Fournisseur personnalisé",
   "customProvider.form.subtitle": "Tout point de terminaison compatible OpenAI.",
@@ -144,6 +160,9 @@ export const messages = {
   "customProvider.acp.args": "Arguments",
   "customProvider.acp.argsHint":
     "Séparez les arguments par des espaces. Mettez entre guillemets un argument qui contient des espaces.",
+  "customProvider.acp.usagePrompt": "Commande d’utilisation",
+  "customProvider.acp.usagePromptHint":
+    "OpenBot l’envoie au plus toutes les 5 minutes et affiche la dernière réponse. Utilisez une commande à laquelle l’agent répond lui-même, comme /usage.",
   "customProvider.acp.env": "Variables d’environnement",
   "customProvider.acp.env.name": "Nom de la variable {number}",
   "customProvider.acp.env.value": "Valeur de la variable {number}",
@@ -156,6 +175,10 @@ export const messages = {
   "customProvider.acp.checkOk": "{name} a répondu",
   "customProvider.acp.checkOkVersion": "{name} {version} a répondu",
   "customProvider.acp.checkProtocol": "ACP version {version}",
+  "customProvider.acp.checkModels": {
+    one: "{count} modèle : {models}",
+    other: "{count} modèles : {models}",
+  },
   "customProvider.acp.checkFailed": "L’agent n’a pas répondu",
   "customProvider.acp.trustTitle": "Cette commande s’exécute sur votre ordinateur",
   "customProvider.acp.trustDescription":
@@ -172,6 +195,7 @@ export const messages = {
   "customProvider.acp.error.envDuplicate": "Cet agent définit déjà {name}.",
   "customProvider.acp.error.envValueRequired": "Saisissez une valeur pour cette variable.",
   "customProvider.acp.error.envValueLength": "La valeur doit faire moins de {max} caractères.",
+  "customProvider.acp.error.usagePromptInvalid": "Utilisez une ligne de {max} caractères au maximum.",
   "customProvider.acp.error.agentIdPattern":
     "Utilisez des lettres minuscules, des chiffres ou des tirets, en commençant par une lettre ou un chiffre. Utilisez au plus 40 caractères.",
 
@@ -179,6 +203,9 @@ export const messages = {
   "customProvider.agents.description": "Les agents ACP qu’OpenBot démarre sur cet ordinateur.",
   "customProvider.agents.empty": "Aucun agent personnalisé pour l’instant.",
   "customProvider.agents.add": "Ajouter un agent",
+  "customProvider.agents.restart": "Redémarrer les agents",
+  "customProvider.agents.cancelRestart": "Annuler le redémarrage",
+  "customProvider.agents.restartPending": "Les agents personnalisés redémarrent quand les tâches en cours s’arrêtent.",
   "customProvider.agents.commandMissing": "{command} · Commande introuvable",
   "customProvider.agents.envCount": { one: "{count} variable", other: "{count} variables" },
   "customProvider.agents.editLabel": "Modifier {name}",
@@ -202,6 +229,7 @@ export const messages = {
   "customProvider.list.empty": "Aucun point de terminaison personnalisé pour l’instant.",
   "customProvider.list.label": "Points de terminaison personnalisés",
   "customProvider.list.apiKeySaved": "Clé API enregistrée",
+  "customProvider.list.editLabel": "Modifier {name}",
   "customProvider.list.deleteLabel": "Supprimer {name}",
   "customProvider.list.confirmTitle": "Supprimer {name} ?",
   "customProvider.list.confirmDescription":

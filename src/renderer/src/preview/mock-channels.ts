@@ -23,9 +23,21 @@ import type {
 import { channelRoutingConversationEventItemType } from "@openbot/contracts/ipc";
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 
-export function createMockChannels(emit: (event: AgentEvent) => void, agentName: (agentId: string) => string) {
-  const channels = new Map<string, Channel>();
-  const messages = new Map<string, ChannelMessage[]>();
+/** A channel that exists when the preview starts, with its history. */
+export interface MockChannelSeed {
+  channel: Channel;
+  messages: ChannelMessage[];
+}
+
+export function createMockChannels(
+  emit: (event: AgentEvent) => void,
+  agentName: (agentId: string) => string,
+  seeds: readonly MockChannelSeed[] = [],
+) {
+  const channels = new Map<string, Channel>(seeds.map((seed) => [seed.channel.id, structuredClone(seed.channel)]));
+  const messages = new Map<string, ChannelMessage[]>(
+    seeds.map((seed) => [seed.channel.id, structuredClone(seed.messages)]),
+  );
   const tasks = new Map<string, ChannelTask[]>();
   const receipts = new Map<string, Channel>();
   const memories = new Map<string, ChannelMemory[]>();
@@ -228,6 +240,7 @@ export function createMockChannels(emit: (event: AgentEvent) => void, agentName:
         active: input.active,
         timezone: input.timezone,
         limitPolicy: input.limitPolicy ?? "wait",
+        missedPolicy: input.missedPolicy ?? "skip",
         trigger: nextTrigger(id, input.schedule, now),
         createdAt: now,
         updatedAt: now,
@@ -246,6 +259,7 @@ export function createMockChannels(emit: (event: AgentEvent) => void, agentName:
         ...(input.instruction === undefined ? {} : { instruction: input.instruction.trim() }),
         ...(input.active === undefined ? {} : { active: input.active }),
         ...(input.limitPolicy === undefined ? {} : { limitPolicy: input.limitPolicy }),
+        ...(input.missedPolicy === undefined ? {} : { missedPolicy: input.missedPolicy }),
         ...(input.schedule === undefined ? {} : { trigger: nextTrigger(current.id, input.schedule, now) }),
         updatedAt: now,
       };

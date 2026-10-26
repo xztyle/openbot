@@ -56,17 +56,6 @@ export function surfacesForFiles(files: string[]): VerificationSurface[] {
   return [...surfaces].sort();
 }
 
-const authApiClientTests = new Set([
-  "apps/auth-api/test/analytics.test.ts",
-  "apps/auth-api/test/content.test.tsx",
-  "apps/auth-api/test/hero-download-selector.test.tsx",
-  "apps/auth-api/test/join-page.test.tsx",
-  "apps/auth-api/test/landing-app-preview.test.tsx",
-  "apps/auth-api/test/landing-glow.test.tsx",
-  "apps/auth-api/test/landing-reveal.test.tsx",
-  "apps/auth-api/test/page-error.test.tsx",
-]);
-
 function isTestFile(file: string): boolean {
   return /\.(test|dom\.test)\.tsx?$/u.test(file);
 }
@@ -79,23 +68,13 @@ function isDesktopTest(file: string): boolean {
     "src/preload/",
     "src/renderer/",
     "scripts/",
-    "packages/contracts/",
-    "packages/i18n/",
     "packages/logging/",
-    "packages/telemetry/",
-    "packages/user-errors/",
-    "packages/team-client/",
     "apps/mobile/src/",
   ].some((prefix) => file.startsWith(prefix));
 }
 
 function isDelegatedTest(file: string): boolean {
-  return (
-    (file.startsWith("apps/auth-api/test/") ||
-      file.startsWith("apps/site-router/test/") ||
-      file.startsWith("remote/api/test/")) &&
-    isTestFile(file)
-  );
+  return file.startsWith("apps/auth-api/test/") && isTestFile(file);
 }
 
 function isSupportedTest(file: string): boolean {
@@ -131,50 +110,17 @@ function formatBunCommand(args: string[]): string {
 
 function testCommandArgs(tests: string[]): string[][] {
   const desktop = tests.filter(isDesktopTest);
-  const authServer = tests.filter((file) => file.startsWith("apps/auth-api/test/") && !authApiClientTests.has(file));
-  const authClient = tests.filter((file) => authApiClientTests.has(file));
-  const sites = tests.filter((file) => file.startsWith("apps/site-router/test/"));
-  const remote = tests.filter((file) => file.startsWith("remote/api/test/"));
+  const auth = tests.filter((file) => file.startsWith("apps/auth-api/test/"));
   const commands: string[][] = [];
   if (desktop.length > 0) commands.push(["run", "test:desktop", "--", ...desktop]);
-  if (authServer.length > 0) {
+  if (auth.length > 0) {
     commands.push([
       "run",
       "--cwd",
       "apps/auth-api",
-      "test:server",
-      "--",
-      ...authServer.map((file) => file.slice("apps/auth-api/".length)),
-    ]);
-  }
-  if (authClient.length > 0) {
-    commands.push([
-      "run",
-      "--cwd",
-      "apps/auth-api",
-      "test:client",
-      "--",
-      ...authClient.map((file) => file.slice("apps/auth-api/".length)),
-    ]);
-  }
-  if (sites.length > 0) {
-    commands.push([
-      "run",
-      "--cwd",
-      "apps/site-router",
       "test",
       "--",
-      ...sites.map((file) => file.slice("apps/site-router/".length)),
-    ]);
-  }
-  if (remote.length > 0) {
-    commands.push([
-      "run",
-      "--cwd",
-      "remote/api",
-      "test",
-      "--",
-      ...remote.map((file) => file.slice("remote/api/".length)),
+      ...auth.map((file) => file.slice("apps/auth-api/".length)),
     ]);
   }
   return commands;
@@ -187,18 +133,6 @@ function workspaceTestCommandArgs(files: string[], suggestedTests: string[]): st
     !suggestedTests.some((file) => file.startsWith("apps/auth-api/"))
   ) {
     commands.push(["run", "test:api"]);
-  }
-  if (
-    files.some((file) => file.startsWith("apps/site-router/")) &&
-    !suggestedTests.some((file) => file.startsWith("apps/site-router/"))
-  ) {
-    commands.push(["run", "test:sites"]);
-  }
-  if (
-    files.some((file) => file.startsWith("remote/api/")) &&
-    !suggestedTests.some((file) => file.startsWith("remote/api/"))
-  ) {
-    commands.push(["run", "test:remote"]);
   }
   return commands;
 }

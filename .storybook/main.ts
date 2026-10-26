@@ -5,11 +5,18 @@ import { mergeConfig, type PluginOption } from "vite";
 import { chatVisualPages } from "./chat-visual-pages";
 
 const config = {
-  // The desktop renderer, and the public site's article components. A site story
-  // brings its own stylesheet with it, because the two stylesheets set the same
-  // global rules to different values and cannot both be loaded for every story.
-  stories: ["../src/renderer/**/*.stories.@(ts|tsx)", "../apps/auth-api/src/**/*.stories.@(ts|tsx)"],
+  // The desktop renderer, the public site's article components and the status page. A site
+  // or status story brings its own stylesheet with it, because the stylesheets set the same
+  // global rules to different values and cannot all be loaded for every story.
+  stories: [
+    "../src/renderer/**/*.stories.@(ts|tsx)",
+    "../apps/auth-api/src/**/*.stories.@(ts|tsx)",
+    "../apps/status/src/**/*.stories.@(ts|tsx)",
+  ],
   addons: ["@storybook/addon-a11y"],
+  // The story iframe has no icon of its own. Without this link, Chrome requests /favicon.ico when
+  // the iframe opens as a page, and the console shows a 404.
+  previewHead: (head) => `${head}\n<link rel="icon" type="image/svg+xml" href="./favicon.svg" />`,
   framework: {
     name: "storybook-solidjs-vite",
     options: {

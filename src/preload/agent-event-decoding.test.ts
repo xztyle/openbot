@@ -39,6 +39,52 @@ const largeApproval = {
   },
 } satisfies ScopedAgentEvent;
 
+const hiddenAgents = {
+  serverId: "server-1",
+  event: { type: "hidden-agents-changed", agents: [{ agentId: "agent-1", hiddenAt: "2026-10-16T09:00:00.000Z" }] },
+} satisfies ScopedAgentEvent;
+
+const memoryChanges = {
+  serverId: "local",
+  event: {
+    type: "conversation",
+    snapshot: {
+      agentId: "agent-1",
+      threadId: "thread-1",
+      activeTurnId: null,
+      revision: 4,
+      messages: [
+        {
+          id: "turn-1:memory-changes",
+          turnId: "turn-1",
+          author: "system",
+          source: "system",
+          text: "Memory: 1 saved, 1 updated, 0 forgotten.",
+          createdAt: "2026-10-23T10:00:00.000Z",
+          status: "completed",
+          itemType: "memory-changes",
+          memoryChanges: [
+            { memoryId: "memory-1", action: "saved", text: "Keeps mornings for writing." },
+            { memoryId: "memory-2", action: "updated", text: "Uses Todoist.", previousText: "Uses Things." },
+          ],
+        },
+      ],
+    },
+  },
+} satisfies ScopedAgentEvent;
+
+/** The memory-changes event with its first change replaced by `change`. */
+function withMemoryChange(change: unknown) {
+  const [message] = memoryChanges.event.snapshot.messages;
+  return {
+    ...memoryChanges,
+    event: {
+      ...memoryChanges.event,
+      snapshot: { ...memoryChanges.event.snapshot, messages: [{ ...message, memoryChanges: [change] }] },
+    },
+  };
+}
+
 describe("decodeScopedAgentEvent", () => {
   it.each([
     ["an event", delta],
@@ -46,6 +92,9 @@ describe("decodeScopedAgentEvent", () => {
       "a buffered live event",
       { serverId: "server-1", event: { type: "queue-invalidated", agentId: "agent-1" }, bufferedLive: true },
     ],
+    ["a hidden agents change", hiddenAgents],
+    ["an empty hidden agents change", { serverId: "local", event: { type: "hidden-agents-changed", agents: [] } }],
+    ["the memory changes of a turn", memoryChanges],
   ] satisfies [string, ScopedAgentEvent][])("keeps %s", (_name, value) => {
     expect(decodeScopedAgentEvent(value)).toEqual(value);
   });
@@ -61,7 +110,24 @@ describe("decodeScopedAgentEvent", () => {
         event: { ...largeApproval.event, approval: { ...largeApproval.event.approval, kind: "network" } },
       },
     ],
+    [
+      "a hidden agent with a time that is not a date",
+      { ...hiddenAgents, event: { ...hiddenAgents.event, agents: [{ agentId: "agent-1", hiddenAt: "yesterday" }] } },
+    ],
+    [
+      "a hidden agent that is named two times",
+      {
+        ...hiddenAgents,
+        event: { ...hiddenAgents.event, agents: [...hiddenAgents.event.agents, ...hiddenAgents.event.agents] },
+      },
+    ],
+    ["hidden agents that are not a list", { ...hiddenAgents, event: { ...hiddenAgents.event, agents: null } }],
     ["a bufferedLive that is not a boolean", { ...delta, bufferedLive: "yes" }],
+    ["a memory change of an unknown action", withMemoryChange({ memoryId: "memory-1", action: "pinned", text: "x" })],
+    [
+      "a memory change with a text longer than a memory",
+      withMemoryChange({ memoryId: "memory-1", action: "saved", text: "x".repeat(501) }),
+    ],
     ["a value that is not a record", "event"],
   ])("rejects %s", (_name, value) => {
     expect(() => decodeScopedAgentEvent(value)).toThrow(/^Invalid /);

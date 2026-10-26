@@ -42,4 +42,31 @@ export const messages = {
   "error.import.hostBusy": "Sunucu diğer dışa aktarımları okuyor. Birkaç dakika sonra tekrar deneyin.",
   "error.import.skillKept":
     '{name}: sunucu zaten "{skill}" becerisine sahip, bu yüzden ajan bu beceriyi kullanıyor. Bir yöneticiden güncellemesini isteyin.',
+  "error.import.transferRemoteTooLarge":
+    "Katılınan bir sunucu için aktarım dosyası 100 MB'tan küçük olmalıdır. Çalışma alanı dosyalarını kapatın veya daha az ajan dışa aktarın.",
+  "error.import.transferNotFile": "Bu dosya bir OpenBot aktarım dosyası değil.",
+  "error.import.transferNewer":
+    "Bu dosyayı OpenBot'un daha yeni bir sürümü oluşturdu. OpenBot'u güncelleyin ve tekrar deneyin.",
+  "error.import.transferEmpty": "Dosyada hiç ajan ve ayar yok.",
+  "error.import.transferTooLarge":
+    "Bir aktarım dosyası 2 GB'tan ve 50.000 dosyadan küçük olmalıdır. Çalışma alanı dosyalarını kapatın veya daha az ajan dışa aktarın.",
+  "error.import.transferAgentInvalid": "Dosyadaki {number}. ajan geçersiz, bu yüzden atlanıyor.",
+  "error.import.transferSettingsInvalid": "Dosyadaki uygulama ayarları geçersiz, bu yüzden içe aktarılmıyor.",
+  "error.import.transferModelMissing":
+    '{name}: "{model}" modeli burada henüz kullanılamıyor, bu yüzden ajan varsayılan modeli kullanıyor. Sağlayıcısı hazır olduğunda modeli yeniden seçin.',
+  "error.import.transferSettingSkipped": "{name} içe aktarılmadı. {reason}",
+  "error.import.transferRoutineFlowSkipped": "İçe aktarma bir rutin akışını dışarıda bıraktı. {reason}",
+  "error.import.transferCustomAgentCommand":
+    '{name}: özel ajanlar bir komut çalıştırdıkları için içe aktarılmaz. "{command}" komutunu kontrol edin ve ajanı Ayarlar\'da yeniden ekleyin.',
+  "error.import.transferSkillLimit":
+    "{name}: bir ajan en fazla {limit} beceriye sahip olabildiği için {total} becerisinden yalnızca ilk {limit} tanesi dosyada.",
+  "error.import.transferFilesGone": "Dışa aktarma sürerken {number} dosya silindi, bu yüzden dosyada değiller.",
+  "error.import.transferProviderKey": "{name}: API anahtarını Ayarlar'da yeniden girin.",
+  "error.import.transferAgentEnv": "{name}: {names} değerlerini Ayarlar'da yeniden girin.",
+  "error.import.transferMcpValues":
+    "{name}: MCP sunucusu kapalı olarak eklendi. Komutunu kontrol edin, değerlerini ve tam adresini yeniden girin, ardından MCP ayarlarında açın.",
+  "error.import.transferValuesCleared":
+    "{name}: bağımsız değişkenlerinden veya adresinden gizli bilgi içerebilecek değerler kaldırıldı. Bunları Ayarlar'da yeniden girin.",
+  "error.import.transferSharedKept":
+    "Paylaşılan klasördeki {number} dosya zaten burada, bu yüzden oldukları gibi korunuyor.",
 } as const satisfies PartialTranslation<typeof source>;

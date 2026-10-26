@@ -1,4 +1,11 @@
-import type { AgentEvent, AttachmentImportEvent, AttachmentSummary, TeamRealtimeEvent } from "@openbot/contracts/ipc";
+import type {
+  AgentEvent,
+  AskSideQuestionInput,
+  AttachmentImportEvent,
+  AttachmentSummary,
+  TeamRealtimeEvent,
+} from "@openbot/contracts/ipc";
+import { decodeSideQuestionResponse, SIDE_QUESTION_ROUTES } from "@openbot/contracts/team-protocol/side-question-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import { eventCheckTemplatesApi } from "@openbot/team-client/event-check-templates-api";
 import { eventChecksApi } from "@openbot/team-client/event-checks-api";
@@ -10,11 +17,14 @@ import {
   listSharedTables,
   previewAgentTemplate,
   publishAgentTemplate,
+  readAgentSessionSettings,
+  resetAgentSessionSetting,
+  setAgentSessionSetting,
   setAgentSkillEnabled,
   uninstallAgentSkill,
   unpublishAgentTemplate,
 } from "@openbot/team-client/team-admin-requests";
-import { listInstalledSkills, type TeamApiRequest } from "@openbot/team-client/team-api-requests";
+import { listInstalledSkills, type TeamApiRequest, teamAgentRoutinesApi } from "@openbot/team-client/team-api-requests";
 import { currentText } from "@openbot/ui/text";
 import { Effect } from "effect";
 import { createSignal, onCleanup } from "solid-js";
@@ -22,7 +32,10 @@ import type { ConversationRuntime } from "../conversation/conversation-runtime";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import { webMemoriesPort } from "../conversation/web-memories-port";
 import { webRoutinesPort } from "../conversation/web-routines-port";
+import { createWebAttachmentMedia } from "./web-attachment-media";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
+import { webBrowserProfileCalls } from "./web-browser-profiles";
+import { webMessageLinks } from "./web-message-link-relay";
 import type { WebWorkspaceRuntime } from "./web-runtime";
 import { isHostFileTypeError, planUploads, type UploadRejection, uploadRejectionNotice } from "./web-upload-plan";
 
@@ -34,6 +47,9 @@ function webHostAdmin(
   request: () => TeamApiRequest,
   onHostEvent?: HostEvents,
   eventsEnabled?: () => boolean,
+  sessionSettingsEnabled?: () => boolean,
+  routineRecoveryEnabled?: () => boolean,
+  webhookTestsEnabled?: () => boolean,
   checksEnabled?: () => boolean,
   apiChecksEnabled?: () => boolean,
   deliveryChecksEnabled?: () => boolean,
@@ -41,8 +57,31 @@ function webHostAdmin(
   // `request()` names the connected host at call time, so a host switch reaches the new host.
   const checks = eventChecksApi((...args) => request()(...args), apiChecksEnabled, deliveryChecksEnabled);
   const templates = eventCheckTemplatesApi((...args) => request()(...args));
-  const eventRoutines = webEventRoutinesApi((...args) => request()(...args));
+  const eventRoutines = webEventRoutinesApi(
+    (...args) => request()(...args),
+    () => routineRecoveryEnabled?.() === true,
+    () => webhookTestsEnabled?.() === true,
+  );
   return {
+    get sessionSettings() {
+      if (sessionSettingsEnabled?.() !== true) return undefined;
+      return {
+        read: (agentId: string) =>
+          runTeamEffect(readAgentSessionSettings(request(), agentId).pipe(Effect.mapError((error) => error.cause))),
+        set: (input: import("@openbot/contracts/ipc").SetAgentSessionSettingInput) =>
+          runTeamEffect(setAgentSessionSetting(request(), input).pipe(Effect.mapError((error) => error.cause))),
+        reset: (input: import("@openbot/contracts/ipc").ResetAgentSessionSettingInput) =>
+          runTeamEffect(resetAgentSessionSetting(request(), input).pipe(Effect.mapError((error) => error.cause))),
+        ...(onHostEvent
+          ? {
+              subscribe: (agentId: string, listener: () => void) =>
+                onHostEvent((event) => {
+                  if (event.type === "agent-session-settings-changed" && event.agentId === agentId) listener();
+                }),
+            }
+          : {}),
+      };
+    },
     skills: {
       listInstalled: (agentId) =>
         runTeamEffect(listAgentSkills(request(), agentId).pipe(Effect.mapError((error) => error.cause))),
@@ -99,14 +138,30 @@ export function createWebConversationRuntime(
   adminRequest?: () => TeamApiRequest,
   onHostEvent?: HostEvents,
   eventsEnabled?: () => boolean,
+  sessionSettingsEnabled?: () => boolean,
+  signInRelayEnabled?: () => boolean,
+  routineRecoveryEnabled?: () => boolean,
+  sideQuestionEnabled?: () => boolean,
+  webhookTestsEnabled?: () => boolean,
+  browserProfilesEnabled?: () => boolean,
   checksEnabled?: () => boolean,
   apiChecksEnabled?: () => boolean,
   deliveryChecksEnabled?: () => boolean,
 ): ConversationRuntime {
   const listeners = new Set<(event: AttachmentImportEvent) => void>();
-  const files = createWebAttachmentFiles(remote);
+  const files = createWebAttachmentFiles(remote, hostId);
   let importing: { cancelled: boolean; serverId: string } | undefined;
   const [importProgress, setImportProgress] = createSignal<{ current: number; total: number } | null>(null);
+  // A new upload cancels the one in flight (`uploadGeneration` in web-runtime.ts), so imports run one at a time.
+  let uploads: Promise<void> = Promise.resolve();
+  function oneAtATime<T>(run: () => Promise<T>): Promise<T> {
+    const result = uploads.then(run);
+    uploads = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
   async function cancelImportFiles() {
     if (!importing) return;
     importing.cancelled = true;
@@ -115,6 +170,43 @@ export function createWebConversationRuntime(
     } catch {
       // The in-flight upload reports transport errors through its import event.
     }
+  }
+  // One file at a time, so a stop or host change takes effect before the next upload. On a stop,
+  // a host change or a failure, the files already uploaded are discarded if the host is the same.
+  // With `rejected`, a file type that the host refuses is named there and the rest go on.
+  async function uploadFiles(
+    files: readonly File[],
+    serverId: string,
+    stopped: () => boolean,
+    rejected?: UploadRejection[],
+  ): Promise<AttachmentSummary[] | null> {
+    const attachments: AttachmentSummary[] = [];
+    const text = currentText();
+    const discard = async () => {
+      if (hostId() === serverId)
+        await Promise.allSettled(attachments.map((attachment) => remote.discard(attachment.id)));
+    };
+    try {
+      for (const [index, file] of files.entries()) {
+        if (stopped() || hostId() !== serverId) break;
+        setImportProgress({ current: index + 1, total: files.length });
+        try {
+          attachments.push(await remote.upload(file));
+        } catch (error) {
+          // The host's capabilities decide this one, so it is known only now.
+          if (!rejected || !isHostFileTypeError(error, text)) throw error;
+          rejected.push({ name: file.name, reason: "host" });
+        }
+      }
+    } catch (error) {
+      await discard();
+      throw error;
+    } finally {
+      setImportProgress(null);
+    }
+    if (!stopped() && hostId() === serverId) return attachments;
+    await discard();
+    return null;
   }
   const unavailable = async (): Promise<never> => {
     throw new Error(currentText().t("webClient.error.desktopOnly"));
@@ -128,11 +220,37 @@ export function createWebConversationRuntime(
     emit({ type: "started", serverId, requestId });
     emit({ type: "error", serverId, requestId, message });
   };
+  const attachmentMedia = createWebAttachmentMedia(remote, hostId);
   onCleanup(() => {
     void cancelImportFiles();
+    attachmentMedia.dispose();
   });
+  // The host's relay routes are admin only, so only an admin relays a sign-in link.
+  const messageLinks = adminRequest ? webMessageLinks(adminRequest, () => signInRelayEnabled?.() === true) : {};
+  const browserProfiles = adminRequest ? webBrowserProfileCalls(adminRequest) : undefined;
   return {
     agent: {
+      ...messageLinks,
+      importAttachmentData: (data, serverId) =>
+        oneAtATime(async () => {
+          if (serverId !== hostId()) throw new Error(currentText().t("webClient.error.hostChanged"));
+          const files = data.map((file) => new File([new Uint8Array(file.bytes)], file.name, { type: file.mimeType }));
+          // The composer's stop button reaches a paste through `importing`, as it reaches a picked file.
+          const job = { cancelled: false, serverId };
+          importing = job;
+          try {
+            // A stop ends the upload in flight with an error. uploadFiles has discarded the files then.
+            const attachments = await uploadFiles(files, serverId, () => job.cancelled).catch((error: unknown) => {
+              if (job.cancelled) return null;
+              throw error;
+            });
+            if (job.cancelled) return [];
+            if (!attachments) throw new Error(currentText().t("webClient.error.hostChanged"));
+            return attachments;
+          } finally {
+            importing = undefined;
+          }
+        }),
       discardDraftAttachment: (id) => remote.discard(id),
       downloadAttachments: unavailable,
       editQueuedMessage: async (input, serverId) => {
@@ -179,76 +297,113 @@ export function createWebConversationRuntime(
       open: (input) => remote.openBrowserTab(input),
       openPictureInPicture: unavailable,
       reload: (tabId) => remote.reloadBrowserTab(tabId),
+      stop: (tabId) => remote.stopBrowserTab(tabId),
+      takeControl: (tabId) => remote.takeBrowserControl(tabId),
+      releaseControl: (tabId) => remote.releaseBrowserControl(tabId),
       setVisible: async () => {},
     },
-    voice: { onModelStatus: () => () => {}, prepareModel: unavailable, transcribe: unavailable },
+    voice: {
+      getSettings: unavailable,
+      onModelStatus: () => () => {},
+      prepareModel: unavailable,
+      transcribe: unavailable,
+      startStream: unavailable,
+      appendStream: unavailable,
+      finishStream: unavailable,
+      cancelStream: async () => {},
+      onStreamTranscript: () => () => {},
+    },
     openUrl: openWebLink,
+    // Any member can ask, so the request is not limited to an admin.
+    get askSideQuestion() {
+      if (!adminRequest || sideQuestionEnabled?.() !== true) return undefined;
+      // Async, so that a host change rejects the promise and the store shows the error.
+      return async (input: AskSideQuestionInput) =>
+        adminRequest()("POST", SIDE_QUESTION_ROUTES.ask, decodeSideQuestionResponse, {
+          agentId: input.agentId,
+          question: input.question,
+          earlier: input.earlier.map(({ question, answer }) => ({ question, answer })),
+        });
+    },
+    // Any member reads the tab labels; the panels offer the other calls to an owner or admin only.
+    get browserProfiles() {
+      return browserProfilesEnabled?.() === true ? browserProfiles : undefined;
+    },
     previewAttachment: files.preview,
+    attachmentMedia,
+    visualPage: files.visualPage,
     importProgress,
     async importFiles(files, options) {
       if (files.length === 0) return;
       const text = currentText();
-      const serverId = hostId();
       // A second pick during an upload would race the first for the draft's room. Say so, and keep both.
       if (importing) {
-        notify(serverId, text.t("webClient.upload.busy"));
+        notify(hostId(), text.t("webClient.upload.busy"));
         return;
       }
-      const job = { cancelled: false, serverId };
-      importing = job;
-      const requestId = crypto.randomUUID();
-      emit({ type: "started", serverId, requestId });
-      const attachments: AttachmentSummary[] = [];
-      try {
-        // Every file is checked before the first one goes up, so a refused file never costs an upload
-        // and never takes the valid files down with it.
-        const plan = planUploads(files, options?.room);
-        const rejected: UploadRejection[] = [...plan.rejected];
-        for (const [index, file] of plan.accepted.entries()) {
-          if (job.cancelled || hostId() !== serverId) break;
-          setImportProgress({ current: index + 1, total: plan.accepted.length });
-          try {
-            attachments.push(await remote.upload(file));
-          } catch (error) {
-            // The host's capabilities decide this one, so it is known only now. The rest go on.
-            if (!isHostFileTypeError(error, text)) throw error;
-            rejected.push({ name: file.name, reason: "host" });
+      // A paste waits for the upload in flight; a pick does not start while another one runs.
+      await oneAtATime(async () => {
+        const serverId = hostId();
+        const job = { cancelled: false, serverId };
+        importing = job;
+        const requestId = crypto.randomUUID();
+        emit({ type: "started", serverId, requestId });
+        try {
+          // Every file is checked before the first one goes up, so a refused file never costs an upload
+          // and never takes the valid files down with it.
+          const plan = planUploads(files, options?.room);
+          const rejected: UploadRejection[] = [...plan.rejected];
+          const attachments = await uploadFiles(plan.accepted, serverId, () => job.cancelled, rejected);
+          if (!attachments) {
+            emit({ type: "completed", serverId, requestId, attachments: [] });
+            return;
           }
+          const notice = rejected.length > 0 ? uploadRejectionNotice(rejected, text) : "";
+          if (attachments.length === 0 && notice) {
+            emit({ type: "error", serverId, requestId, message: notice });
+            return;
+          }
+          emit({ type: "completed", serverId, requestId, attachments });
+          if (notice) notify(serverId, notice);
+        } catch (error) {
+          if (job.cancelled) {
+            emit({ type: "completed", serverId, requestId, attachments: [] });
+            return;
+          }
+          emit({
+            type: "error",
+            serverId,
+            requestId,
+            message: error instanceof Error ? error.message : currentText().t("webClient.error.fileTransfer"),
+          });
+        } finally {
+          importing = undefined;
         }
-        if (job.cancelled || hostId() !== serverId) {
-          if (hostId() === serverId)
-            await Promise.allSettled(attachments.map((attachment) => remote.discard(attachment.id)));
-          emit({ type: "completed", serverId, requestId, attachments: [] });
-          return;
-        }
-        const notice = rejected.length > 0 ? uploadRejectionNotice(rejected, text) : "";
-        if (attachments.length === 0 && notice) {
-          emit({ type: "error", serverId, requestId, message: notice });
-          return;
-        }
-        emit({ type: "completed", serverId, requestId, attachments });
-        if (notice) notify(serverId, notice);
-      } catch (error) {
-        if (hostId() === serverId)
-          await Promise.allSettled(attachments.map((attachment) => remote.discard(attachment.id)));
-        if (job.cancelled) {
-          emit({ type: "completed", serverId, requestId, attachments: [] });
-          return;
-        }
-        emit({
-          type: "error",
-          serverId,
-          requestId,
-          message: error instanceof Error ? error.message : currentText().t("webClient.error.fileTransfer"),
-        });
-      } finally {
-        importing = undefined;
-        setImportProgress(null);
-      }
+      });
     },
     cancelImportFiles,
+    // `request()` names the connected host at call time, so a host switch reaches the new host.
+    routines: adminRequest
+      ? {
+          ...teamAgentRoutinesApi((...args) => adminRequest()(...args)),
+          onEvent: (listener) =>
+            onHostEvent?.((event) => {
+              if (event.type === "routines-changed") listener(event);
+            }) ?? (() => {}),
+        }
+      : undefined,
     admin: adminRequest
-      ? webHostAdmin(adminRequest, onHostEvent, eventsEnabled, checksEnabled, apiChecksEnabled, deliveryChecksEnabled)
+      ? webHostAdmin(
+          adminRequest,
+          onHostEvent,
+          eventsEnabled,
+          sessionSettingsEnabled,
+          routineRecoveryEnabled,
+          webhookTestsEnabled,
+          checksEnabled,
+          apiChecksEnabled,
+          deliveryChecksEnabled,
+        )
       : undefined,
   };
 }

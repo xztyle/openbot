@@ -46,6 +46,11 @@ export function normalizeMarketplaceQuery(value: string | undefined): string | u
   return query || undefined;
 }
 
+/** The public name of a creator. A creator with no display name stays anonymous: the email is private. */
+export function marketplaceCreatorName(name: string | null | undefined): string {
+  return name?.trim() || "OpenBot user";
+}
+
 export function marketplaceLikePattern(value: string): string {
   return `%${value.toLowerCase().replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
 }

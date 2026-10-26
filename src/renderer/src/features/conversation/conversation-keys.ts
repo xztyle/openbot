@@ -38,8 +38,8 @@ export function promptRequestKey(turnId: string | undefined, requestId: string |
 }
 
 export function messagePromptRequestKey(message: {
-  turnId?: string;
-  questionPrompt?: { requestId: string | number };
+  turnId?: string | undefined;
+  questionPrompt?: { requestId: string | number } | undefined;
 }): string | null {
   return promptRequestKey(message.turnId, message.questionPrompt?.requestId);
 }

@@ -13,7 +13,7 @@ const CREATED_AT = "2026-09-20T09:30:00.000Z";
 /** How long each mock step takes (payment, then start), so the list shows the transition states. */
 const MOCK_STEP_MS = 4_000;
 /** The account server's `MAX_SERVERS_PER_ACCOUNT`. */
-const MOCK_MAX_SERVERS = 3;
+const MOCK_MAX_SERVERS = 50;
 
 /** The monthly amounts in minor units, as `scripts/stripe-bootstrap.ts` sets them. A year costs 20% less. */
 const MONTHLY_PRICES = {
@@ -36,6 +36,7 @@ export const MOCK_HOSTED_SERVER_CATALOG: HostedServerCatalog = {
     memberLimit: plan.memberLimit,
     relativeSpeed: plan.relativeSpeed,
     prices: prices(MONTHLY_PRICES[plan.id]),
+    soldOut: plan.id === "starter",
   })),
 };
 
@@ -44,6 +45,7 @@ const NEXT_STATE: Partial<Record<HostedServerState, HostedServerState>> = {
   awaiting_payment: "starting",
   starting: "running",
   waking: "running",
+  stopping: "waking",
 };
 
 /** One stopped server and one whose plan ended, so the preview shows the start and renew actions. */
@@ -185,5 +187,6 @@ export function createMockHostedServers(billingPlans?: BillingServerPlan[]): Hos
       servers = servers.filter((entry) => entry.serverId !== serverId);
     },
     wake: async (serverId) => update(serverId, { state: "waking" }),
+    restart: async (serverId) => update(serverId, { state: "stopping" }),
   };
 }

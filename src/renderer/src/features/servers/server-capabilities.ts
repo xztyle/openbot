@@ -2,11 +2,16 @@ import {
   AGENT_PROVIDERS,
   type AgentProviderId,
   agentProviderDescriptor,
+  canAdministerServer,
+  pasteCodeSignInSupported,
   type ServerSummary,
 } from "@openbot/contracts/ipc";
 import type { TeamCurrentCapability } from "@openbot/contracts/team-protocol/current";
+import { PROVIDER_HOST_SIGN_IN_PROVIDERS } from "@openbot/contracts/team-protocol/provider-host-sign-in-v1";
+import { PROVIDERS_ADMIN_CODE_SIGN_IN_PROVIDERS } from "@openbot/contracts/team-protocol/providers-v1";
 import { PROVIDERS_SIGN_IN_V3_PROVIDERS } from "@openbot/contracts/team-protocol/providers-v3";
 import { PROVIDERS_V4_SIGN_IN_PROVIDERS } from "@openbot/contracts/team-protocol/providers-v4";
+import { SIGN_IN_RELAY_PROVIDERS } from "@openbot/contracts/team-protocol/sign-in-relay-v1";
 
 /**
  * Whether a server can be asked for a capability-gated feature. A local server
@@ -21,15 +26,31 @@ export function serverSupportsCapability(
     (capability === "remote-desktop-setup" ||
       capability === "channel-chats-v1" ||
       capability === "channel-delete-v1" ||
+      capability === "channel-attention-v1" ||
       capability === "agent-duplication" ||
       capability === "model-scoped-usage" ||
       capability === "browser-navigation" ||
       capability === "browser-view" ||
       capability === "browser-view-clipboard" ||
+      capability === "browser-user-control" ||
+      capability === "browser-sign-in" ||
       capability === "mcp-servers-v1" ||
+      capability === "mcp-sign-in-v1" ||
+      capability === "mcp-sign-in-app-v1" ||
+      capability === "sign-in-relay-v1" ||
+      capability === "connectors-v1" ||
+      capability === "onepassword-connector-v1" ||
+      capability === "bitwarden-connector-v1" ||
+      capability === "provider-host-sign-in-v1" ||
       capability === "storage-v1" ||
+      capability === "storage-disk-v1" ||
       capability === "hosted-sites-v1" ||
       capability === "agent-admin-v1" ||
+      capability === "agent-host-settings-v1" ||
+      capability === "agent-backup-models-v1" ||
+      capability === "agent-task-limit-v1" ||
+      capability === "browser-profiles-v1" ||
+      capability === "provider-usage-reset-v1" ||
       capability === "skills-admin-v1" ||
       capability === "shared-tables-v1" ||
       capability === "agent-install-v1" ||
@@ -38,14 +59,30 @@ export function serverSupportsCapability(
       capability === "providers-v2" ||
       capability === "providers-v3" ||
       capability === "providers-v4" ||
+      capability === "providers-v5" ||
+      capability === "agent-session-settings-v1" ||
+      capability === "acp-registry-v1" ||
       capability === "host-admin-v1" ||
       capability === "host-update-v1" ||
       capability === "host-member-update-v1" ||
       capability === "host-release-v1" ||
+      capability === "host-timezone-v1" ||
+      capability === "agent-memory-limit-v1" ||
+      capability === "prompt-cache-ttl-v1" ||
+      capability === "claude-api-key-v1" ||
+      capability === "agent-access-v1" ||
+      capability === "discord-access-v1" ||
       capability === "events-v1" ||
       capability === "context-reset-v1" ||
       capability === "fork-host-v1" ||
-      capability === "agent-import-v1") &&
+      capability === "routine-flows-v1" ||
+      capability === "routine-recovery-v1" ||
+      capability === "webhook-tests-v1" ||
+      capability === "agent-import-v1" ||
+      capability === "instance-transfer-v1" ||
+      capability === "agent-hidden-v1" ||
+      capability === "agent-tasks-v1" ||
+      capability === "side-question-v1") &&
     server?.kind === "remote"
   ) {
     return server.compatibility?.capabilities.includes(capability) === true;
@@ -53,9 +90,61 @@ export function serverSupportsCapability(
   return server?.kind !== "remote" || !server.compatibility || server.compatibility.capabilities.includes(capability);
 }
 
+/**
+ * Whether the routine editor sends a joined server's routines through `routine-recovery-v1`, which
+ * keeps `missedPolicy` and the missed-run history. This computer's host keeps them through IPC.
+ */
+export function remoteRoutineRecovery(server: ServerSummary | undefined): boolean {
+  return server?.kind === "remote" && serverCanAdminister(server, "routine-recovery-v1");
+}
+
+/** Whether the routine editor can ask the host for a test event: this computer, or a joined server with `webhook-tests-v1`. */
+export function serverSendsWebhookTests(server: ServerSummary | undefined): boolean {
+  return serverCanAdminister(server, "webhook-tests-v1");
+}
+
+/**
+ * Whether a joined server signs in to an MCP server for this computer. With `sign-in-relay-v1` the
+ * page opens in this computer's browser and the callback is relayed to the host. An older host opens
+ * the page in its own browser, and the live view shows it; the live view streams the active server only.
+ */
+export function remoteMcpSignIn(server: ServerSummary | undefined): boolean {
+  if (server?.kind !== "remote") return false;
+  if (serverSupportsCapability(server, "sign-in-relay-v1")) return true;
+  return (
+    server.active &&
+    serverSupportsCapability(server, "mcp-sign-in-v1") &&
+    serverSupportsCapability(server, "browser-view")
+  );
+}
+
+/**
+ * The providers a joined server signs in on a page in its own browser, which the live view shows
+ * here. Only a Linux host advertises it, and the live view streams the active server only.
+ */
+export function hostSignInProviders(server: ServerSummary | undefined): readonly AgentProviderId[] {
+  return server?.kind === "remote" &&
+    server.active &&
+    serverSupportsCapability(server, "provider-host-sign-in-v1") &&
+    serverSupportsCapability(server, "browser-view")
+    ? PROVIDER_HOST_SIGN_IN_PROVIDERS
+    : [];
+}
+
+/**
+ * The providers a joined server signs in on a page in this computer's browser, with the callback
+ * relayed to the host (`sign-in-relay-v1`). The user's own browser keeps their sessions, so these win
+ * over the host's code and live view.
+ */
+export function relaySignInProviders(server: ServerSummary | undefined): readonly AgentProviderId[] {
+  return server?.kind === "remote" && serverSupportsCapability(server, "sign-in-relay-v1")
+    ? SIGN_IN_RELAY_PROVIDERS
+    : [];
+}
+
 /** An owner or admin of a joined server. This computer is always its own administrator. */
 export function serverRoleCanAdminister(server: Pick<ServerSummary, "kind" | "role"> | undefined): boolean {
-  return server?.kind === "local" || server?.role === "owner" || server?.role === "admin";
+  return server?.kind === "local" || canAdministerServer(server?.role);
 }
 
 /**
@@ -73,20 +162,35 @@ export function serverCanAdminister(
 }
 
 /**
- * The providers that a code sign-in reaches on `server`. A host with `providers-v4` signs in Codex,
- * Grok, Cursor and Cline, and Claude when it also has `providers-v3`, which only a host that can run
- * the Claude pasted code advertises. A host with `providers-v3` alone signs in Codex, Claude and Grok.
- * This computer, and an older host, sign in with a code only the providers whose descriptor says so:
- * this computer has a browser for the others.
+ * The providers that the host's own code route signs in on `server`: a device code, a pasted code
+ * or a link. A host with `providers-v4` signs in its providers, and the pasted-code ones only when
+ * it also has `providers-v3`, which only a host that can run a pasted code advertises. A host with
+ * `providers-v3` alone signs in its own list, and a host with `providers-v1` alone Codex only. The
+ * providers that a host signs in on a page are in `hostSignInProviders` and `relaySignInProviders`.
  */
-export function codeSignInProviders(server: ServerSummary | undefined): readonly AgentProviderId[] {
-  if (server?.kind === "remote" && serverSupportsCapability(server, "providers-v4")) {
+export function serverCodeRouteProviders(server: ServerSummary | undefined): readonly AgentProviderId[] {
+  if (server?.kind !== "remote") return [];
+  if (serverSupportsCapability(server, "providers-v4")) {
     const paste = serverSupportsCapability(server, "providers-v3");
-    return PROVIDERS_V4_SIGN_IN_PROVIDERS.filter((provider) => paste || provider !== "claude");
+    return PROVIDERS_V4_SIGN_IN_PROVIDERS.filter(
+      (provider) => paste || agentProviderDescriptor(provider).localCodeSignIn !== "paste",
+    );
   }
-  if (server?.kind === "remote" && serverSupportsCapability(server, "providers-v3"))
-    return PROVIDERS_SIGN_IN_V3_PROVIDERS;
-  return AGENT_PROVIDERS.filter((provider) => agentProviderDescriptor(provider).codeSignIn);
+  if (serverSupportsCapability(server, "providers-v3")) return PROVIDERS_SIGN_IN_V3_PROVIDERS;
+  return serverSupportsCapability(server, "providers-v1") ? PROVIDERS_ADMIN_CODE_SIGN_IN_PROVIDERS : [];
+}
+
+/**
+ * The providers that a code sign-in reaches on this computer, for when the browser callback cannot
+ * reach OpenBot: each provider whose driver has one. A pasted code needs a terminal that only some
+ * platforms give it.
+ */
+export function localCodeSignInProviders(platform: string | undefined): readonly AgentProviderId[] {
+  const paste = platform !== undefined && pasteCodeSignInSupported(platform);
+  return AGENT_PROVIDERS.filter((provider) => {
+    const codeSignIn = agentProviderDescriptor(provider).localCodeSignIn;
+    return codeSignIn === "device" || (codeSignIn === "paste" && paste);
+  });
 }
 
 /** `server` when it is a joined server this account may manage through `capability`, otherwise undefined. */

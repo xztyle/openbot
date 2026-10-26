@@ -1,4 +1,12 @@
-import type { AgentApproval, AgentEvent, QueueSnapshot, RoutineFields } from "@openbot/contracts/ipc";
+import type {
+  AgentApproval,
+  AgentContextState,
+  AgentEvent,
+  AgentModelChoice,
+  AgentWaitsSnapshot,
+  QueueSnapshot,
+  RoutineFields,
+} from "@openbot/contracts/ipc";
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 import { desktopAnalytics } from "./analytics";
@@ -6,6 +14,8 @@ import { useAnsweredPrompts } from "./answered-prompts";
 import { seededAttentionPrompts } from "./features/agents/agent-runtime-snapshot";
 import { useAgents } from "./features/agents/agents-context";
 import { agentConversationKey, promptRequestKey } from "./features/conversation/conversation-keys";
+import type { PromptAnswerOptions } from "./features/conversation/conversation-types";
+import type { TurnStepLines } from "./features/conversation/turn-step-lines";
 import { useDynamicIsland } from "./features/dynamic-island/dynamic-island-context";
 import { useServers } from "./features/servers/servers-context";
 import { createScopeGuard } from "./scope-lifetime";
@@ -71,10 +81,19 @@ const Turns = createSimpleContext({
     const [turnProgress, setTurnProgress] = createSignal<
       Record<string, { turnId: string; detail: string } | undefined>
     >(seed?.turnProgress ?? {});
+    // Every progress line of the newest turns, by turn, for the steps under the activity line.
+    const [turnStepLines, setTurnStepLines] = createSignal<TurnStepLines>({});
     const [failedTurns, setFailedTurns] = createSignal<Record<string, string | undefined>>(seed?.failedTurns ?? {});
     // The agents whose queue waits for a provider plan to reset, in epoch seconds. Only a runtime snapshot of the local host carries it.
+    const [contextStates, setContextStates] = createSignal<Record<string, AgentContextState>>({});
     const [usageLimits, setUsageLimits] = createSignal<Record<string, number | null>>({});
+    // Each provider account and model that a usage limit holds, also with no agent on it.
+    const [usageLimitedModels, setUsageLimitedModels] = createSignal<AgentModelChoice[]>([]);
+    // The holds whose ask card the user closed with "Wait", by agent, with the reset of that hold.
+    const [waitedUsageLimits, setWaitedUsageLimits] = createSignal<Record<string, number | null>>({});
     const [queues, setQueues] = createSignal<Record<string, QueueSnapshot>>(seed?.queues ?? {});
+    // Only the active agent's open waits load; a `waits-changed` event updates any agent.
+    const [waits, setWaits] = createSignal<Record<string, AgentWaitsSnapshot>>({});
     const [routinesByConversation, setRoutinesByConversation] = createSignal<
       Record<string, RoutineSnapshot | undefined>
     >({});
@@ -91,11 +110,31 @@ const Turns = createSimpleContext({
         seededAttentionPrompts(seed?.pendingPrompts, presentedPromptResolutions(), submittedPromptRequests()),
       ),
     );
-    const [pendingApprovals, setPendingApprovals] = createSignal<Record<string, AgentApproval | undefined>>(
-      seed?.pendingApprovals ?? {},
+    // Every waiting approval: the agent's chat and each of its tasks has its own thread.
+    const [approvals, setApprovals] = createSignal<AgentApproval[]>(
+      Object.values(seed?.pendingApprovals ?? {}).filter((approval) => approval !== undefined),
     );
+    /** The newest waiting approval of each agent, in any thread. */
+    const pendingApprovals = createMemo(() =>
+      Object.fromEntries(approvals().map((approval) => [approval.agentId, approval] as const)),
+    );
+
+    function approvalOfThread(agentId: string, threadId: string | null | undefined): AgentApproval | undefined {
+      return approvals().find((approval) => approval.agentId === agentId && approval.threadId === threadId);
+    }
+
+    function forgetApproval(agentId: string, requestId: string | number): void {
+      setApprovals((current) =>
+        current.some((approval) => approval.agentId === agentId && String(approval.requestId) === String(requestId))
+          ? current.filter(
+              (approval) => approval.agentId !== agentId || String(approval.requestId) !== String(requestId),
+            )
+          : current,
+      );
+    }
     const completedTurnByAgent = new Map<string, string>();
     const queueSnapshotRequests = new Map<string, number>();
+    const waitSnapshotRequests = new Map<string, number>();
     const routineSnapshotRequests = new Map<string, number>();
 
     function refreshRoutineIds(agentId: string, serverId: string): void {
@@ -122,7 +161,7 @@ const Turns = createSimpleContext({
       },
     );
 
-    function loadQueue(agentId: string, serverId: string): void {
+    function loadQueue(agentId: string): void {
       const queueRequest = (queueSnapshotRequests.get(agentId) ?? 0) + 1;
       queueSnapshotRequests.set(agentId, queueRequest);
       void turnsPort()
@@ -131,15 +170,37 @@ const Turns = createSimpleContext({
           if (!scopeIsCurrent() || queueSnapshotRequests.get(agentId) !== queueRequest) return;
           setQueues((current) => ({ ...current, [agentId]: queue }));
         })
+        // This background read can time out while chat replies still arrive. Keep the last queue;
+        // the next load or queue-changed event updates it. Queue action failures still report errors.
+        .catch(() => undefined);
+    }
+
+    createEffect(
+      () => ({ agentId: activeAgentId(), agentPhase: agentStatus().phase, serverId: activeServerId() }),
+      ({ agentId }) => {
+        if (agentId) loadQueue(agentId);
+      },
+    );
+
+    function loadWaits(agentId: string, serverId: string): void {
+      const request = (waitSnapshotRequests.get(agentId) ?? 0) + 1;
+      waitSnapshotRequests.set(agentId, request);
+      void turnsPort()
+        .agent.listWaits(agentId)
+        .then((snapshot) => {
+          if (!scopeIsCurrent() || waitSnapshotRequests.get(agentId) !== request) return;
+          setWaits((current) => ({ ...current, [agentId]: snapshot }));
+        })
         .catch((error) => {
-          if (scopeIsCurrent()) appendUiError(agentId, error, currentText().t("app.errorStatus.queueLoad"), serverId);
+          if (!scopeIsCurrent() || waitSnapshotRequests.get(agentId) !== request) return;
+          appendUiError(agentId, error, currentText().t("app.errorStatus.waitsLoad"), serverId);
         });
     }
 
     createEffect(
       () => ({ agentId: activeAgentId(), agentPhase: agentStatus().phase, serverId: activeServerId() }),
       ({ agentId, serverId }) => {
-        if (agentId) loadQueue(agentId, serverId);
+        if (agentId) loadWaits(agentId, serverId);
       },
     );
 
@@ -163,21 +224,22 @@ const Turns = createSimpleContext({
           return;
         }
         if (!next.agentIds) return;
-        for (const agentId of next.agentIds.split("\0")) loadQueue(agentId, next.serverId);
+        for (const agentId of next.agentIds.split("\0")) loadQueue(agentId);
       },
     );
 
-    async function answerPrompt(answers: Record<string, string[]>): Promise<boolean> {
+    async function answerPrompt(answers: Record<string, string[]>, options?: PromptAnswerOptions): Promise<boolean> {
       const agent = activeAgent();
       const prompt = agent ? pendingPrompts()[agent.id] : undefined;
       if (!agent || prompt?.type !== "prompt") return false;
-      return submitPromptAnswers(agent.id, prompt, answers);
+      return submitPromptAnswers(agent.id, prompt, answers, options);
     }
 
     async function submitPromptAnswers(
       agentId: string,
       prompt: PromptEvent,
       answers: Record<string, string[]>,
+      options?: PromptAnswerOptions,
     ): Promise<boolean> {
       const serverId = activeServerId();
       const analytics = desktopAnalytics.scope();
@@ -204,7 +266,8 @@ const Turns = createSimpleContext({
           result: "failed",
           failure_code: "response_failed",
         });
-        appendUiError(agentId, error, currentText().t("app.errorStatus.answer"), serverId);
+        if (options?.onError) options.onError(error);
+        else appendUiError(agentId, error, currentText().t("app.errorStatus.answer"), serverId);
         return false;
       }
     }
@@ -213,17 +276,20 @@ const Turns = createSimpleContext({
       agentId: string,
       requestId: string | number,
       decision: "accept" | "decline",
+      options?: { onError?: (error: unknown) => void },
     ): Promise<boolean> {
       const serverId = activeServerId();
-      const approval = pendingApprovals()[agentId];
-      if (!approval || String(approval.requestId) !== String(requestId)) return false;
+      const approval = approvals().find(
+        (item) => item.agentId === agentId && String(item.requestId) === String(requestId),
+      );
+      if (!approval) return false;
       const analytics = desktopAnalytics.scope();
       try {
         await turnsPort().agent.respondToApproval({
           requestId: approval.requestId,
           decision,
         });
-        setPendingApprovals((current) => ({ ...current, [agentId]: undefined }));
+        forgetApproval(agentId, approval.requestId);
         analytics.track("agent_input_action", { kind: "approval", decision, result: "succeeded" });
         return true;
       } catch (error) {
@@ -233,14 +299,15 @@ const Turns = createSimpleContext({
           result: "failed",
           failure_code: "response_failed",
         });
-        appendUiError(agentId, error, currentText().t("app.errorStatus.approval"), serverId);
+        if (options?.onError) options.onError(error);
+        else appendUiError(agentId, error, currentText().t("app.errorStatus.approval"), serverId);
         return false;
       }
     }
 
     async function respondToApproval(decision: "accept" | "decline"): Promise<boolean> {
       const agent = activeAgent();
-      const approval = agent ? pendingApprovals()[agent.id] : undefined;
+      const approval = agent ? approvalOfThread(agent.id, agent.threadId) : undefined;
       if (!agent || !approval) return false;
       return respondToApprovalRequest(agent.id, approval.requestId, decision);
     }
@@ -275,6 +342,15 @@ const Turns = createSimpleContext({
         });
     }
 
+    function cancelWait(waitId: string) {
+      const agent = activeAgent();
+      if (!agent) return;
+      const serverId = activeServerId();
+      void turnsPort()
+        .agent.cancelWait({ agentId: agent.id, waitId })
+        .catch((error) => appendUiError(agent.id, error, currentText().t("app.errorStatus.waitCancel"), serverId));
+    }
+
     function steerQueuedMessage(deliveryId: string) {
       const agent = activeAgent();
       const turnId = agent ? activeTurns()[agent.id] : null;
@@ -286,6 +362,8 @@ const Turns = createSimpleContext({
         .then(() => analytics.track("queue_action", { action: "steer", result: "succeeded" }))
         .catch((error) => {
           analytics.track("queue_action", { action: "steer", result: "failed", failure_code: "steer_failed" });
+          // After the turn ended, the message runs as the next turn. The refusal is old news (#3206).
+          if (activeTurns()[agent.id] !== turnId) return;
           appendUiError(agent.id, error, currentText().t("app.errorStatus.steer"), serverId);
         });
     }
@@ -356,6 +434,10 @@ const Turns = createSimpleContext({
       const agent = activeAgent();
       return agent ? queues()[agent.id] : undefined;
     });
+    const activeWaits = createMemo(() => {
+      const agent = activeAgent();
+      return agent ? (waits()[agent.id]?.waits ?? []) : [];
+    });
     const activeRoutineSnapshot = createMemo(() => {
       const agent = activeAgent();
       return agent ? routinesByConversation()[agentConversationKey(activeServerId(), agent.id)] : undefined;
@@ -378,12 +460,22 @@ const Turns = createSimpleContext({
       setActiveTurns,
       turnProgress,
       setTurnProgress,
+      turnStepLines,
+      setTurnStepLines,
       failedTurns,
       setFailedTurns,
+      contextStates,
+      setContextStates,
       usageLimits,
       setUsageLimits,
+      usageLimitedModels,
+      setUsageLimitedModels,
+      waitedUsageLimits,
+      setWaitedUsageLimits,
       queues,
       setQueues,
+      setWaits,
+      waitSnapshotRequests,
       routinesByConversation,
       pendingPrompts,
       setPendingPrompts,
@@ -391,11 +483,15 @@ const Turns = createSimpleContext({
       setPresentedPromptResolutions,
       submittedPromptRequests,
       setSubmittedPromptRequests,
+      approvals,
+      setApprovals,
       pendingApprovals,
-      setPendingApprovals,
+      approvalOfThread,
+      forgetApproval,
       completedTurnByAgent,
       queueSnapshotRequests,
       activeQueue,
+      activeWaits,
       activeRoutineIds,
       activeRoutines,
       refreshRoutineIds,
@@ -404,6 +500,7 @@ const Turns = createSimpleContext({
       respondToApprovalRequest,
       respondToBrowserTakeover,
       cancelQueuedMessage,
+      cancelWait,
       steerQueuedMessage,
       updateQueuedMessage,
       reorderQueue,

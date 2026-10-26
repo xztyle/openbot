@@ -8,7 +8,7 @@
 // stopped changing.
 
 /** Thirty pictures a second: below what a screen shows, above what an eye follows. */
-export const SCREENCAST_MINIMUM_FRAME_INTERVAL_MS = 33;
+const SCREENCAST_MINIMUM_FRAME_INTERVAL_MS = 33;
 
 export interface FramePacer<T> {
   /** Takes the newest picture. It is sent now, or held until the interval has passed. */

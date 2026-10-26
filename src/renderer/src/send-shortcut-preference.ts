@@ -35,7 +35,7 @@ export function readSendShortcutMode(storage?: PreferenceStorage): SendShortcutM
   }
 }
 
-export function writeSendShortcutMode(mode: SendShortcutMode, storage?: PreferenceStorage): void {
+function writeSendShortcutMode(mode: SendShortcutMode, storage?: PreferenceStorage): void {
   try {
     (storage ?? window.localStorage).setItem(SEND_SHORTCUT_STORAGE_KEY, mode);
     unsavedPreference = undefined;
@@ -46,10 +46,7 @@ export function writeSendShortcutMode(mode: SendShortcutMode, storage?: Preferen
 }
 
 /** The device with the keyboard: Apple devices take ⌘Enter, Windows and Linux take Ctrl+Enter. */
-export function devicePlatform(
-  userAgentDataPlatform?: string,
-  fallbackPlatform?: string,
-): "darwin" | "win32" | "linux" {
+function devicePlatform(userAgentDataPlatform?: string, fallbackPlatform?: string): "darwin" | "win32" | "linux" {
   const platform = (userAgentDataPlatform ?? fallbackPlatform ?? "").toLowerCase();
   // An iPhone reports "iPhone" and an iPad "iPad", or "MacIntel" when it asks for the desktop site.
   if (platform.includes("mac") || platform.includes("iphone") || platform.includes("ipad") || platform.includes("ios"))

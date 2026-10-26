@@ -3,6 +3,7 @@ import {
   type GitHubConnectorDesktopApi,
   type GitHubConnectorStatus,
 } from "@openbot/contracts/ipc";
+import type { GitHubConnectorPort } from "../features/connectors/github-connector-port";
 
 /** How long the mock waits for GitHub's code, and then for the user to type it on github.com. */
 const MOCK_CODE_MS = 800;
@@ -30,7 +31,7 @@ export function createMockGitHubConnector(): GitHubConnectorDesktopApi {
     if (timer) clearTimeout(timer);
     timer = null;
   };
-  return {
+  const api: GitHubConnectorPort = {
     status: async () => ({ ...status }),
     connect: async () => {
       stopTimer();
@@ -68,5 +69,16 @@ export function createMockGitHubConnector(): GitHubConnectorDesktopApi {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+  };
+  // The preview has one connection, so a joined server shows the same one.
+  return {
+    ...api,
+    hostStatus: api.status,
+    hostConnect: api.connect,
+    hostCancel: api.cancel,
+    hostDisconnect: api.disconnect,
+    hostRepositories: api.repositories,
+    hostOpenVerification: api.openVerification,
+    hostOpenInstall: api.openInstall,
   };
 }

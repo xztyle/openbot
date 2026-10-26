@@ -25,6 +25,13 @@ export interface MessageTarget {
   replyThreadId: string | null;
 }
 
+/** A channel, thread or chat that OpenBot can post in, for the agent's `messaging_list_places` tool. */
+export interface MessagingPlace {
+  id: string;
+  name: string;
+  kind: "channel" | "private" | "thread" | "chat";
+}
+
 export interface InboundFile {
   id: string;
   name: string;
@@ -46,8 +53,27 @@ export interface InboundMessage {
   /** True for a reply that does not name OpenBot: it counts only in a conversation that already has an agent. */
   requiresLink: boolean;
   authorId: string;
+  /** Text with each user mention as `@<user id>`; `mentionedUserIds` lists those ids. */
   text: string;
+  /** The users the text mentions, without OpenBot, so the service can name them. */
+  mentionedUserIds: string[];
   files: InboundFile[];
+  /**
+   * The author's role ids, for a platform with role lists (Discord). Null when the platform did not
+   * say: a connection with a role list then ignores the message.
+   */
+  authorRoleIds?: readonly string[] | null;
+  /** The message this one replies to, when a person wrote it and the platform gave its text or files. */
+  replyTo?: InboundQuote | null;
+}
+
+/** A replied-to message, given to the agent as context. Mentions are written as in `text`. */
+interface InboundQuote {
+  authorName: string;
+  text: string;
+  mentionedUserIds: string[];
+  /** ISO time. */
+  sentAt: string;
 }
 
 interface InboundActionBase {
@@ -89,8 +115,11 @@ export interface ConnectionIdentity {
 export interface ContextEntry {
   id: string;
   authorName: string;
+  /** Names the message's files too, when it has any. */
   text: string;
   sentAt: string;
+  /** The message's files, which the agent gets with the message that it answers. */
+  files?: InboundFile[];
 }
 
 /** A failure the connection cannot recover from alone. The user must act. */
@@ -140,10 +169,24 @@ export interface MessagingAdapter {
     afterId: string | null,
     beforeId: string,
   ): Effect.Effect<ContextEntry[], MessagingAdapterError>;
+  /**
+   * The newest messages of a place, oldest first, posts by bots included, for the agent's history
+   * tool. With `threadKey`, only that conversation; with null, the whole channel or chat. At most
+   * `limit` messages; the platform can give fewer.
+   */
+  recent(
+    platformChannelId: string,
+    threadKey: string | null,
+    limit: number,
+  ): Effect.Effect<ContextEntry[], MessagingAdapterError>;
   /** Downloads one file to `destination`. Refuses a file larger than `maxBytes`. */
   download(file: InboundFile, destination: string, maxBytes: number): Effect.Effect<void, MessagingAdapterError>;
   authorName(userId: string): Effect.Effect<string, MessagingAdapterError>;
   placeName(platformChannelId: string): Effect.Effect<string, MessagingAdapterError>;
+  /** The places of this connection that OpenBot can post in now. */
+  places(): Effect.Effect<MessagingPlace[], MessagingAdapterError>;
+  /** The roles a person can have in this workspace, highest first, for a platform with role lists. */
+  roles?(): Effect.Effect<Array<{ id: string; name: string }>, MessagingAdapterError>;
   mention(userId: string): string;
   /** Joins every public place the platform lets OpenBot join without an invitation. */
   joinPublicPlaces?(): Effect.Effect<void, MessagingAdapterError>;
@@ -176,11 +219,16 @@ export interface MessagingTransport {
  * Telegram, one update of a chat, whose secret header Signal has checked. Discord and Telegram get no
  * answer.
  */
-export type IngressDelivery =
+export type IngressDelivery = (
   | { platform: "slack"; kind: "events" | "interactivity"; retryNum: number | null; body: Uint8Array }
   | { platform: "discord"; delivery: DiscordDelivery }
   // `linked` marks the `/start <code>` update that the account service just linked to this host.
-  | { platform: "telegram"; botId: string; body: Uint8Array; linked: boolean };
+  | { platform: "telegram"; botId: string; body: Uint8Array; linked: boolean }
+) & {
+  // Signal kept it while this hosted server started (`queued-delivery`). It can come before its
+  // connection has a transport, and nothing sends it again.
+  queued?: boolean;
+};
 
 /** The HTTP answer the platform gets. A body only for a URL check or a button reply. */
 export interface IngressAnswer {

@@ -1,19 +1,19 @@
 // Where a custom agent's command is on this computer, and whether it can start with its arguments.
 //
 // The command is text the user typed. It never goes into a shell: a bare name is looked up here, in
-// Node, in the `PATH` that a login shell reports through one fixed script. On Windows `where.exe`
+// Node, in the `PATH` that a login shell reports through one fixed script (`loginSearchPath`). On Windows `where.exe`
 // takes the name as one argument. What comes back is the file that `spawn` runs.
 
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, extname, isAbsolute, join } from "node:path";
+import { extname, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 import { CUSTOM_AGENT_LIMITS } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
-import { Deferred, Effect } from "effect";
-import { runInLoginShell } from "./cli";
+import { Effect } from "effect";
+import { loginSearchPath } from "./cli";
 import { pickWindowsExecutable } from "./mcp-provider-shapes";
 import { providerCall, providerFailure } from "./provider-client-effects";
 
@@ -27,9 +27,6 @@ const AGENT_COMMAND_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/;
  * `cliSpawnTarget` gives it one command line, so any other character could start a second command.
  */
 const WINDOWS_SCRIPT_ARG_PATTERN = /^[A-Za-z0-9_.,:=@+/\\-]+$/;
-
-/** How long the login shell's `PATH` is kept. A tool the user installs is found after this. */
-const LOGIN_PATH_TTL_MS = 60_000;
 
 export type AgentCommandForm = "path" | "home" | "name";
 
@@ -94,7 +91,7 @@ export const resolveAgentCommand = Effect.fn("AcpAgentCommand.resolve")(function
     return (yield* isExecutableFile(path, platform)) ? path : null;
   }
   if (platform === "win32" && !options.searchPath) return yield* whereExe(command);
-  const folders = options.searchPath ?? (yield* searchPath());
+  const folders = options.searchPath ?? (yield* loginSearchPath());
   for (const folder of folders) {
     if (!isAbsolute(folder)) continue;
     const candidate = join(folder, command);
@@ -102,30 +99,6 @@ export const resolveAgentCommand = Effect.fn("AcpAgentCommand.resolve")(function
   }
   return null;
 });
-
-let loginPath: { value: Deferred.Deferred<readonly string[]>; readAt: number } | null = null;
-
-/**
- * The login shell's `PATH`, then this process's. The script is fixed: no user text reaches the
- * shell. A packaged app starts with a short `PATH`, and a version manager adds its folders in the
- * profile that only a login shell reads.
- */
-const searchPath = Effect.fn("AcpAgentCommand.searchPath")(function* () {
-  if (loginPath && Date.now() - loginPath.readAt < LOGIN_PATH_TTL_MS) return yield* Deferred.await(loginPath.value);
-  const value = Deferred.makeUnsafe<readonly string[]>();
-  loginPath = { value, readAt: Date.now() };
-  const exit = yield* Effect.exit(
-    runInLoginShell('printf %s "$PATH"').pipe(
-      Effect.catch(() => Effect.succeed("")),
-      Effect.map((stdout) => stdout.split(/\r?\n/u).pop()?.trim() ?? ""),
-      Effect.map((shellPath) => [
-        ...new Set([...shellPath.split(delimiter), ...(process.env.PATH ?? "").split(delimiter)].filter(Boolean)),
-      ]),
-    ),
-  );
-  yield* Deferred.done(value, exit);
-  return yield* exit;
-}, Effect.uninterruptible);
 
 const whereExe = Effect.fn("AcpAgentCommand.whereExe")((command: string) =>
   providerCall(() => execFileAsync("where.exe", [command], { timeout: 5_000, maxBuffer: 64 * 1024 })).pipe(

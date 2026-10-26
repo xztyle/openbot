@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/solid-router";
 import { Effect } from "effect";
+import { installReturnPage } from "../../../server/canonical-redirect";
 import { DiscordAppError } from "../../../server/discord-app";
 import { runApiResponse } from "../../../server/effect-runtime";
 import { requestDiscordApp } from "../../../server/request-auth";
@@ -11,7 +12,7 @@ export const Route = createFileRoute("/v2/discord/callback")({
     handlers: {
       GET: ({ request }) => {
         const url = new URL(request.url);
-        const target = new URL("/discord/connect", url);
+        const target = installReturnPage("/discord/connect", url);
         return runApiResponse(
           Effect.gen(function* () {
             const code = url.searchParams.get("code");

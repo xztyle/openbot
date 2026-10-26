@@ -10,26 +10,25 @@
  * wants, and it is accepted by every other signed-in listing OpenBot ships.
  *
  * So the deep link stays as the fallback for the rare machine where no loopback port can be bound,
- * and this is what a sign-in registers and sends when it is running. The port is whichever one the
- * operating system gives: RFC 8252 says an authorization server must ignore the port of a loopback
- * redirect, and the registration is remade anyway when the stored one names another address.
+ * and this is what a sign-in registers and sends when it is running. The port is
+ * `MCP_OAUTH_REDIRECT_PORT` when it is free, so an administrator can register one exact callback
+ * for a sign-in app: many authorization servers compare the port, although RFC 8252 says they must
+ * not. When another program holds that port, the operating system gives one, and the registration
+ * is remade when the stored one names another address.
  *
  * The grant travels no further than this process. The page the browser is left on says only that
  * the window can be closed - the code is in the request line, and a page that repeated it would
  * put a credential in the browser's history.
  */
 
-import { createServer, type Server } from "node:http";
-import type { Socket } from "node:net";
-import type { AppTextKey } from "@openbot/i18n";
 import type { LanguageService } from "./language-service";
-import { listenLoopback } from "./listen-loopback";
+import { type CallbackAnswer, startLoopbackCallbackServer } from "./loopback-callback-server";
 
 /** The one path this listener answers. Everything else is a 404, including `/`. */
-const REDIRECT_PATH = "/mcp-auth";
+export const MCP_OAUTH_REDIRECT_PATH = "/mcp-auth";
 
-/** The names a request may claim to have reached. Anything else is a page rebinding a name here. */
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
+/** The port tried first. Not assigned by IANA as far as this was checked; any other works the same. */
+export const MCP_OAUTH_REDIRECT_PORT = 28_417;
 
 export interface McpOAuthRedirectServer {
   /** The address to register and to send. Stable for as long as this process runs. */
@@ -41,11 +40,17 @@ export interface McpOAuthRedirectServerOptions {
   /**
    * Hands the grant to the sign-in that is waiting for this `state`, and answers whether one was.
    * A `state` this run did not start is what a forged or replayed request looks like, and it is
-   * refused here exactly as the deep link refuses it.
+   * refused here exactly as the deep link refuses it. `query` is the whole query of the callback,
+   * for a sign-in that this computer relays to a joined server on the same port; such a sign-in
+   * answers `"relayed"`, because it ends on the host and not here.
    */
-  deliver: (state: string, code: string) => boolean;
+  deliver: (state: string, code: string, query: string) => boolean | "relayed";
+  /** Hands a refusal to a sign-in that this computer relays, which ends on the host. */
+  relayRefusal: (state: string, query: string) => void;
   /** Read on each request, so the page uses the language that is set at that time. */
   language: Pick<LanguageService, "locale" | "translate">;
+  /** Tried first; any free port is used when it cannot be bound. */
+  preferredPort?: number;
 }
 
 /**
@@ -57,94 +62,41 @@ export interface McpOAuthRedirectServerOptions {
  */
 export async function startMcpOAuthRedirectServer({
   deliver,
+  relayRefusal,
   language,
+  preferredPort,
 }: McpOAuthRedirectServerOptions): Promise<McpOAuthRedirectServer> {
-  // A browser keeps its connection open after the page is served, and `server.close` waits for
-  // every one of them - so shutdown would sit on a socket nobody is using. They are ended by hand.
-  const sockets = new Set<Socket>();
-  const server: Server = createServer((request, response) => {
-    const answer = respondTo(request.method, request.url, request.headers.host, deliver);
-    response
-      .writeHead(answer.status, {
-        "content-type": "text/html; charset=utf-8",
-        // The grant is in this request's own URL. A page kept on disk keeps the URL that fetched
-        // it, and nothing here is worth a second read anyway.
-        "cache-control": "no-store",
-      })
-      .end(page(language.locale, language.translate(answer.message)));
+  const server = await startLoopbackCallbackServer({
+    path: MCP_OAUTH_REDIRECT_PATH,
+    receive: (url) => receiveGrant(url, deliver, relayRefusal),
+    language,
+    port: { preferred: preferredPort },
+    noPort: () => new Error("The MCP sign-in listener was given no port."),
   });
-  server.on("connection", (socket) => {
-    sockets.add(socket);
-    socket.on("close", () => sockets.delete(socket));
-  });
-
-  const port = await listenLoopback(server, () => new Error("The MCP sign-in listener was given no port."));
   return {
-    redirectUrl: `http://127.0.0.1:${port}${REDIRECT_PATH}`,
-    close: async () => {
-      for (const socket of sockets) socket.destroy();
-      sockets.clear();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    },
+    redirectUrl: `http://127.0.0.1:${server.port}${MCP_OAUTH_REDIRECT_PATH}`,
+    close: server.close,
   };
 }
 
-interface Answer {
-  status: number;
-  /** The catalog key of the page text. */
-  message: Extract<AppTextKey, `error.mcp.redirect${string}`>;
-}
-
-/**
- * What one request gets back. Separated from the listener so a test states a request rather than
- * making one, and so every refusal below is one `return`.
- */
-function respondTo(
-  method: string | undefined,
-  target: string | undefined,
-  host: string | undefined,
-  deliver: (state: string, code: string) => boolean,
-): Answer {
-  // A page on the web can point a name it controls at 127.0.0.1 and have the browser send a
-  // request here believing it is talking to that site. It cannot read the answer, but it can
-  // deliver a grant of its own choosing. The `Host` header is what the browser thinks it reached,
-  // so a request naming anything but the loopback address is not from a redirect this sent.
-  if (!isLoopbackHost(host)) return { status: 403, message: "error.mcp.redirectByName" };
-  if (method !== "GET" && method !== "HEAD") return { status: 405, message: "error.mcp.redirectGetOnly" };
-  let url: URL;
-  try {
-    url = new URL(target ?? "/", "http://127.0.0.1");
-  } catch {
-    return { status: 404, message: "error.mcp.redirectNotSignIn" };
-  }
-  if (url.pathname !== REDIRECT_PATH) return { status: 404, message: "error.mcp.redirectNotSignIn" };
-
-  // An authorization server states a refusal here instead of sending a code. The sign-in itself
-  // ends on its own deadline, with the words the dialog already has; this page exists so the
-  // person reading the browser is not left on a blank one.
-  const failure = url.searchParams.get("error");
-  if (failure) return { status: 400, message: "error.mcp.redirectRefused" };
-
+/** What a callback that passed the shared checks gets back. Every refusal below is one `return`. */
+function receiveGrant(
+  url: URL,
+  deliver: McpOAuthRedirectServerOptions["deliver"],
+  relayRefusal: McpOAuthRedirectServerOptions["relayRefusal"],
+): CallbackAnswer {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  if (!code || !state) return { status: 400, message: "error.mcp.redirectNotSignIn" };
-  if (!deliver(state, code)) return { status: 400, message: "error.mcp.redirectNoSignIn" };
-  return { status: 200, message: "error.mcp.redirectSignedIn" };
-}
-
-function isLoopbackHost(host: string | undefined): boolean {
-  if (!host) return false;
-  try {
-    return LOOPBACK_HOSTS.has(new URL(`http://${host}`).hostname);
-  } catch {
-    return false;
+  // An authorization server states a refusal here instead of sending a code. A local sign-in ends on
+  // its own deadline, with the words the dialog already has; a relayed one ends on the host at once.
+  // This page exists so the person reading the browser is not left on a blank one.
+  if (url.searchParams.get("error")) {
+    if (state) relayRefusal(state, url.search.slice(1));
+    return { status: 400, message: "error.mcp.redirectRefused" };
   }
-}
 
-/**
- * The whole page. The text is a fixed catalog message for a key above, so nothing user-supplied and
- * nothing from the authorization server reaches the markup.
- */
-function page(locale: string, message: string): string {
-  return `<!doctype html><html lang="${locale}"><head><meta charset="utf-8"><title>OpenBot</title></head><body style="font-family:system-ui;padding:2rem"><p>${message}</p></body></html>`;
+  if (!code || !state) return { status: 400, message: "error.mcp.redirectNotSignIn" };
+  const delivered = deliver(state, code, url.search.slice(1));
+  if (!delivered) return { status: 400, message: "error.mcp.redirectNoSignIn" };
+  return { status: 200, message: delivered === "relayed" ? "error.mcp.redirectRelayed" : "error.mcp.redirectSignedIn" };
 }

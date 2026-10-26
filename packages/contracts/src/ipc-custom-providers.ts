@@ -177,6 +177,17 @@ export function isCustomProviderModelId(modelId: string, providerIds: ReadonlySe
   return separator > 0 && providerIds.has(modelId.slice(0, separator));
 }
 
+/** The custom provider that a model id names before its first `/`, as `composedCustomModelId` makes it. */
+export function customProviderOfModel<T extends { readonly id: string }>(
+  modelId: string | null | undefined,
+  providers: readonly T[],
+): T | undefined {
+  const separator = modelId?.indexOf("/") ?? -1;
+  if (!modelId || separator <= 0) return undefined;
+  const providerId = modelId.slice(0, separator);
+  return providers.find((provider) => provider.id === providerId);
+}
+
 /** A header name is compared case-insensitively, the way HTTP does. */
 export function isCustomProviderHeaderName(value: unknown): value is string {
   return isString(value) && value.length > 0 && CUSTOM_PROVIDER_HEADER_NAME_PATTERN.test(value);

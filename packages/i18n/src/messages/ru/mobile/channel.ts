@@ -9,7 +9,7 @@ export const messages = {
   "mobile.channel.route.routine": "Регулярная задача",
   "mobile.channel.list.deleteTitle": "Удалить «{name}»?",
   "mobile.channel.list.deleteBody":
-    "Канал будет остановлен. Его история останется в разделе «Удалённые каналы» только для просмотра. Восстановить канал нельзя. Агенты сохранятся.",
+    "Канал будет остановлен. Его история останется в разделе «Удалённые каналы» только для просмотра. Оттуда канал можно восстановить. Агенты-участники сохранятся.",
   "mobile.channel.list.deleteFailed": "Не удалось удалить канал",
   "mobile.channel.list.deleteFailedBody": "Не удалось удалить этот канал. Повторите попытку.",
   "mobile.channel.list.open": "Открыть канал {name}",
@@ -33,10 +33,15 @@ export const messages = {
   "mobile.channel.actions.refreshHistory": "Обновить историю",
   "mobile.channel.actions.none": "Действий не требуется.",
   "mobile.channel.actions.loading": "Загрузка действий…",
-  "mobile.channel.deleted.note": "Удалённые каналы доступны только для просмотра. Восстановить их нельзя.",
+  "mobile.channel.deleted.note":
+    "Удалённые каналы доступны только для просмотра. Восстановите канал, чтобы снова им пользоваться.",
   "mobile.channel.deleted.loading": "Загрузка удалённых каналов…",
   "mobile.channel.deleted.empty": "Удалённых каналов нет.",
   "mobile.channel.deleted.preview": "Просмотр: {name}",
+  "mobile.channel.deleted.restore": "Восстановить",
+  "mobile.channel.deleted.restoreNamed": "Восстановить {name}",
+  "mobile.channel.deleted.restoreFailed": "Не удалось восстановить канал",
+  "mobile.channel.deleted.restoreFailedBody": "Не удалось восстановить этот канал. Попробуйте ещё раз.",
   "mobile.channel.chat.fallbackName": "Канал",
   "mobile.channel.chat.deletedNotice": "Канал удалён. Только просмотр.",
   "mobile.channel.records.connect": "Подключитесь к серверу, чтобы изменять этот канал.",
@@ -71,7 +76,7 @@ export const messages = {
   "mobile.channel.form.routines": "Регулярные задачи",
   "mobile.channel.form.deleteTitle": "Удалить канал?",
   "mobile.channel.form.deleteBody":
-    "Канал будет остановлен. Его история останется в разделе «Удалённые каналы» только для просмотра. Восстановить канал нельзя. Агенты сохранятся.",
+    "Канал будет остановлен. Его история останется в разделе «Удалённые каналы» только для просмотра. Оттуда канал можно восстановить. Агенты-участники сохранятся.",
   "mobile.channel.form.delete": "Удалить канал",
   "mobile.channel.form.unavailable":
     "Чтобы вносить изменения, подключитесь к настольному серверу с поддержкой каналов.",

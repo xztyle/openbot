@@ -9,7 +9,7 @@ import {
 } from "@openbot/contracts/ipc";
 import type { ProviderPickerOption } from "@openbot/ui/components/ProviderPicker";
 import { providerDiagnosticsText } from "@openbot/ui/features/provider-diagnostics/provider-diagnostics";
-import { createMemo, createSignal } from "solid-js";
+import { createMemo } from "solid-js";
 import { useI18n } from "../../../i18n-context";
 
 interface GeneralStoreProps {
@@ -24,21 +24,24 @@ interface GeneralStoreProps {
    * read, so the row shows no key badge rather than a wrong one.
    */
   openCodeKeyStatus?: () => ProviderApiKeyStatus | undefined;
+  /** Whether a Claude key is saved, read the same way. Absent where the host does not read the key. */
+  claudeKeyStatus?: () => ProviderApiKeyStatus | undefined;
   /** The joined server whose host runs these providers. Absent when this computer runs them. */
   providerHostName?: string | undefined;
   /** The providers that the user turned off in OpenBot. */
   offProviders?: readonly AgentProviderId[] | undefined;
   /** The names of the agents that use each provider. */
   providerUsers?: Partial<Record<AgentProviderId, readonly string[]>> | undefined;
+  /** The names of the agents that use each account, by provider and account. */
+  providerAccountUsers?: Partial<Record<AgentProviderId, Readonly<Record<string, readonly string[]>>>> | undefined;
 }
 
 /**
- * The General tab's provider list: which row is selected, and the three options merged from the
- * agent status and the runtime download status.
+ * The provider options of the Providers tab, merged from the agent status and the runtime download
+ * status.
  */
 export function createSettingsGeneralStore(props: GeneralStoreProps) {
   const i18n = useI18n();
-  const [selectedProvider, setSelectedProvider] = createSignal<AgentProviderId | null>(null);
 
   const providerOptions = createMemo<ProviderPickerOption[]>(() =>
     // A joined server's host serves only the providers that the Team API carries: a host before
@@ -53,6 +56,15 @@ export function createSettingsGeneralStore(props: GeneralStoreProps) {
     ).map((provider) => {
       const agent = props.agentStatus?.providers?.find((candidate) => candidate.id === provider);
       const runtime = props.providerRuntimeStatuses?.[provider];
+      // The Gemini status says only whether a saved key serves the turns.
+      const keyStatus =
+        provider === "opencode"
+          ? props.openCodeKeyStatus?.()
+          : provider === "claude"
+            ? props.claudeKeyStatus?.()
+            : provider === "antigravity" && agent?.apiKeyInUse
+              ? ("saved" as const)
+              : undefined;
       return {
         id: provider,
         name: agentProviderName(provider),
@@ -68,9 +80,13 @@ export function createSettingsGeneralStore(props: GeneralStoreProps) {
         lastError: agent?.lastError,
         diagnostics: agent ? providerDiagnosticsText(agent) : undefined,
         availableVersion: props.providerAvailableVersions?.[provider] ?? null,
-        keyStatus: provider === "opencode" ? props.openCodeKeyStatus?.() : undefined,
+        ...(keyStatus === undefined ? {} : { keyStatus }),
         off: agent?.off ?? props.offProviders?.includes(provider),
         usedBy: props.providerUsers?.[provider],
+        accounts: agent?.accounts?.map((account) => ({
+          ...account,
+          usedBy: props.providerAccountUsers?.[provider]?.[account.id],
+        })),
         /*
          * A CLI the user installed themselves is the one the provider runs, whatever the managed
          * runtime holds, so the row reads it as ready on the version the provider reports. An
@@ -92,7 +108,7 @@ export function createSettingsGeneralStore(props: GeneralStoreProps) {
     }),
   );
 
-  return { providerOptions, selectedProvider, setSelectedProvider };
+  return { providerOptions };
 }
 
 export type SettingsGeneralStore = ReturnType<typeof createSettingsGeneralStore>;

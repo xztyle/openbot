@@ -2,13 +2,42 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/agentSettings";
 
 export const messages = {
+  "agentSettings.session.title": "Ajustes del proveedor",
+  "agentSettings.session.readFailed": "No se pudieron leer los ajustes del proveedor.",
+  "agentSettings.session.pending": "Los cambios guardados se aplican antes del siguiente turno.",
+  "agentSettings.session.unavailable":
+    "El valor guardado {value} no está disponible. Selecciona otro valor o restablécelo.",
+  "agentSettings.session.effective": "Valor actual del proveedor: {value}",
+  "agentSettings.session.reset": "Restablecer ajuste",
+  "agentSettings.session.resetNamed": "Restablecer {name}",
   "agentSettings.label": "Ajustes del agente",
   "agentSettings.title": "Ajustes",
   "agentSettings.backToDetails": "Volver a detalles",
   "agentSettings.closeDetails": "Cerrar detalles",
-  "agentSettings.backToSettings": "Volver a la configuración",
-  "agentSettings.permissions.title": "Permisos",
+  "agentSettings.backToSettings": "Volver a los ajustes",
+  "agentSettings.permissions.title": "Acceso",
   "agentSettings.advanced.title": "Avanzado",
+  "agentSettings.backupModels.title": "Modelos de respaldo",
+  "agentSettings.backupModels.valueAsk": "Preguntar primero",
+  "agentSettings.backupModels.valueAutomatic": "Automático",
+  "agentSettings.backupModels.valueCount": { one: "{mode} · {count}", other: "{mode} · {count}" },
+  "agentSettings.backupModels.intro":
+    "Cuando {model} alcanza su límite de uso antes de que {name} empiece a escribir, {name} te pregunta qué modelo usar.",
+  "agentSettings.backupModels.introAutomatic":
+    "Cuando {model} alcanza su límite de uso o falla con un error del proveedor antes de que {name} empiece a escribir, {name} cambia al primer modelo disponible del orden.",
+  "agentSettings.backupModels.ask": "Preguntar antes de cambiar",
+  "agentSettings.backupModels.order": "Orden",
+  "agentSettings.backupModels.listLabel": "Modelos de respaldo, en orden",
+  "agentSettings.backupModels.empty": "Sin orden definido. {name} ofrece cada modelo disponible.",
+  "agentSettings.backupModels.add": "Añadir modelo de respaldo",
+  "agentSettings.backupModels.moveUp": "Subir {model}",
+  "agentSettings.backupModels.moveDown": "Bajar {model}",
+  "agentSettings.backupModels.remove": "Quitar {model}",
+  "agentSettings.backupModels.limited": "Límite de uso alcanzado · omitido",
+  "agentSettings.backupModels.unavailable": "No disponible ahora · omitido",
+  "agentSettings.backupModels.withAccount": "{model} · {account}",
+  "agentSettings.backupModels.note":
+    "{name} nunca cambia después de empezar a escribir. Vuelve a {model} cuando termina el límite, o 10 minutos después de un error del proveedor.",
   "agentSettings.groups.brain": "Cerebro",
   "agentSettings.groups.knows": "Sabe",
   "agentSettings.groups.does": "Hace",
@@ -29,7 +58,7 @@ export const messages = {
   "agentSettings.avatar.image": "Imagen",
   "agentSettings.avatar.replaceImage": "Reemplazar imagen",
   "agentSettings.avatar.uploadImage": "Subir imagen",
-  "agentSettings.avatar.imageHint": "PNG, JPEG o WebP · recorte cuadrado",
+  "agentSettings.avatar.imageHint": "PNG, JPEG, GIF o WebP · recorte cuadrado",
   "agentSettings.avatar.generatedFace": "Rostro generado",
   "agentSettings.avatar.resetToId": "Restablecer según ID",
   "agentSettings.avatar.newSet": "Nuevo conjunto",
@@ -44,24 +73,26 @@ export const messages = {
   "agentSettings.avatar.saveFailed": "No se pudo guardar el avatar del agente.",
   "agentSettings.avatar.processFailed": "No se pudo procesar el avatar del agente.",
   "agentSettings.runtime.model": "Modelo del agente",
-  "agentSettings.runtime.modelBusy": "Espera a que termine el trabajo actual antes de cambiar de modelo.",
   "agentSettings.runtime.modelUnavailable": "Los modelos estarán disponibles cuando se conecte una CLI de agente.",
   "agentSettings.runtime.reasoning": "Razonamiento",
   "agentSettings.runtime.reasoningLabel": "Nivel de razonamiento del agente",
   "agentSettings.runtime.selectReasoning": "Seleccionar razonamiento",
-  "agentSettings.runtime.reasoningSetByProvider": "Establecido por {provider}",
+  "agentSettings.runtime.reasoningSetByProvider": "Según {provider}",
   "agentSettings.runtime.access": "Acceso",
   "agentSettings.runtime.accessLabel": "Acceso del agente",
   "agentSettings.runtime.busyMessage": "Durante el trabajo",
   "agentSettings.runtime.busyMessageLabel": "Mensajes mientras el agente trabaja",
+  "agentSettings.runtime.taskLimit": "Tareas a la vez",
+  "agentSettings.runtime.taskLimitLabel": "Tareas que se ejecutan a la vez",
   "agentSettings.runtime.workingDirectory": "Directorio de trabajo",
   "agentSettings.runtime.notAvailable": "Todavía no disponible",
   "agentSettings.runtime.fullAccessNote":
     "El agente se ejecuta con acceso completo al equipo desde su espacio de trabajo y la carpeta compartida.",
-  "agentSettings.runtime.claudeApprovalNote": "Claude actúa sin pedir aprobación, salvo las preguntas que te haga.",
-  "agentSettings.runtime.providerApprovalNote":
-    "Según el proveedor, los comandos sensibles pueden pedir aprobación antes de ejecutarse.",
+  "agentSettings.runtime.askNote":
+    "Te pregunta antes de usar una herramienta de OpenBot o publicar un sitio, y cuando su proveedor pide aprobación.",
+  "agentSettings.runtime.fullNote": "Actúa sin preguntar, salvo las preguntas que te haga.",
   "agentSettings.access.workspace": "Solo espacio de trabajo",
+  "agentSettings.access.ask": "Preguntar antes",
   "agentSettings.access.full": "Acceso completo",
   "agentSettings.busyMessage.appDefaultQueue": "Predeterminado de la app (En cola)",
   "agentSettings.busyMessage.appDefaultSteer": "Predeterminado de la app (Orientar)",
@@ -69,6 +100,9 @@ export const messages = {
   "agentSettings.busyMessage.steer": "Orientar",
   "agentSettings.busyMessage.steerUnsupported":
     "{provider} no puede orientar un turno en curso. Los mensajes enviados mientras trabaja esperan en la cola.",
+  "agentSettings.taskLimit.default": "Predeterminado ({count})",
+  "agentSettings.taskLimit.oneTurn":
+    "{provider} ejecuta un turno a la vez. Las tareas y el chat de este agente se esperan entre sí.",
   "agentSettings.notifications.title": "Notificaciones",
   "agentSettings.newChat.title": "Nuevo chat",
   "agentSettings.newChat.description": "El agente olvida este chat. Se conserva su configuración.",
@@ -79,10 +113,13 @@ export const messages = {
   "agentSettings.newChat.confirm": "Iniciar nuevo chat",
   "agentSettings.newChat.failed": "No se pudo iniciar un nuevo chat.",
   "agentSettings.fullAccess.title": "¿Dar acceso completo a este agente?",
+  "agentSettings.fullAccess.askTitle": "¿Dejar que este agente trabaje fuera de su espacio de trabajo?",
   "agentSettings.fullAccess.description":
     "El agente podrá leer, modificar y eliminar cualquier archivo al que tu cuenta de usuario tenga acceso, ejecutar cualquier comando y usar la red. Una instrucción malinterpretada o una página web maliciosa puede acceder a tus archivos personales.",
-  "agentSettings.fullAccess.cancel": "Mantener solo el espacio de trabajo",
+  "agentSettings.fullAccess.noApproval":
+    "El agente ejecutará comandos, cambiará archivos, usará herramientas y publicará sitios sin preguntarte antes.",
   "agentSettings.fullAccess.confirm": "Permitir acceso completo",
+  "agentSettings.fullAccess.askConfirm": "Usar Preguntar antes",
   "agentSettings.links.usage": "Uso",
   "agentSettings.links.memories": "Recuerdos",
   "agentSettings.links.memoriesCount": {
@@ -107,19 +144,34 @@ export const messages = {
   },
   "agentSettings.runtime.workspaceNote":
     "Solo espacio de trabajo limita la escritura al espacio de trabajo de este agente, la carpeta compartida y las carpetas temporales. La lectura y la red siguen disponibles.",
-  "agentSettings.runtime.workspaceEnforcedCommand":
-    "Un comando que necesite escribir fuera te pedirá permiso primero, incluso si Aprobar automáticamente está activado.",
+  "agentSettings.runtime.workspaceEnforcedCommand": "Un comando que necesite escribir fuera te pedirá permiso primero.",
   "agentSettings.runtime.workspaceEnforcedClaude":
-    "Una edición de archivo fuera te pedirá permiso primero, incluso si Aprobar automáticamente está activado. Un comando no puede escribir fuera.",
+    "Una edición de archivo fuera te pedirá permiso primero. Un comando no puede escribir fuera.",
   "agentSettings.runtime.workspaceUnlimited":
-    "El uso del equipo y el navegador de OpenBot no están limitados; puedes desactivar uso del equipo a continuación.",
+    "El uso del equipo y el navegador de OpenBot no están limitados; puedes desactivar el uso del equipo a continuación.",
   "agentSettings.computerUse.title": "Uso del equipo",
   "agentSettings.computerUse.description": "Permitir que este agente controle apps en este equipo",
   "agentSettings.automation.title": "Scripts locales",
-  "agentSettings.automation.description": "Permitir que los scripts de este equipo ejecuten las rutinas de este agente",
+  "agentSettings.automation.description":
+    "Permitir que los scripts del equipo host envíen mensajes, ejecuten rutinas, respondan preguntas y acepten o rechacen solicitudes de aprobación",
   "agentSettings.background.title": "Compañero en segundo plano",
   "agentSettings.background.description":
     "Oculta este agente de tus listas de agentes. Sigue trabajando con tus otros agentes. Ábrelo desde Compañeros en segundo plano, al final de la barra lateral.",
+  "agentSettings.agentNewChat.title": "El agente inicia chats nuevos",
+  "agentSettings.agentNewChat.description":
+    "Permite que el agente inicie un chat nuevo cuando su chat sea largo. Antes guarda notas.",
+  "agentSettings.quickAcknowledgement.title": "Mostrar el plan antes de tareas largas",
+  "agentSettings.quickAcknowledgement.description":
+    "Antes de una tarea larga, el agente muestra su plan. Empieza tras 10 s o cuando pulsas Iniciar.",
+  "agentSettings.browserProfile.label": "Perfil del navegador",
+  "agentSettings.browserProfile.shared": "Compartido",
+  "agentSettings.browserProfile.agent": "Solo este agente",
+  "agentSettings.browserProfile.missing": "Perfil eliminado",
+  "agentSettings.browserProfile.new": "Nuevo perfil",
+  "agentSettings.browserProfile.manageTitle": "Perfiles del navegador",
+  "agentSettings.browserProfile.manageDescription":
+    "Cada perfil guarda sus propios inicios de sesión y cookies. Un cambio cierra las pestañas abiertas del agente.",
+  "agentSettings.browserProfile.manage": "Gestionar",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Todo el proceso de {provider} se ejecuta en un entorno aislado, por lo que la escritura fuera falla. Solo disponible en macOS.",
 } as const satisfies PartialTranslation<typeof source>;

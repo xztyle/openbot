@@ -1,0 +1,9 @@
+{
+  "version": "0.51.1",
+  "highlights": [
+    "DeepSeek, Inception and OpenRouter now download the Pi CLI when you save their API key.",
+    "Closing the Linux AppImage no longer shows a crash report.",
+    "Gemini works again on Docker servers with LXCFS, and Claude agents on a server now respect its CPU limit.",
+    "Agents on a shared server no longer tell you to open the chat on another device."
+  ]
+}

@@ -69,6 +69,11 @@ export function mcpFailureKind(sourceText: string): McpFailureKind {
   return (key && FAILURE_KINDS[key]) || "other";
 }
 
+/** Whether a host answered that its own browser must sign in, which a host with `mcp-sign-in-v1` no longer needs. */
+export function isMcpSignInOnHost(sourceText: string): boolean {
+  return matchingSourceKeys(sourceText)[0] === "error.backend.mcpSignInOnHost";
+}
+
 /** Whether a test answered that the user cancelled a sign-in, which is not a failure to show. */
 export function isMcpSignInCancelled(sourceText: string): boolean {
   return matchingSourceKeys(sourceText)[0] === "error.backend.mcpSignInCancelled";
@@ -88,14 +93,20 @@ export type McpTestState =
   | { status: "failed"; error: string; kind: McpFailureKind };
 
 /** The sign-in states main answers with, as the lookup by row id the panel reads. */
-export function mcpSignInRecord(states: readonly McpSignInState[]): Record<string, boolean> {
-  return Object.fromEntries(states.map((state) => [state.mcpServerId, state.signedIn]));
+export function mcpSignInRecord(states: readonly McpSignInState[]): Record<string, McpSignInState> {
+  return Object.fromEntries(states.map((state) => [state.mcpServerId, state]));
 }
 
 /** The whole sentence a test produced, for the form. The row shows the short badge instead. */
-export function mcpTestMessage(test: McpTestState, t: AppTranslate): string {
+export function mcpTestMessage(test: McpTestState, t: AppTranslate, hostName?: string | undefined): string {
   if (test.status === "testing") return t("common.connecting");
-  if (test.status === "signing-in") return t("mcp.panel.signInWaiting", { count: MCP_SIGN_IN_TIMEOUT_MS / 60_000 });
+  if (test.status === "signing-in") {
+    const count = MCP_SIGN_IN_TIMEOUT_MS / 60_000;
+    // A joined server's sign-in page opens on that host's browser, which keeps what it gets.
+    return hostName
+      ? t("mcp.panel.signInWaitingOn", { count, host: hostName })
+      : t("mcp.panel.signInWaiting", { count });
+  }
   if (test.status === "failed") return test.error;
   return t("mcp.test.connected", { count: test.toolCount });
 }
@@ -140,6 +151,23 @@ export function mcpConfigDraft(config: McpServerConfig): McpServerConfig {
  */
 export function mcpConfigChanged(draft: McpServerConfig, baseline: McpServerConfig): boolean {
   return JSON.stringify(normalizeMcpConfig(draft)) !== JSON.stringify(normalizeMcpConfig(baseline));
+}
+
+/**
+ * Whether Save connects before it stores: a new http server, or an edit that changes where or how
+ * it connects. A rename or a stdio server saves at once, as before.
+ */
+export function mcpSaveConnects(draft: McpServerConfig, baseline: McpServerConfig, isNew: boolean): boolean {
+  if (draft.transport !== "http") return false;
+  if (isNew || baseline.transport !== "http") return true;
+  const next = normalizeMcpConfig(draft);
+  const stored = normalizeMcpConfig(baseline);
+  return next.url !== stored.url || JSON.stringify(next.headers) !== JSON.stringify(stored.headers);
+}
+
+/** A value in the stdio command that is a web address: it names an http server, not a program. */
+export function isMcpHttpAddress(value: string): boolean {
+  return /^https?:\/\/\S/i.test(value.trim());
 }
 
 /**

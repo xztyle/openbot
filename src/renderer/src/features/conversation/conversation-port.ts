@@ -7,6 +7,11 @@ import type { DeleteSharedTableInput, OpenBotDesktopApi, SharedTable } from "@op
 export interface ConversationPort {
   agent: Pick<
     OpenBotDesktopApi["agent"],
+    | "readAgentSessionSettings"
+    | "askSideQuestion"
+    | "setAgentSessionSetting"
+    | "resetAgentSessionSetting"
+    | "onScopedEvent"
     | "deleteTable"
     | "listMemories"
     | "listRoutines"
@@ -14,12 +19,19 @@ export interface ConversationPort {
     | "markConversationRead"
     | "markConversationUnread"
     | "readConversationPage"
+    | "releaseFilePreview"
     | "searchConversationMessages"
     | "sendMessage"
   >;
   browser: Pick<
     OpenBotDesktopApi["browser"],
-    "capturePreview" | "onLiveViewEvent" | "sendLiveViewInput" | "startLiveView" | "stopLiveView"
+    | "capturePreview"
+    | "finishLocalSignIn"
+    | "onLiveViewEvent"
+    | "openLocalSignIn"
+    | "sendLiveViewInput"
+    | "startLiveView"
+    | "stopLiveView"
   >;
   servers: Pick<
     OpenBotDesktopApi["servers"],
@@ -32,11 +44,20 @@ export interface ConversationPort {
     | "setDirectTyping"
   >;
   storage: Pick<OpenBotDesktopApi["storage"], "openLocation">;
+  browserDock: Pick<OpenBotDesktopApi["browserDock"], "publishPresentation" | "onAction" | "onShown">;
 }
 
 /** Read on each call: tests and stories replace `window.openbot` per case. */
 export function conversationPort(): ConversationPort {
   return window.openbot;
+}
+
+/** Cleanup can run after IPC shuts down; process shutdown also frees these in-memory pages. */
+export function releaseFilePreviewPage(pageUrl: string | undefined): void {
+  if (!pageUrl) return;
+  void conversationPort()
+    .agent.releaseFilePreview(pageUrl)
+    .catch(() => undefined);
 }
 
 /** The tables every agent shares. The web client reaches them on the host through the Team API. */

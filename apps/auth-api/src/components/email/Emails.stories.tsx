@@ -1,5 +1,10 @@
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
-import { type RenderedEmail, renderSignInCodeEmail, renderTeamInviteEmail } from "../../server/email-templates";
+import {
+  type RenderedEmail,
+  renderSignInCodeEmail,
+  renderTeamInviteEmail,
+  renderWelcomeEmail,
+} from "../../server/email-templates";
 
 // Each email renders inside an iframe, as a mail client shows it: the template's own markup and
 // `<style>` block apply, and Storybook's stylesheet does not leak in.
@@ -11,6 +16,12 @@ interface EmailPreviewProps {
   email: RenderedEmail;
   width: number;
   scheme: "light" | "dark";
+}
+
+/** Makes the frame as tall as the email, so that a long email is not cut off. */
+function fitToContent(frame: HTMLIFrameElement) {
+  const height = frame.contentDocument?.body.scrollHeight;
+  if (height) frame.style.height = `${height}px`;
 }
 
 function EmailPreview(props: EmailPreviewProps) {
@@ -27,6 +38,7 @@ function EmailPreview(props: EmailPreviewProps) {
       <iframe
         title={props.email.subject}
         srcdoc={props.email.html}
+        onLoad={(event) => fitToContent(event.currentTarget)}
         style={{
           width: `${props.width}px`,
           height: "720px",
@@ -109,6 +121,18 @@ export const TeamInviteMobile: Story = {
   },
 };
 
+export const Welcome: Story = {
+  args: { email: renderWelcomeEmail({ plan: "standard", serverName: "Studio Mac" }) },
+};
+
+export const WelcomeDark: Story = {
+  args: { scheme: "dark", email: renderWelcomeEmail({ plan: "pro", serverName: "Nightly Labs Build Server" }) },
+};
+
+export const WelcomeMobile: Story = {
+  args: { width: 375, email: renderWelcomeEmail({ plan: "starter", serverName: "Design & <Research> Mac mini" }) },
+};
+
 export const PlainTextBodies: Story = {
   render: () => (
     <div>
@@ -121,6 +145,7 @@ export const PlainTextBodies: Story = {
           role: "member",
         })}
       />
+      <PlainTextPreview email={renderWelcomeEmail({ plan: "standard", serverName: "Studio Mac" })} />
     </div>
   ),
 };

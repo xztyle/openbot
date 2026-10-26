@@ -49,7 +49,7 @@ import {
 // The resume token is this service's own, minted and verified here and never seen by the account
 // API, so its audience stays local while the ticket's comes from the shared contract.
 const RESUME_AUDIENCE = "openbot-remote-resume";
-export const RESUME_TTL_SECONDS = 10 * 60;
+const RESUME_TTL_SECONDS = 10 * 60;
 const MAXIMUM_STALE_RESUME_SECONDS = 24 * 60 * 60;
 const MAXIMUM_TRUSTED_RESUME_TOKENS = 100_000;
 const jwksSchema = z.object({ keys: z.array(z.object({ kty: z.string() }).loose()).min(1) });
@@ -110,6 +110,19 @@ export class RemoteTokenError extends Schema.TaggedError<RemoteTokenError>()("Re
   message: Schema.String,
 }) {}
 
+/** The account service did not answer, so it did not say whether the session is active. */
+export class RemoteTokenUnavailableError extends Schema.TaggedError<RemoteTokenUnavailableError>()(
+  "RemoteTokenUnavailableError",
+  {
+    message: Schema.String,
+    // The unchecked claims. Signal still refuses a session that it knows is revoked or ended.
+    hostId: Schema.String,
+    sessionId: Schema.String,
+    role: Schema.String,
+    authEpoch: Schema.Number,
+  },
+) {}
+
 const tokenError = (error: unknown) =>
   new RemoteTokenError({
     message: error instanceof Error ? error.message : "Remote token operation failed.",
@@ -125,7 +138,7 @@ export class RemoteTokenService {
   readonly #turnHost: string;
   readonly #turnPort: number;
   readonly #turnTlsPort: number;
-  readonly #validateResumeClaims: (claims: RemoteTicketClaims) => Effect.Effect<boolean, RemoteTokenError>;
+  readonly #validateResumeClaims: (claims: RemoteTicketClaims) => Effect.Effect<boolean, RemoteTokenUnavailableError>;
   readonly #validateSlackRoute: (hostId: string, teams: SlackRouteTeam[]) => Effect.Effect<string[], RemoteTokenError>;
   readonly #validateTelegramRoute: (
     hostId: string,
@@ -151,7 +164,7 @@ export class RemoteTokenService {
       RemoteApiConfig,
       "ticketJwks" | "ticketJwksUrl" | "sessionSecret" | "turnSecret" | "turnHost" | "turnPort" | "turnTlsPort"
     >,
-    validateResumeClaims: (claims: RemoteTicketClaims) => Effect.Effect<boolean, RemoteTokenError> = () =>
+    validateResumeClaims: (claims: RemoteTicketClaims) => Effect.Effect<boolean, RemoteTokenUnavailableError> = () =>
       Effect.succeed(false),
     options: {
       fetch?: FetchImplementation;

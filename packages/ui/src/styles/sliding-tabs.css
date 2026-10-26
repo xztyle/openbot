@@ -30,6 +30,7 @@
   font-size: var(--openbot-text-md);
   line-height: var(--openbot-leading-sm);
   font-weight: var(--openbot-weight-medium);
+  white-space: nowrap;
   cursor: pointer;
   transition: color var(--sliding-tabs-duration) var(--sliding-tabs-ease);
 }

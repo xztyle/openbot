@@ -7,9 +7,11 @@
  * this process over a Unix socket in the runtime directory that systemd makes for the service user
  * (mode 0700). Only that user and root can connect. Agents run as the same user and already have
  * full access to its files, so the socket gives them nothing new. The socket answers a closed list
- * of requests: status, health, the email-code sign-in, the server name, sign-out, an operator-started
- * database snapshot, the sanitized diagnostics report, the analytics switch and the security audit
- * rows. It never sends the session token or the sign-in code back.
+ * of requests: status, health, the email-code sign-in, the sign-in with an operator's one-time claim,
+ * the server name, sign-out, a Mobile Connect code, an operator-started database snapshot, the
+ * sanitized diagnostics report, the analytics switch and the security audit rows. It never sends the
+ * session token, the sign-in code or the claim back. The Mobile Connect code signs one phone in to
+ * the account of the server; the account service lets it work for one sign-in, for two minutes.
  *
  * The protocol is HTTP with form bodies and `key=value` text lines, so the command needs only
  * `curl --unix-socket`.
@@ -24,14 +26,17 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { CentralAuthState } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect } from "effect";
+import QRCode from "qrcode";
 import type { DatabaseSnapshot, DatabaseSnapshotError } from "../backend/database-snapshot";
 import { runCauseEffect } from "../backend/effect-boundary";
 import type { SecurityAuditLog } from "../backend/security-audit-log";
 import type { CentralAuthManager } from "./central-auth-manager";
 import type { HostService } from "./host-service";
 import { readBodyWithin } from "./http-body";
-import { RemoteWorkflowError, remoteCall } from "./remote-service-effects";
+import { createHostedMobileConnect } from "./mobile-connect-host";
+import { RemoteWorkflowError, remoteCall, toRemoteWorkflowError } from "./remote-service-effects";
 import type { ServerHealth } from "./server-health";
+import type { ServerMemory } from "./server-memory";
 
 const CONTROL_SOCKET_FILE = "control.sock";
 const MAX_BODY_BYTES = 4096;
@@ -69,8 +74,19 @@ export interface ServerModeAnalytics {
 export interface ServerModeOptions {
   environment: ServerModeEnvironment;
   version: string;
-  centralAuth: Pick<CentralAuthManager, "getState" | "requestEmailCode" | "verifyEmailCode" | "logout">;
-  host: Pick<HostService, "getStatus" | "configure" | "start" | "updateIdentity">;
+  centralAuth: Pick<
+    CentralAuthManager,
+    | "getState"
+    | "requestEmailCode"
+    | "verifyEmailCode"
+    | "canPersistSession"
+    | "redeemServerClaim"
+    | "logout"
+    | "createMobileConnect"
+  >;
+  host: Pick<HostService, "getStatus" | "configure" | "start" | "updateIdentity" | "getMobileConnectHost">;
+  /** The memory guard, so that `status` shows the memory ceiling and the turn limit. */
+  memory: Pick<ServerMemory, "level" | "sample" | "turnLimit"> | null;
   /** The security audit file, newest rows first. Absent where nothing records one. */
   audit?: Pick<SecurityAuditLog, "read">;
   onError: (message: string, error: unknown) => void;
@@ -237,6 +253,8 @@ export class ServerMode {
         return runCauseEffect(this.#startLogin(body.get("email") ?? "", body.get("name")));
       case "POST /v1/login/verify":
         return runCauseEffect(this.#verifyLogin(body.get("challenge") ?? "", body.get("code") ?? "", body.get("name")));
+      case "POST /v1/login/claim":
+        return runCauseEffect(this.#claimLogin(body.get("claim") ?? "", body.get("name")));
       case "POST /v1/name":
         return runCauseEffect(this.#rename(body.get("name") ?? ""));
       case "GET /v1/health":
@@ -247,6 +265,8 @@ export class ServerMode {
         return runCauseEffect(this.#backup(body.get("path") ?? ""));
       case "POST /v1/analytics":
         return runCauseEffect(this.#setAnalytics(body.get("enabled") ?? ""));
+      case "POST /v1/mobile-connect":
+        return runCauseEffect(this.#mobileConnect());
       case "POST /v1/logout":
         await runCauseEffect(
           this.#options.centralAuth.logout().pipe(Effect.mapError(({ cause }) => new RemoteWorkflowError({ cause }))),
@@ -283,6 +303,7 @@ export class ServerMode {
         server_name: host.serverName ?? this.#pendingName,
         server_message: this.#publishError ?? host.message,
         ...this.#options.health?.().lines,
+        ...this.#memoryLines(),
       },
     };
   }
@@ -356,6 +377,18 @@ export class ServerMode {
     return this.#status();
   });
 
+  #memoryLines(): Answer["lines"] {
+    const memory = this.#options.memory;
+    const sample = memory?.sample();
+    if (!memory || !sample) return {};
+    return {
+      memory_level: memory.level(),
+      memory_limit: sample.total,
+      memory_available: sample.available,
+      turn_limit: memory.turnLimit(),
+    };
+  }
+
   readonly #startLogin = Effect.fn("ServerMode.startLogin")(function* (
     this: ServerMode,
     email: string,
@@ -394,6 +427,54 @@ export class ServerMode {
     // The entry point publishes the host when the account change is applied. `status` shows it.
     if (state.status === "signed_in") return this.#status();
     return issueFailure(state);
+  });
+
+  /** Signs in with a one-time claim that an operator made for the owner's email. */
+  readonly #claimLogin = Effect.fn("ServerMode.claimLogin")(function* (
+    this: ServerMode,
+    claim: string,
+    name: string | null,
+  ): Effect.fn.Return<Answer, RemoteWorkflowError> {
+    if (!claim.trim()) return failure(400, "invalid_request");
+    let serverName: string | null = null;
+    if (name !== null) {
+      serverName = parseHostedServerName(name);
+      if (!serverName) return nameFailure(name);
+    }
+    const { centralAuth } = this.#options;
+    const status = centralAuth.getState().status;
+    if (status === "signed_in") return failure(409, "signed_in");
+    // Another state can hold a stored session, which a failed claim would remove.
+    if (status !== "signed_out" && status !== "code_sent") return failure(409, `account_${status}`);
+    // The claim works once. A session that is not stored would end at the next start.
+    if (!centralAuth.canPersistSession()) return failure(409, "session_not_storable");
+    const previousName = this.#pendingName;
+    if (serverName) this.#pendingName = serverName;
+    const issue = yield* centralAuth
+      .redeemServerClaim(claim.trim())
+      .pipe(Effect.mapError(({ cause }) => new RemoteWorkflowError({ cause })));
+    if (issue) {
+      this.#pendingName = previousName;
+      return failure(issue.code === "server_claim_invalid" ? 400 : 502, issue.code, issue.message);
+    }
+    // The entry point publishes the host when the account change is applied. `status` shows it.
+    return this.#status();
+  });
+
+  /**
+   * A Mobile Connect code as a QR code for a terminal, in base64 because an answer line holds no line
+   * break. The terminal has no other way to show the code to a phone.
+   */
+  readonly #mobileConnect = Effect.fn("ServerMode.mobileConnect")(function* (
+    this: ServerMode,
+  ): Effect.fn.Return<Answer, RemoteWorkflowError> {
+    const account = this.#options.centralAuth.getState();
+    if (account.status !== "signed_in") return issueFailure(account);
+    // A publish that runs now can give the host its name. The code binds the host that it publishes.
+    yield* this.publish();
+    const ticket = yield* createHostedMobileConnect(this.#options).pipe(toRemoteWorkflowError);
+    const qr = yield* remoteCall(() => QRCode.toString(ticket.qrData, { type: "terminal", small: true }));
+    return { status: 200, lines: { qr: Buffer.from(qr).toString("base64"), expires_at: ticket.expiresAt } };
   });
 
   readonly #rename = Effect.fn("ServerMode.rename")(function* (

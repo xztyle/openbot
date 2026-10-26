@@ -54,7 +54,7 @@ export const messages = {
   "import.guide.skillNote":
     "Добавьте этот навык новому агенту в Grok Bot — только для экспорта. В экспорт он не попадёт.",
   "import.guide.step2": "Отправьте ему это сообщение",
-  "import.guide.copyMessage": "Скопировать сообщение",
+  "import.guide.copyMessage": "Копировать сообщение",
   "import.guide.messageCopied": "Сообщение скопировано",
   "import.guide.messageNote":
     "Он спросит, можно ли включить файлы рабочего пространства, и сохранит файл .zip в «Загрузки».",

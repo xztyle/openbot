@@ -1,5 +1,5 @@
 import type { AppTranslate } from "@openbot/i18n";
-import { Button, X } from "@openbot/ui";
+import { Button, CornerDownLeft, X } from "@openbot/ui";
 import { Show } from "solid-js";
 import { useText } from "../../text";
 import { prefersReducedMotion } from "../../utils";
@@ -64,6 +64,38 @@ export function ScrollToLatestButton(props: { onClick: () => void; newMessageCou
           <X aria-hidden="true" />
         </Button>
       </Show>
+    </div>
+  );
+}
+
+/**
+ * The way back to a reply after its quote opened the original. It stands where "scroll to latest"
+ * stands, in the same pill. The dismiss button keeps the view where it is.
+ */
+export function ReplyReturnButton(props: { onBack: () => void; onStay: () => void }) {
+  const { t } = useText();
+  return (
+    <div class="scroll-to-latest" data-reply-return="true" aria-live="off">
+      <Button
+        variant="ghost"
+        type="button"
+        class="scroll-to-latest-button"
+        data-cuelume-tap="navigate"
+        onClick={props.onBack}
+      >
+        <CornerDownLeft class="scroll-to-latest-reply-icon" aria-hidden="true" />
+        <span class="scroll-to-latest-count">{t("chat.reply.back")}</span>
+      </Button>
+      <Button
+        variant="ghost"
+        type="button"
+        class="scroll-to-latest-dismiss"
+        aria-label={t("chat.reply.stay")}
+        data-cuelume-tap="close"
+        onClick={props.onStay}
+      >
+        <X aria-hidden="true" />
+      </Button>
     </div>
   );
 }

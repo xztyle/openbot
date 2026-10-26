@@ -84,10 +84,13 @@ export const messages = defineMessages("files", {
   "files.cleanup.canBeCleared": "{size} can be cleared",
   "files.cleanup.description.caches": "Copies of server files. OpenBot downloads them again when you open them.",
   "files.cleanup.description.logs": "Diagnostic logs. New logs start at once.",
+  "files.cleanup.description.runtimes":
+    "Older provider CLI versions that no agent uses. OpenBot keeps the version in use and one older version that works.",
   "files.cleanup.clear": "Clear",
   "files.cleanup.clearCategory": "Clear {category}",
   "files.cleanup.confirm.caches": "Clear cached server files?",
   "files.cleanup.confirm.logs": "Clear logs?",
+  "files.cleanup.confirm.runtimes": "Remove old provider CLI versions?",
   "files.cleanup.confirmDescription": "This frees {size}. {description}",
   "files.cleanup.clearing": "Clearing…",
   "files.cleanup.failed": "Could not clear the data.",

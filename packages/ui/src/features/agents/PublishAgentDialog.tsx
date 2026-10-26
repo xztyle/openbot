@@ -1,4 +1,5 @@
 import type { AgentTemplatePreview, MarketplaceAgentRoutine } from "@openbot/contracts/ipc";
+import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import type { AppFormat, AppTranslate } from "@openbot/i18n";
 import { classifyFailure } from "@openbot/telemetry";
 import {
@@ -31,6 +32,8 @@ export interface PublishAgentDialogProps {
   onPublish: () => Promise<void>;
   onUnpublish: () => Promise<void>;
   onCopyLink: () => Promise<void>;
+  /** Opens a link from the instructions. */
+  onOpenLink: (url: string) => void;
 }
 
 type View = "summary" | "context" | "routines";
@@ -183,6 +186,7 @@ export function PublishAgentDialog(props: PublishAgentDialogProps) {
                         view={view() === "context" ? "context" : "routines"}
                         preview={preview()}
                         onBack={() => setView("summary")}
+                        onOpenLink={props.onOpenLink}
                       />
                     }
                   >
@@ -200,7 +204,7 @@ export function PublishAgentDialog(props: PublishAgentDialogProps) {
                           )}
                         </Show>
                         <Text tone="secondary" class="agent-template-description">
-                          {preview().description}
+                          {markdownPreviewText(preview().description)}
                         </Text>
                       </header>
 
@@ -305,6 +309,7 @@ function TemplateDetailView(props: {
   view: "context" | "routines";
   preview: AgentTemplatePreview;
   onBack: () => void;
+  onOpenLink: (url: string) => void;
 }) {
   const { t, sourceText } = useText();
   return (
@@ -319,7 +324,11 @@ function TemplateDetailView(props: {
       </header>
       <div class="agent-template-detail">
         <Show when={props.view === "context"} fallback={<TemplateRoutines routines={props.preview.routines} />}>
-          <TemplateInstructions title={props.preview.title} description={props.preview.description} />
+          <TemplateInstructions
+            title={props.preview.title}
+            description={props.preview.description}
+            onOpenLink={props.onOpenLink}
+          />
           <TemplateSkills skills={props.preview.skills} />
           <Show when={props.preview.skillsError}>
             {(error) => (

@@ -11,7 +11,7 @@ export const messages = {
   "computerUse.error.check": "OpenBot no pudo comprobar el uso del equipo.",
   "computerUse.error.openSettings": "OpenBot no pudo abrir los Ajustes del Sistema.",
   "computerUse.error.startDriver": "OpenBot no pudo iniciar el controlador de uso del equipo.",
-  "computerUse.checkAgain": "Comprobar de nuevo",
+  "computerUse.checkAgain": "Comprobar",
   "computerUse.checking": "Comprobando el uso del equipo",
   "computerUse.unavailable.title": "El uso del equipo aún no está disponible",
   "computerUse.permissions.title": "Permisos del sistema",

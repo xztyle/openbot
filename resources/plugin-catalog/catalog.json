@@ -27,6 +27,12 @@
       "detailSha256": "8b66d2a108340a79e398bedc19efc7dad2914b0addf17c76ee9fc50b72b09c1b"
     },
     {
+      "slug": "cobrain",
+      "version": "1.0.0",
+      "featured": false,
+      "detailSha256": "039484cf64fa35ef8f5ef9a04630166337d1f63b840f4c7552c2612c22edac20"
+    },
+    {
       "slug": "figma",
       "version": "1.1.0",
       "featured": true,
@@ -39,10 +45,34 @@
       "detailSha256": "cfc59276d82b8b54ae133336032b611613b5f8c0e93672f8f07009d126c39464"
     },
     {
+      "slug": "apple-apps",
+      "version": "1.0.0",
+      "featured": false,
+      "detailSha256": "9b424dc121ed978177e46c443e63e525c477e707a04318f5f5c17b90318d5ee5"
+    },
+    {
       "slug": "sentry",
       "version": "1.0.0",
       "featured": false,
       "detailSha256": "4fc370192c4c20834039fbdce4c5deb76f1553690136488aed99df5d9acdd191"
+    },
+    {
+      "slug": "vercel",
+      "version": "1.0.0",
+      "featured": false,
+      "detailSha256": "7e5ead435028c8e74d1e4bf84e7e61bc4216de8d0636a862d160e48391589253"
+    },
+    {
+      "slug": "cloudflare",
+      "version": "1.0.0",
+      "featured": false,
+      "detailSha256": "e538e4ff339d4e285124806dba8faab7e98a1eec7afc3d384aa611d29c340f4c"
+    },
+    {
+      "slug": "supabase",
+      "version": "1.0.0",
+      "featured": false,
+      "detailSha256": "219ea9d6853daa2bbd762640b5921faafc32f6a7449d7b54ab76402e366ced09"
     },
     {
       "slug": "context7",
@@ -88,9 +118,9 @@
     },
     {
       "slug": "composio",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "featured": false,
-      "detailSha256": "f3833ad73221b264a3611761dadaadfd978832c8431106ce92e6a7a45ee9b49c"
+      "detailSha256": "443362cf513bc0925fa9df7158def02d78a5e6c5a403ffb42759436a27367284"
     },
     {
       "slug": "github-direct",
@@ -105,22 +135,10 @@
       "detailSha256": "e636c66e4701a603158e8bb091372d7ecc8aef55e9b7b0fd6d5d9a5d6f44ef4d"
     },
     {
-      "slug": "cloudflare",
-      "version": "1.0.0",
-      "featured": false,
-      "detailSha256": "6e41465cfb26f7ffa3b52fea93b1d5de3645ec949924848d1bc6eaf2cc49370c"
-    },
-    {
       "slug": "render",
       "version": "1.0.0",
       "featured": false,
       "detailSha256": "c66c077fe91fc2c516476591b20f37bae2ff336414cab6497a7c7b0d337198d0"
-    },
-    {
-      "slug": "supabase",
-      "version": "1.0.0",
-      "featured": false,
-      "detailSha256": "9531d1dd9413c48ede50fec9ec3492ee3b45089061bbeedcef78c5b3c7291223"
     },
     {
       "slug": "exa",

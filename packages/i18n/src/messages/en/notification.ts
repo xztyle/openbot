@@ -5,12 +5,22 @@ export const messages = defineMessages("notification", {
   // notifications, raised by the web client while its tab is open.
   "notification.needsInput": "Needs your input.",
   "notification.needsApproval": "Needs your approval.",
+  "notification.needsBrowserStep": "Needs you to finish a step in the browser.",
+  "notification.needsApprovalFor": "Needs your approval: {action}",
   "notification.finished": "Finished working.",
+  // A workflow step that waits for a person to approve or reject it.
+  "notification.workflowApproval": "A step waits for your approval.",
+  // A workflow output step that tells the user its result.
+  "notification.workflowOutput": "A workflow has a new result.",
   "notification.failed": "Stopped with an error.",
   "notification.unattendedRunFailed": "A scheduled run stopped with an error.",
   "notification.eventCheckFailing": "An event check keeps failing.",
   "notification.eventCheckTurnFailed": "An event check turn stopped with an error.",
   "notification.eventCheckDeliveryFailed": "An event check could not give an event to the agent.",
+  // The title of a notification about an agent in a channel: the agent and the channel name.
+  "notification.channelTitle": "{agent} in {channel}",
+  // The body of a channel reply notification when the preview of agent words is off.
+  "notification.channelMessage": "Sent a message.",
   "notification.usageLimit.title": "{provider} account reached its limit",
   "notification.usageLimit.body": {
     one: "{count} agent waits. OpenBot will try again later.",

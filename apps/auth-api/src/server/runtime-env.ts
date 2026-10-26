@@ -46,6 +46,7 @@ const LOCAL_RUNTIME_KEYS = [
   "APNS_KEY_ID",
   "APNS_TEAM_ID",
   "APNS_TOPIC",
+  "FCM_SERVICE_ACCOUNT",
 ] as const;
 
 const BOOLEAN_RUNTIME_KEYS = new Set<(typeof LOCAL_RUNTIME_KEYS)[number]>([

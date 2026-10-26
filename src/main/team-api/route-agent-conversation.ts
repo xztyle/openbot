@@ -25,6 +25,7 @@ import {
   requireListedAgent,
   stringArray,
   stringField,
+  WEBRTC_FRAME_BODY_BUDGET,
 } from "./request-helpers";
 
 export interface AgentConversationRouteDependencies {
@@ -54,16 +55,15 @@ export async function routeAgentConversation(
   }
   if (method === "GET" && action === "conversation-page") {
     requireListedAgent(agents, agentId);
-    const page = await runCauseEffect(
-      agents.readConversationPageFor(
-        agentId,
-        member.id,
-        pageAnchor(url),
-        pageLimit(url),
-        markerExclusionsForCapabilities(capabilities),
-      ),
-    );
-    return json(200, page);
+    const anchor = pageAnchor(url);
+    const exclusions = markerExclusionsForCapabilities(capabilities);
+    // Long messages make a page of fewer messages, so it fits one WebRTC frame. The client reads the
+    // rest as older pages. A page larger than the frame cannot reach a remote client.
+    for (let limit = pageLimit(url); ; limit = Math.floor(limit / 2)) {
+      const page = await runCauseEffect(agents.readConversationPageFor(agentId, member.id, anchor, limit, exclusions));
+      if (Buffer.byteLength(JSON.stringify(page)) <= WEBRTC_FRAME_BODY_BUDGET) return json(200, page);
+      if (limit === 1) throw new HttpError(413, sourceText("error.team.conversationPageTooLarge"));
+    }
   }
   if (method === "POST" && action === "conversation/unread") {
     // `context.protocol` is the same `requestProtocol(request)` this branch used to recompute for

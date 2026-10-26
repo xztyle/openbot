@@ -1,14 +1,26 @@
 import type { AvatarImageInput, CentralAuthUser, MobileConnectedDevice, UpdateStatus } from "@openbot/contracts/ipc";
-import { Button, Heading, Text, Toaster, toast } from "@openbot/ui";
-import { DEFAULT_GENERAL_SETTINGS } from "@openbot/ui/features/settings/app-settings";
+import { Button, Toaster, toast } from "@openbot/ui";
+import { DEFAULT_GENERAL_SETTINGS, type GeneralSettingsValue } from "@openbot/ui/features/settings/app-settings";
 import { createSignal, onCleanup } from "solid-js";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { SettingsModal } from "../src/features/settings/SettingsModal";
 import type { SettingsTab } from "../src/features/settings/settings-tabs";
+import { STORY_SERVERS } from "../src/preview/fixtures";
 import { createMockBilling } from "../src/preview/mock-billing";
+import type { MockVoiceOptions } from "../src/preview/mock-voice";
 import { createMockOpenBot } from "./mock-openbot";
+import { SettingsPageStory } from "./settings-page-story";
 import { previewStorySoundSettings } from "./sound-feedback-fixture";
+
+/** A packaged Windows run, which offers every switch that the defaults hide. */
+const storyGeneralSettings: GeneralSettingsValue = {
+  ...DEFAULT_GENERAL_SETTINGS,
+  launchAtLogin: true,
+  keepRunningInBackground: false,
+  keepAwake: false,
+  keepAwakeOnBattery: false,
+};
 
 const storyAppInfo = { name: "OpenBot", version: "0.2.1", platform: "darwin", variant: "dev" } as const;
 const storyAccount: CentralAuthUser = {
@@ -37,10 +49,12 @@ function SettingsModalStory(props: {
   openTab?: SettingsTab;
   /** A restart that a server admin asked for. */
   scheduledRestart?: UpdateStatus["scheduledRestart"];
+  /** The downloaded dictation models and the saved voice setting. */
+  voice?: MockVoiceOptions;
 }) {
   const previousApi = window.openbot;
   const billingApi = createMockBilling();
-  const mock = createMockOpenBot();
+  const mock = createMockOpenBot(props.voice);
   window.openbot = mock.api;
   onCleanup(() => {
     mock.dispose();
@@ -55,7 +69,7 @@ function SettingsModalStory(props: {
     },
   };
   const [open, setOpen] = createSignal(props.initialOpen);
-  const [value, setValue] = createSignal({ ...DEFAULT_GENERAL_SETTINGS });
+  const [value, setValue] = createSignal({ ...storyGeneralSettings });
   const [updateStatus, setUpdateStatus] = createSignal<UpdateStatus>(
     props.scheduledRestart
       ? { ...storyUpdateStatus, phase: "ready", availableVersion: "0.3.0", scheduledRestart: props.scheduledRestart }
@@ -69,6 +83,7 @@ function SettingsModalStory(props: {
       platform: "ios",
       connectedAt: Date.now() - 86_400_000,
       lastActiveAt: Date.now() - 45_000,
+      via: "code",
     },
     {
       sessionId: "22222222-2222-4222-8222-222222222222",
@@ -76,6 +91,7 @@ function SettingsModalStory(props: {
       platform: "android",
       connectedAt: Date.now() - 3_600_000,
       lastActiveAt: Date.now() - 600_000,
+      via: "link",
     },
   ]);
 
@@ -104,46 +120,56 @@ function SettingsModalStory(props: {
 
   return (
     <>
-      <main class="foundation-story foundation-interaction-stage">
-        <Heading as="h1" size="lg">
-          Workspace settings
-        </Heading>
-        <Text tone="secondary">Preview the global settings surface with session-scoped preferences.</Text>
-        <Button variant="outline" type="button" onClick={() => setOpen(true)}>
-          Open settings
-        </Button>
-        <SettingsModal
-          initialTab={props.initialTab}
-          openTab={props.openTab}
-          open={open()}
-          onOpenChange={setOpen}
-          value={value()}
-          onValueChange={(next) => {
-            previewStorySoundSettings(value(), next);
-            setValue(next);
-          }}
-          appInfo={storyAppInfo}
-          updateStatus={updateStatus()}
-          onCancelScheduledRestart={async () => {
-            const { scheduledRestart: _cancelled, ...rest } = updateStatus();
-            setUpdateStatus(rest);
-          }}
-          account={account()}
-          onUpdateAccountName={updateAccountName}
-          onUpdateAccountAvatar={updateAccountAvatar}
-          onCreateMobileConnect={createMobileConnect}
-          onListMobileConnectedDevices={async () => mobileDevices()}
-          onListAccountSessions={mock.api.auth.listAccountSessions}
-          onRevokeAccountSession={mock.api.auth.revokeAccountSession}
-          onRevokeMobileConnectedDevice={async (sessionId) => {
-            setMobileDevices((current) => current.filter((device) => device.sessionId !== sessionId));
-          }}
-          onUpdateAction={runUpdateAction}
-          billingApi={billingApi}
-          hostedServersApi={props.hostedServers ? hostedServersApi : undefined}
-          onAddHostedServer={props.hostedServers ? fn() : undefined}
-        />
-      </main>
+      <SettingsPageStory
+        title="Settings"
+        controls={
+          <Button variant="outline" type="button" onClick={() => setOpen(true)}>
+            Open settings
+          </Button>
+        }
+        onEscape={() => setOpen(false)}
+      >
+        {(page) => (
+          <SettingsModal
+            page={page()}
+            initialTab={props.initialTab}
+            openTab={props.openTab}
+            open={open()}
+            value={value()}
+            onValueChange={(next) => {
+              previewStorySoundSettings(value(), next);
+              setValue(next);
+            }}
+            appInfo={storyAppInfo}
+            servers={STORY_SERVERS}
+            updateStatus={updateStatus()}
+            onCancelScheduledRestart={async () => {
+              const { scheduledRestart: _cancelled, ...rest } = updateStatus();
+              setUpdateStatus(rest);
+            }}
+            account={account()}
+            onUpdateAccountName={updateAccountName}
+            onUpdateAccountAvatar={updateAccountAvatar}
+            onCreateMobileConnect={createMobileConnect}
+            onCancelMobileConnect={mock.api.auth.cancelMobileConnect}
+            onGetMobileConnectLink={mock.api.auth.getMobileConnectLink}
+            onCreateMobileConnectLink={mock.api.auth.createMobileConnectLink}
+            onRevokeMobileConnectLink={mock.api.auth.revokeMobileConnectLink}
+            onListMobileConnectedDevices={async () => mobileDevices()}
+            onListAccountSessions={mock.api.auth.listAccountSessions}
+            onRevokeAccountSession={mock.api.auth.revokeAccountSession}
+            onRevokeMobileConnectedDevice={async (sessionId) => {
+              setMobileDevices((current) => current.filter((device) => device.sessionId !== sessionId));
+            }}
+            onGetRemoteNetworkRoute={mock.api.getRemoteNetworkRoute}
+            onSetRemoteNetworkRoute={(route) => mock.api.setRemoteNetworkRoute({ route })}
+            onUpdateAction={runUpdateAction}
+            billingApi={billingApi}
+            hostedServersApi={props.hostedServers ? hostedServersApi : undefined}
+            onAddHostedServer={props.hostedServers ? fn() : undefined}
+          />
+        )}
+      </SettingsPageStory>
       <Toaster />
     </>
   );
@@ -154,8 +180,7 @@ const meta = {
   component: SettingsModal,
   args: {
     open: false,
-    onOpenChange: fn(),
-    value: DEFAULT_GENERAL_SETTINGS,
+    value: storyGeneralSettings,
     onValueChange: fn(),
     appInfo: storyAppInfo,
     updateStatus: storyUpdateStatus,
@@ -203,8 +228,40 @@ export const Narrow: Story = {
   parameters: { viewport: { defaultViewport: "settingsNarrow" } },
 };
 
+export const Profile: Story = {
+  render: () => <SettingsModalStory initialOpen initialTab="profile" />,
+};
+
 export const Notifications: Story = {
   render: () => <SettingsModalStory initialOpen initialTab="notifications" />,
+};
+
+export const Voice: Story = {
+  render: () => <SettingsModalStory initialOpen initialTab="voice" />,
+};
+
+export const VoiceWhisperHungarian: Story = {
+  render: () => (
+    <SettingsModalStory
+      initialOpen
+      initialTab="voice"
+      voice={{
+        voiceModelsReady: ["parakeet-tdt-0.6b-v3", "whisper-turbo"],
+        voiceSettings: { modelId: "whisper-turbo", language: "hu" },
+      }}
+    />
+  ),
+};
+
+/** Downloaded models, and the speech model, each with Remove. */
+export const VoiceModelsDownloaded: Story = {
+  render: () => (
+    <SettingsModalStory
+      initialOpen
+      initialTab="voice"
+      voice={{ voiceModelsReady: ["parakeet-tdt-0.6b-v3", "bark-3.0-plus"], speechModelReady: true }}
+    />
+  ),
 };
 
 /** The install guide for each phone, the sign-in code and the connected phones. */

@@ -1,6 +1,6 @@
-import type { DraftAttachment, InstalledSkill, McpServerConfig } from "@openbot/contracts/ipc";
+import type { DraftAttachment } from "@openbot/contracts/ipc";
 import { Bot, File, Folder, Plug, type Puzzle, ShieldCheck, Store } from "@openbot/ui";
-import type { AgentProfile } from "../../data";
+import type { ComposerAgent, ComposerMcpServer, ComposerSkill } from "../../data";
 import type { TextValue } from "../../text";
 
 /**
@@ -15,10 +15,10 @@ export interface PickerFrame {
 }
 
 export type PickerOption =
-  | { type: "agent"; agent: AgentProfile }
+  | { type: "agent"; agent: ComposerAgent }
   /** `showSlug` is set when another listed skill has the same name: the slug tells them apart. */
-  | { type: "skill"; skill: InstalledSkill; showSlug: boolean }
-  | { type: "mcp"; server: McpServerConfig }
+  | { type: "skill"; skill: ComposerSkill; showSlug: boolean }
+  | { type: "mcp"; server: ComposerMcpServer }
   | { type: "attachment"; attachment: DraftAttachment };
 
 export function pickerOptionKey(option: PickerOption): string {
@@ -52,7 +52,7 @@ export function pickerOptionDescription(option: PickerOption, format: TextValue[
 }
 
 /** Where the server answers: the address for an http server, the command for a stdio one. */
-function mcpServerDescription(server: McpServerConfig): string | undefined {
+function mcpServerDescription(server: ComposerMcpServer): string | undefined {
   const source = server.transport === "stdio" ? [server.command, ...server.args].join(" ") : server.url;
   return source.trim() || undefined;
 }
@@ -92,7 +92,7 @@ const MCP_BADGE = "MCP";
  * How well a skill answers the query, lower first; null when it does not. A hit in the name
  * outranks one in the description, so the skill the user names is at the top.
  */
-export function skillMatchRank(skill: InstalledSkill, query: string): number | null {
+export function skillMatchRank(skill: ComposerSkill, query: string): number | null {
   if (!query) return 0;
   const name = skill.name.toLocaleLowerCase();
   const slug = skill.slug.toLocaleLowerCase();
@@ -103,7 +103,7 @@ export function skillMatchRank(skill: InstalledSkill, query: string): number | n
   return skill.description?.toLocaleLowerCase().includes(query) ? 4 : null;
 }
 
-function skillDescription(skill: InstalledSkill): string | undefined {
+function skillDescription(skill: ComposerSkill): string | undefined {
   const description = skill.description?.trim();
   return description || undefined;
 }

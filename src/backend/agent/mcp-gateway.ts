@@ -1,28 +1,36 @@
 import type {
   McpServerConfig,
+  McpSignInAppInput,
+  McpSignInAppState,
   McpSignInState,
   RemoveMcpServerInput,
   SaveMcpServerInput,
+  SaveMcpSignInAppInput,
   SetMcpServerEnabledInput,
   SignOutMcpServerInput,
   TestMcpServerInput,
 } from "@openbot/contracts/ipc";
 import { GITHUB_CONNECTOR_MCP_SERVER_ID, mcpConfigErrors, normalizeMcpConfig } from "@openbot/contracts/ipc";
-import type { Logger } from "@openbot/logging";
-import { Effect, Schema } from "effect";
+import { sourceText } from "@openbot/i18n/source";
+import { type Logger, toLogValue } from "@openbot/logging";
+import { Effect, Result, Schema } from "effect";
 import type { AgentProvider } from "../agent-client";
 import { causeHelpers } from "../effect-boundary";
+import type { McpOperationError } from "../mcp-effects";
 import { McpHandoffLog } from "../mcp-handoff-log";
-import { type McpOAuthAuthority, normalizeResource } from "../mcp-oauth-provider";
-import { type McpSignInPlace, testMcpServer } from "../mcp-probe";
+import { type McpOAuthAuthority, type McpSignInOpener, normalizeResource } from "../mcp-oauth-provider";
+import { McpOAuthProxy, type McpOAuthProxyTarget, mcpOAuthProxyRoute } from "../mcp-oauth-proxy";
+import { inspectMcpServer, type McpSignInPlace, testMcpServer } from "../mcp-probe";
 import {
+  type McpEndpoint,
+  type McpEndpointRefusal,
   type McpServerDrop,
   type McpToolRuntimeSource,
   type McpToolRuntimes,
   NO_MCP_TOOL_RUNTIMES,
 } from "../mcp-provider-shapes";
 import { mcpSecretValues, redactMcpValues } from "../mcp-redaction";
-import type { McpServerStore } from "../mcp-server-store";
+import { McpServerError, type McpServerStore } from "../mcp-server-store";
 import type { ProviderClientContext } from "../provider-drivers";
 import { providerLabel } from "./thread-items";
 
@@ -40,6 +48,8 @@ export interface TestMcpServerOptions {
   storedCredentials?: boolean;
   /** Who can finish a sign-in this test cannot start, for the sentence a sign-in challenge gets. */
   signInPlace?: McpSignInPlace;
+  /** Where an interactive sign-in shows its page, when not in this computer's own browser. */
+  open?: McpSignInOpener;
 }
 
 export interface McpGatewayHooks {
@@ -104,6 +114,11 @@ export class McpGateway {
    * Cleared whenever the MCP list changes, because the user is then owed a fresh answer.
    */
   readonly #reportedDrops = new Set<string>();
+  /** The loopback address that holds the OAuth tokens for the agents. Its listener starts at first use. */
+  readonly #proxy: McpOAuthProxy;
+  /** The sign-in that gave each token the proxy holds now, one entry per route, so a refresh asks that one. */
+  readonly #proxyTokens = new Map<string, McpOAuthAuthority>();
+  readonly #proxyRouteTokens = new Map<string, string>();
   readonly #logger: Logger;
   readonly #hooks: McpGatewayHooks;
 
@@ -117,6 +132,15 @@ export class McpGateway {
     this.#oauth = credentials.mcpOAuth ?? null;
     this.#logger = options.logger;
     this.#hooks = options.hooks;
+    this.#proxy = new McpOAuthProxy({
+      settings: credentials.mcpOAuthProxySettings ?? null,
+      target: (route) => this.#proxyTarget(route),
+      refresh: (url, rejected) => {
+        // A named account row has its own sign-in, so the refresh goes to the one that gave the token.
+        const oauth = this.#proxyTokens.get(rejected) ?? this.#oauth;
+        return oauth ? oauth.refreshAccessToken(url, rejected) : Effect.succeed(null);
+      },
+    });
   }
 
   /** The hand-off record, for the provider runtime that reads the names it holds. */
@@ -128,22 +152,100 @@ export class McpGateway {
     return this.#toolRuntimes();
   }
 
-  /** The bearer token for one configuration, asked at every hand-off and never written to a row. */
-
-  readonly authorization = Effect.fnUntraced(function* (this: McpGateway, config: McpServerConfig) {
-    const github = this.#githubConnector;
-    const oauth = this.#authority(config.id);
-    const token =
-      config.id === GITHUB_CONNECTOR_MCP_SERVER_ID
-        ? github
-          ? yield* github.mcpAuthorization().pipe(toMcpGatewayFailed)
-          : null
-        : oauth
-          ? yield* oauth.accessToken(config.url).pipe(toMcpGatewayFailed)
-          : null;
-    if (token) this.#handoff.recordSecret(token);
-    return token;
+  /**
+   * Where one http configuration is reached and with which bearer, asked at every hand-off.
+   *
+   * A row this machine signed in to goes through the OAuth proxy: the provider gets a loopback
+   * route and that route's bearer, and the OAuth token stays in this process. The GitHub row keeps
+   * its own proxy. Every other row is handed as the user wrote it, with no bearer added. A proxy that
+   * cannot start leaves the row out of the hand-off: the raw token is never the fallback.
+   */
+  readonly endpoint = Effect.fnUntraced(function* (
+    this: McpGateway,
+    config: McpServerConfig,
+  ): Effect.fn.Return<McpEndpoint | McpEndpointRefusal, McpGatewayFailed> {
+    if (config.id === GITHUB_CONNECTOR_MCP_SERVER_ID) {
+      const github = this.#githubConnector;
+      const token = github ? yield* github.mcpAuthorization().pipe(toMcpGatewayFailed) : null;
+      if (token) this.#handoff.recordSecret(token);
+      return { url: config.url, authorization: token, proxied: false };
+    }
+    if (!this.#proxied(config)) return { url: config.url, authorization: null, proxied: false };
+    const route = yield* this.#proxy.route(mcpOAuthProxyRoute(config.id, config.url)).pipe(Effect.result);
+    if (Result.isFailure(route)) {
+      this.#logger.warn("The MCP sign-in proxy did not start.", { cause: toLogValue(route.failure.cause) });
+      return { error: sourceText("error.backend.mcpOAuthProxyUnavailable") };
+    }
+    this.#handoff.recordSecret(route.success.bearer);
+    return { url: route.success.url, authorization: route.success.bearer, proxied: true };
   });
+
+  /**
+   * What the Codex tool manifest records about the proxy for `configs`: the proxy address and the
+   * rows that go through it, or `null` when none does. Codex keeps the configuration of a resumed
+   * session, so a session that holds another port, or a row's own URL from before its sign-in, must
+   * be replaced. A computer with no proxied row keeps the fingerprints it had.
+   */
+  readonly proxyFingerprint = Effect.fnUntraced(function* (
+    this: McpGateway,
+    configs: readonly McpServerConfig[],
+  ): Effect.fn.Return<string | null, McpGatewayFailed> {
+    const proxied = configs
+      .filter((config) => config.enabled && this.#proxied(config))
+      .map((config) => config.id)
+      .sort();
+    if (proxied.length === 0) return null;
+    const identity = yield* this.#proxy.identity().pipe(Effect.result);
+    // The hand-off leaves these rows out in this case, and the manifest records that.
+    if (Result.isFailure(identity)) return JSON.stringify([null, proxied]);
+    return JSON.stringify([identity.success, proxied]);
+  });
+
+  /** Stops the OAuth proxy. Called once, after every provider process has stopped. */
+  readonly close = Effect.fnUntraced(function* (this: McpGateway) {
+    yield* this.#proxy.close();
+  });
+
+  /**
+   * Whether a row goes through the OAuth proxy: an http row with a sign-in on this computer, and no
+   * `Authorization` the user typed. A row whose token expired or whose sign-in ended still goes
+   * through, so the agent reads that it has to sign in again rather than a bare refusal.
+   */
+  #proxied(config: McpServerConfig): boolean {
+    const oauth = this.#authority(config.id);
+    return (
+      oauth !== null &&
+      config.transport === "http" &&
+      config.id !== GITHUB_CONNECTOR_MCP_SERVER_ID &&
+      !config.headers.some((pair) => pair.key.trim().toLowerCase() === "authorization") &&
+      oauth.hasSignIn(config.url)
+    );
+  }
+
+  /**
+   * The upstream of one proxy route, read for each request: an enabled row that still goes through
+   * the proxy, and its token now. A removed, turned-off, edited or signed-out row has no route.
+   */
+  #proxyTarget(route: string): Effect.Effect<McpOAuthProxyTarget | null, McpOperationError> {
+    const config = this.#servers
+      .listEnabled()
+      .find((row) => this.#proxied(row) && mcpOAuthProxyRoute(row.id, row.url) === route);
+    const oauth = config ? this.#authority(config.id) : null;
+    if (!config || !oauth) return Effect.succeed(null);
+    return oauth.accessToken(config.url).pipe(
+      Effect.map((token) => {
+        const previous = this.#proxyRouteTokens.get(route);
+        if (previous !== undefined && previous !== token) this.#proxyTokens.delete(previous);
+        if (!token) {
+          this.#proxyRouteTokens.delete(route);
+          return null;
+        }
+        this.#proxyRouteTokens.set(route, token);
+        this.#proxyTokens.set(token, oauth);
+        return { url: config.url, headers: config.headers, token };
+      }),
+    );
+  }
 
   /**
    * Remembers a set that leaves for a provider, so its secrets stay redactable after the user edits
@@ -274,8 +376,31 @@ export class McpGateway {
       !options.interactive && options.storedCredentials && stored
         ? { accessToken: (url) => stored.accessToken(url), signIn: () => null }
         : undefined;
-    const oauth = options.interactive ? (stored ?? undefined) : silent;
+    const open = options.open;
+    const opened: Pick<McpOAuthAuthority, "accessToken" | "signIn"> | undefined =
+      stored && open
+        ? { accessToken: (url) => stored.accessToken(url), signIn: (url) => stored.signIn(url, open) }
+        : (stored ?? undefined);
+    const oauth = options.interactive ? opened : silent;
     return yield* testMcpServer(config, undefined, this.#toolRuntimes(), oauth, options.signInPlace ?? null).pipe(
+      toMcpGatewayFailed,
+    );
+  });
+
+  /**
+   * The test an agent asks for. Silent like the Test button: it spends the sign-ins this computer
+   * holds and never opens a browser, because the user hands a sign-in over from the conversation.
+   */
+  readonly inspect = Effect.fnUntraced(function* (this: McpGateway, config: McpServerConfig) {
+    const normalized = normalizeMcpConfig(config);
+    const errors = mcpConfigErrors(normalized);
+    const firstError = errors.name ?? errors.command ?? errors.url;
+    if (firstError) return yield* new McpGatewayFailed({ cause: new Error(firstError) });
+    const stored = this.#authority(config.id);
+    const silent: Pick<McpOAuthAuthority, "accessToken" | "signIn"> | undefined = stored
+      ? { accessToken: (url) => stored.accessToken(url), signIn: () => null }
+      : undefined;
+    return yield* inspectMcpServer(normalized, undefined, this.#toolRuntimes(), silent, "here").pipe(
       toMcpGatewayFailed,
     );
   });
@@ -286,8 +411,8 @@ export class McpGateway {
    * next turn is handed the new token rather than the tools staying absent until a restart. A draft
    * no agent uses yet refreshes nothing: its save does that.
    */
-  readonly signIn = Effect.fnUntraced(function* (this: McpGateway, input: TestMcpServerInput) {
-    const result = yield* this.test(input, { interactive: true, signInPlace: "here" });
+  readonly signIn = Effect.fnUntraced(function* (this: McpGateway, input: TestMcpServerInput, open?: McpSignInOpener) {
+    const result = yield* this.test(input, { interactive: true, signInPlace: "here", ...(open ? { open } : {}) });
     const resource = normalizeResource(input.config.url);
     const inUse =
       resource !== null &&
@@ -310,17 +435,80 @@ export class McpGateway {
    * rows are signed out independently. The answer says so, row by row.
    */
   readonly signOut = Effect.fn("McpGateway.signOut")(function* (this: McpGateway, input: SignOutMcpServerInput) {
-    const config = this.#servers.list().find((row) => row.id === input.mcpServerId && row.transport === "http");
+    const config = this.#httpRow(input.mcpServerId);
     const oauth = config ? this.#authority(config.id) : null;
     if (config && oauth) {
       oauth.cancelSignIn(config.url);
-      yield* oauth.forget(config.url).pipe(toMcpGatewayFailed);
+      yield* oauth.signOut(config.url).pipe(toMcpGatewayFailed);
       yield* this.#hooks.refreshAllAgentRuntimes();
     }
     return this.signIns();
   }, Effect.uninterruptible);
 
-  /** Whether each http row has a sign-in on this computer. Yes or no only, never a token. */
+  /**
+   * The sign-in app of one saved http row, and the exact callback address to register with it.
+   * Only a saved row has one: the app is kept under the row's address, and a draft's address can
+   * still change, which would leave the secret under an address no row names.
+   */
+  signInApp(input: McpSignInAppInput): McpSignInAppState {
+    const config = this.#httpRow(input.mcpServerId);
+    return {
+      redirectUrl: this.#oauth?.redirectUrl ?? null,
+      app: config && this.#oauth ? this.#oauth.signInApp(config.url) : null,
+    };
+  }
+
+  /**
+   * Saves the app the next sign-in to this row uses. Rows with the same address share it, as they
+   * share the account. A new client drops the tokens the old one earned, so every agent's session
+   * is refreshed to stop handing them out.
+   */
+  readonly saveSignInApp = Effect.fn("McpGateway.saveSignInApp")(function* (
+    this: McpGateway,
+    input: SaveMcpSignInAppInput,
+  ) {
+    const { config, oauth } = yield* this.#signInAppTarget(input.mcpServerId);
+    if (!input.clientId.trim())
+      return yield* new McpGatewayFailed({
+        cause: new McpServerError(sourceText("error.backend.mcpSignInAppClientId")),
+      });
+    const dropped = yield* oauth
+      .saveSignInApp(config.url, { clientId: input.clientId, clientSecret: input.clientSecret, scope: input.scope })
+      .pipe(toMcpGatewayFailed);
+    if (dropped) yield* this.#hooks.refreshAllAgentRuntimes();
+    return this.signInApp(input);
+  }, Effect.uninterruptible);
+
+  /** Drops the sign-in app and the tokens it earned. The next sign-in registers OpenBot again. */
+  readonly removeSignInApp = Effect.fn("McpGateway.removeSignInApp")(function* (
+    this: McpGateway,
+    input: McpSignInAppInput,
+  ) {
+    const { config, oauth } = yield* this.#signInAppTarget(input.mcpServerId);
+    if (yield* oauth.removeSignInApp(config.url).pipe(toMcpGatewayFailed)) yield* this.#hooks.refreshAllAgentRuntimes();
+    return this.signInApp(input);
+  }, Effect.uninterruptible);
+
+  /** `McpServerError`, so a joined server's host answers 400 with the reason rather than a bare 500. */
+  #signInAppTarget(
+    mcpServerId: string,
+  ): Effect.Effect<{ config: McpServerConfig; oauth: McpOAuthAuthority }, McpGatewayFailed> {
+    const config = this.#httpRow(mcpServerId);
+    if (!config)
+      return new McpGatewayFailed({ cause: new McpServerError(sourceText("error.backend.mcpSignInAppNoServer")) });
+    if (!this.#oauth)
+      return new McpGatewayFailed({ cause: new McpServerError(sourceText("error.backend.mcpSignInAppUnavailable")) });
+    return Effect.succeed({ config, oauth: this.#oauth });
+  }
+
+  #httpRow(mcpServerId: string): McpServerConfig | undefined {
+    return this.#servers.list().find((row) => row.id === mcpServerId && row.transport === "http");
+  }
+
+  /**
+   * Whether each http row has a sign-in on this computer, and whether the server ended the one it
+   * had. Yes or no only, never a token.
+   */
   signIns(): McpSignInState[] {
     return this.#servers
       .list()
@@ -328,9 +516,11 @@ export class McpGateway {
       .map((config) => ({
         mcpServerId: config.id,
         signedIn: this.#authority(config.id)?.signedIn(config.url) ?? false,
+        needsSignIn: this.#authority(config.id)?.needsSignIn(config.url) ?? false,
       }));
   }
 
+  /** The sign-ins of one row: a named account row has its own, every other row shares the address's. */
   #authority(id: string): McpOAuthAuthority | null {
     return this.#oauth?.forConnection?.(id) ?? this.#oauth;
   }

@@ -95,7 +95,7 @@ export interface ObservedPointer {
 }
 
 /** What one request line says: whether it is a tool call, and at most two answers about where the agent works. */
-export interface ObservedRequest {
+interface ObservedRequest {
   /**
    * The tool a call names, or `null` when the line is no tool call. A call's answer gets the text
    * copy of its structured result, and the tap logs how long that answer took.
@@ -124,7 +124,7 @@ const POINTER_TOOLS = new Set(["click", "move_cursor", "scroll"]);
  * `y`. Anything else - a `list`, a `session_begin`, a call with neither - reports nothing rather
  * than a guess.
  */
-export function readRequest(line: string, at: number): ObservedRequest {
+function readRequest(line: string, at: number): ObservedRequest {
   let parsed: unknown;
   try {
     parsed = JSON.parse(line);

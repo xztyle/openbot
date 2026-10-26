@@ -11,6 +11,19 @@ export function useReducedMotion(): boolean {
   return system || !animations;
 }
 
+/**
+ * How a transition that carries a state change plays: with blur and movement, as a plain fade when
+ * motion is reduced, or not at all when Settings turns it off. A fade keeps the change legible.
+ */
+export type TransitionMode = "blur" | "fade" | "none";
+
+export function useTransitionMode(name: Exclude<MotionPreference, "allAnimations">): TransitionMode {
+  const reduced = useReducedMotion();
+  const enabled = useMotionPreferences((state) => state[name]);
+  if (!enabled) return "none";
+  return reduced ? "fade" : "blur";
+}
+
 /** True when one animation plays: Settings keeps it on, and motion is not reduced. */
 export function useMotionPreference(name: Exclude<MotionPreference, "allAnimations">): boolean {
   const reduced = useReducedMotion();

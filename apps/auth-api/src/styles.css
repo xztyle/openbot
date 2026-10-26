@@ -2,10 +2,36 @@
 @import "@fontsource-variable/inter/wght-italic.css";
 @import "tailwindcss";
 @import "@openbot/brand/tokens.css";
+/* Only the web client at /app sets the attribute that turns it on. The public pages stay dark. */
+@import "@openbot/brand/tokens-light.css";
 @import "@openbot/ui/stagger.css";
+
+/* Arial with the size and line metrics of Inter. Until Inter loads, the text takes the same space,
+   so the hero does not move when the font changes. Inter is wider than the system font, and on a
+   slow phone the description wrapped to one more line and pushed the buttons down. */
+@font-face {
+  font-family: "Inter Variable Fallback";
+  src: local("Arial"), local("ArialMT");
+  size-adjust: 107.12%;
+  ascent-override: 90.44%;
+  descent-override: 22.52%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "Inter Variable Fallback";
+  font-weight: 600 900;
+  src: local("Arial Bold"), local("Arial-BoldMT");
+  size-adjust: 107.12%;
+  ascent-override: 90.44%;
+  descent-override: 22.52%;
+  line-gap-override: 0%;
+}
 
 :root {
   color-scheme: dark;
+  --openbot-font-sans:
+    "Inter Variable", "Inter Variable Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --pulse-dur: 1000ms;
   --pulse-count: 1;
   --pulse-min: 0.5;
@@ -448,7 +474,8 @@ a {
   padding: 8px;
 }
 
-.site-panel[data-kind="plugins"] {
+.site-panel[data-kind="plugins"],
+.site-panel[data-kind="resources"] {
   width: 540px;
 }
 
@@ -586,7 +613,10 @@ a {
   border-radius: 10px;
   background: var(--site-panel-art);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-  transition: transform var(--site-nav-duration, 340ms) var(--site-nav-ease, var(--openbot-ease-out));
+  /* A short ease and a layer of its own. With the menu's long settle, the browser painted the
+     mark again on each step of the last few tenths of a pixel, so the hover zoom stuttered. */
+  transition: transform var(--openbot-duration-slow) var(--openbot-ease-out);
+  will-change: transform;
 }
 
 .site-panel-plugin-mark {
@@ -608,6 +638,16 @@ a {
   width: 24px;
   height: 24px;
   border-radius: 6px;
+}
+
+.site-panel-resource-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.site-panel-resource-logo {
+  background: none;
+  box-shadow: none;
 }
 
 .site-panel-row-title {
@@ -673,6 +713,28 @@ a {
   display: none;
 }
 
+/* Just above the mobile header, the brand, the full menu and the buttons do not fit with the menu
+   at the true centre. The menu centres between them, and the triggers are tighter. */
+@media (min-width: 901px) and (max-width: 1040px) {
+  .landing-header {
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    padding-inline: 24px;
+  }
+
+  .site-nav {
+    justify-self: center;
+  }
+
+  .site-nav-trigger {
+    padding: 0 7px 0 10px;
+  }
+
+  .site-nav-link {
+    padding: 0 10px;
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .site-nav-trigger:hover {
     color: var(--openbot-text-primary);
@@ -695,14 +757,6 @@ a {
 
   .site-panel-index:hover svg {
     transform: translateX(3px);
-  }
-}
-
-/* Just above the mobile header, the brand, the full menu and three buttons do
-   not fit in one row. Contact is also in the hero and the footer. */
-@media (min-width: 901px) and (max-width: 1040px) {
-  .site-header-actions > .site-header-contact {
-    display: none;
   }
 }
 
@@ -949,21 +1003,12 @@ a {
   mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M13.17 5 11.76 6.41 16.34 11H4v2h12.34l-4.58 4.59L13.17 19l7-7-7-7Z'/%3E%3C/svg%3E");
 }
 
-.join-page {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  padding: 96px 24px 48px;
-  background:
-    radial-gradient(circle at 50% 42%, var(--openbot-accent-strong), var(--openbot-transparent) 38%),
-    var(--openbot-bg-canvas);
+.landing-button[data-icon="copy"]::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 3h11a2 2 0 0 1 2 2v11h-2V5H8V3Zm-3 4h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Zm0 2v10h10V9H5Z'/%3E%3C/svg%3E");
 }
 
-.join-page-brand {
-  position: absolute;
-  top: 24px;
-  left: 24px;
+.landing-button[data-icon="check"]::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z'/%3E%3C/svg%3E");
 }
 
 .join-card {
@@ -1044,10 +1089,6 @@ a {
   justify-content: center;
 }
 
-.join-card-disabled {
-  opacity: 0.5;
-}
-
 .join-card-error {
   margin: 26px 0 0;
   color: var(--openbot-text-primary);
@@ -1060,16 +1101,11 @@ a {
   line-height: 1.5;
 }
 
+.join-card-status-empty {
+  margin: 0;
+}
+
 @media (max-width: 520px) {
-  .join-page {
-    padding-right: 14px;
-    padding-left: 14px;
-  }
-
-  .join-page-brand {
-    left: 18px;
-  }
-
   .join-card-actions {
     grid-template-columns: 1fr;
   }
@@ -1114,6 +1150,44 @@ a {
     inset 0 1px 0 var(--openbot-glass-highlight),
     0 10px 30px -18px var(--openbot-glass-shadow);
   color: var(--openbot-text-primary);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+
+/* Frosted glass: the hero beam rises behind these buttons and the availability pill. */
+.site-header-actions > .landing-button-glass,
+.landing-availability {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* The hero beam falls through this button. The opaque fill gives the sharp edge, and a soft glow
+   of the beam colour hugs it. The beam canvas has fewer pixels than the screen, so the glow next
+   to the edge is drawn here. It shows once the beam front reaches the button. Any line or inner
+   tint shows as a second layer around the fill. */
+.landing-button[data-beam-source] {
+  position: relative;
+}
+
+.landing-button[data-beam-source]::after {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 8px 1px rgba(var(--landing-beam-rim, 164, 108, 245), 0.55);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+
+.landing-button[data-beam-struck]::after {
+  opacity: 1;
 }
 
 .landing-button:focus-visible {
@@ -1147,6 +1221,34 @@ a {
   transform: translateX(-50%);
 }
 
+/* The beam falls from above the header and lands on the app preview. It covers the hero
+   from edge to edge of the screen, so the light that runs off the preview's corners is
+   not cut at the 1280px column. */
+.landing-beam {
+  position: absolute;
+  z-index: 0;
+  top: -76px;
+  bottom: 0;
+  left: 50%;
+  width: 100vw;
+  pointer-events: none;
+  transform: translateX(-50%);
+  mask-image: linear-gradient(var(--openbot-transparent), var(--openbot-mask-solid) 120px);
+}
+
+/* A beam that falls through a header button lights the top of the hero, so the top needs no fade. */
+.landing-beam[data-source] {
+  mask-image: none;
+}
+
+.landing-beam-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .landing-hero-copy {
   position: relative;
   z-index: 2;
@@ -1162,9 +1264,9 @@ a {
   gap: 8px;
   margin: 0 0 28px;
   padding: 4px 12px 4px 4px;
-  border: 1px solid var(--openbot-border-strong);
+  border-width: 1px;
+  border-style: solid;
   border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-bg-sidebar);
   color: var(--openbot-text-secondary);
   font-size: 11px;
   font-weight: 500;
@@ -1206,6 +1308,14 @@ a {
 
 .landing-availability-separator {
   color: var(--openbot-text-dim);
+}
+
+/* Between the desktop systems and the phone apps. */
+.landing-availability-divider {
+  width: 1px;
+  height: 12px;
+  margin-inline: 2px;
+  background: var(--openbot-border-strong);
 }
 
 .landing-title {
@@ -1412,6 +1522,23 @@ a {
   outline-offset: -2px;
 }
 
+.landing-download-menu-separator {
+  height: 1px;
+  margin: 4px 5px;
+  border: 0;
+  background: var(--openbot-border-strong);
+}
+
+.landing-download-menu-label {
+  padding: 6px 11px 4px;
+  color: var(--openbot-text-muted);
+  text-align: left;
+  font-family: var(--openbot-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .landing-preview {
   aspect-ratio: 16 / 10;
   width: 100%;
@@ -1423,20 +1550,7 @@ a {
   border: 1px solid var(--openbot-border-strong);
   border-radius: var(--openbot-radius-lg);
   background: var(--openbot-bg-sidebar);
-  box-shadow:
-    0 28px 90px -42px var(--openbot-mask-solid),
-    inset 0 1px var(--openbot-glass-highlight);
-}
-
-.landing-preview::before {
-  position: absolute;
-  z-index: -1;
-  inset: -42px -24px -30px;
-  background: radial-gradient(ellipse at 50% 48%, var(--openbot-accent-strong), var(--openbot-transparent) 68%);
-  content: "";
-  filter: blur(22px);
-  opacity: 0.82;
-  pointer-events: none;
+  box-shadow: inset 0 1px var(--openbot-glass-highlight);
 }
 
 .landing-preview-window-controls {
@@ -1838,7 +1952,7 @@ a {
   max-width: 720px;
 }
 
-.landing-section-heading h2 {
+.landing-section-heading :is(h1, h2) {
   margin: 0;
   font-size: clamp(38px, 5vw, 64px);
   font-weight: 500;
@@ -3565,6 +3679,11 @@ a {
       0 14px 36px -18px var(--openbot-glass-shadow);
   }
 
+  .site-header-actions > .landing-button-glass:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.06));
+  }
+
   .landing-footer-cta:hover span {
     text-decoration: underline;
     text-underline-offset: 4px;
@@ -3737,6 +3856,11 @@ a {
     font-size: 8px;
   }
 
+  /* The five systems do not fit on a phone with the words in front of them. */
+  .landing-availability-copy {
+    display: none;
+  }
+
   .landing-availability-platform {
     gap: 3px;
   }
@@ -3816,6 +3940,16 @@ a {
   }
 }
 
+@media (max-width: 400px) {
+  .landing-availability {
+    gap: 4px;
+  }
+
+  .landing-availability-divider {
+    margin-inline: 1px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -3861,6 +3995,1420 @@ a {
   .landing-glow-rise {
     transform: scaleY(1);
     transition: none;
+  }
+}
+
+/* The agent network: one screen high, with the heading over the top of the canvas.
+   The words of the heading appear one at a time when the stage starts to play. The
+   canvas fades out at its sides, at its bottom, and under the heading, whose height the
+   section writes to `--landing-network-top`. */
+.landing-network {
+  overflow: hidden;
+}
+
+.landing-network-stage {
+  --landing-network-top: 30%;
+  position: relative;
+  height: clamp(620px, calc(100svh - 24px), 920px);
+  margin-top: clamp(64px, 8vw, 120px);
+}
+
+.landing-network-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  --landing-network-mask:
+    linear-gradient(
+      to bottom,
+      transparent var(--landing-network-top),
+      var(--openbot-mask-solid) calc(var(--landing-network-top) + 96px),
+      var(--openbot-mask-solid) calc(100% - 120px),
+      transparent
+    ),
+    radial-gradient(ellipse 72% 78% at 50% 55%, var(--openbot-mask-solid) 60%, transparent 100%);
+  -webkit-mask-image: var(--landing-network-mask);
+  -webkit-mask-composite: source-in;
+  mask-image: var(--landing-network-mask);
+  mask-composite: intersect;
+}
+
+.landing-network-heading {
+  position: relative;
+  margin-inline: auto;
+  padding: 0 clamp(20px, 4vw, 48px);
+  text-align: center;
+}
+
+.landing-network-heading .landing-network-description {
+  margin-inline: auto;
+}
+
+.landing-network[data-playing="false"] :is(.landing-network-word, .landing-network-description) {
+  opacity: 0;
+}
+
+.landing-network[data-playing="true"] .landing-network-word {
+  animation: landing-network-word 640ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--landing-network-word) * 90ms);
+}
+
+.landing-network[data-playing="true"] .landing-network-description {
+  animation: landing-download-reveal 720ms cubic-bezier(0.22, 1, 0.36, 1) 560ms backwards;
+}
+
+/* After the rules above, so it overrides their animation shorthand. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-network[data-playing="true"] :is(.landing-network-word, .landing-network-description) {
+    animation: none;
+  }
+}
+
+@keyframes landing-network-word {
+  from {
+    opacity: 0;
+    color: var(--openbot-text-muted);
+    filter: blur(var(--reveal-blur));
+  }
+
+  55% {
+    color: var(--openbot-text-muted);
+  }
+}
+
+.landing-network-marks {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* OpenBot for Teams --------------------------------------------------------
+   The heading and the button stay on the left. One colour card for each offer
+   sticks one step below the previous card, so the label row of each card stays
+   visible. `TeamsSection` sets `--landing-teams-covered` from 0 to 1 while the
+   next card moves on top; the card then becomes a little smaller and darker. */
+
+.landing-teams {
+  /* The top edge of the stuck heading and of the first stuck card. */
+  --landing-teams-top: 96px;
+  /* The distance between two stuck cards: the height of the label row of a card. */
+  --landing-teams-step: 64px;
+}
+
+/* Each offer has one colour, from the build colours of the logo and the iOS download card. */
+.landing-teams [data-offer="servers"] {
+  --landing-teams-color: var(--openbot-logo-production);
+}
+
+.landing-teams [data-offer="environments"] {
+  --landing-teams-color: var(--openbot-logo-preview);
+}
+
+.landing-teams [data-offer="integrations"] {
+  --landing-teams-color: var(--openbot-logo-dev);
+}
+
+.landing-teams [data-offer="support"] {
+  --landing-teams-color: var(--download-ios-color);
+}
+
+.landing-teams-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(40px, 6vw, 96px);
+}
+
+.landing-teams-aside {
+  position: sticky;
+  top: var(--landing-teams-top);
+  align-self: start;
+}
+
+.landing-teams-title {
+  text-wrap: balance;
+}
+
+.landing-section-heading .landing-teams-statement {
+  margin-top: 20px;
+  color: var(--openbot-text-primary);
+  font-size: clamp(19px, 1.8vw, 22px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.landing-section-heading .landing-teams-description {
+  max-width: 36ch;
+  margin-top: 10px;
+}
+
+.landing-teams-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+/* The offers in order. The card on top of the stack has a coloured bar. */
+.landing-teams-progress {
+  display: grid;
+  margin: 48px 0 0;
+  padding: 0;
+  border-left: 1px solid var(--landing-card-border);
+  list-style: none;
+}
+
+.landing-teams-progress-item {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 0 10px 20px;
+  color: var(--openbot-text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color var(--openbot-duration-normal) ease;
+}
+
+.landing-teams-progress-item::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: -1px;
+  width: 2px;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--landing-teams-color);
+  scale: 1 0;
+  transition: scale var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+
+.landing-teams-progress-item[data-active] {
+  color: var(--openbot-text-primary);
+}
+
+.landing-teams-progress-item[data-active]::before {
+  scale: 1 1;
+}
+
+.landing-teams-progress-number {
+  font-family: var(--openbot-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.landing-teams-stack {
+  display: grid;
+  gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-teams-card {
+  position: sticky;
+  top: calc(var(--landing-teams-top) + var(--landing-teams-card) * var(--landing-teams-step));
+  isolation: isolate;
+  min-height: 380px;
+  display: grid;
+  grid-template-rows: var(--landing-teams-step) 1fr auto;
+  overflow: hidden;
+  padding: 0 clamp(26px, 3vw, 40px) clamp(26px, 3vw, 40px);
+  border: 1px solid var(--openbot-download-card-border);
+  border-radius: 28px;
+  background: var(--landing-teams-color);
+  box-shadow: 0 -20px 40px -28px rgb(0 0 0 / 70%);
+  color: var(--openbot-text-on-light);
+  transform-origin: top center;
+  scale: calc(1 - var(--landing-teams-covered, 0) * 0.05);
+  filter: brightness(calc(1 - var(--landing-teams-covered, 0) * 0.22));
+}
+
+/* A soft grid on the full card. It is clearest behind the icon and fades below the text. */
+.landing-teams-card::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--openbot-text-on-light) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--openbot-text-on-light) 7%, transparent) 1px, transparent 1px);
+  background-position: -1px -1px;
+  background-size: 28px 28px;
+  mask-image: radial-gradient(
+    120% 100% at 85% 25%,
+    var(--openbot-mask-solid) 15%,
+    color-mix(in srgb, var(--openbot-mask-solid) 35%, transparent) 100%
+  );
+  pointer-events: none;
+}
+
+.landing-teams-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.landing-teams-card-number {
+  font-family: var(--openbot-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+.landing-teams-card-icon {
+  position: absolute;
+  z-index: -1;
+  top: calc(var(--landing-teams-step) + 4px);
+  /* Inside the card padding, so the card edge does not cut the icon. */
+  right: clamp(26px, 3vw, 40px);
+  width: clamp(130px, 15vw, 200px);
+  height: clamp(130px, 15vw, 200px);
+  /* About 6 px at this size; the icon stroke of 2 is for 24 px. */
+  stroke-width: 0.75;
+  opacity: 0.85;
+}
+
+.landing-teams-card-copy {
+  grid-row: 3;
+}
+
+.landing-teams-card-title {
+  max-width: 12ch;
+  margin: 0;
+  font-size: clamp(34px, 4vw, 56px);
+  font-weight: 600;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.landing-teams-card-description {
+  max-width: 34ch;
+  margin: 16px 0 0;
+  color: var(--openbot-download-card-muted);
+  font-size: 16px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-teams-card {
+    scale: none;
+  }
+
+  .landing-teams-progress-item,
+  .landing-teams-progress-item::before {
+    transition: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .landing-teams {
+    --landing-teams-top: 16px;
+    --landing-teams-step: 52px;
+  }
+
+  .landing-teams-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-teams-aside {
+    position: static;
+  }
+
+  .landing-teams-progress {
+    display: none;
+  }
+
+  .landing-teams-stack {
+    gap: 16px;
+  }
+
+  .landing-teams-card {
+    min-height: 320px;
+    border-radius: 24px;
+  }
+
+  .landing-teams-card-icon {
+    width: 110px;
+    height: 110px;
+    stroke-width: 0.9;
+  }
+}
+
+/* The For Teams page ------------------------------------------------------
+   /teams: the team in the hero title with moving name cursors, the setups in
+   the colours of the Teams cards, a bento of benefits, the steps of a custom
+   project, a marquee of who it is for, and a closing title that lights up as
+   you scroll. */
+
+.teams-page {
+  --landing-card-border: color-mix(in srgb, var(--openbot-text-primary) 8%, transparent);
+  --landing-card-border-hover: color-mix(in srgb, var(--openbot-text-primary) 16%, transparent);
+  --landing-card-fill: color-mix(in srgb, var(--openbot-text-primary) 5%, transparent);
+  --teams-soft-grid:
+    linear-gradient(color-mix(in srgb, var(--openbot-text-on-light) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--openbot-text-on-light) 7%, transparent) 1px, transparent 1px);
+  color: var(--openbot-text-primary);
+}
+
+.teams-page .teams-main {
+  padding-bottom: 0;
+}
+
+.teams-page [data-setup="local"],
+.teams-page [data-tile="0"],
+.teams-page [data-cursor="0"] {
+  --teams-color: var(--openbot-logo-production);
+}
+
+.teams-page [data-setup="managed"],
+.teams-page [data-tile="1"],
+.teams-page [data-cursor="1"] {
+  --teams-color: var(--openbot-logo-preview);
+}
+
+.teams-page [data-setup="custom"],
+.teams-page [data-tile="2"],
+.teams-page [data-cursor="2"] {
+  --teams-color: var(--openbot-logo-dev);
+}
+
+.teams-page [data-tile="3"] {
+  --teams-color: var(--download-ios-color);
+}
+
+/* Shared ----------------------------------------------------------------- */
+
+.teams-page .teams-section {
+  position: relative;
+  isolation: isolate;
+  width: min(100%, 1280px);
+  margin: 0 auto;
+  padding: clamp(96px, 10vw, 144px) clamp(20px, 4vw, 48px) 0;
+}
+
+.teams-page .teams-heading {
+  max-width: 760px;
+}
+
+.teams-page .teams-heading-center {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.teams-page .teams-heading h2 {
+  margin: 0;
+  font-size: clamp(38px, 5vw, 64px);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  text-wrap: balance;
+}
+
+.teams-page .teams-heading p {
+  max-width: 560px;
+  margin: 22px 0 0;
+  color: var(--openbot-text-secondary);
+  font-size: clamp(16px, 1.8vw, 19px);
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.teams-page .teams-heading-center p {
+  margin-inline: auto;
+}
+
+.teams-page .teams-help {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px 16px;
+  margin: 32px 0 0;
+  color: var(--openbot-text-secondary);
+  font-size: 16px;
+}
+
+.teams-page .teams-section[data-revealed="false"] > * {
+  opacity: 0;
+}
+
+.teams-page .teams-section[data-revealed="true"] > * {
+  animation: landing-download-reveal 720ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.teams-page .teams-section[data-revealed="true"] > :nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.teams-page .teams-section[data-revealed="true"] > :nth-child(3) {
+  animation-delay: 240ms;
+}
+
+/* Hero, setups and benefits --------------------------------------------- */
+
+/* Registered, so the light on the pill border can turn. */
+@property --teams-pill-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* A light in the three setup colours runs around the border, the dots hop in turn, and a sheen
+   crosses the label. `::before` is the sharp light and `::after` is its blurred glow. */
+.teams-page .teams-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 28px;
+  padding: 5px 14px 5px 6px;
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-bg-sidebar);
+  color: var(--openbot-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.teams-page .teams-pill::before,
+.teams-page .teams-pill::after {
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--teams-pill-angle),
+    transparent 0deg 190deg,
+    var(--openbot-logo-production) 250deg,
+    var(--openbot-logo-preview) 295deg,
+    var(--openbot-logo-dev) 340deg,
+    transparent 360deg
+  );
+  content: "";
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: teams-pill-turn 5s linear infinite;
+}
+
+.teams-page .teams-pill::after {
+  inset: -3px;
+  padding: 3px;
+  filter: blur(6px);
+  opacity: 0.7;
+}
+
+.teams-page .teams-pill-dots {
+  display: inline-flex;
+}
+
+.teams-page .teams-pill-dots span {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--openbot-bg-sidebar);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--teams-color);
+  animation: teams-pill-hop 2.8s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+
+.teams-page .teams-pill-dots span + span {
+  margin-left: -6px;
+}
+
+.teams-page .teams-pill-dots span:nth-child(2) {
+  animation-delay: 140ms;
+}
+
+.teams-page .teams-pill-dots span:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+.teams-page .teams-pill-label {
+  background:
+    linear-gradient(
+      100deg,
+      var(--openbot-text-secondary) 42%,
+      var(--openbot-text-primary) 50%,
+      var(--openbot-text-secondary) 58%
+    )
+    0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: teams-pill-sheen 5s ease-in-out infinite;
+}
+
+@keyframes teams-pill-turn {
+  to {
+    --teams-pill-angle: 360deg;
+  }
+}
+
+@keyframes teams-pill-hop {
+  0%,
+  30%,
+  100% {
+    transform: none;
+  }
+
+  12% {
+    transform: translateY(-4px) scale(1.12);
+  }
+}
+
+@keyframes teams-pill-sheen {
+  0% {
+    background-position: 100% 0;
+  }
+
+  45%,
+  100% {
+    background-position: 0 0;
+  }
+}
+
+.teams-page .teams-hero {
+  padding-bottom: 24px;
+}
+
+.teams-page .teams-title {
+  max-width: 17ch;
+  margin: 0;
+  font-size: clamp(46px, 7.2vw, 104px);
+  font-weight: 500;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+  text-wrap: balance;
+}
+
+.teams-page .teams-setups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin: clamp(48px, 6vw, 72px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teams-page .teams-setup {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  min-height: 440px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: clamp(26px, 2.6vw, 34px);
+  border: 1px solid var(--openbot-download-card-border);
+  border-radius: 28px;
+  background: var(--teams-color);
+  color: var(--openbot-text-on-light);
+  transition: transform var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+
+.teams-page .teams-setup::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background-image: var(--teams-soft-grid);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(90% 70% at 20% 15%, var(--openbot-mask-solid) 10%, transparent 100%);
+  pointer-events: none;
+}
+
+.teams-page .teams-setup:hover {
+  transform: translateY(-6px);
+}
+
+.teams-page .teams-setup-icon {
+  width: clamp(76px, 7vw, 96px);
+  height: clamp(76px, 7vw, 96px);
+  stroke-width: 1;
+}
+
+.teams-page .teams-setup .landing-download-card-copy h3 {
+  text-wrap: balance;
+}
+
+.teams-page .teams-setup .landing-download-card-copy p {
+  font-size: 15px;
+  text-wrap: pretty;
+}
+
+.teams-page .teams-bento {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teams-page .teams-tile {
+  min-width: 0;
+  min-height: 340px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--landing-card-border);
+  border-radius: 28px;
+  background: var(--openbot-bg-surface);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease;
+}
+
+.teams-page .teams-tile:hover {
+  border-color: var(--landing-card-border-hover);
+  background: var(--openbot-bg-surface-raised);
+}
+
+.teams-page .teams-tile[data-tile="0"] {
+  grid-column: 1 / 8;
+}
+
+.teams-page .teams-tile[data-tile="1"] {
+  grid-column: 8 / 13;
+}
+
+.teams-page .teams-tile[data-tile="2"] {
+  grid-column: 1 / 6;
+}
+
+.teams-page .teams-tile[data-tile="3"] {
+  grid-column: 6 / 13;
+}
+
+/* The picture of a tile: the hero grid, a glow in the tile colour, and the icon on a coloured tile. */
+.teams-page .teams-tile-art {
+  position: relative;
+  flex: 1;
+  min-height: 170px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(50% 70% at 50% 60%, color-mix(in srgb, var(--teams-color) 22%, transparent), transparent 70%),
+    linear-gradient(90deg, var(--openbot-hero-grid-line) 1px, transparent 1px) 0 0 / 32px 32px,
+    linear-gradient(var(--openbot-hero-grid-line) 1px, transparent 1px) 0 0 / 32px 32px;
+  mask-image: linear-gradient(var(--openbot-mask-solid) 55%, transparent);
+}
+
+.teams-page .teams-tile-art svg {
+  width: 88px;
+  height: 88px;
+  padding: 20px;
+  border: 1px solid var(--openbot-download-card-border);
+  border-radius: 24px;
+  background: var(--teams-color);
+  box-shadow: 0 20px 50px -18px var(--teams-color);
+  color: var(--openbot-text-on-light);
+  stroke-width: 1.6;
+  transition: transform 400ms var(--openbot-ease-out);
+}
+
+.teams-page .teams-tile:hover .teams-tile-art svg {
+  transform: translateY(-6px) rotate(-4deg);
+}
+
+.teams-page .teams-tile-copy {
+  padding: 8px 32px 32px;
+}
+
+.teams-page .teams-tile-copy h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.teams-page .teams-tile-copy p {
+  max-width: 48ch;
+  margin: 10px 0 0;
+  color: var(--openbot-text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* Custom timeline -------------------------------------------------------- */
+
+.teams-page .teams-timeline {
+  position: relative;
+  margin: clamp(56px, 7vw, 88px) 0 0;
+}
+
+.teams-page .teams-timeline-line {
+  position: absolute;
+  top: 27px;
+  right: 10%;
+  left: 10%;
+  height: 2px;
+  background: var(--landing-card-border-hover);
+  pointer-events: none;
+}
+
+.teams-page .teams-timeline-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    var(--openbot-logo-production),
+    var(--openbot-logo-preview),
+    var(--openbot-logo-dev),
+    var(--download-ios-color)
+  );
+  transform-origin: left;
+}
+
+/* The spark is under the nodes, so it goes out of view behind each step. */
+.teams-page .teams-timeline-spark {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--openbot-text-primary);
+  box-shadow:
+    0 0 10px 3px color-mix(in srgb, var(--openbot-logo-preview) 80%, transparent),
+    0 0 36px 12px color-mix(in srgb, var(--openbot-logo-production) 45%, transparent);
+  opacity: 0;
+}
+
+.teams-page .teams-timeline-spark::before {
+  position: absolute;
+  top: 50%;
+  right: 50%;
+  width: 160px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--openbot-text-primary));
+  content: "";
+  translate: 0 -50%;
+}
+
+.teams-page .teams-timeline-track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teams-page .teams-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.teams-page .teams-step-node {
+  position: relative;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--teams-color);
+  box-shadow:
+    0 0 0 10px var(--openbot-bg-canvas),
+    0 0 36px 6px color-mix(in srgb, var(--teams-color) 40%, transparent);
+  color: var(--openbot-text-on-light);
+}
+
+.teams-page .teams-step-node::after {
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--teams-color);
+  border-radius: 50%;
+  content: "";
+  opacity: 0;
+}
+
+.teams-page .teams-step-node svg {
+  width: 24px;
+  height: 24px;
+}
+
+.teams-page .teams-step-number {
+  margin: 26px 0 0;
+  color: var(--openbot-text-muted);
+  font-family: var(--openbot-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.teams-page .teams-step-title {
+  max-width: 16ch;
+  margin: 10px 0 0;
+  font-size: clamp(17px, 1.6vw, 21px);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+/* Before a step lights, its node is a small grey dot, and its text is not shown. */
+.teams-page [data-play="false"] .teams-timeline-fill {
+  transform: scaleX(0);
+}
+
+.teams-page [data-play="false"] .teams-step-node {
+  background: var(--openbot-bg-surface-raised);
+  box-shadow: 0 0 0 10px var(--openbot-bg-canvas);
+  color: transparent;
+  transform: scale(0.5);
+}
+
+.teams-page [data-play="false"] :is(.teams-step-number, .teams-step-title) {
+  opacity: 0;
+}
+
+/* One run of the spark. Step n lights when the spark gets to it. */
+.teams-page [data-play="true"] .teams-timeline-fill {
+  animation: teams-timeline-fill 2000ms linear 200ms backwards;
+}
+
+.teams-page [data-play="true"] .teams-timeline-spark {
+  animation: teams-timeline-spark-x 2000ms linear 200ms both;
+}
+
+.teams-page [data-play="true"] .teams-step-node {
+  animation: teams-step-pop 760ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  animation-delay: calc(200ms + var(--teams-index) * 500ms);
+}
+
+.teams-page [data-play="true"] .teams-step-node::after {
+  animation: teams-step-burst 900ms ease-out forwards;
+  animation-delay: calc(200ms + var(--teams-index) * 500ms);
+}
+
+.teams-page [data-play="true"] :is(.teams-step-number, .teams-step-title) {
+  animation: landing-download-reveal 720ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(320ms + var(--teams-index) * 500ms);
+}
+
+@keyframes teams-timeline-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes teams-timeline-spark-x {
+  from {
+    left: 0;
+    opacity: 0;
+  }
+
+  6%,
+  94% {
+    opacity: 1;
+  }
+
+  to {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes teams-step-pop {
+  from {
+    background: var(--openbot-bg-surface-raised);
+    box-shadow: 0 0 0 10px var(--openbot-bg-canvas);
+    color: transparent;
+    transform: scale(0.5);
+  }
+
+  55% {
+    transform: scale(1.22);
+  }
+}
+
+@keyframes teams-step-burst {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+
+/* Audience: marquee ---------------------------------------------------------- */
+
+.teams-page .teams-marquee {
+  display: grid;
+  gap: 16px;
+  margin: clamp(48px, 6vw, 72px) calc(clamp(20px, 4vw, 48px) * -1) 0;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.teams-page .teams-marquee-row {
+  overflow: hidden;
+}
+
+.teams-page [data-revealed="false"] .teams-marquee-row {
+  opacity: 0;
+}
+
+.teams-page [data-revealed="true"] .teams-marquee-row {
+  animation: landing-download-reveal 720ms cubic-bezier(0.22, 1, 0.36, 1) 200ms backwards;
+}
+
+.teams-page [data-revealed="true"] .teams-marquee-row[data-row="1"] {
+  animation-delay: 340ms;
+}
+
+.teams-page .teams-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: teams-marquee-scroll 48s linear infinite;
+}
+
+.teams-page .teams-marquee-row[data-row="1"] .teams-marquee-track {
+  animation-direction: reverse;
+  animation-duration: 40s;
+}
+
+.teams-page .teams-marquee-row:hover .teams-marquee-track {
+  animation-play-state: paused;
+}
+
+.teams-page .teams-marquee-group {
+  display: flex;
+  gap: 16px;
+  padding-right: 16px;
+}
+
+.teams-page .teams-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 28px 12px 12px;
+  border: 1px solid var(--landing-card-border);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--landing-card-fill);
+  color: var(--openbot-text-secondary);
+  font-size: clamp(17px, 1.6vw, 21px);
+  white-space: nowrap;
+  transition:
+    border-color var(--openbot-duration-normal) var(--openbot-ease-out),
+    background-color var(--openbot-duration-normal) var(--openbot-ease-out);
+}
+
+.teams-page .teams-chip:hover {
+  border-color: color-mix(in srgb, var(--teams-color) 50%, transparent);
+  background: color-mix(in srgb, var(--teams-color) 12%, transparent);
+}
+
+.teams-page .teams-chip strong {
+  color: var(--openbot-text-primary);
+  font-weight: 600;
+}
+
+.teams-page .teams-chip-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--teams-color);
+  color: var(--openbot-text-on-light);
+}
+
+.teams-page .teams-chip-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+@keyframes teams-marquee-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.teams-page .teams-closing {
+  display: grid;
+  justify-items: center;
+  gap: 36px;
+  padding-bottom: clamp(80px, 9vw, 128px);
+  text-align: center;
+}
+
+.teams-page .teams-closing h2 {
+  position: relative;
+  z-index: 1;
+  max-width: 16ch;
+  margin: 0;
+  font-size: clamp(40px, 6vw, 84px);
+  font-weight: 500;
+  letter-spacing: -0.06em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+/* Closing ---------------------------------------------------------------- */
+
+/* A second grid in a setup colour, shown only in a circle under the pointer. */
+.teams-page .teams-closing-spot {
+  --openbot-hero-grid-line: color-mix(in srgb, var(--openbot-logo-preview) 60%, transparent);
+  mask-image: radial-gradient(
+    220px circle at var(--teams-x, -999px) var(--teams-y, -999px),
+    var(--openbot-mask-solid),
+    var(--openbot-transparent)
+  );
+}
+
+/* `--teams-progress` (0 to 1) follows the scroll with inertia. Each word turns on over three words' part of
+   it, so the next words start before one ends, and `--teams-ease` (smoothstep) softens each start and end.
+   The dim words keep 3:1 contrast, as large text needs. */
+.teams-page .teams-closing-word {
+  --teams-on: clamp(0, calc((var(--teams-progress, 0) * (var(--teams-count) + 3) - var(--teams-word)) / 3), 1);
+  --teams-ease: calc(var(--teams-on) * var(--teams-on) * (3 - 2 * var(--teams-on)));
+  display: inline-block;
+  opacity: calc(0.4 + var(--teams-ease) * 0.6);
+  filter: blur(calc((1 - var(--teams-ease)) * 6px));
+  transform: translateY(calc((1 - var(--teams-ease)) * 0.16em));
+}
+
+.teams-page .teams-closing-word[data-accent] {
+  background: linear-gradient(100deg, var(--openbot-logo-production), var(--openbot-logo-preview));
+  background-clip: text;
+  color: transparent;
+}
+
+/* The button rises into place over the last part of the scroll. It follows the same smooth value. */
+.teams-page .teams-closing-action {
+  --teams-rise: clamp(0, calc((var(--teams-progress, 0) - 0.7) / 0.3), 1);
+  position: relative;
+  z-index: 1;
+  transform: translateY(calc((1 - var(--teams-rise)) * 14px)) scale(calc(0.97 + var(--teams-rise) * 0.03));
+}
+
+/* A soft glow behind the button. It fades in when the title is complete, then breathes slowly. */
+.teams-page .teams-closing-action::before {
+  position: absolute;
+  inset: -8px -14px;
+  z-index: -1;
+  border-radius: var(--openbot-radius-pill);
+  background: linear-gradient(
+    100deg,
+    var(--openbot-logo-production),
+    var(--openbot-logo-preview) 50%,
+    var(--openbot-logo-dev)
+  );
+  content: "";
+  filter: blur(18px);
+  opacity: 0;
+  scale: 0.85;
+  transition:
+    opacity 1200ms var(--openbot-ease-out),
+    scale 1200ms var(--openbot-ease-out);
+}
+
+.teams-page .teams-closing[data-done="true"] .teams-closing-action::before {
+  opacity: 0.5;
+  scale: 1;
+  animation: teams-closing-breathe 4.8s ease-in-out 1200ms infinite alternate;
+}
+
+@keyframes teams-closing-breathe {
+  from {
+    opacity: 0.5;
+    scale: 1;
+  }
+
+  to {
+    opacity: 0.22;
+    scale: 1.08;
+  }
+}
+
+/* Hero: the agents in the title ----------------------------------------- */
+
+/* The selector outranks the generic `.agent-avatar` size rule, which loads after this stylesheet. */
+.teams-page .teams-avatar {
+  --teams-avatar-size: 0.7em;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--teams-avatar-size);
+  height: var(--teams-avatar-size);
+  border-radius: var(--openbot-radius-pill);
+}
+
+.teams-page .teams-avatar:empty {
+  background: var(--landing-card-fill);
+}
+
+.teams-page .teams-avatar > svg {
+  display: block;
+  width: 128%;
+  height: 128%;
+  overflow: visible;
+  translate: 0 calc(var(--teams-avatar-size) * -0.14);
+}
+
+/* "of" and the avatars stay on one line, so the avatars never start a line alone. */
+.teams-page .teams-title-keep {
+  white-space: nowrap;
+}
+
+.teams-page .teams-title-team {
+  display: inline-flex;
+  vertical-align: -0.26em;
+}
+
+.teams-page .teams-title-team > * + * {
+  margin-left: -0.06em;
+}
+
+.teams-page .teams-cursors {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The script moves each cursor each frame, and sets `--teams-lean` from its sideways speed. */
+.teams-page .teams-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-start;
+  opacity: 0;
+  transition: opacity 400ms ease;
+  will-change: transform;
+}
+
+/* The script sets `data-placed` when the cursor is on its first point. Until then, the Worker HTML hides it. */
+.teams-page .teams-cursor[data-placed] {
+  opacity: 1;
+}
+
+.teams-page .teams-cursor-arrow {
+  width: 30px;
+  height: 30px;
+  fill: var(--teams-color);
+  stroke: var(--openbot-bg-canvas);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 35%));
+  transform: rotate(var(--teams-lean, 0deg));
+  transform-origin: 4px 3px;
+}
+
+.teams-page .teams-cursor-name {
+  margin: 22px 0 0 -6px;
+  padding: 6px 13px;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--teams-color);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 25%);
+  color: var(--openbot-text-on-light);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Phone ------------------------------------------------------------------ */
+
+@media (max-width: 900px) {
+  .teams-page .teams-setups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .teams-page .teams-setup {
+    min-height: 320px;
+    border-radius: 24px;
+  }
+
+  .teams-page .teams-tile[data-tile] {
+    grid-column: 1 / -1;
+  }
+
+  .teams-page .teams-chip {
+    gap: 12px;
+    padding: 8px 20px 8px 8px;
+  }
+
+  .teams-page .teams-chip-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .teams-page .teams-timeline-track {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+
+  .teams-page .teams-timeline-line {
+    top: 28px;
+    right: auto;
+    bottom: 28px;
+    left: 27px;
+    width: 2px;
+    height: auto;
+  }
+
+  .teams-page .teams-timeline-fill {
+    background: linear-gradient(
+      180deg,
+      var(--openbot-logo-production),
+      var(--openbot-logo-preview),
+      var(--openbot-logo-dev),
+      var(--download-ios-color)
+    );
+    transform-origin: top;
+  }
+
+  .teams-page [data-play="false"] .teams-timeline-fill {
+    transform: scaleY(0);
+  }
+
+  .teams-page .teams-timeline-spark {
+    top: 0;
+    left: 50%;
+    margin: -6px 0 0 -6px;
+  }
+
+  .teams-page .teams-timeline-spark::before {
+    top: auto;
+    right: auto;
+    bottom: 50%;
+    left: 50%;
+    width: 2px;
+    height: 120px;
+    background: linear-gradient(180deg, transparent, var(--openbot-text-primary));
+    translate: -50% 0;
+  }
+
+  .teams-page [data-play="true"] .teams-timeline-fill {
+    animation-name: teams-timeline-fill-y;
+  }
+
+  .teams-page [data-play="true"] .teams-timeline-spark {
+    animation-name: teams-timeline-spark-y;
+  }
+
+  .teams-page .teams-step {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 20px;
+    text-align: left;
+  }
+
+  .teams-page .teams-step-node {
+    grid-row: 1 / 3;
+  }
+
+  .teams-page .teams-step-number {
+    align-self: end;
+    margin: 0;
+  }
+
+  .teams-page .teams-step-title {
+    align-self: start;
+    max-width: none;
+    margin: 4px 0 0;
+  }
+
+  .teams-page .teams-cursors {
+    display: none;
+  }
+}
+
+@keyframes teams-timeline-fill-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes teams-timeline-spark-y {
+  from {
+    top: 0;
+    opacity: 0;
+  }
+
+  6%,
+  94% {
+    opacity: 1;
+  }
+
+  to {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .teams-page .teams-pill::before,
+  .teams-page .teams-pill::after,
+  .teams-page .teams-pill-dots span,
+  .teams-page .teams-pill-label,
+  .teams-page .teams-section[data-revealed="true"] > *,
+  .teams-page .teams-timeline *,
+  .teams-page .teams-timeline *::after {
+    animation: none;
+  }
+
+  .teams-page .teams-setup,
+  .teams-page .teams-tile-art svg,
+  .teams-page .teams-timeline * {
+    transition: none;
+  }
+
+  .teams-page .teams-closing-action::before {
+    transition: none;
+  }
+
+  .teams-page [data-revealed="true"] .teams-marquee-row,
+  .teams-page .teams-closing[data-done="true"] .teams-closing-action::before {
+    animation: none;
+  }
+
+  /* No marquee: the chips of the first copy wrap, and the second copy is not shown. */
+  .teams-page .teams-marquee {
+    mask-image: none;
+  }
+
+  .teams-page .teams-marquee-track {
+    width: auto;
+    animation: none;
+  }
+
+  .teams-page .teams-marquee-group {
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 0 16px;
+  }
+
+  .teams-page .teams-marquee-group + .teams-marquee-group,
+  .teams-page .teams-marquee-group > :nth-child(n + 4) {
+    display: none;
+  }
+
+  .teams-page .teams-marquee-row[data-row="1"] .teams-marquee-group > :nth-child(n + 3) {
+    display: none;
+  }
+
+  .teams-page .teams-chip {
+    white-space: normal;
   }
 }
 
@@ -4337,10 +5885,6 @@ a {
   display: block;
 }
 
-.post-media-frame {
-  position: relative;
-}
-
 .post-media {
   display: block;
   width: 100%;
@@ -4391,8 +5935,7 @@ a {
    `z-index` is what keeps it above the gradient host: that host is positioned,
    so without a layer of its own the picture paints underneath and the mount
    reads as a gradient with no screenshot on it. */
-.post-mount .post-media,
-.post-mount .post-media-frame {
+.post-mount .post-media {
   position: relative;
   z-index: 1;
 }
@@ -4408,46 +5951,6 @@ a {
   color: var(--openbot-text-muted);
   font-size: 14px;
   line-height: 1.5;
-}
-
-/* The control that stops a moving picture. It sits on the picture rather than
-   under it, because the thing it stops is what the reader is looking at, and it is
-   opaque so that it stays readable over any frame. */
-.post-media-toggle {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 13px 7px 11px;
-  border: 1px solid var(--openbot-border-strong);
-  border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-bg-overlay);
-  color: var(--openbot-text-primary);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color var(--openbot-duration-normal) ease;
-}
-
-.post-media-toggle:focus-visible {
-  outline: 0;
-  box-shadow: 0 0 0 3px var(--openbot-accent-strong);
-}
-
-.post-media-toggle-icon {
-  width: 9px;
-  height: 11px;
-  background: currentcolor;
-  clip-path: polygon(0 0, 100% 50%, 0 100%);
-}
-
-.post-media-toggle[data-state="playing"] .post-media-toggle-icon {
-  background: linear-gradient(to right, currentcolor 0 3px, transparent 3px 6px, currentcolor 6px);
-  clip-path: none;
 }
 
 .post-more {
@@ -4474,15 +5977,186 @@ a {
   animation: landing-download-reveal 720ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-/* The closing block of a collection page. Centred, because it is an end rather than
-   another row of the page, and separated by a rule so it reads as an offer and not
-   as the last article. The type scale is the download section's, so the two places
-   that ask the reader to take the app speak at the same size. */
+/* A honeycomb of agent faces and art tiles. A cell is a regular hexagon with a point at
+   the top. `--agent-honeycomb-tile` is its width, flat side to flat side, and it is the
+   width / 0.866 (cos 30°) tall. Each cell is the wall plus one width from each of its six
+   neighbours, so a row is 0.866 of that below the row above it. */
+.agent-honeycomb {
+  --agent-honeycomb-tile: 84px;
+  --agent-honeycomb-gap: 6px;
+  --agent-honeycomb-height: calc(var(--agent-honeycomb-tile) / 0.866);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+
+.agent-honeycomb-row {
+  display: flex;
+  gap: var(--agent-honeycomb-gap);
+}
+
+.agent-honeycomb-row + .agent-honeycomb-row {
+  margin-top: calc((var(--agent-honeycomb-tile) + var(--agent-honeycomb-gap)) * 0.866 - var(--agent-honeycomb-height));
+}
+
+/* `translate`, not a margin: the comb keeps the width of one row. */
+.agent-honeycomb-row:nth-of-type(even) {
+  translate: calc((var(--agent-honeycomb-tile) + var(--agent-honeycomb-gap)) / 2) 0;
+}
+
+/* Every cell, face or art, has the same outline. A CSS shape, not a `url(#clip)`
+   reference: in one browser, a referenced clip left the animated faces square. A
+   browser with `shape()` gets soft corners; the others keep the sharp polygon. */
+.agent-honeycomb-cell {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--agent-honeycomb-tile);
+  height: var(--agent-honeycomb-height);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+@supports (clip-path: shape(from 0 0, line to 100% 100%)) {
+  .agent-honeycomb-cell {
+    clip-path: shape(
+      from 55% 2.5%,
+      line to 95% 22.5%,
+      curve to 100% 30% with 100% 25%,
+      line to 100% 70%,
+      curve to 95% 77.5% with 100% 75%,
+      line to 55% 97.5%,
+      curve to 45% 97.5% with 50% 100%,
+      line to 5% 77.5%,
+      curve to 0% 70% with 0% 75%,
+      line to 0% 30%,
+      curve to 5% 22.5% with 0% 25%,
+      line to 45% 2.5%,
+      curve to 55% 2.5% with 50% 0%,
+      close
+    );
+  }
+}
+
+.agent-honeycomb-art {
+  width: 100%;
+  height: 100%;
+  background-position: center;
+  background-size: cover;
+  filter: grayscale(0.35);
+}
+
+/* The square body is 0.61 of its drawing. At 1.75 cells, it is a little taller than the
+   cell, so its colour fills the hexagon to the point. The drawing is centred on the cell
+   rather than laid out in it. */
+.agent-honeycomb-cell > .agent-honeycomb-avatar {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--agent-honeycomb-height) * 1.75);
+  height: calc(var(--agent-honeycomb-height) * 1.75);
+  translate: -50% -50%;
+}
+
+/* A hexagon is 0.866 as wide as it is tall, and the body is square: narrower, the body
+   fits the width of the cell, and eyes near its sides stay in the cell. */
+.agent-honeycomb-cell > .agent-honeycomb-avatar > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  scale: 0.86 1;
+}
+
+/* The closing block of the landing page and of a collection page. Centred, because it is an end rather than
+   another row of the page. A comb of agents fills the full width and fades out at the
+   top and the bottom, so it reads as an offer and not as the last article. The type
+   scale is the download section's, so the two places that ask the reader to take the
+   app speak at the same size. */
 .post-cta {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 620px;
   margin-top: clamp(64px, 8vw, 104px);
-  padding-top: clamp(48px, 6vw, 80px);
-  border-top: 1px solid var(--openbot-border);
+  overflow: hidden;
   text-align: center;
+}
+
+/* The mask is on a layer the size of the block, so its edges fade where the block
+   ends. The comb is larger than the layer and centred on it. */
+.post-cta-comb {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(
+    var(--openbot-transparent),
+    var(--openbot-mask-solid) 14%,
+    var(--openbot-mask-solid) 86%,
+    var(--openbot-transparent)
+  );
+}
+
+/* Every second row moves half a cell to the right, outside the comb's box. A quarter
+   cell to the left centres the rows, so both sides end at the same distance. */
+.post-cta-comb > .agent-honeycomb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: calc(-50% - (var(--agent-honeycomb-tile) + var(--agent-honeycomb-gap)) / 4) -50%;
+}
+
+/* Blurs the faces behind the text, and fades out from the centre, so it has no edge.
+   The pointer goes through it to the faces. */
+.post-cta-veil {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--openbot-bg-canvas) 62%, var(--openbot-transparent));
+  backdrop-filter: blur(16px);
+  mask-image: radial-gradient(720px 340px at 50% 50%, var(--openbot-mask-solid) 50%, var(--openbot-transparent) 100%);
+  pointer-events: none;
+}
+
+.post-cta-copy {
+  position: relative;
+}
+
+/* The rows end 964 px from the centre: on a wider screen, the sides fade too, so the
+   comb has no hard edge there. */
+@media (min-width: 1920px) {
+  .post-cta-comb {
+    mask-image:
+      linear-gradient(
+        var(--openbot-transparent),
+        var(--openbot-mask-solid) 14%,
+        var(--openbot-mask-solid) 86%,
+        var(--openbot-transparent)
+      ),
+      linear-gradient(
+        90deg,
+        var(--openbot-transparent) calc(50% - 960px),
+        var(--openbot-mask-solid) calc(50% - 810px),
+        var(--openbot-mask-solid) calc(50% + 810px),
+        var(--openbot-transparent) calc(50% + 960px)
+      );
+    mask-composite: intersect;
+  }
+}
+
+@media (max-width: 760px) {
+  /* Not taller than the comb: 12 rows of the small cell are 688 px. */
+  .post-cta {
+    min-height: 680px;
+  }
+
+  .post-cta-comb > .agent-honeycomb {
+    --agent-honeycomb-tile: 60px;
+    --agent-honeycomb-gap: 5px;
+  }
+
+  .post-cta-veil {
+    mask-image: radial-gradient(340px 400px at 50% 50%, var(--openbot-mask-solid) 55%, var(--openbot-transparent) 100%);
+  }
 }
 
 .post-cta-title {
@@ -4602,10 +6276,6 @@ a {
     color: var(--openbot-text-primary);
   }
 
-  .post-media-toggle:hover {
-    background: var(--openbot-bg-surface-raised);
-  }
-
   .post-featured-title a:hover {
     color: var(--openbot-text-secondary);
   }
@@ -4636,8 +6306,7 @@ a {
 
   .post-card-art,
   .post-card-art-title,
-  .post-featured-art-title,
-  .post-media-toggle {
+  .post-featured-art-title {
     transition: none;
     transform: none;
   }
@@ -5615,6 +7284,18 @@ a {
 .landing-faq-body .compare-faq-answer {
   padding-bottom: 24px;
   font-size: 16px;
+}
+
+.landing-faq-body .compare-faq-answer a {
+  color: var(--openbot-text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color var(--openbot-duration-normal) ease;
+}
+
+.landing-faq-body .compare-faq-answer a:hover,
+.landing-faq-body .compare-faq-answer a:focus-visible {
+  color: var(--openbot-logo-production);
 }
 
 .compare-sources-note {
@@ -6915,6 +8596,49 @@ a {
   margin-top: clamp(32px, 4vw, 48px);
 }
 
+/* The uses are written text, so they take two columns at most and no icon above the title. */
+.provider-adds-grid.plugin-uses {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0;
+}
+
+/* No use is more important than the others, so the first card does not take the accent. */
+.plugin-uses .provider-add:first-child {
+  border-color: var(--openbot-border);
+  background: var(--openbot-bg-surface);
+}
+
+.plugin-uses .provider-add-title {
+  margin-top: 0;
+}
+
+.provider-steps.plugin-connect {
+  margin-top: 0;
+}
+
+/* The values a sign-in asks for, or the steps a local server needs, inside one step. */
+.plugin-connect-fields {
+  display: grid;
+  gap: 6px;
+  max-width: 68ch;
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--openbot-text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.plugin-connect-field-label {
+  color: var(--openbot-text-primary);
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .provider-adds-grid.plugin-uses {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* A shared agent, as one card: the page a link on X opens. `--agent-share-accent` is the agent's
    avatar colour, set on the page, so every shared agent is tinted as itself. */
 /* Registered, so the tint fades in when the avatar colour arrives after hydration. */
@@ -7066,8 +8790,8 @@ a {
   font-size: 12px;
 }
 
-/* Clamped, the instructions read as one paragraph, so the ellipsis never lands on a blank line.
-   Opened, they keep their line breaks: they are what the agent will do. */
+/* Clamped, the instructions read as one paragraph of plain text, so the ellipsis never lands on a
+   blank line. Opened, they show their Markdown: they are what the agent will do. */
 .agent-share-description {
   display: -webkit-box;
   margin: 14px 0 0;
@@ -7080,11 +8804,93 @@ a {
   line-clamp: 3;
 }
 
-.agent-share-description[data-expanded] {
-  display: block;
+/* Headings and lists read from the left edge, so the opened instructions are not centered. The
+   site has no chat stylesheet, so the Markdown elements are styled here. */
+.agent-share-instructions {
+  width: 100%;
+  margin: 14px 0 0;
+  color: var(--openbot-text-secondary);
+  font-size: 16px;
+  line-height: 1.55;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.agent-share-instructions > :not(:first-child) {
+  margin-top: 12px;
+}
+
+.agent-share-instructions-text {
   white-space: pre-wrap;
-  -webkit-line-clamp: unset;
-  line-clamp: unset;
+}
+
+.agent-share-instructions .message-markdown-heading {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.agent-share-instructions .message-markdown-heading:is([data-level="1"], [data-level="2"]) {
+  font-size: 19px;
+}
+
+.agent-share-instructions * + .message-markdown-heading {
+  margin-top: 20px;
+}
+
+.agent-share-instructions :is(ul, ol) {
+  padding-left: 22px;
+}
+
+.agent-share-instructions ul {
+  list-style: disc;
+}
+
+.agent-share-instructions ul ul {
+  list-style: circle;
+}
+
+.agent-share-instructions ol {
+  list-style: decimal;
+}
+
+.agent-share-instructions li + li,
+.agent-share-instructions li > :is(ul, ol) {
+  margin-top: 4px;
+}
+
+.agent-share-instructions strong {
+  color: var(--openbot-text-primary);
+  font-weight: 600;
+}
+
+.agent-share-instructions code {
+  font-family: var(--openbot-font-mono);
+  font-size: 0.9em;
+}
+
+.agent-share-instructions .message-link {
+  color: var(--openbot-text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.agent-share-instructions .message-link-icon {
+  position: relative;
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+.agent-share-instructions .message-link-icon :is(svg, img) {
+  position: absolute;
+  inset: 0;
+  width: 14px;
+  height: 14px;
 }
 
 .agent-share-more {
@@ -8279,6 +10085,7 @@ a {
 
 .changelog-release-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   color: var(--openbot-text-dim);
@@ -8293,6 +10100,54 @@ a {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+/* The stores that have a mobile version. A store that still reviews it reads as waiting. */
+.changelog-stores {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.changelog-store {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--openbot-radius-pill);
+  box-shadow: inset 0 0 0 1px var(--changelog-hairline);
+  color: var(--openbot-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.changelog-store-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-success);
+}
+
+.changelog-store-detail {
+  color: var(--openbot-text-dim);
+  font-weight: 500;
+}
+
+.changelog-store[data-state="review"] {
+  background: var(--openbot-warning-soft);
+  box-shadow: none;
+  color: var(--openbot-warning-text);
+}
+
+.changelog-store[data-state="review"] .changelog-store-dot {
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.changelog-store[data-state="review"] .changelog-store-detail {
+  color: inherit;
 }
 
 .changelog-release-title {
@@ -9104,23 +10959,11 @@ a {
 /* Hub ------------------------------------------------------------------- */
 
 .download-hub-hero {
-  padding: clamp(28px, 6vw, 88px) 0 clamp(48px, 6vw, 80px);
-}
-
-.download-hub-title {
-  margin: 0;
-  font-size: clamp(56px, 11vw, 164px);
-  font-weight: 500;
-  letter-spacing: -0.06em;
-  line-height: 0.88;
+  padding-bottom: clamp(48px, 6vw, 80px);
 }
 
 .download-hub-intro {
-  max-width: 48ch;
-  margin: clamp(24px, 3vw, 36px) 0 clamp(28px, 3.4vw, 40px);
-  color: var(--openbot-text-secondary);
-  font-size: clamp(17px, 1.5vw, 20px);
-  line-height: 1.5;
+  margin-bottom: clamp(28px, 3.4vw, 40px);
 }
 
 .download-hub-cards {
@@ -9329,4 +11172,621 @@ a {
   text-decoration: underline;
   text-decoration-color: var(--openbot-border-strong);
   text-underline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------------------
+   Contact page: the form beside the other ways to reach the team. An error
+   replaces text on its own line, so a field never moves when one shows.
+   --------------------------------------------------------------------------- */
+
+.contact-section {
+  --contact-fill: color-mix(in srgb, var(--openbot-text-primary) 5%, transparent);
+  --contact-border: color-mix(in srgb, var(--openbot-text-primary) 8%, transparent);
+  --contact-border-hover: color-mix(in srgb, var(--openbot-text-primary) 48%, transparent);
+}
+
+.contact-card {
+  border: 1px solid var(--contact-border);
+  border-radius: 28px;
+  background: var(--contact-fill);
+  padding: clamp(20px, 3vw, 36px);
+}
+
+.contact-form {
+  display: grid;
+  gap: 20px;
+}
+
+.contact-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.contact-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* One line high in each state: the label on the left, then "Optional" or the error on the right. */
+.contact-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  line-height: 20px;
+}
+
+.contact-field-head label {
+  flex: 0 0 auto;
+  color: var(--openbot-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.contact-optional,
+.contact-error {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-optional {
+  color: var(--openbot-text-muted);
+}
+
+.contact-error {
+  color: var(--openbot-danger-text);
+}
+
+.contact-field :is(input, textarea, select) {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-card);
+  background: var(--openbot-bg-canvas);
+  padding: 12px 14px;
+  color: var(--openbot-text-primary);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  transition:
+    border-color var(--openbot-duration-normal) ease,
+    box-shadow var(--openbot-duration-normal) ease;
+}
+
+.contact-field textarea {
+  resize: vertical;
+}
+
+.contact-field textarea::placeholder {
+  color: var(--openbot-text-placeholder);
+}
+
+.contact-field :is(input, textarea, select):hover {
+  border-color: var(--contact-border-hover);
+}
+
+.contact-field :is(input, textarea, select):focus-visible {
+  outline: 0;
+  border-color: var(--openbot-border-focus);
+  box-shadow: 0 0 0 3px var(--openbot-accent-strong);
+}
+
+/* A value that the page filled in, such as the site on the report form. */
+.contact-field input[readonly] {
+  border-color: var(--contact-border);
+  background: transparent;
+  color: var(--openbot-text-secondary);
+}
+
+.contact-field [aria-invalid="true"] {
+  border-color: var(--openbot-danger-border);
+}
+
+.contact-field [aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 3px var(--openbot-danger-focus);
+}
+
+.contact-select {
+  position: relative;
+}
+
+.contact-select select {
+  appearance: none;
+  padding-right: 40px;
+}
+
+.contact-select-icon {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  width: 16px;
+  height: 16px;
+  color: var(--openbot-text-secondary);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.contact-count {
+  justify-self: end;
+  color: var(--openbot-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.contact-submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.contact-submit button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.contact-privacy {
+  flex: 1 1 240px;
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.contact-privacy a {
+  color: var(--openbot-text-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.contact-privacy.contact-failed {
+  color: var(--openbot-danger-text);
+}
+
+.contact-sent {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: clamp(24px, 4vw, 48px) 0;
+  text-align: center;
+}
+
+.contact-sent-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-success-soft);
+  color: var(--openbot-success-text);
+}
+
+.contact-sent-mark svg {
+  width: 22px;
+  height: 22px;
+}
+
+.contact-sent h2 {
+  margin: 8px 0 0;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.contact-sent p {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.contact-sent strong {
+  color: var(--openbot-text-primary);
+  font-weight: 500;
+}
+
+.contact-text-button {
+  margin-top: 8px;
+  border: 0;
+  background: none;
+  padding: 6px 0;
+  color: var(--openbot-text-primary);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.contact-text-button:hover,
+.contact-text-button:focus-visible {
+  color: var(--openbot-logo-production);
+}
+
+/* The other channels under the heading. */
+.contact-channels {
+  display: grid;
+  margin: 32px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--openbot-border);
+}
+
+.contact-channels li {
+  border-bottom: 1px solid var(--openbot-border);
+}
+
+.contact-channels a {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  font-size: 15px;
+}
+
+.contact-channel-label {
+  font-weight: 500;
+}
+
+.contact-channel-detail {
+  overflow: hidden;
+  color: var(--openbot-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contact-channel-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--openbot-text-muted);
+  transition:
+    color var(--openbot-duration-normal) ease,
+    transform var(--openbot-duration-fast) ease;
+}
+
+.contact-channels a:hover .contact-channel-icon,
+.contact-channels a:focus-visible .contact-channel-icon {
+  color: var(--openbot-text-primary);
+  transform: translate(2px, -2px);
+}
+
+@media (max-width: 640px) {
+  .contact-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Shared agent page: the footer and the "no longer shared" state. */
+/* The page centres its card in a flex column; the footer spans the full width below it. */
+.agent-share-page > .landing-footer {
+  align-self: stretch;
+}
+
+.agent-share-gone-copy {
+  margin: 12px 0 0;
+  color: var(--openbot-text-secondary);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.agent-share-gone-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* ---------------------------------------------------------------------------
+   Transactional pages: join, Slack and Discord connect, billing return, site
+   report, and page error. The site header and footer frame one centred card
+   (`.join-card`). `components/transactional/TransactionalPage.tsx` owns it.
+   --------------------------------------------------------------------------- */
+
+.transactional-main {
+  min-height: min(78dvh, 820px);
+  display: grid;
+  place-items: center;
+  padding: clamp(32px, 6vw, 72px) 16px clamp(48px, 8vw, 96px);
+  background: radial-gradient(circle at 50% 42%, var(--openbot-accent-strong), var(--openbot-transparent) 38%);
+}
+
+/* A form reads from the start edge, and needs more width than a message. */
+.transactional-card[data-layout="form"] {
+  width: min(100%, 640px);
+  justify-items: stretch;
+  text-align: start;
+}
+
+.transactional-form-heading {
+  margin-bottom: 28px;
+}
+
+.transactional-form-heading .join-card-copy {
+  max-width: none;
+  margin-top: 12px;
+}
+
+/* A shared button that cannot act yet, for example before the join page reads its link. */
+.transactional-card .landing-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.transactional-card .landing-button:disabled:active {
+  transform: none;
+}
+
+.transactional-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transactional-provider-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.transactional-notes {
+  display: grid;
+  gap: 6px;
+  margin: 24px 0 0;
+  padding: 0;
+  color: var(--openbot-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  list-style: none;
+}
+
+/* The brand page --------------------------------------------------------- */
+.brand-hero-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px 32px;
+  padding: clamp(32px, 4vw, 56px) 0 clamp(36px, 4.5vw, 56px);
+}
+
+.brand-hero-text {
+  min-width: 0;
+  max-width: 640px;
+}
+
+.brand-hero-title {
+  margin-top: 0;
+}
+
+.brand-hero-intro {
+  margin-top: 12px;
+}
+
+.brand-hero {
+  padding-top: clamp(20px, 3vw, 36px);
+}
+
+.brand-stage {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 21 / 8;
+  border-radius: var(--openbot-radius-modal);
+  background: var(--openbot-logo-production);
+}
+
+.brand-stage-logo {
+  width: auto;
+  height: 82%;
+}
+
+/* The panel is the face. The logo square shows only its eyes, and its color changes move to the panel. */
+.brand-stage .app-logo-background {
+  visibility: hidden;
+}
+
+.brand-stage:has(.app-logo[data-easter-egg="party"]) {
+  animation: brand-stage-party 1.2s cubic-bezier(0.77, 0, 0.175, 1) both;
+}
+
+@keyframes brand-stage-party {
+  0%,
+  100% {
+    background-color: var(--openbot-logo-production);
+  }
+
+  22% {
+    background-color: var(--openbot-logo-dev);
+  }
+
+  48% {
+    background-color: var(--openbot-logo-preview);
+  }
+
+  74% {
+    background-color: var(--openbot-logo-production);
+  }
+}
+
+/* The focus ring goes on the panel, not on the small logo square. */
+.brand-stage .app-logo[data-interactive="true"]:focus-visible {
+  box-shadow: none;
+}
+
+.brand-stage:has(.app-logo:focus-visible) {
+  outline: 2px solid var(--openbot-text-primary);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brand-stage {
+    cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-stage:has(.app-logo[data-easter-egg]) {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand-stage {
+    aspect-ratio: 4 / 3;
+  }
+}
+
+/* The header logo menu -------------------------------------------------- */
+
+/* The trigger wraps the header link and takes no grid cell of its own. */
+.site-logo-trigger {
+  display: contents;
+}
+
+/* The surface and rows match the header menu panels, without the drop shadow. */
+.site-logo-menu {
+  z-index: 60;
+  min-width: 236px;
+  border-radius: 14px;
+  background: rgba(22, 22, 22, 0.8);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(40px) saturate(180%);
+  padding: 6px;
+  outline: 0;
+}
+
+.site-logo-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 9px;
+  padding: 8px 10px;
+  color: var(--openbot-text-primary);
+  font-size: 14px;
+  cursor: default;
+  outline: 0;
+}
+
+.site-logo-menu-item[data-highlighted] {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.site-logo-menu-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--openbot-text-secondary);
+}
+
+.site-logo-menu-separator {
+  margin: 6px 4px;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Brand page logo cards --------------------------------------------------- */
+
+.brand-card-art[data-surface="dark"] {
+  background: var(--openbot-bg-frame);
+}
+
+.brand-card-art[data-surface="light"] {
+  background: var(--openbot-surface-light);
+}
+
+.brand-groups {
+  display: grid;
+  gap: clamp(40px, 5vw, 64px);
+}
+
+.brand-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 18px;
+}
+
+.brand-group-title {
+  margin: 0;
+  font-size: clamp(22px, 2.2vw, 28px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.brand-space-toggle {
+  margin-bottom: 0;
+}
+
+.brand-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.brand-cards[data-wide="true"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.brand-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: var(--openbot-radius-xl);
+  background: var(--openbot-bg-surface);
+}
+
+.brand-card-art {
+  aspect-ratio: 16 / 10;
+  display: grid;
+  place-items: center;
+  padding: 12%;
+}
+
+.brand-card-image {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: 100%;
+}
+
+.brand-cards[data-wide="true"] .brand-card-image {
+  width: 100%;
+  height: auto;
+}
+
+.brand-card-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px 20px;
+}
+
+.brand-card-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.brand-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .brand-cards,
+  .brand-cards[data-wide="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

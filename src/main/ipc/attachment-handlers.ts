@@ -5,10 +5,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { chmod, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import {
+  ARCHIVE_ATTACHMENT_EXTENSIONS,
   assertSupportedAttachmentName,
   attachmentFileExtension,
   IMAGE_ATTACHMENT_EXTENSIONS,
   isExtendedTextAttachmentName,
+  isOpenableAttachmentName,
   MEDIA_ATTACHMENT_EXTENSIONS,
   supportedAttachmentExtensions,
 } from "@openbot/contracts/attachment-files";
@@ -26,6 +28,7 @@ import {
   TEAM_EML_ATTACHMENTS_CAPABILITY,
   TEAM_MEDIA_ATTACHMENTS_CAPABILITY,
   TEAM_TEXT_ATTACHMENTS_CAPABILITY,
+  TEAM_ZIP_ATTACHMENTS_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
 import {
   WORKSPACE_DIRECTORY_CAPABILITY,
@@ -40,14 +43,17 @@ import type { AgentService } from "../../backend/agent-service";
 import { causeHelpers, runCauseEffect } from "../../backend/effect-boundary";
 import type { MailboxStore } from "../../backend/mailbox-store";
 import { filePreviewFromBytes, localFilePreview, mimeTypeForName } from "../file-preview";
+import { filePreviewPages } from "../file-preview-pages";
 import { decodeVoid } from "../remote-host-decoding";
 import type { RemoteServerManager } from "../remote-server-manager";
 import { remoteCall, remoteDecode } from "../remote-service-effects";
 import {
   agentRequest,
+  parseAttachmentData,
   parseAttachmentId,
   parseChooseAttachments,
   parseDownloadAttachments,
+  parseFilePreviewPageUrl,
   parseImportAttachments,
   parseOpenAttachment,
   parseOpenSharedFile,
@@ -120,7 +126,7 @@ export function attachmentIpcHandlers({
     }
     const cached = await cacheRemoteFile(directory, cacheKey, downloaded);
     if (action === "reveal") shell.showItemInFolder(cached);
-    else await openPath(cached);
+    else await openOrRevealPath(cached);
   }
 
   return {
@@ -131,6 +137,11 @@ export function attachmentIpcHandlers({
       }),
     },
     agentAttachments: {
+      importAttachmentData: scopedHandler(parseAttachmentData, {
+        local: (data) => runCauseEffect(service.prepareImportedAttachments([], data)),
+        remote: (data, serverId) => runCauseEffect(uploadRemoteImports(remoteServers, serverId, { paths: [], data })),
+      }),
+      releaseFilePreview: payloadHandler(parseFilePreviewPageUrl, (pageUrl) => filePreviewPages.release(pageUrl)),
       chooseAttachments: payloadHandler(agentRequest(parseChooseAttachments), async (parsed) => {
         const mainWindow = getMainWindow();
         const {
@@ -143,6 +154,8 @@ export function attachmentIpcHandlers({
           serverId === LOCAL_SERVER_ID || remoteServers.supportsCapability(serverId, TEAM_MEDIA_ATTACHMENTS_CAPABILITY);
         const supportsText =
           serverId === LOCAL_SERVER_ID || remoteServers.supportsCapability(serverId, TEAM_TEXT_ATTACHMENTS_CAPABILITY);
+        const supportsZip =
+          serverId === LOCAL_SERVER_ID || remoteServers.supportsCapability(serverId, TEAM_ZIP_ATTACHMENTS_CAPABILITY);
         const options: OpenDialogOptions = {
           properties: ["openFile", "multiSelections"],
           filters:
@@ -155,6 +168,7 @@ export function attachmentIpcHandlers({
                       eml: supportsEml,
                       media: supportsMedia,
                       text: supportsText,
+                      zip: supportsZip,
                     }),
                   },
                 ],
@@ -205,8 +219,14 @@ export function attachmentIpcHandlers({
       ),
       openSharedFile: scopedHandler(parseOpenSharedFile, {
         local: async (parsed) => {
-          const sharedFile = await runCauseEffect(service.resolveSharedFile(parsed.path));
-          await deliverLocalFile(sharedFile.path, sharedFile.name, parsed.action, () => openPath(sharedFile.path));
+          // A chat link can name a folder. The file manager shows it; nothing opens it.
+          const sharedFile = await runCauseEffect(
+            service.resolveSharedFile(parsed.path, { allowDirectory: parsed.action === "reveal" }),
+          );
+          // A member upload lands in the shared folder too, so a shared file opens only when its type is safe.
+          await deliverLocalFile(sharedFile.path, sharedFile.name, parsed.action, () =>
+            openOrRevealPath(sharedFile.path),
+          );
         },
         remote: async (parsed, serverId) => {
           const downloaded = await runCauseEffect(remoteServers.downloadSharedFile(parsed.path, serverId));
@@ -246,8 +266,9 @@ export function attachmentIpcHandlers({
       }),
       previewSharedFile: scopedHandler(parseOpenSharedFile, {
         local: async (parsed) => {
+          const generation = filePreviewPages.generation;
           const sharedFile = await runCauseEffect(service.resolveSharedFile(parsed.path));
-          return runCauseEffect(localFilePreview(sharedFile.path, sharedFile.name, sharedFile.size));
+          return runCauseEffect(localFilePreview(sharedFile.path, sharedFile.name, sharedFile.size, generation));
         },
         remote: async (parsed, serverId) => {
           const downloaded = await runCauseEffect(remoteServers.downloadSharedFile(parsed.path, serverId));
@@ -256,8 +277,11 @@ export function attachmentIpcHandlers({
       }),
       previewWorkspaceFile: scopedHandler(parseOpenWorkspaceFile, {
         local: async (parsed) => {
+          const generation = filePreviewPages.generation;
           const workspaceFile = await runCauseEffect(service.resolveLocalWorkspaceFile(parsed.agentId, parsed.path));
-          return runCauseEffect(localFilePreview(workspaceFile.path, workspaceFile.name, workspaceFile.size));
+          return runCauseEffect(
+            localFilePreview(workspaceFile.path, workspaceFile.name, workspaceFile.size, generation),
+          );
         },
         remote: async (parsed, serverId) => {
           const downloaded = await runCauseEffect(
@@ -300,7 +324,7 @@ export function openAttachmentForServer(
         shell.showItemInFolder(attachment.path);
         return;
       }
-      await openPath(attachment.path);
+      await openOrRevealPath(attachment.path);
     },
     remote: async (target) => {
       const downloaded = await runCauseEffect(remoteServers.downloadAttachment(input.attachmentId, target));
@@ -316,13 +340,14 @@ export function openAttachmentForServer(
         bytes: downloaded.bytes,
       });
       if (input.action === "reveal") shell.showItemInFolder(cached);
-      else await openPath(cached);
+      else await openOrRevealPath(cached);
     },
   });
 }
 
 // A remote file has to land on disk before the OS can open it. Owner-only, under a per-server and
-// per-path digest so two servers sharing a file name cannot overwrite each other.
+// per-path digest so two servers sharing a file name cannot overwrite each other. The host supplies
+// the name, so it is made safe for every file system first.
 async function cacheRemoteFile(
   directory: string,
   cacheKeyInput: string,
@@ -331,7 +356,7 @@ async function cacheRemoteFile(
   const cacheRoot = join(app.getPath("userData"), directory);
   await mkdir(cacheRoot, { recursive: true, mode: 0o700 });
   const cacheKey = createHash("sha256").update(cacheKeyInput).digest("hex");
-  const target = join(cacheRoot, `${cacheKey}-${basename(downloaded.name)}`);
+  const target = join(cacheRoot, `${cacheKey}-${safeFileName(downloaded.name) || "file"}`);
   await writeFile(target, downloaded.bytes, { mode: 0o600 });
   await chmod(target, 0o600);
   return target;
@@ -341,6 +366,26 @@ async function cacheRemoteFile(
 async function openPath(path: string): Promise<void> {
   const error = await shell.openPath(path);
   if (error) throw new Error(error);
+}
+
+// Another member or a remote host chose this file and its name. The OS can run some types when it
+// opens them, so only a document, image or media file opens. The file manager shows other types.
+async function openOrRevealPath(path: string): Promise<void> {
+  if (isOpenableAttachmentName(path)) await openPath(path);
+  else shell.showItemInFolder(path);
+}
+
+// The last segment of a name, without characters that Windows does not permit in a file name, and
+// without the trailing dots and spaces that Windows removes.
+function safeFileName(name: string): string {
+  return (
+    name
+      .replaceAll("\\", "/")
+      .split("/")
+      .at(-1)
+      ?.replace(/[<>:"|?*\p{Cc}]/gu, "-")
+      .replace(/[. ]+$/g, "") ?? ""
+  );
 }
 
 // Returns the chosen path, or undefined when the user cancelled.
@@ -472,13 +517,21 @@ function assertRemoteAttachmentSupport(
   ) {
     throw new Error(sourceText("error.attachment.textUnsupported"));
   }
+  if (
+    names.some((name) =>
+      ARCHIVE_ATTACHMENT_EXTENSIONS.some((extension) => extension === attachmentFileExtension(name)),
+    ) &&
+    !remoteServers.supportsCapability(serverId, TEAM_ZIP_ATTACHMENTS_CAPABILITY)
+  ) {
+    throw new Error(sourceText("error.attachment.zipUnsupported"));
+  }
   if (!names.some((name) => attachmentFileExtension(name) === "eml")) return;
   if (remoteServers.supportsCapability(serverId, TEAM_EML_ATTACHMENTS_CAPABILITY)) return;
   throw new Error(sourceText("error.attachment.emlUnsupported"));
 }
 
 /** A ZIP download that failed. The cause is the error the renderer reads. */
-export class AttachmentArchiveFailed extends Schema.TaggedError<AttachmentArchiveFailed>()("AttachmentArchiveFailed", {
+class AttachmentArchiveFailed extends Schema.TaggedError<AttachmentArchiveFailed>()("AttachmentArchiveFailed", {
   cause: Schema.Defect(),
 }) {}
 
@@ -489,7 +542,7 @@ function archiveFailure(message: string): Effect.Effect<never, AttachmentArchive
 }
 
 // Names are archive labels only; file access always uses a managed attachment ID.
-export const saveAttachmentArchive = Effect.fn("Attachments.saveArchive")(function* (
+const saveAttachmentArchive = Effect.fn("Attachments.saveArchive")(function* (
   input: DownloadAttachmentsInput,
   chooseDestination: () => Effect.Effect<string | undefined, AttachmentArchiveFailed>,
   readAttachment: (
@@ -508,13 +561,7 @@ export const saveAttachmentArchive = Effect.fn("Attachments.saveArchive")(functi
       return yield* archiveFailure(sourceText("error.attachment.fileTooLarge"));
     if (totalBytes > ATTACHMENT_LIMITS.totalBytes)
       return yield* archiveFailure(sourceText("error.attachment.totalTooLarge"));
-    const safeName =
-      item.name
-        .replaceAll("\\", "/")
-        .split("/")
-        .at(-1)
-        ?.replace(/[<>:"|?*\p{Cc}]/gu, "-")
-        .replace(/[. ]+$/g, "") || "attachment";
+    const safeName = safeFileName(item.name) || "attachment";
     const extension = extname(safeName);
     const stem = safeName.slice(0, safeName.length - extension.length);
     let name = safeName;

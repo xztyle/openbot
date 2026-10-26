@@ -7,10 +7,16 @@ import { Effect, Schema } from "effect";
 
 import {
   type AgentImportPreview,
+  type AgentMemory,
+  type AgentMemorySelectionState,
+  type AgentTask,
+  type AgentTaskInput,
+  type AgentTasksSnapshot,
   type ApplyAgentImportInput,
   type AttachmentSummary,
   BROWSER_SECRET_RESPONSE_PATH,
   type CancelQueuedMessageInput,
+  type ConversationSnapshot,
   decodeChannel,
   decodeChannelMemories,
   decodeChannelMemory,
@@ -24,20 +30,44 @@ import {
   decodeRemoteAgentImportPreview,
   decodeRemoteAgentImportResult,
   type InstalledSkill,
+  isAgentMemory,
+  isAgentMemorySelectionState,
+  isAgentTask,
+  isAgentTasksSnapshot,
   isAttachmentSummary,
+  isConversationSnapshot,
+  isQueuedMessageReceipt,
+  isRoutine,
+  isRoutineFlowCanvas,
+  isRoutineFlowLink,
+  isRoutineRun,
   type OpenBotDesktopApi,
+  type QueuedMessageReceipt,
   type RemoteAgentImportResult,
   type ReorderQueueInput,
   type RespondToApprovalInput,
   type RespondToBrowserSecretInput,
   type RespondToBrowserTakeoverInput,
+  remoteBrowserSecretResponse,
+  type SetAgentMemoryInclusionInput,
+  type StartAgentTaskInput,
   type SteerQueuedMessageInput,
   type UpdateQueuedMessageInput,
 } from "@openbot/contracts/ipc";
+import { guardedDecoder, guardedListDecoder } from "@openbot/contracts/ipc-decoding";
+import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { AGENT_IMPORT_ROUTES, AGENT_IMPORT_UPLOAD_BYTES } from "@openbot/contracts/team-protocol/agent-import-v1";
+import {
+  AGENT_MEMORIES_PAGE_ROUTE,
+  AGENT_MEMORIES_PAGE_SIZE,
+  AGENT_MEMORY_INCLUSION_ROUTE,
+  AGENT_MEMORY_SELECTION_PAGE_ROUTE,
+} from "@openbot/contracts/team-protocol/agent-memories-v1";
+import { AGENT_TASKS_ROUTES } from "@openbot/contracts/team-protocol/agent-tasks-v1";
 import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
 import { CONTEXT_RESET_ROUTES } from "@openbot/contracts/team-protocol/context-reset-v1";
+import { ROUTINE_FLOWS_ROUTES } from "@openbot/contracts/team-protocol/routine-flows-v1";
 import { decodeTeamProtocolV2Json, type TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import type { RemoteFileUpload } from "./file-upload";
 
@@ -135,6 +165,65 @@ export const clearAgentContext = Effect.fn("TeamClient.clearAgentContext")(funct
   return yield* teamCall(() => request("POST", CONTEXT_RESET_ROUTES.clear, ignoreResponse, { agentId }));
 });
 
+const decodeAgentTasks = guardedDecoder(isAgentTasksSnapshot, "agent tasks response");
+const decodeAgentTask = guardedDecoder(isAgentTask, "agent task response");
+const decodeTaskConversation = guardedDecoder(isConversationSnapshot, "task conversation response");
+const decodeTaskReceipt = guardedDecoder(isQueuedMessageReceipt, "task message receipt");
+
+/**
+ * The tasks of one agent. Send them only to a host that serves `agent-tasks-v1`. A start and a
+ * message carry text only: the caller refuses attachments before it calls them.
+ */
+export const listAgentTasks = Effect.fn("TeamClient.listAgentTasks")(function* (
+  request: TeamApiRequest,
+  agentId: string,
+): Effect.fn.Return<AgentTasksSnapshot, TeamRequestError> {
+  return yield* teamCall(() => request("POST", AGENT_TASKS_ROUTES.list, decodeAgentTasks, { agentId }));
+});
+
+export const readAgentTask = Effect.fn("TeamClient.readAgentTask")(function* (
+  request: TeamApiRequest,
+  { agentId, taskId }: AgentTaskInput,
+): Effect.fn.Return<ConversationSnapshot, TeamRequestError> {
+  return yield* teamCall(() => request("POST", AGENT_TASKS_ROUTES.read, decodeTaskConversation, { agentId, taskId }));
+});
+
+export const startAgentTask = Effect.fn("TeamClient.startAgentTask")(function* (
+  request: TeamApiRequest,
+  { agentId, text, clientMessageId }: StartAgentTaskInput,
+): Effect.fn.Return<AgentTask, TeamRequestError> {
+  return yield* teamCall(() =>
+    request("POST", AGENT_TASKS_ROUTES.start, decodeAgentTask, {
+      agentId,
+      text,
+      ...(clientMessageId === undefined ? {} : { clientMessageId }),
+    }),
+  );
+});
+
+export const sendAgentTaskMessage = Effect.fn("TeamClient.sendAgentTaskMessage")(function* (
+  request: TeamApiRequest,
+  { agentId, taskId, text, clientMessageId }: AgentTaskInput & { text: string; clientMessageId?: string },
+): Effect.fn.Return<QueuedMessageReceipt, TeamRequestError> {
+  return yield* teamCall(() =>
+    request("POST", AGENT_TASKS_ROUTES.send, decodeTaskReceipt, {
+      agentId,
+      taskId,
+      text,
+      ...(clientMessageId === undefined ? {} : { clientMessageId }),
+    }),
+  );
+});
+
+/** Stops the running turn of a task, closes the task, or reopens it. */
+export const agentTaskControl = Effect.fn("TeamClient.agentTaskControl")(function* (
+  request: TeamApiRequest,
+  action: "stop" | "close" | "reopen",
+  { agentId, taskId }: AgentTaskInput,
+): Effect.fn.Return<void, TeamRequestError> {
+  return yield* teamCall(() => request("POST", AGENT_TASKS_ROUTES[action], ignoreResponse, { agentId, taskId }));
+});
+
 /** Sends a Grok Bot export to the host. Send it only to a host that serves `agent-import-v1`. */
 export const stageAgentImport = Effect.fn("TeamClient.stageAgentImport")(function* (
   request: TeamApiRequest,
@@ -198,7 +287,10 @@ export const respondToBrowserSecret = Effect.fn("TeamClient.respondToBrowserSecr
   request: TeamApiRequest,
   input: RespondToBrowserSecretInput,
 ): Effect.fn.Return<void, TeamRequestError> {
-  return yield* teamCall(() => request("POST", BROWSER_SECRET_RESPONSE_PATH, ignoreResponse, { ...input }));
+  // Only the released fields: `saveToVault` is for the Vault of the local computer.
+  return yield* teamCall(() =>
+    request("POST", BROWSER_SECRET_RESPONSE_PATH, ignoreResponse, { ...remoteBrowserSecretResponse(input) }),
+  );
 });
 
 /** The channel calls of the desktop IPC surface, which a remote desktop sends to the host the same way. */
@@ -241,3 +333,180 @@ export function teamChannelsApi(request: TeamApiRequest): TeamChannelsApi {
     listChannelRoutineRuns: (input) => post(CHANNEL_ROUTES.routineRuns, decodeChannelRoutineRuns, input),
   };
 }
+
+const decodeRoutine = guardedDecoder(isRoutine, "routine");
+const decodeRoutineRun = guardedDecoder(isRoutineRun, "routine run");
+const decodeRoutines = guardedListDecoder(isRoutine, "routine list");
+const decodeRoutineRuns = guardedListDecoder(isRoutineRun, "routine run list");
+
+/** The agent routine calls of the desktop IPC surface, which a remote desktop sends to the host the same way. */
+export type TeamAgentRoutinesApi = Pick<
+  OpenBotDesktopApi["agent"],
+  "listRoutines" | "createRoutine" | "updateRoutine" | "deleteRoutine" | "testRoutine" | "listRoutineRuns"
+>;
+
+/** The frozen v1 agent routine routes. Every host serves them. */
+export function teamAgentRoutinesApi(request: TeamApiRequest): TeamAgentRoutinesApi {
+  return {
+    listRoutines: (agentId) => request("GET", TEAM_API_ROUTES.agent.routines(agentId), decodeRoutines),
+    createRoutine: (input) =>
+      request("POST", TEAM_API_ROUTES.agent.routines(input.agentId), decodeRoutine, decodeTeamProtocolV2Json(input)),
+    updateRoutine: (input) =>
+      request(
+        "PATCH",
+        TEAM_API_ROUTES.agent.routine(input.agentId, input.routineId),
+        decodeRoutine,
+        decodeTeamProtocolV2Json(input),
+      ),
+    deleteRoutine: ({ agentId, routineId }) =>
+      request("DELETE", TEAM_API_ROUTES.agent.routine(agentId, routineId), ignoreResponse),
+    testRoutine: ({ agentId, routineId }) =>
+      request("POST", TEAM_API_ROUTES.agent.routineTest(agentId, routineId), decodeRoutineRun),
+    listRoutineRuns: ({ agentId, routineId, limit }) =>
+      request("GET", `${TEAM_API_ROUTES.agent.routineRuns(agentId, routineId)}?limit=${limit}`, decodeRoutineRuns),
+  };
+}
+
+/** The routine canvas calls of the desktop IPC surface. Send them only to a host that serves `routine-flows-v1`. */
+export type TeamRoutineFlowsApi = OpenBotDesktopApi["routineFlows"];
+
+const decodeRoutineFlowCanvas = guardedDecoder(isRoutineFlowCanvas, "routine flow canvas");
+const decodeRoutineFlowLink = guardedDecoder(isRoutineFlowLink, "routine flow link");
+
+/** Every routine flow route is a POST with its input in the body. */
+export function teamRoutineFlowsApi(request: TeamApiRequest): TeamRoutineFlowsApi {
+  const post = <T>(path: string, decode: (value: unknown) => T, body: unknown) =>
+    request("POST", path, decode, decodeTeamProtocolV2Json(body));
+  return {
+    canvas: (agentId) => post(ROUTINE_FLOWS_ROUTES.canvas, decodeRoutineFlowCanvas, { agentId }),
+    savePosition: (input) => post(ROUTINE_FLOWS_ROUTES.savePosition, ignoreResponse, input),
+    removePosition: (input) => post(ROUTINE_FLOWS_ROUTES.removePosition, ignoreResponse, input),
+    connect: (input) => post(ROUTINE_FLOWS_ROUTES.connect, decodeRoutineFlowLink, input),
+    disconnect: (input) => post(ROUTINE_FLOWS_ROUTES.disconnect, ignoreResponse, input),
+    updateLink: (input) => post(ROUTINE_FLOWS_ROUTES.updateLink, decodeRoutineFlowLink, input),
+  };
+}
+/** An Effect request lets the desktop reuse its managed request lifetime. */
+export type AgentMemoriesRequest<E> = <T>(
+  method: string,
+  path: string,
+  decode: (value: unknown) => T,
+  body?: TeamProtocolV2Json,
+) => Effect.Effect<T, E>;
+
+/** Old hosts keep their full-list route; new hosts send bounded pages in stable id order. */
+export const readAgentMemories = Effect.fn("TeamClient.readAgentMemories")(function* <E>(
+  request: AgentMemoriesRequest<E>,
+  agentId: string,
+  paged: boolean,
+): Effect.fn.Return<AgentMemory[], E> {
+  function decodeMemories(value: unknown): AgentMemory[] {
+    if (!Array.isArray(value) || !value.every(isAgentMemory) || value.some((memory) => memory.agentId !== agentId))
+      throw new Error("The host returned invalid memories.");
+    return value;
+  }
+  if (!paged) return yield* request("GET", TEAM_API_ROUTES.agent.memories(agentId), decodeMemories);
+  const memories: AgentMemory[] = [];
+  let after: string | null = null;
+  do {
+    const page: { memories: AgentMemory[]; nextCursor: string | null } = yield* request(
+      "POST",
+      AGENT_MEMORIES_PAGE_ROUTE,
+      (value) => {
+        if (!isDynamicRecord(value) || !(value.nextCursor === null || isString(value.nextCursor)))
+          throw new Error("The host returned an invalid memory page.");
+        const entries = decodeMemories(value.memories);
+        if (
+          entries.length > AGENT_MEMORIES_PAGE_SIZE ||
+          entries.some((entry, index) => {
+            const previous = index === 0 ? after : entries[index - 1]?.id;
+            return previous !== null && previous !== undefined && entry.id <= previous;
+          }) ||
+          (value.nextCursor !== null && (entries.length === 0 || value.nextCursor !== entries.at(-1)?.id))
+        )
+          throw new Error("The host returned an invalid memory cursor.");
+        return { memories: entries, nextCursor: value.nextCursor };
+      },
+      { agentId, after },
+    );
+    memories.push(...page.memories);
+    after = page.nextCursor;
+  } while (after !== null);
+  // Match the local store's updated_at DESC, memory_id order after collecting stable pages.
+  return memories.sort((left, right) =>
+    left.updatedAt !== right.updatedAt
+      ? left.updatedAt > right.updatedAt
+        ? -1
+        : 1
+      : left.id < right.id
+        ? -1
+        : left.id > right.id
+          ? 1
+          : 0,
+  );
+});
+
+/** Selection pages name their owner and use strictly increasing memory IDs. */
+export const readAgentMemorySelection = Effect.fn("TeamClient.readAgentMemorySelection")(function* <E>(
+  request: AgentMemoriesRequest<E>,
+  agentId: string,
+  supported: boolean,
+): Effect.fn.Return<AgentMemorySelectionState | null, E> {
+  if (!supported) return null;
+  const state: AgentMemorySelectionState = { selections: [], usedBytes: 0, budgetBytes: 8192 };
+  let after: string | null = null;
+  do {
+    const page: AgentMemorySelectionState & { nextCursor: string | null } = yield* request(
+      "POST",
+      AGENT_MEMORY_SELECTION_PAGE_ROUTE,
+      (value) => {
+        if (
+          !isDynamicRecord(value) ||
+          value.agentId !== agentId ||
+          !isAgentMemorySelectionState(value) ||
+          !(value.nextCursor === null || isString(value.nextCursor))
+        )
+          throw new Error("The host returned invalid memory selection.");
+        const entries = value.selections;
+        if (
+          entries.length > AGENT_MEMORIES_PAGE_SIZE ||
+          entries.some((entry, index) => {
+            const previous = index === 0 ? after : entries[index - 1]?.memoryId;
+            return previous !== null && previous !== undefined && entry.memoryId <= previous;
+          }) ||
+          (value.nextCursor !== null && (entries.length === 0 || value.nextCursor !== entries.at(-1)?.memoryId))
+        )
+          throw new Error("The host returned an invalid selection cursor.");
+        return {
+          selections: entries,
+          usedBytes: value.usedBytes,
+          budgetBytes: value.budgetBytes,
+          nextCursor: value.nextCursor,
+        };
+      },
+      { agentId, after },
+    );
+    state.selections.push(...page.selections);
+    state.usedBytes = page.usedBytes;
+    state.budgetBytes = page.budgetBytes;
+    after = page.nextCursor;
+  } while (after !== null);
+  return state;
+});
+
+export const setAgentMemoryInclusion = Effect.fn("TeamClient.setAgentMemoryInclusion")(function* <E>(
+  request: AgentMemoriesRequest<E>,
+  input: SetAgentMemoryInclusionInput,
+): Effect.fn.Return<AgentMemorySelectionState, E> {
+  yield* request("POST", AGENT_MEMORY_INCLUSION_ROUTE, ignoreResponse, {
+    agentId: input.agentId,
+    changes: input.changes.map(({ memoryId, inclusion, expectedRevision }) => ({
+      memoryId,
+      inclusion,
+      expectedRevision,
+    })),
+  });
+  const state = yield* readAgentMemorySelection(request, input.agentId, true);
+  if (state === null) throw new Error("The host returned no memory selection.");
+  return state;
+});

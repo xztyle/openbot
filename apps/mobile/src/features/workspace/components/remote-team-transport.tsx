@@ -14,8 +14,10 @@ import {
   type RemoteTeamDiagnostic,
   type RemoteUploadProgress,
 } from "@openbot/team-client/remote-peer";
+import { referenceFrom } from "@openbot/user-errors";
+import type { DOMProps } from "expo/dom";
 import * as Crypto from "expo-crypto";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
 import type {
   BrowserViewBridgeCommand,
@@ -25,6 +27,12 @@ import type {
 } from "@/features/browser/model/browser-view-bridge";
 import { supportLog, supportLogUrl } from "@/features/support/model/support-log";
 import { InactiveRequestError } from "@/features/workspace/model/pending-approvals";
+import { referencedError } from "@/features/workspace/model/referenced-error";
+import {
+  BACKGROUND_READS_IN_FLIGHT,
+  createRequestLimiter,
+  isBackgroundRead,
+} from "@/features/workspace/model/request-lanes";
 import { expoGoDomOptions } from "@/shared/lib/expo-go-dom";
 import { currentText } from "@/shared/lib/text";
 
@@ -65,21 +73,50 @@ type RemoteTeamCommandInput =
   | { type: "disconnect" }
   | { type: "request"; method: string; path: string; body: TeamProtocolV2Json; upload?: RemoteFileUpload };
 
-export const RemoteTeamTransport = forwardRef<RemoteTeamTransportRef, RemoteTeamTransportProps>(
-  function RemoteTeamTransport(
-    { active: foreground, directory, onConnectionUpdate, onMembershipChanged, onNetworkRestored, onTeamEvent },
-    ref,
-  ) {
+// One object, not a new one for each render.
+const BRIDGE_DOM: DOMProps = {
+  ...expoGoDomOptions,
+  containerStyle: {
+    flex: 0,
+    height: 1,
+    left: 0,
+    opacity: 0,
+    position: "absolute",
+    top: 0,
+    width: 1,
+  },
+  pointerEvents: "none",
+  scrollEnabled: false,
+  style: { flex: 0, height: 1, width: 1 },
+};
+
+/**
+ * The hidden page that holds the peer. Each render sends all props to the page, on Android through
+ * the UI thread, so the props change only with `active`: the callbacks read the newest props here.
+ */
+export const RemoteTeamTransport = memo(
+  forwardRef<RemoteTeamTransportRef, RemoteTeamTransportProps>(function RemoteTeamTransport(props, ref) {
     const { refreshProfile } = useMobileSession();
-    const [commands, setCommands] = useState<RemoteTeamCommand[]>([]);
+    const latest = useRef({ props, refreshProfile });
+    latest.current = { props, refreshProfile };
+
+    const bridge = useRef<RemoteTeamBridgeHandle>(null);
+    // A command goes to the page once. A page that is not ready yet gets it when it reports ready.
+    const deliverCommands = useCallback((commands: RemoteTeamCommand[]) => {
+      // The handle has the method only after the page has registered it.
+      const teamCommands = bridge.current?.teamCommands;
+      if (typeof teamCommands === "function" && commands.length > 0) teamCommands(commands);
+    }, []);
     const mailboxRef = useRef<ReturnType<typeof createRemoteCommandMailbox> | null>(null);
-    if (!mailboxRef.current) mailboxRef.current = createRemoteCommandMailbox(setCommands);
+    if (!mailboxRef.current) mailboxRef.current = createRemoteCommandMailbox((command) => deliverCommands([command]));
     const mailbox = mailboxRef.current;
     // The server of this transport, for support log lines. Requests do not name it.
     const hostIdRef = useRef<string | null>(null);
     useEffect(() => () => mailbox.dispose(), [mailbox]);
+    const backgroundReads = useRef<ReturnType<typeof createRequestLimiter> | null>(null);
+    backgroundReads.current ??= createRequestLimiter(BACKGROUND_READS_IN_FLIGHT);
+    const backgroundLane = backgroundReads.current;
 
-    const bridge = useRef<RemoteTeamBridgeHandle>(null);
     const viewListeners = useRef(new Map<string, (event: BrowserViewBridgeEvent) => void>());
     const sendViewCommand = useCallback((command: BrowserViewBridgeCommand) => {
       // The handle has the method only after the page has registered it.
@@ -116,11 +153,19 @@ export const RemoteTeamTransport = forwardRef<RemoteTeamTransportRef, RemoteTeam
         connect: async (hostId, hostPublicKey) => {
           hostIdRef.current = hostId;
           const result = await enqueue({ type: "connect", hostId, hostPublicKey });
-          if (!result.ok) throw new Error(result.error ?? currentText().t("mobile.workspace.error.connectFailed"));
+          if (!result.ok)
+            throw referencedError(
+              result.error ?? currentText().t("mobile.workspace.error.connectFailed"),
+              result.reference,
+            );
         },
         disconnect: async () => {
           const result = await enqueue({ type: "disconnect" });
-          if (!result.ok) throw new Error(result.error ?? currentText().t("mobile.workspace.error.disconnectFailed"));
+          if (!result.ok)
+            throw referencedError(
+              result.error ?? currentText().t("mobile.workspace.error.disconnectFailed"),
+              result.reference,
+            );
         },
         request: async <T,>(
           method: string,
@@ -131,7 +176,8 @@ export const RemoteTeamTransport = forwardRef<RemoteTeamTransportRef, RemoteTeam
           onUploadProgress?: (fraction: number) => void,
         ): Promise<T> => {
           const started = Date.now();
-          const result = await enqueue({ type: "request", method, path, body, upload }, onUploadProgress);
+          const send = () => enqueue({ type: "request", method, path, body, upload }, onUploadProgress);
+          const result = await (isBackgroundRead(method, path) ? backgroundLane(send) : send());
           // Method, path, status and time only. Never the body or the upload.
           const request = `${hostIdRef.current ?? "unknown server"} ${method} ${supportLogUrl(path)}`;
           const time = `(${Date.now() - started} ms)`;
@@ -143,7 +189,8 @@ export const RemoteTeamTransport = forwardRef<RemoteTeamTransportRef, RemoteTeam
               "connection",
               `${request} -> ${result.status ?? "no status"} ${time}`,
             );
-          if (!result.ok) throw new Error(result.error ?? sourceText("error.remote.serverRequestFailed"));
+          if (!result.ok)
+            throw referencedError(result.error ?? sourceText("error.remote.serverRequestFailed"), result.reference);
           if (result.status === 409 && isQueueEditRoute(method, path))
             throw new QueueEditRejectedError(currentText().t("mobile.workspace.error.queueEditRejected"));
           // The host answers 409 when a form or an approval no longer waits: answered elsewhere, or ended.
@@ -152,7 +199,7 @@ export const RemoteTeamTransport = forwardRef<RemoteTeamTransportRef, RemoteTeam
           if (result.status === 409 && method === "POST" && path === TEAM_API_ROUTES.respond.prompt)
             throw new InactiveRequestError(currentText().t("mobile.workspace.error.formUnavailable"));
           if (result.status !== undefined && result.status >= 400)
-            throw new Error(sourceText("error.remote.serverRequestFailed"));
+            throw referencedError(sourceText("error.remote.serverRequestFailed"), referenceFrom("http", result.status));
           return decode(result.body);
         },
         openBrowserView: (options, listener) => {
@@ -174,62 +221,51 @@ export const RemoteTeamTransport = forwardRef<RemoteTeamTransportRef, RemoteTeam
           };
         },
       }),
-      [enqueue, sendViewCommand],
+      [enqueue, sendViewCommand, backgroundLane],
     );
 
+    // A page that loads again, such as after Android ends its renderer, has none of the commands.
+    const handleReady = useCallback(async () => deliverCommands(mailbox.outstanding()), [deliverCommands, mailbox]);
     const handleCommandResult = useCallback(
       async (result: RemoteTeamCommandResult) => {
         mailbox.receive(result);
       },
       [mailbox],
     );
+    const [actions] = useState(() => ({
+      endSession: (sessionId: string) => runTeamEffect(latest.current.props.directory.endSession(sessionId)),
+      getBootstrap: (hostId: string, clientPublicKey: string, existingSessionId: string | null) =>
+        runTeamEffect(latest.current.props.directory.createBootstrap(hostId, clientPublicKey, existingSessionId)),
+      onUploadProgress: async ({ commandId, sent, total }: RemoteUploadProgress) =>
+        uploadListeners.current.get(commandId)?.(total > 0 ? sent / total : 1),
+      onAccountProfileChanged: () => latest.current.refreshProfile(),
+      onBrowserViewEvent: async (event: BrowserViewBridgeEvent) => {
+        const listener = viewListeners.current.get(event.viewId);
+        if (event.type === "ended") viewListeners.current.delete(event.viewId);
+        listener?.(event);
+      },
+      onAccountServersChanged: async () => latest.current.props.onMembershipChanged?.(),
+      onConnectionUpdate: async (update: RemoteTeamConnectionUpdate) => latest.current.props.onConnectionUpdate(update),
+      onDiagnostic: async ({ hostId, step, detail }: RemoteTeamDiagnostic) =>
+        supportLog.add(
+          step === "failed" ? "warn" : "info",
+          "connection",
+          `${hostId} peer ${step}${detail ? `: ${detail}` : ""}`,
+        ),
+      onNetworkRestored: async () => latest.current.props.onNetworkRestored?.(),
+      onTeamEvent: async (hostId: string, event: AgentEvent | TeamRealtimeEvent) =>
+        latest.current.props.onTeamEvent(hostId, event),
+    }));
 
     return (
       <RemoteTeamBridge
         ref={bridge}
-        active={foreground}
-        commands={commands}
-        dom={{
-          ...expoGoDomOptions,
-          containerStyle: {
-            flex: 0,
-            height: 1,
-            left: 0,
-            opacity: 0,
-            position: "absolute",
-            top: 0,
-            width: 1,
-          },
-          pointerEvents: "none",
-          scrollEnabled: false,
-          style: { flex: 0, height: 1, width: 1 },
-        }}
-        endSession={(sessionId) => runTeamEffect(directory.endSession(sessionId))}
-        getBootstrap={(hostId, clientPublicKey, existingSessionId) =>
-          runTeamEffect(directory.createBootstrap(hostId, clientPublicKey, existingSessionId))
-        }
+        active={props.active}
+        dom={BRIDGE_DOM}
         onCommandResult={handleCommandResult}
-        onUploadProgress={async ({ commandId, sent, total }: RemoteUploadProgress) =>
-          uploadListeners.current.get(commandId)?.(total > 0 ? sent / total : 1)
-        }
-        onAccountProfileChanged={refreshProfile}
-        onBrowserViewEvent={async (event) => {
-          const listener = viewListeners.current.get(event.viewId);
-          if (event.type === "ended") viewListeners.current.delete(event.viewId);
-          listener?.(event);
-        }}
-        onAccountServersChanged={onMembershipChanged}
-        onConnectionUpdate={async (update) => onConnectionUpdate(update)}
-        onDiagnostic={async ({ hostId, step, detail }: RemoteTeamDiagnostic) =>
-          supportLog.add(
-            step === "failed" ? "warn" : "info",
-            "connection",
-            `${hostId} peer ${step}${detail ? `: ${detail}` : ""}`,
-          )
-        }
-        onNetworkRestored={async () => onNetworkRestored?.()}
-        onTeamEvent={async (hostId, event) => onTeamEvent(hostId, event)}
+        onReady={handleReady}
+        {...actions}
       />
     );
-  },
+  }),
 );

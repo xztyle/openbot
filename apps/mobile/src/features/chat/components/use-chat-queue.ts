@@ -7,7 +7,11 @@ import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
-import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import {
+  useMobileWorkspaceReader,
+  useMobileWorkspaceSelector,
+} from "@/features/workspace/context/mobile-workspace-context";
+import { queryKeys } from "@/features/workspace/model/query-keys";
 import { currentText, useText } from "@/shared/lib/text";
 import { useHiddenReplies } from "../context/queued-messages-context";
 import { awaitingReplies } from "../model/awaiting-replies";
@@ -44,14 +48,21 @@ export function useChatQueue(
   /** The loaded conversation. Its outgoing exchanges name the teammates the agent waits for. */
   messages: readonly ConversationMessage[] = EMPTY_MESSAGES,
 ) {
-  const { loadQueue, changeQueue, editQueue, canEditQueue, uploadAttachment, discardAttachment, attachmentSupport } =
-    useMobileWorkspace();
+  const workspace = useMobileWorkspaceReader();
+  const canEditQueue = useMobileWorkspaceSelector((current) => current.canEditQueue(serverId));
   const text = useText();
   const { session } = useMobileSession();
   const storageKey = `queue-edit.${session?.user.id}.${serverId}.${agentId}`;
   const queryClient = useQueryClient();
-  const queryKey = useMemo(() => ["chat-queue", serverId, agentId], [serverId, agentId]);
-  const query = useQuery({ queryKey, queryFn: () => loadQueue(agentId, serverId), enabled: online, retry: false });
+  const queryKey = useMemo(() => queryKeys.chatQueue(serverId, agentId), [serverId, agentId]);
+  const query = useQuery({
+    queryKey,
+    queryFn: () => workspace().loadQueue(agentId, serverId),
+    enabled: online,
+    // The chat reads the queue once when it opens, also when the cache holds a recent copy.
+    refetchOnMount: "always",
+    retry: false,
+  });
   const [error, setError] = useState<string | null>(null);
   const [restored] = useState(() => {
     try {
@@ -137,9 +148,13 @@ export function useChatQueue(
   const refresh = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey });
   }, [queryClient, queryKey]);
+  // A connection that comes back reads the queue again. The chat that opens online has its read
+  // from the query: a second request here would replace it.
+  const wasOnline = useRef(online);
   useEffect(() => {
-    if (online) refresh();
-  }, [online, refresh]);
+    if (online && !wasOnline.current) void queryClient.invalidateQueries({ queryKey }, { cancelRefetch: false });
+    wasOnline.current = online;
+  }, [online, queryClient, queryKey]);
 
   const run = useCallback(
     async (action: () => Promise<void>) => {
@@ -180,9 +195,11 @@ export function useChatQueue(
     if (previous)
       await Promise.allSettled([
         ...previous.addedAttachments.map((file) => removeQueueAttachment(previous.editId, file)),
-        ...(previous.pendingSave?.attachmentDraftIds ?? []).map((id) => discardAttachment(agentId, id, serverId)),
+        ...(previous.pendingSave?.attachmentDraftIds ?? []).map((id) =>
+          workspace().discardAttachment(agentId, id, serverId),
+        ),
       ]);
-  }, [storageKey, discardAttachment, agentId, serverId]);
+  }, [storageKey, workspace, agentId, serverId]);
   const begin = useCallback(
     async (delivery: QueueDelivery) => {
       if (edit && edit.delivery.id !== delivery.id) return;
@@ -202,14 +219,16 @@ export function useChatQueue(
         SecureStore.setItem(storageKey, JSON.stringify(next));
         editRef.current = next;
         setEdit(next);
-        const currentQueue = await editQueue(agentId, serverId, {
-          action: "begin",
-          deliveryId: delivery.id,
-          editId: next.editId,
-        }).catch(async (cause) => {
-          if (isQueueEditRejected(cause)) await clearEdit();
-          throw cause;
-        });
+        const currentQueue = await workspace()
+          .editQueue(agentId, serverId, {
+            action: "begin",
+            deliveryId: delivery.id,
+            editId: next.editId,
+          })
+          .catch(async (cause) => {
+            if (isQueueEditRejected(cause)) await clearEdit();
+            throw cause;
+          });
         if (!next.initialized) {
           const currentDelivery = currentQueue.deliveries.find(
             (item) => item.id === delivery.id && item.status === "queued",
@@ -229,7 +248,7 @@ export function useChatQueue(
         setConfirmed(true);
       });
     },
-    [edit, run, storageKey, editQueue, agentId, serverId, clearEdit],
+    [edit, run, storageKey, workspace, agentId, serverId, clearEdit],
   );
   const changeAttachments = useCallback(
     async (files: ChatAttachment[]) => {
@@ -278,7 +297,7 @@ export function useChatQueue(
       cancelled.current = false;
       const saved = await run(async () => {
         if (edit.pendingSave) {
-          await editQueue(agentId, serverId, edit.pendingSave);
+          await workspace().editQueue(agentId, serverId, edit.pendingSave);
           await clearEdit();
           return;
         }
@@ -287,7 +306,7 @@ export function useChatQueue(
         await uploadChatAttachments(files, {
           upload: async (file) => {
             const stored = edit.addedAttachments.find((item) => item.id === file.id);
-            return uploadAttachment(
+            return workspace().uploadAttachment(
               agentId,
               stored ? { ...file, base64: await readQueueAttachment(edit.editId, stored) } : file,
               serverId,
@@ -295,13 +314,13 @@ export function useChatQueue(
           },
           // Once Save can reach the host, these IDs must survive an uncertain response.
           discard: async (id) => {
-            if (!editRef.current?.pendingSave) await discardAttachment(agentId, id, serverId);
+            if (!editRef.current?.pendingSave) await workspace().discardAttachment(agentId, id, serverId);
           },
           cancelled: () => cancelled.current,
           progress: files.length ? setProgress : undefined,
           send: async (ids) => {
             if (ids.length)
-              await editQueue(agentId, serverId, {
+              await workspace().editQueue(agentId, serverId, {
                 action: "retain-attachments",
                 deliveryId: edit.delivery.id,
                 editId: edit.editId,
@@ -319,7 +338,7 @@ export function useChatQueue(
             SecureStore.setItem(storageKey, JSON.stringify(next));
             editRef.current = next;
             setEdit(next);
-            await editQueue(agentId, serverId, pendingSave);
+            await workspace().editQueue(agentId, serverId, pendingSave);
             return edit.delivery.id;
           },
         });
@@ -328,7 +347,7 @@ export function useChatQueue(
       setProgress(null);
       return saved;
     },
-    [edit, confirmed, run, uploadAttachment, discardAttachment, editQueue, agentId, serverId, clearEdit, storageKey],
+    [edit, confirmed, run, workspace, agentId, serverId, clearEdit, storageKey],
   );
   return useMemo(
     () => ({
@@ -340,7 +359,7 @@ export function useChatQueue(
       attachments,
       changeAttachments,
       /** What this host accepts, for files an edit adds. */
-      attachmentSupport: () => attachmentSupport(serverId),
+      attachmentSupport: () => workspace().attachmentSupport(serverId),
       editUnavailable,
       discardFinishedEdit: () =>
         run(async () => {
@@ -361,7 +380,7 @@ export function useChatQueue(
         restored.error ??
         (query.error ? text.errorMessage(query.error, text.t("mobile.chat.queue.loadFailed")) : null),
       loading: online && query.isPending,
-      canEdit: canEditQueue(serverId),
+      canEdit: canEditQueue,
       online,
       activeTurnId,
       begin,
@@ -385,7 +404,7 @@ export function useChatQueue(
         let rejected = false;
         const released = await run(async () => {
           try {
-            await editQueue(agentId, serverId, {
+            await workspace().editQueue(agentId, serverId, {
               action: "cancel",
               deliveryId: edit.delivery.id,
               editId: edit.editId,
@@ -401,20 +420,23 @@ export function useChatQueue(
       },
       remove: (delivery: QueueDelivery) =>
         run(async () => {
-          await changeQueue(agentId, serverId, "cancel", { deliveryId: delivery.id });
+          await workspace().changeQueue(agentId, serverId, "cancel", { deliveryId: delivery.id });
           if (edit?.delivery.id === delivery.id) await clearEdit();
         }),
       steer: (delivery: QueueDelivery) =>
         run(async () => {
           if (!activeTurnId) return;
-          await changeQueue(agentId, serverId, "steer", { deliveryId: delivery.id, expectedTurnId: activeTurnId });
+          await workspace().changeQueue(agentId, serverId, "steer", {
+            deliveryId: delivery.id,
+            expectedTurnId: activeTurnId,
+          });
         }),
       moveFirst: (delivery: QueueDelivery) =>
         run(async () => {
           // The host checks the order against every queued delivery, so the answers the sheet does
           // not list keep their places behind the moved message.
           const waiting = orderedQueue(query.data?.deliveries ?? []);
-          await changeQueue(agentId, serverId, "reorder", {
+          await workspace().changeQueue(agentId, serverId, "reorder", {
             deliveryIds: [delivery.id, ...waiting.filter((item) => item.id !== delivery.id).map((item) => item.id)],
           });
         }),
@@ -443,12 +465,10 @@ export function useChatQueue(
       save,
       refresh,
       run,
-      editQueue,
-      changeQueue,
+      workspace,
       agentId,
       serverId,
       clearEdit,
-      attachmentSupport,
       text,
     ],
   );

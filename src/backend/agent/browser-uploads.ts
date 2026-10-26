@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { ATTACHMENT_LIMITS } from "@openbot/contracts/input-limits";
-import { redactText } from "@openbot/logging";
+import { createOpenBotLogger, redactText } from "@openbot/logging";
 import { Effect, Exit, Fiber, Scope } from "effect";
 import {
   type AttachmentOperationError,
@@ -39,7 +39,7 @@ interface BrowserUploadReservation {
 }
 
 /** The `handleDynamicTool` callbacks this controller uses to bind a staging directory to a real input. */
-export interface BrowserUploadHooks {
+interface BrowserUploadHooks {
   onUploadTargetResolved?: (inputId: string, documentId: string) => void;
   onUploadAssigned?: (inputId: string, documentId: string) => void;
   onUploadOperationStarted?: (completion: Fiber.Fiber<void, BrowserOperationError>) => void;
@@ -87,6 +87,8 @@ const removeUploadRoot = Effect.fn("BrowserUploads.removeRoot")((path: string) =
   ),
 );
 
+const logger = createOpenBotLogger("browser-uploads");
+
 const MAX_BROWSER_UPLOAD_INPUTS_PER_TAB = 10;
 const MAX_BROWSER_UPLOAD_BYTES_PER_TAB = ATTACHMENT_LIMITS.totalBytes;
 const MAX_BROWSER_UPLOAD_BYTES_TOTAL = ATTACHMENT_LIMITS.totalBytes * 2;
@@ -129,12 +131,16 @@ export class BrowserUploads {
     this: BrowserUploads,
     agentId: string,
     params: DynamicToolCallParams,
-  ): Effect.fn.Return<DynamicToolResult, AttachmentOperationError> {
+  ): Effect.fn.Return<DynamicToolResult> {
+    // A failed tool result, as every other browser tool returns: Codex replaces a JSON-RPC error with
+    // "dynamic tool request failed", so the agent could not correct an ambiguous selector or a bad path.
     return yield* this.#stageAndAssign(agentId, params).pipe(
-      Effect.mapError((error) =>
-        attachmentFailure(
-          new Error(redactText(error.cause instanceof Error ? error.cause.message : String(error.cause))),
-        ),
+      Effect.catch((error) =>
+        Effect.sync((): DynamicToolResult => {
+          const text = redactText(error.cause instanceof Error ? error.cause.message : String(error.cause));
+          logger.warn("A browser upload failed.", { error: text });
+          return { success: false, contentItems: [{ type: "inputText", text }] };
+        }),
       ),
     );
   });

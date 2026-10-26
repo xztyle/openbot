@@ -2,7 +2,7 @@ import type { ConversationPage, ConversationSearchPage, QueuedMessageReceipt } f
 import { type ConversationMessage, type ConversationSnapshot, isConversationMessage } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 
-export function decodeConversation(value: unknown): ConversationSnapshot {
+function decodeConversation(value: unknown): ConversationSnapshot {
   if (
     !isDynamicRecord(value) ||
     !isString(value.agentId) ||

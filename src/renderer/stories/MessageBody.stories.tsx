@@ -3,7 +3,7 @@ import type { AgentMessage } from "@openbot/ui/data";
 import { MessageBody } from "@openbot/ui/features/conversation/MessageRendering";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
-import { STORY_AGENTS, STORY_ATTACHMENTS } from "./fixtures";
+import { STORY_AGENTS, STORY_ATTACHMENTS, STORY_REPLY_QUOTE_BODY } from "./fixtures";
 
 const message: AgentMessage = {
   id: "message-body-1",
@@ -85,6 +85,68 @@ export const WithReplyContext: Story = {
       time: "09:55",
     },
   },
+};
+
+const reply: AgentMessage = {
+  id: "message-reply",
+  author: "you",
+  body: "Approved. Renew it today and tell me the new expiry date.",
+  time: "10:00",
+  replyToMessageId: "message-reference",
+  attachments: [],
+};
+
+const quoted: AgentMessage = {
+  id: "message-reference",
+  author: "agent",
+  body: "Without a renewed certificate, macOS rejects the update on Friday. I need your approval to buy the renewal.",
+  time: "09:55",
+};
+
+/** The quote is a button: a click scrolls the chat to the original and flashes it. */
+export const ReplyOpensOriginal: Story = {
+  args: { message: reply, referencedMessage: quoted, onOpenReference: fn() },
+  render: (storyArgs) => <MessageBodySurface args={storyArgs} author="user" width="360px" />,
+};
+
+/** The original is in older history, which the chat loads before it scrolls. */
+export const ReplyLoadingOriginal: Story = {
+  args: { message: reply, referencedMessage: quoted, onOpenReference: fn(), referenceState: "loading" },
+  render: (storyArgs) => <MessageBodySurface args={storyArgs} author="user" width="360px" />,
+};
+
+/** The original was deleted. The chat has no text to quote, so only the note shows. */
+export const ReplyOriginalUnavailable: Story = {
+  args: { message: reply, referenceState: "unavailable" },
+  render: (storyArgs) => <MessageBodySurface args={storyArgs} author="user" width="360px" />,
+};
+
+const markdownQuoted: AgentMessage = {
+  id: "message-reference",
+  author: "agent",
+  body: STORY_REPLY_QUOTE_BODY,
+  time: "09:55",
+};
+
+/** The quote renders the original's Markdown, cut to four lines. */
+export const ReplyMarkdownOriginal: Story = {
+  args: { message: reply, referencedMessage: markdownQuoted, onOpenReference: fn() },
+  render: (storyArgs) => <MessageBodySurface args={storyArgs} author="user" width="360px" />,
+};
+
+/** An original that ends in an open code fence. The cut keeps the reply under it intact. */
+export const ReplyMarkdownOpenFence: Story = {
+  args: {
+    message: reply,
+    referencedMessage: {
+      ...markdownQuoted,
+      body: ["Run these before the tag:", "", "```bash", "bun run check", "bun run test:changed", "bun run lint"].join(
+        "\n",
+      ),
+    },
+    onOpenReference: fn(),
+  },
+  render: (storyArgs) => <MessageBodySurface args={storyArgs} author="user" width="360px" />,
 };
 
 export const WithSelectedTextInstruction: Story = {
@@ -175,6 +237,45 @@ export const CodeBlock: Story = {
         "}",
         "```",
       ].join("\n"),
+      status: undefined,
+      attachments: [],
+    },
+  },
+  render: (storyArgs) => <MessageBodySurface args={storyArgs} variant="ghost" width="460px" />,
+};
+
+export const UnknownConstructorLanguage: Story = {
+  args: {
+    message: {
+      ...message,
+      id: "message-unknown-constructor-language",
+      body: ["Before the code.", "", "```constructor", "const total = 42;", "```", "", "After the code."].join("\n"),
+      status: undefined,
+      attachments: [],
+    },
+  },
+  render: (storyArgs) => <MessageBodySurface args={storyArgs} variant="ghost" width="460px" />,
+};
+
+export const UnknownPrototypeLanguage: Story = {
+  args: {
+    message: {
+      ...message,
+      id: "message-unknown-prototype-language",
+      body: ["Before the code.", "", "```__proto__", "const fallback = 7;", "```", "", "After the code."].join("\n"),
+      status: undefined,
+      attachments: [],
+    },
+  },
+  render: (storyArgs) => <MessageBodySurface args={storyArgs} variant="ghost" width="460px" />,
+};
+
+export const UnknownOrdinaryLanguage: Story = {
+  args: {
+    message: {
+      ...message,
+      id: "message-unknown-ordinary-language",
+      body: ["Before the code.", "", "```mylang", "const ordinary = 3;", "```", "", "After the code."].join("\n"),
       status: undefined,
       attachments: [],
     },

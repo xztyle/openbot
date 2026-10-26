@@ -22,7 +22,7 @@ const WM_CLASS = "openbot";
  * `Exec` names the AppImage itself, because that is the only path that survives a restart, and `%U`
  * is what passes the invitation URL to it.
  */
-export function linuxDesktopEntry(appImagePath: string, iconPath: string): string {
+function linuxDesktopEntry(appImagePath: string, iconPath: string): string {
   return `${[
     "[Desktop Entry]",
     "Type=Application",

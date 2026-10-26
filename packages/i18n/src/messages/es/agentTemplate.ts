@@ -28,8 +28,8 @@ export const messages = {
   "agentTemplate.publish.description":
     "Comparte este agente como plantilla. Se publican sus instrucciones, habilidades y rutinas. Los archivos y recuerdos no se publican.",
   "agentTemplate.publish.published": "Publicado",
-  "agentTemplate.publish.unpublish": "Retirar publicación",
-  "agentTemplate.publish.unpublishing": "Retirando publicación…",
+  "agentTemplate.publish.unpublish": "Retirar",
+  "agentTemplate.publish.unpublishing": "Retirando…",
   "agentTemplate.publish.unpublishFailed": "No se pudo retirar la publicación del agente.",
   "agentTemplate.publish.lastUpdated": "Última actualización: {date}",
   "agentTemplate.publish.context": "Contexto",

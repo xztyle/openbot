@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/solid-router";
 import { DownloadHubPage } from "../../components/download/DownloadHubPage";
-import { downloadPageHead } from "../../lib/download-pages";
 
+// `head` imports the pages when it runs, as in routes/compare/$slug.tsx.
 export const Route = createFileRoute("/download/")({
-  head: ({ match }) => downloadPageHead("hub", match.context.siteUrl),
+  head: async ({ match }) => {
+    const { downloadPageHead } = await import("../../lib/download-pages");
+    return downloadPageHead("hub", match.context.siteUrl);
+  },
   component: DownloadHubPage,
 });

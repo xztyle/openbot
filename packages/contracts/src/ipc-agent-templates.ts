@@ -2,9 +2,9 @@ import { createAgentTemplateShareUrl, isAgentTemplateId, isAgentTemplateShareOri
 import { isAvatarMimeType, isValidAvatarImage } from "./avatar-images";
 import { INPUT_LIMITS } from "./input-limits";
 import { type AvatarHue, isAvatarHue, isAvatarSeed } from "./ipc-agent-identity";
-import type { AgentSummary, AvatarImageInput } from "./ipc-agents";
+import type { AvatarImageInput, ClientAgentSummary } from "./ipc-agents";
 import type { MarketplaceAgentRoutine, MarketplaceAgentSkill } from "./ipc-marketplace-agents";
-import { isRoutineSchedule } from "./ipc-routines";
+import { isReleasedRoutineSchedule } from "./ipc-routines";
 import { isBoolean, isDynamicRecord, isNumber, isString } from "./runtime-values";
 
 /**
@@ -70,7 +70,7 @@ export interface InstallAgentTemplateInput {
 }
 
 export interface InstallAgentTemplateResult {
-  agent: AgentSummary;
+  agent: ClientAgentSummary;
 }
 
 /** The share card: the 1.91:1 image X and other sites show for a link. */
@@ -139,7 +139,7 @@ export function isAgentTemplateRoutine(value: unknown): value is MarketplaceAgen
     value.instruction.trim().length > 0 &&
     value.instruction.length <= INPUT_LIMITS.routineInstruction &&
     isBoolean(value.active) &&
-    isRoutineSchedule(value.schedule)
+    isReleasedRoutineSchedule(value.schedule)
   );
 }
 

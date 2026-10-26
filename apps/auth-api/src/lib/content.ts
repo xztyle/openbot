@@ -16,7 +16,7 @@ export const CONTENT_COLLECTIONS: readonly ContentCollection[] = [
 ];
 
 /** The collections whose articles are prose. A comparison or a provider page is drawn from data instead. */
-export const PROSE_COLLECTIONS = [NEWS_COLLECTION, GUIDES_COLLECTION] as const;
+const PROSE_COLLECTIONS = [NEWS_COLLECTION, GUIDES_COLLECTION] as const;
 
 /** The collections the header menu offers, in its order. */
 export const HEADER_COLLECTIONS = [...PROSE_COLLECTIONS, COMPARE_COLLECTION] as const;

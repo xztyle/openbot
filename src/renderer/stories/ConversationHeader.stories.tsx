@@ -1,7 +1,7 @@
 import { ConversationHeader } from "@openbot/ui/features/conversation/ConversationHeader";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
-import { STORY_AGENT, STORY_AGENT_STATUS, STORY_MODELS } from "./fixtures";
+import { STORY_AGENT, STORY_AGENT_STATUS, STORY_MODELS, storyRuntimeSettings } from "./fixtures";
 
 const meta = {
   title: "Conversation/Header",
@@ -11,7 +11,7 @@ const meta = {
     onSettingsIntent: fn(),
     onOpenSettings: fn(),
     modelPicker: {
-      provider: STORY_AGENT.provider,
+      provider: storyRuntimeSettings(STORY_AGENT).provider,
       value: STORY_AGENT.model,
       reasoningEffort: STORY_AGENT.reasoningEffort,
       modelOptions: STORY_MODELS,
@@ -19,7 +19,7 @@ const meta = {
       onChange: fn(),
       onReasoningEffortChange: fn(),
     },
-    browser: { acting: false, open: false, onToggle: fn() },
+    sidePanel: { open: false, running: 0, onToggle: fn() },
   },
   parameters: { layout: "fullscreen", a11y: { test: "error" } },
 } satisfies Meta<typeof ConversationHeader>;
@@ -35,12 +35,42 @@ export const RemoteControl: Story = {
 export const OfflineHost: Story = {
   args: {
     remoteControl: { enabled: false, active: false, visible: false, onOpen: fn() },
-    browser: { acting: false, open: false, disabled: true, onToggle: fn() },
   },
 };
 export const AgentUsingBrowser: Story = {
-  args: { browser: { acting: true, agentName: STORY_AGENT.name, open: true, onToggle: fn() } },
+  args: { sidePanel: { open: true, actingAgentName: STORY_AGENT.name, running: 0, onToggle: fn() } },
 };
-export const Files: Story = {
-  args: { files: { open: false, onToggle: fn() } },
+export const TasksRunning: Story = {
+  args: { sidePanel: { open: false, running: 2, onToggle: fn() } },
+};
+/** A model chosen during the turn. The picker names it; the badge says that it starts with the next turn. */
+export const ModelAfterThisTurn: Story = {
+  args: {
+    pendingModel: { running: "GPT-5.6 Luna", next: "GPT-5.6 Terra" },
+    modelPicker: {
+      provider: STORY_AGENT.provider,
+      value: "gpt-5.6-terra",
+      reasoningEffort: STORY_AGENT.reasoningEffort,
+      modelOptions: STORY_MODELS,
+      agentStatus: STORY_AGENT_STATUS,
+      onChange: fn(),
+      onReasoningEffortChange: fn(),
+    },
+  },
+};
+/** A provider chosen during the turn. The running turn keeps its provider; the next turn uses the new one. */
+export const ProviderAfterThisTurn: Story = {
+  args: {
+    pendingModel: { running: "Codex · GPT-5.6 Luna", next: "Grok · Grok 4.6" },
+    modelPicker: {
+      provider: "grok",
+      value: "grok-4.6",
+      reasoningEffort: STORY_AGENT.reasoningEffort,
+      modelOptions: STORY_MODELS,
+      agentStatus: STORY_AGENT_STATUS,
+      accountChoice: true,
+      onChange: fn(),
+      onReasoningEffortChange: fn(),
+    },
+  },
 };

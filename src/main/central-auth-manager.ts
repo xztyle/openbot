@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import type { HostKeyHandover } from "@openbot/contracts/host-key-handover";
 import { parseHostedServerClaim } from "@openbot/contracts/hosted-servers";
 import type {
   AvatarImageInput,
@@ -9,11 +10,16 @@ import type {
   CentralAuthState,
   CentralAuthUser,
   MobileConnectedDevice,
+  MobileConnectLink,
   MobileConnectTicket,
 } from "@openbot/contracts/ipc";
 import { decodeRecord, requiredString } from "@openbot/contracts/ipc-decoding";
 import type { LiveActivityRelayPush } from "@openbot/contracts/live-activity-relay";
-import { createMobileConnectUrl, type MobileConnectHostBinding } from "@openbot/contracts/mobile-connect";
+import {
+  createMobileConnectUrl,
+  isMobileConnectHostBinding,
+  type MobileConnectHostBinding,
+} from "@openbot/contracts/mobile-connect";
 import {
   decodeRemoteSession,
   decodeRemoteSessionTicket,
@@ -28,6 +34,8 @@ import {
   type RemoteTicketClaims,
 } from "@openbot/contracts/signal-protocol/ticket";
 import { sourceText } from "@openbot/i18n/source";
+import { createOpenBotLogger } from "@openbot/logging";
+import { referenceFrom, safeReference } from "@openbot/user-errors";
 import { Deferred, Effect, type Layer, Result, Schema, Semaphore } from "effect";
 import { createLocalJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
@@ -39,6 +47,7 @@ import {
   decodeCreatedRemoteInvite,
   decodeEmailChallenge,
   decodeMobileConnectedDevices,
+  decodeMobileConnectLinkResponse,
   decodeRecordHealth,
   decodeRegisteredRemoteHost,
   decodeRemoteHosts,
@@ -54,6 +63,7 @@ import {
   type RemoteInviteRecord,
   type RemoteMemberRecord,
 } from "./central-auth-records";
+import type { NotificationRelayRequest } from "./push-notifications";
 
 interface CentralAuthEvents {
   changed: [state: CentralAuthState];
@@ -73,6 +83,29 @@ interface CentralAuthManagerOptions {
   startupRequestTimeoutMs?: number;
   startupRetryDelaysMs?: readonly number[];
   emailCodeRequestTimeoutMs?: number;
+}
+
+/** The persistent Mobile Connect link of this desktop. The account service keeps only its hash. */
+interface StoredMobileConnectLink {
+  host: MobileConnectHostBinding;
+  token: string;
+  createdAt: number;
+}
+
+const MOBILE_CONNECT_LINK_TOKEN = /^[A-Za-z0-9_-]{32,128}$/u;
+
+const logger = createOpenBotLogger("central-auth");
+
+/** The step of a session file read or write that failed, for the account log. */
+type StoredSessionStage = "read" | "decrypt" | "decode" | "encrypt" | "write";
+
+/**
+ * The stage, error name and system code only. A decode message can quote the decrypted text, and a
+ * file system message names the path.
+ */
+function storedSessionFailure(stage: StoredSessionStage, error: unknown) {
+  const code = isDynamicRecord(error) && isString(error.code) ? error.code : null;
+  return { stage, error: error instanceof Error ? error.name : typeof error, code };
 }
 
 interface EmailCodeRequest {
@@ -127,7 +160,11 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
   readonly #transport: Layer.Layer<CentralAuthTransport>;
   #state: CentralAuthState = { status: "loading" };
   #sessionToken: string | null = null;
+  /** The session token in the stored file, or null when the file holds none that this start could read. */
+  #storedSessionToken: string | null = null;
   readonly #teamHostTokens = new Map<string, string>();
+  /** Belongs to the session that made it: the account service rejects it when that session ends. */
+  #mobileConnectLink: StoredMobileConnectLink | null = null;
   #sessionWrites = Semaphore.makeUnsafe(1);
   /** The account the stored host credentials were issued to, or none while signed out. */
   #sessionAccountId: string | null = null;
@@ -333,12 +370,109 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     (operation) => this.#owned(operation),
   ).bind(this);
 
+  /** Spends the one-time code that this host shows, so it cannot sign in a phone. */
+  readonly cancelMobileConnect = Effect.fn("CentralAuth.cancelMobileConnect")(
+    function* (
+      this: CentralAuthManager,
+      host: MobileConnectHostBinding | null,
+    ): Effect.fn.Return<void, CentralAuthOperationError, CentralAuthTransport> {
+      // A code is always bound to the host that showed it. With no host, no code of this desktop exists.
+      if (!host) return;
+      yield* this.#authorizedRequestEffect(
+        `/v1/mobile-auth/ticket?host=${encodeURIComponent(host.hostId)}`,
+        { method: "DELETE" },
+        () => undefined,
+      );
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /** The stored persistent link, if it was made for this host identity. */
+  getMobileConnectLink(host: MobileConnectHostBinding | null): MobileConnectLink | null {
+    const stored = this.#mobileConnectLink;
+    if (
+      !stored ||
+      !host ||
+      this.#state.status !== "signed_in" ||
+      stored.host.hostId !== host.hostId ||
+      stored.host.fingerprint !== host.fingerprint
+    )
+      return null;
+    return this.#mobileConnectLinkView(stored);
+  }
+
+  /** Makes a new persistent link. The account service revokes the link that it replaces. */
+  readonly createMobileConnectLink = Effect.fn("CentralAuth.createMobileConnectLink")(
+    function* (
+      this: CentralAuthManager,
+      host: MobileConnectHostBinding,
+    ): Effect.fn.Return<MobileConnectLink, CentralAuthOperationError, CentralAuthTransport> {
+      const sessionToken = this.#sessionToken;
+      const result = yield* this.#authorizedRequestEffect(
+        "/v1/mobile-auth/link",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ host }),
+        },
+        decodeMobileConnectLinkResponse,
+      );
+      if (!MOBILE_CONNECT_LINK_TOKEN.test(result.link) || !Number.isFinite(result.createdAt)) {
+        return yield* new CentralAuthOperationError({
+          cause: new Error("The account service returned an invalid Mobile Connect link."),
+        });
+      }
+      const stored = { host, token: result.link, createdAt: result.createdAt };
+      // A sign-out during the request ended the session that the link belongs to.
+      if (this.#sessionToken === sessionToken) {
+        this.#mobileConnectLink = stored;
+        yield* this.#writeStoredSession();
+      }
+      return this.#mobileConnectLinkView(stored);
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  readonly revokeMobileConnectLink = Effect.fn("CentralAuth.revokeMobileConnectLink")(
+    function* (
+      this: CentralAuthManager,
+      host: MobileConnectHostBinding | null,
+    ): Effect.fn.Return<void, CentralAuthOperationError, CentralAuthTransport> {
+      const hostId = this.#mobileConnectLink?.host.hostId ?? host?.hostId;
+      if (!hostId) return;
+      yield* this.#authorizedRequestEffect(
+        `/v1/mobile-auth/link?host=${encodeURIComponent(hostId)}`,
+        { method: "DELETE" },
+        () => undefined,
+      );
+      if (this.#mobileConnectLink?.host.hostId !== hostId) return;
+      this.#mobileConnectLink = null;
+      yield* this.#writeStoredSession();
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  #mobileConnectLinkView(stored: StoredMobileConnectLink): MobileConnectLink {
+    return {
+      url: createMobileConnectUrl({
+        apiUrl: this.#options.mobileConnectApiUrl,
+        ticket: stored.token,
+        host: stored.host,
+      }),
+      createdAt: stored.createdAt,
+    };
+  }
+
   readonly listMobileConnectedDevices = Effect.fn("CentralAuth.listMobileConnectedDevices")(
     function* (
       this: CentralAuthManager,
+      host: MobileConnectHostBinding | null,
     ): Effect.fn.Return<MobileConnectedDevice[], CentralAuthOperationError, CentralAuthTransport> {
+      // A phone signs in to the account and opens each host of the account directory. The list shows
+      // the phones that can open this computer, so a computer with no host identity has none (#2356).
+      if (!host) return [];
       const result = yield* this.#authorizedRequestEffect(
-        "/v1/mobile-auth/devices",
+        `/v1/mobile-auth/devices?host=${encodeURIComponent(host.hostId)}`,
         { method: "GET" },
         decodeMobileConnectedDevices,
       );
@@ -363,6 +497,7 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
                   current: z.boolean(),
                   connectedAt: z.number().finite(),
                   lastActiveAt: z.number().finite(),
+                  hostedServer: z.boolean().exactOptional(),
                 }),
               ),
             })
@@ -437,6 +572,49 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
       if (result.machineToken) this.#teamHostTokens.set(input.hostId.toLowerCase(), result.machineToken);
       yield* this.#writeStoredSession();
       return result;
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /**
+   * Sends a key handover that the host signed with its current and its new key. Returns `refused`
+   * for each final client error, such as another key for the host (409), a stale machine token (401)
+   * or an account service with no handover route (404): the service stores nothing before it sends
+   * one, and the same request again cannot succeed. With no machine token for the host, for example
+   * after a sign-out, the handover cannot be sent: the host list tells if the service stored it
+   * before, because then it advertises the new key. A pending handover runs before each
+   * registration, and only a registration gets a new token, so a handover that stays pending after a
+   * final error stops the host from registering. A timeout, a rate limit, a server error or a lost
+   * answer keeps it pending, because the step can be stored already.
+   */
+  readonly handOverRemoteHostKey = Effect.fn("CentralAuth.handOverRemoteHostKey")(
+    function* (
+      this: CentralAuthManager,
+      hostId: string,
+      handover: HostKeyHandover,
+    ): Effect.fn.Return<"accepted" | "refused", CentralAuthOperationError, CentralAuthTransport> {
+      const machineToken = this.#teamHostTokens.get(hostId.toLowerCase());
+      if (!machineToken) {
+        const hosts = yield* this.#authorizedRequestEffect("/v2/remote/hosts/", { method: "GET" }, decodeRemoteHosts);
+        const host = hosts.find((entry) => entry.hostId.toLowerCase() === hostId.toLowerCase());
+        return host?.devicePublicKey === handover.publicKey ? "accepted" : "refused";
+      }
+      return yield* this.#authorizedRequestEffect(
+        `/v2/remote/hosts/${encodeURIComponent(hostId)}/key-handover`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ machineToken, handover }),
+        },
+        () => undefined,
+      ).pipe(
+        Effect.as("accepted" as const),
+        Effect.catch(({ cause: error }) =>
+          isFinalClientError(error)
+            ? Effect.succeed("refused" as const)
+            : Effect.fail(new CentralAuthOperationError({ cause: error })),
+        ),
+      );
     },
     (operation) => this.#owned(operation),
   ).bind(this);
@@ -722,6 +900,40 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
             if (error instanceof AuthApiError && error.status === 410) return "gone";
             return yield* new CentralAuthOperationError({ cause: error });
           }),
+        ),
+      );
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /**
+   * Sends one notification through the account service to Apple for an iPhone, or to Firebase Cloud
+   * Messaging for an Android phone. The host sealed the agent name and the text with keys that only
+   * the phone has. Returns `gone` when the session of the phone ended or Apple or Google refused the
+   * token.
+   */
+  readonly sendPushNotification = Effect.fn("CentralAuth.sendPushNotification")(
+    function* (
+      this: CentralAuthManager,
+      hostId: string,
+      request: NotificationRelayRequest,
+    ): Effect.fn.Return<"sent" | "gone", CentralAuthOperationError, CentralAuthTransport> {
+      const machineToken = yield* this.#hostMachineToken(hostId);
+      const route = request.platform === "android" ? "android-notification" : "notification";
+      return yield* this.#requestEffect(
+        `/v2/remote/hosts/${encodeURIComponent(hostId)}/${route}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ machineToken, ...request.push }),
+        },
+        () => undefined,
+      ).pipe(
+        Effect.as("sent" as const),
+        Effect.catch(({ cause: error }) =>
+          error instanceof AuthApiError && error.status === 410
+            ? Effect.succeed("gone" as const)
+            : Effect.fail(new CentralAuthOperationError({ cause: error })),
         ),
       );
     },
@@ -1136,19 +1348,27 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     this: CentralAuthManager,
   ): Effect.fn.Return<CentralAuthState, CentralAuthOperationError, CentralAuthTransport> {
     this.#setState({ status: "loading" });
+    // A session that cannot be read now stays on disk: a Keychain that is locked or asks for
+    // permission at startup can open it at the next start, and the next sign-in replaces it.
     if (this.#options.canPersist()) {
+      let stage: StoredSessionStage = "read";
       const attempt4 = yield* Effect.gen({ self: this }, function* () {
         const encrypted = Buffer.from(yield* authCall(() => readFile(this.#options.storagePath, "utf8")), "base64");
-        yield* authDecode(() => this.#restoreStoredSession(this.#options.decrypt(encrypted)));
+        stage = "decrypt";
+        const value = yield* authDecode(() => this.#options.decrypt(encrypted));
+        stage = "decode";
+        yield* authDecode(() => this.#restoreStoredSession(value));
+        this.#storedSessionToken = this.#sessionToken;
       }).pipe(Effect.result);
       if (Result.isFailure(attempt4)) {
         const error = attempt4.failure.cause;
         if (!isMissingFileError(error)) {
-          yield* this.#clearStoredSessionEffect();
+          this.#forgetSession();
+          logger.warn("The stored account session could not be restored.", storedSessionFailure(stage, error));
         }
       }
     } else {
-      yield* authCall(() => rm(this.#options.storagePath, { force: true }));
+      logger.warn("The stored account session was not read: secure storage is unavailable.");
     }
     if (!this.#sessionToken) {
       yield* this.#startupRequestEffect("/health/live", { method: "GET" }, decodeRecordHealth);
@@ -1195,7 +1415,8 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
   ): Effect.fn.Return<CentralAuthState, CentralAuthOperationError, CentralAuthTransport> {
     const existingChallenge = this.#state.status === "code_sent" ? this.#state : null;
     if (existingChallenge) {
-      this.#setState({ ...existingChallenge, issue: undefined });
+      const { issue: _previousIssue, ...challenge } = existingChallenge;
+      this.#setState(challenge);
     } else {
       this.#setState({ status: "signing_in" });
     }
@@ -1261,7 +1482,10 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
       code: string,
     ): Effect.fn.Return<CentralAuthState, CentralAuthOperationError, CentralAuthTransport> {
       const challenge = this.#state.status === "code_sent" ? this.#state : null;
-      if (challenge) this.#setState({ ...challenge, issue: undefined });
+      if (challenge) {
+        const { issue: _previousIssue, ...pendingChallenge } = challenge;
+        this.#setState(pendingChallenge);
+      }
       let sessionApplied = false;
       return yield* Effect.gen({ self: this }, function* () {
         const session = yield* this.#requestEffect(
@@ -1279,6 +1503,7 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
           this.#teamHostTokens.clear();
         }
         this.#sessionToken = session.sessionToken;
+        this.#mobileConnectLink = null;
         sessionApplied = true;
         yield* this.#writeStoredSession();
         return this.#setState({
@@ -1337,28 +1562,65 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
           return parsed;
         },
       );
-      if (this.#sessionAccountId !== null && this.#sessionAccountId !== redeemed.user.id) {
-        this.#teamHostTokens.clear();
-      }
-      const previousToken = this.#sessionToken;
-      this.#sessionToken = redeemed.sessionToken;
-      // The claim is spent. A session that is not stored ends at the next start, so a failed write fails
-      // the redeem, and the session is not kept in memory. The start retry redeems the claim again in its
-      // retry window.
-      const attempt7 = yield* Effect.gen({ self: this }, function* () {
-        yield* this.#writeStoredSession({ required: true });
-      }).pipe(Effect.result);
-      if (Result.isFailure(attempt7)) {
-        const error = attempt7.failure.cause;
-        this.#sessionToken = previousToken;
-        return yield* new CentralAuthOperationError({ cause: error });
-      }
-      const user = this.#resolveUserAvatar(redeemed.user);
-      this.#setState({ status: "signed_in", user });
+      // The start retry redeems the claim again in its retry window when the session is not stored.
+      const user = yield* this.#applyClaimedSession(redeemed);
       return { hostId: redeemed.hostId, name: redeemed.name, user };
     },
     (operation) => this.#owned(operation),
   ).bind(this);
+
+  /**
+   * Signs a self-hosted server in with a one-time claim that an operator made for the owner's email.
+   * The answer is null when it signed in. A failure leaves the state as it was and gives the issue.
+   * The caller checks that the session can be stored first: the claim works only once.
+   */
+  readonly redeemServerClaim = Effect.fn("CentralAuth.redeemServerClaim")(
+    function* (
+      this: CentralAuthManager,
+      claim: string,
+    ): Effect.fn.Return<CentralAuthIssue | null, never, CentralAuthTransport> {
+      return yield* Effect.gen({ self: this }, function* () {
+        const session = yield* this.#requestEffect(
+          "/v2/server-claims/redeem",
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ claim }) },
+          decodeSessionResponse,
+        );
+        yield* this.#applyClaimedSession(session);
+        return null;
+      }).pipe(
+        Effect.catch(({ cause: error }) =>
+          Effect.succeed(centralAuthIssue(error, "server_claim_failed", sourceText("error.auth.serviceError"))),
+        ),
+      );
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /**
+   * Stores the session that a claim gave and signs in. A session that is not stored ends at the next
+   * start, so a failed write fails, and the previous session that the stored file holds is put back.
+   */
+  readonly #applyClaimedSession = Effect.fn("CentralAuth.applyClaimedSession")(function* (
+    this: CentralAuthManager,
+    session: { sessionToken: string; user: CentralAuthUser },
+  ): Effect.fn.Return<CentralAuthUser, CentralAuthOperationError, CentralAuthTransport> {
+    if (this.#sessionAccountId !== null && this.#sessionAccountId !== session.user.id) {
+      this.#teamHostTokens.clear();
+    }
+    const previousToken = this.#sessionToken;
+    const previousMobileConnectLink = this.#mobileConnectLink;
+    this.#sessionToken = session.sessionToken;
+    this.#mobileConnectLink = null;
+    const stored = yield* this.#writeStoredSession({ required: true }).pipe(Effect.result);
+    if (Result.isFailure(stored)) {
+      this.#sessionToken = previousToken;
+      this.#mobileConnectLink = previousMobileConnectLink;
+      return yield* new CentralAuthOperationError({ cause: stored.failure.cause });
+    }
+    const user = this.#resolveUserAvatar(session.user);
+    this.#setState({ status: "signed_in", user });
+    return user;
+  });
 
   readonly logout = Effect.fn("CentralAuth.logout")(
     function* (
@@ -1472,22 +1734,30 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     decoder: (value: unknown) => T,
     sessionToken?: string,
   ): Effect.fn.Return<T, CentralAuthOperationError, CentralAuthTransport> {
-    const deadline = Date.now() + this.#options.startupRetryWindowMs;
+    let deadline = Date.now() + this.#options.startupRetryWindowMs;
+    // A timer that fires late means a blocked event loop, such as a slow database check at start,
+    // not a slow server. The window counts only the time the loop ran.
+    const excludeBlockedTime = (startedAt: number, expectedMs: number) => {
+      deadline += Math.max(0, Date.now() - startedAt - expectedMs);
+    };
     let retryIndex = 0;
     while (true) {
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0)
         return yield* new CentralAuthOperationError({ cause: new Error(sourceText("error.auth.serviceUnavailable")) });
+      const timeoutMs = Math.max(1, Math.min(this.#options.startupRequestTimeoutMs, remainingMs));
+      const startedAt = Date.now();
       const result = yield* this.#requestEffect(
         path,
         {
           ...init,
-          headers: sessionToken ? { ...init.headers, Authorization: `Bearer ${sessionToken}` } : init.headers,
+          ...(sessionToken ? { headers: { ...init.headers, Authorization: `Bearer ${sessionToken}` } } : {}),
         },
         decoder,
-        Math.max(1, Math.min(this.#options.startupRequestTimeoutMs, remainingMs)),
+        timeoutMs,
       ).pipe(Effect.result);
       if (Result.isSuccess(result)) return result.success;
+      excludeBlockedTime(startedAt, timeoutMs);
       const error = result.failure.cause;
       if (!isTransientStartupError(error)) return yield* result.failure;
       const delayMs = Math.min(
@@ -1495,7 +1765,9 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
         Math.max(0, deadline - Date.now()),
       );
       if (delayMs <= 0) return yield* result.failure;
+      const sleptAt = Date.now();
       yield* Effect.sleep(delayMs);
+      excludeBlockedTime(sleptAt, delayMs);
       retryIndex += 1;
     }
   });
@@ -1534,37 +1806,37 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     this: CentralAuthManager,
     required: boolean,
   ): Effect.fn.Return<void, CentralAuthOperationError, CentralAuthTransport> {
-    if (!this.#sessionToken) return;
+    const sessionToken = this.#sessionToken;
+    if (!sessionToken) return;
     if (!this.#options.canPersist()) {
+      logger.warn("The account session was not stored: secure storage is unavailable.");
+      if (!required) return yield* this.#removeOtherStoredSession(sessionToken);
       yield* authCall(() => rm(this.#options.storagePath, { force: true }));
-      if (required)
-        return yield* new CentralAuthOperationError({ cause: new Error("The session could not be stored.") });
-      return;
+      this.#storedSessionToken = null;
+      return yield* new CentralAuthOperationError({ cause: new Error("The session could not be stored.") });
     }
     const temporaryPath = `${this.#options.storagePath}.${randomUUID()}.tmp`;
+    let stage: StoredSessionStage = "encrypt";
     yield* Effect.gen({ self: this }, function* () {
       const value = JSON.stringify({
         version: 2,
-        sessionToken: this.#sessionToken,
+        sessionToken,
         teamHostTokens: Object.fromEntries(this.#teamHostTokens),
+        ...(this.#mobileConnectLink ? { mobileConnectLink: this.#mobileConnectLink } : {}),
       });
       const encrypted = yield* authDecode(() => this.#options.encrypt(value).toString("base64"));
+      stage = "write";
       yield* authCall(() => mkdir(dirname(this.#options.storagePath), { recursive: true }));
       yield* authCall(() => writeFile(temporaryPath, encrypted, { mode: 0o600 }));
       yield* authCall(() => chmod(temporaryPath, 0o600));
       yield* authCall(() => rename(temporaryPath, this.#options.storagePath));
+      this.#storedSessionToken = sessionToken;
     }).pipe(
-      Effect.catch((failure) =>
-        Effect.gen({ self: this }, function* () {
-          yield* Effect.all(
-            [this.#options.storagePath, temporaryPath].map((path) =>
-              authCall(() => rm(path, { force: true })).pipe(Effect.catch(() => Effect.void)),
-            ),
-            { concurrency: "unbounded" },
-          );
-          if (required) return yield* failure;
-        }),
-      ),
+      // A required write fails, and its caller puts back the session that the file still holds.
+      Effect.catch((failure) => {
+        logger.warn("The account session was not stored.", storedSessionFailure(stage, failure.cause));
+        return required ? Effect.fail(failure) : this.#removeOtherStoredSession(sessionToken);
+      }),
       Effect.ensuring(authCall(() => rm(temporaryPath, { force: true })).pipe(Effect.catch(() => Effect.void))),
     );
   });
@@ -1572,20 +1844,40 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
   readonly #clearStoredSessionEffect = Effect.fn("CentralAuth.clearStoredSession")(function* (
     this: CentralAuthManager,
   ): Effect.fn.Return<void, CentralAuthOperationError, CentralAuthTransport> {
-    this.#sessionToken = null;
-    this.#sessionAccountId = null;
-    this.#teamHostTokens.clear();
+    this.#forgetSession();
     // Through the same chain as the writes, so a write already in flight cannot put the
     // file back after it is removed.
     yield* this.#sessionWrites
       .withPermit(authCall(() => rm(this.#options.storagePath, { force: true })))
       .pipe(Effect.uninterruptible);
+    this.#storedSessionToken = null;
   });
+
+  /**
+   * After a write that failed, keeps a stored file with the same session token: only its host
+   * credentials or Mobile Connect link are older. A file with a different session, such as the one
+   * before an email sign-in, is removed, so that the next start does not sign in to that session.
+   */
+  #removeOtherStoredSession(sessionToken: string) {
+    return Effect.gen({ self: this }, function* () {
+      if (this.#storedSessionToken === sessionToken) return;
+      yield* authCall(() => rm(this.#options.storagePath, { force: true }));
+      this.#storedSessionToken = null;
+    });
+  }
+
+  #forgetSession(): void {
+    this.#sessionToken = null;
+    this.#sessionAccountId = null;
+    this.#teamHostTokens.clear();
+    this.#mobileConnectLink = null;
+  }
 
   #restoreStoredSession(value: string): void {
     if (!value.trimStart().startsWith("{")) {
       this.#sessionToken = value;
       this.#teamHostTokens.clear();
+      this.#mobileConnectLink = null;
       return;
     }
     const stored = JSON.parse(value);
@@ -1601,6 +1893,7 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
         }
       }
     }
+    this.#mobileConnectLink = restoreMobileConnectLink(stored.mobileConnectLink);
   }
 
   #setState(state: CentralAuthState): CentralAuthState {
@@ -1617,14 +1910,21 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
     if (error instanceof NetworkBlockedError) {
       return this.#setState({ status: "error", issue: { code: "auth_api_unavailable", message: error.message } });
     }
-    const apiError = error instanceof AuthApiError ? error : null;
-    const unavailable = !apiError || apiError.status >= 500;
+    if (error instanceof AuthApiError && error.status < 500) {
+      return this.#setState({ status: "error", issue: authApiIssue(error) });
+    }
+    // The renderer shows the retry screen for `auth_api_unavailable`. The message and the reference
+    // say which failure it was.
+    const unavailable = serviceUnavailableText(error);
     return this.#setState({
       status: "error",
       issue: {
-        code: unavailable ? "auth_api_unavailable" : apiError.code,
-        message: unavailable ? sourceText("error.auth.serviceUnavailable") : apiError.message,
-        ...(apiError?.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: apiError.retryAfterSeconds }),
+        code: "auth_api_unavailable",
+        message: unavailable.message,
+        ...(unavailable.reference === null ? {} : { reference: unavailable.reference }),
+        ...(error instanceof AuthApiError && error.retryAfterSeconds !== undefined
+          ? { retryAfterSeconds: error.retryAfterSeconds }
+          : {}),
       },
     });
   }
@@ -1645,14 +1945,28 @@ export function readMobileConnectApiUrl(value: string | undefined, fallback: str
   return new URL(apiUrl).origin;
 }
 
+/** A client error that the same request cannot change. A timeout and a rate limit can pass later. */
+function isFinalClientError(error: unknown): boolean {
+  return (
+    error instanceof AuthApiError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 408 &&
+    error.status !== 429
+  );
+}
+
 class AuthApiError extends Schema.TaggedError<AuthApiError>()("AuthApiError", {
   status: Schema.Number,
   code: Schema.String,
   message: Schema.String,
   retryAfterSeconds: Schema.optional(Schema.Number),
+  // The request reference that the account service logs, such as `auth/<16 hex>`. Older services
+  // send none.
+  reference: Schema.NullOr(Schema.String),
 }) {
-  constructor(status: number, code: string, message: string, retryAfterSeconds?: number) {
-    super({ status, code, message, retryAfterSeconds });
+  constructor(status: number, code: string, message: string, retryAfterSeconds?: number, reference?: string | null) {
+    super({ status, code, message, retryAfterSeconds, reference: reference ?? null });
   }
 
   static readonly fromResponseEffect = Effect.fn("CentralAuth.decodeError")(function* (response: Response) {
@@ -1664,7 +1978,13 @@ class AuthApiError extends Schema.TaggedError<AuthApiError>()("AuthApiError", {
       isString(value.error.code) &&
       isString(value.error.message)
     ) {
-      return new AuthApiError(response.status, value.error.code, value.error.message, retryAfterSeconds);
+      return new AuthApiError(
+        response.status,
+        value.error.code,
+        value.error.message,
+        retryAfterSeconds,
+        safeReference(value.error.reference),
+      );
     }
     return new AuthApiError(
       response.status,
@@ -1729,14 +2049,43 @@ function isInterceptedTlsError(error: unknown): boolean {
 
 function centralAuthIssue(error: unknown, fallbackCode: string, fallbackMessage: string): CentralAuthIssue {
   if (error instanceof NetworkBlockedError) return { code: "network_blocked", message: error.message };
+  if (error instanceof AuthApiError) return authApiIssue(error);
+  return { code: fallbackCode, message: errorMessage(error, fallbackMessage) };
+}
+
+/** The account service's answer. Its request reference wins, because its log has the same one. */
+function authApiIssue(error: AuthApiError): CentralAuthIssue {
+  const reference = error.reference ?? referenceFrom("auth", "http", error.status, error.code);
+  return {
+    code: error.code,
+    message: error.message,
+    ...(error.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: error.retryAfterSeconds }),
+    ...(reference === null ? {} : { reference }),
+  };
+}
+
+/**
+ * Why the account service did not answer: no network, no answer in time, or a 5xx. The errno of a
+ * network failure is a fixed token, such as `ECONNREFUSED`, so it can go in the reference.
+ */
+function serviceUnavailableText(error: unknown): { message: string; reference: string | null } {
   if (error instanceof AuthApiError) {
     return {
-      code: error.code,
-      message: error.message,
-      ...(error.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: error.retryAfterSeconds }),
+      message: sourceText("error.auth.serviceStatus", { status: error.status }),
+      reference: error.reference ?? referenceFrom("auth", "http", error.status, error.code),
     };
   }
-  return { code: fallbackCode, message: errorMessage(error, fallbackMessage) };
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return { message: sourceText("error.auth.serviceTimeout"), reference: "auth/timeout" };
+  }
+  if (error instanceof TypeError) {
+    const cause = error.cause;
+    const errno =
+      isDynamicRecord(cause) && isString(cause.code) && /^E[A-Z0-9_]+$/u.test(cause.code) ? cause.code : null;
+    return { message: sourceText("error.auth.serviceUnreachable"), reference: referenceFrom("auth", "network", errno) };
+  }
+  // The startup retry window ended, or the answer could not be read.
+  return { message: sourceText("error.auth.serviceUnavailable"), reference: "auth/unavailable" };
 }
 
 function emailCodeRequestIssue(error: unknown): CentralAuthIssue {
@@ -1787,4 +2136,13 @@ function errorMessage(error: unknown, fallback: string): string {
 function isTransientStartupError(error: unknown): boolean {
   if (error instanceof NetworkBlockedError) return false;
   return !(error instanceof AuthApiError) || error.status >= 500;
+}
+
+/** An invalid stored link is dropped, not the session: the user can make a new link. */
+function restoreMobileConnectLink(value: unknown): StoredMobileConnectLink | null {
+  if (!isDynamicRecord(value)) return null;
+  const { host, token, createdAt } = value;
+  if (!isMobileConnectHostBinding(host) || !isString(token) || !MOBILE_CONNECT_LINK_TOKEN.test(token)) return null;
+  if (!isNumber(createdAt) || !Number.isFinite(createdAt)) return null;
+  return { host: { hostId: host.hostId, fingerprint: host.fingerprint }, token, createdAt };
 }

@@ -12,6 +12,7 @@ import type { AgentService } from "../backend/agent-service";
 import type { BrowserHost } from "../backend/browser-host";
 import type { MailboxStore } from "../backend/mailbox-store";
 import { type ArchiveOperationError, archiveCall, archiveFailure, archiveSync } from "./archive-effects";
+import type { ResourceMonitor } from "./resource-monitor";
 import type { TraceFile } from "./trace-file";
 import type { UpdateService } from "./update-service";
 
@@ -23,6 +24,7 @@ interface MaintenanceContext {
   mailbox: MailboxStore;
   updater: UpdateService;
   trace: TraceFile;
+  resources: ResourceMonitor;
   parentWindow: BrowserWindow | null;
   translate: AppTranslate;
 }
@@ -131,7 +133,7 @@ function powerShellLiteral(value: string): string {
  * a server (`openbot diagnostics`) both send exactly this, so the redaction rules live in one place.
  */
 export const renderDiagnostics = Effect.fn("Archive.renderDiagnostics")(function* (
-  context: Pick<MaintenanceContext, "service" | "browser" | "updater" | "trace">,
+  context: Pick<MaintenanceContext, "service" | "browser" | "updater" | "trace" | "resources">,
 ): Effect.fn.Return<string, ArchiveOperationError> {
   const status = context.service.getStatus();
   const agents = context.service.listAgents();
@@ -150,8 +152,8 @@ export const renderDiagnostics = Effect.fn("Archive.renderDiagnostics")(function
   const mcpServers = context.service.listMcpServers();
   const update = context.updater.getStatus();
   const diagnostics = {
-    // 3, not 2: schema 2 reported `botCount` and `botId`, and this report says `agentCount` and `agentId`.
-    schemaVersion: 3,
+    // 4, not 3: schema 3 had a one-time `memory` reading, and this report has the `resources` summaries.
+    schemaVersion: 4,
     generatedAt: new Date().toISOString(),
     application: {
       version: app.getVersion(),
@@ -187,7 +189,8 @@ export const renderDiagnostics = Effect.fn("Archive.renderDiagnostics")(function
       tabCount: context.browser.listTabs().length,
       activeControlCount: context.browser.getControlState().sessions.length,
     },
-    memory: readMemoryDiagnostics(),
+    // Process groups and provider ids with memory, CPU and delays: never a PID, a command or a path.
+    resources: context.resources.diagnostics(),
     update: {
       phase: update.phase,
       currentVersion: update.currentVersion,
@@ -206,7 +209,10 @@ export const renderDiagnostics = Effect.fn("Archive.renderDiagnostics")(function
 });
 
 export const exportDiagnostics = Effect.fn("Archive.exportDiagnostics")(function* (
-  context: Pick<MaintenanceContext, "service" | "browser" | "updater" | "trace" | "parentWindow" | "translate">,
+  context: Pick<
+    MaintenanceContext,
+    "service" | "browser" | "updater" | "trace" | "resources" | "parentWindow" | "translate"
+  >,
 ): Effect.fn.Return<ExportResult, ArchiveOperationError> {
   const destination = yield* chooseExportDestinationEffect(
     context.parentWindow,
@@ -224,30 +230,6 @@ export const exportDiagnostics = Effect.fn("Archive.exportDiagnostics")(function
   ).pipe(Effect.uninterruptible);
   return { saved: true };
 });
-
-const KB_PER_MB = 1_024;
-const BYTES_PER_MB = 1_024 * 1_024;
-
-/**
- * Memory of the Electron processes and the main process heap, in MB. Provider CLIs are not Electron
- * processes, so `getAppMetrics` leaves them out; each one reports as its own OS process.
- */
-function readMemoryDiagnostics() {
-  const usage = process.memoryUsage();
-  return {
-    mainProcess: {
-      rssMb: Math.round(usage.rss / BYTES_PER_MB),
-      heapUsedMb: Math.round(usage.heapUsed / BYTES_PER_MB),
-      heapTotalMb: Math.round(usage.heapTotal / BYTES_PER_MB),
-      externalMb: Math.round(usage.external / BYTES_PER_MB),
-    },
-    processes: app.getAppMetrics().map((metric) => ({
-      type: metric.type,
-      workingSetMb: Math.round(metric.memory.workingSetSize / KB_PER_MB),
-      peakWorkingSetMb: Math.round(metric.memory.peakWorkingSetSize / KB_PER_MB),
-    })),
-  };
-}
 
 const chooseExportDestinationEffect = Effect.fn("Archive.chooseExportDestination")(function* (
   parentWindow: BrowserWindow | null,

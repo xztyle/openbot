@@ -1,16 +1,37 @@
 import { chatPreviewKind } from "@openbot/contracts/chat-preview";
 import type { AttachmentSummary, InstalledSkill, MessageReaction } from "@openbot/contracts/ipc";
 import { canPreviewAttachment, MESSAGE_REACTIONS, MORE_MESSAGE_REACTIONS } from "@openbot/contracts/ipc";
-import { type BubbleVariant, Button, DropdownMenu } from "@openbot/ui";
+import { parseSelectionInstruction } from "@openbot/contracts/selection-instruction";
+import {
+  AudioLines,
+  type BubbleVariant,
+  Button,
+  ChevronRight,
+  ContextMenu,
+  DropdownMenu,
+  Info,
+  LoaderCircle,
+} from "@openbot/ui";
 import { prefersReducedMotion } from "@openbot/ui/utils";
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch, untrack } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  Match,
+  onCleanup,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js";
 import type { AgentMessage, AgentProfile } from "../../data";
 import { useText } from "../../text";
-import { AttachmentCards } from "./AttachmentCards";
+import { AttachmentCards, type AttachmentMediaSource } from "./AttachmentCards";
 import { CodeBlock } from "./CodeBlock";
 import { CodePreview } from "./CodePreview";
 import { ComparisonTable } from "./ComparisonTable";
-import { CheckIcon, CopyIcon, MoreIcon, PlusIcon, ReactionIcon, ReplyIcon } from "./ConversationIcons";
+import { CheckIcon, CopyIcon, PlusIcon, ReactionIcon, ReplyIcon, StopIcon } from "./ConversationIcons";
 import { createContentBlockCache } from "./contentBlockCache";
 import { createSmoothHeightResize } from "./createSmoothHeightResize";
 import { DataTable, type MessageContentBlock, messageContentBlocks, reuseUnchangedBlocks } from "./DataTable";
@@ -18,8 +39,7 @@ import { messageFileReferences } from "./FileReference";
 import { ImageGeneration } from "./ImageGeneration";
 import { ImageGallery, ImageLightbox, type ImageLightboxOpening, isLightboxImage } from "./ImageLightbox";
 import { MarkdownInlineText, MarkdownMessageText, markdownImageName } from "./MarkdownMessageText";
-import { RichMessageText } from "./RichMessageText";
-import { parseSelectionInstruction } from "./SelectionActions";
+import { ReplyQuote } from "./ReplyQuote";
 import {
   nextStreamingReveal,
   type StreamingRevealChunk,
@@ -82,6 +102,9 @@ function createStreamingBody(message: () => AgentMessage, animate?: boolean) {
   const [animateTail, setAnimateTail] = createSignal(false);
   const [smoothHeight, setSmoothHeight] = createSignal(targetStreaming || animateInitialText);
   let smoothingActive = targetStreaming || animateInitialText;
+  /* A plain copy, for the same reason as `shownBody`: true when the height smoothing, tail and
+     trail are all off and no timer will change them. */
+  let smoothingSettled = !smoothingActive;
   let timings: ReturnType<typeof streamingTimings> | undefined;
   const timing = () => {
     timings ??= streamingTimings();
@@ -103,13 +126,18 @@ function createStreamingBody(message: () => AgentMessage, animate?: boolean) {
   const keepHeightSmoothingActive = () => {
     if (smoothHeightTimer !== undefined) window.clearTimeout(smoothHeightTimer);
     smoothHeightTimer = undefined;
+    smoothingSettled = false;
     setSmoothHeight(true);
   };
   const settleHeightSmoothing = () => {
+    /* Each row that the virtual list mounts comes here. When nothing animated, there is nothing to
+       settle, and reading the timing tokens would force a style recalculation per row. */
+    if (smoothingSettled) return;
     if (smoothHeightTimer !== undefined) window.clearTimeout(smoothHeightTimer);
     smoothHeightTimer = window.setTimeout(
       () => {
         smoothHeightTimer = undefined;
+        smoothingSettled = true;
         setSmoothHeight(false);
         setAnimateTail(false);
         setTrail([]);
@@ -134,6 +162,7 @@ function createStreamingBody(message: () => AgentMessage, animate?: boolean) {
       ...steps.filter((chunk) => now - chunk.revealedAt < fadeMs),
       { length: step.length - shownBody.length, revealedAt: now },
     ]);
+    smoothingSettled = false;
     setAnimateTail(true);
     showBody(targetBody.slice(0, step.length));
     return true;
@@ -224,23 +253,34 @@ const codeContent = (block: MessageContentBlock) => (block.type === "code" ? blo
 const textContent = (block: MessageContentBlock) => (block.type === "text" ? block : undefined);
 
 export function MessageBody(props: {
-  animate?: boolean;
+  animate?: boolean | undefined;
   message: AgentMessage;
-  referencedMessage?: AgentMessage;
+  referencedMessage?: AgentMessage | undefined;
   /**
    * Who wrote the quoted message. A chat with several authors has to name the one it quotes, and
    * an agent chat names another person the reader quotes. Absent, the quote says "You" or "Agent".
    */
-  referencedAuthorName?: string;
+  referencedAuthorName?: string | undefined;
+  /** Opens the quoted message in the chat. Absent, the quote is not a control. */
+  onOpenReference?: (() => void) | undefined;
+  /**
+   * `loading` while the chat loads the history around the original. `unavailable` when the chat did
+   * not find it: a note says so. A quote stays open to a new try, because a load can fail for a
+   * time. With no quote, only the note shows.
+   */
+  referenceState?: "loading" | "unavailable" | undefined;
   agents: AgentProfile[];
-  skills?: InstalledSkill[];
+  skills?: InstalledSkill[] | undefined;
   onSelectAgent: (agentId: string) => void;
   onOpenLink: (url: string) => void;
   onPreview: (attachment: AttachmentSummary) => void;
   onAttachmentAction: (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => void;
-  onOpenSharedFile?: (path: string) => void;
-  onOpenWorkspaceFile?: (path: string) => void;
-  onDownload?: (attachment: AttachmentSummary) => void;
+  onOpenSharedFile?: ((path: string) => void) | undefined;
+  onOpenWorkspaceFile?: ((path: string) => void) | undefined;
+  /** Opens the passage that a quote in the message points to. */
+  onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
+  onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
+  mediaSource?: AttachmentMediaSource | undefined;
 }) {
   const { t } = useText();
   const streamingBody = createStreamingBody(
@@ -248,6 +288,8 @@ export function MessageBody(props: {
     untrack(() => props.animate),
   );
   const streamedBody = streamingBody.body;
+  const referenceOpens = () => Boolean(props.onOpenReference);
+  const referenceTextId = `message-reply-${createUniqueId()}`;
   const selectionInstruction = createMemo(() =>
     props.message.author === "you" && props.message.replyToMessageId
       ? parseSelectionInstruction(props.message.body)
@@ -371,6 +413,7 @@ export function MessageBody(props: {
       onOpenImage={openMarkdownImage}
       onOpenSharedFile={props.onOpenSharedFile}
       onOpenWorkspaceFile={props.onOpenWorkspaceFile}
+      onOpenQuote={props.onOpenQuote}
     />
   );
 
@@ -386,28 +429,53 @@ export function MessageBody(props: {
       </Show>
       <Show when={props.referencedMessage}>
         {(referenced) => (
-          <div class="message-reply-context">
-            <span>
+          <div
+            class="message-reply-context"
+            data-opens={referenceOpens() ? "" : undefined}
+            data-loading={props.referenceState === "loading" ? "" : undefined}
+            data-unavailable={props.referenceState === "unavailable" ? "" : undefined}
+          >
+            {/*
+             * The button lies over the quote, not around it: the quote can hold links and mentions,
+             * and a button cannot hold a control. The quote under it is inert, so a click and the
+             * Tab key both reach the button only.
+             */}
+            <Show when={referenceOpens()}>
+              <Button
+                variant="ghost"
+                type="button"
+                class="message-reply-open"
+                aria-label={t("chat.reply.showOriginal")}
+                aria-describedby={referenceTextId}
+                aria-busy={props.referenceState === "loading" ? "true" : undefined}
+                data-cuelume-tap="navigate"
+                onClick={() => props.onOpenReference?.()}
+              />
+            </Show>
+            <span inert={referenceOpens() ? true : undefined}>
               {props.referencedAuthorName ??
                 (referenced().author === "you" ? t("chat.message.you") : t("chat.message.agentFallback"))}
             </span>
-            <p>
-              <RichMessageText
-                body={referenced().body || t("chat.message.attachment")}
-                agents={props.agents}
-                skills={props.skills}
-                attachments={referenced().attachments}
-                citations={referenced().citations}
-                onSelectAgent={props.onSelectAgent}
-                onOpenLink={props.onOpenLink}
-                onOpenAttachment={openAttachment}
-                onOpenSharedFile={props.onOpenSharedFile}
-                onOpenWorkspaceFile={props.onOpenWorkspaceFile}
-                showCitationFooter={false}
-              />
-            </p>
+            <ReplyQuote
+              id={referenceTextId}
+              body={referenced().body || t("chat.message.attachment")}
+              agents={props.agents}
+              skills={props.skills}
+              attachments={referenced().attachments}
+              citations={referenced().citations}
+            />
+            <Show when={props.referenceState === "loading"}>
+              <LoaderCircle class="message-reply-loading" aria-hidden="true" />
+            </Show>
           </div>
         )}
+      </Show>
+      <Show when={props.referenceState === "unavailable"}>
+        {/* Only a jump that failed changes the note while the row shows. A row that mounts again must not repeat it. */}
+        <p class="message-reply-unavailable" role={props.referencedMessage ? "status" : undefined}>
+          <Info class="message-reply-unavailable-icon" aria-hidden="true" />
+          {t("chat.reply.originalUnavailable")}
+        </p>
       </Show>
       <div class="message-content-resize" ref={(element) => (messageContentResize = element)}>
         <div class="message-content-blocks" ref={(element) => (messageContent = element)}>
@@ -463,6 +531,7 @@ export function MessageBody(props: {
                             onOpenImage={openMarkdownImage}
                             onOpenSharedFile={props.onOpenSharedFile}
                             onOpenWorkspaceFile={props.onOpenWorkspaceFile}
+                            onOpenQuote={props.onOpenQuote}
                             showCitationFooter={index === lastTextBlockIndex()}
                             streaming={streamingBody.revealing() && index === contentBlocks().length - 1}
                             streamingTailAfter={textTailAfter()[index]}
@@ -520,6 +589,7 @@ export function MessageBody(props: {
         <div class="message-attachments-group">
           <AttachmentCards
             attachments={standaloneFileAttachments()}
+            mediaSource={props.mediaSource}
             onPreview={openAttachment}
             onAction={props.onAttachmentAction}
           />
@@ -552,39 +622,61 @@ function imageGenerationStatus(
 export function MessageActions(props: {
   message: AgentMessage;
   /** Names the toolbar for a screen reader. A channel has more authors than "Agent". */
-  authorName?: string;
+  authorName?: string | undefined;
   /**
    * Whether the reaction button stands in the toolbar. A channel message has no owner to hold a
    * reaction yet, so the chats share one toolbar and the channel leaves that button out.
    */
   reactions?: boolean;
   pickerOpen: boolean;
-  moreOpen: boolean;
   expandedEmoji: boolean;
   copied: boolean;
   onTogglePicker: () => void;
-  onToggleMore: () => void;
   onExpandEmoji: () => void;
   onReact: (emoji: MessageReaction | null) => void;
-  onReply?: () => void;
+  onReply?: (() => void) | undefined;
   onCopy: () => void;
+  /** Reads the message aloud, or stops it while it is read. Absent where replies cannot be read aloud. */
+  readAloud?: { reading: boolean; onToggle: () => void } | undefined;
 }) {
   const { t } = useText();
   const authorName = () => props.authorName ?? t("chat.message.agentFallback");
   return (
     <div
-      class={["message-actions", { "message-actions-open": props.pickerOpen || props.moreOpen }]}
+      class={["message-actions", { "message-actions-open": props.pickerOpen }]}
       role="toolbar"
       aria-label={
         props.message.author === "you" ? t("chat.actions.userLabel") : t("chat.actions.label", { name: authorName() })
       }
     >
+      <Button
+        variant="ghost"
+        type="button"
+        class="message-action-button"
+        aria-label={props.copied ? t("common.copied") : t("common.copy")}
+        onClick={props.onCopy}
+      >
+        {props.copied ? <CheckIcon /> : <CopyIcon />}
+      </Button>
+      <Show when={props.readAloud}>
+        {(readAloud) => (
+          <Button
+            variant="ghost"
+            type="button"
+            class="message-action-button"
+            aria-label={readAloud().reading ? t("chat.actions.stopReading") : t("chat.actions.readAloud")}
+            onClick={() => readAloud().onToggle()}
+          >
+            {readAloud().reading ? <StopIcon /> : <AudioLines aria-hidden="true" />}
+          </Button>
+        )}
+      </Show>
       <Show when={props.reactions !== false}>
         <div class="message-action-popover-anchor">
           <DropdownMenu.Root
             open={props.pickerOpen}
             onOpenChange={props.onTogglePicker}
-            placement={untrack(() => props.message.author) === "you" ? "top-end" : "top-start"}
+            placement="bottom-start"
             gutter={6}
             modal={false}
           >
@@ -656,25 +748,91 @@ export function MessageActions(props: {
           <ReplyIcon />
         </Button>
       </Show>
-      <div class="message-action-popover-anchor">
-        <DropdownMenu.Root
-          open={props.moreOpen}
-          onOpenChange={props.onToggleMore}
-          placement="top-end"
-          gutter={6}
-          modal={false}
-        >
-          <DropdownMenu.Trigger class="message-action-button" aria-label={t("chat.actions.more")}>
-            <MoreIcon />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content class="message-more-menu" aria-hidden={props.moreOpen ? undefined : "true"}>
-            <DropdownMenu.Item onSelect={props.onCopy}>
-              {props.copied ? <CheckIcon /> : <CopyIcon />}
-              <span>{props.copied ? t("common.copied") : t("common.copy")}</span>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      </div>
     </div>
+  );
+}
+
+/**
+ * The right-click menu of a message, for `ChatMessageRow`'s `menu` slot. It holds the actions of
+ * `MessageActions` with text labels; React opens a submenu with every reaction.
+ */
+export function MessageMenu(props: {
+  message: AgentMessage;
+  /** Names the menu for a screen reader. A channel has more authors than "Agent". */
+  authorName?: string | undefined;
+  /** Whether React stands in the menu. A channel message has no owner to hold a reaction yet. */
+  reactions?: boolean;
+  onReact: (emoji: MessageReaction | null) => void;
+  onReply?: (() => void) | undefined;
+  onCopy: () => void;
+  readAloud?: { reading: boolean; onToggle: () => void } | undefined;
+}) {
+  const { t } = useText();
+  const authorName = () => props.authorName ?? t("chat.message.agentFallback");
+  const react = (emoji: MessageReaction) => props.onReact(props.message.reaction === emoji ? null : emoji);
+  return (
+    <ContextMenu.Content
+      aria-label={
+        props.message.author === "you" ? t("chat.actions.userLabel") : t("chat.actions.label", { name: authorName() })
+      }
+    >
+      <Show when={props.onReply}>
+        {(onReply) => (
+          <ContextMenu.Item onSelectAfterClose={onReply()}>
+            <ReplyIcon />
+            <span>{t("chat.menu.reply")}</span>
+          </ContextMenu.Item>
+        )}
+      </Show>
+      <ContextMenu.Item onSelect={props.onCopy}>
+        <CopyIcon />
+        <span>{t("chat.menu.copy")}</span>
+      </ContextMenu.Item>
+      <Show when={props.reactions !== false}>
+        <ContextMenu.Sub>
+          <ContextMenu.SubTrigger>
+            <ReactionIcon />
+            <span>{t("chat.menu.react")}</span>
+            <ChevronRight class="ui-menu-trailing" aria-hidden="true" />
+          </ContextMenu.SubTrigger>
+          <ContextMenu.Portal>
+            <ContextMenu.SubContent
+              class="ui-action-menu reaction-picker"
+              data-menu-layout="grid"
+              aria-label={t("chat.actions.chooseReaction")}
+            >
+              <For each={[MESSAGE_REACTIONS, MORE_MESSAGE_REACTIONS]}>
+                {(row, index) => (
+                  <div class={["reaction-picker-row", { "reaction-picker-more": index() > 0 }]}>
+                    <ContextMenu.RadioGroup class="reaction-picker-options" value={props.message.reaction ?? ""}>
+                      <For each={row}>
+                        {(emoji) => (
+                          <ContextMenu.RadioItem
+                            value={emoji}
+                            closeOnSelect
+                            aria-label={t("chat.actions.react", { emoji })}
+                            onSelect={() => react(emoji)}
+                          >
+                            {emoji}
+                          </ContextMenu.RadioItem>
+                        )}
+                      </For>
+                    </ContextMenu.RadioGroup>
+                  </div>
+                )}
+              </For>
+            </ContextMenu.SubContent>
+          </ContextMenu.Portal>
+        </ContextMenu.Sub>
+      </Show>
+      <Show when={props.readAloud}>
+        {(readAloud) => (
+          <ContextMenu.Item onSelect={() => readAloud().onToggle()}>
+            {readAloud().reading ? <StopIcon /> : <AudioLines aria-hidden="true" />}
+            <span>{readAloud().reading ? t("chat.actions.stopReading") : t("chat.actions.readAloud")}</span>
+          </ContextMenu.Item>
+        )}
+      </Show>
+    </ContextMenu.Content>
   );
 }

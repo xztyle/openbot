@@ -1,5 +1,6 @@
 import { createScrollFades } from "@openbot/ui/components/createScrollFades";
 import type { AgentMessage } from "@openbot/ui/data";
+import type { RoutineRunToggleMarkerModel } from "@openbot/ui/features/conversation/ChatActionMarker";
 import {
   calculateChatScrollMargin,
   chatHistoryBoundaryReached,
@@ -19,12 +20,22 @@ import {
 } from "@openbot/ui/features/conversation/UnreadMessages";
 import { currentText } from "@openbot/ui/text";
 import type { VirtualItem } from "@tanstack/virtual-core";
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { eventCheckOrigins, eventCheckOriginsEqual, isEventCheckMarkerMessage } from "../../../app-message-projection";
 import { useShowAgentMessages, useShowAgentReasoning } from "../../../chat-visibility-preferences";
-import { collapseThinkingRuns, groupAgentMessageMarkers } from "../agent-message-timeline";
+import { groupAgentMessageMarkers, markOpenAgentMessages } from "../agent-message-timeline";
 import type { ConversationProps, ConversationTarget } from "../conversation-types";
-import { groupRoutineRunMarkers, summarizeRoutineRunMessages } from "../routine-run-timeline";
+import {
+  expandRoutineRunGroups,
+  groupRoutineRunMarkers,
+  placeRoutineRunTurns,
+  type RoutineRunOpenState,
+  routineRunToggleKey,
+  routineRunTurnMessages,
+  summarizeRoutineRunMessages,
+} from "../routine-run-timeline";
+import { isTurnAnswer } from "../turn-steps";
+import { conversationOwnerId } from "./composer-store";
 
 interface ScrollElements {
   scrollElement: () => HTMLDivElement | undefined;
@@ -35,8 +46,6 @@ interface ScrollElements {
 interface ScrollStickyState {
   getStickToLatest: () => boolean;
   setStickToLatest: (value: boolean) => void;
-  /** A smooth jump to the latest message starts. The steps of it do not change the stick. */
-  beginLatestJump: (element: HTMLElement) => void;
   getCurrentUnreadCount: () => number;
 }
 
@@ -49,14 +58,6 @@ export interface ScrollStoreDeps {
   pendingMessages: () => AgentMessage[];
   elements: ScrollElements;
   sticky: ScrollStickyState;
-}
-
-/**
- * Reasoning shows as a row of its own once its turn is over. While the turn runs, the activity line
- * under the chat carries it and opens it, so the same words are not drawn twice.
- */
-function hiddenThinking(message: AgentMessage, activeTurnId: string | null | undefined): boolean {
-  return message.kind === "thinking" && (message.streaming === true || message.turnId === activeTurnId);
 }
 
 /**
@@ -83,20 +84,30 @@ export function createScrollStore(deps: ScrollStoreDeps) {
   let newMessages: NewMessageTally = { count: 0, anchorId: undefined };
   let talliedConversationIdentity: string | undefined;
 
+  const [openRoutineRuns, setOpenRoutineRuns] = createSignal<RoutineRunOpenState>(new Map());
+  // The thinking and the memory changes of a turn show in the steps above its answer. A turn with
+  // no answer shows its memory changes in a row of their own.
+  const answeredTurns = createMemo(
+    () => new Set(deps.props.messages.flatMap((message) => (isTurnAnswer(message) ? [message.turnId] : []))),
+  );
   /*
    * An event check writes a marker when it wakes the agent. The marker stays in the conversation, so
    * read state and counts see it as before, but it has no row: the agent messages of its interaction
    * carry a chip with the name of the check instead.
    */
-  const drawnMessages = createMemo(() => [
-    ...summarizeRoutineRunMessages(
-      deps.props.messages.filter(
-        (message) =>
-          !hiddenThinking(message, deps.props.activeTurnId) &&
-          !isEventCheckMarkerMessage(message) &&
-          !silentAgentAnswer(message),
-      ),
+  const shownMessages = createMemo(() =>
+    deps.props.messages.filter(
+      (message) =>
+        message.kind !== "thinking" &&
+        !(message.kind === "memory-changes" && answeredTurns().has(message.turnId)) &&
+        !isEventCheckMarkerMessage(message) &&
+        !silentAgentAnswer(message),
     ),
+  );
+  const routineRunTurns = createMemo(() => routineRunTurnMessages(deps.props.messages, shownMessages()));
+  /* The messages of a routine run follow its row and open and close with it. */
+  const drawnMessages = createMemo(() => [
+    ...placeRoutineRunTurns(summarizeRoutineRunMessages(shownMessages()), routineRunTurns(), openRoutineRuns()),
     ...deps.pendingMessages(),
   ]);
   /* The chip of an event check, by the id of the agent message that carries it. */
@@ -104,13 +115,36 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     () => eventCheckOrigins(deps.props.messages, { activeTurnId: deps.props.activeTurnId }),
     { equals: eventCheckOriginsEqual },
   );
+  function toggleRoutineRun(marker: RoutineRunToggleMarkerModel): void {
+    const key = routineRunToggleKey(marker);
+    setOpenRoutineRuns((open) => new Map(open).set(key, marker.expanded !== true));
+  }
+  /* The exchange ids of the agent messages whose text shows under their marker. */
+  const [openAgentMessages, setOpenAgentMessages] = createSignal<ReadonlySet<string>>(new Set());
+  function toggleAgentMessage(messageId: string): void {
+    setOpenAgentMessages((open) => {
+      const next = new Set(open);
+      if (!next.delete(messageId)) next.add(messageId);
+      return next;
+    });
+  }
+  /*
+   * An open chat marks its messages read at once, so read state loses the first unread message.
+   * The visit keeps it until the reader opens another chat. A newer unread message replaces it.
+   */
+  const visitUnread = createMemo<{ identity: string; messageId: string | null }>((previous) => {
+    const identity = `${deps.props.server?.id ?? "local"}:${conversationOwnerId(deps.props) ?? ""}`;
+    const messageId = deps.props.firstUnreadMessageId;
+    if (previous?.identity === identity && !messageId) return previous;
+    return { identity, messageId };
+  });
   /*
    * The unread divider sits on the first unread row the timeline draws. A silent answer has no row,
    * so the divider moves to the next row that has one; read state keeps the stored message. A
    * message that is not loaded keeps its id, so the jump can open its page.
    */
   const unreadBoundaryMessageId = createMemo(() => {
-    const firstUnreadMessageId = deps.props.firstUnreadMessageId;
+    const firstUnreadMessageId = visitUnread().messageId;
     const start = deps.props.messages.findIndex((message) => message.id === firstUnreadMessageId);
     if (start < 0) return firstUnreadMessageId;
     const drawn = new Set(drawnMessages().map((message) => message.id));
@@ -118,15 +152,27 @@ export function createScrollStore(deps: ScrollStoreDeps) {
   });
   /*
    * A group of agent messages or routine runs stops at the unread divider, so the divider keeps its
-   * row. A switch that is off collapses its rows into one row per run; it never removes them.
+   * row. With messages between agents switched off, each run is one collapsed row; nothing is removed.
    */
   const timelineMessages = createMemo(() => {
-    const boundary = unreadBoundaryMessageId();
-    const rows = showReasoning() ? drawnMessages() : collapseThinkingRuns(drawnMessages(), boundary);
-    return groupRoutineRunMarkers(
-      groupAgentMessageMarkers(rows, boundary, { collapsed: !showAgentMessages() }),
-      boundary,
-    );
+    const group = (messages: readonly AgentMessage[]) =>
+      groupRoutineRunMarkers(
+        groupAgentMessageMarkers(messages, unreadBoundaryMessageId(), { collapsed: !showAgentMessages() }),
+        unreadBoundaryMessageId(),
+      );
+    const state = deps.props.contextState;
+    const startedAt =
+      state?.agentId === deps.props.agent?.id && state?.threadId === deps.props.agent?.threadId
+        ? state?.compaction?.startedAt
+        : undefined;
+    const messages = markOpenAgentMessages(drawnMessages(), openAgentMessages());
+    const boundary =
+      startedAt === undefined
+        ? -1
+        : messages.findIndex((message) => message.createdAt && Date.parse(message.createdAt) > startedAt);
+    const rows =
+      boundary < 0 ? group(messages) : [...group(messages.slice(0, boundary)), ...group(messages.slice(boundary))];
+    return expandRoutineRunGroups(rows, messages, routineRunTurns(), openRoutineRuns());
   });
   /*
    * A row finds its message by id. The virtualizer gives a row its new index one tick after the list
@@ -157,7 +203,7 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     () => {
       const rows = timelineRows();
       return {
-        identity: `${deps.props.server?.id ?? "local"}:${deps.props.agent?.id ?? ""}`,
+        identity: `${deps.props.server?.id ?? "local"}:${conversationOwnerId(deps.props) ?? ""}`,
         rows,
         length: rows.length,
         lastId: rows.at(-1)?.id,
@@ -187,15 +233,16 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     },
   );
 
+  // A channel row is mostly a short message under an author; an agent row is often a longer answer.
+  const rowEstimate = untrack(() => deps.props.channel) ? 84 : 128;
   const messageVirtualizer = createChatVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: () => timelineMessages().length,
     getScrollElement: () => deps.elements.scrollElement() ?? null,
-    estimateSize: () => 128,
+    estimateSize: () => rowEstimate,
     getItemKey: (index) => timelineMessages()[index]?.id ?? index,
-    // The virtualizer follows the bottom only while the reader's intent says so.
-    follow: deps.sticky.getStickToLatest,
     keyVersion: () => `${timelineMessages()[0]?.id ?? ""}:${timelineMessages().at(-1)?.id ?? ""}`,
     scrollMargin: virtualScrollMargin,
+    stickToLatest: deps.sticky.getStickToLatest,
     onChange: (instance) => {
       const first = instance.getVirtualItems()[0];
       if (!first) return;
@@ -250,7 +297,7 @@ export function createScrollStore(deps: ScrollStoreDeps) {
 
   async function markUnreadMessages(): Promise<void> {
     if (deps.markingRead()) return;
-    const agentId = deps.props.agent?.id;
+    const agentId = conversationOwnerId(deps.props);
     const target = agentId ? { agentId, serverId: deps.props.server?.id ?? "local" } : undefined;
     deps.setMarkingRead(true);
     deps.setComposerError(null, target);
@@ -302,7 +349,6 @@ export function createScrollStore(deps: ScrollStoreDeps) {
       await deps.props.onLoadLatest?.();
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
-    deps.sticky.beginLatestJump(scrollElement);
     scrollToLatestMessage(scrollElement);
   }
 
@@ -317,6 +363,8 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     clearNewMessages,
     messageVirtualizer,
     timelineMessages,
+    toggleRoutineRun,
+    toggleAgentMessage,
     timelineIndexById,
     eventCheckOriginById,
     unreadBoundaryMessageId,

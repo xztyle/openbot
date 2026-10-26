@@ -1,5 +1,5 @@
 import { Stack } from "expo-router";
-import { Check } from "lucide-react-native";
+import Check from "lucide-react-native/icons/check";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
 import { haptics } from "@/shared/lib/haptics";
 import { isAndroid, isIOS } from "@/shared/lib/platform";

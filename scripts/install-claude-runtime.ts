@@ -6,7 +6,13 @@ import { createOpenBotLogger } from "@openbot/logging";
 import { z } from "zod";
 import { type AgentRuntimeLock, loadAgentRuntimeLock } from "./agent-runtime-lock";
 import { rejectNonRegularFiles, sha256 } from "./remote-desktop-runtime-release";
-import { escapeRegExp, installValidatedTree, isCurrentInstallation, safeArchivePathParts } from "./runtime-install";
+import {
+  download,
+  escapeRegExp,
+  installValidatedTree,
+  isCurrentInstallation,
+  safeArchivePathParts,
+} from "./runtime-install";
 
 const logger = createOpenBotLogger("install-claude-runtime");
 
@@ -49,12 +55,7 @@ export async function installClaudeRuntime(
   }
 
   const url = `${lock.claude.registry}/${artifact.package}/-/${artifact.asset}`;
-  const response = await fetchImpl(url, {
-    headers: { "User-Agent": "OpenBot-runtime-installer" },
-    redirect: "follow",
-  });
-  if (!response.ok) throw new Error(`Claude runtime download failed with HTTP ${response.status}.`);
-  const archiveBytes = Buffer.from(await response.arrayBuffer());
+  const archiveBytes = await download(fetchImpl, url, "Claude runtime");
   if (sha256(archiveBytes) !== artifact.assetSha256) {
     throw new Error(`The ${target} Claude runtime archive checksum is invalid.`);
   }

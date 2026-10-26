@@ -28,6 +28,8 @@ const AGGREGATORS = new Set(["index", "mobile", "source", "shared"]);
 const CODE_ROOTS = ["src", "packages", "apps/mobile/src", "apps/auth-api/src", "scripts"];
 const CODE_EXTENSIONS = /\.(?:ts|tsx)$/;
 const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", "build", "out", ".expo"]);
+/** Keys that no current code sends, but older hosts still do. Keep them so their text is translated. */
+const RELEASED_SOURCE_KEYS = new Set(["error.agent.noStartingModel", "error.provider.cliBusyUpdate"]);
 
 const logger = createOpenBotLogger("i18n-check");
 const failures: string[] = [];
@@ -264,6 +266,7 @@ const code = CODE_ROOTS.flatMap((root) => files(resolve(ROOT, root), CODE_EXTENS
   .map((path) => readFileSync(path, "utf8"))
   .join("\n");
 for (const [key, name] of owner) {
+  if (RELEASED_SOURCE_KEYS.has(key)) continue;
   if (!code.includes(`"${key}"`) && !code.includes(`'${key}'`) && !code.includes(`\`${key}\``)) {
     failures.push(`en/${name}.ts: ${key} is not used. Remove it, or name it as a literal where it renders.`);
   }

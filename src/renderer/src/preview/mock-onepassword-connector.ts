@@ -42,7 +42,7 @@ export function createMockOnePasswordConnector(): OnePasswordConnectorDesktopApi
     ...DISCONNECTED_ONEPASSWORD_CONNECTOR,
     setup: status.setup,
   });
-  return {
+  const api = {
     status: async () => ({ ...status }),
     checkSetup: async () => {
       if (status.setup.cli !== "ready") return { ...status };
@@ -73,7 +73,7 @@ export function createMockOnePasswordConnector(): OnePasswordConnectorDesktopApi
       if (current !== attempt) return { ...status };
       return set(CONNECTED);
     },
-    connectWithToken: async () => {
+    connectWithToken: async (_token: string) => {
       attempt += 1;
       return set({ ...CONNECTED, setup: status.setup });
     },
@@ -85,9 +85,16 @@ export function createMockOnePasswordConnector(): OnePasswordConnectorDesktopApi
       attempt += 1;
       return set(disconnected());
     },
-    onChanged: (listener) => {
+    onChanged: (listener: (status: OnePasswordConnectorStatus) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+  } satisfies Omit<OnePasswordConnectorDesktopApi, `host${string}`>;
+  // The preview has one connection, so a joined server shows the same one.
+  return {
+    ...api,
+    hostStatus: api.status,
+    hostConnectWithToken: ({ token }) => api.connectWithToken(token),
+    hostDisconnect: api.disconnect,
   };
 }

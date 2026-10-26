@@ -1,11 +1,23 @@
 import type { MarketplaceSkillSummary } from "@openbot/contracts/ipc";
-import { ArrowRight, Button, Check, Heading, IconButton, Plug, Puzzle, Sparkles, Text } from "@openbot/ui";
+import {
+  ArrowRight,
+  Button,
+  Check,
+  ErrorReference,
+  Heading,
+  IconButton,
+  Plug,
+  Puzzle,
+  Sparkles,
+  Text,
+} from "@openbot/ui";
 import { ReferenceChip } from "@openbot/ui/reference-chip";
 import { SkillGradient } from "@openbot/ui/skill-gradient";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
-import { GitHubMark, LogoTile, OnePasswordMark } from "../settings/IntegrationLayout";
+import { CONNECTOR_LISTINGS } from "../connectors/connector-catalog";
+import { LogoTile } from "../settings/IntegrationLayout";
 import type { MarketplaceApp } from "./marketplace-model";
 
 /** The top of an agent or skill page. The window moves the focus to the title when the page opens. */
@@ -29,6 +41,8 @@ export function PageHead(props: { media: JSX.Element; title: string; description
 /** The part of a page that waits for the full listing: a status line, or the failure with Retry. */
 export function DetailState(props: {
   status: "loading" | "loaded" | "failed";
+  /** The code of the failed read, when it has one. */
+  reference?: string | null | undefined;
   loadingLabel: string;
   onRetry: () => void;
   children: JSX.Element;
@@ -46,6 +60,7 @@ export function DetailState(props: {
           <Text as="p" variant="body-sm" tone="muted">
             {t("marketplace.loadFailed")}
           </Text>
+          <ErrorReference reference={props.reference} />
           <Button type="button" variant="outline" size="sm" onClick={props.onRetry}>
             {t("common.retry")}
           </Button>
@@ -175,11 +190,8 @@ export function AppMark(props: { app: MarketplaceApp }) {
   };
   return (
     <Switch fallback={<Puzzle aria-hidden="true" />}>
-      <Match when={props.app.kind === "github"}>
-        <GitHubMark />
-      </Match>
-      <Match when={props.app.kind === "onepassword"}>
-        <OnePasswordMark />
+      <Match when={props.app.kind === "connector" ? CONNECTOR_LISTINGS[props.app.connector] : undefined} keyed>
+        {(listing) => <listing.Mark />}
       </Match>
       <Match when={url()} keyed>
         {(src) => <img src={src} alt="" onError={() => setFailed(src)} />}

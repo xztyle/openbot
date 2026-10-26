@@ -3,10 +3,11 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Button, Typography } from "heroui-native";
 import { MemoryEditor, RoutineEditor } from "@/features/agents/components/agent-record-editor";
 import { useEventRoutines } from "@/features/agents/components/use-event-routines";
-import { useMobileSession } from "@/features/auth/context/mobile-session-context";
+import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { useChannels } from "@/features/channels/components/use-channels";
 import { SettingsContent, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
-import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
+import { queryKeys } from "@/features/workspace/model/query-keys";
 import { useText } from "@/shared/lib/text";
 
 export function ChannelRecordsScreen({ section }: { section: "memories" | "memory" | "routines" | "routine" }) {
@@ -16,32 +17,33 @@ export function ChannelRecordsScreen({ section }: { section: "memories" | "memor
     serverId: string;
     recordId?: string;
   }>();
-  const { session, sessionScope } = useMobileSession();
-  const { servers } = useMobileWorkspace();
+  const queryScope = useQueryScope();
+  const online = useMobileWorkspaceSelector((current) =>
+    current.servers.some((server) => server.id === serverId && server.state === "online"),
+  );
   const { store, channels } = useChannels(serverId);
-  const available =
-    servers.some((server) => server.id === serverId && server.state === "online") &&
-    channels.some((channel) => channel.id === channelId);
-  const key = ["channel-info", session?.apiUrl ?? "", session?.user.id ?? "", sessionScope, serverId, channelId];
+  const available = online && channels.some((channel) => channel.id === channelId);
+  const key = queryKeys.channelInfo(queryScope, serverId, channelId);
   const memorySection = section === "memories" || section === "memory";
   const options = { enabled: available, retry: false, staleTime: 0, gcTime: 0 };
   const memories = useQuery({
     ...options,
     enabled: available && memorySection,
-    queryKey: [...key, "memories"],
+    queryKey: queryKeys.channelInfo(queryScope, serverId, channelId, "memories"),
     queryFn: () => store.memories(serverId, channelId),
   });
   const routines = useQuery({
     ...options,
     enabled: available && !memorySection,
-    queryKey: [...key, "routines"],
+    queryKey: queryKeys.channelInfo(queryScope, serverId, channelId, "routines"),
     queryFn: () => store.routines(serverId, channelId),
   });
   const { eventsEnabled, eventRoutines, webhookRoutines } = useEventRoutines(
     { kind: "channel", id: channelId },
     serverId,
     available && !memorySection,
-    key,
+    // Under "routines", so the routine change events of the channel reload this list too.
+    [...queryKeys.channelInfo(queryScope, serverId, channelId, "routines"), "events"],
   );
   const query = memorySection ? memories : routines;
   const recordsPending = query.isPending || (eventsEnabled && eventRoutines.isPending);

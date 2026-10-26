@@ -76,7 +76,10 @@ function openCodeGoRateLimits(value: unknown): AccountRateLimitsReadResult {
   };
 }
 
-function bindingWindow<T extends { usedPercent: number; resetsAt?: number | null }>(weekly: T, monthly: T): T {
+function bindingWindow<T extends { usedPercent: number; resetsAt?: number | null | undefined }>(
+  weekly: T,
+  monthly: T,
+): T {
   if (weekly.usedPercent >= 100 && monthly.usedPercent >= 100) {
     return (monthly.resetsAt ?? Number.POSITIVE_INFINITY) >= (weekly.resetsAt ?? Number.POSITIVE_INFINITY)
       ? monthly

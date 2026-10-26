@@ -44,7 +44,7 @@ export function DynamicIslandBridge() {
     setPendingPrompts,
     setSubmittedPromptRequests,
     pendingApprovals,
-    setPendingApprovals,
+    forgetApproval,
     failedTurns,
     setFailedTurns,
   } = useTurns();
@@ -140,12 +140,7 @@ export function DynamicIslandBridge() {
     }
     if (action.type === "respond-approval") {
       dynamicIslandCoordinator.resolveAction(action);
-      setPendingApprovals((current) => {
-        const approval = current[action.agentId];
-        return approval && String(approval.requestId) === String(action.requestId)
-          ? { ...current, [action.agentId]: undefined }
-          : current;
-      });
+      forgetApproval(action.agentId, action.requestId);
       publishDynamicIslandPresentation();
       return;
     }

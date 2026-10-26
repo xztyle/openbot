@@ -12,12 +12,62 @@ export interface MarkdownListEdit {
   text: string;
   /** The caret offset in `text` after the edit. */
   caret: number;
+  /** Text ranges after the caret that changed, in the original text's offsets. */
+  replacements?: MarkdownListReplacement[];
+}
+
+export interface MarkdownListReplacement {
+  start: number;
+  end: number;
+  text: string;
 }
 
 const LIST_ITEM = /^([ \t]*)(?:([-*+])|(\d{1,9})([.)]))([ \t]+)(\[[ xX]\][ \t]+)?/u;
 const THEMATIC_BREAK = /^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$/u;
 // Any indent, and a list marker before it, so a fence inside a list item counts too.
 const CODE_FENCE = /^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?)(`{3,}|~{3,})(.*)$/u;
+
+/*
+ * Shift only the ordered siblings that form the sequence directly below the inserted item. Blank
+ * lines, continuation lines and nested items stay inside the list. A gap, another delimiter, less
+ * indent or other text at the same indent can be deliberate Markdown, so it ends the automatic edit.
+ */
+function renumberFollowingItems(
+  text: string,
+  lineEnd: number,
+  indent: string,
+  number: number,
+  delimiter: string,
+): { text: string; replacements: MarkdownListReplacement[] } {
+  const lines = text.slice(lineEnd).split("\n");
+  const replacements: MarkdownListReplacement[] = [];
+  let lineStart = lineEnd + 1;
+  let expected = number + 1;
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line === undefined) break;
+    if (!line.trim() || line.length - line.trimStart().length > indent.length) {
+      lineStart += line.length + 1;
+      continue;
+    }
+    const item = LIST_ITEM.exec(line);
+    const [, itemIndent = "", bullet, itemNumber, itemDelimiter] = item ?? [];
+    if (
+      bullet ||
+      itemIndent !== indent ||
+      itemDelimiter !== delimiter ||
+      itemNumber === undefined ||
+      Number(itemNumber) !== expected
+    )
+      break;
+    const start = lineStart + indent.length;
+    replacements.push({ start, end: start + itemNumber.length, text: String(expected + 1) });
+    lines[index] = `${line.slice(0, indent.length)}${expected + 1}${line.slice(indent.length + itemNumber.length)}`;
+    lineStart += line.length + 1;
+    expected += 1;
+  }
+  return { text: text.slice(0, lineEnd) + lines.join("\n"), replacements };
+}
 
 /** The edit for a line break typed at `caret` in `text`, or null when the line break is plain. */
 export function markdownListLineBreak(text: string, caret: number): MarkdownListEdit | null {
@@ -33,9 +83,18 @@ export function markdownListLineBreak(text: string, caret: number): MarkdownList
   if (!line.slice(marker.length).trim()) {
     return { text: text.slice(0, lineStart) + text.slice(lineEnd), caret: lineStart };
   }
-  const nextMarker = bullet ?? `${Number(number) + 1}${delimiter}`;
+  const currentNumber = number === undefined ? null : Number(number);
+  const nextMarker = bullet ?? `${(currentNumber ?? 0) + 1}${delimiter}`;
   const insert = `\n${indent}${nextMarker}${spacing}${task ? "[ ] " : ""}`;
-  return { text: text.slice(0, caret) + insert + text.slice(caret), caret: caret + insert.length };
+  const renumbered =
+    currentNumber === null || delimiter === undefined
+      ? { text, replacements: [] }
+      : renumberFollowingItems(text, lineEnd, indent, currentNumber, delimiter);
+  return {
+    text: renumbered.text.slice(0, caret) + insert + renumbered.text.slice(caret),
+    caret: caret + insert.length,
+    ...(renumbered.replacements.length > 0 ? { replacements: renumbered.replacements } : {}),
+  };
 }
 
 /*

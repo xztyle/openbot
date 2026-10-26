@@ -95,3 +95,49 @@ export function parseGitHubConnectorRepositories(value: unknown): GitHubConnecto
   }
   return { repositories, total: value.total };
 }
+
+/**
+ * The status of a joined server's connection (`connectors-v1`), with the GitHub pages that its client
+ * opens: the host opens no page. Both are `null` when the host has no GitHub App.
+ */
+export interface HostGitHubConnectorStatus extends GitHubConnectorStatus {
+  installUrl: string | null;
+  revokeUrl: string | null;
+}
+
+/** Returns null for a value that is not a host connector status. */
+export function parseHostGitHubConnectorStatus(value: unknown): HostGitHubConnectorStatus | null {
+  const status = parseGitHubConnectorStatus(value);
+  if (!status || !isDynamicRecord(value) || !isNullableString(value.installUrl) || !isNullableString(value.revokeUrl))
+    return null;
+  return { ...status, installUrl: value.installUrl, revokeUrl: value.revokeUrl };
+}
+
+/** Throws for a value that is not a host connector status. */
+export function decodeHostGitHubConnectorStatus(value: unknown): HostGitHubConnectorStatus {
+  const status = parseHostGitHubConnectorStatus(value);
+  if (!status) throw new Error("Invalid GitHub connector response.");
+  return status;
+}
+
+/** Throws for a value that is not a repository list. */
+export function decodeHostGitHubConnectorRepositories(value: unknown): GitHubConnectorRepositories {
+  const repositories = parseGitHubConnectorRepositories(value);
+  if (!repositories) throw new Error("Invalid GitHub connector response.");
+  return repositories;
+}
+
+/** The status without the pages, for the panel. */
+export function withoutGitHubPages(status: HostGitHubConnectorStatus): GitHubConnectorStatus {
+  const { available, state, login, avatarUrl, userCode, verificationUri, error } = status;
+  return { available, state, login, avatarUrl, userCode, verificationUri, error };
+}
+
+/**
+ * `address` when it is an https page on github.com, otherwise null. A joined server names the pages
+ * that its client opens, so the client opens no other site.
+ */
+export function githubPage(address: string | null): string | null {
+  const url = address === null ? null : URL.parse(address);
+  return url?.protocol === "https:" && url.hostname === "github.com" && url.port === "" ? url.toString() : null;
+}

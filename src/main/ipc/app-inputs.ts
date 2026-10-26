@@ -1,14 +1,21 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentCreationLimitPreference,
+  AgentDefaults,
   AgentMemoryLimitPreference,
   AgentProviderId,
+  AppBehaviorPreferenceChange,
+  BrowserDockAction,
+  BrowserDockFrame,
+  BrowserDockPresentation,
   BusyMessageModePreference,
+  ChatWindowTarget,
   DeleteHostedSiteInput,
   DynamicIslandAction,
   DynamicIslandPreference,
   DynamicIslandPresentation,
   ExternalDestination,
+  ExternalLinkPreference,
   HostUpdateSettingsChange,
   IdleRestartTarget,
   InstallMarketplaceAgentInput,
@@ -18,13 +25,15 @@ import type {
   MarketplaceSkillQuery,
   NotificationPreference,
   PublishHostedSiteInput,
+  RemoteNetworkRoutePreference,
   RemoteSessionReusePreference,
   ReplaceHostedSiteInput,
   SaveSetupInput,
   SetAnalyticsPreferenceInput,
+  SetAppAppearancePreferenceInput,
+  SetAppInterfaceSizePreferenceInput,
   SetAppLanguagePreferenceInput,
   SetAppLogoColorPreferenceInput,
-  SetApprovalAutomationInput,
   SetDynamicIslandInteractiveInput,
   SetEnabledSkillInput,
   SubmitMarketplaceAgentInput,
@@ -34,19 +43,26 @@ import type {
   VerifyEmailCodeInput,
 } from "@openbot/contracts/ipc";
 import {
+  decodeExternalLinkTarget,
   IDLE_RESTART_TARGETS,
   isAgentCreationLimit,
+  isAgentDefaults,
   isAgentMemoryLimit,
   isAgentModel,
   isAgentProvider,
+  isAppAppearance,
+  isAppInterfaceSize,
   isAppLanguage,
   isAppLogoColor,
+  isBrowserDockAction,
+  isBrowserDockFrame,
+  isBrowserDockPresentation,
   isBusyMessageMode,
   isDynamicIslandAction,
   isDynamicIslandInteractive,
   isDynamicIslandPreference,
   isDynamicIslandPresentation,
-  isSetApprovalAutomationInput,
+  isRemoteNetworkRoute,
   isSkillCategory,
 } from "@openbot/contracts/ipc";
 import {
@@ -82,20 +98,18 @@ export function parseAnalyticsPreference(input: unknown): SetAnalyticsPreference
   return { enabled: input.enabled };
 }
 
-export function parseApprovalAutomation(input: unknown): SetApprovalAutomationInput {
-  if (!isSetApprovalAutomationInput(input)) throw new Error("Approval automation preference is required.");
-  const parsed: SetApprovalAutomationInput = {};
-  if (input.turbo !== undefined) parsed.turbo = input.turbo;
-  if (input.agentId !== undefined && input.autoApprove !== undefined) {
-    parsed.agentId = input.agentId;
-    parsed.autoApprove = input.autoApprove;
-  }
-  return parsed;
-}
-
 export function parseBusyMessageModePreference(input: unknown): BusyMessageModePreference {
   if (!isDynamicRecord(input) || !isBusyMessageMode(input.mode)) throw new Error("Busy message mode is required.");
   return { mode: input.mode };
+}
+
+export function parseAgentDefaults(input: unknown): AgentDefaults {
+  if (!isAgentDefaults(input)) throw new Error("Agent defaults are required.");
+  return {
+    allowAutomation: input.allowAutomation,
+    allowNewChat: input.allowNewChat,
+    quickAcknowledgement: input.quickAcknowledgement,
+  };
 }
 
 export function parseAgentMemoryLimitPreference(input: unknown): AgentMemoryLimitPreference {
@@ -109,10 +123,26 @@ export function parseAgentCreationLimitPreference(input: unknown): AgentCreation
   return { limit: input.limit };
 }
 
+export function parseChatWindowTarget(input: unknown): ChatWindowTarget {
+  if (!isDynamicRecord(input)) throw new Error("A chat is required.");
+  return { serverId: requireString(input.serverId, "Server"), agentId: requireString(input.agentId, "Agent") };
+}
+
+export function parseExternalLinkPreference(input: unknown): ExternalLinkPreference {
+  const target = isDynamicRecord(input) ? decodeExternalLinkTarget(input.target) : null;
+  if (!target) throw new Error("The external link setting is required.");
+  return { target };
+}
+
 export function parseRemoteSessionReusePreference(input: unknown): RemoteSessionReusePreference {
   if (!isDynamicRecord(input) || !isBoolean(input.keepBetweenRuns))
     throw new Error("The remote session setting is required.");
   return { keepBetweenRuns: input.keepBetweenRuns };
+}
+
+export function parseRemoteNetworkRoutePreference(input: unknown): RemoteNetworkRoutePreference {
+  if (!isDynamicRecord(input) || !isRemoteNetworkRoute(input.route)) throw new Error("The network route is required.");
+  return { route: input.route };
 }
 
 export function parseAppLanguagePreference(input: unknown): SetAppLanguagePreferenceInput {
@@ -125,9 +155,35 @@ export function parseAppLogoColorPreference(input: unknown): SetAppLogoColorPref
   return { color: input.color };
 }
 
+export function parseAppAppearancePreference(input: unknown): SetAppAppearancePreferenceInput {
+  if (!isDynamicRecord(input)) throw new Error("Appearance is required.");
+  const { appearance, transparentWindow } = input;
+  if (appearance !== undefined && !isAppAppearance(appearance)) throw new Error("Appearance is invalid.");
+  if (transparentWindow !== undefined && typeof transparentWindow !== "boolean")
+    throw new Error("Transparent window must be true or false.");
+  if (appearance === undefined && transparentWindow === undefined) throw new Error("Appearance is required.");
+  return {
+    ...(appearance === undefined ? {} : { appearance }),
+    ...(transparentWindow === undefined ? {} : { transparentWindow }),
+  };
+}
+
+export function parseAppInterfaceSizePreference(input: unknown): SetAppInterfaceSizePreferenceInput {
+  if (!isDynamicRecord(input) || !isAppInterfaceSize(input.percent)) throw new Error("Interface size is required.");
+  return { percent: input.percent };
+}
+
 export function parseIdleRestartTarget(input: unknown): IdleRestartTarget {
   if (!isOneOf(IDLE_RESTART_TARGETS, input)) throw new Error("A restart target is required.");
   return input;
+}
+
+export function parseAppBehaviorPreferenceChange(input: unknown): AppBehaviorPreferenceChange {
+  return parseSwitches(
+    input,
+    ["launchAtLogin", "keepRunningInBackground", "keepAwake", "keepAwakeOnBattery"],
+    "The app behavior setting is required.",
+  );
 }
 
 export function parseUpdatePreference(input: unknown): UpdatePreferenceChange {
@@ -158,15 +214,10 @@ function parseSwitches<Key extends string>(
 }
 
 export function parseNotificationPreference(input: unknown): NotificationPreference {
-  if (!isDynamicRecord(input) || !isBoolean(input.desktopNotifications)) {
+  if (!isDynamicRecord(input) || !isBoolean(input.desktopNotifications) || !isBoolean(input.messagePreview)) {
     throw new Error("Notification preference is required.");
   }
-  if (input.showText !== undefined && !isBoolean(input.showText))
-    throw new Error("Notification preference is required.");
-  return {
-    desktopNotifications: input.desktopNotifications,
-    ...(input.showText === undefined ? {} : { showText: input.showText }),
-  };
+  return { desktopNotifications: input.desktopNotifications, messagePreview: input.messagePreview };
 }
 
 export function parseDynamicIslandPreference(input: unknown): DynamicIslandPreference {
@@ -193,6 +244,21 @@ export function parseDynamicIslandAction(input: unknown): DynamicIslandAction {
   throw new Error("Dynamic Island action is invalid.");
 }
 
+export function parseBrowserDockPresentation(input: unknown): BrowserDockPresentation | null {
+  if (input === null || isBrowserDockPresentation(input)) return input;
+  throw new Error("Browser dock presentation is invalid.");
+}
+
+export function parseBrowserDockAction(input: unknown): BrowserDockAction {
+  if (isBrowserDockAction(input)) return input;
+  throw new Error("Browser dock action is invalid.");
+}
+
+export function parseBrowserDockFrame(input: unknown): BrowserDockFrame {
+  if (isBrowserDockFrame(input)) return input;
+  throw new Error("Browser dock frame is invalid.");
+}
+
 export function parseMacPermission(input: unknown): MacPermissionId {
   if (input !== "screen-recording" && input !== "accessibility") {
     throw new Error("Unknown macOS permission.");
@@ -208,6 +274,10 @@ export function parseExternalDestination(input: unknown): ExternalDestination {
     input !== "opencode-auth" &&
     input !== "feedback" &&
     input !== "message" &&
+    input !== "changelog" &&
+    input !== "guides" &&
+    input !== "discord" &&
+    input !== "x" &&
     input !== "grok-bot-export" &&
     input !== "hosted-server-contact" &&
     input !== "mac-screen-recording"

@@ -35,9 +35,9 @@ and inspect the current route options in `src/app/(app)/_layout.tsx`, when addin
 sheet. Four rules decide the shape of the screen before any of that detail applies:
 
 - Use native `formSheet` with fixed detents and a visible grabber. Ordinary standalone forms
-  use `[0.85]`, search uses `[1]`, and message actions use fixed route-specific heights. Do not
-  size sheets from their content. A multi-page flow is ONE outer sheet with a nested native
-  stack. Inner routes use `presentation: "card"` and the native back button, never another sheet.
+  use `[0.85]` and search uses `[1]`. Do not size sheets from their content. A multi-page flow
+  is ONE outer sheet with a nested native stack. Inner routes use `presentation: "card"` and the
+  native back button, never another sheet.
 - `SheetScrollView` is the screen's scroll container and owns header clearance, safe-area behavior
   and scroll-edge effects. Keep scrolling enabled and its viewport bounded with `flex: 1`.
   Do not gate scrolling on content measurements or keyboard visibility, or add screen-local
@@ -74,7 +74,7 @@ bun run doctor               # diagnose dependency and config issues
 bunx expo install --fix      # fix incompatible package versions
 ```
 
-Both are scoped to this app: `lint` is `biome check --max-diagnostics=none src` and `typecheck` runs `codegen` before `tsc` when the codegen inputs changed. See "Execution and verification limits" above for when to run them, and [repository checks](../../AGENTS.md#checks) for the repository-wide commands worth avoiding and why.
+Both are scoped to this app: `lint` is `biome check --max-diagnostics=none src` and `typecheck` runs `codegen` before the type checker (`scripts/type-checker.ts`) when the codegen inputs changed. See "Execution and verification limits" above for when to run them, and [repository checks](../../AGENTS.md#checks) for the repository-wide commands worth avoiding and why.
 
 ## Navigation & Routing
 

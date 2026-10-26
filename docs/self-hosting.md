@@ -64,7 +64,7 @@ Keep the private JWK secret. With it, a person can open each host that uses your
    ```
 
 2. Edit the top level of `apps/auth-api/wrangler.jsonc`. Do not change the `env` section.
-   - `routes`: replace both entries with `{ "pattern": "api.example.com", "custom_domain": true }`.
+   - `routes`: replace all entries with `{ "pattern": "api.example.com", "custom_domain": true }`.
    - `d1_databases`: set `database_id` to the ID that `d1 create` printed.
    - `r2_buckets`: set the bucket names, if you used other names.
    - `vars`:
@@ -106,7 +106,7 @@ Keep the private JWK secret. With it, a person can open each host that uses your
    - `REMOTE_TICKET_JWKS_URL`: `https://api.example.com/.well-known/jwks.json`.
    - `REMOTE_CONTROL_PLANE_URL`: `https://api.example.com`.
    - The Signal secrets from step 1.
-   - Leave `SLACK_SIGNING_SECRET` and the `TELEGRAM_*` values empty.
+   - Leave `SLACK_SIGNING_SECRET`, `DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID` and the `TELEGRAM_*` values empty.
 
    If a reverse proxy already uses port 443, also set the values in
    [the reverse proxy notes](../remote/README.md#production-requirements).
@@ -151,9 +151,12 @@ Do these steps on each computer that hosts or connects.
    & "$env:LOCALAPPDATA\Programs\OpenBot\OpenBot.exe"
    ```
 
+   This is the default install folder. If you chose a different folder in the installer, use it.
+
 3. Sign in with an email address. The code comes from your SMTP account.
 4. To connect an iPhone, scan the connection QR code from the desktop app. The phone then uses the
-   service of that desktop.
+   service of that desktop. Email sign-in on the phone always uses `openbot.run`, so it cannot
+   connect to a self-hosted service.
 
 Set the variables each time that you start the app. Without them, the app uses `openbot.run` and
 sends your session token there. To go back to `openbot.run`, sign out first.

@@ -1,52 +1,29 @@
-import {
-  BILLING_CURRENCIES,
-  type BillingCurrency,
-  type BillingInterval,
-  type BillingPlanId,
-} from "@openbot/contracts/billing";
-import {
-  HOSTED_SERVER_CONTACT_URL,
-  type HostedServerCatalogPlan,
-  type HostedServerList,
-} from "@openbot/contracts/hosted-servers";
-import type { MobileTextKey, MobileTranslate } from "@openbot/i18n/mobile";
-import * as Linking from "expo-linking";
-import { router, Stack } from "expo-router";
-import { usePreventRemove } from "expo-router/react-navigation";
-import { Alert, Button, Chip, Skeleton, Spinner, Typography } from "heroui-native";
+import type { BillingPlanId } from "@openbot/contracts/billing";
+import type { HostedServerCatalogPlan, HostedServerList, HostedServerSummary } from "@openbot/contracts/hosted-servers";
+import type { MobileTextKey } from "@openbot/i18n/mobile";
+import { skipToken, useQuery } from "@tanstack/react-query";
+import { router, useLocalSearchParams } from "expo-router";
+import { Button, Chip, Skeleton, Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { Check, Gauge, HardDrive, Lock, Mail, Ticket, UsersRound } from "lucide-react-native";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import Svg, { Defs, LinearGradient, Mask, RadialGradient, Rect, Stop } from "react-native-svg";
-import { useUniwind } from "uniwind";
-import { useMobileSession } from "@/features/auth/context/mobile-session-context";
-import { type HostedServerCalls, hostedServerCalls } from "@/features/servers/api/hosted-servers";
-import { BillingPeriodPicker } from "@/features/servers/components/billing-period-picker";
-import {
-  hostedRequestKeys,
-  openHostedCheckout,
-  rememberHostedServer,
-  useHostedServerAvailability,
-} from "@/features/servers/model/hosted-server-checkout";
-import {
-  formatHostedPrice,
-  guessHostedCurrency,
-  hostedMonthlyAmount,
-  hostedServerLimit,
-  hostedYearlyDiscountPercent,
-  newestHostedServerInSetup,
-  RECOMMENDED_HOSTED_PLAN,
-} from "@/features/servers/model/hosted-server-plans";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
+import CreditCard from "lucide-react-native/icons/credit-card";
+import Monitor from "lucide-react-native/icons/monitor";
+import Ticket from "lucide-react-native/icons/ticket";
+import { type ReactNode, useEffect, useMemo } from "react";
+import { View } from "react-native";
+import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
+import type { MobileSession } from "@/features/auth/api/mobile-auth";
+import { useMobileSession, useQueryScope } from "@/features/auth/context/mobile-session-context";
+import { hostedServerCalls } from "@/features/servers/api/hosted-servers";
+import { rememberHostedServer, useHostedServerAvailability } from "@/features/servers/model/hosted-server-availability";
+import { hostedServerInSetup } from "@/features/servers/model/hosted-server-plans";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
-import { SettingsPicker } from "@/features/settings/components/settings-controls";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { queryKeys } from "@/features/workspace/model/query-keys";
 import { SheetScrollView } from "@/shared/components/sheet-scroll-view";
-import { haptics } from "@/shared/lib/haptics";
+import { devFeatureOverride } from "@/shared/lib/dev-feature-overrides";
 import { refreshMobileFeatures, useMobileFeature } from "@/shared/lib/mobile-features";
-import { phoneCurrencyAndRegion } from "@/shared/lib/phone-languages";
-import { isIOS } from "@/shared/lib/platform";
-import { currentText, useText } from "@/shared/lib/text";
+import { useText } from "@/shared/lib/text";
 
 const PLAN_TEXT = {
   starter: { name: "mobile.server.hosted.plan.starter", summary: "mobile.server.hosted.plan.starterSummary" },
@@ -54,221 +31,119 @@ const PLAN_TEXT = {
   pro: { name: "mobile.server.hosted.plan.pro", summary: "mobile.server.hosted.plan.proSummary" },
 } as const satisfies Record<BillingPlanId, { name: MobileTextKey; summary: MobileTextKey }>;
 
-type Load =
-  | { kind: "loading" }
-  | { kind: "failed"; message: string }
-  | { kind: "ready"; plans: HostedServerCatalogPlan[]; list: HostedServerList };
+const DATE_FORMAT = { dateStyle: "medium" } as const satisfies Intl.DateTimeFormatOptions;
 
-function firstCurrency(): BillingCurrency {
-  const phone = phoneCurrencyAndRegion();
-  return guessHostedCurrency(phone.currency, phone.region);
+/** Where the user opened the plans. Another value is not sent. */
+function plansEntryPoint(value: unknown): "drawer" | "onboarding" | undefined {
+  return value === "drawer" || value === "onboarding" ? value : undefined;
 }
 
-function nextServerName(count: number, t: MobileTranslate): string {
-  return count === 0
-    ? t("mobile.server.hosted.defaultName")
-    : t("mobile.server.hosted.defaultNameNumbered", { number: count + 1 });
+interface PlansData {
+  plans: HostedServerCatalogPlan[];
+  list: HostedServerList;
 }
 
 /**
- * The plans of a hosted server, as in the desktop add server dialog. A plan opens the Stripe
- * Checkout page in the in-app browser; the account server creates the machine after Stripe confirms
- * the payment, and the setup page follows it.
+ * The plans of a hosted server and the servers of the account, with their plans. App store rules do
+ * not allow a purchase outside the store, so this screen has no prices and no purchase: the user
+ * buys and changes a plan in OpenBot on the computer.
  */
 export function HostedServerPlansScreen() {
   const { t, errorMessage } = useText();
+  const { entryPoint } = useLocalSearchParams<{ entryPoint?: string }>();
+  // The sheet opens and closes once. Its inner pages do not close it.
+  useEffect(() => {
+    const scope = mobileAnalytics.scope();
+    const entry_point = plansEntryPoint(entryPoint);
+    scope.track("hosted_server_plans_action", { action: "viewed", entry_point });
+    return () => scope.track("hosted_server_plans_action", { action: "closed", entry_point });
+  }, [entryPoint]);
   const { session } = useMobileSession();
+  const queryScope = useQueryScope();
   const { servers } = useMobileWorkspace();
-  const [accent, accentForeground, muted] = useThemeColor(["accent", "accent-foreground", "muted"]);
-  const calls = useMemo(() => (session ? hostedServerCalls(session) : null), [session]);
-  const userId = session?.user.id ?? null;
   const apiUrl = session?.apiUrl ?? null;
   const cloudServersOn = useMobileFeature(apiUrl ?? "", "cloudServers");
-  const [load, setLoad] = useState<Load>({ kind: "loading" });
-  const [interval, setBillingInterval] = useState<BillingInterval>("year");
-  const [currency, setCurrency] = useState<BillingCurrency>(firstCurrency);
-  const [plan, setPlan] = useState<BillingPlanId>(RECOMMENDED_HOSTED_PLAN);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const createInFlight = useRef(false);
-  const listedIds = useRef(new Set<string>());
-  listedIds.current = new Set(servers.map((server) => server.id));
-  usePreventRemove(creating, () => {
-    // The account server may be making the server and its payment page; wait for its answer.
+  const listedIds = useMemo(() => new Set(servers.map((server) => server.id)), [servers]);
+  // The last answer stays for the life of the app, one for each account, so the sheet opens with it
+  // at once and reads again in the background. A failed read keeps the last answer on screen.
+  const load = useQuery({
+    queryKey: queryKeys.hostedServerPlans(queryScope),
+    queryFn: session ? () => readPlans(session) : skipToken,
+    staleTime: 0,
+    gcTime: Number.POSITIVE_INFINITY,
+    retry: false,
   });
 
-  const read = useCallback(
-    async (source: HostedServerCalls, resume: boolean): Promise<void> => {
-      setLoad({ kind: "loading" });
-      try {
-        const [catalog, list] = await Promise.all([
-          source.plans(),
-          source.list(),
-          apiUrl ? refreshMobileFeatures(apiUrl, true) : undefined,
-        ]);
-        hostedRequestKeys.settle(list.servers);
-        if (userId) useHostedServerAvailability.setState({ userId, available: list.available, checkedAt: Date.now() });
-        setLoad({ kind: "ready", plans: catalog.plans, list });
-        const setup = resume ? newestHostedServerInSetup(list.servers, listedIds.current) : null;
-        if (setup) {
-          rememberHostedServer(setup);
-          router.push({ pathname: "/hosted-server/setup", params: { serverId: setup.serverId } });
-        }
-      } catch (cause) {
-        const text = currentText();
-        setLoad({ kind: "failed", message: text.errorMessage(cause, text.t("mobile.server.hosted.loadFailed")) });
-      }
-    },
-    [userId, apiUrl],
-  );
-
-  useEffect(() => {
-    if (calls) void read(calls, true);
-  }, [calls, read]);
-
-  /** After a failed create, the limit can explain it better than the error text. */
-  async function refreshList(source: HostedServerCalls): Promise<void> {
-    const list = await source.list().catch(() => null);
-    if (!list) return;
-    hostedRequestKeys.settle(list.servers);
-    setLoad((current) => (current.kind === "ready" ? { ...current, list } : current));
-  }
-
-  async function continueToPayment(): Promise<void> {
-    if (!calls || load.kind !== "ready" || !cloudServersOn || createInFlight.current) return;
-    // The plan that shows as selected, also when the catalog does not have the first choice.
-    const chosen = (load.plans.find((entry) => entry.id === plan) ?? load.plans[0])?.id;
-    if (!chosen) return;
-    createInFlight.current = true;
-    void haptics.impact("medium");
-    setCreating(true);
-    setError(null);
-    const key = hostedRequestKeys.keyFor(chosen, interval, currency);
-    try {
-      const checkout = await calls.create({
-        name: nextServerName(load.list.servers.length, t),
-        plan: chosen,
-        interval,
-        currency,
-        requestId: key.requestId,
-      });
-      // A server that no longer waits for payment, such as one paid after a create timed out, frees
-      // the choice, so the next purchase of it makes a new server.
-      if (checkout.server.state === "awaiting_payment") key.serverId = checkout.server.serverId;
-      else hostedRequestKeys.forget(chosen, interval, currency);
-      rememberHostedServer(checkout.server);
-      setCreating(false);
-      router.push({ pathname: "/hosted-server/setup", params: { serverId: checkout.server.serverId } });
-      if (checkout.checkoutUrl) void openHostedCheckout(checkout.checkoutUrl, String(accent));
-    } catch (cause) {
-      setError(errorMessage(cause, t("mobile.server.hosted.createFailed")));
-      void haptics.notification("error");
-      setCreating(false);
-      await refreshList(calls);
-    } finally {
-      createInFlight.current = false;
-    }
-  }
-
-  if (load.kind === "loading") return <PlansLoading />;
-
-  if (load.kind === "failed") {
-    return (
-      <PlansContent>
+  // Android: one scroll view for every state. The sheet finds its scroll view only when it lays out, so
+  // a new scroll view after the load leaves the sheet with the old one, and an upward drag closes it.
+  return (
+    <PlansContent>
+      {load.data ? (
+        <PlansReady
+          plans={load.data.plans}
+          list={load.data.list}
+          listedIds={listedIds}
+          cloudServersOn={cloudServersOn}
+        />
+      ) : load.isError ? (
         <View className="items-center gap-4 px-4 pt-10">
           <Typography.Paragraph accessibilityRole="alert" align="center" className="text-danger-text">
-            {load.message}
+            {errorMessage(load.error, t("mobile.server.hosted.loadFailed"))}
           </Typography.Paragraph>
-          <Button size="lg" onPress={() => calls && void read(calls, false)}>
+          <Button size="lg" isDisabled={load.isFetching} onPress={() => void load.refetch()}>
             <Button.Label className="font-sans font-semibold">{t("common.tryAgain")}</Button.Label>
           </Button>
         </View>
-      </PlansContent>
-    );
-  }
+      ) : (
+        <PlansLoading />
+      )}
+    </PlansContent>
+  );
+}
 
-  if (!load.list.available || !cloudServersOn || load.plans.length === 0) {
-    return (
-      <PlansContent>
-        <PlansHeader description={t("mobile.server.hosted.unavailable")} />
-        <OtherOptions disabled={false} />
-      </PlansContent>
-    );
-  }
-
-  const limit = hostedServerLimit(load.list);
-  const discount = hostedYearlyDiscountPercent(load.plans, currency);
-  const selected = load.plans.find((entry) => entry.id === plan) ?? load.plans[0];
+function PlansReady({
+  plans,
+  list,
+  listedIds,
+  cloudServersOn,
+}: {
+  plans: HostedServerCatalogPlan[];
+  list: HostedServerList;
+  listedIds: ReadonlySet<string>;
+  cloudServersOn: boolean;
+}) {
+  const { t } = useText();
+  const owned = list.servers.filter((server) => server.state !== "deleted");
+  const showPlans = (devFeatureOverride("cloudServers") ?? (list.available && cloudServersOn)) && plans.length > 0;
+  // A plan that a server of the account uses, so its row shows "Your plan".
+  const ownedPlans = new Set(owned.map((server) => server.plan));
 
   return (
-    <PlansContent>
-      <PlansHeader description={t("mobile.server.hosted.heroDescription")} />
+    <>
+      <PlansHeader
+        description={showPlans ? t("mobile.server.hosted.intro.description") : t("mobile.server.hosted.unavailable")}
+      />
 
-      {isIOS ? <CurrencyMenu currency={currency} disabled={creating} onChange={setCurrency} /> : null}
-      <View className="flex-row items-center gap-3">
-        <BillingPeriodPicker
-          interval={interval}
-          yearlyLabel={
-            discount > 0
-              ? t("mobile.server.hosted.yearlyDiscount", { percent: discount })
-              : t("mobile.server.hosted.yearly")
-          }
-          disabled={creating}
-          onChange={setBillingInterval}
-        />
-        {isIOS ? null : <CurrencyPicker currency={currency} disabled={creating} onChange={setCurrency} />}
-      </View>
-
-      {limit !== null ? (
-        <Alert status="warning">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>{t("mobile.server.hosted.limitTitle")}</Alert.Title>
-            <Alert.Description>{t("mobile.server.hosted.limitDescription", { count: limit })}</Alert.Description>
-          </Alert.Content>
-        </Alert>
+      {owned.length > 0 ? (
+        <SettingsSection title={t("mobile.server.hosted.yourServers")}>
+          {owned.map((server) => (
+            <OwnedServerRow key={server.serverId} server={server} listed={listedIds.has(server.serverId)} />
+          ))}
+        </SettingsSection>
       ) : null}
 
-      <View accessibilityRole="radiogroup" accessibilityLabel={t("mobile.server.hosted.planLabel")} className="gap-3">
-        {load.plans.map((entry) => (
-          <PlanOption
-            key={entry.id}
-            plan={entry}
-            interval={interval}
-            currency={currency}
-            selected={entry.id === selected?.id}
-            disabled={creating || limit !== null}
-            onSelect={() => {
-              void haptics.selection();
-              setPlan(entry.id);
-              setError(null);
-            }}
-          />
-        ))}
-      </View>
+      {showPlans ? (
+        <SettingsSection title={t("mobile.server.hosted.plans")}>
+          {plans.map((entry) => (
+            <PlanRow key={entry.id} plan={entry} current={ownedPlans.has(entry.id)} />
+          ))}
+        </SettingsSection>
+      ) : null}
 
-      <View className="gap-3">
-        {error && limit === null ? (
-          <Typography.Paragraph accessibilityRole="alert" align="center" className="text-danger-text">
-            {error}
-          </Typography.Paragraph>
-        ) : null}
-        <Button size="lg" isDisabled={creating || limit !== null} onPress={() => void continueToPayment()}>
-          {creating ? <Spinner size="sm" color={String(accentForeground)} /> : null}
-          <Button.Label className="font-sans font-semibold">
-            {creating ? t("mobile.server.hosted.openingPayment") : t("mobile.server.hosted.continue")}
-          </Button.Label>
-        </Button>
-        <View className="flex-row items-center justify-center gap-1.5 px-2">
-          <Lock size={12} strokeWidth={2} color={muted} />
-          <Typography.Paragraph type="body-xs" weight="medium" className="text-text-secondary">
-            {t("mobile.server.hosted.securePayment")}
-          </Typography.Paragraph>
-        </View>
-      </View>
+      {showPlans ? <ComputerSteps /> : null}
 
-      <OtherOptions disabled={creating} />
-    </PlansContent>
+      <OtherOptions />
+    </>
   );
 }
 
@@ -285,31 +160,55 @@ function PlansContent({ children }: { children: ReactNode }) {
   );
 }
 
+/** The plans, the account's servers and the feature flags, read together. */
+async function readPlans(session: MobileSession): Promise<PlansData> {
+  const calls = hostedServerCalls(session);
+  const [catalog, list] = await Promise.all([calls.plans(), calls.list(), refreshMobileFeatures(session.apiUrl, true)]);
+  useHostedServerAvailability.setState({
+    userId: session.user.id,
+    available: list.available,
+    serverIds: new Set(list.servers.map((server) => server.serverId)),
+    checkedAt: Date.now(),
+  });
+  return { plans: catalog.plans, list };
+}
+
+/** The first opening only: the shape of the header and the plan rows, until the first answer. */
 function PlansLoading() {
   const { t } = useText();
   return (
-    <PlansContent>
-      <View accessible accessibilityLabel={t("mobile.server.hosted.loading")} className="gap-6">
-        <View className="items-center gap-3">
-          <Skeleton className="h-6 w-3/5 rounded-full" />
-          <Skeleton className="h-4 w-4/5 rounded-full" />
-        </View>
-        <Skeleton className="h-10 rounded-full" />
-        {[0, 1, 2].map((index) => (
-          <Skeleton key={index} className="h-40 rounded-grouped" />
-        ))}
+    <View accessible accessibilityLabel={t("mobile.server.hosted.loading")} className="gap-6">
+      <View className="items-center gap-2 px-4 pt-1">
+        <Skeleton className="h-6 w-3/5 rounded-full" />
+        <Skeleton className="h-4 w-4/5 rounded-full" />
+        <Skeleton className="h-4 w-3/5 rounded-full" />
       </View>
-    </PlansContent>
+      <View className="gap-2">
+        <Skeleton className="mx-4 h-3 w-16 rounded-full" />
+        <View className="overflow-hidden rounded-grouped bg-grouped">
+          {[0, 1, 2].map((index) => (
+            <View key={index}>
+              {index > 0 ? <View className="ml-4 h-px bg-grouped-border" /> : null}
+              <View className="gap-2 px-4 py-3">
+                <Skeleton className="h-4 w-24 rounded-full" />
+                <Skeleton className="h-3 w-4/5 rounded-full" />
+                <Skeleton className="h-3 w-3/5 rounded-full" />
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
   );
 }
 
-/** The sheet's own header: what a hosted server gives, before the plans. */
+/** What a hosted server gives. The native header already names the sheet, so this text stays short. */
 function PlansHeader({ description }: { description: string }) {
   const { t } = useText();
   return (
     <View className="items-center gap-2 px-4 pt-1">
-      <Typography.Heading type="h3" align="center">
-        {t("mobile.server.hosted.heroTitle")}
+      <Typography.Heading type="h4" align="center">
+        {t("mobile.server.hosted.intro.title")}
       </Typography.Heading>
       <Typography.Paragraph type="body-sm" align="center" className="max-w-80 text-text-secondary">
         {description}
@@ -318,8 +217,99 @@ function PlansHeader({ description }: { description: string }) {
   );
 }
 
-/** The other ways to get a server, as grouped rows like Settings. */
-function OtherOptions({ disabled }: { disabled: boolean }) {
+type OwnedServerState = "payment" | "setup" | "starting" | "running" | "stopped" | "planEnded" | "failed";
+
+const OWNED_STATE_TEXT = {
+  payment: "mobile.server.hosted.state.payment",
+  setup: "mobile.server.hosted.state.setup",
+  starting: "mobile.server.hosted.state.starting",
+  running: "mobile.server.hosted.state.running",
+  stopped: "mobile.server.hosted.state.stopped",
+  planEnded: "mobile.server.hosted.state.planEnded",
+  failed: "mobile.server.hosted.state.failed",
+} as const satisfies Record<OwnedServerState, MobileTextKey>;
+
+function ownedServerState(server: HostedServerSummary): OwnedServerState {
+  if (server.error === "plan_ended") return "planEnded";
+  switch (server.state) {
+    case "awaiting_payment":
+      return "payment";
+    case "creating":
+    case "starting":
+      return "setup";
+    case "waking":
+      return "starting";
+    case "running":
+      return "running";
+    case "stopping":
+    case "stopped":
+      return "stopped";
+    default:
+      return "failed";
+  }
+}
+
+/** One server of the account: its plan and billing period, and its state. A server in setup opens its setup page. */
+function OwnedServerRow({ server, listed }: { server: HostedServerSummary; listed: boolean }) {
+  const { t, format } = useText();
+  const [muted] = useThemeColor(["muted"]);
+  const state = ownedServerState(server);
+  const plan = t(PLAN_TEXT[server.plan].name);
+  const interval = server.interval === "year" ? t("mobile.server.hosted.yearly") : t("mobile.server.hosted.monthly");
+  const supportingText =
+    server.deletionScheduledAt != null
+      ? t("mobile.server.hosted.serverPlanEnds", {
+          plan,
+          interval,
+          date: format.date(server.deletionScheduledAt, DATE_FORMAT),
+        })
+      : t("mobile.server.hosted.serverPlan", { plan, interval });
+  const inSetup = hostedServerInSetup(server, listed);
+  const label = (
+    <Typography.Paragraph
+      type="body-xs"
+      className={
+        state === "running"
+          ? "text-success-text"
+          : state === "failed" || state === "planEnded"
+            ? "text-danger-text"
+            : "text-text-secondary"
+      }
+    >
+      {t(OWNED_STATE_TEXT[state])}
+    </Typography.Paragraph>
+  );
+  return (
+    <SettingsRow
+      supportingText={supportingText}
+      accessibilityLabel={`${server.name}, ${supportingText}, ${t(OWNED_STATE_TEXT[state])}`}
+      trailing={
+        inSetup ? (
+          <View className="flex-row items-center gap-1">
+            {label}
+            <ChevronRight size={18} color={muted} strokeWidth={1.5} />
+          </View>
+        ) : (
+          label
+        )
+      }
+      onPress={
+        inSetup
+          ? () => {
+              rememberHostedServer(server);
+              mobileAnalytics.track("hosted_server_plans_action", { action: "setup_opened" });
+              router.push({ pathname: "/hosted-server/setup", params: { serverId: server.serverId } });
+            }
+          : undefined
+      }
+    >
+      <Typography.Paragraph numberOfLines={1}>{server.name}</Typography.Paragraph>
+    </SettingsRow>
+  );
+}
+
+/** The other way to get a server, as a grouped row like Settings. */
+function OtherOptions() {
   const { t } = useText();
   const [foreground] = useThemeColor(["foreground"]);
   return (
@@ -327,241 +317,66 @@ function OtherOptions({ disabled }: { disabled: boolean }) {
       <SettingsRow
         leading={<Ticket color={foreground} size={22} strokeWidth={1.8} />}
         supportingText={t("mobile.server.hosted.joinHint")}
-        disabled={disabled}
         onPress={() => router.push("/hosted-server/join")}
       >
         <Typography.Paragraph>{t("mobile.server.hosted.join")}</Typography.Paragraph>
-      </SettingsRow>
-      <SettingsRow
-        leading={<Mail color={foreground} size={22} strokeWidth={1.8} />}
-        supportingText={t("mobile.server.hosted.contactHint")}
-        disabled={disabled}
-        onPress={() => void Linking.openURL(HOSTED_SERVER_CONTACT_URL).catch(() => undefined)}
-      >
-        <Typography.Paragraph>{t("mobile.server.hosted.contact")}</Typography.Paragraph>
       </SettingsRow>
     </SettingsSection>
   );
 }
 
-/** iOS: the currency is a native menu in the sheet header, so the billing switch gets the full width. */
-function CurrencyMenu({
-  currency,
-  disabled,
-  onChange,
-}: {
-  currency: BillingCurrency;
-  disabled: boolean;
-  onChange: (currency: BillingCurrency) => void;
-}) {
+/** One plan: what it gives, with no price and no purchase action. */
+function PlanRow({ plan, current }: { plan: HostedServerCatalogPlan; current: boolean }) {
   const { t } = useText();
+  const facts = t("mobile.server.hosted.planFacts", {
+    members: t("mobile.server.hosted.members", { count: plan.memberLimit }),
+    storage: t("mobile.server.hosted.storage", { count: plan.diskGb }),
+    speed:
+      plan.relativeSpeed === 1
+        ? t("mobile.server.hosted.speedBase")
+        : t("mobile.server.hosted.speedFaster", { factor: plan.relativeSpeed }),
+  });
   return (
-    <Stack.Toolbar placement="right">
-      <Stack.Toolbar.Menu accessibilityLabel={t("mobile.server.hosted.currency")} disabled={disabled}>
-        <Stack.Toolbar.Label>{currency.toUpperCase()}</Stack.Toolbar.Label>
-        {BILLING_CURRENCIES.map((option) => (
-          <Stack.Toolbar.MenuAction
-            key={option}
-            isOn={option === currency}
-            onPress={() => {
-              if (option === currency) return;
-              void haptics.selection();
-              onChange(option);
-            }}
-          >
-            {option.toUpperCase()}
-          </Stack.Toolbar.MenuAction>
-        ))}
-      </Stack.Toolbar.Menu>
-    </Stack.Toolbar>
-  );
-}
-
-/** Android: the app has no header toolbar there, so the currency stays beside the billing switch. */
-function CurrencyPicker({
-  currency,
-  disabled,
-  onChange,
-}: {
-  currency: BillingCurrency;
-  disabled: boolean;
-  onChange: (currency: BillingCurrency) => void;
-}) {
-  const { t } = useText();
-  const { theme } = useUniwind();
-  return (
-    <SettingsPicker<BillingCurrency>
-      value={currency}
-      options={BILLING_CURRENCIES.map((option) => ({ value: option, label: option.toUpperCase() }))}
-      enabled={!disabled}
-      dark={theme === "dark"}
-      label={t("mobile.server.hosted.currency")}
-      onChange={(next) => {
-        void haptics.selection();
-        onChange(next);
-      }}
-    />
-  );
-}
-
-function PlanOption({
-  plan,
-  interval,
-  currency,
-  selected,
-  disabled,
-  onSelect,
-}: {
-  plan: HostedServerCatalogPlan;
-  interval: BillingInterval;
-  currency: BillingCurrency;
-  selected: boolean;
-  disabled: boolean;
-  onSelect: () => void;
-}) {
-  const { t, format } = useText();
-  const [accentForeground, muted] = useThemeColor(["accent-foreground", "muted"]);
-  const price = (amount: number) => formatHostedPrice(format, amount, currency);
-  const regular = plan.prices[currency].month;
-  const monthly = hostedMonthlyAmount(plan, interval, currency);
-  const yearly = interval === "year";
-  const name = t(PLAN_TEXT[plan.id].name);
-  const recommended = plan.id === RECOMMENDED_HOSTED_PLAN;
-  const billed = yearly
-    ? t("mobile.server.hosted.billedYearly", {
-        price: price(plan.prices[currency].year),
-        saving: price(regular * 12 - plan.prices[currency].year),
-      })
-    : t("mobile.server.hosted.billedMonthly");
-  const facts = [
-    { icon: UsersRound, label: t("mobile.server.hosted.members", { count: plan.memberLimit }) },
-    { icon: HardDrive, label: t("mobile.server.hosted.storage", { count: plan.diskGb }) },
-    {
-      icon: Gauge,
-      label:
-        plan.relativeSpeed === 1
-          ? t("mobile.server.hosted.speedBase")
-          : t("mobile.server.hosted.speedFaster", { factor: plan.relativeSpeed }),
-    },
-  ];
-
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected, disabled }}
-      accessibilityLabel={`${name}, ${t("mobile.server.hosted.perMonthPrice", { price: price(monthly) })}, ${billed}`}
-      disabled={disabled}
-      onPress={onSelect}
-      className={`gap-3 overflow-hidden rounded-grouped border-2 bg-grouped px-4 py-4 ${selected ? "border-accent" : "border-transparent"}`}
-      style={({ pressed }) => ({ opacity: disabled && !selected ? 0.5 : pressed ? 0.75 : 1 })}
-    >
-      {recommended ? <RecommendedGlow /> : null}
+    <SettingsRow supportingText={facts}>
       <View className="flex-row items-center gap-2">
-        <Typography.Paragraph weight="semibold">{name}</Typography.Paragraph>
-        {recommended ? (
-          <Chip size="sm" variant="primary" color="accent">
-            <Chip.Label>{t("mobile.server.hosted.recommended")}</Chip.Label>
+        <Typography.Paragraph weight="semibold">{t(PLAN_TEXT[plan.id].name)}</Typography.Paragraph>
+        {current ? (
+          <Chip size="sm" variant="soft" color="accent">
+            <Chip.Label>{t("mobile.server.hosted.currentPlan")}</Chip.Label>
           </Chip>
         ) : null}
-        <View className="flex-1" />
-        <View
-          className={`size-6 items-center justify-center rounded-full ${selected ? "bg-accent" : "border-2 border-grouped-border"}`}
-        >
-          {selected ? <Check size={15} strokeWidth={3} color={accentForeground} /> : null}
-        </View>
+        {plan.soldOut && !current ? (
+          <Chip size="sm" variant="soft">
+            <Chip.Label>{t("mobile.server.hosted.soldOut")}</Chip.Label>
+          </Chip>
+        ) : null}
       </View>
-
-      <View className="gap-0.5">
-        <View className="flex-row flex-wrap items-baseline gap-x-2">
-          <Typography.Heading type="h3" weight="bold">
-            {price(monthly)}
-          </Typography.Heading>
-          <Typography.Paragraph type="body-sm" className="text-text-secondary">
-            {t("mobile.server.hosted.perMonth")}
-          </Typography.Paragraph>
-          {yearly && regular > monthly ? (
-            <Typography.Paragraph type="body-sm" className="text-text-secondary line-through">
-              {price(regular)}
-            </Typography.Paragraph>
-          ) : null}
-        </View>
-        <Typography.Paragraph type="body-xs" className={yearly ? "text-success-text" : "text-text-secondary"}>
-          {billed}
-        </Typography.Paragraph>
-      </View>
-
-      <Typography.Paragraph type="body-sm" className="text-text-secondary">
-        {t(PLAN_TEXT[plan.id].summary)}
-      </Typography.Paragraph>
-
-      <View className="flex-row flex-wrap gap-x-4 gap-y-1.5">
-        {facts.map(({ icon: Icon, label }) => (
-          <View key={label} className="flex-row items-center gap-1.5">
-            <Icon size={15} strokeWidth={1.8} color={muted} />
-            <Typography.Paragraph type="body-xs" className="text-text-secondary">
-              {label}
-            </Typography.Paragraph>
-          </View>
-        ))}
-      </View>
-    </Pressable>
+      <Typography.Paragraph type="body-sm">{t(PLAN_TEXT[plan.id].summary)}</Typography.Paragraph>
+    </SettingsRow>
   );
 }
 
 /**
- * The desktop mark of the recommended plan: a cool-to-warm line on the top edge and a soft glow at
- * the bottom. It is decoration behind the content, in the theme's accent and warning colors. The
- * layer measures itself, because a percentage size on the SVG resolves inside the card padding.
+ * Where the user gets a server and changes a plan: the desktop app. App store rules do not allow a
+ * purchase outside the store, so the steps are text only, with no link and no button.
  */
-function RecommendedGlow() {
-  const [accent, warning] = useThemeColor(["accent", "warning"]);
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+function ComputerSteps() {
+  const { t } = useText();
+  const [foreground] = useThemeColor(["foreground"]);
   return (
-    <View
-      pointerEvents="none"
-      style={StyleSheet.absoluteFill}
-      onLayout={({ nativeEvent: { layout } }) => setSize({ width: layout.width, height: layout.height })}
-    >
-      {size ? (
-        <Svg width={size.width} height={size.height}>
-          <Defs>
-            <LinearGradient id="recommended-line" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor={accent} stopOpacity={0} />
-              <Stop offset="0.3" stopColor={accent} stopOpacity={0.9} />
-              <Stop offset="0.7" stopColor={warning} stopOpacity={0.9} />
-              <Stop offset="1" stopColor={warning} stopOpacity={0} />
-            </LinearGradient>
-            <LinearGradient id="recommended-glow" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor={accent} />
-              <Stop offset="1" stopColor={warning} />
-            </LinearGradient>
-            {/* As on desktop: the glow fades out from the middle of the bottom edge. */}
-            <RadialGradient id="recommended-fade" cx="50%" cy="100%" rx="90%" ry="100%" fx="50%" fy="100%">
-              <Stop offset="0" stopColor="white" stopOpacity={1} />
-              <Stop offset="1" stopColor="white" stopOpacity={0} />
-            </RadialGradient>
-            <Mask id="recommended-mask">
-              <Rect
-                x={0}
-                y={size.height / 2}
-                width={size.width}
-                height={size.height / 2}
-                fill="url(#recommended-fade)"
-              />
-            </Mask>
-          </Defs>
-          <Rect
-            x={0}
-            y={size.height / 2}
-            width={size.width}
-            height={size.height / 2}
-            fill="url(#recommended-glow)"
-            opacity={0.22}
-            mask="url(#recommended-mask)"
-          />
-          <Rect x={0} y={0} width={size.width} height={1.5} fill="url(#recommended-line)" />
-        </Svg>
-      ) : null}
-    </View>
+    <SettingsSection title={t("mobile.server.hosted.computer.title")}>
+      <SettingsRow
+        leading={<Monitor color={foreground} size={22} strokeWidth={1.8} />}
+        supportingText={t("mobile.server.hosted.computer.addHint")}
+      >
+        <Typography.Paragraph>{t("mobile.server.hosted.computer.add")}</Typography.Paragraph>
+      </SettingsRow>
+      <SettingsRow
+        leading={<CreditCard color={foreground} size={22} strokeWidth={1.8} />}
+        supportingText={t("mobile.server.hosted.computer.changeHint")}
+      >
+        <Typography.Paragraph>{t("mobile.server.hosted.computer.change")}</Typography.Paragraph>
+      </SettingsRow>
+    </SettingsSection>
   );
 }

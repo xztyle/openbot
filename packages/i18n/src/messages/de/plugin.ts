@@ -16,7 +16,7 @@ export const messages = {
   "plugin.uninstallDialog.title": "Verbindung zu {name} trennen?",
   "plugin.uninstallDialog.description":
     "Dies entfernt, was {name} auf diesem Computer installiert hat. Sonst ändert sich nichts an diesem Host oder Agenten.",
-  "plugin.uninstallDialog.confirm": "Verbindung trennen",
+  "plugin.uninstallDialog.confirm": "Trennen",
   "plugin.uninstallDialog.appsLabel": "Zu entfernende Apps: {number}",
   "plugin.uninstallDialog.appsTitle": "Von diesem Host entfernte Apps",
   "plugin.uninstallDialog.appsNote":

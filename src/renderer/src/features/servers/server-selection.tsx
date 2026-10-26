@@ -3,6 +3,7 @@ import { currentText } from "@openbot/ui/text";
 import { onSettled } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";
+import { usePlatform } from "../../platform";
 import { createSimpleContext } from "../../simple-context";
 import { useAgents } from "../agents/agents-context";
 import { useConversationController } from "../conversation/conversation-controller-context";
@@ -40,10 +41,12 @@ const ServerSelection = createSimpleContext({
     const { pendingInviteUrl, setPendingInviteUrl, saveSetup } = useSetup();
     const { setSkillsMarketplaceOpen } = useSettings();
     const { disconnectRemoteDesktopWorkspace } = useRemoteDesktop();
-    const { setBrowserVisibilitySuspended, setPendingAgentSelection, setPreviousServerId } = useServerSwitch();
+    const { setBrowserVisibilitySuspended, setPendingAgentSelection, setPendingChannelSelection, setPreviousServerId } =
+      useServerSwitch();
     const { agentSetupOpen, creatingAgent } = useAgents();
     const { stopComposerTyping } = useConversationController();
     const { setDirectTyping } = useDirectMessages();
+    const { chatWindow } = usePlatform();
 
     async function selectServer(
       serverId: string,
@@ -51,6 +54,9 @@ const ServerSelection = createSimpleContext({
       recoverAuthoritativeServer = true,
     ): Promise<boolean> {
       if (agentSetupOpen() && creatingAgent()) return false;
+      // Main has one active server for the app. A chat window stays on its own server, so a switch
+      // from it would move the main window instead.
+      if (chatWindow) return false;
       const selectionIsCurrent = beginServerSelection();
       const analytics = desktopAnalytics.scope();
       const previousServerId = servers().find((server) => server.active)?.id;
@@ -143,7 +149,8 @@ const ServerSelection = createSimpleContext({
       const onServer = servers().find((server) => server.active)?.id === event.serverId;
       if (!onServer && !(await selectServer(event.serverId, false))) return;
       // Published for the same reason as the marketplace agent above.
-      setPendingAgentSelection(event.agentId);
+      if (event.channelId) setPendingChannelSelection(event.channelId);
+      else setPendingAgentSelection(event.agentId);
     }
 
     onSettled(() =>

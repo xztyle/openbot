@@ -10,6 +10,9 @@ export function webRoutinesPort(
   onEvent?: (listener: (event: AgentEvent | TeamRealtimeEvent) => void) => () => void,
 ) {
   return eventRoutinesPort({ kind: "agent", id: agentId }, api, {
+    // Only the computer that runs OpenBot edits these, as the desktop routines port says.
+    missedPolicy: false,
+    onceSchedule: false,
     listRuns: (id, limit) =>
       request(
         "GET",

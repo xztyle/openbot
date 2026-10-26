@@ -1,3 +1,4 @@
+import { isKeyOnlyProvider } from "@openbot/contracts/agent-providers";
 import type { AgentProviderId } from "@openbot/contracts/ipc";
 import { toast } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
@@ -47,20 +48,22 @@ export function createSetupNext(providers: SetupProviders) {
   });
 
   /**
-   * How the button connects `provider` now, or undefined when it cannot. This computer connects in
-   * its own browser. A host has no browser the user can see, so it signs in with a code, or with the
-   * OpenCode key; each opens a dialog, which is the feedback.
+   * How the button connects `provider` now, or undefined when it cannot: the row's Connect, else the
+   * OpenCode key. A browser sign-in reports in a toast; a dialog sign-in, such as a host's, is its
+   * own feedback. A key-only provider, such as Inception, signs in only with a key, so it opens the
+   * key dialog.
    */
   function connectAction(provider: AgentProviderId): (() => void) | undefined {
     const source = providers.props;
-    if (source.onConnectProvider) {
+    if (isKeyOnlyProvider(provider) && source.providerKeys) return () => providers.signInProvider(provider);
+    const kind = source.connection?.connectKind(provider);
+    if (kind === "browser") {
       return () => {
         toast.info(t("onboarding.toast.connecting", { provider: selectedOption()?.name ?? provider }));
         void providers.connectProvider(provider);
       };
     }
-    const codeLogin = source.codeLogin;
-    if (codeLogin?.providers().includes(provider)) return () => codeLogin.start(provider);
+    if (kind === "dialog") return () => void providers.connectProvider(provider);
     if (provider === "opencode" && source.providerKeys) return () => providers.signInProvider(provider);
     return undefined;
   }
@@ -73,6 +76,15 @@ export function createSetupNext(providers: SetupProviders) {
   function connectSelected(): void {
     const option = selectedOption();
     const runtimePhase = option?.runtimeStatus?.phase ?? "ready";
+    // The step the button asks for is the download, so the button starts it. The row shows progress.
+    if (
+      option &&
+      (runtimePhase === "not-downloaded" || runtimePhase === "download-error") &&
+      providers.props.onDownloadProvider
+    ) {
+      void providers.downloadProvider(option.id);
+      return;
+    }
     const connect =
       option &&
       !providers.props.refreshingProviders &&

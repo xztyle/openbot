@@ -27,7 +27,7 @@ const ISSUE_TITLES = {
 } as const satisfies Record<ServerConnectionIssueCode, AppTextKey>;
 const REMOTE_HOST_GATEWAY_NAME = "OpenBot Remote Host Gateway";
 
-/** The Remote desktop section of the server settings dialog. */
+/** The Remote desktop section of the server settings. */
 export function ServerDesktopPanel(props: {
   server: ServerSummary;
   platform: "darwin" | "win32" | "linux";
@@ -82,7 +82,6 @@ export function ServerDesktopPanel(props: {
           <Badge
             class="server-settings-desktop-status"
             variant={status().available ? "success-light" : "warning-light"}
-            shape="pill"
           >
             {status().title}
           </Badge>
@@ -112,7 +111,7 @@ export function ServerDesktopPanel(props: {
               </ItemDescription>
             </ItemContent>
             <ItemActions class="server-settings-desktop-meta">
-              <Badge variant={props.hostStatus?.remoteDesktopReady ? "success-light" : "warning-light"} shape="pill">
+              <Badge variant={props.hostStatus?.remoteDesktopReady ? "success-light" : "warning-light"}>
                 {props.hostStatus?.remoteDesktopReady
                   ? t("server.desktop.componentInstalled")
                   : t("server.desktop.componentNotInstalled")}

@@ -1,12 +1,12 @@
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import type { AgentProviderId, ConversationMessage, ConversationSnapshot } from "@openbot/contracts/ipc";
-import { isImageGenerationAspectRatio } from "@openbot/contracts/ipc";
+import { isImageGenerationAspectRatio, ROUTINE_QUIET_ANSWER_ITEM_TYPE } from "@openbot/contracts/ipc";
 import { isString } from "@openbot/contracts/runtime-values";
 import { displayMessageReferences, type TeammatePrompt, teammatePrompts } from "./agent/delivery-content";
 import { imageGenerationFailure, isImageGenerationItem } from "./agent/image-generation";
 import { eventCheckMarker } from "./event-check-marker";
 import type { DeliveryContext } from "./mailbox-store";
-import type { ThreadItem, ThreadResponse } from "./protocol";
+import type { ThreadItem } from "./protocol";
 import { boundedReasoningText } from "./reasoning-text";
 
 export interface ThreadTurnMessageContext {
@@ -14,33 +14,6 @@ export interface ThreadTurnMessageContext {
   status?: string;
   startedAt?: number;
   baseTime?: number;
-}
-
-export function snapshotFromThread(
-  agentId: string,
-  thread: ThreadResponse["thread"],
-  findDelivery: (deliveryId: string) => DeliveryContext | null,
-  findMessageDelivery: (messageId: string) => DeliveryContext | null,
-): ConversationSnapshot {
-  const messages: ConversationMessage[] = [];
-  for (const turn of thread.turns ?? []) {
-    messages.push(
-      ...messagesFromThreadItems(
-        agentId,
-        {
-          id: turn.id,
-          ...(turn.status === undefined ? {} : { status: turn.status }),
-          ...(turn.startedAt === undefined ? {} : { startedAt: turn.startedAt }),
-        },
-        turn.items ?? [],
-        0,
-        findDelivery,
-        findMessageDelivery,
-      ),
-    );
-  }
-  sortConversationMessages(messages);
-  return { agentId, threadId: thread.id, activeTurnId: null, revision: 0, messages };
 }
 
 /**
@@ -284,38 +257,6 @@ function mergeConversationMessages(
   return merged;
 }
 
-export function mergeProviderHistory(
-  stored: ConversationSnapshot,
-  imported: ConversationSnapshot,
-  provider?: AgentProviderId,
-): ConversationSnapshot {
-  if (provider === "claude") {
-    const kept = { ...stored, messages: stored.messages.filter((message) => !isStoredClaudeNotice(message)) };
-    return mergeConversationSnapshots(kept, reconcileClaudeHistory(kept, imported));
-  }
-  const importedIds = new Set(imported.messages.map((message) => message.id));
-  const importedAssistantMessages = new Set(
-    imported.messages.filter(isProviderAssistantMessage).map(providerMessageIdentity),
-  );
-  const reconciledStored = {
-    ...stored,
-    messages: stored.messages.filter(
-      (message) =>
-        importedIds.has(message.id) ||
-        !isProviderAssistantMessage(message) ||
-        !importedAssistantMessages.has(providerMessageIdentity(message)),
-    ),
-  };
-  return mergeConversationSnapshots(reconciledStored, imported);
-}
-
-function reconcileClaudeHistory(stored: ConversationSnapshot, imported: ConversationSnapshot): ConversationSnapshot {
-  return {
-    ...imported,
-    messages: reconcileClaudeHistoryMessages(stored.messages, imported.messages),
-  };
-}
-
 function reconcileClaudeHistoryMessages(
   stored: readonly ConversationMessage[],
   imported: readonly ConversationMessage[],
@@ -350,7 +291,7 @@ function reconcileClaudeHistoryMessages(
     importedNarration.set(message.turnId, parts);
   }
   for (const message of imported) {
-    if (message.author !== "assistant" || message.itemType !== "agentMessage" || !message.turnId) continue;
+    if (!isClaudeAnswer(message) || !message.turnId) continue;
     const parts = turns.get(message.turnId) ?? [];
     parts.push(message);
     turns.set(message.turnId, parts);
@@ -377,7 +318,7 @@ function reconcileClaudeHistoryMessages(
   for (const [turnId, parts] of turns) {
     // Live Claude output combines SDK replies under one ID. Keep that ID and its metadata.
     const answer = storedMessages.get(`${turnId}:assistant`);
-    if (answer?.author !== "assistant" || answer.itemType !== "agentMessage" || answer.turnId !== turnId) continue;
+    if (!answer || !isClaudeAnswer(answer) || answer.turnId !== turnId) continue;
     const text = parts.map((part) => part.text).join("");
     const narration = importedNarration.get(turnId) ?? [];
     /* A turn released before narration rode the thinking disclosure stored the narration and the
@@ -454,6 +395,17 @@ function isClaudeNarration(message: ConversationMessage): boolean {
     message.itemType === "commentary" &&
     Boolean(message.turnId) &&
     !isClaudeReasoning(message)
+  );
+}
+
+/**
+ * An answer of a Claude turn. A quiet routine run keeps its answers as quiet answers, live and on
+ * import, so the import must match them too or it stores each one a second time.
+ */
+function isClaudeAnswer(message: ConversationMessage): boolean {
+  return (
+    message.author === "assistant" &&
+    (message.itemType === "agentMessage" || message.itemType === ROUTINE_QUIET_ANSWER_ITEM_TYPE)
   );
 }
 

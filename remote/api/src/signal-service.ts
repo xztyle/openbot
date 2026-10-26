@@ -1,6 +1,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DiscordDelivery } from "@openbot/contracts/signal-protocol/discord-api";
 import { DISCORD_ROUTE_TTL_SECONDS, type DiscordRouteGuild } from "@openbot/contracts/signal-protocol/discord-route";
+import {
+  INGRESS_QUEUE_CAPABILITY,
+  type IngressRoute,
+  isIngressQueueKey,
+  type QueuedSignalMessage,
+} from "@openbot/contracts/signal-protocol/ingress-queue";
 import { SLACK_ROUTE_TTL_SECONDS, type SlackRouteTeam } from "@openbot/contracts/signal-protocol/slack-route";
 import {
   TELEGRAM_CAPABILITY,
@@ -11,6 +17,7 @@ import {
 } from "@openbot/contracts/signal-protocol/telegram-route";
 import { WEBHOOK_ROUTE_TTL_SECONDS, type WebhookRoute } from "@openbot/contracts/signal-protocol/webhook-route";
 import { Context, Effect, Fiber, Layer, Result } from "effect";
+import { IngressQueue, queueRouteKey, type RouteWaker } from "./ingress-queue";
 import {
   type DecodedSignalClientMessage,
   decodeSignalClientMessage,
@@ -27,7 +34,7 @@ import {
   type WebhookDeliveryStatus,
 } from "./protocol";
 import { runTelegramCall, type SignalTelegram, type TelegramAnswer, telegramFailure } from "./telegram";
-import { RemoteTokenError, type TelegramChatLink } from "./tokens";
+import { RemoteTokenError, type RemoteTokenUnavailableError, type TelegramChatLink } from "./tokens";
 
 /** The workspaces a verified route ticket names, each with the time it was linked to the host. */
 interface SlackRoute {
@@ -50,8 +57,8 @@ interface TelegramRoute {
 
 export interface RemoteTokenProvider {
   verifyTicket(token: string): Effect.Effect<RemoteTicketClaims, RemoteTokenError>;
-  verifyResumeToken(token: string): Effect.Effect<RemoteTicketClaims, RemoteTokenError>;
-  validateClaims(claims: RemoteTicketClaims): Effect.Effect<boolean, RemoteTokenError>;
+  verifyResumeToken(token: string): Effect.Effect<RemoteTicketClaims, RemoteTokenError | RemoteTokenUnavailableError>;
+  validateClaims(claims: RemoteTicketClaims): Effect.Effect<boolean, RemoteTokenUnavailableError>;
   issueResumeToken(claims: RemoteTicketClaims): Effect.Effect<string, RemoteTokenError>;
   iceServers(claims: RemoteTicketClaims): IceServer[];
   /** Without a route verifier, no ingress socket connects. */
@@ -99,6 +106,9 @@ interface AuthenticatedPeer {
   claims: RemoteTicketClaims;
   peer: "host" | "client" | "ingress";
   connectionId: string | null;
+  // `client` only: the connection a closed or older host socket held for this client. A host whose
+  // hello did not resume is a new host state with no peer for it.
+  releasedConnectionId: string | null;
   resumed: boolean;
   multiplex: boolean;
   // `ingress` only: the Slack workspaces whose requests this socket receives.
@@ -112,6 +122,8 @@ interface AuthenticatedPeer {
   discordSession: string | null;
   // `ingress` only: opaque generic webhook route IDs whose requests this socket receives.
   webhookRoutes: string[];
+  // The TURN credentials of the last `turn-refresh`, and when Signal made them.
+  turnCredentials: { iceServers: IceServer[]; issuedAt: number } | null;
 }
 
 interface ActiveConnection {
@@ -125,6 +137,7 @@ interface ActiveConnection {
 export interface SignalMetrics {
   acceptedConnections: number;
   authenticationFailures: number;
+  authenticationUnavailable: number;
   protocolFailures: number;
   relayedMessages: number;
   activeSockets: number;
@@ -142,6 +155,9 @@ export interface SignalMetrics {
   discordApiFailures: number;
   webhookDeliveries: number;
   webhookDeliveriesUnavailable: number;
+  // Slack, Discord and Telegram events kept for a hosted server that starts, and sent to it later.
+  queuedDeliveries: number;
+  queuedDeliveriesFlushed: number;
 }
 
 /** The result of the authorization of one Discord API call. */
@@ -152,6 +168,10 @@ export interface SignalServiceOptions {
   discord?: boolean;
   /** The Bot API and the file tokens. Without them, Telegram is off. */
   telegram?: SignalTelegram | null;
+  /** Finds and starts the host of a route with no socket. Without it, Signal keeps no event. */
+  routeWaker?: RouteWaker | null;
+  /** Runs the work that an event for an offline route starts, in the process's runtime. */
+  fork?: (work: Effect.Effect<unknown>) => void;
 }
 
 /** What the Discord Gateway knows of the bot's guilds. */
@@ -162,12 +182,17 @@ export interface DiscordMembership {
   left(guildId: string): void;
 }
 
-/** One signed Slack request for a workspace. Signal passes it on and keeps nothing of it. */
+/**
+ * One signed Slack request for a workspace. Signal passes it on. Only for a hosted server that starts
+ * does Signal keep it, sealed (`IngressQueue`).
+ */
 export interface SlackDelivery {
   kind: SlackDeliveryKind;
   retryNum: number | null;
   retryReason: string | null;
   body: Uint8Array;
+  /** The request addresses OpenBot: a mention, a direct message, a thread reply or a button press. */
+  wakes: boolean;
 }
 
 export interface SlackDeliveryResponse {
@@ -190,6 +215,8 @@ export interface WebhookDeliveryResponse {
 type IngressDeliveryKind = "slack" | "webhook";
 
 type IngressDeliveryResult = Extract<SignalClientMessage, { type: `${IngressDeliveryKind}-delivery-result` }>;
+
+type TelegramDeliveryMessage = Extract<QueuedSignalMessage, { type: "telegram-delivery" }>;
 
 /** One Slack or webhook request that waits for the answer of an `ingress` socket. */
 interface PendingDelivery {
@@ -227,6 +254,17 @@ const UNAVAILABLE = { status: 503 } as const;
 const MAXIMUM_RATE_WINDOWS = 100_000;
 const RATE_WINDOW_MILLISECONDS = 60_000;
 const SIGNAL_RECONNECT_GRACE_MILLISECONDS = 30_000;
+// A socket must send its hello in this time. Signal closes an idle socket that does not, so it cannot
+// keep a connection slot of its address for the proxy's read timeout. The desktop app opens a socket
+// before its ticket is ready and keeps it without a hello for at most 30 seconds.
+const SIGNAL_HELLO_DEADLINE_MILLISECONDS = 30_000;
+// A `turn-refresh` in this time after the last one gets the same TURN credentials again. Each new
+// username has its own coturn quota, so a peer must not make many of them. Clients refresh at
+// `SIGNAL_TURN_REFRESH_INTERVAL_MS`, and credentials of this age still last past their next refresh.
+const TURN_CREDENTIAL_REUSE_MILLISECONDS = 5 * 60_000;
+// The older sockets of a host stay registered. This limits them, because host sockets are not in the
+// account's connection limit.
+const MAXIMUM_SOCKETS_PER_HOST = 4;
 const INITIAL_TICKET_TTL_MILLISECONDS = 3 * 60_000;
 const MAXIMUM_EXPIRATION_TIMER_MILLISECONDS = 24 * 60 * 60_000;
 const INGRESS_RATE_FACTOR = 10;
@@ -259,6 +297,11 @@ export class SignalService {
   // Telegram chat (`<bot ID>:<chat ID>`) to its `ingress` socket, with a floor like the Slack one.
   readonly #telegramChats = new Map<string, string>();
   readonly #telegramRouteFloor = new Map<string, number>();
+  // A chat that the account service just linked, to its host. A route ticket that the host got before
+  // the link does not name the chat, so a socket that says hello with it gets the chat from here. A
+  // ticket lives for `TELEGRAM_ROUTE_TTL_SECONDS`, so after that time every ticket names the chat.
+  // The TTL is the same for each entry, so the oldest entry is first.
+  readonly #telegramLinks = new Map<string, { hostId: string; linkedAt: number; expiresAt: number }>();
   // A delivered callback query (`<bot ID>:<query ID>`) to the socket that can answer it. The TTL is
   // the same for each entry, so the oldest entry is first.
   readonly #telegramCallbacks = new Map<string, { socketId: string; expiresAt: number }>();
@@ -276,10 +319,13 @@ export class SignalService {
   readonly #discordEnabled: boolean;
   #discordMembership: DiscordMembership | null = null;
   readonly #pendingDeliveries = new Map<string, PendingDelivery>();
+  readonly #queue: IngressQueue;
+  readonly #fork: (work: Effect.Effect<unknown>) => void;
   readonly #deliveryLimits: IngressDeliveryLimits;
   readonly #connections = new Map<string, ActiveConnection>();
   readonly #connectionDropTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #peerExpirationTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  readonly #helloTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #usedTicketIds = new Map<string, number>();
   readonly #revokedEpochs = new Map<string, number>();
   readonly #revokedSessions = new Map<string, number>();
@@ -295,6 +341,7 @@ export class SignalService {
   readonly #metrics: SignalMetrics = {
     acceptedConnections: 0,
     authenticationFailures: 0,
+    authenticationUnavailable: 0,
     protocolFailures: 0,
     relayedMessages: 0,
     activeSockets: 0,
@@ -311,6 +358,8 @@ export class SignalService {
     discordApiFailures: 0,
     webhookDeliveries: 0,
     webhookDeliveriesUnavailable: 0,
+    queuedDeliveries: 0,
+    queuedDeliveriesFlushed: 0,
   };
 
   readonly dependencies: Layer.Layer<SignalTokens>;
@@ -331,6 +380,8 @@ export class SignalService {
     this.#deliveryLimits = deliveryLimits;
     this.#discordEnabled = options.discord === true;
     this.#telegram = options.telegram ?? null;
+    this.#fork = options.fork ?? ((work) => void Effect.runFork(work));
+    this.#queue = new IngressQueue(options.routeWaker ?? null, { fork: this.#fork });
   }
 
   /** The Bot API and the file tokens, or `null` when Telegram is off. */
@@ -341,9 +392,12 @@ export class SignalService {
   close(): void {
     for (const timer of this.#connectionDropTimers.values()) clearTimeout(timer);
     for (const timer of this.#peerExpirationTimers.values()) clearTimeout(timer);
+    for (const timer of this.#helloTimers.values()) clearTimeout(timer);
     this.#connectionDropTimers.clear();
     this.#peerExpirationTimers.clear();
+    this.#helloTimers.clear();
     for (const requestId of [...this.#pendingDeliveries.keys()]) this.#settleDelivery(requestId, null);
+    this.#queue.close();
   }
 
   connect(socket: SignalSocket): boolean {
@@ -354,6 +408,14 @@ export class SignalService {
     }
     this.#sockets.set(socket.id, socket);
     this.#metrics.activeSockets = this.#sockets.size;
+    const timer = setTimeout(() => {
+      this.#helloTimers.delete(socket.id);
+      if (this.#sockets.has(socket.id) && !this.#peers.has(socket.id)) {
+        this.#fail(socket, "authentication_required", "Authenticate before sending signal messages.", 1008);
+      }
+    }, SIGNAL_HELLO_DEADLINE_MILLISECONDS);
+    timer.unref?.();
+    this.#helloTimers.set(socket.id, timer);
     return true;
   }
 
@@ -378,6 +440,8 @@ export class SignalService {
         return;
       }
       if (message.type === "hello") {
+        // The deadline is for the hello only. Verification has its own request deadlines.
+        this.#clearHelloTimer(socket.id);
         yield* this.#authenticate(socket, message);
         return;
       }
@@ -395,18 +459,27 @@ export class SignalService {
           this.#fail(socket, "permission_denied", "The connection does not belong to this peer.");
           return;
         }
+        const resumeToken = yield* tokens.issueResumeToken(peer.claims);
+        const now = Date.now();
+        if (!peer.turnCredentials || now - peer.turnCredentials.issuedAt >= TURN_CREDENTIAL_REUSE_MILLISECONDS) {
+          peer.turnCredentials = { iceServers: this.#tokens.iceServers(peer.claims), issuedAt: now };
+        }
         this.#send(socket, {
           type: "ready",
           version: 1,
           connectionId: message.connectionId,
-          resumeToken: yield* tokens.issueResumeToken(peer.claims),
-          iceServers: this.#tokens.iceServers(peer.claims),
+          resumeToken,
+          iceServers: peer.turnCredentials.iceServers,
           ...this.#capabilities(peer.peer),
         });
         return;
       }
       if (message.type === "disconnect") {
         if (this.#ownsConnection(peer, message.connectionId)) this.#dropConnection(message.connectionId, socket.id);
+        return;
+      }
+      if (message.type === "queued-delivery-ack") {
+        if (peer.peer === "ingress") this.#queue.acknowledge(peer.claims.hostId, message.id);
         return;
       }
       if (message.type === "slack-delivery-result" || message.type === "webhook-delivery-result") {
@@ -442,6 +515,7 @@ export class SignalService {
       this.#sockets.delete(socket.id);
       const peer = this.#peers.get(socket.id);
       this.#clearPeerExpiration(socket.id);
+      this.#clearHelloTimer(socket.id);
       if (!peer) {
         this.#metrics.activeSockets = this.#sockets.size;
         return;
@@ -482,7 +556,10 @@ export class SignalService {
         this.#clearConnectionDrop(connection.id);
         this.#connections.delete(connection.id);
         const clientPeer = this.#peers.get(connection.client.id);
-        if (clientPeer) clientPeer.connectionId = null;
+        if (clientPeer) {
+          clientPeer.connectionId = null;
+          clientPeer.releasedConnectionId = connection.id;
+        }
       }
       this.#metrics.activePeerConnections = this.#connections.size;
       this.#metrics.activeSockets = this.#sockets.size;
@@ -573,16 +650,22 @@ export class SignalService {
 
   /**
    * Passes one normalized Discord event to the `ingress` socket of the guild's host. Nothing waits
-   * for an answer, and nothing is kept: with no socket for the guild, the event is dropped.
+   * for an answer. With no socket for the guild, a hosted server starts and gets the event later
+   * (`IngressQueue`); otherwise the event is dropped.
    */
   deliverDiscord(guildId: string, delivery: DiscordDelivery): boolean {
     const socketId = this.#discordGuilds.get(guildId);
     const ingress = socketId ? this.#peers.get(socketId) : undefined;
-    const message = ingress
-      ? encodeSignalServerMessage({ type: "discord-delivery", version: 1, guildId, delivery })
-      : null;
-    if (!ingress || !message || new TextEncoder().encode(message).byteLength > SIGNAL_MESSAGE_BYTES_LIMIT) {
+    const frame = { type: "discord-delivery", version: 1, guildId, delivery } as const;
+    const message = encodeSignalServerMessage(frame);
+    if (new TextEncoder().encode(message).byteLength > SIGNAL_MESSAGE_BYTES_LIMIT) {
       this.#metrics.discordDeliveriesUnavailable += 1;
+      return false;
+    }
+    if (!ingress) {
+      this.#metrics.discordDeliveriesUnavailable += 1;
+      // The removal of the bot is the account service's work, not the host's.
+      if (delivery.kind !== "removed") this.#fork(this.#keep({ platform: "discord", guildId }, guildId, true, frame));
       return false;
     }
     ingress.socket.send(message);
@@ -637,14 +720,14 @@ export class SignalService {
   /**
    * Passes one signed Slack request to the `ingress` socket of the workspace's host and waits for
    * its answer. It resolves 503 when no host holds the workspace, the host is too busy, or it does
-   * not answer in time: Slack then sends the request again, so nothing needs to be kept here.
+   * not answer in time: Slack then sends the request again. For a hosted server that sleeps it
+   * resolves 200, and keeps the request when it addresses OpenBot (`IngressQueue`).
    */
-  readonly deliverSlack = Effect.fn("Signal.deliverSlack")((appId: string, teamId: string, delivery: SlackDelivery) =>
-    this.#deliver(
-      "slack",
-      this.#slackTeams.get(slackRouteKey(appId, teamId)),
-      delivery.body,
-      (requestId, bodyBase64) => ({
+  readonly deliverSlack = Effect.fn("Signal.deliverSlack")((appId: string, teamId: string, delivery: SlackDelivery) => {
+    const route = slackRouteKey(appId, teamId);
+    const socketId = this.#slackTeams.get(route);
+    const frame = (requestId: string, bodyBase64: string) =>
+      ({
         type: "slack-delivery",
         version: 1,
         requestId,
@@ -653,8 +736,20 @@ export class SignalService {
         retryNum: delivery.retryNum,
         retryReason: delivery.retryReason,
         bodyBase64,
-      }),
-    ).pipe(
+      }) as const;
+    // A hosted server that sleeps: Slack gets 200, so it does not count a failure or send again.
+    if (!socketId || !this.#peers.has(socketId)) {
+      this.#undelivered("slack");
+      return this.#keep(
+        { platform: "slack", appId, teamId },
+        route,
+        delivery.wakes,
+        frame(randomIdentifier(), Buffer.from(delivery.body).toString("base64")),
+      ).pipe(
+        Effect.map((outcome): SlackDeliveryResponse => (outcome === "unavailable" ? UNAVAILABLE : { status: 200 })),
+      );
+    }
+    return this.#deliver("slack", socketId, delivery.body, frame).pipe(
       Effect.map(
         (result): SlackDeliveryResponse =>
           result?.type === "slack-delivery-result"
@@ -666,8 +761,8 @@ export class SignalService {
               }
             : UNAVAILABLE,
       ),
-    ),
-  );
+    );
+  });
 
   /** Whether an open `ingress` socket holds this webhook route. Signal checks it before it reads a body. */
   holdsWebhookRoute(routeId: string): boolean {
@@ -769,7 +864,8 @@ export class SignalService {
 
   /**
    * Passes one Telegram update to the `ingress` socket of the chat's host. Telegram does not wait for
-   * the host, so nothing comes back. Returns `false` when no socket holds the chat. `linked` marks the
+   * the host, so nothing comes back. Returns `false` when no socket holds the chat; then a hosted
+   * server starts for an update that `wakes` and gets it later (`IngressQueue`). `linked` marks the
    * `/start` update that the account service just linked, the only one a host links a chat on.
    */
   deliverTelegram(
@@ -778,25 +874,77 @@ export class SignalService {
     body: Uint8Array,
     callbackQueryId: string | null,
     linked = false,
+    wakes = false,
   ): boolean {
-    const socketId = this.#telegramChats.get(telegramRouteKey(botId, chatId));
+    const route = telegramRouteKey(botId, chatId);
+    const socketId = this.#telegramChats.get(route);
     const ingress = socketId ? this.#peers.get(socketId) : undefined;
-    if (!ingress) {
-      this.#metrics.telegramDeliveriesUnrouted += 1;
-      return false;
-    }
-    if (callbackQueryId) this.#rememberCallback(telegramRouteKey(botId, callbackQueryId), ingress.socket.id);
-    this.#metrics.telegramDeliveries += 1;
-    this.#send(ingress.socket, {
+    const frame: TelegramDeliveryMessage = {
       type: "telegram-delivery",
       version: 1,
       botId,
       chatId,
       bodyBase64: Buffer.from(body).toString("base64"),
       ...(linked ? { linked: true as const } : {}),
-    });
+    };
+    // The link can land while the host's socket connects again: then no socket, or a socket that
+    // closes, holds the chat. The host acknowledges a kept event, so its next socket gets the link.
+    const link = linked ? this.#telegramLinks.get(route) : undefined;
+    if (link && this.#queue.enabled) {
+      this.#fork(this.#keepLink(link.hostId, botId, chatId, frame));
+      return ingress !== undefined;
+    }
+    if (!ingress) {
+      this.#metrics.telegramDeliveriesUnrouted += 1;
+      this.#fork(
+        this.#keep(
+          { platform: "telegram", botId, chatId },
+          route,
+          wakes && !linked,
+          frame,
+          callbackQueryId ? { botId, queryId: callbackQueryId } : null,
+        ),
+      );
+      return false;
+    }
+    if (callbackQueryId) this.#rememberCallback(telegramRouteKey(botId, callbackQueryId), ingress.socket.id);
+    this.#metrics.telegramDeliveries += 1;
+    this.#send(ingress.socket, frame);
     return true;
   }
+
+  /**
+   * Keeps the linked `/start` update for its host until a socket of the host acknowledges it. A host
+   * that sent no queue key gets it only on the socket that holds the chat now, as before.
+   */
+  readonly #keepLink = Effect.fn("Signal.keepLink")(function* (
+    this: SignalService,
+    hostId: string,
+    botId: string,
+    chatId: string,
+    frame: TelegramDeliveryMessage,
+  ) {
+    const route = telegramRouteKey(botId, chatId);
+    const outcome = yield* this.#queue.keep(
+      hostId,
+      { platform: "telegram", botId, chatId },
+      queueRouteKey("telegram", route),
+      frame,
+    );
+    const socketId = this.#telegramChats.get(route);
+    const peer = socketId ? this.#peers.get(socketId) : undefined;
+    if (outcome === "queued") {
+      this.#metrics.queuedDeliveries += 1;
+      if (peer) this.#flushQueue(peer);
+      return;
+    }
+    if (!peer) {
+      this.#metrics.telegramDeliveriesUnrouted += 1;
+      return;
+    }
+    this.#metrics.telegramDeliveries += 1;
+    this.#send(peer.socket, frame);
+  });
 
   /**
    * Links a chat with a link code from its `/start` message, and routes it to the newest `ingress`
@@ -811,6 +959,17 @@ export class SignalService {
       const route = telegramRouteKey(botId, chatId);
       if (link.linkedAt < (this.#telegramRouteFloor.get(route) ?? 0)) return false;
       this.#telegramRouteFloor.set(route, link.linkedAt);
+      const now = Date.now();
+      for (const [key, entry] of this.#telegramLinks) {
+        if (entry.expiresAt > now) break;
+        this.#telegramLinks.delete(key);
+      }
+      this.#telegramLinks.delete(route);
+      this.#telegramLinks.set(route, {
+        hostId: link.hostId,
+        linkedAt: link.linkedAt,
+        expiresAt: now + TELEGRAM_ROUTE_TTL_SECONDS * 1_000,
+      });
       let ingress: AuthenticatedPeer | null = null;
       for (const peer of this.#peers.values()) {
         if (peer.peer === "ingress" && peer.claims.hostId === link.hostId) ingress = peer;
@@ -889,7 +1048,12 @@ export class SignalService {
   );
 
   #capabilities(peer: AuthenticatedPeer["peer"]): { capabilities?: string[] } {
-    return peer === "ingress" && this.#telegram ? { capabilities: [TELEGRAM_CAPABILITY] } : {};
+    if (peer !== "ingress") return {};
+    const capabilities = [
+      ...(this.#telegram ? [TELEGRAM_CAPABILITY] : []),
+      ...(this.#queue.enabled ? [INGRESS_QUEUE_CAPABILITY] : []),
+    ];
+    return capabilities.length > 0 ? { capabilities } : {};
   }
 
   #settleDelivery(requestId: string, result: IngressDeliveryResult | null): void {
@@ -904,6 +1068,56 @@ export class SignalService {
   #undelivered(kind: IngressDeliveryKind): null {
     this.#metrics[`${kind}DeliveriesUnavailable`] += 1;
     return null;
+  }
+
+  /** The one path of every messaging platform for an event whose route has no socket. */
+  readonly #keep = Effect.fn("Signal.keep")(function* (
+    this: SignalService,
+    route: IngressRoute,
+    key: string,
+    wakes: boolean,
+    message: QueuedSignalMessage,
+    telegramCallback: { botId: string; queryId: string } | null = null,
+  ) {
+    const outcome = yield* this.#queue.offline(
+      route,
+      queueRouteKey(route.platform, key),
+      wakes,
+      message,
+      telegramCallback,
+    );
+    if (outcome === "queued") this.#metrics.queuedDeliveries += 1;
+    // The host connected while Signal sealed this event, or an earlier event that the flush waited for.
+    const socketId =
+      route.platform === "slack"
+        ? this.#slackTeams.get(key)
+        : route.platform === "discord"
+          ? this.#discordGuilds.get(key)
+          : this.#telegramChats.get(key);
+    const peer = socketId ? this.#peers.get(socketId) : undefined;
+    if (peer) this.#flushQueue(peer);
+    return outcome;
+  });
+
+  /** Sends the kept events of the routes that this socket now holds. */
+  #flushQueue(peer: AuthenticatedPeer): void {
+    const socketId = peer.socket.id;
+    const held = new Set<string>();
+    for (const key of peer.slackTeams)
+      if (this.#slackTeams.get(key) === socketId) held.add(queueRouteKey("slack", key));
+    for (const key of peer.telegramChats)
+      if (this.#telegramChats.get(key) === socketId) held.add(queueRouteKey("telegram", key));
+    for (const key of peer.discordGuilds)
+      if (this.#discordGuilds.get(key) === socketId) held.add(queueRouteKey("discord", key));
+    for (const frame of this.#queue.take(peer.claims.hostId, socketId, (route) => held.has(route))) {
+      if (frame.telegramCallback)
+        this.#rememberCallback(
+          telegramRouteKey(frame.telegramCallback.botId, frame.telegramCallback.queryId),
+          peer.socket.id,
+        );
+      this.#metrics.queuedDeliveriesFlushed += 1;
+      this.#send(peer.socket, { type: "queued-delivery", version: 1, id: frame.id, sealed: frame.sealed });
+    }
   }
 
   metrics(): SignalMetrics {
@@ -930,14 +1144,10 @@ export class SignalService {
           }).pipe(Effect.result);
           let claims: RemoteTicketClaims;
           if (Result.isFailure(initial)) {
+            if (initial.failure._tag === "RemoteTokenUnavailableError") return yield* initial.failure;
             usedInitialTicket = false;
             claims = yield* tokens.verifyResumeToken(message.token);
           } else claims = initial.success;
-          if ((this.#revokedEpochs.get(claims.hostId) ?? 0) > claims.authEpoch) {
-            return yield* new RemoteTokenError({ message: "Revoked ticket." });
-          }
-          if (claims.role !== "host" && this.#revokedSessions.has(claims.sessionId))
-            return yield* new RemoteTokenError({ message: "Ended session." });
           if (message.peer !== "client" && claims.role !== "host")
             return yield* new RemoteTokenError({ message: "Host role required." });
           if (message.peer === "client" && claims.role === "host")
@@ -1003,28 +1213,44 @@ export class SignalService {
               }
             }
           }
+          // Finish signing before admission. No quota slot is held while signing waits or fails.
+          const resumeToken = yield* tokens.issueResumeToken(claims);
+          if (this.#isRevoked(claims))
+            return yield* new RemoteTokenError({ message: "Revoked ticket or ended session." });
           this.#pruneReplayCache();
           if (usedInitialTicket && this.#usedTicketIds.has(claims.jti))
             return yield* new RemoteTokenError({ message: "Ticket was already used." });
-          return { claims, slackRoute, telegramRoute, discordRoute, webhookRoute };
+          return { claims, slackRoute, telegramRoute, discordRoute, webhookRoute, resumeToken };
         }).pipe(Effect.result);
         if (Result.isFailure(authentication)) {
+          // After a restart every resume asks the account service. When it does not answer, the
+          // session can still be active: close without an error frame, so that the peer keeps its
+          // data channels and connects again after its backoff.
+          const failure = authentication.failure;
+          if (failure._tag === "RemoteTokenUnavailableError" && !this.#isRevoked(failure)) {
+            this.#metrics.authenticationUnavailable += 1;
+            socket.close(1013, "The account service is unavailable.");
+            return;
+          }
           this.#metrics.authenticationFailures += 1;
           this.#fail(socket, "authentication_required", "Remote ticket is invalid or expired.", 1008);
           return;
         }
         // Verification may finish after disconnect removed the socket. Register nothing then.
         if (!this.#sockets.has(socket.id)) return;
-        const { claims, slackRoute, telegramRoute, discordRoute, webhookRoute } = authentication.success;
-        // A reconnect of the same logical session replaces its old socket below, so that socket does not
-        // count. A phone that changes network keeps a half-open socket until the idle timeout.
-        const replaced =
-          message.peer === "client"
-            ? this.#connectionForSession(claims.hostId, claims.sessionId)?.client.id
-            : undefined;
+        if (this.#peers.has(socket.id)) {
+          this.#fail(socket, "protocol_error", "This socket is already authenticated.", 1008);
+          return;
+        }
+        const { claims, slackRoute, telegramRoute, discordRoute, webhookRoute, resumeToken } = authentication.success;
+        // A reconnect replaces the old client even when its host has disconnected and the peer has
+        // no connection record. Admission and replacement must have no asynchronous gap.
+        const replaced = message.peer === "client" ? this.#clientForSession(claims) : null;
+        // Only clients count. Host tickets carry the owner's account, so its own devices must not keep
+        // its server from registering.
         if (
-          message.peer !== "ingress" &&
-          this.#userConnectionCount(claims.userId, replaced) >= this.#maximumConnectionsPerUser
+          message.peer === "client" &&
+          this.#userClientCount(claims.userId, replaced?.socket.id) >= this.#maximumConnectionsPerUser
         ) {
           this.#fail(socket, "rate_limited", "Too many active remote connections.", 1008);
           return;
@@ -1035,6 +1261,7 @@ export class SignalService {
           claims,
           peer: message.peer,
           connectionId: null,
+          releasedConnectionId: null,
           resumed: !usedInitialTicket,
           multiplex: message.peer === "host" && message.multiplex === true,
           slackTeams: slackRoute.teams.map((team) => slackRouteKey(team.appId, team.id)),
@@ -1042,14 +1269,12 @@ export class SignalService {
           discordGuilds: discordRoute.guilds.map((guild) => guild.id),
           discordSession: null,
           webhookRoutes: webhookRoute.routes.map((route) => route.id),
+          turnCredentials: null,
         };
         this.#peers.set(socket.id, peer);
         this.#schedulePeerExpiration(peer);
         this.#metrics.acceptedConnections += 1;
         this.#metrics.activeSockets = this.#sockets.size;
-        const resumeToken = yield* tokens.issueResumeToken(claims);
-        // Token signing is asynchronous too. Disconnect already removes the peer and timer.
-        if (!this.#sockets.has(socket.id)) return;
         if (message.peer === "ingress") {
           for (const team of slackRoute.teams) {
             const route = slackRouteKey(team.appId, team.id);
@@ -1063,6 +1288,17 @@ export class SignalService {
             this.#telegramRouteFloor.set(route, chat.linkedAt);
             this.#telegramChats.set(route, socket.id);
             peer.telegramChats.push(route);
+          }
+          // A chat that was linked after the host got this route ticket.
+          if (message.telegramRoute && this.#telegram) {
+            const now = Date.now();
+            for (const [route, link] of this.#telegramLinks) {
+              if (link.hostId !== claims.hostId || link.expiresAt <= now || peer.telegramChats.includes(route))
+                continue;
+              if (link.linkedAt < (this.#telegramRouteFloor.get(route) ?? 0)) continue;
+              this.#telegramChats.set(route, socket.id);
+              peer.telegramChats.push(route);
+            }
           }
           const heldGuilds: string[] = [];
           for (const guild of discordRoute.guilds) {
@@ -1105,10 +1341,30 @@ export class SignalService {
             this.#discordSessions.set(peer.discordSession, socket.id);
             this.#send(socket, { type: "discord-session", version: 1, token, guilds: heldGuilds });
           }
+          // After `ready` and the Discord session, so the host can answer what it kept.
+          const queueKey = message.queueKey && isIngressQueueKey(message.queueKey) ? message.queueKey : null;
+          this.#queue.rememberKey(claims.hostId, queueKey);
+          if (queueKey) this.#flushQueue(peer);
           return;
         }
         if (message.peer === "host") {
+          // A host that changed network or restarted can leave its old socket open until the idle
+          // timeout. `#restoreWaitingClients` moves the clients of the older sockets here, or tells
+          // them to connect again when this host did not resume. The older sockets stay registered
+          // and are not closed: a host treats code 4000 as final, and when two instances overlap,
+          // the other one takes the clients again when this socket closes.
+          for (const socketId of this.#hosts.get(claims.hostId) ?? []) this.#releaseHostClients(socketId);
           const hostSockets = this.#hosts.get(claims.hostId) ?? new Set<string>();
+          // Close the oldest sockets with a code that lets a live host connect again.
+          for (const socketId of [...hostSockets].slice(
+            0,
+            Math.max(0, hostSockets.size - MAXIMUM_SOCKETS_PER_HOST + 1),
+          )) {
+            hostSockets.delete(socketId);
+            this.#peers.delete(socketId);
+            this.#clearPeerExpiration(socketId);
+            this.#sockets.get(socketId)?.close(1013, "Host has too many Signal connections.");
+          }
           hostSockets.add(socket.id);
           this.#hosts.set(claims.hostId, hostSockets);
           this.#send(socket, {
@@ -1122,6 +1378,15 @@ export class SignalService {
           return;
         }
         const host = this.#currentHost(claims.hostId);
+        // The client stays as a waiting peer. `#restoreWaitingClients` sends it `ready` when the host
+        // says hello, so the client needs no new ticket for each check.
+        if (!host && message.waitForHost === true) {
+          // Only a resumed socket is the same client attempt, which still holds the released path.
+          if (replaced && peer.resumed) peer.releasedConnectionId = replaced.releasedConnectionId;
+          if (replaced && this.#peers.has(replaced.socket.id)) this.#replaceClientPeer(replaced);
+          this.#send(socket, { type: "host-waiting", version: 1, resumeToken });
+          return;
+        }
         if (!host) {
           this.#peers.delete(socket.id);
           this.#metrics.activeSockets = this.#sockets.size;
@@ -1143,6 +1408,7 @@ export class SignalService {
           return;
         }
         if (existing) this.#replaceClientSignal(existing);
+        if (replaced && this.#peers.has(replaced.socket.id)) this.#replaceClientPeer(replaced);
         const connectionId = randomIdentifier();
         peer.connectionId = connectionId;
         this.#connections.set(connectionId, {
@@ -1175,9 +1441,8 @@ export class SignalService {
   );
 
   /**
-   * The host socket that said hello last. A host that stops with no close, such as a hosted server
-   * that its provider stops, keeps its old socket until the idle timeout. Its new socket is the one
-   * that answers.
+   * The host socket that said hello last. A new host hello takes the clients of the older sockets of
+   * its host, such as the socket of a hosted server that its provider stopped with no close.
    */
   #currentHost(hostId: string): AuthenticatedPeer | null {
     let current: AuthenticatedPeer | null = null;
@@ -1188,6 +1453,19 @@ export class SignalService {
   #connectionForSession(hostId: string, sessionId: string): ActiveConnection | null {
     for (const connection of this.#connections.values()) {
       if (connection.hostId === hostId && connection.sessionId === sessionId) return connection;
+    }
+    return null;
+  }
+
+  #clientForSession(claims: RemoteTicketClaims): AuthenticatedPeer | null {
+    for (const peer of this.#peers.values()) {
+      if (
+        peer.peer === "client" &&
+        peer.claims.userId === claims.userId &&
+        peer.claims.hostId === claims.hostId &&
+        peer.claims.sessionId === claims.sessionId
+      )
+        return peer;
     }
     return null;
   }
@@ -1204,6 +1482,15 @@ export class SignalService {
           [...this.#connections.values()].some((connection) => connection.hostId === host.claims.hostId)
         )
           return;
+        // The host gets `peer-ready` with `resumed: false` and makes a new peer connection, but a
+        // client that is still online keeps its path on a `ready`. Only a `disconnect` makes the
+        // client connect again; a resumed host keeps its peer, so a `ready` moves the client.
+        const released = client.releasedConnectionId;
+        client.releasedConnectionId = null;
+        if (released && !host.resumed) {
+          this.#send(client.socket, { type: "disconnect", version: 1, connectionId: released });
+          continue;
+        }
         const resumeToken = yield* tokens.issueResumeToken(client.claims);
         if (this.#peers.get(host.socket.id) !== host) return;
         if (this.#peers.get(client.socket.id) !== client || client.connectionId !== null) continue;
@@ -1243,11 +1530,27 @@ export class SignalService {
     this.#clearConnectionDrop(connection.id);
     this.#connections.delete(connection.id);
     const previous = this.#peers.get(connection.client.id);
-    if (previous) {
-      this.#peers.delete(connection.client.id);
-      this.#clearPeerExpiration(connection.client.id);
-      previous.socket.close(4000, "Remote session resumed");
+    if (previous) this.#replaceClientPeer(previous);
+  }
+
+  #replaceClientPeer(peer: AuthenticatedPeer): void {
+    this.#peers.delete(peer.socket.id);
+    this.#clearPeerExpiration(peer.socket.id);
+    peer.socket.close(4000, "Remote session resumed");
+  }
+
+  #releaseHostClients(hostSocketId: string): void {
+    for (const connection of [...this.#connections.values()]) {
+      if (connection.host.id !== hostSocketId) continue;
+      this.#clearConnectionDrop(connection.id);
+      this.#connections.delete(connection.id);
+      const clientPeer = this.#peers.get(connection.client.id);
+      if (clientPeer) {
+        clientPeer.connectionId = null;
+        clientPeer.releasedConnectionId = connection.id;
+      }
     }
+    this.#metrics.activePeerConnections = this.#connections.size;
   }
 
   #dropConnection(connectionId: string, sourceSocketId: string): void {
@@ -1285,6 +1588,12 @@ export class SignalService {
     this.#peerExpirationTimers.set(peer.socket.id, timer);
   }
 
+  #clearHelloTimer(socketId: string): void {
+    const timer = this.#helloTimers.get(socketId);
+    if (timer) clearTimeout(timer);
+    this.#helloTimers.delete(socketId);
+  }
+
   #clearPeerExpiration(socketId: string): void {
     const timer = this.#peerExpirationTimers.get(socketId);
     if (timer) clearTimeout(timer);
@@ -1312,10 +1621,10 @@ export class SignalService {
     return Boolean(connection && (connection.client.id === peer.socket.id || connection.host.id === peer.socket.id));
   }
 
-  #userConnectionCount(userId: string, exceptSocketId?: string): number {
+  #userClientCount(userId: string, exceptSocketId?: string): number {
     let total = 0;
     for (const peer of this.#peers.values()) {
-      if (peer.peer !== "ingress" && peer.claims.userId === userId && peer.socket.id !== exceptSocketId) total += 1;
+      if (peer.peer === "client" && peer.claims.userId === userId && peer.socket.id !== exceptSocketId) total += 1;
     }
     return total;
   }
@@ -1369,6 +1678,11 @@ export class SignalService {
 
   #send(socket: SignalSocket, message: SignalServerMessage): void {
     socket.send(encodeSignalServerMessage(message));
+  }
+
+  #isRevoked(claims: { hostId: string; sessionId: string; role: string; authEpoch: number }): boolean {
+    if ((this.#revokedEpochs.get(claims.hostId) ?? 0) > claims.authEpoch) return true;
+    return claims.role !== "host" && this.#revokedSessions.has(claims.sessionId);
   }
 
   #fail(socket: SignalSocket, code: SignalErrorCode, message: string, closeCode?: number): void {

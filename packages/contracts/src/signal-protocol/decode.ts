@@ -12,6 +12,7 @@ import { decodeDiscordDelivery } from "./discord-api";
 import { DISCORD_ROUTE_GUILDS_LIMIT } from "./discord-route";
 import {
   type IceServer,
+  QUEUED_DELIVERY_SEALED_LIMIT,
   SIGNAL_PROTOCOL_VERSION,
   type SignalChannel,
   type SignalServerMessage,
@@ -55,6 +56,8 @@ export function decodeSignalServerMessage(value: unknown): SignalServerMessage |
         iceServers: iceServers(value.iceServers),
         ...(value.capabilities === undefined ? {} : { capabilities: capabilities(value.capabilities) }),
       };
+    case "host-waiting":
+      return { type: kind, version, resumeToken: identifier(value.resumeToken) };
     case "peer-ready":
       return {
         type: kind,
@@ -137,6 +140,12 @@ export function decodeSignalServerMessage(value: unknown): SignalServerMessage |
         guildId: identifier(value.guildId),
         delivery: decodeDiscordDelivery(value.delivery),
       };
+    case "queued-delivery": {
+      const sealed = text(value.sealed);
+      if (sealed.length === 0 || sealed.length > QUEUED_DELIVERY_SEALED_LIMIT || !/^[A-Za-z0-9_-]+$/u.test(sealed))
+        invalid();
+      return { type: kind, version, id: identifier(value.id), sealed };
+    }
     case "telegram-delivery":
       if (value.linked !== undefined && value.linked !== true) invalid();
       return {

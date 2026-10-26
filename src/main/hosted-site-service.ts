@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, readdir, readFile, realpath } from "node:fs/promises";
-import { extname, isAbsolute, join, relative, resolve } from "node:path";
+import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   checkHostedSitePath,
   HOSTED_SITE_HOST_ID_HEADER,
@@ -322,7 +322,7 @@ export class HostedSiteDesktopService {
   }
 }
 
-export const prepareSite = Effect.fn("HostedSite.prepare")(function* (
+const prepareSite = Effect.fn("HostedSite.prepare")(function* (
   sourcePath: string,
   allowedRoots?: readonly string[],
 ): Effect.fn.Return<PreparedSite, HostedSiteFailure> {
@@ -563,7 +563,8 @@ function arrayBuffer(bytes: Uint8Array): ArrayBuffer {
 
 function isInside(root: string, target: string): boolean {
   const path = relative(root, target);
-  return path === "" || (!path.startsWith("..") && !isAbsolute(path));
+  // `..notes.md` is a child; only `..` itself or a `../` prefix leaves the root.
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
 const firstExisting = Effect.fn("HostedSite.firstExisting")(function* (

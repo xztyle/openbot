@@ -1,3 +1,4 @@
+import { isDynamicIslandServerVisible } from "@openbot/contracts/ipc";
 import { DynamicIslandCoordinator } from "@openbot/team-client/dynamic-island-coordinator";
 import type { DynamicIslandText } from "@openbot/team-client/dynamic-island-presentation";
 import { currentText } from "@openbot/ui/text";
@@ -5,6 +6,7 @@ import { createEffect, flush, onSettled, untrack } from "solid-js";
 import { usePlatform } from "../../platform";
 import { createSimpleContext } from "../../simple-context";
 import { useServers } from "../servers/servers-context";
+import { useSettings } from "../settings/settings-context";
 import { dynamicIslandPort } from "./dynamic-island-port";
 
 /**
@@ -34,6 +36,7 @@ const DynamicIsland = createSimpleContext({
   init: () => {
     const platform = usePlatform();
     const { servers, activeServerId } = useServers();
+    const { generalSettings } = useSettings();
     const coordinator = new DynamicIslandCoordinator(islandText);
     const connectedServers = new Set(["local"]);
     let presentationScheduled = false;
@@ -48,14 +51,21 @@ const DynamicIsland = createSimpleContext({
       ids.sort((left, right) => Number(right === activeId) - Number(left === activeId));
       const ordered = ids.length > 0 ? ids : ["local"];
       // A muted server is muted here too: it contributes neither a presentation nor an attention
-      // count. The filter runs after the `["local"]` fallback so that fallback cannot put a muted
+      // count. A server that the user hid from the island in Settings is left out the same way. The
+      // filter runs after the `["local"]` fallback so that fallback cannot put a muted or hidden
       // local server back. An empty list is fine - the coordinator reads it as idle.
       const muted = new Set(current.filter((server) => server.notificationsMuted).map((server) => server.id));
-      return ordered.filter((serverId) => !muted.has(serverId));
+      const settings = generalSettings();
+      const choices = {
+        serverVisibility: settings.macBookNotchServers,
+        newServersVisible: settings.macBookNotchNewServers,
+      };
+      return ordered.filter((serverId) => !muted.has(serverId) && isDynamicIslandServerVisible(choices, serverId));
     }
 
     function publishPresentation(): void {
-      if (platform.landingPreview || presentationScheduled) return;
+      // The main window owns the island; main rejects a publish from a chat window.
+      if (platform.landingPreview || platform.chatWindow || presentationScheduled) return;
       presentationScheduled = true;
       queueMicrotask(() => {
         presentationScheduled = false;
@@ -87,6 +97,17 @@ const DynamicIsland = createSimpleContext({
         coordinator.retainServers([...configuredServerIds]);
         publishPresentation();
       },
+    );
+
+    // The server choices change what `serverOrder` returns. The island follows a change at once.
+    // A string key, so that a change to another setting, such as a size slider, publishes nothing.
+    createEffect(
+      () => {
+        const settings = generalSettings();
+        return `${settings.macBookNotchNewServers}:${JSON.stringify(settings.macBookNotchServers)}`;
+      },
+      () => publishPresentation(),
+      { defer: true },
     );
 
     onSettled(() =>

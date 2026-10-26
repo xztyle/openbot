@@ -18,5 +18,3 @@ charts draw the same areas.
 - Do not re-export `@openbot/contracts/team-protocol` from `index.ts`. The comment there says why.
   Each module has its own subpath in `package.json`.
 - Do not log tokens, tickets, or message bodies.
-
-Run one test file: `bun run test:desktop -- packages/team-client/src/<name>.test.ts`.

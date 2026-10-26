@@ -13,13 +13,16 @@ import { messages as errorMarketplace } from "./error/marketplace";
 import { messages as errorMcp } from "./error/mcp";
 import { messages as errorMessaging } from "./error/messaging";
 import { messages as errorProvider } from "./error/provider";
+import { messages as errorReference } from "./error/reference";
 import { messages as errorRemote } from "./error/remote";
 import { messages as errorSite } from "./error/site";
 import { messages as errorSkill } from "./error/skill";
 import { messages as errorStorage } from "./error/storage";
 import { messages as errorTeam } from "./error/team";
 import { messages as errorUpdate } from "./error/update";
+import { messages as errorVault } from "./error/vault";
 import { messages as errorVoice } from "./error/voice";
+import { messages as errorWorkflow } from "./error/workflow";
 import { messages as statusAgent } from "./status/agent";
 import { messages as statusComputerUse } from "./status/computerUse";
 import { messages as statusHost } from "./status/host";
@@ -30,6 +33,7 @@ import { messages as statusUpdate } from "./status/update";
 
 export const source = {
   ...errorKind,
+  ...errorReference,
   ...errorApp,
   ...errorTeam,
   ...errorAuth,
@@ -39,6 +43,7 @@ export const source = {
   ...errorProvider,
   ...errorComputerUse,
   ...errorVoice,
+  ...errorWorkflow,
   ...errorBackend,
   ...errorSkill,
   ...errorMarketplace,
@@ -47,6 +52,7 @@ export const source = {
   ...errorAttachment,
   ...errorImport,
   ...errorUpdate,
+  ...errorVault,
   ...errorMcp,
   ...errorConnector,
   ...errorMessaging,

@@ -23,10 +23,8 @@ import {
 } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal, For, Match, onSettled, Show, Switch } from "solid-js";
-import { BitwardenConnectorPanel } from "../settings/BitwardenConnectorPanel";
-import { GitHubConnectorPanel } from "../settings/GitHubConnectorPanel";
+import { ConnectorDetailPanel } from "../connectors/ConnectorDetailPanel";
 import { DangerZone, DetailHeader, type IntegrationStatus, WizardDialog } from "../settings/IntegrationLayout";
-import { OnePasswordConnectorPanel } from "../settings/OnePasswordConnectorPanel";
 import { AccountsSection, AllowForAgent, ChatAccessSection } from "./MarketplaceAccounts";
 import { AppAction, AppsReadNotice } from "./MarketplaceCards";
 import { RelatedEventChecks } from "./MarketplaceEventChecks";
@@ -50,11 +48,11 @@ const STATUS_LABEL = {
 } as const satisfies Record<MarketplaceAppStatus, string>;
 
 /**
- * The status pill has no state of its own for an app that is turned off, or that waits for a
- * sign-in: they read as not in use.
+ * The status pill has no state of its own for an app that is turned off, or whose state this
+ * account cannot read: they read as not in use.
  */
 function pillStatus(status: MarketplaceAppStatus): IntegrationStatus {
-  return status === "connected" || status === "attention" ? status : "idle";
+  return status === "connected" || status === "attention" || status === "connecting" ? status : "idle";
 }
 
 interface AccountRemovalProps {
@@ -341,7 +339,6 @@ function PluginAppPage(props: { scope: MarketplaceScope; app: PluginApp }) {
           action={t("marketplace.app.disconnect.action")}
           busy={model().appBusy(props.app.id)}
           // A plugin opens its own uninstall dialog, which lists the apps and skills it removes.
-          confirm={props.app.kind !== "plugin"}
           onAction={() => model().disconnectApp(props.app)}
         />
       </Show>
@@ -526,7 +523,7 @@ function CustomServerPage(props: { scope: MarketplaceScope; app: CustomApp }) {
   );
 }
 
-/** The page of one app: the GitHub connector, a catalog app, or a server that the user added. */
+/** The page of one app: a connector, a catalog app, or a server that the user added. */
 export function MarketplaceAppPage(props: { scope: MarketplaceScope; id: string }) {
   const { t } = useText();
   const model = () => props.scope.model;
@@ -534,9 +531,10 @@ export function MarketplaceAppPage(props: { scope: MarketplaceScope; id: string 
     model()
       .apps()
       .find((entry) => entry.id === props.id);
-  const github = () => (app()?.kind === "github" ? model().github : undefined);
-  const bitwarden = () => (app()?.kind === "bitwarden" ? model().bitwarden : undefined);
-  const onePassword = () => (app()?.kind === "onepassword" ? model().onePassword : undefined);
+  const connector = () => {
+    const current = app();
+    return current?.kind === "connector" ? model().connector(current.connector) : undefined;
+  };
   const plugin = () => {
     const current = app();
     return current?.kind === "plugin" ? current : undefined;
@@ -556,54 +554,13 @@ export function MarketplaceAppPage(props: { scope: MarketplaceScope; id: string 
           </div>
         }
       >
-        <Match when={github()}>
-          {(panel) => {
-            const current = () => panel()();
-            return (
-              <GitHubConnectorPanel
-                status={current().status}
-                busy={current().busy}
-                repositories={current().repositories}
-                repositoriesError={current().repositoriesError}
-                onConnect={() => current().onConnect()}
-                onCancel={() => current().onCancel()}
-                onDisconnect={() => current().onDisconnect()}
-                onOpenVerification={() => current().onOpenVerification()}
-                onOpenInstall={() => current().onOpenInstall()}
-              />
-            );
-          }}
-        </Match>
-        <Match when={bitwarden()}>
-          {(panel) => (
-            <BitwardenConnectorPanel
-              status={panel()().status}
-              busy={panel()().busy}
-              statusFailed={panel()().statusFailed}
-              onConnect={(key) => panel()().onConnect(key)}
-              onDisconnect={() => panel()().onDisconnect()}
-              onCancel={() => panel()().onCancel?.()}
-              onRetryStatus={() => panel()().onRetryStatus?.()}
-            />
-          )}
-        </Match>
-        <Match when={onePassword()}>
-          {(panel) => {
-            const current = () => panel()();
-            return (
-              <>
-                <OnePasswordConnectorPanel
-                  status={current().status}
-                  busy={current().busy}
-                  onWatchSetup={() => current().onWatchSetup()}
-                  onCheckSetup={() => current().onCheckSetup()}
-                  onInstallCli={() => current().onInstallCli()}
-                  onOpenApp={() => current().onOpenApp()}
-                  onConnect={(accountId) => current().onConnect(accountId)}
-                  onConnectWithToken={(token) => current().onConnectWithToken(token)}
-                  onCancel={() => current().onCancel()}
-                  onDisconnect={() => current().onDisconnect()}
-                />
+        <Match when={connector()}>
+          {(current) => (
+            <>
+              <Show when={current().ready()}>
+                <ConnectorDetailPanel detail={current().detail} />
+              </Show>
+              <Show when={current().detail.id === "onepassword"}>
                 <AppInformation
                   developer={t("connector.onePassword.title")}
                   category={t("marketplace.app.onePasswordCategory")}
@@ -614,9 +571,9 @@ export function MarketplaceAppPage(props: { scope: MarketplaceScope; id: string 
                   }))}
                   onOpenUrl={(url) => model().openUrl(url)}
                 />
-              </>
-            );
-          }}
+              </Show>
+            </>
+          )}
         </Match>
         <Match when={plugin()}>{(current) => <PluginAppPage scope={props.scope} app={current()} />}</Match>
         <Match when={custom()}>{(current) => <CustomServerPage scope={props.scope} app={current()} />}</Match>

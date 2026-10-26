@@ -9,10 +9,12 @@ import {
 } from "@openbot/contracts/billing";
 import {
   HOSTED_PLAN_SIZE,
+  HOSTED_SERVER_ENTRY_POINTS,
   type HostedServerActivityReport,
   type HostedServerCatalog,
   type HostedServerCheckout,
   type HostedServerClaim,
+  type HostedServerEntryPoint,
   type HostedServerError,
   type HostedServerLifecycleInput,
   type HostedServerList,
@@ -23,11 +25,18 @@ import {
   parseHostedServerName,
 } from "@openbot/contracts/hosted-servers";
 import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
+import type { RouteHostState } from "@openbot/contracts/signal-protocol/ingress-queue";
 import { sourceText } from "@openbot/i18n/source";
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { type AccountAnalytics, type AccountAnalyticsEvent, NO_ACCOUNT_ANALYTICS } from "./account-analytics";
 import { getServerEntitlement } from "./billing-entitlement";
-import { BillingError, type BillingReturnTarget, type BillingService, type SubscriptionSync } from "./billing-service";
+import {
+  BillingError,
+  type BillingReturnTarget,
+  type BillingService,
+  SOLD_OUT_PLANS,
+  type SubscriptionSync,
+} from "./billing-service";
 import {
   BoatApiError,
   BoatClient,
@@ -49,9 +58,15 @@ const CLAIM_TTL_MS = 60 * 60_000;
 const CLAIM_REDEEM_RETRY_MS = 10 * 60_000;
 /** The cron asks the provider about a server that has been in a transition state this long. */
 const STUCK_AFTER_MS = 2 * 60_000;
+/**
+ * A start that boat refused with a rate limit is sent again after a delay. The delay is the time from the
+ * wake to the last refusal, within these limits, so it doubles with each refusal.
+ */
+const RATE_LIMIT_RETRY_MIN_MS = 30_000;
+const RATE_LIMIT_RETRY_MAX_MS = 5 * 60_000;
 /** boat retries a delivery for hours, so a delivery ID is kept longer than the 5 minute replay window. */
 const DELIVERY_RETENTION_MS = 7 * 24 * 60 * 60_000;
-const MAX_SERVERS_PER_ACCOUNT = 3;
+const MAX_SERVERS_PER_ACCOUNT = 50;
 const TICK_BATCH_SIZE = 20;
 /**
  * A server that waits for its first payment this long is removed. Its Checkout page (35 minutes)
@@ -84,10 +99,31 @@ const RESIZE_AFTER_NO_USE_MS = 7 * 60_000;
 const LEASE_TTL_SECONDS = 2 * 60 * 60;
 const LEASE_EXTEND_BEFORE_MS = 60 * 60_000;
 /**
+ * boat can keep a stopped machine in memory and continue it at a resume, with no boot. Then `/run` keeps
+ * the flag of the pre-stop hook (`scripts/hosting/openbot-boat-pre-stop`), the condition of
+ * `openbot.service` fails, and OpenBot does not start. This command removes the flag and starts OpenBot.
+ * With no flag it does nothing, so it does not change a machine that boat started with a boot.
+ */
+const HELD_RESUME_START_COMMAND =
+  "if [ -e /run/openbot-pre-stop ]; then sudo -n rm -f /run/openbot-pre-stop && sudo -n systemctl start --no-block openbot.service && echo started; fi";
+const HELD_RESUME_START_TIMEOUT_SECONDS = 10;
+/**
  * The cron starts an idle server this long before its next routine run: one cron interval (5 minutes)
  * and the time that the server takes to start. A server does not stop for no use in this time.
  */
 const SCHEDULE_WAKE_BEFORE_MS = 10 * 60_000;
+/**
+ * boat deletes the disk of a sandbox 14 days after its stop, and each stop saves a new disk. The cron
+ * starts an idle server with no use for this long, and the idle stop saves its disk again.
+ */
+const RETENTION_WAKE_AFTER_MS = 10 * 24 * 60 * 60_000;
+const RETENTION_DISK_KEPT_MS = 14 * 24 * 60 * 60_000;
+/**
+ * The test and production Workers share one boat account: 200 starts each day and 100 active
+ * sandboxes. One start in each 10 minutes of cron time (at most 144 each day for each Worker, with a
+ * cron each 5 minutes or each minute) leaves them to clients.
+ */
+const RETENTION_WAKE_EVERY_MINUTES = 10;
 /** A server can report a routine run at most this far ahead. A later run is reported when it comes nearer. */
 const NEXT_RUN_MAX_AHEAD_MS = 400 * 24 * 60 * 60_000;
 /**
@@ -147,7 +183,8 @@ function hostedValidate<A>(operation: () => A): Effect.Effect<A, HostedFailure> 
  * (`stopped`). An idle server starts again on the next use; a stopped one only on renewal.
  */
 type DesiredState = "running" | "idle" | "stopped" | "deleted";
-type WakeReason = "create" | "message" | "restart" | "schedule";
+/** `last_wake_reason` stores `retention` as `schedule`: its D1 check has no other value. */
+type WakeReason = "create" | "message" | "restart" | "schedule" | "retention";
 
 interface HostedServerRow {
   server_id: string;
@@ -203,12 +240,16 @@ export interface HostedServerServiceOptions {
   analytics?: AccountAnalytics;
   /** The developer key that the request sent. It lets the account create servers when it is the Worker's key. */
   developerKey?: string | null;
+  /** Keeps the Worker alive until work after the reply ends (`waitUntil`). */
+  schedule?: (work: Effect.Effect<void>) => void;
 }
 
 /** Where Stripe sends the user back after Checkout. */
 export interface CheckoutReturn {
   target: BillingReturnTarget;
   origin: string;
+  /** Where the journey started in the app. Only analytics reads it. */
+  entryPoint?: HostedServerEntryPoint;
 }
 
 export interface HostedServerTickResult {
@@ -221,6 +262,7 @@ export interface HostedServerTickResult {
   resized: number;
   idle: number;
   scheduled: number;
+  retained: number;
   failed: number;
 }
 
@@ -233,6 +275,7 @@ class HostedServerDependencies extends Context.Service<
     now: () => number;
     removeHost: ((ownerUserId: string, hostId: string) => Effect.Effect<void, RemoteFailure>) | null;
     analytics: AccountAnalytics;
+    schedule: (work: Effect.Effect<void>) => void;
   }
 >()("auth-api/HostedServerService/Dependencies") {}
 
@@ -282,6 +325,7 @@ export class HostedServerService {
       now: this.#now,
       removeHost,
       analytics: this.#analytics,
+      schedule: options.schedule ?? ((work) => void Effect.runFork(work)),
     });
   }
 
@@ -341,11 +385,15 @@ export class HostedServerService {
     function* (
       this: HostedServerService,
       user: AuthUser,
-      input: { name: unknown; plan: unknown; interval: unknown; currency: unknown },
+      input: { name: unknown; plan: unknown; interval: unknown; currency: unknown; entryPoint?: unknown },
       idempotencyKeyHeader: string | null,
-      returnTo: CheckoutReturn,
+      checkoutReturn: CheckoutReturn,
     ): Effect.fn.Return<HostedServerCheckout, HostedFailure, HostedServerDependencies> {
       const dependencies = yield* HostedServerDependencies;
+      // An older client sends no entry point, and an unknown one is left out. It never fails the request.
+      const returnTo: CheckoutReturn = isOneOf(HOSTED_SERVER_ENTRY_POINTS, input.entryPoint)
+        ? { ...checkoutReturn, entryPoint: input.entryPoint }
+        : checkoutReturn;
       const { billing } = yield* hostedValidate(() => this.#requireAvailable(user));
       const idempotencyKey = idempotencyKeyHeader?.trim() ?? "";
       if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/u.test(idempotencyKey)) {
@@ -367,6 +415,7 @@ export class HostedServerService {
           .first<HostedServerRow>(),
       );
       if (previous) return yield* this.#checkout(previous, user, billing, returnTo);
+      if (SOLD_OUT_PLANS.has(input.plan)) return yield* planSoldOut();
       const unpaid = yield* hostedCall(() =>
         dependencies.database
           .prepare(
@@ -450,7 +499,14 @@ export class HostedServerService {
           .first<HostedServerRow>(),
       );
       if (!row) return yield* notFound();
-      return yield* this.#checkout(row, user, billing, returnTo);
+      // A second page for a server that still waits for its first payment continues the same purchase.
+      const resumed = row.observed_state === "awaiting_payment" && row.desired_state === "running";
+      return yield* this.#checkout(
+        row,
+        user,
+        billing,
+        resumed ? { ...returnTo, entryPoint: "checkout_resume" } : returnTo,
+      );
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
@@ -746,7 +802,6 @@ export class HostedServerService {
       user: AuthUser,
       serverId: string,
     ): Effect.fn.Return<HostedServerSummary, HostedFailure, HostedServerDependencies> {
-      const dependencies = yield* HostedServerDependencies;
       const row = yield* this.#requireUsableRow(user, serverId);
       if (row.desired_state === "stopped") {
         return yield* new HostedServerServiceError(
@@ -755,28 +810,118 @@ export class HostedServerService {
           "The plan of this server ended. Renew it to start the server.",
         );
       }
-      if (row.desired_state === "idle") {
-        const now = dependencies.now();
-        // The start counts as use, so the server does not stop again before its first client connects.
-        yield* hostedCall(() =>
-          dependencies.database
-            .prepare(
-              `UPDATE hosted_servers SET desired_state = 'running', last_active_at = ?, updated_at = ?
-           WHERE server_id = ? AND desired_state = 'idle'`,
-            )
-            .bind(now, now, row.server_id)
-            .run(),
-        );
-        // A server that still stops starts again when the provider reports that it stopped.
-        yield* this.#wakeForClient(yield* this.#requireRow(serverId));
-      } else if (!(yield* this.#retrySetup(row))) {
-        yield* this.#wakeForClient(row);
-      }
+      yield* this.#startForUse(row);
       const current = yield* this.#requireRow(serverId);
       // A client asks for a start because it cannot reach the server. When the row says it runs, a lost
       // provider event can hide a stop, so the provider is asked.
       if (current.observed_state === "running" && current.provider_sandbox_id) yield* this.#refresh(current);
       return summary(yield* this.#requireRow(serverId));
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /**
+   * The owner or an admin restarts a server that runs but does not answer. boat stops the sandbox and saves the disk,
+   * and the restart after the stop (`#observe`) resumes it, as after a resize. A server that does not run
+   * starts as on a wake.
+   */
+  readonly restart = Effect.fn("HostedServerService.restart")(
+    function* (
+      this: HostedServerService,
+      user: AuthUser,
+      serverId: string,
+    ): Effect.fn.Return<HostedServerSummary, HostedFailure, HostedServerDependencies> {
+      const dependencies = yield* HostedServerDependencies;
+      const row = yield* this.#requireUsableRow(user, serverId, "admins");
+      if (row.desired_state === "stopped") {
+        return yield* new HostedServerServiceError(402, "plan_required", sourceText("error.billing.planRequired"));
+      }
+      const sandboxId = row.provider_sandbox_id;
+      const boat = dependencies.boat;
+      if (row.observed_state !== "running" || !sandboxId) {
+        yield* this.#startForUse(row);
+        return summary(yield* this.#requireRow(serverId));
+      }
+      if (!boat)
+        return yield* new HostedServerServiceError(503, "hosting_not_configured", "Hosting is not configured.");
+      // The restart counts as use, so a sleeping server runs again and does not stop before a client connects.
+      const now = dependencies.now();
+      const claimed = yield* hostedCall(() =>
+        dependencies.database
+          .prepare(
+            `UPDATE hosted_servers SET desired_state = 'running', observed_state = 'stopping', last_active_at = ?,
+           updated_at = ?
+         WHERE server_id = ? AND desired_state IN ('running', 'idle') AND observed_state = 'running'`,
+          )
+          .bind(now, now, serverId)
+          .run(),
+      );
+      if (claimed.meta.changes !== 1) return summary(yield* this.#requireRow(serverId));
+      yield* boat.stopSandbox(sandboxId).pipe(
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            // The sandbox did not stop, so a later restart must send the stop again.
+            yield* hostedCall(() =>
+              dependencies.database
+                .prepare(
+                  `UPDATE hosted_servers SET observed_state = 'running', updated_at = ?
+             WHERE server_id = ? AND observed_state = 'stopping'`,
+                )
+                .bind(dependencies.now(), serverId)
+                .run(),
+            );
+            if (!(error instanceof BoatApiError && error.status === 409)) return yield* error;
+            // 409: the sandbox cannot stop in its current state.
+            return yield* new HostedServerServiceError(
+              409,
+              "hosted_server_restart_busy",
+              sourceText("error.billing.restartBusy"),
+            );
+          }),
+        ),
+      );
+      return summary(yield* this.#requireRow(serverId));
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /**
+   * What Signal does with a Slack, Discord or Telegram event for a host with no `ingress` socket. Only
+   * signed Signal requests reach this, for the host of a linked route; no user is signed in. It changes
+   * nothing, so it answers before the platform's deadline; `startForRoute` starts the server.
+   */
+  readonly routeState = Effect.fn("HostedServerService.routeState")(
+    function* (
+      this: HostedServerService,
+      hostId: string,
+    ): Effect.fn.Return<RouteHostState, HostedFailure, HostedServerDependencies> {
+      const dependencies = yield* HostedServerDependencies;
+      const row = yield* hostedCall(() =>
+        dependencies.database
+          .prepare(`SELECT ${ROW_COLUMNS} FROM hosted_servers WHERE server_id = ? AND desired_state != 'deleted'`)
+          .bind(hostId)
+          .first<HostedServerRow>(),
+      );
+      if (!row) return "not_hosted";
+      // A plan that ended, or a server that was never paid, does not start.
+      if (row.desired_state === "stopped" || row.observed_state === "awaiting_payment") return "ended";
+      return row.desired_state === "idle" ? "sleeping" : "starting";
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /** Starts a hosted server for a connector event, as for a client. Signal does not wait for it. */
+  readonly startForRoute = Effect.fn("HostedServerService.startForRoute")(
+    function* (
+      this: HostedServerService,
+      hostId: string,
+    ): Effect.fn.Return<void, HostedFailure, HostedServerDependencies> {
+      const row = yield* this.#requireRow(hostId);
+      if (row.desired_state === "stopped" || row.desired_state === "deleted") return;
+      yield* this.#startForUse(row);
+      const current = yield* this.#requireRow(hostId);
+      // As for a client: the host has no socket, and a lost provider event can hide a stop.
+      if (current.observed_state === "running" && current.provider_sandbox_id) yield* this.#refresh(current);
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
@@ -965,6 +1110,7 @@ export class HostedServerService {
         resized: 0,
         idle: 0,
         scheduled: 0,
+        retained: 0,
         failed: 0,
       };
       yield* hostedCall(() =>
@@ -1104,6 +1250,25 @@ export class HostedServerService {
           .all<HostedServerRow>(),
       );
       result.scheduled = yield* run(scheduled.results, (row) => this.#wakeForSchedule(row, now));
+      // An idle server starts before boat deletes its disk. The stop comes after the last use, so the
+      // disk is never older than the last use. A disk older than 14 days is gone: boat refuses its resume
+      // with a 409, which `#resume` reads as a start in progress. The oldest change goes first, so a
+      // start that failed goes after the others.
+      if (new Date(now).getUTCMinutes() % RETENTION_WAKE_EVERY_MINUTES === 0) {
+        const expiring = yield* hostedCall(() =>
+          dependencies.database
+            .prepare(
+              `SELECT ${ROW_COLUMNS} FROM hosted_servers
+           WHERE desired_state = 'idle' AND observed_state = 'stopped' AND provider_sandbox_id IS NOT NULL
+             AND last_active_at > ? AND last_active_at <= ?
+             AND (deletion_scheduled_at IS NULL OR deletion_scheduled_at > ?)
+           ORDER BY updated_at LIMIT 1`,
+            )
+            .bind(now - RETENTION_DISK_KEPT_MS, now - RETENTION_WAKE_AFTER_MS, now)
+            .all<HostedServerRow>(),
+        );
+        result.retained = yield* run(expiring.results, (row) => this.#wakeForRetention(row, now));
+      }
       // A server that must stop and still runs: the first stop did not happen.
       const unstopped = yield* hostedCall(() =>
         dependencies.database
@@ -1127,12 +1292,27 @@ export class HostedServerService {
           .all<HostedServerRow>(),
       );
       result.restarted = yield* run(stopped.results, (row) => this.#wake(row, "restart"));
+      // A start that boat refused with a rate limit, when no client wake sent it again and its delay ended
+      // (`rateLimitRetryAt`). A provider refresh would see the stopped sandbox and mark the server `stopped`.
+      const rateLimited = yield* hostedCall(() =>
+        dependencies.database
+          .prepare(
+            `SELECT ${ROW_COLUMNS} FROM hosted_servers
+         WHERE desired_state = 'running' AND provider_sandbox_id IS NOT NULL AND observed_state = 'waking'
+           AND observed_error = 'provider_limit'
+           AND updated_at + MIN(?, MAX(?, updated_at - COALESCE(provider_event_at, updated_at))) <= ? LIMIT ?`,
+          )
+          .bind(RATE_LIMIT_RETRY_MAX_MS, RATE_LIMIT_RETRY_MIN_MS, now, TICK_BATCH_SIZE)
+          .all<HostedServerRow>(),
+      );
+      result.restarted += yield* run(rateLimited.results, (row) => this.#wake(row, "restart"));
       const stuck = yield* hostedCall(() =>
         dependencies.database
           .prepare(
             `SELECT ${ROW_COLUMNS} FROM hosted_servers
          WHERE desired_state != 'deleted' AND provider_sandbox_id IS NOT NULL
-           AND observed_state IN ('starting', 'stopping', 'waking') AND updated_at <= ? LIMIT ?`,
+           AND observed_state IN ('starting', 'stopping', 'waking')
+           AND NOT (observed_state = 'waking' AND observed_error IS 'provider_limit') AND updated_at <= ? LIMIT ?`,
           )
           .bind(now - STUCK_AFTER_MS, TICK_BATCH_SIZE)
           .all<HostedServerRow>(),
@@ -1204,6 +1384,8 @@ export class HostedServerService {
     if (previous && (yield* billing.closeCheckout(previous).pipe(Effect.mapError(hostedFailure))) === "paid") {
       return { server: summary(yield* this.#requireRow(row.server_id)), checkoutUrl: null };
     }
+    // A server that has had no plan cannot buy a sold-out plan. A server whose plan ended can renew it.
+    if (awaiting && SOLD_OUT_PLANS.has(row.plan)) return yield* planSoldOut();
     const session = yield* billing
       .createCheckout({
         user: { id: user.id, email: user.email },
@@ -1213,6 +1395,7 @@ export class HostedServerService {
         currency: row.currency,
         target: returnTo.target,
         origin: returnTo.origin,
+        ...(returnTo.entryPoint ? { entryPoint: returnTo.entryPoint } : {}),
       })
       .pipe(Effect.mapError(hostedFailure));
     // A new plan choice changes the key of an unpaid server, so a page for the plan before it is not stored.
@@ -1769,7 +1952,57 @@ export class HostedServerService {
         .run(),
     );
     if (started.meta.changes !== 1) return;
-    yield* this.#wake(yield* this.#requireRow(row.server_id), "schedule");
+    yield* this.#wakeFromCron(row, "schedule");
+  });
+
+  /** The start counts as use, so with no client the idle stop comes after 15 minutes and saves the disk. */
+  readonly #wakeForRetention = Effect.fn("HostedServerService.wakeForRetention")(function* (
+    this: HostedServerService,
+    row: HostedServerRow,
+    now: number,
+  ): Effect.fn.Return<void, HostedFailure, HostedServerDependencies> {
+    const dependencies = yield* HostedServerDependencies;
+    const started = yield* hostedCall(() =>
+      dependencies.database
+        .prepare(
+          `UPDATE hosted_servers SET desired_state = 'running', last_active_at = ?, updated_at = ?
+         WHERE server_id = ? AND desired_state = 'idle' AND observed_state = 'stopped' AND last_active_at = ?`,
+        )
+        .bind(now, now, row.server_id, row.last_active_at)
+        .run(),
+    );
+    if (started.meta.changes !== 1) return;
+    yield* this.#wakeFromCron(row, "retention");
+  });
+
+  /**
+   * Starts an idle server for the cron. No client comes to start it again, and no cron path starts a
+   * server in `error`. After a refused start (a boat fault, or a 4xx such as `billing_required`) the
+   * server sleeps with its last use, so the retention wake tries again before boat deletes the disk.
+   * A 409 or 429 leaves the server `waking`, not `error`. A 404 keeps the error: the sandbox is gone.
+   */
+  readonly #wakeFromCron = Effect.fn("HostedServerService.wakeFromCron")(function* (
+    this: HostedServerService,
+    row: HostedServerRow,
+    reason: "schedule" | "retention",
+  ): Effect.fn.Return<void, HostedFailure, HostedServerDependencies> {
+    const dependencies = yield* HostedServerDependencies;
+    const woken = yield* Effect.result(this.#wake(yield* this.#requireRow(row.server_id), reason));
+    if (Result.isSuccess(woken)) return;
+    const error = woken.failure;
+    if (!(error instanceof BoatApiError && error.status === 404)) {
+      yield* hostedCall(() =>
+        dependencies.database
+          .prepare(
+            `UPDATE hosted_servers SET desired_state = 'idle', observed_state = 'stopped', observed_error = NULL,
+             last_active_at = ?, updated_at = ?
+           WHERE server_id = ? AND desired_state = 'running' AND observed_state = 'error'`,
+          )
+          .bind(row.last_active_at, dependencies.now(), row.server_id)
+          .run(),
+      );
+    }
+    return yield* error;
   });
 
   /** Moves the boat stop time of a server in use, so boat does not stop it. */
@@ -1864,6 +2097,31 @@ export class HostedServerService {
     );
   });
 
+  /** Starts a server that a client or a connector event needs. Its plan did not end. */
+  readonly #startForUse = Effect.fn("HostedServerService.startForUse")(function* (
+    this: HostedServerService,
+    row: HostedServerRow,
+  ): Effect.fn.Return<void, HostedFailure, HostedServerDependencies> {
+    const dependencies = yield* HostedServerDependencies;
+    if (row.desired_state === "idle") {
+      const now = dependencies.now();
+      // The start counts as use, so the server does not stop again before its first client connects.
+      yield* hostedCall(() =>
+        dependencies.database
+          .prepare(
+            `UPDATE hosted_servers SET desired_state = 'running', last_active_at = ?, updated_at = ?
+           WHERE server_id = ? AND desired_state = 'idle'`,
+          )
+          .bind(now, now, row.server_id)
+          .run(),
+      );
+      // A server that still stops starts again when the provider reports that it stopped.
+      yield* this.#wakeForClient(yield* this.#requireRow(row.server_id));
+    } else if (!(yield* this.#retrySetup(row))) {
+      yield* this.#wakeForClient(row);
+    }
+  });
+
   /** The row keeps the reason of a failed resume, so the client gets it in the summary, not as a 500. */
   readonly #wakeForClient = Effect.fn("HostedServerService.wakeForClient")(function* (
     this: HostedServerService,
@@ -1887,8 +2145,15 @@ export class HostedServerService {
   ): Effect.fn.Return<void, HostedFailure, HostedServerDependencies> {
     const dependencies = yield* HostedServerDependencies;
     const now = dependencies.now();
+    const rateLimited = isRateLimitedStart(row);
+    if (rateLimited && now < rateLimitRetryAt(row)) return;
     // A stopping server starts again when the provider reports that it stopped.
-    if (row.observed_state !== "stopped" && !(row.observed_state === "error" && row.provider_sandbox_id)) return;
+    if (
+      !rateLimited &&
+      row.observed_state !== "stopped" &&
+      !(row.observed_state === "error" && row.provider_sandbox_id)
+    )
+      return;
     // A VM that never signed in, or whose session the owner revoked, has its claim in its env file. The
     // claim works again for this start.
     const secret = yield* this.#claimKey();
@@ -1897,16 +2162,21 @@ export class HostedServerService {
     const waking = yield* hostedCall(() =>
       dependencies.database
         .prepare(
-          `UPDATE hosted_servers SET observed_state = 'waking', observed_error = NULL,
-           last_wake_reason = ?, provider_event_at = ?, last_active_at = ?, lease_until = ?,
+          // A retry after a rate limit keeps the error, so clients still show it, and the reason and time of
+          // the wake, which set the next delay. Its `updated_at` check lets only one caller send the retry.
+          `UPDATE hosted_servers SET observed_state = 'waking', observed_error = ?,
+           last_wake_reason = CASE WHEN ? = 1 THEN last_wake_reason ELSE ? END, provider_event_at = ?,
+           last_active_at = ?, lease_until = ?,
            claim_token_hash = CASE WHEN ${CLAIM_OPEN_SQL} THEN ? ELSE claim_token_hash END,
            claim_expires_at = CASE WHEN ${CLAIM_OPEN_SQL} THEN ? ELSE claim_expires_at END,
            updated_at = ?
-         WHERE server_id = ? AND observed_state = ? AND desired_state = 'running'`,
+         WHERE server_id = ? AND observed_state = ? AND desired_state = 'running' AND (? = 0 OR updated_at = ?)`,
         )
         .bind(
-          reason,
-          now,
+          rateLimited ? row.observed_error : null,
+          rateLimited ? 1 : 0,
+          reason === "retention" ? "schedule" : reason,
+          rateLimited ? row.provider_event_at : now,
           now,
           now + LEASE_TTL_SECONDS * 1000,
           claimHash,
@@ -1914,11 +2184,13 @@ export class HostedServerService {
           now,
           row.server_id,
           row.observed_state,
+          rateLimited ? 1 : 0,
+          row.updated_at,
         )
         .run(),
     );
     if (waking.meta.changes !== 1) return;
-    if (reason !== "create") {
+    if (reason !== "create" && !rateLimited) {
       this.#track(row, { name: "hosted_server_action", action: "woken", plan: row.plan, size: row.size, reason });
     }
     yield* this.#resume(row);
@@ -1952,12 +2224,33 @@ export class HostedServerService {
         return yield* this.#resume({ ...row, pending_size: null });
       }
       // 409: the provider already resumes or runs it; the webhook or the cron reports the result. boat
-      // kept its old stop time, so the next activity sets a new one.
+      // kept its old stop time, so the next activity sets a new one. A rate limit no longer applies, so the
+      // cron reads the provider when the webhook does not come.
       if (error instanceof BoatApiError && error.status === 409) {
         yield* hostedCall(() =>
           dependencies.database
-            .prepare("UPDATE hosted_servers SET lease_until = NULL WHERE server_id = ?")
+            .prepare(
+              `UPDATE hosted_servers SET lease_until = NULL,
+               observed_error = CASE WHEN observed_state = 'waking' AND observed_error = 'provider_limit'
+                 THEN NULL ELSE observed_error END
+             WHERE server_id = ?`,
+            )
             .bind(row.server_id)
+            .run(),
+        );
+        return;
+      }
+      // 429: boat refuses starts for a short time. The server stays `waking`, so clients keep waiting, and
+      // the next client wake or the cron sends the start again after a delay (`rateLimitRetryAt`).
+      if (error instanceof BoatApiError && error.status === 429) {
+        console.warn("Hosted server start rate limited.", { serverId: row.server_id, error: safeErrorCode(error) });
+        yield* hostedCall(() =>
+          dependencies.database
+            .prepare(
+              `UPDATE hosted_servers SET observed_error = 'provider_limit', lease_until = NULL, updated_at = ?
+             WHERE server_id = ? AND observed_state = 'waking'`,
+            )
+            .bind(dependencies.now(), row.server_id)
             .run(),
         );
         return;
@@ -1973,6 +2266,17 @@ export class HostedServerService {
       );
       return yield* error;
     }
+    if (row.observed_error === "provider_limit") {
+      yield* hostedCall(() =>
+        dependencies.database
+          .prepare(
+            `UPDATE hosted_servers SET observed_error = NULL, updated_at = ?
+           WHERE server_id = ? AND observed_state = 'waking' AND observed_error = 'provider_limit'`,
+          )
+          .bind(dependencies.now(), row.server_id)
+          .run(),
+      );
+    }
     if (size) {
       yield* hostedCall(() =>
         dependencies.database
@@ -1984,6 +2288,8 @@ export class HostedServerService {
       );
       this.#track(row, { name: "hosted_server_action", action: "resized", plan: row.plan, size });
     }
+    // After the reply: the client gives the wake request 15 seconds, and the resume can use all of them.
+    if (operationResult2.success) dependencies.schedule(startAfterHeldResume(boat, row.server_id, sandboxId));
   });
 
   readonly #observe = Effect.fn("HostedServerService.observe")(function* (
@@ -2136,19 +2442,25 @@ export class HostedServerService {
     return { billing: this.#billing };
   }
 
-  /** A server that is not deleted, of which the user is the owner or an active member. */
+  /**
+   * A server that is not deleted, of which the user is the owner or an active member. With `admins`, the
+   * membership must also have the owner or the admin role.
+   */
   readonly #requireUsableRow = Effect.fn("HostedServerService.requireUsableRow")(function* (
     this: HostedServerService,
     user: AuthUser,
     serverId: string,
+    members: "all" | "admins" = "all",
   ): Effect.fn.Return<HostedServerRow, HostedFailure, HostedServerDependencies> {
     const dependencies = yield* HostedServerDependencies;
+    const roles = members === "admins" ? " AND m.role IN ('owner', 'admin')" : "";
     const row = yield* hostedCall(() =>
       dependencies.database
         .prepare(
           `SELECT ${ROW_COLUMNS} FROM hosted_servers h
          WHERE h.server_id = ? AND h.desired_state != 'deleted' AND (h.owner_user_id = ? OR EXISTS(
-           SELECT 1 FROM remote_memberships m WHERE m.host_id = h.server_id AND m.user_id = ? AND m.status = 'active'
+           SELECT 1 FROM remote_memberships m
+           WHERE m.host_id = h.server_id AND m.user_id = ? AND m.status = 'active'${roles}
          ))`,
         )
         .bind(serverId, user.id, user.id)
@@ -2228,7 +2540,7 @@ function hostedClaim(secret: string, serverId: string) {
   return hmacSha256(secret, `openbot-hosted-claim:v1:${serverId}`);
 }
 
-export function sandboxName(plan: BillingPlanId, email: string, serverId: string): string {
+function sandboxName(plan: BillingPlanId, email: string, serverId: string): string {
   const slug = (value: string) =>
     value
       .toLowerCase()
@@ -2283,6 +2595,37 @@ function providerError(error: unknown): HostedServerError {
   return "provider_error";
 }
 
+/** A start that boat refused with a rate limit (`#resume`). It waits for a retry. */
+function isRateLimitedStart(row: HostedServerRow): boolean {
+  return row.observed_state === "waking" && row.observed_error === "provider_limit";
+}
+
+function rateLimitRetryAt(row: HostedServerRow): number {
+  const waited = row.updated_at - (row.provider_event_at ?? row.updated_at);
+  return row.updated_at + Math.min(RATE_LIMIT_RETRY_MAX_MS, Math.max(RATE_LIMIT_RETRY_MIN_MS, waited));
+}
+
+/** A failure does not change the wake. OpenBot then stays stopped until the next stop and resume. */
+const startAfterHeldResume = Effect.fn("HostedServerService.startAfterHeldResume")(function* (
+  boat: BoatClient,
+  serverId: string,
+  sandboxId: string,
+) {
+  const result = yield* Effect.result(
+    boat.runCommand(sandboxId, HELD_RESUME_START_COMMAND, HELD_RESUME_START_TIMEOUT_SECONDS),
+  );
+  if (Result.isFailure(result)) {
+    console.warn("Hosted server start after a held resume failed.", {
+      serverId,
+      error: safeErrorCode(result.failure),
+    });
+  } else if (result.success.exitCode !== 0) {
+    console.warn("Hosted server start after a held resume failed.", { serverId, exitCode: result.success.exitCode });
+  } else if (result.success.stdout.trim() === "started") {
+    console.info("Hosted server started after a held resume.", { serverId });
+  }
+});
+
 function safeErrorCode(error: unknown): string {
   if (error instanceof BoatApiError) return `${error.status}:${error.code}`;
   if (error instanceof HostedServerServiceError || error instanceof BillingError) return error.code;
@@ -2313,6 +2656,10 @@ function notFound(): HostedServerServiceError {
 
 function invalidClaim(): HostedServerServiceError {
   return new HostedServerServiceError(401, "hosted_claim_invalid", "The server claim is invalid or used.");
+}
+
+function planSoldOut(): HostedServerServiceError {
+  return new HostedServerServiceError(409, "plan_sold_out", sourceText("error.billing.planSoldOut"));
 }
 
 function lifecycleFailure() {

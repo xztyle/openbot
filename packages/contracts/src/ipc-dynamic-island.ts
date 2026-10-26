@@ -12,7 +12,17 @@ export interface DynamicIslandPreference {
   widthPercent: number;
   /** The compact island height, as a percent of its default height. It never gets lower than a notch. */
   heightPercent: number;
+  /**
+   * The user's choice for each server, by server id: false hides the server's items from the island.
+   * A server with no choice uses `newServersVisible`. The choice is local to this computer.
+   */
+  serverVisibility: Record<string, boolean>;
+  /** Whether a server with no choice of its own, such as a server the user adds later, shows its items. */
+  newServersVisible: boolean;
 }
+
+/** The most server choices that a preference can hold. A user has far fewer servers. */
+export const DYNAMIC_ISLAND_SERVER_CHOICES_LIMIT = 256;
 
 /** Limits keep the island large enough to find and to click, whatever the stored value says. */
 export const DYNAMIC_ISLAND_SIZE_LIMITS = {
@@ -48,7 +58,19 @@ export const DEFAULT_DYNAMIC_ISLAND_PREFERENCE = {
   additionalDisplaysEnabled: true,
   widthPercent: 100,
   heightPercent: 100,
+  serverVisibility: {},
+  newServersVisible: true,
 } as const satisfies DynamicIslandPreference;
+
+/** Returns whether the island shows the items of a server. A muted server is hidden separately. */
+export function isDynamicIslandServerVisible(
+  preference: Pick<DynamicIslandPreference, "serverVisibility" | "newServersVisible">,
+  serverId: string,
+): boolean {
+  return Object.hasOwn(preference.serverVisibility, serverId)
+    ? preference.serverVisibility[serverId] === true
+    : preference.newServersVisible;
+}
 
 export interface DynamicIslandAgentIdentity {
   id: string;
@@ -190,7 +212,20 @@ export function isDynamicIslandPreference(value: unknown): value is DynamicIslan
     isBoolean(value.idleVisible) &&
     isBoolean(value.additionalDisplaysEnabled) &&
     isDynamicIslandSizePercent(value.widthPercent, DYNAMIC_ISLAND_SIZE_LIMITS.widthPercent) &&
-    isDynamicIslandSizePercent(value.heightPercent, DYNAMIC_ISLAND_SIZE_LIMITS.heightPercent)
+    isDynamicIslandSizePercent(value.heightPercent, DYNAMIC_ISLAND_SIZE_LIMITS.heightPercent) &&
+    isDynamicIslandServerVisibility(value.serverVisibility) &&
+    isBoolean(value.newServersVisible)
+  );
+}
+
+export function isDynamicIslandServerVisibility(value: unknown): value is Record<string, boolean> {
+  if (!isDynamicRecord(value)) return false;
+  const entries = Object.entries(value);
+  return (
+    entries.length <= DYNAMIC_ISLAND_SERVER_CHOICES_LIMIT &&
+    entries.every(
+      ([serverId, visible]) => serverId.length > 0 && serverId.length <= INPUT_LIMITS.identifier && isBoolean(visible),
+    )
   );
 }
 

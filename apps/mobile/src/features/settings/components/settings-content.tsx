@@ -1,5 +1,5 @@
 import { ListGroup, Typography } from "heroui-native";
-import { ChevronRight } from "lucide-react-native";
+import ChevronRight from "lucide-react-native/icons/chevron-right";
 import { Children, type PropsWithChildren, type ReactNode } from "react";
 import { View } from "react-native";
 import { useCSSVariable } from "uniwind";

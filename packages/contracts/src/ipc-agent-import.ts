@@ -8,12 +8,22 @@
  */
 
 import { INPUT_LIMITS } from "./input-limits";
-import { type AgentSummary, isAgentSummary } from "./ipc-agents";
+import { type ClientAgentSummary, isClientAgentSummary } from "./ipc-agents";
 import { isBoundedString, isIdentifier, isNullableBoundedString } from "./ipc-bounded-values";
 import { isBoolean, isDynamicRecord, isNumber, isString } from "./runtime-values";
 
 /** The Grok Bot page of the ready export agent. */
 export const GROK_BOT_EXPORT_URL = "https://x.ai/bot/gI0XdhhDYPJeyQaqQBC0O";
+
+/** The apps OpenBot ships an export skill for. Each is also the `source.app` its export writes. */
+export const AGENT_IMPORT_SKILL_SOURCES = ["grok-bot", "hermes-agent"] as const;
+export type AgentImportSkillSource = (typeof AGENT_IMPORT_SKILL_SOURCES)[number];
+
+/**
+ * The export skill in OpenBot's own repository, as Hermes installs it from GitHub with
+ * `/skills install`. The path is the skill folder on the default branch.
+ */
+export const HERMES_EXPORT_SKILL_ID = "nightly-labs/openbot/resources/agent-import/hermes-agent";
 
 export const AGENT_IMPORT_LIMITS = {
   archiveBytes: 500 * 1024 * 1024,
@@ -77,7 +87,7 @@ export interface AgentImportSkipped {
 }
 
 export interface AgentImportResult {
-  agents: AgentSummary[];
+  agents: ClientAgentSummary[];
   skipped: AgentImportSkipped[];
   channels: AgentImportChannel[];
   skippedChannels: AgentImportSkipped[];
@@ -97,6 +107,12 @@ function invalid(label: string): never {
 function record(value: unknown, label: string) {
   if (!isDynamicRecord(value)) invalid(label);
   return value;
+}
+
+export function parseAgentImportSkillSource(value: unknown): AgentImportSkillSource {
+  const source = AGENT_IMPORT_SKILL_SOURCES.find((entry) => entry === value);
+  if (!source) invalid("export skill");
+  return source;
 }
 
 export function isAgentImportKey(value: unknown): value is string {
@@ -163,7 +179,7 @@ function decodePreviewChannel(value: unknown): AgentImportPreviewChannel {
   };
 }
 
-function decodeSkipped(value: unknown, label: string): AgentImportSkipped[] {
+export function decodeAgentImportSkipped(value: unknown, label: string): AgentImportSkipped[] {
   if (!Array.isArray(value)) invalid("import result");
   return value.map((item): AgentImportSkipped => {
     const entry = record(item, label);
@@ -177,7 +193,7 @@ function decodeSkipped(value: unknown, label: string): AgentImportSkipped[] {
   });
 }
 
-function decodePreviewAgent(value: unknown): AgentImportPreviewAgent {
+export function decodeAgentImportPreviewAgent(value: unknown): AgentImportPreviewAgent {
   const agent = record(value, "imported agent");
   if (
     !isAgentImportKey(agent.key) ||
@@ -220,7 +236,7 @@ export function decodeAgentImportPreview(value: unknown): AgentImportPreview | n
     token: preview.token,
     sourceApp: preview.sourceApp,
     exportedAt: preview.exportedAt,
-    agents: preview.agents.map(decodePreviewAgent),
+    agents: preview.agents.map(decodeAgentImportPreviewAgent),
     channels: preview.channels.map(decodePreviewChannel),
     warnings: messages(preview.warnings, "import warnings"),
   };
@@ -228,7 +244,7 @@ export function decodeAgentImportPreview(value: unknown): AgentImportPreview | n
 
 export function decodeAgentImportResult(value: unknown): AgentImportResult {
   const result = record(value, "import result");
-  if (!Array.isArray(result.agents) || !result.agents.every(isAgentSummary)) invalid("import result");
+  if (!Array.isArray(result.agents) || !result.agents.every(isClientAgentSummary)) invalid("import result");
   if (!Array.isArray(result.channels)) invalid("import result");
   const channels = result.channels.map((item): AgentImportChannel => {
     const entry = record(item, "imported channel");
@@ -237,9 +253,9 @@ export function decodeAgentImportResult(value: unknown): AgentImportResult {
   });
   return {
     agents: result.agents,
-    skipped: decodeSkipped(result.skipped, "skipped agent"),
+    skipped: decodeAgentImportSkipped(result.skipped, "skipped agent"),
     channels,
-    skippedChannels: decodeSkipped(result.skippedChannels, "skipped channel"),
+    skippedChannels: decodeAgentImportSkipped(result.skippedChannels, "skipped channel"),
     warnings: messages(result.warnings, "import warnings"),
   };
 }
@@ -273,7 +289,7 @@ export function decodeRemoteAgentImportResult(value: unknown): RemoteAgentImport
 /** The remote result, with the new agents read from the host's agent list. */
 export function resolveRemoteAgentImportResult(
   result: RemoteAgentImportResult,
-  agents: readonly AgentSummary[],
+  agents: readonly ClientAgentSummary[],
 ): AgentImportResult {
   const ids = new Set(result.agents.map((agent) => agent.agentId));
   return { ...result, agents: agents.filter((agent) => ids.has(agent.id)) };

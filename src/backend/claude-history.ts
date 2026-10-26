@@ -5,6 +5,8 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Effect } from "effect";
+import { isTurnContextBlock } from "./agent/developer-instructions";
+import { claudeBridgedToolName } from "./agent/tool-catalog";
 import {
   isClaudeCompactionSummary,
   isClaudeInterruptMarker,
@@ -168,51 +170,70 @@ async function scanClaudeHistory(
   const indexDirectory = join(indexRoot, "openbot-claude-history");
   await mkdir(indexDirectory, { recursive: true });
   const indexPath = join(indexDirectory, `${sanitizeProjectPath(request.threadId)}.sqlite`);
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (signal.aborted) throw signal.reason;
-    const before = await fileIdentity(transcript);
-    if (!before) return;
-    const database = new DatabaseSync(indexPath);
-    try {
-      database.exec(SCHEMA);
-      const stored = readHistoryState(database);
-      const committedPrefixHash = stored
-        ? await prefixHash(transcript, Math.min(stored.size, PREFIX_FINGERPRINT_BYTES))
-        : null;
-      const committedScanHash =
-        stored && before.size >= stored.scanOffset ? await scanBoundaryHash(transcript, stored.scanOffset) : null;
-      const reset =
-        stored === null
-          ? true
-          : stored.dev !== before.dev ||
-            stored.ino !== before.ino ||
-            before.size < stored.size ||
-            before.size < stored.scanOffset ||
-            committedPrefixHash !== stored.prefixHash ||
-            committedScanHash !== stored.scanHash ||
-            (before.size === stored.scanOffset && before.mtimeMs !== stored.mtimeMs);
-      if (reset) resetIndex(database);
-      const startOffset = reset ? 0 : (stored?.scanOffset ?? 0);
-      const nextOffset = await buildIndex(transcript, database, startOffset, before.size, before, signal);
-      const after = await fileIdentity(transcript);
-      const afterCommittedPrefixHash = after
-        ? await prefixHash(transcript, Math.min(before.size, PREFIX_FINGERPRINT_BYTES))
-        : null;
-      if (!after || changed(before, after) || afterCommittedPrefixHash !== before.prefixHash) {
-        resetIndex(database);
-        continue;
+  await oneScanAtATime(indexPath, async () => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (signal.aborted) throw signal.reason;
+      const before = await fileIdentity(transcript);
+      if (!before) return;
+      const database = new DatabaseSync(indexPath);
+      try {
+        database.exec(SCHEMA);
+        const stored = readHistoryState(database);
+        const committedPrefixHash = stored
+          ? await prefixHash(transcript, Math.min(stored.size, PREFIX_FINGERPRINT_BYTES))
+          : null;
+        const committedScanHash =
+          stored && before.size >= stored.scanOffset ? await scanBoundaryHash(transcript, stored.scanOffset) : null;
+        const reset =
+          stored === null
+            ? true
+            : stored.dev !== before.dev ||
+              stored.ino !== before.ino ||
+              before.size < stored.size ||
+              before.size < stored.scanOffset ||
+              committedPrefixHash !== stored.prefixHash ||
+              committedScanHash !== stored.scanHash ||
+              (before.size === stored.scanOffset && before.mtimeMs !== stored.mtimeMs);
+        if (reset) resetIndex(database);
+        const startOffset = reset ? 0 : (stored?.scanOffset ?? 0);
+        const nextOffset = await buildIndex(transcript, database, startOffset, before.size, before, signal);
+        const after = await fileIdentity(transcript);
+        const afterCommittedPrefixHash = after
+          ? await prefixHash(transcript, Math.min(before.size, PREFIX_FINGERPRINT_BYTES))
+          : null;
+        if (!after || changed(before, after) || afterCommittedPrefixHash !== before.prefixHash) {
+          resetIndex(database);
+          continue;
+        }
+        writeHistoryState(database, after, nextOffset, await scanBoundaryHash(transcript, nextOffset));
+        await selectConversation(database, signal);
+        await populateTurnMetadata(database, transcript, request.items === "full", signal);
+        if (request.items === "none") await emitMetadata(database, consume, signal);
+        else await emitTurns(database, transcript, consume, signal);
+        return;
+      } finally {
+        database.close();
       }
-      writeHistoryState(database, after, nextOffset, await scanBoundaryHash(transcript, nextOffset));
-      await selectConversation(database, signal);
-      await populateTurnMetadata(database, transcript, request.items === "full", signal);
-      if (request.items === "none") await emitMetadata(database, consume, signal);
-      else await emitTurns(database, transcript, consume, signal);
-      return;
-    } finally {
-      database.close();
     }
+    throw new Error("Claude transcript changed while it was being read.");
+  });
+}
+
+/**
+ * The last scan of each index. A scan holds a write transaction while it awaits transcript reads, so
+ * a second scan of the same session waits for it and does not fail with "database is locked".
+ */
+const indexScans = new Map<string, Promise<unknown>>();
+
+async function oneScanAtATime(indexPath: string, scan: () => Promise<void>): Promise<void> {
+  const current = (indexScans.get(indexPath) ?? Promise.resolve()).then(scan);
+  const settled = current.catch(() => undefined);
+  indexScans.set(indexPath, settled);
+  try {
+    await current;
+  } finally {
+    if (indexScans.get(indexPath) === settled) indexScans.delete(indexPath);
   }
-  throw new Error("Claude transcript changed while it was being read.");
 }
 
 async function buildIndex(
@@ -387,6 +408,17 @@ function resetIndex(database: DatabaseSync): void {
 }
 
 async function selectConversation(database: DatabaseSync, signal: AbortSignal): Promise<void> {
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    await writeSelectedConversation(database, signal);
+    database.exec("COMMIT");
+  } catch (cause) {
+    database.exec("ROLLBACK");
+    throw cause;
+  }
+}
+
+async function writeSelectedConversation(database: DatabaseSync, signal: AbortSignal): Promise<void> {
   const updateParent = database.prepare("UPDATE entries SET parent_uuid = ? WHERE uuid = ?");
   const existsById = database.prepare("SELECT 1 FROM entries WHERE uuid = ?");
   for (const raw of database
@@ -950,7 +982,13 @@ function messageText(message: unknown): string {
   if (!Array.isArray(message.content)) return "";
   return message.content
     .filter(isRecord)
-    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .filter(
+      (block) =>
+        block.type === "text" &&
+        typeof block.text === "string" &&
+        // OpenBot's memory block is not text that the user wrote.
+        !(message.role === "user" && isTurnContextBlock(block.text)),
+    )
     .map((block) => String(block.text))
     .join("\n");
 }
@@ -984,7 +1022,7 @@ function messageToolCalls(message: unknown): Array<{ id: string; name: string }>
   return message.content.filter(isRecord).flatMap((block) => {
     const id = getString(block, "id");
     const name = getString(block, "name");
-    return block.type === "tool_use" && id && name ? [{ id, name }] : [];
+    return block.type === "tool_use" && id && name ? [{ id, name: claudeBridgedToolName(name, block.input) }] : [];
   });
 }
 

@@ -99,7 +99,7 @@ function inlineHtml(line: string): string {
           (_match, a: string | undefined, b: string | undefined) => `<b>${a ?? b}</b>`,
         )
         .replace(/(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])/gu, "<i>$1</i>")
-        .replace(/(?<![\w_])_(?!\s)(.+?)(?<!\s)_(?![\w_])/gu, "<i>$1</i>")
+        .replace(/(?<![\p{L}\p{N}\p{M}_])_(?!\s)(.+?)(?<!\s)_(?![\p{L}\p{N}\p{M}_])/gu, "<i>$1</i>")
         .replace(/~~(.+?)~~/gu, "<s>$1</s>")
         .replace(/(\d+)/gu, (_match, index: string) => links[Number(index)] ?? "");
     })

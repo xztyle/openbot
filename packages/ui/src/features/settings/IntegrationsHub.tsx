@@ -28,7 +28,8 @@ export interface IntegrationsHubRow {
   summary: string;
   /** The agents that use the integration, when it belongs to some agents and not to all. */
   agents?: IntegrationAgent[] | undefined;
-  onOpen: () => void;
+  /** Absent for an integration that cannot be set up here: the row only shows its status. */
+  onOpen?: (() => void) | undefined;
 }
 
 const FACES = 4;
@@ -36,15 +37,25 @@ const FACES = 4;
 /**
  * Server settings > Connectors: one quiet row per integration. The whole row opens its page. A row
  * that is set up sorts into the first section with its status; the others wait below with Set up.
+ * An integration that is not available here waits below with its status and no action.
  */
-export function IntegrationsHub(props: { rows: IntegrationsHubRow[] }) {
+export function IntegrationsHub(props: {
+  rows: IntegrationsHubRow[];
+  /** The joined server's name, when the integrations are that server's and not this computer's. */
+  hostName?: string | undefined;
+}) {
   const { t } = useText();
-  const active = () => props.rows.filter((row) => row.status !== "idle");
-  const idle = () => props.rows.filter((row) => row.status === "idle");
+  const waits = (row: IntegrationsHubRow) => row.status === "idle" || row.status === "unavailable";
+  const active = () => props.rows.filter((row) => !waits(row));
+  const idle = () => props.rows.filter(waits);
   return (
     <div class="integrations-hub">
       <Show when={active().length > 0}>
-        <SettingsSection title={t("connector.hub.onThisComputer")}>
+        <SettingsSection
+          title={
+            props.hostName ? t("connector.hub.onHost", { host: props.hostName }) : t("connector.hub.onThisComputer")
+          }
+        >
           <ItemGroup class="settings-modal-card">
             <For each={active()}>{(row) => <HubRow row={row} />}</For>
           </ItemGroup>
@@ -65,14 +76,18 @@ function HubRow(props: { row: IntegrationsHubRow }) {
   const { t } = useText();
   return (
     <Item class="settings-modal-row integrations-hub-row" data-status={props.row.status}>
-      <Button
-        type="button"
-        variant="ghost"
-        class="integrations-hub-hitarea"
-        aria-label={t("connector.hub.open", { name: props.row.name })}
-        data-cuelume-tap="navigate"
-        onClick={() => props.row.onOpen()}
-      />
+      <Show when={props.row.onOpen}>
+        {(open) => (
+          <Button
+            type="button"
+            variant="ghost"
+            class="integrations-hub-hitarea"
+            aria-label={t("connector.hub.open", { name: props.row.name })}
+            data-cuelume-tap="navigate"
+            onClick={() => open()()}
+          />
+        )}
+      </Show>
       <ItemMedia>
         <LogoTile>{props.row.logo}</LogoTile>
       </ItemMedia>
@@ -91,13 +106,17 @@ function HubRow(props: { row: IntegrationsHubRow }) {
         <Show when={props.row.agents?.length ? props.row.agents : undefined}>
           {(agents) => <FaceStack agents={agents()} />}
         </Show>
-        <Show
-          when={props.row.status === "idle"}
-          fallback={<ChevronRight class="integrations-hub-chevron" aria-hidden="true" />}
-        >
-          <Button type="button" size="sm" onClick={() => props.row.onOpen()}>
-            {t("connector.hub.setUp")}
-          </Button>
+        <Show when={props.row.onOpen}>
+          {(open) => (
+            <Show
+              when={props.row.status === "idle"}
+              fallback={<ChevronRight class="integrations-hub-chevron" aria-hidden="true" />}
+            >
+              <Button type="button" size="sm" onClick={() => open()()}>
+                {t("connector.hub.setUp")}
+              </Button>
+            </Show>
+          )}
         </Show>
       </ItemActions>
     </Item>

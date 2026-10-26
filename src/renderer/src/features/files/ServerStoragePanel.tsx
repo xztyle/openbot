@@ -1,3 +1,4 @@
+import { LOCAL_SERVER_ID } from "@openbot/contracts/ipc";
 import type { AgentProfile } from "@openbot/ui/data";
 import { StorageOverview } from "@openbot/ui/features/files/StorageOverview";
 import { createEffect, createSignal, untrack } from "solid-js";
@@ -42,6 +43,45 @@ export function ServerStoragePanel(props: ServerStorageOptions & { serverId: str
     },
   );
 
+  // Only this computer: a server removes its own old versions, and its store is not reachable here.
+  const runtimes = () => {
+    const { getOldRuntimeVersions, removeOldRuntimeVersions } = calls().storage;
+    return props.serverId === LOCAL_SERVER_ID && getOldRuntimeVersions && removeOldRuntimeVersions
+      ? { getOldRuntimeVersions, removeOldRuntimeVersions }
+      : undefined;
+  };
+  const [oldRuntimeBytes, setOldRuntimeBytes] = createSignal(0);
+  // Read again after each scan, so "Measure again" and a removal both show the new size.
+  createEffect(
+    () => [storage.state.usage, runtimes()] as const,
+    ([scan, port]) => {
+      if (!scan || !port) return;
+      let current = true;
+      port
+        .getOldRuntimeVersions()
+        .then((old) => {
+          if (current) setOldRuntimeBytes(old.bytes);
+        })
+        // Hide the row rather than show an old size; the storage read reports its own failures.
+        .catch(() => {
+          if (current) setOldRuntimeBytes(0);
+        });
+      return () => {
+        current = false;
+      };
+    },
+  );
+
+  async function removeOldRuntimes(): Promise<void> {
+    const port = runtimes();
+    if (!port) return;
+    try {
+      setOldRuntimeBytes((await port.removeOldRuntimeVersions()).bytes);
+    } finally {
+      await storage.refresh(true);
+    }
+  }
+
   const usage = () => storage.state.usage;
 
   return (
@@ -64,6 +104,8 @@ export function ServerStoragePanel(props: ServerStorageOptions & { serverId: str
         if (agentId) props.onOpenAgent(agentId);
       }}
       onClear={storage.clear}
+      oldRuntimeBytes={runtimes() ? oldRuntimeBytes() : 0}
+      onRemoveOldRuntimes={removeOldRuntimes}
       // Settings has no preview pane, so a preview opens the file in its app.
       onPreviewFile={(file) => void storage.fileAction(file, "open", { onShowInChat: () => undefined })}
       onFileAction={(file, action) =>

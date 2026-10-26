@@ -1,10 +1,14 @@
+import { OPENBOT_CONTROL_PLANE_ORIGIN } from "@openbot/contracts/invite-links";
+import { parseMobileConnectUrl } from "@openbot/contracts/mobile-connect";
 import { Redirect, router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { openBrowserAsync } from "expo-web-browser";
 import { Button, Typography } from "heroui-native";
-import { Bot, UserPlus } from "lucide-react-native";
+import Bot from "lucide-react-native/icons/bot";
+import UserPlus from "lucide-react-native/icons/user-plus";
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
+import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
 import { redeemMobileConnectUrl } from "@/features/auth/api/mobile-auth";
 import { useMobileSession } from "@/features/auth/context/mobile-session-context";
 import { SignInScreen } from "@/features/auth/screens/sign-in-screen";
@@ -64,7 +68,12 @@ function IncomingLinkContent({ request }: { request?: string }) {
     setBusy(true);
     setError(null);
     try {
-      const next = await redeemMobileConnectUrl(link.url);
+      const url = link.url;
+      const next = await mobileAnalytics.operation(
+        "mobile_pairing_action",
+        { action: "redeem", entry_point: "link" },
+        () => redeemMobileConnectUrl(url),
+      );
       connect(next);
       forgetIncomingLink(request);
       void haptics.notification("success");
@@ -108,6 +117,10 @@ function IncomingLinkContent({ request }: { request?: string }) {
     );
   }
 
+  // A link can name any account service. Show one that is not ours before the phone connects to it.
+  const pairingService = link.kind === "pairing" && !session ? parseMobileConnectUrl(link.url)?.apiUrl : undefined;
+  const accountService = pairingService && pairingService !== OPENBOT_CONTROL_PLANE_ORIGIN ? pairingService : null;
+
   return (
     <View className="flex-1 justify-center gap-5 bg-background px-6 py-safe-offset-6">
       <Stack.Screen options={{ gestureEnabled: !busy, headerShown: false }} />
@@ -127,6 +140,11 @@ function IncomingLinkContent({ request }: { request?: string }) {
             ? t("mobile.link.plugin.description")
             : t("mobile.link.unavailable.description")}
       </Typography.Paragraph>
+      {accountService ? (
+        <Typography.Paragraph>
+          {t("mobile.link.pairing.accountService", { origin: accountService })}
+        </Typography.Paragraph>
+      ) : null}
       {error ? <Typography.Paragraph className="text-danger-text">{error}</Typography.Paragraph> : null}
       {link.kind === "pairing" && !session ? (
         <Button isDisabled={busy} onPress={() => void pair()}>

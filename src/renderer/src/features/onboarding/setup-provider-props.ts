@@ -46,8 +46,8 @@ export function useSetupProviderProps(local: () => boolean = () => true): SetupP
     get onCancelProviderDownload() {
       return downloads() ? providers.cancelProviderRuntimeDownload : undefined;
     },
-    get onConnectProvider() {
-      return local() ? providers.connectProvider : undefined;
+    get onCancelProviderSignIn() {
+      return local() ? providers.cancelProviderSignIn : undefined;
     },
     get onInstallProvider() {
       return local() ? providers.openProviderInstallGuide : undefined;
@@ -58,8 +58,8 @@ export function useSetupProviderProps(local: () => boolean = () => true): SetupP
     get providerKeys() {
       return downloads() ? providerKeyApi : undefined;
     },
-    get codeLogin() {
-      return local() ? providers.codeLogin : undefined;
+    get connection() {
+      return local() ? providers.connection : undefined;
     },
     get onRefreshProviders() {
       return guides() ? providers.refreshAgentProviders : undefined;
@@ -121,8 +121,8 @@ export function useHostProviderSettings(): () => HostProviderSettings | undefine
     get providerKeys() {
       return downloads() ? providers.providerKeys() : undefined;
     },
-    get codeLogin() {
-      return downloads() ? providers.codeLogin : undefined;
+    get connection() {
+      return downloads() ? providers.connection : undefined;
     },
   };
   return () => (providers.providerAdminServerId() ? settings : undefined);

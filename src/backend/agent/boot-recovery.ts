@@ -1,10 +1,10 @@
-import { Effect, Schema } from "effect";
+import { Cause, Effect, Schema } from "effect";
 import type { AgentProvider } from "../agent-client";
 import type { AgentStore } from "../agent-store";
 import { mergeConversationSnapshots } from "../conversation-snapshots";
-import { causeHelpers } from "../effect-boundary";
+import { causeHelpers, reportOriginalFailure } from "../effect-boundary";
 import { LineTooLongError } from "../jsonl";
-import type { MailboxStore } from "../mailbox-store";
+import type { DeliveryContext, MailboxStore } from "../mailbox-store";
 import { providerSync } from "../provider-client-effects";
 import { importProviderHistory } from "../provider-history-import";
 import type { ConversationRuntime } from "./conversation-runtime";
@@ -13,12 +13,19 @@ import { conversationContentSignature } from "./delivery-content";
 import { markIncompleteImageGeneration } from "./image-generation";
 import type { MailboxSync } from "./mailbox-sync";
 import type { ProviderRuntime } from "./provider-runtime";
-import { providerForAgent } from "./thread-items";
+import { stopRunningSubagents } from "./subagent-updates";
+import { isCodexMissingRollout, providerForAgent } from "./thread-items";
 import type { ThreadLifecycle } from "./thread-lifecycle";
+
+type UnresolvedDelivery = DeliveryContext["delivery"];
 
 export interface BootRecoveryHooks {
   executionThreads?(): Array<{ id: string; threadId: string }>;
+  /** The threads of the agents' tasks. Each runs in its own lane, beside the agent's own chat. */
+  taskThreads?(): Array<{ id: string; threadId: string }>;
   deliveryThreadId?(deliveryId: string): string | null;
+  /** Tells the external conversation of a delivery that the recovery settled it. */
+  deliverySettled?(deliveryId: string, terminal: "completed" | "failed" | "interrupted"): void;
   /**
    * Whether this routine delivery can have ended quiet: a scheduled run, or a run of a deleted
    * routine, whose record is gone. A Test, script or webhook run cannot.
@@ -73,8 +80,11 @@ export class BootRecovery {
    * no active turn, and `markTerminal` cannot correct a terminal status.
    */
   readonly #orphanedDeliveryIds = new Set<string>();
-  /** Do not read the same oversized history again after the provider restarts. */
-  readonly #oversizedHistory = new Set<string>();
+  /**
+   * Do not read again, after the provider restarts, a history that is too large or that the
+   * process has no rollout for.
+   */
+  readonly #unreadableHistory = new Set<string>();
 
   constructor(options: BootRecoveryOptions) {
     this.#store = options.store;
@@ -93,8 +103,15 @@ export class BootRecovery {
       ...agents,
       ...(this.#hooks.executionThreads?.() ?? []).flatMap((context) => {
         const agent = agents.find((item) => item.id === context.id);
-        if (!agent) return [];
+        // A thread that is also the agent's own chat is in the list already.
+        if (!agent || agent.threadId === context.threadId) return [];
         this.#conversation.registerExecutionThread(agent.id, context.threadId);
+        return [{ ...agent, threadId: context.threadId }];
+      }),
+      ...(this.#hooks.taskThreads?.() ?? []).flatMap((context) => {
+        const agent = agents.find((item) => item.id === context.id);
+        if (!agent || agent.threadId === context.threadId) return [];
+        this.#conversation.registerTaskThread(agent.id, context.threadId);
         return [{ ...agent, threadId: context.threadId }];
       }),
     ];
@@ -130,154 +147,186 @@ export class BootRecovery {
     for (const id of this.#orphanedDeliveryIds) {
       if (!unresolvedIds.has(id)) this.#orphanedDeliveryIds.delete(id);
     }
-    // An agent starts one turn at a time, so its unconfirmed deliveries are one batch. The turn names
-    // only the first of them as its client id, and the others ran in that same turn.
+    // Each lane of an agent (its own chat, or one task) starts one turn at a time, so the unconfirmed
+    // deliveries of a lane are one batch. The turn names only the first of them as its client id, and
+    // the others ran in that same turn.
+    const laneOf = (delivery: { id: string; recipientAgentId: string }) =>
+      `${delivery.recipientAgentId}\u0000${this.#mailbox.taskIdForDelivery(delivery.id) ?? ""}`;
     const unconfirmedStarts = new Map<string, Set<string>>();
     for (const { delivery } of unresolved) {
       if (delivery.status !== "starting" || delivery.turnId) continue;
-      const ids = unconfirmedStarts.get(delivery.recipientAgentId) ?? new Set<string>();
-      unconfirmedStarts.set(delivery.recipientAgentId, ids.add(delivery.id));
+      const ids = unconfirmedStarts.get(laneOf(delivery)) ?? new Set<string>();
+      unconfirmedStarts.set(laneOf(delivery), ids.add(delivery.id));
     }
-    for (const context of unresolved) {
-      const { delivery } = context;
+    for (const { delivery } of unresolved) {
       if (!this.#orphanedDeliveryIds.delete(delivery.id)) continue;
-      const interrupted = {
-        terminal: "interrupted" as const,
-        reason: "OpenBot restarted before this delivery reached a confirmed terminal state.",
-      };
-      const { terminal, reason } = yield* Effect.gen({ self: this }, function* () {
-        const { agent, client, session } = yield* recoveryStep(() => {
-          const agent = this.#store.list().find((candidate) => candidate.id === delivery.recipientAgentId);
-          const client = agent ? this.#providers.clientForAgent(agent) : null;
-          const threadId = this.#hooks.deliveryThreadId?.(delivery.id) ?? agent?.threadId;
-          const session =
-            agent && threadId ? this.#store.database.activeProviderSession(threadId, agent.provider) : null;
-          return { agent, client, session };
-        });
-        if (agent && session && client) {
-          const historyKey = `${session.provider}:${session.externalSessionId}`;
-          if (this.#oversizedHistory.has(historyKey)) return interrupted;
-          if (!client.readHistory) return interrupted;
-          const batchIds = delivery.turnId ? null : unconfirmedStarts.get(delivery.recipientAgentId);
-          let recovered: { turnId: string; status?: string } | undefined;
-          yield* client
-            .readHistory(
-              {
-                threadId: session.externalSessionId,
-                cwd: agent.workspacePath,
-                items: delivery.turnId ? "none" : "full",
-              },
-              (fragment) =>
-                providerSync(() => {
-                  const matches =
-                    fragment.turnId === delivery.turnId ||
-                    fragment.items.some(
-                      (item) =>
-                        item.type === "userMessage" &&
-                        !!item.clientId &&
-                        (item.clientId === delivery.id || batchIds?.has(item.clientId) === true),
-                    );
-                  if (matches) {
-                    recovered =
-                      fragment.status === undefined
-                        ? { turnId: fragment.turnId }
-                        : { turnId: fragment.turnId, status: fragment.status };
-                  }
-                  return !matches;
-                }),
-            )
-            .pipe(
-              Effect.tapError((failure) =>
-                Effect.sync(() => {
-                  if (containsLineTooLong(failure)) this.#oversizedHistory.add(historyKey);
-                }),
-              ),
-              toBootRecoveryFailed,
-            );
-          const turn = recovered ? { id: recovered.turnId, status: recovered.status } : undefined;
-          if (turn && !delivery.turnId) {
-            yield* this.#mailbox.markRunning(delivery.id, turn.id).pipe(toBootRecoveryFailed);
-          }
-          if (turn?.status === "completed") {
-            return { terminal: "completed" as const, reason: null };
-          } else if (turn?.status === "failed") {
-            return { terminal: "failed" as const, reason: "The recovered Codex turn failed." };
-          }
-        }
-        return interrupted;
-      }).pipe(Effect.catch(() => Effect.succeed(interrupted)));
-      // A failed provider read keeps the conservative interrupted result; never replay side effects.
-      yield* this.#mailbox.markTerminal(delivery.id, terminal, reason).pipe(toBootRecoveryFailed);
-      yield* recoveryStep(() => {
-        const agent = this.#store.list().find((candidate) => candidate.id === delivery.recipientAgentId);
-        const threadId = this.#hooks.deliveryThreadId?.(delivery.id) ?? agent?.threadId;
-        if (agent && threadId) {
-          const recoveryTurnId =
-            delivery.turnId ?? this.#store.database.readConversationRuntime(agent.id, threadId).activeTurnId;
-          const changedMessages = this.#store.database
-            .readConversationRecoveryMessages(agent.id, threadId, recoveryTurnId)
-            .filter((message) => message.turnId === recoveryTurnId && message.status === "streaming")
-            .map((message) => {
-              const changed = structuredClone(message);
-              changed.status = terminal;
-              markIncompleteImageGeneration(changed, terminal);
-              return changed;
-            });
-          const revision = this.#store.database.persistConversationChanges({
-            agentId: agent.id,
-            threadId,
-            activeTurnId: null,
-            changedMessages,
-            eventType: "turn.reconciled-after-restart",
-            detail: { turnId: delivery.turnId, status: terminal },
-          });
-          const snapshot = structuredClone(this.#conversation.ensureSnapshot(agent.id, threadId));
-          const changedById = new Map(changedMessages.map((message) => [message.id, message]));
-          snapshot.messages = snapshot.messages.map((message) => changedById.get(message.id) ?? message);
-          snapshot.activeTurnId = null;
-          snapshot.revision = revision;
-          // Clear the cached turn before queue listeners can read or change the agent.
-          this.#conversation.setSnapshot(agent.id, snapshot);
-          this.#conversation.publishConversation(snapshot);
-        }
-        this.#mailboxSync.emitQueue(delivery.recipientAgentId);
-      });
-      // The requester of this delivery hears how it ended: a restart sent no result on. Channel and
-      // external-chat work has no agent requester.
-      if (delivery.sender.kind === "agent" && !this.#hooks.deliveryThreadId?.(delivery.id)) {
-        yield* this.#followUp.noteEnded(
-          delivery,
-          terminal === "completed"
-            ? { kind: "restarted-completed" }
-            : terminal === "failed"
-              ? { kind: "failed", reason }
-              : { kind: "restarted" },
-        );
-      }
+      const batchIds = delivery.turnId ? null : (unconfirmedStarts.get(laneOf(delivery)) ?? null);
+      // One delivery that cannot settle must not leave the others of this pass running (#2214).
+      yield* this.#reconcileOrphanedDelivery(delivery, batchIds).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause)
+            : reportOriginalFailure(cause, (failure) => {
+                // Keep the mark, so the next provider readiness tries this delivery again.
+                this.#orphanedDeliveryIds.add(delivery.id);
+                this.#hooks.emitError("delivery_reconcile_failed", failure, delivery.recipientAgentId);
+              }),
+        ),
+      );
     }
     // A result that waited for answers can have lost its wave to the restart.
     yield* this.#followUp.settleAll();
   });
 
+  /** Asks the provider how one orphaned delivery ended, then records that end. */
+  readonly #reconcileOrphanedDelivery = Effect.fn("BootRecovery.reconcileOrphanedDelivery")(function* (
+    this: BootRecovery,
+    delivery: UnresolvedDelivery,
+    batchIds: ReadonlySet<string> | null,
+  ) {
+    const interrupted = {
+      terminal: "interrupted" as const,
+      reason: "OpenBot restarted before this delivery reached a confirmed terminal state.",
+    };
+    const { terminal, reason } = yield* Effect.gen({ self: this }, function* () {
+      const { agent, client, session } = yield* recoveryStep(() => {
+        const agent = this.#store.list().find((candidate) => candidate.id === delivery.recipientAgentId);
+        const client = agent ? this.#providers.clientForAgent(agent) : null;
+        const threadId = this.#hooks.deliveryThreadId?.(delivery.id) ?? agent?.threadId;
+        const session = agent && threadId ? this.#store.database.activeProviderSession(threadId, agent.provider) : null;
+        return { agent, client, session };
+      });
+      if (agent && session && client) {
+        const historyKey = `${session.provider}:${session.externalSessionId}`;
+        if (this.#unreadableHistory.has(historyKey)) return interrupted;
+        if (!client.readHistory) return interrupted;
+        let recovered: { turnId: string; status?: string } | undefined;
+        yield* client
+          .readHistory(
+            {
+              threadId: session.externalSessionId,
+              cwd: agent.workspacePath,
+              items: delivery.turnId ? "none" : "full",
+            },
+            (fragment) =>
+              providerSync(() => {
+                const matches =
+                  fragment.turnId === delivery.turnId ||
+                  fragment.items.some(
+                    (item) =>
+                      item.type === "userMessage" &&
+                      !!item.clientId &&
+                      (item.clientId === delivery.id || batchIds?.has(item.clientId) === true),
+                  );
+                if (matches) {
+                  recovered =
+                    fragment.status === undefined
+                      ? { turnId: fragment.turnId }
+                      : { turnId: fragment.turnId, status: fragment.status };
+                }
+                return !matches;
+              }),
+          )
+          .pipe(
+            Effect.tapError((failure) =>
+              Effect.sync(() => {
+                if (unreadableHistory(failure)) this.#unreadableHistory.add(historyKey);
+              }),
+            ),
+            toBootRecoveryFailed,
+          );
+        const turn = recovered ? { id: recovered.turnId, status: recovered.status } : undefined;
+        if (turn && !delivery.turnId) {
+          yield* this.#mailbox.markRunning(delivery.id, turn.id).pipe(toBootRecoveryFailed);
+        }
+        if (turn?.status === "completed") {
+          return { terminal: "completed" as const, reason: null };
+        } else if (turn?.status === "failed") {
+          return { terminal: "failed" as const, reason: "The recovered Codex turn failed." };
+        }
+      }
+      return interrupted;
+    }).pipe(Effect.catch(() => Effect.succeed(interrupted)));
+    // A failed provider read keeps the conservative interrupted result; never replay side effects.
+    yield* this.#mailbox.markTerminal(delivery.id, terminal, reason).pipe(toBootRecoveryFailed);
+    yield* recoveryStep(() => {
+      const agent = this.#store.list().find((candidate) => candidate.id === delivery.recipientAgentId);
+      const threadId = this.#hooks.deliveryThreadId?.(delivery.id) ?? agent?.threadId;
+      if (agent && threadId) {
+        const recoveryTurnId =
+          delivery.turnId ?? this.#store.database.readConversationRuntime(agent.id, threadId).activeTurnId;
+        const changedMessages = this.#store.database
+          .readConversationRecoveryMessages(agent.id, threadId, recoveryTurnId)
+          .filter((message) => message.turnId === recoveryTurnId && message.status === "streaming")
+          .map((message) => {
+            const changed = structuredClone(message);
+            changed.status = terminal;
+            markIncompleteImageGeneration(changed, terminal);
+            return changed;
+          });
+        const revision = this.#store.database.persistConversationChanges({
+          agentId: agent.id,
+          threadId,
+          activeTurnId: null,
+          changedMessages,
+          eventType: "turn.reconciled-after-restart",
+          detail: { turnId: delivery.turnId, status: terminal },
+        });
+        const snapshot = structuredClone(this.#conversation.ensureSnapshot(agent.id, threadId));
+        const changedById = new Map(changedMessages.map((message) => [message.id, message]));
+        snapshot.messages = snapshot.messages.map((message) => changedById.get(message.id) ?? message);
+        snapshot.activeTurnId = null;
+        snapshot.revision = revision;
+        // Clear the cached turn before queue listeners can read or change the agent.
+        this.#conversation.setSnapshot(agent.id, snapshot);
+        this.#conversation.publishConversation(snapshot);
+      }
+      this.#mailboxSync.emitQueue(delivery.recipientAgentId);
+      this.#hooks.deliverySettled?.(delivery.id, terminal);
+    });
+    // The requester of this delivery hears how it ended: a restart sent no result on. External-chat
+    // work has no agent requester.
+    if (delivery.sender.kind === "agent" && !this.#hooks.deliveryThreadId?.(delivery.id)) {
+      yield* this.#followUp.noteEnded(
+        delivery,
+        terminal === "completed"
+          ? { kind: "restarted-completed" }
+          : terminal === "failed"
+            ? { kind: "failed", reason }
+            : { kind: "restarted" },
+      );
+    }
+  });
+
   recoverPersistedTurns(): void {
     for (const { delivery } of this.#mailbox.unresolvedDeliveries()) this.#orphanedDeliveryIds.add(delivery.id);
+    const runningTurns = this.#store.database.readRunningTurnIds();
     for (const agent of this.threads()) {
       if (!agent.threadId) continue;
       const turnId = this.#store.database.readConversationRuntime(agent.id, agent.threadId).activeTurnId;
+      // A running turn that is not the thread's active turn has no writer left, and no turn of
+      // this process runs yet, so the recovery write below closes it too (#2214).
+      const staleTurns = (runningTurns.get(agent.threadId) ?? []).filter((candidate) => candidate !== turnId);
       const changedMessages = this.#store.database
         .readConversationRecoveryMessages(agent.id, agent.threadId, turnId)
         .flatMap((message) => {
           const changed = structuredClone(message);
-          if (changed.questionPrompt?.resolution === null) changed.questionPrompt.resolution = { status: "expired" };
+          if (changed.questionPrompt?.resolution === null) {
+            changed.questionPrompt.resolution = { status: "expired" };
+            // An ask_ui block is a question prompt; it freezes with its question.
+            if (changed.uiBlock?.state.status === "pending") changed.uiBlock.state = { status: "expired" };
+          }
           if (turnId && changed.turnId === turnId && changed.status === "streaming") {
             changed.status = "interrupted";
             markIncompleteImageGeneration(changed, "interrupted");
           }
-          return changed.questionPrompt?.resolution?.status === "expired" || changed.status === "interrupted"
+          // A background subagent ran in the provider process, which ended with the previous run.
+          const stopped = stopRunningSubagents(changed.subagents, new Date().toISOString(), { background: true });
+          return stopped || changed.questionPrompt?.resolution?.status === "expired" || changed.status === "interrupted"
             ? [changed]
             : [];
         });
-      const changed = turnId !== null || changedMessages.length > 0;
+      const changed = turnId !== null || changedMessages.length > 0 || staleTurns.length > 0;
       if (!changed) continue;
       const revision = this.#store.database.persistConversationChanges({
         agentId: agent.id,
@@ -300,13 +349,23 @@ export class BootRecovery {
     for (const agent of yield* recoveryStep(() => this.threads())) {
       const publicThreadId = agent.threadId;
       if (!publicThreadId) continue;
-      // Inactive sessions still own history after an upgrade or provider switch.
+      // Inactive sessions still own history after an upgrade or provider switch. A session that
+      // was retired before its last complete import has no new turns, so it is not read again.
       const active = this.#store.database.activeProviderSession(publicThreadId, agent.provider);
       for (const session of this.#store.database.listProviderSessions(publicThreadId)) {
-        const client = this.#providers.clientFor(session.provider);
+        if (session.state === "inactive") {
+          const imported = this.#store.database.providerHistoryImport(session.id);
+          if (imported?.state === "complete" && imported.updatedAt >= session.updatedAt) continue;
+        }
+        // The active session is in the folder of the agent's provider account. An account change
+        // retires the sessions, so a retired one can be in the folder of an earlier account.
+        const client =
+          session.externalSessionId === active?.externalSessionId
+            ? this.#providers.historyClientForAgent(agent)
+            : this.#providers.clientFor(session.provider);
         if (!client) continue;
         const historyKey = `${session.provider}:${session.externalSessionId}`;
-        if (this.#oversizedHistory.has(historyKey)) continue;
+        if (this.#unreadableHistory.has(historyKey)) continue;
         yield* Effect.gen({ self: this }, function* () {
           // The full parameters for the session the agent still runs on, and the id alone for the
           // retired ones: a client that loads a session to read it must not reopen a session that
@@ -325,7 +384,7 @@ export class BootRecovery {
             agentId: agent.id,
             publicThreadId,
             cwd: typeof params.cwd === "string" ? params.cwd : agent.workspacePath,
-            findDelivery: (deliveryId) => this.#mailbox.getDelivery(deliveryId),
+            findDelivery: (deliveryId) => this.#mailbox.deliveryForProviderMessage(agent.id, deliveryId),
             findMessageDelivery: (messageId) => this.#mailbox.deliveryForMessage(messageId, agent.id),
             quietRoutineDelivery: (deliveryId) => this.#hooks.quietRoutineDelivery(deliveryId),
           }).pipe(toBootRecoveryFailed);
@@ -333,13 +392,15 @@ export class BootRecovery {
         }).pipe(
           Effect.catch((failure) =>
             Effect.sync(() => {
-              if (containsLineTooLong(failure)) this.#oversizedHistory.add(historyKey);
+              if (unreadableHistory(failure)) this.#unreadableHistory.add(historyKey);
               try {
                 this.#refreshBackfilledConversation(agent.id, publicThreadId);
               } catch (refreshFailure) {
                 this.#hooks.emitError("provider_history_backfill_pending", refreshFailure, agent.id);
               }
-              this.#hooks.emitError("provider_history_backfill_pending", failure.cause, agent.id);
+              // No rollout means no history to import, so it is not an error to show.
+              if (!containsCause(failure, isCodexMissingRollout))
+                this.#hooks.emitError("provider_history_backfill_pending", failure.cause, agent.id);
             }),
           ),
         );
@@ -372,12 +433,16 @@ class BootRecoveryFailed extends Schema.TaggedError<BootRecoveryFailed>()("BootR
 
 const { sync: recoveryStep, rewrap: toBootRecoveryFailed } = causeHelpers(BootRecoveryFailed);
 
-function containsLineTooLong(value: unknown): boolean {
+function unreadableHistory(failure: unknown): boolean {
+  return containsCause(failure, (cause) => cause instanceof LineTooLongError || isCodexMissingRollout(cause));
+}
+
+function containsCause(value: unknown, matches: (cause: unknown) => boolean): boolean {
   const seen = new Set<unknown>();
   let current = value;
   while (current && (typeof current === "object" || typeof current === "function") && !seen.has(current)) {
     seen.add(current);
-    if (current instanceof LineTooLongError) return true;
+    if (matches(current)) return true;
     current = "cause" in current && typeof current === "object" ? current.cause : undefined;
   }
   return false;

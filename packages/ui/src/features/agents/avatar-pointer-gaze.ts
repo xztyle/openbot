@@ -74,7 +74,9 @@ export function createPointerGaze(): PointerGaze {
     last = time;
     const ease = 1 - Math.exp(-step * FOLLOW_RATE);
     const at = pointer;
-    const box = element?.getBoundingClientRect();
+    // Measure only when there is a pointer to look at. Each avatar draws after the one before it
+    // changed its SVG, so a measure here forces a layout per avatar on every frame.
+    const box = at === null ? undefined : element?.getBoundingClientRect();
     const known = at !== null && box !== undefined && box.width > 0;
     if (known) {
       const x = clampUnit((at.x - (box.left + box.width / 2)) / REACH);

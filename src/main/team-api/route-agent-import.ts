@@ -1,4 +1,4 @@
-import { parseApplyAgentImportInput } from "@openbot/contracts/ipc";
+import { canAdministerServer, parseApplyAgentImportInput } from "@openbot/contracts/ipc";
 import {
   AGENT_IMPORT_CAPABILITY,
   AGENT_IMPORT_ROUTES,
@@ -64,7 +64,7 @@ export async function routeAgentImport(
           actor: { id: member.id, name: member.name ?? "Team member" },
           // The service checks the zone and uses the host's own when it is not valid.
           ...(typeof body.timezone === "string" ? { timezone: body.timezone } : {}),
-          reviseSkills: member.role !== "member",
+          reviseSkills: canAdministerServer(member.role),
         }),
       ),
     409,
@@ -79,7 +79,7 @@ export async function routeAgentImport(
  * An export the host cannot read, or a closed token, is a sentence for the member, not a host fault.
  * A system error, such as a full disk, names host paths: it goes to the logger and answers 500.
  */
-async function answer<T>(run: () => Promise<T>, status: number): Promise<T> {
+export async function answer<T>(run: () => Promise<T>, status: number): Promise<T> {
   try {
     return await run();
   } catch (error) {

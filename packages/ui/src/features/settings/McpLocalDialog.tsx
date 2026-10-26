@@ -7,11 +7,11 @@
  * is not on yet, and the steps are what turns it on.
  */
 
+import type { McpLocalFlow } from "@openbot/contracts/mcp-connect-flows";
 import { Alert, AlertContent, AlertDescription, AlertIcon, Button, ExternalLink, Info, Text } from "@openbot/ui";
 import { createMemo, For, Show } from "solid-js";
 import { useText } from "../../text";
 import { createConnectRun, type McpConnectBaseProps, McpConnectShell } from "./McpConnectShell";
-import type { McpLocalFlow } from "./mcp-connect-auth";
 
 export interface McpLocalDialogProps extends McpConnectBaseProps {
   /** The steps that turn the server on, as the listing declares them. */
@@ -37,13 +37,7 @@ export function McpLocalDialog(props: McpLocalDialogProps) {
       description={t("mcp.local.description", { name: props.subject.name })}
       onSubmit={() => void attempt(async () => props.subject.config)}
       action={
-        <Button
-          class="mcp-connect-primary"
-          type="submit"
-          loading={busy()}
-          loadingLabel={t("common.connecting")}
-          disabled={busy()}
-        >
+        <Button class="mcp-connect-primary" type="submit" loading={busy()} loadingLabel={t("common.connecting")}>
           {state.phase === "failed" ? t("common.tryAgain") : t("mcp.connect.connect")}
         </Button>
       }

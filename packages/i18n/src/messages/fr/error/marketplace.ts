@@ -5,8 +5,8 @@ export const messages = {
   // Agent marketplace and agent link errors.
   "error.marketplace.timezoneInvalid": "Le fuseau horaire local n’est pas valide.",
   "error.marketplace.installedAgentMissing": "L’agent installé n’existe plus.",
-  "error.marketplace.differentListing": "Cet agent local a été installé à partir d’un autre agent du marketplace.",
-  "error.marketplace.marketplaceAvatarInvalid": "L’avatar de l’agent du marketplace n’est pas valide.",
+  "error.marketplace.differentListing": "Cet agent local a été installé à partir d’un autre agent de la marketplace.",
+  "error.marketplace.marketplaceAvatarInvalid": "L’avatar de l’agent de la marketplace n’est pas valide.",
   "error.marketplace.shareCardInvalid": "La carte de partage n’est pas valide.",
   "error.marketplace.cannotPublish": "Cet agent ne peut pas être publié.",
   "error.marketplace.templateName": {

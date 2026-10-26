@@ -17,10 +17,16 @@ export const messages = {
     "アップデートサービスから応答がありませんでした。数分後に OpenBot が自動でもう一度試します。",
   "error.update.checkNoRelease":
     "このプラットフォーム向けに公開されたアップデートは見つかりませんでした。数分後に OpenBot が自動でもう一度試します。",
+  "error.update.managedByNix": "この OpenBot のアップデートは Nix がインストールします。Nix で更新してください。",
   "error.update.managedByHost":
     "この Mac のアップデートはホストがインストールします。ホストのメンテナンスが実行されるまで、アップデートは準備済みのままです。",
   "error.update.siblingSession":
     "このアプリケーションから別の OpenBot セッションがまだ実行中です。先に他のすべての macOS ユーザーアカウントで OpenBot を終了してから、アップデートをもう一度インストールしてください。",
+  "error.update.siblingSessionSameAccount":
+    "このユーザーアカウントで別の OpenBot プロセスがまだ実行中です。それを終了してから、もう一度アップデートをインストールしてください。",
   "error.update.siblingCheckFailed":
     "他の OpenBot セッションを確認できませんでした。インストールする前にもう一度お試しください。",
+  "error.update.remoteDisabled": "このコンピューターでは、サーバー管理者からのアップデートはオフになっています。",
+  "error.update.restartStarted": "OpenBot はアップデートをインストールするため、すでに再起動しています。",
+  "error.update.alreadyRestarting": "OpenBot はすでに再起動しています。",
 } as const satisfies PartialTranslation<typeof source>;

@@ -1,7 +1,7 @@
 import type { QueueDelivery } from "@openbot/contracts/ipc";
 import { router, useLocalSearchParams } from "expo-router";
 import { Button, Typography } from "heroui-native";
-import { X } from "lucide-react-native";
+import X from "lucide-react-native/icons/x";
 import { useMemo } from "react";
 import { View } from "react-native";
 import { useCSSVariable } from "uniwind";

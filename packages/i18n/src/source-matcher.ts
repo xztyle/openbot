@@ -72,7 +72,8 @@ function literalPrefix(text: string): string {
 
 export function createSourceLocalizer(input: {
   source: MessageCatalog;
-  translations: Readonly<Record<TranslatedLocale, PartialTranslation<MessageCatalog>>>;
+  /** `undefined` while the language is not loaded. Its text then stays English and is not cached. */
+  translation: (locale: TranslatedLocale) => PartialTranslation<MessageCatalog> | undefined;
 }): SourceLocalizer {
   let byPrefix: Map<string, Template[]> | undefined;
   /** Templates whose literal prefix is shorter than a bucket. Every lookup tries these. */
@@ -110,7 +111,7 @@ export function createSourceLocalizer(input: {
     if (cached) return cached;
     const translate = createTranslate<MessageCatalog>({
       source: input.source,
-      translation: input.translations[locale],
+      translation: input.translation(locale),
       locale,
       sourceLocale: "en",
     });
@@ -139,7 +140,7 @@ export function createSourceLocalizer(input: {
 
   return {
     localize: (text, locale) => {
-      if (locale === "en") return text;
+      if (locale === "en" || !input.translation(locale)) return text;
       const cacheKey = `${locale}\u0000${text}`;
       const cached = cache.get(cacheKey);
       if (cached !== undefined) {

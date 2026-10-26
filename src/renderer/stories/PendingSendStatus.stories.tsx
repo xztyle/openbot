@@ -6,8 +6,8 @@ const meta = {
   title: "Conversation/Pending send status",
   component: PendingSendStatus,
   args: {
-    state: "sending",
-    error: null,
+    state: "failed",
+    error: "The host is offline.",
     retrySafe: true,
     canEdit: true,
     onRetry: fn(),
@@ -20,12 +20,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Sending: Story = {};
-
-/** A later message waits for the one before it, so the host keeps the order the user sent. */
-export const Waiting: Story = { args: { state: "waiting" } };
-
-export const Failed: Story = { args: { state: "failed", error: "The host is offline." } };
+export const Failed: Story = {};
 
 /** A queued message is open in the composer, so the failed message cannot join it. */
 export const FailedWhileEditingQueued: Story = {
@@ -36,6 +31,7 @@ export const FailedWhileEditingQueued: Story = {
 export const Held: Story = { args: { state: "held", onUndo: fn() } };
 
 /** An older host cannot drop a repeated send, so there is no Retry: the first one may have arrived. */
-export const Unconfirmed: Story = { args: { state: "failed", retrySafe: false } };
+export const Unconfirmed: Story = { args: { retrySafe: false, error: null } };
 
-export const UpdateRequired: Story = { args: { state: "failed", updateRequired: true } };
+/** The composer shows the update notice, so the row keeps only Edit and Dismiss. */
+export const UpdateRequired: Story = { args: { updateRequired: true } };

@@ -9,15 +9,26 @@ import {
 import { TEAM_PROTOCOL_V2_CHANNELS } from "@openbot/contracts/team-protocol/v2";
 import { sourceText } from "@openbot/i18n/source";
 import { encodeTeamWebRtcPayload, TeamWebRtcPayloadDecoder } from "./team-webrtc-framing";
+import { isPrivateNetworkCandidate, privateNetworkSdp } from "./team-webrtc-private-network";
 
 export interface BridgeCommand {
   commandId: string;
-  type: "connect" | "prepare-signal" | "disconnect" | "disconnect-peer" | "send" | "restart-ice" | "close";
+  type:
+    | "connect"
+    | "prepare-signal"
+    | "disconnect"
+    | "disconnect-peer"
+    | "send"
+    | "restart-ice"
+    | "set-private-network"
+    | "close";
   peerId: string;
   signalUrl?: string;
   token?: string;
   peer?: "host" | "client";
   iceTransportPolicy?: "all" | "relay";
+  /** For a host: devices connect only over a private network, with no STUN or TURN. */
+  privateNetwork?: boolean;
   channel?: "rpc" | "events" | "files" | "desktop";
   data?: string | ArrayBuffer;
 }
@@ -32,6 +43,8 @@ interface MainBridgeMessage {
   path?: "p2p" | "relay";
   code?: string;
   message?: string;
+  /** On `peer-error` and `signal-closed`: this peer does not connect its Signal socket again. */
+  terminal?: boolean;
   connectionId?: string | null;
   sessionId?: string;
   userId?: string;
@@ -56,6 +69,8 @@ interface PeerState {
   peerConnection: RTCPeerConnection | null;
   iceServers: RTCIceServer[];
   iceTransportPolicy: "all" | "relay";
+  /** A host and its device connections use only private network candidates and no ICE servers. */
+  privateNetwork: boolean;
   channels: Partial<Record<"rpc" | "events" | "files" | "desktop", RTCDataChannel>>;
   payloadDecoders: Partial<Record<"rpc" | "events" | "files" | "desktop", TeamWebRtcPayloadDecoder>>;
   reconnectAttempt: number;
@@ -84,6 +99,8 @@ const SIGNAL_RENEW_DELAY_MS = 8_000;
 const DISCONNECT_GRACE_MS = 15_000;
 
 const peers = new Map<string, PeerState>();
+// Main can replace a peer after an initial connection error. Keep the rate wait across that replacement.
+let signalRetryAt = 0;
 
 // A Signal socket opened while main waits for the ticket. Its TLS and WebSocket handshakes then do
 // not wait for the ticket. Nothing is sent on it before `connect` names the same address and adds
@@ -151,6 +168,7 @@ async function handleCommand(command: BridgeCommand): Promise<void> {
         peerConnection: null,
         iceServers: [],
         iceTransportPolicy: command.iceTransportPolicy,
+        privateNetwork: command.peer === "host" && command.privateNetwork === true,
         channels: {},
         payloadDecoders: {},
         reconnectAttempt: 0,
@@ -185,6 +203,10 @@ async function handleCommand(command: BridgeCommand): Promise<void> {
       await sendChannelPayload(state, channel, command.data);
     } else if (command.type === "restart-ice") {
       await restartIce(requirePeer(command.peerId));
+    } else if (command.type === "set-private-network") {
+      // A host that is not connected now reads the route again when it connects.
+      const host = peers.get(command.peerId);
+      if (host) setPrivateNetwork(host, command.privateNetwork === true);
     } else if (command.type === "close") {
       for (const peerId of [...preparedSignals.keys()]) dropPreparedSignal(peerId);
       for (const peerId of [...peers.keys()]) disconnect(peerId);
@@ -194,15 +216,25 @@ async function handleCommand(command: BridgeCommand): Promise<void> {
     post({
       type: "command-error",
       commandId: command.commandId,
-      message: error instanceof Error ? error.message : sourceText("error.remote.webRtcCommandFailed"),
+      message: commandFailureText(error),
     });
   }
+}
+
+// The text main gets for a failed command. Our own errors are plain `Error` objects and keep their
+// text, because main compares some of it, such as `error.remote.channelNotOpen`. A browser error
+// (a `DOMException` or a `TypeError`) has text that is not in the catalog, so it gets the fallback.
+function commandFailureText(error: unknown): string {
+  return error instanceof Error && error.name === "Error"
+    ? error.message
+    : sourceText("error.remote.webRtcCommandFailed");
 }
 
 function prepareSignal(peerId: string, signalUrl: string): void {
   // A peer that is already connecting has its own socket.
   if (peers.has(peerId)) return;
   dropPreparedSignal(peerId);
+  if (Date.now() < signalRetryAt) return;
   const socket = new WebSocket(signalUrl);
   const listeners = new AbortController();
   const prepared: PreparedSignal = {
@@ -216,14 +248,23 @@ function prepareSignal(peerId: string, signalUrl: string): void {
     if (preparedSignals.get(peerId) === prepared) dropPreparedSignal(peerId);
   };
   socket.addEventListener("open", () => post({ type: "signal-open", peerId }), { signal: listeners.signal });
+  let refusal: string | null = null;
   socket.addEventListener(
     "message",
-    () => {
+    (event) => {
       prepared.refused = true;
+      refusal = signalErrorCode(event.data) ?? refusal;
     },
     { signal: listeners.signal },
   );
-  socket.addEventListener("close", drop, { signal: listeners.signal });
+  socket.addEventListener(
+    "close",
+    (event) => {
+      holdSignalAfterClose(event.code, refusal);
+      drop();
+    },
+    { signal: listeners.signal },
+  );
   socket.addEventListener("error", drop, { signal: listeners.signal });
   preparedSignals.set(peerId, prepared);
 }
@@ -253,10 +294,14 @@ function connectSignal(state: PeerState, prepared: WebSocket | null = null): voi
     prepared?.close(1000, "Peer stopped");
     return;
   }
+  if (Date.now() < signalRetryAt) {
+    prepared?.close(1000, "Signal retry pending");
+    scheduleSignalReconnect(state);
+    return;
+  }
   const socket = prepared ?? new WebSocket(state.signalUrl);
   state.socket = socket;
   const sendHello = () => {
-    state.reconnectAttempt = 0;
     const hello: SignalClientMessage = {
       type: "hello",
       version: SIGNAL_PROTOCOL_VERSION,
@@ -273,32 +318,40 @@ function connectSignal(state: PeerState, prepared: WebSocket | null = null): voi
       post({ type: "signal-open", peerId: state.id });
       sendHello();
     });
+  // The error frame arrives before the close, but its chained handler can run after it.
+  let refusal: string | null = null;
   socket.addEventListener("message", (event) => {
     if (!isString(event.data)) return;
+    refusal = signalErrorCode(event.data) ?? refusal;
     state.signalChain = state.signalChain
       .then(async () => {
         if (state.closed || state.socket !== socket) return;
         let message: SignalServerMessage | null;
         try {
           message = decodeSignalServerMessage(JSON.parse(event.data));
-        } catch (error) {
-          return failSignalProtocol(state, error);
+        } catch {
+          return failSignalProtocol(state);
         }
         // A frame type this build does not know is a newer Signal service, not a broken connection.
         if (message) await handleSignal(state, message);
       })
       // Only what handling a frame this peer did read can throw -- an ICE or SDP operation the
       // browser refused. That is a connection failing, which a reconnect can still fix.
-      .catch((error) => failPeer(state, error));
+      .catch(() => failPeer(state));
   });
   socket.addEventListener("close", (event) => {
     if (state.socket !== socket) return;
     state.socket = null;
+    // Main logs a host's own socket that Signal or the network closed, so the journal shows why the
+    // host left Signal. A socket this peer closed follows an error that main already logged.
+    if (state.role === "host" && !state.closed)
+      post({ type: "signal-closed", peerId: state.id, code: String(event.code), terminal: event.code === 4000 });
     if (event.code === 4000) {
       disconnect(state.id);
       post({ type: "peer-disconnected", peerId: state.id });
       return;
     }
+    holdSignalAfterClose(event.code, refusal);
     if (!state.closed) scheduleSignalReconnect(state);
   });
   socket.addEventListener("error", () => socket.close());
@@ -307,15 +360,18 @@ function connectSignal(state: PeerState, prepared: WebSocket | null = null): voi
 
 async function handleSignal(state: PeerState, message: SignalServerMessage): Promise<void> {
   // Signal sends Slack, Discord, webhook and Telegram messages only to the main process's `ingress`
-  // socket, never to this peer.
+  // socket, never to this peer. `host-waiting` answers only a hello with `waitForHost`, which this
+  // peer does not send.
   if (
+    message.type === "host-waiting" ||
     message.type === "slack-delivery" ||
     message.type === "discord-session" ||
     message.type === "discord-delivery" ||
     message.type === "webhook-ready" ||
     message.type === "webhook-delivery" ||
     message.type === "telegram-delivery" ||
-    message.type === "telegram-call-result"
+    message.type === "telegram-call-result" ||
+    message.type === "queued-delivery"
   )
     return;
   if (message.type === "account-profile-changed") {
@@ -327,38 +383,45 @@ async function handleSignal(state: PeerState, message: SignalServerMessage): Pro
     return;
   }
   if (message.type === "error") {
+    if (message.code === "rate_limited") {
+      signalRetryAt = Date.now() + 60_000;
+      state.socket?.close();
+    }
+    // Signal sends `permission_denied` to a host for a relayed frame whose connection it already
+    // removed, such as a late ICE candidate after a phone reconnected. That connection is gone; the
+    // host registration that serves every other device is not.
+    const staleRelay = message.code === "permission_denied" && state.role === "host";
+    const terminal =
+      message.code === "session_revoked" ||
+      message.code === "authentication_required" ||
+      (message.code === "permission_denied" && !staleRelay) ||
+      message.code === "host_busy";
     post({
       type: "peer-error",
       peerId: state.id,
       code: message.code,
       message: message.message,
+      terminal,
     });
-    // Signal sends `permission_denied` to a host for a relayed frame whose connection it already
-    // removed, such as a late ICE candidate after a phone reconnected. That connection is gone; the
-    // host registration that serves every other device is not.
-    const staleRelay = message.code === "permission_denied" && state.role === "host";
-    if (
-      message.code === "session_revoked" ||
-      message.code === "authentication_required" ||
-      (message.code === "permission_denied" && !staleRelay) ||
-      message.code === "host_busy"
-    ) {
+    if (terminal) {
       disconnect(state.id);
       post({ type: "peer-disconnected", peerId: state.id });
     }
     return;
   }
   if (message.type === "ready") {
+    state.reconnectAttempt = 0;
+    // Null on the `ready` of the host's socket, and on the `ready` that answers a `turn-refresh`.
+    const turnRefresh = message.connectionId === null;
+    const client = state.role === "client" && state.connectionId ? state.peerConnection : null;
     // The host replaces a connection after 10 ICE restarts, so a socket that comes back while the
-    // path is still connected keeps the path. A TURN refresh still restarts ICE, so a relayed path
-    // moves to the new credentials.
+    // path is still connected keeps the path. After a TURN refresh only a relayed path restarts ICE
+    // to use the new credentials; any other path takes them at its next gathering.
     const shouldRestartIce = Boolean(
-      state.role === "client" &&
-        state.connectionId &&
-        state.peerConnection &&
-        (message.connectionId === null ||
-          state.restartIceOnReady ||
-          state.peerConnection.connectionState !== "connected"),
+      client &&
+        (state.restartIceOnReady ||
+          client.connectionState !== "connected" ||
+          (turnRefresh && (await selectedPath(client).catch(() => "relay")) === "relay")),
     );
     state.restartIceOnReady = false;
     state.resumeToken = message.resumeToken;
@@ -369,23 +432,24 @@ async function handleSignal(state: PeerState, message: SignalServerMessage): Pro
     for (const client of state.clients.values()) {
       client.iceServers = state.iceServers;
       client.peerConnection?.setConfiguration({
-        iceServers: client.iceServers,
+        iceServers: usableIceServers(client),
         bundlePolicy: "max-bundle",
         iceTransportPolicy: client.iceTransportPolicy,
       });
-      post({ type: "ice-servers", peerId: client.id, iceServers: client.iceServers });
+      post({ type: "ice-servers", peerId: client.id, iceServers: usableIceServers(client) });
     }
     if (state.peerConnection)
       state.peerConnection.setConfiguration({
-        iceServers: state.iceServers,
+        iceServers: usableIceServers(state),
         bundlePolicy: "max-bundle",
         iceTransportPolicy: state.iceTransportPolicy,
       });
-    // A kept path still uses the credentials of its last ICE restart, so keep their deadline.
-    if (state.role === "client" && state.peerConnection && !shouldRestartIce)
+    // A kept path still uses the credentials of its last ICE restart, so keep their deadline. The
+    // answer to a refresh starts a new one, or the next refresh would be due at once.
+    if (state.role === "client" && state.peerConnection && !shouldRestartIce && !turnRefresh)
       scheduleTurnRefresh(state, Math.max(0, state.turnRefreshDueAt - Date.now()));
     else scheduleTurnRefresh(state);
-    post({ type: "ice-servers", peerId: state.id, iceServers: state.iceServers });
+    post({ type: "ice-servers", peerId: state.id, iceServers: usableIceServers(state) });
     post({ type: "signal-ready", peerId: state.id });
     if (shouldRestartIce) state.iceRestartPending = true;
     if (state.iceRestartPending) await retryPendingIceRestart(state);
@@ -454,8 +518,8 @@ async function handleSignal(state: PeerState, message: SignalServerMessage): Pro
     if (client) {
       try {
         await handleSignal(client, message);
-      } catch (error) {
-        failPeer(client, error);
+      } catch {
+        failPeer(client);
         disconnect(client.id);
       }
     }
@@ -494,7 +558,10 @@ async function handleSignal(state: PeerState, message: SignalServerMessage): Pro
       dropConnection(state);
       return;
     }
-    await connection.setRemoteDescription({ type: "offer", sdp: message.sdp });
+    await connection.setRemoteDescription({
+      type: "offer",
+      sdp: state.privateNetwork ? privateNetworkSdp(message.sdp) : message.sdp,
+    });
     const answer = await connection.createAnswer();
     await connection.setLocalDescription(answer);
     sendSignal(state, {
@@ -502,11 +569,20 @@ async function handleSignal(state: PeerState, message: SignalServerMessage): Pro
       version: SIGNAL_PROTOCOL_VERSION,
       connectionId: message.connectionId,
       channel: "team",
-      sdp: requiredDescriptionSdp(answer),
+      // An answer after gathering, such as on an ICE restart, can already hold candidates.
+      sdp: state.privateNetwork ? privateNetworkSdp(requiredDescriptionSdp(answer)) : requiredDescriptionSdp(answer),
     });
   } else if (message.type === "answer") {
+    const previousFingerprint = sdpFingerprint(state.peerConnection?.remoteDescription?.sdp);
+    // A new fingerprint is a new connection on the host: the host restarted, or it dropped this
+    // connection after Signal lost the socket. The host never authenticates this peer again.
+    if (previousFingerprint && sdpFingerprint(message.sdp) !== previousFingerprint) {
+      dropConnection(state);
+      return;
+    }
     await state.peerConnection?.setRemoteDescription({ type: "answer", sdp: message.sdp });
   } else if (message.type === "ice-candidate") {
+    if (state.privateNetwork && !isPrivateNetworkCandidate(message.candidate)) return;
     await state.peerConnection?.addIceCandidate({
       candidate: message.candidate,
       sdpMid: message.sdpMid,
@@ -519,7 +595,7 @@ async function handleSignal(state: PeerState, message: SignalServerMessage): Pro
 
 function createPeerConnection(state: PeerState, iceServers: RTCIceServer[]): RTCPeerConnection {
   const connection = new RTCPeerConnection({
-    iceServers,
+    iceServers: state.privateNetwork ? [] : iceServers,
     bundlePolicy: "max-bundle",
     iceTransportPolicy: state.iceTransportPolicy,
   });
@@ -528,6 +604,7 @@ function createPeerConnection(state: PeerState, iceServers: RTCIceServer[]): RTC
   connection.onicecandidate = (event) => {
     // An empty candidate marks the end of gathering. Signal v1 accepts only candidates.
     if (!event.candidate?.candidate || !state.connectionId) return;
+    if (state.privateNetwork && !isPrivateNetworkCandidate(event.candidate.candidate)) return;
     sendSignal(state, {
       type: "ice-candidate",
       version: SIGNAL_PROTOCOL_VERSION,
@@ -589,8 +666,8 @@ function bindDataChannel(
           localFingerprint: descriptionFingerprint(state.peerConnection?.localDescription ?? null),
           remoteFingerprint: descriptionFingerprint(state.peerConnection?.remoteDescription ?? null),
         });
-      } catch (error) {
-        failPeer(state, error);
+      } catch {
+        failPeer(state);
       }
     }
   };
@@ -599,32 +676,41 @@ function bindDataChannel(
     try {
       const data = decoder.push(event.data);
       if (data !== undefined) post({ type: "data", peerId: state.id, channel: kind, data });
-    } catch (error) {
-      failPeer(state, error);
+    } catch {
+      failPeer(state);
       disconnectPeerConnection(state);
       post({ type: "peer-disconnected", peerId: state.id });
     }
   };
-  channel.onerror = () =>
+  // A replaced channel can fail after the new connection is up. Its error must not mark that connection failed.
+  channel.onerror = () => {
+    if (state.closed || state.channels[kind] !== channel) return;
     post({
       type: "peer-error",
       peerId: state.id,
       code: "data_channel_error",
       message: sourceText("error.remote.dataChannelFailed", { kind }),
     });
-  // The host can close the connection while this computer sleeps. The path can still read
-  // `connected` and Signal does not tell this end, but the channels close. Without this, main reads
-  // the host as connected and each request fails on a closed channel.
+  };
+  // Either end can lose a channel while the path still reads `connected`. Release that peer so
+  // the client can connect again. A host child closes only its own peer, not the shared Signal socket.
   channel.onclose = () => {
-    if (state.closed || state.role !== "client" || state.channels[kind] !== channel) return;
+    if (state.closed || state.channels[kind] !== channel) return;
     dropConnection(state);
   };
 }
 
 function descriptionFingerprint(description: RTCSessionDescription | null): string {
-  const fingerprint = description?.sdp.match(/^a=fingerprint:sha-256\s+([^\r\n]+)$/imu)?.[1]?.trim();
+  const fingerprint = sdpFingerprint(description?.sdp);
   if (!fingerprint) throw new Error("The WebRTC DTLS fingerprint is unavailable.");
-  return fingerprint.toUpperCase();
+  return fingerprint;
+}
+
+function sdpFingerprint(sdp: string | undefined): string | undefined {
+  return sdp
+    ?.match(/^a=fingerprint:sha-256\s+([^\r\n]+)$/imu)?.[1]
+    ?.trim()
+    .toUpperCase();
 }
 
 async function sendChannelPayload(
@@ -710,6 +796,26 @@ function iceUfrag(sdp: string): string | undefined {
   return sdp.match(/^a=ice-ufrag:(\S+)$/mu)?.[1];
 }
 
+/** The ICE servers that a connection of this peer may use. The private network route uses none. */
+function usableIceServers(state: PeerState): RTCIceServer[] {
+  return state.privateNetwork ? [] : state.iceServers;
+}
+
+/**
+ * Turns the private network route on or off for a host. Turning it on closes every device
+ * connection, so no connection keeps a relayed or public path. Each device then connects again
+ * with private candidates only. Connections that are already private stay valid when it turns off.
+ */
+function setPrivateNetwork(host: PeerState, privateNetwork: boolean): void {
+  if (host.role !== "host" || host.signalHost || host.privateNetwork === privateNetwork) return;
+  host.privateNetwork = privateNetwork;
+  for (const client of [...host.clients.values()]) {
+    client.privateNetwork = privateNetwork;
+    if (privateNetwork) dropConnection(client);
+  }
+  post({ type: "ice-servers", peerId: host.id, iceServers: usableIceServers(host) });
+}
+
 /**
  * Closes a connection that has used up its ICE restarts or lost a data channel. Signal tells the
  * other end, which closes its own connection, and the client connects again with a new one.
@@ -752,6 +858,11 @@ function requiredDescriptionSdp(description: RTCSessionDescriptionInit): string 
 }
 
 async function reportSelectedPath(state: PeerState, connection: RTCPeerConnection): Promise<void> {
+  post({ type: "ice-path", peerId: state.id, path: await selectedPath(connection) });
+}
+
+/** `relay` when either end of the selected pair is a TURN allocation, which keeps the credentials it was made with. */
+async function selectedPath(connection: RTCPeerConnection): Promise<"relay" | "p2p"> {
   const stats = await connection.getStats();
   const transport = [...stats.values()].find((report) => report.type === "transport" && report.selectedCandidatePairId);
   const selectedPair = transport ? stats.get(transport.selectedCandidatePairId) : null;
@@ -763,8 +874,7 @@ async function reportSelectedPath(state: PeerState, connection: RTCPeerConnectio
     [...stats.values()].find((report) => report.type === "candidate-pair" && report.state === "succeeded");
   const local = pair ? stats.get(pair.localCandidateId) : null;
   const remote = pair ? stats.get(pair.remoteCandidateId) : null;
-  const path = local?.candidateType === "relay" || remote?.candidateType === "relay" ? "relay" : "p2p";
-  post({ type: "ice-path", peerId: state.id, path });
+  return local?.candidateType === "relay" || remote?.candidateType === "relay" ? "relay" : "p2p";
 }
 
 function sendSignal(state: PeerState, message: SignalClientMessage): void {
@@ -778,7 +888,6 @@ function replaceSignal(state: PeerState): void {
   if (state.closed) return;
   if (state.reconnectTimer !== null) clearTimeout(state.reconnectTimer);
   state.reconnectTimer = null;
-  state.reconnectAttempt = 0;
   state.restartIceOnReady = true;
   const socket = state.socket;
   state.socket = null;
@@ -788,7 +897,11 @@ function replaceSignal(state: PeerState): void {
 
 function scheduleSignalReconnect(state: PeerState): void {
   if (state.reconnectTimer !== null) return;
-  const delay = Math.min(30_000, 500 * 2 ** state.reconnectAttempt++);
+  // The jitter spreads the hosts that a Signal restart disconnects at the same time.
+  const delay = Math.max(
+    signalRetryAt - Date.now(),
+    Math.min(30_000, 500 * 2 ** state.reconnectAttempt++) * (0.5 + Math.random() / 2),
+  );
   state.reconnectTimer = window.setTimeout(() => {
     state.reconnectTimer = null;
     connectSignal(state);
@@ -808,7 +921,9 @@ function armTurnRefresh(state: PeerState, delay: number): void {
     if (!state.socket || state.socket.readyState !== WebSocket.OPEN)
       return armTurnRefresh(state, SIGNAL_TURN_REFRESH_INTERVAL_MS);
     try {
-      sendSignal(state, { type: "turn-refresh", version: SIGNAL_PROTOCOL_VERSION, connectionId: state.connectionId });
+      // Null asks for the credentials of this socket, and Signal answers with a null `connectionId`.
+      // With a client's connection ID the answer read as the `ready` of a new socket.
+      sendSignal(state, { type: "turn-refresh", version: SIGNAL_PROTOCOL_VERSION, connectionId: null });
     } catch {
       armTurnRefresh(state, SIGNAL_TURN_REFRESH_INTERVAL_MS);
     }
@@ -860,24 +975,45 @@ function disconnectPeerConnection(state: PeerState): void {
 // `incompatible`, which is the honest report -- `webrtc_error` reads as `network_unavailable` and
 // retries forever. `disconnect` closes the socket and clears the reconnect timer, and only posts
 // `peer-disconnected` for a child peer; the peer that owns a socket is never one.
-function failSignalProtocol(state: PeerState, error: unknown): void {
+function failSignalProtocol(state: PeerState): void {
   post({
     type: "peer-error",
     peerId: state.id,
     code: "protocol_error",
-    message: error instanceof Error ? error.message : sourceText("error.remote.signalFrameUnreadable"),
+    message: sourceText("error.remote.signalFrameUnreadable"),
+    terminal: true,
   });
   disconnect(state.id);
   post({ type: "peer-disconnected", peerId: state.id });
 }
 
-function failPeer(state: PeerState, error: unknown): void {
+// The browser's text for an ICE or SDP failure is not in the catalog, so main gets the catalog text.
+// Main makes the reference `transport/webrtc_error` from the code.
+function failPeer(state: PeerState): void {
   post({
     type: "peer-error",
     peerId: state.id,
     code: "webrtc_error",
-    message: error instanceof Error ? error.message : sourceText("error.remote.webRtcFailed"),
+    message: sourceText("error.remote.webRtcFailed"),
   });
+}
+
+/**
+ * Signal closes with 1008 after several refusals, such as an invalid ticket or a protocol error, and
+ * sends an error frame that names it first. Only a rate limit, or a 1008 with no frame, waits (#1867).
+ */
+function holdSignalAfterClose(code: number, refusal: string | null): void {
+  if (code === 1008 && (refusal === null || refusal === "rate_limited")) signalRetryAt = Date.now() + 60_000;
+}
+
+function signalErrorCode(data: unknown): string | null {
+  if (!isString(data)) return null;
+  try {
+    const message = decodeSignalServerMessage(JSON.parse(data));
+    return message?.type === "error" ? message.code : null;
+  } catch {
+    return null;
+  }
 }
 
 function requirePeer(peerId: string): PeerState {

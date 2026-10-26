@@ -1,11 +1,17 @@
 import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
-import type { AgentSummary, ConversationMessage, QueueDeliveryStatus } from "@openbot/contracts/ipc";
+import type { ClientAgentSummary, ConversationMessage, QueueDeliveryStatus } from "@openbot/contracts/ipc";
 import {
+  CONVERSATION_MEMORY_CHANGES_ITEM_TYPE,
   CONVERSATION_PLAN_ITEM_TYPE,
+  CONVERSATION_SUBAGENTS_ITEM_TYPE,
   hostedSiteConversationEvent,
+  isChannelChangeMarker,
   isContextResetMarker,
+  isVaultChangeMarker,
   marketplaceSuggestionEvent,
+  mcpSignInEvent,
+  modelSwitchReason,
   parseConversationPlanText,
   routineConversationEvent,
   routineRunConversationEvent,
@@ -27,7 +33,7 @@ import type { TaskListItem } from "@openbot/ui/features/conversation/TaskList";
 import { currentText } from "@openbot/ui/text";
 import { isRoutineEventItem } from "./features/conversation/conversation-read-state";
 
-export function toAgentProfile(stored: AgentSummary): AgentProfile {
+export function toAgentProfile(stored: ClientAgentSummary): AgentProfile {
   return {
     id: stored.id,
     name: stored.name,
@@ -37,10 +43,20 @@ export function toAgentProfile(stored: AgentSummary): AgentProfile {
     provider: stored.provider,
     model: stored.model,
     reasoningEffort: stored.reasoningEffort,
-    access: stored.access,
-    computerUse: stored.computerUse,
-    allowAutomation: stored.allowAutomation,
-    busyMessageMode: stored.busyMessageMode,
+    ...(stored.providerAccountId === undefined ? {} : { providerAccountId: stored.providerAccountId }),
+    ...(stored.access === undefined ? {} : { access: stored.access }),
+    ...(stored.computerUse === undefined ? {} : { computerUse: stored.computerUse }),
+    ...(stored.allowAutomation === undefined ? {} : { allowAutomation: stored.allowAutomation }),
+    ...(stored.allowNewChat === undefined ? {} : { allowNewChat: stored.allowNewChat }),
+    ...(stored.quickAcknowledgement === undefined ? {} : { quickAcknowledgement: stored.quickAcknowledgement }),
+    ...(stored.fastMode === undefined ? {} : { fastMode: stored.fastMode }),
+    ...(stored.ownBrowserSession === undefined ? {} : { ownBrowserSession: stored.ownBrowserSession }),
+    ...(stored.browserProfileId === undefined ? {} : { browserProfileId: stored.browserProfileId }),
+    ...(stored.busyMessageMode === undefined ? {} : { busyMessageMode: stored.busyMessageMode }),
+    ...(stored.taskLimit === undefined ? {} : { taskLimit: stored.taskLimit }),
+    ...(stored.backupModels === undefined ? {} : { backupModels: stored.backupModels }),
+    ...(stored.usageLimitReturn === undefined ? {} : { usageLimitReturn: stored.usageLimitReturn }),
+    ...(stored.pendingRuntime === undefined ? {} : { pendingRuntime: stored.pendingRuntime }),
     // Always written, so a store update that turns it off replaces the old value.
     background: stored.background === true,
     threadId: stored.threadId,
@@ -48,7 +64,7 @@ export function toAgentProfile(stored: AgentSummary): AgentProfile {
     avatarSeed: stored.avatarSeed,
     avatarHue: stored.avatarHue,
     avatarUrl: stored.avatarUrl,
-    marketplaceSource: stored.marketplaceSource,
+    ...(stored.marketplaceSource === undefined ? {} : { marketplaceSource: stored.marketplaceSource }),
     updatedAt: stored.updatedAt,
     time: stored.updatedAt ? formatTime(stored.updatedAt) : currentText().t("chat.day.now"),
     preview: cleanPreview(stored.preview),
@@ -62,42 +78,61 @@ export function toAgentMessage(message: ConversationMessage, ownerAgentId?: stri
   const hostedSiteEvent = hostedSiteConversationEvent(message);
   const actionMarker = chatActionMarker(message, ownerAgentId, routineEvent, routineRunEvent, hostedSiteEvent);
   const plan = messagePlan(message);
+  const subagents = message.itemType === CONVERSATION_SUBAGENTS_ITEM_TYPE ? message.subagents : undefined;
+  const memoryChanges = message.author === "system" && message.itemType === CONVERSATION_MEMORY_CHANGES_ITEM_TYPE;
+  const senderMember = message.author === "user" ? message.senderMember : undefined;
+  const status =
+    message.exchange || message.routine
+      ? undefined
+      : message.delivery?.status === "queued"
+        ? `Queued #${message.delivery.position}`
+        : message.delivery?.status === "cancelled"
+          ? "Cancelled"
+          : message.status === "failed"
+            ? "Failed"
+            : message.status === "interrupted"
+              ? "Stopped"
+              : undefined;
   return {
     id: message.id,
-    turnId: message.turnId,
+    ...(message.turnId === undefined ? {} : { turnId: message.turnId }),
     author: message.author === "user" ? "you" : "agent",
     body: message.author === "user" ? message.text : cleanAgentMessageText(message.text),
     time: formatMessageTime(message.createdAt),
     createdAt: message.createdAt,
     streaming: message.status === "streaming",
-    itemType: message.itemType,
-    kind: message.questionPrompt ? "question" : actionMarker ? "action-marker" : plan ? "plan" : "text",
-    senderAgentId: exchangeSenderId,
-    senderMember: message.author === "user" ? message.senderMember : undefined,
-    replyToMessageId: message.replyToMessageId,
+    ...(message.itemType === undefined ? {} : { itemType: message.itemType }),
+    kind: message.questionPrompt
+      ? "question"
+      : actionMarker
+        ? "action-marker"
+        : plan
+          ? "plan"
+          : subagents?.length
+            ? "subagents"
+            : memoryChanges
+              ? "memory-changes"
+              : "text",
+    ...(exchangeSenderId === undefined ? {} : { senderAgentId: exchangeSenderId }),
+    ...(senderMember === undefined ? {} : { senderMember }),
+    ...(message.replyToMessageId === undefined ? {} : { replyToMessageId: message.replyToMessageId }),
     ...(cancelledByUser(message) ? { cancelled: true as const } : {}),
-    attachments: message.attachments,
-    imageGeneration: message.imageGeneration,
-    questionPrompt: message.questionPrompt,
-    exchange: message.exchange,
-    reaction: message.reaction,
+    ...(message.attachments === undefined ? {} : { attachments: message.attachments }),
+    ...(message.voiceRecording === undefined ? {} : { voiceRecording: message.voiceRecording }),
+    ...(message.imageGeneration === undefined ? {} : { imageGeneration: message.imageGeneration }),
+    ...(message.questionPrompt === undefined ? {} : { questionPrompt: message.questionPrompt }),
+    ...(message.uiBlock ? { uiBlock: message.uiBlock } : {}),
+    ...(message.exchange === undefined ? {} : { exchange: message.exchange }),
+    ...(message.reaction === undefined ? {} : { reaction: message.reaction }),
     reactions:
       message.reactions ?? (message.reaction ? [{ emoji: message.reaction, actor: { kind: "user" as const } }] : []),
-    routine: message.routine,
-    actionMarker: actionMarker ?? undefined,
-    plan: plan ?? undefined,
-    status:
-      message.exchange || message.routine
-        ? undefined
-        : message.delivery?.status === "queued"
-          ? `Queued #${message.delivery.position}`
-          : message.delivery?.status === "cancelled"
-            ? "Cancelled"
-            : message.status === "failed"
-              ? "Failed"
-              : message.status === "interrupted"
-                ? "Stopped"
-                : undefined,
+    ...(message.routine === undefined ? {} : { routine: message.routine }),
+    ...(actionMarker ? { actionMarker } : {}),
+    ...(plan ? { plan } : {}),
+    ...(subagents?.length ? { subagents } : {}),
+    ...(memoryChanges && message.memoryChanges ? { memoryChanges: message.memoryChanges } : {}),
+    ...(message.trace === undefined ? {} : { trace: message.trace }),
+    ...(status === undefined ? {} : { status }),
   };
 }
 
@@ -105,7 +140,7 @@ export function toAgentMessage(message: ConversationMessage, ownerAgentId?: stri
  * The plan of a `plan` message. A peer on a released Team API protocol sends only the checklist
  * text, so the plan is read back from it.
  */
-export function messagePlan(message: ConversationMessage): AgentMessagePlan | null {
+function messagePlan(message: ConversationMessage): AgentMessagePlan | null {
   if (message.author !== "assistant" || message.itemType !== CONVERSATION_PLAN_ITEM_TYPE) return null;
   const plan = message.plan ?? parseConversationPlanText(message.text);
   if (!plan?.steps.length) return null;
@@ -153,197 +188,57 @@ function hiddenFromTranscript(message: ConversationMessage): boolean {
   );
 }
 
-function isCommentary(message: ConversationMessage): boolean {
-  return message.author === "assistant" && message.itemType === "commentary";
-}
-
-/** The reasoning of one turn as one message: the cleaned text and the id of each step. */
-function thinkingMessage(
-  key: string,
-  first: ConversationMessage,
-  members: readonly ConversationMessage[],
-): AgentMessage {
-  return {
-    id: `thinking:${key}`,
-    turnId: first.turnId,
-    author: "agent",
-    body: "",
-    time: formatMessageTime(first.createdAt),
-    createdAt: first.createdAt,
-    streaming: members.some((member) => member.status === "streaming"),
-    itemType: "commentary",
-    kind: "thinking",
-    items: members.map((member) => cleanAgentMessageText(member.text)),
-    itemIds: members.map((member) => member.id),
-  };
-}
-
-export function toAgentMessages(messages: ConversationMessage[], ownerAgentId?: string): AgentMessage[] {
-  return projectMessages(messages, ownerAgentId, undefined);
-}
-
-function projectMessages(
-  messages: readonly ConversationMessage[],
-  ownerAgentId: string | undefined,
-  cache: MessageProjectionCache | undefined,
-): AgentMessage[] {
-  const visible = messages.filter((message) => !hiddenFromTranscript(message));
-  // The commentary of one turn joins into one message, at the place of its first step.
-  const groups = new Map<string, ConversationMessage[]>();
-  for (const message of visible) {
-    if (!isCommentary(message)) continue;
-    const key = message.turnId ?? message.id;
-    const group = groups.get(key);
-    if (group) group.push(message);
-    else groups.set(key, [message]);
-  }
-  const result: AgentMessage[] = [];
-  const emitted = new Set<string>();
-  for (const message of visible) {
-    if (!isCommentary(message)) {
-      result.push(cache ? cache.message(message, ownerAgentId) : toAgentMessage(message, ownerAgentId));
-      continue;
-    }
-    const key = message.turnId ?? message.id;
-    if (emitted.has(key)) continue;
-    emitted.add(key);
-    const members = groups.get(key) ?? [message];
-    result.push(cache ? cache.thinking(key, message, members) : thinkingMessage(key, message, members));
-  }
-  return result;
-}
-
 /**
- * Which locale and day the strings of a projection follow. `time` reads both, so a row that was
- * cached under another context is made again.
+ * The chat rows of stored messages. `convert` gives the row of the message at an index; a caller
+ * that keeps the rows of unchanged messages passes it.
  */
-function projectionContext(ownerAgentId: string | undefined): string {
-  const { format } = currentText();
-  const today = new Date();
-  return [
-    ownerAgentId ?? "",
-    format.locale,
-    // The date conventions of `intlLocale` are not on the format, so a fixed date shows them.
-    format.date(CONTEXT_PROBE_DATE, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }),
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
-  ].join("\u0000");
-}
-
-const CONTEXT_PROBE_DATE = new Date(Date.UTC(2001, 8, 17, 15, 4, 5));
-
-/** The fields of a message whose own value, or its reference, an `AgentMessage` is made from. */
-const PROJECTED_FIELDS = [
-  "id",
-  "turnId",
-  "author",
-  "text",
-  "createdAt",
-  "status",
-  "itemType",
-  "source",
-  "senderAgentId",
-  "replyToMessageId",
-  "attachments",
-  "imageGeneration",
-  "questionPrompt",
-  "reaction",
-  "reactions",
-] as const satisfies readonly (keyof ConversationMessage)[];
-
-/**
- * The fields that the projection copies into a new object. A change inside them does not change
- * their reference, so they are compared by value.
- */
-const DERIVED_FIELDS = [
-  "senderMember",
-  "delivery",
-  "exchange",
-  "routine",
-  "plan",
-] as const satisfies readonly (keyof ConversationMessage)[];
-
-interface MessageSnapshot {
-  context: string;
-  fields: unknown[];
-  derived: (string | undefined)[];
-}
-
-function snapshotMessage(message: ConversationMessage, context: string): MessageSnapshot {
-  return {
-    context,
-    fields: PROJECTED_FIELDS.map((field) => message[field]),
-    derived: DERIVED_FIELDS.map((field) => {
-      const value = message[field];
-      return value === undefined ? undefined : JSON.stringify(value);
-    }),
-  };
-}
-
-function snapshotsMatch(left: MessageSnapshot, right: MessageSnapshot): boolean {
-  return (
-    left.context === right.context &&
-    left.fields.every((value, index) => value === right.fields[index]) &&
-    left.derived.every((value, index) => value === right.derived[index])
-  );
-}
-
-export interface MessageProjectionCache {
-  message: (message: ConversationMessage, ownerAgentId: string | undefined) => AgentMessage;
-  thinking: (key: string, first: ConversationMessage, members: readonly ConversationMessage[]) => AgentMessage;
-}
-
-/**
- * `toAgentMessages` that keeps the object of a message whose source did not change. A row that
- * reads the object then does not run again when only the message that streams has a new delta.
- * The output is the same as `toAgentMessages`: a message is made again when a field it reads, the
- * interface language, the day, or the owner changed.
- *
- * It keys the cache on the source object, so a store that keeps its items (as a Solid store does)
- * gets the reuse, and a page that a read replaced is made again whole.
- */
-export function createMessageProjector(): (
+export function toAgentMessages(
   messages: readonly ConversationMessage[],
   ownerAgentId?: string,
-) => AgentMessage[] {
-  const entries = new WeakMap<ConversationMessage, { snapshot: MessageSnapshot; value: AgentMessage }>();
-  let thinkingEntries = new Map<
-    string,
-    { members: ConversationMessage[]; snapshots: MessageSnapshot[]; value: AgentMessage }
-  >();
-  return (messages, ownerAgentId) => {
-    const context = projectionContext(ownerAgentId);
-    const nextThinking: typeof thinkingEntries = new Map();
-    const cache: MessageProjectionCache = {
-      message(message, owner) {
-        const snapshot = snapshotMessage(message, context);
-        const cached = entries.get(message);
-        if (cached && snapshotsMatch(cached.snapshot, snapshot)) return cached.value;
-        const value = toAgentMessage(message, owner);
-        entries.set(message, { snapshot, value });
-        return value;
-      },
-      thinking(key, first, members) {
-        const snapshots = members.map((member) => snapshotMessage(member, context));
-        const cached = thinkingEntries.get(key);
-        const reusable =
-          cached &&
-          cached.members.length === members.length &&
-          cached.members.every((member, index) => member === members[index]) &&
-          cached.snapshots.every((snapshot, index) => {
-            const next = snapshots[index];
-            return next !== undefined && snapshotsMatch(snapshot, next);
-          });
-        const value = reusable ? cached.value : thinkingMessage(key, first, members);
-        nextThinking.set(key, { members: [...members], snapshots, value });
-        return value;
-      },
+  convert: (message: ConversationMessage, index: number) => AgentMessage = (message) =>
+    toAgentMessage(message, ownerAgentId),
+): AgentMessage[] {
+  const result: AgentMessage[] = [];
+  const thinkingByTurn = new Map<string, AgentMessage>();
+  for (const [index, message] of messages.entries()) {
+    if (hiddenFromTranscript(message)) continue;
+    if (message.author !== "assistant" || message.itemType !== "commentary") {
+      result.push(convert(message, index));
+      continue;
+    }
+
+    const key = message.turnId ?? message.id;
+    const existing = thinkingByTurn.get(key);
+    if (existing) {
+      const text = cleanAgentMessageText(message.text);
+      existing.items = [...(existing.items ?? []), text];
+      existing.itemIds = [...(existing.itemIds ?? []), message.id];
+      existing.itemCreatedAt = [...(existing.itemCreatedAt ?? []), message.createdAt];
+      existing.streaming = existing.streaming || message.status === "streaming";
+      if (message.trace) existing.trace = message.trace;
+      continue;
+    }
+
+    const text = cleanAgentMessageText(message.text);
+    const thinking: AgentMessage = {
+      id: `thinking:${key}`,
+      ...(message.turnId === undefined ? {} : { turnId: message.turnId }),
+      author: "agent",
+      body: "",
+      time: formatMessageTime(message.createdAt),
+      createdAt: message.createdAt,
+      streaming: message.status === "streaming",
+      itemType: "commentary",
+      kind: "thinking",
+      items: [text],
+      itemIds: [message.id],
+      itemCreatedAt: [message.createdAt],
+      ...(message.trace === undefined ? {} : { trace: message.trace }),
     };
-    const result = projectMessages(messages, ownerAgentId, cache);
-    thinkingEntries = nextThinking;
-    return result;
-  };
+    thinkingByTurn.set(key, thinking);
+    result.push(thinking);
+  }
+  return result;
 }
 
 /** The stored wake-up of an event check. It carries no text of its own and draws no row. */
@@ -726,8 +621,20 @@ export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boo
     left.provider === right.provider &&
     left.model === right.model &&
     left.reasoningEffort === right.reasoningEffort &&
+    left.providerAccountId === right.providerAccountId &&
+    JSON.stringify(left.backupModels) === JSON.stringify(right.backupModels) &&
+    JSON.stringify(left.usageLimitReturn) === JSON.stringify(right.usageLimitReturn) &&
+    JSON.stringify(left.pendingRuntime) === JSON.stringify(right.pendingRuntime) &&
     left.access === right.access &&
     left.computerUse === right.computerUse &&
+    left.allowAutomation === right.allowAutomation &&
+    left.allowNewChat === right.allowNewChat &&
+    left.quickAcknowledgement === right.quickAcknowledgement &&
+    left.fastMode === right.fastMode &&
+    left.ownBrowserSession === right.ownBrowserSession &&
+    left.browserProfileId === right.browserProfileId &&
+    left.busyMessageMode === right.busyMessageMode &&
+    left.taskLimit === right.taskLimit &&
     left.background === right.background &&
     left.threadId === right.threadId &&
     left.avatarSeed === right.avatarSeed &&
@@ -784,7 +691,8 @@ export function agentMessagesEqual(left: AgentMessage, right: AgentMessage): boo
     JSON.stringify(left.actionMarker) === JSON.stringify(right.actionMarker) &&
     JSON.stringify(left.items) === JSON.stringify(right.items) &&
     JSON.stringify(left.itemIds) === JSON.stringify(right.itemIds) &&
-    JSON.stringify(left.plan) === JSON.stringify(right.plan)
+    JSON.stringify(left.plan) === JSON.stringify(right.plan) &&
+    JSON.stringify(left.subagents) === JSON.stringify(right.subagents)
   );
 }
 
@@ -824,10 +732,18 @@ function chatActionMarker(
     };
   }
   if (isContextResetMarker(message)) return { kind: "context-reset", timestamp: message.createdAt };
+  const switchReason = modelSwitchReason(message);
+  if (switchReason)
+    return { kind: "model-switch", reason: switchReason, text: message.text, timestamp: message.createdAt };
+  if (isChannelChangeMarker(message))
+    return { kind: "channel-change", text: message.text, timestamp: message.createdAt };
+  if (isVaultChangeMarker(message)) return { kind: "vault-change", text: message.text, timestamp: message.createdAt };
   const skillEvent = skillConversationEvent(message);
   if (skillEvent) return { ...skillEvent, kind: "skill-lifecycle", timestamp: message.createdAt };
   const suggestion = marketplaceSuggestionEvent(message);
   if (suggestion) return { kind: "marketplace-suggestion", appId: suggestion.appId, timestamp: message.createdAt };
+  const signIn = mcpSignInEvent(message);
+  if (signIn) return { kind: "mcp-sign-in", mcpServerId: signIn.mcpServerId, timestamp: message.createdAt };
   if (routineEvent) {
     return {
       kind: "routine-lifecycle",

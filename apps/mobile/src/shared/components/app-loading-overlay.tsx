@@ -9,43 +9,31 @@ import {
   useMemo,
   useState,
 } from "react";
-import { BackHandler, View } from "react-native";
-import { BloubLoader } from "@/shared/components/bloub-loader";
-import { isAndroid } from "@/shared/lib/platform";
+import { BackHandler } from "react-native";
+
+import { useBloubStageRequest } from "@/shared/components/bloub-stage/bloub-stage-context";
+import { BLOUB_PRIORITY } from "@/shared/components/bloub-stage/bloub-stage-store";
 
 interface AppLoadingOverlayContextValue {
   setLoadingLabel: (label: string | null) => void;
+  /** The loader covers the app. */
   isLoaderPresent: boolean;
 }
 
 const AppLoadingOverlayContext = createContext<AppLoadingOverlayContextValue | null>(null);
-// The exit animation reports its own end, and that report blocks the app until it
-// arrives. A lost animation callback, or a loader unmounted part way through its
-// exit, left the loader over the conversation with no way back. Longer than the
-// whole exit takes, so a healthy exit still owns its own timing.
-const EXIT_DEADLINE_MS = 2000;
 
+/**
+ * The app loader: the stage block covers the screen, the eyes think, and the label shows at the
+ * bottom. When the label clears, the block rolls up and the screen below comes in under it.
+ */
 export function AppLoadingOverlayProvider({ children }: PropsWithChildren) {
-  // Starts idle: the splash backdrop covers account loading on its own, so no
-  // loader is present until a screen raises one with setLoadingLabel.
-  const [{ label, present }, setOverlay] = useState<{ label: string | null; present: boolean }>({
-    label: null,
-    present: false,
-  });
-  const visible = label !== null;
-  const setLoadingLabel = useCallback((nextLabel: string | null) => {
-    setOverlay((current) =>
-      current.label === nextLabel
-        ? current
-        : {
-            label: nextLabel,
-            present: nextLabel !== null || current.present,
-          },
-    );
-  }, []);
-  const handleExitComplete = useCallback(() => {
-    setOverlay((current) => (current.label === null && current.present ? { ...current, present: false } : current));
-  }, []);
+  const [label, setLabel] = useState<string | null>(null);
+  const setLoadingLabel = useCallback((next: string | null) => setLabel(next), []);
+  const present = label !== null;
+  useBloubStageRequest(
+    label !== null ? { shape: { kind: "cover" }, mood: "think", caption: { text: label }, loader: true } : null,
+    BLOUB_PRIORITY.loader,
+  );
   const value = useMemo(() => ({ setLoadingLabel, isLoaderPresent: present }), [present, setLoadingLabel]);
 
   useEffect(() => {
@@ -54,43 +42,8 @@ export function AppLoadingOverlayProvider({ children }: PropsWithChildren) {
     return () => subscription.remove();
   }, [present]);
 
-  useEffect(() => {
-    if (visible || !present) return;
-    const deadline = setTimeout(handleExitComplete, EXIT_DEADLINE_MS);
-    return () => clearTimeout(deadline);
-  }, [handleExitComplete, present, visible]);
-
-  return (
-    <AppLoadingOverlayContext.Provider value={value}>
-      <View className="flex-1">
-        <View
-          className="flex-1"
-          pointerEvents={present ? "none" : "auto"}
-          accessibilityElementsHidden={present}
-          importantForAccessibility={present ? "no-hide-descendants" : "auto"}
-        >
-          {children}
-        </View>
-        <View
-          className="absolute inset-0 items-center justify-center"
-          // Android can stop the exit animation before the loader reaches scale 0, and the loader
-          // then stays over the app. Once the overlay is gone, hide it there.
-          style={isAndroid && !present ? { opacity: 0 } : undefined}
-          pointerEvents={present ? "auto" : "none"}
-          accessibilityElementsHidden={!present}
-          importantForAccessibility={present ? "auto" : "no-hide-descendants"}
-        >
-          {/* Keep the native SVG mounted across account loading and workspace navigation. */}
-          <BloubLoader
-            active={visible}
-            visible={visible}
-            label={label ?? "Loading"}
-            onExitComplete={handleExitComplete}
-          />
-        </View>
-      </View>
-    </AppLoadingOverlayContext.Provider>
-  );
+  // The root navigator blocks the app below while the loader is present.
+  return <AppLoadingOverlayContext.Provider value={value}>{children}</AppLoadingOverlayContext.Provider>;
 }
 
 // Hold the app loading label for one screen, while that screen is the route on top.

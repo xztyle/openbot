@@ -1,10 +1,11 @@
-import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
-import { X } from "lucide-react-native";
+import X from "lucide-react-native/icons/x";
 import { useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { showsOnline } from "@/features/workspace/model/server-status";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
@@ -25,21 +26,25 @@ export function SectionFormScreen() {
   const [finished, setFinished] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
-  const navigation = useNavigation();
   const dirty = name.trim() !== initialName;
   const available =
     Boolean(layout) &&
-    servers.some((server) => server.id === serverId && server.state === "online") &&
+    servers.some((server) => server.id === serverId && showsOnline(server)) &&
     (!sectionId || Boolean(section));
   const valid = name.trim().length > 0 && name.trim().length <= 40;
-  usePreventRemove(!finished && (dirty || saving), ({ data }) => {
+  // Discard turns prevention off before it repeats the action, so the hook does not warn.
+  const [discarding, setDiscarding] = useState(false);
+  usePreventRemove(!discarding && !finished && (dirty || saving), ({ repeat }) => {
     if (pending.current) return;
     Alert.alert(t("mobile.agent.discard.title"), t("mobile.agent.discard.body"), [
       { text: t("mobile.agent.discard.keepEditing"), style: "cancel" },
       {
         text: t("mobile.agent.discard.discard"),
         style: "destructive",
-        onPress: () => navigation.dispatch(data.action),
+        onPress: () => {
+          setDiscarding(true);
+          repeat();
+        },
       },
     ]);
   });

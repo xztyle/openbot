@@ -1,10 +1,10 @@
 import type {
-  GitHubConnectorStatus,
   InstalledSkill,
   MarketplaceAgentSummary,
   MarketplaceSkillQuery,
   MarketplaceSkillSummary,
 } from "@openbot/contracts/ipc";
+import { CONNECTOR_LISTINGS } from "@openbot/ui/features/connectors/connector-catalog";
 import { Marketplace } from "@openbot/ui/features/marketplace/Marketplace";
 import type {
   ChatAccessMode,
@@ -16,6 +16,7 @@ import {
   createMarketplaceNavigation,
   type MarketplaceNavigation,
 } from "@openbot/ui/features/marketplace/marketplace-view";
+import { currentText } from "@openbot/ui/text";
 import { createSignal, createStore, onSettled, untrack } from "solid-js";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
@@ -28,24 +29,7 @@ import {
   STORY_MARKETPLACE_SKILLS,
   STORY_MCP_SERVERS,
 } from "../src/preview/fixtures";
-
-const GITHUB: GitHubConnectorStatus = {
-  available: true,
-  state: "connected",
-  login: "octocat",
-  avatarUrl: null,
-  userCode: null,
-  verificationUri: null,
-  error: null,
-};
-
-const REPOSITORIES = {
-  repositories: [
-    { fullName: "octocat/hello-world", private: false },
-    { fullName: "octocat/private-notes", private: true },
-  ],
-  total: 2,
-};
+import { STORY_CONNECTOR_DETAILS, storyConnectorSet } from "./connector-fixtures";
 
 function page<T extends { name: string; description: string; category?: string | undefined }>(
   items: readonly T[],
@@ -101,6 +85,22 @@ function MarketplaceStory(props: StoryProps) {
   const agents = empty ? [] : STORY_MARKETPLACE_AGENTS;
   const skills = empty ? [] : STORY_MARKETPLACE_SKILLS;
   const firstSkill = STORY_MARKETPLACE_SKILLS[0];
+  const connectors = storyConnectorSet();
+  // The story fixes the names once, in the language it opens with.
+  const connectorApps = untrack(() =>
+    STORY_CONNECTOR_DETAILS.map(({ id }): MarketplaceApp => {
+      const listing = CONNECTOR_LISTINGS[id];
+      return {
+        kind: "connector",
+        id,
+        connector: id,
+        name: currentText().t(listing.title),
+        tagline: currentText().t(listing.tagline),
+        status: id === "github" ? "connected" : "idle",
+        category: listing.category,
+      };
+    }),
+  );
   const [state, setState] = createStore<{
     added: Record<string, true>;
     installed: Record<string, InstalledSkill[]>;
@@ -115,14 +115,7 @@ function MarketplaceStory(props: StoryProps) {
     added: { [STORY_MARKETPLACE_AGENTS[1]?.id ?? ""]: true },
     installed: { chief: firstSkill ? [installed(firstSkill)] : [] },
     apps: [
-      {
-        kind: "github",
-        id: "github",
-        name: "GitHub",
-        tagline: "Repositories and pull requests",
-        status: "connected",
-        category: "coding",
-      },
+      ...connectorApps,
       ...STORY_MARKETPLACE_PLUGINS.map(
         (plugin, index): MarketplaceApp => ({
           kind: "plugin",
@@ -257,17 +250,7 @@ function MarketplaceStory(props: StoryProps) {
     runPrompt: fn(),
     copyLink: fn(),
     openUrl: fn(),
-    github: () => ({
-      status: GITHUB,
-      busy: false,
-      repositories: REPOSITORIES,
-      repositoriesError: null,
-      onConnect: fn(),
-      onCancel: fn(),
-      onDisconnect: fn(),
-      onOpenVerification: fn(),
-      onOpenInstall: fn(),
-    }),
+    connector: (id) => connectors[id],
 
     error,
     clearError: () => setError(null),

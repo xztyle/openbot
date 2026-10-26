@@ -236,6 +236,10 @@ export class DynamicIslandCoordinator {
         if (event.quiet && serverId !== activeServerId) this.#takeBackTurnReplies(runtime, event.agentId, event.turnId);
         runtime.turnReplies.delete(event.agentId);
         runtime.activeTurns[event.agentId] = null;
+        // A host sends a phone `queue-invalidated` instead of the queue, and no snapshot after the turn.
+        // The queue of the last runtime snapshot can still list the finished turn as running, which
+        // kept the Live Activity on "Working" after the reply. The end of the turn ends its delivery.
+        this.#endTurnDeliveries(runtime, event.agentId, event.turnId);
         if (runtime.turnProgress[event.agentId]?.turnId === event.turnId) delete runtime.turnProgress[event.agentId];
         runtime.pendingPrompts[event.agentId] = undefined;
         runtime.pendingApprovals[event.agentId] = undefined;
@@ -372,6 +376,20 @@ export class DynamicIslandCoordinator {
     if (runtime.unreadMessageIds) delete runtime.unreadMessageIds[agentId];
   }
 
+  /**
+   * Removes the started or running deliveries of a finished turn. A starting delivery without a turn
+   * is also stale: its turn either is this one or has not started, and a new turn sends its own event.
+   */
+  #endTurnDeliveries(runtime: ServerRuntime, agentId: string, turnId: string): void {
+    const queue = runtime.queues[agentId];
+    if (!queue) return;
+    const ended = (delivery: QueueSnapshot["deliveries"][number]) =>
+      (delivery.status === "starting" || delivery.status === "running") &&
+      (delivery.turnId === null || delivery.turnId === turnId);
+    if (!queue.deliveries.some(ended)) return;
+    runtime.queues[agentId] = { ...queue, deliveries: queue.deliveries.filter((delivery) => !ended(delivery)) };
+  }
+
   #retainAgentMessages(runtime: ServerRuntime, agentIds: ReadonlySet<string>): void {
     for (const agentId of runtime.incomingMessageAnchors.keys()) {
       if (!agentIds.has(agentId)) runtime.incomingMessageAnchors.delete(agentId);
@@ -400,18 +418,18 @@ export class DynamicIslandCoordinator {
   ): void {
     const liveMessages: Record<string, DynamicIslandMessageSource[]> = {};
     const incomingMessageAnchors = new Map(runtime.incomingMessageAnchors);
-    for (const agentId of new Set(snapshot.latestMessages.map((message) => message.agentId))) {
-      deleteDynamicIslandMessageBodies(runtime.rawMessageBodies, agentId);
-    }
     for (const message of snapshot.latestMessages) {
-      runtime.rawMessageBodies.set(dynamicIslandMessageKey(message.agentId, message.id), message.text);
-      const converted = {
-        id: message.id,
-        author: "agent",
-        body: cleanAgentMessageText(message.text),
-        time: message.createdAt,
-        createdAt: message.createdAt,
-      };
+      // The snapshot text is capped at `AGENT_RUNTIME_TEXT_LIMIT`, so a message that deltas have made
+      // longer stays as it is. Live Activity gets only snapshots, so a longer snapshot replaces the body.
+      const body = cleanAgentMessageText(message.text);
+      const current = runtime.liveMessages[message.agentId]?.find((candidate) => candidate.id === message.id);
+      const converted =
+        current && current.body.length > body.length
+          ? current
+          : { id: message.id, author: "agent", body, time: message.createdAt, createdAt: message.createdAt };
+      if (converted !== current) {
+        runtime.rawMessageBodies.set(dynamicIslandMessageKey(message.agentId, message.id), message.text);
+      }
       liveMessages[message.agentId] = [converted];
       incomingMessageAnchors.set(message.agentId, message.id);
       if (!trackIncoming) continue;
@@ -571,7 +589,8 @@ function toDynamicIslandMessage(
     message.itemType === "question_prompt" ||
     message.itemType === "agent_attachment" ||
     message.itemType?.startsWith(CHAT_VISUAL_ITEM_TYPE_PREFIX) ||
-    message.itemType === "plan"
+    message.itemType === "plan" ||
+    message.itemType === "subagents"
   ) {
     return [];
   }

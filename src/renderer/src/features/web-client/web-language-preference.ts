@@ -1,4 +1,5 @@
 import { type AppLanguage, DEFAULT_APP_LANGUAGE, isAppLanguage } from "@openbot/contracts/app-language";
+import { loadLocale, resolveLocale } from "@openbot/i18n";
 import { createSignal, onCleanup } from "solid-js";
 
 const STORAGE_KEY = "openbot.web.language";
@@ -13,6 +14,14 @@ function read(storage: LanguageStorage | undefined): AppLanguage {
   } catch {
     return DEFAULT_APP_LANGUAGE;
   }
+}
+
+/**
+ * Loads the catalogs of the saved language, so the first screen of the web client is in it. The
+ * public web build loads every language other than English on first use.
+ */
+export function loadSavedLanguage(): Promise<void> {
+  return loadLocale(resolveLocale(read(undefined), navigator.language));
 }
 
 /**

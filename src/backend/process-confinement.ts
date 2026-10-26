@@ -40,7 +40,7 @@ export interface SpawnTarget {
   windowsVerbatimArguments: boolean;
 }
 
-export class ProcessConfinementUnavailableError extends Error {
+class ProcessConfinementUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ProcessConfinementUnavailableError";
@@ -201,6 +201,29 @@ export function customAgentStatePaths(): ProviderStatePaths {
   return { writable: [], protected: [] };
 }
 
+/** The folder where Pi keeps its sign-in, settings and sessions. */
+export function piAgentDirectory(env: NodeJS.ProcessEnv = process.env, home = homedir()): string {
+  return env.PI_CODING_AGENT_DIR?.trim() || join(home, ".pi", "agent");
+}
+
+/** Pi can write sessions, but cannot change the settings or extensions a later full-access run loads. */
+export function piStatePaths(env: NodeJS.ProcessEnv = process.env, home = homedir()): ProviderStatePaths {
+  return { writable: [join(piAgentDirectory(env, home), "sessions")], protected: [] };
+}
+
+/** Only session data is writable. Muse settings, credentials, hooks, and plugins stay read-only. */
+export function museStatePaths(env: NodeJS.ProcessEnv = process.env, home = homedir()): ProviderStatePaths {
+  const root = join(env.XDG_DATA_HOME?.trim() || join(home, ".local", "share"), "muse");
+  return {
+    writable: [
+      join(root, "sessions"),
+      join(root, "logs"),
+      ...["", "-wal", "-shm", "-journal"].map((suffix) => join(root, `session-index.db${suffix}`)),
+    ],
+    protected: [],
+  };
+}
+
 /** The environment of a confined OpenCode process: its own cache, apart from the one outside. */
 export const OPENCODE_CONFINED_ENV: Readonly<Record<string, string>> = { XDG_CACHE_HOME: OPENCODE_CONFINED_CACHE };
 
@@ -224,6 +247,8 @@ const PROJECT_SETTINGS = [
   // Cline reads its project rules, workflows, hooks, skills and agents from these two.
   ".cline",
   ".clinerules",
+  ".pi",
+  ".muse",
   // Antigravity reads project skills from `.gemini` and its customizations from these four.
   ".gemini",
   ".agents",

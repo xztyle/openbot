@@ -72,9 +72,8 @@ audit delegates a check to can be dismissed by the bucket its file lives in.**
   these, because a gate that delegates its check to a test inherits that test's weakening.
   `openbot-database-schema-parity.test.ts` is the whole mechanical half of gate A's DDL rule;
   `openbot-database.test.ts` carries the downgrade guard; `ipc-channel-coverage.test.ts` is gate D's
-  only static link between main and preload; `electron-updater-assumptions.test.ts` pins the updater
-  behaviour gate F rests on; the `v*.test.ts` files are gate C's. A change that makes one of those
-  assertions vacuous passes every later gate, and once it is tagged the weakening is behind the
+  only static link between main and preload. Gates C and F have no test; they use a manual check.
+  A change that makes one of those assertions vacuous passes every later gate, and once it is tagged the weakening is behind the
   range every future audit starts from. Route a modification or deletion of one through the gate
   that names it and read the hunks. Other `**/*.test.ts` files dismiss normally.
 - **`docs/RELEASING.md`**, for the same reason one level up. This audit does not restate the Team

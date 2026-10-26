@@ -41,6 +41,31 @@ export const stopWindowsProcessTree = Effect.fn("WindowsProcessTree.stop")(funct
 }, Effect.uninterruptible);
 
 /**
+ * Ends a provider process and waits for it to exit. On Windows it stops the whole tree. Elsewhere it
+ * sends SIGTERM, and SIGKILL when the process is still running after 2 seconds.
+ */
+export const endProcessTree = Effect.fn("ProcessTree.end")(function* (child: ChildProcess) {
+  // A signal exit leaves `exitCode` null, and a failed spawn has no `pid` and may never emit `exit`.
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform === "win32") return yield* stopWindowsProcessTree(child);
+  yield* Effect.callback<void>((resume) => {
+    const forceKill = setTimeout(() => {
+      if (child.exitCode === null) child.kill("SIGKILL");
+    }, 2_000);
+    const exited = () => {
+      clearTimeout(forceKill);
+      resume(Effect.void);
+    };
+    child.once("exit", exited);
+    child.kill("SIGTERM");
+    return Effect.sync(() => {
+      clearTimeout(forceKill);
+      child.off("exit", exited);
+    });
+  });
+});
+
+/**
  * Stops a process that may run under `cmd.exe`, such as a sign-in through a `.cmd` launcher, and
  * does not wait for it. Elsewhere SIGTERM goes to the process itself.
  */

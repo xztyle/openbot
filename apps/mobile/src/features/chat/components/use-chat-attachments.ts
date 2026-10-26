@@ -7,11 +7,10 @@ import {
 } from "@openbot/contracts/attachment-files";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { MOBILE_ATTACHMENT_BYTES, type RemoteFileUpload } from "@openbot/team-client/remote-peer";
-import type * as Clipboard from "expo-clipboard";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { attachmentSizeBucket } from "@/features/analytics/events";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
 import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
@@ -40,6 +39,9 @@ export interface ChatAttachment extends RemoteFileUpload {
   dimensions?: ImageDimensions;
 }
 
+/** Longer pasted or shared text goes in as a text file, not into the composer. */
+const LARGE_TEXT_LENGTH = 4_000;
+
 function base64(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -52,7 +54,7 @@ export function useChatAttachments(
   /** What the receiving host accepts. Read on each selection, because it loads with the connection. */
   support?: () => AttachmentSupport,
 ) {
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const limitMessage = () => t("mobile.chat.attachment.limit", { limit: INPUT_LIMITS.attachments });
   // The plus's rect while the attachment card is open, and null while it is
   // not: one value, so the card can never be open without an anchor to grow
@@ -204,7 +206,7 @@ export function useChatAttachments(
         error,
         "turn",
         t("mobile.chat.attachment.addFailed"),
-        error instanceof Error ? error.message : t("mobile.chat.tryAgain"),
+        errorMessage(error, t("mobile.chat.tryAgain")),
       );
       return false;
     }
@@ -223,20 +225,70 @@ export function useChatAttachments(
       mobileAnalytics.track("attachment_action", { action: "select", result: "cancelled", attachment_count: 0 });
     else for (const asset of result.assets) await addFile(asset.uri, photoName(asset));
   }
-  function paste(data: Clipboard.PasteEventPayload, onText: (text: string) => void) {
-    if (data.type === "image")
-      return add({
-        name: "pasted-image.png",
-        mimeType: "image/png",
-        base64: data.data.slice(data.data.indexOf(",") + 1),
-      });
-    else if (data.text.length > 4_000)
+  function pasteText(text: string, onText: (text: string) => void) {
+    if (text.length > LARGE_TEXT_LENGTH)
       return add({
         name: "pasted-text.txt",
         mimeType: "text/plain",
-        base64: base64(new TextEncoder().encode(data.text)),
+        base64: base64(new TextEncoder().encode(text)),
       });
-    else onText(data.text);
+    onText(text);
+  }
+  function reportFailures(failures: unknown[]) {
+    mobileAnalytics.track("attachment_action", {
+      action: "select",
+      result: "failed",
+      failure_code: "operation_failed",
+    });
+    void haptics.notification("error");
+    showFailureAlert(
+      failures[0],
+      "turn",
+      t("mobile.chat.attachment.addFailed"),
+      // Each file over the limit gives the same message, so it shows once.
+      [...new Set(failures.map((error) => errorMessage(error, t("mobile.chat.tryAgain"))))].join("\n"),
+    );
+  }
+  /**
+   * Adds what another app shared. Long text becomes a file, as a paste does. Each file is read on its
+   * own, so a refused file does not stop the others, and one alert names each refused file.
+   */
+  async function addShared(
+    text: string,
+    files: readonly { uri: string; name: string }[],
+    onText: (text: string) => void,
+  ) {
+    const large = text.length > LARGE_TEXT_LENGTH;
+    if (text && !large) onText(text);
+    if (!large && files.length === 0) return;
+    const failures: unknown[] = [];
+    beginPreparing();
+    try {
+      if (large) {
+        try {
+          await add({
+            name: "shared-text.txt",
+            mimeType: "text/plain",
+            base64: base64(new TextEncoder().encode(text)),
+          });
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+      for (const file of files) {
+        try {
+          if (itemsRef.current.length >= INPUT_LIMITS.attachments) throw new Error(limitMessage());
+          // The caller deletes the copy after this read, so the item keeps the bytes, not the address.
+          const { name, mimeType, base64 } = await readFile(file.uri, file.name);
+          await add({ name, mimeType, base64 });
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+    } finally {
+      endPreparing();
+    }
+    if (failures.length > 0) reportFailures(failures);
   }
   const busyRef = useRef(false);
   function report(operation: () => Promise<void>) {
@@ -244,30 +296,13 @@ export function useChatAttachments(
     busyRef.current = true;
     beginPreparing();
     return operation()
-      .catch((error) => {
-        mobileAnalytics.track("attachment_action", {
-          action: "select",
-          result: "failed",
-          failure_code: "operation_failed",
-        });
-        void haptics.notification("error");
-        showFailureAlert(
-          error,
-          "turn",
-          t("mobile.chat.attachment.addFailed"),
-          error instanceof Error ? error.message : t("mobile.chat.tryAgain"),
-        );
-      })
+      .catch((error) => reportFailures([error]))
       .finally(() => {
         busyRef.current = false;
         endPreparing();
       });
   }
-  return {
-    items,
-    preparing,
-    menuAnchor,
-    menuOpen: menuAnchor !== null,
+  const actions = {
     openMenu: (anchor: ChatAttachmentAnchor) => setMenuAnchor(anchor),
     closeMenu: () => setMenuAnchor(null),
     // Held after the card has left, so the file read, the base64 encode and
@@ -278,13 +313,41 @@ export function useChatAttachments(
     requestCamera,
     chooseFiles: () => report(chooseFiles),
     replace: (id: string) => report(() => replaceItem(id)),
-    paste,
+    pasteText,
+    addShared,
     remove: (id: string) => {
       void report(() => persistItems(itemsRef.current.filter((item) => item.id !== id)));
       mobileAnalytics.track("attachment_action", { action: "remove", result: "succeeded", attachment_count: 1 });
     },
     clear: () => replace([]),
+    /** Puts back the files of a message that the person takes back to edit, after any files chosen since. */
+    restore: (files: readonly ChatAttachment[]) =>
+      replace([
+        ...itemsRef.current,
+        ...files.map((file) => ({ ...file, id: `mobile-draft-attachment-${++sequence.current}` })),
+      ]),
   };
+  const latestActions = useRef(actions);
+  latestActions.current = actions;
+  const [stableActions] = useState(() => ({
+    openMenu: (anchor: ChatAttachmentAnchor) => latestActions.current.openMenu(anchor),
+    closeMenu: () => latestActions.current.closeMenu(),
+    addPhoto: (uri: string) => latestActions.current.addPhoto(uri),
+    choosePhotos: () => latestActions.current.choosePhotos(),
+    requestCamera: () => latestActions.current.requestCamera(),
+    chooseFiles: () => latestActions.current.chooseFiles(),
+    replace: (id: string) => latestActions.current.replace(id),
+    pasteText: (text: string, onText: (text: string) => void) => latestActions.current.pasteText(text, onText),
+    addShared: (text: string, files: readonly { uri: string; name: string }[], onText: (text: string) => void) =>
+      latestActions.current.addShared(text, files, onText),
+    remove: (id: string) => latestActions.current.remove(id),
+    clear: () => latestActions.current.clear(),
+    restore: (files: readonly ChatAttachment[]) => latestActions.current.restore(files),
+  }));
+  return useMemo(
+    () => ({ items, preparing, menuAnchor, menuOpen: menuAnchor !== null, ...stableActions }),
+    [items, preparing, menuAnchor, stableActions],
+  );
 }
 
 export type ChatAttachments = ReturnType<typeof useChatAttachments>;

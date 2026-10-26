@@ -31,6 +31,14 @@ export function chunkMarkdown(text: string, limit: number): string[] {
 
 function hardSplit(line: string, size: number): string[] {
   const parts: string[] = [];
-  for (let index = 0; index < line.length; index += size) parts.push(line.slice(index, index + size));
+  for (let index = 0; index < line.length; ) {
+    let end = Math.min(index + size, line.length);
+    const before = line.charCodeAt(end - 1);
+    const after = line.charCodeAt(end);
+    // Move a pair boundary back only when the split still advances.
+    if (end - index > 1 && before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff) end -= 1;
+    parts.push(line.slice(index, end));
+    index = end;
+  }
   return parts;
 }

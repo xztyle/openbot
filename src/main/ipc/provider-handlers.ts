@@ -3,16 +3,25 @@ import { Effect } from "effect";
 // runtimes the providers need.
 
 import { isManagedRuntimeProvider, type ManagedProviderId } from "@openbot/contracts/agent-providers";
-import type { AgentProviderId, SetProviderApiKeyInput } from "@openbot/contracts/ipc";
+import {
+  type AgentProviderId,
+  type ConnectProviderAccountInput,
+  isProviderAccountId,
+  PROVIDER_ACCOUNT_LABEL_MAX_LENGTH,
+  type RemoveProviderAccountInput,
+  type RenameProviderAccountInput,
+  type ResetProviderUsageInput,
+  type SetProviderApiKeyInput,
+} from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
-import { shell } from "electron";
 import { AgentLifecycleFailed, type AgentService } from "../../backend/agent-service";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { ProviderCredentialStore } from "../provider-credential-store";
 import type { ProviderRuntimeManager } from "../provider-runtime-manager";
 import { parseProviderId } from "./app-inputs";
 import { handler, type IpcGroupHandlers, payloadHandler } from "./define-ipc-group";
+import { optionalPayload, requireString } from "./validation";
 
 /** Long enough for any key a provider issues, short enough that nothing large reaches the cipher. */
 const MAX_API_KEY_LENGTH = 512;
@@ -21,32 +30,41 @@ export interface ProviderIpcDependencies {
   service: AgentService;
   providerRuntimes: ProviderRuntimeManager;
   credentials: ProviderCredentialStore;
+  /** Opens a web page in the program that the user chose in Settings. */
+  openLink: (url: string) => Promise<void>;
 }
 
 export function providerIpcHandlers({
   service,
   providerRuntimes,
   credentials,
+  openLink,
 }: ProviderIpcDependencies): Pick<IpcGroupHandlers, "providers" | "providerRuntimes"> {
   return {
     providers: {
       setProviderOn: payloadHandler(parseProviderUseInput, ({ provider, on }) =>
         runCauseEffect(service.setProviderOn(provider, on)),
       ),
-      connectProvider: payloadHandler(parseProviderId, (provider) =>
-        runCauseEffect(
+      connectProvider: payloadHandler(parseProviderId, async (provider) => {
+        await runCauseEffect(providerRuntimes.ensureKeyProviderCli(provider));
+        return runCauseEffect(
           service.connectProvider(provider, async (value) => {
             const url = new URL(value);
-            if (url.protocol !== "https:") throw new Error("Only HTTPS ChatGPT login links can open in the browser.");
-            await shell.openExternal(url.toString());
+            if (url.protocol !== "https:") throw new Error(sourceText("error.provider.httpsSignInLinkOnly"));
+            await openLink(url.toString());
           }),
-        ),
+        );
+      }),
+      cancelProviderSignIn: payloadHandler(parseProviderId, (provider) =>
+        runCauseEffect(service.cancelProviderSignIn(provider)),
       ),
       updateProviderCli: payloadHandler(parseManagedProviderId, async (provider) => {
         await runCauseEffect(providerRuntimes.downloadAndWait(provider));
         return service.getStatus();
       }),
-      refreshAgentProviders: handler(() => runCauseEffect(service.refreshProviders())),
+      refreshAgentProviders: payloadHandler(optionalPayload(parseRefreshProvidersInput), (input) =>
+        runCauseEffect(service.refreshProviders({ automatic: input?.automatic === true })),
+      ),
       restartProvider: payloadHandler(parseProviderId, (provider) => runCauseEffect(service.restartProvider(provider))),
       cancelProviderRestart: payloadHandler(parseProviderId, async (provider) =>
         service.cancelProviderRestart(provider),
@@ -61,8 +79,9 @@ export function providerIpcHandlers({
       // The key and the process that uses it change as one step, because the catalog the CLI
       // advertises is decided at spawn time: the service writes the key only when it can restart
       // the provider on it, and reports success only once the new process is up.
-      setProviderApiKey: payloadHandler(parseProviderApiKeyInput, ({ provider, key }) =>
-        runCauseEffect(
+      setProviderApiKey: payloadHandler(parseProviderApiKeyInput, async ({ provider, key }) => {
+        await runCauseEffect(providerRuntimes.ensureKeyProviderCli(provider));
+        return runCauseEffect(
           service.changeProviderCredential(provider, () =>
             credentials
               .set(provider, key)
@@ -72,11 +91,11 @@ export function providerIpcHandlers({
                 ),
               ),
           ),
-        ),
-      ),
+        );
+      }),
       clearProviderApiKey: payloadHandler(parseProviderId, (provider) =>
         runCauseEffect(
-          service.changeProviderCredential(provider, () =>
+          service.clearProviderCredential(provider, () =>
             credentials
               .clear(provider)
               .pipe(
@@ -86,6 +105,31 @@ export function providerIpcHandlers({
               ),
           ),
         ),
+      ),
+      // The account's sign-in opens the same way as `connectProvider`, with an https page only.
+      connectProviderAccount: payloadHandler(parseConnectProviderAccountInput, ({ provider, accountId }) =>
+        runCauseEffect(
+          service.connectProviderAccount(provider, accountId, async (value) => {
+            const url = new URL(value);
+            if (url.protocol !== "https:") throw new Error(sourceText("error.provider.httpsSignInLinkOnly"));
+            await openLink(url.toString());
+          }),
+        ),
+      ),
+      cancelProviderAccountSignIn: payloadHandler(parseRemoveProviderAccountInput, ({ provider, accountId }) =>
+        runCauseEffect(service.cancelProviderAccountSignIn(provider, accountId)),
+      ),
+      renameProviderAccount: payloadHandler(parseRenameProviderAccountInput, ({ provider, accountId, label }) =>
+        runCauseEffect(service.renameProviderAccount(provider, accountId, label)),
+      ),
+      removeProviderAccount: payloadHandler(parseRemoveProviderAccountInput, ({ provider, accountId }) =>
+        runCauseEffect(service.removeProviderAccount(provider, accountId)),
+      ),
+      providerUsageResets: payloadHandler(parseProviderId, (provider) =>
+        runCauseEffect(service.providerUsageResets(provider)),
+      ),
+      resetProviderUsage: payloadHandler(parseResetProviderUsageInput, ({ provider, accountId }) =>
+        runCauseEffect(service.resetProviderUsage(provider, accountId)),
       ),
       // A status, never the key: see `setProviderApiKey` in the desktop API contract.
       getProviderApiKeyState: payloadHandler(parseProviderId, async (provider) => ({
@@ -122,9 +166,41 @@ export function parseManagedProviderId(value: unknown): ManagedProviderId {
   return provider;
 }
 
-export function parseProviderUseInput(value: unknown): { provider: AgentProviderId; on: boolean } {
+function parseRefreshProvidersInput(value: unknown): { automatic: boolean } {
+  if (!isDynamicRecord(value) || typeof value.automatic !== "boolean") throw new Error("Invalid provider refresh.");
+  return { automatic: value.automatic };
+}
+
+function parseProviderUseInput(value: unknown): { provider: AgentProviderId; on: boolean } {
   if (!isDynamicRecord(value) || typeof value.on !== "boolean") throw new Error("Invalid provider switch.");
   const provider = parseProviderId(value.provider);
   if (provider === "acp") throw new Error("Custom agents do not have a built-in provider switch.");
   return { provider, on: value.on };
+}
+
+export function parseConnectProviderAccountInput(value: unknown): ConnectProviderAccountInput {
+  if (!isDynamicRecord(value)) throw new Error("Invalid provider account.");
+  return {
+    provider: parseProviderId(value.provider),
+    accountId: value.accountId === null ? null : requireString(value.accountId, "accountId"),
+  };
+}
+
+export function parseRemoveProviderAccountInput(value: unknown): RemoveProviderAccountInput {
+  if (!isDynamicRecord(value)) throw new Error("Invalid provider account.");
+  return { provider: parseProviderId(value.provider), accountId: requireString(value.accountId, "accountId") };
+}
+
+/** The provider's own sign-in (`default`) or an account after the first. */
+export function parseResetProviderUsageInput(value: unknown): ResetProviderUsageInput {
+  if (!isDynamicRecord(value) || !isProviderAccountId(value.accountId)) throw new Error("Invalid provider account.");
+  return { provider: parseProviderId(value.provider), accountId: value.accountId };
+}
+
+export function parseRenameProviderAccountInput(value: unknown): RenameProviderAccountInput {
+  if (!isDynamicRecord(value) || (value.label !== null && !isString(value.label)))
+    throw new Error("Invalid provider account.");
+  const label = value.label?.trim() || null;
+  if (label && label.length > PROVIDER_ACCOUNT_LABEL_MAX_LENGTH) throw new Error("Invalid provider account.");
+  return { ...parseRemoveProviderAccountInput(value), label };
 }

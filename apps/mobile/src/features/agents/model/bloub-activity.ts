@@ -23,7 +23,7 @@ const FOCUS = 1.7;
 const WIDE = 1;
 const CYCLE = LEAD + FOCUS + WIDE;
 export const FRAME_COUNT = Math.round(CYCLE * FPS);
-export const SETTLE = 0.45;
+const SETTLE = 0.45;
 export const IDLE_FPS = 30;
 const IDLE_SECONDS = 8;
 
@@ -40,7 +40,7 @@ export function prepareBloubIdleFrames(geometry: Geometry, onReady: Ready, sched
   return prepareSharedFrames(`idle:${geometry.key}`, idleFrames(geometry), onReady, schedule);
 }
 
-export function nativeFrame(frame: BotFrame) {
+function nativeFrame(frame: BotFrame) {
   return {
     body: { d: frame.bodyPath, opacity: frame.bodyAlpha },
     eyes: frame.eyes.map((eye) => ({
@@ -53,6 +53,33 @@ export function nativeFrame(frame: BotFrame) {
 }
 
 export type BloubActivityFrame = ReturnType<typeof nativeFrame>;
+
+const MAX_CACHED_REST_FRAMES = 128;
+const restFrames = new Map<string, { engine: BotFrame; native: BloubActivityFrame }>();
+
+function restFrame(geometry: Geometry) {
+  const cached = restFrames.get(geometry.key);
+  if (cached) return cached;
+  const engine = new BotEngine(100, "idle", geometry.radii, geometry.expression).sample(0);
+  const frame = { engine, native: nativeFrame(engine) };
+  const oldest = restFrames.keys().next().value;
+  if (restFrames.size >= MAX_CACHED_REST_FRAMES && oldest !== undefined) restFrames.delete(oldest);
+  restFrames.set(geometry.key, frame);
+  return frame;
+}
+
+/**
+ * The still face of a geometry. A long agent list mounts many avatars with few distinct faces, so
+ * the frame is sampled once per face rather than once per row.
+ */
+export function bloubRestFrame(geometry: Geometry): BloubActivityFrame {
+  return restFrame(geometry).native;
+}
+
+/** The same still face as the engine draws it, for a static SVG. */
+export function bloubRestEngineFrame(geometry: Geometry): BotFrame {
+  return restFrame(geometry).engine;
+}
 
 export function getBloubAvatarColor(seed: string, hue: AvatarHue | null): string {
   const profile = bloubAvatarProfile(seed, hue);

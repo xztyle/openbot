@@ -6,14 +6,17 @@ import {
   type DiscordApiRequest,
   type DiscordButton,
   type DiscordHistoryMessage,
+  decodeDiscordChannels,
   decodeDiscordHistory,
   decodeDiscordMessageId,
   decodeDiscordName,
+  decodeDiscordRoles,
 } from "@openbot/contracts/signal-protocol/discord-api";
 import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect, Result } from "effect";
 import { causeHelpers } from "../../effect-boundary";
 import { chunkMarkdown } from "../messaging-chunks";
+import { mentionNames, withMentionNames } from "../messaging-mentions";
 import type { MessagingAnswerFile } from "../messaging-threads";
 import type {
   ConnectionIdentity,
@@ -25,16 +28,26 @@ import type {
   MessagingDriver,
   MessagingDriverOptions,
   MessagingIngress,
+  MessagingPlace,
   StatusReaction,
 } from "../messaging-types";
 import { DiscordApiError, MessagingAdapterError } from "../messaging-types";
-import { discordCustomId, discordPlainText } from "./discord-events";
+import { discordCustomId, discordMentionIds, discordPlainText, inboundFile } from "./discord-events";
 import { DiscordTransport } from "./discord-transport";
 
 /** A margin under Discord's limit for the fence that `chunkMarkdown` can add. */
 const CHUNK_CHARACTERS = DISCORD_MESSAGE_TEXT_LIMIT - 40;
 /** How many pages of a channel the context reads after the conversation's first message. */
 const HISTORY_PAGES = 3;
+/** The channel messages before a conversation's first message that are its context: the most, and how old. */
+const PRECEDING_MESSAGES = 10;
+const PRECEDING_WINDOW_MS = 15 * 60_000;
+/** The times the history tool reads a channel from, shortest first: an hour, a day, a week. */
+const RECENT_WINDOWS_MS = [3_600_000, 86_400_000, 604_800_000];
+/** The most `listMessages` calls of one history tool call. */
+const RECENT_CALLS = 6;
+const CLOCK_MARGIN_MS = 60_000;
+const DISCORD_EPOCH_MS = 1_420_070_400_000n;
 const RATE_LIMIT_NOTICE_MS = 5_000;
 /** Signal answers a rate limit at once. A call waits and tries again, as a Slack call does. */
 const RATE_LIMIT_RETRIES = 3;
@@ -224,8 +237,10 @@ class DiscordAdapter implements MessagingAdapter {
    * The messages of the reply chain that `threadKey` starts, after `afterId` and before `beforeId`.
    * Discord has no thread of replies, so this reads the channel from the first message on and keeps
    * the first message, the replies to it and the replies to OpenBot's posts, which all reply to it.
-   * Without the Message Content intent, Discord gives the text only of a message that mentions
-   * OpenBot, so a message without text is left out.
+   * The first message of a conversation has no chain before it: its context is the channel's
+   * messages of the last minutes before it, such as an image that a person posted without a mention.
+   * Without the Message Content intent, Discord gives the text and files only of a message that
+   * mentions OpenBot, so a message without either is left out.
    */
   readonly history = Effect.fnUntraced(function* (
     this: DiscordAdapter,
@@ -234,22 +249,76 @@ class DiscordAdapter implements MessagingAdapter {
     afterId: string | null,
     beforeId: string,
   ): Effect.fn.Return<ContextEntry[], MessagingAdapterError> {
-    const root = BigInt(threadKey);
-    const before = BigInt(beforeId);
     const after = afterId ? BigInt(afterId) : null;
+    const messages =
+      threadKey === beforeId
+        ? yield* this.#preceding(platformChannelId, BigInt(beforeId))
+        : yield* this.#chain(platformChannelId, threadKey, BigInt(beforeId));
+    return yield* this.#entries(
+      messages.filter(
+        (message) => !message.authorIsBot && hasContent(message) && (after === null || BigInt(message.id) > after),
+      ),
+    );
+  });
+
+  /**
+   * The newest messages of a reply chain or of the channel, OpenBot's posts included, for the agent's
+   * history tool. Discord lists a channel only forward from an id, so the channel is read from a
+   * time: the last hour first, and a longer time when that has too few messages. A message without
+   * text or files is left out, as in `history`.
+   */
+  readonly recent = Effect.fnUntraced(function* (
+    this: DiscordAdapter,
+    platformChannelId: string,
+    threadKey: string | null,
+    limit: number,
+  ): Effect.fn.Return<ContextEntry[], MessagingAdapterError> {
+    const now = Date.now();
+    if (threadKey) {
+      // A margin past now: this computer's clock can be behind Discord's.
+      const chain = yield* this.#chain(platformChannelId, threadKey, snowflakeAt(now + CLOCK_MARGIN_MS));
+      return (yield* this.#entries(chain.filter(hasContent))).slice(-limit);
+    }
+    let calls = 0;
+    let visible: DiscordHistoryMessage[] | null = null;
+    for (const window of RECENT_WINDOWS_MS) {
+      const read: DiscordHistoryMessage[] = [];
+      let cursor = (snowflakeAt(now - window) - 1n).toString();
+      let complete = false;
+      while (calls < RECENT_CALLS && !complete) {
+        calls += 1;
+        const batch = yield* this.#listMessages(platformChannelId, cursor);
+        read.push(...batch);
+        const last = batch.at(-1);
+        complete = !last || batch.length < DISCORD_LIST_MESSAGES_LIMIT;
+        if (last) cursor = last.id;
+      }
+      // A longer time that was not read to its end has only its oldest messages: the shorter time
+      // before it, read to its end, is newer.
+      if (!complete && visible) break;
+      visible = read.filter(hasContent);
+      if (!complete || visible.length >= limit || calls >= RECENT_CALLS) break;
+    }
+    if (!visible) return [];
+    visible.sort((left, right) => compareSnowflakes(left.id, right.id));
+    return (yield* this.#entries(visible)).slice(-limit);
+  });
+
+  /**
+   * The messages of the reply chain that `threadKey` starts, before `before`, oldest first. Discord
+   * has no thread of replies, so this reads the channel from the first message on and keeps the first
+   * message, the replies to it, OpenBot's posts that reply to it, and the replies to those posts.
+   */
+  readonly #chain = Effect.fnUntraced(function* (
+    this: DiscordAdapter,
+    platformChannelId: string,
+    threadKey: string,
+    before: bigint,
+  ): Effect.fn.Return<DiscordHistoryMessage[], MessagingAdapterError> {
     const messages: DiscordHistoryMessage[] = [];
-    let cursor = (root - 1n).toString();
+    let cursor = (BigInt(threadKey) - 1n).toString();
     for (let page = 0; page < HISTORY_PAGES; page += 1) {
-      const batch = yield* this.#call(
-        {
-          op: "listMessages",
-          guildId: this.#guildId,
-          channelId: platformChannelId,
-          after: cursor,
-          limit: DISCORD_LIST_MESSAGES_LIMIT,
-        },
-        decodeDiscordHistory,
-      );
+      const batch = yield* this.#listMessages(platformChannelId, cursor);
       messages.push(...batch);
       const last = batch.at(-1);
       if (!last || batch.length < DISCORD_LIST_MESSAGES_LIMIT || BigInt(last.id) >= before) break;
@@ -257,23 +326,84 @@ class DiscordAdapter implements MessagingAdapter {
     }
     messages.sort((left, right) => compareSnowflakes(left.id, right.id));
     const botPosts = new Set<string>();
-    const entries: ContextEntry[] = [];
+    const chain: DiscordHistoryMessage[] = [];
     for (const message of messages) {
-      const id = BigInt(message.id);
-      if (id >= before) break;
+      if (BigInt(message.id) >= before) break;
       if (message.authorIsBot) {
-        if (message.replyToId === threadKey) botPosts.add(message.id);
+        if (message.replyToId !== threadKey) continue;
+        botPosts.add(message.id);
+        chain.push(message);
         continue;
       }
-      const inChain =
+      if (
         message.id === threadKey ||
         message.replyToId === threadKey ||
-        (message.replyToId !== null && botPosts.has(message.replyToId));
-      const text = discordPlainText(message.content);
-      if (!inChain || !text || (after !== null && id <= after)) continue;
-      entries.push({ id: message.id, authorName: message.authorName, text, sentAt: message.sentAt });
+        (message.replyToId !== null && botPosts.has(message.replyToId))
+      )
+        chain.push(message);
     }
-    return entries;
+    return chain;
+  });
+
+  /** The newest channel messages before `before`, from the last minutes before it, oldest first. */
+  readonly #preceding = Effect.fnUntraced(function* (
+    this: DiscordAdapter,
+    platformChannelId: string,
+    before: bigint,
+  ): Effect.fn.Return<DiscordHistoryMessage[], MessagingAdapterError> {
+    const messages: DiscordHistoryMessage[] = [];
+    let cursor = (snowflakeAt(Number(snowflakeTime(before)) - PRECEDING_WINDOW_MS) - 1n).toString();
+    for (let page = 0; page < HISTORY_PAGES; page += 1) {
+      const batch = yield* this.#listMessages(platformChannelId, cursor);
+      messages.push(...batch);
+      const last = batch.at(-1);
+      if (!last || batch.length < DISCORD_LIST_MESSAGES_LIMIT || BigInt(last.id) >= before) break;
+      cursor = last.id;
+    }
+    return messages
+      .filter((message) => BigInt(message.id) < before)
+      .sort((left, right) => compareSnowflakes(left.id, right.id))
+      .slice(-PRECEDING_MESSAGES);
+  });
+
+  #listMessages(
+    platformChannelId: string,
+    after: string,
+  ): Effect.Effect<DiscordHistoryMessage[], MessagingAdapterError> {
+    return this.#call(
+      {
+        op: "listMessages",
+        guildId: this.#guildId,
+        channelId: platformChannelId,
+        after,
+        limit: DISCORD_LIST_MESSAGES_LIMIT,
+      },
+      decodeDiscordHistory,
+    );
+  }
+
+  /** Discord messages as context, with each user mention named. A bot's post names the bot. */
+  readonly #entries = Effect.fnUntraced(function* (this: DiscordAdapter, messages: DiscordHistoryMessage[]) {
+    const names = yield* mentionNames(
+      messages.flatMap((message) => discordMentionIds(message.content)),
+      (userId) => this.authorName(userId),
+    );
+    return messages.map(
+      (message): ContextEntry => ({
+        id: message.id,
+        authorName: message.authorIsBot ? `${message.authorName} (bot)` : message.authorName,
+        text: [
+          withMentionNames(discordPlainText(message.content), names),
+          message.attachments.length
+            ? `(Attached files: ${message.attachments.map((file) => file.filename).join(", ")})`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        sentAt: message.sentAt,
+        ...(message.attachments.length ? { files: message.attachments.map(inboundFile) } : {}),
+      }),
+    );
   });
 
   /** A Discord attachment is a signed CDN address: it needs no token. */
@@ -286,28 +416,62 @@ class DiscordAdapter implements MessagingAdapter {
     if (cached) return yield* Deferred.await(cached);
     const name = Deferred.makeUnsafe<string>();
     this.#names.set(userId, name);
-    const result = yield* this.#call({ op: "member", guildId: this.#guildId, userId }, decodeDiscordName).pipe(
-      Effect.catch(() => Effect.succeed(userId)),
+    // Detached, so a caller with a deadline stops waiting at it. The lookup still completes the cache
+    // entry, which a later caller then reads.
+    yield* Effect.forkDetach(
+      this.#call({ op: "member", guildId: this.#guildId, userId }, decodeDiscordName).pipe(
+        Effect.catch(() =>
+          Effect.sync(() => {
+            this.#names.delete(userId);
+            return userId;
+          }),
+        ),
+        Effect.flatMap((result) => Deferred.succeed(name, result)),
+        Effect.uninterruptible,
+      ),
     );
-    yield* Deferred.succeed(name, result);
-    return result;
-  }, Effect.uninterruptible);
+    return yield* Deferred.await(name);
+  });
 
   readonly placeName = Effect.fnUntraced(function* (this: DiscordAdapter, platformChannelId: string) {
     const cached = this.#places.get(platformChannelId);
     if (cached) return yield* Deferred.await(cached);
     const name = Deferred.makeUnsafe<string>();
     this.#places.set(platformChannelId, name);
-    const result = yield* this.#call(
-      { op: "channel", guildId: this.#guildId, channelId: platformChannelId },
-      decodeDiscordName,
-    ).pipe(
-      Effect.map((channel) => `#${channel}`),
-      Effect.catch(() => Effect.succeed(platformChannelId)),
+    // Detached for the same reason as `authorName`.
+    yield* Effect.forkDetach(
+      this.#call({ op: "channel", guildId: this.#guildId, channelId: platformChannelId }, decodeDiscordName).pipe(
+        Effect.map((channel) => `#${channel}`),
+        Effect.catch(() =>
+          Effect.sync(() => {
+            this.#places.delete(platformChannelId);
+            return platformChannelId;
+          }),
+        ),
+        Effect.flatMap((result) => Deferred.succeed(name, result)),
+        Effect.uninterruptible,
+      ),
     );
-    yield* Deferred.succeed(name, result);
-    return result;
-  }, Effect.uninterruptible);
+    return yield* Deferred.await(name);
+  });
+
+  /** A Signal that predates `listChannels` refuses it as an invalid request. */
+  places(): Effect.Effect<MessagingPlace[], MessagingAdapterError> {
+    return this.#call({ op: "listChannels", guildId: this.#guildId }, decodeDiscordChannels).pipe(
+      Effect.map((channels) =>
+        channels.map((channel) => ({
+          id: channel.id,
+          name: channel.kind === "channel" ? `#${channel.name}` : channel.name,
+          kind: channel.kind,
+        })),
+      ),
+    );
+  }
+
+  /** A Signal that predates `listRoles` refuses it as an invalid request. */
+  roles(): Effect.Effect<Array<{ id: string; name: string }>, MessagingAdapterError> {
+    return this.#call({ op: "listRoles", guildId: this.#guildId }, decodeDiscordRoles);
+  }
 
   /** Signal posts with no mention allowed, so a mention shows the person and pings nobody. */
   mention(userId: string): string {
@@ -361,6 +525,20 @@ function buttons(body: MessageBody): DiscordButton[] {
 /** Status text is written by the host and is short; this keeps it within Discord's limit. */
 function clip(text: string): string {
   return text.length > DISCORD_MESSAGE_TEXT_LIMIT ? `${text.slice(0, DISCORD_MESSAGE_TEXT_LIMIT - 1)}…` : text;
+}
+
+/** The smallest Discord id of a message sent at `milliseconds`. */
+function snowflakeAt(milliseconds: number): bigint {
+  return (BigInt(milliseconds) - DISCORD_EPOCH_MS) << 22n;
+}
+
+function snowflakeTime(id: bigint): bigint {
+  return (id >> 22n) + DISCORD_EPOCH_MS;
+}
+
+/** A message that has text or files for the context. */
+function hasContent(message: DiscordHistoryMessage): boolean {
+  return discordPlainText(message.content) !== "" || message.attachments.length > 0;
 }
 
 function compareSnowflakes(left: string, right: string): number {

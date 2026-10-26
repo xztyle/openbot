@@ -14,12 +14,20 @@ export const GUIDES_COLLECTION: ContentCollection<"guides"> = {
   name: "Guides",
   indexTitle: "OpenBot Guides: How to Run a Team of AI Agents",
   indexDescription:
-    "How OpenBot works and how to run a team of AI agents. Start with OpenBot 101, then explore practical guides to models, agents, and the Marketplace.",
+    "How OpenBot works and how to run a team of AI agents. Start with how to set up your first agent, then explore practical guides to models, agents, and the Marketplace.",
   feedTitle: "OpenBot guides",
   backLabel: "All guides",
   moreTitle: "More guides",
   imageEyebrow: "OPENBOT · GUIDES",
   articles: publishedFirst([
+    {
+      slug: "agentic-ai-definition",
+      title: "Agentic AI Definition: How It Differs From Chatbots",
+      description:
+        "What is agentic AI? Compare OpenBot agents with a typical chatbot: ongoing tasks, saved files, source checking and handoffs between agents.",
+      publishedAt: "2026-10-13",
+      author: NEWS_AUTHOR,
+    },
     {
       slug: "openbot-hosted-servers",
       title: "OpenBot Hosted Servers: Plans, Pricing, and How They Work",
@@ -46,7 +54,7 @@ export const GUIDES_COLLECTION: ContentCollection<"guides"> = {
     },
     {
       slug: "openbot-101",
-      title: "OpenBot 101",
+      title: "How to Use OpenBot: Set Up Your First AI Agent",
       description:
         "What OpenBot is, what an agent keeps between runs, and how to get one doing real work on your computer. Start here if you have not opened the app yet.",
       publishedAt: "2026-09-12",
@@ -54,7 +62,7 @@ export const GUIDES_COLLECTION: ContentCollection<"guides"> = {
     },
     {
       slug: "wtf-is-openbot",
-      title: "WTF Is OpenBot?",
+      title: "What Is OpenBot? Models, Providers and Agents Explained",
       description:
         "A practical explanation of models, providers, agents, and the local-first workspace that brings them together.",
       publishedAt: "2026-09-15",

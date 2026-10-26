@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export type SidebarPeopleOrderByServer = Record<string, string[]>;
 
-export const SIDEBAR_PEOPLE_ORDER_STORAGE_KEY = "openbot:sidebar-people-order:v1";
+const SIDEBAR_PEOPLE_ORDER_STORAGE_KEY = "openbot:sidebar-people-order:v1";
 
 type SidebarPeopleOrderStorage = Pick<Storage, "getItem" | "setItem">;
 

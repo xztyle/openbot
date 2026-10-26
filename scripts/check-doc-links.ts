@@ -67,9 +67,12 @@ function anchors(path: string): Set<string> {
   return found;
 }
 
+// A vendored marketplace bundle is upstream text, kept unchanged, and links to upstream files that
+// the catalog does not copy; the catalog build checks the links of what it publishes.
+const VENDORED = "marketplace/production-catalog/bundles/";
 const files = execFileSync("git", ["ls-files", "*.md"], { cwd: ROOT, encoding: "utf8" })
   .split("\n")
-  .filter((file) => file !== "" && existsSync(join(ROOT, file)));
+  .filter((file) => file !== "" && !file.startsWith(VENDORED) && existsSync(join(ROOT, file)));
 const failures: string[] = [];
 
 for (const file of files) {

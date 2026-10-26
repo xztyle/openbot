@@ -1,25 +1,32 @@
-import { BotEngine } from "@norbert_bodziony/bloub";
 import { type AvatarMood, avatarMoodIsBusy } from "@openbot/brand/bloub-avatar-motion";
-import { useIsFocused } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { useDerivedValue, useFrameCallback, useSharedValue } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import { useAppDrawerShownOnUI } from "@/features/servers/components/app-drawer-activity";
 import { useMotionPreference } from "@/shared/lib/motion";
+import { isAndroid } from "@/shared/lib/platform";
+import { useScreenFocusedWhile } from "@/shared/lib/use-screen-focused-while";
 
 import {
   type BloubActivityFrame,
   bloubActivityGeometry,
   bloubMorphGeometry,
+  bloubRestFrame,
   FPS,
   FRAME_COUNT,
   IDLE_FPS,
-  nativeFrame,
   prepareBloubActivityFrames,
   prepareBloubIdleFrames,
   prepareBloubMorphFrames,
   prepareBloubSettlingFrames,
 } from "../model/bloub-activity";
+
+/**
+ * Android redraws a whole SVG in software for each changed frame, so it shows every second frame of
+ * the 60 fps working and morph sequences: 30 fps, the rate of the desktop avatar.
+ */
+const FRAME_STEP = isAndroid ? 2 : 1;
 
 interface Playback {
   frames: BloubActivityFrame[];
@@ -38,21 +45,22 @@ interface Playback {
  * here is the working face and the wide-eyed beat rather than the rings the desktop turns.
  */
 export function useBloubActivityFrame(seed: string, mood: AvatarMood, animateIdle = true) {
-  const focused = useIsFocused();
   // Reduced motion, or the Settings switch for faces, holds the face at rest.
   const still = !useMotionPreference("agentFaces");
   const [playing, setPlaying] = useState(false);
   const busy = avatarMoodIsBusy(mood);
+  const focused = useScreenFocusedWhile(!still && (busy || animateIdle));
   const geometry = useMemo(() => bloubActivityGeometry(seed, mood), [seed, mood]);
   const previousGeometry = useRef(geometry);
   const morph = useRef<{ from: typeof geometry; to: typeof geometry } | null>(null);
-  const rest = useMemo(
-    () => nativeFrame(new BotEngine(100, "idle", geometry.radii, geometry.expression).sample(0)),
-    [geometry],
-  );
+  const rest = useMemo(() => bloubRestFrame(geometry), [geometry]);
   const playback = useSharedValue<Playback>({ frames: [rest], index: 0, loopStart: null });
   const elapsed = useSharedValue(0);
   const idleFrames = useRef<BloubActivityFrame[] | null>(null);
+  // Android: the drawer and its scrim cover the avatars of home, and each frame redraws the SVG in
+  // software. The face holds its frame until the drawer has closed. The gate is on the UI thread, so
+  // the drawer does not render every avatar again. iOS keeps the motion under its blur.
+  const drawerShown = useAppDrawerShownOnUI();
   const startIdle = useCallback(() => {
     const frames = idleFrames.current;
     if (!frames) return false;
@@ -69,11 +77,13 @@ export function useBloubActivityFrame(seed: string, mood: AvatarMood, animateIdl
     }
   }, [playback, startIdle]);
   const clock = useFrameCallback(({ timeSincePreviousFrame }) => {
+    if (isAndroid && drawerShown.get()) return;
     const current = playback.get();
     if (current.loopStart === null && current.index >= current.frames.length - 1) return;
     const fps = current.idle ? IDLE_FPS : FPS;
+    const step = current.idle ? 1 : FRAME_STEP;
     const accumulated = elapsed.get() + Math.min(timeSincePreviousFrame ?? 0, 64);
-    const advance = Math.floor((accumulated * fps) / 1000);
+    const advance = Math.floor((accumulated * fps) / 1000 / step) * step;
     elapsed.set(accumulated - (advance * 1000) / fps);
     if (advance === 0) return;
     let index = current.index + advance;

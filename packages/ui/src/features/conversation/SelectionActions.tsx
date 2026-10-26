@@ -1,5 +1,11 @@
+import { fileQuoteId, fileQuoteTarget } from "@openbot/contracts/chat-tag-references";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import { Button, Input } from "@openbot/ui";
+import {
+  SELECTION_ACTION_INSTRUCTIONS,
+  serializeFileSelectionInstruction,
+  serializeSelectionInstruction,
+} from "@openbot/contracts/selection-instruction";
+import { Button, Input, TextQuote } from "@openbot/ui";
 import { clamp } from "@openbot/ui/utils";
 import { Portal } from "@solidjs/web";
 import type { Element as SolidElement } from "solid-js";
@@ -7,30 +13,26 @@ import { createEffect, createMemo, createSignal, For, onSettled, Show } from "so
 import { useText } from "../../text";
 
 const MESSAGE_TEXT_SELECTOR = ".message-copy[data-selection-message-id]";
+/**
+ * The text of a file in the side panel. `data-selection-file-quote` is its quote id without lines;
+ * `data-selection-file-lines` marks text that is the file source, so a selection gives its lines.
+ */
+const FILE_TEXT_SELECTOR = "[data-selection-file-quote]";
 const INTERACTIVE_SELECTOR =
   'a, button, input, textarea, select, [contenteditable="true"], [role="button"], .message-citation';
 const HIGHLIGHT_NAME = "openbot-message-selection";
 const VIEWPORT_MARGIN = 12;
 const TOOLBAR_GAP = 8;
 
-export const SELECTION_ACTION_INSTRUCTIONS = {
-  Explain: "Explain this selected text.",
-  Improve: "Improve this selected text.",
-  Shorten: "Shorten this selected text.",
-  Tone: "Change the tone of this selected text.",
-  Grammar: "Fix the grammar in this selected text.",
-} as const;
-
 export interface MessageTextSelection {
+  /** The id of the selected message, or the quote id of the selected file passage. */
   messageId: string;
   text: string;
   range: Range;
 }
 
-export interface SelectionInstruction {
-  instruction: string;
-  quote: string;
-}
+/** The modifier of the quote chord with Shift and Period: Command on macOS, Control elsewhere. */
+export type QuoteShortcutModifier = "meta" | "ctrl";
 
 export interface SelectionRect {
   top: number;
@@ -47,29 +49,6 @@ export interface SelectionActionsPosition {
   placement: "top" | "bottom";
 }
 
-export function serializeSelectionInstruction(instruction: string, quote: string): string {
-  const normalizedInstruction = instruction.trim();
-  const normalizedQuote = quote.replace(/\r\n?/gu, "\n").trim();
-  const quoted = normalizedQuote
-    .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n");
-  return `${normalizedInstruction}\n\n${quoted}`;
-}
-
-export function parseSelectionInstruction(body: string): SelectionInstruction | null {
-  const separator = body.lastIndexOf("\n\n>");
-  if (separator <= 0) return null;
-  const instruction = body.slice(0, separator).trim();
-  const quoteLines = body.slice(separator + 2).split("\n");
-  if (!instruction || quoteLines.length === 0 || quoteLines.some((line) => !/^>(?: |$)/u.test(line))) return null;
-  const quote = quoteLines
-    .map((line) => line.replace(/^> ?/u, ""))
-    .join("\n")
-    .trim();
-  return quote ? { instruction, quote } : null;
-}
-
 export function messageTextSelection(selection: Selection | null): MessageTextSelection | null {
   if (selection?.rangeCount !== 1 || selection.isCollapsed) return null;
   const range = selection.getRangeAt(0);
@@ -77,7 +56,7 @@ export function messageTextSelection(selection: Selection | null): MessageTextSe
   const startBlock = messageTextBlock(range.startContainer);
   const endBlock = messageTextBlock(range.endContainer);
   if (!startBlock || startBlock !== endBlock) return null;
-  const messageId = startBlock.dataset.selectionMessageId;
+  const messageId = startBlock.dataset.selectionMessageId ?? fileSelectionQuoteId(startBlock, range);
   const text = selection
     .toString()
     .replace(/\u00a0/gu, " ")
@@ -113,6 +92,9 @@ export function MessageSelectionActions(props: {
   contextKey: string | undefined;
   disabled: boolean;
   onSend: (messageId: string, body: string) => Promise<boolean>;
+  /** Puts the selected text in the composer as a quote. Without it, the toolbar has no Quote action. */
+  onQuote?: ((messageId: string, text: string) => void) | undefined;
+  quoteShortcut?: QuoteShortcutModifier;
 }) {
   const [selection, setSelection] = createSignal<MessageTextSelection | null>(null);
   const [fallbackHighlight, setFallbackHighlight] = createSignal(false);
@@ -128,6 +110,14 @@ export function MessageSelectionActions(props: {
   const dismiss = () => {
     clearSelection();
     window.getSelection()?.removeAllRanges();
+  };
+
+  const quote = () => {
+    const active = selection();
+    if (!active || !props.onQuote) return;
+    // The composer takes the caret next, so the message selection must go first.
+    dismiss();
+    props.onQuote(active.messageId, active.text);
   };
 
   const captureSelection = () => {
@@ -191,13 +181,20 @@ export function MessageSelectionActions(props: {
       if (event.target instanceof Element && event.target.closest(".selection-actions-layer")) return;
       captureSelection();
     };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!selection() || !props.onQuote || !isQuoteShortcut(event, props.quoteShortcut ?? "ctrl")) return;
+      event.preventDefault();
+      quote();
+    };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("keydown", onKeyDown);
       clearPersistentHighlight();
     };
   });
@@ -210,6 +207,8 @@ export function MessageSelectionActions(props: {
           fallbackHighlight={fallbackHighlight()}
           onDismiss={dismiss}
           onSend={props.onSend}
+          onQuote={props.onQuote ? quote : undefined}
+          quoteShortcut={props.quoteShortcut}
         />
       )}
     </Show>
@@ -221,6 +220,8 @@ export function SelectionActionsBar(props: {
   fallbackHighlight?: boolean;
   onDismiss: () => void;
   onSend: (messageId: string, body: string) => Promise<boolean>;
+  onQuote?: (() => void) | undefined;
+  quoteShortcut?: QuoteShortcutModifier | undefined;
 }) {
   const { t } = useText();
   const [prompt, setPrompt] = createSignal("");
@@ -237,8 +238,12 @@ export function SelectionActionsBar(props: {
   let previousSelectionKey = "";
 
   const hasPrompt = createMemo(() => prompt().trim().length > 0);
+  const selectionBody = (instruction: string) =>
+    fileQuoteTarget(props.selection.messageId)
+      ? serializeFileSelectionInstruction(instruction, props.selection.text, props.selection.messageId)
+      : serializeSelectionInstruction(instruction, props.selection.text);
   const maximumInstructionLength = createMemo(() => {
-    const quoteOnly = serializeSelectionInstruction("", props.selection.text).length;
+    const quoteOnly = selectionBody("").length;
     return Math.max(1, INPUT_LIMITS.messageText - quoteOnly);
   });
 
@@ -344,7 +349,7 @@ export function SelectionActionsBar(props: {
   const submit = async (instruction: string) => {
     const normalized = instruction.trim();
     if (!normalized || mode() === "sending") return;
-    const body = serializeSelectionInstruction(normalized, props.selection.text);
+    const body = selectionBody(normalized);
     if (body.length > INPUT_LIMITS.messageText) {
       setLastInstruction(normalized);
       setMode("error");
@@ -477,10 +482,35 @@ export function SelectionActionsBar(props: {
                     "selection-actions-presets-expanded": expanded(),
                   },
                 ]}
-                style={{ "max-width": hasPrompt() ? "0px" : expanded() ? "462px" : "224px" }}
+                style={{
+                  "max-width": hasPrompt()
+                    ? "0px"
+                    : `${(expanded() ? 462 : 224) + (props.onQuote ? QUOTE_ACTION_WIDTH : 0)}px`,
+                }}
               >
                 <Show when={!expanded()}>
                   <span class="selection-actions-divider" aria-hidden="true" />
+                </Show>
+                <Show when={props.onQuote}>
+                  {(onQuote) => (
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      class="selection-actions-control"
+                      aria-label={t("chat.selection.quote")}
+                      aria-keyshortcuts={props.quoteShortcut === "meta" ? "Meta+Shift+Period" : "Control+Shift+Period"}
+                      title={t(
+                        props.quoteShortcut === "meta"
+                          ? "chat.selection.quoteShortcutMac"
+                          : "chat.selection.quoteShortcutOther",
+                      )}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => onQuote()()}
+                    >
+                      <TextQuote class="selection-actions-icon" aria-hidden="true" />
+                      <span class="selection-actions-label">{t("chat.selection.quote")}</span>
+                    </Button>
+                  )}
                 </Show>
                 <PresetButton
                   label={t("chat.selection.explain")}
@@ -566,9 +596,35 @@ function PresetButton(props: { label: string; icon: SolidElement; onSelect: () =
   );
 }
 
+/* The Quote button, so the presets do not clip it. */
+const QUOTE_ACTION_WIDTH = 84;
+
+function isQuoteShortcut(event: KeyboardEvent, modifier: QuoteShortcutModifier): boolean {
+  const modifierDown = modifier === "meta" ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  return modifierDown && event.shiftKey && !event.altKey && event.code === "Period";
+}
+
 function messageTextBlock(node: Node): HTMLElement | null {
   const element = node instanceof HTMLElement ? node : node.parentElement;
-  return element?.closest<HTMLElement>(MESSAGE_TEXT_SELECTOR) ?? null;
+  return element?.closest<HTMLElement>(`${MESSAGE_TEXT_SELECTOR}, ${FILE_TEXT_SELECTOR}`) ?? null;
+}
+
+/** The quote id of a file passage. Source text gives the lines; rendered Markdown names only the file. */
+function fileSelectionQuoteId(block: HTMLElement, range: Range): string | undefined {
+  const id = block.dataset.selectionFileQuote;
+  const target = id ? fileQuoteTarget(id) : null;
+  if (!id || !target || block.dataset.selectionFileLines !== "true") return id;
+  const before = block.ownerDocument.createRange();
+  before.setStart(block, 0);
+  before.setEnd(range.startContainer, range.startOffset);
+  const selected = range.toString();
+  const leading = selected.slice(0, selected.length - selected.trimStart().length);
+  const start = lineBreaks(before.toString()) + lineBreaks(leading) + 1;
+  return fileQuoteId({ ...target, lines: { start, end: start + lineBreaks(selected.trim()) } });
+}
+
+function lineBreaks(value: string): number {
+  return value.split("\n").length - 1;
 }
 
 function rangeIntersectsInteractiveContent(range: Range, root: HTMLElement): boolean {

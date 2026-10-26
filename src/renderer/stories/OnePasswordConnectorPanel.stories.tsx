@@ -75,3 +75,17 @@ export const InstallFailed: Story = {
     error: "OpenBot could not install the 1Password CLI. Check the connection to the internet, then try again.",
   }),
 };
+
+/** A joined server connects with a service account token only, so the page shows no setup steps. */
+export const HostTokenOnly: Story = { args: { ...args({}), hostName: "Studio" } };
+
+export const HostTokenRejected: Story = {
+  args: { ...args({ error: "1Password did not accept the service account token." }), hostName: "Studio" },
+};
+
+export const HostConnected: Story = {
+  args: {
+    ...args({ state: "connected", vaultNames: ["Shared with OpenBot"], loginCount: 3 }),
+    hostName: "Studio",
+  },
+};

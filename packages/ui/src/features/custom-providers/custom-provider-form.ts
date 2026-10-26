@@ -3,7 +3,7 @@
 // from the contract; main rechecks on save, so a drifted copy would pass the form and fail save.
 
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import type { SaveCustomProviderInput } from "@openbot/contracts/ipc";
+import type { CustomProviderSummary, SaveCustomProviderInput, UpdateCustomProviderInput } from "@openbot/contracts/ipc";
 import {
   AGENT_PROVIDERS,
   CUSTOM_PROVIDER_ID_PATTERN,
@@ -38,7 +38,7 @@ export interface CustomProviderDraft {
 export interface CustomProviderErrors {
   providerId?: string;
   displayName?: string;
-  baseUrl?: string;
+  baseUrl?: string | undefined;
   apiKey?: string;
   /** Nothing usable in the whole list, so no single row owns the message. */
   models?: string;
@@ -57,6 +57,24 @@ export function emptyCustomProviderDraft(): CustomProviderDraft {
   };
 }
 
+/**
+ * The form for a saved endpoint. The key and the headers stay in main, so their fields open blank,
+ * and blank fields keep them (`customProviderUpdate`).
+ */
+export function savedCustomProviderDraft(provider: CustomProviderSummary): CustomProviderDraft {
+  return {
+    providerId: provider.id,
+    displayName: provider.name,
+    baseUrl: provider.baseUrl,
+    apiKey: "",
+    models:
+      provider.models.length > 0
+        ? provider.models.map((model) => ({ id: model.id, name: model.name }))
+        : [{ id: "", name: "" }],
+    headers: [{ name: "", value: "" }],
+  };
+}
+
 /** A row the user has not filled in yet: carried by the form, ignored by validation and submit. */
 function blankModel(model: CustomModelDraft): boolean {
   return !model.id.trim() && !model.name.trim();
@@ -66,9 +84,13 @@ function blankHeader(header: CustomHeaderDraft): boolean {
   return !header.name.trim() && !header.value.trim();
 }
 
+/**
+ * A locked ID names a saved endpoint, so it has no ID checks: main accepts a saved ID that a later
+ * release made a built-in provider name, and the user cannot change a locked field.
+ */
 export function validateCustomProvider(
   draft: CustomProviderDraft,
-  takenProviderIds: readonly string[] = [],
+  ids: { taken?: readonly string[] | undefined; locked?: boolean | undefined } = {},
   t: AppTranslate = currentText().t,
 ): CustomProviderErrors {
   const providerId = draft.providerId.trim();
@@ -77,17 +99,19 @@ export function validateCustomProvider(
     headerRows: draft.headers.map(() => undefined),
   };
 
-  if (!providerId) errors.providerId = t("customProvider.error.providerIdRequired");
-  else if (!CUSTOM_PROVIDER_ID_PATTERN.test(providerId)) {
-    errors.providerId = t("customProvider.error.providerIdPattern");
-  } else if (providerId.length > INPUT_LIMITS.identifier) {
-    errors.providerId = t("customProvider.error.providerIdLength", { max: INPUT_LIMITS.identifier });
-  } else if (AGENT_PROVIDERS.some((provider) => provider === providerId)) {
-    errors.providerId = t("customProvider.error.providerIdBuiltIn", { id: providerId });
-  } else if (takenProviderIds.includes(providerId)) {
-    // There is no edit path, so a saved ID is not a field the user can overwrite: main refuses the
-    // save, and this says so before the round trip.
-    errors.providerId = t("customProvider.error.providerIdSaved", { id: providerId });
+  if (!ids.locked) {
+    if (!providerId) errors.providerId = t("customProvider.error.providerIdRequired");
+    else if (!CUSTOM_PROVIDER_ID_PATTERN.test(providerId)) {
+      errors.providerId = t("customProvider.error.providerIdPattern");
+    } else if (providerId.length > INPUT_LIMITS.identifier) {
+      errors.providerId = t("customProvider.error.providerIdLength", { max: INPUT_LIMITS.identifier });
+    } else if (AGENT_PROVIDERS.some((provider) => provider === providerId)) {
+      errors.providerId = t("customProvider.error.providerIdBuiltIn", { id: providerId });
+    } else if (ids.taken?.includes(providerId)) {
+      // There is no way to overwrite a saved ID: main refuses the save, and this says so before the
+      // round trip.
+      errors.providerId = t("customProvider.error.providerIdSaved", { id: providerId });
+    }
   }
 
   const displayName = draft.displayName.trim();
@@ -211,6 +235,21 @@ export function customProviderValue(draft: CustomProviderDraft): SaveCustomProvi
     headers: draft.headers
       .filter((header) => !blankHeader(header))
       .map((header) => ({ name: header.name.trim(), value: header.value.trim() })),
+  };
+}
+
+/**
+ * An edit of a saved endpoint sends only what the user typed: a blank key and no headers keep the
+ * stored ones. There is no way to clear them here, which is the rule of `customProviders.update`.
+ */
+export function customProviderUpdate(value: SaveCustomProviderInput): UpdateCustomProviderInput {
+  return {
+    id: value.id,
+    name: value.name,
+    baseUrl: value.baseUrl,
+    models: value.models,
+    ...(value.apiKey === null ? {} : { apiKey: value.apiKey }),
+    ...(value.headers.length === 0 ? {} : { headers: value.headers }),
   };
 }
 

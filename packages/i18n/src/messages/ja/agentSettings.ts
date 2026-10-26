@@ -2,6 +2,14 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/agentSettings";
 
 export const messages = {
+  "agentSettings.session.title": "プロバイダーの設定",
+  "agentSettings.session.readFailed": "プロバイダーの設定を読み取れませんでした。",
+  "agentSettings.session.pending": "保存した変更は次のターンの前に適用されます。",
+  "agentSettings.session.unavailable":
+    "保存された値 {value} は利用できません。別の値を選択するか、リセットしてください。",
+  "agentSettings.session.effective": "現在のプロバイダーの値: {value}",
+  "agentSettings.session.reset": "設定をリセット",
+  "agentSettings.session.resetNamed": "{name} をリセット",
   "agentSettings.label": "エージェントの設定",
   "agentSettings.title": "設定",
   "agentSettings.backToDetails": "詳細に戻る",
@@ -9,6 +17,27 @@ export const messages = {
   "agentSettings.backToSettings": "設定に戻る",
   "agentSettings.permissions.title": "権限",
   "agentSettings.advanced.title": "詳細設定",
+  "agentSettings.backupModels.title": "バックアップモデル",
+  "agentSettings.backupModels.valueAsk": "先に確認",
+  "agentSettings.backupModels.valueAutomatic": "自動",
+  "agentSettings.backupModels.valueCount": { other: "{mode} · {count}" },
+  "agentSettings.backupModels.intro":
+    "{name} が書き始める前に {model} が使用量の上限に達した場合、{name} はどのモデルを使うかを確認します。",
+  "agentSettings.backupModels.introAutomatic":
+    "{name} が書き始める前に {model} が使用量の上限に達した場合、またはプロバイダーのエラーで失敗した場合、{name} は順番の中で最初に使えるモデルに切り替えます。",
+  "agentSettings.backupModels.ask": "切り替える前に確認",
+  "agentSettings.backupModels.order": "順番",
+  "agentSettings.backupModels.listLabel": "バックアップモデル（順番）",
+  "agentSettings.backupModels.empty": "順番は設定されていません。{name} は使えるモデルをすべて表示します。",
+  "agentSettings.backupModels.add": "バックアップモデルを追加",
+  "agentSettings.backupModels.moveUp": "{model} を上へ移動",
+  "agentSettings.backupModels.moveDown": "{model} を下へ移動",
+  "agentSettings.backupModels.remove": "{model} を削除",
+  "agentSettings.backupModels.limited": "使用量の上限に達しました · スキップ",
+  "agentSettings.backupModels.unavailable": "現在使用できません · スキップ",
+  "agentSettings.backupModels.withAccount": "{model} · {account}",
+  "agentSettings.backupModels.note":
+    "{name} は書き始めた後は切り替えません。上限が解除されると、またはプロバイダーのエラーから 10 分後に {model} に戻ります。",
   "agentSettings.groups.brain": "頭脳",
   "agentSettings.groups.knows": "知識",
   "agentSettings.groups.does": "実行",
@@ -30,7 +59,7 @@ export const messages = {
   "agentSettings.avatar.image": "画像",
   "agentSettings.avatar.replaceImage": "画像を置き換える",
   "agentSettings.avatar.uploadImage": "画像をアップロード",
-  "agentSettings.avatar.imageHint": "PNG、JPEG、WebP · 正方形に切り抜き",
+  "agentSettings.avatar.imageHint": "PNG、JPEG、GIF、WebP · 正方形に切り抜き",
   "agentSettings.avatar.generatedFace": "生成された顔",
   "agentSettings.avatar.resetToId": "ID に戻す",
   "agentSettings.avatar.newSet": "新しいセット",
@@ -46,7 +75,6 @@ export const messages = {
   "agentSettings.avatar.processFailed": "エージェントのアバターを処理できませんでした。",
 
   "agentSettings.runtime.model": "エージェントのモデル",
-  "agentSettings.runtime.modelBusy": "モデルを変更する前に、現在の作業が終わるまで待ってください。",
   "agentSettings.runtime.modelUnavailable": "エージェント CLI が接続されると、モデルを選択できます。",
   "agentSettings.runtime.reasoning": "推論",
   "agentSettings.runtime.reasoningLabel": "エージェントの推論レベル",
@@ -56,15 +84,18 @@ export const messages = {
   "agentSettings.runtime.accessLabel": "エージェントのアクセス",
   "agentSettings.runtime.busyMessage": "作業中",
   "agentSettings.runtime.busyMessageLabel": "エージェントの作業中に送るメッセージ",
+  "agentSettings.runtime.taskLimit": "同時実行タスク数",
+  "agentSettings.runtime.taskLimitLabel": "同時に実行するタスクの数",
   "agentSettings.runtime.workingDirectory": "作業ディレクトリ",
   "agentSettings.runtime.notAvailable": "まだ利用できません",
   "agentSettings.runtime.fullAccessNote":
     "エージェントは、ワークスペースと共有フォルダーからコンピューターへのフルアクセスで実行されます。",
-  "agentSettings.runtime.claudeApprovalNote": "Claude は、あなたへの質問を除き、承認を求めずに操作します。",
-  "agentSettings.runtime.providerApprovalNote":
-    "プロバイダーによっては、重要なコマンドの実行前に承認を求めることがあります。",
+  "agentSettings.runtime.askNote":
+    "OpenBot のツールを使う前、サイトを公開する前、およびプロバイダーが承認を求めたときに確認します。",
+  "agentSettings.runtime.fullNote": "あなたへの質問を除き、確認せずに操作します。",
 
   "agentSettings.access.workspace": "ワークスペースのみ",
+  "agentSettings.access.ask": "事前に確認",
   "agentSettings.access.full": "フルアクセス",
   "agentSettings.busyMessage.appDefaultQueue": "アプリの既定 (キュー)",
   "agentSettings.busyMessage.appDefaultSteer": "アプリの既定 (方向を修正)",
@@ -72,6 +103,9 @@ export const messages = {
   "agentSettings.busyMessage.steer": "方向を修正",
   "agentSettings.busyMessage.steerUnsupported":
     "{provider} は実行中のターンの方向を修正できません。作業中に送ったメッセージはキューで待ちます。",
+  "agentSettings.taskLimit.default": "デフォルト ({count})",
+  "agentSettings.taskLimit.oneTurn":
+    "{provider} は一度に 1 ターンしか実行しません。このエージェントのタスクとチャットは、互いの完了を待ちます。",
 
   "agentSettings.notifications.title": "通知",
 
@@ -81,14 +115,17 @@ export const messages = {
   "agentSettings.newChat.confirmTitle": "{name} と新しいチャットを始めますか？",
   "agentSettings.newChat.confirmDescription":
     "エージェントはこのチャットを忘れます。メッセージは区切り線の上に表示されたままです。指示、モデル、ツール、メモリー、ワークスペース、ブラウザーは変わりません。",
-  "agentSettings.newChat.confirm": "新しいチャットを始める",
+  "agentSettings.newChat.confirm": "新しいチャットを開始",
   "agentSettings.newChat.failed": "新しいチャットを始められませんでした。",
 
   "agentSettings.fullAccess.title": "このエージェントにフルアクセスを許可しますか？",
+  "agentSettings.fullAccess.askTitle": "このエージェントにワークスペースの外での作業を許可しますか？",
   "agentSettings.fullAccess.description":
     "エージェントは、あなたのユーザーアカウントがアクセスできるすべてのファイルの読み取り、変更、削除、任意のコマンドの実行、ネットワークの使用ができるようになります。指示の誤解や悪意のある Web ページ 1 つで、個人のファイルに影響が及ぶ可能性があります。",
-  "agentSettings.fullAccess.cancel": "ワークスペースのみのままにする",
+  "agentSettings.fullAccess.noApproval":
+    "エージェントは、事前に確認せずにコマンドを実行し、ファイルを変更し、ツールを使い、サイトを公開します。",
   "agentSettings.fullAccess.confirm": "フルアクセスを許可",
+  "agentSettings.fullAccess.askConfirm": "事前に確認を使用",
 
   "agentSettings.links.usage": "使用状況",
   "agentSettings.links.memories": "メモリー",
@@ -102,17 +139,34 @@ export const messages = {
   "agentSettings.links.routinesCount": { other: "{count} 件設定済み" },
   "agentSettings.runtime.workspaceNote":
     "「ワークスペースのみ」は、書き込みをこのエージェントのワークスペース、共有フォルダー、一時フォルダーに制限します。読み取りとネットワークは引き続き使用できます。",
-  "agentSettings.runtime.workspaceEnforcedCommand":
-    "外部に書き込む必要があるコマンドは、自動承認がオンでも先に確認します。",
+  "agentSettings.runtime.workspaceEnforcedCommand": "外部に書き込む必要があるコマンドは、先に確認します。",
   "agentSettings.runtime.workspaceEnforcedClaude":
-    "外部のファイル編集は、自動承認がオンでも先に確認します。コマンドは外部に書き込めません。",
+    "外部のファイル編集は、先に確認します。コマンドは外部に書き込めません。",
   "agentSettings.runtime.workspaceUnlimited":
     "Computer Use と OpenBot ブラウザーは制限されません。Computer Use は下でオフにできます。",
   "agentSettings.computerUse.title": "Computer Use",
   "agentSettings.computerUse.description": "このエージェントにこのコンピューターのアプリの操作を許可します",
+  "agentSettings.automation.title": "ローカルスクリプト",
+  "agentSettings.automation.description":
+    "ホスト上のスクリプトが、メッセージの送信、ルーティンの実行、質問への回答、承認の許可や拒否を行えるようにします",
   "agentSettings.background.title": "バックグラウンドのチームメイト",
   "agentSettings.background.description":
     "このエージェントをエージェント一覧に表示しません。ほかのエージェントとの作業は続きます。サイドバーの最後にある「バックグラウンドのチームメイト」から開けます。",
+  "agentSettings.agentNewChat.title": "エージェントが新しいチャットを開始",
+  "agentSettings.agentNewChat.description":
+    "チャットが長くなったときに、エージェントが新しいチャットを開始できます。開始前にメモを保存します。",
+  "agentSettings.quickAcknowledgement.title": "長いタスクの前に計画を表示",
+  "agentSettings.quickAcknowledgement.description":
+    "長いタスクの前に、エージェントが計画を表示します。10 秒後、または開始を押すと始まります。",
+  "agentSettings.browserProfile.label": "ブラウザープロファイル",
+  "agentSettings.browserProfile.shared": "共有",
+  "agentSettings.browserProfile.agent": "このエージェントのみ",
+  "agentSettings.browserProfile.missing": "削除されたプロファイル",
+  "agentSettings.browserProfile.new": "新しいプロファイル",
+  "agentSettings.browserProfile.manageTitle": "ブラウザープロファイル",
+  "agentSettings.browserProfile.manageDescription":
+    "各プロファイルは専用のサインインと Cookie を保持します。変更すると、エージェントの開いているタブが閉じます。",
+  "agentSettings.browserProfile.manage": "管理",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "{provider} のプロセス全体がサンドボックス内で実行されるため、外部への書き込みは失敗します。macOS でのみ利用できます。",
 } as const satisfies PartialTranslation<typeof source>;

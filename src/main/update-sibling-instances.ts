@@ -47,7 +47,7 @@ export function listSiblingOpenBotInstances(
   });
 }
 
-export function parseSiblingInstances(
+function parseSiblingInstances(
   output: string,
   input: Pick<SiblingScanInput, "executablePath" | "currentPid">,
 ): OpenBotSiblingInstance[] {

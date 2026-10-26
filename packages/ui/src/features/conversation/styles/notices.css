@@ -32,7 +32,7 @@
   animation: queue-panel-in var(--openbot-duration-normal) cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
-/* The tone the account dock already gives a spent plan window, so one state keeps one colour. The
+/* The tone the usage rings already give a spent plan window, so one state keeps one colour. The
    text token, not the fill token, because this colour carries words on a dark surface. */
 .composer-notice[data-tone="danger"] {
   --notice-accent: var(--openbot-danger-text);
@@ -113,4 +113,11 @@
   .composer-notice .composer-notice-dismiss:hover:not(:disabled):not([data-disabled]) {
     background: color-mix(in srgb, var(--notice-accent) 18%, transparent);
   }
+}
+
+/* The code sign-in is the second way in: outlined beside the tinted Sign in button. */
+.composer-notice .composer-notice-code-fallback {
+  flex: none;
+  border-color: color-mix(in srgb, var(--notice-accent) 45%, transparent);
+  background: transparent;
 }

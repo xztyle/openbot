@@ -1,13 +1,12 @@
 import type { BillingPlanId, BillingServerPlan } from "@openbot/contracts/billing";
 import type { HostedServerSummary } from "@openbot/contracts/hosted-servers";
-import { Button, CreditCard, Settings, SettingsSection, Text, UserRound } from "@openbot/ui";
+import { Button, SettingsSection, Text } from "@openbot/ui";
 import { BillingDialog } from "@openbot/ui/features/billing/BillingDialog";
 import {
   BillingServerLifecycle,
   type BillingServerLifecycleAction,
 } from "@openbot/ui/features/billing/BillingServerLifecycle";
 import { createBillingStore } from "@openbot/ui/features/billing/billing-store";
-import { SettingsDialogShell } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { createSettingsHostedServersStore } from "@openbot/ui/features/settings/stores/hosted-servers-store";
 import { useText } from "@openbot/ui/text";
 import { createStore, For, untrack } from "solid-js";
@@ -97,7 +96,6 @@ function LifecycleStory(props: LifecycleStoryProps) {
       first.cancelAtPeriodEnd = (props.cancelled || props.scheduled) ?? false;
     }
     return {
-      open: true,
       servers: props.single ? servers.slice(0, 1) : servers,
       activeServerId: "research",
       action: props.action ?? null,
@@ -146,60 +144,8 @@ function LifecycleStory(props: LifecycleStoryProps) {
   }
 
   return (
-    <div class="billing-lifecycle-story">
-      <Button
-        variant="outline"
-        onClick={() =>
-          setState((draft) => {
-            draft.open = true;
-          })
-        }
-      >
-        {t("billing.lifecycle.open")}
-      </Button>
-      <SettingsDialogShell
-        class={
-          props.narrow
-            ? "app-settings-modal-shell billing-lifecycle-story-shell billing-lifecycle-story-narrow"
-            : "app-settings-modal-shell billing-lifecycle-story-shell"
-        }
-        open={state.open}
-        onOpenChange={(open) => {
-          if (!state.action)
-            setState((draft) => {
-              draft.open = open;
-            });
-        }}
-        title={t("settings.tab.billing.title")}
-        description={t("settings.tab.billing.description")}
-        contentKey="billing"
-        sidebar={
-          <div class="settings-modal-nav">
-            <div class="settings-modal-nav-item" aria-hidden="true">
-              <Settings />
-              {t("settings.tab.general.title")}
-            </div>
-            <div class="settings-modal-nav-item" aria-hidden="true">
-              <UserRound />
-              {t("settings.tab.profile.title")}
-            </div>
-            <div class="settings-modal-nav-item" aria-current="page">
-              <CreditCard />
-              {t("settings.tab.billing.title")}
-            </div>
-          </div>
-        }
-        footer={
-          <div class="billing-lifecycle-story-footer">
-            <Text variant="caption" tone="muted">
-              {t("billing.lifecycle.label")}
-            </Text>
-            <Button variant="ghost" size="sm" onClick={() => setState(() => initial())}>
-              {t("billing.lifecycle.reset")}
-            </Button>
-          </div>
-        }
-      >
+    <main class="files-story-stage">
+      <div class="files-story-page" data-narrow={props.narrow ? "true" : undefined}>
         <SettingsSection title={t("billing.servers.title")} description={t("billing.lifecycle.plansDescription")}>
           <div class="billing-lifecycle-list">
             <For each={state.servers}>
@@ -260,8 +206,16 @@ function LifecycleStory(props: LifecycleStoryProps) {
             </For>
           </div>
         </SettingsSection>
-      </SettingsDialogShell>
-    </div>
+        <div class="billing-lifecycle-story-footer">
+          <Text variant="caption" tone="muted">
+            {t("billing.lifecycle.label")}
+          </Text>
+          <Button variant="ghost" size="sm" onClick={() => setState(() => initial())}>
+            {t("billing.lifecycle.reset")}
+          </Button>
+        </div>
+      </div>
+    </main>
   );
 }
 

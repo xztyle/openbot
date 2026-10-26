@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
+import { readFcmServiceAccount } from "../apps/auth-api/src/server/android-notification-relay";
 
 const logger = createOpenBotLogger("deploy-auth-api");
 
@@ -16,6 +18,13 @@ const cloudflareEnvironment = readCloudflareEnvironment(process.argv.slice(2));
 const environmentArgs = cloudflareEnvironment ? ["--env", cloudflareEnvironment] : [];
 
 async function main(): Promise<void> {
+  // Check both values before any remote change. Test Workers do not send account analytics.
+  if (!cloudflareEnvironment) {
+    requiredSecret("OPENPANEL_CLIENT_ID");
+    requiredSecret("OPENPANEL_CLIENT_SECRET");
+    assertLandingBeam();
+  }
+  assertFcmServiceAccount();
   await putRequiredSecret("EMAIL_SMTP_PASSWORD");
   await putRequiredSecret("SKILLS_ADMIN_TOKEN");
   await putRequiredSecret("SITE_REPORT_HASH_SECRET");
@@ -29,6 +38,8 @@ async function main(): Promise<void> {
   if (cloudflareEnvironment === "test") await putOptionalSecret("HOSTED_SERVER_TEMPLATE");
   // Without the key, agents act on GitHub as the signed-in user and not as the OpenBot GitHub App.
   await putOptionalSecret("GITHUB_APP_PRIVATE_KEY");
+  // Without the token, no one can make a server claim.
+  await putOptionalSecret("SERVER_CLAIMS_ADMIN_TOKEN");
   // Slack is optional: without these, the Slack routes answer 503 slack_not_configured. The test
   // Worker takes the development app's values from the .env.dev file.
   await putOptionalSecretSet("SLACK_CLIENT_ID", "SLACK_CLIENT_SECRET", "SLACK_STATE_SECRET");
@@ -45,9 +56,14 @@ async function main(): Promise<void> {
     await putOptionalSecret("HOSTED_SERVERS_DEVELOPER_KEY");
   }
   // Only production sends account events, so a test Worker does not add events to the production project.
-  if (!cloudflareEnvironment) await putOptionalSecretSet("OPENPANEL_CLIENT_ID", "OPENPANEL_CLIENT_SECRET");
+  if (!cloudflareEnvironment) {
+    await putRequiredSecret("OPENPANEL_CLIENT_ID");
+    await putRequiredSecret("OPENPANEL_CLIENT_SECRET");
+  }
   // The Live Activity relay stays off until the Apple key is in the environment.
   await putOptionalSecretSet("APNS_PRIVATE_KEY", "APNS_KEY_ID");
+  // The Android notification relay stays off until the Firebase service account key is in the environment.
+  await putOptionalSecret("FCM_SERVICE_ACCOUNT");
   await run(wranglerExecutable, ["d1", "migrations", "apply", "DB", "--remote", ...environmentArgs], {
     label: "Remote D1 migrations",
   });
@@ -60,16 +76,39 @@ async function main(): Promise<void> {
   });
 }
 
-async function putRequiredSecret(name: string): Promise<void> {
+// The build drops the home page beam when the private port is missing. Production always has it.
+function assertLandingBeam(): void {
+  const port = join(apiRoot, "src", "vendor", "laser-flow", "LandingLaserFlow.tsx");
+  if (existsSync(port)) return;
+  throw new Error(
+    "The home page beam is missing. Clone nightly-labs/openbot-laser-flow into apps/auth-api/src/vendor/laser-flow.",
+  );
+}
+
+function requiredSecret(name: string): string {
   const value = process.env[name];
   if (!value?.trim()) throw new Error(`${name} is missing from the decrypted production environment.`);
   // dotenvx keeps the ciphertext when .env.keys has no matching private key.
   if (value.startsWith("encrypted:"))
     throw new Error(`${name} is not decrypted. Check the environment decryption key.`);
+  return value;
+}
+
+async function putRequiredSecret(name: string): Promise<void> {
+  const value = requiredSecret(name);
   await run(wranglerExecutable, ["secret", "put", name, ...environmentArgs], {
     input: `${value}\n`,
     label: `${name} secret`,
   });
+}
+
+/** A key that the Worker cannot read turns the relay off, so it stops the deployment before remote changes. */
+function assertFcmServiceAccount(): void {
+  const value = process.env.FCM_SERVICE_ACCOUNT?.trim();
+  if (!value) return;
+  if (value.startsWith("encrypted:"))
+    throw new Error("FCM_SERVICE_ACCOUNT is not decrypted. Check the environment decryption key.");
+  if (!readFcmServiceAccount(value)) throw new Error("FCM_SERVICE_ACCOUNT is not a Firebase service account key file.");
 }
 
 /** A test Worker must never take real payments, and production must never take test payments. */
@@ -111,7 +150,7 @@ async function putOptionalSecret(name: string): Promise<void> {
 }
 
 /**
- * Billing, hosting and account events are optional: the Worker turns each off without its secrets.
+ * Billing and hosting are optional: the Worker turns each off without its secrets.
  * Set all or none of a set. A Stripe or boat key without its webhook secret takes payments or makes
  * sandboxes that the Worker never sees.
  */
@@ -130,7 +169,7 @@ async function putOptionalSecretSet(...names: string[]): Promise<void> {
 async function run(
   executable: string,
   args: string[],
-  options: { env?: NodeJS.ProcessEnv; input?: string; label: string },
+  options: { env?: NodeJS.ProcessEnv | undefined; input?: string; label: string },
 ): Promise<void> {
   await new Promise<void>((resolveProcess, rejectProcess) => {
     const environment = { ...process.env, ...options.env };

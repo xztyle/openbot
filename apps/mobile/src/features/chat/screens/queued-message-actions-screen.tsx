@@ -2,7 +2,11 @@ import type { AttachmentSummary } from "@openbot/contracts/ipc";
 import { router, useLocalSearchParams } from "expo-router";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { ArrowUpToLine, CornerDownRight, ExternalLink, Pencil, Trash2 } from "lucide-react-native";
+import ArrowUpToLine from "lucide-react-native/icons/arrow-up-to-line";
+import CornerDownRight from "lucide-react-native/icons/corner-down-right";
+import ExternalLink from "lucide-react-native/icons/external-link";
+import Pencil from "lucide-react-native/icons/pencil";
+import Trash2 from "lucide-react-native/icons/trash";
 import { Alert } from "react-native";
 import { useCSSVariable } from "uniwind";
 import {
@@ -16,7 +20,7 @@ import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 import { AttachmentThumbnail, useAttachmentFile } from "../components/attachment-preview";
 import { useQueuedChat } from "../context/queued-messages-context";
-import { queuedMessagePreview } from "../model/queued-message-view";
+import { queuedMessageLocks, queuedMessagePreview } from "../model/queued-message-view";
 
 export function QueuedMessageActionsScreen() {
   const { t, format } = useText();
@@ -37,10 +41,7 @@ export function QueuedMessageActionsScreen() {
     );
   }
 
-  // Editing holds one delivery on the host: our own hold locks every other row until it ends.
-  const locked = queue.busy || !queue.online || Boolean(held && held.id !== delivery.id);
-  // Another device holds this one. Only confirmed deletion remains available.
-  const editedElsewhere = Boolean(delivery.editing) && held?.id !== delivery.id;
+  const { locked, editedElsewhere } = queuedMessageLocks(delivery, { busy: queue.busy, online: queue.online, held });
   const finish = (action: Promise<boolean>) => {
     void action.then((done) => {
       void haptics.notification(done ? "success" : "error");

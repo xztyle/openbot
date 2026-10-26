@@ -7,5 +7,11 @@ export const messages = {
   "menu.stopAllAgents": "Arrêter tous les agents",
   "menu.checkForUpdates": "Rechercher des mises à jour…",
   "menu.preferences": "Réglages…",
+  "menu.actualSize": "Taille réelle",
+  "menu.zoomIn": "Zoom avant",
+  "menu.zoomOut": "Zoom arrière",
   "menu.copyLink": "Copier le lien",
+  "menu.trayOpen": "Ouvrir OpenBot",
+  "menu.trayQuit": "Quitter OpenBot",
+  "menu.trayTooltip": "OpenBot",
 } as const satisfies PartialTranslation<typeof source>;

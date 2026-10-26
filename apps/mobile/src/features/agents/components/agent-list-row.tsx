@@ -1,12 +1,11 @@
-import type { MenuComponentRef } from "@expo/ui/community/menu";
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import MaskedView from "@react-native-masked-view/masked-view";
 import { BlurView } from "expo-blur";
 import { Link } from "expo-router";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { type PropsWithChildren, useEffect, useId, useMemo, useRef } from "react";
-import { Platform, StyleSheet, useWindowDimensions, View } from "react-native";
+import { memo, type PropsWithChildren, useEffect, useId, useMemo, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import Animated, {
   Easing,
   interpolate,
@@ -19,7 +18,7 @@ import Animated, {
 } from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useAgentChatPreview } from "@/features/agents/components/agent-chat-preview";
-import { AgentAndroidMenu, useAgentContextMenu } from "@/features/agents/components/agent-context-menu";
+import { AgentAndroidMenu, AgentContextMenuLink } from "@/features/agents/components/agent-context-menu";
 import { AgentPinAvatar } from "@/features/agents/components/agent-pin-avatar";
 import { AgentPinSwipeRow } from "@/features/agents/components/agent-pin-swipe-row";
 import { useAgentPinTransition } from "@/features/agents/components/agent-pin-transition";
@@ -27,12 +26,14 @@ import { AGENT_WAIT_STATE, AgentWaitBadge, AgentWaitChip } from "@/features/agen
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
 import { ChatLinkPressable } from "@/features/agents/components/chat-link-pressable";
 import { ChatZoomSource } from "@/features/agents/components/chat-zoom-source";
+import { useWaitingChannel } from "@/features/channels/components/use-waiting-channel";
 import { useAgentWaitReason } from "@/features/workspace/components/use-agent-activity";
 import { useAgentUnread } from "@/features/workspace/components/use-live-workspace";
-import { type MobileAgent, useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { type MobileAgent, useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
 import { canToggleAgentPin } from "@/features/workspace/model/agent-pins";
 import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+import { typeScale } from "@/shared/lib/type-scale";
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
@@ -90,32 +91,30 @@ function AgentRowTextReveal({ active, children }: PropsWithChildren<{ active: bo
 
 interface AgentListRowProps {
   agent: MobileAgent;
-  enableActions?: boolean;
-  /**
-   * Opens the chat instead of the row's own link, for a row outside the home list. Such a row
-   * has no zoom source and does not stand in for the home row's avatar.
-   */
-  onOpen?: () => void;
   leftInset?: number;
   rightInset?: number;
 }
 
-export function AgentListRow({
-  agent,
-  enableActions = true,
-  onOpen,
-  leftInset = 20,
-  rightInset = 20,
-}: AgentListRowProps) {
+/**
+ * A chat of the home list. It renders again only when its agent, its own live state or a pin
+ * transition changes, so a long list stays quiet while other agents work.
+ */
+export const AgentListRow = memo(function AgentListRow({ agent, leftInset = 20, rightInset = 20 }: AgentListRowProps) {
   const { t } = useText();
   const [background] = useThemeColor(["background"]);
-  const { width: windowWidth } = useWindowDimensions();
-  const { pinnedAgentIds, pinnedChannelIds } = useMobileWorkspace();
+  const pinBlocked = useMobileWorkspaceSelector(
+    ({ pinnedAgentIds, pinnedChannelIds }) => !canToggleAgentPin([...pinnedAgentIds, ...pinnedChannelIds], agent.id),
+  );
   const { toggleAgentPinAnimated, transition } = useAgentPinTransition();
-  const editMenu = useRef<MenuComponentRef>(null);
-  const agentContextMenu = useAgentContextMenu(agent);
+  // Each long press mounts the Android menu again, so it opens even if an earlier one did not close.
+  const [menuKey, setMenuKey] = useState(0);
   const agentChatPreview = useAgentChatPreview(agent);
-  const previewLine = useMemo(() => markdownPreviewText(agent.preview), [agent.preview]);
+  // An agent that waits in a channel says so, as its last message in its own chat is not the wait.
+  const waitingChannel = useWaitingChannel(agent.id, agent.serverId);
+  const lastMessage = useMemo(() => markdownPreviewText(agent.preview), [agent.preview]);
+  const previewLine = waitingChannel
+    ? t("mobile.chat.channelWork.waiting", { channel: waitingChannel.name })
+    : lastMessage;
   const isUnread = useAgentUnread(agent.id);
   const waitReason = useAgentWaitReason(agent.id);
   const isUnpinTarget = transition?.chatId === agent.id && transition.target === "row";
@@ -127,15 +126,11 @@ export function AgentListRow({
       seed={agent.avatarSeed}
       size={54}
       animateIdle={false}
+      rings
     />
   );
   const waitBadge = waitReason ? <AgentWaitBadge reason={waitReason} /> : null;
-  const avatar = onOpen ? (
-    <View>
-      {bloub}
-      {waitBadge}
-    </View>
-  ) : (
+  const avatar = (
     <ChatZoomSource>
       <AgentPinAvatar agentId={agent.id} location="row" size={54}>
         {bloub}
@@ -149,34 +144,26 @@ export function AgentListRow({
 
   const row = (
     <ChatLinkPressable
-      chatId={onOpen ? undefined : agent.id}
+      chatId={agent.id}
       accessibilityLabel={
         waitReason
           ? t("mobile.agent.list.withState", { label: openLabel, state: t(AGENT_WAIT_STATE[waitReason]) })
           : openLabel
       }
       accessibilityRole="button"
-      accessibilityActions={
-        enableActions ? [{ name: "pin", label: t("mobile.agent.pin.pinNamed", { name: agent.name }) }] : undefined
-      }
-      onAccessibilityAction={
-        enableActions
-          ? (event) => {
-              if (event.nativeEvent.actionName === "pin") toggleAgentPinAnimated(agent.id);
-            }
-          : undefined
-      }
+      accessibilityActions={[{ name: "pin", label: t("mobile.agent.pin.pinNamed", { name: agent.name }) }]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "pin") toggleAgentPinAnimated(agent.id);
+      }}
       className="w-full"
-      onPressIn={enableActions ? agentChatPreview.onPressIn : undefined}
-      onLongPress={enableActions && Platform.OS === "android" ? () => editMenu.current?.show() : undefined}
-      onPress={onOpen}
+      onPressIn={agentChatPreview.onPressIn}
+      onLongPress={isAndroid ? () => setMenuKey((key) => key + 1) : undefined}
     >
       {({ pressed }) => (
         <View
           className="min-h-20 w-full flex-row items-center gap-3 py-1"
           style={{
-            // In the Android search sheet the row shows the sheet color, not the home list color.
-            backgroundColor: onOpen && isAndroid ? "transparent" : background,
+            backgroundColor: background,
             opacity: pressed ? 0.58 : 1,
             paddingLeft: leftInset,
             paddingRight: rightInset,
@@ -184,68 +171,57 @@ export function AgentListRow({
         >
           {avatar}
           <AgentRowTextReveal active={isUnpinTarget}>
-            <View className="min-w-0 flex-1 gap-1">
-              <View className="gap-0">
-                <View className="flex-row items-center gap-2">
-                  {isUnread ? <View className="size-2 rounded-full bg-accent" /> : null}
-                  <Typography.Paragraph className="min-w-0 flex-1" weight="semibold" numberOfLines={2}>
-                    {agent.name}
+            <View className="min-w-0 flex-1 gap-0.5">
+              <View className="flex-row items-center gap-2">
+                {isUnread ? <View className="size-2 rounded-full bg-accent" /> : null}
+                <Typography.Paragraph
+                  className="font-semibold min-w-0 flex-1"
+                  numberOfLines={1}
+                  style={typeScale.rowTitle}
+                >
+                  {agent.name}
+                </Typography.Paragraph>
+                {waitReason ? (
+                  <AgentWaitChip reason={waitReason} />
+                ) : (
+                  <Typography.Paragraph className="text-muted" style={typeScale.caption}>
+                    {agent.updatedLabel}
                   </Typography.Paragraph>
-                  {waitReason ? (
-                    <AgentWaitChip reason={waitReason} />
-                  ) : (
-                    <Typography.Paragraph type="body-xs" className="text-muted">
-                      {agent.updatedLabel}
-                    </Typography.Paragraph>
-                  )}
-                </View>
-                {agent.title.trim() ? (
-                  <Typography.Paragraph type="body-xs" className="-mt-1.5 text-muted" numberOfLines={2}>
-                    {agent.title.trim()}
-                  </Typography.Paragraph>
-                ) : null}
+                )}
               </View>
-              <Typography.Paragraph type="body-xs" className="text-text-secondary -mt-1" numberOfLines={1}>
+              {agent.title.trim() ? (
+                <Typography.Paragraph className="text-muted" numberOfLines={1} style={typeScale.caption}>
+                  {agent.title.trim()}
+                </Typography.Paragraph>
+              ) : null}
+              <Typography.Paragraph className="text-text-secondary" numberOfLines={1} style={typeScale.preview}>
                 {previewLine}
               </Typography.Paragraph>
             </View>
           </AgentRowTextReveal>
-          {enableActions ? agentChatPreview.measurer : null}
+          {agentChatPreview.measurer}
         </View>
       )}
     </ChatLinkPressable>
   );
-  if (onOpen) return row;
-
-  const href = { pathname: "/chat/[agentId]" as const, params: { agentId: agent.id } };
-  const agentLink = enableActions ? (
-    <Link href={href} asChild>
-      <Link.Trigger>{row}</Link.Trigger>
-      {agentChatPreview.preview}
-      {agentContextMenu}
-    </Link>
-  ) : (
-    <Link href={href} asChild>
-      <Link.Trigger>{row}</Link.Trigger>
-    </Link>
-  );
-
-  if (!enableActions) return agentLink;
-
   return (
     <AgentPinSwipeRow
       agentName={agent.name}
-      pinBlocked={!canToggleAgentPin([...pinnedAgentIds, ...pinnedChannelIds], agent.id)}
+      pinBlocked={pinBlocked}
       onPin={(withHaptic) => toggleAgentPinAnimated(agent.id, { haptic: withHaptic })}
     >
-      {Platform.OS === "android" ? (
-        // The menu measures its child without a width limit; the home list row fills the window.
-        <AgentAndroidMenu agent={agent} menuRef={editMenu} style={{ width: "100%" }}>
-          <View style={{ width: windowWidth }}>{agentLink}</View>
-        </AgentAndroidMenu>
+      {isAndroid ? (
+        <View>
+          <Link href={{ pathname: "/chat/[agentId]", params: { agentId: agent.id } }} asChild>
+            <Link.Trigger>{row}</Link.Trigger>
+          </Link>
+          {menuKey > 0 ? <AgentAndroidMenu key={menuKey} agent={agent} onClose={() => setMenuKey(0)} /> : null}
+        </View>
       ) : (
-        agentLink
+        <AgentContextMenuLink agent={agent} preview={agentChatPreview.preview}>
+          {row}
+        </AgentContextMenuLink>
       )}
     </AgentPinSwipeRow>
   );
-}
+});

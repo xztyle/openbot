@@ -1,5 +1,3 @@
-import katex from "katex";
-
 /**
  * A MathML element from KaTeX. React Native has no DOM, so the app draws this tree with native
  * views instead of the KaTeX HTML that desktop shows. KaTeX still parses the LaTeX, expands its
@@ -50,6 +48,14 @@ const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"'
 const MATH_CACHE_LIMIT = 300;
 const mathCache = new Map<string, MathElement | null>();
 
+let katexModule: typeof import("katex") | null = null;
+function katex(): typeof import("katex") {
+  if (katexModule) return katexModule;
+  const loaded: typeof import("katex") = require("katex");
+  katexModule = loaded;
+  return loaded;
+}
+
 /**
  * The MathML tree of `tex`, without the `math` and `semantics` wrappers and the source annotation.
  * Null when KaTeX cannot parse the formula, or when it needs an element the app cannot draw.
@@ -61,7 +67,7 @@ export function mathTree(tex: string, display: boolean): MathElement | null {
   if (cached !== undefined) return cached;
   let tree: MathElement | null;
   try {
-    const markup = katex.renderToString(tex, {
+    const markup = katex().renderToString(tex, {
       displayMode: display,
       output: "mathml",
       throwOnError: true,

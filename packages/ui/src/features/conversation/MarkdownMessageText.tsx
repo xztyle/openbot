@@ -11,7 +11,7 @@ import { CodeBlock } from "./CodeBlock";
 import { CodePreview } from "./CodePreview";
 import type { MessageCodeBlock } from "./DataTable";
 import { MathFormula } from "./MathFormula";
-import { MessageLink, RichMessageText, type RichMessageTextProps, safeBrowserUrl } from "./RichMessageText";
+import { linkTitle, MessageLink, RichMessageText, type RichMessageTextProps, safeBrowserUrl } from "./RichMessageText";
 import {
   sameStreamingTailOffsets,
   streamingTailInside,
@@ -23,9 +23,14 @@ import {
 type MarkdownMessageTextProps = Omit<RichMessageTextProps, "showCitationFooter"> & {
   showCitationFooter?: boolean;
   streaming?: boolean;
-  imagesAsLinks?: boolean;
+  imagesAsLinks?: boolean | undefined;
   /** Opens a markdown image in the image viewer. Without it, an image is only a picture. */
   onOpenImage?: ((image: HTMLImageElement) => void) | undefined;
+  /**
+   * A short preview, such as a reply quote: only the first blocks, and each code fence as plain
+   * text, with no highlight, toolbar or live preview.
+   */
+  excerpt?: boolean | undefined;
 };
 
 type MarkdownContentProps = Omit<
@@ -105,6 +110,9 @@ const VOID_HTML_ELEMENTS = new Set([
   "track",
   "wbr",
 ]);
+
+/** A reply quote shows four lines, and each block takes at least one. */
+const EXCERPT_BLOCK_LIMIT = 4;
 
 function tokenIs<K extends keyof MarkdownTokenByType>(token: Token, type: K): token is MarkdownTokenByType[K] {
   return token.type === type;
@@ -204,6 +212,13 @@ export function MarkdownMessageText(props: MarkdownMessageTextProps) {
     streamed = { body, tokens };
     return tokens;
   });
+  // An excerpt shows only a few lines, so it renders only the blocks that can fill them.
+  const shownTokens = createMemo((): TokensList => {
+    const all = tokens();
+    if (props.excerpt !== true) return all;
+    const blocks = all.filter((token) => token.type !== "space").slice(0, EXCERPT_BLOCK_LIMIT);
+    return Object.assign(blocks, { links: all.links });
+  });
   // A memo, so each revealed word of a streaming reply does not give the kept blocks a new
   // `content` object and run their reads again. Only a new directory changes it.
   const fileDirectory = createMemo(() => messageFileDirectory(props.body), {
@@ -212,6 +227,7 @@ export function MarkdownMessageText(props: MarkdownMessageTextProps) {
   const contentProps = createMemo(
     (): MarkdownContentProps => ({
       imagesAsLinks: props.imagesAsLinks,
+      excerpt: props.excerpt,
       onOpenImage: props.onOpenImage,
       agents: props.agents,
       skills: props.skills,
@@ -222,6 +238,8 @@ export function MarkdownMessageText(props: MarkdownMessageTextProps) {
       onOpenAttachment: props.onOpenAttachment,
       onOpenSharedFile: props.onOpenSharedFile,
       onOpenWorkspaceFile: props.onOpenWorkspaceFile,
+      onOpenQuote: props.onOpenQuote,
+      linkFavicons: props.linkFavicons,
       fileDirectory: fileDirectory(),
     }),
   );
@@ -229,8 +247,8 @@ export function MarkdownMessageText(props: MarkdownMessageTextProps) {
   return (
     <>
       <MarkdownBlocks
-        tokens={tokens()}
-        linkDefinitions={JSON.stringify(tokens().links)}
+        tokens={shownTokens()}
+        linkDefinitions={JSON.stringify(shownTokens().links)}
         content={contentProps()}
         streaming={props.streaming}
         streamingTailAfter={props.streamingTailAfter}
@@ -258,6 +276,8 @@ export function MarkdownInlineText(
     onOpenAttachment: props.onOpenAttachment,
     onOpenSharedFile: props.onOpenSharedFile,
     onOpenWorkspaceFile: props.onOpenWorkspaceFile,
+    onOpenQuote: props.onOpenQuote,
+    linkFavicons: props.linkFavicons,
     fileDirectory: messageFileDirectory(props.body),
   });
   return <MarkdownInline tokens={tokens()} content={contentProps()} />;
@@ -298,7 +318,7 @@ function MarkdownBlocks(props: {
    */
   linkDefinitions?: string;
   content: MarkdownContentProps;
-  streaming?: boolean;
+  streaming?: boolean | undefined;
   streamingTailAfter?: number | undefined;
 }) {
   const tokens = createMemo(() => props.tokens);
@@ -402,6 +422,12 @@ function MarkdownBlock(props: {
     }
     case "code": {
       if (!tokenIs(token, "code")) return token.raw;
+      if (props.content.excerpt)
+        return (
+          <pre class="message-markdown-excerpt-code">
+            <code>{token.text}</code>
+          </pre>
+        );
       const language = token.lang?.trim().split(/\s+/u)[0] ?? "";
       if (language.toLowerCase() === "math") return <MathFormula tex={token.text} raw={token.raw} display block />;
       const block: MessageCodeBlock = { type: "code", code: token.text, language };
@@ -506,7 +532,7 @@ function MarkdownList(props: {
   );
 }
 
-function MarkdownTable(props: { token: Tokens.Table; content: MarkdownContentProps; streaming?: boolean }) {
+function MarkdownTable(props: { token: Tokens.Table; content: MarkdownContentProps; streaming?: boolean | undefined }) {
   const headers = createMemo(() => props.token.header);
   const rows = createMemo(() => props.token.rows);
   const streamingCellIndex = createMemo(() =>
@@ -554,7 +580,7 @@ function MarkdownTable(props: { token: Tokens.Table; content: MarkdownContentPro
 function MarkdownInline(props: {
   tokens: Token[];
   content: MarkdownContentProps;
-  streaming?: boolean;
+  streaming?: boolean | undefined;
   streamingTailAfter?: number | undefined;
 }) {
   const { t } = useText();
@@ -647,7 +673,12 @@ function MarkdownInline(props: {
             const sharedPath = sharedFileTarget(fileUrl === null ? token.href : decodedFileUrlPath(fileUrl));
             const workspacePath = workspaceFileTarget(fileUrl ?? token.href);
             return url ? (
-              <MessageLink url={url} title={token.title} onOpenLink={props.content.onOpenLink}>
+              <MessageLink
+                url={url}
+                title={token.title || linkTitle(token.text, url)}
+                favicon={props.content.linkFavicons !== false}
+                onOpenLink={props.content.onOpenLink}
+              >
                 {token.text === token.href ? (
                   token.text
                 ) : (
@@ -681,7 +712,12 @@ function MarkdownInline(props: {
             const url = safeBrowserUrl(token.href);
             if (url && props.content.imagesAsLinks) {
               return (
-                <MessageLink url={url} onOpenLink={props.content.onOpenLink}>
+                <MessageLink
+                  url={url}
+                  title={url}
+                  favicon={props.content.linkFavicons !== false}
+                  onOpenLink={props.content.onOpenLink}
+                >
                   {token.text || t("chat.image.view")}
                 </MessageLink>
               );
@@ -759,14 +795,14 @@ function textTokenEndsWithTagMarker(token: Token | undefined): boolean {
 
 function semanticChatTag(token: Token | undefined): string | null {
   if (!token || !tokenIs(token, "link")) return null;
-  const target = /^(agent|skill)(?:\+uri)?:([^\r\n]+)$/u.exec(token.href);
+  const target = /^(agent|skill|quote)(?:\+uri)?:([^\r\n]+)$/u.exec(token.href);
   return target?.[2] ? `@${token.raw}` : null;
 }
 
 function RichText(props: {
   body: string;
   content: MarkdownContentProps;
-  streaming?: boolean;
+  streaming?: boolean | undefined;
   streamingTailAfter?: number | undefined;
 }) {
   return (

@@ -1,13 +1,7 @@
 import type { TranslatedLocale } from "./locale";
 import { createTranslate, type Translate } from "./message";
-import { source as de } from "./messages/de/source";
 import { source as en } from "./messages/en/source";
-import { source as es } from "./messages/es/source";
-import { source as fr } from "./messages/fr/source";
-import { source as ja } from "./messages/ja/source";
-import { source as pt } from "./messages/pt/source";
-import { source as ru } from "./messages/ru/source";
-import { source as tr } from "./messages/tr/source";
+import { sourceTranslation } from "./source-catalogs";
 import { createSourceLocalizer } from "./source-matcher";
 
 export type { TranslatedLocale } from "./locale";
@@ -25,8 +19,6 @@ export type { TranslatedLocale } from "./locale";
  */
 export type SourceMessages = typeof en;
 
-const catalogs = { en, de, es, fr, ja, pt, ru, tr } as const;
-
 /** The English text for a source key. Write it where the code threw a literal before. */
 export const sourceText: Translate<SourceMessages> = createTranslate({
   source: en,
@@ -34,7 +26,7 @@ export const sourceText: Translate<SourceMessages> = createTranslate({
   sourceLocale: "en",
 });
 
-const localizer = createSourceLocalizer({ source: en, translations: catalogs });
+const localizer = createSourceLocalizer({ source: en, translation: sourceTranslation });
 
 /**
  * `text` in `locale`, when it is the English of a source key. Anything else - text from an older
@@ -49,13 +41,29 @@ export function matchingSourceKeys(text: string): readonly string[] {
   return localizer.matchingKeys(text);
 }
 
+/** A plural template is an object of forms, and it always has a placeholder. */
+const templates: Readonly<Record<string, string | Readonly<Record<string, string>>>> = en;
+
+/**
+ * True when `text` is the whole English of a source key with no placeholder. Such text holds nothing
+ * from a provider, a tool or a path, so a host can send it to every client.
+ */
+export function isFixedSourceText(text: string): boolean {
+  return matchingSourceKeys(text).some((key) => templates[key] === text);
+}
+
 const sourceTranslators = new Map<TranslatedLocale, Translate<SourceMessages>>();
 
-/** A typed translator over the source keys, for code that picks a key itself, such as an error kind. */
+/**
+ * A typed translator over the source keys, for code that picks a key itself, such as an error kind.
+ * A language that is not loaded reads English, as in `translateFor`.
+ */
 export function sourceTranslateFor(locale: TranslatedLocale): Translate<SourceMessages> {
   const cached = sourceTranslators.get(locale);
   if (cached) return cached;
-  const translate = createTranslate({ source: en, translation: catalogs[locale], locale, sourceLocale: "en" });
+  const translation = sourceTranslation(locale);
+  if (!translation) return sourceTranslateFor("en");
+  const translate = createTranslate({ source: en, translation, locale, sourceLocale: "en" });
   sourceTranslators.set(locale, translate);
   return translate;
 }

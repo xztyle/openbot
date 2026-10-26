@@ -5,10 +5,8 @@ import type {
   AgentProviderState,
   CustomProviderSummary,
   ProviderApiKeyStatus,
-  ProviderRuntimePhase,
   ProviderRuntimeStatus,
 } from "@openbot/contracts/ipc";
-import type { AppFormat, AppMessages, AppTextKey, AppTranslate } from "@openbot/i18n";
 import {
   Badge,
   Button,
@@ -17,19 +15,61 @@ import {
   DropdownMenu,
   Ellipsis,
   Input,
+  Link,
   RefreshCw,
   RotateCcw,
   SlidersHorizontal,
   Smartphone,
   Spinner,
   Switch,
+  UserRoundPlus,
   X,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createSignal, createStore, createUniqueId, For, Show } from "solid-js";
-import { providerUpdateAvailable, providerVersionLabel } from "../features/provider-updates/provider-update";
 import { useText } from "../text";
 import { MoreProvidersDialog } from "./MoreProvidersDialog";
+import { ProviderAccountList } from "./ProviderAccountList";
+import type { ProviderAccountActions, ProviderPickerAccount } from "./provider-accounts";
+import {
+  createProviderRow,
+  PROVIDER_ACTION_LABEL,
+  PROVIDER_ACTION_TEXT,
+  type ProviderAction,
+  providerAction,
+  providerStatusLabel,
+  providerStatusVariant,
+  runtimeStoreAction,
+  servesCustomProvider,
+  showProviderInUse,
+} from "./provider-row";
+
+/**
+ * What a row's Connect opens: the sign-in in this computer's browser, which the row follows itself,
+ * or a dialog that the caller shows (a code, a page or the hand-off to the app).
+ */
+export type ProviderConnectKind = "browser" | "dialog";
+
+/**
+ * What a row's ⋯ menu offers instead of its Connect: a code, or the address that the browser of a
+ * relayed sign-in shows at its end.
+ */
+export type ProviderAlternativeSignIn = "code" | "address";
+
+/**
+ * How the provider rows sign in. The caller decides each row's ways in from where the user connects;
+ * the rows only show and run them, so every surface offers the same ones.
+ */
+export interface ProviderConnection {
+  /** What the row's Connect opens, or null when the row has no Connect here. */
+  connectKind: (provider: AgentProviderId) => ProviderConnectKind | null;
+  /** The second way in that the row's ⋯ menu offers, or null when it offers none. */
+  alternativeKind: (provider: AgentProviderId) => ProviderAlternativeSignIn | null;
+  /** Runs the row's Connect. A rejection is shown on the row. */
+  connect: (provider: AgentProviderId) => void | Promise<void>;
+  /** Runs the second way in from the ⋯ menu. */
+  alternative: (provider: AgentProviderId) => void;
+}
 
 export interface ProviderPickerOption {
   id: AgentProviderId;
@@ -44,11 +84,11 @@ export interface ProviderPickerOption {
   restartPending?: boolean | undefined;
   runtimeStatus?: ProviderRuntimeStatus | undefined;
   /**
-   * Whether the optional OpenCode key is saved. Only the OpenCode row carries it: no other
-   * provider signs in with a pasted key. Absent while unknown, so the row shows no badge rather
-   * than a wrong one.
+   * Whether the provider's key is saved: the optional OpenCode key, a Gemini key in use, or a Claude
+   * key on a host that reads it. Absent while unknown, so the row shows no badge rather than a
+   * wrong one.
    */
-  keyStatus?: ProviderApiKeyStatus;
+  keyStatus?: ProviderApiKeyStatus | undefined;
   /**
    * Whether the row runs free models with no account, so a downloaded row needs no Connect.
    * Onboarding sets it for OpenCode, whose first-run choice needs no key.
@@ -72,6 +112,11 @@ export interface ProviderPickerOption {
   off?: boolean | undefined;
   /** The names of the agents that use the provider. While there is one, the switch does not turn it off. */
   usedBy?: readonly string[] | undefined;
+  /**
+   * The accounts of a provider that can hold more than one, its own sign-in first. With
+   * `accountActions`, a connected row offers Add account, and lists them from the second one on.
+   */
+  accounts?: readonly ProviderPickerAccount[] | undefined;
 }
 
 export interface ProviderPickerProps {
@@ -85,7 +130,10 @@ export interface ProviderPickerProps {
   allowUnavailableSelection?: boolean;
   focusFirst?: boolean;
   refreshingProviders?: boolean | undefined;
-  onConnectProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
+  /** How each row signs in. Without it, no row offers Connect or a second way in. */
+  connection?: ProviderConnection | undefined;
+  /** Ends the browser sign-in that Connect started, so a closed or stuck page is not a dead end. */
+  onCancelProviderSignIn?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onDownloadProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onCancelProviderDownload?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   /**
@@ -102,23 +150,13 @@ export interface ProviderPickerProps {
   onCancelProviderRestart?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   /**
    * Turns a provider on or off in OpenBot. With it each provider row has a switch. A row whose
-   * `usedBy` names an agent stays on and names the agents, so no agent loses its provider silently.
+   * `usedBy` names an agent stays on, and a toast tells why, so no agent loses its provider silently.
    */
   onSetProviderOn?: ((provider: AgentProviderId, on: boolean) => void | Promise<void>) | undefined;
   onInstallProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onSignInProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
-  /**
-   * Starts the sign-in the user finishes on another device. Offered beside the row's usual sign-in,
-   * never instead of it: this is the way out for a computer whose browser cannot complete the
-   * hand-off, and only for a provider in `codeSignInProviders`.
-   */
-  onSignInWithCodeProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
-  /**
-   * The providers the computer that runs them can sign in with a code. A host decides this by its
-   * capabilities, so an older host never shows a button that it refuses. Without it, the providers
-   * whose descriptor says `codeSignIn`.
-   */
-  codeSignInProviders?: readonly AgentProviderId[] | undefined;
+  /** Adds, signs in, names and removes the accounts of a row. Settings has it; onboarding does not. */
+  accountActions?: ProviderAccountActions | undefined;
   /**
    * The dialog element a row's actions menu portals into. Without it the menu lands beside the
    * dialog in `body`, where a modal makes it inert and out of reach.
@@ -212,12 +250,6 @@ export function ProviderPicker(props: ProviderPickerProps) {
       state[provider] = { pending: false, error: null };
     });
   }
-  /**
-   * The last switch the user tried to turn off while agents use its provider. Each attempt is a new
-   * object, so the message is drawn again and a screen reader announces it again.
-   */
-  const [refusedOff, setRefusedOff] = createSignal<{ provider: AgentProviderId } | null>(null);
-
   /** One custom row; inside group when choosable, after when add-only. */
   const customRow = (engine: () => ProviderPickerOption) => (
     <div
@@ -254,7 +286,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
         <span class="provider-picker-state">
           {/* Count only; endpoint naming is the model picker's job. Moves beside Add when it opens the list. */}
           <Show when={endpointCount() > 0 && !countManageable()}>
-            <Badge class="provider-picker-custom-count" variant="secondary" shape="pill">
+            <Badge class="provider-picker-custom-count" variant="secondary">
               {endpointCountLabel()}
             </Badge>
           </Show>
@@ -263,7 +295,6 @@ export function ProviderPicker(props: ProviderPickerProps) {
             <Badge
               class={`provider-picker-status provider-picker-status-${engine().state}`}
               variant={providerStatusVariant(engine().state)}
-              shape="pill"
             >
               {providerStatusLabel(t, format, engine().state)}
             </Badge>
@@ -411,75 +442,49 @@ export function ProviderPicker(props: ProviderPickerProps) {
         <div role="radiogroup" aria-label={props.ariaLabel}>
           <For each={props.options} keyed={false}>
             {(option) => {
-              const state = () => option().state;
-              const runtimeStatus = () => option().runtimeStatus;
-              const connecting = () => option().connectionState === "connecting";
-              const available = () => state() === "available";
-              const updatable = () => {
-                const runtime = runtimeStatus();
-                return runtime ? providerUpdateAvailable(runtime, option().availableVersion ?? null) : false;
-              };
-              const version = () => {
-                const runtime = runtimeStatus();
-                return runtime ? providerVersionLabel(runtime, { t }) : null;
-              };
-              const visualState = () => providerVisualState(state(), connecting(), runtimeStatus(), updatable());
-              /**
-               * A downloaded row that runs free models needs no sign-in, so its Connect is an option
-               * rather than the step the row waits for: it stays outlined, and it opens the key
-               * dialog when the caller has one. The caller starts the provider when it is chosen.
-               */
-              const connectOptional = () =>
-                freeModelsReady(option()) &&
-                providerRuntimeAction(state(), connecting(), runtimeStatus()) === "connect";
-              const runtimeAction = () => {
-                if (updatable() && props.onUpdateProvider && runtimeStatus()?.phase === "not-downloaded") return;
-                const action = providerRuntimeAction(state(), connecting(), runtimeStatus());
-                // A remote host has no browser sign-in, so its caller passes no onConnectProvider:
-                // show only the Connect, Reconnect or Restart that the key dialog or a code sign-in
-                // can answer.
-                if (action !== "connect" && action !== "reconnect" && action !== "restart") return action;
-                if (props.onConnectProvider) return action;
-                if (action !== "restart" && codeSignInOffered()) return action;
-                return option().id === "opencode" &&
-                  (action === "reconnect" || connectOptional()) &&
-                  props.onSignInProvider
-                  ? action
-                  : undefined;
-              };
-              /**
-               * The row has a way in the user finishes elsewhere, and something to run it with.
-               *
-               * Offered while connected as well: that is how the user reaches a second account,
-               * which is otherwise only possible by signing out first and hoping the new sign-in
-               * works. A runtime still being downloaded has no CLI to ask for a code yet.
-               */
-              const codeSignInOffered = () =>
-                Boolean(props.onSignInWithCodeProvider) &&
-                (props.codeSignInProviders?.includes(option().id) ?? agentProviderDescriptor(option().id).codeSignIn) &&
-                (runtimeStatus()?.phase ?? "ready") === "ready";
-              /**
-               * Every row with a runtime on the computer offers Update in the same place, so the user
-               * looks for it in one menu. While a newer version waits, the badge says so and the menu
-               * names the version it installs; otherwise the same item checks for one.
-               */
-              const updateOffered = () =>
-                Boolean(props.onUpdateProvider) && (runtimeStatus()?.phase === "ready" || updatable());
-              const restartOffered = () =>
-                Boolean(props.onRestartProvider) && (option().restartPending || (available() && !connecting()));
-              const diagnosticsOffered = () => Boolean(option().lastError && option().diagnostics);
+              const {
+                state,
+                runtimeStatus,
+                connecting,
+                available,
+                off,
+                updatable,
+                version,
+                visualState,
+                alternative,
+                connectOptional,
+                runtimeAction,
+                browserConnect,
+                codeFallbackOffered,
+                signInAlternative,
+                connectError,
+                connect,
+                runAction,
+                cancelSignIn,
+                signingIn,
+                hostSignInHint,
+                statusMessage,
+                updateOffered,
+                restartOffered,
+                diagnosticsOffered,
+                accountsOffered,
+                accountError,
+                addAccount,
+                installOffered,
+                signInOffered,
+                apiKeyOffered,
+                freeKey,
+              } = createProviderRow(option, props);
               const actionsMenu = () =>
-                codeSignInOffered() || updateOffered() || restartOffered() || diagnosticsOffered();
+                alternative() !== null || updateOffered() || restartOffered() || diagnosticsOffered();
               const inputId = () => `${pickerId}-${option().id}`;
-              const off = () => Boolean(option().off);
-              /** The refused attempt on this row, until the agents move to another provider. */
-              const refusal = () => {
-                const attempt = refusedOff();
-                return attempt?.provider === option().id && (option().usedBy?.length ?? 0) > 0 ? attempt : undefined;
-              };
-              const usedById = () => `${inputId()}-used-by`;
               /** An off row is not a choice, so it never holds the check. */
               const checked = () => !off() && checkedProvider() === option().id;
+              /** From the second account on, the row counts them and lists each one under it. */
+              const listedAccounts = () => {
+                const accounts = option().accounts ?? [];
+                return props.accountActions && accounts.length > 1 && !off() ? accounts : null;
+              };
               return (
                 <div
                   class={[
@@ -512,7 +517,13 @@ export function ProviderPicker(props: ProviderPickerProps) {
                     <ProviderLogo provider={option().id} class="provider-picker-logo" />
                     <span class="provider-picker-identity">
                       <span class="provider-picker-name">{option().name}</span>
-                      <Show when={option().email ?? option().description ?? (props.versionInDetail ? version() : null)}>
+                      <Show
+                        when={
+                          listedAccounts()
+                            ? t("provider.account.count", { count: listedAccounts()?.length ?? 0 })
+                            : (option().email ?? option().description ?? (props.versionInDetail ? version() : null))
+                        }
+                      >
                         {(detail) => <small class="provider-picker-email">{detail()}</small>}
                       </Show>
                       <Show when={off() ? undefined : option().checkError}>
@@ -532,17 +543,37 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           {t("provider.restartPending")}
                         </small>
                       </Show>
+                      <Show when={hostSignInHint()}>
+                        <small class="provider-picker-email" role="status">
+                          {t("provider.gemini.hostSignIn")}
+                        </small>
+                      </Show>
+                      <Show when={connectError() ?? statusMessage()}>
+                        {(message) => (
+                          <small
+                            class={[
+                              "provider-picker-status-message",
+                              state() === "error" || runtimeStatus()?.phase === "download-error" || connectError()
+                                ? "provider-picker-check-error"
+                                : "provider-picker-email",
+                            ]}
+                          >
+                            {sourceText(message())}
+                          </small>
+                        )}
+                      </Show>
+                      <Show when={!off() && signingIn()}>
+                        <small class="provider-picker-email" role="status">
+                          {t("provider.connecting.browserHint")}
+                        </small>
+                      </Show>
                     </span>
                     {/* Version shares the badge column. */}
                     <span class="provider-picker-state">
                       <Show
                         when={!off()}
                         fallback={
-                          <Badge
-                            class="provider-picker-status provider-picker-status-off"
-                            variant="secondary"
-                            shape="pill"
-                          >
+                          <Badge class="provider-picker-status provider-picker-status-off" variant="secondary">
                             {t("provider.status.off")}
                           </Badge>
                         }
@@ -551,17 +582,8 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           {(installed) => <small class="provider-picker-version">{installed()}</small>}
                         </Show>
                         {/* Free-tier badge only beside runtime badge. */}
-                        <Show
-                          when={
-                            option().id === "opencode" &&
-                            (option().keyStatus === "missing" || option().keyStatus === "unreadable")
-                          }
-                        >
-                          <Badge
-                            class="provider-picker-status provider-picker-key-status"
-                            variant="secondary"
-                            shape="pill"
-                          >
+                        <Show when={freeKey()}>
+                          <Badge class="provider-picker-status provider-picker-key-status" variant="secondary">
                             {t("provider.key.free")}
                           </Badge>
                         </Show>
@@ -569,7 +591,6 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           <Badge
                             class={`provider-picker-status provider-picker-status-${visualState()}`}
                             variant={providerStatusVariant(visualState())}
-                            shape="pill"
                           >
                             {providerStatusLabel(t, format, state(), connecting(), runtimeStatus(), updatable())}
                           </Badge>
@@ -581,6 +602,33 @@ export function ProviderPicker(props: ProviderPickerProps) {
                   <div class="provider-picker-actions">
                     {/* An off provider has no process to act on, so the switch is its only action. */}
                     <Show when={!off()}>
+                      <Show when={accountsOffered()}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          class="provider-picker-install provider-picker-add-account"
+                          aria-label={t("provider.account.addLabel", { name: option().name })}
+                          disabled={props.disabled || props.refreshingProviders}
+                          onClick={addAccount}
+                        >
+                          <UserRoundPlus aria-hidden="true" />
+                          {t("provider.account.add")}
+                        </Button>
+                      </Show>
+                      <Show when={codeFallbackOffered()}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          class="provider-picker-install"
+                          aria-label={t("provider.aria.codeFallback", { name: option().name })}
+                          disabled={props.disabled || props.refreshingProviders}
+                          onClick={signInAlternative}
+                        >
+                          {t("provider.action.signInWithCode")}
+                        </Button>
+                      </Show>
                       <Show when={runtimeAction()}>
                         {(action) => (
                           <Button
@@ -594,40 +642,25 @@ export function ProviderPicker(props: ProviderPickerProps) {
                             class={connectOptional() ? "provider-picker-install" : providerActionClass(action())}
                             aria-label={t(PROVIDER_ACTION_LABEL[action()], { name: option().name })}
                             disabled={props.disabled || (props.refreshingProviders && !runtimeStoreAction(action()))}
-                            onClick={() => {
-                              if (action() === "cancel") {
-                                void props.onCancelProviderDownload?.(option().id);
-                              } else if (action() !== "download" && action() !== "retry") {
-                                // Reconnect and an optional Connect open the key dialog; the rest stay on onConnectProvider.
-                                if (
-                                  option().id === "opencode" &&
-                                  (action() === "reconnect" || connectOptional()) &&
-                                  props.onSignInProvider
-                                ) {
-                                  void props.onSignInProvider(option().id);
-                                } else if (!props.onConnectProvider && codeSignInOffered()) {
-                                  void props.onSignInWithCodeProvider?.(option().id);
-                                } else {
-                                  void props.onConnectProvider?.(option().id);
-                                }
-                              } else {
-                                void props.onDownloadProvider?.(option().id);
-                              }
-                            }}
+                            onClick={() => runAction(action())}
                           >
                             {t(PROVIDER_ACTION_TEXT[action()])}
                           </Button>
                         )}
                       </Show>
-                      <Show
-                        when={
-                          !runtimeStatus() &&
-                          agentProviderDescriptor(option().id).installGuideLink !== null &&
-                          state() === "not-installed" &&
-                          !props.onConnectProvider &&
-                          props.onInstallProvider
-                        }
-                      >
+                      <Show when={signingIn() && props.onCancelProviderSignIn}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="xs"
+                          aria-label={t("provider.aria.cancelSignIn", { name: option().name })}
+                          disabled={props.disabled}
+                          onClick={cancelSignIn}
+                        >
+                          {t("common.cancel")}
+                        </Button>
+                      </Show>
+                      <Show when={installOffered()}>
                         <Button
                           type="button"
                           variant="outline"
@@ -640,7 +673,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           {t("provider.action.install")}
                         </Button>
                       </Show>
-                      <Show when={!runtimeStatus() && props.onConnectProvider}>
+                      <Show when={!runtimeStatus() && browserConnect()}>
                         <Button
                           type="button"
                           variant={providerAction(state(), connecting()) === "connect" ? "default" : "outline"}
@@ -651,7 +684,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           })}
                           aria-busy={connecting() ? "true" : undefined}
                           disabled={props.disabled || props.refreshingProviders}
-                          onClick={() => void props.onConnectProvider?.(option().id)}
+                          onClick={connect}
                         >
                           <Show when={connecting()}>
                             <Spinner size="sm" />
@@ -659,25 +692,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           {t(PROVIDER_ACTION_TEXT[providerAction(state(), connecting())])}
                         </Button>
                       </Show>
-                      {/* Claude's sign-in is a browser round trip it only needs while signed out.
-                      OpenCode reconnects through its runtime Reconnect, so Sign in stays only where
-                      the row cannot offer it: with no runtime action at all, or a Connect or Restart
-                      that retries the same credentials. A saved key that blocks startup must stay
-                      replaceable and removable, so those actions never take the dialog away. */}
-                      <Show
-                        when={
-                          props.onSignInProvider &&
-                          !connectOptional() &&
-                          (option().id === "opencode"
-                            ? runtimeAction() === undefined ||
-                              runtimeAction() === "connect" ||
-                              runtimeAction() === "restart"
-                            : option().id === "claude" &&
-                              !runtimeStatus() &&
-                              state() === "sign-in-required" &&
-                              !props.onConnectProvider)
-                        }
-                      >
+                      <Show when={signInOffered()}>
                         <Button
                           type="button"
                           variant="outline"
@@ -688,6 +703,19 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           onClick={() => void props.onSignInProvider?.(option().id)}
                         >
                           {t("provider.action.signIn")}
+                        </Button>
+                      </Show>
+                      <Show when={apiKeyOffered()}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          class="provider-picker-install"
+                          aria-label={t("provider.aria.apiKey", { name: option().name })}
+                          disabled={props.disabled || props.refreshingProviders}
+                          onClick={() => void props.onSignInProvider?.(option().id)}
+                        >
+                          {t("provider.action.apiKey")}
                         </Button>
                       </Show>
                       {/* The row's secondary actions: Update on every downloaded runtime, and the code
@@ -706,7 +734,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           >
                             <Ellipsis aria-hidden="true" />
                           </DropdownMenu.Trigger>
-                          <DropdownMenu.Portal mount={props.menuMount}>
+                          <DropdownMenu.Portal mount={props.menuMount ?? document.body}>
                             <DropdownMenu.Content>
                               <Show when={updateOffered()}>
                                 <DropdownMenu.Item
@@ -735,11 +763,19 @@ export function ProviderPicker(props: ProviderPickerProps) {
                                   </DropdownMenu.Item>
                                 </Show>
                               </Show>
-                              <Show when={codeSignInOffered()}>
-                                <DropdownMenu.Item onSelect={() => void props.onSignInWithCodeProvider?.(option().id)}>
-                                  <Smartphone aria-hidden="true" />
-                                  {t("provider.action.signInWithCode")}
-                                </DropdownMenu.Item>
+                              <Show when={alternative()}>
+                                {(kind) => (
+                                  <DropdownMenu.Item onSelect={signInAlternative}>
+                                    <Show when={kind() === "address"} fallback={<Smartphone aria-hidden="true" />}>
+                                      <Link aria-hidden="true" />
+                                    </Show>
+                                    {t(
+                                      kind() === "address"
+                                        ? "provider.action.pasteAddress"
+                                        : "provider.action.signInWithCode",
+                                    )}
+                                  </DropdownMenu.Item>
+                                )}
                               </Show>
                               <Show when={diagnosticsOffered()}>
                                 <DropdownMenu.Item
@@ -764,13 +800,12 @@ export function ProviderPicker(props: ProviderPickerProps) {
                         )}
                         aria-busy={useChanges[option().id]?.pending ? "true" : "false"}
                         aria-label={t("provider.aria.use", { name: option().name })}
-                        aria-describedby={refusal() ? usedById() : undefined}
                         onChange={(on: boolean) => {
-                          if (!on && (option().usedBy?.length ?? 0) > 0) {
-                            setRefusedOff({ provider: option().id });
+                          const usedBy = option().usedBy ?? [];
+                          if (!on && usedBy.length > 0) {
+                            showProviderInUse(t, usedBy, option().name);
                             return;
                           }
-                          setRefusedOff(null);
                           void setProviderOn(option().id, on);
                         }}
                       />
@@ -778,21 +813,35 @@ export function ProviderPicker(props: ProviderPickerProps) {
                   </div>
                   {/* Outside the label: inside it, the message would be part of the radio's name, and
                     a click on it would choose the provider. */}
-                  <Show when={useChanges[option().id]?.error}>
+                  <Show when={accountError()}>
                     {(message) => (
                       <small class="provider-picker-check-error provider-picker-used-by" role="alert">
                         {message()}
                       </small>
                     )}
                   </Show>
-                  <Show when={refusal()} keyed>
-                    <small id={usedById()} class="provider-picker-check-error provider-picker-used-by" role="alert">
-                      {t("provider.use.inUse", {
-                        count: option().usedBy?.length ?? 0,
-                        agents: format.list(option().usedBy ?? []),
-                        name: option().name,
-                      })}
-                    </small>
+                  <Show when={listedAccounts()}>
+                    {(accounts) => (
+                      <Show when={props.accountActions}>
+                        {(actions) => (
+                          <ProviderAccountList
+                            provider={option().id}
+                            providerName={option().name}
+                            accounts={accounts()}
+                            actions={actions()}
+                            disabled={props.disabled}
+                            menuMount={props.menuMount}
+                          />
+                        )}
+                      </Show>
+                    )}
+                  </Show>
+                  <Show when={useChanges[option().id]?.error}>
+                    {(message) => (
+                      <small class="provider-picker-check-error provider-picker-used-by" role="alert">
+                        {message()}
+                      </small>
+                    )}
                   </Show>
                 </div>
               );
@@ -894,91 +943,6 @@ function ProviderCallout(props: { title: string; detail: string; class?: string 
   );
 }
 
-/** OpenCode runs user endpoints when its CLI is installed and answers; sign-in is irrelevant. */
-function servesCustomProvider(openCode: ProviderPickerOption | undefined): boolean {
-  return openCode?.state === "available" || openCode?.state === "sign-in-required";
-}
-
-type ProviderVisualState = AgentProviderState | ProviderRuntimePhase | "connecting" | "update-available";
-
-function providerStatusVariant(
-  state: ProviderVisualState,
-): "success-light" | "warning-light" | "destructive-light" | "secondary" {
-  if (state === "available") return "success-light";
-  if (state === "ready") return "success-light";
-  if (state === "error" || state === "download-error") return "destructive-light";
-  if (state === "sign-in-required" || state === "outdated" || state === "finishing") return "warning-light";
-  if (state === "update-available") return "warning-light";
-  return "secondary";
-}
-
-/** Badge text, translated where drawn; downloads report a percentage, not a key. */
-function providerStatusLabel(
-  translate: AppTranslate,
-  format: AppFormat,
-  state: AgentProviderState,
-  connecting = false,
-  runtimeStatus?: ProviderRuntimeStatus,
-  updatable = false,
-): string {
-  // Downloads outrank connection words; the row reports progress until it ends.
-  if (runtimeStatus?.phase === "downloading") {
-    return format.percent(Math.round(Math.max(0, Math.min(100, runtimeStatus.progress ?? 0))) / 100);
-  }
-  if (runtimeStatus?.phase === "finishing") return translate("provider.status.settingUp");
-  if (connecting && state !== "available") return translate("provider.status.connecting");
-  // Update offers outrank "Connected"/"Ready": a hidden offer is never taken.
-  if (updatable) return translate("provider.status.updateAvailable");
-  if (runtimeStatus?.phase === "download-error") return translate("provider.status.downloadFailed");
-  if (state === "available") return translate("provider.status.connected");
-  if (runtimeStatus?.phase === "not-downloaded") return translate("provider.status.notDownloaded");
-  if (runtimeStatus?.phase === "ready") return translate("provider.status.ready");
-  if (state === "sign-in-required") return translate("provider.status.notConnected");
-  if (state === "not-installed") return translate("provider.status.notInstalled");
-  if (state === "outdated") return translate("provider.status.updateRequired");
-  if (state === "error") return translate("provider.status.unavailable");
-  return translate("provider.status.checking");
-}
-
-function providerVisualState(
-  state: AgentProviderState,
-  connecting: boolean,
-  runtimeStatus?: ProviderRuntimeStatus,
-  updatable = false,
-): ProviderVisualState {
-  const phase = runtimeStatus?.phase;
-  // Same order as the label above.
-  if (phase === "downloading" || phase === "finishing") return phase;
-  if (connecting && state !== "available") return "connecting";
-  if (updatable) return "update-available";
-  if (phase === "download-error") return phase;
-  if (state === "available") return "available";
-  return phase ?? state;
-}
-
-/** Row action identifier; never a translated label, since the handler branches on it. */
-type ProviderAction = "download" | "cancel" | "connect" | "reconnect" | "restart" | "retry";
-
-const PROVIDER_ACTION_TEXT = {
-  download: "common.download",
-  cancel: "common.cancel",
-  connect: "provider.action.connect",
-  reconnect: "provider.action.reconnect",
-  restart: "provider.action.restart",
-  retry: "common.retry",
-} as const satisfies Record<ProviderAction, AppTextKey>;
-
-/** The name a screen reader reads. It repeats the provider, because a list of rows that all say
- * "Connect" names nothing. */
-const PROVIDER_ACTION_LABEL = {
-  download: "provider.aria.download",
-  cancel: "provider.aria.cancel",
-  connect: "provider.aria.connect",
-  reconnect: "provider.aria.reconnect",
-  restart: "provider.aria.restart",
-  retry: "provider.aria.retry",
-} as const satisfies Record<ProviderAction, keyof AppMessages>;
-
 /**
  * Connect is the step a row is waiting for, so it takes the accent colour. An outlined Connect read
  * as a disabled button beside a "Ready" badge (issue #643). Reconnect and Restart repeat a step
@@ -986,46 +950,4 @@ const PROVIDER_ACTION_LABEL = {
  */
 function providerActionClass(action: ProviderAction) {
   return action === "connect" ? "provider-picker-install provider-picker-connect" : "provider-picker-install";
-}
-
-/**
- * Whether a free-models row can be used without Connect: its runtime is on disk and nothing reports
- * it broken. The provider state can still say signed out or unchecked, because free models need no
- * sign-in and the first connection only asks the CLI for its models. An error or an outdated CLI
- * keeps Connect, which is how the user retries.
- */
-export function freeModelsReady(option: ProviderPickerOption): boolean {
-  if (!option.freeModels || option.state === "error" || option.state === "outdated") return false;
-  return option.runtimeStatus?.phase === "ready";
-}
-
-/**
- * Whether the action reaches main's managed runtime store rather than a provider CLI.
- *
- * A download, its cancellation and its retry are file transfers the runtime manager owns; it neither
- * asks the agent runtime for anything nor waits for it. The rest put a question to a CLI, so they
- * wait while the providers are being checked. Keeping the two apart is what stops a provider check
- * that never ends from disabling the one action that would end it: with nothing downloaded, every
- * other button on the first-run screen is refused by design, and disabling Download as well leaves
- * the user with no way forward at all.
- */
-function runtimeStoreAction(action: ProviderAction): boolean {
-  return action === "download" || action === "cancel" || action === "retry";
-}
-
-function providerRuntimeAction(
-  state: AgentProviderState,
-  connecting: boolean,
-  runtimeStatus?: ProviderRuntimeStatus,
-): ProviderAction | undefined {
-  if (!runtimeStatus) return;
-  if (runtimeStatus.phase === "not-downloaded") return "download";
-  if (runtimeStatus.phase === "downloading") return "cancel";
-  if (runtimeStatus.phase === "ready") return providerAction(state, connecting);
-  if (runtimeStatus.phase === "download-error") return "retry";
-}
-
-function providerAction(state: AgentProviderState, connecting: boolean): ProviderAction {
-  if (connecting) return "restart";
-  return state === "available" ? "reconnect" : "connect";
 }

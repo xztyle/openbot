@@ -30,7 +30,7 @@ const DYNAMIC_ISLAND_COMPACT_WINDOW_HOVER_ROOM = 18;
 // then the shell springs back down to the notch. The window is the only thing clipping it, so
 // dropping to the compact height on the same tick guillotines the still-tall island - the lower
 // half disappears at once while the top morphs. Hold the tall window until the shell has landed.
-export const DYNAMIC_ISLAND_COLLAPSE_SETTLE_MS = 700;
+const DYNAMIC_ISLAND_COLLAPSE_SETTLE_MS = 700;
 
 const MACBOOK_NOTCH_REFERENCE = {
   displayWidth: 1512,

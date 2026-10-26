@@ -10,6 +10,14 @@ export const LOCAL_SERVER_ID = "local";
 export type ServerConnectionState = "online" | "connecting" | "offline" | "error" | "incompatible";
 export type TeamRole = "owner" | "admin" | "member";
 
+/**
+ * The owner and admins manage the server, its members and its invitations. The owner is an admin
+ * that nobody can change or remove. A missing role manages nothing.
+ */
+export function canAdministerServer(role: TeamRole | null | undefined): boolean {
+  return role === "owner" || role === "admin";
+}
+
 export type ServerConnectionIssueCode =
   | "client_update_required"
   | "host_update_required"
@@ -21,6 +29,8 @@ export interface ServerConnectionIssue {
   code: ServerConnectionIssueCode;
   message: string;
   retryable: boolean;
+  /** A short code a user can copy into a report, such as `signal/host_busy`. */
+  reference?: string;
 }
 
 export interface ServerCompatibility {
@@ -74,6 +84,8 @@ export interface ServerSummary {
   active: boolean;
   /** The active members that the host allows. Absent when the account server did not give one. */
   memberLimit?: number;
+  /** A hosted server, which its owner and its admins can restart. Absent when the account server did not say. */
+  hosted?: boolean;
   compatibility?: ServerCompatibility | null;
   issue?: ServerConnectionIssue | null;
   connectionSequence?: number;
@@ -86,9 +98,23 @@ export interface ServerSummary {
   hostedSleep?: HostedServerSleep | null;
   /** A hosted start needs user action. This is local IPC metadata, not a Team API field. */
   hostedIssue?: HostedServerIssue | null;
+  /** The step of a hosted start in progress, while `hostedSleep` is `waking`. Local IPC metadata. */
+  hostedStart?: HostedServerStart | null;
 }
 
 export type HostedServerIssue = "plan_ended" | "wake_failed" | "start_timeout";
+
+/**
+ * `machine`: the provider starts the machine. `openbot`: the machine runs and OpenBot on it starts.
+ * `provider_limit`: the provider refused the start for a short time, and the account server tries again.
+ */
+export type HostedServerStartStep = "machine" | "openbot" | "provider_limit";
+
+export interface HostedServerStart {
+  step: HostedServerStartStep;
+  /** When the client began to wait, in milliseconds since the epoch. */
+  startedAt: number;
+}
 
 export type HostedServerSleep = "sleeping" | "waking";
 
@@ -200,7 +226,7 @@ export interface DirectConversationSnapshot {
   otherMemberId: string;
   messages: DirectMessage[];
   revision: number;
-  readState?: DirectConversationReadState;
+  readState?: DirectConversationReadState | undefined;
 }
 
 export type DirectConversationPageAnchor =
@@ -222,11 +248,11 @@ export interface DirectConversationPage {
   pageInfo: {
     hasOlder: boolean;
     olderCursor: string | null;
-    /** As in `ConversationPageInfo`: the unloaded length, for the day rail. Absent from a remote host. */
+    /** As in `ConversationPageInfo`: the unloaded length, for the scroll rail. Absent from a remote host. */
     olderCount?: number;
     oldestAt?: string;
   };
-  readState?: DirectConversationReadState;
+  readState?: DirectConversationReadState | undefined;
 }
 
 export interface DirectConversationReadState {

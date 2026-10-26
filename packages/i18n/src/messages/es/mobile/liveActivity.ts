@@ -7,7 +7,7 @@ export const messages = {
   "mobile.liveActivity.badge.message": "Mensaje",
   "mobile.liveActivity.badge.question": "Preguntas",
   "mobile.liveActivity.badge.approval": "Aprobación",
-  "mobile.liveActivity.badge.takeover": "Tomar el control",
+  "mobile.liveActivity.badge.takeover": "Intervenir",
   "mobile.liveActivity.badge.failed": "Fallido",
   "mobile.liveActivity.unread": {
     other: "{count} sin leer",

@@ -51,6 +51,7 @@ export const messages = {
   "language.name.mn": "Монгольский",
   "language.name.mr": "Маратхи",
   "language.name.ms": "Малайский",
+  "language.name.mt": "Мальтийский",
   "language.name.my": "Бирманский",
   "language.name.nb": "Норвежский (букмол)",
   "language.name.ne": "Непальский",

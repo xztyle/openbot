@@ -1,4 +1,6 @@
 import { MCP_SERVERS_CAPABILITY, type ServerSummary } from "@openbot/contracts/ipc";
+import { AGENT_ACCESS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-access-v1";
+import { BROWSER_PROFILES_CAPABILITY } from "@openbot/contracts/team-protocol/browser-profiles-v1";
 import { serverHasStorage } from "../files/storage-usage";
 import type { ServerSettingsSection } from "./ServerSettingsModal";
 import { remoteUpdateServer, serverCanAdminister, serverSupportsCapability } from "./server-capabilities";
@@ -6,7 +8,9 @@ import { remoteUpdateServer, serverCanAdminister, serverSupportsCapability } fro
 /** Every section of the server settings dialog, in the order of its navigation. */
 export const SERVER_SETTINGS_SECTIONS: readonly ServerSettingsSection[] = [
   "general",
+  "vault",
   "members",
+  "roles",
   "desktop",
   "mcp",
   "storage",
@@ -14,7 +18,9 @@ export const SERVER_SETTINGS_SECTIONS: readonly ServerSettingsSection[] = [
   "providers",
   "updates",
   "import",
+  "transfer",
   "routines",
+  "browser-profiles",
   "connectors",
 ];
 
@@ -42,6 +48,16 @@ function hasSection(
     case "general":
     case "members":
       return true;
+    // The vault of this computer.
+    case "vault":
+      return server.kind === "local";
+    // The dialog also needs the roles to be set up; when they are not, the result opens General.
+    case "roles":
+      return serverCanAdminister(server, AGENT_ACCESS_CAPABILITY);
+    case "transfer":
+      return server.kind === "local" || serverCanAdminister(server, "instance-transfer-v1");
+    case "browser-profiles":
+      return serverCanAdminister(server, BROWSER_PROFILES_CAPABILITY);
     case "desktop":
       return options.platform === "darwin";
     case "mcp":

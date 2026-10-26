@@ -5,14 +5,14 @@ import type { messages as source } from "../../en/status/messaging";
 export const messages = {
   "status.messaging.working": "Уже работаю…",
   "status.messaging.queued": "Ожидание: OpenBot занят другим запросом. Ответ придёт сюда.",
-  "status.messaging.busy": "В очереди слишком много запросов. Повторите позже.",
+  "status.messaging.busy": "В очереди слишком много запросов. Повторите попытку позже.",
   "status.messaging.failed": "OpenBot не смог завершить этот запрос. Подробности — на хосте OpenBot.",
   "status.messaging.noAnswer": "OpenBot завершил работу без письменного ответа.",
-  "status.messaging.noAgent": "Пока нет агента, который мог бы здесь ответить. Добавьте Оркестратор Slack в OpenBot.",
-  "status.messaging.delegated": "Над этим работает один из помощников. Ответ придёт сюда.",
+  "status.messaging.noAgent": "Пока нет агента, который мог бы здесь ответить. Добавьте Оркестратора Slack в OpenBot.",
+  "status.messaging.delegated": "Над этим работает один из агентов. Ответ придёт сюда.",
   "status.messaging.stopped": "Остановлено.",
   "status.messaging.stop": "Остановить",
-  "status.messaging.approvalTitle": "OpenBot просит подтверждение, чтобы продолжить.",
+  "status.messaging.approvalTitle": "OpenBot просит подтверждения, чтобы продолжить.",
   "status.messaging.approvalCommand": "Выполнить команду",
   "status.messaging.approvalFileChange": "Изменить файлы",
   "status.messaging.approvalPermissions": "Получить дополнительные разрешения",
@@ -28,10 +28,16 @@ export const messages = {
   "status.messaging.orchestratorName": "Оркестратор Slack",
   "status.messaging.orchestratorTitle": "Отвечает в Slack и обращается к команде",
   "status.messaging.discordNoAgent":
-    "Пока нет агента, который мог бы здесь ответить. Добавьте Оркестратор Discord в OpenBot.",
+    "Пока нет агента, который мог бы здесь ответить. Добавьте Оркестратора Discord в OpenBot.",
   "status.messaging.discordOrchestratorName": "Оркестратор Discord",
   "status.messaging.discordOrchestratorTitle": "Отвечает в Discord и обращается к команде",
   "status.messaging.integrationsSection": "Интеграции",
   "status.messaging.signInReceived": "OpenBot получил установку Slack. Эту вкладку можно закрыть.",
   "status.messaging.signInUnknown": "OpenBot не начинал эту установку Slack. Начните её заново в OpenBot.",
+  "status.messaging.telegramNoAgent":
+    "Пока нет агента, который мог бы здесь ответить. Добавьте Оркестратора Telegram в OpenBot.",
+  "status.messaging.telegramLinked":
+    "OpenBot подключён к этому чату. Упомяните {bot} или ответьте на сообщение OpenBot, чтобы обратиться к агентам.",
+  "status.messaging.telegramOrchestratorName": "Оркестратор Telegram",
+  "status.messaging.telegramOrchestratorTitle": "Отвечает в Telegram и обращается к команде",
 } as const satisfies PartialTranslation<typeof source>;

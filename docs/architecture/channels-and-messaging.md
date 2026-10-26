@@ -26,6 +26,106 @@ library, so the phone composes its layout with the two widget keys and the App G
 state carry an HMAC signature, which the app checks with the key of the host that the action goes
 to, so one host cannot sign an action for another.
 
+## iPhone notifications
+
+A host sends an iOS notification when an agent finishes a turn, stops with an error, cannot start a
+message or a routine run (`error` with the code `delivery_start_failed`), or waits for input, an
+approval, or a step in the browser (`browser-takeover-requested`, also for a password or a code).
+The desktop and the web client notify about the same events (`agentEventCanNotify`), and all three
+decide as one: `notificationForAgentEvent` in `@openbot/team-client` applies the level of the server
+(`all`, or `needs-me` for the events that wait for the user), the switch of the agent, and the quiet
+routine runs. The desktop and the web client close the notification of a request when an
+`agent-input-resolved` or `browser-takeover-resolved` event comes, also for an answer from another
+device. The title is the agent name. When the phone shows previews, the text is the
+preview of a desktop notification: the start of the answer of that turn, the question, or the action
+to approve, with secrets redacted. Otherwise it is the fixed desktop text, such as "Finished working.".
+
+Channels are an exception. The desktop and the web client notify an agent reply in a channel from
+the channel list (`channelReplyNotifications`), because the channel service consumes the
+`turn-completed` event of a channel thread. On a host with `channel-attention-v1`, each summary names
+the author and status of its newest message, the thread of each member, and `openTasks`: its
+queued, waiting and running tasks. The released `activeTasks` counts only running tasks, so it is 0
+while a task waits for the tasks it passed on. A reply notifies once, when the work of the channel
+ends (its newest message is an agent's and stopped streaming, and `openTasks` is 0), while the
+channel has unread messages. Work that writes many messages, asks a question on the way, or passes
+parts to other agents thus notifies once, at its end. The desktop reads the agent list for a
+notification only when a reply is new, and it reads no channel list for a server whose replies
+cannot notify. The title of a prompt, an approval or
+a takeover on a channel thread names the agent and the channel (`notification.channelTitle`), and a
+click opens the channel. The phone gets no channel reply notification. For a phone that sends
+`channel-attention-v1`, the host names the channel in the title of a prompt, an approval or a
+takeover on a channel thread (`PushNotificationService` reads `HostService.channelForThread`), and a
+tap opens the channel. An older phone gets the agent name as the title, as before.
+
+The phone registers with every connected server that supports `push-notifications-v1`
+(`POST /v1/push-notifications/registration`): the APNs token of the app, the secret of that host (the
+same one as for the Live Activity), the language, the level, a mute end, the preview switch, the sound
+(`none` when Play sound is off), the start of its Live Activity of that host, and `away`. One sound is for notifications and the Live Activity. With
+notifications off, Live Activities on and Play sound on, it registers with no token: the host then
+sends no notification, and uses the registration only to make the Live Activity play the sound. It
+tells each host again after each connection and when a choice changes, and removes the registration
+when nothing is left for that host or the user signs out. A level of
+"Nothing" and a mute with no end remove it too. `PushNotificationService` in `src/main` keeps the
+registrations in `openbot-push-notifications-v1.json` in the user data folder, readable only by the
+user, so a phone that does not connect after the host restarts still gets notifications. It sends
+only while the phone is away or its connection is closed. No event goes while the member uses a
+desktop app, which shows the event and asks for input, an approval, or a browser step itself: that
+computer had input in the last 30 seconds (`powerMonitor.getSystemIdleState`), and
+the window of the host's own desktop app has focus or shows the event as a desktop notification, for
+the owner (`desktopShowsAgentEvent`: desktop notifications on, and the mute and the level of this
+computer's server let the event through); or the member sent, answered, or typed from another session in the last 30
+seconds (`TeamApiServer.lastMemberUseElsewhere`, kept in memory). The time is short because a task
+can end at any time after the member leaves the computer. While the phone shows a Live Activity of
+this host that iOS still updates (8 hours from its start, which the phone gives because a host that
+restarted does not know it), the host sends no notification
+(`LiveActivityPushService.showsEvent`). With a sound (Settings > Notifications > Sound), the next
+update of the activity alerts at once, so iOS lights up the screen, shows the activity, and plays
+that sound; with Play sound off, the activity updates silently. iOS does not tell the host when
+the user removes the activity, so until the app runs again such an event shows nowhere.
+
+`push-notification-seal.ts` seals the notification with keys of their own, made from the host secret.
+The host sends it to `POST /v2/remote/hosts/:hostId/notification` with its machine credential and the
+account session of the phone. The Worker checks the credential and a per-host rate limit, and sends
+nothing for a session that has ended, a revoked membership, or a signed-out device, because the host
+does not learn about these. It makes the APNs alert itself, with "OpenBot" as the only text,
+`mutable-content`, the sound, and the sealed bytes. It stores and logs nothing. A `410` answer, from
+the Worker or Apple, removes the registration.
+
+The Notification Service Extension of the app (`apps/mobile/plugins/with-notification-service.js`,
+`NotificationService.swift`) opens the seal with the keys that the app writes into the App Group
+file `push-notifications.json`, and shows the agent name and the text. It refuses content that names
+another server than the one whose keys open it. A notification that it cannot open keeps the app
+name only. A tap opens the chat of the agent.
+
+## Android notifications
+
+An Android phone gets the same notifications in the same conditions, through Firebase Cloud
+Messaging. Android has no Live Activity, so the host does not check one. The phone registers with
+every connected server that supports `push-notifications-android-v1`
+(`POST /v1/push-notifications/android-registration`): the Firebase token of the app, the secret of
+that host, the language, the level, a mute end, the preview switch, and the sound. A registration
+always has a token. `PushNotificationService` keeps it in the same file, as an entry with
+`platform: "android"`; a host from before this capability drops such an entry when it reads the file.
+
+The host sends the sealed notification to `POST /v2/remote/hosts/:hostId/android-notification`. The
+Worker checks the credential, the notification limit of the host and the session, as for an iPhone.
+It signs an OAuth token with the Firebase service account key (`FCM_SERVICE_ACCOUNT`) and sends a
+high-priority data message with `sealed` and, unless the notification is silent, `sound`. It stores
+and logs nothing. Firebase answers `UNREGISTERED` or `SENDER_ID_MISMATCH` for a token that no longer
+reaches the app, and the Worker answers `410`, which removes the registration.
+
+`OpenBotMessagingService.kt` (`apps/mobile/modules/android-notifications`) gets the message, also
+while the app does not run. It opens the seal with the keys that the app writes into
+`push-notifications.json` in its files folder, and gives the notification to `expo-notifications`,
+so a tap reaches the app as on iOS. Android plays the sound of the notification channel, so the app
+makes one channel for each sound (`android-notification-channels.ts`), and the service picks the
+channel of the sound in the message.
+
+Notifications only inform; they have no buttons on either platform. An answer from a button would
+have to reach the computer over the WebRTC connection of the app, which Android does not let a
+closed or frozen app build: React Native stops its timers and its view updates in the background,
+and the web view that holds the connection does not connect again after Android froze the app.
+
 ## Shared channel chats
 
 Channels are separate from sidebar sections. A channel has one host, a purpose, participating agents,
@@ -33,13 +133,14 @@ a selected lead, and linked agent conversations. Agent membership selects who ca
 It does not restrict human access: each authenticated server member can read and use its channels.
 The Electron app provides the channel interface. A creation dialog provides member search and optional
 coordination settings. The chat shows each author and keeps settings in a side panel. Channels use the sidebar
-context menu for management and have no Pause or Resume controls. The mobile interface is unchanged.
+context menu for management and have no Pause or Resume controls. The mobile app has its own channel
+interface (see below).
 
 `ChannelStore` stores the canonical transcript, channel configuration, tasks, assignments, summaries,
 execution threads, and human read positions in SQLite. Migration 18 adds these projections without
 changing existing agent data. Channel commands use the orchestration log and command receipts.
 Messages have stable IDs and per-channel sequences. A channel projection can be rebuilt from its events.
-Archiving stops channel work and retains its records. Restore makes the chat available for new messages again. Neither action removes agents or linked conversations.
+Archiving stops channel work and retains its records. Restore makes the chat available for new messages again. Neither action removes agents or linked conversations. The sidebar calls archiving "Delete". On desktop and web, the row menu in Deleted channels restores a channel; it shows to the people who can delete one.
 
 Each channel-agent pair has a separate execution thread in `projection_threads`. The normal agent
 thread is never replaced. Provider sessions, turns, questions, approvals, attachments, compaction,
@@ -54,22 +155,62 @@ supplies the accepted result schema and the channel summary in place of the tran
 stale routing cannot broadcast a request. Routing can select an existing task, ask a question, or
 indicate that no work is needed. A selected owner or existing task adds one channel message from the
 lead, so the selection is visible and the user can correct it. Deterministic selection adds no
-message.
+message. A request that needs routing in a channel with no lead stops with the reason
+`channelLeadRequired`. A save that sets a new lead queues these requests again, and the lead routes
+them. A lead change does not move a task that already has an owner. The member packet names the lead
+(`leadAgentId`).
 
 Channel tools retrieve history, assign a child task, transfer ownership, and report results. The
 runtime supplies channel and caller identity. A child keeps its parent owner; a transfer changes it.
 Only assignments and awaited results start turns. Completed child results are combined before the
 owner returns. The limit is eight automatic assignments per root request and two active assignments
-per channel. One agent runs at most one work turn across all chats. Declared workspace and browser
-resources serialize channel assignments with each other; undeclared resources reserve the host for
-channel work. Resources do not apply between channel work and direct messages. While any channel
-assignment is active, no agent starts a message from its normal queue (`ChannelService.mayDrain`),
-and a channel assignment starts only when no direct message is starting or running
-(`ChannelService` `normalBusy`). Each side reserves the whole host, whatever the assignment
-declared. A direct message that waits for this shows `heldBy: "channel"` in `openbot.list_agents`
-and the channel name in the queue. An assignment keeps the resources it started with until it ends,
-and a task with an active assignment starts no second owner. These controls do not restrict
+per channel (`CHANNEL_PARALLEL_LIMIT`).
+
+A member can also change its channel when a person asks: `channel_add_member`,
+`channel_remove_member`, `channel_set_instructions`, and `channel_list_routines`,
+`channel_create_routine`, `channel_update_routine`, `channel_delete_routine` for the schedule
+routines. They act only on the channel of the running task (`channel-management.ts`). The request
+message of the root task must have a person as author. A routine run (author id `routine:<id>`)
+and a request that only an agent wrote are refused, so untrusted run input cannot change the
+channel. A member change is a `save` through the command queue, with the draft read from the stored
+channel when its turn comes. The caller cannot remove itself or an owner of a task above its own,
+and removing the lead clears the lead. An agent that a person adds must be one that person can chat
+with, and one they remove must be one they can see: main answers `personAgentLevel` with the level
+their own Team API save has (`HostService.channelPersonAgentLevel`). For a team member's request,
+the routine tools do not list, make or change a one-time routine, which the Team API does not carry
+(`HostService.channelPersonIsRemote`). A retried call finds the
+receipt of its change and changes nothing again. Each change
+writes a `channel-change` note in the same commit, with the agent as author and a source text that
+names the agent, the change and the person. Clients show it as an activity row, and it is not
+unread and not in the model packet.
+
+Channel work holds only the agent that does it. An agent runs one main-lane turn at a time: its chat,
+a channel delivery or a messaging delivery. While the agent has an active assignment,
+`ChannelService.mayDrain` holds its other main-lane requests. The work of other agents does not hold
+it. The tasks of the agent run beside the channel turn within the agent task limit, and a channel
+turn takes no task slot. When the provider of the agent runs one turn at a time (`concurrentTurns:
+false`), its task turns count as busy. Only declared `browser` and `workspace:<path>` resources are
+serialized: the same browser, or two workspaces where one path contains the other. An empty list,
+`none`, and `host` (from an earlier version) reserve nothing. An assignment keeps the resources it
+started with until it ends, and a task with an active assignment starts no second owner. An update
+still waits for channel work on all of the host (`hasActiveWork`). These controls do not restrict
 provider process privileges.
+
+A channel turn can use `ask_ui`, the plan card (`acknowledge_request`) and `html_render`. The
+question, the card and the visual reply are copied into the channel, so each member who reads the
+channel sees them and can answer. Screen capture in a channel turn always asks, also with Full
+access, and the reason names the channel (`status.agent.screenCaptureChannel`). Messaging links
+still refuse these tools. `history_search`, `history_read` and `start_task` stay refused in a
+channel turn; `channel_history` gives the channel history.
+
+A hidden lead does not route. When the user hides an agent, `ChannelService.releaseAgent` gives its
+queued and starting assignments back to the channel. The task keeps its owner and gets a new
+revision, so the work continues after restore or after a reassign. When an agent that owns waiting
+channel work (`ownsWaitingWork`) reaches its usage limit, the agent moves to its backup model as for
+its own chat. The model-switch marker shows in the agent chat and in each affected channel.
+
+A one-time routine of a channel stays on this computer. The released Team API channel codec does
+not accept its schedule, so desktop IPC allows it only on the local host.
 
 Each turn receives bounded channel context: purpose, responsibilities, the current request, source
 messages and replies, shared decisions, recent messages, and attachment references. A versioned
@@ -89,10 +230,11 @@ effects do not have an exactly-once guarantee.
 
 Desktop IPC and remote desktop transports expose `channel-chats-v1` as an optional capability with
 separate payload codecs. Released Team API adapters keep their existing meaning. A host advertises
-the capability only when its channel service is connected. Unsupported remote hosts show an explanation
-in place of channel controls. The account API and Signal service add no channel storage or routing.
+the capability only when its channel service is connected. When a host does not advertise
+`channel-chats-v1`, the renderer hides the channel controls in the sidebar, search and schedule. The account API and Signal service add no channel storage or routing.
 
-Mobile uses the same host channel IDs and `channel-chats-v1` commands. The host database stores
+Mobile shows channels only on a host that advertises `channel-chats-v1`, and Delete and Restore only
+with `channel-delete-v1`. It uses the same host channel IDs and commands. The host database stores
 channel settings, members, messages, memories, routines, and read positions. Mobile keeps only an
 in-memory view. Reconnect loads the host list again. `channels-changed` events refresh the list and
 open channel history, with one request sequence per host and one pending refresh for an event burst.
@@ -107,7 +249,28 @@ unpins it; the shared Hidden chats sheet restores it. Channel and agent pinning 
 measured overlay movement, with static folder artwork for channels. Agent and channel screens
 use the same mobile `ChatView`, header, message list, reply gestures, composer, camera, and keyboard
 motion. Their data adapters provide history, sending, and read positions; channels also provide
-author labels and task actions. Channel send retries retain their operation ID and uploaded files.
+author labels and task actions. Channel send retries keep their operation ID and uploaded files.
+A channel message shows plan cards and `ask_ui` questions as an agent chat does; it has no reactions,
+because the reaction route is an agent route. A channel send is done when the host accepts its
+operation: the host stores a repeated operation once. The send then reads the history of an open
+channel, so the host's row replaces the phone's own; a failed read is not a failed send, and a closed
+channel reads its history when it opens. A channel message that an app before channels came back
+kept aside in `messages.unreadable-<time>.json` stays there.
+
+On a host with `channel-attention-v1`, each channel summary names the threads of its members. The
+channel then shows the approvals and browser steps of those threads, and the agent's own chat does
+not. An older host gives no threads: the channel shows the approvals of the members that run one of
+its tasks, as before. A member with a request in the channel shows as waiting there, with the reason
+of the request. The agent's own chat does not show a turn of another thread (the activity keeps the
+`threadId` of its events); for a channel thread, a card under the chat names the channel and opens it. Its home row says that it waits
+in that channel in place of its last message (`useWaitingChannel`).
+The channel header always has the browser button. It opens the browser of the member that asks for
+a browser step, else of the lead, else of the first member. In a channel with more than one member,
+the agent in the browser header is a glass button with a menu that switches to the browser of any
+member. The Deleted channels sheet restores a channel (`restore`) for the people who
+can delete one. The phone has no local notifications of channel replies: a host sends a notification
+only while the phone is away (see iPhone notifications). A tap on a notification whose thread is a
+channel thread opens the channel, when the phone has the channel list of that server.
 
 Mobile channel settings use one native sheet with a nested stack for memories and routines. The
 memory and routine editors share their controls with agent settings and use channel API operations.
@@ -188,7 +351,10 @@ transport for its events. `messaging-types.ts` is the seam; the core never reads
   orchestrator agent) and `projection_messaging_threads` (one per external conversation, with the
   agent that answers it).
   Tokens are not in the database: `MessagingCredentialStore` keeps the bot token encrypted by
-  `safeStorage`, keyed by connection, and only its state crosses IPC.
+  `safeStorage`, keyed by connection, and only its state crosses IPC. Migration 36 adds
+  `projection_messaging_memories`, the facts of each connection (`MessagingMemoryStore`, the same
+  `MemoryStore` as agent and channel memories, with a connection for an owner). No code deletes a
+  connection, so the table has no cascade: disconnect keeps the facts.
 - **Orchestrator.** A message in a thread that has a link goes to the link's agent. A new conversation
   goes to the workspace's orchestrator; without one, Slack is told that no agent answers. The
   orchestrator is a normal agent (`slack-orchestrator.ts`): its description is its standing remit, and
@@ -197,7 +363,10 @@ transport for its events. `messaging-types.ts` is the seam; the core never reads
   teammate's answer runs as a follow-up turn in the same Slack thread. A turn that only asked a
   teammate posts "A teammate is working on it" (`MessagingThreads.awaitsTeammate`). It goes in the
   sidebar's Integrations section, which `MessagingService` creates the first time; the renderer shows
-  that section collapsed.
+  that section collapsed. A disconnect deletes the orchestrator that no other connected place uses
+  (`AgentService.deleteAgent`, which also removes its links), and then the section when no agent is
+  assigned to it. It checks first that the agent can be deleted, so a busy orchestrator stops the
+  disconnect before the token is revoked or the place unlinked.
 - **Execution threads.** Each Slack thread is a link with its own execution thread in
   `projection_threads`, as a channel-agent pair is. A direct message is answered in a thread under
   it, so each one is its own conversation. `MessagingThreads.event` takes that thread's conversation
@@ -209,7 +378,18 @@ transport for its events. `messaging-types.ts` is the seam; the core never reads
   a Slack turn carries `messagingReturn`, the origin of that turn; `MailboxStore.enqueue` gives the
   answer to it that origin as `messaging`, so the answer runs in the same execution thread, and its
   turn posts to Slack as a follow-up. `DrainScheduler` asks `MessagingThreads.prepare` for the thread
-  and the prompt, which frames the text as external input and adds earlier messages of the thread.
+  and the prompt, which frames the text as external input and adds earlier messages of the thread
+  and the connection's facts, rebuilt each turn, so a new fact needs no provider-thread reload.
+  `MessagingService.#receive` names each user mention (`InboundMessage.mentionedUserIds`) with the
+  adapter's name cache; the adapters do the same for context messages.
+- **Tools.** `messaging_remember`, `messaging_forget_memory` and `messaging_history` are deferred
+  `openbot` tools. `OpenBotToolRouter` finds the link from the calling turn's execution thread and
+  refuses a call from any other thread; no argument names a connection or a channel. The history
+  tool calls the adapter's `recent` through `MessagingThreads.setHistorySource`. A fact is not saved
+  from a direct message. The two outbound tools, `messaging_list_places` and `messaging_post`, are
+  the exception: the router passes them to `MessagingThreads.outboundTool` from any thread, their
+  arguments name an enabled connection and a place, and `MessagingService` answers them through
+  `MessagingThreads.setOutbound` with the adapter's `places` and `postAnswer`, after `redactText`.
 - **Order.** The one-turn-per-agent rule is unchanged, so Slack requests wait behind the agent's own
   work and behind channel work that holds the host. The Slack thread shows a waiting post.
 - **Replies.** `MessagingThreads` reports each turn start and end. `MessagingService` posts a status
@@ -224,12 +404,15 @@ transport for its events. `messaging-types.ts` is the seam; the core never reads
   no invitation. It joins each new public channel on `channel_created`. A private channel needs
   `/invite`.
 - **Deduplication.** An in-memory set drops a redelivered event at once; the mailbox idempotency key
-  covers a restart. Events that arrive while no socket is open are lost after Slack's retries.
+  covers a restart, and a kept event that Signal sends again. Events that arrive while no socket is
+  open are lost after Slack's retries, except for a hosted server that starts.
 - **Screen.** **Server settings → Connectors → Slack** on the computer that runs the agents shows
   each workspace and its orchestrator, and a two-step dialog connects the workspace and adds the
   orchestrator on the model the user picks (`messaging:*`). A remote server shows no Slack page,
-  because the install returns to the host's own browser. A live connection counts as use, so a
-  hosted server does not idle out. **Connectors → Discord** is the same page for Discord
+  because the install returns to the host's own browser. A live connection does not count as use:
+  a hosted server sleeps, and Signal starts it for the next message that addresses OpenBot and keeps
+  that message, sealed to the host, until the host connects
+  ([Connector events](../hosted-servers.md#connector-events)). **Connectors → Discord** is the same page for Discord
   (`SlackIntegrationPanel` with `platform="discord"`). **Connectors → Telegram** has its own page
   (`TelegramIntegrationPanel`), with one row per chat and one orchestrator for all chats.
 

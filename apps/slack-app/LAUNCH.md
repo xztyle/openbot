@@ -72,12 +72,12 @@ Do the steps in this order:
    - [ ] `POST /v2/remote/slack-route/validate` without a signature gives 401.
 4. **Signal**, after the Worker: Signal asks `/v2/remote/slack-route/validate` for 5 minutes after it
    starts, so an older Worker makes every `ingress` hello fail.
-   - [ ] Set `SLACK_SIGNING_SECRET` in the server's `/opt/openbot/remote/.env.production` with the
-         server's Dotenvx key, as `A0C5H5C95NH:<production secret>,A0C5G5XGS83:<development secret>`.
+   - [ ] Set `SLACK_SIGNING_SECRET` as `A0C5H5C95NH:<production secret>,A0C5G5XGS83:<development secret>`.
          Signal binds each secret to its app. A value without app IDs turns the Slack route off (503).
-         The encrypted value in `remote/.env.production` here has the old form, without app IDs:
-         set it again. Not checked: whether the repository file and the server file use the same key
-         pair.
+         `remote/.env.production` here and the server's `/opt/openbot/remote/.env.production` hold the
+         same value, encrypted with the root `DOTENV_PRIVATE_KEY_PRODUCTION`. It lists only
+         `A0C5H5C95NH`. To add the development app, change the repository file with `-fk .env.keys`,
+         then copy it to the server.
    - [ ] Deploy as `docs/remote-session-deployment.md` says, with `remote/nginx/signal.openbot.run.conf`.
    - [ ] `POST https://signal.openbot.run/v1/slack/events` without a signature gives 401, not 404 or
          503.

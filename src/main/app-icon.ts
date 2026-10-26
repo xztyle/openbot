@@ -8,7 +8,7 @@ export function readAppVariant(value: string | undefined, isPackaged: boolean): 
   return isPackaged ? "production" : "dev";
 }
 
-export function appIconFileName(variant: AppVariant, platform: NodeJS.Platform): string {
+function appIconFileName(variant: AppVariant, platform: NodeJS.Platform): string {
   return platform === "darwin" ? `icon-${variant}-macos-safe-area.png` : `icon-${variant}.png`;
 }
 

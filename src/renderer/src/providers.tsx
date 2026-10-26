@@ -1,21 +1,38 @@
-import { type AgentProviderId, type AgentStatus, agentProviderDescriptor } from "@openbot/contracts/ipc";
+import {
+  type AgentProviderId,
+  type AgentStatus,
+  agentProviderDescriptor,
+  LOCAL_SERVER_ID,
+} from "@openbot/contracts/ipc";
+import { CLAUDE_API_KEY_CAPABILITY } from "@openbot/contracts/team-protocol/claude-api-key-v1";
+import {
+  PROVIDER_ACCOUNT_RELAY_CAPABILITY,
+  PROVIDER_ACCOUNT_RELAY_PROVIDERS,
+} from "@openbot/contracts/team-protocol/provider-account-relay-v1";
+import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
+import { PROVIDER_USAGE_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/provider-usage-reset-v1";
 import { classifyFailure } from "@openbot/telemetry";
 import { toast } from "@openbot/ui";
+import type { ProviderAccountActions } from "@openbot/ui/components/provider-accounts";
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, flush, onSettled } from "solid-js";
-import { desktopAnalytics } from "./analytics";
+import { type DesktopAnalyticsProperties, desktopAnalytics } from "./analytics";
 import { appPort } from "./app-port";
 import { useAgents } from "./features/agents/agents-context";
+import { conversationPort } from "./features/conversation/conversation-port";
 import { hostCustomProvidersApi } from "./features/custom-providers/custom-providers-port";
 import { createCustomProvidersStore } from "./features/custom-providers/stores/custom-providers-store";
-import { createProviderCodeLogin } from "./features/provider-updates/provider-code-login";
+import { createProviderConnection } from "./features/provider-updates/provider-connection";
 import { createProviderRuntimeStore } from "./features/provider-updates/provider-runtime-store";
 import { remoteProviderRuntimes } from "./features/provider-updates/remote-provider-runtimes";
-import { codeSignInProviders, remoteAdminServer } from "./features/servers/server-capabilities";
+import { remoteAdminServer, serverSupportsCapability } from "./features/servers/server-capabilities";
 import { useServers } from "./features/servers/servers-context";
 import { hostProviderKeyApi, providerKeyApi } from "./features/settings/provider-key-api";
+import { usePlatform } from "./platform";
 import { providersPort } from "./providers-port";
 import { createSimpleContext } from "./simple-context";
+
+type ProviderConnectMethod = Extract<DesktopAnalyticsProperties<"provider_action">["method"], "browser" | "code">;
 
 /**
  * Coding providers (Codex, Claude, Grok) as two paths the renderer reconciles: managed
@@ -26,8 +43,9 @@ import { createSimpleContext } from "./simple-context";
 const Providers = createSimpleContext({
   name: "Providers",
   init: () => {
-    const { agentStatus, setAgentStatus } = useAgents();
+    const { agentStatus, setAgentStatus, refreshHostAccounts, refreshHostAccountUsage } = useAgents();
     const { activeServer } = useServers();
+    const { appInfo } = usePlatform();
     const [refreshingProviders, setRefreshingProviders] = createSignal(false);
     /**
      * A CLI the user installed themselves, and the version it reports. Only the agent status knows
@@ -55,10 +73,28 @@ const Providers = createSimpleContext({
         managesRuntimes: () => activeServer()?.kind === "local" || providerAdminServerId() !== undefined,
       },
     );
-    /** The provider keys of the computer the providers run on. */
+    // A boolean, so that a server-list update that keeps the capability does not rebuild the keys.
+    const hostReadsClaudeKey = createMemo(() => serverSupportsCapability(activeServer(), CLAUDE_API_KEY_CAPABILITY));
+    /** The provider keys of the computer the providers run on. A saved key is recorded, never its value. */
     const providerKeys = createMemo(() => {
       const serverId = providerAdminServerId();
-      return serverId ? hostProviderKeyApi(providerAdmin, serverId) : providerKeyApi;
+      const api = serverId ? hostProviderKeyApi(providerAdmin, serverId) : providerKeyApi;
+      return {
+        ...api,
+        readsClaudeKey: !serverId || hostReadsClaudeKey(),
+        setProviderApiKey: async (input: { provider: AgentProviderId; key: string }) => {
+          const analytics = desktopAnalytics.scope();
+          const tracked = { provider: input.provider, action: "api_key_saved", method: "api_key" } as const;
+          try {
+            const result = await api.setProviderApiKey(input);
+            analytics.track("provider_action", { ...tracked, result: "succeeded" });
+            return result;
+          } catch (error) {
+            analytics.track("provider_action", { ...tracked, result: "failed", failure_code: "update_failed" });
+            throw error;
+          }
+        },
+      };
     });
     /**
      * The host's own endpoints, for Settings. The machine-local list in `CustomProvidersProvider`
@@ -73,7 +109,10 @@ const Providers = createSimpleContext({
       if (serverId) void hostCustomProviders.refreshCustomProviders().catch(() => undefined);
     });
     /** Connect attempts still waiting for the status that says how they ended. */
-    const pendingProviderConnections = new Map<AgentProviderId, ReturnType<typeof desktopAnalytics.scope>>();
+    const pendingProviderConnections = new Map<
+      AgentProviderId,
+      { analytics: ReturnType<typeof desktopAnalytics.scope>; method: ProviderConnectMethod }
+    >();
     /**
      * The status is the completion signal for every connect started here: main
      * answers `connect()` before the provider has finished coming up, so the
@@ -81,7 +120,7 @@ const Providers = createSimpleContext({
      */
     function applyAgentStatus(status: AgentStatus): void {
       for (const provider of status.providers ?? []) {
-        const analytics = pendingProviderConnections.get(provider.id);
+        const { analytics, method } = pendingProviderConnections.get(provider.id) ?? {};
         if (!analytics) continue;
         if (provider.state === "available") {
           pendingProviderConnections.delete(provider.id);
@@ -89,6 +128,7 @@ const Providers = createSimpleContext({
             provider: provider.id,
             action: "connect_completed",
             result: "succeeded",
+            ...(method ? { method } : {}),
           });
         } else if (provider.state === "error") {
           pendingProviderConnections.delete(provider.id);
@@ -97,6 +137,7 @@ const Providers = createSimpleContext({
             action: "connect_completed",
             result: "failed",
             failure_code: "connect_failed",
+            ...(method ? { method } : {}),
           });
         }
       }
@@ -119,27 +160,53 @@ const Providers = createSimpleContext({
      */
     async function connectProvider(provider: AgentProviderId): Promise<void> {
       if (refreshingProviders()) return;
-      const analytics = beginProviderConnection(provider);
+      const analytics = beginProviderConnection(provider, "browser");
       try {
         const status = await providersPort().connectProvider(provider);
         flush(() => applyAgentStatus(status));
       } catch (error) {
-        endFailedProviderConnection(provider, analytics);
+        endFailedProviderConnection(provider, analytics, "browser");
         throw error;
       }
     }
 
+    /** Ends a browser sign-in that Connect started. The provider then shows its state from before. */
+    async function cancelProviderSignIn(provider: AgentProviderId): Promise<void> {
+      dropProviderConnection(provider);
+      const status = await providersPort().cancelProviderSignIn(provider);
+      flush(() => applyAgentStatus(status));
+    }
+
     /** Opens a connect attempt: the status that ends it is matched back to this scope by provider. */
-    function beginProviderConnection(provider: AgentProviderId) {
+    function beginProviderConnection(provider: AgentProviderId, method: ProviderConnectMethod) {
       const analytics = desktopAnalytics.scope();
-      pendingProviderConnections.set(provider, analytics);
-      analytics.track("provider_action", { provider, action: "connect_started", result: "succeeded" });
+      pendingProviderConnections.set(provider, { analytics, method });
+      analytics.track("provider_action", {
+        provider,
+        action: "connect_started",
+        result: "succeeded",
+        method,
+      });
       return analytics;
+    }
+
+    /** The user ended a sign-in that is still waiting. Its status then says nothing about the connect. */
+    function dropProviderConnection(provider: AgentProviderId): void {
+      const pending = pendingProviderConnections.get(provider);
+      if (!pending) return;
+      pendingProviderConnections.delete(provider);
+      pending.analytics.track("provider_action", {
+        provider,
+        action: "sign_in_cancelled",
+        result: "cancelled",
+        method: pending.method,
+      });
     }
 
     function endFailedProviderConnection(
       provider: AgentProviderId,
       analytics: ReturnType<typeof desktopAnalytics.scope>,
+      method: ProviderConnectMethod,
     ): void {
       pendingProviderConnections.delete(provider);
       analytics.track("provider_action", {
@@ -147,17 +214,19 @@ const Providers = createSimpleContext({
         action: "connect_completed",
         result: "failed",
         failure_code: "connect_failed",
+        method,
       });
     }
 
-    async function refreshAgentProviders(): Promise<void> {
+    /** `automatic`: the app asks, not the user, so a provider OpenBot stopped starting stays stopped. */
+    async function refreshAgentProviders(options = { automatic: false }): Promise<void> {
       if (refreshingProviders() || agentStatus().phase === "starting" || agentStatus().phase === "restarting") {
         return;
       }
       const analytics = desktopAnalytics.scope();
       setRefreshingProviders(true);
       try {
-        const status = await providersPort().refreshAgentProviders();
+        const status = await providersPort().refreshAgentProviders(options);
         flush(() => applyAgentStatus(status));
         analytics.track("provider_action", { action: "refresh", result: "succeeded" });
       } catch (error) {
@@ -182,6 +251,68 @@ const Providers = createSimpleContext({
       const status = await providersPort().setProviderOn({ provider, on });
       if (activeServer()?.id === server.id) flush(() => applyAgentStatus(status));
     }
+
+    /** The joined server whose host's provider accounts this window manages (`provider-accounts-v1`). */
+    const accountsAdminServerId = createMemo(() => remoteAdminServer(activeServer(), PROVIDER_ACCOUNTS_CAPABILITY)?.id);
+    /** The joined server whose host spends the usage reset credits of its accounts (`provider-usage-reset-v1`). */
+    const usageResetServerId = createMemo(() => remoteAdminServer(activeServer(), PROVIDER_USAGE_RESET_CAPABILITY)?.id);
+
+    /**
+     * The accounts of the providers of this computer, or of a joined server's host that serves
+     * `provider-accounts-v1`. An older host and a member get none.
+     */
+    const providerAccounts = createMemo<ProviderAccountActions | undefined>(() => {
+      const hostServerId = accountsAdminServerId();
+      if (hostServerId) {
+        const changed = async (request: Promise<void>) => {
+          await request;
+          await refreshHostAccounts();
+        };
+        return {
+          connect: async (provider, accountId) => connection.connectAccount(provider, accountId),
+          // The host runs one account sign-in for each provider, so the released cancel names only the provider.
+          cancel: async (provider) => {
+            await accountSignIn(hostServerId).cancel(provider);
+          },
+          rename: (provider, accountId, label) =>
+            changed(providerAdmin().renameAccount({ provider, accountId, label }, hostServerId)),
+          remove: (provider, accountId) =>
+            changed(providerAdmin().removeAccount({ provider, accountId }, hostServerId)),
+          ...(usageResetServerId() === hostServerId
+            ? {
+                usageResets: (provider: AgentProviderId) => providerAdmin().usageResets(provider, hostServerId),
+                resetUsage: async (provider: AgentProviderId, accountId: string) => {
+                  const outcome = await providerAdmin().resetUsage({ provider, accountId }, hostServerId);
+                  // The host sends the reading of its own sign-in; the accounts after the first are read here.
+                  await refreshHostAccountUsage().catch(() => undefined);
+                  return outcome;
+                },
+              }
+            : {}),
+        };
+      }
+      if (activeServer()?.kind !== "local") return undefined;
+      const apply = async (request: Promise<AgentStatus>) => {
+        const serverId = activeServer()?.id;
+        const status = await request;
+        if (activeServer()?.id === serverId) flush(() => applyAgentStatus(status));
+      };
+      // A sign-in ends after its answer, and the status has no order, so an older answer could hide how it
+      // ended. The `status` events carry the account's state.
+      return {
+        connect: async (provider, accountId) => {
+          await providersPort().connectProviderAccount({ provider, accountId });
+        },
+        cancel: async (provider, accountId) => {
+          await providersPort().cancelProviderAccountSignIn({ provider, accountId });
+        },
+        rename: (provider, accountId, label) =>
+          apply(providersPort().renameProviderAccount({ provider, accountId, label })),
+        remove: (provider, accountId) => apply(providersPort().removeProviderAccount({ provider, accountId })),
+        usageResets: (provider) => providersPort().providerUsageResets(provider),
+        resetUsage: (provider, accountId) => providersPort().resetProviderUsage({ provider, accountId }),
+      };
+    });
 
     async function restartProvider(provider: AgentProviderId): Promise<void> {
       await changeProviderRestart(provider, providersPort().restartProvider);
@@ -216,10 +347,60 @@ const Providers = createSimpleContext({
     });
 
     /**
-     * The code sign-in as the one object its surfaces take. Onboarding and Settings both offer it
-     * and would otherwise each assemble the same six pieces.
+     * An account sign-in on the host's page. The released status does not carry the accounts, so the
+     * accounts are read again when the sign-in ends.
      */
-    const codeLogin = createProviderCodeLogin({
+    function accountSignIn(serverId: string) {
+      return {
+        hostName: activeServer()?.name ?? "",
+        runtime: conversationPort().browser,
+        clipboard: serverSupportsCapability(activeServer(), "browser-view-clipboard"),
+        start: (provider: AgentProviderId, accountId: string | null) =>
+          providerAdmin().startAccountSignIn({ provider, accountId }, serverId),
+        status: async (provider: AgentProviderId) => {
+          const status = await providerAdmin().accountSignInStatus(provider, serverId);
+          if (status.result) await refreshHostAccounts().catch(() => undefined);
+          return status;
+        },
+        cancel: async (provider: AgentProviderId) => {
+          await providerAdmin().cancelAccountSignIn(provider, serverId);
+          await refreshHostAccounts().catch(() => undefined);
+          return agentStatus();
+        },
+      };
+    }
+
+    /**
+     * An account sign-in that the host relays to this computer's browser (`provider-account-relay-v1`).
+     * The other relay requests run it by its provider, and the accounts are read again when it ends.
+     */
+    function accountRelay(serverId: string) {
+      return {
+        providers: PROVIDER_ACCOUNT_RELAY_PROVIDERS,
+        hostName: activeServer()?.name ?? "",
+        start: (provider: AgentProviderId, accountId: string | null) =>
+          providerAdmin().startAccountRelaySignIn({ provider, accountId }, serverId),
+        status: async (provider: AgentProviderId) => {
+          const status = await providerAdmin().relaySignInStatus(provider, serverId);
+          if (status.result) await refreshHostAccounts().catch(() => undefined);
+          return status;
+        },
+        open: (provider: AgentProviderId) => providerAdmin().openRelaySignIn(provider, serverId),
+        paste: (provider: AgentProviderId, address: string) =>
+          providerAdmin().pasteRelaySignIn({ provider, address }, serverId),
+        cancel: async (provider: AgentProviderId) => {
+          const status = await providerAdmin().cancelRelaySignIn(provider, serverId);
+          await refreshHostAccounts().catch(() => undefined);
+          return status;
+        },
+      };
+    }
+
+    /**
+     * The provider sign-in as the one object its surfaces take. Onboarding, Settings, the composer
+     * and the model picker all offer it, so each offers the same ways in.
+     */
+    const connection = createProviderConnection({
       agentStatus,
       applyStatus: applyAgentStatus,
       target: () => {
@@ -229,20 +410,49 @@ const Providers = createSimpleContext({
               start: (provider) => providerAdmin().startCodeLogin(provider, serverId),
               submit: (provider, code) => providerAdmin().submitCodeLogin({ provider, code }, serverId),
               cancel: (provider) => providerAdmin().cancelCodeLogin(provider, serverId),
+              hostSignIn: {
+                hostName: activeServer()?.name ?? "",
+                runtime: conversationPort().browser,
+                clipboard: serverSupportsCapability(activeServer(), "browser-view-clipboard"),
+                start: (provider) => providerAdmin().startHostSignIn(provider, serverId),
+                status: (provider) => providerAdmin().hostSignInStatus(provider, serverId),
+                cancel: (provider) => providerAdmin().cancelHostSignIn(provider, serverId),
+              },
+              ...(accountsAdminServerId() === serverId ? { accountSignIn: accountSignIn(serverId) } : {}),
+              ...(accountsAdminServerId() === serverId &&
+              serverSupportsCapability(activeServer(), PROVIDER_ACCOUNT_RELAY_CAPABILITY)
+                ? { accountRelay: accountRelay(serverId) }
+                : {}),
+              relay: {
+                hostName: activeServer()?.name ?? "",
+                start: (provider) => providerAdmin().startRelaySignIn(provider, serverId),
+                status: (provider) => providerAdmin().relaySignInStatus(provider, serverId),
+                open: (provider) => providerAdmin().openRelaySignIn(provider, serverId),
+                paste: (provider, address) => providerAdmin().pasteRelaySignIn({ provider, address }, serverId),
+                cancel: (provider) => providerAdmin().cancelRelaySignIn(provider, serverId),
+              },
             }
           : {
               start: (provider) => providersPort().startProviderCodeLogin(provider),
+              submit: (provider, code) => providerAdmin().submitCodeLogin({ provider, code }, LOCAL_SERVER_ID),
               cancel: (provider) => providersPort().cancelProviderCodeLogin(provider),
             };
       },
-      providers: () => codeSignInProviders(providerAdminServerId() ? activeServer() : undefined),
+      // A member of a joined server cannot connect its providers. This computer's own are connected here.
+      place: () =>
+        providerAdminServerId()
+          ? { kind: "app-server", server: activeServer() }
+          : activeServer()?.kind === "remote"
+            ? null
+            : { kind: "computer", platform: appInfo()?.platform },
+      connectInBrowser: connectProvider,
       openVerificationUrl: (url) => void appPort().openUrl(url),
-      connection: {
+      analytics: {
         begin: (provider) => {
-          const analytics = beginProviderConnection(provider);
-          return () => endFailedProviderConnection(provider, analytics);
+          const analytics = beginProviderConnection(provider, "code");
+          return () => endFailedProviderConnection(provider, analytics, "code");
         },
-        drop: (provider) => pendingProviderConnections.delete(provider),
+        drop: dropProviderConnection,
       },
     });
 
@@ -254,10 +464,12 @@ const Providers = createSimpleContext({
       refreshingProviders,
       applyAgentStatus,
       connectProvider,
-      codeLogin,
+      cancelProviderSignIn,
+      connection,
       openProviderInstallGuide,
       refreshAgentProviders,
       setProviderOn,
+      providerAccounts,
       restartProvider,
       cancelProviderRestart,
     };

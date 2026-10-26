@@ -18,13 +18,14 @@
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { CUSTOM_AGENT_DEFAULT_MODEL, customAgentIdOfModel } from "@openbot/contracts/agent-providers";
-import { isAgentModel } from "@openbot/contracts/ipc";
+import { type AgentSessionSettingsSnapshot, type AgentSessionSettingValue, isAgentModel } from "@openbot/contracts/ipc";
 import type { DynamicRecord } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect, Exit } from "effect";
 import { assertAgentArgs, assertWindowsScriptArgs, resolveAgentCommand } from "./acp-agent-command";
 import type { AcpHistoryPersistence } from "./acp-client";
 import type { AgentClient, DiagnosticOrigin } from "./agent-client";
+import { agentLaunchPath } from "./cli";
 import { causeHelpers } from "./effect-boundary";
 import {
   type AppServerNotification,
@@ -51,6 +52,8 @@ export interface CustomAgentConfig {
   readonly command: string;
   readonly args: readonly string[];
   readonly env: readonly { readonly name: string; readonly value: string }[];
+  /** Sent in a private session to read the plan usage, or null for none. */
+  readonly usagePrompt: string | null;
 }
 
 /** The saved custom agents, read when a process starts. */
@@ -58,13 +61,15 @@ export type CustomAgentSource = () => readonly CustomAgentConfig[];
 
 /**
  * Builds the ACP client of one agent, on the file its command resolved to, for the sessions of one
- * working folder. `null` is the process that lists the agent's models.
+ * working folder. `null` is the process that lists the agent's models. `launchPath` is the `PATH`
+ * the process starts with, or null to leave the `PATH` of OpenBot unchanged.
  */
 export type CustomAgentChildFactory = (
   config: CustomAgentConfig,
   executable: string,
   folder: string | null,
   history?: AcpHistoryPersistence,
+  launchPath?: string | null,
 ) => AgentClient;
 
 const MODEL_LIST_TIMEOUT_MS = 5_000;
@@ -126,6 +131,7 @@ function requiredCwd(params: unknown): string {
 }
 
 export class CustomAcpAgentsClient extends EventEmitter<ClientEvents> implements AgentClient {
+  readonly contextCompaction = "unsupported";
   readonly provider = "acp" as const;
   readonly #source: CustomAgentSource;
   readonly #createChild: CustomAgentChildFactory;
@@ -242,6 +248,49 @@ export class CustomAcpAgentsClient extends EventEmitter<ClientEvents> implements
     const held = this.#sessions.get(externalThreadId);
     const release = held?.child.releaseThread?.bind(held.child);
     if (held && release) yield* release(held.sessionId).pipe(toProviderClientOperationError);
+  });
+
+  readonly readSessionSettings = Effect.fn("CustomAcp.readSessionSettings")(function* (
+    this: CustomAcpAgentsClient,
+    externalThreadId: string,
+  ): Effect.fn.Return<AgentSessionSettingsSnapshot, ProviderClientOperationError> {
+    const held = this.#sessions.get(externalThreadId);
+    if (!held?.child.readSessionSettings)
+      return yield* new ProviderClientOperationError({
+        cause: new Error(sourceText("error.provider.sessionSettingUnavailable")),
+      });
+    return yield* held.child.readSessionSettings(held.sessionId);
+  });
+
+  readonly setSessionSetting = Effect.fn("CustomAcp.setSessionSetting")(function* (
+    this: CustomAcpAgentsClient,
+    externalThreadId: string,
+    configId: string,
+    value: AgentSessionSettingValue,
+  ): Effect.fn.Return<AgentSessionSettingsSnapshot, ProviderClientOperationError> {
+    const held = this.#sessions.get(externalThreadId);
+    if (!held?.child.setSessionSetting)
+      return yield* new ProviderClientOperationError({
+        cause: new Error(sourceText("error.provider.sessionSettingUnavailable")),
+      });
+    return yield* held.child.setSessionSetting(held.sessionId, configId, value);
+  });
+
+  /**
+   * Runs on the process that lists the agent's models, in its folder apart from every workspace, so
+   * the prompt never waits for a turn or opens a session where a thread works.
+   */
+  readonly readUsageText = Effect.fn("CustomAcp.readUsageText")(function* (
+    this: CustomAcpAgentsClient,
+    model: string,
+    prompt: string,
+  ): Effect.fn.Return<string | null, ProviderClientOperationError> {
+    if (!this.#running)
+      return yield* new ProviderClientOperationError({ cause: new Error("ACP client is not running.") });
+    const agentId = yield* customStep(() => this.#modelAgent({ model }));
+    const child = yield* this.#child(agentId, null).pipe(toProviderClientOperationError);
+    if (!child.readUsageText) return null;
+    return yield* child.readUsageText(model, prompt).pipe(toProviderClientOperationError);
   });
 
   readonly request = Effect.fn("CustomAcp.request")(
@@ -481,6 +530,7 @@ export class CustomAcpAgentsClient extends EventEmitter<ClientEvents> implements
           cause: new Error(sourceText("error.provider.customAgentNotFound", { command: config.command })),
         });
       yield* customStep(() => assertWindowsScriptArgs(executable, config.args));
+      const launchPath = yield* agentLaunchPath().pipe(toProviderClientOperationError);
       const prefix = folder === null ? agentId : `${agentId}:${folderTag(folder)}`;
       let child: AgentClient | null = null;
       const history =
@@ -503,7 +553,7 @@ export class CustomAcpAgentsClient extends EventEmitter<ClientEvents> implements
                   fragment,
                 ) ?? Effect.void,
             };
-      const created = yield* customStep(() => this.#createChild(config, executable, folder, history));
+      const created = yield* customStep(() => this.#createChild(config, executable, folder, history, launchPath));
       child = created;
       const route = (sessionId: string) => this.#routedSessionId(created, prefix, sessionId);
       created.on("notification", (notification) => {

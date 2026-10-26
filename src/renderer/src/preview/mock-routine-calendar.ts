@@ -32,11 +32,13 @@ export function mockRoutineCalendar(
       if (at >= from && at < to)
         runs.push({ id: run.id, routineId: routine.id, at: run.scheduledFor, status: run.status });
     }
+    // The cap counts the runs in the range, so a later range is as full as the current one.
     let at = Date.parse(routine.trigger.nextRunAt);
-    for (let count = 0; count < MAX_RUNS && at < to; count += 1) {
+    for (let count = 0; count < MAX_RUNS && at < to; ) {
       if (at >= from && at >= now) {
         const iso = new Date(at).toISOString();
         runs.push({ id: `${routine.id}@${iso}`, routineId: routine.id, at: iso, status: "scheduled" });
+        count += 1;
       }
       const next = nextAt(routine.trigger.schedule, at);
       if (next === null) break;

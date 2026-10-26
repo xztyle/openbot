@@ -37,9 +37,17 @@ if [[ ! $sha =~ ^[0-9a-f]{64}$ ]]; then
   exit 1
 fi
 
+# A create that has no sandbox yet sends its first request again, with the snapshot that it saved.
+in_use=$(node_modules/.bin/wrangler d1 execute DB --remote --json --config apps/auth-api/wrangler.jsonc \
+  --command "SELECT DISTINCT provider_template FROM hosted_servers
+    WHERE provider_sandbox_id IS NULL AND provider_template IS NOT NULL AND observed_state != 'deleted'" |
+  jq -er '[.[].results[].provider_template] | join(",")')
+
 bun scripts/hosting/build-boat-template.ts \
   "--version=$version" \
   "--name=$name" \
+  --keep-releases=3 \
+  "--in-use=$in_use" \
   "--appimage-url=https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$asset" \
   "--appimage-sha256=$sha" \
   --auth-api-url=https://api.openbot.run

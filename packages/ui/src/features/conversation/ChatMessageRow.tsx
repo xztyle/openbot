@@ -5,10 +5,10 @@ import {
   BubbleContent,
   BubbleReactions,
   Button,
+  ContextMenu,
   Message,
   MessageAvatar,
   MessageContent,
-  MessageFooter,
   MessageHeader,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
@@ -17,6 +17,7 @@ import { avatarHeadColor } from "../../bloub-avatar";
 import type { AgentMessage, AgentProfile, MessageEventCheckOrigin } from "../../data";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
+import type { AttachmentMediaSource } from "./AttachmentCards";
 import { formatChatTimestamp } from "./chat-timestamp";
 import { conversationBubbleVariant, MessageBody } from "./MessageRendering";
 
@@ -32,9 +33,9 @@ export interface ChatMessageAuthor {
   kind: "you" | "agent" | "member";
   name: string;
   /** Missing for an author the agent list no longer holds, and for the reader's own messages. */
-  agent?: AgentProfile;
+  agent?: AgentProfile | undefined;
   /** The face to draw when the profile is gone: the author id keeps deleted agents apart. */
-  avatarSeed?: string;
+  avatarSeed?: string | undefined;
 }
 
 export interface ChatMessageRowProps {
@@ -47,15 +48,19 @@ export interface ChatMessageRowProps {
    * `false` keeps an empty gutter where the face stands; leave it out when the row has no face.
    */
   showAuthor?: boolean | undefined;
-  showTime?: boolean;
+  /** Whether the time stands beside the author name. Without a name, the time is in the action row. */
+  showTime?: boolean | undefined;
   animate?: boolean;
   agents: AgentProfile[];
-  skills?: InstalledSkill[];
-  referencedMessage?: AgentMessage;
+  skills?: InstalledSkill[] | undefined;
+  referencedMessage?: AgentMessage | undefined;
   /** Who wrote the quoted message. A chat with several authors has to name the one it quotes. */
-  referencedAuthorName?: string;
-  reactions?: readonly ConversationReaction[];
-  reactionOverflowCount?: number;
+  referencedAuthorName?: string | undefined;
+  /** Opens the quoted message in the chat. */
+  onOpenReference?: (() => void) | undefined;
+  referenceState?: "loading" | "unavailable" | undefined;
+  reactions?: readonly ConversationReaction[] | undefined;
+  reactionOverflowCount?: number | undefined;
   /**
    * The event check that woke the agent for this message. It draws a small chip on the top edge of
    * the bubble with the name of the check, so the reader knows where the message came from.
@@ -66,20 +71,24 @@ export interface ChatMessageRowProps {
    * draws it in place of the bell, and keeps the bell when it is absent or does not load.
    */
   eventCheckIconUrl?: string | null | undefined;
-  onRemoveReaction?: () => void;
+  onRemoveReaction?: (() => void) | undefined;
   actions?: JSX.Element;
-  footer?: JSX.Element;
+  /** Draws the right-click menu, a `MessageMenu`. Without it, right-click keeps the native menu. */
+  menu?: (() => JSX.Element) | undefined;
   /** Extra content inside the bubble, under the body: a question prompt, a note about the message. */
   children?: JSX.Element;
-  class?: string;
-  "data-chat-search-message"?: string;
+  class?: string | undefined;
+  "data-chat-search-message"?: string | undefined;
   onSelectAgent: (agentId: string) => void;
   onOpenLink: (url: string) => void;
   onPreview: (attachment: AttachmentSummary) => void;
   onAttachmentAction: (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => void;
   onOpenSharedFile?: (path: string) => void;
-  onOpenWorkspaceFile?: (path: string) => void;
-  onDownload?: (attachment: AttachmentSummary) => void;
+  onOpenWorkspaceFile?: ((path: string) => void) | undefined;
+  onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
+  onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
+  /** Loads the images and media of a client that gets no `previewUrl`. */
+  mediaSource?: AttachmentMediaSource | undefined;
 }
 
 /**
@@ -107,8 +116,8 @@ function OriginIcon(props: { url: string | null | undefined }) {
 }
 
 /**
- * One message of a chat: the alignment, the face, the name, the bubble, its reactions, the hover
- * toolbar and the footer.
+ * One message of a chat: the alignment, the face, the name, the bubble, its reactions, the action
+ * row under the bubble.
  *
  * It is shared because the agent chat and the channel chat draw the same message. They differed on
  * every part around the bubble - the channel had no entrance animation, no streaming state on the
@@ -138,25 +147,59 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
     const time = Number.isNaN(date.getTime()) ? t("chat.marker.unknownTime") : formatChatTimestamp(date, format);
     return t("chat.row.eventCheckOrigin", { name: origin.name, time });
   };
-  return (
-    <Message
-      role="article"
-      align={person() ? "end" : "start"}
-      aria-label={t("chat.row.label", { name: props.author.name })}
-      data-author={person() ? "user" : "assistant"}
-      data-chat-search-message={props["data-chat-search-message"]}
-      style={authorStyle()}
-      class={[
-        "message-entry",
-        {
-          "message-entry-animated": props.animate === true,
-          "message-entry-user": person(),
-          "message-entry-agent": !person(),
-          "message-entry-with-author": props.showAuthor === true && !person(),
-        },
-        props.class,
-      ]}
-    >
+  const rowClass = () => [
+    "message-entry",
+    {
+      "message-entry-animated": props.animate === true,
+      "message-entry-user": person(),
+      "message-entry-agent": !person(),
+      "message-entry-with-author": props.showAuthor === true && !person(),
+    },
+    props.class,
+  ];
+  // The native menu copies selected text and links, and Shift opens Inspect Element. These cases
+  // stop the event before the trigger's delegated handler, which would prevent its default, so the
+  // native menu still opens. The keyboard opens the menu with a synthetic event, which always opens it.
+  const onSelection = (event: MouseEvent) => {
+    const selection = window.getSelection();
+    return (
+      selection !== null &&
+      selection.rangeCount > 0 &&
+      !selection.isCollapsed &&
+      [...selection.getRangeAt(0).getClientRects()].some(
+        (rect) =>
+          event.clientX >= rect.left &&
+          event.clientX <= rect.right &&
+          event.clientY >= rect.top &&
+          event.clientY <= rect.bottom,
+      )
+    );
+  };
+  const keepNativeMenu = (row: HTMLElement) => {
+    // Chromium on macOS can select the word under the pointer before `contextmenu`, so the press
+    // that opens a menu records the selection the user made before it.
+    let pressOnSelection: boolean | undefined;
+    row.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.button === 2 || event.ctrlKey) pressOnSelection = onSelection(event);
+      },
+      { capture: true },
+    );
+    row.addEventListener(
+      "contextmenu",
+      (event) => {
+        const selected = pressOnSelection ?? onSelection(event);
+        pressOnSelection = undefined;
+        if (!event.isTrusted) return;
+        const link = event.target instanceof Element && event.target.closest("a[href]") !== null;
+        if (event.shiftKey || link || selected) event.stopPropagation();
+      },
+      { capture: true },
+    );
+  };
+  const body = (): JSX.Element => (
+    <>
       <Show when={props.showAuthor && !person()}>
         <MessageAvatar class="message-author-avatar">
           <Show when={props.author.agent} fallback={<AgentAvatar seed={seed()} />}>
@@ -198,11 +241,6 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
             </Show>
           </MessageHeader>
         </Show>
-        <Show when={props.showTime && (!props.showAuthor || own())}>
-          <MessageHeader class="message-time">
-            <time datetime={props.message.createdAt}>{props.message.time}</time>
-          </MessageHeader>
-        </Show>
         <div class="message-shell">
           <Bubble
             class={member() ? "message-bubble-member" : undefined}
@@ -217,6 +255,8 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
                 message={props.message}
                 referencedMessage={props.referencedMessage}
                 referencedAuthorName={props.referencedAuthorName}
+                onOpenReference={props.onOpenReference}
+                referenceState={props.referenceState}
                 agents={props.agents}
                 skills={props.skills}
                 onSelectAgent={props.onSelectAgent}
@@ -225,7 +265,9 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
                 onAttachmentAction={props.onAttachmentAction}
                 onOpenSharedFile={props.onOpenSharedFile}
                 onOpenWorkspaceFile={props.onOpenWorkspaceFile}
+                onOpenQuote={props.onOpenQuote}
                 onDownload={props.onDownload}
+                mediaSource={props.mediaSource}
               />
               {props.children}
             </BubbleContent>
@@ -290,12 +332,71 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
               </BubbleReactions>
             </Show>
           </Bubble>
-          {props.actions}
         </div>
-        <Show when={props.footer}>
-          <MessageFooter>{props.footer}</MessageFooter>
-        </Show>
+        {/* The actions and the time stand under the bubble. A named author shows the time beside the name. */}
+        <div class="message-action-row">
+          {props.actions}
+          <Show when={!props.showAuthor || own()}>
+            <time class="message-time" datetime={props.message.createdAt}>
+              {props.message.time}
+            </time>
+          </Show>
+        </div>
       </MessageContent>
-    </Message>
+    </>
+  );
+  return (
+    <Show
+      when={props.menu}
+      fallback={
+        <Message
+          role="article"
+          align={person() ? "end" : "start"}
+          aria-label={t("chat.row.label", { name: props.author.name })}
+          data-author={person() ? "user" : "assistant"}
+          data-chat-search-message={props["data-chat-search-message"]}
+          style={authorStyle()}
+          class={rowClass()}
+        >
+          {body()}
+        </Message>
+      }
+    >
+      {(menu) => (
+        <ContextMenu.Root modal={false}>
+          <ContextMenu.Trigger
+            as="div"
+            ref={keepNativeMenu}
+            aria-keyshortcuts="Shift+F10"
+            onKeyDown={(event: KeyboardEvent & { currentTarget: HTMLElement }) => {
+              if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+              event.preventDefault();
+              const bounds = event.currentTarget.getBoundingClientRect();
+              event.currentTarget.dispatchEvent(
+                new MouseEvent("contextmenu", {
+                  bubbles: true,
+                  cancelable: true,
+                  clientX: bounds.left,
+                  clientY: bounds.top,
+                }),
+              );
+            }}
+            role="article"
+            // The trigger is the row, so it draws the `Message` primitive's element itself:
+            // `as={Message}` would spread Kobalte's own props onto the DOM.
+            data-slot="message"
+            data-align={person() ? "end" : "start"}
+            aria-label={t("chat.row.label", { name: props.author.name })}
+            data-author={person() ? "user" : "assistant"}
+            data-chat-search-message={props["data-chat-search-message"]}
+            style={authorStyle() ?? ""}
+            class={["ui-message", ...rowClass()]}
+          >
+            {body()}
+          </ContextMenu.Trigger>
+          <ContextMenu.Portal>{menu()()}</ContextMenu.Portal>
+        </ContextMenu.Root>
+      )}
+    </Show>
   );
 }

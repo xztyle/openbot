@@ -18,9 +18,10 @@ export const messages = defineMessages("update", {
   "update.provider.checking": "Checking for {name} updates",
   "update.provider.available": "{name} update available",
   "update.provider.updating": "Updating {name}",
+  "update.provider.waiting": "Waiting to update {name}",
   "update.provider.failed": "{name} update failed",
   "update.provider.settingUp": "Setting up",
-  "update.provider.interrupted": "The update was interrupted. Try again.",
+  "update.provider.failedRetry": "The update failed. Try again.",
   "update.provider.unknownVersion": "unknown version",
   "update.provider.remoteHost": "Provider CLI updates run on the computer that hosts them.",
   "update.provider.unavailable": "Provider updates are unavailable.",
@@ -66,5 +67,6 @@ export const messages = defineMessages("update", {
   "update.whatsNew.empty.title": "No new features in this version",
   "update.whatsNew.empty.body": "This version has no notes to show here. The full changelog shows all changes.",
   "update.whatsNew.changelog": "Full changelog",
+  "update.whatsNew.changelogFailed": "OpenBot could not open the changelog.",
   "update.whatsNew.done": "Got it",
 });

@@ -1,9 +1,11 @@
-import type { ChannelSummary, SidebarLayoutAction, SidebarLayoutSnapshot } from "@openbot/contracts/ipc";
+import type { ChannelSummary, HiddenAgent, SidebarLayoutAction, SidebarLayoutSnapshot } from "@openbot/contracts/ipc";
 import type { AvatarMood } from "@openbot/ui/bloub-avatar";
 import { Sidebar } from "@openbot/ui/features/sidebar/Sidebar";
+import { SidebarCommunityCard } from "@openbot/ui/features/sidebar/SidebarCommunityCard";
 import { SidebarMobileAppCard } from "@openbot/ui/features/sidebar/SidebarMobileAppCard";
+import { SidebarStorageCard } from "@openbot/ui/features/sidebar/SidebarStorageCard";
 import { normalizeSidebarPinnedItems, type SidebarPinnedItem } from "@openbot/ui/features/sidebar/sidebar-pins";
-import type { SidebarAgentState } from "@openbot/ui/features/sidebar/sidebar-types";
+import { SIDEBAR_HIDDEN_GROUP_OPEN_ID, type SidebarAgentState } from "@openbot/ui/features/sidebar/sidebar-types";
 import { createSignal, untrack } from "solid-js";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
@@ -56,6 +58,11 @@ const sectionedLayout: SidebarLayoutSnapshot = {
   agentAssignments: { chief: demoSectionId, research: demoSectionId },
   agentOrder: ["chief", "research", "sales"],
 };
+/** "Research" keeps its "Core team" section while it is hidden, so Restore names that section. */
+const userHiddenAgents: HiddenAgent[] = [
+  { agentId: "research", hiddenAt: "2026-09-28T09:00:00.000Z" },
+  { agentId: "sales", hiddenAt: "2026-10-02T15:30:00.000Z" },
+];
 const longSectionLayout: SidebarLayoutSnapshot = {
   revision: 1,
   sections: [
@@ -157,9 +164,27 @@ function InteractiveSidebar(props: Parameters<typeof Sidebar>[0]) {
   const [peopleOrder, setPeopleOrder] = createSignal(untrack(() => props.peopleOrder));
   const [layout, setLayout] = createSignal(untrack(() => props.layout));
   const [collapsedSectionIds, setCollapsedSectionIds] = createSignal(untrack(() => props.collapsedSectionIds));
+  const [hiddenAgents, setHiddenAgents] = createSignal(untrack(() => props.userHiddenAgents ?? []));
+  const onHideAgent = untrack(() => props.onHideAgent);
+  const onRestoreAgent = untrack(() => props.onRestoreAgent);
   return (
     <Sidebar
       {...props}
+      userHiddenAgents={hiddenAgents()}
+      onHideAgent={
+        onHideAgent &&
+        ((agentId) => {
+          setHiddenAgents((current) => [...current, { agentId, hiddenAt: new Date().toISOString() }]);
+          onHideAgent(agentId);
+        })
+      }
+      onRestoreAgent={
+        onRestoreAgent &&
+        ((agentId) => {
+          setHiddenAgents((current) => current.filter((entry) => entry.agentId !== agentId));
+          onRestoreAgent(agentId);
+        })
+      }
       layout={layout()}
       collapsedSectionIds={collapsedSectionIds()}
       pinnedItems={pinnedItems()}
@@ -278,8 +303,69 @@ export const Populated: Story = {
   decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
 };
 
+/** A joined server has a new OpenBot version. The header button opens its update. */
+export const ServerUpdate: Story = {
+  args: { serverName: "Research server", serverUpdate: { version: "0.24.0", running: false, onOpen: fn() } },
+  decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
+};
+
+/** Back opens the chat that was open before. Forward has no chat yet, so it is disabled. */
+export const ChatHistory: Story = {
+  args: {
+    chatHistory: {
+      back: { name: "Research" },
+      forward: null,
+      keys: { back: "⌘[", forward: "⌘]" },
+      onBack: fn(),
+      onForward: fn(),
+    },
+  },
+  decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
+};
+
 export const MobileAppCard: Story = {
   args: { footer: <SidebarMobileAppCard onOpenInstall={fn()} onDismiss={fn()} /> },
+  decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
+};
+
+export const CommunityCard: Story = {
+  args: { footer: <SidebarCommunityCard onJoinDiscord={fn()} onFollowX={fn()} onDismiss={fn()} /> },
+  decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
+};
+
+const GB = 1024 ** 3;
+
+/** A 12 GB hosted server with 1.1 GB free: the card shows, and it can be closed. */
+export const StorageLow: Story = {
+  args: {
+    footer: (
+      <SidebarStorageCard
+        level="low"
+        serverName="Acme HQ"
+        freeBytes={1.1 * GB}
+        totalBytes={12 * GB}
+        onFreeUpSpace={fn()}
+        onDismiss={fn()}
+      />
+    ),
+  },
+  decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
+};
+
+/** At "full" the card is red and has no close button. */
+export const StorageFull: Story = {
+  args: {
+    footer: (
+      <SidebarStorageCard
+        level="full"
+        serverName="Acme HQ"
+        freeBytes={0.14 * GB}
+        totalBytes={12 * GB}
+        onFreeUpSpace={fn()}
+        onDismiss={fn()}
+      />
+    ),
+  },
   decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
 };
 
@@ -402,8 +488,14 @@ export const AgentContextMenu: Story = {
   decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
 };
 
+/** A custom section's menu offers Duplicate when the server can copy agents and change the layout. */
 export const Sections: Story = {
-  args: { layout: sectionedLayout, pinnedItems: pinnedOne },
+  args: {
+    layout: sectionedLayout,
+    pinnedItems: pinnedOne,
+    sectionDuplicateSupported: true,
+    onDuplicateSection: fn(),
+  },
   decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
 };
 
@@ -414,6 +506,24 @@ export const DragStress: Story = {
 
 export const SectionsCollapsed: Story = {
   args: { layout: sectionedLayout, collapsedSectionIds: [demoSectionId], pinnedItems: [] },
+  decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
+};
+
+/** The Hidden group is collapsed until the user opens it. Hide and Restore work in the agent menu. */
+export const HiddenAgents: Story = {
+  args: { layout: sectionedLayout, pinnedItems: [], userHiddenAgents, onHideAgent: fn(), onRestoreAgent: fn() },
+  decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
+};
+
+export const HiddenAgentsOpen: Story = {
+  args: {
+    layout: sectionedLayout,
+    pinnedItems: [],
+    collapsedSectionIds: [SIDEBAR_HIDDEN_GROUP_OPEN_ID],
+    userHiddenAgents,
+    onHideAgent: fn(),
+    onRestoreAgent: fn(),
+  },
   decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
 };
 
@@ -443,7 +553,6 @@ const serverMenu = {
   onAdd: fn(),
   onSetMuted: fn(),
   onSetNotificationLevel: fn(),
-  onOpenUsage: fn(),
   onOpenSettings: fn(),
 };
 
@@ -523,7 +632,7 @@ export const EmptySections: Story = {
       order: ["people", "unassigned", demoSectionId, emptySectionId],
     },
   },
-  decorators: FirstAgent.decorators,
+  decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
 };
 
 export const FirstAgentNarrow: Story = {
@@ -548,6 +657,19 @@ export const Channels: Story = {
       { kind: "channel", id: "channel-4" },
       { kind: "agent", id: "chief" },
     ],
+  },
+  decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
+};
+
+/** Two channels whose work waits for the user: one in "Needs you" with an agent, one pinned. */
+export const ChannelsWaiting: Story = {
+  args: {
+    ...Channels.args,
+    agentStates: { ...agentStates, research: { kind: "waiting", reason: "question", detail: "Which quarter?" } },
+    channelWaits: {
+      "channel-2": { kind: "waiting", reason: "takeover", detail: null },
+      "channel-4": { kind: "waiting", reason: "approval", detail: "git push origin main" },
+    },
   },
   decorators: [(Story) => <div style={{ width: "280px", height: "100vh" }}>{Story()}</div>],
 };

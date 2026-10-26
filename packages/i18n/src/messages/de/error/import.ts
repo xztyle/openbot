@@ -45,4 +45,33 @@ export const messages = {
   "error.import.hostBusy": "Der Server liest andere Exporte. Versuche es in einigen Minuten erneut.",
   "error.import.skillKept":
     "{name}: Der Server hat die Fähigkeit „{skill}“ bereits. Der Agent verwendet daher diese Fähigkeit. Bitte einen Administrator, sie zu aktualisieren.",
+  "error.import.transferRemoteTooLarge":
+    "Eine Übertragungsdatei für einen beigetretenen Server muss kleiner als 100 MB sein. Deaktiviere die Dateien der Arbeitsbereiche oder exportiere weniger Agenten.",
+  "error.import.transferNotFile": "Diese Datei ist keine OpenBot-Übertragungsdatei.",
+  "error.import.transferNewer":
+    "Eine neuere Version von OpenBot hat diese Datei erstellt. Aktualisiere OpenBot und versuche es erneut.",
+  "error.import.transferEmpty": "Die Datei enthält keine Agenten und keine Einstellungen.",
+  "error.import.transferTooLarge":
+    "Eine Übertragungsdatei muss kleiner als 2 GB sein und weniger als 50.000 Dateien enthalten. Deaktiviere die Dateien der Arbeitsbereiche oder exportiere weniger Agenten.",
+  "error.import.transferAgentInvalid": "Agent {number} in der Datei ist ungültig und wird übersprungen.",
+  "error.import.transferSettingsInvalid":
+    "Die App-Einstellungen in der Datei sind ungültig und werden nicht importiert.",
+  "error.import.transferModelMissing":
+    "{name}: Das Modell „{model}“ ist hier noch nicht verfügbar, daher verwendet der Agent das Standardmodell. Wähle das Modell erneut, sobald sein Anbieter bereit ist.",
+  "error.import.transferSettingSkipped": "{name} wird nicht importiert. {reason}",
+  "error.import.transferRoutineFlowSkipped": "Der Import hat einen Routinenablauf ausgelassen. {reason}",
+  "error.import.transferCustomAgentCommand":
+    "{name}: Eigene Agenten werden nicht importiert, da sie einen Befehl ausführen. Prüfe den Befehl „{command}“ und füge den Agenten in den Einstellungen erneut hinzu.",
+  "error.import.transferSkillLimit":
+    "{name}: Nur die ersten {limit} seiner {total} Fähigkeiten sind in der Datei, da ein Agent {limit} Fähigkeiten haben kann.",
+  "error.import.transferFilesGone":
+    "{number} Dateien wurden während des Exports gelöscht und sind daher nicht in der Datei.",
+  "error.import.transferProviderKey": "{name}: Gib den API-Schlüssel in den Einstellungen erneut ein.",
+  "error.import.transferAgentEnv": "{name}: Gib die Werte von {names} in den Einstellungen erneut ein.",
+  "error.import.transferMcpValues":
+    "{name}: Der MCP-Server wird deaktiviert hinzugefügt. Prüfe seinen Befehl, gib seine Werte und die vollständige Adresse erneut ein und aktiviere ihn in den MCP-Einstellungen.",
+  "error.import.transferValuesCleared":
+    "{name}: Werte, die ein Geheimnis enthalten können, wurden aus den Argumenten oder der Adresse entfernt. Gib sie in den Einstellungen erneut ein.",
+  "error.import.transferSharedKept":
+    "{number} Dateien im gemeinsamen Ordner sind hier schon vorhanden und bleiben unverändert.",
 } as const satisfies PartialTranslation<typeof source>;

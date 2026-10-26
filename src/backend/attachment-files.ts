@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import {
   copyFile,
   type FileHandle,
@@ -53,9 +54,9 @@ export interface StoredGeneratedAttachment extends StoredAttachment {
 }
 
 export interface StoredDraft extends StoredAttachment {
-  ownerEditId?: string;
+  ownerEditId?: string | undefined;
   /** Released edit drafts can still belong to a durable composer backup. */
-  preserveOnRestart?: boolean;
+  preserveOnRestart?: boolean | undefined;
   createdAt: string;
 }
 
@@ -205,6 +206,8 @@ export class AttachmentFiles {
     this: AttachmentFiles,
     paths: string[],
     data: AttachmentDataInput[],
+    /** A voice recording is a WebM file, which the user cannot attach. It never reaches a provider. */
+    options: { voiceRecording?: boolean } = {},
   ): Effect.fn.Return<StoredDraft[], AttachmentOperationError> {
     if (paths.some((path) => !path || path.length > INPUT_LIMITS.path)) {
       return yield* attachmentFailure(new Error("An attachment path is invalid."));
@@ -271,7 +274,7 @@ export class AttachmentFiles {
           const targetDirectory = join(this.#draftsRoot, id);
           preparedRoots.push(targetDirectory);
           const name = sanitizeName(item.name || "pasted-image.png");
-          assertSupportedAttachmentName(name);
+          if (!options.voiceRecording) assertSupportedAttachmentName(name);
           const targetPath = join(targetDirectory, name);
           yield* attachmentCall(() => mkdir(targetDirectory, { recursive: true, mode: 0o700 })).pipe(
             Effect.uninterruptible,
@@ -330,10 +333,22 @@ export class AttachmentFiles {
         const attachments: StoredAttachment[] = [];
         let total = 0;
         for (const source of inspected) {
-          const name = uniqueName(sanitizeName(source.path), usedNames);
+          const sourceName = sanitizeName(source.path);
+          const name = yield* attachmentCall(async () => {
+            while (true) {
+              const candidate = uniqueName(sourceName, usedNames);
+              try {
+                await copyFile(source.path, join(temporaryRoot, candidate), constants.COPYFILE_EXCL);
+                return candidate;
+              } catch (error) {
+                if (error === null || typeof error !== "object" || !("code" in error) || error.code !== "EEXIST") {
+                  throw error;
+                }
+              }
+            }
+          }).pipe(Effect.uninterruptible);
           const id = randomUUID();
           const targetPath = join(temporaryRoot, name);
-          yield* attachmentCall(() => copyFile(source.path, targetPath)).pipe(Effect.uninterruptible);
           const copied = yield* attachmentCall(() => stat(targetPath));
           if (copied.size > MAX_FILE_BYTES) throw new Error(`${name} exceeds the 100 MB limit.`);
           total += copied.size;
@@ -661,17 +676,18 @@ function safeArchiveSegment(value: string): string {
   );
 }
 
+/** `used` holds lower-case names: macOS and Windows see "Report.txt" and "report.txt" as one file. */
 function uniqueName(name: string, used: Set<string>): string {
-  if (!used.has(name)) {
-    used.add(name);
+  if (!used.has(name.toLowerCase())) {
+    used.add(name.toLowerCase());
     return name;
   }
   const extension = extname(name);
   const stem = name.slice(0, -extension.length || undefined);
   let index = 2;
-  while (used.has(`${stem}-${index}${extension}`)) index += 1;
+  while (used.has(`${stem}-${index}${extension}`.toLowerCase())) index += 1;
   const result = `${stem}-${index}${extension}`;
-  used.add(result);
+  used.add(result.toLowerCase());
   return result;
 }
 
@@ -680,10 +696,10 @@ function attachmentMetadata(
   explicitMimeType?: string,
 ): { kind: AttachmentKind; mimeType: string; previewKind: AttachmentPreviewKind } {
   const inferred = attachmentMimeTypeForName(name);
-  // Media stays an opaque file even if an importer supplies a preview MIME type. An SVG is text for
-  // the provider: an `image/*` type would send it as a raster image block.
+  // Media and archives stay opaque files even if an importer supplies a preview MIME type. An SVG is
+  // text for the provider: an `image/*` type would send it as a raster image block.
   const mimeType =
-    inferred.startsWith("audio/") || inferred.startsWith("video/")
+    inferred.startsWith("audio/") || inferred.startsWith("video/") || inferred === "application/zip"
       ? inferred
       : attachmentFileExtension(name) === "svg"
         ? "text/plain"

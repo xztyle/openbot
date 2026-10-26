@@ -8,7 +8,7 @@ export const messages = {
   "sharedTable.close": "Tabellen schließen",
   "sharedTable.loading": "Tabellen werden geladen…",
   "sharedTable.empty":
-    "Noch keine Tabellen. Ein Agent erstellt eine, wenn eine Aufgabe Daten über mehrere Durchgänge benötigt. Jeder Agent kann sie nutzen.",
+    "Noch keine Tabellen. Ein Agent erstellt eine, wenn eine Aufgabe Daten über mehrere Durchläufe benötigt. Jeder Agent kann sie nutzen.",
   "sharedTable.loadFailed": "Die Tabellen konnten nicht geladen werden.",
   "sharedTable.deleteFailed": "Dies konnte nicht gelöscht werden.",
   "sharedTable.madeOutside": "Außerhalb von OpenBot erstellt · jeder Agent kann sie löschen",

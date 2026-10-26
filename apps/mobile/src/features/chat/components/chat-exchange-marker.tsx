@@ -2,7 +2,7 @@ import type { AgentExchangeSummary } from "@openbot/contracts/ipc";
 import type { MobileTranslate } from "@openbot/i18n/mobile";
 import { Link } from "expo-router";
 import { Typography } from "heroui-native";
-import { ChevronDown } from "lucide-react-native";
+import ChevronDown from "lucide-react-native/icons/chevron-down";
 import { useState } from "react";
 import { Pressable, View, type ViewStyle } from "react-native";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";

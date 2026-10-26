@@ -22,7 +22,7 @@ export const messages = {
   "files.type.spreadsheets": "Planilhas",
   "files.type.media": "Áudio e vídeo",
   "files.type.other": "Outros",
-  "files.sort.newest": "Mais recentes",
+  "files.sort.newest": "Recentes",
   "files.sort.largest": "Maiores",
   "files.sort.name": "Nome",
   "files.day.today": "Hoje",
@@ -48,8 +48,8 @@ export const messages = {
   "files.delete.titleAvailable": "Excluir este arquivo?",
   "files.delete.titleRemoved": "Remover este arquivo?",
   "files.delete.descriptionAvailable":
-    "“{name}” é excluído do disco. As mensagens que o mostram continuam no chat sem o arquivo.",
-  "files.delete.descriptionRemoved": "“{name}” é removido da lista. A mensagem que o enviou continua no chat.",
+    "“{name}” será excluído do disco. As mensagens que o mostram continuam no chat sem o arquivo.",
+  "files.delete.descriptionRemoved": "“{name}” será removido da lista. A mensagem que o enviou continua no chat.",
   "files.delete.deleting": "Excluindo…",
   "files.delete.removing": "Removendo…",
   "files.delete.failed": "Não foi possível excluir o arquivo.",
@@ -86,10 +86,13 @@ export const messages = {
   "files.cleanup.description.caches":
     "Cópias de arquivos do servidor. O OpenBot as baixa novamente quando você as abre.",
   "files.cleanup.description.logs": "Registros de diagnóstico. Novos registros começam imediatamente.",
+  "files.cleanup.description.runtimes":
+    "Versões anteriores da CLI dos provedores que nenhum agente usa. O OpenBot mantém a versão em uso e uma versão anterior que funciona.",
   "files.cleanup.clear": "Limpar",
   "files.cleanup.clearCategory": "Limpar {category}",
   "files.cleanup.confirm.caches": "Limpar arquivos do servidor em cache?",
   "files.cleanup.confirm.logs": "Limpar registros?",
+  "files.cleanup.confirm.runtimes": "Remover versões anteriores da CLI dos provedores?",
   "files.cleanup.confirmDescription": "Isso libera {size}. {description}",
   "files.cleanup.clearing": "Limpando…",
   "files.cleanup.failed": "Não foi possível limpar os dados.",

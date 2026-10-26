@@ -25,7 +25,8 @@ const toastId = (id: string) => `host-restart:${id}`;
 /**
  * Tells a member why a joined host goes away: it restarts into an update. The notice stays while the
  * restart waits and while the host is away, and says when the host is back. A host that drops while
- * a restart waits counts as restarting, because the host's last event can be lost in the teardown.
+ * its restart only waits is not called restarting: the machine can stop for another reason, and the
+ * connection notice reports that drop.
  */
 export function createHostRestartToasts(hosts: Accessor<readonly HostRestartView[]>): void {
   const phases = new Map<string, Phase>();
@@ -101,6 +102,6 @@ export function createHostRestartToasts(hosts: Accessor<readonly HostRestartView
 function nextPhase(previous: Phase | null, host: HostRestartView): Phase | null {
   // An expired notice stays closed until the host is back or the restart ends.
   if (previous === "expired") return host.online || host.restart === null ? null : "expired";
-  if (previous !== null && !host.online) return "away";
+  if ((previous === "restarting" || previous === "away") && !host.online) return "away";
   return host.restart;
 }

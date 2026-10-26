@@ -56,19 +56,35 @@ commit them.
    change touches. Fill `## Verification` with the checks you ran and the
    checks you left to CI. Remove the sections the template says to remove.
 3. State the model and harness in the body.
-4. Choose the reviewer level from the riskiest file, with the table in
-   `CONTRIBUTING.md#choosing-the-reviewer-for-one-pull-request`. Add a
-   `NorbiAI-Model:` line in an HTML comment only when you need a level
-   other than the default.
-5. Create the PR: `gh pr create --base main --title "<title>" --body-file <file>`.
+4. Create the PR: `gh pr create --base main --title "<title>" --body-file <file>`.
    Write the title as one imperative sentence, as recent `main` commits do.
-6. When the `link_pull_request` tool is available, link the PR URL.
+5. When the `link_pull_request` tool is available, link the PR URL.
+
+## While you wait
+
+Gates 3 to 5 wait for a long time. `main` can move during the wait and
+cause a merge conflict. GitHub does not run `pull_request` workflows on a
+PR with a merge conflict. Thus `Check` and `NorbiAI review` do not start,
+and a wait for them does not end.
+
+1. Before each wait, and at each poll, run
+   `gh pr view <pr> --json mergeable,mergeStateStatus,headRefOid`.
+   Poll at most once each 2 minutes.
+2. `UNKNOWN` means that GitHub calculates the state. Query again at the
+   next poll. Do not act on it.
+3. `CONFLICTING` or `DIRTY` means a merge conflict. Stop the wait. Go to
+   Gate 4, step 5.
+4. When no `Check` or `NorbiAI review` status shows on the head SHA 10
+   minutes after a push, query `mergeable` first. Then read the runs with
+   `gh run list --branch <branch> --limit 5`. Do not continue the wait
+   with no signal.
 
 ## Gate 3 — Babysit the NorbiAI review
 
 Run the `babysit` skill on the PR. It owns the review loop: triage, fixes,
 rebuttals, and re-review requests. Continue to Gate 4 only when the
-`NorbiAI review` status on the head SHA is success.
+`NorbiAI review` status on the head SHA is success. During each `babysit`
+wait, do the checks in "While you wait".
 
 ## Gate 4 — Make CI green
 
@@ -76,8 +92,10 @@ The branch protection on `main` requires the `Check` status and resolved
 conversations. It does not require the branch to be up to date with `main`:
 a PR that is behind `main` can merge when it has no merge conflict.
 
-1. Watch the checks on the head SHA:
-   `gh pr checks <pr> --watch --interval 120`. Run it in the background.
+1. Query `mergeable` first, as "While you wait" says. Then watch the
+   checks on the head SHA: `gh pr checks <pr> --watch --interval 120`.
+   Run it in the background, and query `mergeable` at each wake. When the
+   watch shows no checks, look for a merge conflict first.
 2. For each failed job, read only the failed log:
    `gh run view <run-id> --log-failed`. Find the cause.
 3. When the failure comes from the change, fix it, commit, and push. Each
@@ -88,7 +106,8 @@ a PR that is behind `main` can merge when it has no merge conflict.
 5. Do not update the branch only because `main` moved. When
    `gh pr view <pr> --json mergeable` shows `CONFLICTING`, merge `main` into
    the branch, resolve the conflicts, and push. Do not force-push. The merge
-   starts a full NorbiAI review. Go back to Gate 3.
+   starts a full NorbiAI review. Go back to Gate 3. Find the conflict
+   with the checks in "While you wait", not only after CI fails.
 6. Answer each open human review thread. Do not resolve a thread that
    another person opened before you answer it.
 
@@ -129,6 +148,8 @@ Stop and ask the user when:
 - A fix needs a force-push, a history rewrite, or a change outside this
   repository.
 - A valid finding needs a product decision.
+- A merge conflict needs a product decision: both sides change the same
+  behavior with a different intent.
 - The `babysit` skill stops with no progress.
 - CI fails twice on a cause that you cannot fix in the change.
 - The merge needs `--admin` or a protection change.

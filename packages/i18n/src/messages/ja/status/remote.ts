@@ -21,7 +21,6 @@ export const messages = {
   "status.remote.stageCompatibility": "デスクトップの互換性を確認しています: {reason}",
   "status.remote.stageAgents": "エージェントを読み込んでいます: {reason}",
   "status.remote.stageReads": "既読状態を読み込んでいます: {reason}",
-  "status.remote.stageConversations": "会話を読み込んでいます: {reason}",
   "status.remote.suspendedDetail":
     "接続する前に、OpenBot Mobile またはデスクトップアプリを更新してください。\n{detail}",
   "status.remote.cooldownDetail":

@@ -56,7 +56,6 @@ export const messages = defineMessages("billing", {
   "billing.lifecycle.automatic": "Automatic renewal resumes",
   "billing.lifecycle.noRefund": "No refund for unused time",
   "billing.lifecycle.noRenewal": "No further renewals",
-  "billing.lifecycle.open": "Open design preview",
   "billing.lifecycle.dateUtc": "{date} UTC",
   "billing.lifecycle.renews": "Automatic renewal is on.",
   "billing.lifecycle.schedule": "Delete at period end",
@@ -77,4 +76,73 @@ export const messages = defineMessages("billing", {
   "billing.lifecycle.deleted": "{name} was deleted. Its subscription has ended.",
   "billing.lifecycle.label": "Design preview · Mock actions only",
   "billing.lifecycle.reset": "Reset preview",
+  // The commercial license of the account, above the server plans.
+  "billing.license.title": "License",
+  "billing.license.description": "For work at a company. It does not include a server.",
+  "billing.license.loadFailed": "Could not load the license.",
+  "billing.license.actionFailed": "Could not change the license.",
+  "billing.license.contactSales": "Reach out to licenses@openbot.run for more information.",
+  "billing.license.saving": "Saving…",
+  "billing.license.personal.title": "Personal use",
+  "billing.license.personal.description": "Free for personal and noncommercial use. Work at a company needs a license.",
+  "billing.license.status.ended": "Ended",
+  "billing.license.ended": "The license ended on {date}.",
+  "billing.license.buy": "Buy a license",
+  "billing.license.checkout": "Continue to checkout",
+  "billing.license.work.title": "Work license",
+  // {used} people use the license; it is paid for {users}.
+  "billing.license.work.used": "{used} of {users} users",
+  "billing.license.users.label": "Users",
+  "billing.license.users.add": "Add a user",
+  "billing.license.users.remove": "Remove a user",
+  "billing.license.included": { one: "{count} user included", other: "{count} users included" },
+  // For example "€100 + 3 × €15".
+  "billing.license.breakdown": "{base} + {extra} × {price}",
+  "billing.license.line.base": { one: "First {count} user", other: "First {count} users" },
+  // For example "3 more users × €15".
+  "billing.license.line.extra": "{extra} more × {price}",
+  // {currency} is a currency code, for example "EUR".
+  "billing.license.total.month": "/ month, {currency}",
+  "billing.license.contact.question": { one: "More than {count} user?", other: "More than {count} users?" },
+  "billing.license.contact.action": "Contact us",
+  "billing.license.action.menu": "License actions",
+  "billing.license.action.users": "Users",
+  "billing.license.action.changeUsers": "Change users",
+  "billing.license.action.cancel": "Cancel license",
+  "billing.license.action.renew": "Renew license",
+  "billing.license.paymentFailed": "A license payment failed. Update the payment method to keep the license.",
+  "billing.license.overLimit":
+    "{used} people use the license, but it is for {users} users. New people cannot join until you add users to the license.",
+  "billing.license.covered.title": "Covered by a license",
+  // {owners} is a list of names, for example "Ana and Jan".
+  "billing.license.covered.description": "Work on servers of {owners} is covered by their license.",
+  "billing.license.change.title": "Change users",
+  "billing.license.change.description": "Now: {users} users, {amount} a month. AI agents are not users.",
+  "billing.license.change.minimum": "{used} people use the license now. You cannot set fewer users.",
+  "billing.license.change.more": { other: "More than {count}" },
+  "billing.license.change.custom": "Custom",
+  "billing.license.change.customDescription": {
+    one: "For more than {count} user, we agree the price and the terms with you.",
+    other: "For more than {count} users, we agree the price and the terms with you.",
+  },
+  "billing.license.change.increase": "You pay for the added users for the rest of this month now.",
+  "billing.license.change.decrease": "The lower price starts on the next invoice. There is no refund.",
+  "billing.license.users.title": "License users",
+  "billing.license.users.description": "{used} of {users} users. Members of your servers count. AI agents do not.",
+  "billing.license.users.owner": "Owner",
+  "billing.license.cancel.title": "Cancel the license?",
+  "billing.license.cancel.description":
+    "The license stays active until {date}. Then it ends. Your servers are not affected.",
+  "billing.license.cancel.descriptionNow":
+    "The license ends at the end of the paid period. Your servers are not affected.",
+  "billing.license.cancel.keep": "Keep license",
+  // Shown before an invite that makes the license too small.
+  "billing.license.invite.title": "Add a user to the license?",
+  "billing.license.invite.description": "This invite adds 1 user to your license: {price} more a month.",
+  "billing.license.invite.confirm": "Add user and invite",
+  "billing.license.invite.max": {
+    one: "Your license has {count} user, the maximum. Contact us for a larger license. New people cannot join your servers.",
+    other:
+      "Your license has {count} users, the maximum. Contact us for a larger license. New people cannot join your servers.",
+  },
 });

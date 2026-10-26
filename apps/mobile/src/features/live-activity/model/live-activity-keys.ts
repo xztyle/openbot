@@ -6,6 +6,7 @@ import {
 } from "@openbot/team-client/live-activity-seal";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
+import { untilForeground } from "../../../shared/lib/until-foreground";
 
 const key = "openbot.mobile.live-activity-secret.v1";
 
@@ -28,6 +29,8 @@ export function loadLiveActivitySecret(): Promise<Uint8Array> {
   if (loaded) return Promise.resolve(loaded);
   loading ??= (async () => {
     try {
+      // A locked phone does not open the secret. A read that failed as missing would replace it.
+      await untilForeground();
       const stored = await SecureStore.getItemAsync(key);
       const secret = stored ? fromHex(stored) : null;
       loaded = secret?.length === LIVE_ACTIVITY_SECRET_BYTES ? secret : await createSecret();

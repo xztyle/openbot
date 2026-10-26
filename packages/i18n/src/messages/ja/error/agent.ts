@@ -2,10 +2,15 @@ import type { PartialTranslation } from "../../../message";
 import type { messages as source } from "../../en/error/agent";
 
 export const messages = {
+  "error.agent.historyUnavailable":
+    "このリクエストでは履歴を利用できません。最近の履歴をもう一度読み取るか、チャンネルの作業には channel_history を使用してください。",
+  "error.agent.toolRequestInvalid":
+    "ツール検出の引数が無効です。宣言されたスキーマと、元の修飾されたツール名を使用してください。",
   "error.agent.approvalWhileDeleting": "エージェントの削除中は承認できません。",
   "error.agent.accessLocalOnly":
     "エージェントへのアクセスは、そのエージェントを実行しているコンピューターでのみ変更できます。",
   "error.agent.duplicateCleanupFailed": "エージェントの複製に失敗し、不完全なコピーを削除できませんでした。",
+  "error.agent.commitEffectsFailed": "トランザクションはコミットされましたが、保存された効果の適用に失敗しました。",
   "error.agent.settingsLocalOnly":
     "エージェントの設定は、そのエージェントを実行しているコンピューターでのみ変更できます。",
   "error.agent.skillsLocalOnly": "スキルは、エージェントを実行しているコンピューターでのみ変更できます。",
@@ -36,13 +41,18 @@ export const messages = {
   "error.agent.reasoningEffortUnsupported":
     "モデル「{model}」は推論レベル「{effort}」に対応していません。対応している推論レベル: {efforts}。",
   "error.agent.noStartingModelInSettings":
-    "{provider} に利用可能なモデルがなく、ログイン済みの他のプロバイダーにもありません。プロバイダーにログインするか、サーバー設定 → プロバイダーでデフォルトのプロバイダーを変更してください。",
+    "{provider} に使用できるモデルがなく、サインイン済みのほかのプロバイダーにもありません。プロバイダーにサインインするか、サーバー設定 → プロバイダーでデフォルトのプロバイダーを変更してください。",
   "error.agent.noStartingModel":
     "{provider} に使用できるモデルがなく、サインイン済みのほかのプロバイダーにもありません。プロバイダーにサインインするか、「プロバイダーと権限」でデフォルトのプロバイダーを変更してください。",
   "error.agent.waitBeforeProviderChange":
     "プロバイダーを変更する前に、実行中のターンとキューが終わるまでお待ちください。",
+  "error.agent.waitForTasksBeforeProviderChange":
+    "このエージェントのタスクが実行中です。プロバイダーを変更する前に、タスクの完了を待つか、タスクを停止してください。",
   "error.agent.waitBeforeClearContext":
     "新しいチャットを始める前に、実行中のターンとキューが終わるまでお待ちください。",
+  "error.agent.waitBeforeCompactContext":
+    "コンテキストを圧縮する前に、実行中のターンとキューが終わるのを待ってください。",
+  "error.agent.compactContextUnavailable": "このエージェントは今コンテキストを圧縮できません。",
   "error.agent.unknown": "不明なエージェントです: {id}",
   "error.agent.onlyUserWidensSettings":
     "エージェントにフルアクセスを与える、または Computer Use をオンにできるのはユーザーだけです。エージェントの設定で変更するようユーザーに依頼してください。",
@@ -59,6 +69,8 @@ export const messages = {
   "error.agent.copyNameFailed": "OpenBot はエージェントのコピーに固有の名前を作成できませんでした。",
   "error.agent.endpointRemoved":
     "このエージェントが使用していたエンドポイントは削除されました。別のモデルを選択してください。",
+  "error.agent.turnStalled":
+    "{provider} が応答しなくなったため、OpenBot はこのターンを終了しました。メッセージをもう一度送信するか、別のモデルを選択してください。",
   "error.agent.selectedGone": "選択したエージェントはもう存在しません。",
   "error.agent.profileEndpointsChanged": "生成中にカスタムエンドポイントが変更されました。もう一度お試しください。",
   "error.agent.profileInvalid": "プロバイダーが無効なプロフィールを返しました。指示を修正してみてください。",
@@ -84,10 +96,50 @@ export const messages = {
     "保存されたエージェントのプロフィール {id} に読み取れない「{field}」の値があります。OpenBot を起動する前にデータを更新してください。",
   "error.agent.queueEditRejected": "キューの編集が拒否されました: {reason}",
   "error.agent.computerUseLocalOnly": "Computer Use は、エージェントを実行しているコンピューターでのみ変更できます。",
+  "error.agent.automationLocalOnly":
+    "ローカルスクリプトは、エージェントを実行しているコンピューターでのみ許可できます。",
+  "error.agent.newChatLocalOnly":
+    "新しいチャットの開始を許可できるのは、エージェントを実行しているコンピューターだけです。",
+  "error.agent.quickAcknowledgementLocalOnly":
+    "この設定を変更できるのは、エージェントを実行しているコンピューターだけです。",
+  "error.agent.sideQuestionBusy": "実行中のサイド質問が多すぎます。しばらくしてからもう一度お試しください。",
+  "error.agent.sideQuestionFailed": "エージェントはサイド質問に回答できませんでした。もう一度お試しください。",
+  "error.agent.busyMessageModeLocalOnly":
+    "エージェントの作業中のメッセージの扱いは、エージェントを実行しているコンピューターでのみ設定できます。",
+  "error.agent.backupModelsLocalOnly":
+    "バックアップモデルは、エージェントを実行しているコンピューターでのみ設定できます。",
+  "error.agent.taskLimitLocalOnly": "タスクの上限は、エージェントを実行しているコンピューターでのみ設定できます。",
+  "error.agent.localScriptsOff": "このエージェントはローカルスクリプトを許可していません。",
+  "error.agent.localScriptsRateLimited":
+    "過去 1 時間に、ローカルスクリプトがこのエージェントに {limit} 件のメッセージまたはルーティンのリクエストを送信しました。後でもう一度お試しください。",
+  "error.agent.automationOff": "このエージェントは、ローカルスクリプトによるルーティンの実行を許可していません。",
+  "error.agent.automationPayloadTooLong": "ペイロードが {limit} 文字を超えています。",
+  "error.agent.automationRateLimited":
+    "過去 1 時間に、ローカルスクリプトがこのエージェントのルーティンを {limit} 回実行しました。後でもう一度お試しください。",
   "error.agent.workspaceOnlyMacOnly":
     "このプロバイダーの「ワークスペースのみ」は macOS でのみ利用できます。エージェントの設定で「フルアクセス」を選んでください。",
   "error.agent.lowMemory":
-    "このサーバーはメモリが不足しています。メッセージはキューで待機し、メモリが空くと開始します。より大きいプランにすると、サーバーのメモリが増えます。",
+    "このサーバーはメモリーが不足しています。メッセージはキューで待機し、メモリーが空くと開始します。より大きいプランにすると、サーバーのメモリーが増えます。",
+  "error.agent.lowMemoryServer":
+    "このサーバーはメモリーが不足しています。メッセージはキューで待機し、メモリーが空くと開始します。",
   "error.agent.workspaceOnlyToolMissing":
     "「ワークスペースのみ」には {tool} が必要ですが、OpenBot は見つけられませんでした。インストールするか、エージェントの設定で「フルアクセス」を選んでください。",
+  "error.agent.screenCaptureOff":
+    "このエージェントでは画面キャプチャがオフです。ユーザーはエージェントの設定で Computer Use をオンにできます。",
+  "error.agent.screenCaptureUnavailable": "このコンピューターでは画面キャプチャを利用できません。",
+  "error.agent.screenCaptureShared":
+    "画面キャプチャは Slack、Discord、Telegram の会話では使えません。ほかの人がそのファイルを受け取るためです。",
+  "error.agent.screenCaptureDeclined":
+    "ユーザーはこの画面キャプチャを許可しませんでした。何もキャプチャされていません。",
+  "error.agent.screenCaptureWindowMissing":
+    "そのウィンドウは現在開いていません。list_capture_sources を呼び出して、現在のウィンドウ ID を取得してください。",
+  "error.agent.screenCaptureDisplayMissing":
+    "そのディスプレイは現在接続されていません。list_capture_sources を呼び出して、現在のディスプレイ ID を取得してください。",
+  "error.agent.screenCaptureRegionOutside":
+    "この領域は 1 つのディスプレイの中に収まっていません。list_capture_sources が返す 1 つのディスプレイの範囲内で、デスクトップのポイント座標を使ってください。",
+  "error.agent.screenCapturePermissionMissing":
+    "OpenBot に画面収録の権限がありません。ユーザーに「システム設定」→「プライバシーとセキュリティ」→「画面収録とシステムオーディオ録音」を開いて OpenBot をオンにし、OpenBot を終了してから再度開くよう依頼してください。",
+  "error.agent.screenCaptureEmptyWindows":
+    "Windows が空の画像を返しました。コンピューターのロックを解除し、保護されたコンテンツを閉じるようユーザーに依頼してください。組織のポリシーによって画面キャプチャが止められている場合もあります。",
+  "error.agent.screenCaptureFailed": "画面キャプチャに失敗しました。もう一度お試しください。",
 } as const satisfies PartialTranslation<typeof source>;

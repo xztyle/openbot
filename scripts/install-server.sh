@@ -9,6 +9,8 @@
 #                             not exist.
 #   --auth-api-url <origin>   Another account server, for development. Default: the one of the
 #                             installed server, else the one in the build.
+#   --display-size <W>x<H>    The size of the virtual display that computer use reads, from 640x480
+#                             to 2576x2576. Default: the one of the installed server, else 1280x800.
 #
 # This file only downloads the latest release and checks it against the release manifest, the
 # manifest that the Linux desktop updater reads. The install steps come from that release
@@ -20,6 +22,7 @@ export LC_ALL=C DEBIAN_FRONTEND=noninteractive
 RELEASES=https://github.com/nightly-labs/openbot/releases
 service_user=""
 auth_api_url=""
+display_size=""
 
 fail() {
   echo "$*" >&2
@@ -42,8 +45,13 @@ while [ "$#" -gt 0 ]; do
       auth_api_url=$2
       shift 2
       ;;
+    --display-size)
+      [ "$#" -ge 2 ] || fail "Add a size, such as 1920x1080, after --display-size."
+      display_size=$2
+      shift 2
+      ;;
     -h | --help)
-      sed -n '2,16p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'
+      sed -n '2,18p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *) fail "Unknown option: $1" ;;
@@ -91,7 +99,11 @@ chmod 0700 "$work/OpenBot.AppImage"
 
 setup="$work/squashfs-root/resources/hosting/openbot-server-setup"
 [ -f "$setup" ] || fail "OpenBot $version cannot install as a server. Try again after the next release."
-bash "$setup" "$service_user" "$work/squashfs-root" ${auth_api_url:+"$auth_api_url"}
+# A release before --display-size refuses a fourth argument.
+if [ -n "$display_size" ] && ! grep -q OPENBOT_DISPLAY_SIZE "$setup"; then
+  fail "OpenBot $version has no --display-size. Install without it, or try again after the next release."
+fi
+bash "$setup" "$service_user" "$work/squashfs-root" "$auth_api_url" ${display_size:+"$display_size"}
 
 cat <<'EOF'
 

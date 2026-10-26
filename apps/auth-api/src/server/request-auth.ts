@@ -1,15 +1,20 @@
 import { env, waitUntil } from "cloudflare:workers";
 import { HOSTING_DEVELOPER_KEY_HEADER } from "@openbot/contracts/hosted-servers";
+import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { Effect } from "effect";
+import { type AccountAnalytics, createAccountAnalytics } from "./account-analytics";
+import { AccountAttribution } from "./account-attribution";
 import { adminTokenMatches } from "./admin-token";
 import { AgentMarketplace, AgentMarketplaceError } from "./agent-marketplace";
 import { AgentTemplates } from "./agent-templates";
+import { type FcmRelaySender, sharedFcmSender } from "./android-notification-relay";
 import { AuthOperationError, AuthService, AuthServiceError } from "./auth-service";
 import { BillingError, type BillingService } from "./billing-service";
+import type { ContactMessageServices } from "./contact-message";
 import { D1AuthRepository } from "./d1-auth-repository";
 import { DiscordAppError, DiscordAppService } from "./discord-app";
 import { runApiEffect } from "./effect-runtime";
-import { createEmailCodeDelivery, createTeamInviteEmailDelivery } from "./email-delivery";
+import { createContactMessageDelivery, createEmailCodeDelivery, createTeamInviteEmailDelivery } from "./email-delivery";
 import { GitHubInstallationTokens, GitHubInstallationTokensError } from "./github-installation-tokens";
 import { createHostedBilling } from "./hosted-billing";
 import { type HostedServerService, HostedServerServiceError } from "./hosted-server-service";
@@ -18,7 +23,7 @@ import { enforceHostedSiteReportRateLimit as enforceReportRateLimit } from "./ho
 import { resolveHostedSiteScope } from "./hosted-site-server";
 import { HostedSiteService } from "./hosted-site-service";
 import { JsonBodyError } from "./json-body";
-import { type ApnsLiveActivitySender, sharedApnsSender } from "./live-activity-relay";
+import { type ApnsRelaySender, sharedApnsSender } from "./live-activity-relay";
 import { MarketplaceQueryError } from "./marketplace-pagination";
 import {
   enforceMarketplaceMutation,
@@ -35,11 +40,26 @@ import {
 import { BROWSER_SESSION_LIFETIME_MS } from "./session-policy";
 import { SkillMarketplace, SkillMarketplaceError } from "./skill-marketplace";
 import { SlackAppError, SlackAppService } from "./slack-app";
-import { requireWorkerBindings, type TeamInviteEmailDelivery } from "./types";
+import { requireWorkerBindings, type TeamInviteEmailDelivery, type WorkerBindings } from "./types";
+
+function accountAnalytics(bindings: WorkerBindings): AccountAnalytics {
+  return createAccountAnalytics({
+    clientId: bindings.OPENPANEL_CLIENT_ID,
+    clientSecret: bindings.OPENPANEL_CLIENT_SECRET,
+    fetch: (input, init) => fetch(input, init),
+    schedule,
+  });
+}
+
+export function requestAccountAttribution(): AccountAttribution {
+  const bindings = requireWorkerBindings(env);
+  return new AccountAttribution({ database: bindings.DB, analytics: accountAnalytics(bindings) });
+}
 
 export function requestAuthService(): AuthService {
   const bindings = requireWorkerBindings(env);
   const exposeDevelopmentCode = bindings.AUTH_EXPOSE_DEVELOPMENT_CODE === "true";
+  const analytics = accountAnalytics(bindings);
   return new AuthService({
     repository: new D1AuthRepository(bindings.DB),
     delivery: exposeDevelopmentCode ? null : createEmailCodeDelivery(bindings),
@@ -50,6 +70,8 @@ export function requestAuthService(): AuthService {
     // The revocation is already written and the cron redelivers it, so the answer does not wait.
     flushSessionRevocations: () => Effect.sync(() => schedule(deliverPendingRemoteAuthEvents(bindings, Date.now()))),
     profileChanged: (userId) => notifyAccountProfileChanged(bindings, userId, schedule),
+    analytics,
+    attribution: new AccountAttribution({ database: bindings.DB, analytics }),
   });
 }
 
@@ -167,18 +189,21 @@ export function githubInstallationTokensErrorResponse(error: unknown): Response 
 }
 
 /**
- * The Live Activity relay: the Apple sender and the limit for each host. `null` when this Worker has
- * no Apple key or no limiter, so the relay is off.
+ * The Apple relay for Live Activity updates and notifications: the Apple sender and the limits for
+ * each host. `null` when this Worker has no Apple key or no limiter, so the relay is off.
  */
-export function requestLiveActivityRelay(): {
-  sender: ApnsLiveActivitySender;
+export function requestApnsRelay(): {
+  sender: ApnsRelaySender;
   /** A host sends a few updates a minute for each phone. More is a fault or misuse. */
   allow(hostId: string): Effect.Effect<boolean, AuthOperationError>;
+  /** A host sends one notification for each event that waits for a member, under a separate limit. */
+  allowNotification(hostId: string): Effect.Effect<boolean, AuthOperationError>;
 } | null {
   const bindings = requireWorkerBindings(env);
   const { APNS_PRIVATE_KEY, APNS_KEY_ID, APNS_TEAM_ID, APNS_TOPIC, APNS_ORIGIN, LIVE_ACTIVITY_RATE_LIMITER } = bindings;
   if (!APNS_PRIVATE_KEY || !APNS_KEY_ID || !APNS_TEAM_ID || !APNS_TOPIC || !LIVE_ACTIVITY_RATE_LIMITER) return null;
   const origin = developmentApnsOrigin(APNS_ORIGIN);
+  const limit = relayLimit(LIVE_ACTIVITY_RATE_LIMITER);
   return {
     sender: sharedApnsSender({
       // A deploy passes the key as one line, with `\n` for each line break.
@@ -188,12 +213,34 @@ export function requestLiveActivityRelay(): {
       topic: APNS_TOPIC,
       ...(origin ? { origin } : {}),
     }),
-    allow: (hostId) =>
-      Effect.tryPromise({
-        try: () => LIVE_ACTIVITY_RATE_LIMITER.limit({ key: `host:${hostId}` }),
-        catch: () => new AuthOperationError({ message: "Account operation failed." }),
-      }).pipe(Effect.map((result) => result.success)),
+    allow: (hostId) => limit(`host:${hostId}`),
+    allowNotification: (hostId) => limit(`notification:host:${hostId}`),
   };
+}
+
+/**
+ * The Firebase relay for Android notifications: the Firebase sender and the notification limit of
+ * each host, which it shares with iPhone notifications. `null` when this Worker has no valid service
+ * account key or no limiter, so the relay is off.
+ */
+export function requestFcmRelay(): {
+  sender: FcmRelaySender;
+  allowNotification(hostId: string): Effect.Effect<boolean, AuthOperationError>;
+} | null {
+  const { FCM_SERVICE_ACCOUNT, LIVE_ACTIVITY_RATE_LIMITER } = requireWorkerBindings(env);
+  if (!FCM_SERVICE_ACCOUNT || !LIVE_ACTIVITY_RATE_LIMITER) return null;
+  const sender = sharedFcmSender(FCM_SERVICE_ACCOUNT);
+  if (!sender) return null;
+  const limit = relayLimit(LIVE_ACTIVITY_RATE_LIMITER);
+  return { sender, allowNotification: (hostId) => limit(`notification:host:${hostId}`) };
+}
+
+function relayLimit(limiter: RateLimit) {
+  return (key: string) =>
+    Effect.tryPromise({
+      try: () => limiter.limit({ key }),
+      catch: () => new AuthOperationError({ message: "Account operation failed." }),
+    }).pipe(Effect.map((result) => result.success));
 }
 
 /** Only a development server on this computer can stand in for Apple. */
@@ -249,6 +296,20 @@ export const requireSkillsAdmin = Effect.fn("Auth.requireSkillsAdmin")(function*
 export const requireOperationsAdmin = Effect.fn("Auth.requireOperationsAdmin")(function* (request: Request) {
   return yield* adminTokenMatches(requireWorkerBindings(env).SITE_OPERATIONS_ADMIN_TOKEN, bearerToken(request));
 });
+
+export const requireServerClaimsAdmin = Effect.fn("Auth.requireServerClaimsAdmin")(function* (request: Request) {
+  return yield* adminTokenMatches(requireWorkerBindings(env).SERVER_CLAIMS_ADMIN_TOKEN, bearerToken(request));
+});
+
+/** The limits and delivery of the site's contact form. */
+export function requestContactMessageServices(): ContactMessageServices {
+  const bindings = requireWorkerBindings(env);
+  return {
+    repository: new D1AuthRepository(bindings.DB),
+    now: () => Date.now(),
+    delivery: () => createContactMessageDelivery(bindings),
+  };
+}
 
 export function requestTeamInviteEmailDelivery(): TeamInviteEmailDelivery | null {
   const bindings = requireWorkerBindings(env);
@@ -331,12 +392,6 @@ export function requestRemoteSignalUrl(): string {
   return value;
 }
 
-export function requestSourceIp(request: Request): string {
-  return (
-    request.headers.get("CF-Connecting-IP") ?? request.headers.get("X-Forwarded-For")?.split(",")[0] ?? "127.0.0.1"
-  );
-}
-
 export function bearerToken(request: Request): string | null {
   const authorization = request.headers.get("Authorization");
   if (!authorization?.startsWith("Bearer ")) return null;
@@ -378,10 +433,22 @@ export function authErrorResponse(error: unknown): Response {
     }
     return response;
   }
-  return apiError(500, "internal_error", "The account service could not complete the request.");
+  // The reference is random, so it holds no user data. The log line shows the same value, so a code
+  // that a user copies identifies this log line. The log shows only the error type, not its message.
+  const reference = `auth/${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
+  console.error("Account service request failed:", reference, errorType(error));
+  return json(
+    { error: { code: "internal_error", message: "The account service could not complete the request.", reference } },
+    500,
+  );
+}
+
+function errorType(error: unknown): string {
+  if (isDynamicRecord(error) && isString(error._tag)) return error._tag;
+  return error instanceof Error ? error.name : typeof error;
 }
 
 /** Starts background work in the active Worker invocation. */
-function schedule<E>(work: Effect.Effect<void, E>): void {
+export function schedule<E>(work: Effect.Effect<void, E>): void {
   waitUntil(runApiEffect(work));
 }

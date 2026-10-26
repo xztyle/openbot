@@ -11,6 +11,21 @@ import { type DynamicRecord, isBoolean, isDynamicRecord, isNumber, isString } fr
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import type { NativeImage, WebContents } from "electron";
 import {
+  BROWSER_CARD_FIELDS,
+  type BrowserCardField,
+  type BrowserCardFieldDescription,
+  type BrowserCardFillResult,
+  type BrowserCardTargets,
+  CARD_FIELD_CHECK_FUNCTION,
+  CARD_FIELD_DESCRIPTION_FUNCTION,
+  CARD_FIELD_FINGERPRINT_FUNCTION,
+  CARD_FIELD_SELECT_FUNCTION,
+  CARD_SELECT_OPTION_FUNCTION,
+  cardFieldAccepts,
+  cardFieldText,
+  parseCardFieldDescription,
+} from "./browser-card-fill";
+import {
   buttonMask,
   dispatchMouseClick,
   dispatchShortcut,
@@ -21,6 +36,7 @@ import {
 } from "./browser-cdp-input";
 import {
   boundSerializedSnapshot,
+  CardValueScrub,
   collectBoundedSnapshot,
   collectFocus,
   cssObjectMatch,
@@ -49,8 +65,16 @@ import {
   stringValue,
 } from "./browser-cdp-values";
 import { type BrowserOperationError, browserCall, browserFailure, browserSync } from "./browser-effects";
+import {
+  type BrowserFillFieldsProgress,
+  type BrowserPreparedField,
+  FILL_FIELD_STATE_FUNCTION,
+  fillFieldsFailure,
+  fillPreparedFields,
+} from "./browser-fill-fields";
 import { describeBrowserTarget, stopLoadingAndWait, waitForLoading } from "./browser-navigation";
 import { createFramePacer } from "./browser-screencast-pacing";
+import type { VaultCardSecret } from "./vault-items";
 
 const ACTION_TIMEOUT_MS = 10_000;
 const WAIT_TIMEOUT_MS = 30_000;
@@ -211,6 +235,7 @@ export class BrowserCdpEngine {
   /** The page sizes of the open views that asked for one. The newest one applies. */
   readonly #viewViewports: Array<{ width: number; height: number }> = [];
   #navigationGeneration = 0;
+  readonly #cardScrub = new CardValueScrub();
 
   readonly prepareSecret = Effect.fn("BrowserCdp.prepareSecret")(function* (
     this: BrowserCdpEngine,
@@ -415,6 +440,135 @@ export class BrowserCdpEngine {
       ).pipe(Effect.catch(() => Effect.succeed(false)));
     return { enter, clear, fields: nodes.fields };
   });
+
+  /**
+   * Types a saved card into the fields that the agent named, in the main page or in an HTTPS payment
+   * frame that runs in its own process. Each field is checked before any value goes in: attached, in
+   * an HTTPS frame that `checkOrigin` allows, enabled, of a kind that takes the value, and for the
+   * number and the code, not in a form that sends its fields in the page address. When `allowFill`
+   * then refuses, nothing is typed and the result is empty; when it allows, it can prepare the tab
+   * first. Each field is then filled with native input after its identity is checked again. Snapshots
+   * hide the values from before the first one is typed.
+   */
+  readonly fillCard = Effect.fn("BrowserCdp.fillCard")(function* (
+    this: BrowserCdpEngine,
+    targets: BrowserCardTargets,
+    card: VaultCardSecret,
+    policy: {
+      checkOrigin: (origin: string) => void;
+      allowFill: () => Effect.Effect<boolean, BrowserOperationError>;
+      onFill: () => void;
+    },
+    deadline: number,
+  ): Effect.fn.Return<BrowserCardFillResult, BrowserOperationError> {
+    const generation = this.#navigationGeneration;
+    const unavailable = (field: BrowserCardField, reason: string) =>
+      browserFailure(new Error(`The ${field} target ${reason}`));
+    return yield* this.#leaseEffect((send) =>
+      Effect.gen({ self: this }, function* () {
+        const fields: Array<{
+          field: BrowserCardField;
+          backendNodeId: number;
+          sessionId?: string | undefined;
+          description: BrowserCardFieldDescription;
+          text: string;
+          fingerprint: string;
+        }> = [];
+        const seen = new Set<string>();
+        for (const field of BROWSER_CARD_FIELDS) {
+          const target = targets[field];
+          if (!target) continue;
+          const node = yield* this.#resolveElementEffect(send, target, deadline);
+          const key = `${node.sessionId ?? "main"}:${node.backendNodeId}`;
+          if (seen.has(key)) return yield* browserFailure(new Error("Each card field needs its own target."));
+          seen.add(key);
+          const description = parseCardFieldDescription(
+            yield* this.#callOnNode(send, node.backendNodeId, CARD_FIELD_DESCRIPTION_FUNCTION, [], node.sessionId),
+          );
+          if (!description?.connected)
+            return yield* unavailable(field, "is unavailable here. Take a fresh snapshot, or use request_takeover.");
+          if (!description.secure) return yield* unavailable(field, "is not in an HTTPS page. Use request_takeover.");
+          yield* browserSync(() => policy.checkOrigin(description.origin));
+          if (description.disabled || !cardFieldAccepts(field, description))
+            return yield* unavailable(field, "is not an enabled field that takes this value.");
+          if (description.sendsGet && (field === "number" || field === "securityCode"))
+            return yield* unavailable(
+              field,
+              "is in a form that sends its fields in the page address. Use request_takeover.",
+            );
+          const text = cardFieldText(field, card, description);
+          if (text === null)
+            return yield* unavailable(
+              field,
+              "has no saved value on this card. Leave it to the user with request_takeover.",
+            );
+          const fingerprint = yield* this.#callOnNode(
+            send,
+            node.backendNodeId,
+            CARD_FIELD_FINGERPRINT_FUNCTION,
+            [],
+            node.sessionId,
+          );
+          if (!isString(fingerprint)) return yield* unavailable(field, "is unavailable. Take a fresh snapshot.");
+          fields.push({ field, ...node, description, text, fingerprint });
+        }
+        if (!(yield* policy.allowFill())) return { filled: [], unconfirmed: [] };
+        yield* browserSync(() => assertBeforeDeadline(deadline));
+        if (generation !== this.#navigationGeneration)
+          return yield* browserFailure(new Error("The card page changed. Take a fresh snapshot."));
+        this.#cardScrub.add(card.number, card.securityCode);
+        policy.onFill();
+        const filled: BrowserCardField[] = [];
+        const unconfirmed: BrowserCardField[] = [];
+        yield* Effect.gen({ self: this }, function* () {
+          for (const entry of fields) {
+            yield* browserSync(() => assertBeforeDeadline(deadline));
+            if (generation !== this.#navigationGeneration)
+              return yield* browserFailure(new Error("The card page changed."));
+            if (entry.description.tag === "select") {
+              yield* this.#callOnNode(
+                send,
+                entry.backendNodeId,
+                CARD_SELECT_OPTION_FUNCTION,
+                [entry.field === "expYear" ? "year" : "month", card.expMonth, card.expYear, entry.fingerprint],
+                entry.sessionId,
+              );
+              filled.push(entry.field);
+              continue;
+            }
+            yield* send("DOM.focus", { backendNodeId: entry.backendNodeId }, entry.sessionId);
+            yield* this.#callOnNode(
+              send,
+              entry.backendNodeId,
+              CARD_FIELD_SELECT_FUNCTION,
+              [entry.fingerprint],
+              entry.sessionId,
+            );
+            // Native entry sends trusted input events, so payment frames and masked fields take the value.
+            yield* send("Input.insertText", { text: entry.text }, entry.sessionId);
+            filled.push(entry.field);
+            const holds = yield* this.#callOnNode(
+              send,
+              entry.backendNodeId,
+              CARD_FIELD_CHECK_FUNCTION,
+              [entry.text, entry.field !== "nameOnCard"],
+              entry.sessionId,
+            ).pipe(Effect.catch(() => Effect.succeed(false)));
+            if (holds !== true) unconfirmed.push(entry.field);
+          }
+        }).pipe(
+          Effect.catch((failure) =>
+            browserFailure(
+              new Error(
+                `Card fill stopped. Filled fields: ${filled.join(", ") || "none"}. Read the page before you continue. ${failure.cause instanceof Error ? this.#cardScrub.text(failure.cause.message) : ""}`.trim(),
+              ),
+            ),
+          ),
+        );
+        return { filled, unconfirmed };
+      }),
+    );
+  });
   #retainDebugger = false;
   #ownsDebugger = false;
   #closing = false;
@@ -445,6 +599,8 @@ export class BrowserCdpEngine {
       this.#targets.clear();
       this.#lastSnapshot = null;
     });
+    // Main frame only. The payment frames of the old document go with it.
+    contents.on("did-navigate", () => this.#cardScrub.endDocument());
     contents.debugger.on("message", (_event, method, params, sessionId) => {
       if (method === "Target.attachedToTarget" && isRecord(params)) {
         const attachedSessionId = stringValue(params.sessionId) || sessionId || "";
@@ -508,7 +664,8 @@ export class BrowserCdpEngine {
           : parsed.hasFrame
             ? "iframe"
             : "low-semantic-coverage";
-        return { snapshot, recommendImage, imageReason };
+        // The kept references compare the page with the unscrubbed elements.
+        return { snapshot: this.#cardScrub.snapshot(snapshot), recommendImage, imageReason };
       }),
     );
   });
@@ -516,7 +673,11 @@ export class BrowserCdpEngine {
   readonly click = Effect.fn("BrowserCdp.click")(function* (
     this: BrowserCdpEngine,
     target: BrowserTarget,
-    options: { button?: "left" | "middle" | "right"; clickCount?: number; modifiers?: string[] } = {},
+    options: {
+      button?: "left" | "middle" | "right" | undefined;
+      clickCount?: number | undefined;
+      modifiers?: string[] | undefined;
+    } = {},
     deadline?: number,
     onDispatch?: ActionDispatch,
   ): Effect.fn.Return<void, BrowserOperationError> {
@@ -555,7 +716,7 @@ export class BrowserCdpEngine {
     this: BrowserCdpEngine,
     target: BrowserTarget | undefined,
     text: string,
-    options: { mode?: "replace" | "append"; submit?: boolean } = {},
+    options: { mode?: "replace" | "append" | undefined; submit?: boolean } = {},
     deadline?: number,
     onDispatch?: ActionDispatch,
   ): Effect.fn.Return<void, BrowserOperationError> {
@@ -606,6 +767,147 @@ export class BrowserCdpEngine {
           yield* dispatchShortcut(send, "Enter", resolved.sessionId);
         }
       }),
+    );
+  });
+
+  /** One lease retains all exact field handles until the last native input and cleanup complete. */
+  readonly fillFields = Effect.fn("BrowserCdp.fillFields")(function* (
+    this: BrowserCdpEngine,
+    revision: number,
+    fields: readonly { ref: string; text: string }[],
+    deadline: number,
+    progress: BrowserFillFieldsProgress,
+    checkPolicy: () => void,
+  ): Effect.fn.Return<void, BrowserOperationError> {
+    if (!this.#lastSnapshot || this.#lastSnapshot.revision !== revision)
+      return yield* fillFieldsFailure("stale_snapshot");
+    const generation = this.#navigationGeneration;
+    const origin = yield* browserSync(() => new URL(this.#contents.getURL()).origin);
+    yield* this.#leaseEffect(
+      (send) =>
+        Effect.gen({ self: this }, function* () {
+          const document = yield* send("DOM.getDocument", { depth: 0 });
+          const documentNodeId = numberValue(recordValue(document.root)?.backendNodeId);
+          if (!documentNodeId) return yield* fillFieldsFailure("document_changed");
+          const contextId = yield* automationContextId(send);
+          const objects: string[] = [];
+          const prepared: BrowserPreparedField[] = [];
+          const checkDocument = () =>
+            Effect.gen({ self: this }, function* () {
+              if (progress.stopped || Date.now() >= deadline) return yield* fillFieldsFailure("deadline");
+              if (generation !== this.#navigationGeneration) return yield* fillFieldsFailure("document_changed");
+              yield* browserSync(checkPolicy);
+              const current = yield* send("DOM.getDocument", { depth: 0 });
+              if (numberValue(recordValue(current.root)?.backendNodeId) !== documentNodeId)
+                return yield* fillFieldsFailure("document_changed");
+            });
+          const state = (
+            objectId: string,
+            expected: string | null,
+            select = false,
+            text: string | null = null,
+            requireActive = false,
+          ) =>
+            Effect.gen(function* () {
+              const result = yield* send("Runtime.callFunctionOn", {
+                objectId,
+                functionDeclaration: FILL_FIELD_STATE_FUNCTION,
+                arguments: [expected, origin, select, text, requireActive].map((value) => ({ value })),
+                returnByValue: true,
+              });
+              const value = recordValue(result.result)?.value;
+              if (result.exceptionDetails || !isString(value)) return yield* fillFieldsFailure("target_changed");
+              return value;
+            });
+          yield* Effect.gen({ self: this }, function* () {
+            // No focus or input occurs until every field passes this preflight.
+            for (const [index, field] of fields.entries()) {
+              progress.failedIndex = index;
+              yield* checkDocument();
+              const record = this.#targets.get(field.ref);
+              if (!record || record.targetId) return yield* fillFieldsFailure("invalid_target");
+              const target: BrowserTarget = { kind: "ref", ref: field.ref, revision };
+              // A hidden or changed ref fails here before any input. Report a fixed reason code.
+              const resolved = yield* this.#resolveElementEffect(send, target, deadline).pipe(
+                Effect.catch(() =>
+                  Effect.fail(fillFieldsFailure(Date.now() >= deadline ? "deadline" : "invalid_target")),
+                ),
+              );
+              const object = yield* send("DOM.resolveNode", {
+                backendNodeId: resolved.backendNodeId,
+                executionContextId: contextId,
+              });
+              const objectId = stringValue(recordValue(object.object)?.objectId);
+              if (!objectId) return yield* fillFieldsFailure("invalid_target");
+              objects.push(objectId);
+              const fingerprint = yield* state(objectId, null).pipe(
+                Effect.catch(() => Effect.fail(fillFieldsFailure("invalid_target"))),
+              );
+              // verify() requires the same value at dispatch, so this is the value that input replaces.
+              const preflightEmpty = JSON.parse(fingerprint)[1] === "";
+              const verify = () =>
+                Effect.gen({ self: this }, function* () {
+                  yield* checkDocument();
+                  const current = yield* this.#targetFingerprint(send, resolved.backendNodeId).pipe(
+                    Effect.catch(() =>
+                      Effect.fail(fillFieldsFailure(Date.now() >= deadline ? "deadline" : "target_changed")),
+                    ),
+                  );
+                  if (
+                    !current.visible ||
+                    current.role !== record.element.role ||
+                    current.name !== record.element.name ||
+                    current.tag !== record.element.tag ||
+                    current.visibleText !== record.visibleText
+                  )
+                    return yield* fillFieldsFailure("target_changed");
+                  yield* state(objectId, fingerprint);
+                });
+              prepared.push({
+                verify,
+                replace: (onDispatch) =>
+                  Effect.gen({ self: this }, function* () {
+                    yield* send("DOM.focus", { backendNodeId: resolved.backendNodeId });
+                    // Focus handlers can replace a node or change its policy. Recheck the retained
+                    // object and its selection, rather than searching for a replacement target.
+                    yield* state(objectId, fingerprint, true);
+                    yield* verify();
+                    yield* state(objectId, fingerprint, false, null, true);
+                    if (generation !== this.#navigationGeneration) return yield* fillFieldsFailure("document_changed");
+                    if (progress.stopped || Date.now() >= deadline) return yield* fillFieldsFailure("deadline");
+                    yield* browserSync(checkPolicy);
+                    yield* Effect.gen({ self: this }, function* () {
+                      onDispatch();
+                      if (field.text.length > 0) yield* send("Input.insertText", { text: field.text });
+                      // An empty field needs no input. A Backspace there still runs page key handlers.
+                      else if (!preflightEmpty) yield* dispatchShortcut(send, "Backspace");
+                      // An already dispatched command must drain before its queue slot can end.
+                      // Acknowledgment alone does not prove which field kept the text.
+                      // Closing or takeover can start inside the input acknowledgment callback.
+                      // Do not send a new confirmation command to that withdrawn tab.
+                      yield* browserSync(checkPolicy);
+                      if (generation !== this.#navigationGeneration)
+                        return yield* fillFieldsFailure("document_changed");
+                      yield* state(objectId, fingerprint, false, field.text);
+                      if (generation !== this.#navigationGeneration)
+                        return yield* fillFieldsFailure("document_changed");
+                    }).pipe(Effect.uninterruptible);
+                  }),
+              });
+            }
+            progress.failedIndex = null;
+            yield* fillPreparedFields(prepared, progress, deadline, checkPolicy);
+          }).pipe(
+            Effect.ensuring(
+              Effect.suspend(() =>
+                Effect.forEach(objects, (objectId) => send("Runtime.releaseObject", { objectId }).pipe(Effect.ignore), {
+                  discard: true,
+                }),
+              ),
+            ),
+          );
+        }),
+      false,
     );
   });
 
@@ -734,7 +1036,6 @@ export class BrowserCdpEngine {
     deadline?: number,
     onDispatch?: ActionDispatch,
   ): Effect.fn.Return<void, BrowserOperationError> {
-    this.#contents.focus();
     yield* this.#leaseEffect((send) =>
       Effect.gen({ self: this }, function* () {
         const resolved = yield* this.#resolveElementEffect(send, target, deadline);
@@ -1151,7 +1452,7 @@ export class BrowserCdpEngine {
   readonly #identifyUploadTargetEffect = Effect.fn("BrowserCdp.identifyUploadTarget")(function* (
     this: BrowserCdpEngine,
     send: SendCommand,
-    resolved: { backendNodeId: number; sessionId?: string },
+    resolved: { backendNodeId: number; sessionId?: string | undefined },
   ): Effect.fn.Return<BrowserUploadAssignment, BrowserOperationError> {
     const documentId = yield* this.#callOnNode(
       send,
@@ -1218,6 +1519,16 @@ export class BrowserCdpEngine {
   invalidateReferences(): void {
     this.#targets.clear();
     this.#lastSnapshot = null;
+  }
+
+  /** `value` without the card values that `fillCard` typed in this tab, for a title or a URL. */
+  scrubText(value: string): string {
+    return this.#cardScrub.text(value);
+  }
+
+  /** A target or a wait that names a typed card value would tell the agent whether the page holds it. */
+  #namesCardValue(...values: Array<string | undefined>): boolean {
+    return values.some((value) => value !== undefined && this.#cardScrub.reveals(value));
   }
 
   cancelPendingCommands(): boolean {
@@ -1646,9 +1957,16 @@ export class BrowserCdpEngine {
 
   readonly waitFor = Effect.fn("BrowserCdp.waitFor")(function* (
     this: BrowserCdpEngine,
-    condition: { target?: BrowserTarget; text?: string; url?: string; state?: string },
+    condition: {
+      target?: BrowserTarget | undefined;
+      text?: string | undefined;
+      url?: string | undefined;
+      state?: string | undefined;
+    },
     timeoutMs = WAIT_TIMEOUT_MS,
   ): Effect.fn.Return<void, BrowserOperationError> {
+    if (this.#namesCardValue(condition.text, condition.url))
+      return yield* browserFailure(new Error("A wait cannot name a filled card value."));
     yield* this.#leaseEffect((send) =>
       Effect.gen({ self: this }, function* () {
         const deadline = Date.now() + clamp(timeoutMs, 1, WAIT_TIMEOUT_MS);
@@ -1757,18 +2075,40 @@ export class BrowserCdpEngine {
     this: BrowserCdpEngine,
     timeoutMs = ACTION_TIMEOUT_MS,
   ): Effect.fn.Return<void, BrowserOperationError> {
+    const deadline = Date.now() + timeoutMs;
     yield* this.#leaseEffect((send) =>
       Effect.gen({ self: this }, function* () {
-        if (this.#contents.isLoading()) yield* waitForLoading(this.#contents, timeoutMs);
-        yield* waitForDomQuietAcrossTargets(send, this.#snapshotTargets(), Math.min(timeoutMs, 1_500)).pipe(
-          Effect.catch((failure) =>
-            browserSync(() => {
-              const error = failure.cause;
-              if (error instanceof Error && error.message === "DOM did not become quiet.") return;
-              throw error;
-            }),
-          ),
-        );
+        // A form submission or a scripted redirect starts its navigation after the input that caused
+        // it returns, so the quiet wait can run in the document that is going away. Chromium rejects
+        // that evaluation when the page navigates. The navigation is the result of the action, not a
+        // failure of it: wait for the next document instead of reporting an error, because the
+        // caller then stops the load and leaves the tab on an empty document. The old document can
+        // also become quiet while the server prepares the next one. A page that never becomes quiet
+        // and changes its URL in place (`replaceState`) loads no new document, so it keeps the short
+        // quiet limit.
+        while (true) {
+          const navigationGeneration = this.#navigationGeneration;
+          if (this.#contents.isLoading()) yield* waitForLoading(this.#contents, Math.max(1, deadline - Date.now()));
+          const quiet = yield* waitForDomQuietAcrossTargets(
+            send,
+            this.#snapshotTargets(),
+            Math.min(deadline - Date.now(), 1_500),
+          ).pipe(
+            Effect.as(true),
+            Effect.catch((failure) =>
+              browserSync(() => {
+                const error = failure.cause;
+                if (error instanceof Error && error.message === "DOM did not become quiet.") return true;
+                if (navigationGeneration !== this.#navigationGeneration || this.#contents.isLoading()) return false;
+                throw error;
+              }),
+            ),
+          );
+          const navigating = yield* browserSync(
+            () => navigationGeneration !== this.#navigationGeneration && this.#contents.isLoading(),
+          );
+          if (Date.now() >= deadline || (quiet && !navigating)) return;
+        }
       }),
     );
   });
@@ -1817,11 +2157,14 @@ export class BrowserCdpEngine {
     send: SendCommand,
     target: BrowserTarget,
     deadline?: number,
-  ): Effect.fn.Return<{ backendNodeId: number; sessionId?: string }, BrowserOperationError> {
+  ): Effect.fn.Return<{ backendNodeId: number; sessionId?: string | undefined }, BrowserOperationError> {
     const resolved = yield* this.#resolveTargetEffect(send, target, deadline);
     if (!resolved.backendNodeId)
       return yield* browserFailure(new Error("This operation requires an element target, not coordinates."));
-    return { backendNodeId: resolved.backendNodeId, sessionId: resolved.sessionId };
+    return {
+      backendNodeId: resolved.backendNodeId,
+      ...(resolved.sessionId === undefined ? {} : { sessionId: resolved.sessionId }),
+    };
   });
 
   readonly #resolveTargetEffect = Effect.fn("BrowserCdp.resolveTarget")(function* (
@@ -1830,7 +2173,18 @@ export class BrowserCdpEngine {
     target: BrowserTarget,
     deadline?: number,
     allowNonActionableRole = false,
-  ): Effect.fn.Return<{ backendNodeId?: number; sessionId?: string; x: number; y: number }, BrowserOperationError> {
+  ): Effect.fn.Return<
+    { backendNodeId?: number; sessionId?: string | undefined; x: number; y: number },
+    BrowserOperationError
+  > {
+    if (
+      this.#namesCardValue(
+        target.kind === "role" ? target.name : undefined,
+        target.kind === "text" ? target.text : undefined,
+        target.kind === "css" ? target.selector : undefined,
+      )
+    )
+      return yield* browserFailure(new Error("A target cannot name a filled card value."));
     if (target.kind === "point") {
       const metrics = yield* send("Page.getLayoutMetrics");
       const viewport = recordValue(metrics.cssLayoutViewport);
@@ -1867,19 +2221,23 @@ export class BrowserCdpEngine {
       }
       return {
         backendNodeId: record.backendNodeId,
-        sessionId,
+        ...(sessionId === undefined ? {} : { sessionId }),
         x: 0,
         y: 0,
       };
     }
     if (target.kind === "css") {
-      const matches: Array<{ objectId: string; sessionId?: string }> = [];
+      const matches: Array<{ objectId: string; sessionId?: string | undefined }> = [];
       let ambiguous = false;
       yield* Effect.gen({ self: this }, function* () {
         for (const capture of this.#snapshotTargets(Number.POSITIVE_INFINITY)) {
           const match = yield* cssObjectMatch(send, target.selector, capture.sessionId);
           ambiguous ||= match.ambiguous;
-          if (match.objectId) matches.push({ objectId: match.objectId, sessionId: capture.sessionId });
+          if (match.objectId)
+            matches.push({
+              objectId: match.objectId,
+              ...(capture.sessionId === undefined ? {} : { sessionId: capture.sessionId }),
+            });
         }
       }).pipe(
         Effect.catch((operationFailure) =>
@@ -1918,7 +2276,7 @@ export class BrowserCdpEngine {
           return yield* browserFailure(new Error(`Unable to resolve CSS selector: ${target.selector}`));
         return {
           backendNodeId,
-          sessionId: match.sessionId,
+          ...(match.sessionId === undefined ? {} : { sessionId: match.sessionId }),
           x: 0,
           y: 0,
         };
@@ -1955,8 +2313,8 @@ export class BrowserCdpEngine {
             seen.add(key);
             candidates.push({
               backendNodeId,
-              sessionId: capture.sessionId,
-              targetId: capture.targetId,
+              ...(capture.sessionId === undefined ? {} : { sessionId: capture.sessionId }),
+              ...(capture.targetId === undefined ? {} : { targetId: capture.targetId }),
               role: fallbackRole(node ?? {}),
               name: target.text,
             });
@@ -1996,7 +2354,7 @@ export class BrowserCdpEngine {
     }
     return {
       backendNodeId: found.backendNodeId,
-      sessionId: found.sessionId,
+      ...(found.sessionId === undefined ? {} : { sessionId: found.sessionId }),
       x: 0,
       y: 0,
     };
@@ -2060,7 +2418,7 @@ export class BrowserCdpEngine {
     hitTest: boolean,
     scrollIntoView = true,
     deadline?: number,
-  ): Effect.fn.Return<{ x: number; y: number; sessionId?: string }, BrowserOperationError> {
+  ): Effect.fn.Return<{ x: number; y: number; sessionId?: string | undefined }, BrowserOperationError> {
     const resolved = yield* this.#resolveTargetEffect(send, target, deadline);
     yield* browserSync(() => assertBeforeDeadline(deadline));
     if (!resolved.backendNodeId) return { x: resolved.x, y: resolved.y };
@@ -2074,7 +2432,7 @@ export class BrowserCdpEngine {
     hitTest: boolean,
     sessionId?: string,
     scrollIntoView = true,
-  ): Effect.fn.Return<{ x: number; y: number; sessionId?: string }, BrowserOperationError> {
+  ): Effect.fn.Return<{ x: number; y: number; sessionId?: string | undefined }, BrowserOperationError> {
     if (scrollIntoView) yield* send("DOM.scrollIntoViewIfNeeded", { backendNodeId }, sessionId);
     const box = yield* send("DOM.getBoxModel", { backendNodeId }, sessionId);
     const model = recordValue(box.model);
@@ -2097,7 +2455,8 @@ export class BrowserCdpEngine {
     const insetX = Math.min(4, Math.max(0, (right - left) / 4));
     const insetY = Math.min(4, Math.max(0, (bottom - top) / 4));
     const center = { x: (left + right) / 2, y: (top + bottom) / 2 };
-    if (!hitTest) return { ...center, sessionId };
+    const session = sessionId === undefined ? {} : { sessionId };
+    if (!hitTest) return { ...center, ...session };
     const points = uniquePoints([
       center,
       { x: left + insetX, y: top + insetY },
@@ -2113,8 +2472,8 @@ export class BrowserCdpEngine {
         sessionId,
       );
       const hitId = numberValue(hit.backendNodeId);
-      if (hitId && (yield* isNodeOrDescendant(send, hitId, backendNodeId, sessionId))) {
-        return { ...point, sessionId };
+      if (hitId && (yield* hitActivatesTarget(send, hitId, backendNodeId, sessionId))) {
+        return { ...point, ...session };
       }
       blockerId ||= hitId;
     }
@@ -2356,7 +2715,7 @@ function uniquePoints(points: Array<{ x: number; y: number }>): Array<{ x: numbe
   });
 }
 
-const isNodeOrDescendant = Effect.fn("Browser.isNodeOrDescendant")(function* (
+const hitActivatesTarget = Effect.fn("Browser.hitActivatesTarget")(function* (
   send: SendCommand,
   candidate: number,
   target: number,
@@ -2378,9 +2737,13 @@ const isNodeOrDescendant = Effect.fn("Browser.isNodeOrDescendant")(function* (
       "Runtime.callFunctionOn",
       {
         objectId: objectIds[0],
+        // A pseudo-element hit, such as a styled label's ::after, belongs to its element. A click
+        // on a label activates the control it names, as with a custom radio over a hidden input.
         functionDeclaration: `function(candidate) {
-          for (let node = candidate; node; node = node.parentNode || node.host) {
+          const start = candidate instanceof CSSPseudoElement ? candidate.element : candidate;
+          for (let node = start; node; node = node.parentNode || node.host) {
             if (node === this) return true;
+            if (node.localName === 'label' && node.control === this) return true;
           }
           return false;
         }`,
@@ -2473,7 +2836,15 @@ const waitForDomQuietAcrossTargets = Effect.fn("Browser.waitForDomQuietAcrossTar
           },
           capture.sessionId,
         );
-      }),
+      }).pipe(
+        // A frame whose timers do not run, such as a 1x1 cross-origin ad frame, never reaches the
+        // deadline timer above, and a frame that answers nothing never returns. Either one would hold
+        // every caller until the caller's own deadline.
+        Effect.timeoutOrElse({
+          duration: deadlineMs,
+          orElse: () => Effect.succeed({ result: { type: "boolean", value: false } }),
+        }),
+      ),
     ),
     { concurrency: "unbounded" },
   );

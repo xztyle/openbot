@@ -1,5 +1,4 @@
 import { type DynamicRecord, isDynamicRecord } from "@openbot/contracts/runtime-values";
-import { z } from "zod";
 
 /**
  * A reply that carries no usable JSON object. Callers translate it into their own user-facing
@@ -64,23 +63,4 @@ function balancedObject(value: string): string | null {
     }
   }
   return null;
-}
-
-/**
- * Pairs a schema with the two things a text completion needs from it: the JSON Schema to put in the
- * prompt, and one validating parse of the reply. `z.toJSONSchema` output is already sent to
- * providers as tool input schemas (`openbot-tools.ts`), so the rendering is the same one models
- * already read here.
- */
-export function structuredOutput<Schema extends z.ZodType>(
-  schema: Schema,
-): { describe: () => string; parse: (response: string) => z.output<Schema> } {
-  return {
-    describe: () => JSON.stringify(z.toJSONSchema(schema, { target: "draft-7", io: "input" })),
-    parse: (response) => {
-      const result = schema.safeParse(extractJsonObject(response));
-      if (!result.success) throw new StructuredOutputError("The provider returned a JSON object of the wrong shape.");
-      return result.data;
-    },
-  };
 }

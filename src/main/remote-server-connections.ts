@@ -38,6 +38,7 @@ interface MutableStatus {
   hostRestart: ServerSummary["hostRestart"];
   hostedSleep: HostedSleep;
   hostedIssue: ServerSummary["hostedIssue"];
+  hostedStart: ServerSummary["hostedStart"];
 }
 
 type HostedSleep = NonNullable<ServerSummary["hostedSleep"]> | null;
@@ -66,11 +67,20 @@ export class RemoteServerConnections {
       hostRestart: status?.hostRestart ?? null,
       hostedSleep: status?.hostedSleep ?? null,
       hostedIssue: status?.hostedIssue ?? null,
+      hostedStart: status?.hostedStart ?? null,
     };
   }
 
   setHostedIssue(serverId: string, issue: ServerSummary["hostedIssue"]): void {
     this.#mutable(serverId).hostedIssue = issue;
+  }
+
+  /** The step of a hosted start in progress. Answers whether it changed. */
+  setHostedStart(serverId: string, start: ServerSummary["hostedStart"]): boolean {
+    const status = this.#mutable(serverId);
+    if (status.hostedStart?.step === start?.step && status.hostedStart?.startedAt === start?.startedAt) return false;
+    status.hostedStart = start;
+    return true;
   }
 
   hostedSleepFor(serverId: string): HostedSleep {
@@ -157,6 +167,7 @@ export class RemoteServerConnections {
     status.hostRestart = null;
     status.hostedSleep = null;
     status.hostedIssue = null;
+    status.hostedStart = null;
     status.connectionSequence += 1;
   }
 
@@ -176,8 +187,8 @@ export class RemoteServerConnections {
 
   // A connection that never got through, with no error object worth classifying. Silent, so the
   // caller can fold it into one emission with whatever else the failure changed.
-  reportUnreachable(serverId: string): void {
-    this.#apply(serverId, hostUnreachable(), null);
+  reportUnreachable(serverId: string, reference?: string): void {
+    this.#apply(serverId, hostUnreachable(reference), null);
   }
 
   forget(serverId: string): void {
@@ -231,6 +242,7 @@ export class RemoteServerConnections {
       hostRestart: null,
       hostedSleep: null,
       hostedIssue: null,
+      hostedStart: null,
     };
     this.#statuses.set(serverId, status);
     return status;
@@ -238,7 +250,12 @@ export class RemoteServerConnections {
 }
 
 function sameIssue(left: ServerConnectionIssue | null, right: ServerConnectionIssue): boolean {
-  return left?.code === right.code && left?.message === right.message && left?.retryable === right.retryable;
+  return (
+    left?.code === right.code &&
+    left?.message === right.message &&
+    left?.retryable === right.retryable &&
+    left?.reference === right.reference
+  );
 }
 
 function sameCompatibility(left: ServerCompatibility | null, right: ServerCompatibility): boolean {

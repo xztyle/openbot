@@ -54,13 +54,22 @@ export class SlackWebApi {
     this.#delay = options.delay;
   }
 
-  readonly call = Effect.fnUntraced(function* (this: SlackWebApi, method: string, params: DynamicRecord = {}) {
+  /**
+   * `rateLimitRetries: 0` fails a rate-limited call at once and leaves the connection state alone,
+   * for a read that the agent asked for and can try again later.
+   */
+  readonly call = Effect.fnUntraced(function* (
+    this: SlackWebApi,
+    method: string,
+    params: DynamicRecord = {},
+    options: { rateLimitRetries?: number } = {},
+  ) {
     const body = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
       if (value === undefined || value === null) continue;
       body.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
-    const { payload } = yield* this.#send(method, body);
+    const { payload } = yield* this.#send(method, body, options.rateLimitRetries ?? RATE_LIMIT_RETRIES);
     return payload;
   });
 
@@ -86,7 +95,7 @@ export class SlackWebApi {
   });
 
   readonly authTest = Effect.fnUntraced(function* (this: SlackWebApi) {
-    const { payload, response } = yield* this.#send("auth.test", new URLSearchParams());
+    const { payload, response } = yield* this.#send("auth.test", new URLSearchParams(), RATE_LIMIT_RETRIES);
     const scopes = (response.headers.get("x-oauth-scopes") ?? "")
       .split(",")
       .map((scope) => scope.trim())
@@ -94,7 +103,12 @@ export class SlackWebApi {
     return { payload, scopes };
   });
 
-  readonly #send = Effect.fnUntraced(function* (this: SlackWebApi, method: string, body: URLSearchParams) {
+  readonly #send = Effect.fnUntraced(function* (
+    this: SlackWebApi,
+    method: string,
+    body: URLSearchParams,
+    retries: number,
+  ) {
     for (let attempt = 0; ; attempt += 1) {
       const result = yield* slackRequest(
         `${this.#origin}/api/${method}`,
@@ -109,7 +123,7 @@ export class SlackWebApi {
         },
         (response) =>
           Effect.gen(function* () {
-            if (response.status === 429 && attempt < RATE_LIMIT_RETRIES) {
+            if (response.status === 429 && attempt < retries) {
               const waitMs = Math.max(1, Number(response.headers.get("retry-after") ?? "1")) * 1000;
               yield* slackIo(async () => {
                 await response.body?.cancel();

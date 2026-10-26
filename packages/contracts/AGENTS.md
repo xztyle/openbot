@@ -9,16 +9,21 @@ mock — so the cost of a change is paid by code you cannot edit.
 - Never use the application SemVer as a wire protocol version; application versions are diagnostic
   metadata only.
 - Keep a frozen codec, adapter, and client and host fixtures for each released protocol under
-  `src/team-protocol`, and one registered adapter per supported protocol. Do not serialize current
-  IPC types across the boundary.
+  `src/team-protocol`, and one registered adapter per supported protocol. The fixtures are the record
+  of each released wire format; no unit test reads them, so compare a codec change against them by
+  hand. Do not serialize current IPC types across the boundary.
 - Use capabilities for additive, optional behaviour; a missing capability disables only its own
   feature.
 - A required field, a removed field, or a semantic change needs a new protocol version. Never change
   the meaning of a released one.
+- A new value in an open field is not a protocol change. From protocol 8, provider ids and auth
+  kinds are open (`OPEN_PROVIDER_ID`): a new provider needs no new version. Peers below 8 keep their
+  frozen lists, and the host hides each provider outside them (`FROZEN_PROVIDERS` in
+  `src/main/team-api/provider-visibility.ts`). A client keeps an agent of a provider it does not know.
 - Age, release count and SemVer distance are not reasons to remove an adapter. Removal needs a
   separate architecture decision — a security issue, data-loss risk, semantics that cannot be kept,
-  or cost an adapter cannot contain — plus a changelog entry, update instructions, both
-  update-direction tests, and clear UI text.
+  or cost an adapter cannot contain — plus a changelog entry, update instructions, an E2E check of
+  both update directions, and clear UI text.
 - Malformed known payloads fail closed as `protocol_error`. Unknown optional events are ignored.
 
 ## One channel list, two mirrors
@@ -57,13 +62,13 @@ signature by hand only when the method reshapes its arguments or reads preload s
 
 A group whose methods all pass straight through is generated whole: `GroupApi<IpcEndpoints["group"]>`
 gives its interface, a request keeps its key, and an event is `on` and the key (`voice.modelStatus`
-is `onModelStatus`). The preload builds it with `bridgeGroup` and the test harness with `stubGroup`,
+is `onModelStatus`). The preload builds it with `bridgeGroup`,
 so a new endpoint in it needs no line in `ipc-desktop-apis.ts`. `IPC_GROUP_PATHS`, beside
 `IPC_ENDPOINTS`, gives the place of each group on `window.openbot`: its own key, `""` for the top
 level (`app` and `providers`), a shared path (the agent groups are all `agent`), or null for a group
 the page must not reach (`attachmentImports`). `OpenBotDesktopApi` is built from this table, so a new
-group needs no line in `ipc-desktop-apis.ts` either. The built-preload verifier and the test harness
-read the same table. There are no per-method overrides in `bridgeGroup`. When a method must read or set
+group needs no line in `ipc-desktop-apis.ts` either. The built-preload verifier
+reads the same table. There are no per-method overrides in `bridgeGroup`. When a method must read or set
 preload state, bridge the group into a const outside the API object, spread it, and write only that
 method next to the spread. `agent` and `servers` do this: the server list calls record the selected
 server, and `onPresence`, `onDirectMessage` and `onDirectTyping` narrow the `onScoped*` events to

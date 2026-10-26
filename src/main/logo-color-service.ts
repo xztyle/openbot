@@ -10,7 +10,7 @@ const DEFAULT_PREFERENCE: AppLogoColorPreference = { color: DEFAULT_APP_LOGO_COL
  * build does not ship reads as the default: a lost color choice must not stop the app from starting.
  */
 
-export const readLogoColorPreference = Effect.fn("LogoColorPreference.read")((path: string) =>
+const readLogoColorPreference = Effect.fn("LogoColorPreference.read")((path: string) =>
   readPreferenceFile(path, (parsed): AppLogoColorPreference => {
     if (!isDynamicRecord(parsed) || parsed.version !== 1 || !isAppLogoColor(parsed.color))
       return { ...DEFAULT_PREFERENCE };
@@ -18,7 +18,7 @@ export const readLogoColorPreference = Effect.fn("LogoColorPreference.read")((pa
   }).pipe(Effect.catch(() => Effect.succeed({ ...DEFAULT_PREFERENCE }))),
 );
 
-export const writeLogoColorPreference = Effect.fn("LogoColorPreference.write")(function* (
+const writeLogoColorPreference = Effect.fn("LogoColorPreference.write")(function* (
   path: string,
   preference: AppLogoColorPreference,
 ) {

@@ -7,7 +7,7 @@ export const messages = {
   "error.skill.irregularEntry": "Los paquetes de habilidades solo pueden contener archivos y carpetas normales.",
   "error.skill.packageTooLarge": "El paquete de habilidades debe ocupar menos de 10 MB.",
   "error.skill.missingSkillFile": "El paquete de habilidades debe contener SKILL.md en su raíz.",
-  "error.skill.frontmatterMissing": "SKILL.md debe empezar con metadatos YAML.",
+  "error.skill.frontmatterMissing": "SKILL.md debe empezar con metadatos iniciales en YAML.",
   "error.skill.metadataInvalid": "Los metadatos de SKILL.md no son válidos.",
   "error.skill.nameAndDescriptionRequired": "SKILL.md necesita un nombre y una descripción válidos.",
   "error.skill.zipInvalid": "El ZIP seleccionado no es válido.",

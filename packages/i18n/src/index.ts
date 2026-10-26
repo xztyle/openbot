@@ -1,17 +1,12 @@
+import { appTranslation } from "./app-catalogs";
 import type { TranslatedLocale } from "./locale";
 import { createTranslate, type MessageParams, type Translate } from "./message";
-import { de } from "./messages/de/index";
 import { type AppMessages, en } from "./messages/en/index";
-import { es } from "./messages/es/index";
-import { fr } from "./messages/fr/index";
-import { ja } from "./messages/ja/index";
-import { pt } from "./messages/pt/index";
-import { ru } from "./messages/ru/index";
-import { tr } from "./messages/tr/index";
 
 export { APP_LANGUAGES, type AppLanguage, DEFAULT_APP_LANGUAGE } from "@openbot/contracts/app-language";
 export { type AppFormat, createFormat } from "./format";
 export { formatLocale, resolveLocale, TRANSLATED_LOCALES, type TranslatedLocale } from "./locale";
+export { loadLocale, localeLoaded } from "./locale-loading";
 export {
   createTranslate,
   type Message,
@@ -23,9 +18,7 @@ export {
 } from "./message";
 export type { AppMessages } from "./messages/en/index";
 export { localizeSourceText, matchingSourceKeys, type SourceMessages, sourceText } from "./source-text";
-export { de, en, es, fr, ja, pt, ru, tr };
-
-const catalogs = { en, de, es, fr, ja, pt, ru, tr } as const;
+export { en };
 
 /** The desktop translator: every key of the desktop catalog, including shared and source keys. */
 export type AppTranslate = Translate<AppMessages>;
@@ -44,11 +37,18 @@ export type AppTextKey = {
 /** One translator per locale: a screen that reads `t` on every render must not rebuild it. */
 const translators = new Map<TranslatedLocale, AppTranslate>();
 
-/** The translator for a resolved locale. English is both a catalog and every other catalog's fallback. */
+/**
+ * The translator for a resolved locale. English is both a catalog and every other catalog's fallback.
+ *
+ * A language the web build has not loaded yet reads English (see `loadLocale`). That translator is
+ * not kept, so the first call after the load reads the language.
+ */
 export function translateFor(locale: TranslatedLocale): AppTranslate {
   const cached = translators.get(locale);
   if (cached) return cached;
-  const translate = createTranslate({ source: en, translation: catalogs[locale], locale, sourceLocale: "en" });
+  const translation = appTranslation(locale);
+  if (!translation) return translateFor("en");
+  const translate = createTranslate({ source: en, translation, locale, sourceLocale: "en" });
   translators.set(locale, translate);
   return translate;
 }

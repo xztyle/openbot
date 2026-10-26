@@ -1,4 +1,4 @@
-import { CHAT_VISUAL_ITEM_TYPE_PREFIX } from "@openbot/contracts/chat-visual";
+import { CHAT_VISUAL_ITEM_TYPE_PREFIX, chatVisualReply } from "@openbot/contracts/chat-visual";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import type {
   AgentExchangeSummary,
@@ -8,6 +8,7 @@ import type {
   ConversationMessage,
   ConversationMessageSender,
   ConversationQuestionPrompt,
+  ConversationReaction,
   ImageGenerationInfo,
   QueueDelivery,
   RoutineConversationEventAction,
@@ -15,6 +16,7 @@ import type {
 } from "@openbot/contracts/ipc";
 import {
   CONVERSATION_PLAN_ITEM_TYPE,
+  CONVERSATION_SUBAGENTS_ITEM_TYPE,
   channelRoutingConversationEvent,
   isContextResetMarker,
   parseConversationPlanText,
@@ -64,10 +66,16 @@ export type ChatMessage =
       status?: ConversationMessage["status"];
       replyToMessageId?: string | null;
       attachments?: AttachmentSummary[];
+      /** A visual reply: its one attachment is an HTML page that the chat shows, at this height. */
+      visual?: { height?: number };
       /** An image the agent is generating or generated. Its first attachment is the image. */
       imageGeneration?: ImageGenerationInfo;
       /** Why the turn of a failed user message stopped, as the host reported it. */
       failureReason?: string;
+      /** When the host stored the message. A message that waits on the phone has none. */
+      createdAt?: string;
+      /** The reactions on the message: the reader's own and the agents'. */
+      reactions?: readonly ConversationReaction[];
     }
   /** The task list of an agent plan. The header is `heading` when set, else a catalog title. */
   | {
@@ -81,7 +89,16 @@ export type ChatMessage =
     }
   | { id: string; kind: "thinking"; turnId: string | undefined; steps: { id: string; text: string }[] };
 
+/** A message that shows as a bubble: text, files or a generated image. */
+export type ChatBubbleMessage = Extract<ChatMessage, { kind: "message" }>;
+
 export type ExchangeMarker = Extract<ChatMessage, { kind: "exchange" }>;
+
+/** An older host sends only the reader's own reaction, in `reaction`. */
+function messageReactions(message: ConversationMessage): readonly ConversationReaction[] | undefined {
+  if (message.reactions?.length) return message.reactions;
+  return message.reaction ? [{ emoji: message.reaction, actor: { kind: "user" } }] : undefined;
+}
 
 /** Consecutive messages to and from other agents, drawn as one row as on desktop. */
 export interface ExchangeGroup {
@@ -93,7 +110,8 @@ export interface ExchangeGroup {
 
 export interface PendingChatMessage {
   message: Extract<ChatMessage, { kind: "message" }>;
-  baseline: Set<string>;
+  /** The host rows drawn when the send started. Set only while the send waits for its receipt. */
+  baseline: ReadonlySet<string> | null;
   serverId: string | null;
 }
 
@@ -111,18 +129,22 @@ export function indexChatMessages(
   return index;
 }
 
+/** The host rows, then the messages the host has not drawn yet, in their send order. */
 export function presentChatMessages(
   messages: ChatMessage[],
-  pending: PendingChatMessage | null,
+  pending: readonly PendingChatMessage[],
   aliases: ReadonlyMap<string, string>,
 ): ChatMessage[] {
   // Events can precede the receipt. Wait for its ID rather than matching by text,
   // which could incorrectly merge another member's identical message.
-  const visible =
-    pending && !pending.serverId ? messages.filter((message) => pending.baseline.has(message.id)) : messages;
+  const baseline = pending.find((item) => !item.serverId && item.baseline)?.baseline;
+  const visible = baseline ? messages.filter((message) => baseline.has(message.id)) : messages;
+  const received = new Map<string, PendingChatMessage["message"]>();
+  for (const item of pending) if (item.serverId) received.set(item.serverId, item.message);
   const result = visible.map((message) => {
     // Keep the local image mounted until the caller caches the final attachment IDs.
-    if (pending?.serverId === message.id) return pending.message;
+    const local = received.get(message.id);
+    if (local) return local;
     const alias = aliases.get(message.id);
     if (alias === undefined) return message;
     let aliased = aliasedMessages.get(message);
@@ -132,7 +154,8 @@ export function presentChatMessages(
     }
     return aliased;
   });
-  if (pending && !messages.some((message) => message.id === pending.serverId)) result.push(pending.message);
+  const drawn = new Set(visible.map((message) => message.id));
+  for (const item of pending) if (!item.serverId || !drawn.has(item.serverId)) result.push(item.message);
   return result;
 }
 
@@ -370,8 +393,11 @@ export function projectChatMessages(
           streaming: message.status === "streaming",
           status: message.status,
           attachments: message.attachments,
+          ...visualReply(message),
           imageGeneration: message.imageGeneration,
           replyToMessageId: message.replyToMessageId,
+          createdAt: message.createdAt,
+          reactions: messageReactions(message),
         };
         projectedBubbles.set(message, { readerKey, bubble });
       }
@@ -406,6 +432,17 @@ export function groupExchangeMarkers<T extends ChatMessage>(messages: readonly T
   }
   closeRun();
   return rows;
+}
+
+/**
+ * The row that shows a host message, for a chat that opens at a search result. A marker row has the
+ * message ID after its prefix, and a group row holds several markers. -1 when no row shows it.
+ */
+export function chatRowIndex(rows: readonly (ChatMessage | ExchangeGroup)[], messageId: string): number {
+  const ids = new Set([messageId, `exchange:${messageId}`, `routine:${messageId}`, `context-reset:${messageId}`]);
+  return rows.findIndex((row) =>
+    row.kind === "exchange-group" ? row.exchanges.some((marker) => ids.has(marker.id)) : ids.has(row.id),
+  );
 }
 
 function groupableExchange<T extends ChatMessage>(message: T): message is T & ExchangeMarker {
@@ -450,6 +487,12 @@ export function withFailureReasons(messages: ChatMessage[], deliveries: readonly
   });
 }
 
+function visualReply(message: Parameters<typeof chatVisualReply>[0]): { visual?: { height?: number } } {
+  const visual = chatVisualReply(message);
+  if (!visual) return {};
+  return { visual: visual.height === undefined ? {} : { height: visual.height } };
+}
+
 /** Like the host read state, a plan or a visual page is not a readable message. */
 export function latestReadableMessage(messages: ConversationMessage[]) {
   return messages.findLast(
@@ -457,6 +500,7 @@ export function latestReadableMessage(messages: ConversationMessage[]) {
       Boolean(message.questionPrompt) ||
       (message.author !== "system" &&
         message.itemType !== CONVERSATION_PLAN_ITEM_TYPE &&
+        message.itemType !== CONVERSATION_SUBAGENTS_ITEM_TYPE &&
         !message.itemType?.startsWith(CHAT_VISUAL_ITEM_TYPE_PREFIX) &&
         (message.text.trim().length > 0 || Boolean(message.attachments?.length) || Boolean(message.imageGeneration))),
   );
@@ -514,6 +558,9 @@ function projectChannelMessage(
         event: { action: assigned ? "assigned" : "continued", agentId: null, agentName: name },
       };
   }
+  // A plan card of channel work shows as in an agent chat.
+  const plan = entry.author.kind === "agent" ? projectPlan(entry.message) : null;
+  if (plan) return { ...plan, id: entry.id };
   if (entry.author.kind === "agent" && entry.message.itemType === "commentary" && !entry.superseded) {
     return {
       id: entry.id,
@@ -533,7 +580,9 @@ function projectChannelMessage(
     status: entry.message.status,
     replyToMessageId: entry.message.replyToMessageId,
     attachments: entry.message.attachments,
+    ...visualReply(entry.message),
     imageGeneration: entry.message.imageGeneration,
+    createdAt: entry.message.createdAt,
   };
 }
 
@@ -557,9 +606,4 @@ export function projectChannelMessages(messages: ChannelMessage[], memberId: str
       projectedChannelMessages.set(entry, { self, latest, message });
       return message ?? [];
     });
-}
-
-/** The host accepted a send, but its transcript still needs a successful read. */
-export interface ChatHistoryReceipt {
-  refreshHistory: () => Promise<void>;
 }

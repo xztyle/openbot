@@ -1,6 +1,6 @@
 import type { ChannelSummary } from "@openbot/contracts/ipc";
 import { useThemeColor } from "heroui-native/hooks";
-import { Folder } from "lucide-react-native";
+import Folder from "lucide-react-native/icons/folder";
 import { memo } from "react";
 import { View } from "react-native";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";

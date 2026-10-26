@@ -1,6 +1,7 @@
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
 import type { AppTextKey } from "@openbot/i18n";
 import {
+  ArrowLeftRight,
   Bell,
   Blocks,
   BookMarked,
@@ -12,11 +13,13 @@ import {
   Globe2,
   HardDrive,
   Hash,
+  KeyRound,
   Monitor,
   Plug,
   Puzzle,
   RefreshCw,
   Settings,
+  ShieldCheck,
   Sparkles,
   Store,
   UsersRound,
@@ -42,7 +45,7 @@ import { useServerSettings } from "./features/servers/server-settings";
 import { availableServerSettingsSections } from "./features/servers/server-settings-sections";
 import { useServers } from "./features/servers/servers-context";
 import { useSettings } from "./features/settings/settings-context";
-import { navItems } from "./features/settings/settings-tabs";
+import { dynamicIslandSettingsShown, navItems } from "./features/settings/settings-tabs";
 import { useUsage } from "./features/usage/usage-context";
 import { keyboardShortcuts } from "./global-search-shortcut";
 import { useNavigation } from "./navigation";
@@ -62,6 +65,8 @@ const SERVER_SECTION_RESULTS = {
     keywords: "conversation.globalSearch.keywords.serverGeneral",
     icon: Settings,
   },
+  vault: { title: "server.settings.vaultTitle", icon: KeyRound },
+  roles: { title: "server.settings.rolesTitle", icon: ShieldCheck },
   members: {
     title: "server.settings.membersTitle",
     keywords: "conversation.globalSearch.keywords.serverMembers",
@@ -98,17 +103,19 @@ const SERVER_SECTION_RESULTS = {
     keywords: "conversation.globalSearch.keywords.serverImport",
     icon: Download,
   },
+  transfer: { title: "server.settings.transferTitle", icon: ArrowLeftRight },
   routines: {
     title: "server.settings.routinesTitle",
     keywords: "conversation.globalSearch.keywords.serverRoutines",
     icon: CalendarClock,
   },
+  "browser-profiles": { title: "browser.profiles.title", icon: Globe2 },
   connectors: {
     title: "server.settings.connectorsTitle",
     keywords: "conversation.globalSearch.keywords.serverConnectors",
     icon: Plug,
   },
-} as const satisfies Record<ServerSettingsSection, { title: AppTextKey; keywords: AppTextKey; icon: typeof Settings }>;
+} as const satisfies Record<ServerSettingsSection, { title: AppTextKey; keywords?: AppTextKey; icon: typeof Settings }>;
 
 /** One search result for each page of an agent's settings that opens from a link row. */
 const AGENT_PAGE_RESULTS = {
@@ -148,7 +155,7 @@ export function useGlobalSearchSources(open: () => boolean) {
   const { t } = useText();
   const platform = usePlatform();
   const channels = useChannels();
-  const { agentList, agentSetupOpen, creatingAgent, openBotSetup, setSettingsRequest } = useAgents();
+  const { agentList, agentSetupOpen, creatingAgent, openAgentSetup, setSettingsRequest } = useAgents();
   const { selectAgent, globalSearchOpener } = useNavigation();
   const { activeServer } = useServers();
   const { openServerSettings } = useServerSettings();
@@ -234,7 +241,7 @@ export function useGlobalSearchSources(open: () => boolean) {
   const actions = createMemo<GlobalSearchAction[]>(
     () => {
       const server = activeServer();
-      const isMac = platform.appInfo()?.platform === "darwin";
+      const dynamicIslandShown = dynamicIslandSettingsShown(platform.appInfo()?.platform, platform.chatWindow !== null);
       const list: GlobalSearchAction[] = [
         {
           id: "new-agent",
@@ -243,7 +250,7 @@ export function useGlobalSearchSources(open: () => boolean) {
           icon: Bot,
           run: () => {
             channels.close();
-            openBotSetup();
+            openAgentSetup();
           },
         },
       ];
@@ -274,7 +281,7 @@ export function useGlobalSearchSources(open: () => boolean) {
       }
       for (const item of navItems) {
         // Hosted servers shows only for an account with hosting, which the dialog checks when it opens.
-        if (item.value === "hosted-servers" || (item.value === "dynamic-island" && !isMac)) continue;
+        if (item.value === "hosted-servers" || (item.value === "dynamic-island" && !dynamicIslandShown)) continue;
         list.push({
           id: `settings:${item.value}`,
           label: t(item.titleKey),
@@ -291,12 +298,13 @@ export function useGlobalSearchSources(open: () => boolean) {
           providers: server.kind === "local" || server.id === providerAdminServerId(),
         });
         for (const section of sections) {
-          const result = SERVER_SECTION_RESULTS[section];
+          const result: { title: AppTextKey; keywords?: AppTextKey; icon: typeof Settings } =
+            SERVER_SECTION_RESULTS[section];
           list.push({
             id: `server:${section}`,
             label: t(result.title),
             detail: server.name,
-            keywords: t(result.keywords),
+            ...(result.keywords ? { keywords: t(result.keywords) } : {}),
             group: "settings",
             icon: result.icon,
             run: () => openServerSettings(server.id, globalSearchOpener(), section),
@@ -328,6 +336,20 @@ export function useGlobalSearchSources(open: () => boolean) {
               run: () => openAgentPage(agent.id, page),
             });
           }
+        }
+        // General shows the memory limit only to an admin of a host that can set it, and only while it is online.
+        if (
+          serverCanAdminister(server, "agent-memory-limit-v1") &&
+          (server.kind === "local" || server.state === "online")
+        ) {
+          list.push({
+            id: "server:memory-limit",
+            label: t("server.settings.memoryLimit"),
+            detail: server.name,
+            group: "settings",
+            icon: BookMarked,
+            run: () => openServerSettings(server.id, globalSearchOpener(), "general"),
+          });
         }
       }
       return list;

@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 import { expandAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
-import type { AgentSummary, ConversationSnapshot, QueueDeliveryStatus, RoutineRun } from "@openbot/contracts/ipc";
+import type { AgentSummary, AgentWait, ConversationSnapshot, QueueDelivery, RoutineRun } from "@openbot/contracts/ipc";
+import { redactText } from "@openbot/logging";
+import { wokenWaitsPromptText } from "../agent-waits/agent-waits";
+import { homeSkillRoot, homeSkillTagSlug } from "../home-skills";
 import type { DeliveryContext } from "../mailbox-store";
-import { isEventStartedRun, runMayEndQuiet } from "./routine-quiet-runs";
+import { quietRoutineRun, ROUTINE_NO_UPDATE_TOOL, ROUTINE_REPORT_FAILURE_TOOL } from "./routine-quiet-runs";
 
 export function responseAttachmentMessageId(threadId: string, turnId: string, callId: string): string {
   const digest = createHash("sha256").update(`${threadId}\0${turnId}\0${callId}`).digest("hex").slice(0, 32);
@@ -38,7 +42,11 @@ export function conversationContentSignature(snapshot: ConversationSnapshot): st
   return createHash("sha256").update(content).digest("base64");
 }
 
-export function routineStatusForDelivery(status: QueueDeliveryStatus) {
+/**
+ * A completed delivery with an error is a run whose agent answered and reported that the task failed
+ * (`routine_report_failure`). Its delivery stays completed; the run fails.
+ */
+export function routineStatusForDelivery({ status, error }: Pick<QueueDelivery, "status" | "error">) {
   switch (status) {
     case "queued":
     case "starting":
@@ -46,7 +54,7 @@ export function routineStatusForDelivery(status: QueueDeliveryStatus) {
     case "running":
       return "running";
     case "completed":
-      return "succeeded";
+      return error === null ? "succeeded" : "failed";
     case "failed":
       return "failed";
     case "interrupted":
@@ -65,9 +73,11 @@ export interface DeliveryPromptSources {
   agentNames: ReadonlyMap<string, string>;
   /** The conversation the delivery joins. A user reply quotes the message it answers from it. */
   snapshot: ConversationSnapshot;
-  routineRun: Pick<RoutineRun, "kind" | "instruction"> | null;
+  routineRun: Pick<RoutineRun, "kind" | "source"> | null;
+  /** The open waits that a routine run wakes. The run continues their requests. */
+  wokenWaits?: readonly AgentWait[];
   /** The prompt a channel task or an external message sends in place of the delivery text. */
-  executionText?: string;
+  executionText?: string | undefined;
   /** This is the first message the agent ever got, and the agent that sent it created the agent. */
   fromCreator?: boolean;
 }
@@ -182,7 +192,15 @@ export function deliveryPromptInput(context: DeliveryContext, sources: DeliveryP
       displayText || "(The reply contains attachments only.)",
     ].join("\n");
   }
-  if (delivery.sender.kind === "agent") {
+  // Only `start_task` sends an agent's message to itself: it is the brief of a task.
+  if (delivery.sender.kind === "agent" && delivery.sender.agentId === delivery.recipientAgentId) {
+    text = [
+      "You started this task with openbot.start_task from your own chat. It is a separate conversation beside that chat, with this brief as its first message.",
+      "Do the work in the brief here, and end with the result for the user: the user reads it in this task. Do not send it with openbot.send_message.",
+      COLLABORATOR_SEPARATOR,
+      displayText,
+    ].join("\n");
+  } else if (delivery.sender.kind === "agent") {
     const senderAgentId = delivery.sender.agentId;
     const senderName = agentNames.get(senderAgentId) ?? senderAgentId;
     const replyProtocol = delivery.replyToMessageId
@@ -229,14 +247,9 @@ export function deliveryPromptInput(context: DeliveryContext, sources: DeliveryP
       displayText,
     ].join("\n");
   } else if (delivery.sender.kind === "routine") {
-    const eventRun = sources.routineRun
-      ? isEventStartedRun(sources.routineRun) && runMayEndQuiet(sources.routineRun)
-      : false;
-    const runKind = eventRun
-      ? "event run"
-      : sources.routineRun?.kind === "manual"
-        ? "manual Test run"
-        : "scheduled run";
+    const run = sources.routineRun;
+    const testRun = run !== null && !quietRoutineRun(run);
+    const runKind = testRun ? "manual Test run" : run?.source ? `${run.source} run` : "scheduled run";
     text = [
       "Execute one run of an existing OpenBot routine now.",
       `Routine name: ${delivery.sender.routineName}`,
@@ -245,17 +258,46 @@ export function deliveryPromptInput(context: DeliveryContext, sources: DeliveryP
       "The routine already exists, and its schedule is already configured.",
       "Do not create, update, delete, list, or test routines during this run.",
       "Perform the task below now. Do not answer only that the routine or monitoring is active.",
-      eventRun
-        ? "An event started this run. Follow the notification conditions in the routine task."
-        : sources.routineRun?.kind === "manual"
-          ? "This is a manual Test run. Report the action and result even when a normal scheduled run would suppress a notification because there is no change."
-          : "This is a scheduled run. Follow the notification conditions in the routine task.",
+      "A task can tell you to remind the user or to send the user a message. When it names no other place, write that message as your final answer. OpenBot shows your final answer to the user in this chat. openbot.send_message sends to other agents, not to the user.",
+      testRun
+        ? "This is a manual Test run. Report the action and result even when a normal scheduled run would suppress a notification because there is no change."
+        : `This is a ${runKind}. Follow the notification conditions in the routine task. When they give nothing to report, call the ${ROUTINE_NO_UPDATE_TOOL} tool instead of a written answer. A requested reminder or message is a report, also when there is no new information. Do not call ${ROUTINE_NO_UPDATE_TOOL} for it unless the notification conditions of the task say to send nothing.`,
+      `When the task could not be done, call the ${ROUTINE_REPORT_FAILURE_TOOL} tool with a short reason, then give your answer as usual.`,
       "--- routine task ---",
       displayText,
     ].join("\n");
+    const waits = wokenWaitsPromptText(sources.wokenWaits ?? []);
+    if (waits) text += `\n\n${waits}`;
   }
   if (managedAttachments.length) {
     text += `${ATTACHED_FILES_HEADER}${managedAttachments.map((item) => `- ${item.name}: ${item.path}`).join("\n")}`;
+  }
+  if (context.resumeAfterUsageLimit) {
+    const continuationState = context.resumeAfterUsageLimit;
+    const progress = redactText(
+      snapshot.messages
+        .filter(
+          (message) =>
+            message.turnId !== undefined &&
+            continuationState.previousTurnIds.includes(message.turnId) &&
+            message.author === "assistant" &&
+            message.itemType !== "commentary",
+        )
+        .map((message) => renderHandoffMessage(message, agentNames))
+        .join("\n\n"),
+    );
+    const continuation = [
+      HANDOFF_START,
+      "The previous provider reached its usage limit after starting this task.",
+      "Continue the unfinished task from the conversation and captured work steps. The request below is the original goal, not a new task. Do not repeat completed actions. Check the outcome of any interrupted action before you retry it. If the task is already complete, report the result.",
+      ...(progress ? ["--- interrupted task progress ---", progress.slice(-8000)] : []),
+      "--- captured work steps ---",
+      redactText(continuationState.workSteps) ||
+        "Captured work steps are unavailable. Inspect the saved work before you repeat an action.",
+      "These excerpts can be incomplete. Read more history or inspect the saved work when needed.",
+      HANDOFF_END,
+    ].join("\n\n");
+    text = `${continuation}${CURRENT_MESSAGE_SEPARATOR}${text}`;
   }
   return [
     { type: "text", text },
@@ -301,14 +343,31 @@ export function displayMessageReferences(
   text: string,
   attachments: Array<{ id: string; name: string }>,
   agentNames: ReadonlyMap<string, string>,
+  options: { fileHeadings: boolean } = { fileHeadings: true },
 ): string {
   const names = new Map(attachments.map((attachment) => [attachment.id, attachment.name]));
   return expandAttachmentReferences(
-    expandChatTagReferences(text, (reference) =>
-      reference.kind === "agent" ? agentNames.get(reference.id) : undefined,
+    expandChatTagReferences(
+      text,
+      (reference) =>
+        reference.kind === "agent"
+          ? agentNames.get(reference.id)
+          : reference.kind === "skill" && options.fileHeadings
+            ? homeSkillTagName(reference.id, reference.name)
+            : undefined,
+      options,
     ),
     (reference) => names.get(reference.attachmentId),
   );
+}
+
+/**
+ * A `$` tag of a skill in `~/.agents/skills` names its `SKILL.md` for the provider, because not every
+ * CLI loads that folder. A person reads the name alone.
+ */
+function homeSkillTagName(id: string, name: string): string | undefined {
+  const slug = homeSkillTagSlug(id);
+  return slug === null ? undefined : `${name} at ${join(homeSkillRoot(), slug, "SKILL.md")}`;
 }
 
 export function agentNamesById(agents: AgentSummary[]): ReadonlyMap<string, string> {
@@ -337,28 +396,4 @@ export function renderHandoffMessage(
     : "";
   const body = displayMessageReferences(message.text, message.attachments ?? [], agentNames);
   return [`[${message.createdAt}] ${message.author}${sender}:`, body, attachmentMetadata].filter(Boolean).join("\n");
-}
-
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
-
-export function summarizeOldMessages(
-  messages: ConversationSnapshot["messages"],
-  tokenBudget: number,
-  agentNames: ReadonlyMap<string, string>,
-): string {
-  const maximumCharacters = Math.max(4_000, tokenBudget * 4);
-  const lines = messages.map((message) => {
-    const normalized = displayMessageReferences(message.text, message.attachments ?? [], agentNames)
-      .replace(/\s+/g, " ")
-      .trim();
-    const excerpt = normalized.length > 600 ? `${normalized.slice(0, 597)}...` : normalized;
-    const attachments = (message.attachments ?? []).map((item) => item.name).join(", ");
-    return `- ${message.author}${message.senderAgentId ? ` (${message.senderAgentId})` : ""}: ${excerpt}${attachments ? ` [attachments: ${attachments}]` : ""}`;
-  });
-  const summary = [`Summary of ${messages.length} older user-visible messages:`, ...lines].join("\n");
-  return summary.length > maximumCharacters
-    ? `${summary.slice(0, maximumCharacters - 56)}\n[Summary shortened to fit the handoff budget.]`
-    : summary;
 }

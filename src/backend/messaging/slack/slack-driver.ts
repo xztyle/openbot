@@ -4,6 +4,7 @@ import { SLACK_BOT_SCOPES } from "@openbot/contracts/slack-app";
 import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect, Result } from "effect";
 import { causeHelpers } from "../../effect-boundary";
+import { mentionNames, withMentionNames } from "../messaging-mentions";
 import type { MessagingAnswerFile } from "../messaging-threads";
 import type {
   ConnectionIdentity,
@@ -15,20 +16,42 @@ import type {
   MessagingDriver,
   MessagingDriverOptions,
   MessagingIngress,
+  MessagingPlace,
   StatusReaction,
 } from "../messaging-types";
-import { MessagingAdapterError } from "../messaging-types";
-import { plainText, SLACK_ACTION_IDS } from "./slack-events";
+import { MessagingAdapterError, MessagingConnectionError } from "../messaging-types";
+import { plainText, SLACK_ACTION_IDS, slackMentionIds } from "./slack-events";
 import { SlackEventsTransport } from "./slack-events-transport";
 import { slackChunks, slackMrkdwn } from "./slack-render";
 import { SlackApiError, SlackWebApi } from "./slack-web-api";
 
 const { io: adapterIo } = causeHelpers(MessagingAdapterError);
 
+/** Slack error codes that a later lookup can recover from. */
+const TEMPORARY_SLACK_ERRORS = new Set([
+  "ratelimited",
+  "internal_error",
+  "fatal_error",
+  "service_unavailable",
+  "request_timeout",
+]);
+
+function isTemporaryLookupFailure(failure: MessagingAdapterError): boolean {
+  const error = failure.cause;
+  if (error instanceof MessagingConnectionError) return false;
+  return !(error instanceof SlackApiError) || error.code.startsWith("http_") || TEMPORARY_SLACK_ERRORS.has(error.code);
+}
+
 /** Slack's own limit for one uploaded file is 1 GB; the host holds its uploads to this. */
 const UPLOAD_BYTES = 100 * 1024 * 1024;
 const HISTORY_LIMIT = 100;
+/** A page of a thread, read from its start: the history tool keeps the newest messages. */
+const RECENT_THREAD_LIMIT = 200;
+const RECENT_THREAD_PAGES = 5;
+/** Message subtypes that a person or an app wrote, and not a join or a topic change. */
+const RECENT_SUBTYPES = new Set(["file_share", "bot_message", "thread_broadcast", "me_message"]);
 const CHANNEL_PAGE_LIMIT = 200;
+const PLACES_LIMIT = 500;
 
 const REACTIONS: Record<StatusReaction, string> = {
   received: "eyes",
@@ -220,20 +243,103 @@ class SlackAdapter implements MessagingAdapter {
       limit: HISTORY_LIMIT,
     });
     const messages = Array.isArray(response.messages) ? response.messages.filter(isDynamicRecord) : [];
-    const entries: ContextEntry[] = [];
-    for (const message of messages) {
+    const kept = messages.filter((message) => {
       const ts = message.ts;
       const user = message.user;
-      if (!isString(ts) || !isString(user) || user === this.#botUserId || message.bot_id !== undefined) continue;
-      if (Number(ts) >= Number(beforeId) || (afterId && Number(ts) <= Number(afterId))) continue;
+      if (!isString(ts) || !isString(user) || user === this.#botUserId || message.bot_id !== undefined) return false;
+      return Number(ts) < Number(beforeId) && !(afterId && Number(ts) <= Number(afterId));
+    });
+    return yield* this.#entries(kept, false);
+  });
+
+  /**
+   * The newest messages of a channel, or of one thread, for the agent's history tool. A history read
+   * fails at once when Slack limits it: the agent can try again, and the connection does not wait.
+   * The author and place names use the adapter's cached lookups, which wait for a limit as usual.
+   */
+  readonly recent = Effect.fnUntraced(function* (
+    this: SlackAdapter,
+    platformChannelId: string,
+    threadKey: string | null,
+    limit: number,
+  ): Effect.fn.Return<ContextEntry[], MessagingAdapterError> {
+    const messages = threadKey
+      ? yield* this.#threadReplies(platformChannelId, threadKey)
+      : yield* this.#api
+          .call("conversations.history", { channel: platformChannelId, limit }, { rateLimitRetries: 0 })
+          .pipe(Effect.map(responseMessages));
+    const kept = messages.filter(
+      (message) =>
+        isString(message.ts) &&
+        (message.subtype === undefined || RECENT_SUBTYPES.has(String(message.subtype))) &&
+        (isString(message.user) || message.bot_id !== undefined),
+    );
+    return (yield* this.#entries(kept, threadKey === null)).slice(-limit);
+  });
+
+  /**
+   * A thread from its start. Slack gives replies oldest first, so the newest ones are on the last
+   * page; a longer thread keeps the pages it read. Only a failed first page fails the read: until the
+   * Slack Marketplace approves OpenBot, Slack allows one thread read a minute, so a second page is
+   * often refused.
+   */
+  readonly #threadReplies = Effect.fnUntraced(function* (
+    this: SlackAdapter,
+    platformChannelId: string,
+    threadKey: string,
+  ): Effect.fn.Return<DynamicRecord[], MessagingAdapterError> {
+    const messages: DynamicRecord[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < RECENT_THREAD_PAGES; page += 1) {
+      const read = this.#api.call(
+        "conversations.replies",
+        { channel: platformChannelId, ts: threadKey, limit: RECENT_THREAD_LIMIT, cursor },
+        { rateLimitRetries: 0 },
+      );
+      const response = page === 0 ? yield* read : yield* read.pipe(Effect.catch(() => Effect.succeed(null)));
+      if (!response) break;
+      messages.push(...responseMessages(response));
+      const metadata = isDynamicRecord(response.response_metadata) ? response.response_metadata : {};
+      cursor = isString(metadata.next_cursor) && metadata.next_cursor ? metadata.next_cursor : undefined;
+      if (!cursor) break;
+    }
+    return messages;
+  });
+
+  /** Slack messages as context, oldest first, with each mention named. */
+  readonly #entries = Effect.fnUntraced(function* (
+    this: SlackAdapter,
+    messages: DynamicRecord[],
+    withReplyCounts: boolean,
+  ): Effect.fn.Return<ContextEntry[], MessagingAdapterError> {
+    const raw = messages.map((message) => (isString(message.text) ? message.text : ""));
+    const names = yield* mentionNames(
+      raw.flatMap((text) => slackMentionIds(text, this.#botUserId)),
+      (userId) => this.authorName(userId),
+    );
+    const entries: ContextEntry[] = [];
+    for (const [index, message] of messages.entries()) {
+      const ts = String(message.ts);
+      const replies = withReplyCounts && typeof message.reply_count === "number" ? message.reply_count : 0;
+      const text = withMentionNames(plainText(raw[index] ?? "", this.#botUserId), names);
       entries.push({
         id: ts,
-        authorName: yield* this.authorName(user),
-        text: plainText(isString(message.text) ? message.text : "", this.#botUserId),
+        authorName: yield* this.#author(message),
+        text: replies ? `${text} (thread with ${replies} replies)` : text,
         sentAt: new Date(Number(ts) * 1000).toISOString(),
       });
     }
     return entries.sort((left, right) => Number(left.id) - Number(right.id));
+  });
+
+  readonly #author = Effect.fnUntraced(function* (this: SlackAdapter, message: DynamicRecord) {
+    if (message.user === this.#botUserId) return "OpenBot";
+    if (message.bot_id !== undefined || !isString(message.user)) {
+      const profile = isDynamicRecord(message.bot_profile) ? message.bot_profile.name : undefined;
+      const name = isString(message.username) ? message.username : isString(profile) ? profile : "a bot";
+      return `${name} (bot)`;
+    }
+    return yield* this.authorName(message.user);
   });
 
   download(file: InboundFile, destination: string, maxBytes: number): Effect.Effect<void, MessagingAdapterError> {
@@ -245,36 +351,79 @@ class SlackAdapter implements MessagingAdapter {
     if (cached) return yield* Deferred.await(cached);
     const name = Deferred.makeUnsafe<string>();
     this.#names.set(userId, name);
-    const result = yield* this.#api.call("users.info", { user: userId }).pipe(
-      Effect.map((response) => {
-        const user = isDynamicRecord(response.user) ? response.user : {};
-        const profile = isDynamicRecord(user.profile) ? user.profile : {};
-        for (const candidate of [profile.display_name, profile.real_name, user.real_name, user.name])
-          if (isString(candidate) && candidate.trim()) return candidate.trim();
-        return userId;
-      }),
-      Effect.catch(() => Effect.succeed(userId)),
+    // Detached, so a caller with a deadline stops waiting at it. The lookup still completes the cache
+    // entry, which a later caller then reads.
+    yield* Effect.forkDetach(
+      this.#api.call("users.info", { user: userId }).pipe(
+        Effect.map((response) => {
+          const user = isDynamicRecord(response.user) ? response.user : {};
+          const profile = isDynamicRecord(user.profile) ? user.profile : {};
+          for (const candidate of [profile.display_name, profile.real_name, user.real_name, user.name])
+            if (isString(candidate) && candidate.trim()) return candidate.trim();
+          return userId;
+        }),
+        Effect.catch((failure) =>
+          Effect.sync(() => {
+            if (isTemporaryLookupFailure(failure)) this.#names.delete(userId);
+            return userId;
+          }),
+        ),
+        Effect.flatMap((result) => Deferred.succeed(name, result)),
+        Effect.uninterruptible,
+      ),
     );
-    yield* Deferred.succeed(name, result);
-    return result;
-  }, Effect.uninterruptible);
+    return yield* Deferred.await(name);
+  });
 
   readonly placeName = Effect.fnUntraced(function* (this: SlackAdapter, platformChannelId: string) {
     const cached = this.#places.get(platformChannelId);
     if (cached) return yield* Deferred.await(cached);
     const name = Deferred.makeUnsafe<string>();
     this.#places.set(platformChannelId, name);
-    const result = yield* this.#api.call("conversations.info", { channel: platformChannelId }).pipe(
-      Effect.map((response) =>
-        isDynamicRecord(response.channel) && isString(response.channel.name)
-          ? `#${response.channel.name}`
-          : platformChannelId,
+    // Detached for the same reason as `authorName`.
+    yield* Effect.forkDetach(
+      this.#api.call("conversations.info", { channel: platformChannelId }).pipe(
+        Effect.map((response) =>
+          isDynamicRecord(response.channel) && isString(response.channel.name)
+            ? `#${response.channel.name}`
+            : platformChannelId,
+        ),
+        Effect.catch((failure) =>
+          Effect.sync(() => {
+            if (isTemporaryLookupFailure(failure)) this.#places.delete(platformChannelId);
+            return platformChannelId;
+          }),
+        ),
+        Effect.flatMap((result) => Deferred.succeed(name, result)),
+        Effect.uninterruptible,
       ),
-      Effect.catch(() => Effect.succeed(platformChannelId)),
     );
-    yield* Deferred.succeed(name, result);
-    return result;
-  }, Effect.uninterruptible);
+    return yield* Deferred.await(name);
+  });
+
+  /** The public and private channels that OpenBot is a member of: `chat:write` posts only there. */
+  readonly places = Effect.fnUntraced(function* (
+    this: SlackAdapter,
+  ): Effect.fn.Return<MessagingPlace[], MessagingAdapterError> {
+    const places: MessagingPlace[] = [];
+    let cursor: string | undefined;
+    do {
+      // `users.conversations` gives only the bot's own channels, so a large workspace needs few pages.
+      const page = yield* this.#api.call("users.conversations", {
+        types: "public_channel,private_channel",
+        exclude_archived: true,
+        limit: CHANNEL_PAGE_LIMIT,
+        cursor,
+      });
+      const channels = Array.isArray(page.channels) ? page.channels.filter(isDynamicRecord) : [];
+      for (const channel of channels)
+        if (isString(channel.id) && isString(channel.name))
+          places.push({ id: channel.id, name: `#${channel.name}`, kind: channel.is_private ? "private" : "channel" });
+      const next = isDynamicRecord(page.response_metadata) ? page.response_metadata.next_cursor : undefined;
+      cursor = isString(next) && next && places.length < PLACES_LIMIT ? next : undefined;
+    } while (cursor);
+    return places.slice(0, PLACES_LIMIT);
+  });
 
   readonly joinPublicPlaces = Effect.fnUntraced(function* (
     this: SlackAdapter,
@@ -356,6 +505,10 @@ export interface SlackDriverOptions {
   origin?: string;
   /** The relay that brings the workspace's events. Without it, no workspace connects. */
   ingress?: MessagingIngress;
+}
+
+function responseMessages(response: DynamicRecord): DynamicRecord[] {
+  return Array.isArray(response.messages) ? response.messages.filter(isDynamicRecord) : [];
 }
 
 /** Each workspace installed the OpenBot app, and its events come through the ingress relay. */

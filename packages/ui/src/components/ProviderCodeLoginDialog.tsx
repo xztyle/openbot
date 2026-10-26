@@ -36,6 +36,14 @@ import {
   X,
 } from "@openbot/ui";
 import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import {
+  McpSignInPage,
+  McpSignInPageNote,
+  type McpSignInPageSource,
+  McpSignInRelayControls,
+  type McpSignInRelaySource,
+  relayDescriptionKey,
+} from "../features/settings/McpSignInPage";
 import { useText } from "../text";
 
 /**
@@ -86,6 +94,28 @@ export type ProviderCodeLoginState =
       /** Epoch milliseconds. When the host stops waiting for the sign-in. */
       expiresAt: number;
     }
+  /**
+   * The provider's page is open in the browser of a joined server's host, and the user signs in
+   * through its live view (Gemini on a Linux host). The grant goes back to the host's CLI, not here.
+   */
+  | {
+      phase: "page";
+      /** The host, as its server row names it. */
+      hostName: string;
+      /** The host tab with the page, once the host opened it. */
+      page: McpSignInPageSource | null;
+    }
+  /**
+   * A joined server's host started the sign-in, and the page opens in the user's own browser here
+   * (`sign-in-relay-v1`). This computer takes the callback and sends it to the host's CLI.
+   */
+  | {
+      phase: "relay";
+      /** The host, as its server row names it. */
+      hostName: string;
+      /** The page, once the host has its address. */
+      page: McpSignInRelaySource | null;
+    }
   /** The code was accepted on the other device; OpenBot is finishing the sign-in. */
   | { phase: "verifying" };
 
@@ -100,6 +130,10 @@ export interface ProviderCodeLoginDialogProps {
   onCancel: () => void;
   /** Sends the code a `paste` sign-in's page showed. */
   onSubmitCode?: (code: string) => void;
+  /** Opens the page of a `relay` sign-in, after the user checked its host name. */
+  onOpenRelayPage?: () => Promise<void>;
+  /** Sends the address that the browser of a `relay` sign-in shows. */
+  onPasteRelayAddress?: (address: string) => Promise<void>;
 }
 
 export function ProviderCodeLoginDialog(props: ProviderCodeLoginDialogProps) {
@@ -107,6 +141,8 @@ export function ProviderCodeLoginDialog(props: ProviderCodeLoginDialogProps) {
   const waiting = () => (props.state.phase === "waiting" ? props.state : null);
   const pasting = () => (props.state.phase === "paste" ? props.state : null);
   const linking = () => (props.state.phase === "link" ? props.state : null);
+  const hostPage = () => (props.state.phase === "page" ? props.state : null);
+  const relay = () => (props.state.phase === "relay" ? props.state : null);
   // The field keeps what the user pasted until the dialog closes, so a refused code can be fixed.
   const [pastedCode, setPastedCode] = createSignal("");
   // A new sign-in has a new page, and the code of the last one is no use to it.
@@ -118,6 +154,15 @@ export function ProviderCodeLoginDialog(props: ProviderCodeLoginDialogProps) {
   );
   // The clock only runs while a code is on screen, so an open dialog on any other phase does not
   // wake the view once a second for a label nothing shows.
+  const descriptionText = () => {
+    const host = hostPage();
+    if (host) return t("provider.codeLogin.pageDescription", { host: host.hostName });
+    const relayed = relay();
+    if (!relayed) return t("provider.codeLogin.description");
+    if (!relayed.page)
+      return t("provider.codeLogin.relayStarting", { name: props.providerName, host: relayed.hostName });
+    return t(relayDescriptionKey(relayed.page), { page: relayed.page.authorizeHost, host: relayed.hostName });
+  };
   const remaining = createCountdown(() => waiting()?.expiresAt ?? pasting()?.expiresAt ?? linking()?.expiresAt ?? null);
 
   return (
@@ -129,16 +174,16 @@ export function ProviderCodeLoginDialog(props: ProviderCodeLoginDialogProps) {
     >
       <Dialog.Portal>
         <Dialog.Overlay class="provider-code-login-backdrop">
-          <Dialog.Content class="provider-code-login-dialog" as="section">
+          <Dialog.Content class="provider-code-login-dialog" data-page={hostPage() ? "" : undefined} as="section">
             <header class="provider-code-login-header">
               <Dialog.Title class="provider-code-login-title">
                 {linking()
                   ? t("provider.codeLogin.linkTitle", { name: props.providerName })
-                  : t("provider.codeLogin.title", { name: props.providerName })}
+                  : hostPage() || relay()
+                    ? t("provider.codeLogin.pageTitle", { name: props.providerName })
+                    : t("provider.codeLogin.title", { name: props.providerName })}
               </Dialog.Title>
-              <Dialog.Description class="provider-code-login-description">
-                {t("provider.codeLogin.description")}
-              </Dialog.Description>
+              <Dialog.Description class="provider-code-login-description">{descriptionText()}</Dialog.Description>
             </header>
 
             {/* Each phase carries its own live role, rather than the body being one region. A
@@ -305,6 +350,53 @@ export function ProviderCodeLoginDialog(props: ProviderCodeLoginDialogProps) {
                       </Show>
                     </Text>
                   </div>
+                )}
+              </Show>
+
+              <Show when={hostPage()}>
+                {(host) => (
+                  <Show
+                    when={host().page}
+                    fallback={
+                      <div class="provider-code-login-pending" role="status">
+                        <Spinner size="sm" />
+                        <Text as="span" tone="muted">
+                          {t("provider.codeLogin.pageOpening", { name: props.providerName, host: host().hostName })}
+                        </Text>
+                      </div>
+                    }
+                  >
+                    {(page) => (
+                      <>
+                        <McpSignInPage page={page()} />
+                        <McpSignInPageNote hostName={host().hostName} />
+                      </>
+                    )}
+                  </Show>
+                )}
+              </Show>
+
+              <Show when={relay()}>
+                {(relayed) => (
+                  <Show
+                    when={relayed().page}
+                    fallback={
+                      <div class="provider-code-login-pending" role="status">
+                        <Spinner size="sm" />
+                      </div>
+                    }
+                  >
+                    {(page) => (
+                      <>
+                        <McpSignInRelayControls
+                          page={page()}
+                          onOpen={() => props.onOpenRelayPage?.()}
+                          onPaste={(address) => props.onPasteRelayAddress?.(address) ?? Promise.resolve()}
+                        />
+                        <McpSignInPageNote hostName={relayed().hostName} />
+                      </>
+                    )}
+                  </Show>
                 )}
               </Show>
 

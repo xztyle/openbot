@@ -45,4 +45,32 @@ export const messages = {
   "error.import.hostBusy": "サーバーは他のエクスポートを読み込み中です。数分後にもう一度お試しください。",
   "error.import.skillKept":
     "{name}: サーバーにはすでにスキル「{skill}」があるため、エージェントはそのスキルを使います。更新は管理者に依頼してください。",
+  "error.import.transferRemoteTooLarge":
+    "参加しているサーバーの移行ファイルは 100 MB 未満である必要があります。ワークスペースのファイルをオフにするか、エクスポートするエージェントを減らしてください。",
+  "error.import.transferNotFile": "このファイルは OpenBot の移行ファイルではありません。",
+  "error.import.transferNewer":
+    "このファイルは新しいバージョンの OpenBot で作成されました。OpenBot をアップデートしてから、もう一度お試しください。",
+  "error.import.transferEmpty": "このファイルにはエージェントも設定も含まれていません。",
+  "error.import.transferTooLarge":
+    "移行ファイルは 2 GB 未満、かつ 50,000 ファイル未満である必要があります。ワークスペースのファイルをオフにするか、エクスポートするエージェントを減らしてください。",
+  "error.import.transferAgentInvalid": "ファイル内のエージェント {number} は無効なため、スキップされます。",
+  "error.import.transferSettingsInvalid": "ファイル内のアプリ設定は無効なため、インポートされません。",
+  "error.import.transferModelMissing":
+    "{name}: モデル「{model}」はまだここで利用できないため、エージェントはデフォルトのモデルを使います。プロバイダーの準備ができたら、モデルを選択し直してください。",
+  "error.import.transferSettingSkipped": "{name} はインポートされません。{reason}",
+  "error.import.transferRoutineFlowSkipped": "インポートでルーティンフローが 1 つ除外されました。{reason}",
+  "error.import.transferCustomAgentCommand":
+    "{name}: カスタムエージェントはコマンドを実行するため、インポートされません。コマンド「{command}」を確認し、設定でエージェントを追加し直してください。",
+  "error.import.transferSkillLimit":
+    "{name}: エージェントが持てるスキルは {limit} 個までのため、{total} 個のスキルのうち最初の {limit} 個だけがファイルに含まれています。",
+  "error.import.transferFilesGone":
+    "エクスポートの実行中に {number} 個のファイルが削除されたため、ファイルに含まれていません。",
+  "error.import.transferProviderKey": "{name}: 設定で API キーを入力し直してください。",
+  "error.import.transferAgentEnv": "{name}: 設定で {names} の値を入力し直してください。",
+  "error.import.transferMcpValues":
+    "{name}: MCP サーバーはオフの状態で追加されます。コマンドを確認し、値と完全なアドレスを入力し直してから、MCP の設定でオンにしてください。",
+  "error.import.transferValuesCleared":
+    "{name}: シークレットを含む可能性のある値が、引数またはアドレスから削除されました。設定で入力し直してください。",
+  "error.import.transferSharedKept":
+    "共有フォルダー内の {number} 個のファイルはすでにここにあるため、そのまま保持されます。",
 } as const satisfies PartialTranslation<typeof source>;

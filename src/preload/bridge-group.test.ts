@@ -7,7 +7,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 // and nothing main answers or pushes reaches the renderer undecoded.
 
 const bridge = vi.hoisted(() => {
-  vi.stubGlobal("window", { addEventListener: () => {} });
+  // The main window: the preload reads its URL for the server of a chat window.
+  vi.stubGlobal("window", { addEventListener: () => {}, location: { search: "" } });
   const api: { current: OpenBotDesktopApi | null } = { current: null };
   return {
     api,
@@ -45,7 +46,7 @@ function send(channel: string, payload: unknown): void {
   for (const handler of bridge.listeners.get(channel) ?? []) handler(null, payload);
 }
 
-const status = { phase: "ready", progress: 100, message: null };
+const status = { modelId: "parakeet-tdt-0.6b-v3", phase: "ready", progress: 100, message: null };
 
 beforeEach(() => {
   bridge.invoke.mockReset();

@@ -1,6 +1,22 @@
-/** The server name, the marketplace or expand toggle, and new agent - plus the window drag region. */
+/**
+ * The server name, Back and Forward, its update, the marketplace or expand toggle, and new agent - plus
+ * the window drag region.
+ */
 
-import { Bot, Button, CheckCheck, DropdownMenu, FolderPlus, Hash, Puzzle, Trash2 } from "@openbot/ui";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bot,
+  Button,
+  CheckCheck,
+  CircleFadingArrowUp,
+  DropdownMenu,
+  FolderPlus,
+  Hash,
+  IconButton,
+  Puzzle,
+  Trash2,
+} from "@openbot/ui";
 import { Show } from "solid-js";
 import { useText } from "../../text";
 import { ServerMenu } from "../servers/ServerMenu";
@@ -31,17 +47,71 @@ export function SidebarTopbar() {
           </Button>
         }
       >
-        {(serverMenu) => (
-          <ServerMenu
-            {...serverMenu()}
-            serverName={props.serverName}
-            compact={props.compact}
-            onOpenMarketplace={props.marketplaceSupported !== false ? props.onOpenMarketplace : undefined}
-          />
-        )}
+        {(serverMenu) => <ServerMenu {...serverMenu()} serverName={props.serverName} compact={props.compact} />}
       </Show>
       <div class="sidebar-topbar-actions">
-        {/* The menu view needs the room for the server name, so its menu holds the marketplace. */}
+        <Show when={!props.compact && props.chatHistory}>
+          {(history) => {
+            const backLabel = () => {
+              const back = history().back;
+              return back ? t("sidebar.topbar.backTo", { name: back.name }) : t("sidebar.topbar.back");
+            };
+            const forwardLabel = () => {
+              const forward = history().forward;
+              return forward ? t("sidebar.topbar.forwardTo", { name: forward.name }) : t("sidebar.topbar.forward");
+            };
+            return (
+              <>
+                <IconButton
+                  variant="ghost"
+                  type="button"
+                  class="sidebar-icon-button sidebar-history-button no-drag"
+                  label={backLabel()}
+                  tooltip={`${backLabel()}  ${history().keys.back}`}
+                  disabled={!history().back}
+                  data-cuelume-tap="navigate"
+                  onClick={() => history().onBack()}
+                >
+                  <ArrowLeft aria-hidden="true" />
+                </IconButton>
+                <IconButton
+                  variant="ghost"
+                  type="button"
+                  class="sidebar-icon-button sidebar-history-button no-drag"
+                  label={forwardLabel()}
+                  tooltip={`${forwardLabel()}  ${history().keys.forward}`}
+                  disabled={!history().forward}
+                  data-cuelume-tap="navigate"
+                  onClick={() => history().onForward()}
+                >
+                  <ArrowRight aria-hidden="true" />
+                </IconButton>
+              </>
+            );
+          }}
+        </Show>
+        <Show when={!props.compact && props.serverUpdate}>
+          {(update) => {
+            const label = () =>
+              update().running
+                ? t("server.update.dialog.progressTitle", { name: props.serverName })
+                : t("server.update.dialog.offerTitle", { name: props.serverName, version: update().version });
+            return (
+              <Button
+                variant="ghost"
+                type="button"
+                class="sidebar-icon-button sidebar-update-button no-drag"
+                data-running={update().running ? "true" : undefined}
+                aria-label={label()}
+                title={label()}
+                onClick={() => update().onOpen()}
+              >
+                <CircleFadingArrowUp aria-hidden="true" />
+              </Button>
+            );
+          }}
+        </Show>
+        {/* The menu view needs the room for the server name. The page rail also opens the marketplace. */}
         <Show when={props.compact || (props.marketplaceSupported !== false && props.serverMenu?.view !== "menu")}>
           <Button
             variant="ghost"
@@ -74,7 +144,7 @@ export function SidebarTopbar() {
           <DropdownMenu.Root placement="bottom-end" gutter={4}>
             <DropdownMenu.Trigger
               class="sidebar-icon-button sidebar-new-button no-drag"
-              aria-label={t("sidebar.new.menu")}
+              aria-label={props.onCreateChannel ? t("sidebar.new.menuWithChannel") : t("sidebar.new.menu")}
               aria-hidden={props.compact ? "true" : undefined}
               tabindex={props.compact ? -1 : 0}
             >
@@ -83,30 +153,19 @@ export function SidebarTopbar() {
             <DropdownMenu.Portal>
               <DropdownMenu.Content>
                 <Show when={props.createSupported !== false}>
-                  <DropdownMenu.Item onSelect={props.onCreateAgent}>
+                  <DropdownMenu.Item onSelectAfterClose={props.onCreateAgent}>
                     <Bot aria-hidden="true" />
                     {t("sidebar.new.agent")}
                   </DropdownMenu.Item>
                 </Show>
                 <Show when={props.onCreateChannel}>
-                  <DropdownMenu.Item onSelect={() => props.onCreateChannel?.()}>
+                  <DropdownMenu.Item onSelectAfterClose={() => props.onCreateChannel?.()}>
                     <Hash aria-hidden="true" />
                     {t("sidebar.new.channel")}
                   </DropdownMenu.Item>
                 </Show>
                 <Show when={layoutMutable()}>
-                  <DropdownMenu.Item
-                    onSelect={() => {
-                      // Kobalte selects before it closes the menu, so a callback deferred by the
-                      // same two frames as the restore would still run first: the editor would open,
-                      // take focus in a microtask, then lose it to the trigger and cancel on blur.
-                      // Three frames land strictly after the two-frame restore in
-                      // focusRestoreHandler (components/ui/complex.tsx). Keep the counts in step.
-                      window.requestAnimationFrame(() =>
-                        window.requestAnimationFrame(() => window.requestAnimationFrame(() => startCreateSection())),
-                      );
-                    }}
-                  >
+                  <DropdownMenu.Item onSelectAfterClose={() => startCreateSection()}>
                     <FolderPlus aria-hidden="true" />
                     {t("sidebar.new.section")}
                   </DropdownMenu.Item>

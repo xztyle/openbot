@@ -17,7 +17,7 @@
 import { type DynamicRecord, isDynamicRecord } from "@openbot/contracts/runtime-values";
 
 /** The first line of the copy, which also marks a result that already holds one. */
-export const STRUCTURED_TEXT_LABEL = "structuredContent as JSON, copied by OpenBot for clients that show only text:";
+const STRUCTURED_TEXT_LABEL = "structuredContent as JSON, copied by OpenBot for clients that show only text:";
 
 /**
  * The most characters of JSON the copy holds.

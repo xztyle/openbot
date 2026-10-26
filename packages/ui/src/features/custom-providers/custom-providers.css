@@ -2,15 +2,6 @@
  * join-server-dialog.css, but scrolls instead of paging: the repeatable model and header lists have
  * no fixed height. */
 
-.custom-provider-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--openbot-layer-dialog);
-  display: grid;
-  place-items: center;
-  padding: var(--openbot-space-6);
-}
-
 .custom-provider-dialog {
   display: flex;
   width: min(460px, 100%);
@@ -286,6 +277,10 @@
   gap: var(--openbot-space-2);
 }
 
+.custom-acp-code {
+  overflow-wrap: anywhere;
+}
+
 .custom-acp-code input,
 input.custom-acp-code {
   font-family: var(--openbot-font-mono);
@@ -350,4 +345,34 @@ input.custom-acp-code {
   flex-direction: column;
   gap: var(--openbot-space-4);
   margin-top: var(--openbot-space-3);
+}
+
+/* The ACP registry search and agent-ID forms. The field takes its own line; the actions sit under it
+ * and wrap apart, with the same gap the settings section keeps between its children. */
+.acp-registry-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+}
+
+.acp-registry-form > .ui-field {
+  flex-basis: 100%;
+}
+
+/* A registry entry in a narrow column. Translated action labels can be wider than the row, so the
+ * actions move under the entry and then wrap among themselves. The entry keeps a readable width and
+ * no action is clipped. */
+.acp-registry-entry.ui-item {
+  flex-wrap: wrap;
+}
+
+.acp-registry-entry .ui-item-content {
+  flex-basis: 180px;
+}
+
+.acp-registry-entry .ui-item-actions {
+  min-width: 0;
+  flex-shrink: 1;
+  flex-wrap: wrap;
+  margin-inline-start: auto;
 }

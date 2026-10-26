@@ -19,7 +19,7 @@ function isMobileConnectLink(value: string): boolean {
   return /^openbot:\/\/mobile-connect(?:[/?#]|$)/iu.test(value.trim());
 }
 
-export function readDevelopmentConnectLink(value: string, development: boolean): string | null {
+function readDevelopmentConnectLink(value: string, development: boolean): string | null {
   if (!development || !isMobileConnectLink(value)) return null;
   const link = value.trim();
   const payload = parseMobileConnectUrl(link);
@@ -54,9 +54,9 @@ export function subscribeMobileConnectLink(listener: Listener): () => void {
 }
 
 export function isSameMobileConnectTarget(
-  session: { apiUrl: string; host: MobileConnectHostBinding },
+  session: { apiUrl: string; host?: MobileConnectHostBinding },
   link: string,
 ): boolean {
   const payload = parseMobileConnectUrl(link);
-  return payload?.apiUrl === session.apiUrl && payload.host?.hostId === session.host.hostId;
+  return payload?.apiUrl === session.apiUrl && payload.host?.hostId === session.host?.hostId;
 }

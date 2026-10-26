@@ -5,15 +5,16 @@ import { type QueryKey, useQueryClient } from "@tanstack/react-query";
 import { Stack, useNavigation } from "expo-router";
 import { StackActions } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
-import { Plus } from "lucide-react-native";
+import Plus from "lucide-react-native/icons/plus";
 import { useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { useUniwind } from "uniwind";
 import { requestComposerFocus, requestComposerText } from "@/features/chat/model/composer-requests";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
-import { type MobileAgent, useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { type MobileAgent, useMobileWorkspaceActions } from "@/features/workspace/context/mobile-workspace-context";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
 import { haptics } from "@/shared/lib/haptics";
+import { nativeLabelFont } from "@/shared/lib/native-label-font";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 import { currentText, useText } from "@/shared/lib/text";
 
@@ -92,7 +93,7 @@ export function AgentSkills({
   queryKey: QueryKey;
 }) {
   const { t } = useText();
-  const workspace = useMobileWorkspace();
+  const workspace = useMobileWorkspaceActions();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [removing, setRemoving] = useState<ReadonlySet<string>>(new Set());
@@ -236,7 +237,13 @@ function ManagedSkill({
           colorScheme={theme === "dark" ? "dark" : "light"}
         >
           {/* Older hosts send no `enabled`; such a skill is on. */}
-          <Switch label={skill.name} value={skill.enabled !== false} disabled={busy} onValueChange={onEnabledChange} />
+          <Switch
+            label={skill.name}
+            value={skill.enabled !== false}
+            disabled={busy}
+            modifiers={nativeLabelFont}
+            onValueChange={onEnabledChange}
+          />
         </Host>
         <SkillDescription skill={skill} />
       </SettingsRow>

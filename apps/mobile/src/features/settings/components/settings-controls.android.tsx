@@ -1,8 +1,8 @@
-import { MenuView } from "@expo/ui/community/menu";
 import { Typography } from "heroui-native";
-import { ChevronsUpDown } from "lucide-react-native";
+import ChevronsUpDown from "lucide-react-native/icons/chevrons-up-down";
 import { Switch, View } from "react-native";
 import { useCSSVariable } from "uniwind";
+import { MenuView } from "@/shared/components/menu-view";
 import type { SettingsPickerProps, SettingsSwitchProps } from "./settings-controls.types";
 
 /**

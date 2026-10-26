@@ -4,6 +4,7 @@ import type {
   McpServerConfig,
   SkillCategory,
 } from "@openbot/contracts/ipc";
+import { errorReference } from "@openbot/user-errors";
 import { createStore, onCleanup, onSettled, untrack } from "solid-js";
 import type { EventCheckCatalog } from "./marketplace-event-checks";
 import type { MarketplaceListing } from "./marketplace-listing";
@@ -126,7 +127,10 @@ export function matchesApp(app: MarketplaceApp, query: string, categoryLabel = "
   return [app.name, app.tagline, description, categoryLabel].some((value) => value.toLowerCase().includes(text));
 }
 
-/** The apps the user has (attention first), then the others. An empty group is left out. */
+/**
+ * The apps the user has (attention first), then the others, with a sign-in that still waits. An
+ * empty group is left out.
+ */
 export function appGroups(
   apps: readonly MarketplaceApp[],
 ): { id: string; key: "marketplace.app.yourApps" | "marketplace.app.moreApps"; apps: MarketplaceApp[] }[] {
@@ -155,9 +159,14 @@ export function appGroups(
  * closes before the answer drops it.
  */
 export function createDetail<T>(load: () => Promise<T | undefined>) {
-  const [state, setState] = createStore<{ value: T | undefined; status: "loading" | "loaded" | "failed" }>({
+  const [state, setState] = createStore<{
+    value: T | undefined;
+    status: "loading" | "loaded" | "failed";
+    reference: string | null;
+  }>({
     value: undefined,
     status: "loading",
+    reference: null,
   });
   let alive = true;
   onCleanup(() => {
@@ -166,6 +175,7 @@ export function createDetail<T>(load: () => Promise<T | undefined>) {
   const run = () => {
     setState((draft) => {
       draft.status = "loading";
+      draft.reference = null;
     });
     // A page belongs to one listing, so a later change of the props does not load again.
     void untrack(load).then(
@@ -176,15 +186,16 @@ export function createDetail<T>(load: () => Promise<T | undefined>) {
           draft.status = value ? "loaded" : "failed";
         });
       },
-      () => {
+      (error) => {
         if (alive)
           setState((draft) => {
             draft.status = "failed";
+            draft.reference = errorReference(error);
           });
       },
     );
   };
   // `load` can write the owner's state, such as an error, and a component body refuses writes.
   onSettled(() => run());
-  return { value: () => state.value, status: () => state.status, retry: run };
+  return { value: () => state.value, status: () => state.status, reference: () => state.reference, retry: run };
 }

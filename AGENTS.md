@@ -153,6 +153,15 @@ State which surfaces a change touches. Check all affected consumers and reverse 
   New manual overrides use shell variables. Do not add `.env.local` or `.env.generated`.
 - `.env.keys` stores decryption keys, not service settings. Keep it ignored. Preserve existing
   production key handling and CI/GitHub secrets unless the developer requests a change.
+- The root `.env.keys` holds the only two keys: `DOTENV_PRIVATE_KEY_PRODUCTION` and
+  `DOTENV_PRIVATE_KEY_DEV`. Every encrypted env file, `remote/.env.production` included, uses one of
+  them. Never make a new key pair. Pass `-fk` with the root `.env.keys` so Dotenvx does not make one.
+- For direct Cloudflare changes, `apps/auth-api/.env.production` holds `CLOUDFLARE_API_TOKEN`
+  (write access to all resources in the OpenBot account) and `CLOUDFLARE_ACCOUNT_ID`. Load them
+  with `bunx dotenvx run -f apps/auth-api/.env.production -fk <root>/.env.keys -- <command>`. A worktree
+  has no `.env.keys`; use the one in the main checkout. Never print the token: do not use
+  `dotenvx get` or `echo`. Ask before a change that deletes data or affects production users.
+  Deploy scripts remove the token, so Wrangler deploys keep the developer's `wrangler login`.
 
 See [account service setup](apps/auth-api/README.md) for loading and deployment details.
 
@@ -214,29 +223,25 @@ risks since the last release.
 
 ## Tests
 
-- Keep tests minimal. Do not add a regression test by default. Add a test only when a bug can lose
-  user data, break a released protocol, weaken the trust boundary, or leak a secret, or when the
-  same bug came back.
-- A database migration always needs tests: data-preservation fixtures for every affected released
-  schema, plus the failure and rollback cases that [src/backend/AGENTS.md](src/backend/AGENTS.md)
-  lists.
-- Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work.
-  At the end of E2E tests, produce a verifiable and repeatable artifact, such as a JSON report or a
-  screenshot under `.openbot-build/`.
-- If you must test a system in isolation, first write down all the ways it could fail, then write
-  the code. Put the list in the PR body under "Failure modes": one line per failure, with the test
-  that covers it.
+- Use E2E tests only. Do not add unit tests. An E2E test is a script under `scripts/` (such as
+  `scripts/*-e2e.ts` or `scripts/*-smoke.ts`) that drives the real app, process or service. At the
+  end, it writes a verifiable and repeatable artifact, such as a JSON report or a screenshot under
+  `.openbot-build/`.
+- Vitest files are permitted only for these protected areas:
+  - Database migrations: data-preservation fixtures for every affected released schema, plus the
+    failure and rollback cases that [src/backend/AGENTS.md](src/backend/AGENTS.md) lists. A
+    migration always needs them.
+  - The renderer-to-main trust boundary: sender validation, navigation and permission policy, CSP,
+    sandboxing, and preload payload decoding.
+  - Secret redaction on log, export, and send paths.
+  - Lint and UI check rule fixtures (see [Check rules](#check-rules)).
 - Do not assert what TypeScript, Biome, or `check:ui` already enforce.
-- Wait for state, an event, or a promise, not elapsed time. A spy can provide the wait condition,
-  such as `await waitFor(() => expect(send).toHaveBeenCalled())`; assert the user consequence after
-  that wait. Do not remove synchronization because it uses a spy.
-- Assert behavior and data. Query accessible roles and names; use `toHaveFocus()` for focus.
-  Do not assert markup, classes, layout, animation timing, or snapshots. Use exact text only for
-  product contracts, error/security messages, serialized output, or localization keys.
+- Wait for state, an event, or a promise, not elapsed time.
+- Assert behavior and data. Do not assert markup, classes, layout, animation timing, or snapshots.
 - Use Storybook for visual details only. Do not add story `play` functions: CI does not run them.
   Do not add `data-testid` hooks; `check:ui` allows none.
 - `*.test.ts` uses Node; `*.test.tsx` uses JSX and jsdom; `*.dom.test.ts` uses DOM without a
-  component. Keep pure logic in Node tests.
+  component.
 
 ### Check rules
 
@@ -255,12 +260,12 @@ They describe the enforced syntax, fixture behavior, and reasons for removed rul
 ## Pull requests
 
 - Open a PR only when asked.
+- Write the PR body from `.github/PULL_REQUEST_TEMPLATE.md`. Do not add the Contributor Assignment
+  Agreement box: organization members and users with write access do not sign. The `CLA` workflow
+  adds the box only for an author who must sign. Only the human author can sign it: tick that box
+  only after their explicit approval in this conversation.
 - For UI changes, show before and after. State the model and harness in the PR body.
   Do not commit screenshots or other PR review image assets to the repository.
-- Choose the NorbiAI reviewer level from the riskiest file in the diff with the
-  [reviewer table](CONTRIBUTING.md#choosing-the-reviewer-for-one-pull-request). Put the
-  `NorbiAI-Model:` line in the PR body as an HTML comment; omit it for the default. Do not add
-  `NorbiAI-Effort:` with a `chatgpt-web/*` model: it has no effect.
 - Do not run wider checks locally before a PR. Report focused checks and leave broad checks to CI.
 - A PR needs a named reason and is not auto-approvable if it adds `biome-ignore`, `@ts-expect-error`,
   or `@ts-ignore`; disables rules through `biome.json` overrides or removes a GritQL plugin; widens

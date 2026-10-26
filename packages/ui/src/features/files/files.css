@@ -24,6 +24,9 @@
 .storage-usage [data-group="downloads"] {
   --storage-color: var(--openbot-chart-storage-downloads);
 }
+.storage-usage [data-group="runtimes"] {
+  --storage-color: var(--openbot-chart-storage-runtimes);
+}
 .storage-usage [data-group="app"] {
   --storage-color: var(--openbot-chart-storage-app);
 }

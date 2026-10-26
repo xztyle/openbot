@@ -2,7 +2,9 @@ import type { OpenBotDesktopApi } from "@openbot/contracts/ipc";
 import type {
   EventRoutine,
   EventRoutineOwner,
+  EventRoutineRun,
   EventStatus,
+  ListEventRoutineRunsInput,
   SaveEventRoutineInput,
 } from "@openbot/contracts/ipc-events";
 import { clone } from "./mock-support";
@@ -16,8 +18,13 @@ function mockSecret(): string {
   return `whsec_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
-/** The preview host's event routines. Like the real host, it makes each webhook URL and secret itself. */
-export function createMockEvents(): OpenBotDesktopApi["events"] {
+/**
+ * The preview host's event routines. Like the real host, it makes each webhook URL and secret itself.
+ * `listRuns` reads the run history that the agent and channel mocks keep.
+ */
+export function createMockEvents(
+  listRuns: (input: ListEventRoutineRunsInput) => Promise<EventRoutineRun[]>,
+): OpenBotDesktopApi["events"] {
   let routines: EventRoutine[] = [];
   let sequence = 0;
   const status: EventStatus = { supported: true, connected: true };
@@ -46,6 +53,7 @@ export function createMockEvents(): OpenBotDesktopApi["events"] {
             ? { ...clone(input.trigger), url: `https://hooks.example.test/openbot/${id}` }
             : clone(input.trigger),
         ...(input.limitPolicy === undefined ? {} : { limitPolicy: input.limitPolicy }),
+        ...(input.missedPolicy === undefined ? {} : { missedPolicy: input.missedPolicy }),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
@@ -61,7 +69,29 @@ export function createMockEvents(): OpenBotDesktopApi["events"] {
       if (routine?.trigger.kind !== "webhook") throw new Error("This routine has no webhook trigger.");
       return { secret: mockSecret() };
     },
+    // The preview host starts no run: it answers as a host whose routine matched the test event.
+    sendTestEvent: async ({ id, owner }) => {
+      const routine = findRoutine(id, owner);
+      if (routine?.trigger.kind !== "webhook") throw new Error("This routine has no webhook trigger.");
+      if (!routine.active)
+        return {
+          eventType: routine.trigger.eventType ?? "openbot.test",
+          status: "ignored",
+          reason: "inactive",
+          runId: null,
+        };
+      return {
+        eventType: routine.trigger.eventType ?? "openbot.test",
+        status: "started",
+        reason: null,
+        runId: nextId("run"),
+      };
+    },
     // The preview host receives no webhook requests.
     listActivity: async () => [],
+    listRoutineRuns: async (input) => {
+      if (!findRoutine(input.routineId, input.owner)) throw new Error("Routine not found.");
+      return listRuns(input);
+    },
   };
 }

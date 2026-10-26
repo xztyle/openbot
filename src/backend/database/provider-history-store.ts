@@ -26,6 +26,11 @@ export interface ProviderHistoryImportState extends ProviderHistorySessionInput 
   updatedAt: string;
 }
 
+/** The import state after staging, and whether the staged turn is still imported unchanged. */
+export interface ProviderHistoryStageResult extends ProviderHistoryImportState {
+  turnImported: boolean;
+}
+
 export interface ProviderHistoryStagedTurn {
   sessionId: string;
   turnId: string;
@@ -86,7 +91,10 @@ export class ProviderHistoryStore {
            thread_id = excluded.thread_id,
            provider = excluded.provider,
            external_session_id = excluded.external_session_id,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at
+         WHERE provider_history_imports.thread_id IS NOT excluded.thread_id
+            OR provider_history_imports.provider IS NOT excluded.provider
+            OR provider_history_imports.external_session_id IS NOT excluded.external_session_id`,
       ).run(input.sessionId, input.threadId, input.provider, input.externalSessionId, now, now);
       return this.#requireImport(db, input.sessionId);
     });
@@ -98,12 +106,13 @@ export class ProviderHistoryStore {
    * `cursor` is opaque to this layer. The adapter owns its meaning and passes it back on the next
    * request. Items are keyed by their provider id where available, with a stable index fallback for
    * providers that omit item ids. A changed item clears its imported marker so it can be replayed.
+   * An unchanged item is not written again.
    */
   stageProviderHistoryFragment(input: {
     sessionId: string;
     fragment: ProviderHistoryFragment;
     cursor?: unknown;
-  }): ProviderHistoryImportState {
+  }): ProviderHistoryStageResult {
     const now = new Date().toISOString();
     return this.#transaction((db) => {
       const existing = this.#readImport(db, input.sessionId);
@@ -141,7 +150,11 @@ export class ProviderHistoryStore {
            turn_started_at = COALESCE(excluded.turn_started_at, provider_history_turns.turn_started_at),
            complete = MAX(provider_history_turns.complete, excluded.complete),
            imported = provider_history_turns.imported,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at
+         WHERE provider_history_turns.turn_status IS NOT COALESCE(excluded.turn_status, provider_history_turns.turn_status)
+            OR provider_history_turns.turn_started_at
+                 IS NOT COALESCE(excluded.turn_started_at, provider_history_turns.turn_started_at)
+            OR provider_history_turns.complete < excluded.complete`,
       ).run(
         input.sessionId,
         input.fragment.turnId,
@@ -183,7 +196,8 @@ export class ProviderHistoryStore {
             ? mergeHistoryItem(previous.itemJson, item)
             : item;
         const itemJson = JSON.stringify(storedItem);
-        if (!previous || previous.itemIndex !== absoluteIndex || previous.itemJson !== itemJson) changed = true;
+        if (previous && previous.itemIndex === absoluteIndex && previous.itemJson === itemJson) continue;
+        changed = true;
         writeItem.run(input.sessionId, input.fragment.turnId, itemKey, absoluteIndex, itemJson, now);
       }
       if (changed) {
@@ -191,21 +205,28 @@ export class ProviderHistoryStore {
           "UPDATE provider_history_turns SET imported = 0, updated_at = ? WHERE session_id = ? AND turn_id = ?",
         ).run(now, input.sessionId, input.fragment.turnId);
       }
-      db.prepare(
-        `UPDATE provider_history_imports
-         SET cursor_json = ?, state = ?, updated_at = ?
-         WHERE session_id = ?`,
-      ).run(
-        input.cursor === undefined
-          ? existing.cursor === null
-            ? null
-            : JSON.stringify(existing.cursor)
-          : JSON.stringify(input.cursor),
-        changed || existing.state !== "complete" ? "active" : "complete",
-        now,
-        input.sessionId,
-      );
-      return this.#requireImport(db, input.sessionId);
+      // A complete import keeps its `updated_at` when nothing changed, so the time stays the time
+      // of the last full read.
+      if (changed || existing.state !== "complete" || input.cursor !== undefined) {
+        db.prepare(
+          `UPDATE provider_history_imports
+           SET cursor_json = ?, state = ?, updated_at = ?
+           WHERE session_id = ?`,
+        ).run(
+          input.cursor === undefined
+            ? existing.cursor === null
+              ? null
+              : JSON.stringify(existing.cursor)
+            : JSON.stringify(input.cursor),
+          changed || existing.state !== "complete" ? "active" : "complete",
+          now,
+          input.sessionId,
+        );
+      }
+      return {
+        ...this.#requireImport(db, input.sessionId),
+        turnImported: !changed && existingTurn !== null && requiredNumberColumn(existingTurn, "imported") === 1,
+      };
     });
   }
 

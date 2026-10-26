@@ -53,7 +53,7 @@ const ACTIONABLE_ROLES = new Set([
 
 export interface TargetRecord {
   backendNodeId: number;
-  targetId?: string;
+  targetId?: string | undefined;
   element: BrowserElement;
   visibleText: string;
 }
@@ -66,8 +66,8 @@ export interface SnapshotTarget {
 
 export interface SemanticMatch {
   backendNodeId: number;
-  sessionId?: string;
-  targetId?: string;
+  sessionId?: string | undefined;
+  targetId?: string | undefined;
   role: string;
   name: string;
 }
@@ -137,7 +137,7 @@ export const collectBoundedSnapshot = Effect.fn("Browser.collectBoundedSnapshot"
       elements.push(element);
       targets.set(ref, {
         backendNodeId: candidate.backendNodeId,
-        targetId: capture.targetId,
+        ...(capture.targetId === undefined ? {} : { targetId: capture.targetId }),
         element,
         visibleText: candidate.visibleText,
       });
@@ -504,8 +504,8 @@ export const semanticAxMatches = Effect.fn("Browser.semanticAxMatches")(function
       if (!matched) continue;
       matches.push({
         backendNodeId,
-        sessionId: capture.sessionId,
-        targetId: capture.targetId,
+        ...(capture.sessionId === undefined ? {} : { sessionId: capture.sessionId }),
+        ...(capture.targetId === undefined ? {} : { targetId: capture.targetId }),
         role,
         name,
       });
@@ -830,4 +830,62 @@ function nodeAttributes(value: unknown): Record<string, string> {
     if (name !== undefined && attribute !== undefined) result[name.toLowerCase()] = attribute;
   }
   return result;
+}
+
+const HIDDEN_SECURITY_CODE = "•••";
+
+/**
+ * Hides the card values that `fill_card` typed from what an agent reads of the page: snapshots, tab
+ * titles and URLs, and the text of a target or a wait. A page can copy a field anywhere, so every
+ * string goes through it. The number stays hidden for the life of the tab. A security code is three
+ * or four digits and also hides prices and dates, so it stays hidden only until the filled document
+ * goes. Logs do not use it: the main process registers the number with the log redaction.
+ */
+export class CardValueScrub {
+  readonly #numbers = new Map<string, { pattern: RegExp; replacement: string }>();
+  #securityCodes = new Map<string, RegExp>();
+
+  add(number: string, securityCode: string): void {
+    const digits = number.replace(/[^0-9]/gu, "");
+    if (digits.length >= 12 && !this.#numbers.has(digits)) {
+      // Pages group the digits with spaces, dashes or dots.
+      this.#numbers.set(digits, {
+        pattern: new RegExp(`(?<![0-9])${[...digits].join("[\\s.\\-]*")}(?![0-9])`, "gu"),
+        replacement: `•••• ${digits.slice(-4)}`,
+      });
+    }
+    if (/^[0-9]{3,4}$/u.test(securityCode) && !this.#securityCodes.has(securityCode))
+      this.#securityCodes.set(securityCode, new RegExp(`(?<![0-9])${securityCode}(?![0-9])`, "gu"));
+  }
+
+  /** The filled document was replaced: its security code is no longer on the page. */
+  endDocument(): void {
+    this.#securityCodes = new Map();
+  }
+
+  get active(): boolean {
+    return this.#numbers.size > 0 || this.#securityCodes.size > 0;
+  }
+
+  text(value: string): string {
+    let result = value;
+    for (const { pattern, replacement } of this.#numbers.values()) result = result.replace(pattern, replacement);
+    for (const pattern of this.#securityCodes.values()) result = result.replace(pattern, HIDDEN_SECURITY_CODE);
+    return result;
+  }
+
+  /** Whether `value` names a hidden value. A target or a wait with one would tell the agent the value. */
+  reveals(value: string): boolean {
+    return this.active && this.text(value) !== value;
+  }
+
+  /** A copy of `snapshot` with each string scrubbed, within the serialized size limit. */
+  snapshot(snapshot: BrowserSnapshot): BrowserSnapshot {
+    if (!this.active) return snapshot;
+    const scrubbed: BrowserSnapshot = JSON.parse(JSON.stringify(snapshot), (_key, value: unknown) =>
+      typeof value === "string" ? this.text(value) : value,
+    );
+    boundSerializedSnapshot(scrubbed);
+    return scrubbed;
+  }
 }

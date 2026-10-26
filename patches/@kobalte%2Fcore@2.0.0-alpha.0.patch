@@ -939,3 +939,122 @@ index 2de0aa7c76c766b076336b82e1d916366eb2d517..98d5f56053478b18d1120a3bd40d6b3c
  	const { DomCollectionProvider } = createDomCollection({
  		items,
  		onItemsChange: setItems
+diff --git a/dist/dropdown-menu/BMbSJJfZ.js b/dist/dropdown-menu/BMbSJJfZ.js
+--- a/dist/dropdown-menu/BMbSJJfZ.js
++++ b/dist/dropdown-menu/BMbSJJfZ.js
+@@ -15,7 +15,7 @@
+ 	let hasInteractedOutside = false;
+ 	const onCloseAutoFocus = (e) => {
+ 		props.onCloseAutoFocus?.(e);
+-		if (!hasInteractedOutside) context.triggerRef()?.focus({ preventScroll: true });
++		if (!e.defaultPrevented && !hasInteractedOutside) context.triggerRef()?.focus({ preventScroll: true });
+ 		hasInteractedOutside = false;
+ 		e.preventDefault();
+ 	};
+diff --git a/dist/dropdown-menu/enw8HTeV.jsx b/dist/dropdown-menu/enw8HTeV.jsx
+--- a/dist/dropdown-menu/enw8HTeV.jsx
++++ b/dist/dropdown-menu/enw8HTeV.jsx
+@@ -14,7 +14,7 @@
+ 	let hasInteractedOutside = false;
+ 	const onCloseAutoFocus = (e) => {
+ 		props.onCloseAutoFocus?.(e);
+-		if (!hasInteractedOutside) context.triggerRef()?.focus({ preventScroll: true });
++		if (!e.defaultPrevented && !hasInteractedOutside) context.triggerRef()?.focus({ preventScroll: true });
+ 		hasInteractedOutside = false;
+ 		e.preventDefault();
+ 	};
+diff --git a/dist/dismissable-layer/DXLD03yU.js b/dist/dismissable-layer/DXLD03yU.js
+index fde40e7..f8ae7e0 100644
+--- a/dist/dismissable-layer/DXLD03yU.js
++++ b/dist/dismissable-layer/DXLD03yU.js
+@@ -1,6 +1,6 @@
+ import { n as layerStack } from "../layer-stack/DUp9FXTP.js";
+ import { createComponent, insert, ref, spread, template } from "@solidjs/web";
+-import { createContext, createEffect, createMemo, createSignal, omit, onSettled, useContext } from "solid-js";
++import { createContext, createEffect, createMemo, createSignal, omit, untrack, useContext } from "solid-js";
+ import { interactOutside } from "@solid-primitives/interaction";
+ import { createShortcut } from "@solid-primitives/keyboard";
+ //#region src/dismissable-layer/dismissable-layer-context.tsx
+@@ -54,22 +54,26 @@ function DismissableLayer(props) {
+ 			props.onDismiss();
+ 		}
+ 	}, { preventDefault: false });
+-	onSettled(() => {
+-		if (!ref$1()) return;
++	// OpenBot patch: register the layer when the ref is set. Under Solid 2.0.0-rc.18 a dialog's
++	// onSettled can run before its ref is set, so the layer was never added and Escape did nothing.
++	createEffect(() => ({
++		node: ref$1(),
++		dismiss: untrack(() => props.onDismiss)
++	}), ({ node, dismiss }) => {
++		if (!node) return;
+ 		layerStack.addLayer({
+-			node: ref$1(),
++			node,
+ 			isPointerBlocking: isPointerBlocking(),
+-			dismiss: props.onDismiss
++			dismiss
+ 		});
+-		const unregisterFromParentLayer = parentContext?.registerNestedLayer(ref$1());
++		const unregisterFromParentLayer = parentContext?.registerNestedLayer(node);
+ 		layerStack.assignPointerEventToLayers();
+-		layerStack.disableBodyPointerEvents(ref$1());
++		layerStack.disableBodyPointerEvents(node);
+ 		return () => {
+-			if (!ref$1()) return;
+-			layerStack.removeLayer(ref$1());
++			layerStack.removeLayer(node);
+ 			unregisterFromParentLayer?.();
+ 			layerStack.assignPointerEventToLayers();
+-			layerStack.restoreBodyPointerEvents(ref$1());
++			layerStack.restoreBodyPointerEvents(node);
+ 		};
+ 	});
+ 	createEffect(() => ({
+diff --git a/dist/dismissable-layer/RyRdwdaj.jsx b/dist/dismissable-layer/RyRdwdaj.jsx
+index 725bd17..c9f9d4b 100644
+--- a/dist/dismissable-layer/RyRdwdaj.jsx
++++ b/dist/dismissable-layer/RyRdwdaj.jsx
+@@ -1,5 +1,5 @@
+ import { n as layerStack } from "../layer-stack/DUp9FXTP.jsx";
+-import { createContext, createEffect, createMemo, createSignal, omit, onSettled, useContext } from "solid-js";
++import { createContext, createEffect, createMemo, createSignal, omit, untrack, useContext } from "solid-js";
+ import { interactOutside } from "@solid-primitives/interaction";
+ import { createShortcut } from "@solid-primitives/keyboard";
+ //#region src/dismissable-layer/dismissable-layer-context.tsx
+@@ -52,22 +52,26 @@ function DismissableLayer(props) {
+ 			props.onDismiss();
+ 		}
+ 	}, { preventDefault: false });
+-	onSettled(() => {
+-		if (!ref()) return;
++	// OpenBot patch: register the layer when the ref is set. Under Solid 2.0.0-rc.18 a dialog's
++	// onSettled can run before its ref is set, so the layer was never added and Escape did nothing.
++	createEffect(() => ({
++		node: ref(),
++		dismiss: untrack(() => props.onDismiss)
++	}), ({ node, dismiss }) => {
++		if (!node) return;
+ 		layerStack.addLayer({
+-			node: ref(),
++			node,
+ 			isPointerBlocking: isPointerBlocking(),
+-			dismiss: props.onDismiss
++			dismiss
+ 		});
+-		const unregisterFromParentLayer = parentContext?.registerNestedLayer(ref());
++		const unregisterFromParentLayer = parentContext?.registerNestedLayer(node);
+ 		layerStack.assignPointerEventToLayers();
+-		layerStack.disableBodyPointerEvents(ref());
++		layerStack.disableBodyPointerEvents(node);
+ 		return () => {
+-			if (!ref()) return;
+-			layerStack.removeLayer(ref());
++			layerStack.removeLayer(node);
+ 			unregisterFromParentLayer?.();
+ 			layerStack.assignPointerEventToLayers();
+-			layerStack.restoreBodyPointerEvents(ref());
++			layerStack.restoreBodyPointerEvents(node);
+ 		};
+ 	});
+ 	createEffect(() => ({

@@ -8,21 +8,69 @@ const PLACEHOLDER = /\b(TODO|TBD|FIXME|XXX)\b/;
 export const UNRELEASED = "Unreleased";
 
 /**
- * The date of a mobile release that the store has not approved yet: `## [1.2.0] - In review`.
+ * The date of a mobile release that no store has approved yet: `## [1.2.0] - In review`.
  * `/changelog` does not show it. `bun run mobile:release:published` writes the real date.
  */
 export const IN_REVIEW = "In review";
 
+/** The stores of the mobile app. Each one reviews a build on its own, so each has its own date. */
+export const MOBILE_STORES = ["ios", "android"] as const;
+export type MobileStore = (typeof MOBILE_STORES)[number];
+export const MOBILE_STORE_NAMES: Record<MobileStore, string> = { ios: "iOS", android: "Android" };
+
+/** The day each store made the version available. A store that still reviews it has no entry. */
+export type StoreDates = Partial<Record<MobileStore, string>>;
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const STORE_DATE = /^(\d{4}-\d{2}-\d{2}) \(([^)]+)\)$/;
+const isDay = (text: string) => DAY.test(text) && !Number.isNaN(Date.parse(`${text}T00:00:00Z`));
+const storeNamed = (name: string) => MOBILE_STORES.find((store) => MOBILE_STORE_NAMES[store] === name);
+
+/**
+ * Reads what follows `## [x.y.z] - ` in a mobile heading. Undefined when it is not one of:
+ *
+ *   In review                                no store has the version
+ *   2026-10-14                               both stores since that day
+ *   2026-10-14 (Android)                     only that store; the other one still reviews it
+ *   2026-10-14 (Android), 2026-10-16 (iOS)   both stores, earlier day first
+ */
+export function parseStoreDates(text: string): StoreDates | undefined {
+  if (text === IN_REVIEW) return {};
+  if (isDay(text)) return { ios: text, android: text };
+  const dates: StoreDates = {};
+  const parts = text.split(", ");
+  for (const part of parts) {
+    const [, day = "", name = ""] = STORE_DATE.exec(part) ?? [];
+    const store = storeNamed(name);
+    if (!isDay(day) || store === undefined || dates[store] !== undefined) return undefined;
+    dates[store] = day;
+  }
+  // One form for each state, so a heading that `formatStoreDates` would write differently is wrong.
+  return parts.length <= 2 && formatStoreDates(dates) === text ? dates : undefined;
+}
+
+/** The heading text of `dates`. The inverse of `parseStoreDates`. */
+export function formatStoreDates(dates: StoreDates): string {
+  const entries = MOBILE_STORES.flatMap((store) => {
+    const day = dates[store];
+    return day === undefined ? [] : [{ store, day }];
+  }).sort((a, b) => a.day.localeCompare(b.day));
+  const [first, second] = entries;
+  if (first === undefined) return IN_REVIEW;
+  if (second !== undefined && second.day === first.day) return first.day;
+  return entries.map(({ store, day }) => `${day} (${MOBILE_STORE_NAMES[store]})`).join(", ");
+}
+
 interface ReleaseNotesOptions {
-  /** Also accept `In review` as the date. Only the mobile app waits for store review. */
-  inReview?: boolean;
+  /** Accept the mobile heading forms of `parseStoreDates`. Only the mobile app waits for store review. */
+  storeReview?: boolean;
 }
 
 /** What stops `version` from being released. Empty when its section is ready. */
 export function releaseNotesProblems(
   changelog: string,
   version: string,
-  { inReview = false }: ReleaseNotesOptions = {},
+  { storeReview = false }: ReleaseNotesOptions = {},
 ): string[] {
   const lines = changelog.split(/\r?\n/);
   const start = lines.findIndex((line) => line.startsWith(`## [${version}]`));
@@ -34,18 +82,21 @@ export function releaseNotesProblems(
   }
   const heading = lines[start] ?? "";
   const date = /^## \[[^\]]+\] - (\d{4}-\d{2}-\d{2})$/.exec(heading)?.[1];
-  const waitsForReview = inReview && heading === `## [${version}] - ${IN_REVIEW}`;
+  const prefix = `## [${version}] - `;
   // The page formats the date, and an impossible one such as 2026-13-45 stops it from rendering.
-  if (
-    version !== UNRELEASED &&
-    !waitsForReview &&
-    (date === undefined || Number.isNaN(Date.parse(`${date}T00:00:00Z`)))
-  ) {
-    problems.push(
-      inReview
-        ? `"${heading}" must be "## [${version}] - YYYY-MM-DD" with a real date, or "## [${version}] - ${IN_REVIEW}".`
-        : `"${heading}" must be "## [${version}] - YYYY-MM-DD" with a real date.`,
-    );
+  if (storeReview) {
+    if (
+      version !== UNRELEASED &&
+      (!heading.startsWith(prefix) || parseStoreDates(heading.slice(prefix.length)) === undefined)
+    ) {
+      problems.push(
+        `"${heading}" must be "${prefix}" and then "${IN_REVIEW}", a real YYYY-MM-DD date for both stores, ` +
+          `"YYYY-MM-DD (Android)" or "YYYY-MM-DD (iOS)" for one store, or "YYYY-MM-DD (Android), YYYY-MM-DD (iOS)" ` +
+          "with the earlier date first.",
+      );
+    }
+  } else if (version !== UNRELEASED && (date === undefined || !isDay(date))) {
+    problems.push(`"${heading}" must be "## [${version}] - YYYY-MM-DD" with a real date.`);
   }
 
   const end = lines.findIndex((line, index) => index > start && line.startsWith("## "));

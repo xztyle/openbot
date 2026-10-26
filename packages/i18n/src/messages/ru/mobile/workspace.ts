@@ -15,7 +15,7 @@ export const messages = {
   "mobile.workspace.error.sectionsLoadFailed": "Не удалось загрузить разделы. Повторите попытку.",
   "mobile.workspace.error.transportNotReady": "Мобильный транспорт не готов.",
   "mobile.workspace.error.sectionsUnsupported": "Этот хост не поддерживает изменение разделов.",
-  "mobile.workspace.error.leaveOwnServer": "Выйти можно только с подключённых удалённых серверов.",
+  "mobile.workspace.error.leaveOwnServer": "Выйти можно только из удалённых серверов, к которым вы присоединились.",
   "mobile.workspace.error.removeOwnedServerOnly": "Удалить этот сервер может только владелец.",
   "mobile.workspace.error.agentNotOnHost": "Агента нет на этом хосте.",
   "mobile.workspace.error.filesUnsupported": "Этот хост не поддерживает управление файлами. Обновите OpenBot на хосте.",

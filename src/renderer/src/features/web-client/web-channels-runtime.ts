@@ -1,8 +1,9 @@
 import type { AgentEvent, AttachmentSummary, TeamRealtimeEvent } from "@openbot/contracts/ipc";
 import { currentText } from "@openbot/ui/text";
-import { createSignal } from "solid-js";
+import { createSignal, onCleanup } from "solid-js";
 import { type ChannelsPort, PartialAttachmentImportError } from "../channels/channels-port";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
+import { createWebAttachmentMedia } from "./web-attachment-media";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
 import type { WebWorkspaceRuntime } from "./web-runtime";
 import { isHostFileTypeError, planUploads, type UploadRejection, uploadRejectionNotice } from "./web-upload-plan";
@@ -35,11 +36,17 @@ export function createWebChannelsPort(
   onHostEvent: (listener: (event: AgentEvent | TeamRealtimeEvent) => void) => () => void,
   hostId: () => string,
   eventsEnabled: () => boolean,
+  routineRecoveryEnabled: () => boolean,
+  webhookTestsEnabled: () => boolean,
 ): ChannelsPort {
-  const files = createWebAttachmentFiles(remote);
+  const files = createWebAttachmentFiles(remote, hostId);
   const channels = remote.channels;
   const admin = remote.admin;
-  const eventRoutines = admin ? webEventRoutinesApi(admin.request) : undefined;
+  const eventRoutines = admin
+    ? webEventRoutinesApi(admin.request, routineRecoveryEnabled, webhookTestsEnabled)
+    : undefined;
+  const attachmentMedia = createWebAttachmentMedia(remote, hostId);
+  onCleanup(() => attachmentMedia.dispose());
   const [importProgress, setImportProgress] = createSignal<{ current: number; total: number } | null>(null);
   let uploading = false;
   async function importAttachments(chosen: File[], room?: number): Promise<AttachmentSummary[]> {
@@ -108,6 +115,8 @@ export function createWebChannelsPort(
     openUrl: openWebLink,
     fileActions: "browser",
     previewAttachment: files.preview,
+    attachmentMedia,
+    visualPage: files.visualPage,
     importAttachments,
     importProgress,
   };

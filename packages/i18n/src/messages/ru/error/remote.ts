@@ -16,7 +16,7 @@ export const messages = {
   "error.remote.linuxNeedsX11": "Для удалённого рабочего стола в Linux нужна сессия X11. Wayland не поддерживается.",
   "error.remote.runtimeMissing":
     "Среда Sunshine и Moonlight Web отсутствует или не поддерживается на этом хосте. Установите полный релиз OpenBot на Mac, хост Windows x64 или хост Linux x64 и перезапустите OpenBot.",
-  "error.remote.testActive": "Идёт проверка удалённого рабочего стола. Повторите, когда она закончится.",
+  "error.remote.testActive": "Идёт проверка удалённого рабочего стола. Повторите попытку, когда она закончится.",
   "error.remote.screenRecordingDenied":
     "Хост не разрешил OpenBot записывать экран. Разрешите запись экрана на хосте и повторите попытку.",
   "error.remote.teamSessionExpired": "Сессия команды истекла.",
@@ -92,6 +92,7 @@ export const messages = {
   "error.remote.fileTransportStopped": "Файловый транспорт WebRTC остановился.",
   "error.remote.fileResumeExpired": "Срок возобновления передачи файла по WebRTC истёк.",
   "error.remote.hostRequestFailed": "Хост не смог выполнить запрос.",
+  "error.remote.responseTooLarge": "Ответ хоста слишком велик для отправки на это устройство.",
   "error.remote.sessionNotReady": "Удалённая сессия не готова.",
   "error.remote.peerDisconnected": "Узел WebRTC отключился.",
   "error.remote.tooManyStreams": "Открыто слишком много потоков хоста.",
@@ -107,8 +108,7 @@ export const messages = {
   "error.remote.operationFailed": "Удалённая операция не удалась.",
   "error.remote.connectionReplaced": "Подключение заменено.",
   "error.remote.desktopDidNotConnect": "Компьютер не подключился.",
-  "error.remote.desktopRestarted":
-    "Компьютер перезапустился. Выполняется повторное подключение с новой аутентифицированной сессией.",
+  "error.remote.connectionDropped": "У сервера больше нет этого подключения. Повторное подключение.",
   "error.remote.dataBeforeAuth": "Хост прислал данные до аутентификации.",
   "error.remote.eventStreamGap": "В потоке событий хоста есть пропуск.",
   "error.remote.malformedEvent": "Хост вернул искажённое событие.",
@@ -165,10 +165,35 @@ export const messages = {
   "error.remote.signalFrameUnreadable": "Signal прислал кадр, который этот узел не может прочитать.",
   "error.remote.webRtcCommandFailed": "Команда WebRTC не выполнена.",
   "error.remote.dataChannelFailed": "Сбой канала {kind}.",
+  "error.remote.hostBusy": "Хост занят другим подключением. Повторите попытку чуть позже.",
+  "error.remote.signalPermissionDenied": "У вашего аккаунта нет доступа к этому хосту. Попросите доступ у владельца.",
+  "error.remote.signalRateLimited": "Слишком много попыток подключения. OpenBot повторит попытку через {seconds} с.",
+  "error.remote.signalProtocolError":
+    "Signal и это приложение используют несовместимые протоколы подключения. Обновите OpenBot и повторите попытку.",
+  "error.remote.signalRefused": "Signal отклонил подключение.",
+  "error.remote.signalClosed": "Подключение к Signal закрылось до ответа хоста.",
+  "error.remote.relayUnavailable":
+    "Signal не прислал серверы ретрансляции для этого подключения. Повторите попытку позже.",
+  "error.remote.iceFailed":
+    "Не удалось установить прямое подключение к хосту. Его может блокировать брандмауэр, VPN или прокси.",
+  "error.remote.iceDisconnected": "Прямое подключение к хосту потеряно.",
+  "error.remote.directoryUnreachable": "OpenBot не смог связаться со службой OpenBot. Проверьте подключение.",
+  "error.remote.directoryTimeout": "Служба OpenBot не ответила вовремя. Повторите попытку.",
+  "error.remote.inviteAlreadyUsed": "Это приглашение уже использовано. Попросите новое приглашение.",
+  "error.remote.inviteNotFound": "Это приглашение не существует или истекло. Попросите новое приглашение.",
+  "error.remote.licenseUsersFull":
+    "В лицензии владельца сервера нет свободных пользователей. Попросите владельца добавить пользователя в лицензию.",
+  "error.remote.memberLimitReached": "На этом хосте достигнут лимит участников. Попросите владельца освободить место.",
+  "error.remote.hostNotRegistered": "Этот хост больше не зарегистрирован в службе OpenBot.",
+  "error.remote.membershipEnded": "Вы больше не участник этого хоста. Попросите у владельца новое приглашение.",
+  "error.remote.accountSessionInactive": "Ваш вход больше не активен. Войдите снова.",
+  "error.remote.hostOtherAccount": "Этот хост принадлежит другому аккаунту.",
+  "error.remote.remoteNotConfigured": "Удалённые подключения не настроены в этой службе OpenBot.",
+  "error.remote.hostRefused": "Хост отклонил запрос ({status}).",
   "error.remote.formUnavailable": "Эта форма больше недоступна.",
+  "error.remote.hostedServerRemoval": "Чтобы удалить размещённый сервер, используйте раздел «Оплата».",
   "error.remote.channelsUnsupported": "Обновите этот сервер на компьютере, чтобы использовать каналы.",
   "error.remote.channelDeleteUnsupported": "Обновите этот сервер на компьютере, чтобы удалять каналы.",
-  "error.remote.attachmentUploadCancelled": "Отправка вложения отменена.",
   "error.remote.historyRefreshFailed": "Сообщение отправлено, но историю чата обновить не удалось.",
   "error.remote.taskHistoryRefreshFailed": "Задача изменена, но историю чата обновить не удалось.",
 } as const satisfies PartialTranslation<typeof source>;

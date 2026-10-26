@@ -41,7 +41,7 @@ export function addRemotePreviewUrls<T>(value: T, serverId: string): T {
   return value;
 }
 
-export function remoteAttachmentPreviewUrl(serverId: string, attachmentId: string): string {
+function remoteAttachmentPreviewUrl(serverId: string, attachmentId: string): string {
   return `openbot-remote-attachment://${encodeURIComponent(serverId)}/${encodeURIComponent(attachmentId)}`;
 }
 

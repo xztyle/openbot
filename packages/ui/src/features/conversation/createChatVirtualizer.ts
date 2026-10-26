@@ -1,5 +1,6 @@
 import {
   elementScroll,
+  measureElement as measureRowElement,
   observeElementOffset,
   observeElementRect,
   type VirtualItem,
@@ -14,12 +15,8 @@ interface ChatVirtualizerOptions<TScrollElement extends Element, TItemElement ex
   getItemKey: (index: number) => string | number;
   keyVersion: () => unknown;
   scrollMargin: () => number;
-  /**
-   * Whether the list follows its end. While it returns false, an appended row and a row that grows
-   * do not move the reader, even inside the end zone. Call `syncFollow` when the answer changes.
-   * The default follows, as a list that has no reader intent to ask.
-   */
-  follow?: () => boolean;
+  /** Whether the reader is following new messages instead of reading older ones. */
+  stickToLatest?: () => boolean;
   onChange?: (virtualizer: Virtualizer<TScrollElement, TItemElement>) => void;
 }
 
@@ -36,19 +33,12 @@ export interface ChatVirtualizer<TItemElement extends Element> {
   itemStart: (index: number) => number | undefined;
   /** Opens a row at the top of the list, rendered or not. A smooth scroll animates there. */
   scrollToIndex: (index: number, options?: { smooth?: boolean }) => void;
-  /** Applies the current answer of the `follow` option to the virtualizer. */
-  syncFollow: () => void;
+  /** Scrolls to a position in the scroll content. It replaces the target of an earlier `scrollToIndex`. */
+  scrollToOffset: (offset: number) => void;
 }
 
 const STATIC_CHAT_LIMIT = 100;
-/** How close to the end counts as "at the end", for following an appended or growing row. */
-const FOLLOW_END_THRESHOLD = 80;
-
-function followOptions(follow: boolean) {
-  return follow
-    ? ({ followOnAppend: "auto", scrollEndThreshold: FOLLOW_END_THRESHOLD } as const)
-    : ({ followOnAppend: false, scrollEndThreshold: 0 } as const);
-}
+const SCROLL_END_THRESHOLD = 80;
 
 export function createChatVirtualizer<TScrollElement extends Element, TItemElement extends Element>(
   options: ChatVirtualizerOptions<TScrollElement, TItemElement>,
@@ -60,6 +50,13 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
   );
   const [totalSize, setTotalSize] = createSignal(initialCount * options.estimateSize(0));
   const stableItems = new Map<VirtualItem["key"], { item: VirtualItem; update: (next: VirtualItem) => void }>();
+  // Within this threshold of the end, the virtualizer keeps the reader at the end when a row grows or
+  // one is added. The rows end above the activity line, so a reader who scrolled up a little still
+  // counts as at the end, and each growth of a streaming reply would move them down. Only a reader who
+  // follows the latest message counts. It is set before each measurement and each change of rows.
+  const syncScrollEndThreshold = (instance: Virtualizer<TScrollElement, TItemElement>): void => {
+    instance.options.scrollEndThreshold = options.stickToLatest?.() === false ? -1 : SCROLL_END_THRESHOLD;
+  };
   const virtualizer = new Virtualizer<TScrollElement, TItemElement>({
     count: 0,
     getScrollElement: options.getScrollElement,
@@ -67,10 +64,25 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
     getItemKey: options.getItemKey,
     observeElementRect,
     observeElementOffset,
-    scrollToFn: elementScroll,
+    measureElement: (element, entry, instance) => {
+      syncScrollEndThreshold(instance);
+      return measureRowElement(element, entry, instance);
+    },
+    scrollToFn: (offset, scroll, instance) => {
+      const element = instance.scrollElement;
+      if (element && scroll.adjustments !== undefined && options.stickToLatest?.()) {
+        // Rows end above the activity line. An estimate correction that follows the last row
+        // leaves that line below the view, then the chat's own follow pulls back to the real
+        // bottom, and the two move the chat up and down while a turn runs.
+        elementScroll(element.scrollHeight - element.clientHeight, { ...scroll, adjustments: 0 }, instance);
+        return;
+      }
+      elementScroll(offset, scroll, instance);
+    },
     overscan: 5,
     anchorTo: "end",
-    ...untrack(() => followOptions(options.follow?.() ?? true)),
+    followOnAppend: "auto",
+    scrollEndThreshold: SCROLL_END_THRESHOLD,
     initialRect: { width: 1, height: 600 },
   });
   let refreshQueued = false;
@@ -125,6 +137,7 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
     ({ count, scrollMargin }) => {
       // The virtualizer calls `getItemKey` here; `keyVersion` above is what tracks the keys.
       untrack(() => {
+        syncScrollEndThreshold(virtualizer);
         virtualizer.setOptions({
           ...virtualizer.options,
           count,
@@ -132,7 +145,6 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
           estimateSize: options.estimateSize,
           getItemKey: options.getItemKey,
           scrollMargin,
-          ...followOptions(options.follow?.() ?? true),
           onChange: (instance) => {
             scheduleRefresh();
             untrack(() => options.onChange?.(instance));
@@ -171,10 +183,7 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
     itemStart: (index) => virtualizer.measurementsCache[index]?.start,
     scrollToIndex: (index, scroll) =>
       virtualizer.scrollToIndex(index, { align: "start", behavior: scroll?.smooth ? "smooth" : "auto" }),
-    syncFollow: () => {
-      if (!options.follow) return;
-      untrack(() => virtualizer.setOptions({ ...virtualizer.options, ...followOptions(options.follow?.() ?? true) }));
-    },
+    scrollToOffset: (offset) => virtualizer.scrollToOffset(offset, { align: "start", behavior: "auto" }),
   };
 }
 

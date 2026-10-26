@@ -176,3 +176,14 @@ export const Playground: Story = {
     );
   },
 };
+
+/**
+ * Gemini on a Linux host: the host opens the Google page in its own browser. Until the host has
+ * the tab, the dialog says where the page opens. The live page itself needs a host to stream it.
+ */
+export const HostPageOpening: Story = {
+  args: {
+    providerName: "Gemini",
+    state: { phase: "page", hostName: "Office server", page: null },
+  },
+};

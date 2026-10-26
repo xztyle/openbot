@@ -1,10 +1,8 @@
 import type { AvatarMood } from "@openbot/brand/bloub-avatar-motion";
-import { Typography } from "heroui-native";
-import type { ColorValue } from "react-native";
+import { type ColorValue, View } from "react-native";
 import Animated, { Easing, ReduceMotion, withTiming } from "react-native-reanimated";
 import { BloubAvatarPreview } from "@/features/agents/components/bloub-avatar";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
-import { StreamingTailText, StreamRevealProvider } from "./streaming-tail-text";
 import { ThinkingTextGradient } from "./thinking-text-gradient";
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
@@ -30,6 +28,8 @@ const MOVE_OUT = {
   easing: EASE_OUT,
   reduceMotion: ReduceMotion.System,
 };
+// As on desktop. The label can be a whole commentary step, which must not make the row tall.
+const LABEL_LINES = 2;
 
 function activityEntering() {
   "worklet";
@@ -64,15 +64,12 @@ function activityExiting() {
 export interface ChatActivitySpec {
   key: string;
   label: string;
-  /** Changes when the wording changes, so only new wording plays the word reveal. */
-  labelKey: string;
   accessibilityLabel: string;
   agent?: Pick<MobileAgent, "id" | "serverId" | "avatarHue" | "avatarSeed">;
   mood: AvatarMood;
   online: boolean;
   animateAvatar: boolean;
   shimmer: boolean;
-  reveal: boolean;
 }
 
 export function ChatActivityRow({
@@ -106,19 +103,15 @@ export function ChatActivityRow({
           animateIdle={spec.animateAvatar}
         />
       ) : null}
-      <StreamRevealProvider>
-        <ThinkingTextGradient text={spec.label} foreground={foreground} muted={muted} enabled={spec.shimmer}>
-          <Typography.Paragraph type="body-sm" style={{ color: muted }}>
-            <StreamingTailText
-              key={spec.labelKey}
-              body={spec.label}
-              type="body-sm"
-              style={{ color: muted }}
-              enabled={spec.reveal}
-            />
-          </Typography.Paragraph>
-        </ThinkingTextGradient>
-      </StreamRevealProvider>
+      <View className="min-w-0 flex-1">
+        <ThinkingTextGradient
+          text={spec.label}
+          numberOfLines={LABEL_LINES}
+          foreground={foreground}
+          muted={muted}
+          enabled={spec.shimmer}
+        />
+      </View>
     </Animated.View>
   );
 }

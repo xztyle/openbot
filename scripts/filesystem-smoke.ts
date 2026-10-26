@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { isString } from "@openbot/contracts/runtime-values";
 import { AcpAgentClient } from "../src/backend/acp-client";
+import { OPENCODE_ACP_FLAVOR } from "../src/backend/acp-flavor-opencode";
 import { codexSandboxConfig, codexSandboxMode, codexSandboxPolicy } from "../src/backend/agent/workspace-sandbox";
 import type { AgentClient, AgentProvider } from "../src/backend/agent-client";
 import { CodexAppServerClient } from "../src/backend/app-server-client";
@@ -506,6 +507,7 @@ async function createClient(
     const cli = await runCauseEffect(resolveOpencodeCli());
     const client = new AcpAgentClient(cli, 60_000, {
       provider: "opencode",
+      flavor: OPENCODE_ACP_FLAVOR,
       argv: ["acp"],
       env: { ...OPENCODE_CONFINED_ENV },
       signInMessage: "OpenCode is not signed in.",

@@ -8,8 +8,7 @@ nothing here names a version:
 ```bash
 git diff --stat --diff-filter=MDR <tag>..HEAD -- \
   'packages/contracts/src/team-protocol/v*.ts' \
-  'packages/contracts/src/team-protocol/fixtures/**' \
-  ':(exclude)packages/contracts/src/team-protocol/v*.test.ts'
+  'packages/contracts/src/team-protocol/fixtures/**'
 ```
 
 **Empty is the clean answer, but do not treat non-empty as rare.** The release audited when this
@@ -34,8 +33,7 @@ Three things in that command are load-bearing:
   every peer still running an older build, and the fix is a new protocol version, never an edit.
   `R` is listed deliberately: git classifies a rename as `R` rather than `M`, so leaving it out
   lets a frozen fixture be renamed out from under the check while the diff still reports clean.
-  `A` is left out because an added fixture is additive, and `v*.test.ts` is excluded because a test
-  covering a frozen protocol may legitimately gain cases.
+  `A` is left out because an added fixture is additive.
 
 Read the additions separately with `--diff-filter=A` and confirm each is a genuinely new case
 rather than the other half of a rename.
@@ -52,18 +50,19 @@ is not a wire change. Anything that touches a key list, a validator, or a projec
   fails validation and returns `null`, and callers read `null` as "nothing to send". `tsc` stays
   green throughout.
 
-List the protocol tests for the same reason the diff is derived rather than typed, then run
-`bun run test:desktop -- <path>` once per file it prints:
+No test reads the frozen fixtures. Do this check by hand. List the fixture folders of both
+revisions, for the same reason the diff is derived rather than typed:
 
 ```bash
-{ git ls-tree --name-only <tag> packages/contracts/src/team-protocol/
-  git ls-tree --name-only HEAD packages/contracts/src/team-protocol/; } \
-  | grep -E 'v[0-9]+\.test\.ts$' | sort -u
+{ git ls-tree --name-only <tag> packages/contracts/src/team-protocol/fixtures/
+  git ls-tree --name-only HEAD packages/contracts/src/team-protocol/fixtures/; } | sort -u
 ```
 
-Union both revisions, as gate B does. The tag alone would skip a protocol the release *adds* — a
-new `v4.test.ts` would never run, and the one codec with no shipped history is the one this audit
-has the least other evidence about. `HEAD` alone would hide a frozen test the release *deleted*.
+Union both revisions, as gate B does. The tag alone would skip a protocol the release *adds*, and
+the one codec with no shipped history is the one this audit has the least other evidence about.
+`HEAD` alone would hide a frozen fixture folder the release *deleted*. For each frozen codec or
+adapter hunk from the diff above, read the fixtures of its version. Make sure that the hunk does
+not change how the codec encodes or decodes those payloads.
 
 The full compatibility matrix — older client against new host, new client against older host,
 matching versions, no shared protocol, capability omission, unknown optional events, malformed

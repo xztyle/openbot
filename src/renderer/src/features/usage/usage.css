@@ -4,17 +4,22 @@
  * children, so `.app-frame > *` no longer reaches them: without this, a conversation panel grows to
  * its content height and pushes the composer under the window edge.
  */
-.usage-workspace-content {
+.app-frame-panes {
   display: contents;
 }
-.usage-workspace-content > * {
+.app-frame-panes > * {
   min-height: 0;
 }
-.app-frame-usage-open .usage-workspace-content {
+.app-frame-page-open .app-frame-panes {
   visibility: hidden;
   pointer-events: none;
 }
-.agent-usage-workspace {
+
+/* A selected tab in the chat sets itself visible, so every part of the chat hides, not only its root. */
+.app-frame.app-frame-page-open .app-frame-panes * {
+  visibility: hidden;
+}
+.window-page {
   z-index: 1;
   min-height: 0;
   overflow: hidden;
@@ -179,7 +184,7 @@
   font-weight: var(--openbot-weight-medium);
 }
 
-.usage-workspace-content.server-connection-workspace {
+.app-frame-panes.server-connection-workspace {
   position: relative;
   grid-column: -2 / -1;
   grid-row: 1;
@@ -187,6 +192,11 @@
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+}
+/* The pane makes no stacking context, so the dialog layer of the loading screen would paint over the
+ * menus that open from the sidebar. The screen covers only the pane, so one layer is sufficient. */
+.server-connection-workspace > .app-loading {
+  z-index: 1;
 }
 /* The panes were grid items of the frame and stretched to its height. In this column they grow to
  * fill it, so a short chat keeps its composer at the bottom. */

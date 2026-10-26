@@ -6,6 +6,53 @@ export function serializeEditor(editor: HTMLDivElement): string {
   return Array.from(editor.childNodes).map(serializeNode).join("");
 }
 
+export interface ComposerSelection {
+  start: number;
+  end: number;
+}
+
+export interface ComposerPasteResult {
+  value: string;
+  caret: number;
+}
+
+export function placeSerializedCaret(editor: HTMLDivElement, position: number): void {
+  let remaining = position;
+  let visible = 0;
+  for (const segment of editorSegments(editor)) {
+    const serializedLength = serializeNode(segment).length;
+    const text = segment.nodeType === Node.TEXT_NODE;
+    if (remaining <= serializedLength) {
+      visible += text ? remaining : Number(remaining > 0);
+      break;
+    }
+    remaining -= serializedLength;
+    visible += text ? serializedLength : 1;
+  }
+  const range = rangeFromTextOffsets(editor, visible, visible);
+  if (!range) return;
+  const selection = editor.ownerDocument.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+/** Offsets in the serialized draft, including the complete identity of each inline token. */
+export function serializedEditorSelection(editor: HTMLDivElement): ComposerSelection {
+  const selection = editor.ownerDocument.getSelection();
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  const end = serializeEditor(editor).length;
+  if (!range || !editor.contains(range.commonAncestorContainer)) return { start: end, end };
+  const prefix = editor.ownerDocument.createRange();
+  prefix.selectNodeContents(editor);
+  prefix.setEnd(range.startContainer, range.startOffset);
+  const fragment = editor.ownerDocument.createElement("div");
+  fragment.append(prefix.cloneContents());
+  const start = serializeEditor(fragment).length;
+  prefix.setEnd(range.endContainer, range.endOffset);
+  fragment.replaceChildren(prefix.cloneContents());
+  return { start, end: serializeEditor(fragment).length };
+}
+
 function serializeNode(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
   if (!(node instanceof HTMLElement)) return "";
@@ -24,6 +71,9 @@ function serializeNode(node: Node): string {
   const mcpId = node.dataset.mcpId;
   const mcpName = node.dataset.mcpName;
   if (mcpId && mcpName) return serializeChatTagReference("mcp", mcpName, mcpId);
+  const quoteMessageId = node.dataset.quoteMessageId;
+  const quoteText = node.dataset.quoteText;
+  if (quoteMessageId && quoteText) return serializeChatTagReference("quote", quoteText, quoteMessageId);
   if (node.tagName === "BR") return "\n";
   const content = Array.from(node.childNodes).map(serializeNode).join("");
   return node.tagName === "DIV" || node.tagName === "P" ? `${content}\n` : content;
@@ -77,6 +127,47 @@ export function insertPlainText(editor: HTMLDivElement, text: string): void {
   selection?.addRange(caretRange);
 }
 
+function replaceListRange(
+  editor: HTMLDivElement,
+  selection: Selection,
+  caret: number,
+  insert: string,
+  replacements: NonNullable<ReturnType<typeof markdownListLineBreak>>["replacements"],
+): boolean {
+  if (!replacements?.length) return false;
+  const end = Math.max(...replacements.map((replacement) => replacement.end));
+  const target = rangeFromTextOffsets(editor, caret, end);
+  if (!target) return false;
+
+  // Rewrite a cloned plain-text range, then let the browser record the insertion and all
+  // renumbering as one edit.
+  const content = document.createElement("div");
+  content.append(target.cloneContents());
+  // Chromium does not undo an insertHTML range containing non-editable chips reliably. Keep those
+  // nodes in place and use the token-safe multi-range fallback below instead.
+  if (content.querySelector('[contenteditable="false"]')) return false;
+  for (const replacement of replacements.toReversed()) {
+    const marker = rangeFromTextOffsets(content, replacement.start - caret, replacement.end - caret);
+    if (!marker) return false;
+    marker.deleteContents();
+    marker.insertNode(document.createTextNode(replacement.text));
+  }
+  content.prepend(document.createTextNode(insert));
+
+  selection.removeAllRanges();
+  selection.addRange(target);
+  if (typeof document.execCommand === "function" && document.execCommand("insertHTML", false, content.innerHTML)) {
+    return true;
+  }
+
+  // jsdom has no editing commands. Preserve the same DOM shape for its unit-test path.
+  target.deleteContents();
+  const fragment = content.ownerDocument.createDocumentFragment();
+  fragment.append(...content.childNodes);
+  target.insertNode(fragment);
+  return true;
+}
+
 /*
  * Continues or ends a Markdown list, as `markdownListLineBreak` describes. The edit works in the
  * editor's text offsets, where a chip counts as one position, and it changes only the current
@@ -85,7 +176,7 @@ export function insertPlainText(editor: HTMLDivElement, text: string): void {
 export function insertLineBreak(editor: HTMLDivElement): void {
   const selection = window.getSelection();
   const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
-  if (!range?.collapsed || !editor.contains(range.commonAncestorContainer)) {
+  if (!selection || !range?.collapsed || !editor.contains(range.commonAncestorContainer)) {
     insertPlainText(editor, "\n");
     return;
   }
@@ -97,7 +188,26 @@ export function insertLineBreak(editor: HTMLDivElement): void {
     return;
   }
   if (edit.caret > caret) {
-    insertPlainText(editor, edit.text.slice(caret, edit.caret));
+    const insert = edit.text.slice(caret, edit.caret);
+    if (!replaceListRange(editor, selection, caret, insert, edit.replacements)) {
+      insertPlainText(editor, insert);
+      for (const replacement of edit.replacements?.toReversed() ?? []) {
+        const replacementRange = rangeFromTextOffsets(
+          editor,
+          replacement.start + insert.length,
+          replacement.end + insert.length,
+        );
+        if (!replacementRange) continue;
+        selection.removeAllRanges();
+        selection.addRange(replacementRange);
+        insertPlainText(editor, replacement.text);
+      }
+    }
+    const caretRange = rangeFromTextOffsets(editor, edit.caret, edit.caret);
+    if (caretRange) {
+      selection.removeAllRanges();
+      selection.addRange(caretRange);
+    }
     return;
   }
   const marker = rangeFromTextOffsets(editor, edit.caret, edit.caret + text.length - edit.text.length);
@@ -161,7 +271,8 @@ export function mentionTokenAtCaretBoundary(
 
 function closestMentionToken(node: Node, editor: HTMLDivElement): HTMLElement | null {
   const element = node instanceof HTMLElement ? node : node.parentElement;
-  const token = element?.closest<HTMLElement>("[data-mention-id], [data-skill-id], [data-mcp-id]") ?? null;
+  const token =
+    element?.closest<HTMLElement>("[data-mention-id], [data-skill-id], [data-mcp-id], [data-quote-message-id]") ?? null;
   return token && editor.contains(token) ? token : null;
 }
 

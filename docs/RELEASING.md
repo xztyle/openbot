@@ -107,8 +107,17 @@ up billing and webhooks only and no longer accepts `--template`.
 A failed hosted job leaves the GitHub Release published and the previous template selected.
 Run the failed job again after correcting the cause. A ready snapshot is reused; a save in progress
 is polled; a failed snapshot requires operator inspection. The builder never replaces an existing
-snapshot or deletes old snapshots. It stops at 10 snapshots even if boat permits paid storage above
-that count. Confirm that neither Worker nor any pending create needs a snapshot before removing it.
+snapshot. It stops at 10 snapshots even if boat permits paid storage above that count.
+
+Before the build, the job removes production snapshots of older releases. It keeps the 2 newest
+ready ones, so 3 releases remain with the new one; the newest of them stays selected until the new
+release replaces it. A failed snapshot of an older release is removed too. It keeps a snapshot that
+is saving or has an unknown status, any snapshot newer than the release, and each
+`provider_template` of a production server that is not deleted and has no sandbox yet, because a
+create retry sends its first request again. The job reads these from the production D1
+database and stops if it cannot. Servers already made from a removed snapshot keep running. Names
+without the `openbot-server-production-` prefix are never removed; confirm that neither Worker nor
+any pending create needs one before removing it by hand.
 
 A successful job reports the selected version in its Actions summary. Verify the first rollout by
 creating a temporary production server and checking its initial installed version. Record the
@@ -167,15 +176,15 @@ exact corresponding source for both GPL components with every binary release. A 
 a binary, license, source manifest, checksum, platform signature, or notarization result is missing.
 
 Use this source build only to make or reproduce a runtime version. The
-`.github/workflows/remote-desktop-runtime.yml` workflow builds macOS ARM64, macOS x64 and Windows x64 when the
-recipe or a pinned input changes. It publishes an immutable GitHub prerelease named
-`remote-desktop-runtime-<input-digest>`. The prerelease contains the three deterministic archives, SPDX
+`.github/workflows/remote-desktop-runtime.yml` workflow builds macOS ARM64, macOS x64, Windows x64 and Linux x64
+when the recipe or a pinned input changes. It publishes an immutable GitHub prerelease named
+`remote-desktop-runtime-<input-digest>`. The prerelease contains the four deterministic archives, SPDX
 SBOMs, build provenance, and `remote-desktop-runtime-manifest.json`. It is not an OpenBot application
 update and it must never contain `latest.yml`.
 
 PR pushes do not cancel an active runtime build. The next run reuses a successful native build
 from the same PR and platform when its native inputs and build tools are unchanged. It still runs
-verification and the macOS smoke test against the current checkout. A cache miss rebuilds the
+verification and the macOS or Linux smoke test against the current checkout. A cache miss rebuilds the
 runtime. Pushes to `main` and manual dispatches do not use the PR build cache.
 
 After publication, the workflow opens a draft PR that adds the release tag and SHA-256 values to
@@ -185,7 +194,7 @@ is refused.
 
 So a branch that changes the recipe pins by hand, and must, or merging it leaves `main` with an
 unpinned lock -- which is not a degraded state but a broken one, because
-`prepare-remote-desktop-runtime.ts` throws and takes every `package`, `dist:mac` and `dist:win` run
+`prepare-remote-desktop-runtime.ts` throws and takes every `package`, `dist:mac`, `dist:win` and `dist:linux` run
 with it. From the branch:
 
 ```bash
@@ -198,7 +207,7 @@ bun scripts/pin-remote-desktop-runtime.ts remote-desktop-runtime-manifest.json
 To repeat verification after a download or CI setup failure, without replacing the published
 artifacts, run `gh workflow run remote-desktop-runtime.yml --ref <branch> -f verify_only=true`.
 This mode requires an existing release for the current input digest and runs installation, runtime
-verification, the macOS smoke test, and application packaging. It does not build or publish.
+verification, the macOS and Linux smoke tests, and application packaging. It does not build or publish.
 
 Commit the rewritten `native-runtime.lock.json` to the branch and merge it with the recipe, so `main`
 never sees the two apart. The pin does not change the input digest -- it covers `recipeVersion`, both
@@ -238,13 +247,18 @@ The published runtime uses a new recipe/input digest; no existing release assets
 The Linux GUI capability advisory GHSA-fp6g-27w5-489j does not apply: the Linux runtime is built
 with the tray off, and OpenBot gives Sunshine no file capabilities.
 
-### Linux runtime (recipe 14)
+### Linux runtime (recipe 16)
 
 The `linux-x64` target builds on Ubuntu 24.04 with GCC 14, X11 capture and software encoding only
 (CUDA, DRM, KWin, VAAPI, Vulkan, Wayland, portal and tray are off). The OpenBot patch adds an XTest
 input backend, because Xvfb does not read uinput devices. It also links libcap when DRM is off and
 adds a `vaMapBuffer2` shim, because the prebuilt FFmpeg needs libva 2.21 and Ubuntu 24.04 has 2.20.
-The runtime uses the system libraries of Ubuntu 24.04; the hosted server template installs them.
+The runtime uses the system libraries of Ubuntu 24.04 that Ubuntu 26.04 also has; the hosted server
+template installs them (the remote desktop part of `scripts/hosting/packages.txt`). Since recipe 16,
+Boost.Locale has no ICU backend, and the runtime carries `lib/libminiupnpc.so.17` with its Debian
+licence, because Ubuntu 26.04 has only `libminiupnpc21`. Sunshine finds it through its RUNPATH
+`$ORIGIN/lib`. The build job checks with `ldd` that each executable finds all its libraries on
+Ubuntu 26.04.
 Linux arm64 builds only for local development and has no release artifact.
 
 ## Pin the Gemini server
@@ -278,19 +292,21 @@ packages have no license file, so set `licenseSha256` to the SHA-256 of `LICENSE
 ## Pin the OpenCode CLI
 
 `native-runtime.lock.json` also pins the OpenCode CLI that OpenBot downloads for the OpenCode
-provider before its first update check answers, by npm platform package, asset SHA-256, extracted binary SHA-256, byte counts, and the
-MIT license file it takes from the `opencode-ai` npm package. Codex, Claude, and Grok are pinned
-in the same file by hand; OpenCode has a script, because the version, both platform packages, and
-the license have to agree:
+provider before its first update check answers, by `@opencode/cli-*` npm platform package (OpenCode 2), asset SHA-256,
+extracted binary SHA-256, byte counts, and the MIT license file. The OpenCode 2 tarballs carry no license, so the lock
+names an `opencode-ai` (OpenCode 1) release in `licensePackage` and the app installs the same MIT file from it. Codex,
+Claude, and Grok are pinned in the same file by hand; OpenCode has a script, because the version, all five platform
+packages, and the license have to agree:
 
 ```bash
-bun run pin:opencode-runtime          # the newest published release
-bun run pin:opencode-runtime 1.18.30  # one exact version
+bun run pin:opencode-runtime                # the newest published release
+bun run pin:opencode-runtime 2.1.1          # one exact version
+bun run pin:opencode-runtime 2.1.1 1.19.3   # and one exact `opencode-ai` release for the license
 ```
 
-The script downloads both platform tarballs, checks that `package/package.json` names the package
-and version the lock claims, hashes the extracted binary and the license, and on macOS runs the
-extracted binary with `--version` and refuses a value that is not the pinned one. That last check is
+The script downloads all five platform tarballs, checks that `package/package.json` names the package
+and version the lock claims, hashes the extracted binary and the license, and runs the extracted
+binary of the target that matches the host with `--version` and refuses a value that is not the pinned one. That last check is
 what protects `verifyInstalledRuntime`, which compares the installed version for exact equality. The
 script prints the block for review instead of rewriting the lock, so paste it over the `opencode`
 entry and re-run it with that exact version: the command reports `already pins OpenCode <version>`
@@ -312,7 +328,7 @@ the user installs nothing.
 bun run pin:cua-driver 0.34.0
 ```
 
-The script downloads all three `-binary` release assets, hashes each shipped file, and refuses a
+The script downloads all four `-binary` release assets, hashes each shipped file, and refuses a
 release that renamed an asset or dropped a file. It prints the block for review instead of rewriting
 the lock, so paste it over the `cuaDriver` entry. Use the versioned `cua-driver-rs-v*` tags; the
 `nightly-cua-driver-rs-v*` tags are rebuilt daily and are not a pin.
@@ -337,7 +353,7 @@ Notarization accepts a nested binary signed by another Developer ID team, and
 `native-runtime.lock.json` also pins Bun, which is not a provider CLI: it is the runtime a STDIO MCP
 server is started with on a computer that has no Node, and the staged layout puts a second name
 `bunx` beside it so that `npx -y <package>` has something to answer it. The pin has its own script
-for the same reason OpenCode does - the version, three platform packages, and the MIT license have
+for the same reason OpenCode does - the version, five platform packages, and the MIT license have
 to agree:
 
 ```bash
@@ -345,7 +361,7 @@ bun run pin:bun-runtime         # the newest published release
 bun run pin:bun-runtime 1.4.2   # one exact version
 ```
 
-It works like the OpenCode script: it downloads all three platform tarballs, checks
+It works like the OpenCode script: it downloads all five platform tarballs, checks
 `package/package.json` against the registry metadata, hashes the extracted binary and
 `LICENSE.md`, runs `--version` on the target that matches the host, and prints the block for review
 instead of rewriting the lock. Paste it over the `bun` entry and re-run it with that exact version
@@ -382,7 +398,11 @@ A change to the desktop app or the web client and the iPhone app gets one file i
 into `apps/mobile/CHANGELOG.md` and set the version in `apps/mobile/app.json`,
 `apps/mobile/package.json` and the copy of it in `bun.lock`. The pre-commit hook checks the new section when a commit changes the
 `app.json` version. The new section is `## [x.y.z] - In review`, and `/changelog` does not show it
-until the store makes the build available. Then `bun run mobile:release:published` writes the date.
+until a store makes the build available. Each store reviews the build on its own. When one store has
+it, `bun run mobile:release:published ios` (or `android`) writes the date of that store, such as
+`## [x.y.z] - 2026-10-14 (Android)`. Run it again for the other store:
+`## [x.y.z] - 2026-10-14 (Android), 2026-10-16 (iOS)`. A date with no store is the date of both
+stores. `/changelog` shows each store, and a store that does not have the version as "In review".
 
 `scripts/check-release-notes.ts` stops a release when the section is missing, empty or appears two
 times, or when it has an unknown group, a group with no items, an item with no text or outside a
@@ -396,6 +416,75 @@ group, a placeholder such as `TODO`, or a heading with no real date. These steps
   `changelog.d` file and does not change `CHANGELOG.md`, unless the pull request has the
   `no-changelog` label. Use the label when a user sees no change.
 - `bun run release:preflight` and the tag workflow check the section of the `package.json` version.
+
+### Post-update notes
+
+The desktop dialog uses edited excerpts of the published `CHANGELOG.md` in
+`src/renderer/src/features/updates/whats-new-releases.json`. Before publishing a desktop release,
+add its version, date, and selected notes there. Keep earlier entries for users who skip releases.
+Use short, plain sentences that explain what the user can do. Put required upgrade steps in
+`notices`. Use `added`, `changed`, and `fixed` for the other entries. Do not copy commit messages,
+developer setup, internal paths, credentials, or unpublished plans. Review this text with the
+release notes before tagging. A release can have no dialog entry when it has nothing to show.
+
+The app bundles this text and loads it when needed, so reading it does not send data or require
+network access. The full changelog button opens the existing public page. Changing the bundled
+text requires a new app release. Missing entries do not cause a network fallback.
+
+The installed desktop version comes from `AppInfo`, not an available update or a remote server.
+In development, `AppInfo` uses `package.json`; Electron otherwise reports its own version.
+The local app profile keeps the highest consumed version in `openbot:whats-new-version`. On the
+first launch of this feature, an existing `openbot:analytics-app-version` can supply the previous
+version; the dialog does not enable analytics. A profile with no previous version gets a silent
+baseline, so onboarding is not covered by release notes. Stable `x.y.z` releases participate;
+unknown versions and prerelease builds do not advance the marker. Downgrades do not lower it.
+The marker is saved before automatic display, including a load error; Settings > Updates can
+open the notes again. Empty updates are consumed without opening. If the marker cannot be saved,
+automatic display is disabled; manual opening still works.
+
+Mobile has its own store version and `apps/mobile/CHANGELOG.md`. It must use a native screen and
+its own local marker when post-update notes are added there. Desktop notes must not use a mobile
+version or the version of a connected server. This desktop feature does not change mobile,
+public web, Signal, database schemas, or Team API contracts.
+
+### Discord announcement
+
+Each desktop release posts a message in the OpenBot Discord. Before publishing a desktop release,
+select the 3 to 5 changes in its `CHANGELOG.md` section that have the largest effect on users, and
+write them with the version in `.github/release-announcement.json`:
+
+```json
+{ "version": "x.y.z", "highlights": ["...", "...", "..."] }
+```
+
+Write each highlight as one short, plain sentence that tells the user what they can do now. Put a
+required upgrade step first. Use the rules of the post-update notes: do not copy commit messages,
+developer setup, internal paths, credentials, or unpublished plans. Replace the highlights of the
+previous release; the file holds only one version.
+
+`scripts/discord-release-announcement.ts` builds the message: a mention of the `Release Pings`
+role, the title `OpenBot vx.y.z is out`, the highlights, and a link to the version on `/changelog`.
+It notifies only that role, not `@everyone` or `@here`. Run
+`bun scripts/discord-release-announcement.ts check x.y.z` to see it. The tag workflow and
+`bun run release:preflight` stop when the file is not for the release version, has fewer than 3 or
+more than 5 highlights, has a highlight that is empty or has a placeholder, a line break or a
+mention, or makes a message longer than 2000 characters. They also stop when the
+`DISCORD_RELEASE_ROLE_ID` repository variable is not set or is not a Discord role ID. After the GitHub Release, the Docker image and the
+boat snapshot are published, the `discord-announce` job posts the message as OpenBot through the
+channel webhook in the `DISCORD_RELEASE_WEBHOOK_URL` secret of the `release` environment. The job
+fails, and posts nothing, when `DISCORD_RELEASE_ROLE_ID` is not set. A failed post does not undo the
+release: re-run the job. A re-run after a successful post posts the message again.
+
+One-time setup:
+
+1. In Discord, open the settings of the announcement channel, then Integrations > Webhooks. Make a
+   webhook named `OpenBot` with the OpenBot icon. Add its URL as the secret
+   `DISCORD_RELEASE_WEBHOOK_URL` of the `release` environment.
+2. In Discord, turn on Developer Mode, open Server Settings > Roles, right-click `Release Pings` and
+   select Copy Role ID. Add the ID as the repository variable `DISCORD_RELEASE_ROLE_ID`.
+
+The mobile app has its own post, file, webhook and workflow. It waits until both stores have the
+version. See [the mobile Discord announcement](../apps/mobile/README.md#discord-announcement).
 
 ## Publish a version
 
@@ -421,7 +510,7 @@ under the new dated version heading, and deletes the `changelog.d` files. Review
 preparation before creating the tag:
 
 ```bash
-git add package.json CHANGELOG.md changelog.d
+git add package.json CHANGELOG.md changelog.d .github/release-announcement.json
 git commit -m "release: prepare vX.Y.Z"
 git push origin main
 bun run release:preflight
@@ -432,9 +521,10 @@ git push origin vX.Y.Z
 ```
 
 Pushing the version tag runs `.github/workflows/release.yml`.
-The tag workflow starts only after `https://openbot.run/join` and the Apple association file return
-direct `200` responses with the required security headers, MIME type, app IDs, and paths: `/join`
-for the desktop app, and `/join` and `/agents/*` for the mobile app.
+The tag workflow builds nothing until `https://openbot.run/join` and the Apple association file return
+direct `200` responses: `/join` with `Cache-Control: no-store`, and the association file as
+`application/json` with the exact app IDs and paths: `/join` for the desktop app, and `/join` and
+`/agents/*` for the mobile app.
 
 The workflow:
 
@@ -444,12 +534,14 @@ The workflow:
 4. builds signed and notarized ARM64 DMG and ZIP artifacts plus a separately signed/notarized Host PKG on a GitHub Apple silicon runner,
    and signed and notarized x64 DMG and ZIP artifacts on a GitHub Intel runner (`macos-15-intel`). Each
    architecture builds on its own runner, because the voice runtime and the remote desktop runtime
-   are prepared for the architecture of the build machine. The Host PKG is ARM64 only;
-   when `hdiutil create` fails with "Device not configured" or "Resource busy", it builds again,
-   up to 3 attempts, because that runner error is not caused by the app;
+   are prepared for the architecture of the build machine. The Host PKG is ARM64 only.
+   When `hdiutil create` fails with "Device not configured" or "Resource busy", or a network
+   connection drops, the app build of each architecture starts again, up to 3 attempts, because
+   these runner errors are not caused by the app;
 5. builds a signed Windows x64 NSIS installer on a GitHub Windows runner (unsigned in a dry run);
 6. builds unsigned Linux x64 and arm64 AppImages on GitHub Ubuntu 24.04 runners of each architecture,
-   with the launch check under `xvfb-run`;
+   with the launch check under `xvfb-run`. A further check mounts each AppImage with only `fusermount3`,
+   because its static runtime must start on systems with no libfuse2, such as Arch Linux and Omarchy;
 7. verifies all three unpacked applications, update metadata, included runtimes, provider control
    artifacts, licenses, checksums, platform signing contracts, launch behavior, and update artifact
    size limits;
@@ -500,25 +592,35 @@ after a change to the Azure setup or to `electron-builder.windows-signing.yml`, 
 Installed OpenBot builds check for updates shortly after launch and every four minutes. New versions
 download automatically while **Automatically download updates** is on, which is the default and is
 persisted per user in `openbot-update-preference-v1.json`; with the setting off, a download starts
-only on a user action. The account popover shows the current state and lets the user download an
-available version, then restart into it. The restart action appears as
+only on a user action. The update notice in the sidebar and Settings > Updates show the current
+state and let the user download an available version, then restart into it. The restart action appears as
 soon as the download completes, and no platform installs without that
 explicit action, because `autoInstallOnAppQuit` stays off so shutdown preparation always runs. Every
 stage the user waits on is bounded by a timeout and recorded in `logs/update/update.log`, so a failed
 check, download, or restart reports an actionable error and can be retried in place.
 
 The voice runtime (the sherpa-onnx N-API addon and ONNX Runtime, from the pinned `sherpa-onnx-*`
-npm packages) is part of the macOS and Windows applications, in `voice/runtime`. Linux ships no voice
-runtime and no remote desktop runtime, so voice prompts and remote desktop report themselves as
-unavailable there. The NVIDIA Parakeet TDT 0.6B v3 int8 model is not part of an application or update
+npm packages) is part of the macOS, Windows and Linux applications, in `voice/runtime`. Each Linux
+AppImage carries the runtime of its architecture. The Linux arm64 AppImage ships no remote desktop
+runtime. The NVIDIA Parakeet TDT 0.6B v3 int8 model is not part of an application or update
 artifact. OpenBot downloads its four pinned files on first voice use, checks the size and SHA-256 of
 each, and keeps the verified files in `runtimes/parakeet-tdt-0.6b-v3-int8` in the user data directory
-for later offline use. At startup, a packaged application removes the old `runtimes/whisper`
-directory if it exists.
+for later offline use. The optional Whisper large-v3 turbo int8 model, which takes a fixed dictation
+language, is downloaded the same way only when the user selects Download in Settings > Voice. Its
+three pinned files go in `runtimes/whisper-turbo-int8`. The optional Underdog Bark 3.0 Plus
+int8 model, which recognizes English only, is downloaded the same way when the user selects Download
+in Settings > Voice. Its four pinned files go in `runtimes/bark-3.0-plus-int8`. They come from an
+unofficial sherpa-onnx conversion; the license is in `build/licenses/Underdog-Bark-3.0-Plus-LICENSE`.
+At startup, a packaged application removes the old `runtimes/whisper` directory if it exists. The
+Supertonic 3 int8 voice model, which reads replies aloud, is downloaded the same way only when the
+user turns on Read replies aloud or selects Download in the Spoken replies section. Its eight pinned
+files go in `runtimes/supertonic-3-int8`. The speech host, `voice-speech-host.js`, is a separate
+utility process that loads the same addon. Its weights are under OpenRAIL-M; the license is in
+`build/licenses/Supertone-Supertonic-3-LICENSE`.
 
 The release workflow stops if the macOS update ZIP, the Windows NSIS installer, or the Linux AppImage
 is larger than 700 MiB, or if the DMG is larger than 750 MiB. It also stops if update metadata has a wrong size or SHA-512, if
-the voice model is present, or if the application contains a second native Claude runtime.
+a voice model is present, or if the application contains a second native Claude runtime.
 
 If a release is bad, publish a newer patch version. Do not replace an already published version with
 different binaries.
@@ -556,12 +658,23 @@ Before creating the first tag or any later release:
 11. confirm the canary update does not crash in `CFURLConnectionSynchronous`, preserves data, starts
     the new version, and can run three provider downloads with restricted memory;
 12. on Windows 10 and 11 x64, confirm that normal exit, restart, and sign-out do not start NSIS, while
-    `Restart and install` does start it;
+    `Restart and install` does start it, shows no installer page, and opens OpenBot again. With
+    OpenBot closed and with it open, confirm that Open OpenBot on a `/join` page opens OpenBot and
+    shows the invitation once, and that uninstall
+    removes `HKCU\Software\Classes\openbot`. Update from the previous release, then install to a
+    folder on a second disk. Confirm that the installer has no "All users" page, that an update
+    installs to the same folder, that `icacls` on that folder lists only the user, `SYSTEM` and
+    `Administrators`, and that the uninstaller removes only that folder. Choose
+    `%USERPROFILE%\OpenBot` with an agent workspace in it, and confirm that OpenBot installs to
+    `%USERPROFILE%\OpenBot\OpenBot` and that uninstall keeps the workspace. As a second account,
+    make an empty `D:\OpenBot`. As the first account, choose it, and confirm that OpenBot installs to
+    `D:\OpenBot\OpenBot` and that the second account cannot write there;
 13. on Ubuntu 24.04 x64 with the AppArmor profile from `build/linux/openbot.apparmor` installed,
     confirm the AppImage starts with the sandbox on, that `xdg-open 'openbot://join?...'` focuses the
-    running application, that a provider downloads in-app, that the server rail is drawn, and that the
+    running application, that a provider downloads in-app, that the page rail is drawn, and that the
     microphone control is absent;
-14. confirm `CHANGELOG.md` describes the version and the working tree is clean;
+14. confirm `CHANGELOG.md` and `.github/release-announcement.json` describe the version and the
+    working tree is clean;
 15. create and push the version commit, and create the tag locally, only after CI passes on `main`;
 16. read the running Signal commit from `curl -fsS https://signal.openbot.run/health/live`. If it is
     missing or `unknown`, or if `git diff --quiet <running commit> <new tag> -- remote packages/contracts/src/signal-protocol`

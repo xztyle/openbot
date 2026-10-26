@@ -32,18 +32,20 @@ export const STORAGE_CATEGORY_LABELS = {
 } as const satisfies Record<StorageCategory, AppTextKey>;
 
 /**
- * The bar shows five groups, not eight categories: past four hues a stacked bar stops being
- * readable, so the app's own data folds into one neutral "App data" segment.
+ * The bar shows six groups, not eight categories: past five hues a stacked bar stops being
+ * readable, so caches and logs fold into one neutral "App data" segment. Provider runtimes keep a
+ * hue of their own: they are usually the largest share, and "App data" told the user nothing.
  */
-export type StorageGroup = "workspaces" | "files" | "chats" | "downloads" | "app";
+export type StorageGroup = "workspaces" | "files" | "chats" | "downloads" | "runtimes" | "app";
 
-export const STORAGE_GROUPS: readonly StorageGroup[] = ["workspaces", "files", "chats", "downloads", "app"];
+export const STORAGE_GROUPS: readonly StorageGroup[] = ["workspaces", "files", "chats", "downloads", "runtimes", "app"];
 
 export const STORAGE_GROUP_LABELS = {
   workspaces: "files.group.workspaces",
   files: "files.group.files",
   chats: "files.group.chats",
   downloads: "files.group.downloads",
+  runtimes: "files.category.runtimes",
   app: "files.group.app",
 } as const satisfies Record<StorageGroup, AppTextKey>;
 
@@ -54,7 +56,7 @@ const STORAGE_GROUP_OF: Record<StorageCategory, StorageGroup> = {
   chats: "chats",
   downloads: "downloads",
   caches: "app",
-  runtimes: "app",
+  runtimes: "runtimes",
   logs: "app",
 };
 

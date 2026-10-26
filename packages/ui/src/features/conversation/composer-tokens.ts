@@ -1,9 +1,9 @@
 import { type ChatTagKind, chatTagReferences } from "@openbot/contracts/chat-tag-references";
-import type { DraftAttachment, InstalledSkill, McpServerConfig } from "@openbot/contracts/ipc";
+import type { DraftAttachment } from "@openbot/contracts/ipc";
 import { referenceChipClasses } from "@openbot/ui/reference-chip";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import { createStaticAvatarSvg } from "../../bloub-avatar";
-import type { AgentProfile } from "../../data";
+import type { ComposerAgent, ComposerMcpServer, ComposerSkill } from "../../data";
 import { currentText } from "../../text";
 import { appendAttachmentReferenceVisual } from "./AttachmentReference";
 
@@ -58,11 +58,22 @@ export function createAttachmentToken(attachment: DraftAttachment, actions: Atta
   token.setAttribute("tabindex", "0");
   token.setAttribute("aria-label", currentText().t("composer.token.attachment", { name: attachment.name }));
   token.setAttribute("aria-describedby", actions.tooltipId);
-  appendAttachmentReferenceVisual(token, attachment.name);
+  if (attachment.kind === "image" && attachment.previewUrl) {
+    const preview = document.createElement("img");
+    preview.className = "composer-file-reference-image";
+    preview.src = attachment.previewUrl;
+    preview.alt = "";
+    preview.draggable = false;
+    token.append(preview);
+  } else appendAttachmentReferenceVisual(token, attachment.name);
   const name = document.createElement("span");
   name.className = "inline-file-reference-name";
   name.textContent = attachment.name;
   token.append(name);
+  const size = document.createElement("span");
+  size.className = "composer-file-reference-size";
+  size.textContent = currentText().format.fileSize(attachment.size);
+  token.append(size);
   const showTooltip = () => actions.showTooltip(token, attachment.name);
   const hideTooltip = () => actions.hideTooltip(token);
   token.addEventListener("pointerenter", showTooltip);
@@ -107,7 +118,7 @@ export function syncAttachmentTokens(
   }
 }
 
-export function createMentionToken(agent: AgentProfile): HTMLSpanElement {
+export function createMentionToken(agent: ComposerAgent): HTMLSpanElement {
   const token = document.createElement("span");
   token.className = `composer-mention-token ${referenceChipClasses.root}`;
   token.dataset.kind = "agent";
@@ -137,13 +148,13 @@ export function createMentionToken(agent: AgentProfile): HTMLSpanElement {
   return token;
 }
 
-export function createSkillToken(skill: InstalledSkill): HTMLSpanElement {
+export function createSkillToken(skill: ComposerSkill): HTMLSpanElement {
   const token = document.createElement("span");
   updateSkillToken(token, skill);
   return token;
 }
 
-function updateSkillToken(token: HTMLSpanElement, skill: InstalledSkill): void {
+function updateSkillToken(token: HTMLSpanElement, skill: ComposerSkill): void {
   token.className = `composer-mention-token ${referenceChipClasses.root}`;
   token.dataset.kind = "skill";
   token.title = skill.name;
@@ -161,7 +172,7 @@ function updateSkillToken(token: HTMLSpanElement, skill: InstalledSkill): void {
   token.replaceChildren(iconWrap, name);
 }
 
-/* The lucide-solid 1.33.0 `Puzzle` and `Blocks` shapes, drawn without the icon components. A token
+/* The lucide-solid 1.33.0 `Puzzle`, `Blocks` and `TextQuote` shapes, drawn without the icon components. A token
    is built in effects and event handlers, where a production build has no Solid owner, and lucide's
    `Icon` reads a context there: it throws `NoOwnerError` and halts the renderer. */
 type GlyphShape = ["path" | "rect", Record<string, string>];
@@ -178,6 +189,13 @@ const PUZZLE_GLYPH: GlyphShape[] = [
 const BLOCKS_GLYPH: GlyphShape[] = [
   ["path", { d: "M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2" }],
   ["rect", { x: "14", y: "2", width: "8", height: "8", rx: "1" }],
+];
+
+const TEXT_QUOTE_GLYPH: GlyphShape[] = [
+  ["path", { d: "M17 5H3" }],
+  ["path", { d: "M21 12H8" }],
+  ["path", { d: "M21 19H8" }],
+  ["path", { d: "M3 12v7" }],
 ];
 
 const GLYPH_ATTRIBUTES = {
@@ -204,13 +222,13 @@ function createChipGlyph(name: string, shapes: GlyphShape[]): SVGSVGElement {
   return svg;
 }
 
-export function createMcpToken(server: McpServerConfig): HTMLSpanElement {
+export function createMcpToken(server: ComposerMcpServer): HTMLSpanElement {
   const token = document.createElement("span");
   updateMcpToken(token, server);
   return token;
 }
 
-function updateMcpToken(token: HTMLSpanElement, server: McpServerConfig): void {
+function updateMcpToken(token: HTMLSpanElement, server: ComposerMcpServer): void {
   token.className = `composer-mention-token ${referenceChipClasses.root}`;
   token.dataset.kind = "mcp";
   token.title = server.name;
@@ -228,7 +246,28 @@ function updateMcpToken(token: HTMLSpanElement, server: McpServerConfig): void {
   token.replaceChildren(iconWrap, name);
 }
 
-function createUnavailableTagToken(kind: ChatTagKind, id: string, name: string): HTMLSpanElement {
+/** A passage that the user selected in a message. Its id is the id of that message. */
+export function createQuoteToken(messageId: string, text: string): HTMLSpanElement {
+  const token = document.createElement("span");
+  token.className = `composer-mention-token ${referenceChipClasses.root}`;
+  token.dataset.kind = "quote";
+  token.title = text;
+  token.contentEditable = "false";
+  token.dataset.quoteMessageId = messageId;
+  token.dataset.quoteText = text;
+  token.setAttribute("aria-label", currentText().t("composer.token.quote", { name: text }));
+  const iconWrap = document.createElement("span");
+  iconWrap.className = referenceChipClasses.icon;
+  iconWrap.setAttribute("aria-hidden", "true");
+  iconWrap.append(createChipGlyph("text-quote", TEXT_QUOTE_GLYPH));
+  const name = document.createElement("span");
+  name.className = referenceChipClasses.name;
+  name.textContent = text;
+  token.append(iconWrap, name);
+  return token;
+}
+
+function createUnavailableTagToken(kind: Exclude<ChatTagKind, "quote">, id: string, name: string): HTMLSpanElement {
   const token = document.createElement("span");
   if (kind === "skill") {
     updateUnavailableSkillToken(token, id, name);
@@ -267,7 +306,7 @@ function updateUnavailableMcpToken(token: HTMLSpanElement, id: string, name: str
 
 /* A server the host no longer holds, or one the user turned off, is drawn as a name the agent
    cannot reach - the same outline a removed skill takes. */
-export function syncMcpTokens(editor: HTMLDivElement, servers: McpServerConfig[]): void {
+export function syncMcpTokens(editor: HTMLDivElement, servers: ComposerMcpServer[]): void {
   const available = new Map(servers.filter((server) => server.enabled).map((server) => [server.id, server]));
   for (const token of editor.querySelectorAll<HTMLSpanElement>("[data-mcp-id]")) {
     const id = token.dataset.mcpId;
@@ -278,7 +317,7 @@ export function syncMcpTokens(editor: HTMLDivElement, servers: McpServerConfig[]
   }
 }
 
-export function syncSkillTokens(editor: HTMLDivElement, skills: InstalledSkill[]): void {
+export function syncSkillTokens(editor: HTMLDivElement, skills: ComposerSkill[]): void {
   const available = new Map(
     skills
       .filter((skill) => skill.state !== "needs-repair" && skill.enabled !== false)
@@ -296,9 +335,9 @@ export function syncSkillTokens(editor: HTMLDivElement, skills: InstalledSkill[]
 export function renderEditorValue(
   editor: HTMLDivElement,
   value: string,
-  agents: AgentProfile[],
-  skills: InstalledSkill[],
-  mcpServers: McpServerConfig[],
+  agents: ComposerAgent[],
+  skills: ComposerSkill[],
+  mcpServers: ComposerMcpServer[],
   attachments: DraftAttachment[],
   attachmentTokenActions: AttachmentTokenActions,
 ) {
@@ -328,6 +367,11 @@ export function renderEditorValue(
       cursor = index + match[0].length;
       continue;
     }
+    if (semanticReference?.kind === "quote") {
+      editor.append(createQuoteToken(semanticReference.id, semanticReference.name));
+      cursor = index + match[0].length;
+      continue;
+    }
     if (target.startsWith("mcp:")) {
       const id = target.slice("mcp:".length);
       const server = mcpServers.find((candidate) => candidate.id === id && candidate.enabled);
@@ -344,7 +388,7 @@ export function renderEditorValue(
   if (value.endsWith("\n")) editor.append(document.createElement("br"));
 }
 
-function scheduleStaticMentionAvatar(avatar: HTMLElement, agent: AgentProfile): void {
+function scheduleStaticMentionAvatar(avatar: HTMLElement, agent: ComposerAgent): void {
   queueMicrotask(() => {
     if (!avatar.isConnected) return;
     avatar.replaceChildren(createStaticAvatarSvg(agent.avatarSeed, agent.avatarHue));

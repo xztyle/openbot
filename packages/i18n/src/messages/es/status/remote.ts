@@ -19,7 +19,6 @@ export const messages = {
   "status.remote.stageCompatibility": "Comprobando la compatibilidad del escritorio: {reason}",
   "status.remote.stageAgents": "Cargando agentes: {reason}",
   "status.remote.stageReads": "Cargando el estado de lectura: {reason}",
-  "status.remote.stageConversations": "Cargando conversaciones: {reason}",
   "status.remote.suspendedDetail":
     "Actualiza OpenBot Mobile o la aplicación de escritorio antes de conectarte.\n{detail}",
   "status.remote.cooldownDetail":

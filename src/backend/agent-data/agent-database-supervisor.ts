@@ -14,6 +14,8 @@ export interface AgentDatabaseSupervisorOptions {
   /** Input, not a wait: a test sets it low to reach the kill path without sleeping. */
   statementDeadlineMs?: number;
   queueWaitMs?: number;
+  /** Reports how long the host took to answer one statement, or to be ended for it. */
+  onStatementSettled?: (durationMs: number) => void;
 }
 
 /** The answer to one statement. A failure is a value, never a rejection: every one of these is a
@@ -48,10 +50,12 @@ export class AgentDatabaseSupervisor {
   readonly #spawnHost: () => AgentDatabaseHostProcess;
   readonly #statementDeadlineMs: number;
   readonly #queueWaitMs: number;
+  readonly #onStatementSettled: ((durationMs: number) => void) | undefined;
   readonly #queue: PendingRequest[] = [];
 
   #host: AgentDatabaseHostProcess | null = null;
   #inFlight: PendingRequest | null = null;
+  #sentAt = 0;
   #deadline: NodeJS.Timeout | null = null;
   /** Bumped whenever a host is discarded, so a late message from it is dropped rather than matched. */
   #generation = 0;
@@ -62,6 +66,7 @@ export class AgentDatabaseSupervisor {
     this.#spawnHost = options.spawnHost;
     this.#statementDeadlineMs = options.statementDeadlineMs ?? AGENT_DATABASE_LIMITS.statementDeadlineMs;
     this.#queueWaitMs = options.queueWaitMs ?? AGENT_DATABASE_LIMITS.queueWaitMs;
+    this.#onStatementSettled = options.onStatementSettled;
   }
 
   send(request: AgentDatabaseRequestInput): Effect.Effect<AgentDatabaseOutcome> {
@@ -115,6 +120,7 @@ export class AgentDatabaseSupervisor {
     const generation = this.#generation;
     this.#deadline = setTimeout(() => this.#discardHost(generation, STOPPED_MESSAGE), this.#statementDeadlineMs);
     this.#deadline.unref();
+    this.#sentAt = performance.now();
     host.send(next.request);
   }
 
@@ -135,6 +141,7 @@ export class AgentDatabaseSupervisor {
     this.#clearDeadline();
     this.#inFlight = null;
     pending.settle(response);
+    this.#reportSettled();
     this.#pump();
   }
 
@@ -151,8 +158,15 @@ export class AgentDatabaseSupervisor {
 
     const pending = this.#inFlight;
     this.#inFlight = null;
-    pending?.settle(failed("internal", message));
+    if (pending) {
+      pending.settle(failed("internal", message));
+      this.#reportSettled();
+    }
     this.#pump();
+  }
+
+  #reportSettled(): void {
+    this.#onStatementSettled?.(performance.now() - this.#sentAt);
   }
 
   #clearDeadline(): void {

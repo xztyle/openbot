@@ -14,11 +14,7 @@ import type { EventCheckArguments, EventCheckReadSession } from "../backend/even
 import { readJsonBody } from "../backend/local-mcp-bridge";
 import { isSlackApp, mayCallChatTool } from "../backend/mcp-chat-policy";
 import { McpOperationError, mcpCall, mcpFailure, mcpSync } from "../backend/mcp-effects";
-import {
-  type McpAuthorizationSource,
-  type McpToolRuntimeSource,
-  usableMcpServer,
-} from "../backend/mcp-provider-shapes";
+import { type McpEndpointSource, type McpToolRuntimeSource, usableMcpServer } from "../backend/mcp-provider-shapes";
 import { mcpSecretValues, redactMcpValues } from "../backend/mcp-redaction";
 import { redactMcpResult } from "../backend/mcp-result-redaction";
 import { createMcpTransport } from "../backend/mcp-transport";
@@ -29,7 +25,7 @@ interface Options {
   policies: ChatMcpPolicyStore;
   configs: () => readonly McpServerConfig[];
   chatKey: (threadId: string) => string | null;
-  authorization: McpAuthorizationSource;
+  endpoint: McpEndpointSource;
   runtimes: McpToolRuntimeSource;
 }
 interface Upstream {
@@ -327,7 +323,7 @@ export class ChatMcpProxy {
   }
   readonly #upstream = Effect.fn("ChatMcpProxy.upstream")(function* (this: ChatMcpProxy, config: McpServerConfig) {
     const launched = yield* this.#launchConfig(config);
-    const resolved = yield* usableMcpServer(launched, this.options.runtimes(), this.options.authorization);
+    const resolved = yield* usableMcpServer(launched, this.options.runtimes(), this.options.endpoint);
     if (resolved.error !== undefined) throw new Error("Unavailable app transport.");
     const identity = createHash("sha256").update(JSON.stringify(resolved)).digest("hex");
     const held = this.#upstreams.get(identity);

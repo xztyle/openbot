@@ -1,8 +1,11 @@
+import type { NotificationSound } from "./notification-relay";
+
 /**
  * One iOS Live Activity update that a host asks the OpenBot account service to send through Apple
  * Push Notification service. The content is sealed by the host with keys that only the phone knows,
  * so the service and Apple forward it without reading it. The service builds the Apple payload
- * itself and adds no text, so a host cannot use it to send an ordinary notification.
+ * itself, and an alert has only its own fixed text, so a host cannot use it to send an ordinary
+ * notification.
  */
 export interface LiveActivityRelayPush {
   /** The ActivityKit push token of the activity, as hex. */
@@ -19,6 +22,12 @@ export interface LiveActivityRelayPush {
   staleAt: number | null;
   /** 10 shows a change of state at once. 5 is for a change inside one state, which iOS can delay. */
   priority: 5 | 10;
+  /**
+   * An update that shows an event that notifies the member: iOS lights up the screen, shows the
+   * activity, and plays the sound, in place of a notification. `null` for other updates. Hosts
+   * before this field send none, and the service reads that as `null`.
+   */
+  alert: { sound: NotificationSound | null } | null;
 }
 
 /** A sealed update above this size would not fit the 4 KB Apple payload with its envelope. */

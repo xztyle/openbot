@@ -30,7 +30,7 @@ export const messages = {
   "import.guide.messageNote":
     "ワークスペースのファイルを含めるか確認したあと、.zip ファイルを「ダウンロード」に保存します。",
   "import.guide.step3": ".zip ファイルを選択します",
-  "import.guide.reading": "エクスポートを読み込んでいます…",
+  "import.guide.reading": "読み込み中…",
   "import.guide.choose": "エクスポートファイルを選択",
   "import.guide.chooseNote": "変更の前に、含まれるエージェントを確認できます。",
   "import.review.title": "{source} のエクスポート",
@@ -39,7 +39,7 @@ export const messages = {
   "import.review.noFiles": "ワークスペースのファイルはありません",
   "import.review.importAgents": "{agents}をインポート",
   "import.review.importBoth": "{agents}と{channels}をインポート",
-  "import.review.reading": "読み込んでいます…",
+  "import.review.reading": "読み込み中…",
   "import.review.chooseAnother": "別のファイルを選択",
   "import.review.startFailed": "インポートを開始できませんでした",
   "import.review.warnings": "移行されない項目があります",
@@ -47,7 +47,7 @@ export const messages = {
   "import.review.channels": "チャンネル",
   "import.review.selected": "{total} 件中 {selected} 件を選択",
   "import.review.importItem": "{name} をインポート",
-  "import.review.importing": "インポートしています…",
+  "import.review.importing": "インポート中…",
   "import.review.channelNeedsMember": "インポートするには、このチャンネルのエージェントを 1 つ以上選択してください。",
   "import.review.channelWithout": "{names} を除いてインポートします。",
   "import.review.nameExists":

@@ -24,24 +24,49 @@ import {
 import { redactMcpSecrets, redactMcpValues } from "./mcp-redaction";
 import { createMcpTransport } from "./mcp-transport";
 
-export const MCP_PROBE_TIMEOUT_MS = 10_000;
+const MCP_PROBE_TIMEOUT_MS = 10_000;
 
-export interface McpProbeResult {
+/**
+ * The deadline for a stdio server. Its first start can download the package and all its
+ * dependencies: `npx -y firecrawl-mcp` fetches about 170 packages before the server answers.
+ */
+export const MCP_STDIO_PROBE_TIMEOUT_MS = 60_000;
+
+function probeTimeoutMs(config: McpServerConfig) {
+  return config.transport === "stdio" ? MCP_STDIO_PROBE_TIMEOUT_MS : MCP_PROBE_TIMEOUT_MS;
+}
+
+interface McpProbeResult {
   toolCount: number;
   error: string | null;
+}
+
+/** What the user must give before the server answers: an OAuth sign-in, or a key in a header or the environment. */
+type McpProbeNeed = "sign_in" | "key";
+
+/** The most tool names an agent is told: enough to see what a server does, short enough for one tool result. */
+const MCP_PROBE_TOOL_NAMES = 50;
+
+/**
+ * The probe result as an agent reads it: the first tool names, and what the user must give when the
+ * server refused. The panel and the Team API keep `McpProbeResult`, whose shape they decode.
+ */
+export interface McpProbeOutcome extends McpProbeResult {
+  tools: string[];
+  needs: McpProbeNeed | null;
 }
 
 /**
  * Tests one configuration, saved or not: connects, counts the tools, and disconnects.
  *
  * Only a user asking for it starts this. OpenBot does not test by itself, because a connection is
- * not free - an http server can want an OAuth sign-in, a cold `npx` can take longer than the
- * deadline below, and a server can do real work at startup. The answer is reported once and not
+ * not free - an http server can want an OAuth sign-in, a cold `npx` can download for most of the
+ * stdio deadline, and a server can do real work at startup. The answer is reported once and not
  * stored.
  */
 // SDK errors can quote credentials. Internal operations have no tracing spans; only the
 // redacted McpProbeResult crosses the probe boundary.
-export class McpProbeFailure extends Schema.TaggedError<McpProbeFailure>()("McpProbeFailure", {
+class McpProbeFailure extends Schema.TaggedError<McpProbeFailure>()("McpProbeFailure", {
   cause: Schema.Defect(),
 }) {}
 
@@ -56,7 +81,19 @@ export type McpSignInPlace = "here" | "host";
 
 export const testMcpServer = Effect.fnUntraced(function* (
   config: McpServerConfig,
-  timeoutMs = MCP_PROBE_TIMEOUT_MS,
+  timeoutMs = probeTimeoutMs(config),
+  tools: McpToolRuntimes = NO_MCP_TOOL_RUNTIMES,
+  oauth?: Pick<McpOAuthAuthority, "accessToken" | "signIn" | "forConnection">,
+  signInPlace: McpSignInPlace | null = null,
+) {
+  const { toolCount, error } = yield* inspectMcpServer(config, timeoutMs, tools, oauth, signInPlace);
+  return { toolCount, error } satisfies McpProbeResult;
+});
+
+/** `testMcpServer` with the tool names and the need an agent reads. */
+export const inspectMcpServer = Effect.fnUntraced(function* (
+  config: McpServerConfig,
+  timeoutMs = probeTimeoutMs(config),
   tools: McpToolRuntimes = NO_MCP_TOOL_RUNTIMES,
   oauth?: Pick<McpOAuthAuthority, "accessToken" | "signIn" | "forConnection">,
   signInPlace: McpSignInPlace | null = null,
@@ -70,7 +107,13 @@ export const testMcpServer = Effect.fnUntraced(function* (
         const server = yield* usableMcpServer(
           config,
           tools,
-          authority ? (subject) => authority.accessToken(subject.url) : undefined,
+          // The probe runs in this process, so it holds the token itself and never uses the proxy.
+          authority
+            ? (subject) =>
+                authority
+                  .accessToken(subject.url)
+                  .pipe(Effect.map((authorization) => ({ url: subject.url, authorization, proxied: false })))
+            : undefined,
         );
         return yield* probeMcpServerEffect(server, timeoutMs, signIn, signInPlace);
       }),
@@ -93,38 +136,65 @@ const probeMcpServerEffect = Effect.fnUntraced(function* (
   timeoutMs: number,
   signIn: McpSignIn | null,
   signInPlace: McpSignInPlace | null,
-): Effect.fn.Return<McpProbeResult> {
+): Effect.fn.Return<McpProbeOutcome> {
   const { config } = server;
-  if (server.error !== undefined) return { toolCount: 0, error: boundedError(server.error) };
+  if (server.error !== undefined) return { toolCount: 0, error: boundedError(server.error), tools: [], needs: null };
   const seen: { challenge: McpChallenge | null } = { challenge: null };
   const record = (next: McpChallenge) => {
     seen.challenge = next;
   };
-  const failure = (error: unknown): McpProbeResult => {
+  const failure = (error: unknown): McpProbeOutcome => {
     const described = describeProbeFailure(error, config, timeoutMs, signIn, seen.challenge, signInPlace);
-    return { toolCount: 0, error: boundedError(redactMcpValues(described, probeSecrets(server, signIn))) };
+    return {
+      toolCount: 0,
+      error: boundedError(redactMcpValues(described, probeSecrets(server, signIn))),
+      tools: [],
+      needs: signIn ? null : probeNeed(config, seen.challenge),
+    };
   };
+  const found = (listed: ListedTools): McpProbeOutcome => ({
+    toolCount: listed.count,
+    error: null,
+    tools: listed.names,
+    needs: null,
+  });
+  // The person's sign-in has its own deadline; the retried connection gets a fresh transport.
+  const afterSignIn = Effect.fnUntraced(function* (active: McpSignIn) {
+    const retry = yield* Effect.result(
+      active
+        .complete()
+        .pipe(toMcpProbeFailure, Effect.andThen(connectAndCountEffect(server, timeoutMs, active.provider, record))),
+    );
+    return Result.isFailure(retry) ? failure(retry.failure.cause) : found(retry.success);
+  });
   const startedAt = Date.now();
   const first = yield* Effect.result(connectAndCountEffect(server, timeoutMs, signIn?.provider, record));
-  if (Result.isSuccess(first)) return { toolCount: first.success, error: null };
+  if (Result.isSuccess(first)) {
+    // The user pressed Sign in, and the server answered without a sign-in: it can still want one
+    // to run a tool. Its sign-in starts here, or the press ends with nothing opened and nothing said.
+    if (!signIn) return found(first.success);
+    const begun = yield* Effect.result(signIn.begin());
+    if (Result.isFailure(begun)) return failure(begun.failure.cause);
+    return begun.success ? yield* afterSignIn(signIn) : found(first.success);
+  }
   // A server on the 2025-03 MCP authorization spec answers 401 with no challenge at all; its OAuth
   // metadata at the origin is what says a sign-in, not a key, is wanted. Only a refusal the sentence
   // would explain is followed up, and only public documents are read: no credential is sent.
   const unexplained = seen.challenge;
-  if (!signIn && signInPlace !== null && unexplained?.status === 401 && !unexplained.bearer)
+  if (
+    !signIn &&
+    signInPlace !== null &&
+    unexplained?.status === 401 &&
+    !unexplained.bearer &&
+    !hasCredentialHeader(config)
+  )
     // The same Test deadline covers the lookup: it gets only the time the connection left.
     seen.challenge = {
       ...unexplained,
       bearer: yield* advertisesOAuth(config.url, timeoutMs - (Date.now() - startedAt)),
     };
   if (!signIn || !(first.failure.cause instanceof UnauthorizedError)) return failure(first.failure.cause);
-  // The person's sign-in has its own deadline; the retried connection gets a fresh transport.
-  const retry = yield* Effect.result(
-    signIn
-      .complete()
-      .pipe(toMcpProbeFailure, Effect.andThen(connectAndCountEffect(server, timeoutMs, signIn.provider, record))),
-  );
-  return Result.isFailure(retry) ? failure(retry.failure.cause) : { toolCount: retry.success, error: null };
+  return yield* afterSignIn(signIn);
 });
 
 /**
@@ -133,7 +203,8 @@ const probeMcpServerEffect = Effect.fnUntraced(function* (
  * The SDK reports a token the server refused right after a sign-in as a bare 401, which would read
  * as "check the API key" to someone who has just signed in. And a server that answers a Bearer
  * challenge to a probe that could not sign in wants a sign-in, not a key: that is what Granola
- * answers, and the header fields alone gave the user no way forward.
+ * answers, and the header fields alone gave the user no way forward. A key pasted into a header
+ * is the exception: Composio Connect ignores a key in the wrong header and sends the same challenge.
  */
 function describeProbeFailure(
   error: unknown,
@@ -147,7 +218,7 @@ function describeProbeFailure(
   if (signIn?.registrationFailed() && isRegistrationRefusal(error)) return REGISTRATION_REFUSED;
   if (signIn && httpStatus(error) === 401) return sourceText("error.backend.mcpSignInNotAccepted");
   // A key the user pasted into a header is theirs to fix; the sign-in would not replace it.
-  if (challenge?.status === 401 && challenge.bearer && !hasAuthorizationHeader(config)) {
+  if (challenge?.status === 401 && challenge.bearer && !hasCredentialHeader(config)) {
     const described = describeSignInChallenge(config.url, challenge.url, signInPlace);
     if (described) return described;
   }
@@ -162,7 +233,7 @@ function describeProbeFailure(
  * address the row holds, so a test that passed over https would hide that every agent still fails.
  * The sentence names the https address instead, without its query, which can carry a key.
  */
-export function describeSignInChallenge(url: string, finalUrl: string, place: McpSignInPlace | null): string | null {
+function describeSignInChallenge(url: string, finalUrl: string, place: McpSignInPlace | null): string | null {
   if (place === null) return null;
   if (!normalizeResource(url))
     return sourceText("error.backend.mcpSignInNeedsHttps", { url: httpsAddress(finalUrl, url) });
@@ -178,9 +249,23 @@ function httpsAddress(finalUrl: string, url: string): string {
   return target.toString();
 }
 
-function hasAuthorizationHeader(config: McpServerConfig): boolean {
-  return config.headers.some(({ key }) => key.trim().toLowerCase() === "authorization");
+/**
+ * What the refusal asks of the user, decided as `describeProbeFailure` words it: a Bearer challenge
+ * to a row with no credential header of its own wants a sign-in, any other refusal a key. A
+ * sign-in over plain http needs a new address first, which the error names.
+ */
+function probeNeed(config: McpServerConfig, challenge: McpChallenge | null): McpProbeNeed | null {
+  if (!challenge || !isAccessRefusal(challenge.status)) return null;
+  if (challenge.status !== 401 || !challenge.bearer || hasCredentialHeader(config)) return "key";
+  return normalizeResource(config.url) ? "sign_in" : null;
 }
+
+/** A header whose name says it holds a credential, such as `Authorization` or `x-api-key`, has a value. */
+function hasCredentialHeader(config: McpServerConfig): boolean {
+  return config.headers.some(({ key, value }) => CREDENTIAL_HEADER.test(key) && value.trim().length > 0);
+}
+
+const CREDENTIAL_HEADER = /auth|key|token|secret/i;
 
 /**
  * Every secret this probe could have sent.
@@ -227,19 +312,27 @@ const connectAndCountEffect = Effect.fnUntraced(function* (
   );
 });
 
+interface ListedTools {
+  count: number;
+  /** The first names, up to `MCP_PROBE_TOOL_NAMES`. */
+  names: string[];
+}
+
 /** Count all pages within the connection deadline, without repeating a cursor. */
 const countToolsEffect = Effect.fnUntraced(function* (client: Client) {
   const seen = new Set<string>();
+  const names: string[] = [];
   let count = 0;
   let cursor: string | undefined;
   for (;;) {
     const page = yield* probeIo((signal) =>
       client.listTools(cursor === undefined ? undefined : { cursor }, { signal }),
     );
+    for (const tool of page.tools) if (names.length < MCP_PROBE_TOOL_NAMES) names.push(tool.name.slice(0, 128));
     count += page.tools.length;
-    if (count >= INPUT_LIMITS.mcpToolCount) return INPUT_LIMITS.mcpToolCount;
+    if (count >= INPUT_LIMITS.mcpToolCount) return { count: INPUT_LIMITS.mcpToolCount, names } satisfies ListedTools;
     cursor = page.nextCursor;
-    if (cursor === undefined || seen.has(cursor)) return count;
+    if (cursor === undefined || seen.has(cursor)) return { count, names } satisfies ListedTools;
     seen.add(cursor);
   }
 });
@@ -314,7 +407,7 @@ class McpTimeout extends Error {
 }
 
 /** The failure, in the words the panel shows. Secrets are removed before the text leaves here. */
-export function describeMcpError(error: unknown, config: McpServerConfig, timeoutMs: number): string {
+function describeMcpError(error: unknown, config: McpServerConfig, timeoutMs: number): string {
   const described = describeMcpErrorText(error, config, timeoutMs);
   // A bridge that never answers is the case the native connection replaces: say where to go.
   const bridgeUrl = mcpRemoteBridgeUrl(config);

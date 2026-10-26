@@ -107,13 +107,12 @@ describe("marketplace presentation migration", () => {
     const skills = new SkillMarketplace(bindings);
     expect((await runApiEffect(skills.list({ query: "Owner" }))).skills.map((item) => item.id)).toEqual(["skill-1"]);
     expect((await runApiEffect(agents.list({ query: "Owner" }))).agents.map((item) => item.id)).toEqual(["agent-1"]);
+    // A creator with no display name stays anonymous: the email is not shown and does not match a search.
     database.exec("UPDATE users SET name = NULL");
-    expect((await runApiEffect(skills.list({ query: "owner@example.com" }))).skills.map((item) => item.id)).toEqual([
-      "skill-1",
-    ]);
-    expect((await runApiEffect(agents.list({ query: "owner@example.com" }))).agents.map((item) => item.id)).toEqual([
-      "agent-1",
-    ]);
+    expect((await runApiEffect(skills.list({ query: "owner@example.com" }))).skills).toEqual([]);
+    expect((await runApiEffect(agents.list({ query: "owner@example.com" }))).agents).toEqual([]);
+    expect((await runApiEffect(skills.list({}))).skills.map((item) => item.creatorName)).toEqual(["OpenBot user"]);
+    expect((await runApiEffect(agents.list({}))).agents.map((item) => item.creatorName)).toEqual(["OpenBot user"]);
 
     expect((await runApiEffect(agents.list({ category: "coding" }))).agents).toEqual([]);
     expect((await runApiEffect(agents.list({ category: "other" }))).agents.map((item) => item.id)).toEqual(["agent-1"]);

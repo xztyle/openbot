@@ -1,12 +1,15 @@
 import type { ChannelCommand, ChannelPage, ChannelSummary } from "@openbot/contracts/ipc";
+import type { AppTextKey } from "@openbot/i18n";
 import type { AgentProfile } from "@openbot/ui/data";
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createStore, flush, onSettled, reconcile, untrack } from "solid-js";
+import { actionToast } from "../../action-toast";
+import { type DesktopAnalyticsProperties, desktopAnalytics } from "../../analytics";
 import { mergeChannelPage } from "./channel-page-merge";
 
 /**
  * Takes the older edge of a page: its cursor, and the unloaded length that belongs to that cursor. A
- * page with no length removes the old one, so the day rail never draws a length for another window.
+ * page with no length removes the old one, so the scroll rail never draws a length for another window.
  */
 function takeOlderWindow(target: ChannelPage, source: ChannelPage): void {
   target.olderCursor = source.olderCursor;
@@ -41,6 +44,8 @@ interface ChannelsState {
   loading: boolean;
   pending: boolean;
   error: string | null;
+  /** The code of the failure in `error`. It shows only while `error` is set. */
+  errorReference: string | null;
   editing: "create" | "settings" | null;
   archived: boolean;
   collapsed: boolean;
@@ -66,9 +71,29 @@ export interface ChannelsEnvironment {
   beforeOpen: () => void;
   /** Whether a message that arrives now is in front of the reader. */
   canMarkRead: () => boolean;
+  /** Each channel list that the reader of `scope` gets, before the read marks the open channel read. */
+  onList?: (channels: ChannelSummary[], scope: string) => void;
 }
 
 export type ChannelsController = ReturnType<typeof createChannelsController>;
+
+/** The localized and redacted sentence for a failure, and its code. */
+function failure(error: unknown, fallback: AppTextKey): Pick<ChannelsState, "error" | "errorReference"> {
+  const details = currentText().errorDetails(error, currentText().t(fallback));
+  return { error: details.message, errorReference: details.reference };
+}
+
+type ChannelAction = DesktopAnalyticsProperties<"channel_action">["action"];
+
+/** The tracked action of a command, or `null` for one that is not tracked, such as a settings edit. */
+function channelAction(input: ChannelCommand, creating: boolean, page: ChannelPage | null): ChannelAction | null {
+  if (input.type === "archive") return "archived";
+  if (input.type !== "save") return null;
+  if (creating) return "created";
+  if (page?.channel.id !== input.channelId) return null;
+  const members = new Set(page.channel.members.map((member) => member.agentId));
+  return input.draft.members.some((member) => !members.has(member.agentId)) ? "member_added" : null;
+}
 
 export function createChannelsController(env: ChannelsEnvironment) {
   const [state, setState] = createStore<ChannelsState>({
@@ -79,6 +104,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     loading: false,
     pending: false,
     error: null,
+    errorReference: null,
     editing: null,
     archived: false,
     collapsed: false,
@@ -152,8 +178,11 @@ export function createChannelsController(env: ChannelsEnvironment) {
       const selectedExists = selected !== null && channels.some((channel) => channel.id === selected);
       const page = selectedExists ? await env.port().agent.readChannel({ channelId: selected }) : null;
       if (disposed || account !== env.scopeKey() || id !== refreshId || selected !== state.selectedId) return;
+      env.onList?.(channels, account);
       setState((state) => {
-        state.channels = channels;
+        // Keep each summary object, so the sidebar, which keys its rows by object, does not remount
+        // every channel row (and close an open menu) on each refresh.
+        reconcile(channels, "id")(state.channels);
         if (selected && !selectedExists) {
           state.selectedId = null;
           state.editing = null;
@@ -198,13 +227,16 @@ export function createChannelsController(env: ChannelsEnvironment) {
       if (!disposed && account === env.scopeKey() && id === refreshId)
         setState((state) => {
           Object.assign(state, {
-            error: error instanceof Error ? error.message : currentText().t("channel.error.load"),
+            ...failure(error, "channel.error.load"),
             loading: false,
           });
         });
     }
   }
   async function open(channelId: string) {
+    // A saved selection, a search result or a notification can name a channel on a server that has
+    // no channels.
+    if (!supported()) return;
     env.beforeOpen();
     env.writeSelection(channelId);
     unreadKeptFor = null;
@@ -224,7 +256,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     } catch (error) {
       if (!disposed && account === env.scopeKey())
         setState((state) => {
-          state.error = error instanceof Error ? error.message : currentText().t("channel.error.action");
+          Object.assign(state, failure(error, "channel.error.action"));
         });
       return false;
     }
@@ -242,10 +274,19 @@ export function createChannelsController(env: ChannelsEnvironment) {
     // reader back out of the channel they opened and drop the draft they began there.
     const creating = input.type === "save" && state.editing === "create";
     const selectedBefore = state.selectedId;
+    const action = channelAction(input, creating, state.page);
+    let accepted = false;
     // A `save` is never dropped: settings commit each field as it is left, and a silently
     // discarded autosave is lost work. The service serializes saves per channel and every
     // command is idempotent on its `operationId`, so letting them queue is safe.
-    if (state.pending && input.type !== "stop" && input.type !== "archive" && input.type !== "save") return false;
+    if (
+      state.pending &&
+      input.type !== "stop" &&
+      input.type !== "archive" &&
+      input.type !== "restore" &&
+      input.type !== "save"
+    )
+      return false;
     pendingCommands += 1;
     const attempt =
       failedCommand &&
@@ -259,6 +300,8 @@ export function createChannelsController(env: ChannelsEnvironment) {
     );
     try {
       await env.port().agent.channelCommand(attempt);
+      accepted = true;
+      if (action) desktopAnalytics.track("channel_action", { action, result: "succeeded" });
       if (disposed || account !== env.scopeKey()) {
         onAccepted?.(attempt);
         return false;
@@ -280,12 +323,12 @@ export function createChannelsController(env: ChannelsEnvironment) {
       onAccepted?.(attempt);
       return true;
     } catch (error) {
+      // A refresh that fails after the service accepted the command is not a failed action.
+      if (action && !accepted) desktopAnalytics.track("channel_action", { action, result: "failed" });
       if (!disposed && account === env.scopeKey()) {
         failedCommand = attempt;
         setState((state) => {
-          Object.assign(state, {
-            error: error instanceof Error ? error.message : currentText().t("channel.error.update"),
-          });
+          Object.assign(state, failure(error, "channel.error.update"));
         });
       }
       return false;
@@ -296,6 +339,25 @@ export function createChannelsController(env: ChannelsEnvironment) {
           state.pending = pendingCommands > 0;
         });
     }
+  }
+  /**
+   * Sends a message and gives back a page that holds it. Unlike `command`, a failure throws and
+   * leaves the channel error alone: the conversation shows the message as not sent, with its own
+   * Retry, and the retry sends the same `operationId` again.
+   */
+  async function send(input: Extract<ChannelCommand, { type: "send" }>): Promise<ChannelPage> {
+    const account = env.scopeKey();
+    // The host that stored the message gives the page, also when the reader changes scope meanwhile.
+    const port = env.port();
+    const before = state.page?.channel.id === input.channelId ? state.page.throughSequence : null;
+    await port.agent.channelCommand(input);
+    if (disposed || account !== env.scopeKey()) return port.agent.readChannel({ channelId: input.channelId });
+    await refreshAfter();
+    // A refresh that fails keeps the earlier page, which does not hold the message.
+    const page = state.page;
+    return page?.channel.id === input.channelId && (before === null || page.throughSequence > before)
+      ? page
+      : port.agent.readChannel({ channelId: input.channelId });
   }
   async function loadOlder() {
     const channelId = state.selectedId;
@@ -315,7 +377,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     } catch (error) {
       if (!disposed && account === env.scopeKey() && state.selectedId === channelId)
         setState((state) => {
-          state.error = error instanceof Error ? error.message : currentText().t("channel.error.loadOlder");
+          Object.assign(state, failure(error, "channel.error.loadOlder"));
         });
     }
   }
@@ -422,6 +484,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     },
     open,
     editChannel: async (channelId: string) => {
+      if (!supported()) return;
       if (state.selectedId !== channelId) await open(channelId);
       if (state.page?.channel.id !== channelId || state.page.channel.archived) return;
       setState((state) => {
@@ -433,7 +496,22 @@ export function createChannelsController(env: ChannelsEnvironment) {
         throw new Error(state.error ?? currentText().t("channel.error.delete"));
       }
     },
+    /**
+     * A deleted channel comes back with its history. Its stopped tasks stay stopped. The sidebar menu
+     * shows no channel error, so a failure is a toast, and it does not stay for the next channel.
+     */
+    restore: async (channelId: string) => {
+      if (await command({ type: "restore", channelId, operationId: crypto.randomUUID() })) return;
+      if (failedCommand?.type !== "restore" || failedCommand.channelId !== channelId) return;
+      const message = state.error ?? currentText().t("channel.error.update");
+      failedCommand = null;
+      setState((state) => {
+        Object.assign(state, { error: null, errorReference: null });
+      });
+      actionToast.error(message, { report: { operation: "other", source: "action", cause_code: "unknown" } });
+    },
     command,
+    send,
     perform,
     loadOlder,
     close: () => {
@@ -456,11 +534,13 @@ export function createChannelsController(env: ChannelsEnvironment) {
       setState((state) => {
         state.editing = null;
       }),
-    create: () =>
+    create: () => {
+      if (!supported()) return;
       setState((state) => {
         state.editing = "create";
         state.error = null;
-      }),
+      });
+    },
     toggleArchived: () =>
       setState((state) => {
         Object.assign(state, { archived: !state.archived });

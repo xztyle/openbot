@@ -1,6 +1,7 @@
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { Pin, PinOff } from "lucide-react-native";
+import Pin from "lucide-react-native/icons/pin";
+import PinOff from "lucide-react-native/icons/pin-off";
 import type { PropsWithChildren } from "react";
 import { Pressable, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
@@ -99,7 +100,7 @@ export function AgentPinSwipeRow({
   const { t } = useText();
 
   return (
-    <GestureDetector gesture={swipe.gesture}>
+    <GestureDetector gesture={swipe.detectorGesture}>
       <ReanimatedSwipeable
         ref={swipe.swipeable}
         enabled={!swipe.pinPending}
@@ -110,8 +111,8 @@ export function AgentPinSwipeRow({
         overshootFriction={1}
         rightThreshold={PIN_REVEAL_DISTANCE / 2}
         enableTrackpadTwoFingerGesture
-        simultaneousWithExternalGesture={swipe.gesture}
-        requireExternalGestureToFail={openingGesture}
+        simultaneousWith={swipe.gesture}
+        requireToFail={swipe.swipeRequires}
         onSwipeableWillOpen={swipe.onWillOpen}
         onSwipeableWillClose={swipe.onWillClose}
         onSwipeableClose={swipe.onClose}

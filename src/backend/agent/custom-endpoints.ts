@@ -1,4 +1,4 @@
-import type { AgentModelOption, AgentSummary, UpdateAgentInput } from "@openbot/contracts/ipc";
+import type { AgentModelOption, AgentReasoningEffort, AgentSummary, UpdateAgentInput } from "@openbot/contracts/ipc";
 import {
   CUSTOM_AGENT_DEFAULT_MODEL,
   customAgentIdOfModel,
@@ -446,7 +446,8 @@ export class CustomEndpoints {
 
   /**
    * Moves each agent of `provider` whose model the provider no longer lists to the provider's default,
-   * or to the first model it lists when the default is gone too.
+   * or to the first model it lists when the default is gone too. A saved model that is a listed model
+   * with one of its efforts (`effortVariant`) moves to that model and effort instead.
    *
    * Only called with a catalogue the provider has just reported, because a stale one is no proof that
    * a model is gone. The provider stays the same, so the agent keeps its thread, and a running turn
@@ -469,16 +470,18 @@ export class CustomEndpoints {
       // the same custom agent. One that listed nothing, or did not answer, keeps its model. The router
       // lists `<agent>/default` for an agent that answered with an empty list, which a slow start
       // gives too, so that model is no proof that the saved one is gone.
+      const variant = provider === "acp" ? null : effortVariant(models, agent.model);
       const fallback =
-        provider === "acp"
+        variant?.model ??
+        (provider === "acp"
           ? models.find((model) => sameCustomAgent(model.id, agent.model) && !isCustomAgentDefaultModel(model.id))
-          : providerFallback;
+          : providerFallback);
       if (!fallback) continue;
       yield* this.#hooks
         .applyAgentUpdate({
           agentId: agent.id,
           model: fallback.id,
-          reasoningEffort: fallback.defaultReasoningEffort,
+          reasoningEffort: variant?.effort ?? fallback.defaultReasoningEffort,
         })
         .pipe(toEndpointChangeFailed)
         .pipe(
@@ -510,6 +513,26 @@ function isCustomAgentDefaultModel(model: string): boolean {
 function sameCustomAgent(model: string, agentModel: string): boolean {
   const id = customAgentIdOfModel(model);
   return id !== null && id === customAgentIdOfModel(agentModel);
+}
+
+/**
+ * The listed model and effort that a saved model ID names as `<model>-<effort>`.
+ *
+ * Antigravity 1.3.0 and later list `gemini-3.1-pro` with a Low and a High effort. Earlier versions of
+ * OpenBot listed and saved each effort as a model of its own, `gemini-3.1-pro-high`. An agent saved on
+ * one of these keeps its model and effort. Only an effort that the listed model offers matches.
+ */
+function effortVariant(
+  models: AgentModelOption[],
+  modelId: string,
+): { model: AgentModelOption; effort: AgentReasoningEffort } | null {
+  for (const model of models) {
+    if (model.reasoningEffortConfigurable === false || !modelId.startsWith(`${model.id}-`)) continue;
+    const suffix = modelId.slice(model.id.length + 1);
+    const effort = model.supportedReasoningEfforts.find((candidate) => candidate === suffix);
+    if (effort) return { model, effort };
+  }
+  return null;
 }
 
 export class EndpointChangeFailed extends Schema.TaggedError<EndpointChangeFailed>()("EndpointChangeFailed", {

@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import type { AgentService } from "../backend/agent-service";
 import type { EventCheckReader } from "../backend/event-check-reader";
 import { toMcpOperationError } from "../backend/mcp-effects";
-import type { McpAuthorizationSource, McpToolRuntimeSource } from "../backend/mcp-provider-shapes";
+import type { McpEndpointSource, McpToolRuntimeSource } from "../backend/mcp-provider-shapes";
 import { ChatMcpPolicyStore } from "./chat-mcp-policy-store";
 import { ChatMcpProxy } from "./chat-mcp-proxy";
 import { ChatMcpService } from "./chat-mcp-service";
@@ -12,7 +12,7 @@ import { ChatMcpService } from "./chat-mcp-service";
 interface Options {
   path: string;
   service: () => AgentService;
-  authorization: McpAuthorizationSource;
+  endpoint: McpEndpointSource;
   runtimes: McpToolRuntimeSource;
 }
 function chatKey(service: AgentService, threadId: string): string | null {
@@ -29,7 +29,7 @@ export const createChatMcp = Effect.fn("ChatMcp.create")(function* (options: Opt
     stateDirectory: join(options.path, "mcp-app-state"),
     configs: () => options.service().enabledMcpServers(),
     chatKey: (threadId) => chatKey(options.service(), threadId),
-    authorization: options.authorization,
+    endpoint: options.endpoint,
     runtimes: options.runtimes,
   });
   yield* proxy.start();

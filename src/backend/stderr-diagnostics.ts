@@ -48,7 +48,7 @@ const ANSI_SEQUENCE = new RegExp(
  * matches a whole value, and the first half of a quoted credential is not one. A record that a
  * shortening cut in two would keep that half.
  */
-export const DIAGNOSTIC_TEXT_LIMIT = 2_000;
+const DIAGNOSTIC_TEXT_LIMIT = 2_000;
 
 export function shortenDiagnostic(message: string): string {
   return message.slice(0, DIAGNOSTIC_TEXT_LIMIT);
@@ -72,7 +72,7 @@ export interface DiagnosticStream {
 export function createDiagnosticStream(options: {
   redact: (value: string) => string;
   emit: (message: string) => void;
-  limit?: number;
+  limit?: number | undefined;
 }): DiagnosticStream {
   const limit = options.limit ?? DEFAULT_LIMIT;
   let pending = "";

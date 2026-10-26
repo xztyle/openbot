@@ -12,11 +12,14 @@ import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-
 import type { IncomingMessage } from "node:http";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
+  type AgentAccessLevel,
+  agentAccessRank,
   type ConversationMessageSender,
   type ConversationPageAnchor,
   type ConversationSnapshot,
   type ConversationWithReadState,
   type CreateAgentInput,
+  canAdministerServer,
   conversationMessageSender,
   HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX,
   isAgentModel,
@@ -24,10 +27,12 @@ import {
   isAvatarHue,
   isAvatarSeed,
   isReasoningEffort,
+  isReleasedRoutineSchedule,
   MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX,
   type RespondToApprovalInput,
   type RespondToBrowserTakeoverInput,
   ROUTINE_EVENT_ITEM_TYPE_PREFIX,
+  ROUTINE_QUIET_ANSWER_ITEM_TYPE,
   ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX,
   type TeamMemberSummary,
   type UpdateAgentInput,
@@ -45,18 +50,22 @@ import {
   TEAM_PROTOCOL_V1,
   TEAM_PROTOCOL_VERSION_HEADER,
 } from "@openbot/contracts/team-protocol/v1";
+import { TEAM_PROTOCOL_V2_MAX_JSON_FRAME_BYTES } from "@openbot/contracts/team-protocol/v2";
 import { sourceText } from "@openbot/i18n/source";
 import { readBodyWithin } from "../http-body";
 import { HttpError } from "./http-error";
+import type { TeamApiRequestContext } from "./request-context";
 
 export const JSON_LIMIT = 1024 * 1024;
+/** A response body leaves room in one WebRTC frame for the response envelope around it. */
+export const WEBRTC_FRAME_BODY_BUDGET = Math.floor(TEAM_PROTOCOL_V2_MAX_JSON_FRAME_BYTES * 0.75);
 
 export function requestCapabilities(request: IncomingMessage): Set<string> {
   const header = request.headers[TEAM_CAPABILITIES_HEADER.toLowerCase()];
   const value = Array.isArray(header) ? header.join(",") : header;
   if (!value || value.length > 4_096) return new Set();
   const capabilities = value.split(",").map((capability) => capability.trim());
-  if (capabilities.length > 64) return new Set();
+  if (capabilities.length > (requestProtocol(request) >= 7 ? 128 : 64)) return new Set();
   return new Set(capabilities.filter(isTeamCurrentCapability));
 }
 
@@ -108,17 +117,24 @@ export function markerExclusionsForCapabilities(capabilities: ReadonlySet<string
   excludeRoutineEvents: boolean;
   excludeRoutineRunEvents: boolean;
   excludeHostedSiteEvents: boolean;
-  excludeEventCheckEvents: boolean;
+  excludeEventCheckEvents?: boolean;
+  excludeRoutineQuietAnswers: boolean;
 } {
   return {
     excludeRoutineEvents: !capabilities.has("routine-event-markers"),
     excludeRoutineRunEvents: !capabilities.has("routine-run-event-markers"),
     excludeHostedSiteEvents: !capabilities.has("hosted-site-event-markers"),
     excludeEventCheckEvents: !capabilities.has(EVENT_CHECKS_CAPABILITY),
+    excludeRoutineQuietAnswers: true,
   };
 }
 
+/**
+ * Whether a client can show a message of this kind. No client can collapse a quiet routine answer
+ * into its run, so a quiet answer goes to none: it would show as a new answer to every client.
+ */
 function markerSupported(itemType: string | undefined, capabilities: ReadonlySet<string>): boolean {
+  if (itemType === ROUTINE_QUIET_ANSWER_ITEM_TYPE) return false;
   if (itemType?.startsWith(EVENT_CHECK_ITEM_TYPE_PREFIX)) return capabilities.has(EVENT_CHECKS_CAPABILITY);
   if (itemType?.startsWith(ROUTINE_EVENT_ITEM_TYPE_PREFIX)) return capabilities.has("routine-event-markers");
   // Paged history drops suggestions with routine events, so live events drop them the same way.
@@ -158,8 +174,15 @@ export function memberSender(member: TeamMemberSummary): ConversationMessageSend
   return conversationMessageSender(member.id, member.name?.trim() || member.email || member.username);
 }
 
+/** The released routine codecs reject a `once` schedule, so a Team API request cannot save one. */
+export function requireReleasedSchedule(schedule: unknown): void {
+  if (schedule !== undefined && !isReleasedRoutineSchedule(schedule)) {
+    throw new HttpError(400, sourceText("error.backend.routineScheduleInvalid"));
+  }
+}
+
 export function requireAdmin(member: TeamMemberSummary): void {
-  if (member.role === "member") throw new HttpError(403, sourceText("error.team.adminRequired"));
+  if (!canAdministerServer(member.role)) throw new HttpError(403, sourceText("error.team.adminRequired"));
 }
 
 /**
@@ -180,6 +203,22 @@ export function requireVisibleBodyAgent(body: DynamicRecord, hiddenAgentIds: Rea
   if (isString(body.agentId) && hiddenAgentIds.has(body.agentId)) {
     throw new HttpError(404, sourceText("error.team.agentNotFound"));
   }
+}
+
+/**
+ * A write to one agent needs the level that it changes: `chat` to talk to the agent, `manage` to change
+ * it. A `none` agent never gets here; the router answers 404 for it.
+ */
+export function requireAgentLevel(
+  context: Pick<TeamApiRequestContext, "agentLevel">,
+  agentId: string,
+  required: Exclude<AgentAccessLevel, "none">,
+): void {
+  if (agentAccessRank(context.agentLevel(agentId)) >= agentAccessRank(required)) return;
+  throw new HttpError(
+    403,
+    sourceText(required === "manage" ? "error.team.agentManageDenied" : "error.team.agentViewOnly"),
+  );
 }
 
 export function parseBrowserBounds(value: unknown): {

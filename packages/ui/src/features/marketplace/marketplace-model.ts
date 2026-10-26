@@ -1,5 +1,5 @@
 import type {
-  AgentSummary,
+  ClientAgentSummary,
   InstalledSkill,
   MarketplaceAgentDetail,
   MarketplaceAgentSummary,
@@ -8,15 +8,14 @@ import type {
   McpServerConfig,
   SkillCategory,
 } from "@openbot/contracts/ipc";
-import type { BitwardenConnectorPanelProps } from "../settings/BitwardenConnectorPanel";
-import type { GitHubConnectorPanelProps } from "../settings/GitHubConnectorPanel";
+import type { ConnectorDetail } from "../connectors/ConnectorDetailPanel";
+import type { ConnectorId } from "../connectors/connectors";
 import type { MarketplacePluginDetail, MarketplacePluginPrompt } from "../settings/marketplace-plugins";
-import type { OnePasswordConnectorPanelProps } from "../settings/OnePasswordConnectorPanel";
 import type { MarketplaceEventChecks } from "./marketplace-event-checks";
 import type { CatalogList, MarketplaceHomeCache } from "./marketplace-listing";
 
 /** An agent of the user's that a skill can go to. */
-export type MarketplaceAgent = Pick<AgentSummary, "id" | "name" | "avatarSeed" | "avatarHue" | "avatarUrl">;
+export type MarketplaceAgent = Pick<ClientAgentSummary, "id" | "name" | "avatarSeed" | "avatarHue" | "avatarUrl">;
 
 /** What an agent listing offers the user. */
 export type AgentListingState = "add" | "added" | "update";
@@ -98,15 +97,22 @@ export interface MarketplaceChatAccess {
 }
 
 /**
- * One row of the Apps tab: a catalog app, the GitHub connector, or an MCP server that the host
- * holds and no catalog app claims.
+ * One row of the Apps tab: a catalog app, a connector that the server can run, or an MCP server
+ * that the host holds and no catalog app claims. A connector's `id` is its `ConnectorId`.
  */
 export type MarketplaceApp =
   | (AppBase & { kind: "plugin"; category: SkillCategory; plugin: MarketplacePluginDetail })
-  | (AppBase & { kind: "github"; category: SkillCategory })
-  | (AppBase & { kind: "onepassword"; category: SkillCategory })
-  | (AppBase & { kind: "bitwarden"; category: SkillCategory })
+  | (AppBase & { kind: "connector"; connector: ConnectorId; category: SkillCategory })
   | (AppBase & { kind: "custom"; server: McpServerConfig });
+
+/** A connector that the server on screen can run: its page, and its one-click connect. */
+export interface MarketplaceConnector {
+  readonly detail: ConnectorDetail;
+  /** False until the first read, while the page has nothing to show. */
+  ready: () => boolean;
+  /** Absent when the page must ask for input first. */
+  readonly connect?: (() => void) | undefined;
+}
 
 /**
  * What the Marketplace view reads and asks for. The renderer builds it from its IPC calls, and a
@@ -183,7 +189,7 @@ export interface MarketplaceModel {
   justConnected: () => { appId: string; accountId: string } | null;
   dismissJustConnected: () => void;
   chatAccess: MarketplaceChatAccess;
-  /** False for a member of a joined server, who browses and connects nothing. */
+  /** False for a member of a joined server, who browses and connects no catalog app. */
   canConnectApps: () => boolean;
   /**
    * Whether the list of apps that the host holds was read. Connect waits for `loaded`, so an app
@@ -195,20 +201,17 @@ export interface MarketplaceModel {
   /** The name of the server that holds the apps, for a sentence. Absent when this computer holds them. */
   appsHostName?: (() => string | undefined) | undefined;
   appBusy: (id: string) => boolean;
-  /** Runs the connect step of the app. False when the user closed it. */
-  connectApp: (app: MarketplaceApp) => Promise<boolean>;
-  /** Asks for a confirmation, then removes what the app installed. */
-  disconnectApp: (app: MarketplaceApp) => void;
+  /** Runs the connect step of a catalog app. False when the user closed it. */
+  connectApp: (app: Extract<MarketplaceApp, { kind: "plugin" }>) => Promise<boolean>;
+  /** Asks for a confirmation, then removes what the catalog app installed. */
+  disconnectApp: (app: Extract<MarketplaceApp, { kind: "plugin" }>) => void;
   /** Removes a custom MCP server. */
   removeServer: (id: string) => Promise<boolean>;
   runPrompt?: ((prompt: MarketplacePluginPrompt) => void) | undefined;
   copyLink: (slug: string) => void;
   openUrl: (url: string) => void;
-  /** The GitHub connector page, when this computer has one. */
-  github?: (() => GitHubConnectorPanelProps) | undefined;
-  /** The 1Password connector page, on the computer that runs OpenBot. */
-  onePassword?: (() => OnePasswordConnectorPanelProps) | undefined;
-  bitwarden?: (() => BitwardenConnectorPanelProps) | undefined;
+  /** The connector of a `connector` app. */
+  connector: (id: ConnectorId) => MarketplaceConnector | undefined;
 
   /**
    * The event check templates and checks of the host. Absent when the host has none: the
@@ -218,6 +221,8 @@ export interface MarketplaceModel {
 
   /** The last failure, as a sentence. */
   error: () => string | null;
+  /** The code of the last failure, shown beside the sentence. */
+  errorReference?: (() => string | null) | undefined;
   clearError: () => void;
   /** The last result, for a screen reader. */
   notice: () => string;

@@ -10,9 +10,12 @@ import { CURSOR_VS_CLAUDE_CODE } from "./cursor-vs-claude-code";
 import { DEVIN_COMPARISON } from "./devin";
 import { GROK_BOT_COMPARISON } from "./grok-bot";
 import { HERMES_AGENT_COMPARISON } from "./hermes-agent";
+import { INSTINCT_COMPARISON } from "./instinct";
 import { MANUS_COMPARISON } from "./manus";
 import { MUSE_COMPARISON } from "./muse";
 import { OPENCLAW_COMPARISON } from "./openclaw";
+import { PAPERCLIP_COMPARISON } from "./paperclip";
+import { VIKTOR_COMPARISON } from "./viktor";
 
 export const COMPARISONS: Readonly<Record<string, ComparePage>> = {
   "best-ai-agent-apps": BEST_AI_AGENT_APPS,
@@ -24,7 +27,10 @@ export const COMPARISONS: Readonly<Record<string, ComparePage>> = {
   devin: DEVIN_COMPARISON,
   "grok-bot": GROK_BOT_COMPARISON,
   "hermes-agent": HERMES_AGENT_COMPARISON,
+  instinct: INSTINCT_COMPARISON,
   manus: MANUS_COMPARISON,
   muse: MUSE_COMPARISON,
   openclaw: OPENCLAW_COMPARISON,
+  paperclip: PAPERCLIP_COMPARISON,
+  viktor: VIKTOR_COMPARISON,
 };

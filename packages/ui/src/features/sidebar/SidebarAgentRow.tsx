@@ -3,36 +3,35 @@
  *
  * A waiting agent's row sits in the "Needs you" group instead. There it does not drag, because the
  * group is not a place in the layout, and its tooltip says what the agent waits for.
+ *
+ * A hidden agent's row sits in the "Hidden" group. It does not drag either. It sleeps, shows no state,
+ * and shows when the user hid it in place of the last message.
  */
 
-import { Badge, buttonVariants, Clock3, ContextMenu, Ellipsis, IconButton, Lock, Tooltip } from "@openbot/ui";
+import { AppWindow, Badge, buttonVariants, Clock3, ContextMenu, Ellipsis, IconButton, Lock } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { createStore, Show } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import type { AgentProfile } from "../../data";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
 import { agentAccessLockLabel } from "../agents/agent-access";
 import { SidebarAgentContextMenu } from "./SidebarAgentContextMenu";
-import { SidebarAgentIndicator, SidebarWaitIcon } from "./SidebarAgentIndicator";
-import {
-  SIDEBAR_WAIT_ACTION,
-  SIDEBAR_WAIT_HINT,
-  SIDEBAR_WAIT_TITLE,
-  sidebarAgentStateLabel,
-  sidebarMessageTime,
-  sidebarUsageResetTime,
-} from "./sidebar-filtering";
+import { SidebarAgentIndicator, SidebarWaitChip, SidebarWaitTooltip } from "./SidebarAgentIndicator";
+import { sidebarAgentStateLabel, sidebarMessageTime, sidebarUsageResetTime } from "./sidebar-filtering";
 import { useSidebarScope } from "./sidebar-scope";
-
-/** Long enough that moving the pointer down the list does not flash every waiting row's tooltip. */
-const SIDEBAR_WAIT_TOOLTIP_OPEN_DELAY = 350;
 
 /**
  * `waiting` is set by the "Needs you" group. The row reads it rather than the agent's state, because
- * the group holds its members still during a drag while the state moves on. `fixed` is set by the
- * background group, which is not a place in the layout either, so its rows do not drag.
+ * the group holds its members still during a drag while the state moves on. `userHidden` is set by
+ * the "Hidden" group. `fixed` is set by the background group, which is not a place in the layout
+ * either, so its rows do not drag.
  */
-export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boolean; fixed?: boolean }) {
+export function SidebarAgentRow(rowProps: {
+  agent: AgentProfile;
+  waiting?: boolean;
+  userHidden?: boolean;
+  fixed?: boolean;
+}) {
   const {
     dragOffset,
     draggedChatId,
@@ -41,17 +40,33 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
     props,
     sidebarClickIsSuppressed,
     startChatDragging,
+    userHiddenSince,
   } = useSidebarScope();
   const { t, format } = useText();
   const title = () => rowProps.agent.title.trim();
   const lockLabel = () => agentAccessLockLabel(rowProps.agent, t);
   const accessLabel = () => (lockLabel() ? `. ${lockLabel()}` : "");
-  const state = () => props.agentStates[rowProps.agent.id];
+  const inWindow = () => props.windowAgentIds?.has(rowProps.agent.id) ?? false;
+  const windowLabel = () => (inWindow() ? `. ${t("sidebar.agentMenu.inWindow")}` : "");
+  const state = () => (rowProps.userHidden ? undefined : props.agentStates[rowProps.agent.id]);
+  const hiddenDetail = () => {
+    const since = rowProps.userHidden ? userHiddenSince(rowProps.agent.id) : undefined;
+    return since
+      ? t("sidebar.hidden.since", { date: format.date(new Date(since), { month: "short", day: "numeric" }) })
+      : "";
+  };
+  const detail = () => hiddenDetail() || rowProps.agent.preview;
+  // A function, not a JSX ternary: the compiler wraps a ternary in a memo, and the avatar reads its
+  // mood inside an effect, where a memo cannot be created.
+  const mood = () => (rowProps.userHidden ? "asleep" : (props.agentMoods[rowProps.agent.id] ?? "idle"));
+  const hiddenLabel = () => (rowProps.userHidden ? `${t("sidebar.hidden.title")}. ` : "");
+  const draggable = () =>
+    layoutMutable() && !props.compact && !rowProps.waiting && !rowProps.userHidden && !rowProps.fixed;
   const wait = () => {
     const current = state();
     return rowProps.waiting && current?.kind === "waiting" ? current : undefined;
   };
-  const [overlay, setOverlay] = createStore({ tooltipOpen: false, menuOpen: false });
+  const [menuOpen, setMenuOpen] = createSignal(false);
   let rowElement: HTMLButtonElement | undefined;
   /**
    * The row's menu opens from a long press or a right click, which a person on a touch screen may
@@ -81,14 +96,7 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
   const routineLabel = () => (state()?.kind === "routine" || limit() ? stateLabel() : "");
   // Only a waiting row has a tooltip, so the rows in the sections do not each carry one.
   const row = (): JSX.Element => (
-    <ContextMenu.Root
-      modal={false}
-      onOpenChange={(open) =>
-        setOverlay((draft) => {
-          draft.menuOpen = open;
-        })
-      }
-    >
+    <ContextMenu.Root modal={false} onOpenChange={setMenuOpen}>
       <ContextMenu.Trigger
         as="button"
         ref={(element: HTMLButtonElement) => {
@@ -103,7 +111,7 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
             "sidebar-agent-row-dragging": draggedChatId() === rowProps.agent.id,
           },
         ]}
-        aria-label={`${rowProps.agent.name}${title() ? `, ${title()}` : ""}${accessLabel()}. ${rowProps.agent.preview}${stateLabel() ? `. ${stateLabel()}` : ""}`}
+        aria-label={`${rowProps.agent.name}${title() ? `, ${title()}` : ""}${accessLabel()}${windowLabel()}. ${hiddenLabel()}${detail()}${stateLabel() ? `. ${stateLabel()}` : ""}`}
         title={routineLabel() || undefined}
         aria-pressed={props.activeAgentId === rowProps.agent.id ? "true" : "false"}
         data-cuelume-navigate=""
@@ -112,8 +120,8 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
         }}
       >
         <span class="agent-row-avatar">
-          <AgentAvatar agent={rowProps.agent} motion="idle" mood={props.agentMoods[rowProps.agent.id] ?? "idle"} />
-          <SidebarAgentIndicator state={() => props.agentStates[rowProps.agent.id]} />
+          <AgentAvatar agent={rowProps.agent} motion="idle" mood={mood()} />
+          <SidebarAgentIndicator state={state} />
         </span>
         <span class="agent-row-copy">
           <span class="agent-row-heading">
@@ -125,10 +133,15 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
                     <Lock aria-hidden="true" />
                   </span>
                 </Show>
+                <Show when={inWindow()}>
+                  <span class="agent-row-access" title={t("sidebar.agentMenu.inWindow")}>
+                    <AppWindow aria-hidden="true" />
+                  </span>
+                </Show>
               </span>
               <Show when={title()}>
                 {(label) => (
-                  <Badge class="agent-role-badge" size="sm" title={label()}>
+                  <Badge class="agent-role-badge" title={label()}>
                     <span>{label()}</span>
                   </Badge>
                 )}
@@ -140,11 +153,13 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
                 <Show
                   when={limit()}
                   fallback={
-                    <span class="agent-row-time">
-                      {rowProps.agent.updatedAt
-                        ? sidebarMessageTime(rowProps.agent.updatedAt, format)
-                        : rowProps.agent.time}
-                    </span>
+                    <Show when={!rowProps.userHidden}>
+                      <span class="agent-row-time">
+                        {rowProps.agent.updatedAt
+                          ? sidebarMessageTime(rowProps.agent.updatedAt, format)
+                          : rowProps.agent.time}
+                      </span>
+                    </Show>
                   }
                 >
                   {(current) => (
@@ -156,21 +171,16 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
                 </Show>
               }
             >
-              {(current) => (
-                <span class="agent-row-wait-chip">
-                  <SidebarWaitIcon reason={current().reason} />
-                  {t(SIDEBAR_WAIT_ACTION[current().reason])}
-                </span>
-              )}
+              {(current) => <SidebarWaitChip reason={current().reason} />}
             </Show>
           </span>
-          <span class="agent-row-preview">{rowProps.agent.preview}</span>
+          <span class="agent-row-preview">{detail()}</span>
         </span>
-        <Show when={props.agentStates[rowProps.agent.id]}>
+        <Show when={state()}>
           {(state) => <span class="sr-only">{sidebarAgentStateLabel(state(), t, format)}</span>}
         </Show>
       </ContextMenu.Trigger>
-      <SidebarAgentContextMenu agent={rowProps.agent} pinned={false} />
+      <SidebarAgentContextMenu agent={rowProps.agent} pinned={false} userHidden={rowProps.userHidden === true} />
     </ContextMenu.Root>
   );
   return (
@@ -179,47 +189,22 @@ export function SidebarAgentRow(rowProps: { agent: AgentProfile; waiting?: boole
       class={[
         "sidebar-agent-item",
         {
+          "sidebar-agent-item-user-hidden": rowProps.userHidden === true,
           "sidebar-agent-item-dragging": draggedChatId() === rowProps.agent.id,
           "sidebar-drag-shifting": dragOffset(rowProps.agent.id).y !== 0,
         },
       ]}
       style={`--sidebar-drag-y: ${dragOffset(rowProps.agent.id).y}px;`}
-      data-chat-id={rowProps.waiting || rowProps.fixed ? undefined : rowProps.agent.id}
-      draggable={!layoutMutable() || props.compact || rowProps.waiting || rowProps.fixed ? "false" : "true"}
+      data-chat-id={rowProps.waiting || rowProps.userHidden || rowProps.fixed ? undefined : rowProps.agent.id}
+      draggable={draggable() ? "true" : "false"}
       onDragStart={(event: DragEvent & { currentTarget: HTMLElement }) => startChatDragging(event, rowProps.agent.id)}
       onDragEnd={endChatDragging}
     >
       <Show when={wait()} fallback={row()}>
         {(current) => (
-          <Tooltip.Root
-            open={overlay.tooltipOpen && !overlay.menuOpen}
-            onOpenChange={(open) =>
-              setOverlay((draft) => {
-                draft.tooltipOpen = open;
-              })
-            }
-            placement="right"
-            gutter={10}
-            openDelay={SIDEBAR_WAIT_TOOLTIP_OPEN_DELAY}
-            closeDelay={0}
-            skipDelayDuration={300}
-          >
-            <Tooltip.Trigger as="div" class="sidebar-agent-tooltip-trigger">
-              {row()}
-            </Tooltip.Trigger>
-            <Tooltip.Portal>
-              <Tooltip.Content class="sidebar-wait-tooltip">
-                <span class="sidebar-wait-tooltip-title">
-                  <SidebarWaitIcon reason={current().reason} />
-                  {t(SIDEBAR_WAIT_TITLE[current().reason])}
-                </span>
-                <Show when={current().detail}>
-                  {(detail) => <span class="sidebar-wait-tooltip-detail">{detail()}</span>}
-                </Show>
-                <span class="sidebar-wait-tooltip-hint">{t(SIDEBAR_WAIT_HINT[current().reason])}</span>
-              </Tooltip.Content>
-            </Tooltip.Portal>
-          </Tooltip.Root>
+          <SidebarWaitTooltip wait={current()} menuOpen={menuOpen()}>
+            {row()}
+          </SidebarWaitTooltip>
         )}
       </Show>
       {/* Only the open chat shows it, so the list does not carry one button for each row. The

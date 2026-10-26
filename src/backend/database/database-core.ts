@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { appendFileSync, existsSync } from "node:fs";
 import { chmod, copyFile, mkdir, readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -60,6 +61,8 @@ export class DatabaseCore {
   initialize = Effect.fn("DatabaseCore.initialize")(function* (this: DatabaseCore) {
     if (this.#db) return;
     yield* storedIO(() => mkdir(dirname(this.path), { recursive: true, mode: 0o700 }));
+    // Read before the open: the first statement makes a new write-ahead log.
+    const closedCleanly = yield* storedSync(() => !existsSync(`${this.path}-wal`));
     const db = yield* storedSync(() => new DatabaseSync(this.path));
     const configured = yield* Effect.result(
       Effect.gen({ self: this }, function* () {
@@ -75,7 +78,7 @@ export class DatabaseCore {
             typeof value === "string" ? value.toLocaleLowerCase() : value,
           );
           this.#db = db;
-          this.#migrate();
+          this.#migrate(closedCleanly);
         });
         yield* storedIO(() => chmod(this.path, 0o600));
       }),
@@ -85,6 +88,9 @@ export class DatabaseCore {
         db.close();
         this.#db = null;
       });
+      // The close removed the write-ahead log. An empty one makes the next start run the check again,
+      // so a database that failed it does not open at the next start.
+      yield* storedSync(() => appendFileSync(`${this.path}-wal`, "", { mode: 0o600 })).pipe(Effect.ignore);
       return yield* configured.failure;
     }
   }, Effect.uninterruptible);
@@ -134,17 +140,23 @@ export class DatabaseCore {
         sequences.push(Number(result.lastInsertRowid));
       }
       const result = project(db, sequences);
-      db.prepare(
-        `INSERT INTO orchestration_command_receipts
-          (command_id, accepted_at, first_sequence, last_sequence, result_json)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).run(
-        commandId,
-        new Date().toISOString(),
-        sequences[0] ?? 0,
-        sequences.at(-1) ?? 0,
-        JSON.stringify(result ?? null),
-      );
+      // A receipt is deleted with its command's events. A command that keeps no event, such as the
+      // memory transaction wrapper or a channel delete that removes its own event, gets no receipt,
+      // because nothing would delete it.
+      const keepsEvent = db.prepare("SELECT 1 FROM orchestration_events WHERE command_id = ? LIMIT 1").get(commandId);
+      if (keepsEvent) {
+        db.prepare(
+          `INSERT INTO orchestration_command_receipts
+            (command_id, accepted_at, first_sequence, last_sequence, result_json)
+           VALUES (?, ?, ?, ?, ?)`,
+        ).run(
+          commandId,
+          new Date().toISOString(),
+          sequences[0] ?? 0,
+          sequences.at(-1) ?? 0,
+          JSON.stringify(result ?? null),
+        );
+      }
       if (ownsTransaction) db.exec("COMMIT");
       return result;
     } catch (error) {
@@ -198,8 +210,8 @@ export class DatabaseCore {
     );
   }
 
-  #migrate(): void {
-    migrateOpenBotDatabase(this.connection);
+  #migrate(closedCleanly: boolean): void {
+    migrateOpenBotDatabase(this.connection, { closedCleanly });
   }
 }
 
@@ -212,12 +224,19 @@ function decodeReceiptRow(value: unknown): ReceiptRow | null {
   };
 }
 
-export function deleteOrphanReceipts(db: DatabaseSync): void {
-  db.exec(`DELETE FROM orchestration_command_receipts
-    WHERE NOT EXISTS (
-      SELECT 1 FROM orchestration_events
-      WHERE orchestration_events.command_id = orchestration_command_receipts.command_id
-    )`);
+/**
+ * Deletes the receipts of commands whose events were just dropped. Each receipt is deleted by key,
+ * because a sweep for every orphan scans the whole receipts table, which grows without limit. The
+ * `NOT EXISTS` guard keeps a receipt whose command still has an event.
+ */
+export function deleteReceiptsOf(db: DatabaseSync, commandIds: readonly string[]): void {
+  if (commandIds.length === 0) return;
+  const deleteReceipt = db.prepare(
+    `DELETE FROM orchestration_command_receipts
+     WHERE command_id = ?
+       AND NOT EXISTS (SELECT 1 FROM orchestration_events WHERE command_id = ?)`,
+  );
+  for (const commandId of commandIds) deleteReceipt.run(commandId, commandId);
 }
 
 export function deleteAggregateHistory(db: DatabaseSync, aggregateType: string, aggregateIds: readonly string[]): void {
@@ -233,4 +252,14 @@ export function deleteAggregateHistory(db: DatabaseSync, aggregateType: string, 
     aggregateType,
     ...aggregateIds,
   );
+}
+
+/**
+ * Deletes the attachments of every message of a thread. Their owner is `<thread>:<message>`, and a range
+ * from `<thread>:` up to `<thread>;` (the next character) reads the owner index; `LIKE` cannot (#2241).
+ */
+export function deleteThreadAttachments(db: DatabaseSync, threadId: string): void {
+  db.prepare(
+    "DELETE FROM projection_attachments WHERE owner_kind = 'thread-message' AND owner_id >= ? AND owner_id < ?",
+  ).run(`${threadId}:`, `${threadId};`);
 }

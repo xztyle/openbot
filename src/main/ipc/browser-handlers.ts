@@ -1,14 +1,31 @@
 // The embedded browser and its picture-in-picture window.
 
-import { type BrowserDisplayState, LOCAL_SERVER_ID } from "@openbot/contracts/ipc";
+import { type BrowserDisplayState, type BrowserTab, LOCAL_SERVER_ID } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import {
+  BROWSER_PAGE_STATE_CAPABILITY,
+  BROWSER_PAGE_STATE_ROUTES,
+  decodeBrowserPageStateSnapshot,
+} from "@openbot/contracts/team-protocol/browser-page-state-v1";
+import {
+  BROWSER_SIGN_IN_CAPABILITY,
+  BROWSER_SIGN_IN_ROUTES,
+  decodeBrowserSignInResult,
+} from "@openbot/contracts/team-protocol/browser-sign-in-v1";
+import {
+  BROWSER_USER_CONTROL_CAPABILITY,
+  BROWSER_USER_CONTROL_ROUTES,
+  decodeBrowserUserControlSnapshot,
+} from "@openbot/contracts/team-protocol/browser-user-control-v1";
 import { decodeBrowserViewInputValue } from "@openbot/contracts/team-protocol/browser-view-v1";
 import { TEAM_BROWSER_NAVIGATION_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import { sourceText } from "@openbot/i18n/source";
 import type { BrowserHost } from "../../backend/browser-host";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { BrowserPictureInPicture } from "../browser-picture-in-picture";
+import { isBrowserSignedInPage } from "../browser-sign-in-page";
 import type { BrowserViewClient } from "../browser-view-client";
+import type { LocalSignInWindows } from "../local-sign-in-window";
 import {
   decodeBrowserControlState,
   decodeBrowserDisplayState,
@@ -18,7 +35,14 @@ import {
 } from "../remote-device-decoding";
 import { decodeVoid } from "../remote-host-decoding";
 import type { RemoteServerManager } from "../remote-server-manager";
-import { parseBrowserBounds, parseBrowserNavigate, parseBrowserOpen, parseVisibility } from "./browser-inputs";
+import {
+  parseBrowserBounds,
+  parseBrowserNavigate,
+  parseBrowserOpen,
+  parseLocalSignIn,
+  parseLocalSignInFinish,
+  parseVisibility,
+} from "./browser-inputs";
 import { handler, type IpcGroupHandlers, payloadHandler } from "./define-ipc-group";
 import { routeToServer } from "./route-to-server";
 import { optionalPayload, stringPayload } from "./validation";
@@ -36,7 +60,10 @@ export interface BrowserIpcDependencies {
     | "loadUrl"
     | "navigate"
     | "reload"
+    | "stop"
     | "close"
+    | "takeUserControl"
+    | "releaseUserControl"
     | "listTabs"
     | "getDisplayState"
     | "getControlState"
@@ -45,6 +72,7 @@ export interface BrowserIpcDependencies {
   >;
   remoteServers: Pick<RemoteServerManager, "activeServerId" | "supportsCapability" | "request">;
   browserView: Pick<BrowserViewClient, "start" | "stop" | "sendInput">;
+  localSignIn: LocalSignInWindows;
 }
 
 export function browserIpcHandlers({
@@ -52,7 +80,44 @@ export function browserIpcHandlers({
   browser,
   remoteServers,
   browserView,
+  localSignIn,
 }: BrowserIpcDependencies): Pick<IpcGroupHandlers, "browser" | "browserInput"> {
+  // The frozen tab list has no field for a person's control or the history state, so a host that
+  // can tell answers on its own routes, and its list marks the tabs here.
+  const withUserControl = async (serverId: string, tabs: BrowserTab[]): Promise<BrowserTab[]> => {
+    if (!remoteServers.supportsCapability(serverId, BROWSER_USER_CONTROL_CAPABILITY)) return tabs;
+    const { tabIds } = await runCauseEffect(
+      remoteServers.request(serverId, BROWSER_USER_CONTROL_ROUTES.state, decodeBrowserUserControlSnapshot, {
+        method: "POST",
+        body: {},
+      }),
+    );
+    const held = new Set(tabIds);
+    return tabs.map((tab) => (held.has(tab.id) ? { ...tab, userControl: true } : tab));
+  };
+  const withPageState = async (serverId: string, tabs: BrowserTab[]): Promise<BrowserTab[]> => {
+    if (!remoteServers.supportsCapability(serverId, BROWSER_PAGE_STATE_CAPABILITY)) return tabs;
+    const snapshot = await runCauseEffect(
+      remoteServers.request(serverId, BROWSER_PAGE_STATE_ROUTES.state, decodeBrowserPageStateSnapshot, {
+        method: "POST",
+        body: {},
+      }),
+    );
+    const states = new Map(snapshot.tabs.map((state) => [state.tabId, state]));
+    return tabs.map((tab) => {
+      const state = states.get(tab.id);
+      return state ? { ...tab, canGoBack: state.canGoBack, canGoForward: state.canGoForward } : tab;
+    });
+  };
+  const withTabState = async (serverId: string, tabs: BrowserTab[]): Promise<BrowserTab[]> =>
+    withPageState(serverId, await withUserControl(serverId, tabs));
+  const userControlRequest = async (serverId: string, route: string, tabId: string): Promise<void> => {
+    if (!remoteServers.supportsCapability(serverId, BROWSER_USER_CONTROL_CAPABILITY))
+      throw new Error(sourceText("error.backend.browserUserControlUnsupported"));
+    await runCauseEffect(
+      remoteServers.request(serverId, route, decodeBrowserUserControlSnapshot, { method: "POST", body: { tabId } }),
+    );
+  };
   return {
     browser: {
       open: payloadHandler(parseBrowserOpen, (parsed) =>
@@ -135,11 +200,105 @@ export function browserIpcHandlers({
             ),
         }),
       ),
+      stop: payloadHandler(stringPayload("tabId"), (tabId) =>
+        routeToServer(remoteServers.activeServerId, {
+          local: () => runCauseEffect(browser.stop(tabId)),
+          remote: async (serverId) => {
+            if (!remoteServers.supportsCapability(serverId, BROWSER_PAGE_STATE_CAPABILITY))
+              throw new Error(sourceText("error.backend.browserStopUnsupported"));
+            await runCauseEffect(
+              remoteServers.request(serverId, BROWSER_PAGE_STATE_ROUTES.stop, decodeBrowserPageStateSnapshot, {
+                method: "POST",
+                body: { tabId },
+              }),
+            );
+          },
+        }),
+      ),
+      // A sign-in on this computer for a tab of the active remote server. The local browser needs none.
+      openLocalSignIn: payloadHandler(parseLocalSignIn, ({ tabId, url }) =>
+        routeToServer(remoteServers.activeServerId, {
+          local: () => {
+            throw new Error(sourceText("error.backend.browserSignInUnsupported"));
+          },
+          remote: (serverId) => {
+            if (!remoteServers.supportsCapability(serverId, BROWSER_SIGN_IN_CAPABILITY))
+              throw new Error(sourceText("error.backend.browserSignInUnsupported"));
+            return runCauseEffect(localSignIn.open({ serverId, tabId }, url)).then((end) => ({
+              signedIn: end === "signed-in",
+            }));
+          },
+        }),
+      ),
+      // A failed send keeps the sign-in, so Done can try again. No sign-in found also keeps it, so the
+      // person can finish it in the window. A checked send also keeps it while the server tab shows a
+      // sign-in step; the host answers after the tab loaded again, so the tab list shows the result.
+      // Some sites show their sign-in page again after the reload, so the tab first opens the page
+      // that the window shows after the sign-in.
+      finishLocalSignIn: payloadHandler(parseLocalSignInFinish, async ({ send, check }) => {
+        const target = localSignIn.target();
+        if (!send || !target) {
+          await runCauseEffect(localSignIn.discard());
+          return null;
+        }
+        const cookies = await runCauseEffect(localSignIn.collect());
+        if (cookies.length === 0) return { cookies: 0, signedIn: false };
+        const result = await runCauseEffect(
+          remoteServers.request(target.serverId, BROWSER_SIGN_IN_ROUTES.import, decodeBrowserSignInResult, {
+            method: "POST",
+            body: { tabId: target.tabId, cookies },
+          }),
+        );
+        if (result.cookies === 0) return { cookies: 0, signedIn: false };
+        if (check) {
+          const signedIn = async () => {
+            const tabs = await runCauseEffect(
+              remoteServers.request(target.serverId, TEAM_API_ROUTES.browser.tabs, decodeBrowserTabs),
+            );
+            const tab = tabs.find((entry) => entry.id === target.tabId);
+            return tab !== undefined && isBrowserSignedInPage(tab.url, target.host);
+          };
+          let done = await signedIn();
+          const page = localSignIn.page();
+          if (
+            !done &&
+            page &&
+            isBrowserSignedInPage(page, target.host) &&
+            remoteServers.supportsCapability(target.serverId, TEAM_BROWSER_NAVIGATION_CAPABILITY)
+          ) {
+            await runCauseEffect(
+              remoteServers.request(target.serverId, TEAM_API_ROUTES.browser.load, decodeVoid, {
+                method: "POST",
+                body: { tabId: target.tabId, url: page },
+              }),
+            );
+            done = await signedIn();
+          }
+          if (!done) return { cookies: result.cookies, signedIn: false };
+        }
+        await runCauseEffect(localSignIn.discard());
+        return { cookies: result.cookies, signedIn: true };
+      }),
+      takeControl: payloadHandler(stringPayload("tabId"), (tabId) =>
+        routeToServer(remoteServers.activeServerId, {
+          local: () => runCauseEffect(browser.takeUserControl(tabId, { kind: "local" })),
+          remote: (serverId) => userControlRequest(serverId, BROWSER_USER_CONTROL_ROUTES.take, tabId),
+        }),
+      ),
+      releaseControl: payloadHandler(stringPayload("tabId"), (tabId) =>
+        routeToServer(remoteServers.activeServerId, {
+          local: () => browser.releaseUserControl(tabId),
+          remote: (serverId) => userControlRequest(serverId, BROWSER_USER_CONTROL_ROUTES.release, tabId),
+        }),
+      ),
       listTabs: handler(() =>
         routeToServer(remoteServers.activeServerId, {
           local: () => browser.listTabs(),
-          remote: (serverId) =>
-            runCauseEffect(remoteServers.request(serverId, TEAM_API_ROUTES.browser.tabs, decodeBrowserTabs)),
+          remote: async (serverId) =>
+            withTabState(
+              serverId,
+              await runCauseEffect(remoteServers.request(serverId, TEAM_API_ROUTES.browser.tabs, decodeBrowserTabs)),
+            ),
         }),
       ),
       getDisplayState: handler(() =>
@@ -152,11 +311,12 @@ export function browserIpcHandlers({
               const tabs = await runCauseEffect(
                 remoteServers.request(serverId, TEAM_API_ROUTES.browser.tabs, decodeBrowserTabs),
               );
-              return { tabs, activeTabId: tabs[0]?.id ?? null };
+              return { tabs: await withTabState(serverId, tabs), activeTabId: tabs[0]?.id ?? null };
             }
-            return runCauseEffect(
+            const display = await runCauseEffect(
               remoteServers.request(serverId, TEAM_API_ROUTES.browser.display, decodeBrowserDisplayState),
             );
+            return { ...display, tabs: await withTabState(serverId, display.tabs) };
           },
         }),
       ),

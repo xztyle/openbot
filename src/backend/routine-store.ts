@@ -3,19 +3,30 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   RoutineFields,
   RoutineLimitPolicy,
+  RoutineMissedPolicy,
   RoutineRunFields,
+  RoutineRunSource,
   RoutineRunStatus,
   RoutineSchedule,
 } from "@openbot/contracts/ipc";
-import { isRoutineSchedule, ROUTINE_LIMIT_POLICIES } from "@openbot/contracts/ipc";
+import {
+  isRoutineSchedule,
+  ROUTINE_LIMIT_POLICIES,
+  ROUTINE_MISSED_COUNT_LIMIT,
+  ROUTINE_MISSED_POLICIES,
+  ROUTINE_RUN_SOURCES,
+} from "@openbot/contracts/ipc";
 import type { EventFilter, EventJsonValue, EventRoutineOwner } from "@openbot/contracts/ipc-events";
 import { type DynamicRecord, isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import {
   nextRoutineOccurrence,
+  nextValidRoutineOccurrence,
   normalizeRoutineSchedule,
   RoutineInputError,
+  routineOnceInstant,
   validateRoutineSchedule,
+  validateStoredRoutineSchedule,
 } from "@openbot/team-client/routine-schedule";
 import {
   databaseRows,
@@ -58,6 +69,9 @@ export interface OwnedRoutine extends RoutineFields {
   ownerId: string;
 }
 
+/** What starts a run: its trigger, or the source of a manual run. */
+export type RoutineRunStart = "scheduled" | RoutineRunSource;
+
 /** A run read back with its owner and the handle that names the work it started. */
 export interface OwnedRoutineRun extends RoutineRunFields {
   ownerId: string;
@@ -78,6 +92,7 @@ export interface RoutineInputFields {
   timezone: string;
   schedule: RoutineSchedule;
   limitPolicy?: RoutineLimitPolicy;
+  missedPolicy?: RoutineMissedPolicy;
 }
 
 export interface RoutineUpdateFields {
@@ -87,6 +102,7 @@ export interface RoutineUpdateFields {
   active?: boolean;
   schedule?: RoutineSchedule;
   limitPolicy?: RoutineLimitPolicy;
+  missedPolicy?: RoutineMissedPolicy;
 }
 
 interface RoutineWebhookFields {
@@ -116,6 +132,7 @@ export interface RoutineRecordInput {
   active: boolean;
   timezone: string;
   limitPolicy?: RoutineLimitPolicy;
+  missedPolicy?: RoutineMissedPolicy;
   trigger:
     | { kind: "schedule"; schedule: RoutineSchedule }
     /** A null secret keeps the stored one. */
@@ -155,13 +172,14 @@ export class RoutineStore {
   ) {}
 
   protected get routineColumns(): string {
-    return `routine_id, ${this.tables.ownerColumn}, name, instruction, active, timezone, limit_policy, created_at,
-            updated_at`;
+    return `routine_id, ${this.tables.ownerColumn}, name, instruction, active, timezone, limit_policy, missed_policy,
+            created_at, updated_at`;
   }
 
   protected get runColumns(): string {
     return `run_id, routine_id, ${this.tables.ownerColumn}, trigger_id, run_kind, scheduled_for, routine_name,
-            instruction, ${this.tables.handleColumn}, status, error, created_at, updated_at`;
+            instruction, ${this.tables.handleColumn}, status, error, missed_count, missed_until, run_source, created_at,
+            updated_at`;
   }
 
   protected listRoutines(ownerId: string): OwnedRoutine[] {
@@ -216,11 +234,12 @@ export class RoutineStore {
   }
 
   protected createRoutine(ownerId: string, input: RoutineInputFields, now = new Date()): OwnedRoutine {
-    this.#validateInput(input.name, input.instruction, input.timezone, input.schedule);
+    this.#validateInput(input.name, input.instruction, input.timezone, input.schedule, null);
     this.#assertBelowLimit(ownerId);
     const routineId = randomUUID();
     const createdAt = now.toISOString();
     const schedule = normalizeRoutineSchedule(input.schedule, now);
+    if (input.active) assertOnceAhead(schedule, input.timezone, now);
     const { commandPrefix, eventPrefix, routineAggregate, routineTable, ownerColumn } = this.tables;
     return this.database.dispatch(
       `${commandPrefix}:create:${routineId}`,
@@ -236,9 +255,9 @@ export class RoutineStore {
         const sequence = sequences[0] ?? 0;
         db.prepare(
           `INSERT INTO ${routineTable} (
-             routine_id, ${ownerColumn}, name, instruction, active, timezone, limit_policy, created_at, updated_at,
-             last_event_sequence
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             routine_id, ${ownerColumn}, name, instruction, active, timezone, limit_policy, missed_policy, created_at,
+             updated_at, last_event_sequence
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         ).run(
           routineId,
           ownerId,
@@ -246,7 +265,8 @@ export class RoutineStore {
           input.instruction.trim(),
           input.active ? 1 : 0,
           input.timezone,
-          input.limitPolicy ?? "wait",
+          limitPolicyFor(schedule, input.limitPolicy),
+          input.missedPolicy ?? defaultMissedPolicy(schedule),
           createdAt,
           createdAt,
           sequence,
@@ -263,10 +283,12 @@ export class RoutineStore {
     const name = input.name ?? current.name;
     const instruction = input.instruction ?? current.instruction;
     const schedule = normalizeRoutineSchedule(input.schedule ?? current.trigger.schedule, now);
-    this.#validateInput(name, instruction, current.timezone, schedule);
+    this.#validateInput(name, instruction, current.timezone, schedule, current.trigger.schedule);
     const active = input.active ?? current.active;
-    const limitPolicy = input.limitPolicy ?? current.limitPolicy ?? "wait";
+    const limitPolicy = limitPolicyFor(schedule, input.limitPolicy ?? current.limitPolicy);
+    const missedPolicy = input.missedPolicy ?? current.missedPolicy ?? "skip";
     const reactivating = !current.active && active;
+    if (active && (input.schedule || reactivating)) assertOnceAhead(schedule, current.timezone, now);
     const updatedAt = now.toISOString();
     const { commandPrefix, eventPrefix, routineAggregate, routineTable, triggerTable, ownerColumn } = this.tables;
     return this.database.dispatch(
@@ -283,13 +305,15 @@ export class RoutineStore {
         const sequence = sequences[0] ?? 0;
         db.prepare(
           `UPDATE ${routineTable}
-           SET name = ?, instruction = ?, active = ?, limit_policy = ?, updated_at = ?, last_event_sequence = ?
+           SET name = ?, instruction = ?, active = ?, limit_policy = ?, missed_policy = ?, updated_at = ?,
+               last_event_sequence = ?
            WHERE routine_id = ? AND ${ownerColumn} = ?`,
         ).run(
           name.trim(),
           instruction.trim(),
           active ? 1 : 0,
           limitPolicy,
+          missedPolicy,
           updatedAt,
           sequence,
           input.routineId,
@@ -334,13 +358,25 @@ export class RoutineStore {
     let schedule: RoutineSchedule | null = null;
     if (trigger.kind === "schedule") {
       schedule = normalizeRoutineSchedule(trigger.schedule, now);
-      validateRoutineSchedule(schedule, input.timezone);
+      const stored = current?.trigger.kind === "schedule" ? current.trigger.schedule : null;
+      this.#validateSchedule(schedule, input.timezone, stored);
     } else {
       validateWebhookTrigger(trigger.eventType, trigger.filters);
     }
     const id = current?.id ?? randomUUID();
-    const limitPolicy = input.limitPolicy ?? current?.limitPolicy ?? "wait";
+    const limitPolicy = schedule
+      ? limitPolicyFor(schedule, input.limitPolicy ?? current?.limitPolicy)
+      : (input.limitPolicy ?? current?.limitPolicy ?? "wait");
+    const missedPolicy =
+      input.missedPolicy ?? current?.missedPolicy ?? (schedule ? defaultMissedPolicy(schedule) : "skip");
     const timestamp = now.toISOString();
+    // A routine that runs already keeps its schedule; a new run time must still be ahead.
+    const running =
+      current?.active &&
+      current.trigger.kind === "schedule" &&
+      current.timezone === input.timezone &&
+      JSON.stringify(current.trigger.schedule) === JSON.stringify(schedule);
+    if (schedule && input.active && !running) assertOnceAhead(schedule, input.timezone, now);
     const { commandPrefix, eventPrefix, routineAggregate, routineTable, triggerTable, webhookTable, ownerColumn } =
       this.tables;
     const eventTrigger =
@@ -361,6 +397,7 @@ export class RoutineStore {
             active: input.active,
             timezone: input.timezone,
             limitPolicy,
+            missedPolicy,
             trigger: eventTrigger,
           },
         },
@@ -369,12 +406,13 @@ export class RoutineStore {
         const sequence = sequences[0] ?? 0;
         db.prepare(
           `INSERT INTO ${routineTable} (
-             routine_id, ${ownerColumn}, name, instruction, active, timezone, limit_policy, created_at, updated_at,
-             last_event_sequence
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             routine_id, ${ownerColumn}, name, instruction, active, timezone, limit_policy, missed_policy, created_at,
+             updated_at, last_event_sequence
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(routine_id) DO UPDATE SET
              name = excluded.name, instruction = excluded.instruction, active = excluded.active,
-             timezone = excluded.timezone, limit_policy = excluded.limit_policy, updated_at = excluded.updated_at,
+             timezone = excluded.timezone, limit_policy = excluded.limit_policy,
+             missed_policy = excluded.missed_policy, updated_at = excluded.updated_at,
              last_event_sequence = excluded.last_event_sequence`,
         ).run(
           id,
@@ -384,6 +422,7 @@ export class RoutineStore {
           input.active ? 1 : 0,
           input.timezone,
           limitPolicy,
+          missedPolicy,
           current?.createdAt ?? timestamp,
           timestamp,
           sequence,
@@ -490,12 +529,12 @@ export class RoutineStore {
           aggregateType: runAggregate,
           aggregateId: routineId,
           eventType: `${eventPrefix}.run-created`,
-          payload: { runId, triggerId: null, kind: "manual", scheduledFor: event.receivedAt },
+          payload: { runId, triggerId: null, kind: "manual", source: "webhook", scheduledFor: event.receivedAt },
         },
       ],
       (db, sequences): WebhookReceiveResult => {
         insertWebhookReceipt(db, { ...receipt, status: "started", reason: null, runId });
-        this.#insertRun(db, runId, { ...routine, instruction }, null, "manual", event.receivedAt, sequences[0] ?? 0);
+        this.#insertRun(db, runId, { ...routine, instruction }, null, "webhook", event.receivedAt, sequences[0] ?? 0);
         return { kind: "started", run: this.#requireRun(runId) };
       },
     );
@@ -522,14 +561,15 @@ export class RoutineStore {
     );
   }
 
-  protected listRunRows(ownerId: string, routineId: string, limit = 50): OwnedRoutineRun[] {
+  /** Skipped-run records only fill the local history, so other readers do not get them by default. */
+  protected listRunRows(ownerId: string, routineId: string, limit = 50, withSkipped = false): OwnedRoutineRun[] {
     const safeLimit = Math.max(1, Math.min(INPUT_LIMITS.routineRunsPage, limit));
     return databaseRows(
       this.database.connection
         .prepare(
           `SELECT ${this.runColumns}
            FROM ${this.tables.runTable}
-           WHERE routine_id = ? AND ${this.tables.ownerColumn} = ?
+           WHERE routine_id = ? AND ${this.tables.ownerColumn} = ?${withSkipped ? "" : " AND missed_count IS NULL"}
            ORDER BY created_at DESC, run_id DESC LIMIT ?`,
         )
         .all(routineId, ownerId, safeLimit),
@@ -630,7 +670,7 @@ export class RoutineStore {
         .prepare(
           `SELECT trigger.trigger_id, trigger.next_run_at, trigger.schedule_json, routine.routine_id,
                   routine.${ownerColumn}, routine.name, routine.instruction, routine.active, routine.timezone,
-                  routine.limit_policy, routine.created_at, routine.updated_at
+                  routine.limit_policy, routine.missed_policy, routine.created_at, routine.updated_at
            FROM ${triggerTable} trigger
            JOIN ${routineTable} routine ON routine.routine_id = trigger.routine_id
            WHERE routine.active = 1 AND trigger.next_run_at <= ?
@@ -686,22 +726,211 @@ export class RoutineStore {
   }
 
   /**
-   * Missed occurrences are dropped, never replayed: a closed app must not wake into a backlog. A
-   * trigger that came due while a restart held the routines stays due, so it runs once now.
+   * Missed occurrences are never replayed: a closed app must not wake into a backlog. The ones a
+   * routine drops are recorded on one cancelled run. A routine set to run once keeps its newest
+   * occurrence due, so the scheduler runs it now. A trigger that came due while a restart held the
+   * routines stays due as well, so it runs once now.
    */
   skipMissed(now = new Date(), held?: RoutineHoldWindow): void {
-    for (const routine of this.#allActive()) {
-      const due = Date.parse(routine.trigger.nextRunAt);
+    this.#skipMissedIn(this.#allActive(), now, held, false);
+  }
+
+  /**
+   * `skipMissed` for the routines of one owner, when the user restores a hidden agent. The hide was a
+   * pause that the user chose, so every missed occurrence is skipped, also for a routine set to run
+   * once, as a paused routine does when it is resumed.
+   */
+  skipMissedFor(ownerId: string, now = new Date()): void {
+    this.#skipMissedIn(
+      this.#allActive().filter((routine) => routine.ownerId === ownerId),
+      now,
+      undefined,
+      true,
+    );
+  }
+
+  #skipMissedIn(
+    routines: readonly OwnedRoutine[],
+    now: Date,
+    held: RoutineHoldWindow | undefined,
+    skipAll: boolean,
+  ): void {
+    for (const routine of routines) {
+      const missedPolicy = skipAll ? "skip" : routine.missedPolicy;
+      const { trigger } = routine;
+      const due = Date.parse(trigger.nextRunAt);
       if (held && due >= held.since.getTime() && due <= held.until.getTime()) continue;
-      const next = nextRoutineOccurrence(routine.trigger.schedule, routine.timezone, now).toISOString();
-      this.advanceTrigger(routine.id, routine.trigger.id, next);
+      if (trigger.schedule.kind === "once") {
+        if (due <= now.getTime()) this.#settleMissedOnce(routine, now, missedPolicy);
+        continue;
+      }
+      if (due > now.getTime()) {
+        this.advanceTrigger(
+          routine.id,
+          trigger.id,
+          nextRoutineOccurrence(trigger.schedule, routine.timezone, now).toISOString(),
+        );
+        continue;
+      }
+      // A crash after a run was made and before its trigger moved leaves that occurrence due. It ran.
+      // The scheduler can make that run at a later, collapsed occurrence, so the newest run counts.
+      const ran = this.#latestScheduledRun(trigger.id, trigger.nextRunAt);
+      const first = ran ? nextRoutineOccurrence(trigger.schedule, routine.timezone, new Date(ran)) : new Date(due);
+      if (first.getTime() > now.getTime()) {
+        this.advanceTrigger(routine.id, trigger.id, first.toISOString());
+        continue;
+      }
+      const missed = missedOccurrences(trigger.schedule, routine.timezone, first, now);
+      if (missedPolicy === "run-once") {
+        if (!missed.previous) continue;
+        const count = missed.truncated ? missed.count : missed.count - 1;
+        this.#recordMissed(routine, { first, until: missed.previous, count }, missed.last);
+      } else {
+        this.#recordMissed(routine, { first, until: missed.last, count: missed.count }, missed.next);
+      }
     }
+  }
+
+  /**
+   * A one-time routine that came due while OpenBot was closed. A run that a crash left behind
+   * finishes it. Otherwise `run-once` keeps it due, so the scheduler runs it now, and `skip`
+   * records the missed time and finishes it.
+   */
+  #settleMissedOnce(routine: OwnedRoutine, now: Date, missedPolicy: RoutineMissedPolicy | undefined): void {
+    const { trigger } = routine;
+    if (this.#latestScheduledRun(trigger.id, trigger.nextRunAt)) {
+      this.completeTrigger(routine.id, trigger.id, now);
+      return;
+    }
+    if (missedPolicy === "run-once") return;
+    const at = new Date(trigger.nextRunAt);
+    this.#recordMissed(routine, { first: at, until: at, count: 1 }, null);
+  }
+
+  /**
+   * Pauses a routine whose one-time trigger has run. The trigger keeps its time, so the routine
+   * shows when it ran, and the routine resumes only with a new time.
+   */
+  completeTrigger(routineId: string, triggerId: string, now = new Date()): void {
+    const { commandPrefix, eventPrefix, routineAggregate, routineTable } = this.tables;
+    this.database.dispatch(
+      `${commandPrefix}-trigger:complete:${triggerId}`,
+      [
+        {
+          aggregateType: routineAggregate,
+          aggregateId: routineId,
+          eventType: `${eventPrefix}.trigger-completed`,
+          payload: { triggerId },
+        },
+      ],
+      (db, sequences) => {
+        db.prepare(
+          `UPDATE ${routineTable} SET active = 0, updated_at = ?, last_event_sequence = ? WHERE routine_id = ?`,
+        ).run(now.toISOString(), sequences[0] ?? 0, routineId);
+        return null;
+      },
+    );
+  }
+
+  /** The newest scheduled run of the trigger at or after `from`. */
+  #latestScheduledRun(triggerId: string, from: string): string | null {
+    const row = this.database.connection
+      .prepare(
+        `SELECT MAX(scheduled_for) AS scheduled_for FROM ${this.tables.runTable}
+         WHERE trigger_id = ? AND run_kind = 'scheduled' AND scheduled_for >= ?`,
+      )
+      .get(triggerId, from);
+    return isDynamicRecord(row) && typeof row.scheduled_for === "string" ? row.scheduled_for : null;
+  }
+
+  /**
+   * Records the skipped occurrences on one cancelled run and moves the trigger in one transaction, so
+   * a crash cannot record them twice. The run is never queued: it only fills the history. A null
+   * `nextRunAt` is a one-time trigger, which keeps its time and pauses the routine instead.
+   */
+  #recordMissed(
+    routine: OwnedRoutine,
+    skipped: { first: Date; until: Date; count: number },
+    nextRunAt: Date | null,
+  ): void {
+    const {
+      commandPrefix,
+      eventPrefix,
+      routineAggregate,
+      runAggregate,
+      triggerTable,
+      runTable,
+      routineTable,
+      ownerColumn,
+    } = this.tables;
+    const triggerId = routine.trigger.id;
+    const runId = randomUUID();
+    const scheduledFor = skipped.first.toISOString();
+    const until = skipped.count > 1 ? skipped.until.toISOString() : null;
+    const next = nextRunAt?.toISOString() ?? null;
+    this.database.dispatch(
+      `${commandPrefix}-trigger:missed:${triggerId}:${scheduledFor}`,
+      [
+        {
+          aggregateType: runAggregate,
+          aggregateId: routine.id,
+          eventType: `${eventPrefix}.run-missed`,
+          payload: { runId, triggerId, scheduledFor, until, count: skipped.count },
+        },
+        next
+          ? {
+              aggregateType: routineAggregate,
+              aggregateId: routine.id,
+              eventType: `${eventPrefix}.trigger-advanced`,
+              payload: { triggerId, nextRunAt: next },
+            }
+          : {
+              aggregateType: routineAggregate,
+              aggregateId: routine.id,
+              eventType: `${eventPrefix}.trigger-completed`,
+              payload: { triggerId },
+            },
+      ],
+      (db, sequences) => {
+        const timestamp = new Date().toISOString();
+        db.prepare(
+          `INSERT INTO ${runTable} (
+             run_id, routine_id, ${ownerColumn}, trigger_id, run_kind, scheduled_for, routine_name, instruction,
+             status, error, missed_count, missed_until, created_at, updated_at, last_event_sequence
+           ) VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, 'cancelled', NULL, ?, ?, ?, ?, ?)`,
+        ).run(
+          runId,
+          routine.id,
+          routine.ownerId,
+          triggerId,
+          scheduledFor,
+          routine.name,
+          routine.instruction,
+          skipped.count,
+          until,
+          timestamp,
+          timestamp,
+          sequences[0] ?? 0,
+        );
+        if (next) {
+          db.prepare(
+            `UPDATE ${triggerTable} SET next_run_at = ?, updated_at = ?, last_event_sequence = ?
+             WHERE trigger_id = ? AND routine_id = ?`,
+          ).run(next, timestamp, sequences[1] ?? 0, triggerId, routine.id);
+        } else {
+          db.prepare(
+            `UPDATE ${routineTable} SET active = 0, updated_at = ?, last_event_sequence = ? WHERE routine_id = ?`,
+          ).run(timestamp, sequences[1] ?? 0, routine.id);
+        }
+        return null;
+      },
+    );
   }
 
   protected createRunRow(
     routine: RunSource,
     triggerId: string | null,
-    kind: OwnedRoutineRun["kind"],
+    start: RoutineRunStart,
     scheduledFor: string,
   ): OwnedRoutineRun {
     const { commandPrefix, eventPrefix, runAggregate } = this.tables;
@@ -716,11 +945,11 @@ export class RoutineStore {
           aggregateType: runAggregate,
           aggregateId: routine.id,
           eventType: `${eventPrefix}.run-created`,
-          payload: { runId, triggerId, kind, scheduledFor },
+          payload: { runId, triggerId, ...runStartColumns(start), scheduledFor },
         },
       ],
       (db, sequences) => {
-        this.#insertRun(db, runId, routine, triggerId, kind, scheduledFor, sequences[0] ?? 0);
+        this.#insertRun(db, runId, routine, triggerId, start, scheduledFor, sequences[0] ?? 0);
         return this.#requireRun(runId);
       },
     );
@@ -731,23 +960,25 @@ export class RoutineStore {
     runId: string,
     routine: RunSource,
     triggerId: string | null,
-    kind: OwnedRoutineRun["kind"],
+    start: RoutineRunStart,
     scheduledFor: string,
     sequence: number,
   ): void {
     const { runTable, ownerColumn, handleColumn } = this.tables;
     const createdAt = new Date().toISOString();
+    const { kind, source } = runStartColumns(start);
     db.prepare(
       `INSERT INTO ${runTable} (
-         run_id, routine_id, ${ownerColumn}, trigger_id, run_kind, scheduled_for, routine_name, instruction,
-         ${handleColumn}, status, error, created_at, updated_at, last_event_sequence
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'queued', NULL, ?, ?, ?)`,
+         run_id, routine_id, ${ownerColumn}, trigger_id, run_kind, run_source, scheduled_for, routine_name,
+         instruction, ${handleColumn}, status, error, created_at, updated_at, last_event_sequence
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'queued', NULL, ?, ?, ?)`,
     ).run(
       runId,
       routine.id,
       routine.ownerId,
       triggerId,
       kind,
+      source ?? null,
       scheduledFor,
       routine.name,
       routine.instruction,
@@ -827,6 +1058,9 @@ export class RoutineStore {
   #fields(row: DynamicRecord): Omit<OwnedRoutine, "trigger"> {
     const limitPolicy = requiredStringColumn(row, "limit_policy");
     if (!isOneOf(ROUTINE_LIMIT_POLICIES, limitPolicy)) throw new Error("The stored routine limit policy is invalid.");
+    const missedPolicy = requiredStringColumn(row, "missed_policy");
+    if (!isOneOf(ROUTINE_MISSED_POLICIES, missedPolicy))
+      throw new Error("The stored routine missed-run policy is invalid.");
     return {
       id: requiredStringColumn(row, "routine_id"),
       ownerId: requiredStringColumn(row, this.tables.ownerColumn),
@@ -835,6 +1069,7 @@ export class RoutineStore {
       active: requiredNumberColumn(row, "active") === 1,
       timezone: requiredStringColumn(row, "timezone"),
       limitPolicy,
+      missedPolicy,
       createdAt: requiredStringColumn(row, "created_at"),
       updatedAt: requiredStringColumn(row, "updated_at"),
     };
@@ -873,18 +1108,32 @@ export class RoutineStore {
     if (!isRoutineRunStatus(status)) throw new Error("The stored routine run status is invalid.");
     const kind = requiredStringColumn(row, "run_kind");
     if (kind !== "scheduled" && kind !== "manual") throw new Error("The stored routine run kind is invalid.");
+    const source = optionalStringColumn(row, "run_source");
+    if (source !== null && !isOneOf(ROUTINE_RUN_SOURCES, source)) {
+      throw new Error("The stored routine run source is invalid.");
+    }
+    const missedCount = row.missed_count;
     return {
       id: requiredStringColumn(row, "run_id"),
       routineId: requiredStringColumn(row, "routine_id"),
       ownerId: requiredStringColumn(row, this.tables.ownerColumn),
       triggerId: optionalStringColumn(row, "trigger_id"),
       kind,
+      ...(source === null ? {} : { source }),
       scheduledFor: requiredStringColumn(row, "scheduled_for"),
       routineName: requiredStringColumn(row, "routine_name"),
       instruction: requiredStringColumn(row, "instruction"),
       handleId: optionalStringColumn(row, this.tables.handleColumn),
       status,
       error: optionalStringColumn(row, "error"),
+      ...(missedCount === null
+        ? {}
+        : {
+            missed: {
+              count: requiredNumberColumn(row, "missed_count"),
+              until: optionalStringColumn(row, "missed_until"),
+            },
+          }),
       createdAt: requiredStringColumn(row, "created_at"),
       updatedAt: requiredStringColumn(row, "updated_at"),
     };
@@ -937,16 +1186,33 @@ export class RoutineStore {
       randomUUID(),
       routineId,
       JSON.stringify(schedule),
-      nextRoutineOccurrence(schedule, timezone, now).toISOString(),
+      // A one-time run keeps its time after it passes, so a finished routine still shows when it ran.
+      (schedule.kind === "once"
+        ? routineOnceInstant(schedule, timezone)
+        : nextRoutineOccurrence(schedule, timezone, now)
+      ).toISOString(),
       timestamp,
       timestamp,
       sequence,
     );
   }
 
-  #validateInput(name: string, instruction: string, timezone: string, schedule: RoutineSchedule): void {
+  #validateInput(
+    name: string,
+    instruction: string,
+    timezone: string,
+    schedule: RoutineSchedule,
+    stored: RoutineSchedule | null,
+  ): void {
     this.#validateFields(name, instruction);
-    validateRoutineSchedule(schedule, timezone);
+    this.#validateSchedule(schedule, timezone, stored);
+  }
+
+  /** A new or changed schedule gets the full check; an unchanged one stays editable, as an older version stored it. */
+  #validateSchedule(schedule: RoutineSchedule, timezone: string, stored: RoutineSchedule | null): void {
+    if (stored && JSON.stringify(stored) === JSON.stringify(schedule))
+      validateStoredRoutineSchedule(schedule, timezone);
+    else validateRoutineSchedule(schedule, timezone);
   }
 
   #validateFields(name: string, instruction: string): void {
@@ -963,10 +1229,83 @@ export class RoutineStore {
 
 type RunSource = Pick<OwnedRoutine, "id" | "ownerId" | "name" | "instruction">;
 
+/** The walk counts at most one past the exact limit, which reads as "more than the limit". */
+const MISSED_WALK_LIMIT = ROUTINE_MISSED_COUNT_LIMIT + 1;
+const HOUR_MS = 3_600_000;
+/** Windows before now that the walk searches, shortest first, once the count passes the limit. */
+const MISSED_WINDOWS_MS = [HOUR_MS, 24 * HOUR_MS, 32 * 24 * HOUR_MS, 400 * 24 * HOUR_MS, Number.POSITIVE_INFINITY];
+
+interface MissedOccurrences {
+  /** Exact up to the limit, then `MISSED_WALK_LIMIT`. */
+  count: number;
+  /** The walk stopped at the limit, so `count` is a lower bound. */
+  truncated: boolean;
+  last: Date;
+  previous: Date | null;
+  next: Date;
+}
+
+/**
+ * The occurrences from `first` through `now`. One step costs tens of microseconds, and a routine
+ * every three minutes misses thousands in a week, so the walk stops counting at the limit. It then
+ * finds the newest two in the shortest window before `now` that holds two.
+ */
+function missedOccurrences(schedule: RoutineSchedule, timezone: string, first: Date, now: Date): MissedOccurrences {
+  validateStoredRoutineSchedule(schedule, timezone);
+  const step = (after: Date) => nextValidRoutineOccurrence(schedule, timezone, after);
+  let previous: Date | null = null;
+  let last = first;
+  let count = 1;
+  let next = step(last);
+  while (next.getTime() <= now.getTime() && count < MISSED_WALK_LIMIT) {
+    previous = last;
+    last = next;
+    count += 1;
+    next = step(last);
+  }
+  if (next.getTime() > now.getTime()) return { count, truncated: false, last, previous, next };
+  for (const window of MISSED_WINDOWS_MS) {
+    const start = Math.max(last.getTime(), now.getTime() - window);
+    let newest: Date | null = start === last.getTime() ? last : null;
+    let before: Date | null = start === last.getTime() ? previous : null;
+    let cursor = step(new Date(start));
+    while (cursor.getTime() <= now.getTime()) {
+      before = newest;
+      newest = cursor;
+      cursor = step(cursor);
+    }
+    if (newest && before) return { count, truncated: true, last: newest, previous: before, next: cursor };
+  }
+  throw new Error("The missed routine occurrences could not be found.");
+}
+
+/** A one-time routine that would run must have its time ahead. */
+function assertOnceAhead(schedule: RoutineSchedule, timezone: string, now: Date): void {
+  if (schedule.kind === "once") nextRoutineOccurrence(schedule, timezone, now);
+}
+
+/**
+ * A one-time routine always waits for a spent plan: a dropped reminder has no later run that
+ * makes up for it.
+ */
+function limitPolicyFor(schedule: RoutineSchedule, requested: RoutineLimitPolicy | undefined): RoutineLimitPolicy {
+  return schedule.kind === "once" ? "wait" : (requested ?? "wait");
+}
+
+/** A one-time routine that came due while OpenBot was closed runs late by default; it has no next run. */
+function defaultMissedPolicy(schedule: RoutineSchedule): RoutineMissedPolicy {
+  return schedule.kind === "once" ? "run-once" : "skip";
+}
+
 function scheduleColumn(row: DynamicRecord): RoutineSchedule {
   const value = JSON.parse(requiredStringColumn(row, "schedule_json"));
   if (!isRoutineSchedule(value)) throw new Error("The stored routine schedule is invalid.");
   return value;
+}
+
+/** The stored kind of a run, and the source of a manual one. */
+function runStartColumns(start: RoutineRunStart): Pick<RoutineRunFields, "kind" | "source"> {
+  return start === "scheduled" ? { kind: "scheduled" } : { kind: "manual", source: start };
 }
 
 function isRoutineRunStatus(value: string): value is RoutineRunStatus {

@@ -14,7 +14,7 @@ import { createScopeGuard } from "../../scope-lifetime";
 import { createSimpleContext } from "../../simple-context";
 import { useServers } from "../servers/servers-context";
 import { usePresence } from "../team/team-context";
-import { useUsage } from "../usage/usage-context";
+import { useWindowPage } from "../window/window-page-context";
 import { conversationPort } from "./conversation-port";
 import { preserveKnownDirectUnread } from "./conversation-read-state";
 
@@ -46,7 +46,12 @@ function recoveredDirectConversation(
       firstUnreadMessageId: readState.firstUnreadMessageId ?? unread[0]?.id ?? null,
     };
   }
-  return { ...page, messages, revision: Math.max(page.revision, cached.revision), readState };
+  return {
+    ...page,
+    messages,
+    revision: Math.max(page.revision, cached.revision),
+    ...(readState === undefined ? {} : { readState }),
+  };
 }
 
 /**
@@ -90,11 +95,11 @@ const DirectMessages = createSimpleContext({
   name: "Direct messages",
   init: () => {
     const { appFocused, peopleEnabled } = usePlatform();
-    const usage = useUsage();
+    const windowPage = useWindowPage();
     // Every automatic read below asks whether the user can see the message it is about to mark
-    // read. Usage covers the workspace content, so a conversation under it is not visible
+    // read. A rail page, such as Usage or Settings, covers the workspace content, so a conversation under it is not visible
     // however focused the window is.
-    const conversationVisible = () => appFocused() && !usage.state.serverId;
+    const conversationVisible = () => appFocused() && !windowPage.conversationCovered();
     const { activeServer, activeServerId, activeServerSupportsCapability } = useServers();
     const { currentTeamMember, directPeople } = usePresence();
     const scopeIsCurrent = createScopeGuard();
@@ -223,13 +228,14 @@ const DirectMessages = createSimpleContext({
           const existing = current[memberId];
           if (!existing) return current;
           const ids = new Set(page.messages.map((message) => message.id));
+          const readState = page.readState ?? existing.readState;
           return {
             ...current,
             [memberId]: {
               ...existing,
               messages: [...page.messages, ...existing.messages.filter((message) => !ids.has(message.id))],
               revision: Math.max(existing.revision, page.revision),
-              readState: page.readState ?? existing.readState,
+              ...(readState === undefined ? {} : { readState }),
             },
           };
         });

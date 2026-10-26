@@ -32,12 +32,12 @@ export const messages = {
   "import.guide.openFailed": "Der Export konnte nicht geöffnet werden",
   "import.guide.step1": "Füge den Exportagenten zu Grok Bot hinzu",
   "import.guide.setupLabel": "So fügst du den Exportagenten hinzu",
-  "import.guide.setupAgent": "Agent installieren",
+  "import.guide.setupAgent": "Agenten installieren",
   "import.guide.setupSkill": "Selbst einrichten",
-  "import.guide.agentMeta": "Grok Bot-Agent · enthält die Exportfähigkeit",
+  "import.guide.agentMeta": "Grok-Bot-Agent · enthält die Exportfähigkeit",
   "import.guide.openAgent": "Exportagent öffnen",
   "import.guide.agentNote":
-    "Installiere den fertigen Agenten von seiner Grok Bot-Seite. Er wird beim Export ausgelassen.",
+    "Installiere den fertigen Agenten von seiner Grok-Bot-Seite. Er wird beim Export ausgelassen.",
   "import.guide.skillCopied": "Fähigkeit kopiert",
   "import.guide.saveFile": "Datei speichern…",
   "import.guide.skillNote":

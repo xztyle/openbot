@@ -13,8 +13,9 @@ import {
   shapes,
   widgetURL,
 } from "@expo/ui/swift-ui/modifiers";
+import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import type { AgentLiveActivityProps } from "@openbot/team-client/live-activity-props";
-import { Directory, File } from "expo-file-system";
+import { Directory, File, Paths } from "expo-file-system";
 import {
   LiveActivity,
   type LiveActivityEnvironment,
@@ -314,9 +315,9 @@ function composeLayout(constants: {
   var open = ${String(openSealedLiveActivity)};
   var layout = ${String(agentLiveActivityLayout)};
   return function (props, environment) {
-    var shown = props;
+    var shown = props || {};
     var context = environment;
-    if (typeof props.sealed === "string") {
+    if (props && typeof props.sealed === "string") {
       var text = c.seal ? open(props.sealed, c.seal, c.tag) : null;
       var opened = null;
       try { opened = text === null ? null : JSON.parse(text); } catch (error) { opened = null; }
@@ -328,8 +329,34 @@ function composeLayout(constants: {
 })()`;
 }
 
-function toInstance(activity: LiveActivity): LiveActivityInstance<AgentLiveActivityProps> {
+/**
+ * The start of the activity that the app shows, by its ActivityKit id. ActivityKit does not give it,
+ * and the hosts need it after they restart, because iOS stops the updates 8 hours after the start.
+ */
+const START_FILE = "live-activity-start.json";
+
+function rememberStart(id: string, startedAt: number): void {
+  try {
+    new File(Paths.document, START_FILE).writeSync(JSON.stringify({ id, startedAt }));
+  } catch {
+    // Without the file the hosts use the time when they first got the token.
+  }
+}
+
+function savedStart(id: string): number | null {
+  try {
+    const file = new File(Paths.document, START_FILE);
+    if (!file.exists) return null;
+    const saved = JSON.parse(file.textSync());
+    return isDynamicRecord(saved) && saved.id === id && typeof saved.startedAt === "number" ? saved.startedAt : null;
+  } catch {
+    return null;
+  }
+}
+
+function toInstance(activity: LiveActivity, startedAt: number | null): LiveActivityInstance<AgentLiveActivityProps> {
   return {
+    startedAt,
     update: (props, staleDate) => activity.update(props, staleDate),
     end: (dismissalPolicy) => activity.end(dismissalPolicy),
     watchPushToken(receive) {
@@ -363,9 +390,17 @@ export const agentLiveActivity: AgentLiveActivityLoader = () => {
   let layoutKeys = "";
   native = {
     starter: {
-      start: (props, staleDate) =>
-        toInstance(new LiveActivity(factory.start(JSON.stringify(props), undefined, staleDate?.getTime()))),
-      getInstances: () => factory.getInstances().map((activity) => toInstance(new LiveActivity(activity))),
+      start: (props, staleDate) => {
+        const activity = new LiveActivity(factory.start(JSON.stringify(props), undefined, staleDate?.getTime()));
+        const startedAt = Date.now();
+        rememberStart(activity.getId(), startedAt);
+        return toInstance(activity, startedAt);
+      },
+      getInstances: () =>
+        factory.getInstances().map((native) => {
+          const activity = new LiveActivity(native);
+          return toInstance(activity, savedStart(activity.getId()));
+        }),
     },
     setSealKeys(keys, fallback) {
       const next = JSON.stringify([keys, fallback]);
@@ -383,7 +418,7 @@ export const agentLiveActivity: AgentLiveActivityLoader = () => {
       if (!widgetsDirectory || !match?.[2] || !extension) return null;
       const fileName = `${AVATAR_PREFIX}${name}.${extension}`;
       const file = new File(widgetsDirectory, fileName);
-      if (!file.exists) file.write(match[2], { encoding: "base64" });
+      if (!file.exists) file.writeSync(match[2], { encoding: "base64" });
       return fileName;
     },
     hasAvatar: (fileName) => Boolean(widgetsDirectory) && new File(widgetsDirectory, fileName).exists,

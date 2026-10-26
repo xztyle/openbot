@@ -1,4 +1,10 @@
-import type { AccountSession, CentralAuthState, CentralAuthUser, OpenBotDesktopApi } from "@openbot/contracts/ipc";
+import type {
+  AccountSession,
+  CentralAuthState,
+  CentralAuthUser,
+  MobileConnectLink,
+  OpenBotDesktopApi,
+} from "@openbot/contracts/ipc";
 import { clone, type Listener, type MockRuntime } from "./mock-support";
 
 export interface MockAuthOptions {
@@ -17,6 +23,7 @@ export function createMockAuth(options: MockAuthOptions, { emit }: MockRuntime) 
     },
   };
   let authState = clone<CentralAuthState>(options.authState ?? defaultAuthState);
+  let mobileConnectLink: MobileConnectLink | null = null;
   let accountSessions: AccountSession[] = [
     {
       sessionId: "22222222-2222-4222-8222-222222222222",
@@ -33,6 +40,15 @@ export function createMockAuth(options: MockAuthOptions, { emit }: MockRuntime) 
       current: false,
       connectedAt: Date.now() - 172_800_000,
       lastActiveAt: Date.now() - 3_600_000,
+    },
+    {
+      sessionId: "44444444-4444-4444-8444-444444444444",
+      name: "Research server",
+      kind: "desktop",
+      current: false,
+      connectedAt: Date.now() - 259_200_000,
+      lastActiveAt: Date.now() - 300_000,
+      hostedServer: true,
     },
     {
       sessionId: "11111111-1111-4111-8111-111111111111",
@@ -94,6 +110,18 @@ export function createMockAuth(options: MockAuthOptions, { emit }: MockRuntime) 
         "openbot://mobile-connect?api=https%3A%2F%2Fapi.openbot.run&ticket=preview-mobile-ticket_1234567890abcdef",
       expiresAt: Date.now() + 120_000,
     }),
+    cancelMobileConnect: async () => undefined,
+    getMobileConnectLink: async () => clone(mobileConnectLink),
+    createMobileConnectLink: async () => {
+      mobileConnectLink = {
+        url: `openbot://mobile-connect?api=https%3A%2F%2Fapi.openbot.run&ticket=preview-mobile-link_${crypto.randomUUID().replaceAll("-", "")}`,
+        createdAt: Date.now(),
+      };
+      return clone(mobileConnectLink);
+    },
+    revokeMobileConnectLink: async () => {
+      mobileConnectLink = null;
+    },
     listMobileConnectedDevices: async () =>
       accountSessions
         .filter((session) => session.kind === "mobile")
@@ -103,6 +131,7 @@ export function createMockAuth(options: MockAuthOptions, { emit }: MockRuntime) 
           platform: "ios",
           connectedAt: session.connectedAt,
           lastActiveAt: session.lastActiveAt,
+          via: "code",
         })),
     revokeMobileConnectedDevice: async (sessionId) => {
       accountSessions = accountSessions.filter(

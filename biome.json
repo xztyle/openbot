@@ -40,7 +40,8 @@
       "!src/renderer/src/vendor",
       "!marketplace/watcher-catalog/watchers/linear-assigned-intake/program.mjs",
       "!marketplace/watcher-catalog/watchers/*/program-*.mjs",
-      "!resources/watcher-catalog"
+      "!resources/watcher-catalog",
+      "!marketplace/production-catalog/bundles"
     ]
   },
   "formatter": {
@@ -275,7 +276,10 @@
     },
     {
       "includes": ["src/renderer/**", "packages/ui/**", "packages/brand/**", "apps/auth-api/**", ".storybook/**"],
-      "plugins": ["./tools/biome/anti-slop/rules/no-collections-in-stores.grit"]
+      "plugins": [
+        "./tools/biome/anti-slop/rules/no-collections-in-stores.grit",
+        "./tools/biome/anti-slop/rules/no-cleanup-in-effect-callbacks.grit"
+      ]
     },
     {
       "includes": ["**/*.stories.ts", "**/*.stories.tsx"],
@@ -293,9 +297,7 @@
         "!**/*.test.tsx",
         "!**/*.stories.tsx",
         "!src/renderer/src/preview/**",
-        "!src/renderer/src/app-test-harness.ts",
-        "!src/renderer/src/setupTests.ts",
-        "!apps/mobile/src/test-setup.ts"
+        "!src/renderer/src/setupTests.ts"
       ],
       "plugins": ["./tools/ui-foundation/no-hardcoded-ui-text.grit"]
     },
@@ -314,6 +316,26 @@
                     "message": "Shared UI receives data and actions through props; do not import application or platform implementations."
                   }
                 ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/mobile/src/**/*.ts", "apps/mobile/src/**/*.tsx"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "lucide-react-native": {
+                    "allowImportNames": ["LucideIcon", "LucideProps"],
+                    "message": "Metro does not remove unused exports, so this index adds every icon to the mobile bundle. Import one icon from \"lucide-react-native/icons/<name>\"."
+                  }
+                }
               }
             }
           }

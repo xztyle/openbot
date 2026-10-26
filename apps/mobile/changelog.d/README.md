@@ -15,4 +15,6 @@ Use the groups and item rules of [the release notes](../../../docs/RELEASING.md#
 every file into the new version section of [`apps/mobile/CHANGELOG.md`](../CHANGELOG.md), set the
 new version in `apps/mobile/app.json`, `apps/mobile/package.json` and `bun.lock`, and delete the files. The
 pre-commit hook and the Changelog workflow check each file. The new section is `In review`, and
-`/changelog` does not show it until `bun run mobile:release:published` writes its date.
+`/changelog` does not show it until `bun run mobile:release:published ios` (or `android`) writes the
+date of the first store. Run the command again for the other store. See
+[the mobile release steps](../README.md#github-actions-testflight-release).

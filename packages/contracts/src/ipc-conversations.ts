@@ -3,6 +3,12 @@ import { isIdentifier } from "./ipc-bounded-values";
 import { type ConversationMessage, isConversationMessage, type MessageReaction } from "./ipc-conversation-messages";
 import { isDynamicRecord, isNumber } from "./runtime-values";
 
+/**
+ * The most recent completed messages that main keeps and sends for one conversation, plus the
+ * active turn. A snapshot with fewer messages is the whole conversation.
+ */
+export const CONVERSATION_SNAPSHOT_MESSAGE_LIMIT = 100;
+
 export interface ConversationSnapshot {
   agentId: string;
   threadId: string | null;
@@ -63,7 +69,7 @@ export interface ConversationPageInfo {
   hasOlder: boolean;
   olderCursor: string | null;
   /**
-   * How many messages are older than the page, and the time of the oldest one. The chat's day rail
+   * How many messages are older than the page, and the time of the oldest one. The chat's scroll rail
    * draws the part that is not loaded from these. A host that does not send them leaves them out,
    * and the Team API never carries them.
    */
@@ -73,7 +79,7 @@ export interface ConversationPageInfo {
 
 export interface ReadConversationPageInput {
   agentId: string;
-  anchor?: ConversationPageAnchor;
+  anchor?: ConversationPageAnchor | undefined;
   limit?: number;
 }
 
@@ -86,6 +92,23 @@ export interface ConversationPage {
   references: Record<string, ConversationMessage>;
   pageInfo: ConversationPageInfo;
   readState?: ConversationReadState;
+}
+
+/** A link in an agent's conversation that the user opened. */
+export interface OpenMessageLinkInput {
+  agentId: string;
+  url: string;
+}
+
+/** The address that the browser shows at the end of a relayed sign-in link. */
+export interface PasteMessageLinkInput {
+  url: string;
+  address: string;
+}
+
+/** A relayed sign-in link that the user stopped. */
+export interface CancelMessageLinkInput {
+  url: string;
 }
 
 export interface SearchConversationMessagesInput {
@@ -141,6 +164,13 @@ export interface SendMessageInput {
    * same agent, returns the first receipt instead of a new message, so a lost reply can be retried.
    */
   clientMessageId?: string;
+  /** The open task of this agent that takes the message. Without it, the agent's own chat takes it. */
+  taskId?: string;
+  /**
+   * An audio draft of what the user said, when the text came from a voice turn. The host keeps it with
+   * the message for replay and never gives it to the agent.
+   */
+  voiceRecordingDraftId?: string;
 }
 
 export interface SetMessageReactionInput {

@@ -49,6 +49,11 @@ export function AnimationsSettingsScreen() {
       label: t("mobile.settings.animations.textReveal"),
       footer: t("mobile.settings.animations.textRevealFooter"),
     },
+    {
+      name: "searchTransitions",
+      label: t("mobile.settings.animations.searchTransitions"),
+      footer: t("mobile.settings.animations.searchTransitionsFooter"),
+    },
   ];
   return (
     <SettingsContent>

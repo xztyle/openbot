@@ -183,7 +183,11 @@ function isSearchTab(value: string): value is SearchTab {
 }
 
 function messagePreview(message: AgentMessage): string {
-  return expandChatTagReferences(message.body).trim().replace(/\s+/g, " ");
+  return expandChatTagReferences(message.body, (reference) =>
+    reference.kind === "quote" ? `“${reference.name}”` : undefined,
+  )
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function resultKey(result: ResultData): string {

@@ -1,4 +1,5 @@
 import type { GitHubConnectorRepositories, GitHubConnectorStatus } from "@openbot/contracts/ipc";
+import type { AppTextKey } from "@openbot/i18n";
 import {
   Alert,
   AlertActions,
@@ -29,10 +30,10 @@ import {
 } from "@openbot/ui";
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch } from "solid-js";
 import { useText } from "../../text";
+import { GitHubMark } from "./brand-marks";
 import {
   DangerZone,
   DetailHeader,
-  GitHubMark,
   type IntegrationStatus,
   Stepper,
   WizardDialog,
@@ -40,6 +41,8 @@ import {
 } from "./IntegrationLayout";
 
 export interface GitHubConnectorPanelProps {
+  /** The joined server whose connection this is. Absent: this computer's. */
+  hostName?: string | undefined;
   status: GitHubConnectorStatus;
   /** True while an action runs. Every button waits for it. */
   busy: boolean;
@@ -66,12 +69,13 @@ function connectStep(status: GitHubConnectorStatus, busy: boolean): ConnectStep 
   return busy ? "waiting" : "failed";
 }
 
-const HEADER_STATUS = {
+/** The status of the connection, as its page header and every list of connectors show it. */
+export const GITHUB_STATUS = {
   disconnected: { status: "idle", label: "connector.github.statusNotSetUp" },
-  pending: { status: "idle", label: "connector.github.statusConnecting" },
+  pending: { status: "connecting", label: "connector.github.statusConnecting" },
   connected: { status: "connected", label: "connector.github.statusConnected" },
   expired: { status: "attention", label: "connector.github.statusExpired" },
-} as const satisfies Record<GitHubConnectorStatus["state"], { status: IntegrationStatus; label: string }>;
+} as const satisfies Record<GitHubConnectorStatus["state"], { status: IntegrationStatus; label: AppTextKey }>;
 
 /**
  * The GitHub page of one OpenBot computer. The token never reaches this component: the status holds
@@ -90,7 +94,7 @@ export function GitHubConnectorPanel(props: GitHubConnectorPanelProps) {
       if (state === "pending") setConnectOpen(true);
     },
   );
-  const header = () => HEADER_STATUS[props.status.state];
+  const header = () => GITHUB_STATUS[props.status.state];
   const login = () => props.status.login ?? "";
 
   const connect = () => {
@@ -115,7 +119,11 @@ export function GitHubConnectorPanel(props: GitHubConnectorPanelProps) {
         name={t("connector.github.title")}
         status={header().status}
         statusLabel={t(header().label)}
-        subtitle={t("connector.github.description")}
+        subtitle={
+          props.hostName
+            ? t("connector.github.descriptionHost", { host: props.hostName })
+            : t("connector.github.description")
+        }
         actions={
           <Show when={props.status.state === "disconnected"}>
             <Button type="button" size="sm" loading={props.busy} onClick={connect}>
@@ -185,6 +193,7 @@ export function GitHubConnectorPanel(props: GitHubConnectorPanelProps) {
       <DisconnectDialog
         open={confirmOpen()}
         login={login()}
+        hostName={props.hostName}
         onConfirm={confirmDisconnect}
         onClose={() => setConfirmOpen(false)}
       />
@@ -477,7 +486,9 @@ function ConnectDialog(props: GitHubConnectorPanelProps & { open: boolean; onRet
               >
                 {(list) => (
                   <Text variant="caption" tone="muted">
-                    {t("connector.github.connectedSummary", { count: list().total })}
+                    {props.hostName
+                      ? t("connector.github.connectedSummaryHost", { count: list().total, host: props.hostName })
+                      : t("connector.github.connectedSummary", { count: list().total })}
                   </Text>
                 )}
               </Show>
@@ -510,7 +521,13 @@ function DeviceCode(props: { code: string }) {
   );
 }
 
-function DisconnectDialog(props: { open: boolean; login: string; onConfirm: () => void; onClose: () => void }) {
+function DisconnectDialog(props: {
+  open: boolean;
+  login: string;
+  hostName: string | undefined;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
   const { t } = useText();
   return (
     <WizardDialog
@@ -520,7 +537,11 @@ function DisconnectDialog(props: { open: boolean; login: string; onConfirm: () =
       logo={<GitHubMark />}
       link="broken"
       title={t("connector.github.disconnectConfirmTitle")}
-      description={t("connector.github.disconnectConfirmDescription", { login: props.login })}
+      description={
+        props.hostName
+          ? t("connector.github.disconnectConfirmDescriptionHost", { login: props.login, host: props.hostName })
+          : t("connector.github.disconnectConfirmDescription", { login: props.login })
+      }
       footer={
         <>
           <Button type="button" variant="ghost" onClick={props.onClose}>
@@ -557,7 +578,9 @@ function DisconnectDialog(props: { open: boolean; login: string; onConfirm: () =
           <span class="github-connector-effect-icon" aria-hidden="true">
             <Check />
           </span>
-          {t("connector.github.disconnectEffectKept")}
+          {props.hostName
+            ? t("connector.github.disconnectEffectKeptHost", { host: props.hostName })
+            : t("connector.github.disconnectEffectKept")}
         </li>
       </ul>
     </WizardDialog>

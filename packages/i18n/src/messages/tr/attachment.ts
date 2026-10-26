@@ -3,10 +3,11 @@ import type { messages as source } from "../en/attachment";
 
 export const messages = {
   "attachment.openFile": "Dosyayı aç",
-  "attachment.preview": "{name} önizle",
+  "attachment.preview": "{name} dosyasını önizle",
   "attachment.notFound": "Dosya bulunamadı",
-  "attachment.download": "{name} indir",
-  "attachment.open": "{name} aç",
+  "attachment.download": "{name} dosyasını indir",
+  "attachment.open": "{name} dosyasını aç",
+  "attachment.loadMedia": "{name} dosyasını oynat",
   "attachment.previewUnavailable": "Önizleme kullanılamıyor.",
   "attachment.error.preview": "{name} önizlenemedi. Tekrar deneyin.",
   "attachment.error.download": "Ekler indirilemedi. Tekrar deneyin.",

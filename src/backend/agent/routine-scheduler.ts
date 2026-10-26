@@ -4,6 +4,7 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentEvent,
   AgentSummary,
+  AgentWait,
   ConversationMessage,
   ConversationSnapshot,
   CreateRoutineInput,
@@ -18,12 +19,14 @@ import type {
   UpdateRoutineInput,
 } from "@openbot/contracts/ipc";
 import { routineConversationEventItemType, routineRunConversationEventItemType } from "@openbot/contracts/ipc";
+import type { EventRoutine } from "@openbot/contracts/ipc-events";
 import { type DynamicRecord, isBoolean } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { collapseMissedOccurrences, RoutineInputError } from "@openbot/team-client/routine-schedule";
 import { Effect, Schema } from "effect";
 import { AgentRoutineStore } from "../agent-routine-store";
 import { AGENT_PREVIEW_MAX_LENGTH, type AgentStore } from "../agent-store";
+import type { AgentWaits } from "../agent-waits/agent-waits";
 import { causeHelpers } from "../effect-boundary";
 import type { MailboxStore } from "../mailbox-store";
 import type { DynamicToolCallParams } from "../protocol";
@@ -33,7 +36,7 @@ import type { RoutineDueSource, RoutineTimer } from "../routine-timer";
 import { type ConversationRuntime, withDatabaseTransaction } from "./conversation-runtime";
 import { routineStatusForDelivery } from "./delivery-content";
 import { mergeEventInstructions, RoutineEventDigest } from "./routine-event-digest";
-import { isEventStartedRun, runMayEndQuiet } from "./routine-quiet-runs";
+import { isEventStartedRun, quietRoutineRun } from "./routine-quiet-runs";
 import {
   localTimezone,
   type OpenBotToolResponse,
@@ -41,13 +44,24 @@ import {
   openBotToolResult,
   routineToolAgentId,
   routineToolArguments,
+  routineToolPolicies,
   routineToolSchedule,
   routineToolString,
 } from "./routine-tools";
+import {
+  CREATE_WEBHOOK_ROUTINE_ARGUMENTS,
+  CREATE_WEBHOOK_ROUTINE_TOOL,
+  UPDATE_WEBHOOK_ROUTINE_ARGUMENTS,
+  UPDATE_WEBHOOK_ROUTINE_TOOL,
+  type WebhookRoutineWriter,
+  webhookRoutineSummary,
+  webhookRoutineToolResult,
+  webhookToolTrigger,
+} from "./webhook-routine-tool";
 
 export interface RoutineMutationOptions {
   recordConversationEvent?: boolean;
-  turnId?: string;
+  turnId?: string | undefined;
 }
 
 /**
@@ -101,6 +115,15 @@ export interface RoutineSchedulerOptions {
   timer: RoutineTimer;
   /** Runs that events may start for one routine in an hour. Defaults to ROUTINE_EVENT_HOURLY_RUN_CAP. */
   eventRunCap?: number;
+  /** The open waits that a run of the agent wakes. */
+  waits: AgentWaits;
+  /**
+   * The server timezone: a routine the agent creates uses it when neither the tool call nor the
+   * sender's message gives a zone. Omitted, the host system zone.
+   */
+  timezone?: () => string;
+  /** Built after the service, so read when a tool call needs it. Omitted, the tool refuses. */
+  webhookRoutines?: (() => WebhookRoutineWriter) | undefined;
 }
 
 /** The agent preview before a routine run, and the routine task the run showed in its place. */
@@ -128,6 +151,7 @@ export class RoutineScheduler implements RoutineDueSource {
   readonly #conversation: ConversationRuntime;
   readonly #hooks: RoutineHooks;
   readonly #routines: AgentRoutineStore;
+  readonly #waits: AgentWaits;
   /**
    * A deletion has to interrupt live runs before it can remove their routine, so it holds the agent
    * out of the drain loop while it does — otherwise the queue starts the next delivery for a
@@ -135,10 +159,12 @@ export class RoutineScheduler implements RoutineDueSource {
    */
   readonly #deletionAgents = new Set<string>();
   readonly #timer: RoutineTimer;
+  readonly #timezone: () => string;
+  readonly #webhookRoutines: (() => WebhookRoutineWriter) | undefined;
   /**
    * The timezone a member's client sent with a message, by delivery. A routine the agent creates in
    * the turn that runs the message runs on that clock, not on the host's, and a later message from
-   * someone else cannot change it. Memory only: after a restart, the host zone applies. Past the cap,
+   * someone else cannot change it. Memory only: after a restart, the server timezone applies. Past the cap,
    * the oldest entry goes.
    */
   readonly #deliveryTimezones = new Map<string, string>();
@@ -159,6 +185,9 @@ export class RoutineScheduler implements RoutineDueSource {
     this.#timer = options.timer;
     this.#events = new RoutineEventDigest(options.eventRunCap);
     this.#routines = new AgentRoutineStore(options.store.database);
+    this.#waits = options.waits;
+    this.#timezone = options.timezone ?? localTimezone;
+    this.#webhookRoutines = options.webhookRoutines;
   }
 
   noteDeliveryTimezone(deliveryId: string, timezone: string): void {
@@ -175,6 +204,10 @@ export class RoutineScheduler implements RoutineDueSource {
       if (timezone !== undefined) return timezone;
     }
     return undefined;
+  }
+
+  #isHidden(agentId: string): boolean {
+    return this.#hooks.listAgents().some((agent) => agent.id === agentId && agent.hiddenAt !== undefined);
   }
 
   /** The scheduler's clause in the drain mute registry. */
@@ -212,14 +245,18 @@ export class RoutineScheduler implements RoutineDueSource {
     return this.#routines.runForDelivery(deliveryId);
   }
 
+  /** The open waits that the run of this delivery continues. */
+  wokenWaits(deliveryId: string): AgentWait[] {
+    return this.#waits.wokenBy(deliveryId);
+  }
+
   /**
-   * Whether the run of this delivery may end without a message, when the agent answers only the
-   * no-update marker. A scheduled run may. A script or webhook run may when its routine task asks
-   * for the marker. A Test run is started by someone who waits for the result.
+   * Whether the run of this delivery may end without a message, when the agent has nothing to
+   * report. Not a Test run: the person who started it waits for the result.
    */
   quietRunForDelivery(deliveryId: string): boolean {
     const run = this.#routines.runForDelivery(deliveryId);
-    return run !== null && runMayEndQuiet(run);
+    return run !== null && quietRoutineRun(run);
   }
 
   /**
@@ -251,6 +288,12 @@ export class RoutineScheduler implements RoutineDueSource {
 
   skipMissed(now: Date, held?: RoutineHoldWindow): void {
     this.#routines.skipMissed(now, held);
+  }
+
+  /** Skips the occurrences that came due while the agent was hidden. The caller arms the timer. */
+  skipMissedFor(agentId: string, now: Date): void {
+    this.#routines.skipMissedFor(agentId, now);
+    this.stateChanged(agentId);
   }
 
   create(input: CreateRoutineInput, options: RoutineMutationOptions = {}): Routine {
@@ -368,11 +411,12 @@ export class RoutineScheduler implements RoutineDueSource {
       Effect.sync(() => this.#deletionAgents.add(input.agentId)),
       () =>
         Effect.gen({ self: this }, function* () {
-          const activeRuns = yield* this.#interruptRunsBeforeDeletionEffect(
+          const interruptedRuns = yield* this.#interruptRunsBeforeDeletionEffect(
             input.agentId,
             this.#routines.activeRuns(input.agentId, input.routineId),
           );
           yield* routineStep(() => {
+            const activeRuns = this.#runsToCancelOnDeletion(input.agentId, input.routineId, interruptedRuns);
             if (options.recordConversationEvent === false || routine.trigger.kind !== "schedule") {
               withDatabaseTransaction(
                 this.#store.database,
@@ -385,6 +429,7 @@ export class RoutineScheduler implements RoutineDueSource {
                     }
                     this.#routines.updateRunStatus(run.id, "cancelled");
                   }
+                  this.#cancelQueuedRoutineDeliveries(input.agentId, input.routineId);
                   this.#routines.delete(input.agentId, input.routineId);
                 },
                 // Deliberately narrower than the conversation variants: this branch records no
@@ -409,6 +454,7 @@ export class RoutineScheduler implements RoutineDueSource {
                       }
                       transitionMessages.push(this.#appendRunTransition(snapshot, run, "cancelled").message);
                     }
+                    this.#cancelQueuedRoutineDeliveries(input.agentId, input.routineId);
                     return transitionMessages;
                   },
                   onRollback: () => this.#mailbox.restorePersistedState(),
@@ -440,15 +486,16 @@ export class RoutineScheduler implements RoutineDueSource {
         }
       });
     }
-    return yield* this.runWithPayload({ ...input, payload: "" });
+    return yield* this.runWithPayload({ ...input, payload: "", source: "test" });
   });
 
   /** Store the event in the run instruction so recovery retains it. */
   readonly runWithPayload = Effect.fn("RoutineScheduler.runWithPayload")(function* (
     this: RoutineScheduler,
-    input: TestRoutineInput & { payload: string },
+    input: TestRoutineInput & { payload: string; source: "test" | "script"; waitId?: string },
   ) {
     const run = yield* routineStep(() => {
+      if (this.#isHidden(input.agentId)) throw new RoutineInputError(sourceText("error.backend.recipientHidden"));
       if (!this.mayDrain(input.agentId)) throw new RoutineInputError(sourceText("error.backend.routineWaitForAgent"));
       this.#conversation.requireKnownAgent(input.agentId);
       const routine = this.#routines.getRecord(input.agentId, input.routineId);
@@ -467,16 +514,17 @@ export class RoutineScheduler implements RoutineDueSource {
       return this.#routines.createRun(
         { id: routine.id, agentId: routine.ownerId, name: routine.name, instruction },
         null,
-        "manual",
+        input.source,
         new Date().toISOString(),
       );
     });
-    if (this.#holdEventRun(run)) {
+    // A run that an agent's wait continues starts now: a merged run would lose the wait.
+    if (!input.waitId && this.#holdEventRun(run)) {
       this.arm();
       yield* routineStep(() => this.stateChanged(input.agentId));
       return run;
     }
-    const queued = yield* this.#enqueueRunEffect(run);
+    const queued = yield* this.#enqueueRunEffect(run, input.waitId ?? null);
     yield* routineStep(() => this.stateChanged(input.agentId));
     return queued;
   }, Effect.uninterruptible);
@@ -538,22 +586,23 @@ export class RoutineScheduler implements RoutineDueSource {
         this.#routines.createRun(
           { id: routine.id, agentId: routine.ownerId, name: routine.name, instruction },
           null,
-          "manual",
+          // The runs of one group came from one kind of event; an old run without a source was a script's.
+          only.source ?? "script",
           new Date().toISOString(),
         ),
       );
     });
   }
 
-  listRuns(input: ListRoutineRunsInput): RoutineRun[] {
+  listRuns(input: ListRoutineRunsInput, withSkipped = false): RoutineRun[] {
     this.#conversation.requireKnownAgent(input.agentId);
     if (!this.#routines.getRecord(input.agentId, input.routineId))
       throw new RoutineInputError(sourceText("error.backend.routineGone"));
-    return this.#routines.listRuns(input.agentId, input.routineId, input.limit);
+    return this.#routines.listRuns(input.agentId, input.routineId, input.limit, withSkipped);
   }
 
   /**
-   * The six `openbot` routine tools. Returns null when `tool` is not one of them.
+   * The eight `openbot` routine tools. Returns null when `tool` is not one of them.
    *
    * A request the model can correct is a tool failure, not a throw: a throw becomes a provider error
    * toast, although the model's corrected retry then creates the routine. Other errors are faults
@@ -592,7 +641,14 @@ export class RoutineScheduler implements RoutineDueSource {
     if (params.tool === "list_routines") {
       const args = routineToolArguments(params.arguments, ["agentId"]);
       const agentId = this.#toolAgentId(args, senderAgentId);
-      return openBotToolResult({ routines: this.list(agentId) });
+      return openBotToolResult({
+        routines: this.list(agentId),
+        webhookRoutines: this.#routines
+          .listRecords(agentId)
+          .flatMap((routine) =>
+            routine.trigger.kind === "webhook" ? [webhookRoutineSummary({ ...routine, trigger: routine.trigger })] : [],
+          ),
+      });
     }
 
     if (params.tool === "create_routine") {
@@ -603,13 +659,15 @@ export class RoutineScheduler implements RoutineDueSource {
         "schedule",
         "active",
         "timezone",
+        "limitPolicy",
+        "missedPolicy",
       ]);
       const agentId = this.#toolAgentId(args, senderAgentId);
       const active = args.active === undefined ? true : args.active;
       if (!isBoolean(active)) throw new RoutineInputError("active must be a boolean.");
       const timezone =
         args.timezone === undefined
-          ? (this.#turnSenderTimezone(senderAgentId, params.turnId) ?? localTimezone())
+          ? (this.#turnSenderTimezone(senderAgentId, params.turnId) ?? this.#timezone())
           : routineToolString(args.timezone, "timezone", 128, "A routine timezone is required.");
       const name = routineToolString(args.name, "name", INPUT_LIMITS.routineName, "A routine name is required.");
       const key = name.trim().toLowerCase();
@@ -632,10 +690,91 @@ export class RoutineScheduler implements RoutineDueSource {
           active,
           timezone,
           schedule: routineToolSchedule(args.schedule),
+          ...routineToolPolicies(args),
         },
-        { turnId: agentId === senderAgentId ? params.turnId : undefined },
+        agentId === senderAgentId ? { turnId: params.turnId } : {},
       );
       return openBotToolResult(routine);
+    }
+
+    if (params.tool === CREATE_WEBHOOK_ROUTINE_TOOL) {
+      const args = routineToolArguments(params.arguments, CREATE_WEBHOOK_ROUTINE_ARGUMENTS);
+      const agentId = this.#toolAgentId(args, senderAgentId);
+      const webhooks = this.#webhookTool(senderAgentId, params.threadId, params.turnId);
+      const active = args.active === undefined ? true : args.active;
+      if (!isBoolean(active)) throw new RoutineInputError("active must be a boolean.");
+      // The zone has no effect on a webhook trigger. It is the editor's default if the user changes
+      // the trigger to a schedule.
+      const timezone = this.#turnSenderTimezone(senderAgentId, params.turnId) ?? this.#timezone();
+      const name = routineToolString(args.name, "name", INPUT_LIMITS.routineName, "A routine name is required.");
+      this.#requireFreeRoutineName(agentId, name);
+      const { limitPolicy } = routineToolPolicies(args);
+      const routine = yield* webhooks.save({
+        agentId,
+        name,
+        instruction: routineToolString(
+          args.instruction,
+          "instruction",
+          INPUT_LIMITS.routineInstruction,
+          "A routine instruction is required.",
+        ),
+        active,
+        timezone,
+        ...webhookToolTrigger(args),
+        ...(limitPolicy === undefined ? {} : { limitPolicy }),
+      });
+      // Only the caller's own chat shows the card with the secret: the card needs the turn.
+      const turnId = agentId === senderAgentId ? params.turnId : undefined;
+      const recorded = this.#recordWebhookEvent(agentId, "created", routine, turnId);
+      return openBotToolResult(webhookRoutineToolResult(routine, recorded && turnId !== undefined));
+    }
+
+    if (params.tool === UPDATE_WEBHOOK_ROUTINE_TOOL) {
+      const args = routineToolArguments(params.arguments, UPDATE_WEBHOOK_ROUTINE_ARGUMENTS);
+      const agentId = this.#toolAgentId(args, senderAgentId);
+      const webhooks = this.#webhookTool(senderAgentId, params.threadId, params.turnId);
+      const routineId = routineToolString(
+        args.routineId,
+        "routineId",
+        INPUT_LIMITS.identifier,
+        "routineId is required.",
+      );
+      const current = this.#routines.getRecord(agentId, routineId);
+      if (current?.trigger.kind !== "webhook") {
+        throw new RoutineInputError(
+          `No webhook routine has routineId ${routineId}. The webhookRoutines of list_routines show their ids.`,
+        );
+      }
+      const active = args.active === undefined ? current.active : args.active;
+      if (!isBoolean(active)) throw new RoutineInputError("active must be a boolean.");
+      const name =
+        args.name === undefined
+          ? current.name
+          : routineToolString(args.name, "name", INPUT_LIMITS.routineName, "A routine name is required.");
+      if (name.trim().toLowerCase() !== current.name.trim().toLowerCase()) this.#requireFreeRoutineName(agentId, name);
+      // A policy the call leaves out keeps its stored value.
+      const { limitPolicy } = routineToolPolicies(args);
+      const routine = yield* webhooks.save({
+        routineId,
+        agentId,
+        name,
+        instruction:
+          args.instruction === undefined
+            ? current.instruction
+            : routineToolString(
+                args.instruction,
+                "instruction",
+                INPUT_LIMITS.routineInstruction,
+                "A routine instruction is required.",
+              ),
+        active,
+        timezone: current.timezone,
+        ...webhookToolTrigger(args, current.trigger),
+        ...(limitPolicy === undefined ? {} : { limitPolicy }),
+      });
+      const turnId = agentId === senderAgentId ? params.turnId : undefined;
+      const recorded = this.#recordWebhookEvent(agentId, "updated", routine, turnId);
+      return openBotToolResult(webhookRoutineToolResult(routine, recorded && turnId !== undefined, true));
     }
 
     if (params.tool === "update_routine") {
@@ -646,12 +785,16 @@ export class RoutineScheduler implements RoutineDueSource {
         "instruction",
         "schedule",
         "active",
+        "limitPolicy",
+        "missedPolicy",
       ]);
+      const policies = routineToolPolicies(args);
       const input: UpdateRoutineInput = {
         agentId: this.#toolAgentId(args, senderAgentId),
         routineId: routineToolString(args.routineId, "routineId", INPUT_LIMITS.identifier, "routineId is required."),
+        ...policies,
       };
-      let hasUpdate = false;
+      let hasUpdate = Object.keys(policies).length > 0;
       if (args.name !== undefined) {
         input.name = routineToolString(args.name, "name", INPUT_LIMITS.routineName, "A routine name is required.");
         hasUpdate = true;
@@ -675,9 +818,7 @@ export class RoutineScheduler implements RoutineDueSource {
         hasUpdate = true;
       }
       if (!hasUpdate) throw new RoutineInputError("At least one routine update is required.");
-      return openBotToolResult(
-        this.update(input, { turnId: input.agentId === senderAgentId ? params.turnId : undefined }),
-      );
+      return openBotToolResult(this.update(input, input.agentId === senderAgentId ? { turnId: params.turnId } : {}));
     }
 
     if (params.tool === "delete_routine") {
@@ -689,7 +830,7 @@ export class RoutineScheduler implements RoutineDueSource {
         INPUT_LIMITS.identifier,
         "routineId is required.",
       );
-      yield* this.delete({ agentId, routineId }, { turnId: agentId === senderAgentId ? params.turnId : undefined });
+      yield* this.delete({ agentId, routineId }, agentId === senderAgentId ? { turnId: params.turnId } : {});
       return openBotToolResult({ deleted: true, agentId, routineId });
     }
 
@@ -728,7 +869,7 @@ export class RoutineScheduler implements RoutineDueSource {
     if (delivery.sender.kind !== "routine") return false;
     const run = this.#routines.runForDelivery(delivery.id);
     if (!run) return false;
-    const status = routineStatusForDelivery(delivery.status);
+    const status = routineStatusForDelivery(delivery);
     if (run.status === "needs-attention" && ["starting", "running"].includes(delivery.status)) return false;
     if (run.status === status && run.error === delivery.error) return false;
     if (status === "queued") this.#routines.updateRunStatus(run.id, status, delivery.error);
@@ -788,22 +929,40 @@ export class RoutineScheduler implements RoutineDueSource {
         if (!active()) break;
         if (this.#hooks.excludedAgents().has(due.routine.agentId)) continue;
         const run = yield* routineStep(() => {
+          // Enqueueing an earlier run can yield. A pause, edit or delete in that time must
+          // apply before this occurrence starts, rather than firing the saved due list.
+          const current = this.#routines.get(due.routine.agentId, due.routine.id);
+          if (!current?.active || current.trigger.id !== due.triggerId || current.trigger.nextRunAt !== due.nextRunAt)
+            return null;
+          // A one-time trigger has no later run to make up for a dropped one, so it always queues.
+          // A crash before it completes leaves the run, and `skipMissed` completes it on start.
+          if (current.trigger.schedule.kind === "once") {
+            const queued = this.#routines.createRun(
+              current,
+              current.trigger.id,
+              "scheduled",
+              current.trigger.nextRunAt,
+            );
+            this.#routines.completeTrigger(current.id, current.trigger.id, now);
+            changedAgents.add(current.agentId);
+            return queued;
+          }
           const { scheduledFor, nextRunAt } = collapseMissedOccurrences(
-            due.schedule,
-            due.routine.timezone,
-            new Date(due.nextRunAt),
+            current.trigger.schedule,
+            current.timezone,
+            new Date(current.trigger.nextRunAt),
             now,
           );
           // A run that has not finished already does this routine's work. Another one would only
           // queue behind it, and after a sleep the queue drains as a burst of identical runs. A routine
           // set to skip drops the occurrence while a spent plan would only make it wait.
           const queued =
-            this.#hasLiveRun(due.routine.agentId, due.routine.id) ||
-            (due.routine.limitPolicy === "skip" && this.#hooks.usageLimited(due.routine.agentId))
+            this.#hasLiveRun(current.agentId, current.id) ||
+            (current.limitPolicy === "skip" && this.#hooks.usageLimited(current.agentId))
               ? null
-              : this.#routines.createRun(due.routine, due.triggerId, "scheduled", scheduledFor.toISOString());
-          this.#routines.advanceTrigger(due.routine.id, due.triggerId, nextRunAt.toISOString());
-          changedAgents.add(due.routine.agentId);
+              : this.#routines.createRun(current, current.trigger.id, "scheduled", scheduledFor.toISOString());
+          this.#routines.advanceTrigger(current.id, current.trigger.id, nextRunAt.toISOString());
+          changedAgents.add(current.agentId);
           return queued;
         });
         if (run && !run.deliveryId)
@@ -855,6 +1014,8 @@ export class RoutineScheduler implements RoutineDueSource {
     const agent = yield* routineStep(() => {
       const found = this.#hooks.listAgents().find((candidate) => candidate.id === input.agentId);
       if (!found) throw new Error(sourceText("error.agent.unknown", { id: input.agentId }));
+      // The next agent of the flow is hidden. It receives no new work until the user restores it.
+      if (found.hiddenAt !== undefined) throw new Error(sourceText("error.backend.recipientHidden"));
       return found;
     });
     const validateRecipient = yield* routineStep(() => this.#mailbox.prepareDelivery([agent.id]));
@@ -890,9 +1051,11 @@ export class RoutineScheduler implements RoutineDueSource {
     return deliveryId;
   }, Effect.uninterruptible);
 
+  /** `waitId` is the one open wait a script event names; null wakes every wait the run matches. */
   readonly #enqueueRunEffect = Effect.fn("RoutineScheduler.enqueueRun")(function* (
     this: RoutineScheduler,
     run: RoutineRun,
+    waitId: string | null = null,
   ) {
     // A test or a script run that arrives while a spent plan holds the agent would wait for the
     // reset, and a routine set to skip has no use for a late result.
@@ -931,7 +1094,19 @@ export class RoutineScheduler implements RoutineDueSource {
       const deliveryId = receipt.deliveries[0]?.id;
       if (!deliveryId)
         return yield* new RoutineOperationFailed({ cause: new Error("Unable to create the routine delivery.") });
-      const queued = yield* routineStep(() => this.#routines.attachDelivery(run.id, deliveryId));
+      const queued = yield* routineStep(() => {
+        try {
+          return this.#routines.attachDelivery(run.id, deliveryId);
+        } catch (error) {
+          // The routine was deleted while the delivery was created: cancel it with its run.
+          if (this.#mailbox.getDelivery(deliveryId)?.delivery.status === "queued")
+            this.#mailbox.cancelNow(agent.id, deliveryId);
+          if (!this.#routines.getRecord(run.agentId, run.routineId))
+            throw new RoutineInputError(sourceText("error.backend.routineGone"));
+          throw error;
+        }
+      });
+      yield* routineStep(() => this.#waits.wakeForRun(run, deliveryId, waitId));
       const snapshot = yield* routineStep(() => {
         const current = this.#conversation.ensureSnapshot(agent.id, agent.threadId);
         this.#hooks.syncMailboxMessages(current);
@@ -961,12 +1136,43 @@ export class RoutineScheduler implements RoutineDueSource {
       Effect.tapError((failure) =>
         routineStep(() => {
           const error = failure.cause;
-          this.#transitionRunWithConversation(run, "failed", error instanceof Error ? error.message : String(error));
+          // A deleted routine took its run with it: there is no run left to mark failed.
+          if (this.#routines.getRecord(run.agentId, run.routineId))
+            this.#transitionRunWithConversation(run, "failed", error instanceof Error ? error.message : String(error));
           this.stateChanged(run.agentId);
         }),
       ),
     );
   }, Effect.uninterruptible);
+
+  /**
+   * Waiting for an interrupt yields, so another run of the routine can attach its delivery in the
+   * meantime. Read the runs again: a run that only now holds a queued delivery must be cancelled
+   * with it, and a run seen without a delivery must be cancelled by the delivery it holds now.
+   */
+  #runsToCancelOnDeletion(agentId: string, routineId: string, interruptedRuns: RoutineRun[]): RoutineRun[] {
+    const current = new Map(this.#routines.activeRuns(agentId, routineId).map((run) => [run.id, run]));
+    const runs = interruptedRuns.map((run) => current.get(run.id) ?? run);
+    const known = new Set(runs.map((run) => run.id));
+    for (const run of current.values()) {
+      if (known.has(run.id)) continue;
+      const status = run.deliveryId ? this.#mailbox.getDelivery(run.deliveryId)?.delivery.status : undefined;
+      if (!run.deliveryId || status === "queued") runs.push(run);
+    }
+    return runs;
+  }
+
+  /**
+   * A run attaches its delivery only after the enqueue returns, so a delivery can sit in the queue
+   * before any run row points to it. The delivery names its routine: cancel it by that name, or the
+   * drain that follows the deletion would start the deleted routine's instruction.
+   */
+  #cancelQueuedRoutineDeliveries(agentId: string, routineId: string): void {
+    for (const deliveryId of this.#mailbox.queuedDeliveryIds(agentId)) {
+      const sender = this.#mailbox.getDelivery(deliveryId)?.delivery.sender;
+      if (sender?.kind === "routine" && sender.routineId === routineId) this.#mailbox.cancelNow(agentId, deliveryId);
+    }
+  }
 
   readonly #interruptRunsBeforeDeletionEffect = Effect.fn("RoutineScheduler.interruptRunsBeforeDeletion")(function* (
     this: RoutineScheduler,
@@ -1004,7 +1210,7 @@ export class RoutineScheduler implements RoutineDueSource {
       activeTurnIds.add(delivery.turnId);
     }
     if (activeTurnIds.size === 0) return cancellableRuns;
-    if (!this.#store.activeProviderSession(agentId)) {
+    if (!this.#store.activeProviderSession(agentId) && !this.#conversation.routineSession(agentId)) {
       return yield* new RoutineOperationFailed({ cause: new Error(sourceText("error.backend.routineRunNoSession")) });
     }
     for (const turnId of activeTurnIds) yield* this.#hooks.interrupt(agentId, turnId);
@@ -1073,6 +1279,65 @@ export class RoutineScheduler implements RoutineDueSource {
     };
     snapshot.messages.push(message);
     return { run: updated, message };
+  }
+
+  /**
+   * The writer of the webhook routine tools. A public route changes only on a person's request: a
+   * routine run or an agent message can carry text from outside, such as a webhook body.
+   */
+  #webhookTool(senderAgentId: string, threadId: string, turnId: string): WebhookRoutineWriter {
+    const webhooks = this.#webhookRoutines?.();
+    if (!webhooks) throw new RoutineInputError("This server cannot create webhook routines.");
+    // Every delivery of the turn: a message steered into a routine run shares the run's turn. Only
+    // the agent's own chat: a channel task and a Slack or Telegram message also arrive as `user`.
+    const deliveries = this.#mailbox.findDeliveriesByTurn(senderAgentId, turnId);
+    const requested =
+      deliveries.length > 0 &&
+      deliveries.every(({ delivery }) => delivery.sender.kind === "user") &&
+      !this.#conversation.isExecutionThread(this.#conversation.publicThreadId(senderAgentId, threadId));
+    if (!requested) {
+      throw new RoutineInputError(
+        "Only a person's message can create or change a webhook routine. Ask the user to request it in the chat.",
+      );
+    }
+    return webhooks;
+  }
+
+  /** Both trigger kinds: `routines` of `list_routines` has schedule routines only. */
+  #requireFreeRoutineName(agentId: string, name: string): void {
+    const key = name.trim().toLowerCase();
+    const existing = this.#routines.listRecords(agentId).find((routine) => routine.name.trim().toLowerCase() === key);
+    if (existing) {
+      throw new RoutineInputError(
+        `Routine "${existing.name}" already exists with routineId ${existing.id}. Choose another name.`,
+      );
+    }
+  }
+
+  /**
+   * The chat record of a webhook routine that an agent made or changed. The main process saved the
+   * routine already, so a failed record is reported and does not fail the tool call. False when it
+   * failed.
+   */
+  #recordWebhookEvent(
+    agentId: string,
+    action: "created" | "updated",
+    routine: EventRoutine,
+    turnId: string | undefined,
+  ): boolean {
+    try {
+      this.#mutateWithConversation(
+        agentId,
+        action,
+        () => routine,
+        (saved) => saved,
+        turnId,
+      );
+      return true;
+    } catch (error) {
+      this.#hooks.emitError("routine_event_record_failed", error, agentId);
+      return false;
+    }
   }
 
   #mutateWithConversation<T>(

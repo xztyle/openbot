@@ -5,7 +5,7 @@ import {
   type AgentSubmission,
   isAvatarHue,
   isAvatarSeed,
-  isRoutineSchedule,
+  isReleasedRoutineSchedule,
   isSkillCategory,
   type MarketplaceAgentDetail,
   type MarketplaceAgentQuery,
@@ -20,6 +20,7 @@ import {
   decodeMarketplaceCursor,
   encodeMarketplaceCursor,
   type MarketplaceSort,
+  marketplaceCreatorName,
   marketplaceLikePattern,
   normalizeMarketplaceLimit,
   normalizeMarketplaceQuery,
@@ -49,7 +50,6 @@ interface AgentRow {
   skills_json: string;
   routines_json: string;
   creator_name: string | null;
-  creator_email: string;
   installs: number;
   featured: number;
   updated_at: number;
@@ -82,7 +82,7 @@ export class AgentMarketplace {
         const queryInput = normalizeMarketplaceQuery(input.query);
         if (queryInput) {
           clauses.push(
-            "(lower(versions.name) LIKE ? ESCAPE '\\' OR lower(versions.title) LIKE ? ESCAPE '\\' OR lower(versions.description) LIKE ? ESCAPE '\\' OR lower(coalesce(nullif(trim(users.name), ''), users.email)) LIKE ? ESCAPE '\\')",
+            "(lower(versions.name) LIKE ? ESCAPE '\\' OR lower(versions.title) LIKE ? ESCAPE '\\' OR lower(versions.description) LIKE ? ESCAPE '\\' OR lower(coalesce(users.name, '')) LIKE ? ESCAPE '\\')",
           );
           const query = marketplaceLikePattern(queryInput);
           values.push(query, query, query, query);
@@ -117,7 +117,7 @@ export class AgentMarketplace {
             `SELECT agents.id, agents.installs, agents.featured, agents.updated_at,
               versions.id AS version_id, versions.version, versions.name, versions.title, versions.description,
               versions.avatar_seed, versions.avatar_hue, versions.avatar_key,
-              versions.skills_json, versions.routines_json, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name, users.email AS creator_email
+              versions.skills_json, versions.routines_json, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name
        FROM marketplace_agents agents
        JOIN marketplace_agent_versions versions ON ${clauses.join(" AND ")}
        JOIN users ON users.id = agents.owner_user_id
@@ -187,7 +187,7 @@ export class AgentMarketplace {
             `SELECT versions.id, versions.agent_id, versions.version, versions.name, versions.title, versions.description,
               versions.avatar_seed, versions.avatar_hue, versions.avatar_key, versions.skills_json,
               versions.routines_json, versions.status, versions.rejection_note, versions.created_at,
-              agents.installs, agents.featured, agents.updated_at, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name, users.email AS creator_email
+              agents.installs, agents.featured, agents.updated_at, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name
        FROM marketplace_agent_versions versions
        JOIN marketplace_agents agents ON agents.id = versions.agent_id
        JOIN users ON users.id = agents.owner_user_id
@@ -414,7 +414,7 @@ export class AgentMarketplace {
             `SELECT versions.id, versions.agent_id, versions.version, versions.name, versions.title, versions.description,
               versions.avatar_seed, versions.avatar_hue, versions.avatar_key, versions.skills_json,
               versions.routines_json, versions.status, versions.rejection_note, versions.created_at,
-              agents.installs, agents.featured, agents.updated_at, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name, users.email AS creator_email
+              agents.installs, agents.featured, agents.updated_at, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name
        FROM marketplace_agent_versions versions JOIN marketplace_agents agents ON agents.id = versions.agent_id
        JOIN users ON users.id = agents.owner_user_id WHERE versions.status = 'pending' ORDER BY versions.created_at`,
           ).all<AgentRow>(),
@@ -527,7 +527,7 @@ export class AgentMarketplace {
             `SELECT agents.id, agents.installs, agents.featured, agents.updated_at,
               versions.id AS version_id, versions.version, versions.name, versions.title, versions.description,
               versions.avatar_seed, versions.avatar_hue, versions.avatar_key, versions.skills_json,
-              versions.routines_json, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name, users.email AS creator_email
+              versions.routines_json, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name
        FROM marketplace_agents agents JOIN marketplace_agent_versions versions ON versions.id = agents.approved_version_id
        JOIN users ON users.id = agents.owner_user_id WHERE agents.id = ?`,
           )
@@ -548,7 +548,7 @@ export class AgentMarketplace {
             `SELECT versions.id, versions.agent_id, versions.version, versions.name, versions.title, versions.description,
               versions.avatar_seed, versions.avatar_hue, versions.avatar_key, versions.skills_json,
               versions.routines_json, versions.status, versions.rejection_note, versions.created_at,
-              agents.installs, agents.featured, agents.updated_at, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name, users.email AS creator_email
+              agents.installs, agents.featured, agents.updated_at, versions.category, agents.show_creator_avatar, users.avatar_url AS creator_avatar_url, users.name AS creator_name
        FROM marketplace_agent_versions versions JOIN marketplace_agents agents ON agents.id = versions.agent_id
        JOIN users ON users.id = agents.owner_user_id WHERE versions.id = ?`,
           )
@@ -624,7 +624,7 @@ function isRoutine(value: unknown): value is MarketplaceAgentRoutine {
     value.instruction.trim().length > 0 &&
     value.instruction.length <= INPUT_LIMITS.routineInstruction &&
     isBoolean(value.active) &&
-    isRoutineSchedule(value.schedule)
+    isReleasedRoutineSchedule(value.schedule)
   );
 }
 
@@ -649,7 +649,7 @@ function publicSummary(row: AgentRow): MarketplaceAgentSummary {
     name: row.name,
     title: row.title,
     description: row.description,
-    creatorName: row.creator_name?.trim() || row.creator_email,
+    creatorName: marketplaceCreatorName(row.creator_name),
     category: isSkillCategory(row.category) ? row.category : "other",
     creatorAvatarUrl: row.show_creator_avatar === 1 ? row.creator_avatar_url : null,
     version: row.version,

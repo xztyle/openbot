@@ -1,3 +1,15 @@
+## Linked issue
+
+<!-- `Closes #123`. A new feature or a change to how OpenBot works needs an issue with the `approved` label first: see https://github.com/nightly-labs/openbot/blob/main/CONTRIBUTING.md#what-you-can-send -->
+
+## Type of change
+
+- [ ] Bug fix
+- [ ] Small improvement or alignment, with no change to how a feature works
+- [ ] New provider, MCP app, or connector
+- [ ] Translation or documentation
+- [ ] New feature or change to existing behavior (needs an approved issue)
+
 ## What changed
 
 <!-- Describe the user-visible outcome and why this is the smallest useful change. -->
@@ -11,7 +23,7 @@
 
 ## Failure modes
 
-<!-- Remove this section unless the PR adds or changes a unit test. Write the list before the code: one line per way the system can fail, with the test that covers it. -->
+<!-- Remove this section unless the PR adds or changes a vitest file. Write the list before the code: one line per way the system can fail, with the test that covers it. -->
 
 - 
 

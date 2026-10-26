@@ -129,6 +129,34 @@ export interface CancelMcpSignInInput {
   url: string;
 }
 
+/**
+ * The address that the browser shows at the end of a relayed sign-in. The user pastes it when this
+ * computer did not take the callback. Main sends only its query to the host.
+ */
+export interface CompleteMcpSignInRelayInput {
+  url: string;
+  address: string;
+}
+
+/**
+ * A sign-in of a joined server that waits in the browser of this computer (`sign-in-relay-v1`): the
+ * host name of the page, and whether this computer listens for the callback. When it does not, the
+ * user pastes the address that the browser shows. A page that returns nowhere, such as a device page,
+ * is not `pasteable`: the user only opens it, and the host's sign-in finishes by itself.
+ */
+export interface McpSignInRelayPage {
+  authorizeHost: string;
+  listening: boolean;
+  pasteable: boolean;
+}
+
+/** One relayed sign-in as its host answers it. `callback` is `null` when the page does not return to a loopback address. */
+export interface SignInRelayStatus {
+  authorizeUrl: string | null;
+  callback: { port: number; path: string; state: string | null } | null;
+  result: McpTestResult | null;
+}
+
 export interface SignOutMcpServerInput {
   mcpServerId: string;
 }
@@ -140,6 +168,44 @@ export interface SignOutMcpServerInput {
 export interface McpSignInState {
   mcpServerId: string;
   signedIn: boolean;
+  /**
+   * The server refused the stored sign-in, so the user must sign in again. Only this computer
+   * reports it: `mcp-sign-in-v1` carries `signedIn` alone, so a joined host never sets it.
+   */
+  needsSignIn?: boolean;
+}
+
+/**
+ * An OAuth app the administrator registered with a server's authorization server themselves, for a
+ * server that offers no dynamic registration. The secret never comes back: `secretSaved` says only
+ * whether one is on file.
+ */
+export interface McpSignInApp {
+  clientId: string;
+  secretSaved: boolean;
+  /** Space-separated. Empty: the scope the server asks for. */
+  scope: string;
+}
+
+/**
+ * One saved http row's sign-in app, and the exact address the authorization server must send the
+ * grant back to. `redirectUrl` is `null` when the computer has no sign-in store.
+ */
+export interface McpSignInAppState {
+  redirectUrl: string | null;
+  app: McpSignInApp | null;
+}
+
+export interface McpSignInAppInput {
+  mcpServerId: string;
+}
+
+export interface SaveMcpSignInAppInput {
+  mcpServerId: string;
+  clientId: string;
+  /** `null` keeps the secret on file; an empty string removes it. */
+  clientSecret: string | null;
+  scope: string;
 }
 
 export function createMcpServerId(): string {
@@ -237,8 +303,151 @@ export function decodeMcpSignInStates(value: unknown): McpSignInState[] {
   return value;
 }
 
+/**
+ * A sign-in that a joined server runs in its own browser (`mcp-sign-in-v1`): the host tab with the
+ * page while it is open, and how it ended, in the shape of a test. Both are `null` while the host
+ * looks for the page.
+ */
+export interface McpSignInStatus {
+  tabId: string | null;
+  result: McpTestResult | null;
+}
+
+export function decodeMcpSignInStatus(value: unknown): McpSignInStatus {
+  if (
+    !isDynamicRecord(value) ||
+    (value.tabId !== null && !isBounded(value.tabId, INPUT_LIMITS.identifier)) ||
+    (value.result !== null && !isMcpTestResult(value.result))
+  )
+    throw new Error("Invalid MCP server response.");
+  return { tabId: value.tabId, result: value.result };
+}
+
+/**
+ * The query of a pasted callback address, or `null` when it is not the callback of this sign-in. The
+ * host checks `state` too; this check only gives the user a clear answer before the request.
+ */
+export function relayCallbackQuery(address: string, state: string | null): string | null {
+  try {
+    const url = new URL(address.trim());
+    const params = url.searchParams;
+    if (!params.has("code") && !params.has("error")) return null;
+    if (state !== null && params.get("state") !== state) return null;
+    return url.search.slice(1);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The names a loopback callback can use. Any other address is not a callback on the computer that
+ * listens. The relay listener binds only `127.0.0.1`, so a `[::1]` callback is not relayed.
+ */
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
+
+/**
+ * The loopback address that a sign-in page sends the browser back to, or `null`. A sign-in that returns
+ * to another address, such as `openbot://`, has no callback to listen for. The host names it, and the
+ * client reads it again from the page it opens, so a host cannot name a port that the page does not use.
+ */
+export function loopbackCallback(pageUrl: string): NonNullable<SignInRelayStatus["callback"]> | null {
+  try {
+    const page = new URL(pageUrl);
+    const redirect = page.searchParams.get("redirect_uri");
+    if (!redirect) return null;
+    const target = new URL(redirect);
+    if (target.protocol !== "http:" || !LOOPBACK_HOSTS.has(target.hostname) || !target.port) return null;
+    return { port: Number(target.port), path: target.pathname, state: page.searchParams.get("state") };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A sign-in page that an agent printed and that a joined server can relay: an https page that returns
+ * to a loopback address with a `state`. Any other link opens as a normal link.
+ */
+export function relayableSignInLink(address: string): string | null {
+  const page = URL.parse(address);
+  if (page?.protocol !== "https:" || !page.searchParams.get("state")) return null;
+  return loopbackCallback(page.toString()) ? page.toString() : null;
+}
+
+export function decodeSignInRelayFlow(value: unknown): { flowId: string } {
+  if (!isDynamicRecord(value) || !isBounded(value.flowId, INPUT_LIMITS.identifier) || value.flowId.length === 0)
+    throw new Error("Invalid sign-in relay response.");
+  return { flowId: value.flowId };
+}
+
+export function decodeSignInRelayStatus(value: unknown): SignInRelayStatus {
+  if (
+    !isDynamicRecord(value) ||
+    (value.authorizeUrl !== null && !isBounded(value.authorizeUrl, INPUT_LIMITS.signInRelayAddress)) ||
+    (value.callback !== null && !isSignInRelayCallback(value.callback)) ||
+    (value.result !== null && !isMcpTestResult(value.result))
+  )
+    throw new Error("Invalid sign-in relay response.");
+  return { authorizeUrl: value.authorizeUrl, callback: value.callback, result: value.result };
+}
+
+function isSignInRelayCallback(value: unknown): value is NonNullable<SignInRelayStatus["callback"]> {
+  return (
+    isDynamicRecord(value) &&
+    isNumber(value.port) &&
+    Number.isInteger(value.port) &&
+    value.port > 0 &&
+    value.port < 65_536 &&
+    isBounded(value.path, INPUT_LIMITS.mcpUrl) &&
+    (value.state === null || isBounded(value.state, INPUT_LIMITS.mcpClientId))
+  );
+}
+
+/** The page of a relayed sign-in that waits on this computer, or `null`. */
+export function decodeMcpSignInRelayPage(value: unknown): McpSignInRelayPage | null {
+  if (value === null) return null;
+  if (
+    !isDynamicRecord(value) ||
+    !isBounded(value.authorizeHost, INPUT_LIMITS.mcpUrl) ||
+    !isBoolean(value.listening) ||
+    !isBoolean(value.pasteable)
+  )
+    throw new Error("Invalid MCP server response.");
+  return { authorizeHost: value.authorizeHost, listening: value.listening, pasteable: value.pasteable };
+}
+
+/** The host tab that shows a remote sign-in page, or `null` while there is none. */
+export function decodeMcpSignInPage(value: unknown): string | null {
+  if (value !== null && !isBounded(value, INPUT_LIMITS.identifier)) throw new Error("Invalid MCP server response.");
+  return value;
+}
+
+export function decodeMcpSignInAppState(value: unknown): McpSignInAppState {
+  if (
+    !isDynamicRecord(value) ||
+    (value.redirectUrl !== null && !isBounded(value.redirectUrl, INPUT_LIMITS.mcpUrl)) ||
+    (value.app !== null && !isMcpSignInApp(value.app))
+  )
+    throw new Error("Invalid MCP server response.");
+  return { redirectUrl: value.redirectUrl, app: value.app };
+}
+
+function isMcpSignInApp(value: unknown): value is McpSignInApp {
+  return (
+    isDynamicRecord(value) &&
+    isBounded(value.clientId, INPUT_LIMITS.mcpClientId) &&
+    value.clientId.length > 0 &&
+    isBoolean(value.secretSaved) &&
+    isBounded(value.scope, INPUT_LIMITS.mcpScope)
+  );
+}
+
 function isMcpSignInState(value: unknown): value is McpSignInState {
-  return isDynamicRecord(value) && isBounded(value.mcpServerId, INPUT_LIMITS.identifier) && isBoolean(value.signedIn);
+  return (
+    isDynamicRecord(value) &&
+    isBounded(value.mcpServerId, INPUT_LIMITS.identifier) &&
+    isBoolean(value.signedIn) &&
+    (value.needsSignIn === undefined || isBoolean(value.needsSignIn))
+  );
 }
 
 /**

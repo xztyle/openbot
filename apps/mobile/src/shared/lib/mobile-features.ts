@@ -7,6 +7,7 @@ import {
 import * as Application from "expo-application";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { create } from "zustand";
+import { devFeatureOverride } from "@/shared/lib/dev-feature-overrides";
 import { isAndroid, isIOS } from "@/shared/lib/platform";
 
 /** A screen that opens often reads the flags again at most this often. */
@@ -67,5 +68,6 @@ function appVersion(): string | null {
 
 /** One flag for the account server of this session. It is off for another account server. */
 export function useMobileFeature(apiUrl: string, feature: keyof MobileFeatureFlags): boolean {
-  return useMobileFeatures((state) => state.apiUrl === apiUrl && state.flags[feature]);
+  const on = useMobileFeatures((state) => state.apiUrl === apiUrl && state.flags[feature]);
+  return devFeatureOverride(feature) ?? on;
 }

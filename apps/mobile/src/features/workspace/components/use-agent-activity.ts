@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { useMobileWorkspaceSelector } from "@/features/workspace/context/mobile-workspace-context";
+import { showsOnline } from "@/features/workspace/model/server-status";
+import { selectLiveState } from "./use-live-workspace";
 
 export function useAgentActivity(agentId: string) {
-  const { liveState, activeServer } = useMobileWorkspace();
-  const online = activeServer.state === "online";
-  const serverId = activeServer.id;
+  const liveState = useMobileWorkspaceSelector(selectLiveState);
+  const online = useMobileWorkspaceSelector((workspace) => showsOnline(workspace.activeServer));
+  const serverId = useMobileWorkspaceSelector((workspace) => workspace.activeServer.id);
   const select = useCallback(
     () => (online ? liveState.get().activityByServer[serverId]?.[agentId] : undefined),
     [liveState, online, serverId, agentId],
@@ -23,9 +25,9 @@ export function useAgentWaitReason(agentId: string) {
  * activity that keeps the same agents waiting does not re-render the list.
  */
 export function useWaitingAgentIds(): ReadonlySet<string> {
-  const { liveState, activeServer } = useMobileWorkspace();
-  const online = activeServer.state === "online";
-  const serverId = activeServer.id;
+  const liveState = useMobileWorkspaceSelector(selectLiveState);
+  const online = useMobileWorkspaceSelector((workspace) => showsOnline(workspace.activeServer));
+  const serverId = useMobileWorkspaceSelector((workspace) => workspace.activeServer.id);
   const select = useCallback(() => {
     if (!online) return "";
     const activities = liveState.get().activityByServer[serverId] ?? {};

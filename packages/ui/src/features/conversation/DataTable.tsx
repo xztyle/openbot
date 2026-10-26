@@ -357,6 +357,8 @@ function parseRow(line: string): string[] | null {
 }
 
 function hasUnescapedPipe(value: string): boolean {
+  // Each streamed chunk parses the whole message again, and most lines have no pipe.
+  if (!value.includes("|")) return false;
   for (let index = 0; index < value.length; index += 1) {
     if (value[index] !== "|") continue;
     let slashCount = 0;

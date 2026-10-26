@@ -24,8 +24,26 @@ const BUILT_IN_RULES: Readonly<Record<string, PluralRule>> = {
   },
   // CLDR: one is every number from 0 up to, but not including, 2.
   fr: (count) => (count >= 0 && count < 2 ? "one" : "other"),
+  // CLDR Italian: one for 1; many for nonzero integer multiples of one million.
+  it: (count) => {
+    const absolute = Math.abs(count);
+    if (absolute === 1) return "one";
+    return absolute !== 0 && Number.isInteger(absolute) && absolute % 1_000_000 === 0 ? "many" : "other";
+  },
   // Japanese has one form for every count.
   ja: () => "other",
+  // Korean has one form for every count.
+  ko: () => "other",
+  // CLDR Polish: one for 1; few for 2–4, 22–24…; many for 0, 5–21, 25–31…; other for fractions.
+  pl: (count) => {
+    const absolute = Math.abs(count);
+    if (!Number.isInteger(absolute)) return "other";
+    if (absolute === 1) return "one";
+    const lastDigit = absolute % 10;
+    const lastTwo = absolute % 100;
+    if (lastDigit >= 2 && lastDigit <= 4 && (lastTwo < 12 || lastTwo > 14)) return "few";
+    return "many";
+  },
   // CLDR Portuguese: one for integer parts 0 and 1; many for nonzero multiples of one million.
   pt: (count) => {
     const absolute = Math.abs(count);
@@ -44,6 +62,8 @@ const BUILT_IN_RULES: Readonly<Record<string, PluralRule>> = {
   },
   // CLDR: one is the integer 1.
   tr: (count) => (count === 1 ? "one" : "other"),
+  // CLDR Chinese has one form for every count, like Japanese.
+  zh: () => "other",
 };
 
 const rulesByLocale = new Map<string, Intl.PluralRules>();

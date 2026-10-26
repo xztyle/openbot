@@ -4,6 +4,9 @@ import type { messages as source } from "../../en/error/host";
 export const messages = {
   // Errors from host setup, publishing, and host maintenance.
   "error.host.iceServersMissing": "Remote Signal n’a pas fourni de serveurs ICE.",
+  "error.host.keyRotationUnavailable": "Ce serveur ne peut pas changer sa clé sans le service de comptes.",
+  "error.host.keyRotationRefused":
+    "Le service de comptes n’a pas accepté la nouvelle clé du serveur. La clé actuelle reste utilisée.",
   "error.host.webRtcNotConfigured": "Le service d’hôte WebRTC n’est pas configuré.",
   "error.host.runtimeNotInstalled": "Le runtime du bureau à distance n’est pas installé.",
   "error.host.setupUnavailable": "La configuration des autorisations n’est pas disponible.",
@@ -20,6 +23,7 @@ export const messages = {
   "error.host.noServer": "Cet ordinateur n’a aucun serveur à modifier.",
   "error.host.identityLocalOnly":
     "Le nom et le logo du serveur ne peuvent être modifiés que sur l’ordinateur qui l’exécute.",
+  "error.host.timezoneInvalid": "Ce fuseau horaire est inconnu.",
   "error.host.maintenanceInterrupted":
     "La maintenance de l’hôte a été interrompue. Vérifiez l’application et réinitialisez l’état de l’hôte avant de réessayer.",
   "error.host.updateFailed":
@@ -28,5 +32,5 @@ export const messages = {
   "error.host.tenantShutdownTimeout":
     "L’arrêt des locataires a expiré. Aucun remplacement de l’application n’a démarré.",
   "error.host.tenantHealthMissing":
-    "Les rapports d’état des locataires sont absents ou mauvais après le redémarrage. Examinez les sessions des locataires avant une autre mise à jour.",
+    "Les rapports d’état des locataires sont absents ou signalent un problème après le redémarrage. Examinez les sessions des locataires avant une autre mise à jour.",
 } as const satisfies PartialTranslation<typeof source>;

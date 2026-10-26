@@ -1,5 +1,13 @@
 import { type AppLanguage, DEFAULT_APP_LANGUAGE } from "@openbot/contracts/app-language";
-import { type AppTranslate, formatLocale, resolveLocale, type TranslatedLocale, translateFor } from "@openbot/i18n";
+import {
+  type AppTranslate,
+  formatLocale,
+  loadLocale,
+  localeLoaded,
+  resolveLocale,
+  type TranslatedLocale,
+  translateFor,
+} from "@openbot/i18n";
 import { TextProvider } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import {
@@ -21,6 +29,27 @@ export interface I18nValue {
 }
 
 /**
+ * `requested` once its catalogs are loaded. The desktop build holds every language, so this is
+ * `requested` at once. The public web build loads a language on first use and keeps the previous
+ * one on the screen until then; if the load fails, the screen stays in that language.
+ */
+function createLoadedLocale(requested: () => TranslatedLocale): () => TranslatedLocale {
+  const [loads, setLoads] = createSignal(0);
+  createEffect(requested, (next) => {
+    if (localeLoaded(next)) return;
+    void loadLocale(next).then(
+      () => setLoads((count) => count + 1),
+      () => undefined,
+    );
+  });
+  return createMemo<TranslatedLocale>((previous) => {
+    loads();
+    const next = requested();
+    return localeLoaded(next) ? next : (previous ?? "en");
+  });
+}
+
+/**
  * Interface language, owned by main (native menu, notifications, and this window share one
  * saved setting). Outermost provider since every screen renders text. `t` reads the memo per
  * call so a language change repaints subscribers. Ungated: system language is the first frame.
@@ -38,7 +67,7 @@ function createI18nValue(): I18nValue {
   // value arriving from main is older than it.
   let pending = 0;
   // `navigator.language` is the renderer's view of the same value `app.getLocale()` gives main.
-  const locale = createMemo<TranslatedLocale>(() => resolveLocale(language(), navigator.language));
+  const locale = createLoadedLocale(() => resolveLocale(language(), navigator.language));
   const translate = createMemo(() => translateFor(locale()));
   const t: AppTranslate = (key, ...params) => translate()(key, ...params);
 
@@ -139,27 +168,25 @@ export function I18nProvider(props: ParentProps): JSX.Element {
 export function StaticI18nProvider(
   props: ParentProps<{ locale: TranslatedLocale; formatLocale?: string }>,
 ): JSX.Element {
+  const locale = createLoadedLocale(() => props.locale);
   const value: I18nValue = {
     language: () => props.locale,
-    locale: () => props.locale,
-    t: (key, ...params) => translateFor(props.locale)(key, ...params),
+    locale,
+    t: (key, ...params) => translateFor(locale())(key, ...params),
     changeLanguage: () => undefined,
   };
   // As in `I18nProvider`. The page can outlive this provider (the web client is one route of an
   // English site), so the previous language comes back when it unmounts.
-  createEffect(
-    () => props.locale,
-    (locale) => {
-      const previous = document.documentElement.lang;
-      document.documentElement.lang = locale;
-      return () => {
-        document.documentElement.lang = previous;
-      };
-    },
-  );
+  createEffect(locale, (shown) => {
+    const previous = document.documentElement.lang;
+    document.documentElement.lang = shown;
+    return () => {
+      document.documentElement.lang = previous;
+    };
+  });
   return (
     <I18nContext value={value}>
-      <TextProvider locale={props.locale} formatLocale={props.formatLocale}>
+      <TextProvider locale={locale()} formatLocale={props.formatLocale}>
         {props.children}
       </TextProvider>
     </I18nContext>

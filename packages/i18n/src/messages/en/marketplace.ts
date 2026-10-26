@@ -176,6 +176,13 @@ export const messages = defineMessages("marketplace", {
   "marketplace.plugin.notion.prompt.meetingNotes":
     "Turn these bullets into a structured meeting note in my team space.",
   "marketplace.plugin.notion.prompt.updateDoc": "Update the onboarding doc with the new release checklist.",
+  "marketplace.plugin.cobrain.tagline": "Shared memory for your AI agents",
+  "marketplace.plugin.cobrain.description":
+    "Cobrain is a Markdown memory that every AI you connect can read and write. Agents load the context of a client or project before working, search past notes and decisions, and save what they learn so the next thread starts where the last one ended. Each user signs in to their own Cobrain account.",
+  "marketplace.plugin.cobrain.app": "Read, search and write notes in your Cobrain brain over one MCP server.",
+  "marketplace.plugin.cobrain.prompt.startSession": "Load my Cobrain context for this project before we start.",
+  "marketplace.plugin.cobrain.prompt.searchDecision": "Search my Cobrain notes for what we decided about pricing.",
+  "marketplace.plugin.cobrain.prompt.saveNote": "Save a note in Cobrain with what we did today and what is left.",
   "marketplace.plugin.figma.tagline": "Designs and prototypes",
   "marketplace.plugin.figma.description":
     "Figma lets agents read design files, inspect components, styles and variables, and hand production specs to engineers. It connects to the MCP server in the Figma desktop app, on this computer. The server can read designs only; write support is in progress.",
@@ -195,6 +202,15 @@ export const messages = defineMessages("marketplace", {
     "Use the styles in this repository and design a settings page in Paper.",
   "marketplace.plugin.paper.prompt.tokens":
     "List the design tokens in the open Paper file and compare them with our theme.",
+  "marketplace.plugin.appleApps.tagline": "Mail, Calendar and more on your Mac",
+  "marketplace.plugin.appleApps.description":
+    "Apple apps lets agents use Mail, Calendar, Contacts, Reminders, Notes, Messages and Safari on this Mac. It works on macOS only. OpenBot starts mcp-icloud, a community server that is not made by Apple or OpenBot. The server controls the apps through AppleScript, on this computer, and needs no account and no key. The first time an agent uses an app, macOS asks if OpenBot can control it. To change this later, open System Settings › Privacy & Security › Automation. Agents can send email and iMessages, and change or delete events, contacts and reminders, so review each write before you approve it. What the tools read, such as email text, goes to the model provider of the agent.",
+  "marketplace.plugin.appleApps.app":
+    "Mail, Calendar, Contacts, Reminders, Notes, Messages and Safari, over the local mcp-icloud server. Needs macOS and Automation access.",
+  "marketplace.plugin.appleApps.prompt.unread": "Summarize my unread email in Apple Mail from today.",
+  "marketplace.plugin.appleApps.prompt.today": "What is on my Apple Calendar today and tomorrow?",
+  "marketplace.plugin.appleApps.prompt.schedule":
+    "Find the latest email about the project meeting and add the meeting to my calendar.",
   "marketplace.plugin.sentry.tagline": "Errors and crash triage",
   "marketplace.plugin.sentry.description":
     "Sentry lets agents search recent errors, inspect stack traces and affected releases, and summarize what broke after a deploy. Each user signs in to their own Sentry account through the browser.",
@@ -203,6 +219,30 @@ export const messages = defineMessages("marketplace", {
   "marketplace.plugin.sentry.prompt.newErrors": "What new errors appeared since yesterday's deploy?",
   "marketplace.plugin.sentry.prompt.topCrash": "Explain the top crash in the mobile project and its likely cause.",
   "marketplace.plugin.sentry.prompt.releaseHealth": "How healthy is the current release compared to the last one?",
+  "marketplace.plugin.vercel.tagline": "Deployments, build logs and projects",
+  "marketplace.plugin.vercel.description":
+    "Vercel lets agents list projects and recent deployments, read build and runtime logs, and find why a build failed. Each user signs in to their own Vercel account through the browser and chooses the teams that agents can use. In those teams, agents get the same rights as the user's account. They can also change environment variables, domains, DNS records and deployments, and buy domains.",
+  "marketplace.plugin.vercel.app":
+    "Projects, deployments, build logs, and runtime logs, over Vercel's MCP server with browser sign-in.",
+  "marketplace.plugin.vercel.prompt.failedBuild": "Why did the last production deployment fail?",
+  "marketplace.plugin.vercel.prompt.recentDeployments": "List the deployments from today and their status.",
+  "marketplace.plugin.vercel.prompt.runtimeErrors": "Which routes had runtime errors in the last hour?",
+  "marketplace.plugin.cloudflare.tagline": "Workers, DNS, storage and logs",
+  "marketplace.plugin.cloudflare.description":
+    "Cloudflare lets agents list and manage Workers, DNS records, R2, D1 and KV through the Cloudflare API, query Workers logs, and search the Cloudflare docs. Each user signs in to their own Cloudflare account through the browser. On Cloudflare's consent page, choose Read only: the default, Minimal, does not let agents see Workers, logs or DNS records. With write permissions, agents can deploy and delete Workers, change DNS records and change other account settings.",
+  "marketplace.plugin.cloudflare.app":
+    "Workers, DNS, storage, and logs, over Cloudflare's API MCP server with browser sign-in.",
+  "marketplace.plugin.cloudflare.prompt.workers": "Which Workers are deployed in my Cloudflare account?",
+  "marketplace.plugin.cloudflare.prompt.errors": "Which Cloudflare Workers logged errors in the last hour?",
+  "marketplace.plugin.cloudflare.prompt.dns": "List the DNS records of each zone in my Cloudflare account.",
+  "marketplace.plugin.supabase.tagline": "Databases, logs and edge functions",
+  "marketplace.plugin.supabase.description":
+    "Supabase lets agents list projects, run SQL, read table schemas and logs, check security and performance advisors, manage edge functions and branches, and search the Supabase docs. Each user signs in to their own Supabase account through the browser and chooses an organization. Agents get full access: they can run SQL that changes or deletes data, apply migrations, deploy edge functions, and create or pause projects.",
+  "marketplace.plugin.supabase.app":
+    "Databases, logs, and edge functions, over Supabase's MCP server with browser sign-in.",
+  "marketplace.plugin.supabase.prompt.projects": "Which projects are in my Supabase organization?",
+  "marketplace.plugin.supabase.prompt.tables": "List the tables and columns of my Supabase database.",
+  "marketplace.plugin.supabase.prompt.errors": "Which errors did my Supabase project log in the last hour?",
   "marketplace.plugin.context7.tagline": "Current library documentation",
   "marketplace.plugin.context7.description":
     "Context7 fetches current documentation and API references for libraries and frameworks, so answers use the version the project actually runs. It needs no account and no key.",
@@ -259,12 +299,19 @@ export const messages = defineMessages("marketplace", {
   "marketplace.plugin.resend.prompt.template": "Draft a password-reset email for the new flow.",
   "marketplace.plugin.composio.tagline": "Many apps through your own Composio link",
   "marketplace.plugin.composio.description":
-    "Composio connects agents to Gmail, Slack, GitHub, and hundreds of other apps through one MCP server. Create the server in your Composio account, add the apps you want to it, and paste its link here. Add an API key only if your server requires one.",
+    "Composio connects agents to Gmail, Slack, GitHub, and hundreds of other apps through one MCP server. Connect the apps you want in your Composio account, then paste its MCP URL and API key here.",
   "marketplace.plugin.composio.app":
     "The apps you add to your Composio MCP server, over the link from your Composio account.",
   "marketplace.plugin.composio.prompt.inbox": "Summarize my unread email and draft replies to the urgent ones.",
   "marketplace.plugin.composio.prompt.handoff": "Post a summary of this pull request to our team channel.",
   "marketplace.plugin.composio.prompt.apps": "Which apps and actions can you use through Composio?",
+  // The connect form text of the catalog listings. Each English text is the catalog's own text, byte for byte.
+  "marketplace.plugin.composio.hint.url": "The URL of an MCP server in your Composio account",
+  "marketplace.plugin.composio.hint.apiKey": "Find it in your Composio account, in Settings > Sessions & API Key.",
+  "marketplace.auth.apiKey": "API key",
+  "marketplace.auth.personalApiKey": "Personal API key",
+  "marketplace.auth.mcpUrl": "MCP URL",
+  "marketplace.auth.createKey": "Create a key",
 
   // Skills. {label} is the install button text: an agent name, "All agents" or "2 agents".
   "marketplace.skill.installMenu.install": "Install",

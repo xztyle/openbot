@@ -36,8 +36,8 @@ export function hostSetupProviderProps(settings: HostProviderSettings): SetupPro
     get providerKeys() {
       return settings.providerKeys;
     },
-    get codeLogin() {
-      return settings.codeLogin;
+    get connection() {
+      return settings.connection;
     },
     get customProviders() {
       return settings.customProviders;

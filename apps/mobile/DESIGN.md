@@ -14,6 +14,8 @@ Render product text through HeroUI Native `Typography`, including `Typography.He
 
 Native system chrome is the intentional exception. Navigation and operating-system-owned controls must remain native even when HeroUI can produce a visually similar element. This lets iOS apply Liquid Glass automatically on supported versions and lets Android retain its native Material behavior.
 
+All text uses Inter, the desktop and web font, with the system font as fallback. Native chrome stays native but takes the font: header titles, back titles and toolbar labels read the React Navigation theme fonts (`navigationFonts` in `src/shared/lib/app-font.ts`), and an iOS `@expo/ui` label takes `nativeLabelFont`. System menus, date pickers and Live Activities keep the system font.
+
 ## Component ownership
 
 | Interface need | Preferred owner | Guidance |
@@ -22,11 +24,11 @@ Native system chrome is the intentional exception. Navigation and operating-syst
 | Product headings, paragraphs, labels, and inline text | HeroUI Native `Typography` | Use semantic type, color, weight, and alignment props instead of React Native `Text` and screen-local font styling. |
 | Screen stacks, titles, back buttons, headers, and route transitions | Expo Router native `Stack` | Configure them in route layouts or screen options instead of drawing custom headers. |
 | Tab navigation | Expo Router `NativeTabs` | Use native tab triggers, labels, badges, and platform icons instead of a custom tab bar. |
-| Search integrated with navigation | `Stack.SearchBar` and native toolbar search slots | Do not place a HeroUI input inside a handmade navigation bar. |
+| Search integrated with navigation | `Stack.SearchBar` and native toolbar search slots | Do not place a HeroUI input inside a handmade navigation bar. The home search field and the Marketplace field are the documented exceptions; see [Home search](#home-search) and [Marketplace search](#marketplace-search). |
 | Header and bottom toolbar actions or menus | `Stack.Toolbar` native items | Let the platform render placement, materials, menus, and interaction behavior. |
 | Route-level modals and form sheets | Expo Router native presentations | Prefer native modal or form-sheet presentation over a custom full-screen overlay. |
-| Native pickers, switches, sliders, menus, and grouped system forms | `@expo/ui` | Use when the interaction should look and behave like a platform control. Keep every `@expo/ui` tree inside `Host`. |
-| Large or unbounded data lists | React Native `FlatList` or an approved virtualized list | Do not use a non-virtualized component for feeds or large search results. |
+| Native pickers, switches, sliders, menus, and grouped system forms | `@expo/ui` | Use when the interaction should look and behave like a platform control. Keep every `@expo/ui` tree inside `Host`. Import `MenuView` from `@/shared/components/menu-view`, not `@expo/ui/community/menu`. iOS keeps the native menu. Android draws the HeroUI `Menu`, because the Material menu takes the device palette and shape, and shows a Lucide icon for each SF Symbol `image` that the component maps. Add the mapping when you use a new symbol. |
+| Large or unbounded data lists | React Native `FlatList` or an approved virtualized list. The chat uses Legend List (`@legendapp/list`) | Do not use a non-virtualized component for feeds or large search results. |
 | Custom in-content glass surface | `expo-glass-effect` | Use sparingly, only when glass is part of the product content rather than navigation chrome. Provide non-glass and reduced-transparency behavior. |
 
 Native ownership takes priority over HeroUI for navigation chrome. HeroUI ownership takes priority for application content.
@@ -36,10 +38,77 @@ Native ownership takes priority over HeroUI for navigation chrome. HeroUI owners
 - Obtain Liquid Glass through native navigation components. Do not imitate it with blur views, gradients, translucent HeroUI cards, shadows, or screenshots of glass.
 - Do not replace native headers, tab bars, toolbars, or search bars with `GlassView`. `expo-glass-effect` is for deliberate custom content surfaces, not for rebuilding system chrome.
 - Preserve platform safe-area and scroll-edge behavior. Ordinary screens normally use automatic content inset adjustment. Native sheets use the shared `SheetScrollView` header handling described below; do not add a second automatic inset or screen-local spacer.
-- The home list is the fallback exception for a full screen: iOS 27 shows no native scroll edge effect under its header. Its native header is transparent on iOS and Android, the native top edge is hidden, and the screen draws the canvas `SheetScrollEdgeEffect` of the chat header under the native buttons. Android pads the list by the header height, because it has no content inset.
+- The home list is the fallback exception for a full screen: iOS 27 shows no native scroll edge effect under its header. Its native header is transparent on iOS and Android, the native top edge is hidden, and the screen draws the canvas `SheetScrollEdgeEffect` of the chat header under the native buttons
+(on iOS; Android draws the solid Material bar of the big header). Android pads the list by the header height, because it has no content inset.
 - Avoid forcing opaque colors or bespoke backgrounds onto native chrome unless the product requirement explicitly calls for it. Let the operating system adapt materials to the platform version, appearance, accessibility settings, and scroll state.
 - Treat older iOS versions and Android as first-class fallbacks. The interface must remain complete and readable when Liquid Glass is unavailable or reduced transparency is enabled.
 - Use platform-native icons in native navigation (`sf` on iOS and the corresponding Material icon on Android). Use the existing application icon convention for HeroUI content.
+
+### Big headers
+
+Home, Routines and Usage have a big header that the screen draws, not `headerLargeTitle`. The native
+large title does not work under the custom scroll edge effect on iOS 27, and Android has none. Use
+`src/shared/components/large-title.tsx`:
+
+- `useLargeTitleScroll` gives the scroll handler and the scroll distance from the rest position.
+- `LargeTitle` is the first item of the scroll content: an optional caption (the server name) and the
+  34 pt bold title. On iOS a pull past the top grows it a little, as the native title does.
+- `LargeTitleBar` draws the scroll edge effect and the 17 pt small title. The small title fades in,
+  4 pt up, in 200 ms when the text of the big title reaches the bottom of the bar.
+- Android uses Material 3, not an iOS copy: a 28 dp bold title (a medium top app bar), the surface
+  solid under the bar and a 32 dp fade below it, as the top fade of the design,
+  a 22 dp regular small title on the 72 dp line, and 48 dp icon buttons with a round ripple: a 40 dp glass circle on full screens, the plain icon in sheets.
+- Android has no Liquid Glass, and its blur does not work over a scroll view. The search field and the
+  bar buttons use `useChromeGlass()`: the solid glass of the design (`--openbot-bg-chrome-glass`, 94-96%
+  opaque), a hairline edge, a soft shadow and the top light of `ChromeGlassSheen`. The home search
+  field has a real blur on Android 12 and later: the home content is in a `BlurTargetView`, and the
+  field draws a `BlurView` of it (radius 24) under the lighter `--openbot-bg-chrome-blur` fill. While
+  the results are open, the field shows the solid glass over the blur, because the results are not in
+  the target. iOS without Liquid Glass keeps the solid capsule.
+  Stacks set `androidBackOptions` in `screenOptions`, so the back button of every inner page, in
+  sheets too, is the same round button and not the native arrow.
+- `LargeTitleScrollView` puts grouped content under a big header on the sheet surface.
+
+The native header stays, transparent, with an empty title. It keeps the native Liquid Glass buttons on
+iOS: back, `Stack.Toolbar` actions and menus. Android draws its buttons with `AndroidHeaderButton`,
+and the stack draws the back button with `androidBackOptions`. Text sizes that HeroUI `Typography` has no variant for come from
+`src/shared/lib/type-scale.ts`; spread them into `style`.
+
+### Home search
+
+Search is a field at the bottom of home (`features/search/components/home-search.tsx`), not a header
+button or a sheet. It is an in-content glass surface: `GlassView` with Liquid Glass, and a solid
+`default` capsule without it or with Reduce Transparency. The field rides on the keyboard. When it
+takes focus, the results come in over the list (220 ms, opacity and 8 pt up; opacity only with
+reduced motion), a close button comes in beside the field, and the drawer pan stops. Close, Android
+Back, or a result closes them in 160 ms. With no query the results show shortcuts and the agents of
+the server; a query shows the same sections as before, with `BlurSwap` between states.
+
+### Marketplace search
+
+The Marketplace page (drawer → Marketplace) has the same bottom field as home, for the same reason:
+it is the one control of a page that the thumb reaches, and it rides on the keyboard. It uses the
+shared `GlassCapsule` (`src/shared/components/glass-capsule.tsx`), so the glass, the solid fallback
+and Reduce Transparency behave as on home. `Stack.SearchBar` would put the field at the top and
+leave the filter without a place.
+
+The filter is a glass button beside the field, in its own capsule, that opens a native `MenuView`:
+the kind (one inline group), a category submenu, and Installed only. It is not inside the field: on
+iOS the menu grows out of the view it opens from, so a button in the field would take the whole field
+into the menu. Android shows the categories as one more group of the menu, not as a sub-menu: the
+Android menu draws a sub-menu as a layer under its row, which runs off the screen above a bottom field.
+The Android menu opens above a button in the lower half of the screen and fits its height to the room
+there. Each filter that is set shows as a token in the field, and a tap on a token removes it. A filter or a query turns the overview into one grouped list in place;
+there is no results overlay. A close button comes in beside the field while it has focus or text.
+
+A listing opens as one sheet with a nested stack. The first page shows the listing as the desktop
+page does: one header card on the listing's gradient (`ListingGradient`, the still colours of the
+desktop `SkillGradient`) with the icon, name, creator and kind, and an example request or the agent's
+skills under them; then the facts in a grid of two columns, and the content (SKILL.md, an agent's skills and routines, an app's prompts). The `+` in the native header
+installs. A skill opens the agent choice as the next page, and an app that asks for a key or a
+sign-in opens its connect page; each page has its own `SheetSaveAction`. The arrow on an example request is the desktop Try: it puts the request
+(a skill keeps its `@[name](skill:id)` marker) in an agent's message field and the chat replaces the
+sheet, as Agent info > Skills does for a new skill. Several agents that can use it are a native menu.
 
 ## Sheets
 
@@ -155,11 +224,10 @@ Use `src/shared/components/sheet-scroll-view.tsx` as the root scroll container. 
   following existing screens. Reuse `SheetFormField` instead of rebuilding its platform inputs.
 - `SheetScrollView` uses `KeyboardAwareScrollView` to reveal the focused field and keep the last
   action reachable above the keyboard. Keep `mode="insets"` so keyboard clearance does not add a
-  layout spacer. Use `disableScrollOnKeyboardHide` to keep the user's position. The keyboard-controller 1.21.9 patch shrinks insets during dismissal and
+  layout spacer. Use `disableScrollOnKeyboardHide` to keep the user's position. The keyboard-controller 1.22.7 patch shrinks insets during dismissal and
   clamps only the current offset beyond the remaining content, instead of replaying a saved offset
-  after a new drag. `scripts/mobile-keyboard-scroll.test.ts` covers that event sequence against the
-  installed library. Leave `automaticallyAdjustKeyboardInsets` disabled and do not add another
-  keyboard-avoiding wrapper. Verify tapping outside a field followed immediately by scrolling,
+  after a new drag. Check that event sequence again when the library changes. Leave
+  `automaticallyAdjustKeyboardInsets` disabled and do not add another keyboard-avoiding wrapper. Verify tapping outside a field followed immediately by scrolling,
   interactive keyboard dismissal, reaching the final action, and both short and long content.
 
 ### Palette, groups and text

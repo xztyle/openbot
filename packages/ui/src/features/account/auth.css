@@ -1,7 +1,7 @@
 .account-login-screen,
 .initial-setup-screen {
   position: absolute;
-  z-index: 100;
+  z-index: var(--openbot-layer-dialog);
   inset: 0;
   min-height: 100vh;
   display: grid;
@@ -193,7 +193,6 @@
 .account-login-form input:not(.otp-input-native):focus {
   border-color: var(--openbot-border-focus);
   background: var(--openbot-bg-surface);
-  box-shadow: 0 0 0 3px var(--openbot-accent-soft);
 }
 
 .account-login-form input:not(.otp-input-native)[aria-invalid="true"] {
@@ -221,7 +220,9 @@
 }
 
 .account-login-primary:disabled,
-.account-login-code-action:disabled {
+.account-login-primary[aria-disabled="true"],
+.account-login-code-action:disabled,
+.account-login-code-action[aria-disabled="true"] {
   cursor: default;
   opacity: 0.48;
 }
@@ -257,7 +258,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .account-login-primary:hover:not(:disabled) {
+  .account-login-primary:hover:not(:disabled, [aria-disabled="true"]) {
     background: var(--openbot-text-primary);
   }
 
@@ -267,7 +268,7 @@
   }
 }
 
-.account-login-primary:active:not(:disabled) {
+.account-login-primary:active:not(:disabled, [aria-disabled="true"]) {
   transform: scale(0.98);
 }
 
@@ -594,7 +595,7 @@
   padding-inline: var(--openbot-space-2);
 }
 
-.ui-button.provider-picker-refresh:hover:not(:disabled) {
+.ui-button.provider-picker-refresh:hover:not(:disabled, [aria-disabled="true"]) {
   color: var(--openbot-text-primary);
 }
 
@@ -752,6 +753,13 @@
   white-space: nowrap;
 }
 
+/* The reason a row is not ready is the sentence the user acts on, so it wraps rather than ends in an
+   ellipsis. */
+.provider-picker-status-message {
+  overflow: visible;
+  white-space: normal;
+}
+
 /* The agents that keep a provider on, on a line of its own below the row and in line with the name.
    The row grows to show the whole sentence, because the user must read which agents to change. */
 .provider-picker-check-error.provider-picker-used-by {
@@ -764,6 +772,56 @@
 
 .provider-picker-option-selected .provider-picker-email {
   color: var(--openbot-text-readable);
+}
+
+/* The same icon size as the other small buttons of the row. */
+.provider-picker-add-account svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  stroke-width: var(--openbot-icon-stroke);
+}
+
+/* The accounts of a provider, on lines of their own below its row and in line with its name. */
+.provider-picker-accounts {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  margin-top: -6px;
+  padding: 0 0 8px 66px;
+}
+
+.provider-picker-account-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.provider-picker-account {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.provider-picker-account + .provider-picker-account {
+  border-top: 1px solid var(--openbot-border);
+}
+
+.provider-picker-account-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+}
+
+.provider-picker-account .provider-picker-check-error {
+  white-space: normal;
+}
+
+.provider-picker-account-rename {
+  max-width: 220px;
 }
 
 /* The version and the status badge, in the one cell the row's last column reserves. They are read
@@ -1189,8 +1247,8 @@ button {
 }
 
 button:not(.ui-button):focus-visible,
-input:focus-visible,
-textarea:focus-visible {
+input:not(.ui-input):focus-visible,
+textarea:not(.ui-textarea):focus-visible {
   outline: 2px solid var(--openbot-border-focus);
   outline-offset: 2px;
 }
@@ -1286,8 +1344,6 @@ body,
 
 .panel-edge,
 .direct-conversation-header,
-.browser-panel-header,
-.browser-toolbar,
 .remote-desktop-header,
 .settings-panel,
 .browser-panel,
@@ -1297,7 +1353,6 @@ body,
 }
 
 .search-field,
-.browser-address-bar input,
 .composer,
 .direct-composer,
 .settings-field input,
@@ -1312,7 +1367,6 @@ body,
 }
 
 .search-field:focus-within,
-.browser-address-bar input:focus,
 .composer:focus-within,
 .direct-composer:focus-within,
 .settings-field input:focus,
@@ -1326,7 +1380,6 @@ body,
 }
 
 .search-field input::placeholder,
-.browser-address-bar input::placeholder,
 .composer-editor-placeholder,
 .direct-composer textarea::placeholder,
 .settings-field input::placeholder,
@@ -1338,8 +1391,7 @@ body,
 }
 
 .provider-picker-option-selected,
-.provider-model-option-selected,
-.browser-tab-controlled .browser-tab {
+.provider-model-option-selected {
   border-color: var(--openbot-border-focus);
   background: var(--openbot-accent-soft);
   color: var(--openbot-text-primary);
@@ -1371,7 +1423,7 @@ body,
 .voice-button:hover,
 .voice-button-active:hover,
 .initial-setup-save:hover:not(:disabled),
-.account-login-primary:hover:not(:disabled) {
+.account-login-primary:hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--openbot-text-primary);
   color: var(--openbot-text-on-light);
 }
@@ -1388,8 +1440,7 @@ body,
 }
 
 .account-login-error,
-.initial-setup-error,
-.account-popover-error {
+.initial-setup-error {
   border-color: var(--openbot-danger-soft);
   background: var(--openbot-danger-soft);
   color: var(--openbot-danger);

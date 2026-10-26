@@ -1,5 +1,5 @@
 import { useThemeColor } from "heroui-native/hooks";
-import { Check } from "lucide-react-native";
+import Check from "lucide-react-native/icons/check";
 import { useEffect } from "react";
 import { View } from "react-native";
 import Animated, {

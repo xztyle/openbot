@@ -12,7 +12,7 @@ export const messages = {
   "computerUse.error.check": "OpenBot n’a pas pu vérifier Computer Use.",
   "computerUse.error.openSettings": "OpenBot n’a pas pu ouvrir Réglages Système.",
   "computerUse.error.startDriver": "OpenBot n’a pas pu démarrer le pilote de Computer Use.",
-  "computerUse.checkAgain": "Vérifier à nouveau",
+  "computerUse.checkAgain": "Revérifier",
   "computerUse.checking": "Vérification de Computer Use",
   "computerUse.unavailable.title": "Computer Use n’est pas encore disponible",
   "computerUse.permissions.title": "Autorisations du système",

@@ -1,4 +1,4 @@
-import { GripVertical } from "lucide-react-native";
+import GripVertical from "lucide-react-native/icons/grip-vertical";
 import { type ReactNode, useEffect } from "react";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -13,7 +13,7 @@ import Animated, {
 import { scheduleOnRN } from "react-native-worklets";
 import { haptics } from "@/shared/lib/haptics";
 
-export const SERVER_ROW_HEIGHT = 68;
+export const SERVER_ROW_HEIGHT = 64;
 const SHIFT = { duration: 180, reduceMotion: ReduceMotion.System } as const;
 const SETTLE = { dampingRatio: 1, duration: 220, reduceMotion: ReduceMotion.System } as const;
 

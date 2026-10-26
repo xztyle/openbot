@@ -14,7 +14,7 @@ export type IncomingLink =
   | { kind: "template"; url: string; templateId: string }
   | { kind: "invalid" };
 
-export function parseIncomingLink(value: string): IncomingLink {
+function parseIncomingLink(value: string): IncomingLink {
   // The other link kinds have separate parsers and cannot weaken invitation validation.
   if (isInviteLink(value)) return { kind: "invite", url: value };
   try {

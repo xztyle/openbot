@@ -128,8 +128,14 @@
 .account-update-island__action-shell {
   position: relative;
   display: grid;
-  width: calc(var(--openbot-control-xl) + var(--openbot-control-xl) + var(--openbot-space-6) + var(--openbot-space-1));
-  min-width: calc(var(--openbot-control-xl) + var(--openbot-control-xl) + var(--openbot-space-3));
+  /* A floor, not a fixed width: translated labels such as "Uruchom ponownie" are wider than the
+     English ones, and the button grows to hold them while the status text gives way. */
+  min-width: calc(
+    var(--openbot-control-xl) +
+    var(--openbot-control-xl) +
+    var(--openbot-space-6) +
+    var(--openbot-space-1)
+  );
   flex-shrink: 0;
 }
 
@@ -317,4 +323,15 @@
   .account-update-island__progress-value .t-digit {
     animation: none;
   }
+}
+
+/* In the sidebar there is no account box to come out of: the island is in the flow at the end of
+ * the sidebar, with four round corners and the same space above and below its button. */
+.sidebar-update-island > .account-update-island {
+  position: relative;
+  inset: auto;
+  min-height: 0;
+  margin: var(--openbot-space-2) var(--openbot-space-3) var(--openbot-space-3);
+  border-radius: var(--openbot-radius-lg);
+  padding: var(--openbot-space-1-5) var(--openbot-space-1-5) var(--openbot-space-1-5) var(--openbot-space-3);
 }

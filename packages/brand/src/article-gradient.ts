@@ -2,8 +2,7 @@
 // on an index, the live shader that replaces it on hover, and the og:image baked at
 // build time all agree without anyone keeping three things in step. It also means
 // a published article keeps its colours forever: change the derivation and you
-// silently re-colour every social card already shared, which is why
-// test/content-metadata.test.ts pins the output for a fixed title.
+// silently re-colour every social card already shared, so do not change it.
 //
 // The hexes below are copies of brand tokens. A WebGL uniform needs a real colour,
 // not a var(), and this module is read by the build-time generator where no

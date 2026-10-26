@@ -1,5 +1,14 @@
 import { Typography } from "heroui-native";
-import { createContext, type PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  memo,
+  type PropsWithChildren,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { TextStyle } from "react-native";
 import Animated, {
   cancelAnimation,
@@ -11,6 +20,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import { isAndroid } from "@/shared/lib/platform";
 import { createStreamRevealPool, streamRevealWindow } from "../model/stream-reveal-pool";
 
 const AnimatedTypography = Animated.createAnimatedComponent(Typography);
@@ -20,6 +30,9 @@ const REVEAL_TIMING = {
   easing: Easing.bezier(0.23, 1, 0.32, 1),
   reduceMotion: ReduceMotion.System,
 };
+// A nested text has no native view on Android, so each frame of a word's fade lays out and draws
+// its whole paragraph again, and the paragraph flickers. There each word shows at once.
+const WORD_FADE = !isAndroid;
 
 export function StreamRevealProvider({ children }: PropsWithChildren) {
   const [pool] = useState(() => createStreamRevealPool());
@@ -84,7 +97,7 @@ function useRevealSlot(enabled: boolean) {
   return { phase: enabled ? phase : "done", onDone };
 }
 
-function RevealedWord({
+const RevealedWord = memo(function RevealedWord({
   enabled,
   end,
   onSettled,
@@ -102,7 +115,7 @@ function RevealedWord({
       </Typography>
     );
   return <FadingWord {...props} onDone={onDone} />;
-}
+});
 
 export function StreamingBlock({ children, enabled }: PropsWithChildren<{ enabled: boolean }>) {
   const { phase, onDone } = useRevealSlot(enabled);
@@ -124,15 +137,16 @@ export function StreamingBlock({ children, enabled }: PropsWithChildren<{ enable
   return <Animated.View style={style}>{children}</Animated.View>;
 }
 
-export function StreamingTailText({
+export const StreamingTailText = memo(function StreamingTailText({
   body,
   enabled,
   type,
   style,
 }: Omit<TextProps, "text"> & { body: string; enabled: boolean }) {
-  const [baseline, setBaseline] = useState(enabled ? "" : body);
-  if ((!enabled && baseline !== body) || !body.startsWith(baseline)) setBaseline(body);
-  const { prefix, words } = streamRevealWindow(body, baseline, enabled);
+  const fade = enabled && WORD_FADE;
+  const [baseline, setBaseline] = useState(fade ? "" : body);
+  if ((!fade && baseline !== body) || !body.startsWith(baseline)) setBaseline(body);
+  const { prefix, words } = streamRevealWindow(body, baseline, fade);
   const settle = useCallback(
     (end: number) => {
       setBaseline((previous) => (body.startsWith(previous) && end > previous.length ? body.slice(0, end) : previous));
@@ -150,9 +164,9 @@ export function StreamingTailText({
           onSettled={settle}
           type={type}
           style={style}
-          enabled={enabled}
+          enabled={fade}
         />
       ))}
     </>
   );
-}
+});

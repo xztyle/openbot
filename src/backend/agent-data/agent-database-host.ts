@@ -34,6 +34,13 @@ const MAX_OPEN_DATABASES = 8;
 const ALLOWED_VTABLE_MODULES = new Set(["fts5", "fts5vocab", "rtree", "rtreecheck"]);
 
 /**
+ * PRAGMAs those modules run from inside an agent's statement: FTS5 reads `data_version` on each
+ * access, and R*Tree reads `page_size` when it creates a table. Allowed only as reads, with no
+ * argument; both report a number and change nothing.
+ */
+const MODULE_PRAGMAS = new Set(["data_version", "page_size"]);
+
+/**
  * Result codes `node:sqlite` reports on `error.errcode` but does not export as constants, unlike the
  * authorizer action codes.
  */
@@ -69,9 +76,11 @@ function authorize(action: number, first: string | null, second: string | null):
   switch (action) {
     case constants.SQLITE_ATTACH:
     case constants.SQLITE_DETACH:
-    case constants.SQLITE_PRAGMA:
-    case constants.SQLITE_DROP_VTABLE:
       return constants.SQLITE_DENY;
+    case constants.SQLITE_PRAGMA:
+      return second === null && first !== null && MODULE_PRAGMAS.has(first.toLowerCase())
+        ? constants.SQLITE_OK
+        : constants.SQLITE_DENY;
     case constants.SQLITE_CREATE_VTABLE:
       return second !== null && ALLOWED_VTABLE_MODULES.has(second.toLowerCase())
         ? constants.SQLITE_OK
@@ -91,8 +100,9 @@ function authorize(action: number, first: string | null, second: string | null):
     // remove or reshape it. SQLite reports the target table itself, so the rule is decided on the
     // compiled statement rather than on a guess about what the SQL text means. The two actions name
     // it in different arguments: `DROP TABLE` in the first, `ALTER TABLE` in the second, after the
-    // database name.
+    // database name. A virtual table's `DROP` also drops its shadow tables, each checked on its own.
     case constants.SQLITE_DROP_TABLE:
+    case constants.SQLITE_DROP_VTABLE:
       return tableOwnedByAnother(first);
     case constants.SQLITE_ALTER_TABLE:
       return tableOwnedByAnother(second);
@@ -279,7 +289,7 @@ function toFailure(error: unknown, databasePath: string): AgentDatabaseFailure {
       kind: "not-authorized",
       message:
         "SQLite refused part of this statement. ATTACH, DETACH, PRAGMA, VACUUM, and extensions are not available, and a table another agent created cannot be dropped or altered.",
-      sqliteCode: code,
+      ...(code === undefined ? {} : { sqliteCode: code }),
     };
   }
   return redactFailure({ kind: "sqlite", message, ...(code === undefined ? {} : { sqliteCode: code }) }, databasePath);

@@ -41,11 +41,6 @@
   background: var(--openbot-bg-sidebar);
 }
 
-.remote-desktop-button[aria-expanded="true"] {
-  background: var(--openbot-accent-soft);
-  color: var(--openbot-accent-hover);
-}
-
 .voice-button:active,
 .voice-button-active:active {
   transform: scale(0.97);

@@ -1,10 +1,12 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { AttachmentSummary } from "@openbot/contracts/ipc";
-import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Button, Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { ImagePlus, Paperclip, X } from "lucide-react-native";
+import ImagePlus from "lucide-react-native/icons/image-plus";
+import Paperclip from "lucide-react-native/icons/paperclip";
+import X from "lucide-react-native/icons/x";
 import { type PropsWithChildren, useCallback, useEffect, useRef, useState } from "react";
 import { Alert, View } from "react-native";
 import {
@@ -26,7 +28,6 @@ export function QueuedMessageEditScreen() {
   const { t } = useText();
   const { chat, deliveryId } = useLocalSearchParams<{ chat: string; deliveryId: string }>();
   const { queue } = useQueuedChat(chat);
-  const navigation = useNavigation();
   const held = queue?.edit?.delivery ?? null;
   const delivery = held?.id === deliveryId ? held : queue?.queued.find((item) => item.id === deliveryId);
   const edit = queue?.edit ?? null;
@@ -93,8 +94,8 @@ export function QueuedMessageEditScreen() {
     },
     [queue, exitAfter],
   );
-  usePreventRemove(Boolean(edit) && !leaving, ({ data }) => {
-    const go = () => navigation.dispatch(data.action);
+  usePreventRemove(Boolean(edit) && !leaving, ({ repeat }) => {
+    const go = repeat;
     const release = () =>
       releaseThenExit(go, () => {
         void haptics.notification("error");

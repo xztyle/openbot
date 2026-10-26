@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, readlink, realpath, rename, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readlink, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { HookCallbackMatcher, Options, SdkPluginConfig } from "@anthropic-ai/claude-agent-sdk";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
@@ -7,6 +7,7 @@ import { Effect, Result } from "effect";
 import { workspaceTemporaryPaths } from "./agent/workspace-sandbox";
 import { runCauseEffect } from "./effect-boundary";
 import { isMissingFileError } from "./file-errors";
+import { listHomeSkills, skillFolderNames } from "./home-skills";
 import { isPathInside } from "./path-containment";
 import { type ProviderClientOperationError, providerCall, providerFailure } from "./provider-client-effects";
 
@@ -72,6 +73,56 @@ export const claudeWorkspaceSkillPlugin = Effect.fn("ClaudeWorkspace.skillPlugin
   }
   return { type: "local", path: directory };
 });
+
+/**
+ * A plugin named `agents` with the user's skills in `~/.agents/skills`, because Claude does not read
+ * that folder. A skill that Claude already reads from `<configDirectory>/skills` or `.claude/skills`
+ * of the workspace is left out, so a skill that `npx skills` linked into both folders is listed once.
+ * Claude lists each skill as `agents:<name>`, and `/<name>` still works. Each set of skills has a
+ * folder of its own, named by its hash and never changed, so a query that runs keeps its skills when
+ * the next one gets another set. Null when no skill is left.
+ */
+export const claudeHomeSkillPlugin = Effect.fn("ClaudeWorkspace.homeSkillPlugin")(function* (
+  stateDirectory: string,
+  configDirectory: string,
+  cwd: string,
+): Effect.fn.Return<SdkPluginConfig | null, ProviderClientOperationError> {
+  const read = new Set([
+    ...(yield* skillFolderNames(join(configDirectory, "skills"))),
+    ...(yield* skillFolderNames(join(cwd, ".claude", "skills"))),
+  ]);
+  const skills = (yield* listHomeSkills()).filter((skill) => !read.has(skill.slug));
+  if (skills.length === 0) return null;
+  const hash = createHash("sha256")
+    .update(skills.map((skill) => skill.directory).join("\0"))
+    .digest("hex");
+  const directory = join(stateDirectory, "claude-skill-plugins", `home-${hash}`);
+  const manifest = join(directory, ".claude-plugin", "plugin.json");
+  if (yield* pathExists(manifest)) return { type: "local", path: directory };
+  // Made aside and renamed into place, so a query never sees a plugin without all its skills.
+  const staged = `${directory}.${randomUUID()}`;
+  yield* providerCall(() => mkdir(join(staged, ".claude-plugin"), { recursive: true, mode: 0o700 }));
+  yield* providerCall(() =>
+    writeFile(join(staged, ".claude-plugin", "plugin.json"), `${JSON.stringify({ name: "agents" })}\n`),
+  );
+  yield* providerCall(() => mkdir(join(staged, "skills")));
+  for (const skill of skills)
+    yield* providerCall(() => symlink(skill.directory, join(staged, "skills", skill.slug), "junction"));
+  const moved = yield* Effect.result(providerCall(() => rename(staged, directory)));
+  if (Result.isFailure(moved)) {
+    // A query that started at the same time made the same folder first.
+    yield* providerCall(() => rm(staged, { recursive: true, force: true }));
+    if (!(yield* pathExists(manifest))) return yield* Effect.fail(moved.failure);
+  }
+  return { type: "local", path: directory };
+});
+
+const pathExists = Effect.fn("ClaudeWorkspace.pathExists")((path: string) =>
+  providerCall(() => lstat(path)).pipe(
+    Effect.as(true),
+    Effect.catch((error) => (isMissingFileError(error.cause) ? Effect.succeed(false) : Effect.fail(error))),
+  ),
+);
 
 const currentLink = Effect.fn("ClaudeWorkspace.currentLink")((path: string) =>
   providerCall(() => readlink(path)).pipe(

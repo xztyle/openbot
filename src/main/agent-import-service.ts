@@ -1,5 +1,5 @@
-import { Deferred, Effect, Exit, Result, Schema } from "effect";
-import { type ArchiveOperationError, archiveCall, archiveFailure, archiveResult, archiveSync } from "./archive-effects";
+import { Deferred, Effect, Exit, Result } from "effect";
+import { type ArchiveOperationError, archiveCall, archiveFailure, archiveSync } from "./archive-effects";
 // Agent import into this host from one `.zip` export: chosen by the local user, or sent by a member
 // of a joined client with `agent-import-v1`.
 //
@@ -10,10 +10,9 @@ import { type ArchiveOperationError, archiveCall, archiveFailure, archiveResult,
 // be written is a warning, not a failed step, so the agent still imports. Group chats become channels
 // after the agents, with the members that imported; a channel needs at least one, as in OpenBot.
 
-import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, resolve } from "node:path";
-import { AVATAR_MIME_TYPES, isValidAvatarImage } from "@openbot/contracts/avatar-images";
+import { randomUUID } from "node:crypto";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   AGENT_IMPORT_LIMITS,
@@ -32,11 +31,21 @@ import {
   isChannelDraft,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
-import { unzipSync, zipSync } from "fflate";
+import { zipSync } from "fflate";
 import type { AgentService } from "../backend/agent-service";
 import type { ChannelService } from "../backend/channel-service";
 import { runCauseEffect } from "../backend/effect-boundary";
-import { isPathInside } from "../backend/path-containment";
+import {
+  type ArchiveLimits,
+  avatarImage,
+  extract,
+  listEntries,
+  readArchiveEffect,
+  type ArchiveEntry as StagedEntry,
+  sha256,
+  writeImportedFilesEffect,
+  writeTreeEffect,
+} from "./agent-archive";
 import {
   AGENT_IMPORT_MANIFEST,
   decodeImportManifest,
@@ -46,12 +55,20 @@ import {
 import { validTimezone } from "./agent-marketplace-service";
 import type { LocalSkillLibrary } from "./local-skill-library";
 import type { SkillMarketplaceFailure } from "./skill-marketplace-service";
-import { inspectArchive, isUnsafeArchivePath } from "./skill-package";
+import { inspectArchive } from "./skill-package";
 
 /** Skill folders are copied here, published to the local library, and removed again. */
 const SKILL_STAGING = ".openbot/import-skills";
 /** Workspace files of an imported agent go under this folder, so they never replace OpenBot's own. */
 const IMPORTED_FILES = "imported";
+/** Archive limits and the errors that name them. */
+const IMPORT_ARCHIVE: ArchiveLimits = {
+  archiveBytes: AGENT_IMPORT_LIMITS.archiveBytes,
+  files: AGENT_IMPORT_LIMITS.files,
+  tooLarge: sourceText("error.import.zipTooLarge"),
+  expandedTooLarge: sourceText("error.import.expandedTooLarge", { limit: AGENT_IMPORT_LIMITS.files }),
+  invalid: sourceText("error.import.zipInvalid"),
+};
 
 export interface AgentImportAgents {
   listAgents(): AgentSummary[];
@@ -65,6 +82,7 @@ export interface AgentImportAgents {
   createRoutine(input: CreateRoutineInput, options?: { recordConversationEvent?: boolean }): unknown;
   createMemory(input: { agentId: string; text: string }): unknown;
   memoryLimit(): number;
+  initializeMemorySelection(agentId: string): void;
   setAvatar(agentId: string, image: AvatarImageInput | null): ReturnType<AgentService["setAvatar"]>;
   deleteAgent(agentId: string): ReturnType<AgentService["deleteAgent"]>;
   channels: { command(command: ChannelCommand, actor: ChannelActor): ReturnType<ChannelService["command"]> };
@@ -86,10 +104,6 @@ export interface AgentImportSkills {
     skillId: string;
     revision: number;
   }): Effect.Effect<unknown, SkillMarketplaceFailure>;
-}
-
-interface StagedEntry {
-  size: number;
 }
 
 interface StagedImport {
@@ -221,8 +235,8 @@ export class AgentImportService {
     owner: string,
     temporary: boolean,
   ): Effect.fn.Return<AgentImportPreview, ArchiveOperationError> {
-    const bytes = yield* readArchiveEffect(path);
-    const entries = yield* archiveSync(() => listEntries(bytes));
+    const bytes = yield* readArchiveEffect(path, IMPORT_ARCHIVE);
+    const entries = yield* archiveSync(() => listEntries(bytes, IMPORT_ARCHIVE));
     const wrapper = wrapperFolder([...entries.keys()]);
     const inner = new Map([...entries].map(([name, entry]) => [name.slice(wrapper.length), entry]));
     const manifestName = `${wrapper}${AGENT_IMPORT_MANIFEST}`;
@@ -378,7 +392,7 @@ export class AgentImportService {
 
     // The archive is read again rather than held since `stage`: an export can be hundreds of MB.
     // The file can change in between, so only the same bytes are accepted.
-    const bytes = yield* readArchiveEffect(staged.path);
+    const bytes = yield* readArchiveEffect(staged.path, IMPORT_ARCHIVE);
     if (sha256(bytes) !== staged.sha256)
       return yield* archiveFailure(new Error(sourceText("error.import.exportChanged")));
     const imported: AgentSummary[] = [];
@@ -592,6 +606,7 @@ export class AgentImportService {
               warnings.push(sourceText("error.import.memoryLimit", { name: source.name, limit: memoryLimit }));
             for (const text of source.memories.slice(0, memoryLimit))
               this.agents.createMemory({ agentId: agent.id, text });
+            this.agents.initializeMemorySelection(agent.id);
             const avatar = staged.avatars.get(source.key);
             if (avatar)
               agent = yield* this.agents
@@ -616,72 +631,6 @@ export class AgentImportService {
   });
 }
 
-const readArchiveEffect = Effect.fn("Archive.readArchive")(function* (
-  path: string,
-): Effect.fn.Return<Uint8Array, ArchiveOperationError> {
-  const info = yield* archiveCall(() => stat(path));
-  if (!info.isFile()) return yield* archiveFailure(new Error(sourceText("error.import.chooseZip")));
-  if (info.size === 0 || info.size > AGENT_IMPORT_LIMITS.archiveBytes)
-    return yield* archiveFailure(new Error(sourceText("error.import.zipTooLarge")));
-  return new Uint8Array(yield* archiveCall(() => readFile(path)));
-});
-
-/** Every file entry and its expanded size, checked, without inflating anything. */
-function listEntries(bytes: Uint8Array): Map<string, StagedEntry> {
-  const entries = new Map<string, StagedEntry>();
-  let expanded = 0;
-  try {
-    unzipSync(bytes, {
-      filter: (file) => {
-        const name = file.name.replaceAll("\\", "/");
-        if (name.endsWith("/")) return false;
-        if (isUnsafeEntry(name)) throw new UnsafeEntry(name);
-        expanded += file.originalSize;
-        if (entries.size >= AGENT_IMPORT_LIMITS.files || expanded > AGENT_IMPORT_LIMITS.archiveBytes)
-          throw new UnsafeEntry(null);
-        entries.set(name, { size: file.originalSize });
-        return false;
-      },
-    });
-  } catch (error) {
-    if (error instanceof UnsafeEntry)
-      throw new Error(
-        error.entry
-          ? sourceText("error.import.unsafeFile", { name: error.entry })
-          : sourceText("error.import.expandedTooLarge", { limit: AGENT_IMPORT_LIMITS.files }),
-      );
-    // A zip that Grok Bot is still writing has no central directory yet, so it reads as invalid.
-    throw new Error(sourceText("error.import.zipInvalid"));
-  }
-  if (!entries.size) throw new Error(sourceText("error.import.empty"));
-  return entries;
-}
-
-/** Inflates the file entries `include` names. A directory entry is never inflated. */
-function extract(bytes: Uint8Array, include: (name: string) => boolean): Record<string, Uint8Array> {
-  const raw = unzipSync(bytes, {
-    filter: (file) => {
-      const name = file.name.replaceAll("\\", "/");
-      return !name.endsWith("/") && include(name);
-    },
-  });
-  return Object.fromEntries(Object.entries(raw).map(([name, data]) => [name.replaceAll("\\", "/"), data]));
-}
-
-/** A segment such as `D:` names another Windows drive, so `resolve` would leave the target folder. */
-function isUnsafeEntry(name: string): boolean {
-  return isUnsafeArchivePath(name) || name.split("/").some((part) => /^[a-z]:/iu.test(part));
-}
-
-class UnsafeEntry extends Schema.TaggedError<UnsafeEntry>()("UnsafeEntry", {
-  entry: Schema.NullOr(Schema.String),
-  message: Schema.String,
-}) {
-  constructor(entry: string | null) {
-    super({ entry, message: "Unsafe archive entry." });
-  }
-}
-
 /** A zip made by compressing a folder puts everything in that folder. */
 function wrapperFolder(names: string[]): string {
   if (names.includes(AGENT_IMPORT_MANIFEST)) return "";
@@ -692,83 +641,6 @@ function wrapperFolder(names: string[]): string {
 
 function filesUnder(entries: Map<string, StagedEntry>, folder: string): Array<[string, StagedEntry]> {
   return [...entries].filter(([name]) => name.startsWith(`${folder}/`));
-}
-
-const writeTreeEffect = Effect.fn("Archive.writeTree")(function* (
-  root: string,
-  files: ReadonlyArray<readonly [string, Uint8Array]>,
-): Effect.fn.Return<void, ArchiveOperationError> {
-  const base = resolve(root);
-  for (const [name, data] of files) {
-    const target = resolve(base, name);
-    if (isAbsolute(name) || isUnsafeEntry(name) || target === base || !isPathInside(base, target))
-      return yield* archiveFailure(new Error(sourceText("error.import.unsafeFile", { name })));
-    yield* archiveCall(() => mkdir(dirname(target), { recursive: true })).pipe(Effect.uninterruptible);
-    // `wx` refuses to replace a file, so an entry can never overwrite what is already there.
-    yield* archiveCall(() => writeFile(target, data, { flag: "wx" })).pipe(Effect.uninterruptible);
-  }
-});
-
-/**
- * Writes the workspace files of one agent and never replaces a file. When a file is already there,
- * for example `README.md` and `readme.md` on a disk that ignores case, the entry is saved beside it
- * as `README (2).md`. A file that still cannot be written is skipped. Each case adds a warning.
- */
-const writeImportedFilesEffect = Effect.fn("Archive.writeImportedFiles")(function* (
-  root: string,
-  files: ReadonlyArray<readonly [string, Uint8Array]>,
-  agentName: string,
-  warnings: string[],
-): Effect.fn.Return<void, ArchiveOperationError> {
-  const base = resolve(root);
-  for (const [name, data] of files) {
-    const target = resolve(base, name);
-    if (isAbsolute(name) || isUnsafeEntry(name) || target === base || !isPathInside(base, target))
-      return yield* archiveFailure(new Error(sourceText("error.import.unsafeFile", { name })));
-    try {
-      archiveResult(
-        yield* Effect.result(
-          archiveCall(() => mkdir(dirname(target), { recursive: true })).pipe(Effect.uninterruptible),
-        ),
-      );
-      for (let copy = 1; ; copy += 1) {
-        try {
-          archiveResult(
-            yield* Effect.result(
-              archiveCall(() => writeFile(copy === 1 ? target : copyName(target, copy), data, { flag: "wx" })).pipe(
-                Effect.uninterruptible,
-              ),
-            ),
-          );
-          if (copy > 1)
-            warnings.push(
-              sourceText("error.import.fileRenamed", { name: agentName, file: name, saved: copyName(name, copy) }),
-            );
-          break;
-        } catch (error) {
-          if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
-        }
-      }
-    } catch (error) {
-      warnings.push(sourceText("error.import.fileSkipped", { name: agentName, file: name, reason: message(error) }));
-    }
-  }
-});
-
-/** `notes/plan.md` becomes `notes/plan (2).md`. */
-function copyName(path: string, copy: number): string {
-  const extension = extname(path);
-  return `${path.slice(0, path.length - extension.length)} (${copy})${extension}`;
-}
-
-function sha256(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
-function avatarImage(bytes: Uint8Array | undefined): AvatarImageInput | null {
-  if (!bytes) return null;
-  const mimeType = AVATAR_MIME_TYPES.find((type) => isValidAvatarImage(type, bytes));
-  return mimeType ? { mimeType, bytes } : null;
 }
 
 function bounded(warnings: string[]): string[] {

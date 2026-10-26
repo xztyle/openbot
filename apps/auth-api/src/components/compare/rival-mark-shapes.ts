@@ -8,6 +8,9 @@
 // Manus is the glyph from its brand page (manus.im/brand), without the word mark.
 // Claude Cowork has no mark of its own: from September 2026 it rolls out inside
 // Claude, so it is the Claude mark. Devin is the mark from devin.ai, not the Cognition logo.
+// Instinct is the stick figure from instinct.com, redrawn with even strokes.
+// Paperclip is the paperclip from the favicon of its web app.
+// Viktor is the letter V from its avatar on viktor.com, without the gradient tile.
 // ChatGPT dots is the ring from chatgpt.com/features/dots, not the OpenAI logo.
 // Codex, Claude Code and Cursor use the marks that the provider logos draw: Codex has
 // no mark apart from the OpenAI blossom. Antigravity is the arch from the icon.svg that
@@ -25,9 +28,12 @@ export type RivalMarkName =
   | "devin"
   | "grok-bot"
   | "hermes-agent"
+  | "instinct"
   | "manus"
   | "muse"
-  | "openclaw";
+  | "openclaw"
+  | "paperclip"
+  | "viktor";
 
 export interface RivalMarkShape {
   /** `[x, y, width, height]`, as an SVG `viewBox`. */
@@ -85,6 +91,14 @@ export const RIVAL_MARK_SHAPES: Record<RivalMarkName, RivalMarkShape> = {
     viewBox: [0, 0, 400, 400],
     path: "M88 0h224a88 88 0 0 1 88 88v224a88 88 0 0 1-88 88h-224a88 88 0 0 1-88-88v-224a88 88 0 0 1 88-88ZM199 58l-21 2l-24 6l-17 6l-19 8l-18 11l-15 11l-13 13l-7 11l-9 17l-4 13l-2 13l0 15l2 8l3 7l9 11l10 7l9 2l-7-6l-5-13l7 9l9 8l-6 62l-5 27l-3 8l-3 4l-5 3l-7 0l-5-2l-4-4l-3-7l0-7l0-7l3-8l-6 8l-3 6l-1 7l0 12l3 9l6 7l7 4l8 1l8-2l9-5l7-6l7-10l-3 10l-6 10l-9 7l-5 2l-6 0l-10-2l-10-7l-6-9l-3-12l0 10l3 11l4 7l7 8l9 5l10 4l2 7l2 4l4 4l5 3l8 1l10-1l8-6l7-9l-2 10l-4 10l-6 9l-7 7l40 0l9-5l1 1l-4 4l2 0l3-4l3-1l-2 5l6 0l8-12l7-5l-3 6l-10 11l9 0l18-18l1-1l0 1l-2 5l41-25l5-2l1 1l-14 14l-10 12l-12 13l8 0l9-18l10-11l15-9l19-6l-13 6l-15 12l-8 10l-7 16l8 0l3-8l4-7l9-9l7-6l13-7l13-2l19 3l10 4l4 4l8 8l5 10l2 10l4 0l-2-11l-3-6l-8-12l-11-8l-6-3l-17-4l19 2l6 3l8 5l6 6l6 9l3 8l2 11l3 0l0-6l1-4l15-13l6-10l4-16l1-21l-2-17l-4-22l-13-49l-17-78l-6-19l-8-21l-9-17l-12-14l-12-12l-15-9l-17-7l-23-6ZM171 65l13 1l14 5l12 8l11 11l12 17l9 20l7 23l0 3l-4 2l0 2l11 7l3 3l-15-8l-1-5l4-3l0-3l-1-2l-3-1l-10 2l-3 2l0 4l4 2l0 5l-2 4l-6 7l2-4l4-6l1-2l-5-5l-4-16l-5-16l-11-19l-10-11l-9-8l-13-8l-12-3l-13-1l-17 2l21-7ZM281 94l12 15l8 14l9 22l5 23l-6-23l-7-18l-7-13l-7-10l2 5l0 9l1 3l-4-4l9 21l-10-18l1 6l-3-4l0 3l8 23l-8-18l-7-7l12 28l-14-28l-4 4l-14-5l16 37l23 73l6 26l3 27l-9-48l-27-84l-7-17l-5-8l1 6l-7-8l-5-2l-3 1l-1-4l9 0l-2-12l6 10l12 2l4-4l-6-10l6 7l1-3l6 0l-8-12l12 13l-6-11l9 11l0-10ZM197 100l8 9l6 11l2-1l3 0l3 8l-6-2l0 2l-11-17l-2 5l3 8l-4-4l3 10l-5-7l0 2l-2-1l-1 0l0 5l-3-4l-8 0l-3-6l5-6l-4-7l3 4l5-1l-2-7l6 6l6-3ZM168 105l10 12l7 14l2 7l-5-4l2 12l-5-13l-1 10l-6-10l2 12l-4-9l-4 2l0 4l-2-3l-10-4l-1-6l8-4l0-4l2 6l5-4l-2-9l2 6l2 0l2 4l-1-8ZM115 108l-10 21l-5 17l-1-8l-1 1l1-3l-6 2l-2 4l-5 0l5-11l8-13l-7 16l0 1l4-2l4-4ZM86 108l-15 21l-13 28l6-18l-3 2l1-4l-1 1l4-10ZM131 114l1 27l-3-6l0 5l-2-5l-8 2l-1 4l-1-4l-9 1l-3-3l3-10l10 4l4-13l-3 14l7-2ZM87 115l-7 11l3 1l9-11l-9 15l6-1l2-2l-9 22l0-7l-3 3l-1-4l-1 0l0-5l-9 23l6-20l-2 1l-5 0l1-5l6-11l5 1ZM148 119l5 21l-3-5l-11 0l-2-2l0 4l-3-9l-1-6l14 2l1-1ZM135 144l7 19l10 20l-5 0l-4-9l-5-14ZM103 173l7 9l9 8l14-3l-4 6l-1 3l14-8l11-4l5 6l26-1l1-8l2 9l13 2l0 32l-12 76l0 13l1 9l-8 8l-10-15l-9-8l-5-1l-26 3l-7 0l-5-3l-5-6l-13-23l-4-10l-3-13l1-19l2 6l8 9l0 3l-3 7l5 9l-2-1l0 1l2 6l2 3l4 3l-1-2l6-3l-9 0l-1-3l2-3l7-1l8 1l1 1l-3 2l8-3l-1-2l-4 0l-11-6l-3-1l-4 1l-4-4l2-5l0-3l-7-8l-3-5l1-4l8-8l5-10l-1-7l-6-7l-4-2l-2 0l8 5l2 2l-8-2l-5 2l5-1l8 2l2 5l-8-6l-8 2l-4-7l5-3l8 0l-4-3l14-4l-6-10ZM150 192l-9 1l-3 2l-4 5l7-3l-5 5l2 0l-3 2l3-1l-2 4l2-1l0 3l2-5l6-4l-2 7l3 2l-2 1l3 4l4 2l4 0l4-3l1-3l-1-2l2-2l0-2l7 4l-1 2l-3 4l-9 4l-9 0l-10-2l-1 1l3 0l3 1l-1 2l3-1l0 2l2-2l1 2l1-1l1 1l2-1l1 1l1-1l2 1l2-1l3 1l0-1l1-1l3 1l-1-2l5 0l-2-2l4-1l-2-1l4-1l-2-1l4 0l-3-1l4-2l-2 0l7-3l-5-1l3-2l-5 1l-2 0l0-1l1 0l-1-1l-12-6l-11-3l7 0l11 5l-7-4ZM248 202l7 2l4 5l-4 0l-5-2l-5 0l-7 2l-3-2l6-4ZM98 211l1 4l2 2l-1 1l0 2l3 4l-2 2l-2 0l-3-4l0-9ZM96 228l1 1l2 0l-4 3ZM107 241l6 5l-2-4ZM283 257l1 18l-2 13ZM104 259l3 4l-3-2ZM111 262l6 2l-7 0l-1-1ZM226 267l2 27l-14 9ZM318 268l6 28l1 14l0 15l-3 17l2-32ZM112 271l-1 2l1 2l1-3ZM229 304l3 13l-4 5l-4 2l-8 0l-3-4l-1-5l3-3ZM108 329l-4 19l-3 8l-4 6l-5 4l-4 1l-8 0l-5-3l-2-3l14-1l5-2l4-4l7-10ZM192 330l4 8l4 5l10 8l9 5l-16 11l-25 11l-3-8l-13-20l7-1l6-2Z",
   },
+  // redesign/stickman.png from instinct.com, redrawn as a ring head and five even strokes
+  // on a 120 grid. The strokes overlap, so the path fills nonzero; the inner ring of the
+  // head winds the other way to stay a hole.
+  instinct: {
+    viewBox: [0, 0, 120, 120],
+    path: "M60 4A17 14 0 1 1 60 32A17 14 0 1 1 60 4ZM60 11A9.5 7 0 1 0 60 25A9.5 7 0 1 0 60 11ZM64.5 37L64.5 74A4.5 4.5 0 0 1 55.5 74L55.5 37A4.5 4.5 0 0 1 64.5 37ZM64.1 44.9L47.1 81.9A4.5 4.5 0 0 1 38.9 78.1L55.9 41.1A4.5 4.5 0 0 1 64.1 44.9ZM64.1 41.1L81.1 78.1A4.5 4.5 0 0 1 72.9 81.9L55.9 44.9A4.5 4.5 0 0 1 64.1 41.1ZM64.3 75.3L52.3 114.3A4.5 4.5 0 0 1 43.7 111.7L55.7 72.7A4.5 4.5 0 0 1 64.3 75.3ZM64.3 72.7L76.3 111.7A4.5 4.5 0 0 1 67.7 114.3L55.7 75.3A4.5 4.5 0 0 1 64.3 72.7Z",
+    fillRule: "nonzero",
+  },
   // Manus-Glyph-Black.svg from manus.im/brand: the three rays and the hand, its four
   // paths joined into one.
   manus: {
@@ -102,5 +116,19 @@ export const RIVAL_MARK_SHAPES: Record<RivalMarkName, RivalMarkShape> = {
   openclaw: {
     viewBox: [0, 0, 120, 120],
     path: "M60 10C65.7 10 70.8 10.9 75.4 12.5Q85.2 3.4 90.8 6.7Q92.1 7.5 91.3 8.8Q90.5 10.1 89.2 9.3Q85.8 7.2 78.5 13.7C92.1 19.6 100.4 31.8 103.6 44C115.8 41.7 119.6 50.8 115 60C112.3 65.5 108 66.5 103.9 64.6C100.2 81 87.6 95.8 75 100L75 110L65 110L65 100C60 102 55 100 55 100L55 110L45 110L45 100C32.4 95.8 19.8 81 16.1 64.6C12 66.5 7.7 65.5 5 60C0.4 50.8 4.2 41.7 16.4 44C19.6 31.8 27.9 19.6 41.5 13.7Q34.2 7.2 30.8 9.3Q29.5 10.1 28.7 8.8Q27.9 7.5 29.2 6.7Q34.8 3.4 44.6 12.5C49.2 10.9 54.3 10 60 10ZM51 35C51 31.7 48.3 29 45 29C41.7 29 39 31.7 39 35C39 38.3 41.7 41 45 41C48.3 41 51 38.3 51 35ZM81 35C81 31.7 78.3 29 75 29C71.7 29 69 31.7 69 35C69 38.3 71.7 41 75 41C78.3 41 81 38.3 81 35ZM78.5 34C78.5 35.4 77.4 36.5 76 36.5C74.6 36.5 73.5 35.4 73.5 34C73.5 32.6 74.6 31.5 76 31.5C77.4 31.5 78.5 32.6 78.5 34ZM48.5 34C48.5 35.4 47.4 36.5 46 36.5C44.6 36.5 43.5 35.4 43.5 34C43.5 32.6 44.6 31.5 46 31.5C47.4 31.5 48.5 32.6 48.5 34Z",
+  },
+  // ui/public/favicon.svg of paperclipai/paperclip: one stroke, 2 wide with round caps, on
+  // a 24 grid. Each line and each bend of the stroke is outlined as its own shape, all
+  // wound the same way, so the path fills nonzero to their union.
+  paperclip: {
+    viewBox: [0, 0, 24, 24],
+    path: "M15.286 5.3L6.872 13.886A1 1 0 0 0 6.886 15.3A1 1 0 0 0 8.3 15.286L16.714 6.7A1 1 0 0 0 16.7 5.286A1 1 0 0 0 15.286 5.3ZM6.879 13.879A3 3 0 0 0 6 16.001A3 3 0 0 0 6.879 18.122A3 3 0 0 0 9.001 19.001A3 3 0 0 0 11.122 18.122L9.708 16.708A1 1 0 0 1 9.001 17.001A1 1 0 0 1 8.293 16.708A1 1 0 0 1 8 16A1 1 0 0 1 8.293 15.293ZM11.129 18.115L19.543 9.529A1 1 0 0 0 19.529 8.115A1 1 0 0 0 18.115 8.129L9.701 16.715A1 1 0 0 0 9.715 18.129A1 1 0 0 0 11.129 18.115ZM19.536 9.536A5 5 0 0 0 21.001 6A5 5 0 0 0 19.536 2.465A5 5 0 0 0 16 1A5 5 0 0 0 12.465 2.465L13.879 3.879A3 3 0 0 1 16.001 3A3 3 0 0 1 18.122 3.879A3 3 0 0 1 19.001 6.001A3 3 0 0 1 18.122 8.122ZM12.458 2.472L4.079 11.023A1 1 0 0 0 4.093 12.437A1 1 0 0 0 5.507 12.423L13.886 3.872A1 1 0 0 0 13.872 2.458A1 1 0 0 0 12.458 2.472ZM4.092 11.01A7 7 0 0 0 2.001 15.972A7 7 0 0 0 4.051 20.95A7 7 0 0 0 9.029 23A7 7 0 0 0 13.991 20.909L12.565 19.507A5 5 0 0 1 9.021 21A5 5 0 0 1 5.465 19.536A5 5 0 0 1 4.001 15.98A5 5 0 0 1 5.494 12.436ZM13.992 20.908L22.371 12.357A1 1 0 0 0 22.357 10.943A1 1 0 0 0 20.943 10.957L12.564 19.508A1 1 0 0 0 12.578 20.922A1 1 0 0 0 13.992 20.908Z",
+    fillRule: "nonzero",
+  },
+  // viktor-avatar-color.svg from viktor.com/assets/brand/logos: the white V, without the
+  // gradient tile behind it, on a square around the letter.
+  viktor: {
+    viewBox: [27, 26, 106, 106],
+    path: "M36.875 28.4375H68.75C69.6876 28.4375 70.3124 29.0625 70.3124 30.0001V96.5626H75.7309C85.1059 96.5626 89.6876 91.5626 89.6876 81.5625V30.0001C89.6876 29.0625 90.3124 28.4375 91.25 28.4375H123.125C124.062 28.4375 124.688 29.0625 124.688 30.0001V90.625C124.688 112.812 102.5 130 73.125 130H36.875C35.9375 130 35.3125 129.375 35.3125 128.438V30.0001C35.3125 29.0625 35.9375 28.4375 36.875 28.4375Z",
   },
 };

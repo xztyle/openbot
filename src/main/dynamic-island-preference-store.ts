@@ -2,6 +2,7 @@ import {
   DEFAULT_DYNAMIC_ISLAND_PREFERENCE,
   DYNAMIC_ISLAND_SIZE_LIMITS,
   type DynamicIslandPreference,
+  isDynamicIslandServerVisibility,
   isDynamicIslandSizePercent,
 } from "@openbot/contracts/ipc";
 import { isBoolean, isDynamicRecord } from "@openbot/contracts/runtime-values";
@@ -44,6 +45,11 @@ export const readDynamicIslandPreference = Effect.fn("readDynamicIslandPreferenc
       heightPercent: isDynamicIslandSizePercent(parsed.heightPercent, DYNAMIC_ISLAND_SIZE_LIMITS.heightPercent)
         ? parsed.heightPercent
         : DEFAULT_DYNAMIC_ISLAND_PREFERENCE.heightPercent,
+      // The server choices are optional for the same reason. A bad value resets only the choices,
+      // which shows every server again, as the island did before the choices existed.
+      ...(isDynamicIslandServerVisibility(parsed.serverVisibility) && isBoolean(parsed.newServersVisible)
+        ? { serverVisibility: { ...parsed.serverVisibility }, newServersVisible: parsed.newServersVisible }
+        : { serverVisibility: {}, newServersVisible: DEFAULT_DYNAMIC_ISLAND_PREFERENCE.newServersVisible }),
     };
   }).pipe(
     Effect.catch((failure) => {

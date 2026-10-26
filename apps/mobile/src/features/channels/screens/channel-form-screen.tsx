@@ -1,16 +1,21 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { type AvatarHue, type ChannelDraft, type ChannelSummary, isChannelDraft } from "@openbot/contracts/ipc";
 import * as Crypto from "expo-crypto";
-import { router, Stack, useLocalSearchParams, useNavigation } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Typography } from "heroui-native";
-import { X } from "lucide-react-native";
+import Check from "lucide-react-native/icons/check";
+import X from "lucide-react-native/icons/x";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable } from "react-native";
+import { useCSSVariable } from "uniwind";
 import { BloubAvatarThumbnail } from "@/features/agents/components/bloub-avatar";
 import { useChannels } from "@/features/channels/components/use-channels";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
-import { useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import {
+  useMobileWorkspaceReader,
+  useMobileWorkspaceSelector,
+} from "@/features/workspace/context/mobile-workspace-context";
 import { AndroidHeaderButton } from "@/shared/components/android-header-button";
 import { SheetFormField } from "@/shared/components/sheet-form-field";
 import { SheetSaveAction } from "@/shared/components/sheet-save-action";
@@ -43,6 +48,7 @@ const MemberChoice = memo(function MemberChoice({
   disabled: boolean;
   onToggle: (id: string) => void;
 }) {
+  const accent = String(useCSSVariable("--openbot-accent"));
   return (
     <Pressable
       accessibilityRole="checkbox"
@@ -57,7 +63,7 @@ const MemberChoice = memo(function MemberChoice({
     >
       <BloubAvatarThumbnail agentId={id} serverId={serverId} seed={avatarSeed} hue={avatarHue} size={32} />
       <Typography.Paragraph className="flex-1">{name}</Typography.Paragraph>
-      <Typography>{selected ? "✓" : ""}</Typography>
+      {selected ? <Check size={18} color={accent} strokeWidth={2} /> : null}
     </Pressable>
   );
 });
@@ -65,17 +71,17 @@ const MemberChoice = memo(function MemberChoice({
 export function ChannelFormScreen({ create = false }: { create?: boolean }) {
   const { t } = useText();
   const params = useLocalSearchParams<{ serverId?: string; channelId?: string }>();
-  const workspace = useMobileWorkspace();
-  const [serverId] = useState(params.serverId ?? workspace.activeServer.id);
+  const workspace = useMobileWorkspaceReader();
+  const [serverId] = useState(params.serverId ?? workspace().activeServer.id);
   const [channelId] = useState(() => (create ? `channel-${Crypto.randomUUID()}` : (params.channelId ?? "")));
   const state = useChannels(serverId);
   const current = state.channels.find((channel) => channel.id === channelId);
   const last = useRef(current);
   if (current) last.current = current;
-  const available =
-    state.supported &&
-    workspace.servers.some((server) => server.id === serverId && server.state === "online") &&
-    (create || Boolean(current));
+  const online = useMobileWorkspaceSelector((current) =>
+    current.servers.some((server) => server.id === serverId && server.state === "online"),
+  );
+  const available = state.supported && online && (create || Boolean(current));
   if (!create && !last.current)
     return (
       <SheetScrollView>
@@ -113,9 +119,11 @@ function ChannelForm({
   store: MobileChannelStore;
 }) {
   const { t, errorMessage } = useText();
-  const { agents, servers } = useMobileWorkspace();
-  const canManage = servers.find((server) => server.id === serverId)?.role !== "member";
-  const navigation = useNavigation();
+  const agents = useMobileWorkspaceSelector((current) => current.agents);
+  const canManage = useMobileWorkspaceSelector(
+    (current) => current.servers.find((server) => server.id === serverId)?.role !== "member",
+  );
+  const accent = String(useCSSVariable("--openbot-accent"));
   const [edits, setEdits] = useState<Partial<ChannelDraft>>({});
   const [saving, setSaving] = useState(false);
   const [finished, setFinished] = useState(false);
@@ -141,7 +149,9 @@ function ChannelForm({
   const availableIds = useMemo(() => new Set(choices.map((agent) => agent.id)), [choices]);
   const selectedIds = useMemo(() => new Set(draft.members.map((member) => member.agentId)), [draft.members]);
   const disabled = saving || !available || finished || Boolean(channel?.archived);
-  usePreventRemove(!finished && (dirty || saving), ({ data }) => {
+  // Discard turns prevention off before it repeats the action, so the hook does not warn.
+  const [discarding, setDiscarding] = useState(false);
+  usePreventRemove(!discarding && !finished && (dirty || saving), ({ repeat }) => {
     if (lock.current) return;
     void haptics.notification("warning");
     const text = currentText();
@@ -150,7 +160,10 @@ function ChannelForm({
       {
         text: text.t("mobile.channel.discard.discard"),
         style: "destructive",
-        onPress: () => navigation.dispatch(data.action),
+        onPress: () => {
+          setDiscarding(true);
+          repeat();
+        },
       },
     ]);
   });
@@ -316,7 +329,8 @@ function ChannelForm({
                 key={agent.id}
                 disabled={disabled}
                 disclosure={false}
-                trailing={<Typography>{draft.leadAgentId === agent.id ? "✓" : ""}</Typography>}
+                checked={draft.leadAgentId === agent.id}
+                trailing={draft.leadAgentId === agent.id ? <Check size={18} color={accent} strokeWidth={2} /> : null}
                 onPress={() => setEdits((current) => ({ ...current, leadAgentId: agent.id }))}
               >
                 <Typography.Paragraph>{agent.name}</Typography.Paragraph>

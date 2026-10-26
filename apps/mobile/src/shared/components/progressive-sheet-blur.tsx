@@ -8,8 +8,8 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 // before the physical view edge, so clipping cannot leave a visible seam.
 const OUTER_BLUR_LAYER_END = 0.94;
 const BLUR_LAYER_ENDS = [OUTER_BLUR_LAYER_END, 0.8, 0.66, 0.52, 0.38, 0.24];
-// The dark system material is lighter than the dark sheet, so a masked sheet
-// color pulls the blurred edge back to the sheet's tone.
+// The dark system material is lighter than the dark surface, so a masked
+// surface color pulls the blurred edge back to the surface's tone.
 const DARK_SHEET_TINT_OPACITY = 0.7;
 const FADE_STOPS = Array.from({ length: 17 }, (_, index) => {
   const progress = index / 16;
@@ -19,9 +19,12 @@ const FADE_STOPS = Array.from({ length: 17 }, (_, index) => {
 export const ProgressiveSheetBlur = memo(function ProgressiveSheetBlur({
   style,
   edge = "top",
+  surface = "sheet",
 }: {
   style: StyleProp<ViewStyle>;
   edge?: "top" | "bottom";
+  /** The color of the dark tint: a sheet, or the canvas of a full screen. */
+  surface?: "canvas" | "sheet";
 }) {
   const id = useId().replaceAll(":", "");
   const colorScheme = useColorScheme();
@@ -64,7 +67,10 @@ export const ProgressiveSheetBlur = memo(function ProgressiveSheetBlur({
       })}
       {colorScheme === "dark" ? (
         <MaskedView style={StyleSheet.absoluteFill} maskElement={fadeMask(`sheet-tint-${id}`, OUTER_BLUR_LAYER_END)}>
-          <View className="flex-1 bg-sheet" style={{ opacity: DARK_SHEET_TINT_OPACITY }} />
+          <View
+            className={surface === "sheet" ? "flex-1 bg-sheet" : "flex-1 bg-background"}
+            style={{ opacity: DARK_SHEET_TINT_OPACITY }}
+          />
         </MaskedView>
       ) : null}
     </View>

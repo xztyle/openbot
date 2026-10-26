@@ -19,9 +19,6 @@ export const AgentTemplateInstall = lazy(() =>
 export const AgentUsagePanel = lazy(() =>
   import("./features/usage/AgentUsagePanel").then((module) => ({ default: module.AgentUsagePanel })),
 );
-export const AccountDock = lazy(() =>
-  import("@openbot/ui/features/account/AccountDock").then((module) => ({ default: module.AccountDock })),
-);
 export const AccountLogin = lazy(() =>
   import("@openbot/ui/features/account/AccountLogin").then((module) => ({ default: module.AccountLogin })),
 );
@@ -45,6 +42,9 @@ export const JoinServerDialog = lazy(() =>
 export const FirstRunFlow = lazy(() =>
   import("./features/onboarding/FirstRunFlow").then((module) => ({ default: module.FirstRunFlow })),
 );
+export const LanguageStep = lazy(() =>
+  import("./features/onboarding/LanguageStep").then((module) => ({ default: module.LanguageStep })),
+);
 export const RemoteDesktopWorkspace = lazy(() =>
   import("@openbot/ui/features/remote-desktop/RemoteDesktopWorkspace").then((module) => ({
     default: module.RemoteDesktopWorkspace,
@@ -58,4 +58,19 @@ export const SettingsModal = lazy(() =>
 );
 export const MarketplaceModal = lazy(() =>
   import("./features/settings/MarketplaceModal").then((module) => ({ default: module.MarketplaceModal })),
+);
+export const WorkflowsPage = lazy(() =>
+  import("./features/workflows/WorkflowsPage").then((module) => ({ default: module.WorkflowsPage })),
+);
+export const ScheduleView = lazy(() =>
+  import("./features/schedule/SchedulePanel").then((module) => ({ default: module.ScheduleView })),
+);
+export const TasksView = lazy(() =>
+  import("./features/tasks/TasksView").then((module) => ({ default: module.TasksView })),
+);
+export const ServerOnboarding = lazy(() =>
+  import("./features/onboarding/ServerOnboarding").then((module) => ({ default: module.ServerOnboarding })),
+);
+export const RoutineFlowsCanvas = lazy(() =>
+  import("./features/routine-flows/RoutineFlowsCanvas").then((module) => ({ default: module.RoutineFlowsCanvas })),
 );

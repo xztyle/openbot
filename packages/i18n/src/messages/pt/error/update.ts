@@ -17,13 +17,17 @@ export const messages = {
     "O serviço de atualizações não respondeu. O OpenBot tentará novamente automaticamente em alguns minutos.",
   "error.update.checkNoRelease":
     "Nenhuma atualização publicada foi encontrada para esta plataforma. O OpenBot tentará novamente automaticamente em alguns minutos.",
+  "error.update.managedByNix": "O Nix instala as atualizações desta cópia do OpenBot. Atualize-a com o Nix.",
   "error.update.managedByHost":
     "As atualizações neste Mac são instaladas pelo computador anfitrião. A atualização permanece pronta para instalação até a manutenção do computador anfitrião ser executada.",
   "error.update.siblingSession":
     "Outra sessão do OpenBot ainda está em execução neste aplicativo. Encerre o OpenBot em todas as outras contas de usuário do macOS e instale a atualização novamente.",
+  "error.update.siblingSessionSameAccount":
+    "Outro processo do OpenBot ainda está rodando nesta conta de usuário. Feche-o e instale a atualização de novo.",
   "error.update.siblingCheckFailed":
     "Não foi possível verificar outras sessões do OpenBot. Tente novamente antes de instalar.",
   "error.update.remoteDisabled":
     "As atualizações feitas por administradores do servidor estão desativadas neste computador.",
   "error.update.restartStarted": "O OpenBot já está reiniciando para instalar a atualização.",
+  "error.update.alreadyRestarting": "O OpenBot já está reiniciando.",
 } as const satisfies PartialTranslation<typeof source>;

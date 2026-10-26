@@ -79,6 +79,18 @@ export function calendarWeekStart(day: CalendarDay, weekStartsOn: number): Calen
   return addCalendarDays(day, -((weekday - weekStartsOn + 7) % 7));
 }
 
+/** The first day of the month that holds `day`. */
+export function calendarMonthStart(day: CalendarDay): CalendarDay {
+  return `${day.slice(0, 8)}01`;
+}
+
+/** The first day of the month `amount` months after the month that holds `day`. */
+export function addCalendarMonths(day: CalendarDay, amount: number): CalendarDay {
+  const date = calendarDayDate(calendarMonthStart(day));
+  date.setUTCMonth(date.getUTCMonth() + amount);
+  return dayFromUtc(date);
+}
+
 export function calendarDays(first: CalendarDay, count: number): CalendarDay[] {
   return Array.from({ length: count }, (_, index) => addCalendarDays(first, index));
 }

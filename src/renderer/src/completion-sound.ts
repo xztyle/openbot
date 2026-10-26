@@ -1,11 +1,11 @@
-import type { AgentEvent, AgentSummary } from "@openbot/contracts/ipc";
+import type { AgentEvent, ClientAgentSummary } from "@openbot/contracts/ipc";
 
 const COMPLETION_SOUND_STORAGE_KEY = "openbot:completion-sound-enabled";
 const COMPLETION_SOUND_DURATION_SECONDS = 0.22;
 
 let completionAudioContext: AudioContext | undefined;
 
-type NotificationAgent = Pick<AgentSummary, "id" | "notifications">;
+type NotificationAgent = Pick<ClientAgentSummary, "id" | "notifications">;
 type PreferenceStorage = Pick<Storage, "getItem">;
 
 /** The choice for this page after the browser did not save it. It wins over an older saved value. */
@@ -34,7 +34,7 @@ export function setCompletionSoundEnabled(enabled: boolean, storage?: Pick<Stora
   }
 }
 
-export function shouldPlayCompletionSound(
+function shouldPlayCompletionSound(
   event: AgentEvent,
   agents: NotificationAgent[],
   storage?: PreferenceStorage,
@@ -67,11 +67,21 @@ export function unlockCompletionSound(): void {
   }
 }
 
-async function playCompletionSound(): Promise<void> {
+/** The one audio context of the app sounds, so that each sound does not keep its own output open. */
+export async function appSoundContext(): Promise<AudioContext> {
   try {
     completionAudioContext ??= new AudioContext();
-    const context = completionAudioContext;
-    if (context.state === "suspended") await context.resume();
+    if (completionAudioContext.state === "suspended") await completionAudioContext.resume();
+    return completionAudioContext;
+  } catch (error) {
+    completionAudioContext = undefined;
+    throw error;
+  }
+}
+
+async function playCompletionSound(): Promise<void> {
+  try {
+    const context = await appSoundContext();
 
     const startedAt = context.currentTime;
     const oscillator = context.createOscillator();

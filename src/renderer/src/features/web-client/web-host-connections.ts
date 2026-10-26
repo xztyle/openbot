@@ -1,12 +1,20 @@
-import { type AgentEvent, type AgentSummary, isAgentSummary } from "@openbot/contracts/ipc";
+import {
+  type AgentEvent,
+  type ClientAgentSummary,
+  isClientAgentSummary,
+  type TeamRealtimeEvent,
+} from "@openbot/contracts/ipc";
 import { guardedListDecoder } from "@openbot/contracts/ipc-decoding";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
-import { decodeTeamProtocolSupportV1, teamProtocolUpdateDirection } from "@openbot/contracts/team-protocol/v1";
+import { teamProtocolUpdateDirection } from "@openbot/contracts/team-protocol/v1";
 import { TEAM_PROTOCOL_V3 } from "@openbot/contracts/team-protocol/v3";
+import { decodeTeamProtocolSupportV7Base } from "@openbot/contracts/team-protocol/v7-base";
+import { agentEventCanNotify } from "@openbot/team-client/agent-notifications";
 import type { RemoteTeamHost } from "@openbot/team-client/remote-directory";
 import type { createRemoteTeamPeer, RemoteTeamPeerActions } from "@openbot/team-client/remote-peer";
 import { createRemoteConnectionRecovery } from "@openbot/team-client/remote-recovery";
 import { currentText } from "@openbot/ui/text";
+import { referenceFrom } from "@openbot/user-errors";
 import {
   type acquireWebHostLock,
   decodeWebHostTabMessage,
@@ -18,6 +26,16 @@ import {
 const RELEASED_HOST_REST_MS = 30_000;
 
 type Peer = ReturnType<typeof createRemoteTeamPeer>;
+
+/** A host request that failed. `reference` names the status or the transport failure. */
+export class WebHostRequestError extends Error {
+  constructor(
+    message: string,
+    readonly reference: string | null,
+  ) {
+    super(message);
+  }
+}
 
 interface HostEntry {
   host: RemoteTeamHost;
@@ -31,13 +49,32 @@ interface HostEntry {
   endingSessions: Set<Promise<void>>;
   incompatible: boolean;
   /** The host's agents, for the name and the notification switch of an event's agent. */
-  agents: AgentSummary[];
+  agents: ClientAgentSummary[];
   /** Counts `agents-changed` events, so a list read that started before one is dropped. */
   agentsRevision: number;
 }
 
-/** The events of a host that this tab has not opened that a notification can show. */
-export type WebHostNotice = Extract<AgentEvent, { type: "prompt" | "approval" | "turn-completed" }>;
+/** The events of a host that this tab has not opened that a notification can show or withdraw. */
+export type WebHostNotice = Extract<
+  AgentEvent,
+  {
+    type:
+      | "prompt"
+      | "approval"
+      | "browser-takeover-requested"
+      | "turn-completed"
+      | "error"
+      | "agent-input-resolved"
+      | "browser-takeover-resolved";
+  }
+>;
+
+/** Whether a host event can show a notification, or resolves the request of one. */
+export function isWebHostNotice(event: AgentEvent | TeamRealtimeEvent): event is WebHostNotice {
+  return (
+    agentEventCanNotify(event) || event.type === "agent-input-resolved" || event.type === "browser-takeover-resolved"
+  );
+}
 
 export interface WebHostConnections {
   /** The hosts of the account. Every host that this tab has not opened gets a status connection. */
@@ -71,7 +108,7 @@ export function createWebHostConnections(options: {
   /** The host revoked the session. The membership may have ended. */
   onSessionRevoked(): void;
   /** An event of a host this tab has not opened, with the host's agents, for a notification. */
-  onNotice?(hostId: string, event: WebHostNotice, agents: AgentSummary[]): void;
+  onNotice?(hostId: string, event: WebHostNotice, agents: ClientAgentSummary[]): void;
 }): WebHostConnections {
   const { channel } = options;
   const entries = new Map<string, HostEntry>();
@@ -128,8 +165,9 @@ export function createWebHostConnections(options: {
 
   function connect(entry: HostEntry): void {
     const { host } = entry;
-    const failed = (message: string | null | undefined) =>
-      new Error(message ?? currentText().t("webClient.error.connectionUnavailable"));
+    // The peer's code goes with its text, so the recovery keeps both.
+    const failed = (message: string | null | undefined, reference: string | undefined) =>
+      new WebHostRequestError(message ?? currentText().t("webClient.error.connectionUnavailable"), reference ?? null);
     const peer = options.createPeer({
       current: {
         getBootstrap: options.actions.getBootstrap,
@@ -149,8 +187,8 @@ export function createWebHostConnections(options: {
             void readAgents(entry);
           if (update.state !== "offline") return;
           if (update.code === "session_revoked") options.onSessionRevoked();
-          if (update.code === "protocol_error") entry.recovery?.suspend(failed(update.message));
-          else entry.recovery?.offline(failed(update.message));
+          if (update.code === "protocol_error") entry.recovery?.suspend(failed(update.message, update.reference));
+          else entry.recovery?.offline(failed(update.message, update.reference));
         },
         // A status connection shows no workspace. It reads only the events that a notification needs.
         async onTeamEvent(_hostId, event) {
@@ -158,8 +196,7 @@ export function createWebHostConnections(options: {
           if (event.type === "agents-changed") {
             entry.agents = event.agents;
             entry.agentsRevision += 1;
-          } else if (event.type === "prompt" || event.type === "approval" || event.type === "turn-completed")
-            options.onNotice?.(host.hostId, event, entry.agents);
+          } else if (isWebHostNotice(event)) options.onNotice?.(host.hostId, event, entry.agents);
         },
       },
     });
@@ -181,7 +218,7 @@ export function createWebHostConnections(options: {
         });
         entry.connecting = connecting;
         const connected = await connecting;
-        if (!connected.ok) throw failed(connected.error);
+        if (!connected.ok) throw failed(connected.error, connected.reference);
         const response = await peer.execute({
           id: crypto.randomUUID(),
           type: "request",
@@ -189,8 +226,12 @@ export function createWebHostConnections(options: {
           path: TEAM_API_ROUTES.compatibility,
           body: {},
         });
-        if (!response.ok || (response.status ?? 500) >= 400) throw failed(response.error);
-        const support = decodeTeamProtocolSupportV1(response.body);
+        if (!response.ok || (response.status ?? 500) >= 400)
+          throw failed(
+            response.error,
+            response.status === undefined ? response.reference : (referenceFrom("http", response.status) ?? undefined),
+          );
+        const support = decodeTeamProtocolSupportV7Base(response.body);
         // The same rule as opening the host, so the rail and the open agree.
         if (teamProtocolUpdateDirection({ minimum: TEAM_PROTOCOL_V3, maximum: TEAM_PROTOCOL_V3 }, support.protocol)) {
           entry.incompatible = true;
@@ -233,7 +274,7 @@ export function createWebHostConnections(options: {
       if (entries.get(entry.host.hostId) !== entry || !response?.ok || (response.status ?? 500) >= 400) return;
       // An `agents-changed` that arrived during the read is newer than the read.
       if (entry.agentsRevision !== revision) return;
-      entry.agents = guardedListDecoder(isAgentSummary, "teammates")(response.body);
+      entry.agents = guardedListDecoder(isClientAgentSummary, "teammates")(response.body);
     } catch {
       // As above: the status does not depend on the list.
     }

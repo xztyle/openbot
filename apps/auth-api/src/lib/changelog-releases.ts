@@ -9,7 +9,7 @@ import { type ChangelogPlatform, type ChangelogRelease, parseChangelog } from ".
 
 export const CHANGELOG_RELEASES: Readonly<Record<ChangelogPlatform, readonly ChangelogRelease[]>> = {
   desktop: parseChangelog(changelogSource),
-  mobile: parseChangelog(mobileChangelogSource, "mobile-"),
+  mobile: parseChangelog(mobileChangelogSource, { anchorPrefix: "mobile-", stores: true }),
 };
 
 /** The date of the newest dated release, for the sitemap. */

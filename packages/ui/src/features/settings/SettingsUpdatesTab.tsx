@@ -37,6 +37,7 @@ const UPDATE_TRACK_LABELS = { Stable: "settings.updates.track.stable" } as const
 
 interface SettingsUpdatesTabProps {
   store: SettingsUpdatesStore;
+  onOpenWhatsNew?: (() => void) | undefined;
   value: GeneralSettingsValue;
   onUpdateSetting: <Key extends keyof GeneralSettingsValue>(key: Key, value: GeneralSettingsValue[Key]) => void;
   /** The dialog element the Select popover portals into, captured when this tab was created. */
@@ -118,8 +119,16 @@ export function SettingsUpdatesTab(props: SettingsUpdatesTabProps) {
           </Alert>
         )}
       </Show>
+      <Show when={props.onOpenWhatsNew}>
+        <Button type="button" variant="outline" size="sm" onClick={() => props.onOpenWhatsNew?.()}>
+          {t("update.whatsNew.title")}
+        </Button>
+      </Show>
       <ItemGroup class="settings-modal-card">
-        <Item class="settings-modal-row settings-modal-update-track-row">
+        <Item
+          data-settings-row="settings.updates.track.title"
+          class="settings-modal-row settings-modal-update-track-row"
+        >
           <ItemContent>
             <ItemTitle>{t("settings.updates.track.title")}</ItemTitle>
             <ItemDescription>{t("settings.updates.track.description")}</ItemDescription>
@@ -170,7 +179,7 @@ export function SettingsUpdatesTab(props: SettingsUpdatesTabProps) {
           </Show>
         </Item>
         <Show when={props.store.idleRestartOffered()}>
-          <Item class="settings-modal-row">
+          <Item data-settings-row="settings.updates.idleRestart.title" class="settings-modal-row">
             <ItemContent>
               <ItemTitle>{t("settings.updates.idleRestart.title")}</ItemTitle>
               <ItemDescription>
@@ -200,18 +209,21 @@ export function SettingsUpdatesTab(props: SettingsUpdatesTabProps) {
           fallback={
             <>
               <SwitchField
+                data-settings-row="settings.updates.autoDownload.title"
                 checked={props.value.autoDownloadUpdates}
                 onChange={(checked) => props.onUpdateSetting("autoDownloadUpdates", checked)}
                 label={t("settings.updates.autoDownload.title")}
                 description={t("settings.updates.autoDownload.description")}
               />
               <SwitchField
+                data-settings-row="settings.updates.autoInstall.title"
                 checked={props.value.autoInstallUpdates}
                 onChange={(checked) => props.onUpdateSetting("autoInstallUpdates", checked)}
                 label={t("settings.updates.autoInstall.title")}
                 description={t("settings.updates.autoInstall.description")}
               />
               <SwitchField
+                data-settings-row="settings.updates.allowRemote.title"
                 checked={props.value.allowRemoteUpdates}
                 onChange={(checked) => props.onUpdateSetting("allowRemoteUpdates", checked)}
                 label={t("settings.updates.allowRemote.title")}
@@ -221,7 +233,7 @@ export function SettingsUpdatesTab(props: SettingsUpdatesTabProps) {
           }
         >
           {/* Host management is machine state an administrator owns. Report it; never offer it. */}
-          <Item class="settings-modal-row">
+          <Item data-settings-row="settings.updates.managed.title" class="settings-modal-row">
             <ItemContent>
               <ItemTitle>{t("settings.updates.managed.title")}</ItemTitle>
               <ItemDescription>{t("settings.updates.managed.description")}</ItemDescription>

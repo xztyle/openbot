@@ -2,6 +2,10 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/onboarding";
 
 export const messages = {
+  "onboarding.readFailed.title": "OpenBot n’a pas pu lire votre configuration.",
+  "onboarding.readFailed.description":
+    "Vos données locales n’ont pas changé. Réessayez. Si le problème persiste, configurez OpenBot à nouveau.",
+  "onboarding.readFailed.setUpAgain": "Reconfigurer",
   "onboarding.setup.saveFailed": "OpenBot n’a pas pu enregistrer votre configuration locale.",
   "onboarding.setup.verifyFailed": "OpenBot n’a pas pu vérifier cette invitation.",
   "onboarding.setup.connectFailed": "OpenBot n’a pas pu se connecter à cet hôte.",
@@ -39,6 +43,9 @@ export const messages = {
   "onboarding.provider.googlePlan": "Forfait Google AI Pro ou Ultra",
   "onboarding.provider.cursorPlan": "Forfait Cursor ou clé API",
   "onboarding.provider.clineAccount": "Modèles gratuits avec un compte Cline",
+  "onboarding.provider.inceptionKey": "Modèles Mercury avec une clé d’API Inception",
+  "onboarding.provider.deepseekKey": "Modèles DeepSeek avec une clé d’API DeepSeek",
+  "onboarding.provider.openrouterKey": "De nombreux modèles avec une clé d’API OpenRouter",
   "onboarding.provider.tryFree": "Essayez gratuitement",
   "onboarding.provider.noSignIn": "Aucune connexion requise",
   "onboarding.provider.more": "Plus de fournisseurs",
@@ -73,7 +80,7 @@ export const messages = {
   "onboarding.choice.freeDetail": "Modèles gratuits. Aucun abonnement requis.",
   "onboarding.choice.subscription": "J’ai un abonnement",
   "onboarding.choice.subscriptionDetail": "ChatGPT, Claude ou Grok",
-  "onboarding.choice.startFreeInstead": "Commencer gratuitement à la place",
+  "onboarding.choice.startFreeInstead": "Plutôt l’option gratuite",
   "onboarding.plan.title": "Connectez votre forfait",
   "onboarding.plan.description": "Connectez-vous une fois. Vos agents utilisent votre forfait.",
   "onboarding.computer.title": "OpenBot peut contrôler votre ordinateur",
@@ -84,8 +91,8 @@ export const messages = {
   "onboarding.action.next": "Suivant",
   "onboarding.server.title": "Configurer {server}",
   "onboarding.server.description":
-    "OpenBot n’inclut pas d’abonnement IA. Connectez votre propre fournisseur à ce serveur avant de créer un agent.",
-  "onboarding.server.label": "Choisissez le fournisseur IA de ce serveur",
+    "OpenBot n’inclut pas d’abonnement d’IA. Connectez votre propre fournisseur à ce serveur avant de créer un agent.",
+  "onboarding.server.label": "Choisissez le fournisseur d’IA de ce serveur",
   "onboarding.server.hint":
     "La connexion reste sur le serveur. Vous pourrez changer le fournisseur de chaque agent plus tard.",
   "onboarding.server.continue": "Continuer",

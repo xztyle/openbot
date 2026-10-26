@@ -6,9 +6,7 @@ import {
 import type {
   AccountUsage,
   AgentEvent,
-  AgentModelOption,
   AgentStatus,
-  AgentSummary,
   AttachmentSummary,
   AvatarImageInput,
   BrowserLiveViewEvent,
@@ -17,12 +15,15 @@ import type {
   BrowserPreview,
   BrowserTab,
   CancelQueuedMessageInput,
+  ClientAgentModelOption,
+  ClientAgentSummary,
   ConversationPage,
   ConversationReadState,
   ConversationSearchPage,
   CreateAgentInput,
   DuplicateAgentResult,
   EditQueuedMessageInput,
+  HiddenAgentsSnapshot,
   InvitePreview,
   QueueSnapshot,
   ReorderQueueInput,
@@ -30,6 +31,9 @@ import type {
   RespondToBrowserSecretInput,
   RespondToBrowserTakeoverInput,
   RespondToPromptInput,
+  Routine,
+  RoutineRun,
+  SetAgentHiddenInput,
   SetMessageReactionInput,
   SidebarLayoutAction,
   SidebarLayoutSnapshot,
@@ -37,16 +41,19 @@ import type {
   TeamInviteSummary,
   TeamMemberSummary,
   TeamRealtimeEvent,
+  TestRoutineInput,
   UpdateAgentInput,
   UpdateQueuedMessageInput,
+  UpdateRoutineInput,
   WorkspaceDirectory,
 } from "@openbot/contracts/ipc";
 import {
+  canAdministerServer,
   decodeWorkspaceDirectory,
   isAccountUsage,
-  isAgentModelOption,
   isAgentStatus,
-  isAgentSummary,
+  isClientAgentModelOption,
+  isClientAgentSummary,
   isConversationMessage,
   isConversationReadState,
   isConversationWithReadState,
@@ -55,9 +62,19 @@ import {
   isSidebarLayoutSnapshot,
   isTeamPresenceSnapshot,
 } from "@openbot/contracts/ipc";
-import { guardedListDecoder, requiredString } from "@openbot/contracts/ipc-decoding";
+import { guardedListDecoder, optionalHistoryExtent, requiredString } from "@openbot/contracts/ipc-decoding";
 import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import {
+  BROWSER_PAGE_STATE_CAPABILITY,
+  BROWSER_PAGE_STATE_ROUTES,
+  decodeBrowserPageStateSnapshot,
+} from "@openbot/contracts/team-protocol/browser-page-state-v1";
+import {
+  BROWSER_USER_CONTROL_CAPABILITY,
+  BROWSER_USER_CONTROL_ROUTES,
+  decodeBrowserUserControlSnapshot,
+} from "@openbot/contracts/team-protocol/browser-user-control-v1";
 import {
   decodeBrowserViewInputValue,
   TEAM_BROWSER_VIEW_CLIPBOARD_CAPABILITY,
@@ -72,19 +89,21 @@ import {
   type FileTicket,
   type FileTicketSource,
 } from "@openbot/contracts/team-protocol/file-tickets-v1";
-import {
-  decodeTeamProtocolSupportV1,
-  type TeamProtocolSupportV1,
-  teamProtocolUpdateDirection,
-} from "@openbot/contracts/team-protocol/v1";
+import { FOCUS_USE_ROUTES } from "@openbot/contracts/team-protocol/focus-use-v1";
+import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
+import { ROUTINE_FLOWS_CAPABILITY } from "@openbot/contracts/team-protocol/routine-flows-v1";
+import { type TeamProtocolSupportV1, teamProtocolUpdateDirection } from "@openbot/contracts/team-protocol/v1";
 import { TEAM_PROTOCOL_V2_MAX_FILE_BYTES, type TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { TEAM_PROTOCOL_V3 } from "@openbot/contracts/team-protocol/v3";
+import { decodeTeamProtocolSupportV7Base } from "@openbot/contracts/team-protocol/v7-base";
 import {
   WORKSPACE_DIRECTORY_CAPABILITY,
   WORKSPACE_DIRECTORY_ROUTES,
 } from "@openbot/contracts/team-protocol/workspace-directory-v1";
 import { runTeamEffect } from "@openbot/team-client";
+import { bytesToBase64 } from "@openbot/team-client/base64";
 import { createRemoteBrowserView, type RemoteBrowserView } from "@openbot/team-client/browser-view";
+import { verifyEd25519Base64Url } from "@openbot/team-client/ed25519";
 import {
   RemoteDirectoryError,
   RemoteTeamDirectoryClient,
@@ -99,6 +118,7 @@ import {
   type RemoteTeamConnectionUpdate,
 } from "@openbot/team-client/remote-peer";
 import { remoteWorkspaceReadTimeout } from "@openbot/team-client/remote-recovery";
+import { listHiddenAgents, setAgentHidden, setAgentProviderAccount } from "@openbot/team-client/team-admin-requests";
 import {
   cancelQueuedMessage,
   deleteAgent,
@@ -110,15 +130,24 @@ import {
   steerQueuedMessage,
   type TeamApiRequest,
   type TeamChannelsApi,
+  type TeamRoutineFlowsApi,
+  teamAgentRoutinesApi,
   teamChannelsApi,
+  teamRoutineFlowsApi,
   updateQueuedMessage,
   uploadAttachmentDraft,
 } from "@openbot/team-client/team-api-requests";
 import type { BrowserViewRuntime } from "@openbot/ui/features/browser/BrowserLiveView";
 import { currentText } from "@openbot/ui/text";
+import { referenceFrom } from "@openbot/user-errors";
 import { Effect } from "effect";
 import type { ServerAdminPort } from "../servers/servers-port";
-import { createWebHostConnections, type WebHostConnections, type WebHostNotice } from "./web-host-connections";
+import {
+  createWebHostConnections,
+  type WebHostConnections,
+  type WebHostNotice,
+  WebHostRequestError,
+} from "./web-host-connections";
 import {
   acquireOpenedWebHostLock,
   acquireWebHostLock,
@@ -154,7 +183,12 @@ export interface WebWorkspaceRuntime {
   openBrowserTab(input: BrowserOpenInput): Promise<BrowserTab>;
   navigateBrowserTab(input: BrowserNavigateInput): Promise<void>;
   reloadBrowserTab(tabId: string): Promise<void>;
+  /** Behind `browser-page-state`. */
+  stopBrowserTab(tabId: string): Promise<void>;
   closeBrowserTab(tabId: string): Promise<void>;
+  /** Behind `browser-user-control`: the owning agent waits on the tab until the release. */
+  takeBrowserControl(tabId: string): Promise<void>;
+  releaseBrowserControl(tabId: string): Promise<void>;
   respondToBrowserSecret?: (input: RespondToBrowserSecretInput) => Promise<void>;
   getSidebarLayout?: () => Promise<SidebarLayoutSnapshot>;
   mutateSidebarLayout?: (action: SidebarLayoutAction) => Promise<SidebarLayoutSnapshot>;
@@ -171,8 +205,10 @@ export interface WebWorkspaceRuntime {
   acceptInvite(url: string): Promise<RemoteTeamHost>;
   connect(host: RemoteTeamHost): Promise<string[]>;
   disconnect(): Promise<void>;
-  listAgents(): Promise<AgentSummary[]>;
+  listAgents(): Promise<ClientAgentSummary[]>;
   conversation(agentId: string, before?: string): Promise<ConversationPage>;
+  /** The page of an agent's conversation around one message, or the newest page from an older host. */
+  conversationAround?: (agentId: string, messageId: string) => Promise<ConversationPage>;
   /** Marks this member's messages from the agent read through `throughMessageId`, or all when it is null. */
   markRead(agentId: string, throughMessageId: string | null): Promise<ConversationReadState>;
   /**
@@ -187,6 +223,8 @@ export interface WebWorkspaceRuntime {
    * connection that waits to retry tries again now. Nothing is resent.
    */
   networkRestored?(): void;
+  /** Tells a hosted server that this tab has focus. Send it only to a host with `focus-use-v1`. */
+  focusUse(): Promise<void>;
   /** Resolves to the conversation message the host stored: the delivery id of the receipt. */
   send(
     agentId: string,
@@ -221,12 +259,22 @@ export interface WebWorkspaceRuntime {
   workspaceFile(agentId: string, path: string): Promise<WebFile>;
   /** A folder in one agent's workspace on the host. */
   workspaceDirectory(agentId: string, path: string): Promise<WorkspaceDirectory>;
+  /** The routine canvas routes. Each call refuses while the host does not serve `routine-flows-v1`. */
+  routineFlows?: TeamRoutineFlowsApi;
+  /** Changes an agent routine, such as its instruction. */
+  updateRoutine?: (input: UpdateRoutineInput) => Promise<Routine>;
+  /** Runs an agent routine now. */
+  testRoutine?: (input: TestRoutineInput) => Promise<RoutineRun>;
+  /** The agents that a user hid on the host. Any member can call it on a host with `agent-hidden-v1`. */
+  listHiddenAgents?: () => Promise<HiddenAgentsSnapshot>;
+  /** Hides or restores an agent, and returns the host's hidden list. Needs `agent-hidden-v1`. */
+  setAgentHidden?: (input: SetAgentHiddenInput) => Promise<HiddenAgentsSnapshot>;
   react(input: SetMessageReactionInput): Promise<void>;
   setAvatar(agentId: string, image: AvatarImageInput | null): Promise<void>;
-  models(): Promise<AgentModelOption[]>;
+  models(): Promise<ClientAgentModelOption[]>;
   status(): Promise<AgentStatus>;
   accountUsage?: () => Promise<AccountUsage>;
-  createAgent(input: CreateAgentInput): Promise<AgentSummary>;
+  createAgent(input: CreateAgentInput): Promise<ClientAgentSummary>;
   duplicateAgent(agentId: string): Promise<DuplicateAgentResult>;
   updateAgent(input: UpdateAgentInput): Promise<void>;
   deleteAgent(agentId: string): Promise<void>;
@@ -249,7 +297,7 @@ export interface WebRuntimeEvents {
   /** A host that this tab has not opened revoked its session. */
   hostSessionRevoked?(): void;
   /** An event of a host this tab has not opened that a notification can show. */
-  hostNotice?(hostId: string, event: WebHostNotice, agents: AgentSummary[]): void;
+  hostNotice?(hostId: string, event: WebHostNotice, agents: ClientAgentSummary[]): void;
 }
 
 /** The host speaks no Team API protocol that this web build speaks. The workspace shows it in full. */
@@ -267,10 +315,17 @@ export class WebHostIncompatibleError extends Error {
 }
 
 export class WebHostConnectionError extends Error {
-  constructor(readonly code: "identity_changed" | "authentication_required" | "access_ended") {
+  /** The code a user can copy, such as `http/401`. */
+  readonly reference: string | null;
+
+  constructor(
+    readonly code: "identity_changed" | "authentication_required" | "access_ended",
+    reference: string | null = null,
+  ) {
     super(
       currentText().t(code === "identity_changed" ? "webClient.error.identityChanged" : "webClient.error.accessEnded"),
     );
+    this.reference = reference;
   }
 }
 
@@ -306,6 +361,7 @@ export function createWebWorkspaceRuntime(
     fetch: accountFetch,
     // `bun run dev:api` serves this page and the account service from `http://localhost:<port>`.
     inviteLinks: { allowLocalDevelopmentApiUrl: import.meta.env.DEV },
+    verifyHostKeySignature: verifyEd25519Base64Url,
     hostKeys: {
       get: async (id) => localStorage.getItem(`openbot.web.host-key:${accountId}:${id}`),
       set: async (id, key) => localStorage.setItem(`openbot.web.host-key:${accountId}:${id}`, key),
@@ -317,8 +373,15 @@ export function createWebWorkspaceRuntime(
       try {
         return await runTeamEffect(directory.createBootstrap(id, key, sessionId));
       } catch (error) {
+        // The reference keeps 401 apart from 403 and names the account service code, such as `session_inactive`.
         if (error instanceof RemoteDirectoryError && (error.status === 401 || error.status === 403))
-          events.connection({ hostId: id, state: "offline", message: null, code: "session_revoked" });
+          events.connection({
+            hostId: id,
+            state: "offline",
+            message: null,
+            code: "session_revoked",
+            ...(error.reference ? { reference: error.reference } : {}),
+          });
         throw error;
       }
     },
@@ -326,24 +389,32 @@ export function createWebWorkspaceRuntime(
       if (!sessionsEnded) await runTeamEffect(directory.endSession(id));
     },
   };
-  const peer = dependencies.createPeer({
-    current: {
-      ...sessionActions,
-      onConnectionUpdate: async (update) => {
-        if (update.state !== "online") {
-          browserView.disconnect(update.message ?? undefined);
-          const releaseGeneration = liveViewGeneration + 1;
-          void releaseLiveView().finally(() => {
-            if (liveViewGeneration === releaseGeneration) browserView.disconnect();
-          });
-        }
-        events.connection(update);
+  /** The host of a connect attempt that Signal holds until the host is online. */
+  let waitingHostId: string | null = null;
+  const peer = dependencies.createPeer(
+    {
+      current: {
+        ...sessionActions,
+        onConnectionUpdate: async (update) => {
+          // A `connecting` update without `hostOffline`, such as a `rate_limited` reply, does not end the hold.
+          if (update.hostOffline) waitingHostId = update.hostId;
+          else if (update.state !== "connecting") waitingHostId = null;
+          if (update.state !== "online") {
+            browserView.disconnect(update.message ?? undefined);
+            const releaseGeneration = liveViewGeneration + 1;
+            void releaseLiveView().finally(() => {
+              if (liveViewGeneration === releaseGeneration) browserView.disconnect();
+            });
+          }
+          events.connection(update);
+        },
+        onHostStreamData: (data) => browserView.receive(data),
+        onTeamEvent: async (id, event) => events.event(id, event),
+        onAccountProfileChanged: events.accountChanged,
       },
-      onHostStreamData: (data) => browserView.receive(data),
-      onTeamEvent: async (id, event) => events.event(id, event),
-      onAccountProfileChanged: events.accountChanged,
     },
-  });
+    { waitForHost: true },
+  );
   let releaseHostLock: (() => void) | null = null;
   let lockedHostId: string | null = null;
   const hostChannel = dependencies.openHostChannel?.(accountId) ?? null;
@@ -360,7 +431,7 @@ export function createWebWorkspaceRuntime(
         // Without a listener, the status connections read no agent list.
         ...(events.hostNotice
           ? {
-              onNotice: (hostId: string, event: WebHostNotice, agents: AgentSummary[]) =>
+              onNotice: (hostId: string, event: WebHostNotice, agents: ClientAgentSummary[]) =>
                 events.hostNotice?.(hostId, event, agents),
             }
           : {}),
@@ -376,7 +447,7 @@ export function createWebWorkspaceRuntime(
         requestId: message.requestId,
       } satisfies WebHostTabMessage);
   });
-  let connecting = false;
+  let connecting: Promise<unknown> | null = null;
   let disposed = false;
   let generation = 0;
   let uploadGeneration = 0;
@@ -434,14 +505,16 @@ export function createWebWorkspaceRuntime(
     if (disposed) throw new Error(currentText().t("webClient.error.connectionClosed"));
     const current = generation;
     const requestHostId = lockedHostId;
+    const timeoutMs =
+      method === "GET" && path === TEAM_API_ROUTES.me ? 15_000 : remoteWorkspaceReadTimeout(method, path);
     const result = await peer.execute({
       id: crypto.randomUUID(),
       type: "request",
       method,
       path,
       body,
-      upload,
-      timeoutMs: method === "GET" && path === TEAM_API_ROUTES.me ? 15_000 : remoteWorkspaceReadTimeout(method, path),
+      ...(upload === undefined ? {} : { upload }),
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
     });
     if (disposed || generation !== current) throw new Error(currentText().t("webClient.error.hostChanged"));
     const membershipRead = method === "GET" && path === TEAM_API_ROUTES.me;
@@ -451,12 +524,18 @@ export function createWebWorkspaceRuntime(
       if (disposed || generation !== current) throw new Error(currentText().t("webClient.error.hostChanged"));
     }
     if (result.status === 401 || (result.status === 403 && membershipRead)) {
-      const error = new WebHostConnectionError(result.status === 401 ? "authentication_required" : "access_ended");
+      const error = new WebHostConnectionError(
+        result.status === 401 ? "authentication_required" : "access_ended",
+        referenceFrom("http", result.status),
+      );
       if (requestHostId) events.accessDenied?.(requestHostId, error);
       throw error;
     }
     if (!result.ok || (result.status ?? 500) >= 400)
-      throw new Error(hostRefusal(result.status, result.body) ?? currentText().t("webClient.error.requestIncomplete"));
+      throw new WebHostRequestError(
+        hostRefusal(result.status, result.body) ?? currentText().t("webClient.error.requestIncomplete"),
+        result.status === undefined ? (result.reference ?? null) : referenceFrom("http", result.status),
+      );
     return result.body;
   }
   // The shared Team API requests decode their own responses. A declaration, like `request`, so the
@@ -482,7 +561,7 @@ export function createWebWorkspaceRuntime(
     team: {
       async getPresence() {
         const value = await request("GET", TEAM_API_ROUTES.team.presence);
-        if (!isTeamPresenceSnapshot(value)) throw new Error("The host returned invalid presence.");
+        if (!isTeamPresenceSnapshot(value)) throw new Error(currentText().t("error.remote.invalidData"));
         return value;
       },
       listMembers,
@@ -527,6 +606,19 @@ export function createWebWorkspaceRuntime(
     },
   };
   const channels = teamChannelsApi(teamApi);
+  /** The routine flow routes, sent only to a host that negotiated them. */
+  async function routineFlowsRequest<T>(
+    method: string,
+    path: string,
+    decode: (value: unknown) => T,
+    body?: TeamProtocolV2Json,
+  ): Promise<T> {
+    if (!capabilities.includes(ROUTINE_FLOWS_CAPABILITY))
+      throw new Error(currentText().t("error.team.routineFlowsUnsupported"));
+    return teamApi(method, path, decode, body);
+  }
+  const routineFlows = teamRoutineFlowsApi(routineFlowsRequest);
+  const agentRoutines = teamAgentRoutinesApi(teamApi);
   const browserView = createRemoteBrowserView(
     (data) => peer.sendHostStreamData(data),
     request,
@@ -550,6 +642,72 @@ export function createWebWorkspaceRuntime(
   const emitView = (event: BrowserLiveViewEvent) => {
     for (const listener of viewListeners) listener(event);
   };
+  async function connectHost(host: RemoteTeamHost): Promise<string[]> {
+    try {
+      await peer.cancelUpload().catch(() => undefined);
+      const switchingHost = lockedHostId !== host.hostId;
+      const retryDraftCleanup = switchingHost && draftCleanupRetryHosts.has(host.hostId);
+      if (switchingHost) await discardCompletedDrafts();
+      await releaseLiveView();
+      browserView.disconnect();
+      if (switchingHost) {
+        await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });
+        releaseHostLock?.();
+        releaseHostLock = null;
+        lockedHostId = null;
+        // This tab's own status connection gives the host up first.
+        await hosts?.select(host.hostId);
+        const release = await acquireOpenedWebHostLock(
+          accountId,
+          host.hostId,
+          hostChannel,
+          dependencies.acquireHostLock,
+        );
+        if (disposed) {
+          release();
+          throw new Error(currentText().t("webClient.error.connectionClosed"));
+        }
+        releaseHostLock = release;
+        lockedHostId = host.hostId;
+        hosts?.holdSelected(host.hostId, true);
+      }
+      const current = ++generation;
+      connectedHost = host;
+      pinWebHostKey(accountId, host);
+      const result = await peer.execute({
+        id: crypto.randomUUID(),
+        type: "connect",
+        hostId: host.hostId,
+        hostPublicKey: host.devicePublicKey,
+      });
+      if (!result.ok || disposed || current !== generation)
+        throw new WebHostRequestError(
+          currentText().t("webClient.error.connectionUnavailable"),
+          result.ok ? null : (result.reference ?? null),
+        );
+      const support = decodeTeamProtocolSupportV7Base(await request("GET", TEAM_API_ROUTES.compatibility));
+      const updateDirection = teamProtocolUpdateDirection(
+        { minimum: TEAM_PROTOCOL_V3, maximum: TEAM_PROTOCOL_V3 },
+        support.protocol,
+      );
+      if (updateDirection) throw new WebHostIncompatibleError(support, updateDirection);
+      capabilities = support.capabilities;
+      if (retryDraftCleanup) await discardCompletedDrafts(host.hostId);
+      return capabilities;
+    } catch (error) {
+      capabilities = [];
+      connectedHost = null;
+      try {
+        await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });
+      } finally {
+        releaseHostLock?.();
+        releaseHostLock = null;
+        lockedHostId = null;
+        hosts?.holdSelected(host.hostId, false);
+      }
+      throw error;
+    }
+  }
   return {
     admin,
     ...(hosts ? { hosts } : {}),
@@ -586,8 +744,24 @@ export function createWebWorkspaceRuntime(
     },
     async browserTabs() {
       const value = await request("GET", TEAM_API_ROUTES.browser.tabs);
-      if (!Array.isArray(value)) throw new Error("The host returned an invalid tab list.");
-      return value.map(decodeWebBrowserTab);
+      if (!Array.isArray(value)) throw new Error(currentText().t("error.remote.invalidData"));
+      // The frozen tab list has no field for a person's control or the history state, so the host
+      // answers on their own routes.
+      const held = capabilities.includes(BROWSER_USER_CONTROL_CAPABILITY)
+        ? new Set(decodeBrowserUserControlSnapshot(await request("POST", BROWSER_USER_CONTROL_ROUTES.state, {})).tabIds)
+        : new Set<string>();
+      const pageStates = capabilities.includes(BROWSER_PAGE_STATE_CAPABILITY)
+        ? new Map(
+            decodeBrowserPageStateSnapshot(await request("POST", BROWSER_PAGE_STATE_ROUTES.state, {})).tabs.map(
+              ({ tabId, ...state }) => [tabId, state],
+            ),
+          )
+        : new Map<string, { canGoBack: boolean; canGoForward: boolean }>();
+      return value.map(decodeWebBrowserTab).map((tab) => ({
+        ...tab,
+        ...(held.has(tab.id) ? { userControl: true as const } : {}),
+        ...pageStates.get(tab.id),
+      }));
     },
     async openBrowserTab(input) {
       return decodeWebBrowserTab(await request("POST", TEAM_API_ROUTES.browser.open, { ...input }));
@@ -606,20 +780,35 @@ export function createWebWorkspaceRuntime(
     async reloadBrowserTab(tabId) {
       await request("POST", TEAM_API_ROUTES.browser.reload, { tabId });
     },
+    async stopBrowserTab(tabId) {
+      if (!capabilities.includes(BROWSER_PAGE_STATE_CAPABILITY))
+        throw new Error(currentText().t("error.backend.browserStopUnsupported"));
+      decodeBrowserPageStateSnapshot(await request("POST", BROWSER_PAGE_STATE_ROUTES.stop, { tabId }));
+    },
     async closeBrowserTab(tabId) {
       await request("POST", TEAM_API_ROUTES.browser.close, { tabId });
+    },
+    async takeBrowserControl(tabId) {
+      if (!capabilities.includes(BROWSER_USER_CONTROL_CAPABILITY))
+        throw new Error(currentText().t("error.backend.browserUserControlUnsupported"));
+      decodeBrowserUserControlSnapshot(await request("POST", BROWSER_USER_CONTROL_ROUTES.take, { tabId }));
+    },
+    async releaseBrowserControl(tabId) {
+      if (!capabilities.includes(BROWSER_USER_CONTROL_CAPABILITY))
+        throw new Error(currentText().t("error.backend.browserUserControlUnsupported"));
+      decodeBrowserUserControlSnapshot(await request("POST", BROWSER_USER_CONTROL_ROUTES.release, { tabId }));
     },
     async browserPreview(tabId) {
       return decodeWebBrowserPreview(await request("POST", TEAM_API_ROUTES.browser.preview, { tabId }));
     },
     async getSidebarLayout() {
       const value = await request("GET", TEAM_API_ROUTES.sidebarLayout.state);
-      if (!isSidebarLayoutSnapshot(value)) throw new Error("The host returned an invalid sidebar layout.");
+      if (!isSidebarLayoutSnapshot(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return value;
     },
     async mutateSidebarLayout(action) {
       const value = await request("POST", TEAM_API_ROUTES.sidebarLayout.actions, { ...action });
-      if (!isSidebarLayoutSnapshot(value)) throw new Error("The host returned an invalid sidebar layout.");
+      if (!isSidebarLayoutSnapshot(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return value;
     },
     channels: {
@@ -650,7 +839,7 @@ export function createWebWorkspaceRuntime(
     },
     async currentMemberId() {
       const value = await request("GET", TEAM_API_ROUTES.me);
-      if (!isDynamicRecord(value)) throw new Error("The host returned an invalid team member.");
+      if (!isDynamicRecord(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return requiredString(value, "id");
     },
     respondToBrowserSecret: (input) =>
@@ -682,70 +871,22 @@ export function createWebWorkspaceRuntime(
     },
     acceptInvite: (url) => runTeamEffect(directory.acceptInvite(url)),
     async connect(host) {
+      // An attempt that waits for an offline host has no deadline, so another host replaces it.
+      if (connecting && waitingHostId !== null && waitingHostId !== host.hostId) {
+        const previous = connecting;
+        await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });
+        await previous.catch(() => undefined);
+      }
       if (connecting || disposed) throw new Error(currentText().t("webClient.error.connectionChanging"));
-      connecting = true;
+      const attempt = connectHost(host);
+      connecting = attempt;
       try {
-        await peer.cancelUpload().catch(() => undefined);
-        const switchingHost = lockedHostId !== host.hostId;
-        const retryDraftCleanup = switchingHost && draftCleanupRetryHosts.has(host.hostId);
-        if (switchingHost) await discardCompletedDrafts();
-        await releaseLiveView();
-        browserView.disconnect();
-        if (switchingHost) {
-          await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });
-          releaseHostLock?.();
-          releaseHostLock = null;
-          lockedHostId = null;
-          // This tab's own status connection gives the host up first.
-          await hosts?.select(host.hostId);
-          const release = await acquireOpenedWebHostLock(
-            accountId,
-            host.hostId,
-            hostChannel,
-            dependencies.acquireHostLock,
-          );
-          if (disposed) {
-            release();
-            throw new Error(currentText().t("webClient.error.connectionClosed"));
-          }
-          releaseHostLock = release;
-          lockedHostId = host.hostId;
-          hosts?.holdSelected(host.hostId, true);
-        }
-        const current = ++generation;
-        connectedHost = host;
-        pinWebHostKey(accountId, host);
-        const result = await peer.execute({
-          id: crypto.randomUUID(),
-          type: "connect",
-          hostId: host.hostId,
-          hostPublicKey: host.devicePublicKey,
-        });
-        if (!result.ok || disposed || current !== generation)
-          throw new Error(currentText().t("webClient.error.connectionUnavailable"));
-        const support = decodeTeamProtocolSupportV1(await request("GET", TEAM_API_ROUTES.compatibility));
-        const updateDirection = teamProtocolUpdateDirection(
-          { minimum: TEAM_PROTOCOL_V3, maximum: TEAM_PROTOCOL_V3 },
-          support.protocol,
-        );
-        if (updateDirection) throw new WebHostIncompatibleError(support, updateDirection);
-        capabilities = support.capabilities;
-        if (retryDraftCleanup) await discardCompletedDrafts(host.hostId);
-        return capabilities;
-      } catch (error) {
-        capabilities = [];
-        connectedHost = null;
-        try {
-          await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });
-        } finally {
-          releaseHostLock?.();
-          releaseHostLock = null;
-          lockedHostId = null;
-          hosts?.holdSelected(host.hostId, false);
-        }
-        throw error;
+        return await attempt;
       } finally {
-        connecting = false;
+        if (connecting === attempt) {
+          connecting = null;
+          waitingHostId = null;
+        }
       }
     },
     async disconnect() {
@@ -766,7 +907,7 @@ export function createWebWorkspaceRuntime(
       }
     },
     async listAgents() {
-      return guardedListDecoder(isAgentSummary, "teammates")(await request("GET", TEAM_API_ROUTES.agents.all));
+      return guardedListDecoder(isClientAgentSummary, "agents")(await request("GET", TEAM_API_ROUTES.agents.all));
     },
     async conversation(id, before) {
       if (!capabilities.includes("conversation-pagination")) {
@@ -775,15 +916,24 @@ export function createWebWorkspaceRuntime(
       const query = new URLSearchParams({ limit: "50", ...(before ? { before } : {}) });
       return decodeWebConversationPage(await request("GET", `${TEAM_API_ROUTES.agent.conversationPage(id)}?${query}`));
     },
+    async conversationAround(id, messageId) {
+      if (!capabilities.includes("conversation-pagination"))
+        return decodeWebConversationSnapshot(await request("GET", TEAM_API_ROUTES.agent.conversation(id)));
+      const query = new URLSearchParams({ limit: "50", around: messageId });
+      return decodeWebConversationPage(await request("GET", `${TEAM_API_ROUTES.agent.conversationPage(id)}?${query}`));
+    },
     async markRead(id, throughMessageId) {
       const value = await request("POST", TEAM_API_ROUTES.agent.conversationRead(id), { throughMessageId });
-      if (!isConversationReadState(value)) throw new Error("The host returned an invalid read state.");
+      if (!isConversationReadState(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return value;
     },
     async markUnread(id) {
       const value = await request("POST", TEAM_API_ROUTES.agent.conversationUnread(id), {});
       if (!isConversationReadState(value)) throw new Error("The host returned an invalid read state.");
       return value;
+    },
+    async focusUse() {
+      await request("POST", FOCUS_USE_ROUTES.ping);
     },
     async conversationReads() {
       const value = await request("GET", TEAM_API_ROUTES.agents.conversationReads);
@@ -805,13 +955,11 @@ export function createWebWorkspaceRuntime(
         await request("DELETE", TEAM_API_ROUTES.agent.avatar(agentId));
         return;
       }
-      let binary = "";
-      for (const byte of image.bytes) binary += String.fromCharCode(byte);
       await request(
         "PUT",
         TEAM_API_ROUTES.agent.avatar(agentId),
         {},
-        { name: "avatar", mimeType: image.mimeType, base64: btoa(binary) },
+        { name: "avatar", mimeType: image.mimeType, base64: bytesToBase64(image.bytes) },
       );
     },
     async send(id, text, attachmentDraftIds, replyToMessageId = null, clientMessageId) {
@@ -856,17 +1004,16 @@ export function createWebWorkspaceRuntime(
         eml: capabilities.includes("eml-attachments"),
         media: capabilities.includes("media-attachments"),
         text: capabilities.includes(TEAM_TEXT_ATTACHMENTS_CAPABILITY),
+        zip: capabilities.includes("zip-attachments"),
       });
       if (extension && !supported.includes(extension)) throw new Error(currentText().t("webClient.error.fileType"));
       if (file.size > MOBILE_ATTACHMENT_BYTES) throw new Error(currentText().t("error.remote.attachmentTooLarge"));
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (currentUpload !== uploadGeneration || uploadHostGeneration !== generation)
         throw new Error(currentText().t("webClient.error.uploadCancelled"));
-      let binary = "";
-      for (const byte of bytes) binary += String.fromCharCode(byte);
       const mimeType = file.type || "application/octet-stream";
       const value = await Effect.runPromise(
-        uploadAttachmentDraft(teamApi, { name: file.name, mimeType, base64: btoa(binary) }).pipe(
+        uploadAttachmentDraft(teamApi, { name: file.name, mimeType, base64: bytesToBase64(bytes) }).pipe(
           Effect.mapError((error) => error.cause),
         ),
       );
@@ -929,22 +1076,31 @@ export function createWebWorkspaceRuntime(
         throw new Error(currentText().t("error.team.workspaceDirectoryUnsupported"));
       return decodeWorkspaceDirectory(await request("POST", WORKSPACE_DIRECTORY_ROUTES.list, { agentId, path }));
     },
+    routineFlows,
+    updateRoutine: agentRoutines.updateRoutine,
+    testRoutine: agentRoutines.testRoutine,
+    listHiddenAgents: () => runTeamEffect(listHiddenAgents(teamApi).pipe(Effect.mapError((error) => error.cause))),
+    setAgentHidden: (input) =>
+      runTeamEffect(setAgentHidden(teamApi, input).pipe(Effect.mapError((error) => error.cause))),
     async models() {
-      return guardedListDecoder(isAgentModelOption, "models")(await request("GET", TEAM_API_ROUTES.agents.models));
+      return guardedListDecoder(
+        isClientAgentModelOption,
+        "models",
+      )(await request("GET", TEAM_API_ROUTES.agents.models));
     },
     async status() {
       const value = await request("GET", TEAM_API_ROUTES.agents.status);
-      if (!isAgentStatus(value)) throw new Error("The host returned an invalid status.");
+      if (!isAgentStatus(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return value;
     },
     async accountUsage() {
       const value = await request("GET", TEAM_API_ROUTES.agents.usage);
-      if (!isAccountUsage(value)) throw new Error("The host returned invalid account usage.");
+      if (!isAccountUsage(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return value;
     },
     async createAgent(input) {
       const value = await request("POST", TEAM_API_ROUTES.agents.all, { ...input });
-      if (!isAgentSummary(value)) throw new Error("The host returned an invalid teammate.");
+      if (!isClientAgentSummary(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return value;
     },
     async duplicateAgent(agentId) {
@@ -953,16 +1109,29 @@ export function createWebWorkspaceRuntime(
       const operationId = duplicateOperationIds.get(operationKey) ?? crypto.randomUUID();
       duplicateOperationIds.set(operationKey, operationId);
       const value = await request("POST", TEAM_API_ROUTES.agent.duplicate(agentId), { operationId });
-      if (!isDynamicRecord(value) || !isAgentSummary(value.agent) || !isSidebarLayoutSnapshot(value.layout))
-        throw new Error("The host returned an invalid duplicated agent.");
+      if (!isDynamicRecord(value) || !isClientAgentSummary(value.agent) || !isSidebarLayoutSnapshot(value.layout))
+        throw new Error(currentText().t("error.remote.invalidData"));
       duplicateOperationIds.delete(operationKey);
       return { agent: value.agent, layout: value.layout } satisfies DuplicateAgentResult;
     },
     async updateAgent(input) {
-      await request("PATCH", TEAM_API_ROUTES.agent.one(input.agentId), { ...input });
+      // The released agent route ignores the account, so it goes on `provider-accounts-v1` after the
+      // profile: a provider change there returns the agent to the new provider's own sign-in.
+      // Backup models stay on the host computer: the Team API does not carry them.
+      const { providerAccountId, backupModels: _backupModels, leaveUsageLimit: _leaveUsageLimit, ...profile } = input;
+      if (providerAccountId !== undefined && !capabilities.includes(PROVIDER_ACCOUNTS_CAPABILITY))
+        throw new Error(currentText().t("error.team.providersUnsupported"));
+      await request("PATCH", TEAM_API_ROUTES.agent.one(input.agentId), { ...profile });
+      if (providerAccountId === undefined) return;
+      await runTeamEffect(
+        setAgentProviderAccount(teamApi, { agentId: input.agentId, accountId: providerAccountId }).pipe(
+          Effect.mapError((error) => error.cause),
+        ),
+      );
     },
     async deleteAgent(agentId) {
-      if (connectedHost?.role === "member") throw new Error(currentText().t("error.team.membersCannotDeleteAgents"));
+      if (connectedHost && !canAdministerServer(connectedHost.role))
+        throw new Error(currentText().t("error.team.membersCannotDeleteAgents"));
       await Effect.runPromise(deleteAgent(teamApi, agentId).pipe(Effect.mapError((error) => error.cause)));
     },
     async search(agentId, query, cursor) {
@@ -979,10 +1148,10 @@ export function createWebWorkspaceRuntime(
         typeof value.total !== "number" ||
         (value.nextCursor !== null && typeof value.nextCursor !== "string")
       )
-        throw new Error("The host returned invalid search results.");
+        throw new Error(currentText().t("error.remote.invalidData"));
       const results = value.results.map((item) => {
         if (!isDynamicRecord(item) || typeof item.agentId !== "string" || !isConversationMessage(item.message))
-          throw new Error("The host returned an invalid search result.");
+          throw new Error(currentText().t("error.remote.invalidData"));
         return { agentId: item.agentId, message: item.message };
       });
       return { results, total: value.total, nextCursor: value.nextCursor };
@@ -1009,7 +1178,7 @@ export function createWebWorkspaceRuntime(
 }
 
 function decodeWebFile(value: unknown): WebFile {
-  if (!isDynamicRecord(value)) throw new Error("The host returned an invalid file.");
+  if (!isDynamicRecord(value)) throw new Error(currentText().t("error.remote.invalidData"));
   const base64 = requiredString(value, "base64");
   // A browser on a computer takes a file up to the protocol limit, the same limit the peer applies.
   // The decoded size comes from the length: `atob` would copy a file of 100 MB only to measure it.
@@ -1079,7 +1248,7 @@ function decodeWebBrowserTab(tab: unknown): BrowserTab {
     (tab.ownerThreadId !== null && typeof tab.ownerThreadId !== "string") ||
     (tab.ownerAgentId !== null && typeof tab.ownerAgentId !== "string")
   )
-    throw new Error("The host returned an invalid tab.");
+    throw new Error(currentText().t("error.remote.invalidData"));
   return {
     id: requiredString(tab, "id"),
     title: requiredString(tab, "title"),
@@ -1105,16 +1274,16 @@ function decodeWebBrowserPreview(value: unknown): BrowserPreview {
     value.height < 1 ||
     value.height > 600
   )
-    throw new Error("The host returned an invalid browser preview.");
+    throw new Error(currentText().t("error.remote.invalidData"));
   return { dataUrl: value.dataUrl, width: value.width, height: value.height };
 }
 
 function decodeWebConversationSnapshot(value: unknown): ConversationPage {
-  if (!isConversationWithReadState(value)) throw new Error("The host returned an invalid conversation.");
+  if (!isConversationWithReadState(value)) throw new Error(currentText().t("error.remote.invalidData"));
   return { ...value, references: {}, pageInfo: { hasOlder: false, olderCursor: null } };
 }
 
-export function decodeWebConversationPage(value: unknown): ConversationPage {
+function decodeWebConversationPage(value: unknown): ConversationPage {
   if (
     !isConversationWithReadState(value) ||
     !isDynamicRecord(value) ||
@@ -1124,15 +1293,20 @@ export function decodeWebConversationPage(value: unknown): ConversationPage {
     (value.pageInfo.hasOlder && !value.pageInfo.olderCursor) ||
     !isDynamicRecord(value.references)
   )
-    throw new Error("The host returned an invalid conversation page.");
+    throw new Error(currentText().t("error.remote.invalidData"));
   const references: ConversationPage["references"] = {};
   for (const [id, message] of Object.entries(value.references)) {
-    if (!isConversationMessage(message)) throw new Error("The host returned an invalid referenced message.");
+    if (!isConversationMessage(message)) throw new Error(currentText().t("error.remote.invalidData"));
     references[id] = message;
   }
   return {
     ...value,
     references,
-    pageInfo: { hasOlder: value.pageInfo.hasOlder, olderCursor: value.pageInfo.olderCursor },
+    pageInfo: {
+      hasOlder: value.pageInfo.hasOlder,
+      olderCursor: value.pageInfo.olderCursor,
+      // history-extent-v1: the host sends the unloaded length only when it was negotiated.
+      ...optionalHistoryExtent(value.pageInfo),
+    },
   };
 }

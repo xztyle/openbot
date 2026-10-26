@@ -5,7 +5,7 @@ export const messages = {
   "mcp.connect.unreachable": "そのサーバーに接続できませんでした。",
   "mcp.connect.title": "{name} に接続",
   "mcp.connect.notConnected": "未接続",
-  "mcp.connect.close": "{name} への接続を閉じる",
+  "mcp.connect.close": "{name} の接続画面を閉じる",
   "mcp.connect.getKey": "キーを取得",
   "mcp.connect.keyDescription":
     "{name} アカウントの認証情報を貼り付けてください。OpenBot はそれを使って接続し、{host} に保存します。",
@@ -23,16 +23,17 @@ export const messages = {
   "mcp.local.docs": "セットアップガイド",
   "mcp.signIn.description":
     "{name} アカウントにサインインしてください。OpenBot はそのアカウントで使えるツールを取得し、パスワードは取得しません。",
-  "mcp.signIn.waiting": "ブラウザーを待っています…",
+  "mcp.signIn.waiting": "ブラウザーを待機中…",
   "mcp.signIn.continue": "{name} に進む",
+  "mcp.signIn.pageDescription": "このページは {host} のブラウザーで開いています。ここでサインインしてください。",
   "mcp.server.loadFailed": "MCP サーバーを読み込めませんでした。",
   "mcp.test.connected": { other: "接続済み · ツール {count} 個" },
-  "mcp.status.testing": "テストしています…",
+  "mcp.status.testing": "テスト中…",
   "mcp.status.failed": "失敗",
   "mcp.status.enabled": "有効",
   "mcp.status.disabled": "無効",
   "mcp.status.signedIn": "サインイン済み",
-  "mcp.status.signingIn": "サインインしています…",
+  "mcp.status.signingIn": "サインイン中…",
   "mcp.status.signInNeeded": "サインインが必要",
   "mcp.status.refused": "拒否されました",
   "mcp.status.checkUrl": "URL を確認",
@@ -110,4 +111,46 @@ export const messages = {
   "mcp.panel.signInWaiting": {
     other: "ブラウザーでサインインを完了してください。OpenBot は {count} 分後に待機をやめます。",
   },
+  "mcp.panel.signInWaitingOn": {
+    other: "{host} でサインインページを開いています。OpenBot は {count} 分後に待機をやめます。",
+  },
+  "mcp.panel.appTitle": "サインインアプリ",
+  "mcp.panel.appDescription":
+    "サーバーのプロバイダーに登録した OAuth アプリを使います。サーバーが OpenBot を自動で登録できない場合に OpenBot がこのアプリを使います。OpenBot に自動で登録させる場合は空のままにしてください。",
+  "mcp.panel.appSaveFirst": "まずこのサーバーを保存してください。その後でサインインアプリを追加できます。",
+  "mcp.panel.appUrlChanged": "まず新しいサーバー URL を保存してください。サインインアプリは保存済みの URL に属します。",
+  "mcp.panel.appLoadFailed": "サインインアプリを読み込めませんでした。",
+  "mcp.panel.callbackUrl": "コールバック URL",
+  "mcp.panel.callbackUrlDescription": "この URL をそのまま、アプリで許可するリダイレクト URL に追加してください。",
+  "mcp.panel.callbackUrlOnHost":
+    "{host} は自身のブラウザーでサインインするため、この URL は {host} 上にあります。この URL をそのまま、アプリで許可するリダイレクト URL に追加してください。",
+  "mcp.panel.callbackUrlUnavailable": "使用できるコールバック URL がありません。",
+  "mcp.panel.copyCallbackUrl": "コールバック URL をコピー",
+  "mcp.panel.clientId": "クライアント ID",
+  "mcp.panel.clientSecret": "クライアントシークレット",
+  "mcp.panel.clientSecretDescription": "任意。シークレットがあるアプリの場合のみ入力します。",
+  "mcp.panel.clientSecretSaved": "シークレットは保存済みです。置き換えるには新しいシークレットを入力してください。",
+  "mcp.panel.clientSecretRemoved": "アプリを保存するとシークレットが削除されます。",
+  "mcp.panel.removeClientSecret": "シークレットを削除",
+  "mcp.panel.scopes": "スコープ",
+  "mcp.panel.scopesDescription": "任意。スコープはスペースで区切ってください。",
+  "mcp.panel.saveApp": "アプリを保存",
+  "mcp.panel.removeApp": "アプリを削除",
+  "mcp.panel.appSaved": "アプリを保存しました。使用するにはサインインしてください。",
+  "mcp.panel.appRemoved": "アプリを削除しました。",
+  "mcp.signIn.relayDescription":
+    "サインインページが {page} にあることを確認してから、ブラウザーで開いてください。完了すると、OpenBot がサインインを {host} に送信します。",
+  "mcp.signIn.relayOpenDescription":
+    "お使いのブラウザーで {page} のサインインページを開いてください。完了したら、ブラウザーに表示されたアドレスをここに貼り付けてください。その後、OpenBot がサインインを {host} に送信します。",
+  "mcp.signIn.relayDeviceDescription":
+    "サインインページが {page} にあることを確認してから、ブラウザーで開いてサインインを完了してください。{host} はサインインを自動で検出します。",
+  "mcp.signIn.relayOpen": "サインインページを開く",
+  "mcp.signIn.relayPasteHint":
+    "ブラウザーが OpenBot に戻らない場合は、表示されているアドレスをコピーしてここに貼り付けてください。",
+  "mcp.signIn.relayPasteRequired":
+    "OpenBot はブラウザーからサインインを自動で受け取れません。完了したら、ブラウザーに表示されたアドレスをコピーしてここに貼り付けてください。",
+  "mcp.signIn.relayAddress": "ブラウザーのアドレス",
+  "mcp.signIn.relaySend": "送信",
+  "mcp.panel.callbackUrlRelayed":
+    "サインインページはお使いのブラウザーで開き、このコンピューターの OpenBot がサインインを {host} に送信します。この URL をそのまま、アプリで許可するリダイレクト URL に追加してください。",
 } as const satisfies PartialTranslation<typeof source>;

@@ -67,6 +67,14 @@ export class TelegramChatState {
       )
       .map(({ threadKey: _threadKey, ...entry }) => entry);
   }
+
+  /** The newest messages of one conversation, or of the whole chat for null, oldest first. */
+  recent(threadKey: string | null, limit: number): ContextEntry[] {
+    return this.#recent
+      .filter((entry) => threadKey === null || entry.threadKey === threadKey)
+      .slice(-limit)
+      .map(({ threadKey: _threadKey, ...entry }) => entry);
+  }
 }
 
 /** The state of each chat, by `<bot ID>:<chat ID>`, for one driver. */

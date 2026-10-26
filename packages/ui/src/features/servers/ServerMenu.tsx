@@ -12,7 +12,6 @@ import {
   Moon,
   PanelLeft,
   Plus,
-  Puzzle,
 } from "@openbot/ui";
 import { SwapLabel } from "@openbot/ui/components/SwapLabel";
 import { createEffect, createSignal, For, Show, untrack } from "solid-js";
@@ -45,8 +44,6 @@ export interface ServerMenuProps extends ServerActionCallbacks {
   onAdd?: () => void;
   /** True when `onAdd` opens the hosted server plans, where the user can also join with an invite. */
   addCreatesServer?: boolean | undefined;
-  /** The menu view has no room for the marketplace button on the sidebar title, so the menu holds it. */
-  onOpenMarketplace?: (() => void) | undefined;
   /** The compact sidebar hides the server name. The rail stays visible then. */
   compact?: boolean;
 }
@@ -71,7 +68,7 @@ let lastShown: { id: string | undefined; name: string } | undefined;
 
 /**
  * The server name on the sidebar title. Its menu sets the server view. In the menu view, it also
- * lists the servers, and the usage and settings of the active server. A click or Enter on a server
+ * lists the servers and the actions of the active server. A click or Enter on a server
  * row selects that server. Hover or the arrow key on a row opens all actions of that server.
  */
 export function ServerMenu(props: ServerMenuProps) {
@@ -190,6 +187,8 @@ export function ServerMenu(props: ServerMenuProps) {
                       onLeave={props.onLeave}
                       onDelete={props.onDelete}
                       canDelete={props.canDelete}
+                      onRestart={props.onRestart}
+                      canRestart={props.canRestart}
                       onRemove={props.onRemove}
                       canRemove={props.canRemove}
                     />
@@ -237,12 +236,12 @@ export function ServerMenu(props: ServerMenuProps) {
                           trigger={() => trigger ?? null}
                           onSetMuted={props.onSetMuted}
                           onSetNotificationLevel={props.onSetNotificationLevel}
-                          onOpenUsage={props.onOpenUsage}
-                          onOpenSchedule={props.onOpenSchedule}
                           onOpenSettings={props.onOpenSettings}
                           onLeave={props.onLeave}
                           onDelete={props.onDelete}
                           canDelete={props.canDelete}
+                          onRestart={props.onRestart}
+                          canRestart={props.canRestart}
                           onRemove={props.onRemove}
                           canRemove={props.canRemove}
                         />
@@ -259,27 +258,22 @@ export function ServerMenu(props: ServerMenuProps) {
                   <span>{t(props.addCreatesServer ? "server.rail.add" : "server.rail.addRemote")}</span>
                 </DropdownMenu.Item>
               </Show>
-              <Show when={props.onOpenMarketplace}>
-                <DropdownMenu.Item onSelect={() => props.onOpenMarketplace?.()}>
-                  <Puzzle class="agent-context-icon size-4" aria-hidden="true" />
-                  <span>{t("sidebar.topbar.marketplace")}</span>
-                </DropdownMenu.Item>
-              </Show>
               <Show when={activeServer()}>
                 {(server) => (
                   <>
                     <DropdownMenu.Separator />
-                    {/* Mute and notifications are in the submenu of each server row. */}
+                    {/* Mute and notifications are in the submenu of each server row. The page rail opens
+                        Usage and Routines of the active server. */}
                     <ServerActionItems
                       menu={DropdownMenu}
                       server={server()}
                       trigger={() => trigger ?? null}
-                      onOpenUsage={props.onOpenUsage}
-                      onOpenSchedule={props.onOpenSchedule}
                       onOpenSettings={props.onOpenSettings}
                       onLeave={props.onLeave}
                       onDelete={props.onDelete}
                       canDelete={props.canDelete}
+                      onRestart={props.onRestart}
+                      canRestart={props.canRestart}
                       onRemove={props.onRemove}
                       canRemove={props.canRemove}
                     />
@@ -346,12 +340,12 @@ export function ServerMenu(props: ServerMenuProps) {
                   trigger={() => trigger ?? null}
                   onSetMuted={props.onSetMuted}
                   onSetNotificationLevel={props.onSetNotificationLevel}
-                  onOpenUsage={props.onOpenUsage}
-                  onOpenSchedule={props.onOpenSchedule}
                   onOpenSettings={props.onOpenSettings}
                   onLeave={props.onLeave}
                   onDelete={props.onDelete}
                   canDelete={props.canDelete}
+                  onRestart={props.onRestart}
+                  canRestart={props.canRestart}
                   onRemove={props.onRemove}
                   canRemove={props.canRemove}
                 />

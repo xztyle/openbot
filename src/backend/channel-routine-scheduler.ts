@@ -60,7 +60,7 @@ function stoppedBlocker(tasks: ChannelTask[], task: ChannelTask, seen = new Set<
  * `hasAssignment` separates "nobody has picked this up yet" from "a member is on it": an assignment
  * is a durable row, so the difference survives a restart too.
  */
-export function channelRunStatusForTasks(
+function channelRunStatusForTasks(
   tasks: ChannelTask[],
   hasAssignment: boolean,
 ): { status: ChannelRoutineRunStatus; error: string | null } {
@@ -126,8 +126,13 @@ export class ChannelRoutineScheduler implements RoutineDueSource {
     return false;
   }
 
-  listRuns(input: ListChannelRoutineRunsInput): ChannelRoutineRun[] {
-    return this.#routines.listRuns(this.#requireChannel(input.channelId), input.routineId, input.limit ?? 50);
+  listRuns(input: ListChannelRoutineRunsInput, withSkipped = false): ChannelRoutineRun[] {
+    return this.#routines.listRuns(
+      this.#requireChannel(input.channelId),
+      input.routineId,
+      input.limit ?? 50,
+      withSkipped,
+    );
   }
 
   create(input: CreateChannelRoutineInput): ChannelRoutine {
@@ -191,6 +196,14 @@ export class ChannelRoutineScheduler implements RoutineDueSource {
     if (!access.webhook && this.#routines.getRecord(channelId, input.routineId)?.trigger.kind === "webhook") {
       throw new Error(sourceText("error.backend.routineGone"));
     }
+    // A request the routine posted and no member has started yet leaves with the routine, as an
+    // agent routine's queued delivery does. Work that already runs keeps its Stop control. An
+    // assignment is created before its delivery is queued, so "assigned" is not "started": only a
+    // delivery that left the queue holds the task.
+    this.#channels.withdrawRequests(
+      channelId,
+      new Set(this.#routines.activeRuns(channelId, input.routineId).flatMap((run) => run.requestMessageId ?? [])),
+    );
     this.#routines.delete(channelId, input.routineId);
     this.#changed(input.channelId);
   }
@@ -215,11 +228,7 @@ export class ChannelRoutineScheduler implements RoutineDueSource {
     const run =
       routine.limitPolicy === "skip" && this.#hooks.usageLimited(routine.channelId)
         ? yield* channelRoutineStep(() =>
-            this.#routines.updateRunStatus(
-              this.#routines.createRun(routine, null, "manual", now).id,
-              "cancelled",
-              null,
-            ),
+            this.#routines.updateRunStatus(this.#routines.createRun(routine, null, "test", now).id, "cancelled", null),
           )
         : yield* this.#fireEffect(routine, null, now);
     this.#changed(routine.channelId);
@@ -258,6 +267,12 @@ export class ChannelRoutineScheduler implements RoutineDueSource {
         if (!active()) break;
         if (this.#excluded().has(due.routine.channelId)) continue;
         const scheduledFor = yield* channelRoutineStep(() => {
+          // A one-time trigger completes in the place of an advance, with the same at-most-once order.
+          if (due.schedule.kind === "once") {
+            this.#routines.completeTrigger(due.routine.id, due.triggerId, now);
+            changed.add(due.routine.channelId);
+            return due.nextRunAt;
+          }
           const occurrence = collapseMissedOccurrences(
             due.schedule,
             due.routine.timezone,
@@ -366,7 +381,7 @@ export class ChannelRoutineScheduler implements RoutineDueSource {
     scheduledFor: string,
   ) {
     const run = yield* channelRoutineStep(() => {
-      const created = this.#routines.createRun(routine, triggerId, triggerId ? "scheduled" : "manual", scheduledFor);
+      const created = this.#routines.createRun(routine, triggerId, triggerId ? "scheduled" : "test", scheduledFor);
       return created.requestMessageId ? created : this.#routines.attachRequest(created.id, randomUUID());
     });
     return yield* this.#issueEffect(run);
@@ -393,9 +408,19 @@ export class ChannelRoutineScheduler implements RoutineDueSource {
             origin: { kind: "routine", routineId: run.routineId, routineName: run.routineName, runId: run.id },
           },
           this.#actor(run),
+          // The request waits behind earlier channel commands; a routine deleted meanwhile posts nothing.
+          (queued) => (this.#routines.getRecord(run.channelId, run.routineId) ? queued : null),
         )
         .pipe(toChannelRoutineFailed),
     );
+    if (!this.#routines.getRecord(run.channelId, run.routineId)) {
+      // Deleted while the request was being applied: withdraw what it created, as deletion does.
+      yield* channelRoutineStep(() => {
+        this.#channels.withdrawRequests(run.channelId, new Set([requestMessageId]));
+        this.#changed(run.channelId);
+      });
+      return run;
+    }
     if (Result.isFailure(issued)) {
       const error = issued.failure.cause;
       return yield* channelRoutineStep(() => {

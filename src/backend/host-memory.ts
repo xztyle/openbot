@@ -1,7 +1,8 @@
 /**
- * How much memory the computer that runs OpenBot has left. Only a hosted server gives one: its
- * machine is small, and one unit holds OpenBot, its browser tabs and every provider process. The main
- * process reads the system; this file has no Electron import, so the backend can use it.
+ * How much memory the computer that runs OpenBot has left. Only a server gives one (hosted,
+ * self-hosted or a container): one unit or container holds OpenBot, its browser tabs and every
+ * provider process. The main process reads the system; this file has no Electron import, so the
+ * backend can use it.
  */
 export type HostMemoryLevel = "ok" | "low" | "critical";
 
@@ -16,4 +17,6 @@ export interface HostMemory {
   reserveTurn(): () => void;
   /** Called after each sample. Returns the unsubscribe. */
   subscribe(listener: () => void): () => void;
+  /** True on a hosted server: its plan sets the memory, so the low-memory notice names the plan. */
+  readonly hostedPlan: boolean;
 }

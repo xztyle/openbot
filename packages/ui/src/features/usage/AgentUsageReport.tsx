@@ -1,4 +1,4 @@
-import type { AnalyticsTotals, HostAnalytics } from "@openbot/contracts/ipc";
+import { type AnalyticsTotals, analyticsTokens, type HostAnalytics } from "@openbot/contracts/ipc";
 import type { AppFormat, AppTextKey } from "@openbot/i18n";
 import { Button, SlidingTabs } from "@openbot/ui";
 import { createMemo, createStore, For, onSettled, Show } from "solid-js";
@@ -84,9 +84,9 @@ function BreakdownCells(props: { row: AnalyticsTotals; cost: boolean; share: (am
       <td>
         <Amount value={props.row.estimatedCostUsd} cost />
       </td>
-      <td>{props.share(props.cost ? props.row.estimatedCostUsd : props.row.processedTokens)}</td>
+      <td>{props.share(props.cost ? props.row.estimatedCostUsd : analyticsTokens(props.row))}</td>
       <td>
-        <Amount value={props.row.processedTokens} />
+        <Amount value={analyticsTokens(props.row)} />
       </td>
     </>
   );
@@ -112,18 +112,18 @@ export function AgentUsageReport(props: {
   );
   const models = createMemo(() =>
     [...props.result.models].sort((a, b) =>
-      cost() ? (b.estimatedCostUsd ?? -1) - (a.estimatedCostUsd ?? -1) : b.processedTokens - a.processedTokens,
+      cost() ? (b.estimatedCostUsd ?? -1) - (a.estimatedCostUsd ?? -1) : analyticsTokens(b) - analyticsTokens(a),
     ),
   );
   const agents = createMemo(() =>
     [...props.result.agents].sort((a, b) =>
-      cost() ? (b.estimatedCostUsd ?? -1) - (a.estimatedCostUsd ?? -1) : b.processedTokens - a.processedTokens,
+      cost() ? (b.estimatedCostUsd ?? -1) - (a.estimatedCostUsd ?? -1) : analyticsTokens(b) - analyticsTokens(a),
     ),
   );
   const partial = () =>
     totals().missingUsageTurns > 0 || totals().unpricedRecords > 0 || totals().incompleteRecords > 0;
   const share = (amount: number | null) => {
-    const total = cost() ? totals().estimatedCostUsd : totals().processedTokens;
+    const total = cost() ? totals().estimatedCostUsd : analyticsTokens(totals());
     return amount === null || total === null
       ? t("usage.unavailable")
       : format.percent(total ? amount / total : 0, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -155,7 +155,7 @@ export function AgentUsageReport(props: {
         <section class="agent-usage-summary" aria-label={t("usage.summary")}>
           <div>
             <p class="agent-usage-hero">
-              <Amount value={cost() ? totals().estimatedCostUsd : totals().processedTokens} cost={cost()} />
+              <Amount value={cost() ? totals().estimatedCostUsd : analyticsTokens(totals())} cost={cost()} />
             </p>
             <p class="agent-usage-secondary">
               {t("usage.sessions", { count: totals().sessions, sessions: usageNumber(totals().sessions, text) })} ·{" "}
@@ -184,10 +184,13 @@ export function AgentUsageReport(props: {
                     </strong>
                   </div>
                   <p>
-                    {cost()
-                      ? t("usage.provider.shareOfCost", { share: share(provider.cost) })
-                      : t("usage.provider.shareOfTokens", { share: share(provider.tokens) })}{" "}
-                    ·{" "}
+                    {/* A provider with no known cost has no share of it, and its heading already says so. */}
+                    <Show when={!cost() || provider.cost !== null}>
+                      {cost()
+                        ? t("usage.provider.shareOfCost", { share: share(provider.cost) })
+                        : t("usage.provider.shareOfTokens", { share: share(provider.tokens) })}{" "}
+                      ·{" "}
+                    </Show>
                     {cost()
                       ? t("usage.tokensAmount", { tokens: usageCompact(provider.tokens, text) })
                       : usageCost(provider.cost, text)}
@@ -210,6 +213,12 @@ export function AgentUsageReport(props: {
       <section aria-label={t("usage.totals.title")}>
         <h3>{t("usage.totals.title")}</h3>
         <dl class="agent-usage-totals">
+          <div>
+            <dt>{t("usage.totals.tokens")}</dt>
+            <dd>
+              <Amount value={analyticsTokens(totals())} />
+            </dd>
+          </div>
           <For each={TOTAL_ROWS}>
             {(item) => (
               <div>
@@ -304,7 +313,7 @@ export function AgentUsageReport(props: {
                   <tr>
                     <th scope="col">{t("usage.column.date")}</th>
                     <th scope="col">{t("usage.column.costUsd")}</th>
-                    <th scope="col">{t("usage.totals.processedTokens")}</th>
+                    <th scope="col">{t("usage.column.tokens")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -313,7 +322,7 @@ export function AgentUsageReport(props: {
                       <tr>
                         <th scope="row">{formatUsageDay(day.date, format)}</th>
                         <td>{usageExactCost(day.estimatedCostUsd, text)}</td>
-                        <td>{usageNumber(day.processedTokens, text)}</td>
+                        <td>{usageNumber(analyticsTokens(day), text)}</td>
                       </tr>
                     )}
                   </For>
@@ -335,6 +344,7 @@ export function AgentUsageReport(props: {
         <details>
           <summary>{t("usage.about.title")}</summary>
           <p>{t("usage.about.body")}</p>
+          <p>{t("usage.about.tokens")}</p>
         </details>
       </footer>
     </>

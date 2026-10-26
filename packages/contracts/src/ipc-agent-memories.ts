@@ -71,7 +71,6 @@ export interface DeleteAgentMemoryInput {
  * which was the only cap before the setting existed. A lower cap never deletes memories: an agent
  * over it keeps them and only cannot add another.
  */
-// A full list must fit the released 2 MiB WebRTC frame, including JSON escaping.
 export const AGENT_MEMORY_LIMITS = [INPUT_LIMITS.agentMemories, 128, 256, 512] as const;
 export type AgentMemoryLimit = (typeof AGENT_MEMORY_LIMITS)[number];
 export const DEFAULT_AGENT_MEMORY_LIMIT: AgentMemoryLimit = INPUT_LIMITS.agentMemories;
@@ -83,4 +82,78 @@ export function isAgentMemoryLimit(value: unknown): value is AgentMemoryLimit {
 /** The app setting, as it is stored and as it crosses IPC. */
 export interface AgentMemoryLimitPreference {
   limit: AgentMemoryLimit;
+}
+
+/**
+ * The limit of one server's agents (`agent-memory-limit-v1`) and the values that host permits. A
+ * newer host can permit other values, so they are numbers here, not `AgentMemoryLimit`.
+ */
+export interface HostAgentMemoryLimit {
+  limit: number;
+  choices: number[];
+}
+
+export function hostAgentMemoryLimit({ limit }: AgentMemoryLimitPreference): HostAgentMemoryLimit {
+  return { limit, choices: [...AGENT_MEMORY_LIMITS] };
+}
+
+/** On the wire the route codec has already checked the fields; this fails closed on anything else. */
+export function decodeHostAgentMemoryLimit(value: unknown): HostAgentMemoryLimit {
+  const count = (item: unknown): item is number => typeof item === "number" && Number.isSafeInteger(item) && item > 0;
+  if (!isDynamicRecord(value) || !count(value.limit) || !Array.isArray(value.choices) || !value.choices.every(count))
+    throw new Error("Invalid agent memory limit.");
+  return { limit: value.limit, choices: [...value.choices] };
+}
+
+/** Selection metadata stays separate from the released memory shape. */
+export interface AgentMemorySelection {
+  memoryId: string;
+  inclusion: "essential" | "searchable";
+  userControlled: boolean;
+  revision: number;
+}
+
+export interface AgentMemorySelectionChange {
+  memoryId: string;
+  inclusion: "essential" | "searchable" | "automatic";
+  expectedRevision: number;
+}
+
+export interface AgentMemorySelectionState {
+  selections: AgentMemorySelection[];
+  usedBytes: number;
+  budgetBytes: number;
+}
+
+export interface SetAgentMemoryInclusionInput {
+  agentId: string;
+  changes: AgentMemorySelectionChange[];
+}
+
+export function isAgentMemorySelection(value: unknown): value is AgentMemorySelection {
+  return (
+    isDynamicRecord(value) &&
+    isString(value.memoryId) &&
+    value.memoryId.length > 0 &&
+    value.memoryId.length <= INPUT_LIMITS.identifier &&
+    isOneOf(["essential", "searchable"] as const, value.inclusion) &&
+    typeof value.userControlled === "boolean" &&
+    typeof value.revision === "number" &&
+    Number.isSafeInteger(value.revision) &&
+    value.revision >= 0
+  );
+}
+
+export function isAgentMemorySelectionState(value: unknown): value is AgentMemorySelectionState {
+  return (
+    isDynamicRecord(value) &&
+    Array.isArray(value.selections) &&
+    value.selections.every(isAgentMemorySelection) &&
+    new Set(value.selections.map((entry) => entry.memoryId)).size === value.selections.length &&
+    typeof value.usedBytes === "number" &&
+    Number.isSafeInteger(value.usedBytes) &&
+    value.usedBytes >= 0 &&
+    value.budgetBytes === 8192 &&
+    value.usedBytes <= value.budgetBytes
+  );
 }

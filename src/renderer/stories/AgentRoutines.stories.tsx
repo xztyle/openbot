@@ -1,4 +1,4 @@
-import type { Routine, RoutineRun } from "@openbot/contracts/ipc";
+import type { Routine, RoutineResultDelivery, RoutineResultDestination, RoutineRun } from "@openbot/contracts/ipc";
 import { onCleanup } from "solid-js";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
@@ -6,8 +6,8 @@ import { AgentRoutinesSettings } from "../src/features/conversation/AgentRoutine
 import AgentSettingsPanel from "../src/features/conversation/AgentSettingsPanel";
 import { desktopEventRoutinesApi } from "../src/features/conversation/routine-webhooks-api";
 import { agentRoutinesPort, eventRoutinesPort } from "../src/features/conversation/routines-port";
-import { STORY_AGENT, STORY_AGENT_STATUS, STORY_MODELS } from "./fixtures";
-import { createMockOpenBot } from "./mock-openbot";
+import { STORY_AGENT, STORY_AGENT_STATUS, STORY_MODELS, storyRuntimeSettings } from "./fixtures";
+import { createMockOpenBot, type MockOpenBotOptions } from "./mock-openbot";
 
 const morningBrief: Routine = {
   id: "routine-morning-brief",
@@ -55,9 +55,14 @@ const fullPanelRuns: RoutineRun[] = [
   storyRun("run-yesterday", "failed", "scheduled", 28),
 ];
 
-function RoutinesStory(props: { routines?: Routine[]; runs?: RoutineRun[] }) {
+function RoutinesStory(props: {
+  routines?: Routine[];
+  runs?: RoutineRun[];
+  localHost?: boolean;
+  results?: Pick<MockOpenBotOptions, "routineResultOptions" | "routineResultDestinations" | "routineResultDeliveries">;
+}) {
   const previousApi = window.openbot;
-  const mock = createMockOpenBot({ routines: { chief: props.routines ?? storyRoutines } });
+  const mock = createMockOpenBot({ routines: { chief: props.routines ?? storyRoutines }, ...props.results });
   window.openbot = mock.api;
   if (props.runs) mock.api.agent.listRoutineRuns = async () => structuredClone(props.runs ?? []);
   onCleanup(() => {
@@ -66,7 +71,12 @@ function RoutinesStory(props: { routines?: Routine[]; runs?: RoutineRun[] }) {
   });
   return (
     <main style={{ width: "380px", height: "720px", overflow: "auto", background: "var(--openbot-bg-canvas)" }}>
-      <AgentRoutinesSettings port={agentRoutinesPort("chief")} onCountChange={fn()} onBack={fn()} onClose={fn()} />
+      <AgentRoutinesSettings
+        port={agentRoutinesPort("chief", false, props.localHost === true)}
+        onCountChange={fn()}
+        onBack={fn()}
+        onClose={fn()}
+      />
     </main>
   );
 }
@@ -77,7 +87,7 @@ function WebhookRoutineStory() {
   const mock = createMockOpenBot({ routines: { chief: [] } });
   window.openbot = mock.api;
   const owner = { kind: "agent", id: "chief" } as const;
-  const api = desktopEventRoutinesApi("story-server");
+  const api = desktopEventRoutinesApi("story-server", false, true);
   const seeded = api.saveRoutine({
     owner,
     name: "Deploy review",
@@ -149,11 +159,7 @@ function FullSettingsPanelStory() {
       <AgentSettingsPanel
         onOpenUsage={fn()}
         agent={STORY_AGENT}
-        runtimeSettings={{
-          provider: STORY_AGENT.provider,
-          model: STORY_AGENT.model,
-          reasoningEffort: STORY_AGENT.reasoningEffort,
-        }}
+        runtimeSettings={storyRuntimeSettings(STORY_AGENT)}
         agentStatus={STORY_AGENT_STATUS}
         modelOptions={STORY_MODELS}
         working={false}
@@ -218,9 +224,107 @@ export const RunHistoryStatuses: Story = {
         deliveryId: `delivery-${status}`,
         status,
         error: status === "failed" ? "Example failure" : null,
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(Date.now() - index * 3_600_000).toISOString(),
         updatedAt: new Date().toISOString(),
       }))}
+    />
+  ),
+};
+
+/**
+ * OpenBot was closed for five occurrences of an hourly routine set to run once when OpenBot opens.
+ * It ran the newest one late and recorded the four before it as skipped. Yesterday it skipped one.
+ * The times are on the hour.
+ */
+export const MissedRuns: Story = {
+  render: () => (
+    <RoutinesStory
+      localHost
+      routines={[
+        {
+          ...morningBrief,
+          missedPolicy: "run-once",
+          trigger: { ...morningBrief.trigger, schedule: { kind: "hourly", minute: 0 } },
+        },
+        weeklyPlanning,
+      ]}
+      runs={[
+        { ...storyRun("run-late", "succeeded", "scheduled", 1), createdAt: hoursAgo(0.5) },
+        {
+          ...storyRun("run-skipped", "cancelled", "scheduled", 5),
+          deliveryId: null,
+          missed: { count: 4, until: hoursAgo(2) },
+        },
+        {
+          ...storyRun("run-skipped-yesterday", "cancelled", "scheduled", 30),
+          deliveryId: null,
+          missed: { count: 1, until: null },
+        },
+      ]}
+    />
+  ),
+};
+
+const newsChannel: RoutineResultDestination = {
+  connectionId: "connection-slack",
+  platform: "slack",
+  connectionName: "Acme",
+  placeId: "C-news",
+  placeName: "news",
+};
+
+function storyDelivery(
+  runId: string,
+  status: RoutineResultDelivery["status"],
+  reason: RoutineResultDelivery["reason"],
+  hours: number,
+): RoutineResultDelivery {
+  return {
+    runId,
+    status,
+    reason,
+    attempts: 1,
+    destination: newsChannel,
+    updatedAt: hoursAgo(hours),
+    sentAt: status === "sent" ? hoursAgo(hours) : null,
+  };
+}
+
+/**
+ * Each answer of the morning brief also goes to a Slack channel. One went, one waited a day for its
+ * connection, and OpenBot stopped during one. Each run succeeded: the delivery has its own status.
+ */
+export const ResultDestination: Story = {
+  render: () => (
+    <RoutinesStory
+      localHost
+      runs={[
+        storyRun("run-sent", "succeeded", "scheduled", 0),
+        storyRun("run-expired", "succeeded", "scheduled", 24),
+        storyRun("run-restart", "succeeded", "scheduled", 48),
+      ]}
+      results={{
+        routineResultOptions: [
+          {
+            connectionId: "connection-slack",
+            platform: "slack",
+            connectionName: "Acme",
+            places: [
+              { id: "C-general", name: "general" },
+              { id: "C-news", name: "news" },
+            ],
+            placesFailed: false,
+          },
+        ],
+        routineResultDestinations: { [morningBrief.id]: newsChannel },
+        routineResultDeliveries: {
+          [morningBrief.id]: [
+            storyDelivery("run-sent", "sent", null, 0),
+            storyDelivery("run-expired", "failed", "expired", 0),
+            storyDelivery("run-restart", "uncertain", "restart", 48),
+          ],
+        },
+      }}
     />
   ),
 };
@@ -234,8 +338,15 @@ export const FullSidePanel: Story = {
   parameters: { layout: "fullscreen" },
 };
 
-function storyRun(id: string, status: RoutineRun["status"], kind: RoutineRun["kind"], hoursAgo: number): RoutineRun {
-  const scheduledFor = new Date(Date.now() - hoursAgo * 3_600_000).toISOString();
+/** Counted back from the start of this hour, so an hourly run in a story falls on its schedule. */
+function hoursAgo(hours: number): string {
+  const hour = new Date();
+  hour.setMinutes(0, 0, 0);
+  return new Date(hour.getTime() - hours * 3_600_000).toISOString();
+}
+
+function storyRun(id: string, status: RoutineRun["status"], kind: RoutineRun["kind"], hours: number): RoutineRun {
+  const scheduledFor = hoursAgo(hours);
   return {
     id,
     routineId: morningBrief.id,

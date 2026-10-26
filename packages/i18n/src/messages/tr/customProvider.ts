@@ -2,6 +2,21 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/customProvider";
 
 export const messages = {
+  "customProvider.registry.title": "ACP kayıt defteri",
+  "customProvider.registry.description":
+    "Bu sunucuya ajan yükleyin. Çalışma zamanını kaldırmak ajan ayarlarını, kimlik bilgilerini ve konuşmaları korur.",
+  "customProvider.registry.search": "Kayıt defterinde ara",
+  "customProvider.registry.empty": "Bu aramayla eşleşen ajan yok.",
+  "customProvider.registry.agentId": "Özel ajan kimliği",
+  "customProvider.registry.install": "Yükle",
+  "customProvider.registry.update": "Güncelle",
+  "customProvider.registry.remove": "Çalışma zamanını kaldır",
+  "customProvider.registry.searchFailed": "Kayıt defterinde arama yapılamadı. Tekrar deneyin.",
+  "customProvider.registry.statusFailed": "Yükleme ilerlemesi denetlenemedi. OpenBot tekrar deneyecek.",
+  "customProvider.registry.installFailed": "Ajan yüklenemedi. Tekrar deneyin.",
+  "customProvider.registry.updateFailed": "Ajan güncellenemedi. Tekrar deneyin.",
+  "customProvider.registry.removeFailed": "Çalışma zamanı kaldırılamadı. Tekrar deneyin.",
+  "customProvider.registry.cancelFailed": "Yükleme iptal edilemedi. Tekrar deneyin.",
   // Form doğrulama. Her mesaj özel sağlayıcı formunun bir alanını adlandırır.
   "customProvider.error.providerIdRequired": "Bir sağlayıcı kimliği girin.",
   "customProvider.error.providerIdPattern":
@@ -40,12 +55,13 @@ export const messages = {
     "Kaldırıldı. OpenCode listeyi geçerli görev durduktan sonra okur. Ardından Bağlan'a basın.",
   "customProvider.removed.notRunning": "Kaldırıldı. OpenCode bir sonraki başlatılışında listeyi okur.",
   "customProvider.saveFailed": "OpenBot bu uç noktayı kaydedemedi.",
-  "customProvider.removeFailed": "OpenBot {name} ögesini kaldıramadı.",
+  "customProvider.removeFailed": "OpenBot {name} öğesini kaldıramadı.",
   "customProvider.saveUnavailable": "Bu derleme bir uç noktayı kaydedemez.",
   "customProvider.removeUnavailable": "Bu derleme bir uç noktayı kaldıramaz.",
 
   // Ekleme iletişim kutusu.
   "customProvider.form.title": "Özel sağlayıcı ekle",
+  "customProvider.form.editTitle": "Özel sağlayıcıyı düzenle",
   "customProvider.form.description": "OpenAI uyumlu bir uç noktayı ve sunduğu modelleri tanımlayın.",
   "customProvider.form.heading": "Özel sağlayıcı",
   "customProvider.form.subtitle": "Herhangi bir OpenAI uyumlu uç nokta.",
@@ -155,6 +171,9 @@ export const messages = {
   "customProvider.acp.args": "Bağımsız değişkenler",
   "customProvider.acp.argsHint":
     "Bağımsız değişkenleri boşluklarla ayırın. Boşluk içeren bir bağımsız değişkenin etrafına tırnak işareti koyun.",
+  "customProvider.acp.usagePrompt": "Kullanım komutu",
+  "customProvider.acp.usagePromptHint":
+    "OpenBot bunu en fazla 5 dakikada bir gönderir ve son yanıtı gösterir. Ajanın kendisinin yanıtladığı bir komut kullanın, örneğin /usage.",
   "customProvider.acp.env": "Ortam değişkenleri",
   "customProvider.acp.env.name": "{number}. değişken adı",
   "customProvider.acp.env.value": "{number}. değişken değeri",
@@ -167,6 +186,10 @@ export const messages = {
   "customProvider.acp.checkOk": "{name} yanıt verdi",
   "customProvider.acp.checkOkVersion": "{name} {version} yanıt verdi",
   "customProvider.acp.checkProtocol": "ACP sürümü {version}",
+  "customProvider.acp.checkModels": {
+    one: "{count} model: {models}",
+    other: "{count} model: {models}",
+  },
   "customProvider.acp.checkFailed": "Ajan yanıt vermedi",
   "customProvider.acp.trustTitle": "Bu komut bilgisayarınızda çalışır",
   "customProvider.acp.trustDescription":
@@ -182,6 +205,7 @@ export const messages = {
   "customProvider.acp.error.envDuplicate": "Bu ajan zaten {name} değişkenini tanımlıyor.",
   "customProvider.acp.error.envValueRequired": "Bu değişken için bir değer girin.",
   "customProvider.acp.error.envValueLength": "Değeri en fazla {max} karakter tutun.",
+  "customProvider.acp.error.usagePromptInvalid": "En fazla {max} karakterlik tek bir satır kullanın.",
   "customProvider.acp.error.agentIdPattern":
     "Bir harf veya rakamla başlayan küçük harfler, rakamlar veya kısa çizgiler kullanın. En fazla 40 karakter kullanın.",
 
@@ -217,6 +241,7 @@ export const messages = {
   "customProvider.list.empty": "Henüz özel uç nokta yok.",
   "customProvider.list.label": "Özel uç noktalar",
   "customProvider.list.apiKeySaved": "API anahtarı kaydedildi",
+  "customProvider.list.editLabel": "{name} sağlayıcısını düzenle",
   "customProvider.list.deleteLabel": "{name} sağlayıcısını sil",
   "customProvider.list.confirmTitle": "{name} kaldırılsın mı?",
   "customProvider.list.confirmDescription":

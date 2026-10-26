@@ -1,4 +1,5 @@
 import { agentTemplateIdFromWebAppSearch, WEB_APP_AGENT_TEMPLATE_PARAM } from "@openbot/contracts/agent-template-links";
+import { type FirstTouch, readFirstTouch } from "@openbot/contracts/first-touch";
 import { inviteUrlFromWebAppSearch, WEB_APP_INVITE_FIELDS } from "@openbot/contracts/invite-links";
 import type { AppVariant, CentralAuthState, CentralAuthUser } from "@openbot/contracts/ipc";
 import { pluginSlugFromWebAppSearch, WEB_APP_PLUGIN_PARAM } from "@openbot/contracts/plugin-links";
@@ -10,12 +11,13 @@ import { NotificationObserver, Toaster, toast } from "@openbot/ui";
 import { AccountLogin } from "@openbot/ui/features/account/AccountLogin";
 import { AppLoadingScreen } from "@openbot/ui/features/account/AppLoadingScreen";
 import { currentText } from "@openbot/ui/text";
+import { Dynamic } from "@solidjs/web";
 import { createEffect, createSignal, createStore, onSettled, Show } from "solid-js";
+import type { DesktopAnalyticsProperties } from "../../analytics";
 import { configureWebReports, reportNotification } from "../../error-reports";
-// Copying a selection with a formula in it gives its LaTeX source, as on desktop.
-import "katex/contrib/copy-tex";
 import { StaticI18nProvider } from "../../i18n-context";
-import { WebWorkspace } from "./WebWorkspace";
+import type { WebWorkspace } from "./WebWorkspace";
+import { createWebAppearancePreference } from "./web-appearance-preference";
 import { WEB_APP_BILLING_PARAM } from "./web-billing";
 import type { WebRuntimeFactory } from "./web-client-context";
 import { takeHostingReturn } from "./web-hosted-servers";
@@ -24,6 +26,25 @@ import { webNetworkFailureMessage } from "./web-network-error";
 
 /** An account request that has no answer by now is over, so the screen shows Retry and not a wait without end. */
 const ACCOUNT_REQUEST_TIMEOUT_MS = 15_000;
+
+// The site loads this before it mounts `WebApp` (`apps/auth-api/src/routes/app.lazy.tsx`).
+export { loadSavedLanguage } from "./web-language-preference";
+
+/**
+ * The workspace is its own chunk, so the sign-in screen does not wait for it. A signed-in account
+ * loads it after the session check; the sign-in screen loads it after it shows. A failed import is
+ * tried again on the next check.
+ */
+let workspaceImport: Promise<typeof WebWorkspace> | null = null;
+function loadWorkspace(): Promise<typeof WebWorkspace> {
+  if (!workspaceImport) {
+    workspaceImport = import("./WebWorkspace").then((module) => module.WebWorkspace);
+    workspaceImport.catch(() => {
+      workspaceImport = null;
+    });
+  }
+  return workspaceImport;
+}
 
 /** A sign-in refusal that the login form already shows. */
 class SignInIssueShown extends Error {}
@@ -65,13 +86,21 @@ function takePluginLink(): string | null {
   return slug;
 }
 
-/** True on a return from the Stripe Customer Portal, `/app?billing=portal`. The query is removed after it is read. */
-function takeBillingReturn(): boolean {
+type BillingReturn = DesktopAnalyticsProperties<"billing_return_viewed">;
+
+/**
+ * A return from Stripe to Billing: `/app?billing=portal` from the Customer Portal, or
+ * `/app?billing=license` from license Checkout, with `&cancelled=1` when the user went back. The
+ * query is removed after it is read.
+ */
+function takeBillingReturn(): BillingReturn | null {
   const url = new URL(window.location.href);
-  if (!url.searchParams.has(WEB_APP_BILLING_PARAM)) return false;
-  url.searchParams.delete(WEB_APP_BILLING_PARAM);
+  const kind = url.searchParams.get(WEB_APP_BILLING_PARAM);
+  if (kind === null) return null;
+  const outcome = url.searchParams.get("cancelled") === "1" ? "cancelled" : "completed";
+  for (const name of [WEB_APP_BILLING_PARAM, "cancelled"]) url.searchParams.delete(name);
   window.history.replaceState(window.history.state, "", url);
-  return true;
+  return kind === "license" || kind === "portal" ? { outcome, kind } : { outcome };
 }
 
 /** The query fields of a push notification link, `/app?host=<id>&chat=<id>`. The service worker builds them. */
@@ -106,16 +135,39 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
   createEffect(
     () => ({ account: state.account, loaded: state.loaded }),
     ({ account, loaded }) => {
-      if (loaded) configureWebReports(account);
+      if (!loaded) return;
+      configureWebReports(account);
+      // Analytics is optional. A failed import changes nothing in the app.
+      import("./web-analytics")
+        .then((module) => {
+          module.configureWebAnalytics(account);
+          if (!account || !billingReturnEvent) return;
+          module.trackBillingReturn(billingReturnEvent);
+          billingReturnEvent = null;
+        })
+        .catch(() => undefined);
     },
   );
   // Kept here, not in the workspace, so each link waits through sign-in.
   const [agentTemplateId, setAgentTemplateId] = createSignal(takeAgentTemplateLink());
   const [inviteUrl, setInviteUrl] = createSignal(takeInviteLink());
   const [pluginSlug, setPluginSlug] = createSignal(takePluginLink());
-  const [billingReturn, setBillingReturn] = createSignal(takeBillingReturn());
+  const initialBillingReturn = takeBillingReturn();
+  const initialHostingReturn = takeHostingReturn();
+  const [billingReturn, setBillingReturn] = createSignal(initialBillingReturn !== null);
   const [chatLink, setChatLink] = createSignal(takeChatLink());
-  const [hostingReturn, setHostingReturn] = createSignal(takeHostingReturn());
+  const [hostingReturn, setHostingReturn] = createSignal(initialHostingReturn);
+  /** Sent once, when analytics has the account. */
+  let billingReturnEvent: BillingReturn | null =
+    initialBillingReturn ??
+    (initialHostingReturn ? { outcome: initialHostingReturn.paid ? "completed" : "cancelled", kind: "plan" } : null);
+  const [workspace, setWorkspace] = createSignal<typeof WebWorkspace>();
+  /** Sets the account when the workspace code is ready to show it. */
+  async function showAccount(account: CentralAuthUser) {
+    const view = await loadWorkspace();
+    setWorkspace(() => view);
+    return account;
+  }
   // The loading screen stays over the app until its exit ends.
   const [loadingShown, setLoadingShown] = createSignal(true);
   let channel: BroadcastChannel | null = null;
@@ -151,7 +203,10 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
   };
   async function request(
     path: string,
-    body?: { email: string } | { challengeId: string | null; code: string } | Record<string, never>,
+    body?:
+      | { email: string }
+      | { challengeId: string | null; code: string; firstTouch?: FirstTouch }
+      | Record<string, never>,
   ) {
     let response: Response;
     try {
@@ -212,7 +267,7 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
       !isString(value.user.id) ||
       !isString(value.user.email)
     )
-      throw new Error("The account response is invalid.");
+      throw new Error(text.t("webClient.login.accountInvalid"));
     return {
       id: value.user.id,
       email: value.user.email,
@@ -225,7 +280,7 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     if (state.account && !navigator.onLine) return;
     const generation = sessionGeneration;
     try {
-      const account = accountFrom(await request("session"));
+      const account = await showAccount(accountFrom(await request("session")));
       if (!disposed && generation === sessionGeneration) {
         sessionEnded = false;
         setState((draft) => {
@@ -260,7 +315,7 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     const value = await signInRequest("email/start", { email });
     if (value === null) return;
     if (!isDynamicRecord(value) || !isString(value.challengeId) || typeof value.resendAt !== "number")
-      throw new Error("The sign-in response is invalid.");
+      throw new Error(text.t("webClient.login.responseInvalid"));
     const challengeId = value.challengeId;
     const resendAt = value.resendAt;
     setState((draft) => {
@@ -276,12 +331,26 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     });
   }
   async function verify(challengeId: string, code: string) {
-    const value = await signInRequest("email/verify", { challengeId, code });
+    // The first website visit of this browser, so that reports can name the source of a new account.
+    const firstTouch = readFirstTouch(() => window.localStorage, Date.now());
+    const value = await signInRequest("email/verify", { challengeId, code, ...(firstTouch ? { firstTouch } : {}) });
     if (value === null) return;
     const account = accountFrom(value);
     sessionGeneration += 1;
     sessionEnded = false;
     channel?.postMessage("session-changed");
+    try {
+      await showAccount(account);
+    } catch {
+      // The server has used the code and set the session, so the retry checks the session again.
+      setState((draft) => {
+        draft.login = {
+          status: "error",
+          issue: { code: "auth_api_unavailable", message: sourceText("error.auth.serviceUnavailable") },
+        };
+      });
+      return;
+    }
     setState((draft) => {
       draft.account = account;
     });
@@ -312,6 +381,7 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
   });
   const variant: AppVariant = import.meta.env.DEV ? "dev" : "production";
   const languagePreference = createWebLanguagePreference();
+  const appearancePreference = createWebAppearancePreference();
   return (
     <StaticI18nProvider
       locale={resolveLocale(languagePreference.language(), navigator.language)}
@@ -341,7 +411,8 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
               }
             >
               {(accountId) => (
-                <WebWorkspace
+                <Dynamic
+                  component={workspace()}
                   accountId={accountId}
                   accountEmail={state.account?.email ?? ""}
                   accountName={state.account?.name ?? null}
@@ -365,12 +436,20 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
                   onHostingReturnConsumed={() => setHostingReturn(null)}
                   language={languagePreference.language()}
                   onChangeLanguage={languagePreference.setLanguage}
+                  appearance={appearancePreference.appearance()}
+                  onChangeAppearance={appearancePreference.setAppearance}
                 />
               )}
             </Show>
           </Show>
           <Show when={loadingShown()}>
-            <AppLoadingScreen ready={state.loaded} onExited={() => setLoadingShown(false)} />
+            <AppLoadingScreen
+              ready={state.loaded}
+              onExited={() => {
+                setLoadingShown(false);
+                void loadWorkspace().catch(() => undefined);
+              }}
+            />
           </Show>
         </div>
       </NotificationObserver>

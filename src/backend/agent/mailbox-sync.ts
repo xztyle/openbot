@@ -120,19 +120,25 @@ export class MailboxSync {
       this.#mailbox.conversationMessages(agent.id, oldest === undefined ? {} : { fromCreatedAt: oldest }),
     );
     if (conversationContentSignature(persisted) === previousSignature) return;
-    this.#database.persistConversationChanges({
-      agentId: agent.id,
-      threadId: agent.threadId,
-      activeTurnId: persisted.activeTurnId,
-      changedMessages: persisted.messages,
-      removedMessageIds: [...previousMessageIds].filter(
-        (messageId) => !persisted.messages.some((message) => message.id === messageId),
-      ),
-      eventType: "conversation.mailbox-reconciled",
-      detail: {
-        messageCount: persisted.messages.length,
-      },
-    });
+    // The signature also changes with key order, which the stored rows keep. Write only the
+    // messages that store differently, so a read with no real change writes nothing (#2224).
+    const changedMessages = this.#database.changedConversationMessages(agent.threadId, persisted.messages);
+    const removedMessageIds = [...previousMessageIds].filter(
+      (messageId) => !persisted.messages.some((message) => message.id === messageId),
+    );
+    if (changedMessages.length > 0 || removedMessageIds.length > 0) {
+      this.#database.persistConversationChanges({
+        agentId: agent.id,
+        threadId: agent.threadId,
+        activeTurnId: persisted.activeTurnId,
+        changedMessages,
+        removedMessageIds,
+        eventType: "conversation.mailbox-reconciled",
+        detail: {
+          messageCount: changedMessages.length,
+        },
+      });
+    }
     const live = this.#conversation.snapshot(agent.id);
     if (live) {
       const liveOldest = live.messages[0]?.createdAt;
@@ -183,8 +189,7 @@ export class MailboxSync {
           // still-starting row with the confirmed turn before publishing the retry. This is safe:
           // the turn id came from the provider, and it prevents a second drain from replaying it.
           // Check the active marker again so a delayed retry cannot claim a new turn's rows.
-          const activeTurn = this.#conversation.workingSnapshot(agentId)?.activeTurnId;
-          if (turnId && activeTurn === turnId) {
+          if (turnId && this.#conversation.snapshotWithTurn(agentId, turnId)) {
             const accepted = new Set(deliveryIds);
             for (const deliveryId of accepted) {
               const current = this.#mailbox.getDelivery(deliveryId)?.delivery;

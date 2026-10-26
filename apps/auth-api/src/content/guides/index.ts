@@ -2,6 +2,7 @@
 // is in the server's HTML rather than arriving after hydration.
 
 import type { ArticleBody } from "../body";
+import { AgenticAIDefinition } from "./agentic-ai-definition";
 import { OpenBot101 } from "./openbot-101";
 import { OpenBotHostedServers } from "./openbot-hosted-servers";
 import { OpenBotMarketplace } from "./openbot-marketplace";
@@ -9,6 +10,7 @@ import { WhatAreAIAgents } from "./what-are-ai-agents";
 import { WtfIsOpenBot } from "./wtf-is-openbot";
 
 export const GUIDE_BODIES: Readonly<Record<string, ArticleBody>> = {
+  "agentic-ai-definition": AgenticAIDefinition,
   "what-are-ai-agents": WhatAreAIAgents,
   "openbot-101": OpenBot101,
   "openbot-hosted-servers": OpenBotHostedServers,

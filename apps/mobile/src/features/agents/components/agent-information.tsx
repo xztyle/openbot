@@ -1,14 +1,20 @@
-import { analyticsRange, type InstalledSkill } from "@openbot/contracts/ipc";
+import { analyticsRange, canAdministerServer } from "@openbot/contracts/ipc";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { Button, Typography } from "heroui-native";
 import { type PropsWithChildren, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
+import { agentSkillsQuery } from "@/features/agents/model/agent-skills-query";
 import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
-import { useMobileSession } from "@/features/auth/context/mobile-session-context";
+import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
-import { type MobileAgent, useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import {
+  type MobileAgent,
+  useMobileWorkspaceActions,
+  useMobileWorkspaceSelector,
+} from "@/features/workspace/context/mobile-workspace-context";
+import { queryKeys } from "@/features/workspace/model/query-keys";
 import { useText } from "@/shared/lib/text";
 import { AgentEventChecks } from "./agent-event-checks";
 import { AgentFiles } from "./agent-files";
@@ -99,51 +105,53 @@ export function AgentInformation({
   section: "usage" | "memories" | "routines" | "memory" | "routine" | "skills" | "files" | "eventChecks";
 }) {
   useEffect(() => {
-    if (section === "usage") mobileAnalytics.track("usage_viewed", {});
+    if (section === "usage") mobileAnalytics.track("usage_viewed", { scope: "agent" });
   }, [section]);
-  const { t } = useText();
+  const { t, format } = useText();
   const { recordId } = useLocalSearchParams<{ recordId?: string }>();
-  const workspace = useMobileWorkspace();
-  const role = workspace.servers.find((server) => server.id === agent.serverId)?.role;
-  const { session, sessionScope } = useMobileSession();
+  const workspace = useMobileWorkspaceActions();
+  const role = useMobileWorkspaceSelector(
+    (current) => current.servers.find((server) => server.id === agent.serverId)?.role,
+  );
+  const queryScope = useQueryScope();
   const [range, setRange] = useState(() => analyticsRange(agent.id));
-  const key = ["agent-info", session?.apiUrl, session?.user.id, sessionScope, agent.serverId, agent.id];
   const options = { enabled: available, retry: false, staleTime: 0, gcTime: 0 };
   const memories = useQuery({
     ...options,
     enabled: available && (section === "memories" || section === "memory"),
-    queryKey: [...key, "memories"],
+    queryKey: queryKeys.agentRecord(queryScope, agent.serverId, agent.id, "memories"),
     queryFn: () => workspace.loadAgentMemories(agent.id, agent.serverId),
   });
+  const memorySelection = useQuery({
+    ...options,
+    enabled: available && (section === "memories" || section === "memory"),
+    queryKey: queryKeys.agentRecord(queryScope, agent.serverId, agent.id, "memory-selection"),
+    queryFn: () => workspace.loadAgentMemorySelection(agent.id, agent.serverId),
+  });
+  const selectionById = new Map(memorySelection.data?.selections.map((entry) => [entry.memoryId, entry]));
   const routines = useQuery({
     ...options,
     enabled: available && (section === "routines" || section === "routine"),
-    queryKey: [...key, "routines"],
+    queryKey: queryKeys.agentRecord(queryScope, agent.serverId, agent.id, "routines"),
     queryFn: () => workspace.loadAgentRoutines(agent.id, agent.serverId),
   });
   const { eventsEnabled, eventRoutines, webhookRoutines } = useEventRoutines(
     { kind: "agent", id: agent.id },
     agent.serverId,
     available && (section === "routines" || section === "routine"),
-    key,
+    queryKeys.agentEventRoutines(queryScope, agent.serverId, agent.id),
   );
   const allRoutines = [...(routines.data ?? []), ...webhookRoutines];
   // An owner or admin reads the admin list, which has the enabled state, and can change it.
-  const manageSkills = workspace.canManageAgentSkills(agent.serverId);
-  const skillsKey = [...key, "skills", manageSkills];
-  const skills = useQuery({
-    ...options,
-    enabled: available && section === "skills",
-    queryKey: skillsKey,
-    queryFn: async () => {
-      const installed = await workspace.loadAgentSkills(agent.id, agent.serverId, manageSkills);
-      return installed && userAssignedSkills(installed);
-    },
-  });
-  const eventChecksKey = [...key, "event-checks"];
+  const manageSkills = useMobileWorkspaceSelector((current) => current.canManageAgentSkills(agent.serverId));
+  const skillsQuery = agentSkillsQuery(queryScope, agent.serverId, agent.id, manageSkills, workspace.loadAgentSkills);
+  const skillsKey = skillsQuery.queryKey;
+  const skills = useQuery({ ...options, ...skillsQuery, enabled: available && section === "skills" });
+  const manageEventChecks = useMobileWorkspaceSelector((current) => current.canManageEventChecks(agent.serverId));
+  const eventChecksKey = [...queryKeys.agentInfo(queryScope, agent.serverId, agent.id), "event-checks"];
   const eventChecks = useQuery({
     ...options,
-    enabled: available && section === "eventChecks" && workspace.canManageEventChecks(agent.serverId),
+    enabled: available && section === "eventChecks" && manageEventChecks,
     queryKey: eventChecksKey,
     queryFn: () => workspace.loadEventChecks(agent.id, agent.serverId),
   });
@@ -152,7 +160,7 @@ export function AgentInformation({
   const storage = useQuery({
     ...options,
     enabled: available && section === "files",
-    queryKey: [...key, "storage"],
+    queryKey: queryKeys.agentRecord(queryScope, agent.serverId, agent.id, "storage"),
     queryFn: () => {
       const force = forceStorageScan.current;
       forceStorageScan.current = false;
@@ -166,7 +174,7 @@ export function AgentInformation({
   const usage = useQuery({
     ...options,
     enabled: available && section === "usage",
-    queryKey: [...key, "usage", available, range],
+    queryKey: queryKeys.agentUsage(queryScope, agent.serverId, agent.id, available, range),
     // The last report stays on screen while the next range loads, so its values change in place.
     placeholderData: keepPreviousData,
     // As on desktop, the agent page reads the host report with an agent filter: it splits the days by
@@ -197,18 +205,39 @@ export function AgentInformation({
           </InformationSection>
         </View>
       ) : null}
+      {section === "memories" && memorySelection.data ? (
+        <SettingsNote>
+          {t("mobile.agent.info.memory.inclusion.explanation")}{" "}
+          {t("mobile.agent.info.memory.inclusion.capacity", {
+            used: format.fileSize(memorySelection.data.usedBytes),
+            total: format.fileSize(memorySelection.data.budgetBytes),
+          })}
+        </SettingsNote>
+      ) : null}
       {section === "memories" ? (
         <InformationSection
           kind="memories"
           list
           available={available}
-          pending={memories.isPending}
-          failed={memories.isError}
-          retry={() => void memories.refetch()}
+          pending={memories.isPending || memorySelection.isPending}
+          failed={memories.isError || memorySelection.isError}
+          retry={() => {
+            void memories.refetch();
+            void memorySelection.refetch();
+          }}
         >
           {memories.data?.map((memory) => (
             <SettingsRow
               key={memory.id}
+              supportingText={
+                selectionById.has(memory.id)
+                  ? t(
+                      selectionById.get(memory.id)?.inclusion === "essential"
+                        ? "mobile.agent.info.memory.inclusion.essential"
+                        : "mobile.agent.info.memory.inclusion.searchable",
+                    )
+                  : undefined
+              }
               onPress={() =>
                 router.push({
                   pathname: "/agent-info/[agentId]/memory",
@@ -337,7 +366,7 @@ export function AgentInformation({
             <AgentFiles
               agent={agent}
               usage={storage.data}
-              canDelete={role === "owner" || role === "admin"}
+              canDelete={canAdministerServer(role)}
               onChanged={rescanStorage}
             />
           ) : (
@@ -351,14 +380,17 @@ export function AgentInformation({
       ) : null}
       {section === "memory" ? (
         !recordId ? (
-          <MemoryEditor agent={agent} available={available} />
+          <MemoryEditor agent={agent} available={available} selection={memorySelection.data} />
         ) : (
           <RecordSection
             kind="memory"
             available={available}
-            pending={memories.isPending}
-            failed={memories.isError}
-            retry={() => void memories.refetch()}
+            pending={memories.isPending || memorySelection.isPending}
+            failed={memories.isError || memorySelection.isError}
+            retry={() => {
+              void memories.refetch();
+              void memorySelection.refetch();
+            }}
           >
             {memories.data?.some((item) => item.id === recordId) ? (
               <MemoryEditor
@@ -366,6 +398,8 @@ export function AgentInformation({
                 agent={agent}
                 available={available && !memories.isError}
                 memory={memories.data.find((item) => item.id === recordId)}
+                selection={memorySelection.data}
+                selectionAvailable={!memorySelection.isError}
               />
             ) : (
               <SettingsRow>
@@ -394,7 +428,11 @@ export function AgentInformation({
                 key={recordId}
                 agent={agent}
                 available={available && !routines.isError && !(eventsEnabled && eventRoutines.isError)}
-                routine={allRoutines.find((item) => item.id === recordId)}
+                // The event record carries what the routine does with missed runs; the released one does not.
+                routine={
+                  eventRoutines.data?.find((item) => item.id === recordId) ??
+                  allRoutines.find((item) => item.id === recordId)
+                }
               />
             ) : (
               <SettingsRow>
@@ -485,14 +523,4 @@ function InformationSection({
       </SettingsRow>
     </SettingsSection>
   );
-}
-
-/** The skills the user assigned, as the desktop agent settings list them: built-in skills are hidden. */
-function userAssignedSkills(skills: InstalledSkill[]): InstalledSkill[] {
-  return skills
-    .filter(
-      (skill) =>
-        skill.origin !== "managed" && skill.slug !== "openbot-site-hosting" && skill.skillId !== "openbot-site-hosting",
-    )
-    .sort((left, right) => left.name.localeCompare(right.name));
 }

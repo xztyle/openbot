@@ -58,6 +58,12 @@ export interface StorageOverviewProps {
   /** The viewer can clear caches and delete files. Off for a member of a remote server. */
   canManage?: boolean;
   onClear: (category: ClearableStorageCategory) => void | Promise<void>;
+  /**
+   * What older provider CLI versions take. Only this computer offers it: a server removes its old
+   * versions on its own.
+   */
+  oldRuntimeBytes?: number;
+  onRemoveOldRuntimes?: () => void | Promise<void>;
   onPreviewFile: (file: StoredFileRow) => void;
   onFileAction: (file: StoredFileRow, action: StoredFileAction) => void | Promise<void>;
 }
@@ -75,13 +81,16 @@ export function StorageOverview(props: StorageOverviewProps) {
   const [showFiles, setShowFiles] = createSignal(false);
   const total = createMemo(() => storageTotal(props.breakdown));
   const groups = createMemo(() => storageGroupTotals(props.breakdown, t));
-  const removable = createMemo(() =>
-    props.breakdown.flatMap((entry) =>
+  const removable = createMemo((): CleanupEntry[] => [
+    ...props.breakdown.flatMap((entry) =>
       entry.removable && entry.bytes > 0 && isOneOf(CLEARABLE_STORAGE_CATEGORIES, entry.category)
         ? [{ category: entry.category, bytes: entry.bytes }]
         : [],
     ),
-  );
+    ...(props.onRemoveOldRuntimes && props.oldRuntimeBytes
+      ? [{ category: "runtimes" as const, bytes: props.oldRuntimeBytes }]
+      : []),
+  ]);
   const removableBytes = () => removable().reduce((sum, entry) => sum + entry.bytes, 0);
   const agentRows = createMemo(() =>
     [...props.agentUsage]
@@ -320,7 +329,7 @@ export function StorageOverview(props: StorageOverviewProps) {
             entries={removable()}
             totalBytes={removableBytes()}
             disabled={props.state === "scanning"}
-            onClear={props.onClear}
+            onClear={(category) => (category === "runtimes" ? props.onRemoveOldRuntimes?.() : props.onClear(category))}
           />
         </Show>
       </div>
@@ -330,9 +339,9 @@ export function StorageOverview(props: StorageOverviewProps) {
 
 function StorageCaption(props: {
   state: StorageScanState;
-  scannedAt?: string | null;
-  freeBytes?: number | null;
-  now?: Date;
+  scannedAt?: string | null | undefined;
+  freeBytes?: number | null | undefined;
+  now?: Date | undefined;
 }) {
   const { t, format } = useText();
   const parts = () => {
@@ -357,26 +366,31 @@ function relativeTime(iso: string, now: Date, t: AppTranslate, format: AppFormat
   return format.date(new Date(iso), { month: "short", day: "numeric" });
 }
 
+/** `runtimes` removes only the old provider CLI versions, not the row's whole size. */
+type CleanupCategory = ClearableStorageCategory | "runtimes";
+
 interface CleanupEntry {
-  category: ClearableStorageCategory;
+  category: CleanupCategory;
   bytes: number;
 }
 
 const CLEANUP_DESCRIPTIONS = {
   caches: "files.cleanup.description.caches",
   logs: "files.cleanup.description.logs",
-} as const satisfies Record<ClearableStorageCategory, AppTextKey>;
+  runtimes: "files.cleanup.description.runtimes",
+} as const satisfies Record<CleanupCategory, AppTextKey>;
 
 const CLEANUP_CONFIRM_TITLES = {
   caches: "files.cleanup.confirm.caches",
   logs: "files.cleanup.confirm.logs",
-} as const satisfies Record<ClearableStorageCategory, AppTextKey>;
+  runtimes: "files.cleanup.confirm.runtimes",
+} as const satisfies Record<CleanupCategory, AppTextKey>;
 
 function StorageCleanup(props: {
   entries: readonly CleanupEntry[];
   totalBytes: number;
   disabled: boolean;
-  onClear: (category: ClearableStorageCategory) => void | Promise<void>;
+  onClear: (category: CleanupCategory) => void | Promise<void>;
 }) {
   const { t, format, errorMessage } = useText();
   const headingId = `storage-cleanup-${createUniqueId()}`;

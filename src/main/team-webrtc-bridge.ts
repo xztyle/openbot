@@ -17,6 +17,8 @@ interface TeamWebRtcBridgeEvents {
   signalReady: [peerId: string];
   /** The Signal socket of a peer opened. Only the connection trace reads it. */
   signalOpen: [peerId: string];
+  /** A host's own Signal socket closed. `terminal`: the peer does not connect it again. */
+  signalClosed: [peerId: string, code: string, terminal: boolean];
   incoming: [
     peerId: string,
     connection: {
@@ -33,12 +35,12 @@ interface TeamWebRtcBridgeEvents {
   disconnected: [peerId: string];
   data: [peerId: string, channel: TeamWebRtcChannel, data: string | ArrayBuffer];
   path: [peerId: string, path: "p2p" | "relay"];
-  error: [peerId: string, code: string, message: string];
+  error: [peerId: string, code: string, message: string, terminal?: boolean];
   iceServers: [peerId: string, servers: RemoteDesktopIceServer[]];
 }
 
 interface TeamWebRtcBridgeOptions {
-  developmentUrl?: string | null;
+  developmentUrl?: string | null | undefined;
   preloadPath?: string;
   iceTransportPolicy?: "all" | "relay";
 }
@@ -48,11 +50,19 @@ interface TeamWebRtcBridgeOptions {
 // discriminated Signal union it carries fragments of has already been decoded on the other side.
 // The schema stays zod and stays strict about it: this is the renderer-to-main trust boundary, and
 // the only thing shared with the wire contract is the shape of what crosses it, tied below.
-const iceServerSchema = z.object({
-  urls: z.union([z.string(), z.array(z.string())]),
-  username: z.string().optional(),
-  credential: z.string().optional(),
-}) satisfies z.ZodType<IceServer>;
+const iceServerSchema = z
+  .object({
+    urls: z.union([z.string(), z.array(z.string())]),
+    username: z.string().optional(),
+    credential: z.string().optional(),
+  })
+  .transform(
+    ({ urls, username, credential }): IceServer => ({
+      urls,
+      ...(username === undefined ? {} : { username }),
+      ...(credential === undefined ? {} : { credential }),
+    }),
+  ) satisfies z.ZodType<IceServer>;
 const bridgeMessageSchema = z
   .object({
     type: z.string().optional(),
@@ -64,6 +74,7 @@ const bridgeMessageSchema = z
     path: z.enum(["p2p", "relay"]).optional(),
     code: z.string().optional(),
     message: z.string().optional(),
+    terminal: z.boolean().optional(),
     connectionId: z.string().optional(),
     sessionId: z.string().optional(),
     userId: z.string().optional(),
@@ -85,8 +96,10 @@ type BridgeCommand =
       token: string;
       peer: "host" | "client";
       iceTransportPolicy: "all" | "relay";
+      privateNetwork?: boolean;
     }
   | { type: "prepare-signal"; peerId: string; signalUrl: string }
+  | { type: "set-private-network"; peerId: string; privateNetwork: boolean }
   | { type: "disconnect" | "disconnect-peer" | "restart-ice" | "close"; peerId: string }
   | { type: "send"; peerId: string; channel: TeamWebRtcChannel; data: string | ArrayBuffer };
 
@@ -124,10 +137,22 @@ export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
 
   readonly connect = Effect.fn("TeamWebRtcBridge.connect")(function* (
     this: TeamWebRtcBridge,
-    input: { peerId: string; signalUrl: string; token: string; peer: "host" | "client" },
+    input: { peerId: string; signalUrl: string; token: string; peer: "host" | "client"; privateNetwork?: boolean },
   ) {
     yield* this.start();
     yield* this.#command({ type: "connect", ...input, iceTransportPolicy: this.#options.iceTransportPolicy ?? "all" });
+  }).bind(this);
+
+  /**
+   * Turns the private network route on or off for a connected host. When it turns on, the bridge
+   * closes every device connection, and each device connects again over a private network only.
+   */
+  readonly setPrivateNetwork = Effect.fn("TeamWebRtcBridge.setPrivateNetwork")(function* (
+    this: TeamWebRtcBridge,
+    peerId: string,
+    privateNetwork: boolean,
+  ) {
+    if (this.#port) yield* this.#command({ type: "set-private-network", peerId, privateNetwork });
   }).bind(this);
 
   /**
@@ -327,6 +352,8 @@ export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
     else if (message.type === "account-servers-changed") this.emit("accountServersChanged", message.peerId);
     else if (message.type === "signal-ready") this.emit("signalReady", message.peerId);
     else if (message.type === "signal-open") this.emit("signalOpen", message.peerId);
+    else if (message.type === "signal-closed" && message.code)
+      this.emit("signalClosed", message.peerId, message.code, message.terminal === true);
     else if (message.type === "peer-connected" && message.localFingerprint && message.remoteFingerprint)
       this.emit("connected", message.peerId, {
         localFingerprint: message.localFingerprint,
@@ -345,6 +372,7 @@ export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
         message.peerId,
         message.code ?? "webrtc_error",
         message.message ?? sourceText("error.remote.webRtcFailed"),
+        message.terminal === true,
       );
   }
 }

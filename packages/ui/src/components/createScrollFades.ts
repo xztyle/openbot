@@ -3,11 +3,15 @@ import { createStore } from "solid-js";
 /** Slack in pixels before an edge counts as reached, absorbing sub-pixel scroll positions. */
 const EDGE_EPSILON = 2;
 
-/** Top/bottom fade flags in one store; `bind`+`measure`, `adopt` for owned observers. */
+/**
+ * Top/bottom fade flags in one store; `bind`+`measure`, `adopt` for owned observers. `watch` the
+ * content when it can grow while the scroller keeps its size.
+ */
 export function createScrollFades() {
   const [fades, setFades] = createStore({ bottom: false, top: false });
   let element: Element | undefined;
   let resizeObserver: ResizeObserver | undefined;
+  let contentObserver: ResizeObserver | undefined;
 
   function measure(): void {
     if (!element) return;
@@ -36,6 +40,11 @@ export function createScrollFades() {
     remeasure();
   }
 
+  function watch(content: Element): void {
+    contentObserver ??= new ResizeObserver(measure);
+    contentObserver.observe(content);
+  }
+
   function classes(): Record<string, boolean> {
     return { "scroll-fade-top": fades.top, "scroll-fade-bottom": fades.bottom };
   }
@@ -43,7 +52,9 @@ export function createScrollFades() {
   function stop(): void {
     resizeObserver?.disconnect();
     resizeObserver = undefined;
+    contentObserver?.disconnect();
+    contentObserver = undefined;
   }
 
-  return { adopt, bind, classes, measure, remeasure, stop };
+  return { adopt, bind, classes, measure, remeasure, stop, watch };
 }

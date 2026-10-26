@@ -12,6 +12,11 @@ export class ProviderClientOperationError extends Schema.TaggedError<ProviderCli
 
 export const { rewrap: toProviderClientOperationError } = causeHelpers(ProviderClientOperationError);
 
+/** A sign-in failure with a safe message for the user. The provider status shows it as it is. */
+export class ProviderSignInError extends Schema.TaggedError<ProviderSignInError>()("ProviderSignInError", {
+  message: Schema.String,
+}) {}
+
 export function providerFailure(cause: unknown): ProviderClientOperationError {
   return cause instanceof ProviderClientOperationError ? cause : new ProviderClientOperationError({ cause });
 }

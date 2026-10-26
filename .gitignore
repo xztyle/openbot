@@ -37,6 +37,9 @@ Shared/
 index-*.css
 .openbot-browser-test/
 .openbot-build/
+# The home page beam, a React Bits port. Its license forbids a public copy; CI checks it out
+# from the private nightly-labs/openbot-laser-flow repository.
+/apps/auth-api/src/vendor/laser-flow/
 .worktrees/
 # Claude Code creates git worktrees here; they carry a nested biome.json.
 .claude/worktrees/
@@ -56,6 +59,9 @@ Bots
 mise.local.toml
 # Local provider credential export. Never commit.
 keys
+# A Firebase service account key sends Android notifications. It goes into the encrypted account
+# service settings only. Never commit.
+*firebase-adminsdk*.json
 # Agent task checklist. Local to one worktree.
 /TASKS.md
 

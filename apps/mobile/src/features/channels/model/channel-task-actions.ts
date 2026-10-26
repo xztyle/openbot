@@ -41,7 +41,7 @@ export function channelTaskActivities(
         activeMessage && latest.message.status === "streaming" && latest.message.itemType !== "commentary"
           ? "responding"
           : "working",
-      detail: "Working on it…",
+      detail: null,
     };
   });
 }

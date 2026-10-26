@@ -12,19 +12,16 @@
 
 import { readFile, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve } from "node:path";
-import { isChatVisualMimeType } from "@openbot/contracts/chat-visual";
+import { CHAT_VISUAL_PAGE_LIMIT, isChatVisualMimeType } from "@openbot/contracts/chat-visual";
 import { LOCAL_SERVER_ID } from "@openbot/contracts/ipc";
+import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { app, session } from "electron";
 import type { AgentService } from "../backend/agent-service";
 import { runCauseEffect } from "../backend/effect-boundary";
 import type { MailboxStore } from "../backend/mailbox-store";
-import {
-  attachmentCorsHeaders,
-  attachmentDocumentHeaders,
-  CHAT_VISUAL_PAGE_LIMIT,
-  chatVisualResponse,
-} from "./chat-visual-protocol";
+import { attachmentCorsHeaders, attachmentDocumentHeaders, chatVisualResponse } from "./chat-visual-protocol";
 import { buildContentSecurityPolicy, readSelfHostedSignalOrigin } from "./content-security-policy";
+import { filePreviewPages } from "./file-preview-pages";
 import { fileResponse } from "./file-response";
 import type { RemoteServerManager } from "./remote-server-manager";
 import { canCheckRendererPermission, canRequestRendererPermission } from "./renderer-permissions";
@@ -40,7 +37,7 @@ export function configureContentSecurityPolicy(): void {
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     if (details.resourceType !== "mainFrame" || !isTrustedRendererUrl(details.url)) {
-      callback({ responseHeaders: details.responseHeaders });
+      callback(details.responseHeaders === undefined ? {} : { responseHeaders: details.responseHeaders });
       return;
     }
     callback({
@@ -77,6 +74,7 @@ export interface AttachmentProtocolDependencies {
 }
 
 export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: AttachmentProtocolDependencies): void {
+  const logger = createOpenBotLogger("attachment-protocol");
   session.defaultSession.protocol.handle("openbot-attachment", async (request) => {
     try {
       const url = new URL(request.url);
@@ -103,7 +101,7 @@ export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: 
       const serverId = decodeURIComponent(url.hostname);
       const attachmentId = decodeURIComponent(url.pathname.split("/").filter(Boolean)[0] ?? "");
       if (!serverId || !attachmentId) return new Response("Not found", { status: 404 });
-      const attachment = await runCauseEffect(remoteServers.downloadAttachment(attachmentId, serverId));
+      const attachment = await runCauseEffect(remoteServers.downloadAttachment(attachmentId, serverId, true));
       return new Response(Buffer.from(attachment.bytes), {
         headers: {
           "Content-Type": attachment.mimeType,
@@ -114,7 +112,9 @@ export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: 
           "Content-Disposition": "inline",
         },
       });
-    } catch {
+    } catch (error) {
+      // The image shows only a download icon, so the log is the only record of why it failed.
+      logger.warn("A remote attachment could not be shown.", { cause: toLogValue(error) });
       return new Response("Not found", { status: 404 });
     }
   });
@@ -123,6 +123,7 @@ export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: 
   session.defaultSession.protocol.handle("openbot-visual", async (request) => {
     try {
       const url = new URL(request.url);
+      if (url.hostname === "preview") return filePreviewPages.response(request);
       const id = url.hostname === "file" ? url.pathname.split("/").filter(Boolean).at(-1) : undefined;
       const attachment = id ? await runCauseEffect(mailbox.resolveAttachment(id)) : null;
       if (!attachment || !isChatVisualMimeType(attachment.mimeType)) return new Response("Not found", { status: 404 });
@@ -142,7 +143,8 @@ export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: 
       const attachment = await runCauseEffect(remoteServers.downloadAttachment(attachmentId, serverId));
       if (!isChatVisualMimeType(attachment.mimeType)) return new Response("Not found", { status: 404 });
       return chatVisualResponse(attachment.bytes);
-    } catch {
+    } catch (error) {
+      logger.warn("A remote visual reply could not be shown.", { cause: toLogValue(error) });
       return new Response("Not found", { status: 404 });
     }
   });

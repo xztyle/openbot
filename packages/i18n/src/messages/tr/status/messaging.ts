@@ -40,7 +40,7 @@ export const messages = {
   "status.messaging.signInReceived": "OpenBot Slack kurulumunu aldı. Bu sekmeyi kapatabilirsiniz.",
   "status.messaging.signInUnknown": "OpenBot bu Slack kurulumunu başlatmadı. OpenBot içinde tekrar başlatın.",
   "status.messaging.telegramNoAgent":
-    "Burada henüz yanıt verebilecek bir ajan yok. OpenBot'ta Telegram Düzenleyicisi'ni ekleyin.",
+    "Henüz burada yanıt verebilecek bir ajan yok. OpenBot'ta Telegram Düzenleyicisini ekleyin.",
   "status.messaging.telegramLinked":
     "OpenBot bu sohbete bağlandı. Ajanlara sormak için {bot} adını anın veya OpenBot'un bir mesajını yanıtlayın.",
   "status.messaging.telegramOrchestratorName": "Telegram Düzenleyicisi",

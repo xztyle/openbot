@@ -9,6 +9,11 @@ export function appendVoiceTranscript(draft: string, transcript: string): string
 }
 
 export async function recordingToWav(recording: Blob): Promise<Uint8Array> {
+  return encodePcmWav(await recordingToSamples(recording), VOICE_AUDIO_LIMITS.sampleRate);
+}
+
+/** The recording as mono samples at the 16 kHz rate that both local models and ElevenLabs take. */
+export async function recordingToSamples(recording: Blob): Promise<Float32Array> {
   const context = new AudioContext();
   try {
     const decoded = await context.decodeAudioData(await recording.arrayBuffer());
@@ -17,13 +22,13 @@ export async function recordingToWav(recording: Blob): Promise<Uint8Array> {
     if (resampled.length > VOICE_AUDIO_LIMITS.sampleRate * VOICE_AUDIO_LIMITS.maximumSeconds) {
       throw new Error(currentText().t("app.voice.tooLong"));
     }
-    return encodePcmWav(resampled, VOICE_AUDIO_LIMITS.sampleRate);
+    return resampled;
   } finally {
     await context.close();
   }
 }
 
-export function encodePcmWav(samples: Float32Array, sampleRate: number): Uint8Array {
+function encodePcmWav(samples: Float32Array, sampleRate: number): Uint8Array {
   const output = new Uint8Array(44 + samples.length * 2);
   const view = new DataView(output.buffer);
   writeAscii(output, 0, "RIFF");
@@ -39,9 +44,17 @@ export function encodePcmWav(samples: Float32Array, sampleRate: number): Uint8Ar
   view.setUint16(34, 16, true);
   writeAscii(output, 36, "data");
   view.setUint32(40, samples.length * 2, true);
+  output.set(encodePcm16(samples), 44);
+  return output;
+}
+
+/** Signed 16-bit little-endian samples, with no header. */
+export function encodePcm16(samples: Float32Array): Uint8Array {
+  const output = new Uint8Array(samples.length * 2);
+  const view = new DataView(output.buffer);
   for (let index = 0; index < samples.length; index += 1) {
     const sample = Math.max(-1, Math.min(1, samples[index] ?? 0));
-    view.setInt16(44 + index * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    view.setInt16(index * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
   }
   return output;
 }

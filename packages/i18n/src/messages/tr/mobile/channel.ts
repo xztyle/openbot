@@ -9,7 +9,7 @@ export const messages = {
   "mobile.channel.route.routine": "Rutin",
   "mobile.channel.list.deleteTitle": "{name} silinsin mi?",
   "mobile.channel.list.deleteBody":
-    "Bu işlem kanalı durdurur. Geçmişi yalnızca önizleme amacıyla Silinen kanallar bölümünde kalır. Geri yükleyemezsiniz. Ajanlar korunur.",
+    "Bu işlem kanalı durdurur. Geçmişi yalnızca önizleme amacıyla Silinen kanallar bölümünde kalır. Oradan geri yükleyebilirsiniz. Üye ajanlar korunur.",
   "mobile.channel.list.deleteFailed": "Kanal silinemedi",
   "mobile.channel.list.deleteFailedBody": "Bu kanal silinemedi. Tekrar deneyin.",
   "mobile.channel.list.open": "{name} kanalını aç",
@@ -32,10 +32,14 @@ export const messages = {
   "mobile.channel.actions.none": "İşlem gerekmiyor.",
   "mobile.channel.actions.loading": "Eylemler yükleniyor…",
   "mobile.channel.deleted.note":
-    "Silinen kanallar yalnızca önizleme için kullanılabilir. Bunları geri yükleyemezsiniz.",
+    "Silinen kanallar yalnızca önizleme için kullanılabilir. Yeniden kullanmak için bir kanalı geri yükleyin.",
   "mobile.channel.deleted.loading": "Silinen kanallar yükleniyor…",
   "mobile.channel.deleted.empty": "Silinen kanal yok.",
   "mobile.channel.deleted.preview": "{name} önizlemesi",
+  "mobile.channel.deleted.restore": "Geri yükle",
+  "mobile.channel.deleted.restoreNamed": "Geri yükle: {name}",
+  "mobile.channel.deleted.restoreFailed": "Kanal geri yüklenemedi",
+  "mobile.channel.deleted.restoreFailedBody": "Bu kanal geri yüklenemedi. Tekrar deneyin.",
   "mobile.channel.chat.fallbackName": "Kanal",
   "mobile.channel.chat.deletedNotice": "Silinmiş kanal. Yalnızca önizleme.",
   "mobile.channel.records.connect": "Bu kanalı düzenlemek için sunucuya bağlanın.",
@@ -70,7 +74,7 @@ export const messages = {
   "mobile.channel.form.routines": "Rutinler",
   "mobile.channel.form.deleteTitle": "Kanal silinsin mi?",
   "mobile.channel.form.deleteBody":
-    "Bu işlem kanalı durdurur. Geçmişi yalnızca önizleme amacıyla Silinen kanallar bölümünde kalır. Geri yükleyemezsiniz. Ajanlar korunur.",
+    "Bu işlem kanalı durdurur. Geçmişi yalnızca önizleme amacıyla Silinen kanallar bölümünde kalır. Oradan geri yükleyebilirsiniz. Üye ajanlar korunur.",
   "mobile.channel.form.delete": "Kanalı sil",
   "mobile.channel.form.unavailable": "Değişiklik yapmak için kanalları destekleyen bir masaüstü sunucusuna bağlanın.",
   "mobile.channel.form.invalidName": "Geçerli bir kanal adı girin.",

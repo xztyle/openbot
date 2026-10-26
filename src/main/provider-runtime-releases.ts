@@ -6,7 +6,7 @@ import type { AgentRuntimeLock } from "../../scripts/agent-runtime-lock";
 import {
   codexTag,
   cursorPackageUrl,
-  OPENCODE_UMBRELLA_PACKAGE,
+  OPENCODE_CLI_PACKAGE,
   providerRuntimeDescriptor,
   type RuntimeSpec,
   type RuntimeTarget,
@@ -70,6 +70,80 @@ const LATEST_RELEASES: Record<
   ManagedProviderId,
   (context: LatestReleaseContext) => Effect.Effect<RuntimeSpec, ProviderRuntimeFailure>
 > = {
+  pi: Effect.fn("ProviderRelease.pi")(function* ({ target, lock, fetch }: LatestReleaseContext) {
+    const pinned = providerRuntimeDescriptor("pi").spec(target, lock);
+    const release = yield* fetchJsonEffect(fetch, "https://api.github.com/repos/earendil-works/pi/releases/latest", {
+      Accept: "application/vnd.github+json",
+    });
+    const version = isString(release.tag_name) ? versionFromTag(release.tag_name, "v") : null;
+    const assetName = `pi-${target.replace("win32", "windows")}.${target === "win32-x64" ? "zip" : "tar.gz"}`;
+    const asset = Array.isArray(release.assets)
+      ? release.assets.find((entry: unknown) => isDynamicRecord(entry) && entry.name === assetName)
+      : null;
+    if (
+      !version ||
+      !isDynamicRecord(asset) ||
+      !isString(asset.digest) ||
+      !/^sha256:[a-f0-9]{64}$/u.test(asset.digest) ||
+      !isNumber(asset.size) ||
+      asset.size <= 0
+    )
+      return yield* new ProviderRuntimeFailure({ cause: new Error(sourceText("error.provider.nativeArchiveInvalid")) });
+    return {
+      ...pinned,
+      source: "latest" as const,
+      version,
+      packageVersion: version,
+      url: `https://github.com/earendil-works/pi/releases/download/v${version}/${assetName}`,
+      archiveDigest: { algorithm: "sha256" as const, hex: asset.digest.slice(7) },
+      downloadBytes: asset.size,
+    };
+  }),
+  muse: Effect.fn("ProviderRelease.muse")(function* ({ target, lock, fetch }: LatestReleaseContext) {
+    const pinned = providerRuntimeDescriptor("muse").spec(target, lock);
+    const channel = yield* fetchJsonEffect(fetch, "https://api.meta.ai/muse-code/channels/muse-stable");
+    if (!isString(channel.version) || !/^\d+\.\d+\.\d+-R\d+(?:\.\d+)?$/u.test(channel.version))
+      return yield* new ProviderRuntimeFailure({ cause: new Error(sourceText("error.provider.nativeArchiveInvalid")) });
+    const base = `https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=${encodeURIComponent(channel.version)}&file=`;
+    const manifest = yield* fetchJsonEffect(fetch, `${base}manifest.json`);
+    const targets: Record<RuntimeTarget, string> = {
+      "darwin-arm64": "aarch64_macos",
+      "darwin-x64": "x86_macos",
+      "linux-arm64": "aarch64_linux",
+      "linux-x64": "x86_linux",
+      "win32-x64": "x86_windows",
+    };
+    const asset = isDynamicRecord(manifest.artifacts) ? manifest.artifacts[targets[target]] : null;
+    if (
+      manifest.version !== channel.version ||
+      manifest.checksum_algorithm !== "sha256" ||
+      !isDynamicRecord(asset) ||
+      !isString(asset.checksum) ||
+      !/^[a-f0-9]{64}$/u.test(asset.checksum) ||
+      !isNumber(asset.size) ||
+      asset.size <= 0 ||
+      !isString(asset.url)
+    )
+      return yield* new ProviderRuntimeFailure({ cause: new Error(sourceText("error.provider.nativeArchiveInvalid")) });
+    const url = new URL(asset.url);
+    if (
+      url.origin !== "https://lookaside.facebook.com" ||
+      url.pathname !== "/lookaside/muse/download/" ||
+      url.searchParams.get("version") !== channel.version ||
+      url.searchParams.get("channel") !== "muse"
+    )
+      return yield* new ProviderRuntimeFailure({ cause: new Error(sourceText("error.provider.nativeArchiveInvalid")) });
+    return {
+      ...pinned,
+      source: "latest" as const,
+      version: channel.version,
+      packageVersion: channel.version,
+      url: url.toString(),
+      archiveDigest: { algorithm: "sha256" as const, hex: asset.checksum },
+      downloadBytes: asset.size,
+      installedBytes: asset.size,
+    };
+  }),
   codex: Effect.fn("ProviderRelease.codex")(function* ({
     target,
     lock,
@@ -78,7 +152,7 @@ const LATEST_RELEASES: Record<
     const pinned = providerRuntimeDescriptor("codex").spec(target, lock);
     const api = lock.codex.repository.replace("https://github.com/", "https://api.github.com/repos/");
     const release = yield* fetchJsonEffect(fetch, `${api}/releases/latest`, { Accept: "application/vnd.github+json" });
-    const version = isString(release.tag_name) ? versionFromTag(release.tag_name) : null;
+    const version = isString(release.tag_name) ? versionFromTag(release.tag_name, "rust-v") : null;
     if (!(version && Array.isArray(release.assets))) {
       return yield* new ProviderRuntimeFailure({ cause: new Error(sourceText("error.provider.codexReleaseShape")) });
     }
@@ -128,13 +202,13 @@ const LATEST_RELEASES: Record<
     fetch,
   }: LatestReleaseContext): Effect.fn.Return<RuntimeSpec, ProviderRuntimeFailure> {
     const pinned = providerRuntimeDescriptor("opencode").spec(target, lock);
-    // The umbrella package names the release. Staging takes the LICENSE from it, so a platform
-    // package published before it is not offered yet.
-    const umbrella = yield* fetchJsonEffect(fetch, `${lock.opencode.registry}/${OPENCODE_UMBRELLA_PACKAGE}/latest`);
+    // The umbrella package names the release, so a platform package published before it is not
+    // offered yet.
+    const umbrella = yield* fetchJsonEffect(fetch, `${lock.opencode.registry}/${OPENCODE_CLI_PACKAGE}/latest`);
     const version = isString(umbrella.version) && VERSION.test(umbrella.version) ? umbrella.version : null;
     if (!version)
       return yield* new ProviderRuntimeFailure({
-        cause: new Error(sourceText("error.provider.releaseNoDownload", { name: OPENCODE_UMBRELLA_PACKAGE })),
+        cause: new Error(sourceText("error.provider.releaseNoDownload", { name: OPENCODE_CLI_PACKAGE })),
       });
     const artifact = yield* npmArtifactEffect(
       fetch,
@@ -322,9 +396,10 @@ function sha512Hex(integrity: string): string | null {
   return match?.[1] ? Buffer.from(match[1], "base64").toString("hex") : null;
 }
 
-function versionFromTag(tag: string): string | null {
-  const version = /^rust-v(\d+\.\d+\.\d+)$/u.exec(tag)?.[1];
-  return version ?? null;
+/** Codex tags each release `rust-v<version>`, and Pi tags it `v<version>`. */
+function versionFromTag(tag: string, prefix: "rust-v" | "v"): string | null {
+  const version = tag.startsWith(prefix) ? tag.slice(prefix.length) : "";
+  return VERSION.test(version) ? version : null;
 }
 
 /**

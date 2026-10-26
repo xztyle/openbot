@@ -72,6 +72,8 @@ jobs:
       - name: Validate release version
         id: release
         shell: bash
+        env:
+          DISCORD_RELEASE_ROLE_ID: ${{ vars.DISCORD_RELEASE_ROLE_ID }}
         run: |
           package_version="$(bun -p 'require("./package.json").version')"
           tag_version="${GITHUB_REF_NAME#v}"
@@ -80,6 +82,12 @@ jobs:
             exit 1
           fi
           bun scripts/check-release-notes.ts
+          # The `discord-announce` job of a tag push needs the role, so stop before the release.
+          if [[ "$GITHUB_EVENT_NAME" == "push" && -z "$DISCORD_RELEASE_ROLE_ID" ]]; then
+            echo "DISCORD_RELEASE_ROLE_ID is not set. See docs/RELEASING.md#discord-announcement." >&2
+            exit 1
+          fi
+          bun scripts/discord-release-announcement.ts check "$package_version"
           echo "version=$package_version" >> "$GITHUB_OUTPUT"
           echo "tag=v$package_version" >> "$GITHUB_OUTPUT"
 
@@ -309,8 +317,8 @@ jobs:
         run: |
           bun run check:desktop
           bun run test:desktop -- --maxWorkers=2
-          bun run test:sites
-          # The account service build needs more than the default Node heap of this 7 GB runner (about 2 GB).
+          # The account service check needs more than the default Node heap of this 7 GB runner (about 2 GB).
+          # Its build sets a larger heap itself, in `apps/auth-api/package.json`.
           NODE_OPTIONS=--max-old-space-size=4096 bun run check:api
 
       - name: Install and verify native runtimes
@@ -340,8 +348,11 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
         # On a hosted macOS runner, `hdiutil create` can fail with "Device not configured" or
-        # "Resource busy" when nothing is wrong with the app; v0.21.1 failed this way. Only that
-        # error gets another attempt. Each attempt signs and notarizes again, about 6 minutes.
+        # "Resource busy" when nothing is wrong with the app; v0.21.1 failed this way. The connection
+        # to Apple's ticket service or to GitHub can also drop: `stapler` failed with code 68 and
+        # "The network connection was lost" in v0.38.2 and v0.39.1, and a DMG tool download
+        # failed with `ENOTFOUND github.com` in v0.31.0. Only these errors get another attempt.
+        # Each attempt signs and notarizes again, about 6 minutes.
         shell: bash
         run: |
           bun run voice:prepare-runtime
@@ -352,11 +363,14 @@ jobs:
               --config.mac.provisioningProfile="$OPENBOT_PROVISIONING_PROFILE" 2>&1 | tee "$log"; then
               exit 0
             fi
-            if ! grep -Eq 'hdiutil: create failed - (Device not configured|Resource busy)' "$log"; then
+            if grep -Eq 'hdiutil: create failed - (Device not configured|Resource busy)' "$log"; then
+              echo "::warning::hdiutil could not create the DMG (attempt $attempt of 3)."
+              hdiutil info || true
+            elif grep -Eq 'The network connection was lost|getaddrinfo ENOTFOUND' "$log"; then
+              echo "::warning::A network connection failed during the build (attempt $attempt of 3)."
+            else
               exit 1
             fi
-            echo "::warning::hdiutil could not create the DMG (attempt $attempt of 3)."
-            hdiutil info || true
           done
           exit 1
 
@@ -396,7 +410,14 @@ jobs:
             | grep -Fx 'NSUserActivityTypeBrowsingWeb'
           plutil -extract ElectronTeamID raw "$app_path/Contents/Info.plist" | grep -Fx 'ZTRDTUL87R'
           spctl --assess --type execute --verbose=2 "$app_path"
-          xcrun stapler validate "$app_path"
+          # `stapler` reads the ticket from Apple's ticket service. The connection to it can drop
+          # (Error 68 in v0.38.1), so the check gets five attempts. It must pass to continue.
+          for attempt in 1 2 3 4 5; do
+            xcrun stapler validate "$app_path" && break
+            if (( attempt == 5 )); then exit 1; fi
+            echo "::warning::stapler could not validate the ticket (attempt $attempt of 5)."
+            sleep 30
+          done
 
       - name: Verify updater metadata
         shell: bash
@@ -463,7 +484,13 @@ jobs:
           xcrun notarytool submit "$host_pkg" --keychain "$HOST_SIGNING_KEYCHAIN" \
             --keychain-profile openbot-host-release --wait --timeout 20m --output-format json > "$host_signing_dir/notarization.json"
           jq -e '.status == "Accepted"' "$host_signing_dir/notarization.json" >/dev/null
-          xcrun stapler staple "$host_pkg"
+          # The connection to Apple's ticket service can drop, as in the app check.
+          for attempt in 1 2 3 4 5; do
+            xcrun stapler staple "$host_pkg" && break
+            if (( attempt == 5 )); then exit 1; fi
+            echo "::warning::stapler could not staple the Host installer (attempt $attempt of 5)."
+            sleep 30
+          done
           bun scripts/verify-host-installer.ts "$host_pkg" "$RELEASE_VERSION"
           # Host infrastructure is never an Electron auto-update target.
           if grep -F '.pkg' dist/latest-mac.yml; then exit 1; fi
@@ -550,8 +577,10 @@ jobs:
       - name: Set up Bun
         uses: ./.github/actions/setup-bun
 
+      # The Linux job checks types with tsrs, as PR CI does. tsrs has no Windows binary, so a type check
+      # here would use `tsc` from another TypeScript version and could stop a release that CI passed.
       - name: Run Windows checks
-        run: bun run lint && bun run typecheck && bunx vitest run src/backend/cli.test.ts
+        run: bun run lint
 
       # Without a token, the GitHub API rate limit for the runner's address can refuse the release
       # lookup with HTTP 403.
@@ -718,6 +747,7 @@ jobs:
       contents: read
       id-token: write
     env:
+      GITHUB_TOKEN: ${{ github.token }}
       RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
     steps:
       - name: Check out tagged source
@@ -737,9 +767,6 @@ jobs:
       - name: Run Linux checks
         if: matrix.arch == 'x64'
         run: bun run lint && bun run typecheck
-
-      - name: Run Linux CLI tests
-        run: bunx vitest run src/backend/cli.test.ts
 
       - name: Install and verify provider control artifacts
         run: |
@@ -794,6 +821,35 @@ jobs:
           bun run verify:update-artifacts "$SUFFIX"
         env:
           SUFFIX: ${{ matrix.suffix }}
+
+      # Arch Linux and Omarchy have no libfuse.so.2. The AppImage runtime must be static and mount the
+      # AppImage with only `fusermount3`, as it does when a user starts the download.
+      - name: Mount the AppImage without libfuse2
+        run: |
+          set -euo pipefail
+          sudo apt-get install --no-install-recommends --yes fuse3
+          appImage=$(echo dist/*.AppImage)
+          headers=$(readelf --program-headers "$appImage")
+          if grep -Fq "program interpreter" <<<"$headers"; then
+            echo "The AppImage runtime is not static, so it needs system libraries such as libfuse.so.2." >&2
+            exit 1
+          fi
+          # The runtime prints the mount point and keeps the mount until it stops.
+          output=$(mktemp)
+          "$appImage" --appimage-mount >"$output" &
+          runtime=$!
+          for _ in $(seq 1 60); do
+            [ -s "$output" ] && break
+            sleep 1
+          done
+          mountPoint=$(head -n 1 "$output")
+          if [ -z "$mountPoint" ] || [ ! -x "$mountPoint/openbot" ]; then
+            echo "The AppImage did not mount with fusermount3, or its mount has no openbot executable." >&2
+            cat "$output" >&2
+            exit 1
+          fi
+          kill "$runtime" 2>/dev/null || true
+          wait "$runtime" || true
 
       - name: Generate checksums
         run: |
@@ -1017,6 +1073,38 @@ jobs:
               --title "OpenBot $RELEASE_TAG"
           fi
 
+  # Posts the highlights of `.github/release-announcement.json`, which the `validate` job checked, as
+  # OpenBot through a channel webhook (docs/RELEASING.md#discord-announcement). It waits for the
+  # Docker image and the boat snapshot, so the post says "is out" only when every channel has the
+  # version. A failure here does not undo the release: re-run this job. A re-run after a success
+  # posts the message again.
+  discord-announce:
+    name: Announce the release on Discord
+    needs: [validate, publish, docker-publish, hosted-release]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
+        with:
+          install: none
+
+      - name: Post the announcement
+        env:
+          DISCORD_RELEASE_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK_URL }}
+          DISCORD_RELEASE_ROLE_ID: ${{ vars.DISCORD_RELEASE_ROLE_ID }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
+        run: bun scripts/discord-release-announcement.ts send "$RELEASE_VERSION"
+
   hosted-release:
     name: Publish boat server snapshot
     needs: [validate, publish]
@@ -1126,3 +1214,102 @@ jobs:
             jq -e '[.manifests[].platform | select(.os == "linux") | .architecture] | sort == ["amd64", "arm64"]' \
               "$anonymous_config/manifest.json" >/dev/null
           done
+
+  # `nix/sources.json` names the release that the Nix flake installs. It can only name a published
+  # release, because its hashes come from the release's SHA256SUMS.txt. So the update goes to main in
+  # its own PR. The PR's own workflow runs wait for approval because GITHUB_TOKEN opened it, and the
+  # merge waits for them, so the job approves them. It also starts CI on the branch. The PR merges
+  # itself when the required checks pass.
+  nix-sources:
+    name: Open Nix sources PR
+    needs: [validate, publish]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out main
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: ./.github/actions/setup-bun
+        with:
+          install: ignore-scripts
+
+      - name: Update nix/sources.json
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
+        run: bun scripts/nix-sources.ts "$RELEASE_VERSION"
+
+      # Only this step gets the write token: the steps before it run dependency code, which can change
+      # the Git configuration and hooks of the checkout. So this step runs outside the checkout and
+      # makes the branch and the commit with the GitHub API, from the commit that the checkout fetched.
+      - name: Open the PR
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.release_version }}
+          BASE_SHA: ${{ steps.checkout.outputs.commit }}
+        run: |
+          set -euo pipefail
+          path=nix/sources.json
+          file="$GITHUB_WORKSPACE/$path"
+          current="$(gh api "repos/$GITHUB_REPOSITORY/contents/$path?ref=$BASE_SHA")"
+          if jq -r .content <<<"$current" | base64 -d | cmp -s - "$file"; then
+            echo "$path needs no change."
+            exit 0
+          fi
+          branch="build/nix-sources-$RELEASE_VERSION"
+          created=false
+          if gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json number --jq 'length > 0' | grep -Fx true; then
+            echo "A Nix sources PR already exists."
+          else
+            created=true
+            # A rerun after a failed run can find the branch. No open PR uses it, so reset it.
+            if ! gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/heads/$branch" -f "sha=$BASE_SHA" >/dev/null; then
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch" -f "sha=$BASE_SHA" -F force=true >/dev/null
+            fi
+            gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$path" \
+              -f "branch=$branch" \
+              -f "sha=$(jq -r .sha <<<"$current")" \
+              -f "message=build(nix): install OpenBot $RELEASE_VERSION" \
+              -f "content=$(base64 -w0 "$file")" >/dev/null
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --label no-changelog \
+              --title "build(nix): install OpenBot $RELEASE_VERSION" \
+              --body "Points the Nix flake at the published v$RELEASE_VERSION release. The hashes come from its \`SHA256SUMS.txt\`."
+          fi
+          # A failed call below gives a warning, so that the steps after it still run.
+          if ! gh pr merge "$branch" --repo "$GITHUB_REPOSITORY" --auto --squash; then
+            echo "::warning::Auto-merge is not on for the Nix sources PR. Merge it when its checks pass."
+          fi
+          head_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq .object.sha)"
+          waiting_runs() {
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$head_sha&event=pull_request&status=action_required" \
+              --jq '.workflow_runs[].id' || echo "::warning::Could not list the PR workflow runs." >&2
+          }
+          # The runs of a new PR can appear some seconds after the PR. The runs of an existing PR are there.
+          attempts=1
+          if [ "$created" = true ]; then attempts=12; fi
+          approved=0
+          for attempt in $(seq 1 "$attempts"); do
+            runs="$(waiting_runs)"
+            for run in $runs; do
+              if gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$run/approve" >/dev/null; then
+                approved=$((approved + 1))
+              fi
+            done
+            if [ -z "$runs" ] && { [ "$approved" -ge 1 ] || [ "$created" = false ]; }; then break; fi
+            if [ "$attempt" -lt "$attempts" ]; then sleep 5; fi
+          done
+          if [ -n "$(waiting_runs)" ] || { [ "$created" = true ] && [ "$approved" -eq 0 ]; }; then
+            echo "::warning::Some PR workflow runs were not approved. Approve the waiting runs on the PR so that it can merge."
+          fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"

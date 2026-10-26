@@ -1,7 +1,10 @@
+import type { AppAppearance } from "@openbot/contracts/app-appearance";
 import type { AppLanguage } from "@openbot/contracts/app-language";
 import type { CentralAuthUser } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import {
+  Button,
+  CreditCard,
   Item,
   ItemActions,
   ItemContent,
@@ -14,10 +17,10 @@ import {
   Tabs,
   UserRound,
 } from "@openbot/ui";
+import { AppearanceSelect } from "@openbot/ui/features/settings/AppearanceSelect";
 import { LanguageSelect } from "@openbot/ui/features/settings/LanguageSelect";
-import { ProfileNameSaveBar } from "@openbot/ui/features/settings/ProfileNameSaveBar";
 import { SendShortcutSelect } from "@openbot/ui/features/settings/SendShortcutSelect";
-import { SettingsDialogShell } from "@openbot/ui/features/settings/SettingsDialogShell";
+import { SettingsDialogShell, type SettingsPagePlacement } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { SettingsProfileTab } from "@openbot/ui/features/settings/SettingsProfileTab";
 import { SoundThemePicker } from "@openbot/ui/features/settings/SoundThemePicker";
 import { createSettingsProfileStore } from "@openbot/ui/features/settings/stores/profile-store";
@@ -25,6 +28,7 @@ import { useText } from "@openbot/ui/text";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { readActionSoundChoice, replayActionSoundChoice, setActionSoundChoice } from "../../action-sounds";
+import { setShowAgentSteps, useShowAgentSteps } from "../../agent-steps-preference";
 import {
   setShowAgentMessages,
   setShowAgentReasoning,
@@ -32,9 +36,10 @@ import {
   useShowAgentReasoning,
 } from "../../chat-visibility-preferences";
 import { isCompletionSoundEnabled, setCompletionSoundEnabled } from "../../completion-sound";
-import { setWebReportsEnabled, webReportsEnabled } from "../../error-reports";
+import { webReportsEnabled } from "../../error-reports";
 import { currentDevicePlatform, setSendShortcutMode, useSendShortcutMode } from "../../send-shortcut-preference";
 import type { WebAccountCalls } from "./web-account";
+import { setWebAnalyticsEnabled } from "./web-analytics";
 import { isNotificationTextEnabled, setNotificationTextEnabled } from "./web-notification-text";
 import type { WebPushAvailability, WebPushFailure } from "./web-push";
 
@@ -60,10 +65,17 @@ const TAB_ITEMS = {
 export interface WebAccountSettingsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Where the settings page shows, or nothing while the page is not on screen. */
+  page: SettingsPagePlacement | undefined;
   account: CentralAuthUser;
   calls: WebAccountCalls;
   language: AppLanguage;
   onChangeLanguage: (language: AppLanguage) => void;
+  appearance: AppAppearance;
+  onChangeAppearance: (appearance: AppAppearance) => void;
+  /** Closes these settings and opens the plans and servers of the account. */
+  onOpenBilling: () => void;
+  onSignOut: () => Promise<void>;
   /** Push notifications from the opened host. Absent in a build that has none. */
   push?: {
     availability: WebPushAvailability;
@@ -87,6 +99,7 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
   const [completionSound, setCompletionSound] = createSignal(isCompletionSoundEnabled());
   const [notificationText, setNotificationText] = createSignal(isNotificationTextEnabled());
   const sendShortcutMode = useSendShortcutMode();
+  const showAgentSteps = useShowAgentSteps();
   const showAgentReasoning = useShowAgentReasoning();
   const showAgentMessages = useShowAgentMessages();
   // Playback reads the stored value on each event, so the switch follows a change from another tab.
@@ -131,33 +144,54 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
       <SettingsDialogShell
         class="app-settings-modal-shell"
         open={props.open}
-        onOpenChange={props.onOpenChange}
+        page={props.page}
         title={t(navItem().titleKey)}
         description={t(navItem().descriptionKey)}
         contentKey={activeTab()}
         onContentElement={(element) => (modalElement = element)}
-        footer={<ProfileNameSaveBar store={profile} />}
         sidebar={
-          <Tabs.List class="settings-modal-nav" aria-label={t("settings.sections.label")}>
-            {TABS.map((tab) => {
-              const item = TAB_ITEMS[tab];
-              const NavIcon = item.icon;
-              return (
-                <Tabs.Trigger
-                  class="settings-modal-nav-item"
-                  value={tab}
-                  aria-current={activeTab() === tab ? "page" : undefined}
-                >
-                  <NavIcon aria-hidden="true" />
-                  <span>{t(item.titleKey)}</span>
-                </Tabs.Trigger>
-              );
-            })}
-          </Tabs.List>
+          <>
+            <Tabs.List class="settings-modal-nav" aria-label={t("settings.sections.label")}>
+              {TABS.map((tab) => {
+                const item = TAB_ITEMS[tab];
+                const NavIcon = item.icon;
+                return (
+                  <Tabs.Trigger
+                    class="settings-modal-nav-item"
+                    value={tab}
+                    aria-current={activeTab() === tab ? "page" : undefined}
+                  >
+                    <NavIcon aria-hidden="true" />
+                    <span>{t(item.titleKey)}</span>
+                  </Tabs.Trigger>
+                );
+              })}
+            </Tabs.List>
+            <div class="settings-modal-nav">
+              <Button
+                variant="ghost"
+                type="button"
+                class="settings-modal-nav-item"
+                onClick={() => {
+                  props.onOpenChange(false);
+                  props.onOpenBilling();
+                }}
+              >
+                <CreditCard aria-hidden="true" />
+                <span>{t("account.menu.billing")}</span>
+              </Button>
+            </div>
+          </>
         }
       >
-        <Tabs.Content value="profile" class="settings-modal-tab-panel" data-tab="profile">
-          <SettingsProfileTab store={profile} account={props.account} canListSessions canRevokeSession />
+        <Tabs.Content value="profile" class="settings-modal-tab-panel profile-panel" data-tab="profile">
+          <SettingsProfileTab
+            store={profile}
+            account={props.account}
+            canListSessions
+            canRevokeSession
+            onSignOut={props.onSignOut}
+          />
         </Tabs.Content>
 
         <Tabs.Content value="preferences" class="settings-modal-tab-panel" data-tab="preferences">
@@ -180,6 +214,12 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                   </ItemActions>
                 </Item>
               </Show>
+              <SwitchField
+                checked={showAgentSteps()}
+                onChange={(checked) => setShowAgentSteps(checked)}
+                label={t("settings.showAgentSteps.title")}
+                description={t("settings.showAgentSteps.description")}
+              />
               <Item class="settings-modal-row">
                 <ItemContent>
                   <ItemTitle>{t("settings.language.title")}</ItemTitle>
@@ -205,16 +245,29 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                 label={t("settings.showAgentMessages.title")}
                 description={t("settings.showAgentMessages.description")}
               />
+              <Item class="settings-modal-row">
+                <ItemContent>
+                  <ItemTitle>{t("settings.appearance.theme.title")}</ItemTitle>
+                  <ItemDescription>{t("settings.appearance.theme.description")}</ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <AppearanceSelect
+                    value={props.appearance}
+                    onChange={props.onChangeAppearance}
+                    {...(modalElement ? { mount: modalElement } : {})}
+                  />
+                </ItemActions>
+              </Item>
             </ItemGroup>
           </SettingsSection>
-          <SettingsSection title={t("settings.analytics.webTitle")}>
+          <SettingsSection title={t("settings.analytics.title")}>
             <ItemGroup class="settings-modal-card">
               <SwitchField
                 checked={reportsEnabled()}
                 onChange={(value) => {
-                  setReportsEnabled(setWebReportsEnabled(value));
+                  setReportsEnabled(setWebAnalyticsEnabled(value));
                 }}
-                label={t("settings.analytics.webTitle")}
+                label={t("settings.analytics.title")}
                 description={t("settings.analytics.webDescription")}
               />
             </ItemGroup>
@@ -259,8 +312,8 @@ export default function WebAccountSettings(props: WebAccountSettingsProps) {
                   setNotificationText(checked);
                   setNotificationTextEnabled(checked);
                 }}
-                label={t("settings.notificationText.title")}
-                description={t("settings.notificationText.description")}
+                label={t("settings.notificationPreview.title")}
+                description={t("settings.notificationPreview.description")}
               />
               <Item class="settings-modal-row settings-sound-theme-row">
                 <ItemContent>

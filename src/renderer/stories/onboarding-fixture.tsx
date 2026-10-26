@@ -6,9 +6,9 @@ import { createSignal, onCleanup, untrack } from "solid-js";
 import { fn } from "storybook/test";
 import type { FirstRunFlowProps } from "../src/features/onboarding/FirstRunFlow";
 import { providerKeyApi } from "../src/features/settings/provider-key-api";
-import { createFakeCodeLogin } from "./code-login-fixture";
 import { STORY_AGENT_STATUS } from "./fixtures";
 import { createMockOpenBot } from "./mock-openbot";
+import { createFakeConnection } from "./provider-connection-fixture";
 
 export const noProvidersConnectedAgentStatus: AgentStatus = {
   ...STORY_AGENT_STATUS,
@@ -62,6 +62,8 @@ const initialRuntimeStatuses = (): Record<ManagedProviderId, ProviderRuntimeStat
   antigravity: { phase: "not-downloaded", progress: null, message: null, version: null },
   cursor: { phase: "not-downloaded", progress: null, message: null, version: null },
   cline: { phase: "not-downloaded", progress: null, message: null, version: null },
+  pi: { phase: "not-downloaded", progress: null, message: null, version: null },
+  muse: { phase: "not-downloaded", progress: null, message: null, version: null },
   opencode: { phase: "not-downloaded", progress: null, message: null, version: null },
 });
 
@@ -119,11 +121,10 @@ type FakeProviderArgs = Pick<
   | "onUpdateProvider"
   | "onDownloadProvider"
   | "onCancelProviderDownload"
-  | "onConnectProvider"
   | "onInstallProvider"
   | "onRefreshProviders"
   | "providerKeys"
-  | "codeLogin"
+  | "connection"
 >;
 
 /**
@@ -276,10 +277,9 @@ export function FakeProviderDownloads(props: {
     onUpdateProvider: installUpdate,
     onDownloadProvider: downloadProvider,
     onCancelProviderDownload: cancelProviderDownload,
-    onConnectProvider: connectProvider,
     onInstallProvider: fn(),
     onRefreshProviders: undefined,
     providerKeys: providerKeyApi,
-    codeLogin: createFakeCodeLogin({ finishAfterMs: 0 }),
+    connection: createFakeConnection({ browser: connectProvider, finishAfterMs: 0 }),
   });
 }

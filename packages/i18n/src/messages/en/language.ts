@@ -54,6 +54,7 @@ export const messages = defineMessages("language", {
   "language.name.mn": "Mongolian",
   "language.name.mr": "Marathi",
   "language.name.ms": "Malay",
+  "language.name.mt": "Maltese",
   "language.name.my": "Burmese",
   "language.name.nb": "Norwegian Bokmål",
   "language.name.ne": "Nepali",

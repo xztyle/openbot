@@ -3,7 +3,7 @@ import type { AvatarHue } from "@openbot/contracts/ipc";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { Button, Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { Shuffle } from "lucide-react-native";
+import Shuffle from "lucide-react-native/icons/shuffle";
 import { memo, type ReactNode, useCallback, useState } from "react";
 import { View } from "react-native";
 import { AgentColorGlow, useAgentColorTransition } from "@/features/agents/components/agent-color-glow";
@@ -11,6 +11,7 @@ import { AvatarThumbnail, BloubAvatarPreview } from "@/features/agents/component
 import { createAvatarCandidates } from "@/features/agents/model/avatar-candidates";
 import { getBloubAvatarColor } from "@/features/agents/model/bloub-activity";
 import { haptics } from "@/shared/lib/haptics";
+import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import type { AgentPhotoProps } from "./agent-photo";
 
@@ -18,7 +19,7 @@ const PREVIEW_SIZE = 144;
 // Centred on the avatar. In a sheet with a clear header it reaches up behind the header's blur.
 const GLOW_HEIGHT = 340;
 
-const HUE_LABELS = {
+export const HUE_LABELS = {
   0: "mobile.agent.appearance.hue.red",
   30: "mobile.agent.appearance.hue.orange",
   55: "mobile.agent.appearance.hue.yellow",
@@ -63,7 +64,8 @@ export function AgentAppearancePicker({
   const { t } = useText();
   const [candidates, setCandidates] = useState(() => createAvatarCandidates(seed));
   const shuffle = useCallback(() => setCandidates((current) => createAvatarCandidates(seed, current)), [seed]);
-  const color = useAgentColorTransition(getBloubAvatarColor(seed, hue));
+  const targetColor = getBloubAvatarColor(seed, hue);
+  const color = useAgentColorTransition(targetColor);
 
   return (
     <View className="gap-4">
@@ -74,7 +76,7 @@ export function AgentAppearancePicker({
           name: name.trim() || t("mobile.agent.appearance.newAgent"),
         })}
       >
-        {colorGlow ? <AgentColorGlow color={color} centerY={PREVIEW_SIZE / 2} height={GLOW_HEIGHT} /> : null}
+        {colorGlow ? <AgentColorGlow color={targetColor} centerY={PREVIEW_SIZE / 2} height={GLOW_HEIGHT} /> : null}
         <BloubAvatarPreview
           agentId={agentId}
           serverId={serverId}
@@ -145,7 +147,8 @@ const AvatarFaceOptions = memo(function AvatarFaceOptions({
             onSeedChange(candidate);
           }}
         >
-          <AvatarThumbnail seed={candidate} hue={hue} size={36} animateColor />
+          {/* Android redraws each SVG in software on every frame of a colour fade, twelve at once here. */}
+          <AvatarThumbnail seed={candidate} hue={hue} size={36} animateColor={!isAndroid} />
         </Button>
       ))}
       <Button

@@ -79,12 +79,7 @@ export function AwaitingRepliesSection({
                       foreground={String(primaryColor)}
                       muted={secondary}
                       enabled
-                      fill={false}
-                    >
-                      <Typography.Paragraph type="body-sm" style={{ color: secondary }}>
-                        {t(STATE_KEYS.working)}
-                      </Typography.Paragraph>
-                    </ThinkingTextGradient>
+                    />
                   </View>
                 ) : (
                   <Typography

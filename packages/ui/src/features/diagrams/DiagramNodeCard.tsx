@@ -30,7 +30,10 @@ export interface DiagramRoutineChip {
 export interface DiagramNodeCardProps {
   node: DiagramNode;
   name: string;
-  agent?: AgentProfile | undefined;
+  /** Only the face and the kicker read it, so a sample agent needs no more than these. */
+  agent?:
+    | (Pick<AgentProfile, "avatarSeed" | "avatarHue" | "avatarUrl" | "title"> & Partial<Pick<AgentProfile, "model">>)
+    | undefined;
   /** The step an agent runs in when the focused routine fires; absent outside its path. */
   step?: number | undefined;
   /** True for an agent that no routine reaches, so it never runs. */
@@ -159,13 +162,6 @@ export function DiagramNodeCard(props: DiagramNodeCardProps) {
             <strong class="diagram-node-name">{props.name}</strong>
           </span>
         </Button>
-        <Show when={props.step}>
-          {(step) => (
-            <span class="diagram-node-step" title={t("diagram.node.step", { step: step() })}>
-              {step()}
-            </span>
-          )}
-        </Show>
         <Show when={props.selected && props.removable}>
           <Button
             type="button"

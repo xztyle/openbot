@@ -344,6 +344,9 @@ export const FILES_BREAKDOWN: StorageBreakdown[] = (
   ] satisfies StorageBreakdown[]
 ).map((entry) => ({ ...entry, bytes: Math.round(entry.bytes) }));
 
+/** The part of the `runtimes` row above that older provider CLI versions take. */
+export const FILES_OLD_RUNTIME_BYTES = Math.round(640 * MB);
+
 /** A server with years of agent work, for the widths and units of a large total. */
 export const FILES_BREAKDOWN_LARGE: StorageBreakdown[] = (
   [

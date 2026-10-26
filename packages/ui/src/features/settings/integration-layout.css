@@ -189,10 +189,7 @@
 
 /* Above the settings window the flow opens from. */
 .integration-dialog-backdrop {
-  position: fixed;
-  inset: 0;
   z-index: calc(var(--openbot-layer-dialog) + 1);
-  background: var(--openbot-dialog-overlay);
 }
 
 .integration-wizard-dialog {
@@ -348,7 +345,7 @@
 }
 
 .integrations-hub-hitarea:focus-visible {
-  outline: 2px solid var(--openbot-accent-strong);
+  outline: 2px solid var(--openbot-border-focus);
   outline-offset: -2px;
 }
 
@@ -397,22 +394,20 @@
 }
 
 .integrations-agent-face {
+  --integrations-agent-face-size: 32px;
   display: inline-block;
   flex: none;
-  width: 32px;
-  height: 32px;
+  width: var(--integrations-agent-face-size);
+  height: var(--integrations-agent-face-size);
 }
 
 .integrations-agent-face[data-size="sm"] {
-  width: 24px;
-  height: 24px;
+  --integrations-agent-face-size: 24px;
 }
 
+/* An agent avatar stands low in its box. Lift it to the middle, as the marketplace avatar does. */
 .integrations-agent-face > * {
+  --agent-avatar-optical-offset: calc(var(--integrations-agent-face-size) * -0.14);
   width: 100%;
   height: 100%;
-}
-
-.integrations-back {
-  justify-self: start;
 }

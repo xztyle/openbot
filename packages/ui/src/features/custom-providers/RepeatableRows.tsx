@@ -29,7 +29,7 @@ interface RepeatableRowsProps<T> {
   rows: readonly T[];
   limit: number;
   busy: boolean;
-  sectionError?: string;
+  sectionError?: string | undefined;
   rowError: (index: number) => string | undefined;
   onAdd: () => void;
   onRemove: (index: number) => void;

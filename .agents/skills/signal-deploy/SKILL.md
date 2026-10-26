@@ -82,8 +82,8 @@ changes that are live now.
   `/etc/nginx/conf.d/openbot-remote.conf`. A new `location` in the repository needs the same change on
   the host, after a backup, `nginx -t` and `systemctl reload nginx`. Without it, the request goes
   through `location /`, which has the default 1 MB body limit and writes the path to the access log.
-- **Tests.** In the tag worktree: `bun install --frozen-lockfile`, then
-  `bun run --cwd remote/api test`.
+- **Checks.** In the tag worktree: `bun install --frozen-lockfile`, then
+  `bun run --cwd remote/api check`. It runs the typecheck. `remote/api` has no tests.
 
 ## 3. Check the secrets
 

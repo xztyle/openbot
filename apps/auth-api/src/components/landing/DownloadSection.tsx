@@ -49,7 +49,10 @@ export function DownloadSection() {
       <div class="landing-download-inner">
         <header class="landing-download-heading" data-revealed={revealState()}>
           <h2 id="download-title">Download OpenBot</h2>
-          <p>Choose your platform. Run Codex, Claude, Gemini, Grok, OpenCode or your own model from one desktop app.</p>
+          <p>
+            Choose your platform. Run Codex, Claude, Gemini, Grok, OpenCode, Muse Code, Pi or your own model from one
+            desktop app, and talk to your agents from your phone.
+          </p>
         </header>
 
         <div class="landing-download-grid">

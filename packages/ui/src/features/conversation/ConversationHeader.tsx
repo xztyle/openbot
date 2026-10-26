@@ -1,9 +1,10 @@
-import { Button, Folder, Lock, Search } from "@openbot/ui";
+import { Badge, Button, Clock3, Lock, Search } from "@openbot/ui";
 import { ProviderModelPicker } from "@openbot/ui/components/ProviderModelPicker";
 import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { agentAccessLockLabel } from "@openbot/ui/features/agents/agent-access";
-import { ComputerIcon, RemoteDesktopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
+import { RemoteDesktopIcon } from "@openbot/ui/features/conversation/ConversationIcons";
+import { SidePanelToggle, type SidePanelToggleProps } from "@openbot/ui/features/conversation/SidePanel";
 import { useText } from "@openbot/ui/text";
 import type { ComponentProps, JSX } from "@solidjs/web";
 import { Show } from "solid-js";
@@ -11,7 +12,11 @@ import { Show } from "solid-js";
 export interface ConversationHeaderProps {
   actions?: JSX.Element;
   agent: AgentProfile | null | undefined;
+  /** The title of a chat that has no one agent, such as a channel. It shows when `agent` is missing. */
+  title?: JSX.Element | undefined;
   modelPicker: ComponentProps<typeof ProviderModelPicker>;
+  /** A model, effort, provider or account chosen during the running turn. It applies from the next turn. */
+  pendingModel?: ConversationHeaderPendingModel | undefined;
   onSettingsIntent: () => void;
   onOpenSettings: () => void;
   /**
@@ -19,24 +24,23 @@ export interface ConversationHeaderProps {
    * Left out where the client has no conversation search.
    */
   onOpenSearch?: (() => void) | undefined;
-  remoteControl?: {
-    enabled: boolean;
-    active: boolean;
-    visible: boolean;
-    onOpen: (trigger: HTMLButtonElement) => void;
-  };
-  /** The Files panel of this chat. Left out when the host cannot list them. */
-  files?: {
-    open: boolean;
-    onToggle: () => void;
-  };
-  browser?: {
-    acting: boolean;
-    agentName?: string;
-    open: boolean;
-    disabled?: boolean;
-    onToggle: () => void;
-  };
+  remoteControl?: ConversationHeaderRemoteControl | undefined;
+  /** Missing when the chat has no side panel, such as a deleted channel. */
+  sidePanel?: SidePanelToggleProps | undefined;
+}
+
+export interface ConversationHeaderPendingModel {
+  /** The model, and the effort when it changes too, of the running turn. */
+  running: string;
+  /** The same for the next turn. */
+  next: string;
+}
+
+export interface ConversationHeaderRemoteControl {
+  enabled: boolean;
+  active: boolean;
+  visible: boolean;
+  onOpen: (trigger: HTMLButtonElement) => void;
 }
 
 export function ConversationHeader(props: ConversationHeaderProps) {
@@ -44,7 +48,7 @@ export function ConversationHeader(props: ConversationHeaderProps) {
   return (
     <header class="window-drag conversation-header">
       <div class="conversation-heading-group">
-        <Show when={props.agent}>
+        <Show when={props.agent} fallback={props.title}>
           {(agent) => (
             <Button
               variant="ghost"
@@ -71,6 +75,18 @@ export function ConversationHeader(props: ConversationHeaderProps) {
       </div>
       <div class="conversation-header-actions no-drag">
         {props.actions}
+        <Show when={props.agent && props.pendingModel}>
+          {(change) => {
+            const detail = () => t("conversation.header.modelNextTurnDetail", change());
+            return (
+              <Badge variant="info-light" class="conversation-model-pending" role="status" title={detail()}>
+                <Clock3 aria-hidden="true" />
+                {t("conversation.header.modelNextTurn")}
+                <span class="sr-only">{detail()}</span>
+              </Badge>
+            );
+          }}
+        </Show>
         <Show when={props.agent}>
           <ProviderModelPicker {...props.modelPicker} />
         </Show>
@@ -105,47 +121,7 @@ export function ConversationHeader(props: ConversationHeaderProps) {
             </Button>
           )}
         </Show>
-        <Show when={props.files}>
-          {(files) => (
-            <Button
-              variant="ghost"
-              type="button"
-              class="header-panel-toggle"
-              aria-label={t(files().open ? "conversation.header.hideFiles" : "conversation.header.showFiles")}
-              aria-expanded={files().open ? "true" : "false"}
-              onClick={() => files().onToggle()}
-              data-cuelume-tap={files().open ? "close" : "open"}
-            >
-              <Folder aria-hidden="true" class="size-[14px]" />
-            </Button>
-          )}
-        </Show>
-        <Show when={props.browser}>
-          <Button
-            variant="ghost"
-            type="button"
-            class={[
-              "header-panel-toggle computer-button",
-              { "computer-button-agent-active": props.browser?.acting === true },
-            ]}
-            aria-label={
-              props.browser?.acting
-                ? t("conversation.header.browserActing", {
-                    name: props.browser?.agentName ?? t("conversation.header.agentFallback"),
-                  })
-                : t(props.browser?.open ? "conversation.header.hideComputer" : "conversation.header.openComputer")
-            }
-            aria-expanded={props.browser?.open ? "true" : "false"}
-            disabled={props.browser?.disabled}
-            onClick={() => props.browser?.onToggle()}
-            data-cuelume-tap={props.browser?.open ? "close" : "open"}
-          >
-            <ComputerIcon />
-            <Show when={props.browser?.acting}>
-              <span class="computer-control-dot" aria-hidden="true" />
-            </Show>
-          </Button>
-        </Show>
+        <Show when={props.sidePanel}>{(sidePanel) => <SidePanelToggle {...sidePanel()} />}</Show>
       </div>
     </header>
   );

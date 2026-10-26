@@ -75,6 +75,7 @@ export function createWebHostedServerCalls(
     openCheckout: async (serverId) =>
       open(await request(serverPath(serverId, "checkout"), parseHostedServerCheckout, { body: "{}" })),
     wake: (serverId) => request(serverPath(serverId, "wake"), parseHostedServerSummary, { body: "{}" }),
+    restart: (serverId) => request(serverPath(serverId, "restart"), parseHostedServerSummary, { body: "{}" }),
     async delete({ serverId, confirmName }) {
       await send(`servers/${encodeURIComponent(serverId)}`, {
         method: "DELETE",

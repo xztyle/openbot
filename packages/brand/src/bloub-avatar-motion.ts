@@ -11,9 +11,8 @@ import type { ExpressionId, StateId } from "@norbert_bodziony/bloub";
  * silhouette, so it is an identity trait and not a frame of animation.
  *
  * Listing the ids gives the type that locks every call site down to this set. The list is not the
- * authority, though: `bloub-avatar-motion.test.ts` checks it against the catalogue's own
- * `baseBody` flags, so a library bump that adds a state or reclassifies one fails a test rather
- * than quietly changing a shape.
+ * authority, though: the catalogue's own `baseBody` flags are. Check the list against them when
+ * the library changes, so that a state it adds or reclassifies does not quietly change a shape.
  */
 export const SHAPE_SAFE_STATES = ["idle", "wink", "wide", "notify", "swirl"] as const satisfies readonly StateId[];
 

@@ -4,13 +4,24 @@ import type { DatabaseSync } from "node:sqlite";
 import { COMPUTER_USE_MCP_SERVER_NAME } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import { isGeneratedAgentId } from "@openbot/contracts/validation";
+import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
+import { AGENT_MEMORY_SELECTION_SCHEMA_SQL, migrateAgentMemorySelection } from "./agent-memory-selection";
+import { AGENT_TASK_SCHEMA_SQL } from "./agent-tasks/agent-task-schema";
+import { AGENT_WAIT_SCHEMA_SQL } from "./agent-waits/agent-wait-schema";
+import { BROWSER_PROFILE_SCHEMA_SQL } from "./browser-profiles/browser-profile-schema";
 import { CHANNEL_SCHEMA_SQL, CHANNEL_SETTINGS_SCHEMA_SQL } from "./channel-schema";
 import { PROVIDER_HISTORY_SCHEMA_SQL } from "./database/provider-history-schema";
 import { EVENT_CHECK_SCHEMA_SQL } from "./event-check-schema";
 import { MCP_SERVERS_SCHEMA_SQL } from "./mcp-schema";
-import { MESSAGING_SCHEMA_SQL } from "./messaging/messaging-schema";
+import {
+  MESSAGING_ALLOWED_ROLES_SCHEMA_SQL,
+  MESSAGING_MEMORY_SCHEMA_SQL,
+  MESSAGING_SCHEMA_SQL,
+} from "./messaging/messaging-schema";
 import { ROUTINE_FLOW_SCHEMA_SQL } from "./routine-flows/routine-flow-schema";
+import { ROUTINE_RESULT_SCHEMA_SQL } from "./routine-results/routine-result-schema";
+import { WORKFLOW_SCHEMA_SQL } from "./workflows/workflow-schema";
 
 const BASELINE_SCHEMA_VERSION = 8;
 
@@ -386,6 +397,98 @@ const V28_PROVIDER_SESSIONS_COLUMN_SQL = `provider TEXT NOT NULL,`;
 // schema puts it last as well. Both routine tables end with a column, not a table constraint.
 const V27_ROUTINE_LIMIT_POLICY_COLUMN_SQL = `limit_policy TEXT NOT NULL DEFAULT 'wait' CHECK(limit_policy IN ('wait', 'skip'))`;
 
+// Migration 33 adds what a routine does with the occurrences that came due while OpenBot was closed, and
+// the run columns that record those occurrences on one cancelled run. Frozen with the migration. The policy
+// goes after the migration 27 column. ADD COLUMN puts a run column before the UNIQUE constraint that ends
+// the run tables, so the latest schema puts the two run columns there as well.
+const V33_ROUTINE_MISSED_POLICY_COLUMN_SQL = `missed_policy TEXT NOT NULL DEFAULT 'skip' CHECK(missed_policy IN ('skip', 'run-once'))`;
+const V33_ROUTINE_RUN_MISSED_COLUMNS_SQL = [
+  "missed_count INTEGER CHECK(missed_count IS NULL OR missed_count >= 1)",
+  "missed_until TEXT",
+] as const;
+
+// Migration 35 records what started a manual run: a test, a local script or a webhook. Frozen with the
+// migration. A run from before it has no source, and a scheduled run never has one. ADD COLUMN puts it after
+// the migration 33 columns, before the UNIQUE constraint.
+const V35_ROUTINE_RUN_SOURCE_COLUMN_SQL = `run_source TEXT CHECK(run_source IS NULL OR run_source IN ('test', 'script', 'webhook'))`;
+
+// Migration 40 stores the shown-order keys of each thread message, so a page reads an index range rather
+// than sorting the whole thread (#2226). Frozen with the migration; `database/thread-message-order.ts`
+// keeps them current, and every write to the table must call it. No default: a key of 0 or '' would look
+// real. ADD COLUMN puts the columns before the PRIMARY KEY constraint that ends the table.
+const V40_THREAD_MESSAGE_ORDER_COLUMNS_SQL = [
+  "group_start TEXT",
+  "group_first INTEGER",
+  "group_id TEXT",
+  "turn_rank INTEGER",
+] as const;
+
+const BASELINE_THREAD_MESSAGES_END_SQL = `    last_event_sequence INTEGER NOT NULL,
+    PRIMARY KEY(thread_id, message_id)`;
+
+// The order index carries the author and item type, so the marker and unread filters read no table row.
+// The turn index finds the rows of one turn for its refresh after a write.
+const V40_THREAD_MESSAGE_ORDER_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS thread_messages_shown_order ON projection_thread_messages(
+    thread_id, group_start, group_first, group_id, turn_rank, created_at, ordinal, message_id, author, item_type
+  );
+  CREATE INDEX IF NOT EXISTS thread_messages_turn ON projection_thread_messages(thread_id, turn_id);
+`;
+
+// The order of migration 40, frozen: the window that pages ran over each thread before it, over every
+// thread at once. A row that has its keys already is not written again.
+const V40_THREAD_MESSAGE_ORDER_BACKFILL_SQL = `WITH ranked AS (
+  SELECT thread_id, message_id, created_at, ordinal, NULLIF(turn_id, '') AS turn,
+    CASE
+      WHEN author = 'user' THEN 0
+      WHEN author = 'assistant' THEN CASE WHEN item_type IN ('commentary', 'plan') THEN 1 ELSE 3 END
+      WHEN json_extract(message_json, '$.exchange.direction') = 'incoming' THEN 0
+      ELSE 2
+    END AS role_rank
+  FROM projection_thread_messages
+), keyed AS (
+  SELECT thread_id, message_id,
+    CASE WHEN turn IS NULL THEN created_at ELSE MIN(created_at) OVER turn_by_time END AS group_start,
+    CASE WHEN turn IS NULL THEN ordinal ELSE FIRST_VALUE(ordinal) OVER turn_by_time END AS group_first,
+    CASE WHEN turn IS NULL THEN 'message:' || message_id ELSE 'turn:' || turn END AS group_id,
+    CASE WHEN turn IS NULL THEN 0
+      WHEN SUM(role_rank = 0) OVER turn_by_time >= 2 THEN 4
+      ELSE role_rank END AS turn_rank
+  FROM ranked
+  WINDOW turn_by_time AS (PARTITION BY thread_id, turn ORDER BY created_at, ordinal)
+)
+UPDATE projection_thread_messages AS message
+SET group_start = keyed.group_start, group_first = keyed.group_first,
+  group_id = keyed.group_id, turn_rank = keyed.turn_rank
+FROM keyed
+WHERE message.thread_id = keyed.thread_id AND message.message_id = keyed.message_id
+  AND (message.group_start, message.group_first, message.group_id, message.turn_rank)
+    IS NOT (keyed.group_start, keyed.group_first, keyed.group_id, keyed.turn_rank)`;
+
+// Migration 41 indexes attachments by owner. Each conversation write deletes the attachments of each
+// changed message by owner, which without it is a scan of every attachment (#2241). Frozen with the migration.
+const V41_ATTACHMENT_OWNER_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS attachments_owner ON projection_attachments(owner_kind, owner_id);
+`;
+
+// Migration 42 indexes the columns that a routine flow sweep filters on. A sweep runs on each turn and queue
+// change, and without them each one is a scan of every routine run and flow step (#2283). The running steps
+// index holds only running steps, in the order the sweep reads them. Frozen with the migration.
+const V42_ROUTINE_FLOW_SWEEP_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS routine_runs_status_updated ON projection_routine_runs(status, updated_at);
+  CREATE INDEX IF NOT EXISTS routine_flow_steps_running ON routine_flow_steps(created_at, step_id)
+    WHERE status = 'running';
+  CREATE INDEX IF NOT EXISTS routine_flow_steps_updated ON routine_flow_steps(updated_at);
+`;
+
+// Migration 43 indexes thread events by type. Each stream flush looks up the earlier streamed-message
+// events of its thread by type, which without it reads every earlier event of the thread (#2278). Only
+// that lookup reads it, so it is partial: other aggregates do not pay its write cost. Frozen with the migration.
+const V43_THREAD_EVENT_TYPE_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS orchestration_events_thread_type
+    ON orchestration_events(aggregate_id, event_type, sequence) WHERE aggregate_type = 'thread';
+`;
+
 const BASELINE_AGENT_ROUTINES_END_SQL = `    last_event_sequence INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS agent_routines_agent`;
@@ -393,6 +496,16 @@ const BASELINE_AGENT_ROUTINES_END_SQL = `    last_event_sequence INTEGER NOT NUL
 const V19_CHANNEL_ROUTINES_END_SQL = `    last_event_sequence INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS channel_routines_channel`;
+
+const BASELINE_ROUTINE_RUNS_END_SQL = `    last_event_sequence INTEGER NOT NULL,
+    UNIQUE(trigger_id, scheduled_for)
+  );
+  CREATE INDEX IF NOT EXISTS routine_runs_routine`;
+
+const V19_CHANNEL_ROUTINE_RUNS_END_SQL = `    last_event_sequence INTEGER NOT NULL,
+    UNIQUE(trigger_id, scheduled_for)
+  );
+  CREATE INDEX IF NOT EXISTS channel_routine_runs_routine`;
 
 // IF NOT EXISTS throughout, because this text is both migration 15 and the tail of the latest
 // schema. A database built from the latest schema and then replayed forward - which is how a
@@ -449,33 +562,73 @@ const ANALYTICS_DATE_INDEX_SQL = `
 const LATEST_SCHEMA_SQL =
   substituteOnce(
     substituteOnce(
-      substituteOnce(BASELINE_V8_SCHEMA_SQL, BASELINE_REACTIONS_TABLE_SQL, V12_REACTIONS_TABLE_SQL),
-      BASELINE_PROVIDER_SESSIONS_CHECK_SQL,
-      V28_PROVIDER_SESSIONS_COLUMN_SQL,
+      substituteOnce(
+        substituteOnce(
+          substituteOnce(BASELINE_V8_SCHEMA_SQL, BASELINE_REACTIONS_TABLE_SQL, V12_REACTIONS_TABLE_SQL),
+          BASELINE_THREAD_MESSAGES_END_SQL,
+          withThreadMessageOrderColumns(BASELINE_THREAD_MESSAGES_END_SQL),
+        ),
+        BASELINE_PROVIDER_SESSIONS_CHECK_SQL,
+        V28_PROVIDER_SESSIONS_COLUMN_SQL,
+      ),
+      BASELINE_AGENT_ROUTINES_END_SQL,
+      withRoutinePolicies(BASELINE_AGENT_ROUTINES_END_SQL),
     ),
-    BASELINE_AGENT_ROUTINES_END_SQL,
-    withRoutineLimitPolicy(BASELINE_AGENT_ROUTINES_END_SQL),
+    BASELINE_ROUTINE_RUNS_END_SQL,
+    withRunAddedColumns(BASELINE_ROUTINE_RUNS_END_SQL),
   ) +
   ANALYTICS_SCHEMA_SQL +
   ANALYTICS_DATE_INDEX_SQL +
   CHANNEL_SCHEMA_SQL +
   substituteOnce(
-    CHANNEL_SETTINGS_SCHEMA_SQL,
-    V19_CHANNEL_ROUTINES_END_SQL,
-    withRoutineLimitPolicy(V19_CHANNEL_ROUTINES_END_SQL),
+    substituteOnce(
+      CHANNEL_SETTINGS_SCHEMA_SQL,
+      V19_CHANNEL_ROUTINES_END_SQL,
+      withRoutinePolicies(V19_CHANNEL_ROUTINES_END_SQL),
+    ),
+    V19_CHANNEL_ROUTINE_RUNS_END_SQL,
+    withRunAddedColumns(V19_CHANNEL_ROUTINE_RUNS_END_SQL),
   ) +
   MCP_SERVERS_SCHEMA_SQL +
   MESSAGING_SCHEMA_SQL +
   PROVIDER_HISTORY_SCHEMA_SQL +
   WEBHOOK_SCHEMA_SQL +
   ROUTINE_FLOW_SCHEMA_SQL +
+  AGENT_MEMORY_SELECTION_SCHEMA_SQL +
+  AGENT_WAIT_SCHEMA_SQL +
+  MESSAGING_MEMORY_SCHEMA_SQL +
+  ROUTINE_RESULT_SCHEMA_SQL +
+  AGENT_TASK_SCHEMA_SQL +
+  V40_THREAD_MESSAGE_ORDER_INDEX_SQL +
+  V41_ATTACHMENT_OWNER_INDEX_SQL +
+  V42_ROUTINE_FLOW_SWEEP_INDEX_SQL +
+  V43_THREAD_EVENT_TYPE_INDEX_SQL +
+  MESSAGING_ALLOWED_ROLES_SCHEMA_SQL +
+  BROWSER_PROFILE_SCHEMA_SQL +
+  WORKFLOW_SCHEMA_SQL +
   EVENT_CHECK_SCHEMA_SQL;
 
-/** The end of a routine table with the migration 27 column after its last one. */
-function withRoutineLimitPolicy(tableEnd: string): string {
+/** The end of the thread message table with the migration 40 columns before its PRIMARY KEY constraint. */
+function withThreadMessageOrderColumns(tableEnd: string): string {
+  return tableEnd.replace(
+    "last_event_sequence INTEGER NOT NULL,\n",
+    `last_event_sequence INTEGER NOT NULL,\n${V40_THREAD_MESSAGE_ORDER_COLUMNS_SQL.map((column) => `    ${column},\n`).join("")}`,
+  );
+}
+
+/** The end of a routine table with the migration 27 and 33 columns after its last one. */
+function withRoutinePolicies(tableEnd: string): string {
   return tableEnd.replace(
     "last_event_sequence INTEGER NOT NULL\n",
-    `last_event_sequence INTEGER NOT NULL,\n    ${V27_ROUTINE_LIMIT_POLICY_COLUMN_SQL}\n`,
+    `last_event_sequence INTEGER NOT NULL,\n    ${V27_ROUTINE_LIMIT_POLICY_COLUMN_SQL},\n    ${V33_ROUTINE_MISSED_POLICY_COLUMN_SQL}\n`,
+  );
+}
+
+/** The end of a routine run table with the migration 33 and 35 columns before its UNIQUE constraint. */
+function withRunAddedColumns(tableEnd: string): string {
+  return tableEnd.replace(
+    "last_event_sequence INTEGER NOT NULL,\n",
+    `last_event_sequence INTEGER NOT NULL,\n${[...V33_ROUTINE_RUN_MISSED_COLUMNS_SQL, V35_ROUTINE_RUN_SOURCE_COLUMN_SQL].map((column) => `    ${column},\n`).join("")}`,
   );
 }
 
@@ -492,6 +645,8 @@ function substituteOnce(source: string, search: string, replacement: string): st
 export interface OpenBotMigrationOptions {
   appliedAt?: string;
   warn?: (message: string, error: unknown) => void;
+  /** The last connection closed cleanly, so SQLite removed the write-ahead log. */
+  closedCleanly?: boolean;
   /** Tests only. The free bytes on the disk of this file, or null when unknown. */
   freeBytes?: (file: string) => number | null;
 }
@@ -633,9 +788,99 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
   },
   {
     version: 32,
-    // Main shipped routine flows at 31; the deployed fork shipped event checks at 31.
-    // Both are additive and idempotent, so either source keeps its rows and receives the missing tables.
-    up: (db) => db.exec(ROUTINE_FLOW_SCHEMA_SQL + EVENT_CHECK_SCHEMA_SQL),
+    // Upstream shipped routine flows at 31; the deployed fork shipped event checks at 31 and no routine
+    // flows. The routine flow tables are idempotent, so they are a no-op on every upstream source and give
+    // a fork 31 source the tables that migration 42 indexes. A fork 32 source already has them and gets
+    // only this migration's agent memory change, through `upgradeFork32` (see there).
+    up: upgradeToAgentMemorySelection,
+  },
+  {
+    version: 33,
+    // Adds columns with a constant default or none to four tables: no rebuild, so no foreign-key pause and
+    // no vacuum. Every existing routine keeps skipping the occurrences it missed, which is what it did
+    // before, and every existing run records no missed occurrence.
+    up: addRoutineMissedRuns,
+  },
+  {
+    version: 34,
+    // Only creates a table, so no foreign-key pause and no vacuum. No agent has an open wait yet.
+    up: (db) => db.exec(AGENT_WAIT_SCHEMA_SQL),
+  },
+  {
+    version: 35,
+    // Adds a column with no default to two tables: no rebuild, so no foreign-key pause and no vacuum. Every
+    // existing run records no source, which the app reads as a test run, as it did before.
+    up: addRoutineRunSource,
+  },
+  {
+    version: 36,
+    // Only creates a table, so no foreign-key pause and no vacuum. No connection has memories yet.
+    up: (db) => db.exec(MESSAGING_MEMORY_SCHEMA_SQL),
+  },
+  {
+    version: 37,
+    // Only creates tables, so no foreign-key pause and no vacuum. No routine has a destination yet, so every
+    // routine keeps its answers in OpenBot, which is what it did before.
+    up: (db) => db.exec(ROUTINE_RESULT_SCHEMA_SQL),
+  },
+  {
+    version: 38,
+    // Only creates tables, so no foreign-key pause and no vacuum. No agent has a task yet, so every
+    // delivery keeps running in its agent's own chat, which is what it did before.
+    up: (db) => db.exec(AGENT_TASK_SCHEMA_SQL),
+  },
+  {
+    version: 39,
+    // Deletes many large rows, so the file gets smaller only after a vacuum.
+    vacuumAfterCommit: true,
+    up: deleteRepeatedMailboxReconciliations,
+  },
+  {
+    version: 40,
+    // Adds columns with no default and two indexes: no rebuild, so no foreign-key pause and no vacuum. The
+    // keys of every existing message come from the order that pages computed before, so a cursor that a
+    // client holds keeps its place.
+    up: addThreadMessageOrder,
+  },
+  {
+    version: 41,
+    // Only creates an index, so no foreign-key pause and no vacuum.
+    up: (db) => db.exec(V41_ATTACHMENT_OWNER_INDEX_SQL),
+  },
+  {
+    version: 42,
+    // Only creates indexes, so no foreign-key pause and no vacuum.
+    up: (db) => db.exec(V42_ROUTINE_FLOW_SWEEP_INDEX_SQL),
+  },
+  {
+    version: 43,
+    // Only creates an index, so no foreign-key pause and no vacuum.
+    up: (db) => db.exec(V43_THREAD_EVENT_TYPE_INDEX_SQL),
+  },
+  {
+    version: 44,
+    // Only creates a table, so no foreign-key pause and no vacuum. No connection has a role list yet, so
+    // everyone can still mention OpenBot, which is what they could before.
+    up: (db) => db.exec(MESSAGING_ALLOWED_ROLES_SCHEMA_SQL),
+  },
+  {
+    version: 45,
+    // Only creates a table, so no foreign-key pause and no vacuum. No agent names a profile yet, so
+    // every tab keeps the session it had.
+    up: (db) => db.exec(BROWSER_PROFILE_SCHEMA_SQL),
+  },
+  {
+    version: 46,
+    // Only creates tables, so no foreign-key pause and no vacuum. No one has a workflow yet, and agents,
+    // routines and routine flows stay as they were.
+    up: (db) => db.exec(WORKFLOW_SCHEMA_SQL),
+  },
+  {
+    version: 47,
+    // The fork's event checks, after upstream's 32 to 46. Only creates tables, so no foreign-key pause and
+    // no vacuum. A database that came from the fork's 31 or 32 already has these tables and their rows,
+    // and every statement is IF NOT EXISTS, so for it this only records the marker.
+    up: (db) => db.exec(EVENT_CHECK_SCHEMA_SQL),
   },
 ];
 
@@ -653,6 +898,7 @@ export function migrateOpenBotDatabase(db: DatabaseSync, options: OpenBotMigrati
   const appliedVersions = readAppliedVersions(db);
   validateAppliedVersions(appliedVersions);
   const currentVersion = latestAppliedVersion(appliedVersions);
+  const upgradedFork32 = currentVersion === FORK_COMPATIBILITY_VERSION && upgradeFork32(db);
   const pending = MIGRATIONS.filter((migration) => migration.version > currentVersion);
 
   for (const migration of pending) {
@@ -667,7 +913,9 @@ export function migrateOpenBotDatabase(db: DatabaseSync, options: OpenBotMigrati
     if (migration.vacuumAfterCommit) vacuumWhenDiskAllows(db, migration.version, options);
   }
 
-  assertQuickCheck(db);
+  // The check reads every page, which takes minutes on a large file. Only a migration, or a stop that
+  // did not close the file (a crash, a kill, a disk save while it ran), can leave a damaged page.
+  if (upgradedFork32 || pending.length > 0 || !options.closedCleanly) assertQuickCheck(db);
 }
 
 /** VACUUM writes a full copy of the database next to it, and the WAL can grow by as much again. */
@@ -761,6 +1009,79 @@ function migrateToBaselineV8(db: DatabaseSync, appliedAt: string): void {
   compactMailboxHistory(db);
   migrateProviderSessionsForGrok(db);
   migrateReactionsForActors(db);
+}
+
+/** Migration 32. The routine flow tables are for a fork 31 source; every other source already has them. */
+function upgradeToAgentMemorySelection(db: DatabaseSync): void {
+  db.exec(ROUTINE_FLOW_SCHEMA_SQL);
+  migrateAgentMemorySelection(db);
+}
+
+/**
+ * The deployed fork shipped a different version 32: a compatibility migration that gave a fork 31 source
+ * upstream's routine flow tables and an upstream 31 source the fork's event check tables. Upstream then
+ * shipped agent memory selection as its own 32. A fork 32 database records 32 but has none of upstream's
+ * 32, so the version alone cannot tell the two apart and the migration loop would skip upstream's 32.
+ */
+const FORK_COMPATIBILITY_VERSION = 32;
+const AGENT_MEMORY_SELECTION_TABLES = ["agent_memory_selections", "agent_memory_search"];
+const FORK_32_TABLES = [
+  "routine_flow_links",
+  "routine_flow_positions",
+  "routine_flow_steps",
+  "projection_event_checks",
+  "projection_event_check_executions",
+  "projection_event_check_outbox",
+];
+
+type Version32Source = "upstream" | "fork" | "unknown";
+
+/**
+ * Reads which version 32 a database at 32 has from its tables: upstream's has the agent memory selection
+ * tables, the fork's has the routine flow and event check tables and no agent memory selection table. A
+ * migration commits its tables and its marker together, so a database with only part of either set was
+ * changed by something else and is left as it is.
+ */
+function readVersion32Source(db: DatabaseSync): Version32Source {
+  const tables = new Set(
+    db
+      // SQLite names are case-insensitive, and a table keeps the case it was created with.
+      .prepare("SELECT lower(name) AS name FROM sqlite_master WHERE type = 'table'")
+      .all()
+      .map((row) => (isDynamicRecord(row) && isString(row.name) ? row.name : "")),
+  );
+  const memoryTables = AGENT_MEMORY_SELECTION_TABLES.filter((table) => tables.has(table)).length;
+  if (memoryTables === AGENT_MEMORY_SELECTION_TABLES.length) return "upstream";
+  if (memoryTables === 0 && FORK_32_TABLES.every((table) => tables.has(table))) return "fork";
+  return "unknown";
+}
+
+/**
+ * Applies upstream's migration 32 to a fork 32 database, in one transaction, and keeps the fork's marker 32,
+ * which records when that database reached 32. Upstream's 33 to 46 and the event checks' 47 then run as on
+ * any other database at 32, and 47 finds the fork's event check tables and rows already there. The agent
+ * memory selection tables mark the database as done, so a retry after a later failure skips this.
+ * Returns whether it changed the database.
+ */
+function upgradeFork32(db: DatabaseSync): boolean {
+  const source = readVersion32Source(db);
+  if (source === "upstream") return false;
+  if (source === "unknown") {
+    throw new Error(
+      "OpenBot database version 32 has neither upstream's agent memory tables nor the fork's event check and routine flow tables.",
+    );
+  }
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    // Another process can finish the same upgrade between the read above and this lock.
+    if (readVersion32Source(db) === "fork") upgradeToAgentMemorySelection(db);
+    assertForeignKeys(db);
+    db.exec("COMMIT");
+  } catch (error) {
+    if (db.isTransaction) db.exec("ROLLBACK");
+    throw new Error(`OpenBot database migration to version ${FORK_COMPATIBILITY_VERSION} failed.`, { cause: error });
+  }
+  return true;
 }
 
 function refreshProviderSessionsForDynamicTools(db: DatabaseSync, appliedAt: string): void {
@@ -866,9 +1187,14 @@ function assertForeignKeys(db: DatabaseSync): void {
 }
 
 function assertQuickCheck(db: DatabaseSync): void {
-  const result = db.prepare("PRAGMA quick_check").get();
-  if (isDynamicRecord(result) && result.quick_check === "ok") return;
-  throw new Error("OpenBot database failed its integrity check.");
+  const problems = db
+    .prepare("PRAGMA quick_check(20)")
+    .all()
+    .map((row) => (isDynamicRecord(row) ? row.quick_check : row));
+  if (problems.length === 1 && problems[0] === "ok") return;
+  // The lines name the damaged pages and tables, which tell a page left by a disk save from a bad index.
+  logger.error("The OpenBot database failed its integrity check.", { problems });
+  throw new Error(sourceText("error.backend.databaseIntegrity"));
 }
 
 function migrateReactionsForActors(db: DatabaseSync): void {
@@ -969,6 +1295,49 @@ function addRoutineLimitPolicy(db: DatabaseSync): void {
     if (columns.some((column) => isDynamicRecord(column) && column.name === "limit_policy")) continue;
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${V27_ROUTINE_LIMIT_POLICY_COLUMN_SQL}`);
   }
+}
+
+// Migration 33 adds the missed-run policy to the routine tables and the missed-run record to the run tables.
+function addRoutineMissedRuns(db: DatabaseSync): void {
+  const additions: readonly (readonly [string, string, string])[] = [
+    ["projection_agent_routines", "missed_policy", V33_ROUTINE_MISSED_POLICY_COLUMN_SQL],
+    ["projection_channel_routines", "missed_policy", V33_ROUTINE_MISSED_POLICY_COLUMN_SQL],
+    ...["projection_routine_runs", "projection_channel_routine_runs"].flatMap((table) =>
+      V33_ROUTINE_RUN_MISSED_COLUMNS_SQL.map(
+        (column) => [table, column.slice(0, column.indexOf(" ")), column] as const,
+      ),
+    ),
+  ];
+  for (const [table, name, column] of additions) {
+    // A development profile that ran this version before it shipped has the column already.
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (columns.some((existing) => isDynamicRecord(existing) && existing.name === name)) continue;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`);
+  }
+}
+
+// Migration 35 adds the run source to the run tables.
+function addRoutineRunSource(db: DatabaseSync): void {
+  for (const table of ["projection_routine_runs", "projection_channel_routine_runs"]) {
+    // A development profile that ran this version before it shipped has the column already.
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (columns.some((column) => isDynamicRecord(column) && column.name === "run_source")) continue;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${V35_ROUTINE_RUN_SOURCE_COLUMN_SQL}`);
+  }
+}
+
+// Migration 40 stores the shown-order keys of each thread message and indexes them.
+function addThreadMessageOrder(db: DatabaseSync): void {
+  // A development profile that ran this version before it shipped has the columns already.
+  const columns = db.prepare("PRAGMA table_info(projection_thread_messages)").all();
+  for (const column of V40_THREAD_MESSAGE_ORDER_COLUMNS_SQL) {
+    const name = column.slice(0, column.indexOf(" "));
+    if (columns.some((existing) => isDynamicRecord(existing) && existing.name === name)) continue;
+    db.exec(`ALTER TABLE projection_thread_messages ADD COLUMN ${column}`);
+  }
+  // The index is built once, after the keys, rather than updated row by row.
+  db.exec(V40_THREAD_MESSAGE_ORDER_BACKFILL_SQL);
+  db.exec(V40_THREAD_MESSAGE_ORDER_INDEX_SQL);
 }
 
 // Migration 28 removes the provider CHECK. It rebuilds the table with no guard: every shipped table has the
@@ -1444,6 +1813,42 @@ function compactConversationHistory(db: DatabaseSync): void {
     updateActivity.run(JSON.stringify(activityDetail), event.threadId, event.sequence);
     deleteActivities.run(event.threadId, event.threadId, event.sequence);
     deleteEvents.run(event.threadId, event.sequence);
+  }
+  deleteOrphanReceipts(db);
+}
+
+// A page read wrote its mailbox messages again on each read when only their key order differed from
+// the rows (#2224), so a thread can hold thousands of identical `conversation.mailbox-reconciled`
+// events in a row. An event goes only when the next event of its thread is the same type with the
+// same payload. Replay merges a changed message into the one it names, so applying the same payload
+// twice in a row gives what applying it once gives. The last event of each run stays, and with it
+// the `last_event_sequence` that the rows it wrote point to.
+function deleteRepeatedMailboxReconciliations(db: DatabaseSync): void {
+  db.exec("CREATE TEMP TABLE repeated_mailbox_reconciliations (sequence INTEGER PRIMARY KEY)");
+  try {
+    // `event_type` comes before `payload_json` in a row, so the scan reads a payload only for a pair of
+    // reconcile events. The next event comes from the aggregate index.
+    db.exec(`
+      INSERT INTO repeated_mailbox_reconciliations (sequence)
+      SELECT event.sequence
+      FROM orchestration_events event
+      JOIN orchestration_events next ON next.sequence = (
+        SELECT later.sequence FROM orchestration_events later
+        WHERE later.aggregate_type = 'thread' AND later.aggregate_id = event.aggregate_id
+          AND later.sequence > event.sequence
+        ORDER BY later.sequence LIMIT 1
+      )
+      WHERE event.aggregate_type = 'thread' AND event.event_type = 'conversation.mailbox-reconciled'
+        AND next.event_type = event.event_type AND next.payload_json = event.payload_json`);
+    db.exec(`
+      DELETE FROM projection_thread_activities
+      WHERE activity_type = 'conversation.mailbox-reconciled'
+        AND last_event_sequence IN (SELECT sequence FROM repeated_mailbox_reconciliations)`);
+    db.exec(
+      "DELETE FROM orchestration_events WHERE sequence IN (SELECT sequence FROM repeated_mailbox_reconciliations)",
+    );
+  } finally {
+    db.exec("DROP TABLE temp.repeated_mailbox_reconciliations");
   }
   deleteOrphanReceipts(db);
 }

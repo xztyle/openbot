@@ -27,10 +27,11 @@ const UiErrors = createSimpleContext({
       const { t, errorMessage } = currentText();
       const body = errorMessage(error, t("app.error.actionFailed"));
       const errorKey = agentConversationKey(serverId, agentId);
+      // The same failure again replaces the earlier one, so a server that is down shows it once.
       setUiErrors((current) => ({
         ...current,
         [errorKey]: [
-          ...(current[errorKey] ?? []),
+          ...(current[errorKey] ?? []).filter((entry) => entry.status !== status || entry.body !== body),
           {
             id: `ui-${Date.now()}-${Math.random()}`,
             author: "agent",

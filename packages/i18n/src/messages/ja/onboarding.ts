@@ -2,12 +2,16 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/onboarding";
 
 export const messages = {
+  "onboarding.readFailed.title": "OpenBot は設定を読み込めませんでした。",
+  "onboarding.readFailed.description":
+    "ローカルのデータは変更されていません。もう一度お試しください。問題が続く場合は、OpenBot を設定し直してください。",
+  "onboarding.readFailed.setUpAgain": "設定し直す",
   "onboarding.setup.saveFailed": "OpenBot はローカルの設定を保存できませんでした。",
   "onboarding.setup.verifyFailed": "OpenBot はこの招待を確認できませんでした。",
   "onboarding.setup.connectFailed": "OpenBot はこのホストに接続できませんでした。",
   "onboarding.setup.localTitle": "このコンピューターを設定",
   "onboarding.setup.remoteTitle": "ホストに接続",
-  "onboarding.setup.title": "OpenBot をどこで実行しますか?",
+  "onboarding.setup.title": "OpenBot をどこで実行しますか？",
   "onboarding.setup.localDescription": "エージェント、会話、ファイルはこのコンピューターに保存されます。",
   "onboarding.setup.remoteDescription": "OpenBot ホストを運用している人からの招待を使ってください。",
   "onboarding.setup.description":
@@ -39,6 +43,9 @@ export const messages = {
   "onboarding.provider.googlePlan": "Google AI Pro または Ultra プラン",
   "onboarding.provider.cursorPlan": "Cursor プランまたは API キー",
   "onboarding.provider.clineAccount": "Cline アカウントで無料モデル",
+  "onboarding.provider.inceptionKey": "Inception API キーで Mercury モデル",
+  "onboarding.provider.deepseekKey": "DeepSeek API キーで使う DeepSeek モデル",
+  "onboarding.provider.openrouterKey": "OpenRouter API キーで使う多数のモデル",
   "onboarding.provider.tryFree": "無料で試す",
   "onboarding.provider.noSignIn": "サインイン不要",
   "onboarding.provider.more": "その他のプロバイダー",
@@ -70,7 +77,7 @@ export const messages = {
   "onboarding.toast.connecting":
     "{provider} に接続しています。ブラウザーのウィンドウが開いたら、サインインを完了してください。",
   "onboarding.progress": "オンボーディング ステップ {step}/{total}",
-  "onboarding.choice.title": "AI チームをつくろう。",
+  "onboarding.choice.title": "AI チームを作りましょう。",
   "onboarding.choice.description": "どちらかを選んでください。後で変更できます。",
   "onboarding.choice.startFree": "無料で始める",
   "onboarding.choice.freeDetail": "無料のモデル。サブスクリプションは不要です。",
@@ -80,7 +87,7 @@ export const messages = {
   "onboarding.plan.title": "プランを接続",
   "onboarding.plan.description": "一度サインインするだけ。エージェントがあなたのプランを使います。",
   "onboarding.computer.title": "OpenBot がコンピューターを操作する場合があります",
-  "onboarding.opening": "OpenBot を開いています…",
+  "onboarding.opening": "OpenBot を起動中…",
   "onboarding.launch.downloading": "無料モデルをダウンロードしています…",
   "onboarding.action.connect": "接続",
   "onboarding.action.open": "OpenBot を開く",

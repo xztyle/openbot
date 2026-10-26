@@ -3,7 +3,6 @@ import type {
   HostUpdateSettingsChange,
   HostUpdateStatus,
   OpenBotDesktopApi,
-  UpdateRestartMode,
 } from "@openbot/contracts/ipc";
 import { classifyFailure } from "@openbot/telemetry";
 import {
@@ -15,7 +14,6 @@ import {
   AlertTitle,
   Button,
   Clock3,
-  ConfirmDialog,
   Info,
   Item,
   ItemActions,
@@ -32,7 +30,7 @@ import { restartReasonKey } from "@openbot/ui/features/updates/restart-reasons";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
-import { watchHostUpdate } from "./host-update-toast";
+import { openServerUpdate, serverUpdateStatus } from "./server-update-flow";
 
 /** The update calls of one server's host. The desktop reaches them through main. */
 export type HostUpdateCalls = Pick<
@@ -67,7 +65,6 @@ export function ServerUpdatePanel(
   const [status, setStatus] = createSignal<HostUpdateStatus | null>(null);
   const [loadError, setLoadError] = createSignal<string | null>(null);
   const [busy, setBusy] = createSignal<string | null>(null);
-  const [confirmRestart, setConfirmRestart] = createSignal(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
   /** Bumped for each server and on unmount, so an answer for an earlier one is dropped. */
   let generation = 0;
@@ -114,9 +111,15 @@ export function ServerUpdatePanel(
       setStatus(null);
       setRelease(null);
       setBusy(null);
-      setConfirmRestart(false);
       setLoadError(null);
       void untrack(read);
+    },
+  );
+  // The update dialog reads the status while the update runs; the panel shows the same one.
+  createEffect(
+    () => serverUpdateStatus(props.serverId),
+    (next) => {
+      if (next && next !== untrack(status)) show(next);
     },
   );
   onCleanup(() => {
@@ -149,13 +152,12 @@ export function ServerUpdatePanel(
 
   const changeSettings = (settings: HostUpdateSettingsChange) =>
     act("settings", (serverId) => calls().setUpdateSettings(settings, serverId));
-  // The download toast keeps the percentage in view after Server Settings closes.
-  const start = (mode: UpdateRestartMode) =>
-    act(`start-${mode}`, async (serverId) => {
-      const next = await calls().startUpdate(mode, serverId);
-      watchHostUpdate({ serverId, name: props.hostName, calls: calls(), offer: false }, next);
-      return next;
-    });
+  // The update dialog starts the update and follows it after Server Settings closes.
+  const openUpdate = (current: HostUpdateStatus) =>
+    openServerUpdate(
+      { serverId: props.serverId, name: props.hostName, canManage: props.canManage !== false, calls: calls() },
+      current,
+    );
   const blocked = () => {
     const remote = status()?.remoteUpdates;
     return remote === "disabled" || remote === "managed" || status()?.phase === "unsupported";
@@ -208,10 +210,12 @@ export function ServerUpdatePanel(
       case "available":
         return t("server.update.status.available", { version: version(current) });
       case "downloading":
-        return t("server.update.status.downloading", {
-          version: version(current),
-          progress: format.percent((current.progress ?? 0) / 100),
-        });
+        return current.progress === null
+          ? t("server.update.status.downloadingUnknown", { version: version(current) })
+          : t("server.update.status.downloading", {
+              version: version(current),
+              progress: format.percent(current.progress / 100),
+            });
       case "ready":
         return t("server.update.status.ready", { version: version(current) });
       case "installing":
@@ -228,159 +232,135 @@ export function ServerUpdatePanel(
   }
 
   return (
-    <>
-      <SettingsSection title={t("server.update.hostTitle", { name: props.hostName })}>
-        <Show when={loadError()}>
-          {(error) => (
-            <Alert tone="danger" role="alert">
-              <AlertIcon>
-                <TriangleAlert />
-              </AlertIcon>
-              <AlertContent>
-                <AlertDescription>{error()}</AlertDescription>
-              </AlertContent>
-            </Alert>
-          )}
-        </Show>
-        <Show when={status()}>
-          {(current) => (
-            <>
-              <BlockedNotice status={current()} release={readOnlyRelease()} hostName={props.hostName} />
-              <ItemGroup class="settings-modal-card">
-                <Item class="settings-modal-row">
-                  <ItemContent>
-                    <ItemTitle>{t("server.update.version", { version: current().currentVersion })}</ItemTitle>
-                    <ItemDescription aria-live="polite">{message(current())}</ItemDescription>
-                    <Show when={current().phase === "downloading"}>
-                      <Progress
-                        value={current().progress ?? 0}
-                        indeterminate={current().progress === null}
-                        aria-label={message(current())}
-                      />
-                    </Show>
-                  </ItemContent>
-                  <ItemActions>
-                    <Show when={current().phase !== "installing" && !current().restart}>
+    <SettingsSection title={t("server.update.hostTitle", { name: props.hostName })}>
+      <Show when={loadError()}>
+        {(error) => (
+          <Alert tone="danger" role="alert">
+            <AlertIcon>
+              <TriangleAlert />
+            </AlertIcon>
+            <AlertContent>
+              <AlertDescription>{error()}</AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
+      </Show>
+      <Show when={status()}>
+        {(current) => (
+          <>
+            <BlockedNotice status={current()} release={readOnlyRelease()} hostName={props.hostName} />
+            <ItemGroup class="settings-modal-card">
+              <Item class="settings-modal-row">
+                <ItemContent>
+                  <ItemTitle>{t("server.update.version", { version: current().currentVersion })}</ItemTitle>
+                  <ItemDescription aria-live="polite">{message(current())}</ItemDescription>
+                  <Show when={current().phase === "downloading"}>
+                    <Progress
+                      value={current().progress ?? 0}
+                      indeterminate={current().progress === null}
+                      aria-label={message(current())}
+                    />
+                  </Show>
+                </ItemContent>
+                <ItemActions>
+                  <Show when={current().phase !== "installing" && !current().restart}>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      loading={
+                        busy() === "check" || current().phase === "checking" || readOnlyRelease()?.phase === "checking"
+                      }
+                      disabled={checkDisabled()}
+                      onClick={() => void check()}
+                    >
+                      {t("server.update.check")}
+                    </Button>
+                    <Show when={!blocked()}>
                       <Button
                         type="button"
                         size="sm"
-                        variant="outline"
-                        loading={
-                          busy() === "check" ||
-                          current().phase === "checking" ||
-                          readOnlyRelease()?.phase === "checking"
-                        }
-                        disabled={checkDisabled()}
-                        onClick={() => void check()}
+                        // Only a relaunch of the host recovers from a failed install.
+                        disabled={disabled() || !current().availableVersion || current().errorCode === "install_failed"}
+                        onClick={() => openUpdate(current())}
                       >
-                        {t("server.update.check")}
+                        {t("server.update.start")}
                       </Button>
-                      <Show when={!blocked()}>
+                    </Show>
+                  </Show>
+                </ItemActions>
+              </Item>
+              <Show when={props.canManage !== false && !blocked()}>
+                <SwitchField
+                  checked={current().autoDownload}
+                  disabled={disabled()}
+                  onChange={(autoDownload) => void changeSettings({ autoDownload })}
+                  label={t("server.update.autoDownloadTitle")}
+                  description={t("server.update.autoDownloadDescription", { name: props.hostName })}
+                />
+                <SwitchField
+                  checked={current().autoInstall}
+                  disabled={disabled()}
+                  onChange={(autoInstall) => void changeSettings({ autoInstall })}
+                  label={t("server.update.autoInstallTitle")}
+                  description={t("server.update.autoInstallDescription", { name: props.hostName })}
+                />
+              </Show>
+            </ItemGroup>
+            <Show when={current().restart}>
+              {(restart) => (
+                <Alert tone="neutral" role="status">
+                  <AlertIcon>
+                    <Clock3 />
+                  </AlertIcon>
+                  <AlertContent>
+                    <AlertTitle>
+                      {restart().mode === "now"
+                        ? t("server.update.scheduledNowTitle", { name: props.hostName })
+                        : t("server.update.scheduledTitle", { name: props.hostName })}
+                    </AlertTitle>
+                    <AlertDescription>
+                      {restart().requestedBy === null
+                        ? t("server.update.automatic", { name: props.hostName })
+                        : t("server.update.requestedBy", { member: restart().requestedBy ?? "" })}
+                      <Show when={restart().waitingFor.length > 0}>
+                        {" "}
+                        {t("server.update.waitingFor", { reasons: waitingFor(current()) })}
+                      </Show>
+                    </AlertDescription>
+                  </AlertContent>
+                  <Show when={props.canManage !== false && current().phase !== "installing"}>
+                    <AlertActions>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        loading={busy() === "cancel"}
+                        disabled={!props.actionsAvailable || Boolean(busy())}
+                        onClick={() => void act("cancel", (serverId) => calls().cancelUpdate(serverId))}
+                      >
+                        {t("server.update.cancel")}
+                      </Button>
+                      <Show when={restart().mode === "when-idle"}>
                         <Button
                           type="button"
                           size="sm"
-                          loading={busy() === "start-when-idle"}
-                          // Only a relaunch of the host recovers from a failed install.
-                          disabled={
-                            disabled() || current().phase === "up-to-date" || current().errorCode === "install_failed"
-                          }
-                          onClick={() => void start("when-idle")}
+                          variant="outline"
+                          disabled={disabled()}
+                          onClick={() => openUpdate(current())}
                         >
-                          {t("server.update.start")}
+                          {t("server.update.restartNow")}
                         </Button>
                       </Show>
-                    </Show>
-                  </ItemActions>
-                </Item>
-                <Show when={props.canManage !== false && !blocked()}>
-                  <SwitchField
-                    checked={current().autoDownload}
-                    disabled={disabled()}
-                    onChange={(autoDownload) => void changeSettings({ autoDownload })}
-                    label={t("server.update.autoDownloadTitle")}
-                    description={t("server.update.autoDownloadDescription", { name: props.hostName })}
-                  />
-                  <SwitchField
-                    checked={current().autoInstall}
-                    disabled={disabled()}
-                    onChange={(autoInstall) => void changeSettings({ autoInstall })}
-                    label={t("server.update.autoInstallTitle")}
-                    description={t("server.update.autoInstallDescription", { name: props.hostName })}
-                  />
-                </Show>
-              </ItemGroup>
-              <Show when={current().restart}>
-                {(restart) => (
-                  <Alert tone="neutral" role="status">
-                    <AlertIcon>
-                      <Clock3 />
-                    </AlertIcon>
-                    <AlertContent>
-                      <AlertTitle>
-                        {restart().mode === "now"
-                          ? t("server.update.scheduledNowTitle", { name: props.hostName })
-                          : t("server.update.scheduledTitle", { name: props.hostName })}
-                      </AlertTitle>
-                      <AlertDescription>
-                        {restart().requestedBy === null
-                          ? t("server.update.automatic", { name: props.hostName })
-                          : t("server.update.requestedBy", { member: restart().requestedBy ?? "" })}
-                        <Show when={restart().waitingFor.length > 0}>
-                          {" "}
-                          {t("server.update.waitingFor", { reasons: waitingFor(current()) })}
-                        </Show>
-                      </AlertDescription>
-                    </AlertContent>
-                    <Show when={props.canManage !== false && current().phase !== "installing"}>
-                      <AlertActions>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          loading={busy() === "cancel"}
-                          disabled={!props.actionsAvailable || Boolean(busy())}
-                          onClick={() => void act("cancel", (serverId) => calls().cancelUpdate(serverId))}
-                        >
-                          {t("server.update.cancel")}
-                        </Button>
-                        <Show when={restart().mode === "when-idle"}>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={disabled()}
-                            onClick={() => setConfirmRestart(true)}
-                          >
-                            {t("server.update.restartNow")}
-                          </Button>
-                        </Show>
-                      </AlertActions>
-                    </Show>
-                  </Alert>
-                )}
-              </Show>
-            </>
-          )}
-        </Show>
-      </SettingsSection>
-      <Show when={props.canManage !== false && confirmRestart()}>
-        <ConfirmDialog
-          open
-          tone="destructive"
-          initialFocus="cancel"
-          pending={busy() === "start-now"}
-          title={t("server.update.restartConfirmTitle", { name: props.hostName })}
-          description={t("server.update.restartConfirmDescription", { name: props.hostName })}
-          confirmLabel={t("server.update.restartNow")}
-          pendingLabel={t("server.update.restarting")}
-          onCancel={() => setConfirmRestart(false)}
-          onConfirm={async () => {
-            await start("now");
-            setConfirmRestart(false);
-          }}
-        />
+                    </AlertActions>
+                  </Show>
+                </Alert>
+              )}
+            </Show>
+          </>
+        )}
       </Show>
-    </>
+    </SettingsSection>
   );
 }
 

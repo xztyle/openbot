@@ -16,7 +16,6 @@ export const messages = {
   "skill.emptyAssigned": "このエージェントにはまだスキルが割り当てられていません。",
   "skill.folderSkill":
     "このスキルは OpenBot がインストールしたものではありません。{location} で編集または削除してください。",
-  "skill.localOnHost": "このローカルスキルはホストに保存されています。詳細はそのコンピューターで開いてください。",
   "skill.moreFor": "{name} のその他の操作",
   "skill.update": "更新",
   "skill.updateName": "{name} を更新",

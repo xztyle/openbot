@@ -29,6 +29,11 @@ Usage: openbot <command>
                                  Sign in with a code that OpenBot sends to your email.
                                  The server then shows in the server list of that account.
                                  Its name is "OpenBot" when you give no name.
+  login --claim [--name <name>]  Sign in with a one-time claim that the operator made for
+                                 the owner's email. No code is needed. The claim comes from
+                                 standard input, or a hidden prompt in a terminal.
+  mobile-connect                 Show a QR code that connects the OpenBot phone app to this
+                                 account. It works for one sign-in and expires after two minutes.
   logout                         Sign out. The server stops until the next sign-in.
   name <name>                    Change the server name.
   audit [<count>]                Show the newest security changes, such as who changed an event check,
@@ -114,8 +119,12 @@ check_answer() {
   if [ -z "$message" ]; then
     case $(value error) in
       invalid_email) message="Enter a valid email address." ;;
+      invalid_request) message="Enter the sign-in code or the claim." ;;
       invalid_name) message="Enter a server name." ;;
       signed_in) message="This server is signed in. To use another account, run: openbot logout" ;;
+      account_signed_out | account_code_sent) message="Sign in first with: openbot login" ;;
+      account_error | account_loading) message="OpenBot could not check the account yet. Run: openbot status" ;;
+      session_not_storable) message="This server cannot store the session securely. The claim was not used." ;;
       *) message="OpenBot refused the request ($(value error))." ;;
     esac
   fi
@@ -124,7 +133,7 @@ check_answer() {
 }
 
 show_status() {
-  local account server name message staged
+  local account server name message staged limit
   account=$(value account)
   server=$(value server)
   name=$(value server_name)
@@ -139,6 +148,12 @@ show_status() {
   esac
   if [ -n "$name" ]; then echo "Server: $name ($server)"; else echo "Server: $server"; fi
   case $server in error | unconfigured) if [ -n "$message" ]; then echo "  $message"; fi ;; esac
+  # The limit is the smaller of the machine memory and the limit of the unit or the container.
+  limit=$(value memory_limit)
+  if [ -n "$limit" ]; then
+    echo "Memory: $(($(value memory_available) / 1048576)) MiB free of $((limit / 1048576)) MiB ($(value memory_level))"
+    echo "Turns at the same time: at most $(value turn_limit)"
+  fi
   staged=$(staged_version)
   if [ -n "$staged" ]; then echo "OpenBot $staged is ready to install. Run: sudo openbot update"; fi
 }
@@ -290,13 +305,17 @@ analytics_command() {
 }
 
 login_command() {
-  local email="" name="" challenge code attempt second
+  local email="" name="" claim="" with_claim="" challenge code attempt second
   while [ "$#" -gt 0 ]; do
     case $1 in
       --name)
         [ "$#" -ge 2 ] || fail "Add a name after --name."
         name=$2
         shift 2
+        ;;
+      --claim)
+        with_claim=1
+        shift
         ;;
       -*) fail "Unknown option: $1" ;;
       *)
@@ -311,19 +330,29 @@ login_command() {
     show_status
     return 0
   fi
-  [ -t 0 ] || fail "Run openbot login in a terminal."
-  if [ -z "$email" ]; then read -rp "Email: " email; fi
-  # With the name, OpenBot refuses a name that it cannot publish before it sends a code.
-  control POST /v1/login/start "email=$email" ${name:+"name=$name"}
-  check_answer || exit 1
-  challenge=$(value challenge)
-  echo "OpenBot sent a sign-in code to $email."
-  for attempt in 1 2 3; do
-    read -rp "Code: " code
-    control POST /v1/login/verify "challenge=$challenge" "code=$code" ${name:+"name=$name"}
-    if check_answer; then break; fi
-    [ "$attempt" -lt 3 ] || exit 1
-  done
+  if [ -n "$with_claim" ]; then
+    [ -z "$email" ] || fail "The claim names the account. Give no email with --claim."
+    # Never an argument: other users can read the arguments of a process. It works once.
+    if [ -t 0 ]; then read -rsp "Claim: " claim && echo; else read -r claim || true; fi
+    [ -n "$claim" ] || fail "Give the claim on standard input."
+    control POST /v1/login/claim "claim=$claim" ${name:+"name=$name"}
+    check_answer || exit 1
+    email=$(value email)
+  else
+    [ -t 0 ] || fail "Run openbot login in a terminal."
+    if [ -z "$email" ]; then read -rp "Email: " email; fi
+    # With the name, OpenBot refuses a name that it cannot publish before it sends a code.
+    control POST /v1/login/start "email=$email" ${name:+"name=$name"}
+    check_answer || exit 1
+    challenge=$(value challenge)
+    echo "OpenBot sent a sign-in code to $email."
+    for attempt in 1 2 3; do
+      read -rp "Code: " code
+      control POST /v1/login/verify "challenge=$challenge" "code=$code" ${name:+"name=$name"}
+      if check_answer; then break; fi
+      [ "$attempt" -lt 3 ] || exit 1
+    done
+  fi
   echo "Signed in as $(value email). Publishing the server..."
   for ((second = 0; second < 90; second += 2)); do
     control GET /v1/status
@@ -334,7 +363,8 @@ login_command() {
   done
   show_status
   if [ "$(value server)" = online ]; then
-    echo "Sign in to OpenBot with $email on your computer, phone or https://openbot.run/app to use this server."
+    echo "Sign in to OpenBot with $email on your computer or https://openbot.run/app to use this server."
+    echo "To use it from your phone, run: openbot mobile-connect"
   fi
 }
 
@@ -346,10 +376,37 @@ audit_command() {
   { sed -n 's/^row[0-9]*=//p' <<<"$response"; } || true
 }
 
+mobile_connect_command() {
+  local expires_at
+  control POST /v1/mobile-connect
+  check_answer || exit 1
+  expires_at=$(value expires_at)
+  # Arithmetic runs a command in an array index, so only digits go into it.
+  [[ $expires_at =~ ^[0-9]+$ ]] || fail "OpenBot sent an invalid Mobile Connect code."
+  value qr | base64 -d
+  echo "In the OpenBot phone app, select Scan QR code and scan this code."
+  echo "It works for one sign-in and expires in $((expires_at / 1000 - $(date +%s))) seconds. Run the command again for a new code."
+}
+
 logs_command() {
   require_host "read the log on the host with: docker logs <container>"
   if [ "${1:-}" = -f ]; then exec journalctl --unit "$UNIT" --follow --lines 100; fi
   exec journalctl --unit "$UNIT" --lines 200 --no-pager
+}
+
+# OpenBot starts again when `apply` fails or a signal stops the update, as in `request`. A copy that
+# did not complete is done again first, because a partial release cannot start. The status stays.
+# A second signal must not stop the recovery, and the `apply` child ignores it too.
+restart_after_failed_update() {
+  local status=$?
+  trap '' INT TERM HUP
+  [ ! -e "$INSTALL/.applying" ] || "$INSTALL/hosted/openbot-hosted-update" apply || true
+  if systemctl start "$UNIT"; then
+    echo "The update failed. OpenBot $(version_of "$INSTALL/app") runs. Try again with: sudo openbot update" >&2
+  else
+    echo "The update failed, and OpenBot did not start. Read the log with: openbot logs" >&2
+  fi
+  exit "$status"
 }
 
 update_command() {
@@ -367,8 +424,11 @@ update_command() {
     read -rp "Install OpenBot $after now? OpenBot stops for about a minute, and running agent turns stop. [y/N] " reply
     [[ $reply == [yY]* ]] || return 0
   fi
+  trap restart_after_failed_update EXIT
+  trap 'exit 1' INT TERM HUP
   systemctl stop "$UNIT"
   "$INSTALL/hosted/openbot-hosted-update" apply
+  trap - EXIT INT TERM HUP
   systemctl start "$UNIT"
   echo "Installed OpenBot $(version_of "$INSTALL/app")."
 }
@@ -433,6 +493,7 @@ case $command in
     show_status
     ;;
   audit) audit_command "$@" ;;
+  mobile-connect) mobile_connect_command ;;
   logs) logs_command "$@" ;;
   start | stop | restart)
     require_host "run docker $command <container> on the host"

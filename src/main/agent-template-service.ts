@@ -32,6 +32,7 @@ import {
   type InstallAgentTemplateResult,
   isAgentTemplateCardPng,
   isAgentTemplateSnapshot,
+  isReleasedRoutineSchedule,
   type PublishAgentTemplateInput,
   type RoutineSchedule,
   toAgentTemplateSnapshot,
@@ -43,6 +44,7 @@ import { Effect, Result, Schema } from "effect";
 import { causeHelpers } from "../backend/effect-boundary";
 import { imageMimeType, localSchedule, toArrayBuffer, validTimezone } from "./agent-marketplace-service";
 import type { LocalSkillLibrary } from "./local-skill-library";
+import { MANAGED_SKILL_SLUGS } from "./managed-skill-service";
 import { inspectSkillMarkdown, normalizedFiles } from "./skill-package";
 
 /** The words for a snapshot problem. The English is the text the contract sent before. */
@@ -231,7 +233,13 @@ export class AgentTemplateService {
           decodeAgentTemplateDetail,
         )
         .pipe(toAgentTemplateFailure);
-      return { ...detail, avatarUrl: detail.avatarUrl ? this.auth.resolveApiUrl(detail.avatarUrl) : null };
+      return {
+        ...detail,
+        // A template published before its owner's copy of a managed skill was recognized carries that
+        // copy. The new agent gets OpenBot's own, and installing the copy would fail on its folder.
+        skills: detail.skills.filter((skill) => skill.kind !== "embedded" || !MANAGED_SKILL_SLUGS.has(skill.slug)),
+        avatarUrl: detail.avatarUrl ? this.auth.resolveApiUrl(detail.avatarUrl) : null,
+      };
     });
   }
 
@@ -364,12 +372,10 @@ export class AgentTemplateService {
       avatarSeed: agent.avatarSeed,
       avatarHue: agent.avatarHue,
       skills,
-      routines: this.agents.listRoutines(agent.id).map(({ name, instruction, active, trigger }) => ({
-        name,
-        instruction,
-        active,
-        schedule: trigger.schedule,
-      })),
+      routines: this.agents.listRoutines(agent.id).flatMap(({ name, instruction, active, trigger }) =>
+        // A `once` routine names one date, so it is not part of a template.
+        isReleasedRoutineSchedule(trigger.schedule) ? [{ name, instruction, active, schedule: trigger.schedule }] : [],
+      ),
     });
   }
 

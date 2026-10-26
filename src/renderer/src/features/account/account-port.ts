@@ -2,13 +2,16 @@ import type { OpenBotDesktopApi } from "@openbot/contracts/ipc";
 
 /**
  * What the account context reaches in main: the OpenBot account session, its devices, and the
- * usage the account dock shows.
+ * usage the page rail and the Usage page show.
  */
 export interface AccountPort {
   agent: Pick<OpenBotDesktopApi["agent"], "getUsage">;
   auth: Pick<
     OpenBotDesktopApi["auth"],
+    | "cancelMobileConnect"
     | "createMobileConnect"
+    | "createMobileConnectLink"
+    | "getMobileConnectLink"
     | "getState"
     | "listAccountSessions"
     | "listMobileConnectedDevices"
@@ -18,6 +21,7 @@ export interface AccountPort {
     | "retry"
     | "revokeAccountSession"
     | "revokeMobileConnectedDevice"
+    | "revokeMobileConnectLink"
     | "updateAvatar"
     | "updateName"
     | "verifyEmailCode"

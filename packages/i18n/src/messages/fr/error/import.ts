@@ -45,4 +45,33 @@ export const messages = {
   "error.import.hostBusy": "Le serveur lit d’autres exportations. Réessayez dans quelques minutes.",
   "error.import.skillKept":
     "{name} : le serveur a déjà la compétence « {skill} », l’agent utilise donc celle-ci. Demandez à un administrateur de la mettre à jour.",
+  "error.import.transferRemoteTooLarge":
+    "Un fichier de transfert pour un serveur rejoint doit faire moins de 100 Mo. Désactivez les fichiers des espaces de travail ou exportez moins d’agents.",
+  "error.import.transferNotFile": "Ce fichier n’est pas un fichier de transfert OpenBot.",
+  "error.import.transferNewer":
+    "Ce fichier a été créé par une version plus récente d’OpenBot. Mettez à jour OpenBot et réessayez.",
+  "error.import.transferEmpty": "Le fichier ne contient ni agents ni réglages.",
+  "error.import.transferTooLarge":
+    "Un fichier de transfert doit faire moins de 2 Go et contenir moins de 50 000 fichiers. Désactivez les fichiers des espaces de travail ou exportez moins d’agents.",
+  "error.import.transferAgentInvalid": "L’agent {number} du fichier n’est pas valide. Il est ignoré.",
+  "error.import.transferSettingsInvalid":
+    "Les réglages de l’app dans le fichier ne sont pas valides. Ils ne sont pas importés.",
+  "error.import.transferModelMissing":
+    "{name} : le modèle « {model} » n’est pas encore disponible ici, donc l’agent utilise le modèle par défaut. Choisissez de nouveau le modèle quand son fournisseur est prêt.",
+  "error.import.transferSettingSkipped": "{name} n’est pas importé. {reason}",
+  "error.import.transferRoutineFlowSkipped": "L’import a laissé de côté un flux de routine. {reason}",
+  "error.import.transferCustomAgentCommand":
+    "{name} : les agents personnalisés ne sont pas importés, car ils exécutent une commande. Vérifiez la commande « {command} » et ajoutez de nouveau l’agent dans les réglages.",
+  "error.import.transferSkillLimit":
+    "{name} : seules les {limit} premières de ses {total} compétences sont dans le fichier, car un agent peut avoir {limit} compétences.",
+  "error.import.transferFilesGone":
+    "{number} fichiers ont été supprimés pendant l’exportation. Ils ne sont donc pas dans le fichier.",
+  "error.import.transferProviderKey": "{name} : saisissez de nouveau sa clé API dans les réglages.",
+  "error.import.transferAgentEnv": "{name} : saisissez de nouveau les valeurs de {names} dans les réglages.",
+  "error.import.transferMcpValues":
+    "{name} : le serveur MCP est ajouté désactivé. Vérifiez sa commande, saisissez de nouveau ses valeurs et son adresse complète, puis activez-le dans les réglages MCP.",
+  "error.import.transferValuesCleared":
+    "{name} : les valeurs qui peuvent contenir un secret ont été retirées de ses arguments ou de son adresse. Saisissez-les de nouveau dans les réglages.",
+  "error.import.transferSharedKept":
+    "{number} fichiers du dossier partagé sont déjà présents ici. Ils restent tels quels.",
 } as const satisfies PartialTranslation<typeof source>;

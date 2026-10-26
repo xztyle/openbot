@@ -28,13 +28,15 @@ export class DiscordConnect {
     this.#port = port;
   }
 
-  readonly start = Effect.fnUntraced(function* (this: DiscordConnect) {
+  /** Returns the install page and its nonce. With `opensPage` false the client of a joined server opens it. */
+  readonly start = Effect.fnUntraced(function* (this: DiscordConnect, opensPage: boolean) {
     this.#prune();
     const nonce = randomBytes(24).toString("base64url");
     const { privateKey, publicKey } = yield* connectIo(() => createDiscordGuildKeyPair());
     this.#pending.set(nonce, { privateKey, expiresAt: Date.now() + PENDING_TTL_MS });
     const url = yield* this.#port.authorize({ hostNonce: nonce, hostPublicKey: publicKey });
-    yield* connectIo(() => this.#port.openExternal(url));
+    if (opensPage) yield* connectIo(() => this.#port.openExternal(url));
+    return { url, nonce };
   });
 
   readonly complete = Effect.fnUntraced(function* (this: DiscordConnect, nonce: string, grant: string) {

@@ -51,17 +51,17 @@ export const Failed: Story = {
     },
   },
 };
-export const Narrow: Story = {
-  render: (args) => (
-    <div style={{ width: "280px", "max-width": "100%" }}>
-      <BrowserSecretCard {...args} />
-    </div>
-  ),
-};
+const renderNarrow: NonNullable<Story["render"]> = (args) => (
+  <div style={{ width: "280px", "max-width": "100%" }}>
+    <BrowserSecretCard {...args} />
+  </div>
+);
+
+export const Narrow: Story = { render: renderNarrow };
 
 export const TwelveDigitsNarrow: Story = {
   args: { request: { ...request, secret: { method: "otp", origin: "https://accounts.example.com", digits: 12 } } },
-  render: Narrow.render,
+  render: renderNarrow,
 };
 
 export const PreviewUnavailable: Story = {
@@ -78,4 +78,33 @@ export const SubmittingPassword: Story = {
 
 export const SubmittingCode: Story = {
   args: { onRespond: () => new Promise<void>(() => {}) },
+};
+
+export const Island: Story = {
+  args: { variant: "island" },
+};
+
+export const IslandAuthenticator: Story = {
+  args: { ...Authenticator.args, variant: "island" },
+};
+
+export const IslandPassword: Story = {
+  args: { ...Password.args, variant: "island" },
+};
+
+export const IslandEightDigits: Story = {
+  args: { ...EightDigits.args, variant: "island" },
+};
+
+export const IslandFailed: Story = {
+  args: { ...Failed.args, variant: "island" },
+};
+
+export const IslandSubmittingCode: Story = {
+  args: { ...SubmittingCode.args, variant: "island" },
+};
+
+export const IslandNarrow: Story = {
+  args: { variant: "island" },
+  render: renderNarrow,
 };

@@ -1,19 +1,23 @@
 {
   "slug": "cloudflare",
   "name": "Cloudflare",
-  "tagline": "Manage Cloudflare resources",
+  "tagline": "Workers, DNS, storage and logs",
   "description": "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
   "category": "coding",
   "creatorName": "cloudflare.com",
-  "iconUrl": "https://cloudflare.com/favicon.ico",
+  "iconUrl": "https://www.cloudflare.com/favicon.ico",
   "version": "1.0.0",
-  "prompts": [{ "id": "prompt-inspect", "text": "Show what I can access through Cloudflare. Do not change anything." }],
+  "prompts": [
+    { "id": "prompt-workers", "text": "Which Workers are deployed in my Cloudflare account?" },
+    { "id": "prompt-errors", "text": "Which Cloudflare Workers logged errors in the last hour?" },
+    { "id": "prompt-dns", "text": "List the DNS records of each zone in my Cloudflare account." }
+  ],
   "apps": [
     {
       "id": "app-cloudflare-mcp",
       "name": "Cloudflare",
       "description": "Connect to Cloudflare directly with an API token limited to the resources you need. API tokens with client IP filtering do not work with this hosted connection.",
-      "iconUrl": "https://cloudflare.com/favicon.ico",
+      "iconUrl": "https://www.cloudflare.com/favicon.ico",
       "server": {
         "name": "cloudflare",
         "transport": "http",
@@ -39,8 +43,8 @@
       }
     }
   ],
-  "websiteUrl": "https://github.com/cloudflare/mcp",
-  "privacyPolicyUrl": null,
-  "termsUrl": null,
+  "websiteUrl": "https://www.cloudflare.com",
+  "privacyPolicyUrl": "https://www.cloudflare.com/privacypolicy/",
+  "termsUrl": "https://www.cloudflare.com/website-terms/",
   "skills": []
 }

@@ -1,6 +1,6 @@
 import type {
   AgentEvent,
-  AgentSummary,
+  ClientAgentSummary,
   ConfigureHostInput,
   CreateTeamInviteInput,
   DirectConversationSnapshot,
@@ -22,6 +22,7 @@ import type {
   TeamSessionSummary,
   UpdateTeamMemberInput,
 } from "@openbot/contracts/ipc";
+import { sourceText } from "@openbot/i18n/source";
 import {
   STORY_DIRECT_SNAPSHOTS,
   STORY_DIRECT_THREADS,
@@ -55,7 +56,7 @@ export function createMockTeam(
   options: MockTeamOptions,
   { emit }: MockRuntime,
   emitAgentEvent: (event: AgentEvent) => void,
-  readAgents: () => AgentSummary[],
+  readAgents: () => ClientAgentSummary[],
 ) {
   let servers = clone(options.servers ?? STORY_SERVERS);
   let presence = clone(options.presence ?? STORY_PRESENCE);
@@ -200,6 +201,7 @@ export function createMockTeam(
         state: "online" as const,
         hostedSleep: null,
         hostedIssue: null,
+        hostedStart: null,
         connectionSequence: (server.connectionSequence ?? 0) + 1,
       };
       servers = servers.map((item) => (item.id === serverId ? connected : item));
@@ -360,6 +362,11 @@ export function createMockTeam(
       emitHostStatus(hostStatus);
       return clone(hostStatus);
     },
+    rotateIdentityKey: async () => {
+      hostStatus = { ...hostStatus, message: sourceText("status.host.keyRotated") };
+      emitHostStatus(hostStatus);
+      return clone(hostStatus);
+    },
     getPresence: async () => clone(presence),
     start: async () => {
       hostStatus = { ...hostStatus, phase: "online", apiOnline: true, remoteDesktopReady: true };
@@ -459,6 +466,8 @@ export function createMockTeam(
 
   return {
     servers: serversApi,
+    /** The server the preview shows, which its agent events belong to. */
+    activeServerId: () => servers.find((server) => server.active)?.id ?? "local",
     host,
     remoteDesktop,
     emitPresence,

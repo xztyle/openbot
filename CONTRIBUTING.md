@@ -3,13 +3,53 @@
 Thanks for helping improve OpenBot. Pull requests with clear verification are the easiest to
 review.
 
+## What you can send
+
+These rules apply to people outside the `nightly-labs` organization. Organization members and
+users with write access to this repository skip them. So do their agents, which act as
+`openbotgit[bot]` through the OpenBot GitHub App.
+
+You can open a pull request without an issue for:
+
+- Bug fixes.
+- Small improvements, alignments, and clean-ups that do not change how a feature works.
+- Translations and documentation.
+- A new provider, MCP app, or connector. Follow
+  [Integrations](docs/architecture/integrations.md) ("Add a provider", "Add an application",
+  "Add a connector").
+
+These need an issue with the `approved` label before you write code:
+
+- New features.
+- Changes to how an existing feature works or looks.
+- Large refactors, new dependencies, and changes to migrations, IPC contracts, the Team API,
+  security boundaries, or CI.
+
+To propose one, open a [feature request](https://github.com/nightly-labs/openbot/issues/new?template=feature_request.yml)
+and wait. A maintainer adds `approved` when the change fits OpenBot. Then link the issue in your
+pull request with `Closes #<number>`.
+
+The `Contribution policy` workflow applies these labels:
+
+| Label | Meaning |
+| --- | --- |
+| `external` | The author is outside the organization. The workflow adds it. |
+| `needs-approved-issue` | A maintainer decided that the pull request needs an approved issue. The `Contribution policy` check fails until the pull request closes an issue with the `approved` label. If it does not do this in 7 days, the workflow closes the pull request. |
+| `approved` | A maintainer accepts the issue. Pull requests that close it pass the check. |
+| `policy-exempt` | A maintainer turned off the check for this pull request. |
+
+A maintainer who reopens a closed pull request starts a new 7-day period.
+
 ## Before opening an issue
 
+- Use an issue form. The workflow closes an issue from outside the organization that does not
+  come from a form or that has an empty required answer.
 - Search existing issues first.
+- Use Discussions for questions and for ideas that are not yet a specific request.
 - Use the security process in `SECURITY.md` for vulnerabilities.
 - Remove credentials, private file paths, conversation contents, and personal data from diagnostics.
-- Include the OpenBot version, macOS version, Mac architecture, provider, CLI version, and
-  reproduction steps for bugs.
+- For a bug, give the platform, the OpenBot version, the operating system, the provider and its CLI
+  version, the exact steps, and the expected and actual results. The bug form asks for each one.
 
 ## Development setup
 
@@ -39,10 +79,12 @@ Type-only imports (`import type`) are erased by the compiler and stay allowed in
 
 ## Pull requests
 
-1. Create a branch from `main`.
-2. Test behavior changes and reproduced bugs as [AGENTS.md, Tests](AGENTS.md#tests) describes.
-3. Run `bun run check`. Coding agents do not: see [AGENTS.md, Checks](AGENTS.md#checks).
-4. Describe user-visible changes, risks, and manual verification in the pull request.
+1. Make sure that the change is one you can send: see [What you can send](#what-you-can-send).
+2. Create a branch from `main`.
+3. Test behavior changes and reproduced bugs as [AGENTS.md, Tests](AGENTS.md#tests) describes.
+4. Run `bun run check`. Coding agents do not: see [AGENTS.md, Checks](AGENTS.md#checks).
+5. Describe user-visible changes, risks, and manual verification in the pull request. Link the
+   issue that the pull request closes.
 
 Do not commit generated `out`, `dist`, coverage, local browser profiles, Electron `userData`, CLI
 state, `.env` files, credentials, real conversations, or user attachments.
@@ -58,8 +100,8 @@ Public guides live in `apps/auth-api/src/content/guides/`. To add one:
 4. Open the guide in a local preview and check the guide index, article page, feed and social card.
 
 Write for someone who has OpenBot open and is trying to complete a task. Use short paragraphs, plain English and the
-exact names of buttons, settings and files. Keep product claims tied to the current app. Use `ArticleImage`,
-`ArticleGif`, `ArticleClip` or `ArticleVideo` only when the media adds information that the text does not.
+exact names of buttons, settings and files. Keep product claims tied to the current app. Use `ArticleImage` only
+when the picture adds information that the text does not.
 
 Use `OPENBOT_LINKS` for external links and include useful `alt` text for every image. Do not paste bare URLs into a
 guide.
@@ -89,40 +131,13 @@ the recheck whatever its timestamp says. That one is passed to the reviewer whol
 responses share a size budget and are dropped from the oldest end. A label carries no argument of
 its own, so write the rebuttal as a comment first and label afterwards.
 
-### Choosing the reviewer for one pull request
+### The reviewer
 
-The reviewer runs on a default model and reasoning effort set in
-[`.github/workflows/norbiai-review.yml`](.github/workflows/norbiai-review.yml). A pull request that
-needs a closer read, or one small enough not to need the slowest one, can pick its own with two
-directives, each on a line of its own in the pull request description:
-
-```
-NorbiAI-Model: chatgpt-web/pro
-NorbiAI-Effort: high
-```
-
-Wrap a directive in `<!-- -->` to keep it out of the rendered description. A directive inside a
-fenced code block is an example and is not read, so a pull request may show one without changing its
-own review. Each is optional: leave one out and that half keeps the default. The choice applies to this pull request only — nothing is
-written back, so the next one starts from the defaults again — and the review comment records under
-`Review details` which reviewer actually ran.
-
-Pick the level from the highest-risk file in the diff, not from its size. A one-line migration
-needs a closer read than a large copy change.
-
-| Diff touches | Directive |
-| --- | --- |
-| Only documentation, comments, localization strings, Storybook stories, or tests with no production change | none (the workflow picks `chatgpt-web/medium` itself) |
-| Product code, including a [non-negotiable](AGENTS.md#non-negotiable) area: migrations, a released Team API wire protocol, the renderer-to-main trust boundary, secret redaction, or licensing | none (the default, `gpt-6-astra` at `low`) |
-
-When unsure between two rows, take the higher one. Do not lower the level to get a faster result on
-a risky change. A slower model on a very large diff can reach the job's time limit: split the pull
-request rather than drop the level.
-
-The workflow picks `chatgpt-web/medium` without a directive when every changed file is Markdown,
-under `docs/`, a Storybook story, a test, or a localization message file. `AGENTS.md`, `CLAUDE.md`,
-`.github/` and `.agents/` files are instructions, not documentation, and keep the default. A
-directive always wins over this choice.
+Every review runs on `claude-opus-5-5` at `high` reasoning effort, on Claude Code with the Claude
+login on the runner mac. This is set in
+[`.github/workflows/norbiai-review.yml`](.github/workflows/norbiai-review.yml). A pull request, a
+review request or the changed files cannot choose another model or effort. A slow review on a very
+large diff can reach the job's time limit: split the pull request.
 
 A review after a push reads only the commits since the last successful review, and rechecks the
 earlier findings against the full current code. A rebuttal on an unchanged commit reads no new code.
@@ -130,32 +145,13 @@ The first review, a review after a rebase or a merge of the base branch, and a r
 the `norbiai` label read the whole pull request. Add the label when a change since the last review
 needs the whole pull request read again.
 
-`NorbiAI-Effort` reaches `gpt-6-astra` and `claude-opus-5-5` only. A `chatgpt-web/*` slug carries
-its own level — the `high` in `chatgpt-web/high` is the reasoning level, already chosen — so pair
-the effort with another model or it changes nothing. `gpt-6-astra` itself is capped at `low`: asking
-for more is answered with a warning and the run goes ahead at `low`.
-
-The default, `gpt-6-astra` at `low`, runs on Codex. Name `chatgpt-web/pro` for a closer read, or
-`claude-opus-5-5` to review on Claude
-Code with the Claude login on the runner mac. It runs at `high` without `NorbiAI-Effort`. Every
-other model runs on Codex. Both use the same prompt, merge block and
-findings list. Claude Code can only read: it gets the Read, Grep and Glob tools and the `git diff`,
-`git show`, `git log` and `git ls-files` commands. It does not load the pull request's own settings,
-hooks, `CLAUDE.md` or MCP servers.
-
-The same two directives work in a `/norbiai review` comment, where they override the description for
-that one run. On a pull request from a fork only the comment is read: the description belongs to
-whoever opened the pull request, and choosing your own reviewer is not theirs to do.
-
-`ALLOWED_MODELS` and `ALLOWED_EFFORTS` in the workflow file are the accepted values. Anything else
-is refused with a warning and the default runs instead, so a typo reviews at the default rather
-than at none. The value is the whole rest of the line, so keep the directive on its own: a trailing
-note makes the line unrecognised rather than being trimmed off it. The review still has to finish
-inside the job's own time limit, whichever model runs.
+Claude Code can only read: it gets the Read, Grep and Glob tools and the `git diff`, `git show`,
+`git log` and `git ls-files` commands. It does not load the pull request's own settings, hooks,
+`CLAUDE.md` or MCP servers.
 
 ## Security-sensitive changes
 
-Preserve the following boundaries and their tests:
+Preserve the following boundaries, and their tests where they exist:
 
 - Electron sandboxing, context isolation, navigation policy, and IPC sender validation.
 - Attachment realpath, MIME, size, quota, and managed-protocol checks.
@@ -185,7 +181,19 @@ reason in the `bunfig.toml` comment. `bun pm untrusted` shows the blocked script
 
 ## Licensing
 
-By submitting a contribution, you agree that it is your original work (or that you have the right to
-submit it) and that it is licensed under the repository's PolyForm Noncommercial 1.0.0 license. Do
-not submit copied UI assets, proprietary code, private plugin binaries, or material whose license is
-unclear.
+Each author of a pull request must sign the
+[OpenBot Contributor Assignment Agreement](CLA.md). The agreement assigns the copyright in your
+contributions to Synthetify Labs spółka z ograniczoną odpowiedzialnością. Organization members,
+users with write access to this repository and bots do not sign.
+
+To sign, tick the agreement box in the description of your pull request. The pull request template
+has no box, because most authors do not sign. When you must sign, the `CLA` workflow adds the box to
+the end of the description. A coding agent ticks the box only when you tell it to. An author of a
+commit in a pull request that a different person opened signs with a comment instead, as section 10
+of the agreement says. You sign one time for each version. The `CLA` workflow records the signature on the `cla-signatures` branch
+and sets the `CLA` status. Its rules are in `scripts/cla.ts`. Each commit author email must be
+linked to a GitHub account, so that the workflow can find who must sign.
+
+A contribution must be your original work, or you must identify the source and the license of the
+material that you did not write. Do not submit copied UI assets, proprietary code, private plugin
+binaries, or material whose license is unclear.

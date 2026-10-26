@@ -11,7 +11,7 @@ export const messages = {
   "status.messaging.noAgent": "Nenhum agente pode responder aqui ainda. Adicione o Orquestrador do Slack no OpenBot.",
   "status.messaging.delegated": "Um colega está trabalhando nisso. A resposta chegará aqui.",
   "status.messaging.stopped": "Interrompido.",
-  "status.messaging.stop": "Interromper",
+  "status.messaging.stop": "Parar",
   "status.messaging.approvalTitle": "O OpenBot pede aprovação para continuar.",
   "status.messaging.approvalCommand": "Executar um comando",
   "status.messaging.approvalFileChange": "Alterar arquivos",

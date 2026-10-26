@@ -1,3 +1,5 @@
+import type { BillingPlanId } from "@openbot/contracts/billing";
+
 // HTML and plain-text bodies for account email. Mail clients render HTML very differently, so the
 // markup keeps to what all of them share:
 // - Tables and inline styles only. Gmail and Outlook drop or limit `<style>`, so that block holds
@@ -30,7 +32,23 @@ export interface TeamInviteEmailInput {
   role: "admin" | "member";
 }
 
+export interface ContactMessageEmailInput {
+  name: string | null;
+  email: string;
+  company: string | null;
+  topic: string;
+  message: string;
+}
+
+export interface WelcomeEmailInput {
+  plan: BillingPlanId;
+  serverName: string;
+}
+
+// This private install signs in at its own web app, and its mail names no public OpenBot links.
 const SITE_URL = "https://bots.delynith.com/app";
+const WEB_APP_URL = SITE_URL;
+const PLAN_NAMES: Record<BillingPlanId, string> = { starter: "Starter", standard: "Standard", pro: "Pro" };
 const FOOTER_LINKS = [{ label: "bots.delynith.com", href: SITE_URL }] as const;
 const FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Helvetica, Arial, sans-serif";
 const MONO_STACK = "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace";
@@ -112,6 +130,96 @@ export function renderTeamInviteEmail(input: TeamInviteEmailInput): RenderedEmai
           muted: true,
         }),
         linkFallback(input.inviteUrl),
+      ].join(""),
+      footer,
+    }),
+  };
+}
+
+// A message from the contact form on the site, to the team's own mailbox. The visitor wrote every
+// field, so the HTML escapes each one, and a reply goes to the visitor through `Reply-To`.
+export function renderContactMessageEmail(input: ContactMessageEmailInput): RenderedEmail {
+  const sender = input.name ? `${input.name} <${input.email}>` : input.email;
+  const fullSubject = `${input.topic} from ${input.name ?? input.email}`;
+  const subject = fullSubject.length > 150 ? `${fullSubject.slice(0, 149)}…` : fullSubject;
+  const preheader = input.message.slice(0, 120);
+  const footer = `Sent from the contact form on openbot.run. Reply to this email to answer ${input.email}.`;
+  return {
+    subject,
+    preheader,
+    text: textBody(
+      [
+        `From: ${sender}`,
+        ...(input.company ? [`Company: ${input.company}`] : []),
+        `Topic: ${input.topic}`,
+        "",
+        input.message,
+      ],
+      footer,
+    ),
+    html: renderLayout({
+      title: subject,
+      preheader,
+      body: [
+        heading(escapeHtml(input.topic)),
+        detailRow("From", sender),
+        ...(input.company ? [detailRow("Company", input.company)] : []),
+        paragraph(escapeHtml(input.message).replace(/\r?\n/gu, "<br>"), { last: true }),
+      ].join(""),
+      footer,
+    }),
+  };
+}
+
+// Sent once to an account, when its first plan starts. Kamil signs it, and a reply goes to the
+// sending mailbox.
+export function renderWelcomeEmail(input: WelcomeEmailInput): RenderedEmail {
+  const serverName = input.serverName.trim();
+  const planName = PLAN_NAMES[input.plan];
+  const subject = "Welcome to OpenBot!";
+  const thanks = "Thank you for choosing OpenBot to build and run your AI Coworkers.";
+  const reachOut =
+    "I just wanted to personally say hello and let you know that if you run into any issues or have any feedback or suggestions - feel free to reach out to me directly by replying to this email.";
+  const feedback =
+    "Every piece of feedback is incredibly valuable to us, especially as we’re still at an early stage and continuously improving the product.";
+  const footer = "You receive this email because you started an OpenBot subscription.";
+  return {
+    subject,
+    preheader: thanks,
+    text: textBody(
+      [
+        "Hi,",
+        "Welcome to OpenBot!",
+        thanks,
+        "",
+        `Plan: ${planName}`,
+        `Server: ${serverName}`,
+        `Open your server: ${WEB_APP_URL}`,
+        "",
+        reachOut,
+        "",
+        feedback,
+        "",
+        "Best,",
+        "Kamil",
+      ],
+      footer,
+    ),
+    html: renderLayout({
+      title: subject,
+      preheader: thanks,
+      body: [
+        heading("Welcome to OpenBot!", { gap: 16 }),
+        paragraph("Hi,", { gap: 16 }),
+        paragraph(thanks, { gap: 16 }),
+        detailRows([
+          ["Plan", planName],
+          ["Server", serverName],
+        ]),
+        button("Open your server", WEB_APP_URL),
+        paragraph(reachOut, { gap: 16 }),
+        paragraph(feedback, { gap: 24 }),
+        paragraph("Best,<br>Kamil", { last: true }),
       ].join(""),
       footer,
     }),
@@ -223,14 +331,14 @@ function footerLinks(): string {
   ).join(`<span aria-hidden="true">&nbsp;&nbsp;·&nbsp;&nbsp;</span>`);
 }
 
-function heading(html: string): string {
-  return `<h1 class="ob-text" style="margin:0 0 10px;font-size:22px;line-height:28px;font-weight:600;letter-spacing:-0.2px;color:${COLOR.text};">${html}</h1>`;
+function heading(html: string, options: { gap?: number } = {}): string {
+  return `<h1 class="ob-text" style="margin:0 0 ${options.gap ?? 10}px;font-size:22px;line-height:28px;font-weight:600;letter-spacing:-0.2px;color:${COLOR.text};">${html}</h1>`;
 }
 
-function paragraph(html: string, options: { muted?: boolean; last?: boolean } = {}): string {
+function paragraph(html: string, options: { muted?: boolean; last?: boolean; gap?: number } = {}): string {
   const color = options.muted ? COLOR.muted : COLOR.text;
   const size = options.muted ? "13px;line-height:20px" : "15px;line-height:23px";
-  return `<p class="${options.muted ? "ob-muted" : "ob-text"}" style="margin:0 0 ${options.last ? 0 : 20}px;font-size:${size};color:${color};">${html}</p>`;
+  return `<p class="${options.muted ? "ob-muted" : "ob-text"}" style="margin:0 0 ${options.last ? 0 : (options.gap ?? 20)}px;font-size:${size};color:${color};">${html}</p>`;
 }
 
 function codeBlock(code: string): string {
@@ -242,11 +350,20 @@ function codeBlock(code: string): string {
 }
 
 function detailRow(label: string, value: string): string {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
-  <tr>
-    <td class="ob-rule ob-muted" style="border-top:1px solid ${COLOR.border};border-bottom:1px solid ${COLOR.border};padding:12px 0;font-size:13px;line-height:20px;color:${COLOR.muted};">${escapeHtml(label)}</td>
-    <td class="ob-rule ob-text" align="right" style="border-top:1px solid ${COLOR.border};border-bottom:1px solid ${COLOR.border};padding:12px 0;font-size:13px;line-height:20px;font-weight:600;color:${COLOR.text};">${escapeHtml(value)}</td>
-  </tr>
+  return detailRows([[label, value]]);
+}
+
+function detailRows(rows: [label: string, value: string][]): string {
+  const cells = rows
+    .map(
+      ([label, value]) => `<tr>
+    <td class="ob-rule ob-muted" style="border-bottom:1px solid ${COLOR.border};padding:12px 0;font-size:13px;line-height:20px;color:${COLOR.muted};">${escapeHtml(label)}</td>
+    <td class="ob-rule ob-text" align="right" style="border-bottom:1px solid ${COLOR.border};padding:12px 0;font-size:13px;line-height:20px;font-weight:600;color:${COLOR.text};">${escapeHtml(value)}</td>
+  </tr>`,
+    )
+    .join("");
+  return `<table role="presentation" class="ob-rule" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-top:1px solid ${COLOR.border};">
+  ${cells}
 </table>`;
 }
 

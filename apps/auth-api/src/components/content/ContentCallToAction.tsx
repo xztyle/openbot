@@ -1,11 +1,16 @@
-import { EXTERNAL_LINK_REL, OPENBOT_LINKS } from "../../lib/landing-links";
+import { AgentHoneycomb, honeycombRows } from "../landing/AgentHoneycomb";
 import { createLandingReveal } from "../landing/createLandingReveal";
-import { Button, ButtonLink } from "../ui/button";
+import { ButtonLink } from "../ui/button";
 
-// The last block before the footer on a collection page. A reader who reaches the end of
-// an article has nowhere left to go, so this is the one clear way on to the app.
+// Covers a 1920 px screen and is taller than the block; the block clips the rest.
+const COMB_ROWS = honeycombRows(12, 22, 5, "post-cta");
+
+// The last block before the footer on a collection page, and after the download section
+// on the landing page. A reader who reaches the end of an article has nowhere left to go,
+// so this is the one clear way on to the app.
 // It borrows the landing page's type scale and its reveal rather than inventing a
-// second treatment, so the page ends in the voice the site opened in.
+// second treatment, so the page ends in the voice the site opened in. A comb of agents
+// fills the block, and a blur behind the text keeps it easy to read.
 export function ContentCallToAction() {
   let section: HTMLElement | undefined;
   // No inset margin: the default holds a block back until it has climbed 40% of the
@@ -17,32 +22,30 @@ export function ContentCallToAction() {
   return (
     <section
       ref={section}
-      class="post-container post-cta"
+      class="post-cta"
       aria-labelledby="post-cta-title"
       data-revealed={revealed() ? "true" : "false"}
     >
-      <h2 class="post-cta-title" id="post-cta-title">
-        Meet your first teammate
-      </h2>
-      <p class="post-cta-description">
-        Run Codex, Claude, Gemini, Grok or your own model with the plans you already pay for, each with its own
-        workspace and context. Your work stays on your computer.
-      </p>
-      <div class="post-cta-actions">
-        <ButtonLink to="/" hash="download" variant="primary" size="lg" icon="download">
-          Download OpenBot
-        </ButtonLink>
-        <Button
-          href={OPENBOT_LINKS.contact}
-          target="_blank"
-          rel={EXTERNAL_LINK_REL}
-          variant="secondary"
-          size="lg"
-          icon="contact"
-          class="landing-button-glass"
-        >
-          Contact
-        </Button>
+      <div class="post-cta-comb" aria-hidden="true">
+        <AgentHoneycomb rows={COMB_ROWS} />
+      </div>
+      <div class="post-cta-veil" aria-hidden="true" />
+      <div class="post-container post-cta-copy">
+        <h2 class="post-cta-title" id="post-cta-title">
+          Meet your first teammate
+        </h2>
+        <p class="post-cta-description">
+          Run Codex, Claude, Gemini, Grok or your own model with the plans you already pay for, each with its own
+          workspace and context. Your work stays on your computer.
+        </p>
+        <div class="post-cta-actions">
+          <ButtonLink to="/download" variant="primary" size="lg" icon="download">
+            Download OpenBot
+          </ButtonLink>
+          <ButtonLink to="/contact" variant="secondary" size="lg" icon="contact" class="landing-button-glass">
+            Contact
+          </ButtonLink>
+        </div>
       </div>
     </section>
   );

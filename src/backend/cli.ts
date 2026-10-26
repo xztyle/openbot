@@ -1,13 +1,13 @@
 import { execFile, spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, extname, join, posix, resolve, win32 } from "node:path";
+import { basename, delimiter, dirname, extname, isAbsolute, join, posix, resolve, win32 } from "node:path";
 import { promisify } from "node:util";
 import { type AgentProviderId, agentProviderName } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
-import { Effect, Result } from "effect";
+import { Deferred, Effect, Result } from "effect";
 import { type ProviderClientOperationError, providerCall, providerFailure } from "./provider-client-effects";
 
 const execFileAsync = promisify(execFile);
@@ -20,45 +20,42 @@ const MINIMUM_GROK_VERSION = [1, 0, 5] as const;
 // session with the ACP resource-not-found error.
 const MINIMUM_CLINE_VERSION = [3, 0, 68] as const;
 
-export interface CodexCliInfo {
+/** What every resolved provider CLI carries. */
+interface ResolvedCli {
   executable: string;
   version: string;
+  /**
+   * The `PATH` that `--version` ran with, from `cliLaunchPath`. Each process of the CLI starts with
+   * it. Absent on Windows, which has no login shell, and when the CLI was not run.
+   */
+  launchPath?: string;
+}
+
+export interface CodexCliInfo extends ResolvedCli {
   source: "system" | "managed";
 }
 
-export interface ClaudeCliInfo {
-  executable: string;
-  version: string;
+export interface ClaudeCliInfo extends ResolvedCli {
   source?: "system" | "managed";
 }
 
-export interface GrokCliInfo {
-  executable: string;
-  version: string;
+export interface GrokCliInfo extends ResolvedCli {
   source?: "system" | "managed";
 }
 
-export interface OpencodeCliInfo {
-  executable: string;
-  version: string;
+export interface OpencodeCliInfo extends ResolvedCli {
   source?: "system" | "managed";
 }
 
-export interface AntigravityCliInfo {
-  executable: string;
-  version: string;
+export interface AntigravityCliInfo extends ResolvedCli {
   source?: "system" | "managed";
 }
 
-export interface CursorCliInfo {
-  executable: string;
-  version: string;
+export interface CursorCliInfo extends ResolvedCli {
   source?: "system" | "managed";
 }
 
-export interface ClineCliInfo {
-  executable: string;
-  version: string;
+export interface ClineCliInfo extends ResolvedCli {
   source?: "system" | "managed";
 }
 
@@ -86,38 +83,41 @@ export class CodexCliError extends Error {
  * has no managed copy and only the user's own installation is used. A missing key means the same as
  * an unset option: the resolver looks for the copy shipped inside the application itself.
  */
-export type BundledProviderExecutables = Partial<Record<AgentProviderId, string | null>>;
+export type BundledProviderExecutables = Partial<Record<AgentProviderId, string | null | undefined>>;
 
 export const resolveCodexCli: (input?: {
   systemCandidates?: string[];
-  bundledExecutable?: string | null;
+  bundledExecutable?: string | null | undefined;
 }) => Effect.Effect<CodexCliInfo, ProviderClientOperationError> = Effect.fn("Cli.resolveCodexCli")(
   function* (
-    input: { systemCandidates?: string[]; bundledExecutable?: string | null } = {},
+    input: { systemCandidates?: string[]; bundledExecutable?: string | null | undefined } = {},
   ): Effect.fn.Return<CodexCliInfo, ProviderClientOperationError> {
     const bundledExecutable =
       input.bundledExecutable === undefined ? bundledCodexExecutable() : input.bundledExecutable;
     const candidates = yield* cliCandidates("codex", input.systemCandidates, bundledExecutable);
     const failures: CodexCliError[] = [];
+    // The copy that OpenBot tried first. The message for it tells the user which copy to repair.
+    let firstFailedSource: "system" | "managed" | undefined;
 
     for (const candidate of candidates) {
       if (!(yield* isExecutable(candidate.executable))) continue;
 
       const attempt = yield* Effect.result(
         Effect.gen(function* () {
-          const stdout = yield* readCliVersion(candidate.executable, "codex");
+          const { stdout, launch } = yield* readCliVersion(candidate, "codex");
           const version = parseCodexVersion(stdout);
           if (!isMinimumVersion(version, MINIMUM_CODEX_VERSION)) {
             throw new CodexCliError(sourceText("error.provider.codexOutdated", { version }), "outdated");
           }
 
-          return { executable: candidate.executable, version, source: candidate.source };
+          return { executable: candidate.executable, version, source: candidate.source, ...launch };
         }).pipe(Effect.catchDefect((cause) => Effect.fail(providerFailure(cause)))),
       );
       if (Result.isSuccess(attempt)) return attempt.success;
       const error = attempt.failure.cause;
 
       if (isCliTimeout(error)) throw error;
+      firstFailedSource ??= candidate.source;
       failures.push(
         error instanceof CodexCliError
           ? error
@@ -128,7 +128,14 @@ export const resolveCodexCli: (input?: {
     const outdated = failures.find((failure) => failure.code === "outdated");
     if (outdated) throw outdated;
     if (failures.length > 0) {
-      throw new CodexCliError(sourceText("error.provider.codexNotStartedHint"), "invalid");
+      throw new CodexCliError(
+        sourceText(
+          firstFailedSource === "managed"
+            ? "error.provider.codexManagedNotStarted"
+            : "error.provider.codexNotStartedHint",
+        ),
+        "invalid",
+      );
     }
 
     throw new CodexCliError(sourceText("error.provider.codexMissing"), "missing");
@@ -136,7 +143,7 @@ export const resolveCodexCli: (input?: {
   Effect.catchDefect((cause) => Effect.fail(providerFailure(cause))),
 );
 
-export function bundledCodexExecutable(
+function bundledCodexExecutable(
   platform = process.platform,
   architecture = process.arch,
   resourcesPath: string | null | undefined = process.resourcesPath,
@@ -146,33 +153,36 @@ export function bundledCodexExecutable(
 
 export const resolveClaudeCli: (input?: {
   systemCandidates?: string[];
-  bundledExecutable?: string | null;
+  bundledExecutable?: string | null | undefined;
 }) => Effect.Effect<ClaudeCliInfo, ProviderClientOperationError> = Effect.fn("Cli.resolveClaudeCli")(
   function* (
-    input: { systemCandidates?: string[]; bundledExecutable?: string | null } = {},
+    input: { systemCandidates?: string[]; bundledExecutable?: string | null | undefined } = {},
   ): Effect.fn.Return<ClaudeCliInfo, ProviderClientOperationError> {
     const bundledExecutable =
       input.bundledExecutable === undefined ? bundledClaudeExecutable() : input.bundledExecutable;
     const candidates = yield* cliCandidates("claude", input.systemCandidates, bundledExecutable);
     const failures: CodexCliError[] = [];
+    // The copy that OpenBot tried first. The message for it tells the user which copy to repair.
+    let firstFailedSource: "system" | "managed" | undefined;
 
     for (const candidate of candidates) {
       if (!(yield* isExecutable(candidate.executable))) continue;
 
       const attempt = yield* Effect.result(
         Effect.gen(function* () {
-          const stdout = yield* readCliVersion(candidate.executable, "claude");
+          const { stdout, launch } = yield* readCliVersion(candidate, "claude");
           const version = parseClaudeVersion(stdout);
           if (!isMinimumVersion(version, MINIMUM_CLAUDE_VERSION)) {
             throw new CodexCliError(sourceText("error.provider.claudeOutdated", { version }), "outdated");
           }
-          return { executable: candidate.executable, version, source: candidate.source };
+          return { executable: candidate.executable, version, source: candidate.source, ...launch };
         }).pipe(Effect.catchDefect((cause) => Effect.fail(providerFailure(cause)))),
       );
       if (Result.isSuccess(attempt)) return attempt.success;
       const error = attempt.failure.cause;
 
       if (isCliTimeout(error)) throw error;
+      firstFailedSource ??= candidate.source;
       failures.push(
         error instanceof CodexCliError
           ? error
@@ -183,7 +193,14 @@ export const resolveClaudeCli: (input?: {
     const outdated = failures.find((failure) => failure.code === "outdated");
     if (outdated) throw outdated;
     if (failures.length > 0) {
-      throw new CodexCliError(sourceText("error.provider.claudeNotStartedHint"), "invalid");
+      throw new CodexCliError(
+        sourceText(
+          firstFailedSource === "managed"
+            ? "error.provider.claudeManagedNotStarted"
+            : "error.provider.claudeNotStartedHint",
+        ),
+        "invalid",
+      );
     }
 
     throw new CodexCliError(sourceText("error.provider.claudeMissing"), "missing");
@@ -191,7 +208,7 @@ export const resolveClaudeCli: (input?: {
   Effect.catchDefect((cause) => Effect.fail(providerFailure(cause))),
 );
 
-export function bundledClaudeExecutable(
+function bundledClaudeExecutable(
   platform = process.platform,
   architecture = process.arch,
   resourcesPath: string | null | undefined = process.resourcesPath,
@@ -201,10 +218,10 @@ export function bundledClaudeExecutable(
 
 export const resolveGrokCli: (input?: {
   systemCandidates?: string[];
-  bundledExecutable?: string | null;
+  bundledExecutable?: string | null | undefined;
 }) => Effect.Effect<GrokCliInfo, ProviderClientOperationError> = Effect.fn("Cli.resolveGrokCli")(
   function* (
-    input: { systemCandidates?: string[]; bundledExecutable?: string | null } = {},
+    input: { systemCandidates?: string[]; bundledExecutable?: string | null | undefined } = {},
   ): Effect.fn.Return<GrokCliInfo, ProviderClientOperationError> {
     const bundledExecutable = input.bundledExecutable === undefined ? bundledGrokExecutable() : input.bundledExecutable;
     const candidates = yield* cliCandidates("grok", input.systemCandidates, bundledExecutable);
@@ -215,12 +232,12 @@ export const resolveGrokCli: (input?: {
 
       const attempt = yield* Effect.result(
         Effect.gen(function* () {
-          const stdout = yield* readCliVersion(candidate.executable, "grok");
+          const { stdout, launch } = yield* readCliVersion(candidate, "grok");
           const version = parseGrokVersion(stdout);
           if (!isMinimumVersion(version, MINIMUM_GROK_VERSION)) {
             throw new CodexCliError(sourceText("error.provider.grokOutdated", { version }), "outdated");
           }
-          return { executable: candidate.executable, version, source: candidate.source };
+          return { executable: candidate.executable, version, source: candidate.source, ...launch };
         }).pipe(Effect.catchDefect((cause) => Effect.fail(providerFailure(cause)))),
       );
       if (Result.isSuccess(attempt)) return attempt.success;
@@ -251,10 +268,10 @@ export const resolveGrokCli: (input?: {
  */
 export const resolveOpencodeCli: (input?: {
   systemCandidates?: string[];
-  bundledExecutable?: string | null;
+  bundledExecutable?: string | null | undefined;
 }) => Effect.Effect<OpencodeCliInfo, ProviderClientOperationError> = Effect.fn("Cli.resolveOpencodeCli")(
   function* (
-    input: { systemCandidates?: string[]; bundledExecutable?: string | null } = {},
+    input: { systemCandidates?: string[]; bundledExecutable?: string | null | undefined } = {},
   ): Effect.fn.Return<OpencodeCliInfo, ProviderClientOperationError> {
     const bundledExecutable =
       input.bundledExecutable === undefined ? bundledOpencodeExecutable() : input.bundledExecutable;
@@ -265,11 +282,12 @@ export const resolveOpencodeCli: (input?: {
       found = true;
       const attempt = yield* Effect.result(
         Effect.gen(function* () {
-          const version = parseOpencodeVersion(yield* readCliVersion(candidate.executable, "opencode"));
+          const { stdout, launch } = yield* readCliVersion(candidate, "opencode");
+          const version = parseOpencodeVersion(stdout);
           // `source` has to be the candidate's own: hardcoding "system" made `updateProviderCli` refuse
           // to activate the managed copy, and made `trackSystemCliVersions` report the managed version
           // as the user's, which suppressed every later update offer.
-          return { executable: candidate.executable, version, source: candidate.source };
+          return { executable: candidate.executable, version, source: candidate.source, ...launch };
         }).pipe(Effect.catchDefect((cause) => Effect.fail(providerFailure(cause)))),
       );
       if (Result.isSuccess(attempt)) return attempt.success;
@@ -304,10 +322,10 @@ export function antigravityHarnessName(target: string): "localharness_external" 
  */
 export const resolveAntigravityCli: (input?: {
   systemCandidates?: string[];
-  bundledExecutable?: string | null;
+  bundledExecutable?: string | null | undefined;
 }) => Effect.Effect<AntigravityCliInfo, ProviderClientOperationError> = Effect.fn("Cli.resolveAntigravityCli")(
   function* (
-    input: { systemCandidates?: string[]; bundledExecutable?: string | null } = {},
+    input: { systemCandidates?: string[]; bundledExecutable?: string | null | undefined } = {},
   ): Effect.fn.Return<AntigravityCliInfo, ProviderClientOperationError> {
     const override = input.systemCandidates ?? [configuredCliPath("antigravity")].filter((path) => path !== null);
     const candidates =
@@ -363,10 +381,10 @@ export const CURSOR_MANIFEST = "cursor-package.json";
  */
 export const resolveCursorCli: (input?: {
   systemCandidates?: string[];
-  bundledExecutable?: string | null;
+  bundledExecutable?: string | null | undefined;
 }) => Effect.Effect<CursorCliInfo, ProviderClientOperationError> = Effect.fn("Cli.resolveCursorCli")(
   function* (
-    input: { systemCandidates?: string[]; bundledExecutable?: string | null } = {},
+    input: { systemCandidates?: string[]; bundledExecutable?: string | null | undefined } = {},
   ): Effect.fn.Return<CursorCliInfo, ProviderClientOperationError> {
     const candidates = yield* cliCandidates("cursor", input.systemCandidates, input.bundledExecutable ?? null);
     let found = false;
@@ -375,8 +393,9 @@ export const resolveCursorCli: (input?: {
       found = true;
       const attempt = yield* Effect.result(
         Effect.gen(function* () {
-          const version = parseCursorVersion(yield* readCliVersion(candidate.executable, "cursor"));
-          return { executable: candidate.executable, version, source: candidate.source };
+          const { stdout, launch } = yield* readCliVersion(candidate, "cursor");
+          const version = parseCursorVersion(stdout);
+          return { executable: candidate.executable, version, source: candidate.source, ...launch };
         }).pipe(Effect.catchDefect((cause) => Effect.fail(providerFailure(cause)))),
       );
       if (Result.isSuccess(attempt)) return attempt.success;
@@ -427,10 +446,10 @@ export function parseCursorManifestVersion(manifest: string): string {
  */
 export const resolveClineCli: (input?: {
   systemCandidates?: string[];
-  bundledExecutable?: string | null;
+  bundledExecutable?: string | null | undefined;
 }) => Effect.Effect<ClineCliInfo, ProviderClientOperationError> = Effect.fn("Cli.resolveClineCli")(
   function* (
-    input: { systemCandidates?: string[]; bundledExecutable?: string | null } = {},
+    input: { systemCandidates?: string[]; bundledExecutable?: string | null | undefined } = {},
   ): Effect.fn.Return<ClineCliInfo, ProviderClientOperationError> {
     const candidates = yield* cliCandidates("cline", input.systemCandidates, input.bundledExecutable ?? null);
     const failures: CodexCliError[] = [];
@@ -438,11 +457,12 @@ export const resolveClineCli: (input?: {
       if (!(yield* isExecutable(candidate.executable))) continue;
       const attempt = yield* Effect.result(
         Effect.gen(function* () {
-          const version = parseClineVersion(yield* readCliVersion(candidate.executable, "cline"));
+          const { stdout, launch } = yield* readCliVersion(candidate, "cline");
+          const version = parseClineVersion(stdout);
           if (!isMinimumVersion(version, MINIMUM_CLINE_VERSION)) {
             throw new CodexCliError(sourceText("error.provider.clineOutdated", { version }), "outdated");
           }
-          return { executable: candidate.executable, version, source: candidate.source };
+          return { executable: candidate.executable, version, source: candidate.source, ...launch };
         }).pipe(Effect.catchDefect((cause) => Effect.fail(providerFailure(cause)))),
       );
       if (Result.isSuccess(attempt)) return attempt.success;
@@ -464,7 +484,7 @@ export const resolveClineCli: (input?: {
   Effect.catchDefect((cause) => Effect.fail(providerFailure(cause))),
 );
 
-export function bundledOpencodeExecutable(
+function bundledOpencodeExecutable(
   platform = process.platform,
   architecture = process.arch,
   resourcesPath: string | null | undefined = process.resourcesPath,
@@ -472,7 +492,7 @@ export function bundledOpencodeExecutable(
   return bundledProviderExecutable("opencode", platform, architecture, resourcesPath);
 }
 
-export function bundledGrokExecutable(
+function bundledGrokExecutable(
   platform = process.platform,
   architecture = process.arch,
   resourcesPath: string | null | undefined = process.resourcesPath,
@@ -555,6 +575,22 @@ export function claudeTakesPromptSnapshotFlag(version: string): boolean {
   return isMinimumVersion(version, [2, 1, 263]);
 }
 
+/**
+ * Whether this Antigravity ACP server answers `/usage` itself, with no model turn. Checked in 1.4.1;
+ * 1.3.0 sends the command to the model.
+ */
+export function antigravityAnswersUsageCommand(version: string): boolean {
+  return isMinimumVersion(version, [1, 4, 1]);
+}
+
+/**
+ * Whether this Antigravity ACP server keeps its token and settings in `GEMINI_HOME`, so that an
+ * account after the first can have a folder of its own. Checked in 1.4.0, 1.4.1 and 1.4.3.
+ */
+export function antigravityReadsGeminiHome(version: string): boolean {
+  return isMinimumVersion(version, [1, 4, 0]);
+}
+
 function isMinimumVersion(version: string, minimum: readonly number[]): boolean {
   const parts = version.split(".").map(Number);
   for (const [index, required] of minimum.entries()) {
@@ -564,6 +600,64 @@ function isMinimumVersion(version: string, minimum: readonly number[]): boolean 
     if (part < required) return false;
   }
   return true;
+}
+
+/** Resolves native RPC providers through the same explicit/managed/system precedence. */
+const resolveNativeCli = Effect.fn("Cli.resolveNativeCli")(function* (
+  provider: "pi" | "muse",
+  input: { systemCandidates?: string[]; bundledExecutable?: string | null | undefined } = {},
+): Effect.fn.Return<AgentCliInfo, ProviderClientOperationError> {
+  const candidates = yield* cliCandidates(provider, input.systemCandidates, input.bundledExecutable ?? null);
+  let found = false;
+  let outdated: CodexCliError | undefined;
+  for (const candidate of candidates) {
+    if (!(yield* isExecutable(candidate.executable))) continue;
+    found = true;
+    const attempt = yield* Effect.result(
+      Effect.gen(function* () {
+        const { stdout, launch } = yield* readCliVersion(candidate, provider);
+        const version = provider === "pi" ? parsePiVersion(stdout) : parseMuseVersion(stdout);
+        if (provider === "pi" && !isMinimumVersion(version, [1, 1, 0]))
+          throw new CodexCliError(sourceText("error.provider.piOutdated", { version }), "outdated");
+        return { executable: candidate.executable, version, source: candidate.source, ...launch };
+      }).pipe(Effect.catchDefect((cause) => Effect.fail(providerFailure(cause)))),
+    );
+    if (Result.isSuccess(attempt)) return attempt.success;
+    if (attempt.failure.cause instanceof CodexCliError && attempt.failure.cause.code === "outdated")
+      outdated = attempt.failure.cause;
+    if (isCliTimeout(attempt.failure.cause)) return yield* Effect.fail(attempt.failure);
+  }
+  if (outdated) return yield* Effect.fail(providerFailure(outdated));
+  return yield* Effect.fail(
+    providerFailure(
+      new CodexCliError(
+        sourceText(found ? "error.provider.nativeNotStarted" : "error.provider.nativeMissing", {
+          provider: agentProviderName(provider),
+        }),
+        found ? "invalid" : "missing",
+      ),
+    ),
+  );
+});
+
+export const resolvePiCli = (input?: { systemCandidates?: string[]; bundledExecutable?: string | null | undefined }) =>
+  resolveNativeCli("pi", input);
+export const resolveMuseCli = (input?: {
+  systemCandidates?: string[];
+  bundledExecutable?: string | null | undefined;
+}) => resolveNativeCli("muse", input);
+
+export function parsePiVersion(output: string): string {
+  const match = output.trim().match(/(?:^|\s)v?(\d+\.\d+\.\d+)(?:[-+][\w.-]+)?(?:\s|$)/u);
+  if (!match?.[1])
+    throw new CodexCliError(sourceText("error.provider.nativeVersionUnreadable", { provider: "Pi" }), "invalid");
+  return match[1];
+}
+export function parseMuseVersion(output: string): string {
+  const match = output.match(/\b\d+\.\d+\.\d+-R\d+(?:\.\d+)?\b/u) ?? output.match(/\b\d+\.\d+\.\d+\b/u);
+  if (!match)
+    throw new CodexCliError(sourceText("error.provider.nativeVersionUnreadable", { provider: "Muse" }), "invalid");
+  return match[0];
 }
 
 /** The command name of a provider's CLI on `PATH`. */
@@ -595,9 +689,10 @@ const cliCandidates = Effect.fn("Cli.candidates")(function* (
 });
 
 /**
- * `command` goes into a login shell as `command -v <command>`, so it takes a fixed provider id and
- * nothing else. A command the user typed, as for a custom agent, is resolved by
- * `resolveAgentCommand` in `acp-agent-command.ts`, which never gives it to a shell.
+ * The places a provider's CLI may be, in order. On Windows `where.exe` takes the fixed command name
+ * as one argument. Elsewhere each folder of the login shell's `PATH` is searched here, in Node, as
+ * `resolveAgentCommand` in `acp-agent-command.ts` does for a custom agent: no command name reaches
+ * the shell, and one cached login shell serves every provider.
  */
 const collectCandidates = Effect.fn("Cli.collectCandidates")(function* (
   provider: AgentProviderId,
@@ -611,23 +706,37 @@ const collectCandidates = Effect.fn("Cli.collectCandidates")(function* (
     const output = yield* providerCall(() =>
       execFileAsync("where.exe", [command], { timeout: 5_000, maxBuffer: 64 * 1024 }),
     ).pipe(Effect.catch(() => Effect.succeed({ stdout: "" })));
+    // `where.exe` also lists the extensionless script that npm writes for Git Bash, which Windows
+    // cannot start.
     candidates.push(
       ...output.stdout
         .split(/\r?\n/u)
         .map((path) => path.trim())
-        .filter(Boolean),
+        .filter((path) => isWindowsRunnable(path, process.env.PATHEXT)),
     );
     candidates.push(...windowsFallbackPaths(provider));
   } else {
-    const output = yield* runInLoginShell(`command -v ${command}`).pipe(Effect.catch(() => Effect.succeed("")));
-    const path = commandPathFromShellOutput(output);
-    if (path) candidates.push(path);
+    for (const folder of yield* loginSearchPath()) {
+      if (isAbsolute(folder)) candidates.push(join(folder, command));
+    }
     candidates.push(...posixFallbackPaths(provider));
   }
   return [...new Set(candidates)];
 });
 
-export function windowsFallbackPaths(
+/** The extensions Windows runs when `PATHEXT` is unset, in the order the system itself uses. */
+const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
+
+/** Whether Windows can start a file by its extension, as `PATHEXT` lists them. */
+export function isWindowsRunnable(path: string, pathext: string | undefined): boolean {
+  const dot = path.lastIndexOf(".");
+  // A dot inside a directory name is not an extension.
+  if (dot <= Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"))) return false;
+  const extension = path.slice(dot).toLowerCase();
+  return (pathext?.trim() || DEFAULT_PATHEXT).split(";").some((entry) => entry.trim().toLowerCase() === extension);
+}
+
+function windowsFallbackPaths(
   provider: AgentProviderId,
   userHome = homedir(),
   environment: NodeJS.ProcessEnv = process.env,
@@ -651,6 +760,10 @@ export function windowsFallbackPaths(
     paths.push(win32.join(userHome, ".grok", "bin", "grok.exe"));
     if (localAppData) paths.push(win32.join(localAppData, "Microsoft", "WinGet", "Links", "grok.exe"));
   }
+  if (command === "opencode") {
+    paths.push(win32.join(userHome, ".opencode", "bin", "opencode.exe"));
+    if (localAppData) paths.push(win32.join(localAppData, "Microsoft", "WinGet", "Links", "opencode.exe"));
+  }
   if (appData) paths.push(win32.join(appData, "npm", `${command}.cmd`));
   paths.push(
     win32.join(userHome, ".local", "bin", `${command}.exe`),
@@ -665,32 +778,36 @@ export function windowsFallbackPaths(
 }
 
 /**
- * The shell that answers `command -v`. It has to be a login shell, because that is what reads the
- * profile a version manager appends its `PATH` to, and a packaged app inherits none of it.
- *
- * macOS keeps `/bin/zsh`: it is the default login shell and is always present. Linux cannot assume
- * zsh is installed at all, so it prefers the user's own `$SHELL` and falls back to `/bin/sh`. The
- * `-i` flag goes with it, because `sh` is not required to accept an interactive non-tty invocation
- * and dash exits rather than running the command.
+ * The shells that macOS runs as the login shell when `$SHELL` names one. Each accepts `-lic` (`sh`
+ * gets `-lc`) and runs `printf %s "$PATH"` as POSIX shells do; fish joins a quoted `$PATH` with `:`
+ * too. tcsh refuses `-lic`, so a tcsh user gets `/bin/zsh`.
  */
-export function loginShellCommand(
+const MAC_LOGIN_SHELLS = new Set(["bash", "fish", "ksh", "sh", "zsh"]);
+
+/**
+ * The shell that reports the login `PATH`. It has to be a login shell, because that is what reads
+ * the profile a version manager appends its `PATH` to, and a packaged app inherits none of it.
+ *
+ * Both platforms prefer the user's own `$SHELL`, because that is the profile their terminal reads:
+ * a user who sets up nvm in `~/.bash_profile` has no Codex in zsh. macOS falls back to `/bin/zsh`,
+ * the default login shell, which is always present, and uses `$SHELL` only for a known shell at an
+ * absolute path. Linux cannot assume zsh is installed at all, so it falls back to `/bin/sh`. The
+ * `-i` flag does not go with `sh`, because `sh` is not required to accept an interactive non-tty
+ * invocation and dash exits rather than running the command.
+ */
+function loginShellCommand(
   platform: NodeJS.Platform = process.platform,
   environment: NodeJS.ProcessEnv = process.env,
 ): { command: string; args: string[] } {
-  if (platform !== "linux") return { command: "/bin/zsh", args: ["-lic"] };
   const preferred = environment.SHELL?.trim();
-  if (!preferred) return { command: "/bin/sh", args: ["-lc"] };
+  if (platform !== "linux") {
+    if (!preferred || !isAbsolute(preferred) || !MAC_LOGIN_SHELLS.has(basename(preferred))) {
+      return { command: "/bin/zsh", args: ["-lic"] };
+    }
+  } else if (!preferred) {
+    return { command: "/bin/sh", args: ["-lc"] };
+  }
   return { command: preferred, args: preferred.endsWith("/sh") ? ["-lc"] : ["-lic"] };
-}
-
-/**
- * The path that `command -v` printed, from what the login shell wrote. An interactive profile can
- * print before the command runs, such as a greeting or `fastfetch`, so the path is the last line
- * that is an absolute path. An alias, a function or a builtin prints no path and gives `null`.
- */
-export function commandPathFromShellOutput(stdout: string): string | null {
-  const lines = stdout.split(/\r?\n/u).map((line) => line.trim());
-  return lines.findLast((line) => line.startsWith("/")) ?? null;
 }
 
 const LOGIN_SHELL_TIMEOUT_MS = 5_000;
@@ -767,13 +884,102 @@ export function runInLoginShell(
   });
 }
 
-export function posixFallbackPaths(provider: AgentProviderId, userHome = homedir()): string[] {
+/** How long the login shell's `PATH` is kept. A tool the user installs is found after this. */
+const LOGIN_PATH_TTL_MS = 60_000;
+
+let loginPath: { value: Deferred.Deferred<readonly string[]>; readAt: number } | null = null;
+
+/**
+ * The login shell's `PATH`, then this process's. The script is fixed: no user text reaches the
+ * shell. A packaged app starts with a short `PATH`, and a version manager adds its folders in the
+ * profile that only a login shell reads. Provider CLIs and custom agents are looked up here, and
+ * every caller in the next `LOGIN_PATH_TTL_MS` shares one shell.
+ */
+export const loginSearchPath = Effect.fn("Cli.loginSearchPath")(function* () {
+  if (loginPath && Date.now() - loginPath.readAt < LOGIN_PATH_TTL_MS) return yield* Deferred.await(loginPath.value);
+  const value = Deferred.makeUnsafe<readonly string[]>();
+  loginPath = { value, readAt: Date.now() };
+  const exit = yield* Effect.exit(
+    runInLoginShell('printf %s "$PATH"').pipe(
+      Effect.catch(() => Effect.succeed("")),
+      // An interactive profile can print before the script runs, such as a greeting or `fastfetch`.
+      Effect.map((stdout) => stdout.split(/\r?\n/u).pop()?.trim() ?? ""),
+      Effect.map((shellPath) => [
+        ...new Set([...shellPath.split(delimiter), ...(process.env.PATH ?? "").split(delimiter)].filter(Boolean)),
+      ]),
+    ),
+  );
+  yield* Deferred.done(value, exit);
+  return yield* exit;
+}, Effect.uninterruptible);
+
+/**
+ * The `PATH` that a custom agent's process and a Claude session start with, or null where none is
+ * needed. It is the folders `resolveAgentCommand` looks in, so a command found there can find its
+ * own interpreter: an app that Finder, the Dock or a login item starts has a short `PATH`, and
+ * `#!/usr/bin/env node` fails with exit code 127 without the login shell's folders. Windows has no
+ * login shell.
+ */
+export const agentLaunchPath = Effect.fn("Cli.agentLaunchPath")(function* (
+  platform: NodeJS.Platform = process.platform,
+) {
+  if (platform === "win32") return null;
+  // A relative folder such as `.` would be read in the agent's working folder, which is a workspace.
+  const folders = (yield* loginSearchPath()).filter((folder) => isAbsolute(folder));
+  return folders.length > 0 ? folders.join(delimiter) : null;
+});
+
+/**
+ * The `PATH` that a provider CLI runs with: `agentLaunchPath`, then the CLI's own folder for a copy
+ * of the user's. A CLI that npm, Volta or Homebrew installed is a `#!/usr/bin/env node` script, and
+ * when it was found in a fallback folder rather than on the login `PATH`, its Node is often beside
+ * it. A managed copy is a native program, and its folder stays off the `PATH` that agents' commands
+ * get.
+ */
+export const cliLaunchPath = Effect.fn("Cli.launchPath")(function* (
+  executable: string,
+  source: "system" | "managed" | undefined,
+  platform: NodeJS.Platform = process.platform,
+) {
+  if (platform === "win32") return null;
+  const folders = (yield* agentLaunchPath(platform))?.split(delimiter) ?? [];
+  const own = dirname(executable);
+  if (source === "system" && !folders.includes(own)) folders.push(own);
+  return folders.length > 0 ? folders.join(delimiter) : null;
+});
+
+/** The `PATH` entry that each process of a resolved CLI starts with, to spread over its environment. */
+export function cliPathEnvironment(cli: { readonly launchPath?: string }): Record<string, string> {
+  return cli.launchPath ? { PATH: cli.launchPath } : {};
+}
+
+/**
+ * Where a CLI may be when the login shell's `PATH` does not name it: the shell failed or took too
+ * long, or the profile that sets the `PATH` is one the login shell does not read. These are the
+ * default global folders of the installers and package managers, never a version-manager folder
+ * that only its own shell setup selects, such as nvm's.
+ */
+function posixFallbackPaths(
+  provider: AgentProviderId,
+  userHome = homedir(),
+  platform: NodeJS.Platform = process.platform,
+): string[] {
   const command = cliCommandName(provider);
   const paths = [posix.join(userHome, ".local", "bin", command)];
   if (command === "claude") paths.push(posix.join(userHome, ".claude", "local", "claude"));
   if (command === "opencode") paths.push(posix.join(userHome, ".opencode", "bin", "opencode"));
   if (command === "grok") paths.push(posix.join(userHome, ".grok", "bin", "grok"));
-  paths.push(`/opt/homebrew/bin/${command}`, `/usr/local/bin/${command}`, `/usr/bin/${command}`);
+  paths.push(
+    posix.join(userHome, ".npm-global", "bin", command),
+    posix.join(userHome, ".volta", "bin", command),
+    posix.join(userHome, ".bun", "bin", command),
+    platform === "darwin"
+      ? posix.join(userHome, "Library", "pnpm", command)
+      : posix.join(userHome, ".local", "share", "pnpm", command),
+    `/opt/homebrew/bin/${command}`,
+    `/usr/local/bin/${command}`,
+    `/usr/bin/${command}`,
+  );
   return paths;
 }
 
@@ -839,7 +1045,16 @@ function isCliTimeout(error: unknown): error is CodexCliError {
   return error instanceof CodexCliError && error.code === "timeout";
 }
 
-const readCliVersion = Effect.fn("Cli.readVersion")(function* (candidate: string, provider: AgentProviderId) {
+/**
+ * Runs `--version` with the `PATH` that the CLI's processes get, so a `#!/usr/bin/env node` CLI that
+ * starts here also starts as the provider. `launch` holds that `PATH` for the resolved CLI info.
+ */
+const readCliVersion = Effect.fn("Cli.readVersion")(function* (
+  { executable: candidate, source }: { executable: string; source: "system" | "managed" },
+  provider: AgentProviderId,
+) {
+  const launchPath = yield* cliLaunchPath(candidate, source);
+  const launch = launchPath ? { launchPath } : {};
   const target = process.platform === "win32" && [".bat", ".cmd"].includes(extname(candidate).toLowerCase());
   const output = yield* providerCall(() =>
     target
@@ -857,6 +1072,7 @@ const readCliVersion = Effect.fn("Cli.readVersion")(function* (candidate: string
           timeout: CLI_VERSION_TIMEOUT_MS,
           maxBuffer: 64 * 1024,
           windowsHide: process.platform === "win32",
+          env: { ...process.env, ...cliPathEnvironment(launch) },
         }),
   ).pipe(
     Effect.mapError((failure) =>
@@ -870,11 +1086,13 @@ const readCliVersion = Effect.fn("Cli.readVersion")(function* (candidate: string
         : failure,
     ),
   );
-  return output.stdout;
+  return { stdout: output.stdout, launch };
 });
 
+/** `X_OK` also passes for a folder, and a login-shell `PATH` folder can hold one with the CLI's name. */
 const isExecutable = Effect.fn("Cli.isExecutable")((path: string) =>
-  providerCall(() => access(path, process.platform === "win32" ? constants.F_OK : constants.X_OK)).pipe(
-    Effect.match({ onSuccess: () => true, onFailure: () => false }),
-  ),
+  providerCall(async () => {
+    await access(path, process.platform === "win32" ? constants.F_OK : constants.X_OK);
+    return (await stat(path)).isFile();
+  }).pipe(Effect.match({ onSuccess: (file) => file, onFailure: () => false })),
 );

@@ -32,3 +32,12 @@ export function permanentTrailingSlashRedirect(request: Request, response: Respo
   if (target.origin !== url.origin || target.pathname !== trimmed || target.search !== url.search) return response;
   return new Response(null, { status: 308, headers: response.headers });
 }
+
+/**
+ * The page that a Slack or Discord install returns to. The callback runs on `api.openbot.run`, and the
+ * page opens on `openbot.run`, where the browser client runs, so the client tab that started the
+ * install can take its grant. Another origin, such as a development one, keeps its own.
+ */
+export function installReturnPage(path: string, callbackUrl: URL): URL {
+  return new URL(path, callbackUrl.hostname === `api.${SITE_HOST}` ? SITE_ORIGIN : callbackUrl);
+}

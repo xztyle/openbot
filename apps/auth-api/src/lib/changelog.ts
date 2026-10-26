@@ -5,6 +5,7 @@
 // the sitemap read.
 //
 // The parser covers the Markdown the file uses and nothing more: `## [x.y.z] - date` headings,
+// the store dates of a mobile heading,
 // `### Added` style groups, `-` bullets with indented continuation lines, plain paragraphs
 // under a heading, and inline `**bold**`, `code` and [links](url).
 
@@ -49,10 +50,21 @@ export interface ChangelogGroup {
   items: string[];
 }
 
+/** A store of the mobile app. Each one reviews a build on its own. */
+export type MobileStore = "ios" | "android";
+
+export interface StoreAvailability {
+  store: MobileStore;
+  /** `YYYY-MM-DD`, the day the store made the version available. Empty while it reviews it. */
+  date: string;
+}
+
 export interface ChangelogRelease {
   version: string;
-  /** `YYYY-MM-DD`, as the heading writes it. Empty when the heading has no real date. */
+  /** `YYYY-MM-DD`, the first day that the version was available. Empty when the heading has no real date. */
   date: string;
+  /** Each store, with the version first available first. Empty for the desktop app, which has no store. */
+  stores: StoreAvailability[];
   /** The fragment a link to this release uses, such as `v0-22-0`. */
   anchor: string;
   /** Paragraphs between the heading and the first group. */
@@ -67,8 +79,14 @@ export type InlineSegment =
   | { kind: "link"; text: string; href: string };
 
 const RELEASE_HEADING = /^## \[([^\]]+)\](?:\s+-\s+(\d{4}-\d{2}-\d{2}))?/;
-/** A mobile version that the store has not approved yet. `scripts/release-notes.ts` writes it. */
+/** A mobile version that no store has approved yet. `scripts/release-notes.ts` writes it. */
 const IN_REVIEW_HEADING = /^## \[[^\]]+\]\s+-\s+In review\s*$/;
+/** A heading with a date only is a mobile version that both stores have had since that day. */
+const SHARED_DATE_HEADING = /^## \[[^\]]+\]\s+-\s+\d{4}-\d{2}-\d{2}\s*$/;
+/** `2026-10-14 (Android)`: one store's date in a mobile heading, as `scripts/release-notes.ts` writes it. */
+const STORE_DATE = /(\d{4}-\d{2}-\d{2}) \((iOS|Android)\)/g;
+const STORE_NAMES: Record<string, MobileStore> = { iOS: "ios", Android: "android" };
+const MOBILE_STORES: readonly MobileStore[] = ["ios", "android"];
 const GROUP_HEADING = /^### (.+)$/;
 const BULLET = /^- (.*)$/;
 const CONTINUATION = /^ {2,}(\S.*)$/;
@@ -88,16 +106,42 @@ function releaseAnchor(version: string): string {
   return `v${version.replace(/[^0-9a-z]+/gi, "-").toLowerCase()}`;
 }
 
+function isRealDate(date: string): boolean {
+  return !Number.isNaN(Date.parse(`${date}T00:00:00Z`));
+}
+
+/** The stores in a mobile heading. A store that the heading does not name still reviews the version. */
+function storeAvailability(line: string, date: string): StoreAvailability[] {
+  const dates = new Map<MobileStore, string>();
+  if (SHARED_DATE_HEADING.test(line)) for (const store of MOBILE_STORES) dates.set(store, date);
+  for (const [, day = "", name = ""] of line.matchAll(STORE_DATE)) {
+    const store = STORE_NAMES[name];
+    if (store && isRealDate(day)) dates.set(store, day);
+  }
+  return MOBILE_STORES.map((store) => ({ store, date: dates.get(store) ?? "" })).sort(
+    (a, b) => (a.date === "" ? 1 : 0) - (b.date === "" ? 1 : 0) || a.date.localeCompare(b.date),
+  );
+}
+
 function groupType(heading: string): ChangelogGroupType {
   return GROUP_TYPES[heading.trim().toLowerCase()] ?? "other";
 }
 
+interface ParseChangelogOptions {
+  /** Keeps the anchors of two files apart when both have the same version. */
+  anchorPrefix?: string;
+  /** The file is the mobile app's, whose headings have a date for each store. */
+  stores?: boolean;
+}
+
 /**
  * Every released version, newest first as the file lists them. Unreleased notes and a version
- * that is still in store review are left out.
- * `anchorPrefix` keeps the anchors of two files apart when both have the same version.
+ * that no store has approved yet are left out.
  */
-export function parseChangelog(markdown: string, anchorPrefix = ""): ChangelogRelease[] {
+export function parseChangelog(
+  markdown: string,
+  { anchorPrefix = "", stores = false }: ParseChangelogOptions = {},
+): ChangelogRelease[] {
   const releases: ChangelogRelease[] = [];
   let release: ChangelogRelease | undefined;
   let group: ChangelogGroup | undefined;
@@ -121,12 +165,21 @@ export function parseChangelog(markdown: string, anchorPrefix = ""): ChangelogRe
       closeItem();
       const [, version = "", written = ""] = heading;
       // A date the page cannot format would stop the whole page from rendering.
-      const date = Number.isNaN(Date.parse(`${written}T00:00:00Z`)) ? "" : written;
+      const firstDate = isRealDate(written) ? written : "";
+      const availability = stores ? storeAvailability(line, firstDate) : [];
       group = undefined;
       release =
         version.toLowerCase() === "unreleased" || IN_REVIEW_HEADING.test(line)
           ? undefined
-          : { version, date, anchor: `${anchorPrefix}${releaseAnchor(version)}`, intro: [], notices: [], groups: [] };
+          : {
+              version,
+              date: availability[0]?.date || firstDate,
+              stores: availability,
+              anchor: `${anchorPrefix}${releaseAnchor(version)}`,
+              intro: [],
+              notices: [],
+              groups: [],
+            };
       if (release) releases.push(release);
       continue;
     }

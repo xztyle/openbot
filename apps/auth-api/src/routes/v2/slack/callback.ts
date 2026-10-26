@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/solid-router";
 import { Effect } from "effect";
+import { installReturnPage } from "../../../server/canonical-redirect";
 import { runApiResponse } from "../../../server/effect-runtime";
 import { requestSlackApp } from "../../../server/request-auth";
 import { SlackAppError } from "../../../server/slack-app";
@@ -11,7 +12,7 @@ export const Route = createFileRoute("/v2/slack/callback")({
     handlers: {
       GET: ({ request }) => {
         const url = new URL(request.url);
-        const target = new URL("/slack/connect", url);
+        const target = installReturnPage("/slack/connect", url);
         return runApiResponse(
           Effect.gen(function* () {
             const code = url.searchParams.get("code");

@@ -2,13 +2,14 @@ import type { SharedTable } from "@openbot/contracts/ipc";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { Trash2 } from "lucide-react-native";
+import Trash2 from "lucide-react-native/icons/trash";
 import { useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import { showFailureAlert } from "@/features/analytics/failure-reports";
-import { useMobileSession } from "@/features/auth/context/mobile-session-context";
+import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { SettingsNote, SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { type MobileAgent, useMobileWorkspace } from "@/features/workspace/context/mobile-workspace-context";
+import { queryKeys } from "@/features/workspace/model/query-keys";
 import { haptics } from "@/shared/lib/haptics";
 import { currentText, useText } from "@/shared/lib/text";
 
@@ -20,9 +21,9 @@ import { currentText, useText } from "@/shared/lib/text";
 export function AgentSharedTables({ agent, available }: { agent: MobileAgent; available: boolean }) {
   const { t } = useText();
   const workspace = useMobileWorkspace();
-  const { session, sessionScope } = useMobileSession();
+  const queryScope = useQueryScope();
   const tables = useQuery({
-    queryKey: ["agent-info", session?.apiUrl, session?.user.id, sessionScope, agent.serverId, "tables"],
+    queryKey: queryKeys.sharedTables(queryScope, agent.serverId),
     queryFn: () => workspace.listSharedTables(agent.serverId),
     enabled: available,
     retry: false,

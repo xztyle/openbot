@@ -302,8 +302,17 @@ export class OnePasswordConnectorService implements PasswordVault {
     this: OnePasswordConnectorService,
   ): Effect.fn.Return<OnePasswordConnectorStatus> {
     if (!this.#installing) yield* this.#sharedCheck();
-    // The user moves logins into the vault in the 1Password app, outside this window. A page that
-    // opens or gets the focus back reads the list again; the answer arrives as a status event.
+    return yield* this.refreshLogins();
+  }).bind(this);
+
+  /**
+   * The user moves logins into the vault in the 1Password app, outside this window. A page that
+   * opens or gets the focus back reads the list again; the answer arrives as a status event. A joined
+   * server's page has no event, so it reads the status again until the count arrives.
+   */
+  readonly refreshLogins = Effect.fn("OnePasswordConnector.refreshLogins")(function* (
+    this: OnePasswordConnectorService,
+  ): Effect.fn.Return<OnePasswordConnectorStatus> {
     if (this.#store.read() && !this.#connecting) yield* this.#readIndexInBackground(INDEX_REFRESH_ON_VIEW_MS);
     return this.status();
   }).bind(this);

@@ -17,7 +17,7 @@ import {
 import { OPENBOT_SOFTWARE_APPLICATION } from "./software-application";
 
 /** The sitemap date of the pages. Change it when their text changes. */
-export const DOWNLOAD_PAGES_UPDATED_AT = "2026-10-09";
+export const DOWNLOAD_PAGES_UPDATED_AT = "2026-10-15";
 
 /** A system with its own page: a desktop installer or a phone app. */
 export type DownloadPagePlatform = DownloadPlatform | MobilePlatform;
@@ -194,7 +194,7 @@ export const DOWNLOAD_PAGES: Record<DownloadPagePlatform, DownloadPageContent> =
     installSteps: [
       { text: "Download the installer." },
       {
-        text: "Run the installer. It is not code-signed yet, so Windows can show “Windows protected your PC” or “Unknown publisher”. Select More info, then Run anyway.",
+        text: "Run the installer. For a new release, Windows can show “Windows protected your PC”. Select More info, make sure that the publisher is SYNTHETIFY LABS, then select Run anyway.",
       },
       { text: "The installer installs OpenBot for your user and opens it. Later, open it from the Start menu." },
       CONNECT_STEP,
@@ -211,7 +211,7 @@ export const DOWNLOAD_PAGES: Record<DownloadPagePlatform, DownloadPageContent> =
       {
         question: "Why does Windows warn about the installer?",
         answer:
-          "The Windows installer is not code-signed yet, so SmartScreen does not know the publisher. The source code and every release build are public on GitHub, where you can check the checksum and the build attestation.",
+          "The installer is code-signed by SYNTHETIFY LABS, but SmartScreen can warn about a new release until enough people download it. Select More info, make sure that the publisher is SYNTHETIFY LABS, then select Run anyway. The source code and every release build are public on GitHub, where you can check the checksum and the build attestation.",
       },
       providersQuestion("Windows"),
     ],
@@ -279,7 +279,7 @@ export const DOWNLOAD_PAGES: Record<DownloadPagePlatform, DownloadPageContent> =
         title: "A server with no screen",
         steps: [
           {
-            text: "On Ubuntu 24.04 with systemd, install OpenBot as an always-on server of your account, then sign in with an email code:",
+            text: "On Ubuntu 24.04 or 26.04 with systemd, install OpenBot as an always-on server of your account, then sign in with an email code:",
             code: "curl -fsSL https://raw.githubusercontent.com/nightly-labs/openbot/main/scripts/install-server.sh | sudo bash\nsudo openbot login",
           },
           { text: "Then use it from the desktop app, the mobile app or openbot.run/app." },
@@ -287,10 +287,9 @@ export const DOWNLOAD_PAGES: Record<DownloadPagePlatform, DownloadPageContent> =
       },
     ],
     notes: [
-      "Each release is tested on Ubuntu 24.04 on x64.",
+      "Each release is tested on Ubuntu 24.04 on x64. OpenBot also runs on Ubuntu 26.04.",
       UPDATES_NOTE,
       NETWORK_NOTE,
-      "Voice prompts are not available on Linux.",
       "Remote desktop works with the x64 AppImage in an X11 session, such as Xorg or Xvfb. It does not work under Wayland, and the arm64 AppImage does not include it.",
     ],
     faq: [

@@ -24,6 +24,15 @@ function errorBodyKey(code: string) {
   }
 }
 
+/**
+ * Whether the event is the failure of unattended work: a scheduled routine run that failed, or one of
+ * the event check error codes above.
+ */
+export function isUnattendedFailure(event: AgentEvent): boolean {
+  if (event.type === "turn-completed") return event.origin === "routine" && event.status === "failed";
+  return event.type === "error" && event.agentId !== undefined && errorBodyKey(event.code) !== null;
+}
+
 export interface UnattendedFailureSubject {
   body: string;
   agentId: string;

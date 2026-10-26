@@ -11,16 +11,19 @@ import type {
   CustomAgentCheckResult,
   CustomAgentResult,
   CustomAgentSummary,
+  CustomAgentUsage,
   SaveCustomAgentInput,
 } from "@openbot/contracts/ipc";
+import { isNewCustomAgentId } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { checkAcpAgent } from "../backend/acp-agent-check";
 import { assertAgentArgs, assertWindowsScriptArgs, resolveAgentCommand } from "../backend/acp-agent-command";
 import { AgentLifecycleFailed, type AgentService } from "../backend/agent-service";
+import { agentLaunchPath } from "../backend/cli";
 import type { CustomAgentStore } from "./custom-agent-store";
 
 export interface CustomAgentChangeDependencies {
-  service: Pick<AgentService, "saveCustomAgent" | "removeCustomAgent" | "reloadCustomAgents">;
+  service: Pick<AgentService, "saveCustomAgent" | "removeCustomAgent" | "reloadCustomAgents" | "customAgentUsage">;
   customAgents: Pick<CustomAgentStore, "list" | "save" | "remove" | "checkEnv" | "assertWritable">;
   resolve?: typeof resolveAgentCommand;
   check?: typeof checkAcpAgent;
@@ -30,9 +33,16 @@ export interface CustomAgentChanges {
   /** The agents without their environment values. */
   list(): Effect.Effect<CustomAgentSummary[]>;
   save(input: SaveCustomAgentInput): Effect.Effect<CustomAgentResult, ProviderRuntimeFailure>;
+  /** Changes an installed command only if its previous binding is unchanged. Keeps current name and secrets. */
+  saveIfUnchanged(
+    input: SaveCustomAgentInput,
+    expected: CustomAgentSummary | null,
+  ): Effect.Effect<CustomAgentResult, ProviderRuntimeFailure>;
   remove(id: string): Effect.Effect<CustomAgentResult, ProviderRuntimeFailure>;
   /** One trial start. Writes nothing. */
   check(input: CheckCustomAgentInput): Effect.Effect<CustomAgentCheckResult, ProviderRuntimeFailure>;
+  /** The answers to the usage prompts. Not serialized with the writes: it reads, and a read can take 30 seconds. */
+  usage(): Effect.Effect<CustomAgentUsage[]>;
 }
 
 export function createCustomAgentChanges({
@@ -47,32 +57,62 @@ export function createCustomAgentChanges({
     return gate.withPermit(Effect.suspend(run));
   }
 
+  const save = Effect.fn("CustomAgentChanges.save")(function* (input: SaveCustomAgentInput) {
+    if (!isNewCustomAgentId(input.id) && !(yield* customAgents.list()).some((agent) => agent.id === input.id))
+      return yield* new ProviderRuntimeFailure({ cause: new Error(sourceText("error.provider.customAgentIdInvalid")) });
+    yield* runtimeSync(() => assertAgentArgs(input.args));
+    yield* service
+      .saveCustomAgent(() =>
+        customAgents
+          .save(input)
+          .pipe(
+            Effect.mapError((error) => new AgentLifecycleFailed({ operation: "saveCustomAgent", cause: error.cause })),
+          ),
+      )
+      .pipe(toProviderRuntimeFailure);
+    return {
+      agents: yield* customAgents.list(),
+      restart: yield* service.reloadCustomAgents().pipe(toProviderRuntimeFailure),
+    };
+  });
+
   return {
     list: () => customAgents.list(),
+    usage: () => service.customAgentUsage(),
     /**
      * Persist first, then restart the router. The command is not resolved here: an agent installed
      * later still saves, and its row shows that the command is not found.
      */
-    save: (input) =>
+    save: (input) => serialize(() => save(input).pipe(Effect.uninterruptible)),
+    saveIfUnchanged: (input, expected) =>
       serialize(() =>
-        Effect.fn("CustomAgentChanges.save")(function* () {
-          yield* runtimeSync(() => assertAgentArgs(input.args));
-          yield* service
-            .saveCustomAgent(() =>
-              customAgents
-                .save(input)
-                .pipe(
-                  Effect.mapError(
-                    (error) => new AgentLifecycleFailed({ operation: "saveCustomAgent", cause: error.cause }),
-                  ),
-                ),
-            )
-            .pipe(toProviderRuntimeFailure);
-          return {
-            agents: yield* customAgents.list(),
-            restart: yield* service.reloadCustomAgents().pipe(toProviderRuntimeFailure),
-          };
-        })().pipe(Effect.uninterruptible),
+        Effect.gen(function* () {
+          const current = (yield* customAgents.list()).find((agent) => agent.id === input.id) ?? null;
+          if (
+            (current === null) !== (expected === null) ||
+            (current &&
+              expected &&
+              (current.command !== expected.command || JSON.stringify(current.args) !== JSON.stringify(expected.args)))
+          ) {
+            return yield* new ProviderRuntimeFailure({
+              cause: new Error(sourceText("error.provider.registryBindingChanged")),
+            });
+          }
+          // A user can change credentials while the download runs. Keep their current values,
+          // name and usage prompt; only new registry environment names receive the registry defaults.
+          const env = current
+            ? [
+                ...input.env.filter((entry) => !current.envNames.includes(entry.name)),
+                ...current.envNames.map((name) => ({ name, value: null })),
+              ]
+            : input.env;
+          return yield* save({
+            ...input,
+            name: current?.name ?? input.name,
+            usagePrompt: current ? (current.usagePrompt ?? null) : input.usagePrompt,
+            env,
+          });
+        }).pipe(Effect.uninterruptible),
       ),
     /** The agents on it move to another provider before the write, in the backend's chain. */
     remove: (id) =>
@@ -111,7 +151,11 @@ export function createCustomAgentChanges({
             cause: new Error(sourceText("error.provider.customAgentNotFound", { command: input.command })),
           });
         yield* runtimeSync(() => assertWindowsScriptArgs(executable, input.args));
-        return yield* check({ executable, args: input.args, env }).pipe(toProviderRuntimeFailure);
+        // The same `PATH` the agent starts with.
+        const path = yield* agentLaunchPath().pipe(toProviderRuntimeFailure);
+        return yield* check({ executable, args: input.args, env, path, listModels: true }).pipe(
+          toProviderRuntimeFailure,
+        );
       })().pipe(Effect.uninterruptible),
   };
 }

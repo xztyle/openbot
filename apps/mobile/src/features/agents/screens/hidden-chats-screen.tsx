@@ -1,7 +1,7 @@
 import { type Href, Link, router } from "expo-router";
 import { Typography } from "heroui-native";
 import { useThemeColor } from "heroui-native/hooks";
-import { Eye } from "lucide-react-native";
+import Eye from "lucide-react-native/icons/eye";
 import { type ReactNode, useMemo } from "react";
 import { Pressable, View } from "react-native";
 import { BloubAvatar } from "@/features/agents/components/bloub-avatar";
@@ -14,7 +14,16 @@ import { useText } from "@/shared/lib/text";
 
 export function HiddenChatsScreen() {
   const { t } = useText();
-  const { hiddenAgents, unhideAgent, agents, activeServer, hiddenChannelIds, unhideChannel } = useMobileWorkspace();
+  const {
+    activeServer,
+    agents,
+    hiddenAgents,
+    unhideAgent,
+    hidesAgentsOnServer,
+    canUnhideAgent,
+    hiddenChannelIds,
+    unhideChannel,
+  } = useMobileWorkspace();
   const channels = useChannels(activeServer.id);
   const hiddenChannels = channels.channels.filter(
     (channel) => !channel.archived && hiddenChannelIds.includes(channel.id),
@@ -25,8 +34,8 @@ export function HiddenChatsScreen() {
   );
   const foreground = useThemeColor("foreground");
   const total = hiddenAgents.length + hiddenChannels.length;
-  const items: { id: string; name: string; href: Href; avatar: ReactNode; show: () => void }[] = [
-    ...hiddenAgents.map((agent) => ({
+  const agentItems: { id: string; name: string; href: Href; avatar: ReactNode; show: (() => void) | null }[] =
+    hiddenAgents.map((agent) => ({
       id: agent.id,
       name: agent.name,
       href: { pathname: "/chat/[agentId]" as const, params: { agentId: agent.id } },
@@ -40,12 +49,18 @@ export function HiddenChatsScreen() {
           animateIdle={false}
         />
       ),
-      show: () => {
-        unhideAgent(agent.id);
-        void haptics.notification();
-        if (total === 1) router.back();
-      },
-    })),
+      // A member cannot show an agent that the host hid; the host refuses the request.
+      show: canUnhideAgent(agent.id)
+        ? () => {
+            unhideAgent(agent.id);
+            void haptics.notification();
+            if (total === 1) router.back();
+          }
+        : null,
+    }));
+  // The phone hides a channel only for itself.
+  const items = [
+    ...agentItems,
     ...hiddenChannels.map((channel) => ({
       id: channel.id,
       name: channel.name,
@@ -60,6 +75,7 @@ export function HiddenChatsScreen() {
       },
     })),
   ];
+  const synced = hidesAgentsOnServer(activeServer.id) || agentItems.some((item) => item.show === null);
 
   return (
     <SheetScrollView contentContainerClassName="gap-5 px-5 pb-safe-offset-5 pt-7">
@@ -68,7 +84,7 @@ export function HiddenChatsScreen() {
           {t("mobile.agent.hidden.title")}
         </Typography.Heading>
         <Typography.Paragraph type="body-xs" align="center" className="text-text-secondary">
-          {t("mobile.agent.hidden.body")}
+          {t(synced ? "mobile.agent.hidden.bodySynced" : "mobile.agent.hidden.body")}
         </Typography.Paragraph>
       </View>
 
@@ -97,17 +113,19 @@ export function HiddenChatsScreen() {
                 </Pressable>
               </Link.Trigger>
             </Link>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("mobile.agent.hidden.showNamed", { name: item.name })}
-              className="min-h-10 flex-row items-center gap-1.5 rounded-full bg-control-active px-3"
-              onPress={item.show}
-            >
-              <Eye color={String(foreground)} size={16} strokeWidth={1.9} />
-              <Typography.Paragraph type="body-xs" weight="semibold">
-                {t("mobile.agent.hidden.show")}
-              </Typography.Paragraph>
-            </Pressable>
+            {item.show ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("mobile.agent.hidden.showNamed", { name: item.name })}
+                className="min-h-10 flex-row items-center gap-1.5 rounded-full bg-control-active px-3"
+                onPress={item.show}
+              >
+                <Eye color={String(foreground)} size={16} strokeWidth={1.9} />
+                <Typography.Paragraph type="body-xs" weight="semibold">
+                  {t("mobile.agent.hidden.show")}
+                </Typography.Paragraph>
+              </Pressable>
+            ) : null}
           </View>
         ))}
       </View>

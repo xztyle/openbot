@@ -19,6 +19,8 @@ export const messages = defineMessages("queue", {
   "queue.item.steerFallback.steerFailed": "Steering did not succeed, so the message waits in the queue.",
   "queue.item.moveUpLabel": "Move queued message {position} up",
   "queue.item.moveDownLabel": "Move queued message {position} down",
+  "queue.item.runAsTask": "Run as task",
+  "queue.item.runAsTaskLabel": "Run queued message {position} as a task",
   "queue.item.deleteLabel": "Delete queued message {position}",
   "queue.item.deleteTooltip": "Delete message",
   "queue.item.editLabel": "Edit queued message {position}",

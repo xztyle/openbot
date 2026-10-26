@@ -23,7 +23,7 @@ export function createMcpTransport(
     const headers = authProvider
       ? Object.fromEntries(config.headers.map(({ key, value }) => [key, value]))
       : mcpHandoffHeaders(server);
-    const transportFetch = authProvider ? secureOAuthFetch() : fetchFn;
+    const transportFetch = authProvider ? secureOAuthFetch({ resource: config.url, mcpTraffic: true }) : fetchFn;
     /*
      * The transport does OAuth of its own: a 401 on a token this probe believed was still valid
      * makes it call `auth()` through its own fetch, which spends the refresh token and the client

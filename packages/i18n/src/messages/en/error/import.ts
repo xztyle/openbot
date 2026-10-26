@@ -41,4 +41,43 @@ export const messages = defineMessages("error.import", {
   "error.import.hostBusy": "The server is reading other exports. Try again in a few minutes.",
   "error.import.skillKept":
     '{name}: the server already has the skill "{skill}", so the agent uses that skill. Ask an admin to update it.',
+  // Hermes Agent import from a folder on this computer.
+  "error.import.hermesNoProfiles":
+    "This folder has no Hermes profiles. Choose the Hermes folder, which holds config.yaml or SOUL.md.",
+  "error.import.hermesClosed": "The Hermes profiles are no longer open. Read them again.",
+  "error.import.hermesProfileMissing": "The selection names a Hermes profile that was not read.",
+  "error.import.hermesSoulLong":
+    "{name}: SOUL.md is longer than {limit} characters, so the instructions keep its start. The full file is in imported/hermes/SOUL.md.",
+  "error.import.hermesSkillSkipped": '{name}: the skill "{skill}" is skipped. {reason}',
+  "error.import.hermesSkillCodeAdded":
+    "It has code that it did not have when the profiles were read. Read them again to allow it.",
+  "error.import.hermesLinkNotSaved":
+    "{name}: OpenBot could not save which agent came from this profile, so the next import adds it as a new agent.",
+  // Instance transfer between two OpenBot computers.
+  "error.import.transferRemoteTooLarge":
+    "A transfer file for a joined server must be under 100 MB. Turn off workspace files, or export fewer agents.",
+  "error.import.transferNotFile": "This file is not an OpenBot transfer file.",
+  "error.import.transferNewer": "A newer version of OpenBot made this file. Update OpenBot and try again.",
+  "error.import.transferEmpty": "The file contains no agents and no settings.",
+  "error.import.transferTooLarge":
+    "A transfer file must be under 2 GB and 50,000 files. Turn off workspace files, or export fewer agents.",
+  "error.import.transferAgentInvalid": "Agent {number} in the file is invalid, so it is skipped.",
+  "error.import.transferSettingsInvalid": "The app settings in the file are invalid, so they are not imported.",
+  "error.import.transferModelMissing":
+    '{name}: the model "{model}" is not available here yet, so the agent uses the default model. Choose the model again when its provider is ready.',
+  "error.import.transferSettingSkipped": "{name} is not imported. {reason}",
+  "error.import.transferRoutineFlowSkipped": "The import left out a routine flow. {reason}",
+  "error.import.transferCustomAgentCommand":
+    '{name}: custom agents are not imported, because they run a command. Check the command "{command}" and add the agent again in Settings.',
+  "error.import.transferSkillLimit":
+    "{name}: only the first {limit} of its {total} skills are in the file, because an agent can have {limit} skills.",
+  "error.import.transferFilesGone": "{number} files were deleted while the export ran, so they are not in the file.",
+  "error.import.transferProviderKey": "{name}: enter its API key again in Settings.",
+  "error.import.transferAgentEnv": "{name}: enter the values of {names} again in Settings.",
+  "error.import.transferMcpValues":
+    "{name}: the MCP server is added turned off. Check its command, enter its values and full address again, and turn it on in MCP settings.",
+  "error.import.transferValuesCleared":
+    "{name}: values that can hold a secret were removed from its arguments or address. Enter them again in Settings.",
+  "error.import.transferSharedKept":
+    "{number} files in the Shared folder are already here, so they are kept as they are.",
 });

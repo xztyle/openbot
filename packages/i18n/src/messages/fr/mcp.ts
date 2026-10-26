@@ -20,11 +20,12 @@ export const messages = {
     "{name} exécute ce serveur dans son application de bureau, sur cet ordinateur. Activez-le, puis connectez-vous.",
   "mcp.local.stepsTitle": "Activer le serveur dans {name}",
   "mcp.local.address": "Adresse",
-  "mcp.local.docs": "Guide d'installation",
+  "mcp.local.docs": "Guide d’installation",
   "mcp.signIn.description":
     "Connectez-vous à votre compte {name}. OpenBot obtient les outils accessibles à ce compte, sans mot de passe.",
   "mcp.signIn.waiting": "En attente du navigateur…",
   "mcp.signIn.continue": "Continuer vers {name}",
+  "mcp.signIn.pageDescription": "Cette page est ouverte dans le navigateur de {host}. Connectez-vous ici.",
   "mcp.server.loadFailed": "Impossible de charger les serveurs MCP.",
   "mcp.test.connected": { one: "Connecté · {count} outil", other: "Connecté · {count} outils" },
   "mcp.status.testing": "Test…",
@@ -113,4 +114,48 @@ export const messages = {
     one: "Terminez la connexion dans votre navigateur. OpenBot cesse d’attendre après {count} minute.",
     other: "Terminez la connexion dans votre navigateur. OpenBot cesse d’attendre après {count} minutes.",
   },
+  "mcp.panel.signInWaitingOn": {
+    one: "Ouverture de la page de connexion sur {host}. OpenBot cesse d’attendre après {count} minute.",
+    other: "Ouverture de la page de connexion sur {host}. OpenBot cesse d’attendre après {count} minutes.",
+  },
+  "mcp.panel.appTitle": "App de connexion",
+  "mcp.panel.appDescription":
+    "Utilisez une app OAuth que vous avez enregistrée auprès du fournisseur du serveur. OpenBot l’utilise quand le serveur ne peut pas enregistrer OpenBot lui-même. Laissez vide pour qu’OpenBot s’enregistre.",
+  "mcp.panel.appSaveFirst": "Enregistrez d’abord ce serveur. Vous pourrez ensuite ajouter une app de connexion.",
+  "mcp.panel.appUrlChanged":
+    "Enregistrez d’abord la nouvelle URL du serveur. L’app de connexion appartient à l’URL enregistrée.",
+  "mcp.panel.appLoadFailed": "Impossible de lire l’app de connexion.",
+  "mcp.panel.callbackUrl": "URL de rappel",
+  "mcp.panel.callbackUrlDescription": "Ajoutez exactement cette URL aux URL de redirection autorisées de l’app.",
+  "mcp.panel.callbackUrlOnHost":
+    "{host} se connecte avec son propre navigateur : cette URL est donc sur {host}. Ajoutez exactement cette URL aux URL de redirection autorisées de l’app.",
+  "mcp.panel.callbackUrlUnavailable": "Aucune URL de rappel n’est disponible.",
+  "mcp.panel.copyCallbackUrl": "Copier l’URL de rappel",
+  "mcp.panel.clientId": "ID client",
+  "mcp.panel.clientSecret": "Secret client",
+  "mcp.panel.clientSecretDescription": "Facultatif. Uniquement pour une app qui a un secret.",
+  "mcp.panel.clientSecretSaved": "Secret enregistré. Saisissez un nouveau secret pour le remplacer.",
+  "mcp.panel.clientSecretRemoved": "Le secret est supprimé quand vous enregistrez l’app.",
+  "mcp.panel.removeClientSecret": "Supprimer le secret",
+  "mcp.panel.scopes": "Portées",
+  "mcp.panel.scopesDescription": "Facultatif. Séparez les portées par des espaces.",
+  "mcp.panel.saveApp": "Enregistrer l’app",
+  "mcp.panel.removeApp": "Supprimer l’app",
+  "mcp.panel.appSaved": "App enregistrée. Connectez-vous pour l’utiliser.",
+  "mcp.panel.appRemoved": "App supprimée.",
+  "mcp.signIn.relayDescription":
+    "Vérifiez que la page de connexion est sur {page}, puis ouvrez-la dans votre navigateur. Quand vous avez terminé, OpenBot envoie la connexion à {host}.",
+  "mcp.signIn.relayOpenDescription":
+    "Ouvrez la page de connexion de {page} dans votre navigateur. Quand vous avez terminé, collez ici l’adresse affichée. OpenBot envoie ensuite la connexion à {host}.",
+  "mcp.signIn.relayDeviceDescription":
+    "Vérifiez que la page de connexion est sur {page}, puis ouvrez-la dans votre navigateur et terminez-y la connexion. {host} détecte la connexion lui-même.",
+  "mcp.signIn.relayOpen": "Ouvrir la page de connexion",
+  "mcp.signIn.relayPasteHint":
+    "Si le navigateur ne revient pas vers OpenBot, copiez l’adresse qu’il affiche et collez-la ici.",
+  "mcp.signIn.relayPasteRequired":
+    "OpenBot ne peut pas récupérer seul la connexion depuis le navigateur. Quand vous avez terminé, copiez l’adresse affichée et collez-la ici.",
+  "mcp.signIn.relayAddress": "Adresse du navigateur",
+  "mcp.signIn.relaySend": "Envoyer",
+  "mcp.panel.callbackUrlRelayed":
+    "La page de connexion s’ouvre dans votre navigateur, et OpenBot sur votre ordinateur envoie la connexion à {host}. Ajoutez exactement cette URL aux URL de redirection autorisées de l’app.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -5,6 +5,7 @@ import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { InitialSetup } from "../src/features/onboarding/InitialSetup";
 import { STORY_AGENT_STATUS } from "./fixtures";
 import { createMockOpenBot } from "./mock-openbot";
+import { createFakeConnection } from "./provider-connection-fixture";
 
 type InitialSetupArgs = Parameters<typeof InitialSetup>[0];
 
@@ -39,7 +40,7 @@ const args: InitialSetupArgs = {
   }),
   onJoinRemote: fn(async () => undefined),
   onClose: fn(),
-  onConnectProvider: fn(async () => undefined),
+  connection: createFakeConnection({ browser: fn(async () => undefined), alternative: [] }),
   onAddCustomProvider: fn(async () => "restarted" as const),
   onDeleteCustomProvider: fn(async () => "restarted" as const),
   customProviders: [

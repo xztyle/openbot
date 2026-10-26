@@ -4,7 +4,7 @@ import { chunkMarkdown, FENCE } from "../messaging-chunks";
 const SLACK_CHUNK_CHARACTERS = 3_900;
 
 /**
- * Markdown as Slack `mrkdwn`. `&`, `<` and `>` are escaped everywhere, also in code, as Slack
+ * Markdown as Slack `mrkdwn`. Content `&`, `<` and `>` are escaped, also in code, as Slack
  * requires. That also makes `<!channel>` and `<@U…>` inert: an answer cannot ping a workspace.
  */
 export function slackMrkdwn(markdown: string): string {
@@ -26,6 +26,8 @@ function escapeSlack(text: string): string {
 }
 
 function blockMrkdwn(line: string): string {
+  const quote = /^ {0,3}&gt; ?(.*)$/.exec(line);
+  if (quote) return `> ${quote[1]}`;
   const heading = /^#{1,6}\s+(.*)$/.exec(line);
   if (heading) return `**${heading[1]}**`;
   const bullet = /^(\s*)[-*+]\s+(.*)$/.exec(line);

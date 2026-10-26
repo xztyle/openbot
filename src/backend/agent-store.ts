@@ -23,23 +23,39 @@ import type { AgentProfileDraft } from "@openbot/contracts/ipc";
 import {
   AGENT_PROVIDERS,
   type AgentAccess,
+  type AgentBackupModels,
+  type AgentDefaults,
   type AgentModelId,
+  type AgentPendingRuntime,
   type AgentProviderId,
   type AgentReasoningEffort,
+  type AgentSessionSettingOverrides,
   type AgentSummary,
+  type AgentUsageLimitReturn,
   type AvatarImageInput,
   type BusyMessageMode,
   type CreateAgentInput,
   DEFAULT_AGENT_ACCESS,
+  DEFAULT_AGENT_DEFAULTS,
+  DEFAULT_PROVIDER_ACCOUNT_ID,
   type DuplicateAgentResult,
   decodeAgentProfileDraft,
   decodeSaveAgentProfileResult,
   defaultProviderModel,
   isAgentAccess,
+  isAgentBackupModels,
   isAgentModel,
+  isAgentPendingRuntime,
+  isAgentSessionSettingOverrides,
+  isAgentSessionSettingResets,
+  isAgentTaskLimit,
+  isAgentUsageLimitReturn,
   isAvatarHue,
   isAvatarSeed,
+  isBrowserProfileId,
   isBusyMessageMode,
+  isHiddenAt,
+  isProviderAccountId,
   isReasoningEffort,
   isSidebarLayoutSnapshot,
   providerForLegacyModel,
@@ -53,7 +69,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Effect, Result, Semaphore, Stream } from "effect";
 import { ProfileCreationRecovery } from "./agent/profile-creation-recovery";
-import { writeFileAtomically } from "./atomic-json-file";
+import { isEmptyStoredFile, parseStoredJson, writeFileAtomically } from "./atomic-json-file";
 import { automationRoot } from "./automation-command";
 import type { AgentModelChange } from "./database/agent-roster";
 import { OpenBotDatabase, type ProviderSession, stableThreadId } from "./openbot-database";
@@ -81,12 +97,35 @@ type PersistedStoredAgent = Omit<StoredAgent, "avatarUrl" | "provider" | "access
   access?: AgentAccess;
   // Absent on every agent stored before the setting existed, which keeps Computer Use on.
   computerUse?: boolean;
-  // Absent on every agent stored before the setting existed, which keeps automation off.
+  // Absent means the account default, which is off until the user changes it in Settings › Agents.
   allowAutomation?: boolean;
+  // Absent means the account default, which is off until the user changes it in Settings › Agents.
+  allowNewChat?: boolean;
+  // Absent means the account default, which is off until the user changes it in Settings › Agents.
+  quickAcknowledgement?: boolean;
+  // Absent on every agent stored before the setting existed, which keeps its tabs in the shared browser session.
+  ownBrowserSession?: boolean;
+  // Absent on every agent stored before named browser profiles existed. Stored with
+  // `ownBrowserSession: true`, so an older OpenBot opens the agent's own session instead.
+  browserProfileId?: string;
+  // Absent on every agent stored before the setting existed, which leaves the service tier to Codex.
+  fastMode?: boolean;
   // Absent means the app default, as for every agent stored before the setting existed.
   busyMessageMode?: BusyMessageMode;
+  // Absent means the default task limit, as for every agent stored before tasks existed.
+  taskLimit?: number;
+  // Absent means the provider's own sign-in, as for every agent stored before accounts existed.
+  providerAccountId?: string;
+  // Absent means the agent asks before it leaves a model at its usage limit.
+  backupModels?: AgentBackupModels;
+  // Present only while the agent works on a backup model for a usage limit.
+  usageLimitReturn?: AgentUsageLimitReturn;
+  // Present only while a turn or task still runs on the previous provider.
+  pendingRuntime?: AgentPendingRuntime;
+  // Present only while a user hides the agent. Absent on every agent stored before hiding existed.
+  hiddenAt?: string;
   // Written only as `true`. Absent on every agent stored before the setting existed, which keeps it
-  // in the user's lists.
+  // in the user's lists. A background teammate keeps working; a hidden agent (`hiddenAt`) does not.
   background?: boolean;
 };
 type StoredAgentBase = Omit<PersistedStoredAgent, "avatarSeed" | "avatarHue"> & DynamicRecord;
@@ -125,20 +164,20 @@ const LEGACY_AVATAR_COLORS = [
 const NEW_AGENT_PREVIEW = "No messages yet";
 /** The longest agent preview the store keeps; a longer text is cut to it. */
 export const AGENT_PREVIEW_MAX_LENGTH = 180;
-export const DEFAULT_AGENT_MODEL: AgentModelId = "gpt-6-luna";
+const DEFAULT_AGENT_MODEL: AgentModelId = "gpt-6-luna";
 export const DEFAULT_AGENT_PROVIDER: AgentProviderId = "codex";
 // A provider CLI reports the effort its own configuration uses -- Codex says `medium` for every
 // GPT-5.6 model -- which is not the one this product leads with: a new agent starts on the fast
 // model, where the extra thinking buys little and costs a visible wait on every turn.
-export const DEFAULT_REASONING_EFFORT: AgentReasoningEffort = "low";
+const DEFAULT_REASONING_EFFORT: AgentReasoningEffort = "low";
 
 // These three strings are history, not vocabulary. The first is the file a release before the move to
 // SQLite wrote its state into, and is only ever read: renaming it means that file is never found and the
 // data of anyone who has not yet run the importing release is lost. The second is the key that file's
 // agent array is stored under, and reading a different one discards every agent in it just as
-// silently. The third is a `command_id` already stamped into `orchestration_command_receipts` on
-// every existing install, and is what stops the legacy import running a second time. None of the
-// three follows the bot-to-agent rename.
+// silently. The third is the `command_id` of the import's roster event on existing installs. The next
+// roster write removes that event and its receipt; the roster event that write keeps is what stops the
+// legacy import running a second time. None of the three follows the bot-to-agent rename.
 const LEGACY_AGENTS_STATE_FILE = "bots.json";
 const LEGACY_AGENTS_STATE_KEY = "bots";
 const LEGACY_AGENTS_IMPORT_COMMAND_ID = "legacy-import:bots:v1";
@@ -147,8 +186,10 @@ const logger = createOpenBotLogger("agent-store");
 
 // Windows answers `EBUSY` or `EPERM` while a file in the tree is still open: a provider process that
 // is exiting after its session closed, an antivirus scan or the search indexer. Node retries these
-// codes with a growing delay, about 1.5 seconds in total, before the deletion reports a failure.
-const AGENT_FILES_REMOVAL = { recursive: true, force: true, maxRetries: 5 } as const;
+// codes with a growing delay, about 8 seconds in total, before the deletion reports a failure. The
+// Claude SDK's close does not wait for the `claude` process. On Windows it kills a process that has
+// not exited after 7 seconds, so a shorter wait fails a delete that a retry then completes.
+const AGENT_FILES_REMOVAL = { recursive: true, force: true, maxRetries: 10, retryDelay: 150 } as const;
 
 export class AgentStore {
   readonly #statePath: string;
@@ -170,7 +211,14 @@ export class AgentStore {
   readonly #avatarUpdateQueue = Semaphore.makeUnsafe(1);
   readonly #creationQueue = Semaphore.makeUnsafe(1);
 
-  constructor(userDataPath: string, homePath: string, database = new OpenBotDatabase(userDataPath)) {
+  readonly #agentDefaults: () => AgentDefaults;
+
+  constructor(
+    userDataPath: string,
+    homePath: string,
+    database = new OpenBotDatabase(userDataPath),
+    agentDefaults: () => AgentDefaults = () => DEFAULT_AGENT_DEFAULTS,
+  ) {
     const openbotRoot = join(homePath, "OpenBot");
     this.#statePath = join(userDataPath, LEGACY_AGENTS_STATE_FILE);
     this.#agentsRoot = join(openbotRoot, "Agents");
@@ -181,10 +229,16 @@ export class AgentStore {
     this.#duplicationsRoot = join(userDataPath, "agent-duplications");
     this.#automationRoot = automationRoot(userDataPath);
     this.#database = database;
+    this.#agentDefaults = agentDefaults;
     this.#profileCreationRecovery = new ProfileCreationRecovery(
       join(userDataPath, "agent-profile-creations"),
       this.#agentsRoot,
     );
+  }
+
+  /** The account defaults that an agent with no value of its own follows; see `AGENT_DEFAULT_KEYS`. */
+  agentDefaults(): AgentDefaults {
+    return this.#agentDefaults();
   }
 
   get database(): OpenBotDatabase {
@@ -410,10 +464,14 @@ export class AgentStore {
       record.provider = source.provider;
       record.model = source.model;
       record.reasoningEffort = source.reasoningEffort;
+      if (source.sessionSettingOverrides)
+        record.sessionSettingOverrides = structuredClone(source.sessionSettingOverrides);
       record.access = source.access;
       record.computerUse = source.computerUse;
       if (source.busyMessageMode) record.busyMessageMode = source.busyMessageMode;
       if (source.background === true) record.background = true;
+      if (source.taskLimit !== undefined) record.taskLimit = source.taskLimit;
+      if (source.backupModels) record.backupModels = structuredClone(source.backupModels);
       record.avatarSeed = source.avatarSeed;
       record.avatarHue = source.avatarHue;
 
@@ -630,11 +688,56 @@ export class AgentStore {
     }
   }
 
+  setSessionSettingOverrides(
+    agentId: string,
+    overrides: AgentSessionSettingOverrides,
+    resetIdentity?: string,
+  ): AgentSummary {
+    if (!isAgentSessionSettingOverrides(overrides)) throw new Error(sourceText("error.provider.sessionSettingInvalid"));
+    const agent = this.#requireAgent(agentId);
+    const previous = agent.sessionSettingOverrides;
+    const previousResets = agent.sessionSettingResets;
+    if (resetIdentity) agent.sessionSettingResets = [...new Set([...(previousResets ?? []), resetIdentity])];
+    agent.sessionSettingOverrides = structuredClone(overrides);
+    try {
+      this.#persist("agent.updated");
+    } catch (error) {
+      if (previous === undefined) delete agent.sessionSettingOverrides;
+      else agent.sessionSettingOverrides = previous;
+      if (previousResets === undefined) delete agent.sessionSettingResets;
+      else agent.sessionSettingResets = previousResets;
+      throw error;
+    }
+    return { ...agent };
+  }
+
+  clearSessionSettingReset(agentId: string, identity: string): void {
+    const agent = this.#requireAgent(agentId);
+    const previous = agent.sessionSettingResets;
+    if (!previous?.includes(identity)) return;
+    agent.sessionSettingResets = previous.filter((value) => value !== identity);
+    try {
+      this.#persist("agent.updated");
+    } catch (error) {
+      agent.sessionSettingResets = previous;
+      throw error;
+    }
+  }
+
   /** `initiatingAgentId` names the agent that asked for the change, for the audit entry of a model change. */
 
   updateAgent = Effect.fn("AgentStore.updateAgent")(function* (
     this: AgentStore,
-    input: UpdateAgentInput,
+    input: UpdateAgentInput & {
+      /** The model to go back to after a usage limit. `null` removes it. */
+      usageLimitReturn?: AgentUsageLimitReturn | null;
+      /** The provider to use from the next turn. `null` removes it. */
+      pendingRuntime?: AgentPendingRuntime | null;
+      /** The shared or the agent's own session. It replaces a named profile. */
+      ownBrowserSession?: boolean;
+      /** The named browser profile. `null` removes it. The caller checks that the profile exists. */
+      browserProfileId?: string | null;
+    },
     initiatingAgentId?: string,
   ): Effect.fn.Return<AgentSummary, StoredStateFailure> {
     try {
@@ -675,9 +778,47 @@ export class AgentStore {
         if (!isBoolean(input.computerUse)) throw new Error("Invalid Computer Use value.");
         next.computerUse = input.computerUse;
       }
-      if (input.allowAutomation !== undefined) {
+      if (input.allowAutomation === null) delete next.allowAutomation;
+      else if (input.allowAutomation !== undefined) {
         if (!isBoolean(input.allowAutomation)) throw new Error("Invalid automation value.");
         next.allowAutomation = input.allowAutomation;
+      }
+      if (input.allowNewChat === null) delete next.allowNewChat;
+      else if (input.allowNewChat !== undefined) {
+        if (!isBoolean(input.allowNewChat)) throw new Error("Invalid new chat value.");
+        next.allowNewChat = input.allowNewChat;
+      }
+      if (input.quickAcknowledgement === null) delete next.quickAcknowledgement;
+      else if (input.quickAcknowledgement !== undefined) {
+        if (!isBoolean(input.quickAcknowledgement)) throw new Error("Invalid quick acknowledgement value.");
+        next.quickAcknowledgement = input.quickAcknowledgement;
+      }
+      if (input.ownBrowserSession !== undefined) {
+        if (!isBoolean(input.ownBrowserSession)) throw new Error("Invalid browser session value.");
+        next.ownBrowserSession = input.ownBrowserSession;
+        // A choice of the shared or the agent's own session replaces a named profile.
+        delete next.browserProfileId;
+      }
+      if (input.browserProfileId === null) delete next.browserProfileId;
+      else if (input.browserProfileId !== undefined) {
+        if (!isBrowserProfileId(input.browserProfileId)) throw new Error("Invalid browser profile.");
+        next.browserProfileId = input.browserProfileId;
+        next.ownBrowserSession = true;
+      }
+      if (input.fastMode !== undefined) {
+        if (!isBoolean(input.fastMode)) throw new Error("Invalid fast mode value.");
+        next.fastMode = input.fastMode;
+      }
+      // A provider change without an account returns the agent to the new provider's own sign-in.
+      if (
+        input.providerAccountId === null ||
+        input.providerAccountId === DEFAULT_PROVIDER_ACCOUNT_ID ||
+        (input.provider !== undefined && input.provider !== agent.provider && input.providerAccountId === undefined)
+      )
+        delete next.providerAccountId;
+      else if (input.providerAccountId !== undefined) {
+        if (!isProviderAccountId(input.providerAccountId)) throw new Error("Invalid provider account.");
+        next.providerAccountId = input.providerAccountId;
       }
       if (input.busyMessageMode === null) delete next.busyMessageMode;
       else if (input.busyMessageMode !== undefined) {
@@ -689,6 +830,16 @@ export class AgentStore {
         if (input.background) next.background = true;
         else delete next.background;
       }
+      if (input.taskLimit === null) delete next.taskLimit;
+      else if (input.taskLimit !== undefined) {
+        if (!isAgentTaskLimit(input.taskLimit)) throw new Error("Invalid task limit.");
+        next.taskLimit = input.taskLimit;
+      }
+      if (input.backupModels === null) delete next.backupModels;
+      else if (input.backupModels !== undefined) {
+        if (!isAgentBackupModels(input.backupModels)) throw new Error("Invalid backup models.");
+        next.backupModels = structuredClone(input.backupModels);
+      }
       if (input.avatarSeed !== undefined) {
         if (!isAvatarSeed(input.avatarSeed)) throw new Error("Invalid avatar seed.");
         next.avatarSeed = input.avatarSeed;
@@ -696,6 +847,27 @@ export class AgentStore {
       if (input.avatarHue !== undefined) {
         if (input.avatarHue !== null && !isAvatarHue(input.avatarHue)) throw new Error("Invalid avatar hue.");
         next.avatarHue = input.avatarHue;
+      }
+      // A model the user picks ends the way back from a usage limit.
+      if (
+        input.usageLimitReturn === null ||
+        (input.usageLimitReturn === undefined &&
+          (next.provider !== agent.provider ||
+            next.model !== agent.model ||
+            next.providerAccountId !== agent.providerAccountId))
+      )
+        delete next.usageLimitReturn;
+      else if (input.usageLimitReturn !== undefined) {
+        if (!isAgentUsageLimitReturn(input.usageLimitReturn)) throw new Error("Invalid usage limit model.");
+        next.usageLimitReturn = { ...input.usageLimitReturn };
+      }
+      if (input.pendingRuntime === null) delete next.pendingRuntime;
+      else if (input.pendingRuntime !== undefined) {
+        if (!isAgentPendingRuntime(input.pendingRuntime)) throw new Error("Invalid pending runtime.");
+        next.pendingRuntime = { ...input.pendingRuntime };
+      } else if (next.provider !== agent.provider || next.providerAccountId !== agent.providerAccountId) {
+        // A handover that landed ends the queued change.
+        delete next.pendingRuntime;
       }
       next.updatedAt = new Date().toISOString();
       const previous = { ...agent };
@@ -713,15 +885,34 @@ export class AgentStore {
             }
           : undefined;
       Object.assign(agent, next);
-      // A copy cannot remove a field, and `null` above returned the agent to the app default.
+      // A copy cannot remove a field, and `null` above returned the agent to the app default or to
+      // the provider's own sign-in, and an agent flag to the account default.
       if (next.busyMessageMode === undefined) delete agent.busyMessageMode;
       if (next.background === undefined) delete agent.background;
+      if (next.taskLimit === undefined) delete agent.taskLimit;
+      if (next.providerAccountId === undefined) delete agent.providerAccountId;
+      if (next.backupModels === undefined) delete agent.backupModels;
+      if (next.usageLimitReturn === undefined) delete agent.usageLimitReturn;
+      if (next.pendingRuntime === undefined) delete agent.pendingRuntime;
+      if (next.browserProfileId === undefined) delete agent.browserProfileId;
+      if (next.allowAutomation === undefined) delete agent.allowAutomation;
+      if (next.allowNewChat === undefined) delete agent.allowNewChat;
+      if (next.quickAcknowledgement === undefined) delete agent.quickAcknowledgement;
       try {
         this.#persist(modelChange ? "agent.model-changed" : "agent.updated", modelChange);
       } catch (error) {
         Object.assign(agent, previous);
         if (previous.busyMessageMode === undefined) delete agent.busyMessageMode;
         if (previous.background === undefined) delete agent.background;
+        if (previous.taskLimit === undefined) delete agent.taskLimit;
+        if (previous.providerAccountId === undefined) delete agent.providerAccountId;
+        if (previous.backupModels === undefined) delete agent.backupModels;
+        if (previous.usageLimitReturn === undefined) delete agent.usageLimitReturn;
+        if (previous.pendingRuntime === undefined) delete agent.pendingRuntime;
+        if (previous.browserProfileId === undefined) delete agent.browserProfileId;
+        if (previous.allowAutomation === undefined) delete agent.allowAutomation;
+        if (previous.allowNewChat === undefined) delete agent.allowNewChat;
+        if (previous.quickAcknowledgement === undefined) delete agent.quickAcknowledgement;
         throw error;
       }
       return { ...agent };
@@ -729,6 +920,33 @@ export class AgentStore {
       return yield* new StoredStateFailure({ cause });
     }
   }, Effect.uninterruptible).bind(this);
+
+  /**
+   * Hides the agent at `hiddenAt`, or restores it when `hiddenAt` is null. A second hide keeps the
+   * first time. The roster event keeps the field, so the hidden state survives a restart.
+   */
+  setHidden(agentId: string, hiddenAt: string | null): AgentSummary {
+    const agent = this.#requireAgent(agentId);
+    const previous = agent.hiddenAt;
+    if ((hiddenAt === null && previous === undefined) || (hiddenAt !== null && previous !== undefined))
+      return { ...agent };
+    if (hiddenAt !== null && !isHiddenAt(hiddenAt)) throw new Error("Invalid hidden agent time.");
+    if (hiddenAt === null) delete agent.hiddenAt;
+    else agent.hiddenAt = hiddenAt;
+    try {
+      this.#persist(hiddenAt === null ? "agent.restored" : "agent.hidden");
+    } catch (error) {
+      if (previous === undefined) delete agent.hiddenAt;
+      else agent.hiddenAt = previous;
+      throw error;
+    }
+    return { ...agent };
+  }
+
+  /** Whether a user hid the agent. An unknown agent is not hidden. */
+  isHidden(agentId: string): boolean {
+    return this.#state.agents.some((agent) => agent.id === agentId && agent.hiddenAt !== undefined);
+  }
 
   setMarketplaceSource(agentId: string, source: NonNullable<AgentSummary["marketplaceSource"]>): AgentSummary {
     const agent = this.#requireAgent(agentId);
@@ -1202,6 +1420,10 @@ export class AgentStore {
    * hide the first -- the same trade `#reconcileWorkspaceDirectory` makes for an ambiguous pair. That
    * also settles two threads naming one agent: the first in the ordering wins and the rest are reported.
    *
+   * The thread of a channel context or an external conversation is never adopted: it is not the agent's
+   * own chat. An agent that an earlier build gave one keeps it, because its chat history is there now;
+   * `ConversationRuntime` keeps one snapshot for such a thread.
+   *
    * The repair is one `#persist`, because `replaceAgents` runs `ensureThreadProjection` for every agent
    * that holds a thread, which is what rewrites the row's `agent_id` to the spelling the roster uses.
    * Nothing here may stop the app, so a thread this cannot place is counted and left alone.
@@ -1321,18 +1543,23 @@ export class AgentStore {
     agent.updatedAt = updatedAt;
   }
 
+  /** Whether this thread is an agent's own chat. It copies no agent, so a hot path can ask it. */
+  ownsThread(threadId: string): boolean {
+    return this.#state.agents.some((agent) => agent.threadId === threadId);
+  }
+
   activeProviderSession(id: string): ProviderSession | null {
     const agent = this.#requireAgent(id);
     if (!agent.threadId) return null;
     return this.#database.activeProviderSession(agent.threadId, agent.provider);
   }
 
-  bindProviderSession(id: string, externalSessionId: string): ProviderSession {
+  bindProviderSession(id: string, provider: AgentProviderId, externalSessionId: string): ProviderSession {
     const agent = this.#requireAgent(id);
     if (!agent.threadId) throw new Error(`Agent ${id} does not have an OpenBot thread.`);
     return this.#database.bindProviderSession({
       threadId: agent.threadId,
-      provider: agent.provider,
+      provider,
       externalSessionId,
       model: agent.model,
       effort: agent.reasoningEffort,
@@ -1362,7 +1589,13 @@ export class AgentStore {
         const attempt8 = yield* Effect.result(
           Effect.gen({ self: this }, function* () {
             try {
-              const parsed = JSON.parse(yield* storedIO(() => readFile(this.#statePath, "utf8")));
+              const contents = yield* storedIO(() => readFile(this.#statePath, "utf8"));
+              // A power loss left the file without content: no agent in it can be recovered.
+              if (isEmptyStoredFile(contents)) {
+                const empty: StoredState = { version: 2, examplesInitialized: false, agents: [] };
+                return empty;
+              }
+              const parsed = parseStoredJson(this.#statePath, contents, (value) => (isRecord(value) ? value : null));
               const stored = isRecord(parsed) ? parsed[LEGACY_AGENTS_STATE_KEY] : null;
               if (!isRecord(parsed) || !isBoolean(parsed.examplesInitialized) || !Array.isArray(stored)) {
                 throw new Error(sourceText("error.agent.stateCorrupt"));
@@ -1678,10 +1911,23 @@ function isStoredAgent(value: unknown): value is PersistedStoredAgent {
   const record = value;
   return (
     (record.provider === undefined || isOneOf(AGENT_PROVIDERS, record.provider)) &&
+    (record.sessionSettingOverrides === undefined || isAgentSessionSettingOverrides(record.sessionSettingOverrides)) &&
+    (record.sessionSettingResets === undefined || isAgentSessionSettingResets(record.sessionSettingResets)) &&
     (record.access === undefined || isAgentAccess(record.access)) &&
     (record.computerUse === undefined || isBoolean(record.computerUse)) &&
     (record.allowAutomation === undefined || isBoolean(record.allowAutomation)) &&
+    (record.allowNewChat === undefined || isBoolean(record.allowNewChat)) &&
+    (record.quickAcknowledgement === undefined || isBoolean(record.quickAcknowledgement)) &&
+    (record.ownBrowserSession === undefined || isBoolean(record.ownBrowserSession)) &&
+    (record.browserProfileId === undefined || isBrowserProfileId(record.browserProfileId)) &&
+    (record.fastMode === undefined || isBoolean(record.fastMode)) &&
     (record.busyMessageMode === undefined || isBusyMessageMode(record.busyMessageMode)) &&
+    (record.taskLimit === undefined || isAgentTaskLimit(record.taskLimit)) &&
+    (record.providerAccountId === undefined || isProviderAccountId(record.providerAccountId)) &&
+    (record.backupModels === undefined || isAgentBackupModels(record.backupModels)) &&
+    (record.usageLimitReturn === undefined || isAgentUsageLimitReturn(record.usageLimitReturn)) &&
+    (record.pendingRuntime === undefined || isAgentPendingRuntime(record.pendingRuntime)) &&
+    (record.hiddenAt === undefined || isHiddenAt(record.hiddenAt)) &&
     (record.background === undefined || isBoolean(record.background)) &&
     isAvatarSeed(record.avatarSeed) &&
     (record.avatarHue === null || isAvatarHue(record.avatarHue)) &&
@@ -1741,10 +1987,56 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     value.allowAutomation === undefined || isBoolean(value.allowAutomation)
       ? value.allowAutomation
       : reset("allowAutomation", undefined);
+  const allowNewChat =
+    value.allowNewChat === undefined || isBoolean(value.allowNewChat)
+      ? value.allowNewChat
+      : reset("allowNewChat", undefined);
+  const quickAcknowledgement =
+    value.quickAcknowledgement === undefined || isBoolean(value.quickAcknowledgement)
+      ? value.quickAcknowledgement
+      : reset("quickAcknowledgement", undefined);
+  const ownBrowserSession =
+    value.ownBrowserSession === undefined || isBoolean(value.ownBrowserSession)
+      ? value.ownBrowserSession
+      : reset("ownBrowserSession", undefined);
+  // An id this build cannot read leaves `ownBrowserSession`, which a profile always sets: the tabs
+  // then use the agent's own session, never the shared one.
+  const browserProfileId =
+    value.browserProfileId === undefined || isBrowserProfileId(value.browserProfileId)
+      ? value.browserProfileId
+      : reset("browserProfileId", undefined);
+  const fastMode =
+    value.fastMode === undefined || isBoolean(value.fastMode) ? value.fastMode : reset("fastMode", undefined);
   const busyMessageMode =
     value.busyMessageMode === undefined || isBusyMessageMode(value.busyMessageMode)
       ? value.busyMessageMode
       : reset("busyMessageMode", undefined);
+  const taskLimit =
+    value.taskLimit === undefined || isAgentTaskLimit(value.taskLimit)
+      ? value.taskLimit
+      : reset("taskLimit", undefined);
+  const providerAccountId =
+    value.providerAccountId === undefined || isProviderAccountId(value.providerAccountId)
+      ? value.providerAccountId
+      : reset("providerAccountId", undefined);
+  const backupModels =
+    value.backupModels === undefined || isAgentBackupModels(value.backupModels)
+      ? value.backupModels
+      : reset("backupModels", undefined);
+  const usageLimitReturn =
+    value.usageLimitReturn === undefined || isAgentUsageLimitReturn(value.usageLimitReturn)
+      ? value.usageLimitReturn
+      : reset("usageLimitReturn", undefined);
+  const pendingRuntime =
+    value.pendingRuntime === undefined || isAgentPendingRuntime(value.pendingRuntime)
+      ? value.pendingRuntime
+      : reset("pendingRuntime", undefined);
+  // A time this build cannot read keeps the agent hidden, at the time of the read: a user hid it,
+  // and showing it again would run its routines without a decision of the user.
+  const hiddenAt =
+    value.hiddenAt === undefined || isHiddenAt(value.hiddenAt)
+      ? value.hiddenAt
+      : reset("hiddenAt", new Date().toISOString());
   // Only `true` is kept. Anything else reads as an agent the user sees, which is how it was stored.
   const background =
     value.background === undefined || isBoolean(value.background) ? value.background : reset("background", undefined);
@@ -1764,6 +2056,14 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
       reset("marketplaceSource", undefined);
     }
   }
+  const sessionSettingResets =
+    value.sessionSettingResets === undefined || isAgentSessionSettingResets(value.sessionSettingResets)
+      ? value.sessionSettingResets
+      : reset("sessionSettingResets", undefined);
+  const sessionSettingOverrides =
+    value.sessionSettingOverrides === undefined || isAgentSessionSettingOverrides(value.sessionSettingOverrides)
+      ? value.sessionSettingOverrides
+      : reset("sessionSettingOverrides", undefined);
   const agent: PersistedStoredAgent = {
     id,
     name: isString(value.name) ? value.name : reset("name", titleFromId(id)),
@@ -1785,9 +2085,22 @@ function readStoredAgent(value: unknown): ReadStoredAgent | UnreadableStoredAgen
     ...(access === undefined ? {} : { access }),
     ...(computerUse === undefined ? {} : { computerUse }),
     ...(allowAutomation === undefined ? {} : { allowAutomation }),
+    ...(allowNewChat === undefined ? {} : { allowNewChat }),
+    ...(quickAcknowledgement === undefined ? {} : { quickAcknowledgement }),
+    ...(ownBrowserSession === undefined ? {} : { ownBrowserSession }),
+    ...(browserProfileId === undefined ? {} : { browserProfileId }),
+    ...(fastMode === undefined ? {} : { fastMode }),
     ...(busyMessageMode === undefined ? {} : { busyMessageMode }),
+    ...(taskLimit === undefined ? {} : { taskLimit }),
+    ...(providerAccountId === undefined ? {} : { providerAccountId }),
+    ...(backupModels === undefined ? {} : { backupModels }),
+    ...(usageLimitReturn === undefined ? {} : { usageLimitReturn }),
+    ...(pendingRuntime === undefined ? {} : { pendingRuntime }),
+    ...(hiddenAt === undefined ? {} : { hiddenAt }),
     ...(background === true ? { background } : {}),
     ...(createdBy === undefined ? {} : { createdBy }),
+    ...(sessionSettingOverrides === undefined ? {} : { sessionSettingOverrides }),
+    ...(sessionSettingResets === undefined ? {} : { sessionSettingResets }),
     ...(marketplaceSource === undefined ? {} : { marketplaceSource }),
   };
   return { agent, repaired };

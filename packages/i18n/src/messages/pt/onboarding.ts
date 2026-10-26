@@ -2,6 +2,10 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/onboarding";
 
 export const messages = {
+  "onboarding.readFailed.title": "O OpenBot não conseguiu ler sua configuração.",
+  "onboarding.readFailed.description":
+    "Seus dados locais não mudaram. Tente novamente. Se o problema continuar, configure o OpenBot de novo.",
+  "onboarding.readFailed.setUpAgain": "Configurar de novo",
   "onboarding.setup.saveFailed": "O OpenBot não conseguiu salvar sua configuração local.",
   "onboarding.setup.verifyFailed": "O OpenBot não conseguiu verificar este convite.",
   "onboarding.setup.connectFailed": "O OpenBot não conseguiu se conectar a este computador anfitrião.",
@@ -9,7 +13,7 @@ export const messages = {
   "onboarding.setup.remoteTitle": "Conectar a um computador anfitrião",
   "onboarding.setup.title": "Onde o OpenBot será executado?",
   "onboarding.setup.localDescription": "Agentes, conversas e arquivos ficam neste computador.",
-  "onboarding.setup.remoteDescription": "Use um convite da pessoa que executa seu computador anfitrião do OpenBot.",
+  "onboarding.setup.remoteDescription": "Use um convite da pessoa que gerencia o seu computador anfitrião do OpenBot.",
   "onboarding.setup.description":
     "Use este computador ou conecte-se a um computador anfitrião do OpenBot em outro local.",
   "onboarding.setup.back": "Voltar à escolha de conexão",
@@ -29,7 +33,7 @@ export const messages = {
   "onboarding.setup.otherInvitation": "Usar outro convite",
   "onboarding.setup.joinNote":
     "Você entrará como {email}. Convites por e-mail só funcionam para o endereço que os recebeu.",
-  "onboarding.setup.connect": "Conectar ao computador anfitrião",
+  "onboarding.setup.connect": "Conectar ao anfitrião",
   "onboarding.setup.reviewInvitation": "Revisar convite",
   "onboarding.setup.continueWith": "Continuar com {provider}",
   "onboarding.setup.chooseProvider": "Escolher um provedor",
@@ -39,6 +43,9 @@ export const messages = {
   "onboarding.provider.googlePlan": "Plano Google AI Pro ou Ultra",
   "onboarding.provider.cursorPlan": "Plano Cursor ou chave de API",
   "onboarding.provider.clineAccount": "Modelos gratuitos com uma conta Cline",
+  "onboarding.provider.inceptionKey": "Modelos Mercury com uma chave de API da Inception",
+  "onboarding.provider.deepseekKey": "Modelos da DeepSeek com uma chave de API da DeepSeek",
+  "onboarding.provider.openrouterKey": "Muitos modelos com uma chave de API do OpenRouter",
   "onboarding.provider.tryFree": "Experimente grátis",
   "onboarding.provider.noSignIn": "Não precisa entrar em uma conta",
   "onboarding.provider.more": "Mais provedores",
@@ -59,13 +66,13 @@ export const messages = {
   "onboarding.next.connecting": "{provider} está se conectando.",
   "onboarding.next.connect": "Conecte {provider} para continuar.",
   "onboarding.error.installGuide": "O OpenBot não conseguiu abrir o guia de instalação de {provider}.",
-  "onboarding.error.signInGuide": "O OpenBot não conseguiu abrir o guia de acesso de {provider}.",
+  "onboarding.error.signInGuide": "O OpenBot não conseguiu abrir o guia de login de {provider}.",
   "onboarding.error.connect": "O OpenBot não conseguiu conectar {provider}. Tente novamente.",
   "onboarding.error.download": "O OpenBot não conseguiu baixar {provider}. Tente novamente.",
   "onboarding.error.cancelDownload": "O OpenBot não conseguiu cancelar o download de {provider}. Tente novamente.",
   "onboarding.error.refresh": "O OpenBot não conseguiu atualizar seus provedores locais de IA. Tente novamente.",
   "onboarding.error.finish": "O OpenBot não conseguiu concluir a configuração.",
-  "onboarding.toast.connecting": "Conectando {provider}. Conclua o acesso se uma janela do navegador abrir.",
+  "onboarding.toast.connecting": "Conectando {provider}. Conclua o login se uma janela do navegador abrir.",
   "onboarding.progress": "Etapa {step} de {total} da configuração inicial",
   "onboarding.choice.title": "Monte sua equipe de IA.",
   "onboarding.choice.description": "Escolha uma opção. Você pode alterar isso depois.",
@@ -73,7 +80,7 @@ export const messages = {
   "onboarding.choice.freeDetail": "Modelos gratuitos. Sem assinatura.",
   "onboarding.choice.subscription": "Tenho uma assinatura",
   "onboarding.choice.subscriptionDetail": "ChatGPT, Claude ou Grok",
-  "onboarding.choice.startFreeInstead": "Começar grátis em vez disso",
+  "onboarding.choice.startFreeInstead": "Prefiro começar grátis",
   "onboarding.plan.title": "Conecte seu plano",
   "onboarding.plan.description": "Entre uma vez. Seus agentes usam seu plano.",
   "onboarding.computer.title": "O OpenBot pode controlar seu computador",
@@ -86,6 +93,6 @@ export const messages = {
   "onboarding.server.description":
     "O OpenBot não inclui uma assinatura de IA. Conecte seu próprio provedor a este servidor antes de criar um agente.",
   "onboarding.server.label": "Escolha o provedor de IA deste servidor",
-  "onboarding.server.hint": "O acesso à conta fica no servidor. Você pode alterar o provedor de cada agente depois.",
+  "onboarding.server.hint": "O login fica no servidor. Você pode alterar o provedor de cada agente depois.",
   "onboarding.server.continue": "Continuar",
 } as const satisfies PartialTranslation<typeof source>;

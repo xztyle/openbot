@@ -6,8 +6,8 @@ import { type InviteLinkOptions, type InviteLinkPayload, parseInviteUrl } from "
 import type {
   AgentEvent,
   AgentImportPreview,
-  AgentSummary,
   AvatarImageInput,
+  ClientAgentSummary,
   ConversationPage,
   ConversationPageAnchor,
   ConversationReadState,
@@ -24,7 +24,10 @@ import type {
   DirectTypingRealtimeEvent,
   DraftAttachment,
   DuplicateAgentResult,
+  ExportInstanceInput,
   HostedServerIssue,
+  HostedServerStartStep,
+  InstanceTransferPreview,
   InvitePreview,
   InviteSummary,
   JoinServerInput,
@@ -40,10 +43,12 @@ import type {
   TeamMemberSummary,
   TeamPresenceSnapshot,
   TeamRealtimeEvent,
+  TeamRole,
   UpdateTeamMemberInput,
 } from "@openbot/contracts/ipc";
 import {
   decodeRemoteAgentImportPreview,
+  decodeRemoteInstanceTransferPreview,
   LOCAL_SERVER_ID,
   REMOTE_DESKTOP_SETUP_CAPABILITY,
   type RemoteDesktopTestInput,
@@ -53,10 +58,20 @@ import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { AGENT_IMPORT_ROUTES } from "@openbot/contracts/team-protocol/agent-import-v1";
 import { decodeBrowserViewSessionResponse } from "@openbot/contracts/team-protocol/browser-view-v1";
 import { TEAM_MEMBER_LEAVE_CAPABILITY, type TeamCurrentCapability } from "@openbot/contracts/team-protocol/current";
+import { FOCUS_USE_CAPABILITY, FOCUS_USE_ROUTES } from "@openbot/contracts/team-protocol/focus-use-v1";
 import type { HostRestartEvent } from "@openbot/contracts/team-protocol/host-update-v1";
+import { INSTANCE_TRANSFER_ROUTES } from "@openbot/contracts/team-protocol/instance-transfer-v1";
 import { decodeTeamProtocolV1CurrentHttpResponse } from "@openbot/contracts/team-protocol/v1-adapter";
 import { sourceText } from "@openbot/i18n/source";
-import { WAKE_RECONNECT_STATES } from "@openbot/team-client/hosted-server-wake";
+import { createFocusUsePing } from "@openbot/team-client/focus-use";
+import { followHostKeyHandovers } from "@openbot/team-client/host-key-handover";
+import {
+  HOSTED_HOST_READY_LIMIT_MS,
+  HOSTED_START_FAILED_READS,
+  HOSTED_START_POLL_MS,
+  hostedStartStep,
+  WAKE_RECONNECT_STATES,
+} from "@openbot/team-client/hosted-server-wake";
 import { Deferred, Effect, Exit, Layer, Result, Scope, Semaphore } from "effect";
 import type { CentralAuthOperationError } from "./central-auth-effects";
 import { contentDispositionFileName } from "./content-disposition";
@@ -78,14 +93,14 @@ import {
 } from "./remote-conversation-decoding";
 import { decodeRemoteDesktopSetupFromHost, decodeRemoteDesktopTestFromHost } from "./remote-desktop-setup-decoding";
 import { decodeRemoteDesktopSession } from "./remote-device-decoding";
-import { decodeVoid, type ResponseDecoder } from "./remote-host-decoding";
+import { acceptEmpty, decodeVoid, type ResponseDecoder } from "./remote-host-decoding";
 import { type RemoteRequestInit, RemoteServerClient } from "./remote-server-client";
 import { RemoteServerConnections } from "./remote-server-connections";
 import { RemoteProtocolError, RemoteRequestError } from "./remote-server-errors";
 import { RemoteEventRefresh } from "./remote-server-event-refresh";
 import { RemoteEventStream } from "./remote-server-event-stream";
-import { reconcileWebRtcHosts } from "./remote-server-host-directory";
-import { requestJson } from "./remote-server-http";
+import { followedHostKeyHandovers, reconcileWebRtcHosts, verifyHostKeySignature } from "./remote-server-host-directory";
+import { requestJson, throwRemoteResponseError } from "./remote-server-http";
 import { RemotePresenceCache } from "./remote-server-presence";
 import { RemoteServerStore, type TokenCipher } from "./remote-server-store";
 import type { StoredRemoteServer } from "./remote-server-stored-shape";
@@ -153,6 +168,8 @@ export interface HostedServerWakeHooks {
   unavailable: OmitThisParameter<HostedServerDesktopService["unavailableHost"]>;
   /** The user's input starts a sleeping server. */
   wake: OmitThisParameter<HostedServerDesktopService["wake"]>;
+  /** The state of a server that starts, read while the client waits for it. */
+  status: OmitThisParameter<HostedServerDesktopService["status"]>;
 }
 
 export interface DevelopmentRemoteServerConnection {
@@ -163,17 +180,17 @@ export interface DevelopmentRemoteServerConnection {
   publicKey: string;
   username: string;
   sessionToken: string;
+  /** The role that the host gives the technical member. A file from an older host has none. */
+  role?: TeamRole | undefined;
 }
 
 const REMOTE_DUPLICATION_TIMEOUT_MS = TEAM_WEBRTC_REMOTE_REQUEST_TIMEOUT_MILLISECONDS;
 /** An export of up to 100 MB goes up and is read in one request, and apply creates many agents. */
 export const AGENT_IMPORT_UPLOAD_TIMEOUT_MS = TEAM_WEBRTC_REMOTE_REQUEST_TIMEOUT_MILLISECONDS;
 // How long a host that restarts into an update keeps the fast retry after Signal first misses it. A
-// host that is not back by then is offline, as any other host.
-const HOST_RESTART_RETRY_MS = 10 * 60_000;
-// How long a hosted server keeps the short retry after a wake request. It boots in about a minute; a
-// server that is not back by then is asked about again.
-const HOSTED_SERVER_START_MS = 5 * 60_000;
+// host that is not back by then is offline, as any other host. A hosted server restarts its whole
+// machine and restores its disk; one took 18 minutes.
+const HOST_RESTART_RETRY_MS = 30 * 60_000;
 export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   readonly #scope = Scope.makeUnsafe();
   readonly #platform: Layer.Layer<RemoteRequest>;
@@ -202,12 +219,21 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   readonly #hostedServers: HostedServerWakeHooks | null;
   /** When each hosted server that starts after a wake request started. */
   readonly #hostedStartAt = new Map<string, number>();
+  /** When the account server first reported each starting server `running`: OpenBot on it starts. */
+  readonly #hostedRunningSince = new Map<string, number>();
+  /** The status reads in a row that failed, for each starting server. */
+  readonly #hostedFailedReads = new Map<string, number>();
   readonly #hostedWakePending = new Set<string>();
   readonly #hostedStartRevision = new Map<string, number>();
+  /** The next status read of each hosted server that starts. */
   readonly #hostedStartTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  /** Hosted servers that did not come online in the start time. Only the user's next wake starts them again. */
+  /** Hosted servers whose host did not connect in the start time. Only the user's next wake starts them again. */
   readonly #hostedStartExpired = new Set<string>();
   #appFocused = true;
+  /** The selected hosted server keeps running while this window has focus (`focus-use-v1`). */
+  readonly #focusUse = createFocusUsePing((serverId) =>
+    this.#background(this.request(serverId, FOCUS_USE_ROUTES.ping, acceptEmpty, { method: "POST", body: {} })),
+  );
   readonly #remoteViewerProxy: RemoteViewerProxy | null;
   #selections = Semaphore.makeUnsafe(1);
   /** One read of the account's host list at a time, so an older answer cannot replace a newer one. */
@@ -357,7 +383,12 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#webrtcTransport?.on("error", (serverId, code, message) => {
       // Each failure checks the start time, so a start that fails for another reason also ends.
       const hostedStarting = this.#awaitsHostedStart(serverId);
-      if (code === "host_unavailable" && !this.#awaitsHostRestart(serverId) && !hostedStarting) {
+      // A failure to connect also checks the restart time: the workspace shows "Updating" until it ends.
+      // An error on a live connection, such as `rate_limited`, does not start that time.
+      const hostRestarting =
+        (code === "host_unavailable" || !this.#webrtcTransport?.isConnected(serverId)) &&
+        this.#awaitsHostRestart(serverId);
+      if (code === "host_unavailable" && !hostRestarting && !hostedStarting) {
         this.#events.markHostOffline(serverId);
         // A hosted server that another reason stopped starts again only for the selected server with the
         // app in focus. A server that sleeps waits for the user's input.
@@ -530,6 +561,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     focused: boolean,
   ) {
     this.#appFocused = focused;
+    this.#syncFocusUse();
     yield* this.#events.setAppFocused(focused);
   }).bind(this);
 
@@ -555,6 +587,11 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
 
   get activeServerId(): string {
     return this.#store.activeServerId;
+  }
+
+  /** The servers that a chat window shows. Their hosts keep sending chat events. */
+  setChatWindowServers(serverIds: ReadonlySet<string>): void {
+    this.#events.setChatWindowServers(serverIds);
   }
 
   // What the host on the other end negotiated it can do. An IPC handler asks before calling a route
@@ -599,7 +636,12 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#emitChanged();
     yield* this.startEventConnections();
     if (this.#connections.hostedSleepFor(serverId) === "sleeping") yield* this.#wakeHostedServer(serverId);
-    else if (this.#events.isHostOffline(serverId)) yield* this.#checkHostedServer(serverId, true);
+    else {
+      if (this.#events.isHostOffline(serverId)) yield* this.#checkHostedServer(serverId, true);
+      // A host that dropped recently waits on its reconnect backoff, up to minutes. Without this the
+      // selected server showed "Connecting" until that timer fired.
+      yield* this.#events.retryNow(serverId);
+    }
     return this.list();
   });
 
@@ -673,7 +715,20 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
         if (preview.hostId !== invite.serverId)
           return yield* new RemoteWorkflowError({ cause: new Error(sourceText("error.remote.inviteHostMismatch")) });
         const publicKey = preview.devicePublicKey;
-        if (!publicKey || (yield* remoteDecode(() => fingerprint(publicKey))) !== invite.fingerprint) {
+        const hostFingerprint = publicKey ? yield* remoteDecode(() => fingerprint(publicKey)) : "";
+        // The invitation names the key that the host had when it made the invitation. A signed handover
+        // chain from that key to the current one keeps the invitation valid after a key rotation.
+        if (
+          !publicKey ||
+          (hostFingerprint !== invite.fingerprint &&
+            !(yield* followHostKeyHandovers({
+              hostId: invite.serverId,
+              trustedFingerprint: invite.fingerprint,
+              advertisedPublicKey: publicKey,
+              handovers: preview.keyHandovers,
+              verify: verifyHostKeySignature,
+            })))
+        ) {
           return yield* new RemoteWorkflowError({
             cause: new Error(sourceText("error.remote.inviteIdentityMismatch")),
           });
@@ -686,7 +741,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
         yield* this.#store.unhideHost(accepted.hostId);
         yield* this.#syncWebRtcHosts();
         const synchronized = this.#store.find(accepted.hostId);
-        if (!synchronized || synchronized.fingerprint !== invite.fingerprint) {
+        if (!synchronized || synchronized.fingerprint !== hostFingerprint) {
           return yield* new RemoteWorkflowError({
             cause: new Error(sourceText("error.remote.inviteIdentityChanged")),
           });
@@ -777,7 +832,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
         encryptedToken: yield* remoteDecode(() => this.#store.sealToken(input.sessionToken)),
         remoteDesktopAvailable: false,
         logoVersion: verifiedIdentity.logoVersion,
-        role: "member",
+        role: input.role ?? "member",
       };
       this.#connections.setCompatibility(stored.id, verifiedIdentity.compatibility);
       this.#connections.clearIssue(stored.id);
@@ -950,7 +1005,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
           this.#events.resumeReconnect(serverId);
           this.#connections.setState(serverId, "connecting");
           this.#emitChanged();
-          yield* transport.connect(serverId);
+          yield* transport.retry(serverId);
           // The `connected` handler is what turns that "connecting" back into "online", and a host
           // that was already connected raises no such event -- the session it would announce is the
           // one still running. Retrying a host whose channel had never actually dropped therefore
@@ -1021,9 +1076,9 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
 
   /**
    * A wake request started this hosted server: show that it starts, and reconnect each few seconds
-   * until it answers. The account client calls it for each wake, also one from settings.
+   * until it answers. The account client calls it for each wake, also one from settings, with the reply.
    */
-  hostedServerStarting(serverId: string): void {
+  hostedServerStarting(serverId: string, server?: Parameters<typeof hostedStartStep>[0]): void {
     if (this.#stopping || !this.#store.has(serverId) || this.#connections.stateFor(serverId) === "online") return;
     this.#hostedStartRevision.set(serverId, (this.#hostedStartRevision.get(serverId) ?? 0) + 1);
     if (this.#connections.statusFor(serverId).hostedIssue === "plan_ended") this.#events.resumeReconnect(serverId);
@@ -1032,14 +1087,94 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#connections.setHostedIssue(serverId, null);
     if (!this.#hostedStartAt.has(serverId)) {
       this.#hostedStartAt.set(serverId, Date.now());
-      this.#hostedStartTimers.set(
-        serverId,
-        setTimeout(() => this.#expireHostedStart(serverId), HOSTED_SERVER_START_MS),
-      );
+      this.#scheduleHostedStartRead(serverId);
     }
     this.#events.setHostStarting(serverId, true);
-    if (this.#connections.setHostedSleep(serverId, "waking")) this.#emitChanged();
+    const sleepChanged = this.#connections.setHostedSleep(serverId, "waking");
+    const step = (server && hostedStartStep(server)) ?? this.#connections.statusFor(serverId).hostedStart?.step;
+    if (this.#applyHostedStartStep(serverId, step ?? "machine") || sleepChanged) this.#emitChanged();
   }
+
+  /**
+   * The client waits while the account server reports that the server starts. Only OpenBot on a running
+   * machine has a time limit, `HOSTED_HOST_READY_LIMIT_MS`. Answers whether the visible step changed.
+   */
+  #applyHostedStartStep(serverId: string, step: HostedServerStartStep): boolean {
+    const startedAt = this.#hostedStartAt.get(serverId);
+    if (startedAt === undefined) return false;
+    if (step !== "openbot") this.#hostedRunningSince.delete(serverId);
+    else if (!this.#hostedRunningSince.has(serverId)) this.#hostedRunningSince.set(serverId, Date.now());
+    const runningSince = this.#hostedRunningSince.get(serverId);
+    if (runningSince !== undefined && Date.now() - runningSince >= HOSTED_HOST_READY_LIMIT_MS) {
+      this.#expireHostedStart(serverId);
+      return false;
+    }
+    return this.#connections.setHostedStart(serverId, { step, startedAt });
+  }
+
+  #scheduleHostedStartRead(serverId: string): void {
+    clearTimeout(this.#hostedStartTimers.get(serverId));
+    this.#hostedStartTimers.set(
+      serverId,
+      setTimeout(() => {
+        this.#hostedStartTimers.delete(serverId);
+        Effect.runFork(
+          Effect.forkIn(
+            this.#owned(this.#readHostedStart(serverId)).pipe(Effect.catch(() => Effect.void)),
+            this.#scope,
+          ),
+        );
+      }, HOSTED_START_POLL_MS),
+    );
+  }
+
+  readonly #readHostedStart = Effect.fn("RemoteManager.readHostedStart")(function* (
+    this: RemoteServerManager,
+    serverId: string,
+  ) {
+    const hosted = this.#hostedServers;
+    if (!hosted || this.#stopping || !this.#hostedStartAt.has(serverId)) return;
+    const revision = this.#hostedStartRevision.get(serverId) ?? 0;
+    const status = yield* hosted.status(serverId).pipe(Effect.catch(() => Effect.succeed(null)));
+    if (
+      this.#stopping ||
+      !this.#hostedStartAt.has(serverId) ||
+      !this.#store.has(serverId) ||
+      this.#connections.stateFor(serverId) === "online"
+    )
+      return;
+    // A wake during the read changed the start. Its state is read again later.
+    if ((this.#hostedStartRevision.get(serverId) ?? 0) !== revision) {
+      this.#scheduleHostedStartRead(serverId);
+      return;
+    }
+    // A failed read is also a reason the host is offline. The client reads again, up to a limit.
+    const failedReads = status ? 0 : (this.#hostedFailedReads.get(serverId) ?? 0) + 1;
+    this.#hostedFailedReads.set(serverId, failedReads);
+    if (failedReads >= HOSTED_START_FAILED_READS) {
+      this.#expireHostedStart(serverId);
+      return;
+    }
+    const step = status && !status.sleeping ? hostedStartStep(status) : null;
+    if (status && !step) {
+      this.#clearHostedStart(serverId);
+      this.#events.setHostStarting(serverId, false);
+      if (status.sleeping) {
+        this.#connections.setHostedSleep(serverId, "sleeping");
+      } else {
+        this.#connections.setHostedSleep(serverId, null);
+        this.#connections.setHostedIssue(serverId, status.error === "plan_ended" ? "plan_ended" : "wake_failed");
+        if (status.error === "plan_ended") this.#events.suspendReconnect(serverId);
+      }
+      this.#emitChanged();
+      return;
+    }
+    // A wake starts a stopped server, and sends a refused start again when its delay ends.
+    if (step === "provider_limit" || status?.state === "stopped")
+      yield* Effect.forkIn(hosted.wake(serverId).pipe(Effect.ignore), this.#scope);
+    if (step && this.#applyHostedStartStep(serverId, step)) this.#emitChanged();
+    if (this.#hostedStartAt.has(serverId)) this.#scheduleHostedStartRead(serverId);
+  });
 
   #wakeHostedServer(serverId: string): Effect.Effect<void> {
     const hosted = this.#hostedServers;
@@ -1116,19 +1251,18 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     this.#emitChanged();
   });
 
-  /** A hosted server starts after a wake request, so a missed connection is not news until the start time ends. */
+  /** A hosted server starts after a wake request, so a missed connection is not news until the start ends. */
   #awaitsHostedStart(serverId: string): boolean {
-    const since = this.#hostedStartAt.get(serverId);
-    if (since === undefined) return false;
-    if (Date.now() - since < HOSTED_SERVER_START_MS) return true;
-    this.#expireHostedStart(serverId);
-    return false;
+    return this.#hostedStartAt.has(serverId);
   }
 
   #clearHostedStart(serverId: string): void {
     clearTimeout(this.#hostedStartTimers.get(serverId));
     this.#hostedStartTimers.delete(serverId);
     this.#hostedStartAt.delete(serverId);
+    this.#hostedRunningSince.delete(serverId);
+    this.#hostedFailedReads.delete(serverId);
+    this.#connections.setHostedStart(serverId, null);
   }
 
   #expireHostedStart(serverId: string): void {
@@ -1589,13 +1723,70 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     (operation) => this.#owned(operation),
   ).bind(this);
 
+  /** Sends an OpenBot transfer file to the host with `instance-transfer-v1` and answers its preview. */
+  readonly stageInstanceTransfer = Effect.fn("RemoteManager.stageInstanceTransfer")(
+    function* (
+      this: RemoteServerManager,
+      serverId: string,
+      bytes: Uint8Array,
+    ): Effect.fn.Return<InstanceTransferPreview, RemoteWorkflowError, RemoteRequest> {
+      const server = yield* remoteDecode(() => this.#store.require(serverId));
+      const url = new URL(INSTANCE_TRANSFER_ROUTES.stage, server.apiUrl);
+      const response = yield* this.#client.fetch(
+        server,
+        url,
+        { method: "POST", headers: { "Content-Type": "application/zip" }, body: Buffer.from(bytes) },
+        true,
+        AGENT_IMPORT_UPLOAD_TIMEOUT_MS,
+      );
+      yield* this.#rejectHostError(response, url);
+      const value = yield* remoteCall(() => response.json());
+      return yield* remoteDecode(() => decodeRemoteInstanceTransferPreview(value));
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /** The host's transfer file, made with `instance-transfer-v1`. */
+  readonly downloadInstanceTransfer = Effect.fn("RemoteManager.downloadInstanceTransfer")(
+    function* (
+      this: RemoteServerManager,
+      serverId: string,
+      input: ExportInstanceInput,
+    ): Effect.fn.Return<Uint8Array, RemoteWorkflowError, RemoteRequest> {
+      const server = yield* remoteDecode(() => this.#store.require(serverId));
+      const url = new URL(INSTANCE_TRANSFER_ROUTES.export, server.apiUrl);
+      const response = yield* this.#client.fetch(
+        server,
+        url,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
+        true,
+        AGENT_IMPORT_UPLOAD_TIMEOUT_MS,
+      );
+      yield* this.#rejectHostError(response, url);
+      return new Uint8Array(yield* remoteCall(() => response.arrayBuffer()));
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /**
+   * The WebRTC path of `fetch` answers a host error as a response, not a failure. A transfer must not
+   * read that error as a file or a preview.
+   */
+  #rejectHostError(response: Response, url: URL) {
+    return response.ok
+      ? Effect.void
+      : throwRemoteResponseError(response, "POST", url.pathname).pipe(
+          Effect.mapError((cause) => new RemoteWorkflowError({ cause })),
+        );
+  }
+
   readonly setAgentAvatar = Effect.fn("RemoteManager.setAgentAvatar")(
     function* (
       this: RemoteServerManager,
       agentId: string,
       image: AvatarImageInput | null,
       serverId = this.#store.activeServerId,
-    ): Effect.fn.Return<AgentSummary, RemoteWorkflowError, RemoteRequest> {
+    ): Effect.fn.Return<ClientAgentSummary, RemoteWorkflowError, RemoteRequest> {
       const server = yield* remoteDecode(() => this.#store.require(serverId));
       const url = new URL(TEAM_API_ROUTES.agent.avatar(agentId), server.apiUrl);
       const headers = new Headers();
@@ -1603,7 +1794,7 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       const response = yield* this.#client.fetch(server, url, {
         method: image ? "PUT" : "DELETE",
         headers,
-        body: image ? Buffer.from(image.bytes) : undefined,
+        ...(image ? { body: Buffer.from(image.bytes) } : {}),
       });
       const json = yield* remoteCall(() => response.json());
       const value = yield* remoteDecode(() =>
@@ -1667,22 +1858,27 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
       this: RemoteServerManager,
       attachmentId: string,
       serverId = this.#store.activeServerId,
+      preview = false,
     ): Effect.fn.Return<RemoteAttachment, RemoteWorkflowError, RemoteRequest> {
       const server = yield* remoteDecode(() => this.#store.require(serverId));
-      return yield* this.#attachments.get(server.id, attachmentId, () =>
-        this.#owned(
-          Effect.gen({ self: this }, function* () {
-            const response = yield* this.#client.fetch(
-              server,
-              new URL(TEAM_API_ROUTES.attachment(attachmentId), server.apiUrl),
-            );
-            return {
-              bytes: new Uint8Array(yield* remoteCall(() => response.arrayBuffer())),
-              name: contentDispositionFileName(response.headers.get("content-disposition"), attachmentId),
-              mimeType: response.headers.get("content-type") ?? "application/octet-stream",
-            };
-          }),
-        ),
+      return yield* this.#attachments.get(
+        server.id,
+        attachmentId,
+        () =>
+          this.#owned(
+            Effect.gen({ self: this }, function* () {
+              const response = yield* this.#client.fetch(
+                server,
+                new URL(TEAM_API_ROUTES.attachment(attachmentId), server.apiUrl),
+              );
+              return {
+                bytes: new Uint8Array(yield* remoteCall(() => response.arrayBuffer())),
+                name: contentDispositionFileName(response.headers.get("content-disposition"), attachmentId),
+                mimeType: response.headers.get("content-type") ?? "application/octet-stream",
+              };
+            }),
+          ),
+        preview,
       );
     },
     (operation) => this.#owned(operation),
@@ -1732,7 +1928,8 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     const done = Deferred.makeUnsafe<void, RemoteWorkflowError>();
     this.#stopping = done;
     return yield* Effect.gen({ self: this }, function* () {
-      for (const serverId of this.#hostedStartTimers.keys()) this.#clearHostedStart(serverId);
+      for (const serverId of [...this.#hostedStartAt.keys()]) this.#clearHostedStart(serverId);
+      this.#focusUse.dispose();
       yield* this.#events.stop();
       this.#refresh.clear();
       this.#client.clear();
@@ -1787,8 +1984,14 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
     const email = yield* remoteDecode(() => this.#centralAccount.getEmail());
     const localHostId = this.#getLocalHostId();
     this.#localMemberLimit = hosts.find((host) => host.hostId === localHostId)?.memberLimit ?? null;
+    const followedHandovers = yield* followedHostKeyHandovers({
+      hosts,
+      servers: this.#store.servers,
+      preservedIdentities: this.#store.preservedIdentities,
+    });
     const { servers, removedHostIds, staleTransportHostIds, pinnedKeys } = reconcileWebRtcHosts({
       hosts,
+      followedHandovers,
       isConnected: (hostId) => transport.isConnected(hostId),
       servers: this.#store.servers,
       preservedIdentities: this.#store.preservedIdentities,
@@ -1852,7 +2055,18 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
   }
 
   #emitChanged(): void {
+    this.#syncFocusUse();
     this.emit("changed", this.list());
+  }
+
+  #syncFocusUse(): void {
+    const serverId = this.#store.activeServerId;
+    const focused =
+      !this.#stopping &&
+      this.#appFocused &&
+      this.#connections.stateFor(serverId) === "online" &&
+      this.supportsCapability(serverId, FOCUS_USE_CAPABILITY);
+    this.#focusUse.setTarget(focused ? serverId : null);
   }
 }
 

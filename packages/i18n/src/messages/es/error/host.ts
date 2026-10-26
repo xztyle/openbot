@@ -3,6 +3,9 @@ import type { messages as source } from "../../en/error/host";
 
 export const messages = {
   "error.host.iceServersMissing": "Remote Signal no ha proporcionado servidores ICE.",
+  "error.host.keyRotationUnavailable": "Este servidor no puede cambiar su clave sin el servicio de cuentas.",
+  "error.host.keyRotationRefused":
+    "El servicio de cuentas no aceptó la nueva clave del servidor. La clave actual sigue en uso.",
   "error.host.webRtcNotConfigured": "El servicio de host WebRTC no está configurado.",
   "error.host.runtimeNotInstalled": "El entorno de ejecución del escritorio remoto no está instalado.",
   "error.host.setupUnavailable": "La configuración de permisos no está disponible.",
@@ -15,11 +18,12 @@ export const messages = {
   "error.host.ownerIdentityUnavailable": "La identidad del propietario del host no está disponible.",
   "error.host.reserveAddressFailed": "No se pudo reservar la dirección pública.",
   "error.host.publishFailed": "No se pudo publicar este OpenBot.",
-  "error.host.mobileConnectPublishFailed": "No se pudo publicar este OpenBot para Mobile Connect.",
-  "error.host.mobileConnectHostChanged": "El host de Mobile Connect cambió. Inténtalo de nuevo.",
+  "error.host.mobileConnectPublishFailed": "No se pudo publicar este OpenBot para la conexión móvil.",
+  "error.host.mobileConnectHostChanged": "El host de la conexión móvil cambió. Inténtalo de nuevo.",
   "error.host.noServer": "Este equipo no tiene ningún servidor que se pueda cambiar.",
   "error.host.identityLocalOnly":
     "El nombre y el logotipo del servidor solo se pueden cambiar en el equipo que lo ejecuta.",
+  "error.host.timezoneInvalid": "Esta zona horaria no es conocida.",
   "error.host.maintenanceInterrupted":
     "Se interrumpió el mantenimiento del host. Verifica la aplicación y restablece el estado del host antes de intentarlo de nuevo.",
   "error.host.updateFailed":

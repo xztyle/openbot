@@ -3,6 +3,7 @@ import {
   agentProviderDescriptor,
   agentProviderName,
   type BusyMessageMode,
+  canAdministerServer,
   type UpdateAgentHostSettingsInput,
 } from "@openbot/contracts/ipc";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
@@ -10,14 +11,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Typography } from "heroui-native";
 import { useState } from "react";
 import { useUniwind } from "uniwind";
-import { useMobileSession } from "@/features/auth/context/mobile-session-context";
+import { useQueryScope } from "@/features/auth/context/mobile-session-context";
 import { SettingsRow, SettingsSection } from "@/features/settings/components/settings-content";
 import { SettingsPicker, SettingsSwitch } from "@/features/settings/components/settings-controls";
 import {
   type MobileAgent,
   type MobileServer,
-  useMobileWorkspace,
+  useMobileWorkspaceActions,
 } from "@/features/workspace/context/mobile-workspace-context";
+import { queryKeys } from "@/features/workspace/model/query-keys";
 import { haptics } from "@/shared/lib/haptics";
 import { useText } from "@/shared/lib/text";
 
@@ -48,15 +50,15 @@ interface AgentHostFieldsProps {
  */
 function useAgentHostSettings({ agent, server, available }: AgentHostFieldsProps) {
   const { t, errorMessage } = useText();
-  const workspace = useMobileWorkspace();
-  const { session, sessionScope } = useMobileSession();
+  const workspace = useMobileWorkspaceActions();
+  const queryScope = useQueryScope();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canAdminister = server?.role === "owner" || server?.role === "admin";
+  const canAdminister = canAdministerServer(server?.role);
   // Under "agent-info" and ending in "host": the host's `agents-changed` event reads it again, so a
   // change made on another device shows here while the page is open.
-  const queryKey = ["agent-info", session?.apiUrl, session?.user.id, sessionScope, agent.serverId, agent.id, "host"];
+  const queryKey = queryKeys.agentRecord(queryScope, agent.serverId, agent.id, "host");
   const settings = useQuery({
     queryKey,
     queryFn: () => workspace.loadAgentHostSettings(agent.id, agent.serverId),

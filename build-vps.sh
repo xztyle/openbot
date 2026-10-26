@@ -83,7 +83,8 @@ copy() { # copy <from-dir> <to-dir> <relative path>...
 }
 # deps: everything `bun install --frozen-lockfile` and the root postinstall read.
 copy "$full" "$contexts/deps" package.json bun.lock bunfig.toml patches packages/logging \
-  scripts/stamp-install.ts scripts/setup-mobile-skia.ts scripts/install-git-hooks.ts \
+  scripts/stamp-install.ts scripts/install-git-hooks.ts \
+  scripts/electron-dist-cache.ts scripts/install-electron.ts \
   scripts/prepare-dev-environment.ts scripts/development-secrets.ts src/main/development-profile.ts
 (cd "$full" && find . -name package.json -not -path '*/node_modules/*' -print0) |
   while IFS= read -r -d '' manifest; do copy "$full" "$contexts/deps" "${manifest#./}"; done

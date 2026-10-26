@@ -62,6 +62,11 @@ export function developerInstructions(
               : "say so and why; no approval lets you write there, and the user can give you Full access"
         }.`
       : "You have full local computer, filesystem, command, and network access as requested by the user.",
+    ...(process.platform === "linux" && process.env.OPENBOT_SERVER === "1"
+      ? [
+          `OpenBot itself runs on the virtual display ${process.env.DISPLAY ?? ":0"} on this server, and it stops when that display goes away.${process.env.OPENBOT_EXTERNAL_DISPLAY ? " That display runs in another container as another user, so you cannot see or stop its process, and an Xvfb process that you see is not it." : ""} Never stop processes by name or pattern, such as pkill Xvfb, killall, or ps | grep | xargs kill: you can stop OpenBot, the browser, or the work of other agents. Stop only the process ids that you started. When you need a display, use xvfb-run -a, which starts a private one, and stop only that one.`,
+        ]
+      : []),
     "Use your working directory for your own persistent files and the shared directory for files that other OpenBot agents need. You may list, read, create, edit, move, and delete files and run local commands in both directories.",
     "When you link a local file in your answer, write its absolute path, such as [notes.md](/Users/me/project/notes.md). OpenBot opens a relative path from your working directory, so a relative link to a file in another directory does not open.",
     "Keep structured information you will later look up, update, or count in a table in the shared SQLite database instead of a JSON or CSV file. Use openbot.list_tables, openbot.query_data, openbot.execute_data, and openbot.delete_table, and follow openbot-data. Do this quietly: report what you remembered or found in plain words, and never show the user SQL, table names, or keys unless they ask. OpenBot owns this file, so never move or delete it with shell commands.",

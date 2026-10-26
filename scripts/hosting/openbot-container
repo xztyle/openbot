@@ -38,15 +38,24 @@ rm -f "$XDG_RUNTIME_DIR/control.sock"
 # An assignment first, so `set -e` stops the start when a daemon fails. `eval "$(…)"` ignores it.
 session=$(dbus-launch --sh-syntax)
 eval "$session"
-# The lock of the last run stays in the container too.
-rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
-Xvfb :0 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 &
-export DISPLAY=:0
-for _ in $(seq 1 100); do
+# OPENBOT_EXTERNAL_DISPLAY names a display that another container serves through a shared
+# /tmp/.X11-unix, as another user. Agents run as this user, so they cannot stop that display (with
+# `pkill Xvfb`, for example), and OpenBot stops when its display goes away.
+if [ -n "${OPENBOT_EXTERNAL_DISPLAY:-}" ]; then
+  export DISPLAY="$OPENBOT_EXTERNAL_DISPLAY"
+  attempts=300
+else
+  # The lock of the last run stays in the container too.
+  rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
+  Xvfb :0 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1 &
+  export DISPLAY=:0
+  attempts=100
+fi
+for _ in $(seq 1 "$attempts"); do
   xdpyinfo >/dev/null 2>&1 && break
   sleep 0.1
 done
-xdpyinfo >/dev/null 2>&1 || fail "The virtual display did not start."
+xdpyinfo >/dev/null 2>&1 || fail "The virtual display $DISPLAY did not start."
 
 # Each data volume makes its own keyring password on its first start. The password only lets the
 # daemon open the keyring without a person; the file is 0600. A keyring with no password file is not

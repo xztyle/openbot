@@ -47,7 +47,7 @@ FROM install AS checks
 COPY --from=full-src . .
 RUN bun run i18n:check && bun run typecheck:node && bun run typecheck:renderer && bun run typecheck:api
 
-FROM ghcr.io/nightly-labs/openbot:0.33.0@sha256:b9290c58f1f2b9a20a04657398e8c313999b23e3231adc60a96c15d6e8f6aaa7 AS runtime
+FROM ghcr.io/nightly-labs/openbot:0.51.1@sha256:f04294c28d65b8a6d1dfa275a58399a5c98449e5fa67737c21e78e563547934d AS runtime
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap nodejs python3 \
     && rm -rf /var/lib/apt/lists/*

@@ -1,5 +1,6 @@
 import {
   type AccountUsage,
+  type AgentCreationLimitPreference,
   type AgentEvent,
   type AgentMemory,
   type AgentMemoryLimitPreference,
@@ -28,6 +29,7 @@ import {
   composedCustomModelId,
   createMcpServerId,
   DEFAULT_AGENT_ACCESS,
+  DEFAULT_AGENT_CREATION_LIMIT,
   DEFAULT_AGENT_MEMORY_LIMIT,
   DEFAULT_APP_LOGO_COLOR,
   DEFAULT_APPROVAL_AUTOMATION_PREFERENCE,
@@ -247,6 +249,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   let approvalAutomation = clone<ApprovalAutomationPreference>(DEFAULT_APPROVAL_AUTOMATION_PREFERENCE);
   let busyMessageMode: BusyMessageModePreference = { mode: DEFAULT_BUSY_MESSAGE_MODE };
   let agentMemoryLimit: AgentMemoryLimitPreference = { limit: DEFAULT_AGENT_MEMORY_LIMIT };
+  let agentCreationLimit: AgentCreationLimitPreference = { limit: DEFAULT_AGENT_CREATION_LIMIT };
   let remoteSessionReuse: RemoteSessionReusePreference = { ...DEFAULT_REMOTE_SESSION_REUSE_PREFERENCE };
   let languagePreference = clone<AppLanguagePreference>(options.languagePreference ?? { language: "system" });
   const languageListeners = new Set<(preference: AppLanguagePreference) => void>();
@@ -505,6 +508,11 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     setAgentMemoryLimitPreference: async ({ limit }) => {
       agentMemoryLimit = { limit };
       return clone(agentMemoryLimit);
+    },
+    getAgentCreationLimitPreference: async () => clone(agentCreationLimit),
+    setAgentCreationLimitPreference: async ({ limit }) => {
+      agentCreationLimit = { limit };
+      return clone(agentCreationLimit);
     },
     getAppLanguagePreference: async () => clone(languagePreference),
     setAppLanguagePreference: async ({ language }) => {
@@ -1223,11 +1231,14 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       updateAgent: async (input: UpdateAgentInput) => {
         const current = agents.find((agent) => agent.id === input.agentId);
         if (!current) throw new Error("Agent not found");
-        const { agentId: _agentId, busyMessageMode, ...updates } = input;
+        const { agentId: _agentId, busyMessageMode, background, ...updates } = input;
         const updated: AgentSummary = { ...current, ...updates };
         // `null` returns the agent to the app default, which an agent records by having no value.
         if (busyMessageMode === null) delete updated.busyMessageMode;
         else if (busyMessageMode) updated.busyMessageMode = busyMessageMode;
+        // The host stores only `true`, as `AgentStore` does.
+        if (background === true) updated.background = true;
+        else if (background === false) delete updated.background;
         agents = agents.map((agent) => (agent.id === updated.id ? updated : agent));
         emitAgentEvent({ type: "agents-changed", agents });
         return clone(updated);

@@ -63,6 +63,11 @@ export const messages = {
   "sidebar.state.waitingDetail": "{state}: {detail}",
   "sidebar.waiting.title": "Size ihtiyacı var",
   "sidebar.waiting.label": { one: "Size ihtiyacı var, {count} ajan", other: "Size ihtiyacı var, {count} ajan" },
+  "sidebar.background.title": {
+    one: "Arka plan takım arkadaşları ({count})",
+    other: "Arka plan takım arkadaşları ({count})",
+  },
+  "sidebar.background.waiting": { one: "{count} sizi bekliyor", other: "{count} sizi bekliyor" },
   "sidebar.waiting.action.question": "Yanıtla",
   "sidebar.waiting.action.approval": "İncele",
   "sidebar.waiting.action.takeover": "Devral",

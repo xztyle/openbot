@@ -68,6 +68,8 @@ export const messages = defineMessages("sidebar", {
   "sidebar.state.waitingDetail": "{state}: {detail}",
   "sidebar.waiting.title": "Needs you",
   "sidebar.waiting.label": { one: "Needs you, {count} agent", other: "Needs you, {count} agents" },
+  "sidebar.background.title": { one: "Background teammate ({count})", other: "Background teammates ({count})" },
+  "sidebar.background.waiting": { one: "{count} needs you", other: "{count} need you" },
   "sidebar.waiting.action.question": "Answer",
   "sidebar.waiting.action.approval": "Review",
   "sidebar.waiting.action.takeover": "Take over",

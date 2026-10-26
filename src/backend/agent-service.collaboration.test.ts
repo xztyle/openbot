@@ -18,7 +18,7 @@ import {
   waitForQueue,
 } from "./agent-service-test-harness";
 import type { AgentStore } from "./agent-store";
-import { AGENT_CREATION_LIMIT, AGENT_MESSAGE_LIMIT } from "./collaboration-limits";
+import { AGENT_MESSAGE_LIMIT } from "./collaboration-limits";
 import { runCauseEffect } from "./effect-boundary";
 import type { MailboxStore } from "./mailbox-store";
 import { getString } from "./protocol";
@@ -52,8 +52,13 @@ interface Team {
   from(agentId: string, senderId: string): QueueDelivery[];
 }
 
-async function team(agentIds: string[]): Promise<Team> {
-  const started = await startService(root, { provider: "codex", autoComplete: false });
+async function team(agentIds: string[], options: { agentCreationLimit?: number } = {}): Promise<Team> {
+  const { agentCreationLimit } = options;
+  const started = await startService(root, {
+    provider: "codex",
+    autoComplete: false,
+    ...(agentCreationLimit === undefined ? {} : { agentCreationLimit: () => agentCreationLimit }),
+  });
   service = started.service;
   const { client, store, mailbox } = started;
   await Promise.all(agentIds.map((id) => runCauseEffect(store.getOrCreate(id))));
@@ -457,10 +462,11 @@ describe.sequential("AgentService: collaboration between agents", () => {
       expect(t.from("chief", agentId)).toMatchObject([{ text: "Three sources: A, B, C.", expectsReply: false }]);
     });
 
-    it("refuses another agent after the limit, and counts only agents that agents created", async () => {
-      const t = await team(["chief"]);
+    it("refuses another agent after the user's limit, and counts only agents that agents created", async () => {
+      const limit = 3;
+      const t = await team(["chief"], { agentCreationLimit: limit });
       await t.begin("chief");
-      for (let index = 0; index < AGENT_CREATION_LIMIT; index += 1) {
+      for (let index = 0; index < limit; index += 1) {
         const id = `made-${index}`;
         await runCauseEffect(t.store.getOrCreate(id));
         t.store.recordCreator(id, "chief");

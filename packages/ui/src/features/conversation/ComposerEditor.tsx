@@ -139,10 +139,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
   );
   const matchingAgents = createMemo(() => {
     const query = mention()?.query.trim().toLocaleLowerCase() ?? "";
+    // A background teammate is offered only to a typed name, so the open list stays short.
     return props.agents.filter(
       (agent) =>
         agent.id !== props.agentId &&
-        (!query || `${agent.name} ${agent.title} ${agent.description}`.toLocaleLowerCase().includes(query)),
+        (query
+          ? `${agent.name} ${agent.title} ${agent.description}`.toLocaleLowerCase().includes(query)
+          : agent.background !== true),
     );
   });
   const matchingAttachments = createMemo(() => {

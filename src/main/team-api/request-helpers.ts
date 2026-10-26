@@ -360,6 +360,12 @@ export function agentUpdate(value: DynamicRecord, agentId: string): UpdateAgentI
     }
     result.notifications = value.notifications;
   }
+  if (value.background !== undefined) {
+    if (!isBoolean(value.background)) {
+      throw new HttpError(400, "background is invalid.");
+    }
+    result.background = value.background;
+  }
   if (value.provider !== undefined) {
     if (!isAgentProvider(value.provider)) {
       throw new HttpError(400, "provider is invalid.");

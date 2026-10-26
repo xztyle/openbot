@@ -191,9 +191,9 @@ one sender has sent 20 messages to one recipient in 10 minutes (`AGENT_MESSAGE_L
 `AGENT_MESSAGE_WINDOW_MS`), the next call fails with a text that tells the agent to stop and ask the
 user. A fan-out to several recipients counts each pair apart. The count reads the mailbox, so it
 includes answers and host notes, and a restart does not reset it. A retried tool call finds its own
-message first and skips both guards. `openbot.create_agent` refuses when agents have created 20
-agents in 24 hours (`AGENT_CREATION_LIMIT`, `AGENT_CREATION_WINDOW_MS`); an agent that the user
-creates does not count.
+message first and skips both guards. `openbot.create_agent` has no cap by default. When the user
+sets one in Settings (`AgentCreationLimitPreference`), it refuses when agents have created that many
+agents in 24 hours (`AGENT_CREATION_WINDOW_MS`); an agent that the user creates does not count.
 
 ### When a delegation ends with no answer
 

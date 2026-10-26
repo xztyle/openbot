@@ -53,6 +53,10 @@ export const messages = defineMessages("settings", {
   "settings.agentMemoryLimit.title": "Memories per agent",
   "settings.agentMemoryLimit.description":
     "How many memories each agent on this computer can keep. A larger number makes each prompt longer.",
+  "settings.agentCreationLimit.title": "Agents that agents can create",
+  "settings.agentCreationLimit.description":
+    "How many new agents your agents can create in 24 hours. Agents that you create do not count.",
+  "settings.agentCreationLimit.unlimited": "No limit",
   "settings.keepRemoteSessions.title": "Fast connection to servers",
   "settings.keepRemoteSessions.description":
     "Keep the connection to your joined servers between launches. OpenBot starts about a second faster. When you quit OpenBot, the OpenBot service does not close the connection.",

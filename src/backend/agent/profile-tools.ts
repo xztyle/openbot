@@ -54,6 +54,12 @@ export const createAgentToolSchema = z
         "Reasoning effort that the model supports, from list_models. Omit to use your own effort when the new agent gets your model, else the model's default.",
       )
       .optional(),
+    background: z
+      .boolean()
+      .describe(
+        "true makes a background teammate: it stays out of the user's agent lists, starts with notifications off, and works with agents as usual. Default false.",
+      )
+      .optional(),
   })
   .strict();
 
@@ -100,6 +106,10 @@ export const updateProfileToolSchema = z
       .describe("false turns Computer Use off for the agent. Only the user can turn it on.")
       .optional(),
     notifications: z.boolean().describe("Whether the user gets notifications for the agent.").optional(),
+    background: z
+      .boolean()
+      .describe("true hides the agent from the user's agent lists as a background teammate; false shows it again.")
+      .optional(),
   })
   .strict();
 

@@ -17,6 +17,7 @@ import {
 import { parseHostedSiteList, parseHostedSiteSummary } from "@openbot/contracts/hosted-sites";
 import {
   type AccountSession,
+  type AgentCreationLimitPreference,
   type AgentMemoryLimitPreference,
   type AnalyticsPreference,
   type AppInfo,
@@ -45,6 +46,7 @@ import {
   type HostedSiteSummary,
   IDLE_RESTART_TARGETS,
   type IdleRestart,
+  isAgentCreationLimit,
   isAgentMemoryLimit,
   isAgentModel,
   isAgentProvider,
@@ -129,6 +131,12 @@ export function decodeBusyMessageModePreference(value: unknown): BusyMessageMode
 export function decodeAgentMemoryLimitPreference(value: unknown): AgentMemoryLimitPreference {
   const preference = decodeRecord(value, "agent memory limit preference");
   if (!isAgentMemoryLimit(preference.limit)) throw new Error("Invalid agent memory limit.");
+  return { limit: preference.limit };
+}
+
+export function decodeAgentCreationLimitPreference(value: unknown): AgentCreationLimitPreference {
+  const preference = decodeRecord(value, "agent creation limit preference");
+  if (!isAgentCreationLimit(preference.limit)) throw new Error("Invalid agent creation limit.");
   return { limit: preference.limit };
 }
 

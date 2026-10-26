@@ -14,6 +14,8 @@ export const messages = {
   "agentSettings.groups.does": "Aufgaben",
   "agentSettings.groups.rules": "Regeln",
   "agentSettings.saveFailed": "Die Agenteneinstellungen konnten nicht gespeichert werden.",
+  "agentSettings.saveFailed.background":
+    "Die Hintergrund-Einstellung konnte nicht gespeichert werden. Die gespeicherte Einstellung gilt wieder.",
   "agentSettings.name": "Name",
   "agentSettings.nameLabel": "Agentenname",
   "agentSettings.agentTitle": "Titel",
@@ -117,6 +119,9 @@ export const messages = {
   "agentSettings.automation.title": "Lokale Skripte",
   "agentSettings.automation.description":
     "Skripten auf diesem Computer erlauben, die Routinen dieses Agenten auszuführen",
+  "agentSettings.background.title": "Hintergrund-Teammitglied",
+  "agentSettings.background.description":
+    "Blende diesen Agenten in deinen Agentenlisten aus. Er arbeitet weiter mit deinen anderen Agenten. Öffne ihn über Hintergrund-Teammitglieder am Ende der Seitenleiste.",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Der gesamte Prozess von {provider} läuft in einer Sandbox, daher schlagen Schreibzugriffe außerhalb fehl. Nur unter macOS verfügbar.",
 } as const satisfies PartialTranslation<typeof source>;

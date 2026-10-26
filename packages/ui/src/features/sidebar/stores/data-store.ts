@@ -62,8 +62,16 @@ export function createSidebarDataStore(deps: {
     pinnedItemCache = nextCache;
     return items;
   });
-  const listedAgents = createMemo(() =>
+  const unpinnedAgents = createMemo(() =>
     props.agents.filter((agent) => !pinnedKeys().has(sidebarPinnedItemKey({ kind: "agent", id: agent.id }))),
+  );
+  /**
+   * Background teammates leave the sections and the "Needs you" group for a collapsed group of their
+   * own at the end of the list. A pinned one stays in its tile: the user chose to see it.
+   */
+  const listedAgents = createMemo(() => unpinnedAgents().filter((agent) => agent.background !== true));
+  const backgroundAgents = createMemo(() =>
+    sortByLayoutOrder(unpinnedAgents().filter((agent) => agent.background === true)),
   );
   /**
    * Agents that wait for the user leave their section for the "Needs you" group, the same way a
@@ -224,6 +232,7 @@ export function createSidebarDataStore(deps: {
   return {
     assignedSectionId,
     agentById,
+    backgroundAgents,
     channelById,
     chatKind,
     chatName,

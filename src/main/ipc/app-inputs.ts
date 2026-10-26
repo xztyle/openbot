@@ -1,5 +1,6 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
+  AgentCreationLimitPreference,
   AgentMemoryLimitPreference,
   AgentProviderId,
   BusyMessageModePreference,
@@ -34,6 +35,7 @@ import type {
 } from "@openbot/contracts/ipc";
 import {
   IDLE_RESTART_TARGETS,
+  isAgentCreationLimit,
   isAgentMemoryLimit,
   isAgentModel,
   isAgentProvider,
@@ -98,6 +100,12 @@ export function parseBusyMessageModePreference(input: unknown): BusyMessageModeP
 
 export function parseAgentMemoryLimitPreference(input: unknown): AgentMemoryLimitPreference {
   if (!isDynamicRecord(input) || !isAgentMemoryLimit(input.limit)) throw new Error("Agent memory limit is required.");
+  return { limit: input.limit };
+}
+
+export function parseAgentCreationLimitPreference(input: unknown): AgentCreationLimitPreference {
+  if (!isDynamicRecord(input) || !isAgentCreationLimit(input.limit))
+    throw new Error("Agent creation limit is required.");
   return { limit: input.limit };
 }
 

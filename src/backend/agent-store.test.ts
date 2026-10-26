@@ -424,6 +424,29 @@ describe("AgentStore", () => {
     expect(await allowAutomation()).toBeUndefined();
   });
 
+  it("keeps a background teammate across a restart and a duplication, and clears it on request", async () => {
+    const root = await mkdtemp(join(tmpdir(), "openbot-store-"));
+    temporaryRoots.push(root);
+    const userData = join(root, "user-data");
+    const home = join(root, "home");
+    const store = new AgentStore(userData, home);
+    await runCauseEffect(store.initialize());
+    const agent = await runCauseEffect(store.createAgent({ ...AGENT_PROFILE_INPUT, background: true }));
+    expect(agent).toMatchObject({ background: true, notifications: false });
+    const copy = await runCauseEffect(store.duplicateAgent(agent.id));
+    expect(copy.background).toBe(true);
+    const stored = async (agentId: string) => {
+      const reopened = new AgentStore(userData, home);
+      await runCauseEffect(reopened.initialize());
+      return reopened.list().find((candidate) => candidate.id === agentId);
+    };
+
+    expect(await stored(agent.id)).toMatchObject({ background: true, notifications: false });
+    await runCauseEffect(store.updateAgent({ agentId: agent.id, background: false }));
+    expect((await stored(agent.id))?.background).toBeUndefined();
+    expect((await stored(copy.id))?.background).toBe(true);
+  });
+
   it("migrates version 1 avatars to stable id seeds", async () => {
     const root = await mkdtemp(join(tmpdir(), "openbot-store-"));
     temporaryRoots.push(root);

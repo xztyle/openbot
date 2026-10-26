@@ -16,6 +16,7 @@ import { app, type BrowserWindow, shell } from "electron";
 import type { AgentService } from "../../backend/agent-service";
 import type { BrowserHost } from "../../backend/browser-host";
 import type { MailboxStore } from "../../backend/mailbox-store";
+import type { AgentCreationLimitPreferenceStore } from "../agent-creation-limit-preference-store";
 import type { AgentMemoryLimitPreferenceStore } from "../agent-memory-limit-preference-store";
 import { readAnalyticsPreference, writeAnalyticsPreference } from "../analytics-preference-store";
 import type { ApprovalAutomation } from "../approval-automation-store";
@@ -29,6 +30,7 @@ import type { RemoteSessionReusePreferenceStore } from "../remote-session-reuse-
 import { readSetupState, writeSetupState } from "../setup-store";
 import type { UpdateService } from "../update-service";
 import {
+  parseAgentCreationLimitPreference,
   parseAgentMemoryLimitPreference,
   parseAnalyticsPreference,
   parseAppLanguagePreference,
@@ -78,6 +80,7 @@ export interface AppIpcDependencies {
   approvalAutomation: ApprovalAutomation;
   busyMessageMode: BusyMessageModePreferenceStore;
   agentMemoryLimit: AgentMemoryLimitPreferenceStore;
+  agentCreationLimit: AgentCreationLimitPreferenceStore;
   remoteSessionReuse: RemoteSessionReusePreferenceStore;
   remoteSessionCache: RemoteSessionCache;
   language: LanguageService;
@@ -99,6 +102,7 @@ export function appIpcHandlers({
   approvalAutomation,
   busyMessageMode,
   agentMemoryLimit,
+  agentCreationLimit,
   remoteSessionReuse,
   remoteSessionCache,
   language,
@@ -145,6 +149,10 @@ export function appIpcHandlers({
         runCauseEffect(
           agentMemoryLimit.set(parsed).pipe(Effect.tap(() => Effect.sync(() => service.memoryLimitChanged()))),
         ),
+      ),
+      getAgentCreationLimitPreference: handler(() => agentCreationLimit.get()),
+      setAgentCreationLimitPreference: payloadHandler(parseAgentCreationLimitPreference, (parsed) =>
+        runCauseEffect(agentCreationLimit.set(parsed)),
       ),
       getRemoteSessionReusePreference: handler(() => remoteSessionReuse.get()),
       // Off removes the kept sessions at once. The sessions of this run then end when the app quits.

@@ -41,6 +41,8 @@ export function toAgentProfile(stored: AgentSummary): AgentProfile {
     computerUse: stored.computerUse,
     allowAutomation: stored.allowAutomation,
     busyMessageMode: stored.busyMessageMode,
+    // Always written, so a store update that turns it off replaces the old value.
+    background: stored.background === true,
     threadId: stored.threadId,
     workspacePath: stored.workspacePath,
     avatarSeed: stored.avatarSeed,
@@ -726,6 +728,7 @@ export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boo
     left.reasoningEffort === right.reasoningEffort &&
     left.access === right.access &&
     left.computerUse === right.computerUse &&
+    left.background === right.background &&
     left.threadId === right.threadId &&
     left.avatarSeed === right.avatarSeed &&
     left.avatarHue === right.avatarHue &&

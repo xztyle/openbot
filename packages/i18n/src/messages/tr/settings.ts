@@ -38,6 +38,10 @@ export const messages = {
   "settings.agentMemoryLimit.title": "Ajan başına bellek",
   "settings.agentMemoryLimit.description":
     "Bu bilgisayardaki her ajanın tutabileceği bellek sayısı. Daha büyük bir sayı her istemi uzatır.",
+  "settings.agentCreationLimit.title": "Ajanların oluşturabileceği ajanlar",
+  "settings.agentCreationLimit.description":
+    "Ajanlarınızın 24 saatte oluşturabileceği yeni ajan sayısı. Sizin oluşturduğunuz ajanlar sayılmaz.",
+  "settings.agentCreationLimit.unlimited": "Sınır yok",
   "settings.permissions.title": "İzinler",
   "settings.turbo.title": "Turbo modu",
   "settings.turbo.description":

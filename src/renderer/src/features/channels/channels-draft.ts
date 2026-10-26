@@ -4,8 +4,15 @@ export function emptyChannelDraft(): ChannelDraft {
   return { name: "", title: "", instructions: "", members: [], leadAgentId: null };
 }
 
-/** The agent search of both member pickers: a case-blind match on the name and the description. */
-export function matchesAgentSearch(agent: { name: string; description: string }, search: string): boolean {
+/**
+ * The agent search of both member pickers: a case-blind match on the name and the description. A
+ * background teammate shows only for a typed search, so the open list stays short.
+ */
+export function matchesAgentSearch(
+  agent: { name: string; description: string; background?: boolean },
+  search: string,
+): boolean {
+  if (!search.trim()) return agent.background !== true;
   return `${agent.name} ${agent.description}`.toLowerCase().includes(search.toLowerCase());
 }
 

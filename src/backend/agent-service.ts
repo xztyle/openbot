@@ -256,6 +256,11 @@ export interface AgentServiceOptions {
    * default cap, which was the only cap before the setting existed.
    */
   agentMemoryLimit?: () => number;
+  /**
+   * How many agents other agents may create in `AGENT_CREATION_WINDOW_MS`, or null for no limit. The
+   * main process owns the preference. Omitted, no limit.
+   */
+  agentCreationLimit?: () => number | null;
   deleteWithRevokedApproval?: (
     agentId: string,
     remove: () => Effect.Effect<void, AgentRemovalFailed>,
@@ -1110,6 +1115,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         }),
         lastTurnFailed: (agentId) => this.#turn.failedTurns().has(agentId),
         usageLimit: (agentId) => this.#usageLimits.limitFor(agentId),
+        agentCreationLimit: () => options.agentCreationLimit?.() ?? null,
       },
     });
   }

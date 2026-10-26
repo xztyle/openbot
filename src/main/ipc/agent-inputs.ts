@@ -548,6 +548,10 @@ export function parseUpdateAgent(value: unknown): UpdateAgentInput {
     if (!isBoolean(value.allowAutomation)) throw new Error("Invalid automation value.");
     result.allowAutomation = value.allowAutomation;
   }
+  if (value.background !== undefined) {
+    if (!isBoolean(value.background)) throw new Error("Invalid background value.");
+    result.background = value.background;
+  }
   if (value.busyMessageMode !== undefined) {
     if (value.busyMessageMode !== null && !isBusyMessageMode(value.busyMessageMode)) {
       throw new Error("Invalid busy message mode.");

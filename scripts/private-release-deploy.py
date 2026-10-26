@@ -118,6 +118,16 @@ def deploy_worker():
     return match.group(1)
 
 
+def working_agents():
+    """The agents with a running turn or an unsettled delivery, read just before the host restart."""
+    with sqlite3.connect(f"file:{BASE / 'data/.config/OpenBot/openbot.db'}?mode=ro", uri=True) as connection:
+        active = [row[0] for row in connection.execute(
+            "SELECT thread_id FROM projection_threads WHERE active_turn_id IS NOT NULL")]
+        pending = [list(row) for row in connection.execute(
+            "SELECT * FROM projection_deliveries WHERE status IN ('queued','running','pending')")]
+    return dict(active_threads=active, pending_deliveries=pending)
+
+
 def deploy_host(image):
     compose = BASE / "compose.yaml"
     previous = compose.read_text()
@@ -154,7 +164,10 @@ def main():
         return
     before = database_state(BASE / "data/.config/OpenBot/openbot.db")
     (RELEASE / "before.json").write_text(json.dumps(before, indent=2))
-    if before["active"] or before["pending"]:
+    # --interrupt-active: the user accepts that running turns end as "interrupted". Their agents are
+    # written to interrupted-agents.json so they can be told to resume after the restart.
+    interrupt = "--interrupt-active" in sys.argv[2:]
+    if (before["active"] or before["pending"]) and not interrupt:
         raise RuntimeError("A bot has active or queued work. Deployment stops before interrupting it.")
     environment_hash = hashlib.sha256((BASE / ".env.runtime").read_bytes()).hexdigest()
     if "--existing-image" not in sys.argv[2:]:
@@ -167,8 +180,10 @@ def main():
     expected_schema = smoke_test(IMAGE)
     worker = deploy_worker()
     current = database_state(BASE / "data/.config/OpenBot/openbot.db")
-    if current["active"] or current["pending"]:
+    if (current["active"] or current["pending"]) and not interrupt:
         raise RuntimeError("A bot started working while artifacts uploaded. Host restart deferred.")
+    if interrupt:
+        (RELEASE / "interrupted-agents.json").write_text(json.dumps(working_agents(), indent=2))
     deploy_host(IMAGE)
     after = validate_after(before, expected_schema, environment_hash)
     report = dict(revision=REVISION, image=IMAGE, worker=worker, before=before, after=after,

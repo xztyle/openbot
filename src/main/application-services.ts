@@ -1016,7 +1016,7 @@ export async function createApplicationServices({
   // Closing copies the write-ahead log into the database file and removes it. A step that passed its
   // limit, such as a slow agent stop, still writes, so the close waits a short time for it.
   teardown.push(TEARDOWN_ORDER.database, "the database", () => store.database.close(), { afterAbandonedSteps: true });
-  // Every managed skill (`MANAGED_SKILL_SLUGS`): site hosting, skill creator, data, event checks and host apps.
+  // Every managed skill (`MANAGED_SKILL_SLUGS`): site hosting, skill creator, data, event checks, host apps and bench.
   const managedSkills = createApplicationManagedSkills(
     app.isPackaged
       ? join(process.resourcesPath, "managed-skills")

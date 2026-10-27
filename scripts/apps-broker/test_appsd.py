@@ -15,6 +15,7 @@ os.environ["APPS_BASE"] = str(ROOT / "apps")
 os.environ["APPS_DATA_ROOT"] = str(ROOT / "data" / "OpenBot")
 os.environ["APPS_BACKUPS"] = str(ROOT / "backups")
 os.environ["APPS_NGINX_CONF"] = str(ROOT / "nginx.conf")
+os.environ["APPS_CF_TOKEN_FILE"] = str(ROOT / "cloudflare-dns.env")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import appsd  # noqa: E402
@@ -191,6 +192,73 @@ class PublicPorts(unittest.TestCase):
     def test_malformed_entries_are_ignored(self):
         self.write({"tts-gateway": [{"host_port": "x"}, "nope", {"host_port": 8050}]})
         self.assertEqual(appsd.public_mappings("tts-gateway"), [])
+
+
+class FakeCloudflare:
+    def __init__(self, records):
+        self.records = records
+        self.calls = []
+
+    def __call__(self, token, method, path, body=None, query=None):
+        self.calls.append((method, path, body))
+        if path == "/zones":
+            return [{"id": "zone1"}]
+        if method == "GET":
+            return [r for r in self.records if r["name"] == query["name"]]
+        if method == "POST":
+            self.records.append({"id": f"r{len(self.records)}", **body})
+            return {}
+        if method == "DELETE":
+            self.records = [r for r in self.records if r["id"] != path.rsplit("/", 1)[1]]
+            return {}
+        return {}
+
+
+class PublicDns(unittest.TestCase):
+    def setUp(self):
+        self.real = appsd.cf_request
+        appsd.CF_TOKEN_FILE.write_text("CLOUDFLARE_API_TOKEN=tok-very-secret\n")
+        appsd.write_json(appsd.BASE / "config.json", {"domain": "example.com"})
+
+    def tearDown(self):
+        appsd.cf_request = self.real
+        appsd.CF_TOKEN_FILE.unlink(missing_ok=True)
+        (appsd.BASE / "config.json").unlink(missing_ok=True)
+
+    def test_no_token_is_pending_and_sends_nothing(self):
+        appsd.CF_TOKEN_FILE.unlink()
+        appsd.cf_request = fake = FakeCloudflare([])
+        self.assertEqual(appsd.sync_dns("web", make_app("web"))["state"], "pending")
+        self.assertEqual(fake.calls, [])
+
+    def test_publish_creates_a_marked_proxied_record(self):
+        appsd.cf_request = fake = FakeCloudflare([])
+        self.assertEqual(appsd.publish_state(make_app("web")["name"])["state"], "published")
+        record = fake.records[0]
+        self.assertEqual((record["name"], record["comment"], record["proxied"]), ("web.example.com", "openbot-apps:web", True))
+        appsd.sync_dns("web", appsd.read_json(appsd.app_path("web")))
+        self.assertEqual(len(fake.records), 1)
+        self.assertNotIn("tok-very-secret", json.dumps(appsd.read_json(appsd.app_path("web"))))
+
+    def test_foreign_records_are_never_changed(self):
+        foreign = {"id": "x1", "name": "web.example.com", "type": "CNAME", "comment": None}
+        appsd.cf_request = fake = FakeCloudflare([foreign])
+        self.assertEqual(appsd.sync_dns("web", make_app("web"))["state"], "failed")
+        self.assertEqual(appsd.sync_dns("web", None)["state"], "private")
+        self.assertEqual(fake.records, [foreign])
+        self.assertFalse([c for c in fake.calls if c[0] != "GET"])
+
+    def test_private_and_deleted_apps_lose_only_their_record(self):
+        ours = {"id": "o1", "name": "web.example.com", "type": "A", "comment": "openbot-apps:web"}
+        appsd.cf_request = fake = FakeCloudflare([ours])
+        appsd.sync_dns("web", make_app("web", private=True))
+        self.assertEqual(fake.records, [])
+
+    def test_legacy_private_apps_and_nginx(self):
+        self.assertTrue(appsd.is_private({"name": "porttest"}))
+        self.assertFalse(appsd.is_private({"name": "cakemaker-web"}))
+        make_app("hidden-app", host_port=20009, private=True)
+        self.assertNotIn("hidden-app", appsd.render_nginx(appsd.load_config()))
 
 
 class Routes(unittest.TestCase):

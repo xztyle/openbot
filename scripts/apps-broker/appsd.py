@@ -8,6 +8,9 @@ Agents reach it through a unix socket mounted into the container and the `appctl
 Every request is translated into fixed, hardened container settings: the caller can pick a name, a
 source folder under the OpenBot workspace tree, a port and (bounded) resource sizes, nothing else.
 
+Public apps get a proxied Cloudflare A record and an origin certificate once the user puts an API
+token in CF_TOKEN_FILE; see the "Cloudflare DNS and origin TLS" section.
+
 Subcommands: serve | install | env-set | config | status
 Python standard library only.
 """
@@ -25,7 +28,9 @@ import sys
 import threading
 import time
 import traceback
+import urllib.error
 import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -38,6 +43,13 @@ CLIENT_DIR = BASE / "client"
 SOCKET_PATH = CLIENT_DIR / "appctl.sock"
 STATE = BASE / "state"
 LOGS = BASE / "logs"
+TLS_DIR = BASE / "tls"
+# Root-only file the user creates: CLOUDFLARE_API_TOKEN=... (Zone DNS Edit, Zone SSL and Certificates Edit).
+# It is read on each use and never logged, returned, or passed to an app container.
+CF_TOKEN_FILE = Path(os.environ.get("APPS_CF_TOKEN_FILE", "/opt/openbot/secrets/cloudflare-dns.env"))
+CF_API = "https://api.cloudflare.com/client/v4"
+# Apps from before the private flag existed that stay off public DNS unless published explicitly.
+LEGACY_PRIVATE = {"porttest", "tts-gateway"}
 APP_UID = 10001
 OWNER_UID = int(os.environ.get("APPS_SOCKET_UID", "1000"))
 
@@ -59,6 +71,11 @@ DEFAULT_CONFIG = {
     # Host-owned: { "<app>": [ { "host_port": 8050, "container_port": 8443 } ] }. Agents cannot set it.
     "public_ports": {},
     "deleted_keep_days": 30,
+    # The A record target of each public app (proxied through Cloudflare).
+    "public_ipv4": "158.69.224.199",
+    # Optional: the Cloudflare zone name (default: `domain`) or its id (skips the lookup).
+    "cloudflare_zone": "",
+    "cloudflare_zone_id": "",
 }
 
 CLOUDFLARE_RANGES = """173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18
@@ -247,7 +264,7 @@ def render_nginx(cfg):
     mapping = []
     for name in list_state("apps"):
         app = read_json(app_path(name))
-        if app and app.get("host_port"):
+        if app and app.get("host_port") and not is_private(app):
             mapping.append(f'    "{name}.{cfg["domain"]}" {app["host_port"]};')
     ranges = "\n".join(f"    {r} 1;" for r in CLOUDFLARE_RANGES)
     tls = ""
@@ -315,6 +332,275 @@ def apply_nginx():
                 NGINX_CONF.write_text(previous)
             raise ApiError(f"nginx rejected the generated config: {test.stderr.strip()[-400:]}", 500)
         subprocess.run(["systemctl", "reload", "nginx"], check=False)
+
+
+# ---- Cloudflare DNS and origin TLS ------------------------------------------------------------
+#
+# Hosting an app publishes it as a proxied A record `<app>.<domain>`. The broker marks each record it
+# creates with the comment `openbot-apps:<app>` and changes or deletes only records with that comment.
+# Without the token file every public app stays "pending" and nothing is sent to Cloudflare.
+
+cf_lock = threading.Lock()
+_zone_ids = {}
+_tls_failed_at = [0.0]
+
+
+class CloudflareError(Exception):
+    pass
+
+
+def cf_token():
+    """The API token from the root-only file, read again on each call. None when it is missing."""
+    try:
+        text = CF_TOKEN_FILE.read_text()
+    except OSError:
+        return None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[7:].strip()
+        key, sep, value = line.partition("=")
+        if sep and key.strip() == "CLOUDFLARE_API_TOKEN":
+            return value.strip().strip("\"'") or None
+    return None
+
+
+def cf_request(token, method, path, body=None, query=None):
+    url = CF_API + path + ("?" + urllib.parse.urlencode(query) if query else "")
+    data = json.dumps(body).encode() if body is not None else None
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "User-Agent": "openbot-apps-broker"}
+    request = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            payload = json.loads(response.read() or b"{}")
+    except urllib.error.HTTPError as err:
+        try:
+            payload = json.loads(err.read() or b"{}")
+        except ValueError:
+            payload = {}
+        if not isinstance(payload, dict) or not payload.get("errors"):
+            raise CloudflareError(f"Cloudflare API answered HTTP {err.code}") from None
+    except (OSError, ValueError) as err:
+        raise CloudflareError(f"Cloudflare API unreachable ({type(err).__name__})") from None
+    if not payload.get("success"):
+        errors = payload.get("errors") or []
+        text = "; ".join(f"{e.get('code')}: {e.get('message')}" for e in errors if isinstance(e, dict))
+        raise CloudflareError((text or "Cloudflare API request failed")[:300])
+    return payload.get("result")
+
+
+def cf_zone_id(token, cfg):
+    if cfg.get("cloudflare_zone_id"):
+        return cfg["cloudflare_zone_id"]
+    zone = cfg.get("cloudflare_zone") or cfg["domain"]
+    if zone not in _zone_ids:
+        result = cf_request(token, "GET", "/zones", query={"name": zone})
+        if not result:
+            raise CloudflareError(f"the zone {zone} is not visible to the token")
+        _zone_ids[zone] = result[0]["id"]
+    return _zone_ids[zone]
+
+
+def is_private(app):
+    if "private" in app:
+        return bool(app["private"])
+    return app.get("name") in LEGACY_PRIVATE
+
+
+def dns_comment(name):
+    return f"openbot-apps:{name}"
+
+
+def sync_dns(name, app):
+    """Make the Cloudflare record of one app match its setting. `app` None means the app is deleted.
+
+    Returns {"state": published|pending|private|failed, "reason"?}. Never raises.
+    """
+    cfg = load_config()
+    want = app is not None and not is_private(app)
+    if name in RESERVED_NAMES or not NAME_RE.match(name or ""):
+        return {"state": "failed", "reason": "reserved or invalid name"}
+    token = cf_token()
+    if not token:
+        if want:
+            return {"state": "pending", "reason": "no Cloudflare token on the host"}
+        return {"state": "private", "reason": "no Cloudflare token on the host; no record was checked"}
+    fqdn = f"{name}.{cfg['domain']}"
+    comment = dns_comment(name)
+    try:
+        with cf_lock:
+            zone = cf_zone_id(token, cfg)
+            records = cf_request(token, "GET", f"/zones/{zone}/dns_records", query={"name": fqdn, "per_page": 100}) or []
+            records = [r for r in records if r.get("name") == fqdn]
+            ours = [r for r in records if r.get("comment") == comment]
+            if not want:
+                for record in ours:
+                    cf_request(token, "DELETE", f"/zones/{zone}/dns_records/{record['id']}")
+                return {"state": "private"}
+            if len(ours) < len(records):
+                return {"state": "failed", "reason": f"{fqdn} already has a DNS record that the broker does not manage"}
+            ip = cfg.get("public_ipv4") or DEFAULT_CONFIG["public_ipv4"]
+            spec = {"type": "A", "name": fqdn, "content": ip, "proxied": True, "ttl": 1, "comment": comment}
+            keep = next((r for r in ours if r.get("type") == "A"), None)
+            for record in ours:
+                if record is not keep:
+                    cf_request(token, "DELETE", f"/zones/{zone}/dns_records/{record['id']}")
+            if keep is None:
+                cf_request(token, "POST", f"/zones/{zone}/dns_records", spec)
+            elif keep.get("content") != ip or not keep.get("proxied"):
+                cf_request(token, "PATCH", f"/zones/{zone}/dns_records/{keep['id']}", spec)
+        return {"state": "published"}
+    except CloudflareError as err:
+        return {"state": "failed", "reason": str(err)}
+    except Exception as err:  # noqa: BLE001
+        return {"state": "failed", "reason": f"internal error ({type(err).__name__})"}
+
+
+def publish_state(name):
+    """Sync DNS for one app and keep the result on its record. The caller holds the app lock."""
+    app = read_json(app_path(name))
+    result = sync_dns(name, app)
+    if app is not None:
+        app["dns"] = {**result, "at": iso()}
+        write_json(app_path(name), app)
+    if result["state"] == "failed":
+        say(f"DNS for {name}: {result['reason']}")
+    return result
+
+
+def dns_label(app):
+    if is_private(app):
+        return "private (not published)"
+    dns = app.get("dns") or {}
+    if dns.get("state") == "published":
+        return "published"
+    if dns.get("state") == "failed":
+        return f"failed: {dns.get('reason')}"
+    return "pending" if CF_TOKEN_FILE.exists() else "pending (no token)"
+
+
+def tls_ready(cfg):
+    cert, key = cfg.get("tls_cert"), cfg.get("tls_key")
+    return bool(cert and key and Path(cert).is_file() and Path(key).is_file())
+
+
+def set_tls_config(cert, key):
+    path = BASE / "config.json"
+    raw = read_json(path, {}) or {}
+    raw["tls_cert"], raw["tls_key"] = cert, key
+    write_json(path, raw, 0o644)
+
+
+def ensure_origin_cert():
+    """Get a Cloudflare Origin CA certificate for `*.<domain>` and `<domain>` and serve apps on 443.
+
+    Does nothing when a certificate is configured or the token is missing. On failure it logs and
+    the apps stay on port 80. Never raises.
+    """
+    cfg = load_config()
+    if tls_ready(cfg):
+        return "present"
+    token = cf_token()
+    if not token:
+        return "pending (no token)"
+    if time.time() - _tls_failed_at[0] < 3600:
+        return "failed recently; retry later"
+    domain = cfg["domain"]
+    try:
+        with cf_lock:
+            TLS_DIR.mkdir(parents=True, exist_ok=True)
+            os.chmod(TLS_DIR, 0o700)
+            key_path, cert_path = TLS_DIR / "origin.key", TLS_DIR / "origin.pem"
+            new_key = TLS_DIR / "origin.key.new"
+            new_key.unlink(missing_ok=True)
+            old_umask = os.umask(0o077)
+            try:
+                made = subprocess.run(
+                    ["openssl", "req", "-new", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1",
+                     "-nodes", "-keyout", str(new_key), "-subj", f"/CN=*.{domain}"],
+                    capture_output=True, text=True, timeout=60,
+                )
+            finally:
+                os.umask(old_umask)
+            if made.returncode != 0:
+                raise CloudflareError(f"openssl failed: {made.stderr.strip()[-200:]}")
+            result = cf_request(token, "POST", "/certificates", {
+                "csr": made.stdout,
+                "hostnames": [f"*.{domain}", domain],
+                "request_type": "origin-ecc",
+                "requested_validity": 5475,
+            })
+            pem = (result or {}).get("certificate")
+            if not pem or "BEGIN CERTIFICATE" not in pem:
+                raise CloudflareError("Cloudflare returned no certificate")
+            os.chmod(new_key, 0o600)
+            new_cert = TLS_DIR / "origin.pem.new"
+            fd = os.open(new_cert, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as handle:
+                handle.write(pem if pem.endswith("\n") else pem + "\n")
+            os.replace(new_key, key_path)
+            os.replace(new_cert, cert_path)
+            set_tls_config(str(cert_path), str(key_path))
+    except (CloudflareError, OSError, subprocess.SubprocessError) as err:
+        _tls_failed_at[0] = time.time()
+        say(f"origin certificate not issued; apps stay on port 80: {err}")
+        return f"failed: {err}"
+    try:
+        apply_nginx()
+    except ApiError as err:
+        set_tls_config("", "")
+        _tls_failed_at[0] = time.time()
+        say(f"origin certificate issued but nginx refused it; apps stay on port 80: {err}")
+        return f"failed: {err}"
+    say(f"origin certificate installed; apps are served on port 443 for *.{domain}")
+    return "issued"
+
+
+def sync_all(cleanup=False, only_unsettled=False):
+    """Startup and periodic pass: origin TLS, then each app's DNS record. Never raises."""
+    ensure_origin_cert()
+    for name in list_state("apps"):
+        app = read_json(app_path(name))
+        if not app:
+            continue
+        if only_unsettled:
+            settled = (app.get("dns") or {}).get("state")
+            if settled == ("private" if is_private(app) else "published"):
+                continue
+            if not is_private(app) and not cf_token():
+                continue
+        lock = lock_for(f"app:{name}")
+        if not lock.acquire(blocking=False):
+            continue
+        try:
+            publish_state(name)
+        finally:
+            lock.release()
+    if cleanup:
+        remove_orphan_records()
+
+
+def remove_orphan_records():
+    """Delete records the broker made for apps that no longer exist or are private now."""
+    token = cf_token()
+    if not token:
+        return
+    cfg = load_config()
+    public = {n for n in list_state("apps") if not is_private(read_json(app_path(n)) or {"name": n})}
+    try:
+        with cf_lock:
+            zone = cf_zone_id(token, cfg)
+            records = cf_request(token, "GET", f"/zones/{zone}/dns_records",
+                                 query={"comment.startswith": "openbot-apps:", "per_page": 100}) or []
+            for record in records:
+                comment = record.get("comment") or ""
+                owner = comment[len("openbot-apps:"):] if comment.startswith("openbot-apps:") else None
+                if not owner or owner in public or record.get("name") != f"{owner}.{cfg['domain']}":
+                    continue
+                cf_request(token, "DELETE", f"/zones/{zone}/dns_records/{record['id']}")
+                say(f"removed the DNS record of {owner} (app deleted or private)")
+    except CloudflareError as err:
+        say(f"DNS cleanup failed: {err}")
 
 
 # ---- source and build -------------------------------------------------------------------------
@@ -605,6 +891,8 @@ def deploy(name, opts):
     check_name(name)
     real = resolve_source(name, opts.get("src"))
     existing = read_json(app_path(name))
+    if "private" in opts and not isinstance(opts["private"], bool):
+        raise ApiError("private must be true or false.")
     if not existing and len(list_state("apps")) >= cfg["max_apps"]:
         raise ApiError(f"The limit of {cfg['max_apps']} apps is reached.")
 
@@ -612,7 +900,9 @@ def deploy(name, opts):
         with Held(f"app:{name}"):
             context = snapshot_source(real, name)
             manifest = manifest_from(context)
-            app = read_json(app_path(name)) or {"name": name, "dbs": [], "events": []}
+            app = read_json(app_path(name)) or {"name": name, "dbs": [], "events": [], "private": False}
+            if "private" in opts:
+                app["private"] = opts["private"]
             app["port"] = int(pick(opts, manifest, "port", app.get("port", 3000)))
             app["health"] = pick(opts, manifest, "health", app.get("health", "")) or ""
             app["memory_mb"] = int(pick(opts, manifest, "memory_mb", app.get("memory_mb", cfg["default_memory_mb"])))
@@ -679,7 +969,13 @@ def deploy(name, opts):
             write_json(app_path(name), app)
             apply_nginx()
             prune_images(name, keep={app["image"], app.get("previous_image")})
-            job.log(f"Running: http://{name}.{cfg['domain']} (container port {app['port']})")
+            job.log(f"Running: http://app-{name}:{app['port']} (inside this server)")
+            publish_state(name)
+            app = read_json(app_path(name)) or app
+            if is_private(app):
+                job.log(f"Private: no public address (to publish: appctl publish {name})")
+            else:
+                job.log(f"Public: https://{name}.{cfg['domain']} (DNS: {dns_label(app)})")
 
     return run_job("deploy", name, work)
 
@@ -707,7 +1003,9 @@ def app_status(name, brief=False):
     out = {
         "name": name,
         "internal_url": f"http://app-{name}:{app['port']}",
-        "public_url": f"https://{name}.{cfg['domain']}",
+        "public_url": None if is_private(app) else f"https://{name}.{cfg['domain']}",
+        "private": is_private(app),
+        "dns": dns_label(app),
         "local_url": f"http://127.0.0.1:{app['host_port']}",
         "public_ports": public_mappings(name),
         "port": app["port"],
@@ -808,8 +1106,25 @@ def delete_app(name, confirm):
         (STATE / "run" / f"{name}.env").unlink(missing_ok=True)
         prune_images(name, keep=set())
         shutil.rmtree(BASE / "build" / name, ignore_errors=True)
+        dns = sync_dns(name, None)
     apply_nginx()
-    return {"deleted": name, "kept_until_days": load_config()["deleted_keep_days"], "archive": str(graveyard)}
+    if dns["state"] == "failed":
+        say(f"DNS record of deleted app {name} not removed: {dns['reason']}")
+    return {
+        "deleted": name, "kept_until_days": load_config()["deleted_keep_days"], "archive": str(graveyard),
+        "dns": dns.get("reason") or "no DNS record is left" if dns["state"] == "private" else f"record not removed: {dns['reason']}",
+    }
+
+
+def set_visibility(name, private):
+    app = get_app(name)
+    with Held(f"app:{name}"):
+        app["private"] = private
+        event(app, "made private" if private else "published")
+        write_json(app_path(name), app)
+        apply_nginx()
+        publish_state(name)
+    return app_status(name, brief=True)
 
 
 def app_logs(name, tail, since, build):
@@ -1087,6 +1402,8 @@ def overview():
     cfg = load_config()
     return {
         "domain": cfg["domain"],
+        "public_dns": "token present" if CF_TOKEN_FILE.exists() else "pending (no Cloudflare token on the host)",
+        "origin_tls": tls_ready(cfg),
         "apps": len(list_state("apps")),
         "databases": len(list_state("dbs")),
         "memory_budget_mb": cfg["max_total_memory_mb"],
@@ -1147,6 +1464,8 @@ def background_loop():
             watchdog_once()
             if tick % 20 == 0:
                 backup_and_cleanup_once()
+            if tick % 10 == 5:
+                sync_all(only_unsettled=True)
         except Exception:  # noqa: BLE001
             traceback.print_exc()
         tick += 1
@@ -1240,6 +1559,8 @@ def route(method, segs, query, body):
                 return env_set(name, pairs)
             if method == "DELETE":
                 return env_unset(name, body.get("name", ""))
+        if rest in (["publish"], ["unpublish"]) and method == "POST":
+            return set_visibility(name, rest[0] == "unpublish")
         if len(rest) == 1 and method == "POST" and rest[0] in ("stop", "start", "restart", "recreate", "rollback"):
             return app_action(name, rest[0])
     if segs == ["dbs"] and method == "GET":
@@ -1285,6 +1606,7 @@ def serve():
         apply_nginx()
     except ApiError as err:
         say(f"nginx config not applied at start: {err}")
+    threading.Thread(target=sync_all, kwargs={"cleanup": True}, daemon=True).start()
     threading.Thread(target=background_loop, daemon=True).start()
     say(f"openbot apps broker listening on {SOCKET_PATH}")
     server.serve_forever()

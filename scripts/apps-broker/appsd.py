@@ -70,7 +70,7 @@ NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,28}[a-z0-9]$")
 ENV_NAME_RE = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
 USER_ONLY_ENV_RE = re.compile(r"KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD|PRIVATE|CREDENTIAL|AUTH|COOKIE|SESSION", re.I)
 RESERVED_ENV = {"PORT", "DATABASE_URL", "REDIS_URL", "PATH", "HOME", "HOSTNAME"}
-RESERVED_NAMES = {"www", "api", "admin", "mail", "signal", "turn", "bots", "app", "apps", "dashboard", "root"}
+RESERVED_NAMES = {"www", "api", "admin", "mail", "signal", "turn", "bots", "dl", "app", "apps", "dashboard", "root"}
 ENGINES = {
     "postgres": {"image": "postgres:17-alpine", "port": 5432, "data": "/var/lib/postgresql/data", "memory_mb": 1024},
     "mariadb": {"image": "mariadb:11", "port": 3306, "data": "/var/lib/mysql", "memory_mb": 1024},

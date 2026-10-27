@@ -14,11 +14,7 @@ import type {
   RespondToBrowserTakeoverInput,
   RespondToPromptInput,
 } from "@openbot/contracts/ipc";
-import {
-  AGENT_RUNTIME_ATTENTION_LIMIT,
-  BROWSER_TAKEOVER_REASONS,
-  COMPUTER_USE_MCP_SERVER_NAME,
-} from "@openbot/contracts/ipc";
+import { AGENT_RUNTIME_ATTENTION_LIMIT, BROWSER_TAKEOVER_REASONS } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isOneOf } from "@openbot/contracts/runtime-values";
 import {
   type ConversationUiBlock,
@@ -786,8 +782,8 @@ export class AttentionRegistry {
    * Answers what already waits for an agent that now has Full access. The grant is read when a request
    * arrives, so without this a card stays open after the user moves the agent to Full access, presses
    * Always allow on another of its cards, or an admin changes it from another computer. The rule is the
-   * one for a new request: a Workspace only agent, Computer Use and a tool that always asks keep their
-   * card, and a question is never answered.
+   * one for a new request: a Workspace only agent and a tool that always asks keep their card, and a
+   * question is never answered.
    */
   answerGrantedRequests(): void {
     const report = (agentId: string) => (error: unknown) =>
@@ -1440,15 +1436,12 @@ export class AttentionRegistry {
   /**
    * Only the consent that Codex marks is covered, a tool set to ask every time included. A form, a
    * hand-off, a sign-in and any request that OpenBot does not know still reach the user. A Workspace
-   * only agent and Computer Use keep their card: the first asks to go outside the limit the user
-   * chose, and the second has its own switch.
+   * only agent keeps its card: it asks to go outside the limit the user chose. Computer Use is
+   * covered too: its own switch decides whether the agent has those tools at all, so an agent that
+   * asks has it on, and the owner wants its clicks and keys to run without a card each time.
    */
   #answersMcpToolConsent(params: unknown, agentId: string): boolean {
-    return (
-      mcpToolCallConsent(params) &&
-      getString(params, "serverName") !== COMPUTER_USE_MCP_SERVER_NAME &&
-      this.#answersForAgent(agentId)
-    );
+    return mcpToolCallConsent(params) && this.#answersForAgent(agentId);
   }
 
   surfaceMcpElicitation(client: AgentClient, request: AppServerRequest): void {

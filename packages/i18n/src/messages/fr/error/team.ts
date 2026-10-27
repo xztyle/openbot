@@ -132,6 +132,8 @@ export const messages = {
     "Les connexions de ce serveur ne peuvent pas être gérées d’ici. Mettez à jour OpenBot sur l’hôte.",
   "error.team.discordAccessUnsupported":
     "Ce serveur ne peut pas définir de rôles Discord. Mettez à jour OpenBot sur ce serveur.",
+  "error.team.discordChannelsUnsupported":
+    "Ce serveur ne peut pas configurer les salons Discord. Mettez OpenBot à jour dessus.",
   "error.team.connectorPageRefused": "Le serveur a envoyé une page qu’OpenBot n’ouvre pas.",
   "error.team.signInRelayUnknown": "Cette connexion est terminée ou n’existe pas.",
   "error.team.signInRelayUsed": "Cette connexion a déjà été envoyée.",

@@ -734,6 +734,7 @@ async function createMessagingServices({
     ],
     downloadsRoot: join(app.getPath("userData"), "messaging-downloads"),
     statusPath: join(app.getPath("userData"), "openbot-messaging-status-v1.json"),
+    discordChannelsPath: join(app.getPath("userData"), "openbot-discord-channels-v1.json"),
     ingress: signalIngress,
     sidebar: sidebarLayout,
     slackApp: {

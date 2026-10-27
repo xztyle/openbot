@@ -12,6 +12,7 @@ import type {
   MessagingPlatform,
   MessagingWorkspaceInput,
   SetDiscordAccessInput,
+  SetDiscordChannelConfigInput,
   SetMessagingEnabledInput,
 } from "@openbot/contracts/ipc";
 import {
@@ -20,6 +21,7 @@ import {
   isReasoningEffort,
   MESSAGING_PLATFORMS,
   parseDiscordAllowedRoles,
+  parseDiscordChannelConfig,
 } from "@openbot/contracts/ipc";
 import { isBoolean, isOneOf } from "@openbot/contracts/runtime-values";
 import { isObject, requireString } from "./validation";
@@ -96,6 +98,13 @@ export function parseHostAddMessagingOrchestratorInput(value: unknown): HostAddM
     platform: parsePlatform(value.platform),
     workspaceId: value.workspaceId === null ? null : requireString(value.workspaceId, "Workspace id"),
   };
+}
+
+export function parseSetDiscordChannelConfigInput(value: unknown): SetDiscordChannelConfigInput {
+  if (!isObject(value)) throw new Error("A messaging request is invalid.");
+  const config = parseDiscordChannelConfig({ serverAgentId: value.serverAgentId, channels: value.channels });
+  if (!config) throw new Error("A messaging request is invalid.");
+  return { workspaceId: requireString(value.workspaceId, "Workspace id"), ...config };
 }
 
 export function parseSetDiscordAccessInput(value: unknown): SetDiscordAccessInput {

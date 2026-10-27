@@ -94,12 +94,24 @@ export function stripBotMention(content: string, botUserId: string | null): stri
 }
 
 /**
- * The delivery for one guild message, or null when the host must not receive it: a bot or webhook
- * wrote it, or it does not mention the bot.
+ * Whether the host of a guild asked for the messages of a channel that do not mention the bot
+ * (`discord-listen`).
  */
-function normalizeGuildMessage(message: DiscordMessageData, botUserId: string): DiscordInboundMessage | null {
+export type DiscordListens = (guildId: string, channelId: string) => boolean;
+
+/**
+ * The delivery for one guild message, or null when the host must not receive it: a bot or webhook
+ * wrote it, or it does not mention the bot in a channel that the host did not ask for. A message
+ * without a mention has `mentioned: false`; a mention keeps the shape that an older host knows.
+ */
+export function normalizeGuildMessage(
+  message: DiscordMessageData,
+  botUserId: string,
+  listens: DiscordListens = () => false,
+): DiscordInboundMessage | null {
   if (!message.guild_id || message.author.bot === true || message.webhook_id) return null;
-  if (!message.mentions.some((user) => user.id === botUserId)) return null;
+  const mentioned = message.mentions.some((user) => user.id === botUserId);
+  if (!mentioned && !listens(message.guild_id, message.channel_id)) return null;
   const reference = message.message_reference;
   let replyTo: DiscordInboundMessage["replyTo"] = null;
   const repliedId = message.referenced_message?.id ?? reference?.message_id;
@@ -123,6 +135,7 @@ function normalizeGuildMessage(message: DiscordMessageData, botUserId: string): 
     replyTo,
     attachments: attachmentsOf(message.attachments),
     sentAt: message.timestamp,
+    ...(mentioned ? {} : { mentioned: false as const }),
   };
 }
 
@@ -191,8 +204,11 @@ export class DiscordState {
   // User ID to the time of the last reply to a direct message from that user.
   readonly #directReplies = new Map<string, number>();
 
-  constructor(applicationId: string) {
+  readonly #listens: DiscordListens;
+
+  constructor(applicationId: string, listens: DiscordListens = () => false) {
     this.#configuredApplicationId = applicationId;
+    this.#listens = listens;
   }
 
   /** Whether the bot is in the guild, or null before the READY of every shard. */
@@ -312,7 +328,7 @@ export class DiscordState {
   #message(message: DiscordMessageData, now: number): DiscordAction[] {
     if (!message.guild_id) return this.#directMessage(message, now);
     if (!this.#botUserId) return [];
-    const normalized = normalizeGuildMessage(message, this.#botUserId);
+    const normalized = normalizeGuildMessage(message, this.#botUserId, this.#listens);
     return normalized
       ? [{ type: "deliver", guildId: message.guild_id, delivery: { kind: "message", message: normalized } }]
       : [];

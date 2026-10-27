@@ -1,4 +1,5 @@
 import type {
+  DiscordChannelConfig,
   MessagingConnection,
   MessagingDesktopApi,
   MessagingPlatform,
@@ -89,6 +90,8 @@ export function createMockMessaging(orchestrator: () => string): MessagingDeskto
   const discord = platform("discord", sourceText("error.messaging.discordNotConnected"));
   /** The roles that each preview Discord server allows. None lets everyone. */
   const allowedRoles = new Map<string, MessagingRole[]>();
+  /** The agent settings of each preview Discord server. */
+  const channelConfigs = new Map<string, DiscordChannelConfig>();
   const chats = new Map<string, MessagingConnection>();
   /** One orchestrator answers every Telegram chat, so a new chat gets it too. */
   let telegramOrchestrator: string | null = null;
@@ -123,6 +126,26 @@ export function createMockMessaging(orchestrator: () => string): MessagingDeskto
       discord.connected(workspaceId);
       allowedRoles.set(workspaceId, clone(roles));
       return clone({ allowedRoles: roles });
+    },
+    getDiscordChannelConfig: async ({ workspaceId }) => {
+      discord.connected(workspaceId);
+      return clone(channelConfigs.get(workspaceId) ?? { serverAgentId: null, channels: [] });
+    },
+    listDiscordChannels: async ({ workspaceId }) => {
+      discord.connected(workspaceId);
+      return clone({
+        channels: [
+          { id: "100000000000000101", name: "general" },
+          { id: "100000000000000102", name: "support" },
+          { id: "100000000000000103", name: "random" },
+        ],
+      });
+    },
+    setDiscordChannelConfig: async ({ workspaceId, serverAgentId, channels }) => {
+      discord.connected(workspaceId);
+      const config = { serverAgentId, channels: channels.filter((channel) => channel.agentId || channel.answerAll) };
+      channelConfigs.set(workspaceId, clone(config));
+      return clone(config);
     },
     getTelegramOverview: async () => clone({ connections: [...chats.values()] }),
     connectTelegramChat: async ({ place }) => {
@@ -198,5 +221,8 @@ export function createMockMessaging(orchestrator: () => string): MessagingDeskto
     hostGetDiscordAccess: (input) => api.getDiscordAccess(input),
     hostListDiscordRoles: (input) => api.listDiscordRoles(input),
     hostSetDiscordAccess: (input) => api.setDiscordAccess(input),
+    hostGetDiscordChannelConfig: (input) => api.getDiscordChannelConfig(input),
+    hostListDiscordChannels: (input) => api.listDiscordChannels(input),
+    hostSetDiscordChannelConfig: (input) => api.setDiscordChannelConfig(input),
   };
 }

@@ -17,6 +17,9 @@ export type HostMessagingApi = Pick<
   | "hostGetDiscordAccess"
   | "hostListDiscordRoles"
   | "hostSetDiscordAccess"
+  | "hostGetDiscordChannelConfig"
+  | "hostListDiscordChannels"
+  | "hostSetDiscordChannelConfig"
 >;
 
 /**
@@ -54,5 +57,9 @@ export function hostMessagingApi(
     discordRoles: (workspaceId) => call((api, id) => api.hostListDiscordRoles({ workspaceId }, id)),
     setDiscordAccess: (workspaceId, allowedRoles) =>
       call((api, id) => api.hostSetDiscordAccess({ workspaceId, allowedRoles }, id)),
+    discordChannelConfig: (workspaceId) => call((api, id) => api.hostGetDiscordChannelConfig({ workspaceId }, id)),
+    discordChannels: (workspaceId) => call((api, id) => api.hostListDiscordChannels({ workspaceId }, id)),
+    setDiscordChannelConfig: (workspaceId, config) =>
+      call((api, id) => api.hostSetDiscordChannelConfig({ workspaceId, ...config }, id)),
   };
 }

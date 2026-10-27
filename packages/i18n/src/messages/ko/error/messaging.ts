@@ -12,6 +12,7 @@ export const messages = {
     "OpenBot이 이 컴퓨터에서 Discord 이벤트를 받을 수 없어요. 로그인하고 이 컴퓨터에 이름을 지정한 다음 다시 시도해 주세요.",
   "error.messaging.discordRolesUnsupported":
     "OpenBot이 아직 Discord 역할을 나열할 수 없어요. 나중에 다시 시도해 주세요.",
+  "error.messaging.discordAgentMissing": "선택한 에이전트가 더 이상 없어요. 다른 에이전트를 고르세요.",
   "error.messaging.telegramNotConnected": "이 Telegram 채팅이 연결되어 있지 않아요.",
   "error.messaging.telegramUnsupported": "이 컴퓨터는 Telegram에 연결할 수 없어요.",
   "error.messaging.telegramRelayUnavailable":

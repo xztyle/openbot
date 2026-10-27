@@ -12,6 +12,7 @@ export const messages = {
   "error.messaging.discordRelayUnavailable":
     "OpenBot не может получать события Discord на этом компьютере. Войдите, дайте компьютеру имя и повторите попытку.",
   "error.messaging.discordRolesUnsupported": "OpenBot пока не может показать роли Discord. Повторите попытку позже.",
+  "error.messaging.discordAgentMissing": "Выбранного агента больше нет. Выберите другого.",
   "error.messaging.telegramNotConnected": "Этот чат Telegram не подключён.",
   "error.messaging.telegramUnsupported": "Этот компьютер не может подключиться к Telegram.",
   "error.messaging.telegramRelayUnavailable":

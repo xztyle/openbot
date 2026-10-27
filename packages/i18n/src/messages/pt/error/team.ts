@@ -129,6 +129,8 @@ export const messages = {
     "As conexões deste servidor não podem ser gerenciadas daqui. Atualize o OpenBot no computador anfitrião.",
   "error.team.discordAccessUnsupported":
     "Este servidor não consegue definir funções do Discord. Atualize o OpenBot nele.",
+  "error.team.discordChannelsUnsupported":
+    "Este servidor não pode configurar canais do Discord. Atualize o OpenBot nele.",
   "error.team.connectorPageRefused": "O servidor enviou uma página que o OpenBot não abre.",
   "error.team.signInRelayUnknown": "Este login terminou ou não existe.",
   "error.team.signInRelayUsed": "Este login já foi enviado.",

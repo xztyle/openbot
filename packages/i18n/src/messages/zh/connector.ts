@@ -250,6 +250,21 @@ export const messages = {
   // {role} is the name of a Discord role that the server no longer has.
   "connector.discord.accessRoleDeleted": "{role}（已删除）",
   "connector.discord.accessSave": "保存",
+  "connector.discord.channelsConfigure": "配置",
+  "connector.discord.channelsTitle": "配置 {workspace}",
+  "connector.discord.channelsDescription": "选择在此服务器和每个频道中回答的智能体。",
+  "connector.discord.channelsServerAgent": "此服务器的智能体",
+  "connector.discord.channelsOrchestratorDefault": "Discord Orchestrator（默认）",
+  "connector.discord.channelsServerDefault": "服务器默认",
+  "connector.discord.channelsListTitle": "频道",
+  "connector.discord.channelsChannelAgent": "#{channel} 的智能体",
+  "connector.discord.channelsAnswerAll": "回答每条消息",
+  "connector.discord.channelsAnswerAllDescription": "这里无需提及 @OpenBot。",
+  "connector.discord.channelsLoading": "正在加载频道…",
+  "connector.discord.channelsLoadFailed": "Discord 频道未能加载",
+  "connector.discord.channelsNone": "此服务器没有 OpenBot 可见的文字频道。",
+  "connector.discord.channelsSave": "保存",
+  "connector.discord.channelsSaveFailed": "Discord 设置未保存",
   // {host} is the joined server's name.
   "connector.discord.accessHostUpdate": "请更新 {host} 上的 OpenBot，以选择角色。",
   // Server settings > Connectors > Telegram: each chat adds the one OpenBot bot, and the Telegram

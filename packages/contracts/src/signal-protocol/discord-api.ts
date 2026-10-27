@@ -58,7 +58,10 @@ export interface DiscordInboundQuote {
   attachments: DiscordInboundAttachment[];
 }
 
-/** One guild message that mentions OpenBot. */
+/**
+ * One guild message that mentions OpenBot, or, in a channel that the host named in `discord-listen`,
+ * any message of a person.
+ */
 export interface DiscordInboundMessage {
   id: string;
   channelId: string;
@@ -85,6 +88,11 @@ export interface DiscordInboundMessage {
   } | null;
   attachments: DiscordInboundAttachment[];
   sentAt: string;
+  /**
+   * False for a message that does not mention OpenBot, which Signal passes on only in a channel that
+   * the host named in `discord-listen`. Absent for a mention, and from an older Signal.
+   */
+  mentioned?: false;
 }
 
 /** A press of a button on an OpenBot message. Signal has already acknowledged it to Discord. */
@@ -288,7 +296,15 @@ function inboundMessage(value: unknown): DiscordInboundMessage {
     replyTo,
     attachments: item.attachments.map(attachment),
     sentAt: text(item.sentAt),
+    ...(mentioned(item.mentioned) ? {} : { mentioned: false as const }),
   };
+}
+
+/** Absent is a mention: an older Signal passes on only mentions. */
+function mentioned(value: unknown): boolean {
+  if (value === undefined || value === true) return true;
+  if (value === false) return false;
+  return invalid();
 }
 
 function inboundInteraction(value: unknown): DiscordInboundInteraction {

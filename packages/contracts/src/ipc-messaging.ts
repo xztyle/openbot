@@ -46,6 +46,9 @@ export const MESSAGING_LIMITS = {
   /** Discord's own limit of roles in a server. */
   roles: 250,
   roleName: 100,
+  /** The channels of one Discord server with their own settings. `listChannels` returns at most 500. */
+  channelSettings: 500,
+  channelName: 100,
 } as const;
 
 export interface MessagingConnection {
@@ -124,6 +127,41 @@ export interface HostDiscordAccessInput {
 }
 
 export type HostSetDiscordAccessInput = SetDiscordAccessInput;
+
+/**
+ * The settings of one channel of a Discord server. `agentId` null uses the server's agent. With
+ * `answerAll`, OpenBot answers every message of a person in the channel, also without a mention.
+ */
+export interface DiscordChannelSetting {
+  channelId: string;
+  agentId: string | null;
+  answerAll: boolean;
+}
+
+/**
+ * Which agent answers in one Discord server and in each of its channels. `serverAgentId` null uses
+ * the Discord Orchestrator. A channel with the defaults (no agent, `answerAll` false) is not listed.
+ * An agent that was deleted reads as null: its place falls back to the next default.
+ */
+export interface DiscordChannelConfig {
+  serverAgentId: string | null;
+  channels: DiscordChannelSetting[];
+}
+
+export interface SetDiscordChannelConfigInput extends DiscordChannelConfig {
+  workspaceId: string;
+}
+
+/** One text channel of a Discord server, to configure. */
+export interface DiscordTextChannel {
+  id: string;
+  name: string;
+}
+
+/** The text channels of a Discord server, in Discord's order. */
+export interface DiscordChannelList {
+  channels: DiscordTextChannel[];
+}
 
 /** The Slack workspaces connected on this computer. */
 export type SlackOverview = MessagingOverview;
@@ -286,6 +324,57 @@ export function isDiscordAccess(value: unknown): value is DiscordAccess {
 
 export function isDiscordRoleList(value: unknown): value is DiscordRoleList {
   return isDynamicRecord(value) && isRoleList(value.roles, MESSAGING_LIMITS.roles);
+}
+
+function isDiscordChannelSetting(value: unknown): value is DiscordChannelSetting {
+  return (
+    isDynamicRecord(value) &&
+    typeof value.channelId === "string" &&
+    ROLE_ID.test(value.channelId) &&
+    (value.agentId === null || isIdentifier(value.agentId)) &&
+    isBoolean(value.answerAll)
+  );
+}
+
+export function isDiscordChannelConfig(value: unknown): value is DiscordChannelConfig {
+  return (
+    isDynamicRecord(value) &&
+    (value.serverAgentId === null || isIdentifier(value.serverAgentId)) &&
+    Array.isArray(value.channels) &&
+    value.channels.length <= MESSAGING_LIMITS.channelSettings &&
+    value.channels.every(isDiscordChannelSetting)
+  );
+}
+
+export function isDiscordChannelList(value: unknown): value is DiscordChannelList {
+  return (
+    isDynamicRecord(value) &&
+    Array.isArray(value.channels) &&
+    value.channels.length <= MESSAGING_LIMITS.channelSettings &&
+    value.channels.every(
+      (channel) =>
+        isDynamicRecord(channel) &&
+        typeof channel.id === "string" &&
+        ROLE_ID.test(channel.id) &&
+        isBoundedString(channel.name, MESSAGING_LIMITS.channelName),
+    )
+  );
+}
+
+/**
+ * A new channel configuration, or null when it is invalid or names a channel twice. Channels with
+ * the defaults are left out.
+ */
+export function parseDiscordChannelConfig(value: unknown): DiscordChannelConfig | null {
+  if (!isDiscordChannelConfig(value)) return null;
+  const ids = new Set(value.channels.map((channel) => channel.channelId));
+  if (ids.size !== value.channels.length) return null;
+  return {
+    serverAgentId: value.serverAgentId,
+    channels: value.channels
+      .filter((channel) => channel.agentId !== null || channel.answerAll)
+      .map((channel) => ({ channelId: channel.channelId, agentId: channel.agentId, answerAll: channel.answerAll })),
+  };
 }
 
 /** A new role list, or null when it is too long, repeats a role, or has an invalid role. */

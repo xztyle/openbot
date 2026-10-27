@@ -167,6 +167,11 @@ export type SignalClientMessage =
     }
   // An `ingress` socket's answer to one `slack-delivery`. Signal returns it to Slack as the HTTP
   // response, so `body` is only the `url_verification` challenge or an interactivity reply.
+  // An `ingress` socket names the channels of one guild of its Discord route in which Signal also
+  // passes on the messages that do not mention OpenBot, with `mentioned: false`. Each frame replaces
+  // the list of its guild; an empty list stops it. Sent only to a Signal whose `ready` named
+  // `discord-listen` (`./discord-route.ts`). Signal keeps the list while the socket is open.
+  | { type: "discord-listen"; version: SignalProtocolVersion; guildId: string; channelIds: string[] }
   | {
       type: "slack-delivery-result";
       version: SignalProtocolVersion;

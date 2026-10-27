@@ -5,10 +5,14 @@
 import {
   type AddMessagingOrchestratorResult,
   type DiscordAccess,
+  type DiscordChannelConfig,
+  type DiscordChannelList,
   type DiscordRoleList,
   decodeHostMessagingOverview,
   isAddMessagingOrchestratorResult,
   isDiscordAccess,
+  isDiscordChannelConfig,
+  isDiscordChannelList,
   isDiscordRoleList,
   type MessagingPlatform,
   messagingPage,
@@ -17,6 +21,10 @@ import { decodeRecord, nullableString } from "@openbot/contracts/ipc-decoding";
 import { CONNECTORS_CAPABILITY, CONNECTORS_ROUTES } from "@openbot/contracts/team-protocol/connectors-v1";
 import type { TeamCurrentCapability } from "@openbot/contracts/team-protocol/current";
 import { DISCORD_ACCESS_CAPABILITY, DISCORD_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/discord-access-v1";
+import {
+  DISCORD_CHANNELS_CAPABILITY,
+  DISCORD_CHANNELS_ROUTES,
+} from "@openbot/contracts/team-protocol/discord-channels-v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
@@ -38,6 +46,7 @@ import {
   parseHostSetMessagingEnabledInput,
   parseMessagingWorkspaceInput,
   parseSetDiscordAccessInput,
+  parseSetDiscordChannelConfigInput,
   parseSetMessagingEnabledInput,
 } from "./messaging-inputs";
 import { scopedHandler } from "./scoped-handler";
@@ -61,6 +70,9 @@ interface MessagingIpcDependencies {
     | "discordAccess"
     | "listDiscordRoles"
     | "setDiscordAccess"
+    | "discordChannelConfig"
+    | "listDiscordChannels"
+    | "setDiscordChannelConfig"
   >;
   remoteServers: {
     supportsCapability(serverId: string, capability: TeamCurrentCapability): boolean;
@@ -94,6 +106,16 @@ const decodeDiscordRoles = (value: unknown): DiscordRoleList => {
   return value;
 };
 
+const decodeChannelConfig = (value: unknown): DiscordChannelConfig => {
+  if (!isDiscordChannelConfig(value)) throw new Error("Invalid Discord channel settings response.");
+  return value;
+};
+
+const decodeChannelList = (value: unknown): DiscordChannelList => {
+  if (!isDiscordChannelList(value)) throw new Error("Invalid Discord channels response.");
+  return value;
+};
+
 const decodeOrchestrator = (value: unknown): AddMessagingOrchestratorResult => {
   if (!isAddMessagingOrchestratorResult(value)) throw new Error("Invalid messaging orchestrator response.");
   return value;
@@ -114,6 +136,12 @@ export function messagingIpcHandlers({
   function postAccess<T>(serverId: string, path: string, decoder: ResponseDecoder<T>, body: TeamProtocolV2Json) {
     if (!remoteServers.supportsCapability(serverId, DISCORD_ACCESS_CAPABILITY))
       throw new Error(sourceText("error.team.discordAccessUnsupported"));
+    return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
+  }
+  /** A Discord channel request to a joined server (`fork-host-v1`). An older host answers 404. */
+  function postChannels<T>(serverId: string, path: string, decoder: ResponseDecoder<T>, body: TeamProtocolV2Json) {
+    if (!remoteServers.supportsCapability(serverId, DISCORD_CHANNELS_CAPABILITY))
+      throw new Error(sourceText("error.team.discordChannelsUnsupported"));
     return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
   }
   /**
@@ -176,6 +204,15 @@ export function messagingIpcHandlers({
       ),
       setDiscordAccess: payloadHandler(parseSetDiscordAccessInput, (input) =>
         runCauseEffect(messaging.setDiscordAccess(input)),
+      ),
+      getDiscordChannelConfig: payloadHandler(parseMessagingWorkspaceInput, ({ workspaceId }) =>
+        runCauseEffect(messaging.discordChannelConfig(workspaceId)),
+      ),
+      listDiscordChannels: payloadHandler(parseMessagingWorkspaceInput, ({ workspaceId }) =>
+        runCauseEffect(messaging.listDiscordChannels(workspaceId)),
+      ),
+      setDiscordChannelConfig: payloadHandler(parseSetDiscordChannelConfigInput, (input) =>
+        runCauseEffect(messaging.setDiscordChannelConfig(input)),
       ),
       getTelegramOverview: handler(() => messaging.telegramOverview()),
       connectTelegramChat: payloadHandler(parseConnectTelegramChatInput, ({ place }) =>
@@ -274,6 +311,25 @@ export function messagingIpcHandlers({
           postAccess(serverId, DISCORD_ACCESS_ROUTES.update, decodeDiscordAccess, {
             workspaceId,
             allowedRoles: allowedRoles.map((role) => ({ id: role.id, name: role.name })),
+          }),
+      }),
+      hostGetDiscordChannelConfig: scopedHandler(parseMessagingWorkspaceInput, {
+        local: ({ workspaceId }) => runCauseEffect(messaging.discordChannelConfig(workspaceId)),
+        remote: ({ workspaceId }, serverId) =>
+          postChannels(serverId, DISCORD_CHANNELS_ROUTES.config, decodeChannelConfig, { workspaceId }),
+      }),
+      hostListDiscordChannels: scopedHandler(parseMessagingWorkspaceInput, {
+        local: ({ workspaceId }) => runCauseEffect(messaging.listDiscordChannels(workspaceId)),
+        remote: ({ workspaceId }, serverId) =>
+          postChannels(serverId, DISCORD_CHANNELS_ROUTES.channels, decodeChannelList, { workspaceId }),
+      }),
+      hostSetDiscordChannelConfig: scopedHandler(parseSetDiscordChannelConfigInput, {
+        local: (input) => runCauseEffect(messaging.setDiscordChannelConfig(input)),
+        remote: ({ workspaceId, serverAgentId, channels }, serverId) =>
+          postChannels(serverId, DISCORD_CHANNELS_ROUTES.update, decodeChannelConfig, {
+            workspaceId,
+            serverAgentId,
+            channels: channels.map((channel) => ({ ...channel })),
           }),
       }),
     },

@@ -1,6 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { DiscordDelivery } from "@openbot/contracts/signal-protocol/discord-api";
-import { DISCORD_ROUTE_TTL_SECONDS, type DiscordRouteGuild } from "@openbot/contracts/signal-protocol/discord-route";
+import {
+  DISCORD_LISTEN_CAPABILITY,
+  DISCORD_ROUTE_TTL_SECONDS,
+  type DiscordRouteGuild,
+} from "@openbot/contracts/signal-protocol/discord-route";
 import {
   INGRESS_QUEUE_CAPABILITY,
   type IngressRoute,
@@ -120,6 +124,9 @@ interface AuthenticatedPeer {
   discordGuilds: string[];
   // `ingress` only: the hash of the `discord-session` token sent to this socket.
   discordSession: string | null;
+  // `ingress` only: for each guild of the route, the channels whose messages without a mention this
+  // socket receives too (`discord-listen`).
+  discordListen: Map<string, ReadonlySet<string>>;
   // `ingress` only: opaque generic webhook route IDs whose requests this socket receives.
   webhookRoutes: string[];
   // The TURN credentials of the last `turn-refresh`, and when Signal made them.
@@ -478,6 +485,17 @@ export class SignalService {
         if (this.#ownsConnection(peer, message.connectionId)) this.#dropConnection(message.connectionId, socket.id);
         return;
       }
+      if (message.type === "discord-listen") {
+        // Only a guild of this socket's own Discord route ticket. A guild whose route moved to
+        // another socket since keeps its list here, and `discordListens` ignores it.
+        if (peer.peer !== "ingress" || !peer.discordGuilds.includes(message.guildId)) {
+          this.#fail(socket, "permission_denied", "The guild is not routed to this socket.");
+          return;
+        }
+        if (message.channelIds.length === 0) peer.discordListen.delete(message.guildId);
+        else peer.discordListen.set(message.guildId, new Set(message.channelIds));
+        return;
+      }
       if (message.type === "queued-delivery-ack") {
         if (peer.peer === "ingress") this.#queue.acknowledge(peer.claims.hostId, message.id);
         return;
@@ -671,6 +689,17 @@ export class SignalService {
     ingress.socket.send(message);
     this.#metrics.discordDeliveries += 1;
     return true;
+  }
+
+  /**
+   * Whether the `ingress` socket that the guild is routed to asked for the messages of the channel
+   * that do not mention OpenBot. False while the guild has no socket: Signal keeps no such message
+   * for a host that is off.
+   */
+  discordListens(guildId: string, channelId: string): boolean {
+    const socketId = this.#discordGuilds.get(guildId);
+    if (socketId === undefined) return false;
+    return this.#peers.get(socketId)?.discordListen.get(guildId)?.has(channelId) ?? false;
   }
 
   /**
@@ -1052,6 +1081,7 @@ export class SignalService {
     const capabilities = [
       ...(this.#telegram ? [TELEGRAM_CAPABILITY] : []),
       ...(this.#queue.enabled ? [INGRESS_QUEUE_CAPABILITY] : []),
+      ...(this.#discordEnabled ? [DISCORD_LISTEN_CAPABILITY] : []),
     ];
     return capabilities.length > 0 ? { capabilities } : {};
   }
@@ -1268,6 +1298,7 @@ export class SignalService {
           telegramChats: [],
           discordGuilds: discordRoute.guilds.map((guild) => guild.id),
           discordSession: null,
+          discordListen: new Map(),
           webhookRoutes: webhookRoute.routes.map((route) => route.id),
           turnCredentials: null,
         };

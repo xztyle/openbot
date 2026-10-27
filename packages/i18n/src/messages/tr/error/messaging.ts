@@ -14,6 +14,7 @@ export const messages = {
     "OpenBot bu bilgisayarda Discord etkinliklerini alamıyor. Oturum açın, bu bilgisayara bir ad verin ve tekrar deneyin.",
   "error.messaging.discordRolesUnsupported":
     "OpenBot henüz Discord rollerini listeleyemiyor. Daha sonra yeniden deneyin.",
+  "error.messaging.discordAgentMissing": "Seçilen ajan artık yok. Başka bir ajan seçin.",
   "error.messaging.telegramNotConnected": "Bu Telegram sohbeti bağlı değil.",
   "error.messaging.telegramUnsupported": "Bu bilgisayar Telegram'a bağlanamıyor.",
   "error.messaging.telegramRelayUnavailable":

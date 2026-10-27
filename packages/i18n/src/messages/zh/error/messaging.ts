@@ -12,6 +12,7 @@ export const messages = {
   "error.messaging.discordRelayUnavailable":
     "OpenBot 无法在这台电脑上接收 Discord 事件。请登录，为这台电脑命名后重试。",
   "error.messaging.discordRolesUnsupported": "OpenBot 暂时无法列出 Discord 角色，请稍后重试。",
+  "error.messaging.discordAgentMissing": "所选智能体已不存在。请选择其他智能体。",
   // Errors of a Telegram chat connection, which the host sends.
   "error.messaging.telegramNotConnected": "该 Telegram 聊天未连接。",
   "error.messaging.telegramUnsupported": "这台电脑无法连接 Telegram。",

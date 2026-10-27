@@ -272,6 +272,21 @@ export const messages = defineMessages("connector", {
   // {role} is the name of a Discord role that the server no longer has.
   "connector.discord.accessRoleDeleted": "{role} (deleted)",
   "connector.discord.accessSave": "Save",
+  "connector.discord.channelsConfigure": "Configure",
+  "connector.discord.channelsTitle": "Configure {workspace}",
+  "connector.discord.channelsDescription": "Choose the agent that answers in this server and in each channel.",
+  "connector.discord.channelsServerAgent": "Agent for this server",
+  "connector.discord.channelsOrchestratorDefault": "Discord Orchestrator (default)",
+  "connector.discord.channelsServerDefault": "Server default",
+  "connector.discord.channelsListTitle": "Channels",
+  "connector.discord.channelsChannelAgent": "Agent for #{channel}",
+  "connector.discord.channelsAnswerAll": "Answer every message",
+  "connector.discord.channelsAnswerAllDescription": "People do not need to mention @OpenBot here.",
+  "connector.discord.channelsLoading": "Loading the channels…",
+  "connector.discord.channelsLoadFailed": "Discord channels did not load",
+  "connector.discord.channelsNone": "This server has no text channels that OpenBot can see.",
+  "connector.discord.channelsSave": "Save",
+  "connector.discord.channelsSaveFailed": "The Discord settings were not saved",
   // {host} is the joined server's name.
   "connector.discord.accessHostUpdate": "Update OpenBot on {host} to choose roles.",
 

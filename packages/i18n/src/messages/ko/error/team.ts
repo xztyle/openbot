@@ -125,6 +125,7 @@ export const messages = {
   "error.team.signInRelayUnsupported": "이 서버는 로그인을 중계할 수 없어요. 호스트의 OpenBot을 업데이트해 주세요.",
   "error.team.connectorsUnsupported": "이 서버는 여기서 연결을 관리할 수 없어요. 호스트의 OpenBot을 업데이트해 주세요.",
   "error.team.discordAccessUnsupported": "이 서버는 Discord 역할을 설정할 수 없어요. OpenBot을 업데이트해 주세요.",
+  "error.team.discordChannelsUnsupported": "이 서버는 Discord 채널을 설정할 수 없어요. OpenBot을 업데이트해 주세요.",
   "error.team.connectorPageRefused": "서버가 OpenBot에서 열 수 없는 페이지를 보냈어요.",
   "error.team.signInRelayUnknown": "이 로그인은 종료되었거나 존재하지 않아요.",
   "error.team.signInRelayUsed": "이 로그인은 이미 전송되었어요.",

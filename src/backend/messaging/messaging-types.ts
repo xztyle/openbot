@@ -65,6 +65,10 @@ export interface InboundMessage {
   authorRoleIds?: readonly string[] | null;
   /** The message this one replies to, when a person wrote it and the platform gave its text or files. */
   replyTo?: InboundQuote | null;
+  /** False for a Discord message that does not mention OpenBot: only a channel that answers every message takes it. */
+  mentioned?: boolean;
+  /** For a reply to an OpenBot post: true. Lets a channel that answers every message find the conversation. */
+  repliesToBot?: boolean;
 }
 
 /** A replied-to message, given to the agent as context. Mentions are written as in `text`. */
@@ -291,6 +295,11 @@ export interface MessagingIngress {
    * the platforms that hold it.
    */
   acquire(platform: MessagingPlatform): () => void;
+  /**
+   * Names the channels of a Discord guild in which Signal also passes on the messages that do not
+   * mention OpenBot. An empty list stops it.
+   */
+  setDiscordListen?(guildId: string, channelIds: readonly string[]): void;
   state(): IngressState;
   onState(listener: (state: IngressState) => void): () => void;
   /** Sets the one handler of the requests the relay receives, or removes it. */

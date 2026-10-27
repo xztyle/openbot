@@ -12,6 +12,7 @@ export const messages = {
     "OpenBot はこのコンピューターで Discord のイベントを受信できません。サインインし、このコンピューターに名前を付けてから、もう一度お試しください。",
   "error.messaging.discordRolesUnsupported":
     "OpenBot はまだ Discord のロールを一覧にできません。後でもう一度お試しください。",
+  "error.messaging.discordAgentMissing": "選んだエージェントはもうありません。別のエージェントを選んでください。",
   "error.messaging.telegramNotConnected": "この Telegram チャットは接続されていません。",
   "error.messaging.telegramUnsupported": "このコンピューターは Telegram に接続できません。",
   "error.messaging.telegramRelayUnavailable":

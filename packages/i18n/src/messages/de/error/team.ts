@@ -129,6 +129,8 @@ export const messages = {
     "Die Verbindungen dieses Servers lassen sich hier nicht verwalten. Aktualisiere OpenBot auf dem Host.",
   "error.team.discordAccessUnsupported":
     "Dieser Server kann keine Discord-Rollen festlegen. Aktualisiere OpenBot auf dem Server.",
+  "error.team.discordChannelsUnsupported":
+    "Dieser Server kann keine Discord-Kanäle konfigurieren. Aktualisiere OpenBot darauf.",
   "error.team.connectorPageRefused": "Der Server hat eine Seite gesendet, die OpenBot nicht öffnet.",
   "error.team.signInRelayUnknown": "Diese Anmeldung ist beendet oder existiert nicht.",
   "error.team.signInRelayUsed": "Diese Anmeldung wurde bereits gesendet.",

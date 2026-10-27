@@ -36,6 +36,8 @@ export function discordInboundMessage(message: DiscordInboundMessage): InboundMe
     // The replied-to message's files are context too, as its text is.
     files: [...message.attachments, ...(quote?.attachments ?? [])].map(inboundFile),
     authorRoleIds: message.authorRoleIds,
+    mentioned: message.mentioned !== false,
+    repliesToBot: reply?.authorIsBot === true,
     // A reply to a person's message starts a new conversation, so it has no earlier messages: the
     // replied-to message is its context.
     replyTo: quote

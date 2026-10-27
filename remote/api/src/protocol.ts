@@ -7,6 +7,7 @@
 // The re-exports below are what the rest of this workspace imports, so moving the types out did not
 // churn `signal-service.ts` or `tokens.ts`.
 
+import { DISCORD_LISTEN_CHANNELS_LIMIT } from "@openbot/contracts/signal-protocol/discord-route";
 import {
   type SignalClientMessage,
   type SignalServerMessage,
@@ -46,6 +47,7 @@ const identifierSchema = z
   .max(128)
   .regex(/^[A-Za-z0-9_-]+$/u);
 const channelSchema = z.enum(["team", "remote-desktop"]);
+const discordSnowflakeSchema = z.string().regex(/^[0-9]{1,24}$/u);
 const signalMessageTypeSchema = z.enum([
   "hello",
   "offer",
@@ -58,6 +60,7 @@ const signalMessageTypeSchema = z.enum([
   "webhook-delivery-result",
   "telegram-call",
   "queued-delivery-ack",
+  "discord-listen",
 ]);
 
 // The Bot API calls an `ingress` socket can make (`TelegramCallParams`). Every object is strict: an
@@ -201,6 +204,12 @@ const signalClientMessageSchema = z.discriminatedUnion("type", [
     status: z.union([z.literal(200), z.literal(400), z.literal(401), z.literal(404), z.literal(503)]),
     contentType: z.enum(["application/json", "text/plain"]).optional(),
     body: z.string().max(SLACK_DELIVERY_RESPONSE_BYTES_LIMIT).optional(),
+  }),
+  z.object({
+    type: z.literal("discord-listen"),
+    version: z.literal(1),
+    guildId: discordSnowflakeSchema,
+    channelIds: z.array(discordSnowflakeSchema).max(DISCORD_LISTEN_CHANNELS_LIMIT),
   }),
   z.object({
     type: z.literal("queued-delivery-ack"),

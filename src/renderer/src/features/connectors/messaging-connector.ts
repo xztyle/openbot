@@ -1,6 +1,8 @@
 import type {
   AddMessagingOrchestratorResult,
   DiscordAccess,
+  DiscordChannelConfig,
+  DiscordChannelList,
   DiscordRoleList,
   MessagingDesktopApi,
   MessagingOverview,
@@ -11,6 +13,7 @@ import { sourceText } from "@openbot/i18n/source";
 import type { AgentProfile } from "@openbot/ui/data";
 import type {
   DiscordAccessControl,
+  DiscordChannelsControl,
   SlackOrchestratorChoice,
   SlackOrchestratorModels,
   WorkspacePlatform,
@@ -46,6 +49,11 @@ export interface MessagingApi {
   /** The roles of a Discord server to choose from. */
   discordRoles: (workspaceId: string) => Promise<DiscordRoleList>;
   setDiscordAccess: (workspaceId: string, allowedRoles: MessagingRole[]) => Promise<DiscordAccess>;
+  /** Which agent answers in a Discord server and in each channel. */
+  discordChannelConfig: (workspaceId: string) => Promise<DiscordChannelConfig>;
+  /** The text channels of a Discord server to configure. */
+  discordChannels: (workspaceId: string) => Promise<DiscordChannelList>;
+  setDiscordChannelConfig: (workspaceId: string, config: DiscordChannelConfig) => Promise<DiscordChannelConfig>;
 }
 
 /** The connections of this computer, through main. Read on each call: tests and stories replace `window.openbot`. */
@@ -90,6 +98,9 @@ export function localMessagingApi(messaging: () => MessagingDesktopApi = () => w
     discordAccess: (workspaceId) => messaging().getDiscordAccess({ workspaceId }),
     discordRoles: (workspaceId) => messaging().listDiscordRoles({ workspaceId }),
     setDiscordAccess: (workspaceId, allowedRoles) => messaging().setDiscordAccess({ workspaceId, allowedRoles }),
+    discordChannelConfig: (workspaceId) => messaging().getDiscordChannelConfig({ workspaceId }),
+    discordChannels: (workspaceId) => messaging().listDiscordChannels({ workspaceId }),
+    setDiscordChannelConfig: (workspaceId, config) => messaging().setDiscordChannelConfig({ workspaceId, ...config }),
   };
 }
 
@@ -319,6 +330,16 @@ export function createMessagingConnector(
       return access.unsupported;
     },
   };
+  const discordChannels: DiscordChannelsControl = {
+    load: async (workspaceId) => {
+      const [config, list] = await Promise.all([
+        api.discordChannelConfig(workspaceId),
+        api.discordChannels(workspaceId),
+      ]);
+      return { config, channels: list.channels };
+    },
+    save: (workspaceId, config) => api.setDiscordChannelConfig(workspaceId, config),
+  };
   return {
     ...base,
     id: platform,
@@ -352,6 +373,7 @@ export function createMessagingConnector(
         onSetEnabled: shared.setEnabled,
         onAddOrchestrator: (workspaceId, choice) => addOrchestrator({ platform, workspaceId }, choice),
         access: platform === "discord" ? discordAccess : undefined,
+        channels: platform === "discord" ? discordChannels : undefined,
       },
     },
   };

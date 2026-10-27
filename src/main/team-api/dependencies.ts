@@ -195,6 +195,9 @@ export interface TeamApiConnectors {
     | "discordAccess"
     | "listDiscordRoles"
     | "setDiscordAccess"
+    | "discordChannelConfig"
+    | "listDiscordChannels"
+    | "setDiscordChannelConfig"
   >;
 }
 

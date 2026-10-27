@@ -1,7 +1,7 @@
 import type { MessagingPlatform } from "@openbot/contracts/ipc";
 import { decodeSignalServerMessage } from "@openbot/contracts/signal-protocol/decode";
 import { type DiscordApiRequest, decodeDiscordApiError } from "@openbot/contracts/signal-protocol/discord-api";
-import { DISCORD_API_PATH } from "@openbot/contracts/signal-protocol/discord-route";
+import { DISCORD_API_PATH, DISCORD_LISTEN_CAPABILITY } from "@openbot/contracts/signal-protocol/discord-route";
 import {
   INGRESS_QUEUE_CAPABILITY,
   openQueuedDelivery,
@@ -179,6 +179,8 @@ export class SignalIngress implements MessagingIngress {
   #telegramBackoffMs = BACKOFF_START_MS;
   readonly #sessionListeners = new Set<(session: DiscordSession | null) => void>();
   readonly #routeListeners = new Set<(guildIds: ReadonlySet<string>) => void>();
+  /** The channels of each guild whose messages without a mention Signal passes on too. */
+  readonly #discordListen = new Map<string, readonly string[]>();
   /** What the Signal of the open socket can do, from its `ready`. */
   #capabilities = new Set<string>();
   /** The HTTPS origin of the Signal of the open socket, for Telegram files. */
@@ -347,6 +349,30 @@ export class SignalIngress implements MessagingIngress {
       cause: new DiscordApiError(request.op, refused?.code ?? `http_${status}`, refused?.retryAfterMs),
     });
   });
+
+  /**
+   * Names the channels of a guild in which Signal also passes on messages without a mention. Sent at
+   * once on an open socket whose Signal knows `discord-listen`, and again after each new session.
+   */
+  setDiscordListen(guildId: string, channelIds: readonly string[]): void {
+    const before = this.#discordListen.get(guildId) ?? [];
+    if (channelIds.length === 0) this.#discordListen.delete(guildId);
+    else this.#discordListen.set(guildId, [...channelIds]);
+    if (before.length === 0 && channelIds.length === 0) return;
+    if (this.#discordSession) this.#sendListen(guildId, channelIds);
+  }
+
+  #sendListen(guildId: string, channelIds: readonly string[]): void {
+    const socket = this.#socket;
+    if (socket?.readyState !== WebSocket.OPEN || !this.#capabilities.has(DISCORD_LISTEN_CAPABILITY)) return;
+    const frame: SignalClientMessage = {
+      type: "discord-listen",
+      version: SIGNAL_PROTOCOL_VERSION,
+      guildId,
+      channelIds: [...channelIds],
+    };
+    socket.send(JSON.stringify(frame));
+  }
 
   onDiscordRoutes(listener: (guildIds: ReadonlySet<string>) => void): () => void {
     this.#routeListeners.add(listener);
@@ -571,6 +597,8 @@ export class SignalIngress implements MessagingIngress {
       this.#discordSession = session;
       for (const listener of [...this.#sessionListeners]) listener(session);
       const routes = new Set(message.guilds);
+      for (const [guildId, channelIds] of this.#discordListen)
+        if (routes.has(guildId)) this.#sendListen(guildId, channelIds);
       for (const listener of [...this.#routeListeners]) listener(routes);
       return;
     }

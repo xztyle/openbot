@@ -126,6 +126,8 @@ export const messages = {
   "error.team.connectorsUnsupported":
     "Las conexiones de este servidor no se pueden gestionar desde aquí. Actualiza OpenBot en el host.",
   "error.team.discordAccessUnsupported": "Este servidor no puede configurar roles de Discord. Actualiza OpenBot en él.",
+  "error.team.discordChannelsUnsupported":
+    "Este servidor no puede configurar canales de Discord. Actualiza OpenBot en él.",
   "error.team.connectorPageRefused": "El servidor envió una página que OpenBot no abre.",
   "error.team.signInRelayUnknown": "Este inicio de sesión terminó o no existe.",
   "error.team.signInRelayUsed": "Este inicio de sesión ya se envió.",

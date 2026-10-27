@@ -11,6 +11,9 @@ import type {
   AgentSummary,
   ConnectTelegramChatInput,
   DiscordAccess,
+  DiscordChannelConfig,
+  DiscordChannelList,
+  DiscordChannelSetting,
   DiscordRoleList,
   MessagingConnection,
   MessagingConnectionState,
@@ -20,6 +23,7 @@ import type {
   MessagingPlatform,
   RespondToApprovalInput,
   SetDiscordAccessInput,
+  SetDiscordChannelConfigInput,
   SidebarLayoutSnapshot,
   SidebarSection,
 } from "@openbot/contracts/ipc";
@@ -35,6 +39,7 @@ import type { AgentLifecycleFailed } from "../agent-service";
 import { causeHelpers } from "../effect-boundary";
 import type { MessagingOrigin } from "../mailbox-store";
 import type { SidebarLayoutStore } from "../sidebar-layout-store";
+import { DiscordChannelConfigStore } from "./discord/discord-channel-config";
 import { type DiscordAppPort, DiscordConnect, type DiscordConnectFailed } from "./discord/discord-connect";
 import { discordOrchestratorMemories, discordOrchestratorProfile } from "./discord/discord-orchestrator";
 import { mentionNames, withMentionNames } from "./messaging-mentions";
@@ -128,6 +133,8 @@ export interface MessagingServiceOptions {
   sidebar?: Pick<SidebarLayoutStore, "getSnapshot" | "mutate" | "removeAgent">;
   /** The file that keeps status posts across a restart. Without it, they are kept in memory only. */
   statusPath?: string;
+  /** The file of the Discord server and channel settings. Without it, they are kept in memory only. */
+  discordChannelsPath?: string;
 }
 
 interface LiveConnection {
@@ -179,6 +186,8 @@ const FINAL_POST_ATTEMPTS = 5;
 const RECEIVE_NAME_DEADLINE_MS = 5_000;
 /** How long a new message waits for the files of the earlier messages; past it, it runs without them. */
 const RECEIVE_CONTEXT_DEADLINE_MS = 5_000;
+/** How long a channel that answers every message keeps one conversation without a new message. */
+const CHANNEL_CONVERSATION_IDLE_MS = 2 * 60 * 60_000;
 /** The marker `mention` uses. Text that did not come from the host has it taken out. */
 const MENTION_MARKERS = /[\uE000-\uE001]/g;
 
@@ -227,6 +236,7 @@ export class MessagingService {
   readonly #slackOrigin: string | undefined;
   readonly #telegramApp: TelegramAppPort | null;
   readonly #sidebar: Pick<SidebarLayoutStore, "getSnapshot" | "mutate" | "removeAgent"> | null;
+  readonly #discordChannels: DiscordChannelConfigStore;
   #started = false;
   /** `start` asked every enabled connection to start. One with no live entry then does not start by itself. */
   #connectionsStarted = false;
@@ -247,6 +257,8 @@ export class MessagingService {
     this.#telegramApp = options.ingress && options.telegramApp ? options.telegramApp : null;
     this.#sidebar = options.sidebar ?? null;
     this.#status = new MessagingStatusPosts(options.statusPath ?? null);
+    this.#discordChannels = new DiscordChannelConfigStore(options.discordChannelsPath ?? null);
+    this.#discordChannels.load();
     this.#posts = this.#status.posts;
     this.#stops = this.#status.stops;
   }
@@ -609,6 +621,101 @@ export class MessagingService {
     yield* messagingStep(() => this.#threads.store.replaceAllowedRoles(record.connectionId, input.allowedRoles));
     return { allowedRoles: this.#threads.store.allowedRoles(record.connectionId) };
   }).bind(this);
+
+  /** Which agent answers in a Discord server and in each channel. A deleted agent reads as null. */
+  readonly discordChannelConfig = Effect.fn("MessagingService.discordChannelConfig")(function* (
+    this: MessagingService,
+    guildId: string,
+  ): Effect.fn.Return<DiscordChannelConfig, MessagingOperationFailed> {
+    const record = yield* messagingStep(() => this.#requireConnection("discord", guildId));
+    const stored = this.#discordChannels.get(record.connectionId);
+    const existing = new Set(this.#agents.listAgents().map((agent) => agent.id));
+    const known = (id: string | null) => (id && existing.has(id) ? id : null);
+    return {
+      serverAgentId: known(stored.serverAgentId),
+      channels: stored.channels
+        .map((channel) => ({ ...channel, agentId: known(channel.agentId) }))
+        .filter((channel) => channel.agentId !== null || channel.answerAll),
+    };
+  }).bind(this);
+
+  /** The text channels of a running Discord server, to configure. Signal reads them from Discord. */
+  readonly listDiscordChannels = Effect.fn("MessagingService.listDiscordChannels")(function* (
+    this: MessagingService,
+    guildId: string,
+  ): Effect.fn.Return<DiscordChannelList, MessagingOperationFailed> {
+    const record = yield* messagingStep(() => this.#requireConnection("discord", guildId));
+    const live = this.#live.get(record.connectionId);
+    if (!live?.identity)
+      return yield* new MessagingOperationFailed({
+        cause: new Error(sourceText("error.messaging.discordRelayUnavailable")),
+      });
+    const places = yield* live.adapter
+      .places()
+      .pipe(
+        Effect.mapError(
+          () =>
+            new MessagingOperationFailed({ cause: new Error(sourceText("error.messaging.discordRelayUnavailable")) }),
+        ),
+      );
+    return {
+      channels: places
+        .filter((place) => place.kind === "channel")
+        .map((place) => ({ id: place.id, name: roleName(place.name.replace(/^#/u, "")) })),
+    };
+  }).bind(this);
+
+  /** Replaces the agent settings of a Discord server, and tells Signal its channels that answer every message. */
+  readonly setDiscordChannelConfig = Effect.fn("MessagingService.setDiscordChannelConfig")(function* (
+    this: MessagingService,
+    input: SetDiscordChannelConfigInput,
+  ): Effect.fn.Return<DiscordChannelConfig, MessagingOperationFailed> {
+    const record = yield* messagingStep(() => this.#requireConnection("discord", input.workspaceId));
+    const existing = new Set(this.#agents.listAgents().map((agent) => agent.id));
+    const named = [input.serverAgentId, ...input.channels.map((channel) => channel.agentId)];
+    if (named.some((id) => id !== null && !existing.has(id)))
+      return yield* new MessagingOperationFailed({
+        cause: new Error(sourceText("error.messaging.discordAgentMissing")),
+      });
+    yield* this.#discordChannels
+      .set(record.connectionId, { serverAgentId: input.serverAgentId, channels: input.channels })
+      .pipe(Effect.mapError((cause) => new MessagingOperationFailed({ cause })));
+    if (this.#live.get(record.connectionId)?.transport) this.#listen(record);
+    return yield* this.discordChannelConfig(input.workspaceId);
+  }).bind(this);
+
+  /** Tells Signal the channels of a running Discord server that answer every message. */
+  #listen(record: MessagingConnectionRecord, stopped = false): void {
+    if (record.platform !== "discord") return;
+    const channels = stopped
+      ? []
+      : this.#discordChannels
+          .get(record.connectionId)
+          .channels.filter((channel) => channel.answerAll)
+          .map((channel) => channel.channelId);
+    this.#ingress?.setDiscordListen?.(record.workspaceId, channels);
+  }
+
+  /** The agent of a new conversation: the channel's, the server's, or the orchestrator. Each must exist. */
+  #agentFor(record: MessagingConnectionRecord, setting: DiscordChannelSetting | null): string | null {
+    const existing = new Set(this.#agents.listAgents().map((agent) => agent.id));
+    const known = (id: string | null | undefined) => (id && existing.has(id) ? id : null);
+    if (record.platform !== "discord") return this.#orchestrator(record);
+    return (
+      known(setting?.agentId) ??
+      known(this.#discordChannels.get(record.connectionId).serverAgentId) ??
+      this.#orchestrator(record)
+    );
+  }
+
+  #channelSetting(record: MessagingConnectionRecord, platformChannelId: string): DiscordChannelSetting | null {
+    if (record.platform !== "discord") return null;
+    return (
+      this.#discordChannels
+        .get(record.connectionId)
+        .channels.find((channel) => channel.channelId === platformChannelId) ?? null
+    );
+  }
 
   /**
    * Opens the OpenBot Discord app's install in the browser, or only returns it when `opensPage` is
@@ -1043,6 +1150,7 @@ export class MessagingService {
         if (join) this.#dispatch(join.pipe(toMessagingOperationFailed));
       },
     });
+    this.#listen(live.record);
     // After `start`: a transport takes deliveries only once it has its sink.
     this.#transportDeadlines.delete(record.connectionId);
     for (const ready of [...(this.#transportWaiters.get(record.connectionId) ?? [])]) ready();
@@ -1086,6 +1194,7 @@ export class MessagingService {
     const live = this.#live.get(connectionId);
     this.#live.delete(connectionId);
     const transport = live?.transport;
+    if (live) this.#listen(live.record, true);
     if (transport) yield* transport.stop();
   });
 
@@ -1146,15 +1255,44 @@ export class MessagingService {
   readonly #receive = Effect.fn("MessagingService.receive")(function* (
     this: MessagingService,
     live: LiveConnection,
-    message: InboundMessage,
+    inbound: InboundMessage,
   ) {
     if (!live.identity) return;
+    // OpenBot's own posts never start a turn. Signal already leaves out every bot's messages.
+    if (inbound.authorId === live.identity.botUserId) return;
     // A connection with a role list ignores everyone else, before anything shows the message was seen.
-    if (!this.#authorAllowed(live.record.connectionId, message)) return;
+    if (!this.#authorAllowed(live.record.connectionId, inbound)) return;
+    const setting = this.#channelSetting(live.record, inbound.platformChannelId);
+    const answerAll = setting?.answerAll === true;
+    // A message without a mention counts only in a channel that answers every message. Signal can
+    // still pass one on for a moment after the setting is turned off.
+    if (inbound.mentioned === false && !answerAll) return;
+    const routedAgent = this.#agentFor(live.record, setting);
     // Before any await: a redelivered event can arrive while the first copy is still downloading its
     // files, before the mailbox holds its idempotency key. The mailbox key covers a restart.
     const store = this.#threads.store;
-    const existing = store.linkByKey(live.record.connectionId, message.platformChannelId, message.threadKey);
+    const chained = store.linkByKey(live.record.connectionId, inbound.platformChannelId, inbound.threadKey);
+    // In a channel that answers every message, a message continues the channel's ongoing conversation
+    // of the channel's agent, unless it replies to an OpenBot post of a known conversation. OpenBot
+    // answers each message itself, so the reply goes to the message.
+    const ongoing =
+      answerAll && !(chained && inbound.repliesToBot) && routedAgent
+        ? store.latestLink(
+            live.record.connectionId,
+            inbound.platformChannelId,
+            routedAgent,
+            new Date(Date.now() - CHANNEL_CONVERSATION_IDLE_MS).toISOString(),
+          )
+        : null;
+    const message: InboundMessage =
+      answerAll && !(chained && inbound.repliesToBot)
+        ? {
+            ...inbound,
+            threadKey: ongoing?.threadKey ?? inbound.platformMessageId,
+            target: { platformChannelId: inbound.platformChannelId, replyThreadId: inbound.platformMessageId },
+          }
+        : inbound;
+    const existing = message === inbound ? chained : ongoing;
     // Before the dedup key: a reply with a mention also arrives as `app_mention`, which must still run.
     if (message.requiresLink && !existing) return;
     const dedupKey = `${live.record.connectionId}:${message.dedupKey}`;
@@ -1198,7 +1336,8 @@ export class MessagingService {
         // Only Discord's earlier messages have files, such as an image that a person posted without a
         // mention just before this message. The agent gets them with this message. Slack is not asked:
         // before Marketplace approval it allows one thread read a minute, which the prompt needs.
-        adapter.platform === "discord" && !message.isDirect
+        // A channel that answers every message gave each earlier message to OpenBot already.
+        adapter.platform === "discord" && !message.isDirect && !answerAll
           ? adapter
               .history(
                 message.platformChannelId,
@@ -1221,7 +1360,7 @@ export class MessagingService {
       : null;
     // A conversation keeps its agent. A new one goes to the workspace's orchestrator, which asks its
     // teammates; without one, nothing answers.
-    const agentId = existing?.agentId ?? this.#orchestrator(live.record);
+    const agentId = existing?.agentId ?? routedAgent;
     if (!agentId) {
       const noAgent =
         live.record.platform === "discord"
@@ -1393,10 +1532,21 @@ export class MessagingService {
     const place = link.isDirect
       ? "direct message"
       : yield* live.adapter.placeName(link.platformChannelId).pipe(toMessagingOperationFailed);
-    const messages = yield* live.adapter
-      .history(link.platformChannelId, link.threadKey, link.historyCursor, origin.platformMessageId)
-      .pipe(Effect.catch(() => Effect.succeed([])));
-    return { workspaceName, place, messages, cursor: origin.platformMessageId, skippedFiles: [] };
+    const answersEveryMessage = this.#channelSetting(live.record, link.platformChannelId)?.answerAll === true;
+    // Every earlier message of such a channel came to the conversation already.
+    const messages = answersEveryMessage
+      ? []
+      : yield* live.adapter
+          .history(link.platformChannelId, link.threadKey, link.historyCursor, origin.platformMessageId)
+          .pipe(Effect.catch(() => Effect.succeed([])));
+    return {
+      workspaceName,
+      place,
+      messages,
+      cursor: origin.platformMessageId,
+      skippedFiles: [],
+      ...(answersEveryMessage ? { answersEveryMessage } : {}),
+    };
   });
 
   /** The newest messages of a link's own place, for the agent's `messaging_history` tool. */

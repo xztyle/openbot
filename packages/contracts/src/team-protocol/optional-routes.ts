@@ -26,6 +26,7 @@ import { CONNECTORS_CODECS } from "./connectors-v1";
 import { CONTEXT_RESET_CODECS } from "./context-reset-v1";
 import { CONVERSATION_FILE_SEARCH_CODECS } from "./conversation-file-search-v1";
 import { DISCORD_ACCESS_CODECS } from "./discord-access-v1";
+import { DISCORD_CHANNELS_CODECS } from "./discord-channels-v1";
 import { EVENT_CHECK_API_CODECS } from "./event-check-api-v1";
 import { EVENT_CHECK_TEMPLATES_CODECS } from "./event-check-templates-v1";
 import { EVENT_CHECKS_CODECS } from "./event-checks-v1";
@@ -101,6 +102,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...AGENT_MEMORY_LIMIT_CODECS,
   ...PROMPT_CACHE_TTL_CODECS,
   ...DISCORD_ACCESS_CODECS,
+  ...DISCORD_CHANNELS_CODECS,
   ...HOST_RELEASE_CODECS,
   ...HOST_MEMBER_UPDATE_CODECS,
   ...CONTEXT_RESET_CODECS,

@@ -124,6 +124,8 @@ export const messages = {
   "error.team.connectorsUnsupported":
     "Bu sunucunun bağlantıları buradan yönetilemez. Ana makinedeki OpenBot'u güncelleyin.",
   "error.team.discordAccessUnsupported": "Bu sunucu Discord rollerini ayarlayamıyor. Sunucudaki OpenBot'u güncelleyin.",
+  "error.team.discordChannelsUnsupported":
+    "Bu sunucu Discord kanallarını yapılandıramaz. Üzerindeki OpenBot'u güncelleyin.",
   "error.team.connectorPageRefused": "Sunucu, OpenBot'un açmadığı bir sayfa gönderdi.",
   "error.team.signInRelayUnknown": "Bu oturum açma sona erdi veya mevcut değil.",
   "error.team.signInRelayUsed": "Bu oturum açma zaten gönderildi.",

@@ -77,6 +77,8 @@ export interface MessagingPromptContext {
   /** The newest message the agent has now read, stored as the link's history cursor. */
   cursor: string | null;
   skippedFiles: string[];
+  /** The channel answers every message, so people do not mention OpenBot there. */
+  answersEveryMessage?: boolean;
 }
 
 export type MessagingHistoryScope = "channel" | "conversation";
@@ -478,6 +480,7 @@ export class MessagingThreads {
         context: prompt.messages,
         replyTo: origin.replyTo ?? null,
         skippedFiles: prompt.skippedFiles,
+        answersEveryMessage: prompt.answersEveryMessage === true,
         memories: this.memories.list(link.connectionId),
       }),
     };

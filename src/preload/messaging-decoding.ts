@@ -4,9 +4,13 @@
 import {
   type AddMessagingOrchestratorResult,
   type DiscordAccess,
+  type DiscordChannelConfig,
+  type DiscordChannelList,
   type DiscordRoleList,
   isAddMessagingOrchestratorResult,
   isDiscordAccess,
+  isDiscordChannelConfig,
+  isDiscordChannelList,
   isDiscordRoleList,
   isMessagingOverview,
   isTelegramOverview,
@@ -37,5 +41,15 @@ export function decodeDiscordAccessReply(value: unknown): DiscordAccess {
 
 export function decodeDiscordRolesReply(value: unknown): DiscordRoleList {
   if (!isDiscordRoleList(value)) throw new Error("Invalid Discord roles response.");
+  return value;
+}
+
+export function decodeDiscordChannelConfigReply(value: unknown): DiscordChannelConfig {
+  if (!isDiscordChannelConfig(value)) throw new Error("Invalid Discord channel settings response.");
+  return value;
+}
+
+export function decodeDiscordChannelListReply(value: unknown): DiscordChannelList {
+  if (!isDiscordChannelList(value)) throw new Error("Invalid Discord channels response.");
   return value;
 }

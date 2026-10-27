@@ -123,6 +123,7 @@ export const messages = {
   "error.team.signInRelayUnsupported": "该服务器无法中继登录，请更新主机上的 OpenBot。",
   "error.team.connectorsUnsupported": "该服务器无法从这里管理其连接，请更新主机上的 OpenBot。",
   "error.team.discordAccessUnsupported": "该服务器无法设置 Discord 角色。请更新其上的 OpenBot。",
+  "error.team.discordChannelsUnsupported": "该服务器无法配置 Discord 频道。请更新其上的 OpenBot。",
   "error.team.connectorPageRefused": "服务器发送了 OpenBot 不会打开的页面。",
   "error.team.signInRelayUnknown": "该登录已结束或不存在。",
   "error.team.signInRelayUsed": "该登录已发送过。",

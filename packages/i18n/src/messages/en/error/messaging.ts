@@ -12,6 +12,7 @@ export const messages = defineMessages("error.messaging", {
   "error.messaging.discordRelayUnavailable":
     "OpenBot cannot receive Discord events on this computer. Sign in, give this computer a name, and try again.",
   "error.messaging.discordRolesUnsupported": "OpenBot cannot list Discord roles yet. Try again later.",
+  "error.messaging.discordAgentMissing": "The chosen agent no longer exists. Choose another agent.",
   // Errors of a Telegram chat connection, which the host sends.
   "error.messaging.telegramNotConnected": "This Telegram chat is not connected.",
   "error.messaging.telegramUnsupported": "This computer cannot connect to Telegram.",

@@ -12,6 +12,7 @@ export const messages = {
     "OpenBot kann auf diesem Computer keine Discord-Ereignisse empfangen. Melde dich an, gib diesem Computer einen Namen und versuche es erneut.",
   "error.messaging.discordRolesUnsupported":
     "OpenBot kann die Discord-Rollen noch nicht auflisten. Versuche es später noch einmal.",
+  "error.messaging.discordAgentMissing": "Der gewählte Agent existiert nicht mehr. Wähle einen anderen.",
   "error.messaging.telegramNotConnected": "Dieser Telegram-Chat ist nicht verbunden.",
   "error.messaging.telegramUnsupported": "Dieser Computer kann keine Verbindung zu Telegram herstellen.",
   "error.messaging.telegramRelayUnavailable":

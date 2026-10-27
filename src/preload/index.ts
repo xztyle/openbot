@@ -234,6 +234,8 @@ import { decodeHostReleaseStatusFromMain } from "./host-release-decoding";
 import {
   decodeAddOrchestratorReply,
   decodeDiscordAccessReply,
+  decodeDiscordChannelConfigReply,
+  decodeDiscordChannelListReply,
   decodeDiscordRolesReply,
   decodeMessagingOverviewReply,
   decodeTelegramOverviewReply,
@@ -961,6 +963,9 @@ const openbotApi: OpenBotDesktopApi = {
     getDiscordAccess: decodeDiscordAccessReply,
     listDiscordRoles: decodeDiscordRolesReply,
     setDiscordAccess: decodeDiscordAccessReply,
+    getDiscordChannelConfig: decodeDiscordChannelConfigReply,
+    listDiscordChannels: decodeDiscordChannelListReply,
+    setDiscordChannelConfig: decodeDiscordChannelConfigReply,
     getTelegramOverview: decodeTelegramOverviewReply,
     connectTelegramChat: decodeVoid,
     disconnectTelegramChat: decodeVoid,
@@ -977,6 +982,9 @@ const openbotApi: OpenBotDesktopApi = {
     hostGetDiscordAccess: decodeDiscordAccessReply,
     hostListDiscordRoles: decodeDiscordRolesReply,
     hostSetDiscordAccess: decodeDiscordAccessReply,
+    hostGetDiscordChannelConfig: decodeDiscordChannelConfigReply,
+    hostListDiscordChannels: decodeDiscordChannelListReply,
+    hostSetDiscordChannelConfig: decodeDiscordChannelConfigReply,
   }),
   hostAdmin: bridgeGroup(IPC_ENDPOINTS.hostAdmin, {
     updateIdentity: decodeServer,

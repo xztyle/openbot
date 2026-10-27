@@ -343,6 +343,8 @@ import type {
   AddTelegramOrchestratorInput,
   ConnectTelegramChatInput,
   DiscordAccess,
+  DiscordChannelConfig,
+  DiscordChannelList,
   DiscordRoleList,
   HostAddMessagingOrchestratorInput,
   HostDiscordAccessInput,
@@ -354,6 +356,7 @@ import type {
   MessagingOverview,
   MessagingWorkspaceInput,
   SetDiscordAccessInput,
+  SetDiscordChannelConfigInput,
   SetMessagingEnabledInput,
   SetSlackEnabledInput,
   SetTelegramEnabledInput,
@@ -1032,6 +1035,15 @@ export const IPC_ENDPOINTS = {
     getDiscordAccess: request<MessagingWorkspaceInput, DiscordAccess>()("messaging:get-discord-access"),
     listDiscordRoles: request<MessagingWorkspaceInput, DiscordRoleList>()("messaging:list-discord-roles"),
     setDiscordAccess: request<SetDiscordAccessInput, DiscordAccess>()("messaging:set-discord-access"),
+    // Which agent answers in a Discord server and in each channel, and the channels where OpenBot
+    // answers every message. The channels to choose from come from Discord through Signal.
+    getDiscordChannelConfig: request<MessagingWorkspaceInput, DiscordChannelConfig>()(
+      "messaging:get-discord-channel-config",
+    ),
+    listDiscordChannels: request<MessagingWorkspaceInput, DiscordChannelList>()("messaging:list-discord-channels"),
+    setDiscordChannelConfig: request<SetDiscordChannelConfigInput, DiscordChannelConfig>()(
+      "messaging:set-discord-channel-config",
+    ),
     // The Telegram chats that added the OpenBot bot. A connect opens a `t.me` link with a one-use code
     // in this computer's browser; the chat links itself when the bot is added.
     getTelegramOverview: request<undefined, TelegramOverview>()("messaging:get-telegram-overview"),
@@ -1062,6 +1074,16 @@ export const IPC_ENDPOINTS = {
     ),
     hostSetDiscordAccess: scopedRequest<HostSetDiscordAccessInput, DiscordAccess, "required">()(
       "messaging:host-set-discord-access",
+    ),
+    // The same for a joined server with `fork-host-v1`.
+    hostGetDiscordChannelConfig: scopedRequest<HostDiscordAccessInput, DiscordChannelConfig, "required">()(
+      "messaging:host-get-discord-channel-config",
+    ),
+    hostListDiscordChannels: scopedRequest<HostDiscordAccessInput, DiscordChannelList, "required">()(
+      "messaging:host-list-discord-channels",
+    ),
+    hostSetDiscordChannelConfig: scopedRequest<SetDiscordChannelConfigInput, DiscordChannelConfig, "required">()(
+      "messaging:host-set-discord-channel-config",
     ),
   },
   // The server name, logo, timezone, agent memory limit and app update of one server's host. `host.updateIdentity` and `update`

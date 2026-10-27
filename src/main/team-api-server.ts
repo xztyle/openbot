@@ -204,6 +204,7 @@ import { routeContextReset } from "./team-api/route-context-reset";
 import { routeConversationFiles } from "./team-api/route-conversation-files";
 import { routeDirect } from "./team-api/route-direct";
 import { routeDiscordAccess } from "./team-api/route-discord-access";
+import { routeDiscordChannels } from "./team-api/route-discord-channels";
 import { eventCheckCapability, routeEventChecks } from "./team-api/route-event-checks";
 import { routeEvents } from "./team-api/route-events";
 import { routeFiles } from "./team-api/route-files";
@@ -888,6 +889,7 @@ export class TeamApiServer {
         return;
       if ((await routeConnectors(context, this.#options.connectors)) === "handled") return;
       if ((await routeDiscordAccess(context, this.#options.connectors)) === "handled") return;
+      if ((await routeDiscordChannels(context, this.#options.connectors)) === "handled") return;
       if ((await routeOnePasswordConnector(context, this.#options.onePasswordConnector)) === "handled") return;
       if ((await routeBitwardenConnector(context, this.#options.bitwardenConnector)) === "handled") return;
       if ((await routeProviderHostSignIn(context, this.#options.providerHostSignIns)) === "handled") return;
@@ -2050,7 +2052,8 @@ export class TeamApiServer {
             this.#options.chatMcp !== undefined ||
             this.#options.mcpOAuth !== undefined ||
             this.#options.securityAudit !== undefined ||
-            this.#options.webPush !== undefined
+            this.#options.webPush !== undefined ||
+            this.#options.connectors !== undefined
           );
         return true;
       }),

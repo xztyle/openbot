@@ -42,6 +42,7 @@ import { ProviderModelPicker } from "../../components/ProviderModelPicker";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
 import { DiscordMark, SlackMark } from "./brand-marks";
+import { type DiscordChannelsControl, DiscordChannelsDialog } from "./DiscordChannelsDialog";
 import {
   DetailHeader,
   type IntegrationStatus,
@@ -108,7 +109,11 @@ export interface SlackIntegrationPanelProps {
   onRetry?: (() => void) | undefined;
   /** Who can use OpenBot in each Discord server. Discord only. */
   access?: DiscordAccessControl | undefined;
+  /** Which agent answers in each Discord server and channel. Discord only. */
+  channels?: DiscordChannelsControl | undefined;
 }
+
+export type { DiscordChannelsControl } from "./DiscordChannelsDialog";
 
 /** What a workspace row can do. */
 type RowKind = "live" | "setup" | "paused" | "attention";
@@ -334,6 +339,8 @@ export function SlackIntegrationPanel(props: SlackIntegrationPanelProps) {
   const [target, setTarget] = createSignal<DialogTarget | null>(null);
   const [disconnecting, setDisconnecting] = createSignal<MessagingConnection | null>(null);
   const [choosingRoles, setChoosingRoles] = createSignal<MessagingConnection | null>(null);
+  const [configuring, setConfiguring] = createSignal<MessagingConnection | null>(null);
+  const channels = () => (props.platform === "discord" ? props.channels : undefined);
   const text = () => messagingPlatformText(props.platform);
   const state = () => slackIntegrationState(props.connections, props.agents, props.platform, props.loadError);
   const unknown = () => messagingStateUnknown(props);
@@ -439,6 +446,7 @@ export function SlackIntegrationPanel(props: SlackIntegrationPanelProps) {
                   onReconnect={() => props.onReconnect(connection.workspaceId)}
                   onSetEnabled={(enabled) => props.onSetEnabled(connection.workspaceId, enabled)}
                   onDisconnect={() => setDisconnecting(connection)}
+                  onConfigure={channels() ? () => setConfiguring(connection) : undefined}
                 />
               )}
             </For>
@@ -544,6 +552,16 @@ export function SlackIntegrationPanel(props: SlackIntegrationPanelProps) {
           />
         )}
       </Show>
+      <Show when={channels()}>
+        {(control) => (
+          <DiscordChannelsDialog
+            connection={configuring()}
+            agents={props.agents}
+            control={control()}
+            onClose={() => setConfiguring(null)}
+          />
+        )}
+      </Show>
       <DisconnectDialog
         platform={props.platform}
         hostName={props.hostName}
@@ -575,6 +593,8 @@ function WorkspaceRow(props: {
   onReconnect: () => void;
   onSetEnabled: (enabled: boolean) => void;
   onDisconnect: () => void;
+  /** Opens the agent settings of a Discord server. */
+  onConfigure?: (() => void) | undefined;
 }) {
   const { t, format } = useText();
   const text = () => messagingPlatformText(props.platform);
@@ -613,6 +633,9 @@ function WorkspaceRow(props: {
           <Match when={kind() === "paused"}>{action(t(text().resume), () => props.onSetEnabled(true))}</Match>
           <Match when={kind() === "live"}>{action(t(text().pause), () => props.onSetEnabled(false))}</Match>
         </Switch>
+        <Show when={kind() === "live" ? props.onConfigure : undefined}>
+          {(configure) => action(t("connector.discord.channelsConfigure"), () => configure()())}
+        </Show>
         <Button
           type="button"
           size="sm"

@@ -38,3 +38,11 @@ export interface DiscordRouteGuild {
   // with its newest link, so a host that lost the guild cannot take it back with an older ticket.
   linkedAt: number;
 }
+
+// The capability that a Signal names in an ingress `ready` when it takes `discord-listen` frames. An
+// older Signal does not name it, and passes on only the messages that mention OpenBot.
+export const DISCORD_LISTEN_CAPABILITY = "discord-listen";
+
+// The most channels of one guild that one `discord-listen` frame names. The most that `listChannels`
+// returns.
+export const DISCORD_LISTEN_CHANNELS_LIMIT = 500;

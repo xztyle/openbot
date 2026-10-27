@@ -3,6 +3,8 @@ import {
   type AgentAccessSnapshot,
   type AgentSessionSettings,
   type DiscordAccess,
+  type DiscordChannelConfig,
+  type DiscordChannelList,
   type DiscordRoleList,
   decodeAgentAccessSnapshot,
   type HiddenAgentsSnapshot,
@@ -10,17 +12,21 @@ import {
   type HostSetDiscordAccessInput,
   isAgentSessionSettings,
   isDiscordAccess,
+  isDiscordChannelConfig,
+  isDiscordChannelList,
   isDiscordRoleList,
   isHiddenAgentsSnapshot,
   type ResetAgentSessionSettingInput,
   type SetAgentHiddenInput,
   type SetAgentSessionSettingInput,
+  type SetDiscordChannelConfigInput,
 } from "@openbot/contracts/ipc";
 import { AGENT_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/agent-access-v1";
 import { AGENT_HIDDEN_ROUTES } from "@openbot/contracts/team-protocol/agent-hidden-v1";
 import { AGENT_MEMORY_LIMIT_ROUTES } from "@openbot/contracts/team-protocol/agent-memory-limit-v1";
 import { AGENT_SESSION_SETTINGS_ROUTES } from "@openbot/contracts/team-protocol/agent-session-settings-v1";
 import { DISCORD_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/discord-access-v1";
+import { DISCORD_CHANNELS_ROUTES } from "@openbot/contracts/team-protocol/discord-channels-v1";
 import { HOST_MEMBER_UPDATE_ROUTES } from "@openbot/contracts/team-protocol/host-member-update-v1";
 import { HOST_RELEASE_ROUTES } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOST_TIMEZONE_ROUTES } from "@openbot/contracts/team-protocol/host-timezone-v1";
@@ -1288,6 +1294,50 @@ export function setDiscordAccess(
     request("POST", DISCORD_ACCESS_ROUTES.update, decodeDiscordAccess, {
       workspaceId: input.workspaceId,
       allowedRoles: input.allowedRoles.map((role) => ({ id: role.id, name: role.name })),
+    }),
+  );
+}
+
+function decodeDiscordChannelConfig(value: unknown): DiscordChannelConfig {
+  if (!isDiscordChannelConfig(value)) throw new Error("Invalid Discord channel settings response.");
+  return value;
+}
+
+/** Which agent answers in one Discord server of the host and in each channel (`fork-host-v1`). */
+export function discordChannelConfig(
+  request: TeamApiRequest,
+  input: HostDiscordAccessInput,
+): Effect.Effect<DiscordChannelConfig, TeamAdminRequestError> {
+  return adminCall(() => request("POST", DISCORD_CHANNELS_ROUTES.config, decodeDiscordChannelConfig, { ...input }));
+}
+
+/** The text channels of one Discord server of the host. The host reads them from Discord. */
+export function discordChannels(
+  request: TeamApiRequest,
+  input: HostDiscordAccessInput,
+): Effect.Effect<DiscordChannelList, TeamAdminRequestError> {
+  return adminCall(() =>
+    request(
+      "POST",
+      DISCORD_CHANNELS_ROUTES.channels,
+      (value) => {
+        if (!isDiscordChannelList(value)) throw new Error("Invalid Discord channels response.");
+        return value;
+      },
+      { ...input },
+    ),
+  );
+}
+
+export function setDiscordChannelConfig(
+  request: TeamApiRequest,
+  input: SetDiscordChannelConfigInput,
+): Effect.Effect<DiscordChannelConfig, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", DISCORD_CHANNELS_ROUTES.update, decodeDiscordChannelConfig, {
+      workspaceId: input.workspaceId,
+      serverAgentId: input.serverAgentId,
+      channels: input.channels.map((channel) => ({ ...channel })),
     }),
   );
 }

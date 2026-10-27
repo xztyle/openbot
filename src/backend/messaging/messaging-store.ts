@@ -203,6 +203,20 @@ export class MessagingStore {
     return row ? decodeLink(row) : null;
   }
 
+  /** The newest conversation of an agent in one channel with activity since `since` (ISO time). */
+  latestLink(connectionId: string, platformChannelId: string, agentId: string, since: string): MessagingLink | null {
+    const row = databaseRow(
+      this.#database.connection
+        .prepare(
+          `SELECT * FROM projection_messaging_threads
+           WHERE connection_id = ? AND platform_channel_id = ? AND agent_id = ? AND updated_at >= ?
+           ORDER BY updated_at DESC LIMIT 1`,
+        )
+        .get(connectionId, platformChannelId, agentId, since),
+    );
+    return row ? decodeLink(row) : null;
+  }
+
   linkForThread(threadId: string): MessagingLink | null {
     const row = databaseRow(
       this.#database.connection.prepare("SELECT * FROM projection_messaging_threads WHERE thread_id = ?").get(threadId),

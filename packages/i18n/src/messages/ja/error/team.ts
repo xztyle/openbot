@@ -126,6 +126,8 @@ export const messages = {
     "このサーバーの接続はここから管理できません。ホストの OpenBot を更新してください。",
   "error.team.discordAccessUnsupported":
     "このサーバーでは Discord のロールを設定できません。サーバーの OpenBot を更新してください。",
+  "error.team.discordChannelsUnsupported":
+    "このサーバーでは Discord チャンネルを設定できません。OpenBot を更新してください。",
   "error.team.connectorPageRefused": "サーバーが OpenBot で開かないページを送信しました。",
   "error.team.signInRelayUnknown": "このサインインは終了したか、存在しません。",
   "error.team.signInRelayUsed": "このサインインはすでに送信されています。",

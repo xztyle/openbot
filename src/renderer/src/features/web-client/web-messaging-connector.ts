@@ -19,6 +19,8 @@ import { sourceText } from "@openbot/i18n/source";
 import { runTeamEffect } from "@openbot/team-client";
 import {
   discordAccess,
+  discordChannelConfig,
+  discordChannels,
   discordRoles,
   type MessagingConnectorPage,
   messagingConnectorAddOrchestrator,
@@ -29,6 +31,7 @@ import {
   messagingConnectorReconnect,
   messagingConnectorSetEnabled,
   setDiscordAccess,
+  setDiscordChannelConfig,
   type TeamAdminRequestError,
 } from "@openbot/team-client/team-admin-requests";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
@@ -170,6 +173,10 @@ export function webHostMessaging(
       hostGetDiscordAccess: (input, serverId) => access(serverId, (target) => discordAccess(target, input)),
       hostListDiscordRoles: (input, serverId) => access(serverId, (target) => discordRoles(target, input)),
       hostSetDiscordAccess: (input, serverId) => access(serverId, (target) => setDiscordAccess(target, input)),
+      hostGetDiscordChannelConfig: (input, serverId) => run(serverId, (target) => discordChannelConfig(target, input)),
+      hostListDiscordChannels: (input, serverId) => run(serverId, (target) => discordChannels(target, input)),
+      hostSetDiscordChannelConfig: (input, serverId) =>
+        run(serverId, (target) => setDiscordChannelConfig(target, input)),
     },
     dispose: () => {
       for (const nonce of [...pending.keys()]) forget(nonce);

@@ -1,0 +1,13 @@
+{
+  "type": "agent-input-escalations-changed",
+  "escalations": [
+    {
+      "kind": "prompt",
+      "requestId": 7,
+      "agentId": "agent-qa",
+      "threadId": "thread-qa",
+      "turnId": "turn-1",
+      "delegatorAgentIds": ["agent-lead", "agent-orchestrator"]
+    }
+  ]
+}

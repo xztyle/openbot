@@ -13,6 +13,7 @@ export const messages = {
   "notification.workflowOutput": "ワークフローに新しい結果があります。",
   "notification.failed": "エラーで停止しました。",
   "notification.channelTitle": "{channel} の {agent}",
+  "notification.teammateTitle": "{agent}: {teammate} があなたを待っています",
   "notification.channelMessage": "メッセージを送信しました。",
   "notification.usageLimit.title": "{provider} のアカウントが上限に達しました",
   "notification.usageLimit.body": { other: "エージェント {count} 件が待機中です。OpenBot は後でもう一度試します。" },

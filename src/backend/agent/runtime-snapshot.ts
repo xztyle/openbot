@@ -146,6 +146,7 @@ export interface RuntimeSnapshotSources {
   turn: Pick<TurnLifecycle, "failedTurns">;
   attention: Pick<AttentionRegistry, "runtimeAttention">;
   usageLimits: Pick<UsageLimitGate, "limitedAgents" | "limitedModels">;
+  inputEscalations?: AgentRuntimeSnapshot["inputEscalations"];
 }
 
 /** The runtime view of every agent: active turns, queued work, latest messages and attention. */
@@ -158,6 +159,7 @@ export function buildRuntimeSnapshot({
   turn,
   attention,
   usageLimits,
+  inputEscalations,
 }: RuntimeSnapshotSources): AgentRuntimeSnapshot {
   const runtimeAgents: AgentRuntimeSnapshot["agents"] = agents.map((agent) => ({
     id: agent.id,
@@ -217,5 +219,6 @@ export function buildRuntimeSnapshot({
     usageLimits: usageLimits.limitedAgents(),
     usageLimitedModels: usageLimits.limitedModels(),
     ...(contextStates ? { contextStates } : {}),
+    ...(inputEscalations ? { inputEscalations } : {}),
   });
 }

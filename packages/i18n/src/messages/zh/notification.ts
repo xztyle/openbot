@@ -16,6 +16,7 @@ export const messages = {
   "notification.failed": "因错误而停止。",
   // The title of a notification about an agent in a channel: the agent and the channel name.
   "notification.channelTitle": "{channel} 中的 {agent}",
+  "notification.teammateTitle": "{agent}：{teammate} 需要你",
   // The body of a channel reply notification when the preview of agent words is off.
   "notification.channelMessage": "发来一条消息。",
   "notification.usageLimit.title": "{provider} 账号已达上限",

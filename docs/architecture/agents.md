@@ -465,6 +465,28 @@ turn fails, the sender gets a note. If the requests end with no answer, such as 
 gets the last text of the agent with a note, because no turn comes. A restart settles every deferred
 result at startup.
 
+### When a teammate waits for the user
+
+`InputEscalations` (`src/backend/agent/input-escalations.ts`) owns what the delegator learns when a
+teammate's turn waits for the user: a question, an approval or a browser takeover in the teammate's
+own chat. After each attention event and each turn start it derives the list again from the
+attention registry and `MailboxStore.delegationChain`. The chain starts with the sender of the agent
+request that started the turn (a message steered in later does not count; a turn that an answer
+started continues the request whose result the agent owes) and follows the turn that sent each
+request up to the root, with no cycle and at most 8 agents. A channel or task thread does not count.
+The list goes out as `agent-input-escalations-changed` before the request event, and in the runtime
+snapshot. It names the request only; the question and the approval keep their own events. The chat
+of each agent in the chain shows the request with the card of the teammate's chat, and the answer
+goes to the same route (`respondToPrompt`, `respondToApproval`), so an answer anywhere removes it
+everywhere. A question with a secret answer and a browser takeover show only an "Open <teammate>"
+card. The chain agents go to "Needs you", and a notification of the request opens the root's chat.
+The root agent gets one note per request, a message from the teammate with `expectsReply` false
+and a key with no turn id, so it steers into a running turn or starts one, and it never ends a
+delegation. The note quotes the first question, never a secret one or an approval command. A note
+that still waits in the queue covers the next request of the same teammate. The Team API sends the
+list under `fork-host-v1` (`input-escalations-v1.ts`), after each runtime snapshot and at each
+change, without the agents that the peer cannot see.
+
 This policy lives in `src/backend/agent/developer-instructions.ts` and is supplied on both thread
 start and resume. Codex receives `developerInstructions`; Claude and Pi append them to the system
 prompt; Grok and the other ACP agents receive them as a tagged instruction block in normal turn

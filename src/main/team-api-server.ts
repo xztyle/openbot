@@ -6,6 +6,7 @@ import {
   AGENT_RUNTIME_SNAPSHOT_BYTES_LIMIT,
   type AgentAccessLevel,
   type AgentEvent,
+  type AgentRuntimeSnapshot,
   type AgentSummary,
   AnalyticsInputError,
   canAdministerServer,
@@ -109,6 +110,11 @@ import {
   type HostRestartState,
 } from "@openbot/contracts/team-protocol/host-update-v1";
 import { teamHttpCodec } from "@openbot/contracts/team-protocol/http-codecs";
+import {
+  INPUT_ESCALATIONS_CAPABILITY,
+  INPUT_ESCALATIONS_EVENT,
+  visibleInputEscalations,
+} from "@openbot/contracts/team-protocol/input-escalations-v1";
 import { type OptionalTeamEvent, optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
 import { PROVIDERS_V8_CAPABILITY } from "@openbot/contracts/team-protocol/providers-v8";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
@@ -604,6 +610,32 @@ export class TeamApiServer {
     )
       return;
     if (client.readyState === webSockets.WebSocket.OPEN) client.send(JSON.stringify(this.#hostRestart));
+  }
+
+  /** The agents whose requests and chats a peer cannot see: roles, and providers its protocol does not know. */
+  #escalationHiddenAgentIds(capabilities: ReadonlySet<string>, blocked: ReadonlySet<string>): Set<string> {
+    const hidden = hiddenProviderAgentIds(this.#options.agents.listAgents(), eventProtocol(capabilities));
+    for (const id of blocked) hidden.add(id);
+    return hidden;
+  }
+
+  /**
+   * The escalations, after each runtime snapshot: the frozen snapshot projection drops them, and a
+   * client that reconnects must learn the list again. An empty list is sent too, to clear a stale one.
+   */
+  #sendInputEscalations(client: Ws.WebSocket, connection: EventClientState, snapshot: AgentRuntimeSnapshot): void {
+    if (!connection.capabilities.has(INPUT_ESCALATIONS_CAPABILITY)) return;
+    if (client.readyState !== webSockets.WebSocket.OPEN) return;
+    const blocked = this.#blockedAgentIds(this.#connectionMember(connection));
+    client.send(
+      JSON.stringify({
+        type: INPUT_ESCALATIONS_EVENT,
+        escalations: visibleInputEscalations(
+          snapshot.inputEscalations ?? [],
+          this.#escalationHiddenAgentIds(connection.capabilities, blocked),
+        ),
+      }),
+    );
   }
 
   #sendBrowserUserControl(client: Ws.WebSocket, connection: EventClientState): void {
@@ -1291,16 +1323,25 @@ export class TeamApiServer {
         )
           continue;
         // The list of hidden agents does not name an agent that this peer cannot see, as `/v1/hidden-agents` does.
+        // An escalation names no agent that this peer cannot see either.
         outgoing = JSON.stringify(
-          optional.type === "hidden-agents-changed"
+          optional.type === INPUT_ESCALATIONS_EVENT
             ? {
                 type: optional.type,
-                ...visibleSnapshot(
-                  optional,
-                  this.hiddenAgentIds(eventProtocol(connection.capabilities), connection.capabilities, member),
+                escalations: visibleInputEscalations(
+                  optional.escalations,
+                  this.#escalationHiddenAgentIds(connection.capabilities, blocked),
                 ),
               }
-            : optional,
+            : optional.type === "hidden-agents-changed"
+              ? {
+                  type: optional.type,
+                  ...visibleSnapshot(
+                    optional,
+                    this.hiddenAgentIds(eventProtocol(connection.capabilities), connection.capabilities, member),
+                  ),
+                }
+              : optional,
         );
       } else if (event.type === "conversation" && supportsRuntimeSnapshots) {
         conversationInvalidation ??=
@@ -1556,10 +1597,11 @@ export class TeamApiServer {
     connection.snapshotResponsePending = true;
     if (rateLimited) connection.nextSnapshotRequestAt = now + RUNTIME_SNAPSHOT_REQUEST_INTERVAL_MS;
     try {
+      const snapshot = this.#options.agents.getRuntimeSnapshot();
       const payload = this.#encodeProviderEvent(
         {
           type: "runtime-snapshot",
-          snapshot: this.#options.agents.getRuntimeSnapshot(),
+          snapshot,
         },
         connection.capabilities,
         {},
@@ -1571,6 +1613,7 @@ export class TeamApiServer {
       }
       client.send(payload, (error) => {
         connection.snapshotResponsePending = false;
+        if (!error) this.#sendInputEscalations(client, connection, snapshot);
         if (error && client.readyState === webSockets.WebSocket.OPEN) {
           client.close(1011, "Runtime snapshot could not be sent");
           return;
@@ -2169,6 +2212,7 @@ function eventCapability(event: AgentEvent): TeamCurrentCapability | null {
   if (event.type === "workflows-changed") return WORKFLOWS_CAPABILITY;
   if (event.type === "turn-progress") return TEAM_AGENT_ACTIVITY_CAPABILITY;
   if (event.type === "runtime-snapshot") return "agent-runtime-snapshots";
+  if (event.type === "agent-input-escalations-changed") return INPUT_ESCALATIONS_CAPABILITY;
   if (event.type === "sidebar-layout-changed") return "sidebar-layout";
   if (event.type === "browser-changed" || event.type === "browser-control-changed") return "browser-control";
   if (event.type === "conversation-page") return "conversation-pagination";

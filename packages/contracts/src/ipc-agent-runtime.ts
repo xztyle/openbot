@@ -8,6 +8,7 @@ import {
   isBrowserTakeoverRequest,
 } from "./ipc-approvals";
 import { isBoundedString, isIdentifier, isNullableBoundedString, isRequestId } from "./ipc-bounded-values";
+import { type AgentInputEscalation, isAgentInputEscalationList } from "./ipc-input-escalations";
 import { isBoolean, isDynamicRecord, isNumber, isOneOf } from "./runtime-values";
 
 export const AGENT_RUNTIME_TEXT_LIMIT = 240;
@@ -245,6 +246,12 @@ export interface AgentRuntimeSnapshot {
    * from a released Team API snapshot, as `usageLimits` is.
    */
   usageLimitedModels?: AgentModelChoice[];
+  /**
+   * The requests that wait for the user in a turn that another agent asked for, with the agents
+   * whose chats show them. Absent from a released Team API snapshot, as `usageLimits` is: a Team API
+   * client gets them in the `agent-input-escalations-changed` event.
+   */
+  inputEscalations?: AgentInputEscalation[];
 }
 
 export function isAgentRuntimeSnapshot(value: unknown): value is AgentRuntimeSnapshot {
@@ -305,7 +312,8 @@ export function isAgentRuntimeSnapshot(value: unknown): value is AgentRuntimeSna
     (value.usageLimitedModels === undefined ||
       (Array.isArray(value.usageLimitedModels) &&
         value.usageLimitedModels.length <= INPUT_LIMITS.agents &&
-        value.usageLimitedModels.every(isAgentModelChoice)))
+        value.usageLimitedModels.every(isAgentModelChoice))) &&
+    (value.inputEscalations === undefined || isAgentInputEscalationList(value.inputEscalations))
   );
 }
 

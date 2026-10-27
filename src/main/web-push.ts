@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import type { AgentEvent, AgentSummary } from "@openbot/contracts/ipc";
+import type { AgentEvent, AgentInputEscalation, AgentSummary } from "@openbot/contracts/ipc";
 import type { WebPushRegistration } from "@openbot/contracts/team-protocol/web-push-v1";
 import { type AppTranslate, resolveLocale, translateFor } from "@openbot/i18n";
 import { toLogValue } from "@openbot/logging";
-import { notificationForAgentEvent } from "@openbot/team-client/agent-notifications";
+import { inputEscalationDelegator, notificationForAgentEvent } from "@openbot/team-client/agent-notifications";
 import { encryptWebPushMessage, vapidAuthorization } from "./web-push-crypto";
 import type { WebPushStore, WebPushSubscription } from "./web-push-store";
 
@@ -74,6 +74,13 @@ export function webPushKind(event: AgentEvent): WebPushKind | null {
   return event.type === "error" ? "failed" : null;
 }
 
+/** The agent that a request event comes from. */
+function eventAgentId(event: AgentEvent): string {
+  if (event.type === "approval") return event.approval.agentId;
+  if (event.type === "browser-takeover-requested") return event.request.agentId;
+  return "agentId" in event && typeof event.agentId === "string" ? event.agentId : "";
+}
+
 /**
  * Sends Web Push messages from this host to the browsers of its members, so a phone is told that an
  * agent needs it also while the page is closed. The host signs each message with its own VAPID key and
@@ -89,6 +96,8 @@ export class WebPushService {
   readonly #lastSent = new Map<string, number>();
   readonly #translators = new Map<string, AppTranslate>();
   readonly #pending = new Set<Promise<void>>();
+  /** The last escalation list. It comes before the request event, so a request finds its delegator. */
+  #escalations: AgentInputEscalation[] = [];
 
   constructor(options: WebPushOptions) {
     this.#options = options;
@@ -130,6 +139,10 @@ export class WebPushService {
   }
 
   #onEvent(event: AgentEvent): void {
+    if (event.type === "agent-input-escalations-changed") {
+      this.#escalations = event.escalations;
+      return;
+    }
     const kind = webPushKind(event);
     if (!kind) return;
     const subscriptions = this.#options.store.list();
@@ -142,8 +155,18 @@ export class WebPushService {
       if (gone.includes(subscription)) continue;
       if (subscription.level === "nothing" || (subscription.mutedUntil !== null && subscription.mutedUntil > now))
         continue;
-      const content = notificationForAgentEvent(event, agents, this.#translator(subscription), subscription.level);
-      if (!content || this.#options.hiddenAgentIds(subscription.protocol).has(content.agentId)) continue;
+      const delegator = inputEscalationDelegator(this.#escalations, event);
+      const content = notificationForAgentEvent(
+        event,
+        agents,
+        this.#translator(subscription),
+        subscription.level,
+        null,
+        null,
+        delegator,
+      );
+      const hidden = this.#options.hiddenAgentIds(subscription.protocol);
+      if (!content || hidden.has(content.agentId) || (delegator && hidden.has(eventAgentId(event)))) continue;
       const key = `${subscriptionId(subscription)}:${content.agentId}:${kind}`;
       if (now - (this.#lastSent.get(key) ?? 0) < REPEAT_MS) continue;
       this.#lastSent.set(key, now);

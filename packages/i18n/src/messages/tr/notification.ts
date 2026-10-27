@@ -13,6 +13,7 @@ export const messages = {
   "notification.workflowOutput": "Bir iş akışının yeni bir sonucu var.",
   "notification.failed": "Bir hatayla durdu.",
   "notification.channelTitle": "{channel} kanalında {agent}",
+  "notification.teammateTitle": "{agent}: {teammate} sizi bekliyor",
   "notification.channelMessage": "Bir mesaj gönderdi.",
   "notification.usageLimit.title": "{provider} hesabı sınırına ulaştı",
   "notification.usageLimit.body": {

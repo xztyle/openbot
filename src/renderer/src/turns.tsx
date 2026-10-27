@@ -2,6 +2,7 @@ import type {
   AgentApproval,
   AgentContextState,
   AgentEvent,
+  AgentInputEscalation,
   AgentModelChoice,
   AgentWaitsSnapshot,
   QueueSnapshot,
@@ -110,6 +111,8 @@ const Turns = createSimpleContext({
         seededAttentionPrompts(seed?.pendingPrompts, presentedPromptResolutions(), submittedPromptRequests()),
       ),
     );
+    // The requests of teammates that work for other agents, with the agents whose chats show them.
+    const [inputEscalations, setInputEscalations] = createSignal<AgentInputEscalation[]>([]);
     // Every waiting approval: the agent's chat and each of its tasks has its own thread.
     const [approvals, setApprovals] = createSignal<AgentApproval[]>(
       Object.values(seed?.pendingApprovals ?? {}).filter((approval) => approval !== undefined),
@@ -233,6 +236,18 @@ const Turns = createSimpleContext({
       const prompt = agent ? pendingPrompts()[agent.id] : undefined;
       if (!agent || prompt?.type !== "prompt") return false;
       return submitPromptAnswers(agent.id, prompt, answers, options);
+    }
+
+    /** Answers the waiting question of any agent, as its own chat does: a teammate's, from its delegator's chat. */
+    async function answerAgentPrompt(
+      agentId: string,
+      requestId: string | number,
+      answers: Record<string, string[]>,
+      options?: PromptAnswerOptions,
+    ): Promise<boolean> {
+      const prompt = pendingPrompts()[agentId];
+      if (prompt?.type !== "prompt" || String(prompt.requestId) !== String(requestId)) return false;
+      return submitPromptAnswers(agentId, prompt, answers, options);
     }
 
     async function submitPromptAnswers(
@@ -485,6 +500,8 @@ const Turns = createSimpleContext({
       setSubmittedPromptRequests,
       approvals,
       setApprovals,
+      inputEscalations,
+      setInputEscalations,
       pendingApprovals,
       approvalOfThread,
       forgetApproval,
@@ -496,6 +513,7 @@ const Turns = createSimpleContext({
       activeRoutines,
       refreshRoutineIds,
       answerPrompt,
+      answerAgentPrompt,
       respondToApproval,
       respondToApprovalRequest,
       respondToBrowserTakeover,

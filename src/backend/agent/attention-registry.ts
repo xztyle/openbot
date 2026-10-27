@@ -241,6 +241,8 @@ interface PendingBrowserTakeover {
   params: DynamicToolCallParams;
   request: BrowserTakeoverRequest;
   resolve: (result: DynamicToolResult) => void;
+  /** The card is shown. Before that, the tab is still being handed over or filled from the vault. */
+  surfaced?: boolean;
 }
 
 /**
@@ -328,6 +330,26 @@ export type RuntimeAttention = Pick<
   "attentionComplete" | "pendingPrompts" | "pendingApprovals" | "pendingBrowserTakeovers"
 >;
 
+/** One request that waits for the user, as `pendingRequests` reports it. */
+export type PendingAttentionRequest =
+  | {
+      kind: "prompt";
+      requestId: RequestId;
+      agentId: string;
+      threadId: string;
+      turnId: string;
+      questions: readonly AgentPromptQuestion[];
+    }
+  | {
+      kind: "approval";
+      requestId: RequestId;
+      agentId: string;
+      threadId: string;
+      turnId: string;
+      approvalKind: AgentApprovalKind;
+    }
+  | { kind: "browser-takeover"; requestId: RequestId; agentId: string; threadId: string; turnId: string };
+
 export type LocalAttentionResponse =
   | { kind: "prompt"; requestId: string; answers: Record<string, string[]> }
   | { kind: "approval"; requestId: string; decision: "accept" | "decline" };
@@ -409,6 +431,45 @@ export class AttentionRegistry {
       approvals: [...this.#approvals.values()].filter((pending) => pending.approval.agentId === agentId).length,
       browserTakeovers: [...this.#takeovers.values()].filter((pending) => pending.request.agentId === agentId).length,
     };
+  }
+
+  /**
+   * Every request that waits for the user now, oldest first in each kind: what a delegator learns
+   * about. A question keeps its questions, so that a secret one is never quoted; an approval keeps its
+   * kind only, because its command text can hold a secret.
+   */
+  pendingRequests(): PendingAttentionRequest[] {
+    return [
+      ...[...this.#prompts.values()].map((pending) => ({
+        kind: "prompt" as const,
+        requestId: pending.id,
+        agentId: pending.agentId,
+        threadId: pending.publicThreadId,
+        turnId: pending.turnId,
+        questions: pending.questions,
+      })),
+      ...[...this.#approvals.values()].map(({ approval }) => ({
+        kind: "approval" as const,
+        requestId: approval.requestId,
+        agentId: approval.agentId,
+        threadId: approval.threadId,
+        turnId: approval.turnId,
+        approvalKind: approval.kind,
+      })),
+      ...[...this.#takeovers.values()].flatMap(({ request, surfaced }) =>
+        surfaced
+          ? [
+              {
+                kind: "browser-takeover" as const,
+                requestId: request.requestId,
+                agentId: request.agentId,
+                threadId: request.threadId,
+                turnId: request.turnId,
+              },
+            ]
+          : [],
+      ),
+    ];
   }
 
   /** Full details for one agent; the UI snapshot has a separate size budget. */
@@ -690,6 +751,7 @@ export class AttentionRegistry {
       pending.request.secret = { ...pending.request.secret, requiresReload: true };
     else delete pending.request.secret;
     yield* this.#browser.beginTakeover(pending.request.tabId).pipe(toAttentionOperationFailed);
+    pending.surfaced = true;
     this.#emit({ type: "browser-takeover-requested", request: pending.request });
     this.#emitRuntimeSnapshot();
   }, Effect.uninterruptible);
@@ -959,6 +1021,7 @@ export class AttentionRegistry {
           this.#takeovers.get(requestId) === pending
         ) {
           this.#routines.markNeedsAttention(turnId);
+          pending.surfaced = true;
           this.#emit({ type: "browser-takeover-requested", request: takeover });
         }
       } else {

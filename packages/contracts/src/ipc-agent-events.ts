@@ -25,6 +25,7 @@ import {
   isConversationSnapshot,
 } from "./ipc-conversations";
 import { type HiddenAgent, isHiddenAgentsSnapshot } from "./ipc-hidden-agents";
+import { type AgentInputEscalation, isAgentInputEscalationList } from "./ipc-input-escalations";
 import { isQueueSnapshot, type QueueSnapshot } from "./ipc-queue";
 import { isSidebarLayoutSnapshot, type SidebarLayoutSnapshot } from "./ipc-sidebar-layout";
 import { isBoolean, isDynamicRecord, isNumber, isString } from "./runtime-values";
@@ -125,6 +126,12 @@ export type AgentEvent =
     }
   | { type: "browser-takeover-requested"; request: BrowserTakeoverRequest }
   | { type: "browser-takeover-resolved"; requestId: string | number; agentId: string }
+  /**
+   * The whole list of requests that wait for the user in a turn that another agent asked for. The
+   * chats of the agents in each chain show them. Sent before the request event, so a client knows
+   * where the request belongs when it arrives.
+   */
+  | { type: "agent-input-escalations-changed"; escalations: AgentInputEscalation[] }
   | { type: "approval"; approval: AgentApproval }
   | { type: "runtime-snapshot"; snapshot: AgentRuntimeSnapshot }
   | { type: "browser-changed"; tabs: BrowserTab[]; activeTabId: string | null }
@@ -298,6 +305,8 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
       return isDynamicRecord(value.state);
     case "browser-user-control-changed":
       return Array.isArray(value.tabIds) && value.tabIds.every(isString);
+    case "agent-input-escalations-changed":
+      return isAgentInputEscalationList(value.escalations);
     case "browser-page-state-changed":
       return (
         Array.isArray(value.tabs) &&

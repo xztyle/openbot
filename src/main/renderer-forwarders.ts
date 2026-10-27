@@ -16,6 +16,7 @@
 
 import {
   type AgentEvent,
+  type AgentInputEscalation,
   type BrowserDisplayState,
   type ChannelSummary,
   decodeChannelSummaries,
@@ -36,6 +37,7 @@ import {
   type AgentNotificationChannel,
   agentEventCanNotify,
   agentEventRequestThread,
+  inputEscalationDelegator,
   notificationForAgentEvent,
   notificationForUsageLimit,
   notificationRequestKey,
@@ -116,7 +118,11 @@ export function createRendererForwarders({
     return window.isFocused() || getChatWindows().some((chatWindow) => chatWindow.isFocused());
   }
 
+  /** The last escalation list of each server. It comes before the request event, so a request finds its delegator. */
+  const inputEscalations = new Map<string, AgentInputEscalation[]>();
+
   function forwardAgentEvent(serverId: string, event: AgentEvent, bufferedLive = false): void {
+    if (event.type === "agent-input-escalations-changed") inputEscalations.set(serverId, event.escalations);
     if (serverId === LOCAL_SERVER_ID) getHostAnalytics()?.handleAgentEvent(event);
     const window = getMainWindow();
     if (!window || window.isDestroyed()) return;
@@ -341,6 +347,7 @@ export function createRendererForwarders({
             // The switch is read again: the user can turn it off while the lookups run.
             preview && notificationPreviewEnabled() ? { reply, redact: redactText } : null,
             channel,
+            channel ? null : inputEscalationDelegator(inputEscalations.get(serverId) ?? [], event),
           );
     // An answer from another device came in while the lookups ran.
     if (!content || (requestKey && !requestNotifications.has(requestKey))) return;

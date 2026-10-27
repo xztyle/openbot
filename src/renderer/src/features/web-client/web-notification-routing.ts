@@ -1,5 +1,9 @@
 import type { AgentEvent, ChannelSummary, ClientAgentSummary, ServerNotificationLevel } from "@openbot/contracts/ipc";
-import { type AgentNotificationChannel, agentEventRequestThread } from "@openbot/team-client/agent-notifications";
+import {
+  type AgentNotificationChannel,
+  agentEventRequestThread,
+  inputEscalationDelegator,
+} from "@openbot/team-client/agent-notifications";
 import { channelReplyNotifications } from "@openbot/team-client/channel-notifications";
 import type { TextValue } from "@openbot/ui/text";
 import { onCleanup, untrack } from "solid-js";
@@ -50,6 +54,10 @@ export function createWebNotificationRouting(options: {
       level,
       translate: options.t,
       channel: threadId === null ? null : options.channelForThread(hostId, threadId),
+      delegatorAgentId: inputEscalationDelegator(
+        untrack(() => workspace.state.inputEscalations),
+        event,
+      ),
       onOpen: (agentId, channelId) =>
         channelId ? options.onOpenChannel(hostId, channelId) : options.onOpen(hostId, agentId),
     });

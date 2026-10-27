@@ -1,9 +1,12 @@
 import { agentProviderName } from "@openbot/contracts/agent-providers";
-import type {
-  AgentEvent,
-  ClientAgentSummary,
-  ServerNotificationLevel,
-  TeamRealtimeEvent,
+import {
+  type AgentEvent,
+  type AgentInputEscalation,
+  type ClientAgentSummary,
+  inputEscalationOf,
+  inputEscalationRoot,
+  type ServerNotificationLevel,
+  type TeamRealtimeEvent,
 } from "@openbot/contracts/ipc";
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import type { AppFormat, AppTranslate } from "@openbot/i18n";
@@ -135,6 +138,25 @@ export function agentEventNeedsUser(event: AgentEvent): boolean {
   );
 }
 
+/**
+ * The agent whose chat shows the request of this event for its teammate: the root of the delegation
+ * chain, which the user talks to. Null for any other event, and for a request that no agent delegated.
+ */
+export function inputEscalationDelegator(
+  escalations: readonly AgentInputEscalation[],
+  event: AgentEvent,
+): string | null {
+  const found =
+    event.type === "prompt"
+      ? inputEscalationOf(escalations, "prompt", event.agentId, event.requestId)
+      : event.type === "approval"
+        ? inputEscalationOf(escalations, "approval", event.approval.agentId, event.approval.requestId)
+        : event.type === "browser-takeover-requested"
+          ? inputEscalationOf(escalations, "browser-takeover", event.request.agentId, event.request.requestId)
+          : undefined;
+  return found ? inputEscalationRoot(found) : null;
+}
+
 /** The thread that an event waits on, or null when it is not a request. A channel can own that thread. */
 export function agentEventRequestThread(event: AgentEvent): string | null {
   if (event.type === "prompt") return event.threadId;
@@ -157,11 +179,26 @@ export function notificationForAgentEvent(
   level: ServerNotificationLevel,
   preview: AgentNotificationPreview | null = null,
   channel: AgentNotificationChannel | null = null,
+  delegatorAgentId: string | null = null,
 ): AgentNotificationContent | null {
   if (level === "nothing") return null;
   const subject = notificationSubject(event, level, translate, preview);
   if (!subject) return null;
   const agent = agents.find((candidate) => candidate.id === subject.agentId);
+  // A request of a teammate that works for another agent shows in the chat of that agent, which the
+  // user talks to. The notice names both and opens that chat. That agent's switch decides it too: a
+  // background teammate starts with its notifications off, and the user never opens its chat.
+  const delegator =
+    delegatorAgentId && agentEventNeedsUser(event)
+      ? agents.find((candidate) => candidate.id === delegatorAgentId)
+      : undefined;
+  if (agent && delegator && (delegator.notifications || agent.notifications))
+    return {
+      title: translate("notification.teammateTitle", { agent: delegator.name, teammate: agent.name }),
+      ...subject,
+      agentId: delegator.id,
+      threadId: delegator.threadId,
+    };
   if (!agent?.notifications) return null;
   if (channel)
     return {

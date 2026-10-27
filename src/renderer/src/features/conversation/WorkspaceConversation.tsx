@@ -21,6 +21,7 @@ import {
 } from "@openbot/ui/features/conversation/BackupModels";
 import { unloadedHistory } from "@openbot/ui/features/conversation/ChatScrollRail";
 import { sidebarAgentWaits } from "@openbot/ui/features/sidebar/sidebar-agent-states";
+import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo } from "solid-js";
 import { desktopAnalytics } from "../../analytics";
 import { ProviderSignInDialogs } from "../../components/ProviderSignInDialogs";
@@ -57,6 +58,7 @@ import { useConversation } from "./conversation-context";
 import { messagePromptRequestKey, promptRequestKey } from "./conversation-keys";
 import type { ConversationTasks } from "./conversation-types";
 import { createMarketplaceAppAccess } from "./marketplace-app-access";
+import { teammateRequestsFor, teammateRequestViews, toastTeammateAnswerError } from "./teammate-requests";
 
 /**
  * The transcript of the active Agent, with everything the composer needs to send
@@ -133,6 +135,8 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
     pendingPrompts,
     approvals,
     approvalOfThread,
+    inputEscalations,
+    answerAgentPrompt,
     activeTurns,
     turnProgress,
     turnStepLines,
@@ -206,6 +210,33 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
       usageLimits: usageLimits(),
     }),
   );
+
+  /** The requests of the teammates that work for this agent. Its chat answers them as theirs do. */
+  const teammateRequests = createMemo(() => {
+    const prompts = Object.values(pendingPrompts());
+    return teammateRequestViews(
+      teammateRequestsFor(activeAgent()?.id, {
+        escalations: inputEscalations(),
+        agents: agentList(),
+        prompts: prompts.flatMap((event) => (event?.type === "prompt" ? [event] : [])),
+        approvals: approvals(),
+        takeovers: prompts.flatMap((event) => (event?.type === "browser-takeover-requested" ? [event.request] : [])),
+      }),
+      {
+        name: (agent) => agent?.name ?? currentText().t("chat.message.agentFallback"),
+        answer: (agentId, requestId, answers) =>
+          answerAgentPrompt(agentId, requestId, answers, { onError: toastTeammateAnswerError }),
+        // The card shows a failed answer itself.
+        respondToApproval: (agentId, requestId, decision) =>
+          respondToApprovalRequest(agentId, requestId, decision, {
+            onError: (error) => {
+              throw error;
+            },
+          }),
+        open: selectAgent,
+      },
+    );
+  });
 
   const activeApproval = createMemo(() => {
     const agent = activeAgent();
@@ -568,6 +599,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         usageLimitAsk={usageLimitAsk()}
         usageLimited={activeServer()?.kind === "local" ? usageLimited : undefined}
         browserTakeover={activeBrowserTakeover()}
+        teammateRequests={teammateRequests()}
         activeTurnId={activeAgent() ? activeTurns()[activeAgent()?.id ?? ""] : null}
         activityDetail={activeAgent() ? turnProgress()[activeAgent()?.id ?? ""]?.detail : undefined}
         turnStepLines={turnStepLines()}

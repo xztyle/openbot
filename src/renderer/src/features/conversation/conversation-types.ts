@@ -5,6 +5,7 @@ import type {
   AgentDefaults,
   AgentEvent,
   AgentModelChoice,
+  AgentPromptQuestion,
   AgentProviderId,
   AgentStatus,
   AgentTask,
@@ -38,11 +39,28 @@ import type { AwaitingReplyItem } from "@openbot/ui/features/conversation/Awaiti
 import type { UsageLimitAskCardProps } from "@openbot/ui/features/conversation/BackupModels";
 import type { ChatMessageAuthor } from "@openbot/ui/features/conversation/ChatMessageRow";
 import type { UnloadedHistory } from "@openbot/ui/features/conversation/ChatScrollRail";
+import type { TeammateRequestKind } from "@openbot/ui/features/conversation/ConversationPrompts";
 import type { SidebarAgentWait } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import type { JSX } from "@solidjs/web";
 import type { ConnectorRegistry } from "../connectors/connector-registry";
 import type { ConversationRuntime } from "./conversation-runtime";
 import type { TurnStepLines } from "./turn-step-lines";
+
+/** A teammate's request in this chat. Without the answer actions, only its own chat can answer it. */
+export interface TeammateRequest {
+  key: string;
+  agentId: string;
+  name: string;
+  agent: AgentProfile | undefined;
+  kind: TeammateRequestKind;
+  /** The questions, when they can be answered here. */
+  questions?: AgentPromptQuestion[] | undefined;
+  onAnswer?: ((answers: Record<string, string[]>) => Promise<boolean>) | undefined;
+  approval?: AgentApproval | undefined;
+  onApprove?: (() => Promise<boolean>) | undefined;
+  onReject?: (() => Promise<boolean>) | undefined;
+  onOpen: () => void;
+}
 
 /**
  * What a conversation is, as data. These live apart from `ConversationView.tsx`
@@ -275,6 +293,12 @@ export interface ConversationProps {
   /** Whether a usage limit holds this model and account now. Absent for a joined server. */
   usageLimited?: ((choice: AgentModelChoice) => boolean) | undefined;
   browserTakeover: Extract<AgentEvent, { type: "browser-takeover-requested" }>["request"] | undefined;
+  /**
+   * The requests of teammates that work for this agent and wait for the user. The chat shows each one
+   * after its own, and an answer here answers the teammate's request. Absent where the host does not
+   * report them.
+   */
+  teammateRequests?: readonly TeammateRequest[] | undefined;
   onSelectAgent: (agentId: string) => void;
   /**
    * What stops each agent in its own chat: a question, an approval, a browser takeover or a usage

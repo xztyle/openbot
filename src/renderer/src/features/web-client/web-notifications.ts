@@ -120,6 +120,8 @@ export function showWebAgentNotification(options: {
   translate: AppTranslate;
   /** The channel whose thread the event came from, or null. */
   channel: AgentNotificationChannel | null;
+  /** The agent whose chat shows this teammate's request, or null. The notification then opens that chat. */
+  delegatorAgentId?: string | null;
   onOpen(agentId: string, channelId: string | undefined): void;
 }): void {
   if (typeof Notification === "undefined" || Notification.permission !== "granted" || browserFocused()) return;
@@ -132,6 +134,7 @@ export function showWebAgentNotification(options: {
     options.level,
     isNotificationTextEnabled() ? { reply: null, redact: redactText } : null,
     options.channel,
+    options.channel ? null : (options.delegatorAgentId ?? null),
   );
   if (!content) return;
   const key = notificationRequestKey(options.hostId, options.event);

@@ -168,6 +168,12 @@ import { composerDraftKey } from "../conversation/conversation-keys";
 import type { AgentSettingsRequest } from "../conversation/conversation-types";
 import { createMarketplaceAppAccess } from "../conversation/marketplace-app-access";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
+import {
+  teammateRequestsFor,
+  teammateRequestViews,
+  toastTeammateAnswerError,
+  withTeammateAttention,
+} from "../conversation/teammate-requests";
 import type { FilesPort } from "../files/files-port";
 import { hostSetupProviderProps } from "../onboarding/host-setup-provider-props";
 import { createRoutineTimezonePrompt } from "../schedule/routine-timezone-prompt";
@@ -1438,6 +1444,39 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         );
     },
   );
+  const teammateRequestInput = createMemo(() => ({
+    escalations: workspace.state.inputEscalations,
+    agents: workspace.profiles(),
+    prompts: workspace.state.prompts,
+    approvals: workspace.state.approvals,
+    takeovers: workspace.state.takeovers,
+  }));
+  /** The requests of the teammates that work for the open agent. Its chat answers them as theirs do. */
+  const teammateRequests = createMemo(() =>
+    workspace.state.status !== "online"
+      ? []
+      : teammateRequestViews(teammateRequestsFor(workspace.state.selectedId ?? undefined, teammateRequestInput()), {
+          name: (agent) => agent?.name ?? t("chat.message.agentFallback"),
+          answer: async (_agentId, requestId, answers) => {
+            try {
+              await workspace.answer({ requestId, answers });
+              return true;
+            } catch (error) {
+              toastTeammateAnswerError(error);
+              return false;
+            }
+          },
+          // The card shows a failed answer itself.
+          respondToApproval: async (_agentId, requestId, decision) => {
+            await workspace.approve({ requestId, decision });
+            return true;
+          },
+          open: (agentId) => {
+            setMobilePane("conversation");
+            void select(agentId);
+          },
+        }),
+  );
   const sidebarActivity = createMemo(() => {
     // The agent conversation shows only the waits of the agent's own thread. A wait in a channel
     // thread stays out of "Needs you", because selecting the row cannot answer it.
@@ -1456,15 +1495,22 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       unreadReplies: { ...workspace.state.unreadCounts },
       recentReplies: { ...workspace.state.recentReplies },
       failedTurns: { ...workspace.state.failedTurns },
-      // One wait per agent: a question replaces a browser takeover for the same agent.
-      pendingPrompts: Object.fromEntries([
-        ...workspace.state.takeovers
-          .filter(inAgentThread)
-          .map((request) => [request.agentId, { type: "browser-takeover-requested", request } as const] as const),
-        ...workspace.state.prompts.filter(inAgentThread).map((prompt) => [prompt.agentId, prompt] as const),
-      ]),
-      pendingApprovals: Object.fromEntries(
-        workspace.state.approvals.filter(inAgentThread).map((approval) => [approval.agentId, approval]),
+      // A teammate's request waits in the chat of the agent that gave it the work too, so that agent
+      // goes to "Needs you": the user seldom opens the teammate's chat.
+      ...withTeammateAttention(
+        {
+          // One wait per agent: a question replaces a browser takeover for the same agent.
+          pendingPrompts: Object.fromEntries([
+            ...workspace.state.takeovers
+              .filter(inAgentThread)
+              .map((request) => [request.agentId, { type: "browser-takeover-requested", request } as const] as const),
+            ...workspace.state.prompts.filter(inAgentThread).map((prompt) => [prompt.agentId, prompt] as const),
+          ]),
+          pendingApprovals: Object.fromEntries(
+            workspace.state.approvals.filter(inAgentThread).map((approval) => [approval.agentId, approval]),
+          ),
+        },
+        teammateRequestInput(),
       ),
     };
   });
@@ -2728,6 +2774,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 // The card stays in the state while the host is away, and shows again with the host's snapshot.
                 approval={workspace.state.status === "online" ? view.approval() : undefined}
                 browserTakeover={browserTakeover()}
+                teammateRequests={teammateRequests()}
                 onSelectAgent={(id) => {
                   setMobilePane("conversation");
                   void select(id);

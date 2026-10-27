@@ -53,3 +53,25 @@
     animation: none;
   }
 }
+
+/* A teammate's request in the chat of the agent that gave it the work: who asks, then its card. */
+.teammate-request {
+  display: grid;
+  min-width: 0;
+  gap: var(--openbot-space-2);
+}
+
+.teammate-request-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-3);
+}
+
+.teammate-request-note {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+}

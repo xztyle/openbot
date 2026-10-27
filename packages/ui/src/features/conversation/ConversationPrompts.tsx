@@ -24,6 +24,7 @@ import { StandingApprovalConfirmation } from "@openbot/ui/components/StandingApp
 import { BrowserSecretCard } from "@openbot/ui/features/conversation/BrowserSecretCard";
 import { BrowserTakeoverPreview } from "@openbot/ui/features/conversation/BrowserTakeoverPreview";
 import { type TextValue, useText } from "@openbot/ui/text";
+import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import type { AgentProfile } from "../../data";
 import { AgentAvatar } from "../agents/AgentAvatar";
@@ -123,6 +124,62 @@ export function ChoiceCard(props: {
         }}
       />
     </div>
+  );
+}
+
+/** What a teammate's request asks of the user, for the title of its card in the delegator's chat. */
+export type TeammateRequestKind = "prompt" | "approval" | "browser-takeover";
+
+const TEAMMATE_REQUEST_TITLE = {
+  prompt: "prompt.teammate.question",
+  approval: "prompt.teammate.approval",
+  "browser-takeover": "prompt.teammate.browser",
+} as const;
+
+/**
+ * A request of a teammate, shown in the chat of the agent that gave it the work. `children` is the
+ * card that answers it, the same card as in the teammate's own chat. When `answerHere` is false, the
+ * request is answered only in the teammate's chat: a private answer, or a browser step. The card then
+ * says so, and does not show the question.
+ */
+export function TeammateRequestCard(props: {
+  name: string;
+  agent?: AgentProfile | undefined;
+  kind: TeammateRequestKind;
+  answerHere: boolean;
+  onOpen: () => void;
+  children?: JSX.Element;
+}) {
+  const { t } = useText();
+  const title = () => t(TEAMMATE_REQUEST_TITLE[props.kind], { name: props.name });
+  return (
+    <section class="teammate-request" aria-label={title()}>
+      <header class="teammate-request-header">
+        <span class="approval-requester">
+          <AgentAvatar
+            agent={props.agent}
+            seed={props.agent ? undefined : props.name}
+            class="approval-requester-avatar"
+          />
+          <span class="approval-requester-name">{title()}</span>
+        </span>
+        <Button variant="ghost" size="sm" type="button" onClick={() => props.onOpen()}>
+          {t("prompt.teammate.open", { name: props.name })}
+        </Button>
+      </header>
+      <Show
+        when={props.answerHere}
+        fallback={
+          <p class="teammate-request-note conversation-interaction-card">
+            {props.kind === "browser-takeover"
+              ? t("prompt.teammate.browserBody", { name: props.name })
+              : t("prompt.teammate.private", { name: props.name })}
+          </p>
+        }
+      >
+        {props.children}
+      </Show>
+    </section>
   );
 }
 

@@ -27,6 +27,13 @@ export const messages = defineMessages("prompt", {
   "prompt.approval.grantFailed": "Could not save the standing approval. Try again.",
   "prompt.approval.label": "Agent approval",
   "prompt.approval.labelFrom": "Approval for {name}",
+  // A teammate's request, shown in the chat of the agent that gave it the work.
+  "prompt.teammate.question": "{name} needs your answer",
+  "prompt.teammate.approval": "{name} needs your approval",
+  "prompt.teammate.browser": "{name} needs you in the browser",
+  "prompt.teammate.private": "The answer is private, so the question stays in the chat of {name}.",
+  "prompt.teammate.browserBody": "Finish the browser step in the chat of {name}.",
+  "prompt.teammate.open": "Open {name}",
   "prompt.approval.badge": "Approval",
   "prompt.approval.files": "Files",
   "prompt.approval.agentWorkspace": "Agent workspace",

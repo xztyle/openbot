@@ -1525,6 +1525,39 @@ export function ConversationTimeline() {
                 />
               )}
             </Show>
+            <For each={props.teammateRequests ?? []} keyed={(request) => request.key}>
+              {(request) => (
+                <Loading>
+                  <TeammateRequestCard
+                    name={request().name}
+                    agent={request().agent}
+                    kind={request().kind}
+                    answerHere={Boolean((request().questions && request().onAnswer) || request().approval)}
+                    onOpen={() => request().onOpen()}
+                  >
+                    <Show when={request().questions && request().onAnswer ? request() : undefined}>
+                      {(answerable) => (
+                        <QuestionPromptBubble
+                          questions={answerable().questions ?? []}
+                          sendShortcut={deviceSendShortcut(props.platform)}
+                          onSubmit={(answers) => answerable().onAnswer?.(answers) ?? Promise.resolve(false)}
+                        />
+                      )}
+                    </Show>
+                    <Show when={request().approval}>
+                      {(approval) => (
+                        <ApprovalCard
+                          approval={approval()}
+                          agentName={request().name}
+                          onApprove={() => request().onApprove?.() ?? Promise.resolve(false)}
+                          onReject={() => request().onReject?.() ?? Promise.resolve(false)}
+                        />
+                      )}
+                    </Show>
+                  </TeammateRequestCard>
+                </Loading>
+              )}
+            </For>
           </div>
         </Show>
       </div>
@@ -1556,6 +1589,11 @@ export function ConversationTimeline() {
 
 const ApprovalCard = lazy(() =>
   import("@openbot/ui/features/conversation/ConversationPrompts").then((module) => ({ default: module.ApprovalCard })),
+);
+const TeammateRequestCard = lazy(() =>
+  import("@openbot/ui/features/conversation/ConversationPrompts").then((module) => ({
+    default: module.TeammateRequestCard,
+  })),
 );
 const QuestionPromptBubble = lazy(() =>
   import("@openbot/ui/components/QuestionPromptBubble").then((module) => ({ default: module.QuestionPromptBubble })),

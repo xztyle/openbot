@@ -6,6 +6,8 @@
  *
  * The background teammate mark of `agent-background-v1.ts` came later and uses this string too. A
  * fork host built before it refuses an update that sets only that mark, so the client fails closed.
+ * The `agent-input-escalations-changed` event of `input-escalations-v1.ts` came later too. A fork
+ * host built before it sends no such event, so a client shows each request in its own chat only.
  *
  * A released peer reads no capability from a header with more than 64 entries, and a released
  * client refuses a host that advertises more than 64. These features used seven entries, which put

@@ -9,6 +9,7 @@ export const messages = {
   "notification.finished": "작업을 마쳤어요.",
   "notification.failed": "오류로 중단됐어요.",
   "notification.channelTitle": "{channel}의 {agent}",
+  "notification.teammateTitle": "{agent}: {teammate}에게 도움이 필요해요",
   "notification.channelMessage": "메시지를 보냈어요.",
   "notification.usageLimit.title": "{provider} 계정이 한도에 도달했어요",
   "notification.usageLimit.body": { other: "에이전트 {count}개가 대기 중이에요. OpenBot이 나중에 다시 시도할게요." },

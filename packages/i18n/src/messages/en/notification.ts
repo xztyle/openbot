@@ -19,6 +19,9 @@ export const messages = defineMessages("notification", {
   "notification.eventCheckDeliveryFailed": "An event check could not give an event to the agent.",
   // The title of a notification about an agent in a channel: the agent and the channel name.
   "notification.channelTitle": "{agent} in {channel}",
+  // The title of a notification about a teammate's request, shown in the chat of the agent that
+  // gave it the work: that agent, then the teammate.
+  "notification.teammateTitle": "{agent}: {teammate} needs you",
   // The body of a channel reply notification when the preview of agent words is off.
   "notification.channelMessage": "Sent a message.",
   "notification.usageLimit.title": "{provider} account reached its limit",

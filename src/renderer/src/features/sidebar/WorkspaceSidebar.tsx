@@ -25,6 +25,7 @@ import { useAgents } from "../agents/agents-context";
 import { useChannels } from "../channels/channels-context";
 import { useConversation } from "../conversation/conversation-context";
 import { useDirectMessages } from "../conversation/direct-messages-context";
+import { withTeammateAttention } from "../conversation/teammate-requests";
 import { useServerActions } from "../servers/server-actions";
 import { serverRoleCanAdminister } from "../servers/server-capabilities";
 import { useServerSettings } from "../servers/server-settings";
@@ -93,7 +94,16 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
   // The host refuses a member: a hidden agent stops for every member, as a deleted one does.
   const hideAllowed = () =>
     activeServerSupportsCapability(AGENT_HIDDEN_CAPABILITY) && serverRoleCanAdminister(activeServer());
-  const { activeTurns, queues, failedTurns, usageLimits, pendingPrompts, pendingApprovals, approvals } = useTurns();
+  const {
+    activeTurns,
+    queues,
+    failedTurns,
+    usageLimits,
+    pendingPrompts,
+    pendingApprovals,
+    approvals,
+    inputEscalations,
+  } = useTurns();
   const { unreadReplies, recentReplies, markAllAgentMessagesRead, markAgentMessagesUnread } = useConversation();
   const { directPeople } = usePresence();
   const { activeDirectMember, activeDirectMemberId, directThreads } = useDirectMessages();
@@ -148,18 +158,30 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
 
   /* The agent conversation shows only the waits of the agent's own thread. A wait in a channel
    * thread stays out of "Needs you", because selecting the row cannot answer it. */
-  const sidebarAgentStates = createMemo(() =>
-    computeSidebarAgentStates({
+  const sidebarAgentStates = createMemo(() => {
+    const prompts = Object.values(pendingPrompts());
+    return computeSidebarAgentStates({
       agentIds: agentList().map((agent) => agent.id),
       activeTurns: activeTurns(),
       queues: queues(),
       unreadReplies: unreadReplies(),
       recentReplies: recentReplies(),
-      ...agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
+      // A teammate's request waits in the chat of the agent that gave it the work too, so that agent
+      // goes to "Needs you": the user seldom opens the teammate's chat.
+      ...withTeammateAttention(
+        agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
+        {
+          escalations: inputEscalations(),
+          agents: agentList(),
+          prompts: prompts.flatMap((event) => (event?.type === "prompt" ? [event] : [])),
+          approvals: approvals(),
+          takeovers: prompts.flatMap((event) => (event?.type === "browser-takeover-requested" ? [event.request] : [])),
+        },
+      ),
       failedTurns: failedTurns(),
       usageLimits: usageLimits(),
-    }),
-  );
+    });
+  });
 
   /* A wait in a channel thread goes to the channel instead. Selecting the channel opens the view
    * that answers it. */

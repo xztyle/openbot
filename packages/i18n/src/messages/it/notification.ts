@@ -13,6 +13,7 @@ export const messages = {
   "notification.workflowOutput": "Un flusso di lavoro ha un nuovo risultato.",
   "notification.failed": "Si è fermato per un errore.",
   "notification.channelTitle": "{agent} in {channel}",
+  "notification.teammateTitle": "{agent}: {teammate} ha bisogno di te",
   "notification.channelMessage": "Ha inviato un messaggio.",
   "notification.usageLimit.title": "L'account {provider} ha raggiunto il limite",
   "notification.usageLimit.body": {

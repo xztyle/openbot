@@ -156,6 +156,7 @@ import { DuplicationGate, toAgentDuplicationFailed } from "./agent/duplication-g
 import type { FailureContext, FailureSignal } from "./agent/failure-signal";
 import { type AgentHostedSites, HostedSiteCoordinator } from "./agent/hosted-site-coordinator";
 import { ImageGenRuntime } from "./agent/image-gen-runtime";
+import { InputEscalations } from "./agent/input-escalations";
 import { MailboxSync } from "./agent/mailbox-sync";
 import { type GitHubConnectorSource, McpGateway, type TestMcpServerOptions } from "./agent/mcp-gateway";
 import { mcpServersFromGateway } from "./agent/mcp-tools";
@@ -453,6 +454,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #browserUploads: BrowserUploads;
   readonly #mailboxSync: MailboxSync;
   readonly #followUp: DelegationFollowUp;
+  /** Built after the attention registry and the mailbox; an event before then has no request to escalate. */
+  readonly #escalations: InputEscalations | undefined;
   readonly #boot: BootRecovery;
   readonly #deltas: DeltaBuffer;
   readonly #turn: TurnLifecycle;
@@ -967,6 +970,18 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       hooks: {
         scheduleDrain: (agentId) => this.#drain.scheduleDrain(agentId),
         redactMcp: (text) => this.#mcp.redact(text),
+        emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
+      },
+    });
+    this.#escalations = new InputEscalations({
+      store,
+      mailbox,
+      mailboxSync: this.#mailboxSync,
+      conversation: this.#conversation,
+      hooks: {
+        pendingRequests: () => this.#attention.pendingRequests(),
+        scheduleDrain: (agentId) => this.#drain.scheduleDrain(agentId),
+        emit: (event) => this.emit("event", event),
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       },
     });
@@ -1602,6 +1617,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       turn: this.#turn,
       attention: this.#attention,
       usageLimits: this.#usageLimits,
+      inputEscalations: this.#escalations?.list() ?? [],
     });
   }
 
@@ -4816,6 +4832,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   #emit(event: AgentEvent): void {
     recordAgentRestartActivity(event);
+    // Before the event: a client learns who delegated a request before the request arrives.
+    this.#escalations?.observe(event);
     if (this.channels?.event(event) || this.messaging?.event(event, this.#scope) || this.#tasks?.event(event)) return;
     this.emit("event", event);
   }

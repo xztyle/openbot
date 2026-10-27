@@ -85,6 +85,7 @@ export function AgentEventBridge() {
     submittedPromptRequests,
     setSubmittedPromptRequests,
     setApprovals,
+    setInputEscalations,
     forgetApproval,
     completedTurnByAgent,
     queueSnapshotRequests,
@@ -286,6 +287,9 @@ export function AgentEventBridge() {
           event.approval,
         ]);
         return;
+      case "agent-input-escalations-changed":
+        setInputEscalations(event.escalations);
+        return;
       case "runtime-snapshot":
         void channels.refresh();
         applyAgentRuntimeSnapshot(event.snapshot);
@@ -386,6 +390,8 @@ export function AgentEventBridge() {
     setQueues((current) => reconcileQueuesWithRuntimeWork(current, snapshot.work, runtimeTurns));
     setPendingPrompts((current) => reconcileAttentionPrompts(current, snapshot, submittedPromptRequests()));
     setApprovals((current) => reconcileAttentionApprovals(current, snapshot));
+    // A Team API snapshot has no escalations: the host sends them in their own event after it.
+    if (snapshot.inputEscalations) setInputEscalations(snapshot.inputEscalations);
     applyRuntimeMessages(snapshot.latestMessages);
   }
 

@@ -1678,6 +1678,56 @@ export class MailboxStore {
     return null;
   }
 
+  /**
+   * The agents that delegated the turn `turnId` of `agentId`: first the agent whose request started
+   * the turn, then the agent whose request started the turn that sent that request, and so on to the
+   * root of the chain. A request is an agent message that waits for an answer, outside a channel. A
+   * message steered into a running turn did not start it. A turn that a teammate's answer started
+   * continues the work for the request whose result the agent still owes, so that request counts.
+   * The walk stops at a user or routine message, at a cycle, and at `limit` agents.
+   */
+  delegationChain(agentId: string, turnId: string, limit: number): string[] {
+    const turnIds = this.#sourceTurnIds();
+    const messages = this.#messagesById();
+    const chain: string[] = [];
+    const seen = new Set([agentId]);
+    let current: { agentId: string; turnId: string } | null = { agentId, turnId };
+    while (current && chain.length < limit) {
+      const request = this.#delegatingRequest(current.agentId, current.turnId, messages);
+      if (request?.sender.kind !== "agent" || seen.has(request.sender.agentId)) break;
+      seen.add(request.sender.agentId);
+      chain.push(request.sender.agentId);
+      const sourceTurnId = turnIds.get(request.id);
+      current = sourceTurnId ? { agentId: request.sender.agentId, turnId: sourceTurnId } : null;
+    }
+    return chain;
+  }
+
+  #delegatingRequest(
+    agentId: string,
+    turnId: string,
+    messages: ReadonlyMap<string, StoredMessage>,
+  ): StoredMessage | null {
+    const isRequest = (message: StoredMessage | undefined): message is StoredMessage =>
+      message?.sender.kind === "agent" &&
+      message.sender.agentId !== agentId &&
+      message.expectsReply !== false &&
+      !message.channelId;
+    const byAge = (a: StoredDelivery, b: StoredDelivery) => Date.parse(a.createdAt) - Date.parse(b.createdAt);
+    const started = this.#state.deliveries
+      .filter((delivery) => delivery.recipientAgentId === agentId && delivery.turnId === turnId && !delivery.steeredAt)
+      .sort(byAge)[0];
+    const first = started ? messages.get(started.messageId) : undefined;
+    if (isRequest(first)) return first;
+    if (!first || !isAnswer(first)) return null;
+    const owed = this.#state.deliveries
+      .filter((delivery) => delivery.recipientAgentId === agentId && (delivery.resultAwaiting?.length ?? 0) > 0)
+      .sort(byAge)
+      .at(-1);
+    const request = owed ? messages.get(owed.messageId) : undefined;
+    return isRequest(request) ? request : null;
+  }
+
   /** Whether the message's sender waits for an answer. Unknown messages count as expecting one. */
   expectsReply(messageId: string): boolean {
     return this.#state.messages.find((message) => message.id === messageId)?.expectsReply !== false;

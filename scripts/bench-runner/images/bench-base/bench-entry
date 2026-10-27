@@ -1,0 +1,25 @@
+#!/bin/bash
+# Entrypoint of every bench image: optional virtual display, then the job command at low priority.
+set -e
+if [ "${BENCH_DISPLAY:-0}" = "1" ]; then
+    export DISPLAY=:99
+    Xvfb :99 -screen 0 "${BENCH_SCREEN:-1920x1080x24}" -nolisten tcp -ac +extension GLX +render -noreset \
+        >/tmp/xvfb.log 2>&1 &
+    for _ in $(seq 1 50); do
+        [ -S /tmp/.X11-unix/X99 ] && break
+        sleep 0.1
+    done
+    if [ ! -S /tmp/.X11-unix/X99 ]; then
+        echo "[bench] Xvfb did not start:" >&2
+        cat /tmp/xvfb.log >&2
+        exit 125
+    fi
+fi
+if [ "${BENCH_GPU:-0}" = "1" ] && [ -e /dev/dxg ]; then
+    # WSL2: GPU-accelerated OpenGL through Mesa's D3D12 driver; CUDA works through the mapped driver.
+    export LD_LIBRARY_PATH="/usr/lib/wsl/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export GALLIUM_DRIVER="${GALLIUM_DRIVER:-d3d12}"
+    export MESA_D3D12_DEFAULT_ADAPTER_NAME="${MESA_D3D12_DEFAULT_ADAPTER_NAME:-NVIDIA}"
+fi
+# Lower CPU and I/O priority so the job never competes with the user's own work.
+exec nice -n 10 ionice -c 3 -t -- "$@"

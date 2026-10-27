@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+"""benchctl: run heavy jobs (builds, GPU tests, screenshots) on a bench PC or, if none is free, on the server.
+
+  benchctl run [--gpu] [--display] [--image NAME] [--timeout S] [--out PATH]... [--cwd DIR]
+               [--exclude PATTERN]... [--no-default-excludes] [--detach] -- <command...>
+  benchctl status | wait <job> | logs <job> | cancel <job>
+
+`run` packs the folder (default: the current one), sends it, streams the log live, copies the declared
+outputs back into the folder and exits with the command's exit code (124 timeout, 125 bench error,
+130 cancelled). Talks to the host bench broker over a unix socket. Python standard library only.
+"""
+
+import argparse
+import fnmatch
+import http.client
+import json
+import os
+import signal
+import socket
+import sys
+import tarfile
+import tempfile
+import time
+
+SOCKET = os.environ.get("BENCHCTL_SOCKET") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "benchctl.sock")
+DEFAULT_EXCLUDES = [".git", "node_modules", "__pycache__", ".venv", "venv", ".cache", ".mypy_cache",
+                    ".pytest_cache", "target", ".gradle", ".DS_Store"]
+STATE_FILE = os.path.join(tempfile.gettempdir(), "benchctl-jobs.json")
+
+
+class UnixConnection(http.client.HTTPConnection):
+    def __init__(self, path, timeout=120):
+        super().__init__("broker", timeout=timeout)
+        self.path = path
+
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self.path)
+
+
+def die(message, code=125):
+    print(f"benchctl: {message}", file=sys.stderr)
+    sys.exit(code)
+
+
+def request(method, path, body=None, headers=None, timeout=120, raw=False):
+    conn = UnixConnection(SOCKET, timeout)
+    try:
+        conn.request(method, "/v1" + path, body=body, headers=headers or {})
+        response = conn.getresponse()
+        if raw and response.status == 200:
+            return response, conn
+        data = response.read()
+    except (OSError, http.client.HTTPException) as err:
+        conn.close()
+        die(f"cannot reach the bench broker at {SOCKET}: {err}")
+    conn.close()
+    try:
+        payload = json.loads(data or b"{}")
+    except json.JSONDecodeError:
+        payload = {"error": data[:200].decode("utf8", "replace")}
+    if response.status >= 400:
+        die(payload.get("error", f"request failed ({response.status})"))
+    return payload
+
+
+def call(method, path, value=None, timeout=120):
+    body = json.dumps(value).encode() if value is not None else None
+    return request(method, path, body, {"Content-Type": "application/json"}, timeout)
+
+
+# ---- packing -----------------------------------------------------------------------------------
+
+
+def load_ignore(root):
+    path = os.path.join(root, ".benchignore")
+    if not os.path.exists(path):
+        return []
+    with open(path) as handle:
+        return [line.strip().rstrip("/") for line in handle if line.strip() and not line.startswith("#")]
+
+
+def excluded(rel, name, patterns):
+    return any(fnmatch.fnmatch(name, p) or fnmatch.fnmatch(rel, p) for p in patterns)
+
+
+def pack(root, patterns, cap_bytes):
+    root = os.path.realpath(root)
+    fd, path = tempfile.mkstemp(prefix="benchctl-", suffix=".tar.gz")
+    os.close(fd)
+    count = 0
+    raw = 0
+    skipped_links = 0
+    with tarfile.open(path, "w:gz", compresslevel=3) as tar:
+        for dirpath, dirs, files in os.walk(root, followlinks=False):
+            rel_dir = os.path.relpath(dirpath, root)
+            keep_dirs = []
+            for d in dirs:
+                rel = os.path.normpath(os.path.join(rel_dir, d))
+                full = os.path.join(dirpath, d)
+                if excluded(rel, d, patterns):
+                    continue
+                if os.path.islink(full):
+                    files.append(d)  # handled as a link below
+                    continue
+                keep_dirs.append(d)
+                tar.add(full, arcname=rel, recursive=False)
+            dirs[:] = keep_dirs
+            for f in files:
+                rel = os.path.normpath(os.path.join(rel_dir, f))
+                full = os.path.join(dirpath, f)
+                if excluded(rel, f, patterns):
+                    continue
+                if os.path.islink(full):
+                    target = os.path.realpath(full)
+                    if target != root and not target.startswith(root + os.sep):
+                        skipped_links += 1
+                        continue
+                elif not os.path.isfile(full):
+                    continue
+                try:
+                    tar.add(full, arcname=rel, recursive=False)
+                except OSError as err:
+                    print(f"benchctl: skipped {rel}: {err}", file=sys.stderr)
+                    continue
+                count += 1
+                raw += os.lstat(full).st_size
+                if raw > 4 * cap_bytes:
+                    os.unlink(path)
+                    die(f"the folder is too large to send (over {4 * cap_bytes // 2**20} MB before compression). "
+                        "Exclude build outputs with --exclude or a .benchignore file.")
+    size = os.path.getsize(path)
+    if size > cap_bytes:
+        os.unlink(path)
+        die(f"the packed folder is {size // 2**20} MB; the limit is {cap_bytes // 2**20} MB. "
+            "Exclude build outputs with --exclude or a .benchignore file.")
+    if skipped_links:
+        print(f"benchctl: skipped {skipped_links} symlink(s) pointing outside the folder", file=sys.stderr)
+    return path, count, size
+
+
+def upload(path):
+    size = os.path.getsize(path)
+    with open(path, "rb") as handle:
+        return request("POST", "/uploads", handle, {"Content-Type": "application/gzip",
+                                                    "Content-Length": str(size)}, timeout=600)["upload"]
+
+
+# ---- following a job ---------------------------------------------------------------------------
+
+
+def remember(job_id, cwd):
+    try:
+        with open(STATE_FILE) as handle:
+            known = json.load(handle)
+    except (OSError, ValueError):
+        known = {}
+    known[job_id] = cwd
+    known = dict(list(known.items())[-50:])
+    try:
+        with open(STATE_FILE, "w") as handle:
+            json.dump(known, handle)
+    except OSError:
+        pass
+
+
+def recall(job_id):
+    try:
+        with open(STATE_FILE) as handle:
+            return json.load(handle).get(job_id)
+    except (OSError, ValueError):
+        return None
+
+
+def fetch_outputs(job_id, cwd):
+    response, conn = request("GET", f"/jobs/{job_id}/output", timeout=600, raw=True)
+    fd, path = tempfile.mkstemp(prefix="benchctl-out-", suffix=".tar.gz")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            while True:
+                block = response.read(1 << 20)
+                if not block:
+                    break
+                handle.write(block)
+        conn.close()
+        with tarfile.open(path, "r:gz") as tar:
+            names = tar.getnames()
+            tar.extractall(cwd, filter="data")
+        return len(names)
+    finally:
+        os.unlink(path)
+
+
+def follow(job_id, cwd, quiet=False, fetch=True):
+    offset = 0
+    cancelling = [False]
+
+    def on_interrupt(_sig, _frame):
+        if not cancelling[0]:
+            cancelling[0] = True
+            print(f"\nbenchctl: cancelling job {job_id} ...", file=sys.stderr)
+            call("POST", f"/jobs/{job_id}/cancel", {})
+
+    previous = signal.signal(signal.SIGINT, on_interrupt)
+    try:
+        while True:
+            info = request("GET", f"/jobs/{job_id}?offset={offset}&wait=20", timeout=60)
+            if info["log"] and not quiet:
+                sys.stdout.write(info["log"])
+                sys.stdout.flush()
+            offset = info["next"]
+            if info["state"] in ("done", "failed", "cancelled") and not info["log"]:
+                break
+            if info["state"] in ("done", "failed", "cancelled"):
+                continue  # drain the rest of the log
+    finally:
+        signal.signal(signal.SIGINT, previous)
+    if fetch and info.get("output_ready") and cwd:
+        try:
+            n = fetch_outputs(job_id, cwd)
+            print(f"[bench] copied {n} output entr{'y' if n == 1 else 'ies'} into {cwd}", file=sys.stderr)
+        except (tarfile.TarError, OSError) as err:
+            print(f"benchctl: could not copy the outputs back: {err}", file=sys.stderr)
+            return 125
+    if info["state"] == "cancelled":
+        return 130
+    if info["state"] == "failed":
+        if info.get("exit_code") is not None:
+            return info["exit_code"]
+        print(f"benchctl: job {job_id} failed: {info.get('error')}", file=sys.stderr)
+        return 125
+    code = info.get("exit_code")
+    return code if isinstance(code, int) else 125
+
+
+# ---- commands ----------------------------------------------------------------------------------
+
+
+def cmd_run(args):
+    command = args.command
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        die("give the command after --, for example: benchctl run -- make -j8", 2)
+    cwd = os.path.realpath(args.cwd or os.getcwd())
+    if not os.path.isdir(cwd):
+        die(f"not a folder: {cwd}", 2)
+    limits = call("GET", "/status")["limits"]
+    patterns = ([] if args.no_default_excludes else list(DEFAULT_EXCLUDES)) + load_ignore(cwd) + (args.exclude or [])
+    path, count, size = pack(cwd, patterns, limits["max_upload_mb"] * 2**20)
+    try:
+        print(f"[bench] sending {count} files ({size / 2**20:.1f} MB) from {cwd}", file=sys.stderr)
+        upload_id = upload(path)
+    finally:
+        os.unlink(path)
+    body = {"upload": upload_id, "cmd": command, "gpu": args.gpu, "display": args.display,
+            "outputs": args.out or [], "client_cwd": cwd}
+    if args.image:
+        body["image"] = args.image
+    if args.timeout:
+        body["timeout_s"] = args.timeout
+    job_id = call("POST", "/jobs", body)["job"]
+    remember(job_id, cwd)
+    if args.detach:
+        print(f"Started job {job_id}. Follow with: benchctl wait {job_id}")
+        return 0
+    return follow(job_id, cwd)
+
+
+def cmd_status(args):
+    info = call("GET", "/status")
+    if args.json:
+        print(json.dumps(info, indent=2))
+        return 0
+    print("BENCHES")
+    if not info["benches"]:
+        print("  (none enrolled)")
+    for b in info["benches"]:
+        flags = [("online" if b["online"] else "offline")]
+        if b["paused"]:
+            flags.append(f"paused ({b['paused_by']})")
+        if b["user_busy"]:
+            flags.append("user-busy")
+        print(f"  {b['name']:<20} priority {b['priority']:<4} {', '.join(flags):<32} "
+              f"gpu: {b['gpu'] or '-'}  jobs {b['running']}/{b['capacity']}")
+    fb = info["server_fallback"]
+    print(f"  {'(server fallback)':<20} {'on' if fb['enabled'] else 'off'}, {fb['running']}/{fb['slots']} running, no GPU")
+    print("RECENT JOBS")
+    if not info["jobs"]:
+        print("  (none)")
+    for j in info["jobs"]:
+        code = "" if j["exit_code"] is None else f" exit {j['exit_code']}"
+        print(f"  {j['id']}  {j['state']:<9}{code:<8} on {j['where'] or '-':<14} {j['created']}  {j['cmd']}")
+    lim = info["limits"]
+    print(f"IMAGES {', '.join(lim['images'])} (default {lim['default_image']}); timeout default "
+          f"{lim['default_timeout_s']}s, max {lim['max_timeout_s']}s; upload {lim['max_upload_mb']} MB, "
+          f"outputs {lim['max_output_mb']} MB")
+    return 0
+
+
+def main():
+    p = argparse.ArgumentParser(prog="benchctl", description=__doc__.split("\n\n")[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("run", help="run a command on a bench (or the server)")
+    r.add_argument("--gpu", action="store_true", help="needs the GPU (falls back to the server without one)")
+    r.add_argument("--display", action="store_true", help="start a virtual X display (Xvfb) as DISPLAY")
+    r.add_argument("--image", help="allowlisted image name (see benchctl status)")
+    r.add_argument("--timeout", type=int, help="seconds (default 1800, max 7200)")
+    r.add_argument("--out", action="append", metavar="PATH", help="output path or glob to copy back (repeatable)")
+    r.add_argument("--cwd", help="folder to send (default: the current folder)")
+    r.add_argument("--exclude", action="append", metavar="PATTERN", help="do not send matching files (repeatable)")
+    r.add_argument("--no-default-excludes", action="store_true", help="also send .git, node_modules, target, ...")
+    r.add_argument("--detach", action="store_true", help="return the job id right away")
+    r.add_argument("command", nargs=argparse.REMAINDER)
+    s = sub.add_parser("status", help="benches and recent jobs")
+    s.add_argument("--json", action="store_true")
+    w = sub.add_parser("wait", help="follow a job, copy its outputs back, exit with its code")
+    w.add_argument("job")
+    w.add_argument("--cwd", help="where to copy outputs (default: the folder the job was sent from)")
+    lg = sub.add_parser("logs", help="print a job's log so far")
+    lg.add_argument("job")
+    c = sub.add_parser("cancel", help="cancel a job")
+    c.add_argument("job")
+    args = p.parse_args()
+    if args.cmd == "run":
+        sys.exit(cmd_run(args))
+    if args.cmd == "status":
+        sys.exit(cmd_status(args))
+    if args.cmd == "wait":
+        sys.exit(follow(args.job, args.cwd or recall(args.job)))
+    if args.cmd == "logs":
+        sys.stdout.write(request("GET", f"/jobs/{args.job}?offset=0")["log"])
+        return
+    if args.cmd == "cancel":
+        print(json.dumps(call("POST", f"/jobs/{args.job}/cancel", {})))
+
+
+if __name__ == "__main__":
+    main()

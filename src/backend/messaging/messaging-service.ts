@@ -46,11 +46,13 @@ import { mentionNames, withMentionNames } from "./messaging-mentions";
 import { MessagingStatusPosts, type PendingFinal, type StatusPost, type StopButton } from "./messaging-status-posts";
 import type { MessagingConnectionRecord, MessagingLink } from "./messaging-store";
 import {
+  isMainChatLink,
   MESSAGING_NOT_RUNNING,
   type MessagingActivity,
   type MessagingHistory,
   type MessagingHistoryScope,
   type MessagingThreads,
+  mainChatThreadKey,
 } from "./messaging-threads";
 import {
   type ConnectionIdentity,
@@ -288,6 +290,21 @@ export class MessagingService {
       );
     this.#threads.setContextSource((link, origin) => this.#promptContext(link, origin));
     this.#threads.setHistorySource((link, scope, limit) => this.#recentMessages(link, scope, limit));
+    this.#threads.setFollowUps({
+      remember: (routineId, origin) => {
+        const { replyTo: _replyTo, ...kept } = origin;
+        this.#status.followUps.set(routineId, kept);
+        Effect.runFork(this.#status.save());
+      },
+      take: (routineId) => {
+        const followUp = this.#status.followUps.get(routineId) ?? null;
+        if (followUp) {
+          this.#status.followUps.delete(routineId);
+          Effect.runFork(this.#status.save());
+        }
+        return followUp;
+      },
+    });
     this.#threads.setOutbound({
       places: (connectionId) => this.#outboundPlaces(connectionId),
       post: (connectionId, target, markdown) => this.#outboundPost(connectionId, target, markdown),
@@ -317,6 +334,7 @@ export class MessagingService {
     for (const waiters of [...this.#transportWaiters.values()]) for (const ready of [...waiters]) ready();
     this.#threads.setContextSource(null);
     this.#threads.setHistorySource(null);
+    this.#threads.setFollowUps(null);
     this.#threads.setOutbound(null);
     this.#ingress?.handle(null);
     this.#endTelegramLinkLease();
@@ -635,7 +653,7 @@ export class MessagingService {
       serverAgentId: known(stored.serverAgentId),
       channels: stored.channels
         .map((channel) => ({ ...channel, agentId: known(channel.agentId) }))
-        .filter((channel) => channel.agentId !== null || channel.answerAll),
+        .filter((channel) => channel.agentId !== null || channel.answerAll || channel.mainChat === true),
     };
   }).bind(this);
 
@@ -706,6 +724,17 @@ export class MessagingService {
       known(this.#discordChannels.get(record.connectionId).serverAgentId) ??
       this.#orchestrator(record)
     );
+  }
+
+  /**
+   * The main chat of the agent that a channel with `mainChat` delivers to: the channel's agent, else
+   * the server's. Null without one, or before the agent has a chat; the channel then works as before.
+   */
+  #mainThreadId(record: MessagingConnectionRecord, setting: DiscordChannelSetting): string | null {
+    const agents = this.#agents.listAgents();
+    const known = (id: string | null | undefined) => (id ? agents.find((agent) => agent.id === id) : undefined);
+    const agent = known(setting.agentId) ?? known(this.#discordChannels.get(record.connectionId).serverAgentId);
+    return agent?.threadId ?? null;
   }
 
   #channelSetting(record: MessagingConnectionRecord, platformChannelId: string): DiscordChannelSetting | null {
@@ -1268,15 +1297,21 @@ export class MessagingService {
     // still pass one on for a moment after the setting is turned off.
     if (inbound.mentioned === false && !answerAll) return;
     const routedAgent = this.#agentFor(live.record, setting);
+    // A channel that delivers to the main chat of its agent: every message there joins that chat, and
+    // its answer replies to the message. The orchestrator has no chat of the user's to join.
+    const mainThreadId = setting?.mainChat ? this.#mainThreadId(live.record, setting) : null;
     // Before any await: a redelivered event can arrive while the first copy is still downloading its
     // files, before the mailbox holds its idempotency key. The mailbox key covers a restart.
     const store = this.#threads.store;
-    const chained = store.linkByKey(live.record.connectionId, inbound.platformChannelId, inbound.threadKey);
+    const chained = mainThreadId
+      ? null
+      : store.linkByKey(live.record.connectionId, inbound.platformChannelId, inbound.threadKey);
     // In a channel that answers every message, a message continues the channel's ongoing conversation
     // of the channel's agent, unless it replies to an OpenBot post of a known conversation. OpenBot
     // answers each message itself, so the reply goes to the message.
-    const ongoing =
-      answerAll && !(chained && inbound.repliesToBot) && routedAgent
+    const ongoing = mainThreadId
+      ? store.linkByKey(live.record.connectionId, inbound.platformChannelId, mainChatThreadKey(mainThreadId))
+      : answerAll && !(chained && inbound.repliesToBot) && routedAgent
         ? store.latestLink(
             live.record.connectionId,
             inbound.platformChannelId,
@@ -1285,16 +1320,18 @@ export class MessagingService {
           )
         : null;
     const message: InboundMessage =
-      answerAll && !(chained && inbound.repliesToBot)
+      mainThreadId || (answerAll && !(chained && inbound.repliesToBot))
         ? {
             ...inbound,
-            threadKey: ongoing?.threadKey ?? inbound.platformMessageId,
+            threadKey: mainThreadId
+              ? mainChatThreadKey(mainThreadId)
+              : (ongoing?.threadKey ?? inbound.platformMessageId),
             target: { platformChannelId: inbound.platformChannelId, replyThreadId: inbound.platformMessageId },
           }
         : inbound;
     const existing = message === inbound ? chained : ongoing;
     // Before the dedup key: a reply with a mention also arrives as `app_mention`, which must still run.
-    if (message.requiresLink && !existing) return;
+    if (message.requiresLink && !existing && !mainThreadId) return;
     const dedupKey = `${live.record.connectionId}:${message.dedupKey}`;
     if (this.#recent.has(dedupKey)) return;
     this.#recent.add(dedupKey);
@@ -1337,7 +1374,7 @@ export class MessagingService {
         // mention just before this message. The agent gets them with this message. Slack is not asked:
         // before Marketplace approval it allows one thread read a minute, which the prompt needs.
         // A channel that answers every message gave each earlier message to OpenBot already.
-        adapter.platform === "discord" && !message.isDirect && !answerAll
+        adapter.platform === "discord" && !message.isDirect && !answerAll && !mainThreadId
           ? adapter
               .history(
                 message.platformChannelId,
@@ -1360,7 +1397,7 @@ export class MessagingService {
       : null;
     // A conversation keeps its agent. A new one goes to the workspace's orchestrator, which asks its
     // teammates; without one, nothing answers.
-    const agentId = existing?.agentId ?? routedAgent;
+    const agentId = mainThreadId ? routedAgent : (existing?.agentId ?? routedAgent);
     if (!agentId) {
       const noAgent =
         live.record.platform === "discord"
@@ -1418,6 +1455,7 @@ export class MessagingService {
               platformChannelId: message.platformChannelId,
               threadKey: message.threadKey,
               isDirect: message.isDirect,
+              ...(mainThreadId ? { mainThreadId } : {}),
               title: message.isDirect ? authorName : `${place} · ${named.slice(0, 80) || authorName}`,
               text,
               sourcePaths: paths,
@@ -1537,7 +1575,13 @@ export class MessagingService {
     const messages = answersEveryMessage
       ? []
       : yield* live.adapter
-          .history(link.platformChannelId, link.threadKey, link.historyCursor, origin.platformMessageId)
+          .history(
+            link.platformChannelId,
+            // The main chat has no reply chain: its context is the channel's messages just before.
+            isMainChatLink(link) ? origin.platformMessageId : link.threadKey,
+            link.historyCursor,
+            origin.platformMessageId,
+          )
           .pipe(Effect.catch(() => Effect.succeed([])));
     return {
       workspaceName,
@@ -1615,7 +1659,7 @@ export class MessagingService {
     const live = this.#live.get(activity.link.connectionId);
     const origin = activity.origin;
     const key = `${activity.link.linkId}:${origin.platformMessageId}`;
-    const target = this.#targets.get(key) ?? linkTarget(activity.link);
+    const target = this.#targets.get(key) ?? linkTarget(activity.link, origin.platformMessageId);
     const post = this.#posts.get(key);
     if (activity.type === "started") {
       if (!live) return;
@@ -1815,11 +1859,14 @@ export class MessagingService {
     this: MessagingService,
     approval: AgentApproval,
   ) {
-    const link = this.#threads.store.linkForThread(approval.threadId);
+    const link = this.#threads.linkForThread(approval.threadId);
     if (!link) return;
     const running = this.#threads.runningOrigin(link.linkId);
     const key = running ? `${link.linkId}:${running.origin.platformMessageId}` : null;
-    const target = (key && this.#targets.get(key)) || (key && this.#posts.get(key)?.target) || linkTarget(link);
+    const target =
+      (key && this.#targets.get(key)) ||
+      (key && this.#posts.get(key)?.target) ||
+      linkTarget(link, running?.origin.platformMessageId);
     const kind =
       approval.kind === "command"
         ? sourceText("status.messaging.approvalCommand")
@@ -2058,7 +2105,10 @@ function integrationsSection(layout: SidebarLayoutSnapshot): SidebarSection | un
 }
 
 /** Where to answer when the message that started the work is not known: the conversation's thread. */
-function linkTarget(link: MessagingLink): MessageTarget {
+function linkTarget(link: MessagingLink, platformMessageId?: string): MessageTarget {
+  // The main chat has no thread on the platform: its answer replies to the message.
+  if (isMainChatLink(link))
+    return { platformChannelId: link.platformChannelId, replyThreadId: platformMessageId ?? null };
   return { platformChannelId: link.platformChannelId, replyThreadId: link.threadKey };
 }
 

@@ -253,6 +253,9 @@ export const messages = {
   "connector.discord.channelsChannelAgent": "Agente de #{channel}",
   "connector.discord.channelsAnswerAll": "Responder a cada mensagem",
   "connector.discord.channelsAnswerAllDescription": "Aqui não é preciso mencionar @OpenBot.",
+  "connector.discord.channelsMainChat": "Usar o chat principal do agente",
+  "connector.discord.channelsMainChatDescription":
+    "As mensagens daqui vão para o chat do agente com você, e a resposta dele é publicada aqui.",
   "connector.discord.channelsLoading": "Carregando os canais…",
   "connector.discord.channelsLoadFailed": "Os canais do Discord não carregaram",
   "connector.discord.channelsNone": "Este servidor não tem canais de texto que o OpenBot veja.",

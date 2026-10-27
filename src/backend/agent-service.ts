@@ -829,7 +829,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         const agent = store.list().find((candidate) => candidate.id === agentId);
         return agent !== undefined && workspaceAccessEnforced(agent);
       },
-      messagingThread: (threadId) => this.messaging.store.linkForThread(threadId) !== null,
+      messagingThread: (threadId) => this.messaging.linkForThread(threadId) !== null,
       emit: (event) => this.#emit(event),
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       emitRuntimeSnapshot: () => this.#emitRuntimeSnapshot(),
@@ -1184,6 +1184,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       interrupt: (agentId, turnId, threadId) => this.interrupt(agentId, turnId, threadId).pipe(toMessagingThreadFailed),
       forgetThread: (threadId) => this.#forgetExecutionThread(threadId).pipe(toMessagingThreadFailed),
       ownChat: (threadId) => this.#store.ownsThread(threadId),
+      wokenWaitRequests: (deliveryId) => this.#waits.wokenBy(deliveryId).map((wait) => wait.requestMessageId),
     });
     this.#memoryHold = new MemoryHold({
       memory: hostMemory,
@@ -1337,6 +1338,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       hooks: {
         channelAssignment: (deliveryId) => this.channels.store.assignmentForDelivery(deliveryId),
         taskThreadId: (deliveryId) => this.#tasks.threadForDelivery(deliveryId),
+        externalTurn: (turnId) => this.messaging.answersExternalMessage(turnId),
       },
     });
     this.#turn = new TurnLifecycle({
@@ -4551,8 +4553,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     activeTurnId: string | null,
     stoppedTurnId: string | null | undefined,
   ): string | null {
+    // A turn that answers a Discord message posts its answer there: another message waits for its own turn.
     return activeTurnId &&
       activeTurnId !== stoppedTurnId &&
+      !this.messaging.answersExternalMessage(activeTurnId) &&
       (agent.busyMessageMode ?? this.#busyMessageMode()) === "steer"
       ? activeTurnId
       : null;

@@ -229,6 +229,9 @@ export const messages = {
   "connector.discord.channelsChannelAgent": "#{channel} 에이전트",
   "connector.discord.channelsAnswerAll": "모든 메시지에 답하기",
   "connector.discord.channelsAnswerAllDescription": "여기서는 @OpenBot을 멘션하지 않아도 돼요.",
+  "connector.discord.channelsMainChat": "에이전트의 메인 채팅 사용",
+  "connector.discord.channelsMainChatDescription":
+    "여기 메시지는 에이전트와 나누는 채팅으로 가고, 답변은 여기에 올라와요.",
   "connector.discord.channelsLoading": "채널을 불러오는 중…",
   "connector.discord.channelsLoadFailed": "Discord 채널을 불러오지 못했어요",
   "connector.discord.channelsNone": "이 서버에는 OpenBot이 볼 수 있는 텍스트 채널이 없어요.",

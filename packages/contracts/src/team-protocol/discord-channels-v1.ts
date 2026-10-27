@@ -2,7 +2,8 @@
 //
 // What it grants: an owner or admin of a server reads and sets which agent answers in each Discord
 // server that the host connected, which agent answers in each of its channels, and in which channels
-// OpenBot answers every message without a mention. The admin also lists the server's text channels
+// OpenBot answers every message without a mention, and in which channels a message goes to the main
+// chat of its agent (`mainChat`, optional and additive). The admin also lists the server's text channels
 // to choose from; the host asks Discord for them through Signal. A member cannot use any route;
 // `requireAdmin` on the host is the only gate. A fork host built before these routes answers 404,
 // so the client fails closed.
@@ -18,7 +19,10 @@ export const DISCORD_CHANNELS_ROUTES = {
 } as const;
 
 const workspace = fields({ workspaceId: identifier });
-const setting = fields({ channelId: identifier, agentId: nullable(identifier), answerAll: boolean });
+const setting = fields(
+  { channelId: identifier, agentId: nullable(identifier), answerAll: boolean },
+  { mainChat: boolean },
+);
 const config = fields({ serverAgentId: nullable(identifier), channels: list(setting, 500) });
 
 export const DISCORD_CHANNELS_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([

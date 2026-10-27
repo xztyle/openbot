@@ -10,6 +10,7 @@ const Setting = Schema.Struct({
   channelId: Schema.String,
   agentId: Schema.NullOr(Schema.String),
   answerAll: Schema.Boolean,
+  mainChat: Schema.optional(Schema.Boolean),
 });
 const Config = Schema.Struct({ serverAgentId: Schema.NullOr(Schema.String), channels: Schema.Array(Setting) });
 const ConfigFile = Schema.Struct({ version: Schema.Literal(1), connections: Schema.Record(Schema.String, Config) });

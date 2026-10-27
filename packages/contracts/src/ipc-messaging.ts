@@ -136,11 +136,17 @@ export interface DiscordChannelSetting {
   channelId: string;
   agentId: string | null;
   answerAll: boolean;
+  /**
+   * The channel's messages go to the main chat of its agent (the channel's, else the server's), and
+   * the answer of each such turn is posted back. Absent means false.
+   */
+  mainChat?: boolean;
 }
 
 /**
  * Which agent answers in one Discord server and in each of its channels. `serverAgentId` null uses
- * the Discord Orchestrator. A channel with the defaults (no agent, `answerAll` false) is not listed.
+ * the Discord Orchestrator. A channel with the defaults (no agent, `answerAll` and `mainChat` false) is
+ * not listed.
  * An agent that was deleted reads as null: its place falls back to the next default.
  */
 export interface DiscordChannelConfig {
@@ -332,7 +338,8 @@ function isDiscordChannelSetting(value: unknown): value is DiscordChannelSetting
     typeof value.channelId === "string" &&
     ROLE_ID.test(value.channelId) &&
     (value.agentId === null || isIdentifier(value.agentId)) &&
-    isBoolean(value.answerAll)
+    isBoolean(value.answerAll) &&
+    (value.mainChat === undefined || isBoolean(value.mainChat))
   );
 }
 
@@ -372,8 +379,13 @@ export function parseDiscordChannelConfig(value: unknown): DiscordChannelConfig 
   return {
     serverAgentId: value.serverAgentId,
     channels: value.channels
-      .filter((channel) => channel.agentId !== null || channel.answerAll)
-      .map((channel) => ({ channelId: channel.channelId, agentId: channel.agentId, answerAll: channel.answerAll })),
+      .filter((channel) => channel.agentId !== null || channel.answerAll || channel.mainChat === true)
+      .map((channel) => ({
+        channelId: channel.channelId,
+        agentId: channel.agentId,
+        answerAll: channel.answerAll,
+        ...(channel.mainChat ? { mainChat: true } : {}),
+      })),
   };
 }
 

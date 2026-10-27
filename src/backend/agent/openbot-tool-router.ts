@@ -660,7 +660,7 @@ export class OpenBotToolRouter {
     const parsed = requestApiKeyToolSchema.safeParse(params.arguments);
     if (!parsed.success)
       return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
-    if (this.#messaging.store.linkForThread(this.#conversation.publicThreadId(agentId, params.threadId)))
+    if (this.#messaging.linkForThread(this.#conversation.publicThreadId(agentId, params.threadId)))
       return openBotToolFailure(
         "request_api_key does not work in a Slack, Discord or Telegram chat. Ask the user to give you the key in OpenBot.",
       );
@@ -689,7 +689,7 @@ export class OpenBotToolRouter {
     }
     const threadId = this.#conversation.publicThreadId(agent.id, params.threadId);
     // Nobody presses a button on Slack, Discord or Telegram.
-    if (this.#messaging.store.linkForThread(threadId)) {
+    if (this.#messaging.linkForThread(threadId)) {
       refuse("This chat cannot show the plan card. Do not call it here; start the work.");
       return;
     }
@@ -877,7 +877,7 @@ export class OpenBotToolRouter {
       return yield* this.#messaging.outboundTool(params.tool, params.arguments);
     if (params.tool.startsWith("messaging_")) {
       // Only the agent that answers a platform conversation, in that conversation's own thread.
-      const link = this.#messaging.store.linkForThread(executionThreadId);
+      const link = this.#messaging.linkForThread(executionThreadId);
       if (!link || link.agentId !== senderAgentId)
         return openBotToolFailure(
           "Messaging tools work only in a turn that answers a Slack, Discord or Telegram message.",
@@ -1061,7 +1061,12 @@ export class OpenBotToolRouter {
     );
     if (checkResult) return checkResult;
     const routineResult = yield* this.#routines.handleTool(params, senderAgentId);
-    if (routineResult) return routineResult;
+    if (routineResult) {
+      // A one-time routine made while the agent answers Discord in its own chat answers there too.
+      if (params.tool === "create_routine")
+        this.#messaging.noteRoutineCreated(senderAgentId, params.turnId, routineResult);
+      return routineResult;
+    }
 
     const flowResult = yield* handleRoutineFlowTool(
       params.tool,
@@ -1253,7 +1258,7 @@ export class OpenBotToolRouter {
     const threadId = this.#conversation.publicThreadId(agent.id, params.threadId);
     // A Slack, Discord or Telegram link sends each agent attachment of the turn to the platform. The
     // screen of this computer must stay on this computer.
-    if (this.#messaging.store.linkForThread(threadId)) {
+    if (this.#messaging.linkForThread(threadId)) {
       return openBotToolFailure(sourceText("error.agent.screenCaptureShared"));
     }
     // A channel shows the image to each member who reads it, so each capture asks, with Full access too.

@@ -60,6 +60,8 @@ export interface MessagingReceiveInput {
   text: string;
   sourcePaths: string[];
   origin: Omit<MessagingOrigin, "linkId">;
+  /** The agent's own chat that answers this conversation (`isMainChatLink`), instead of a thread of its own. */
+  mainThreadId?: string;
   /** Stable for one external message, so a redelivered event enqueues nothing. */
   idempotencyKey: string;
 }
@@ -122,6 +124,15 @@ export interface MessagingThreadsHooks {
    * still go to the platform, but its events stay in the app, where the chat shows them.
    */
   ownChat(threadId: string): boolean;
+  /** The deliveries of the requests whose open waits this routine run wakes. */
+  wokenWaitRequests?(deliveryId: string): string[];
+}
+
+/** The one-time routines made in a turn that answered a Discord message in an agent's own chat. */
+export interface MessagingFollowUps {
+  remember(routineId: string, origin: MessagingOrigin): void;
+  /** The message a routine follows up, forgotten once read: a one-time routine runs once. */
+  take(routineId: string): MessagingOrigin | null;
 }
 
 /**
@@ -154,7 +165,7 @@ export class MessagingThreads {
   readonly #listeners = new Set<(activity: MessagingActivity) => void>();
   readonly #admissions = new Map<string, Deferred.Deferred<void>>();
   /** The external message each running turn answers, by turn id. */
-  readonly #turnOrigins = new Map<string, { origin: MessagingOrigin | null; followUp: boolean }>();
+  readonly #turnOrigins = new Map<string, { link: MessagingLink; origin: MessagingOrigin | null; followUp: boolean }>();
   /**
    * The newest turns whose end the conversation was told of, so `deliverySettled` does not tell it a
    * second time. Past the cap, the oldest goes.
@@ -174,6 +185,7 @@ export class MessagingThreads {
       ) => Effect.Effect<MessagingHistory | null, MessagingOperationFailed>)
     | null = null;
   #outbound: MessagingOutbound | null = null;
+  #followUps: MessagingFollowUps | null = null;
 
   constructor(database: OpenBotDatabase, mailbox: MailboxStore, hooks: MessagingThreadsHooks) {
     this.store = new MessagingStore(database);
@@ -214,6 +226,78 @@ export class MessagingThreads {
 
   setOutbound(outbound: MessagingOutbound | null): void {
     this.#outbound = outbound;
+  }
+
+  setFollowUps(followUps: MessagingFollowUps | null): void {
+    this.#followUps = followUps;
+  }
+
+  /**
+   * A one-time routine that a turn made while it answered a Discord message in the agent's own chat,
+   * as "get back to me in 30 minutes": the run's answer replies to that message. A routine on a
+   * schedule keeps its own destination.
+   */
+  noteRoutineCreated(agentId: string, turnId: string, response: OpenBotToolResponse): void {
+    if (!response.success) return;
+    const origin = this.#mainChatOrigin(agentId, turnId);
+    if (!origin) return;
+    const item = response.contentItems[0];
+    let routine: unknown;
+    try {
+      routine = item && item.type === "inputText" ? JSON.parse(item.text) : null;
+    } catch {
+      return;
+    }
+    if (
+      typeof routine === "object" &&
+      routine !== null &&
+      "id" in routine &&
+      typeof routine.id === "string" &&
+      "agentId" in routine &&
+      routine.agentId === agentId &&
+      "schedule" in routine &&
+      typeof routine.schedule === "object" &&
+      routine.schedule !== null &&
+      "kind" in routine.schedule &&
+      routine.schedule.kind === "once"
+    )
+      this.#followUps?.remember(routine.id, origin);
+  }
+
+  /** The Discord message that a turn in an agent's own chat answers, or null. */
+  #mainChatOrigin(agentId: string, turnId: string): MessagingOrigin | null {
+    for (const { delivery } of this.#mailbox.findDeliveriesByTurn(agentId, turnId)) {
+      const origin = this.#mailbox.messagingOrigin(delivery.id);
+      const link = origin ? this.store.link(origin.linkId) : null;
+      if (origin && link && isMainChatLink(link)) return origin;
+    }
+    return null;
+  }
+
+  /**
+   * A routine run in an agent's own chat that follows up a Discord message: a one-time routine made
+   * in the turn that answered it, or a run that wakes a wait opened there. Its answer replies to it.
+   */
+  #followUpOf(event: { agentId: string; threadId: string; turnId: string }): {
+    link: MessagingLink;
+    origin: MessagingOrigin;
+  } | null {
+    const deliveries = [
+      ...this.#mailbox.findDeliveriesByTurn(event.agentId, event.turnId),
+      ...this.#mailbox.startingDeliveriesForAgent(event.agentId, null),
+    ];
+    for (const { delivery } of deliveries) {
+      if (delivery.sender.kind !== "routine") continue;
+      const origins = [
+        ...(this.#hooks.wokenWaitRequests?.(delivery.id) ?? []).map((id) => this.#mailbox.messagingOrigin(id)),
+        this.#followUps?.take(delivery.sender.routineId) ?? null,
+      ];
+      for (const origin of origins) {
+        const link = origin ? this.store.link(origin.linkId) : null;
+        if (origin && link && isMainChatLink(link) && link.threadId === event.threadId) return { link, origin };
+      }
+    }
+    return null;
   }
 
   /**
@@ -378,6 +462,7 @@ export class MessagingThreads {
       threadKey: input.threadKey,
       isDirect: input.isDirect,
       title: input.title.slice(0, MESSAGING_LIMITS.name),
+      ...(input.mainThreadId ? { threadId: input.mainThreadId } : {}),
     });
     // The link decides the agent: a conversation that already has one keeps it, even when another
     // message routed it elsewhere at the same time.
@@ -444,6 +529,29 @@ export class MessagingThreads {
     return origin ? (this.store.link(origin.linkId)?.threadId ?? null) : null;
   }
 
+  /**
+   * The link whose conversation a thread answers now. An agent's own chat answers a Discord channel
+   * only during a turn that a message of that channel started: the user's own turns there are no
+   * external conversation, so they keep every tool and post nothing.
+   */
+  linkForThread(threadId: string): MessagingLink | null {
+    const links = this.store.linksForThread(threadId);
+    if (links.length === 0) return null;
+    if (!this.#hooks.ownChat(threadId)) return links[0] ?? null;
+    return (
+      links.find((link) =>
+        this.#mailbox
+          .unresolvedMessagingDeliveries(link.linkId)
+          .some((context) => context.delivery.status !== "queued"),
+      ) ?? null
+    );
+  }
+
+  /** Whether this running turn answers an external message: nothing else may steer into it. */
+  answersExternalMessage(turnId: string): boolean {
+    return this.#turnOrigins.get(turnId)?.origin != null;
+  }
+
   /** Whether a platform message is in the mailbox, by its idempotency key. */
   received(idempotencyKey: string): boolean {
     return this.#mailbox.deliveryForKey(idempotencyKey) !== null;
@@ -470,6 +578,7 @@ export class MessagingThreads {
     return {
       threadId: link.threadId,
       text: messagingPromptText({
+        ...(isMainChatLink(link) ? { mainChat: true } : {}),
         platform: connection?.platform ?? "slack",
         workspaceName: prompt.workspaceName ?? connection?.workspaceName ?? null,
         isDirect: link.isDirect,
@@ -521,24 +630,31 @@ export class MessagingThreads {
       case "turn-progress":
         return this.#takes(event.threadId);
       case "turn-started": {
-        const link = this.store.linkForThread(event.threadId);
-        if (!link) return false;
+        const link = this.linkForThread(event.threadId);
+        if (!link) {
+          const followUp = this.#hooks.ownChat(event.threadId) ? this.#followUpOf(event) : null;
+          if (!followUp) return false;
+          // Its answer goes to the Discord message; that message keeps the reactions of its own turn.
+          this.#turnOrigins.set(event.turnId, { ...followUp, followUp: true });
+          this.#publish({ type: "started", ...followUp, turnId: event.turnId, followUp: true });
+          return false;
+        }
         const running = this.#mailbox
           .unresolvedMessagingDeliveries(link.linkId)
           .find((context) => context.delivery.status !== "queued");
         const origin = running ? this.#mailbox.messagingOrigin(running.delivery.id) : null;
         const followUp = running?.delivery.sender.kind === "agent";
-        this.#turnOrigins.set(event.turnId, { origin, followUp });
+        this.#turnOrigins.set(event.turnId, { link, origin, followUp });
         this.#publish({ type: "started", link, turnId: event.turnId, origin, followUp });
         return !this.#hooks.ownChat(event.threadId);
       }
       case "turn-completed": {
-        const link = this.store.linkForThread(event.threadId);
+        const started = this.#turnOrigins.get(event.turnId);
+        const link = started?.link ?? this.linkForThread(event.threadId);
         if (!link) return false;
-        const started = this.#turnOrigins.get(event.turnId) ?? { origin: null, followUp: false };
         this.#turnOrigins.delete(event.turnId);
         // A turn with no known requester tells no conversation, so `deliverySettled` still must.
-        if (started.origin) {
+        if (started?.origin) {
           this.#finishedTurns.add(event.turnId);
           if (this.#finishedTurns.size > FINISHED_TURN_LIMIT) {
             const [oldest] = this.#finishedTurns;
@@ -547,7 +663,7 @@ export class MessagingThreads {
         }
         this.store.touch(link.linkId);
         Effect.runFork(
-          this.#finished(link, event.turnId, event.status, started.origin, started.followUp).pipe(
+          this.#finished(link, event.turnId, event.status, started?.origin ?? null, started?.followUp ?? false).pipe(
             Effect.uninterruptible,
             Effect.forkIn(scope, { startImmediately: true }),
           ),
@@ -694,6 +810,15 @@ export class MessagingThreads {
   #publish(activity: MessagingActivity): void {
     for (const listener of this.#listeners) listener(activity);
   }
+}
+
+/** The thread key of a Discord channel's link to an agent's own chat. A platform's own key never has a colon. */
+export function mainChatThreadKey(agentThreadId: string): string {
+  return `main-chat:${agentThreadId}`;
+}
+
+export function isMainChatLink(link: MessagingLink): boolean {
+  return link.threadKey.startsWith("main-chat:");
 }
 
 /** The same test the turn lifecycle uses for the answer of a turn. */

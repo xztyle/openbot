@@ -29,6 +29,8 @@ export interface QueueControlsHooks {
   channelAssignment(deliveryId: string): ChannelAssignment | null;
   /** The thread of the open task that a delivery runs in, or null for the agent's own chat. */
   taskThreadId(deliveryId: string): string | null;
+  /** Whether a running turn answers a Slack, Discord or Telegram message, whose answer goes there. */
+  externalTurn?(turnId: string): boolean;
 }
 
 export interface QueueControlsOptions {
@@ -236,6 +238,8 @@ export class QueueControls {
         throw new Error(sourceText("error.backend.steerTurnChanged"));
       if (this.#hooks.channelAssignment(input.deliveryId))
         throw new Error(sourceText("error.backend.useChannelTaskControls"));
+      // Its answer goes to the external conversation, so another message waits for its own turn.
+      if (this.#hooks.externalTurn?.(snapshot.activeTurnId)) throw new SteerUnsupportedError();
       const context = this.#mailbox.getDelivery(input.deliveryId);
       if (!context || context.delivery.recipientAgentId !== agent.id || context.delivery.status !== "queued")
         throw new Error(sourceText("error.backend.steerQueuedOnly"));

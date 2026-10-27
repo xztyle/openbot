@@ -282,6 +282,9 @@ export const messages = defineMessages("connector", {
   "connector.discord.channelsChannelAgent": "Agent for #{channel}",
   "connector.discord.channelsAnswerAll": "Answer every message",
   "connector.discord.channelsAnswerAllDescription": "People do not need to mention @OpenBot here.",
+  "connector.discord.channelsMainChat": "Use the agent's main chat",
+  "connector.discord.channelsMainChatDescription":
+    "Messages here join the agent's own chat with you, and its answer is posted back.",
   "connector.discord.channelsLoading": "Loading the channels…",
   "connector.discord.channelsLoadFailed": "Discord channels did not load",
   "connector.discord.channelsNone": "This server has no text channels that OpenBot can see.",

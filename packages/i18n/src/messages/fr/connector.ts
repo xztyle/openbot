@@ -258,6 +258,9 @@ export const messages = {
   "connector.discord.channelsChannelAgent": "Agent de #{channel}",
   "connector.discord.channelsAnswerAll": "Répondre à chaque message",
   "connector.discord.channelsAnswerAllDescription": "Inutile de mentionner @OpenBot ici.",
+  "connector.discord.channelsMainChat": "Utiliser le chat principal de l'agent",
+  "connector.discord.channelsMainChatDescription":
+    "Les messages d'ici rejoignent le chat de l'agent avec vous, et sa réponse est publiée ici.",
   "connector.discord.channelsLoading": "Chargement des salons…",
   "connector.discord.channelsLoadFailed": "Les salons Discord ne se sont pas chargés",
   "connector.discord.channelsNone": "Ce serveur n’a aucun salon textuel visible par OpenBot.",

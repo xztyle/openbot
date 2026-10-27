@@ -260,6 +260,8 @@ export const messages = {
   "connector.discord.channelsChannelAgent": "#{channel} 的智能体",
   "connector.discord.channelsAnswerAll": "回答每条消息",
   "connector.discord.channelsAnswerAllDescription": "这里无需提及 @OpenBot。",
+  "connector.discord.channelsMainChat": "使用智能体的主聊天",
+  "connector.discord.channelsMainChatDescription": "这里的消息会进入智能体与你的聊天，它的回答会发回这里。",
   "connector.discord.channelsLoading": "正在加载频道…",
   "connector.discord.channelsLoadFailed": "Discord 频道未能加载",
   "connector.discord.channelsNone": "此服务器没有 OpenBot 可见的文字频道。",

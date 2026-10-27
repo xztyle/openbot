@@ -259,6 +259,9 @@ export const messages = {
   "connector.discord.channelsChannelAgent": "#{channel} のエージェント",
   "connector.discord.channelsAnswerAll": "すべてのメッセージに答える",
   "connector.discord.channelsAnswerAllDescription": "ここでは @OpenBot をメンションする必要はありません。",
+  "connector.discord.channelsMainChat": "エージェントのメインチャットを使う",
+  "connector.discord.channelsMainChatDescription":
+    "ここでのメッセージはあなたとエージェントのチャットに届き、その回答がここに投稿されます。",
   "connector.discord.channelsLoading": "チャンネルを読み込み中…",
   "connector.discord.channelsLoadFailed": "Discord のチャンネルを読み込めませんでした",
   "connector.discord.channelsNone": "このサーバーには OpenBot が見えるテキストチャンネルがありません。",

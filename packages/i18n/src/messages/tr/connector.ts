@@ -284,6 +284,9 @@ export const messages = {
   "connector.discord.channelsChannelAgent": "#{channel} ajanı",
   "connector.discord.channelsAnswerAll": "Her mesajı yanıtla",
   "connector.discord.channelsAnswerAllDescription": "Burada @OpenBot'tan bahsetmek gerekmez.",
+  "connector.discord.channelsMainChat": "Ajanın ana sohbetini kullan",
+  "connector.discord.channelsMainChatDescription":
+    "Buradaki mesajlar ajanın seninle olan sohbetine gider ve yanıtı buraya gönderilir.",
   "connector.discord.channelsLoading": "Kanallar yükleniyor…",
   "connector.discord.channelsLoadFailed": "Discord kanalları yüklenemedi",
   "connector.discord.channelsNone": "Bu sunucuda OpenBot'un görebildiği metin kanalı yok.",

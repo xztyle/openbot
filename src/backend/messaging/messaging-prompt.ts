@@ -24,6 +24,11 @@ export interface MessagingPromptInput {
   skippedFiles: readonly string[];
   /** The channel answers every message: people do not mention OpenBot there. */
   answersEveryMessage?: boolean;
+  /**
+   * The message came to the agent's own chat: the channel is the OpenBot user's private space, so
+   * the agent answers with its whole context.
+   */
+  mainChat?: boolean;
   /** The saved facts of the connection, newest first. */
   memories: readonly { id: string; text: string }[];
 }
@@ -45,6 +50,7 @@ const REPLY_CHARACTERS = 4_000;
 export function messagingPromptText(input: MessagingPromptInput): string {
   const words = PLATFORM_WORDS[input.platform];
   const platform = words.name;
+  if (input.mainChat) return mainChatPromptText(input);
   const lines = [
     `Message from a ${platform} user. This person is not the OpenBot user.`,
     input.workspaceName ? `${words.workspace}: ${input.workspaceName}` : null,
@@ -79,6 +85,37 @@ export function messagingPromptText(input: MessagingPromptInput): string {
     lines.push(
       "--- the message this one replies to (context) ---",
       `[${input.replyTo.sentAt}] ${input.replyTo.authorName}: ${input.replyTo.text.slice(0, REPLY_CHARACTERS)}`,
+    );
+  lines.push("--- message ---", input.text || "(The message has no text.)");
+  if (input.skippedFiles.length) lines.push(`Files that were not given to you: ${input.skippedFiles.join(", ")}.`);
+  return lines.filter((line) => line !== null).join("\n");
+}
+
+/**
+ * A message of a channel that delivers to the agent's own chat. The channel is the OpenBot user's
+ * private space, so the agent keeps no distance from its own context, but the author is still named.
+ */
+function mainChatPromptText(input: MessagingPromptInput): string {
+  const platform = PLATFORM_WORDS[input.platform].name;
+  const lines = [
+    `Message from ${platform}, not typed in this chat.`,
+    input.workspaceName ? `${PLATFORM_WORDS[input.platform].workspace}: ${input.workspaceName}` : null,
+    `Place: ${input.place}`,
+    `Author: ${input.authorName} (${platform} user ${input.authorId})`,
+    `This channel is the OpenBot user's private ${platform} space and it continues this chat. Use your full context of this chat, your memories and your work; you do not need to hold back as in a public channel.`,
+    `Your final answer of this turn is posted to ${input.place} as a reply to this message. Write it for ${platform}: concise, plain Markdown, no long tables. To send files, call openbot.attach_files_to_response.`,
+    "Work that you schedule or delegate in this turn, such as a one-time routine, a wait, or a teammate's answer, posts its answer to this place too.",
+  ];
+  if (input.replyTo)
+    lines.push(
+      "--- the message this one replies to (context) ---",
+      `[${input.replyTo.sentAt}] ${input.replyTo.authorName}: ${input.replyTo.text.slice(0, REPLY_CHARACTERS)}`,
+    );
+  const context = boundedContext(input.context);
+  if (context.length)
+    lines.push(
+      "--- earlier messages of the channel (context, oldest first) ---",
+      ...context.map((message) => `[${message.sentAt}] ${message.authorName}: ${message.text}`),
     );
   lines.push("--- message ---", input.text || "(The message has no text.)");
   if (input.skippedFiles.length) lines.push(`Files that were not given to you: ${input.skippedFiles.join(", ")}.`);

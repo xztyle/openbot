@@ -35,6 +35,7 @@ const DEFAULT = "default";
 interface ChannelDraft {
   agentId: string;
   answerAll: boolean;
+  mainChat: boolean;
 }
 
 function draftOf(config: DiscordChannelConfig, channels: readonly DiscordTextChannel[]) {
@@ -42,18 +43,23 @@ function draftOf(config: DiscordChannelConfig, channels: readonly DiscordTextCha
   const drafts: Record<string, ChannelDraft> = {};
   for (const channel of channels) {
     const setting = settings.get(channel.id);
-    drafts[channel.id] = { agentId: setting?.agentId ?? DEFAULT, answerAll: setting?.answerAll ?? false };
+    drafts[channel.id] = {
+      agentId: setting?.agentId ?? DEFAULT,
+      answerAll: setting?.answerAll ?? false,
+      mainChat: setting?.mainChat ?? false,
+    };
   }
   return { serverAgentId: config.serverAgentId ?? DEFAULT, channels: drafts };
 }
 
 function configOf(draft: ReturnType<typeof draftOf>, kept: readonly DiscordChannelSetting[]): DiscordChannelConfig {
   const channels: DiscordChannelSetting[] = Object.entries(draft.channels)
-    .filter(([, channel]) => channel.agentId !== DEFAULT || channel.answerAll)
+    .filter(([, channel]) => channel.agentId !== DEFAULT || channel.answerAll || channel.mainChat)
     .map(([channelId, channel]) => ({
       channelId,
       agentId: channel.agentId === DEFAULT ? null : channel.agentId,
       answerAll: channel.answerAll,
+      ...(channel.mainChat ? { mainChat: true } : {}),
     }));
   // A saved channel that Discord did not list now, such as one OpenBot cannot see, keeps its settings.
   for (const setting of kept) if (!(setting.channelId in draft.channels)) channels.push({ ...setting });
@@ -62,7 +68,8 @@ function configOf(draft: ReturnType<typeof draftOf>, kept: readonly DiscordChann
 
 /**
  * Configures one Discord server: the agent that answers in it, and for each text channel its own
- * agent and whether OpenBot answers every message there. Save stores all of it at once; closing with
+ * agent, whether OpenBot answers every message there, and whether the messages go to the agent's
+ * main chat. Save stores all of it at once; closing with
  * changes asks first.
  */
 export function DiscordChannelsDialog(props: {
@@ -232,7 +239,10 @@ export function DiscordChannelsDialog(props: {
                 <ItemGroup class="settings-modal-card">
                   <For each={view.channels}>
                     {(channel) => {
-                      const current = () => view.draft.channels[channel.id] ?? { agentId: DEFAULT, answerAll: false };
+                      const current = () =>
+                        view.draft.channels[channel.id] ?? { agentId: DEFAULT, answerAll: false, mainChat: false };
+                      // The orchestrator has no main chat of the user's: only a chosen agent has one.
+                      const hasAgent = () => current().agentId !== DEFAULT || view.draft.serverAgentId !== DEFAULT;
                       return (
                         <Item class="settings-modal-row">
                           <ItemContent>
@@ -257,6 +267,19 @@ export function DiscordChannelsDialog(props: {
                                 setView((state) => {
                                   const entry = state.draft.channels[channel.id];
                                   if (entry) entry.answerAll = checked;
+                                })
+                              }
+                            />
+                            <SwitchField
+                              size="sm"
+                              checked={current().mainChat && hasAgent()}
+                              disabled={view.status !== "ready" || !hasAgent()}
+                              label={t("connector.discord.channelsMainChat")}
+                              description={t("connector.discord.channelsMainChatDescription")}
+                              onChange={(checked: boolean) =>
+                                setView((state) => {
+                                  const entry = state.draft.channels[channel.id];
+                                  if (entry) entry.mainChat = checked;
                                 })
                               }
                             />

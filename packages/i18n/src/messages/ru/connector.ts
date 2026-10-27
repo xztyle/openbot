@@ -277,6 +277,9 @@ export const messages = {
   "connector.discord.channelsChannelAgent": "Агент для #{channel}",
   "connector.discord.channelsAnswerAll": "Отвечать на каждое сообщение",
   "connector.discord.channelsAnswerAllDescription": "Здесь не нужно упоминать @OpenBot.",
+  "connector.discord.channelsMainChat": "Использовать основной чат агента",
+  "connector.discord.channelsMainChatDescription":
+    "Сообщения отсюда попадают в чат агента с вами, а его ответ публикуется здесь.",
   "connector.discord.channelsLoading": "Загрузка каналов…",
   "connector.discord.channelsLoadFailed": "Каналы Discord не загрузились",
   "connector.discord.channelsNone": "На этом сервере нет текстовых каналов, видимых OpenBot.",

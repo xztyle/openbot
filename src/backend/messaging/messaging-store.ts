@@ -54,6 +54,11 @@ export interface MessagingLinkInput {
   threadKey: string;
   isDirect: boolean;
   title: string;
+  /**
+   * An agent's own chat to answer in, for a Discord channel that delivers to it. The link then makes
+   * no execution thread of its own.
+   */
+  threadId?: string;
 }
 
 const LINK_LIST_LIMIT = 200;
@@ -218,10 +223,16 @@ export class MessagingStore {
   }
 
   linkForThread(threadId: string): MessagingLink | null {
-    const row = databaseRow(
-      this.#database.connection.prepare("SELECT * FROM projection_messaging_threads WHERE thread_id = ?").get(threadId),
-    );
-    return row ? decodeLink(row) : null;
+    return this.linksForThread(threadId)[0] ?? null;
+  }
+
+  /** An agent's own chat can have a link for each Discord channel that delivers to it. */
+  linksForThread(threadId: string): MessagingLink[] {
+    return databaseRows(
+      this.#database.connection
+        .prepare("SELECT * FROM projection_messaging_threads WHERE thread_id = ? ORDER BY updated_at DESC, link_id")
+        .all(threadId),
+    ).map(decodeLink);
   }
 
   links(agentId: string): MessagingLink[] {
@@ -246,7 +257,8 @@ export class MessagingStore {
     const existing = this.linkByKey(input.connectionId, input.platformChannelId, input.threadKey);
     if (existing) return existing;
     const linkId = `messaging-link-${randomUUID()}`;
-    const threadId = `openbot-thread-${randomUUID()}`;
+    const ownChat = input.threadId !== undefined;
+    const threadId = input.threadId ?? `openbot-thread-${randomUUID()}`;
     this.#database.dispatch(
       `messaging-thread:${linkId}`,
       [
@@ -259,14 +271,15 @@ export class MessagingStore {
       ],
       (db, sequences) => {
         const now = new Date().toISOString();
-        db.prepare("INSERT INTO projection_threads VALUES (?, ?, ?, NULL, ?, ?, ?)").run(
-          threadId,
-          input.agentId,
-          input.title,
-          now,
-          now,
-          sequences[0] ?? 0,
-        );
+        if (!ownChat)
+          db.prepare("INSERT INTO projection_threads VALUES (?, ?, ?, NULL, ?, ?, ?)").run(
+            threadId,
+            input.agentId,
+            input.title,
+            now,
+            now,
+            sequences[0] ?? 0,
+          );
         db.prepare(
           `INSERT INTO projection_messaging_threads
              (link_id, connection_id, agent_id, platform_channel_id, thread_key, is_direct, thread_id, title,

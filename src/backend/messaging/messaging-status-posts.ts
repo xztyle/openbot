@@ -31,10 +31,24 @@ export type StatusPost = typeof StatusPost.Type;
 const StopButton = Schema.Struct({ linkId: Schema.String, authorId: Schema.String, connectionId: Schema.String });
 export type StopButton = typeof StopButton.Type;
 
+/**
+ * The Discord message that a one-time routine follows up, by routine id: the routine was made in the
+ * turn that answered it in the agent's own chat, so the run's answer replies to it.
+ */
+const FollowUp = Schema.Struct({
+  linkId: Schema.String,
+  authorId: Schema.String,
+  authorName: Schema.String,
+  platformMessageId: Schema.String,
+});
+export type FollowUp = typeof FollowUp.Type;
+
 const StatusPostsFile = Schema.Struct({
   version: Schema.Literal(1),
   posts: Schema.Record(Schema.String, StatusPost),
   stops: Schema.Record(Schema.String, StopButton),
+  /** Added later: an older build ignores it. */
+  followUps: Schema.optional(Schema.Record(Schema.String, FollowUp)),
 });
 const decodeStatusPostsFile = Schema.decodeUnknownSync(StatusPostsFile);
 
@@ -47,6 +61,7 @@ const decodeStatusPostsFile = Schema.decodeUnknownSync(StatusPostsFile);
 export class MessagingStatusPosts {
   readonly posts = new Map<string, StatusPost>();
   readonly stops = new Map<string, StopButton>();
+  readonly followUps = new Map<string, FollowUp>();
   /**
    * The posts that came from the file and that this run has not changed. Only for these is a request
    * that is not pending a request that ended while OpenBot was closed.
@@ -81,6 +96,7 @@ export class MessagingStatusPosts {
     }
     for (const [token, stop] of Object.entries(file.stops))
       if (connectionIds.has(stop.connectionId)) this.stops.set(token, stop);
+    for (const [routineId, followUp] of Object.entries(file.followUps ?? {})) this.followUps.set(routineId, followUp);
   }
 
   /** Writes the current posts. A failed write is logged: the posts in memory still work. */
@@ -91,7 +107,12 @@ export class MessagingStatusPosts {
       Effect.suspend(() =>
         writeJsonFileAtomically(
           path,
-          { version: 1, posts: Object.fromEntries(this.posts), stops: Object.fromEntries(this.stops) },
+          {
+            version: 1,
+            posts: Object.fromEntries(this.posts),
+            stops: Object.fromEntries(this.stops),
+            followUps: Object.fromEntries(this.followUps),
+          },
           { createDirectory: true },
         ),
       ).pipe(

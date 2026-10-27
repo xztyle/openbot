@@ -873,6 +873,44 @@ export class MailboxStore {
    * Moves a queued message of the person into a task, so it runs beside the agent's own chat. Only a
    * message with one recipient and no channel or external origin can move.
    */
+  /**
+   * Gives a queued messaging delivery the text of a newer message of the same conversation, so one
+   * turn answers both. The origin becomes the newer message, which the answer replies to, and its
+   * idempotency key names this message. False when the delivery left the queue, is being edited, or
+   * the text is too long.
+   */
+  joinQueuedMessaging = Effect.fn("MailboxStore.joinQueuedMessaging")(function* (
+    this: MailboxStore,
+    deliveryId: string,
+    text: string,
+    origin: MessagingOrigin,
+    idempotencyKey: string,
+  ): Effect.fn.Return<boolean, StoredStateFailure> {
+    try {
+      const delivery = this.#state.deliveries.find((candidate) => candidate.id === deliveryId);
+      if (delivery?.status !== "queued" || delivery.editId || this.#queueUpdates.has(deliveryId)) return false;
+      if (text.length > INPUT_LIMITS.messageText || this.#state.idempotency[idempotencyKey]) return false;
+      const message = this.#requireMessage(delivery.messageId);
+      if (message.messaging?.linkId !== origin.linkId) return false;
+      const previous = this.#state.messages;
+      this.#state.messages = previous.map((candidate) =>
+        candidate === message ? { ...message, text, messaging: structuredClone(origin) } : candidate,
+      );
+      this.#state.idempotency[idempotencyKey] = message.id;
+      this.#changes.messageIds.add(message.id);
+      try {
+        this.#persist("mailbox.messaging-joined");
+      } catch (error) {
+        this.#state.messages = previous;
+        delete this.#state.idempotency[idempotencyKey];
+        throw error;
+      }
+      return true;
+    } catch (cause) {
+      return yield* new StoredStateFailure({ cause });
+    }
+  }, Effect.uninterruptible).bind(this);
+
   moveToTask = Effect.fn("MailboxStore.moveToTask")(function* (
     this: MailboxStore,
     agentId: string,

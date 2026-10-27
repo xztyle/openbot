@@ -164,6 +164,8 @@ export interface MessagingAdapter {
     markdown: string,
     replaceMessageId: string | null,
   ): Effect.Effect<void, MessagingAdapterError>;
+  /** Deletes a post of OpenBot's own. Only some platforms can. */
+  remove?(target: MessageTarget, messageId: string): Effect.Effect<void, MessagingAdapterError>;
   /** Uploads files to the conversation, and returns the names it did not send. */
   upload(target: MessageTarget, files: MessagingAnswerFile[]): Effect.Effect<string[], MessagingAdapterError>;
   /** Earlier messages of the conversation, oldest first, after `afterId` and before `beforeId`. */

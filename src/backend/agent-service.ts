@@ -1185,6 +1185,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       forgetThread: (threadId) => this.#forgetExecutionThread(threadId).pipe(toMessagingThreadFailed),
       ownChat: (threadId) => this.#store.ownsThread(threadId),
       wokenWaitRequests: (deliveryId) => this.#waits.wokenBy(deliveryId).map((wait) => wait.requestMessageId),
+      // Only a provider that reads a message at its next step is asked; any refusal leaves it queued.
+      steer: (agentId, deliveryId, turnId) =>
+        this.#queue.steer({ agentId, deliveryId, expectedTurnId: turnId }).pipe(
+          Effect.as(true),
+          Effect.catch(() => Effect.succeed(false)),
+        ),
     });
     this.#memoryHold = new MemoryHold({
       memory: hostMemory,
@@ -1338,7 +1344,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       hooks: {
         channelAssignment: (deliveryId) => this.channels.store.assignmentForDelivery(deliveryId),
         taskThreadId: (deliveryId) => this.#tasks.threadForDelivery(deliveryId),
-        externalTurn: (turnId) => this.messaging.answersExternalMessage(turnId),
+        externalTurn: (turnId, deliveryId) => this.messaging.answersExternalMessage(turnId, deliveryId),
+        messagingThreadId: (deliveryId) => this.messaging.threadForDelivery(deliveryId),
+        steerText: (deliveryId) => this.messaging.steerText(deliveryId),
       },
     });
     this.#turn = new TurnLifecycle({

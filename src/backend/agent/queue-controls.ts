@@ -29,8 +29,15 @@ export interface QueueControlsHooks {
   channelAssignment(deliveryId: string): ChannelAssignment | null;
   /** The thread of the open task that a delivery runs in, or null for the agent's own chat. */
   taskThreadId(deliveryId: string): string | null;
-  /** Whether a running turn answers a Slack, Discord or Telegram message, whose answer goes there. */
-  externalTurn?(turnId: string): boolean;
+  /**
+   * Whether a running turn answers a Slack, Discord or Telegram message, whose answer goes there,
+   * so `deliveryId` may not steer into it. A newer message of the same conversation may.
+   */
+  externalTurn?(turnId: string, deliveryId: string): boolean;
+  /** The execution thread of a messaging delivery, or null for any other delivery. */
+  messagingThreadId?(deliveryId: string): string | null;
+  /** The provider text of a messaging delivery that joins the running turn of its conversation. */
+  steerText?(deliveryId: string): string | undefined;
 }
 
 export interface QueueControlsOptions {
@@ -228,8 +235,12 @@ export class QueueControls {
     const agent = yield* this.#store.existing(input.agentId).pipe(toQueueOperationFailed);
     const { client, session, snapshot, context, turnId, taskThreadId } = yield* queueStep(() => {
       const client = this.#providers.requireReadyClientForAgent(agent);
-      // A task message steers the task's turn, in the task's own provider session.
-      const taskThreadId = this.#hooks.taskThreadId(input.deliveryId);
+      // A task message steers the task's turn, in the task's own provider session, and a message of
+      // an external conversation the turn of that conversation's thread.
+      const messagingThreadId = this.#hooks.messagingThreadId?.(input.deliveryId) ?? null;
+      const taskThreadId =
+        this.#hooks.taskThreadId(input.deliveryId) ??
+        (messagingThreadId && messagingThreadId !== agent.threadId ? messagingThreadId : null);
       const session = taskThreadId
         ? this.#store.database.activeProviderSession(taskThreadId, agent.provider)?.externalSessionId
         : this.#store.activeProviderSession(agent.id)?.externalSessionId;
@@ -239,7 +250,7 @@ export class QueueControls {
       if (this.#hooks.channelAssignment(input.deliveryId))
         throw new Error(sourceText("error.backend.useChannelTaskControls"));
       // Its answer goes to the external conversation, so another message waits for its own turn.
-      if (this.#hooks.externalTurn?.(snapshot.activeTurnId)) throw new SteerUnsupportedError();
+      if (this.#hooks.externalTurn?.(snapshot.activeTurnId, input.deliveryId)) throw new SteerUnsupportedError();
       const context = this.#mailbox.getDelivery(input.deliveryId);
       if (!context || context.delivery.recipientAgentId !== agent.id || context.delivery.status !== "queued")
         throw new Error(sourceText("error.backend.steerQueuedOnly"));
@@ -263,6 +274,8 @@ export class QueueControls {
       this.#mailboxSync.emitQueue(agent.id);
       return yield* new QueueOperationFailed({ cause: new SteerUnsupportedError() });
     }
+    const executionText = this.#hooks.steerText?.(input.deliveryId);
+    const steerText = executionText === undefined ? {} : { executionText };
     yield* this.#mailbox.markSteering(input.deliveryId, turnId).pipe(toQueueOperationFailed);
     this.#mailboxSync.emitQueue(agent.id);
     yield* client
@@ -275,6 +288,7 @@ export class QueueControls {
           input: deliveryPromptInput(context, {
             agentNames: agentNamesById(this.#store.list()),
             snapshot,
+            ...steerText,
             routineRun:
               context.delivery.sender.kind === "routine" ? this.#routines.runForDelivery(input.deliveryId) : null,
             wokenWaits: context.delivery.sender.kind === "routine" ? this.#routines.wokenWaits(input.deliveryId) : [],

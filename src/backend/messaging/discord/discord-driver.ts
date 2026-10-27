@@ -142,6 +142,17 @@ class DiscordAdapter implements MessagingAdapter {
     );
   });
 
+  readonly remove = Effect.fnUntraced(function* (
+    this: DiscordAdapter,
+    target: MessageTarget,
+    messageId: string,
+  ): Effect.fn.Return<void, MessagingAdapterError> {
+    yield* this.#call(
+      { op: "deleteMessage", guildId: this.#guildId, channelId: target.platformChannelId, messageId },
+      ignoreAnswer,
+    );
+  });
+
   /** Discord has private replies only to a button press. Without one, nothing is posted. */
   readonly postPrivate = Effect.fnUntraced(function* (
     this: DiscordAdapter,

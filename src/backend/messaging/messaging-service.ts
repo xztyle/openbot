@@ -1293,6 +1293,8 @@ export class MessagingService {
     if (!this.#authorAllowed(live.record.connectionId, inbound)) return;
     const setting = this.#channelSetting(live.record, inbound.platformChannelId);
     const answerAll = setting?.answerAll === true;
+    // A Discord channel that answers every message answers a quick run of messages in one turn.
+    const batch = answerAll && live.record.platform === "discord";
     // A message without a mention counts only in a channel that answers every message. Signal can
     // still pass one on for a moment after the setting is turned off.
     if (inbound.mentioned === false && !answerAll) return;
@@ -1466,6 +1468,7 @@ export class MessagingService {
                 ...(replyTo ? { replyTo } : {}),
               },
               idempotencyKey: `messaging:${live.record.connectionId}:${message.dedupKey}`,
+              ...(batch ? { batch } : {}),
             })
             .pipe(toMessagingOperationFailed);
           if (result.status === "duplicate") return;
@@ -1480,11 +1483,14 @@ export class MessagingService {
             return;
           }
           this.#targets.set(key, message.target);
+          // The earlier message's request answers this one now, and its answer replies here.
+          if (result.replaced) this.#targets.delete(`${result.link.linkId}:${result.replaced.platformMessageId}`);
           yield* adapter
             .react(message.target, message.platformMessageId, "received", true)
             .pipe(Effect.catch(() => Effect.void));
           // In the same order as the turn's own posts: a turn that already started has its status post.
-          if (result.waiting)
+          // A channel that answers every message batches them, so a "Waiting" post there is only noise.
+          if (result.waiting && !batch)
             yield* this.#serial(
               result.link.linkId,
               Effect.gen({ self: this }, function* () {
@@ -1659,9 +1665,27 @@ export class MessagingService {
     const live = this.#live.get(activity.link.connectionId);
     const origin = activity.origin;
     const key = `${activity.link.linkId}:${origin.platformMessageId}`;
-    const target = this.#targets.get(key) ?? linkTarget(activity.link, origin.platformMessageId);
+    const target =
+      this.#targets.get(key) ??
+      (activity.type === "joined"
+        ? { platformChannelId: activity.link.platformChannelId, replyThreadId: origin.platformMessageId }
+        : linkTarget(activity.link, origin.platformMessageId));
     const post = this.#posts.get(key);
-    if (activity.type === "started") {
+    if (activity.type === "joined") {
+      // The running turn answers a newer message now: its status post moves there, under it.
+      const previousKey = `${activity.link.linkId}:${activity.previous.platformMessageId}`;
+      const moved = this.#posts.get(previousKey);
+      this.#targets.delete(previousKey);
+      if (moved && !moved.final) {
+        this.#posts.delete(previousKey);
+        if (moved.stopToken) this.#stops.delete(moved.stopToken);
+        yield* this.#status.save();
+        const remove = live?.adapter.remove?.bind(live.adapter);
+        if (remove && moved.messageId)
+          yield* remove(moved.target, moved.messageId).pipe(Effect.catch(() => Effect.void));
+      }
+    }
+    if (activity.type === "started" || activity.type === "joined") {
       if (!live) return;
       const stopToken = token();
       this.#stops.set(stopToken, {
@@ -2137,7 +2161,10 @@ function token(): string {
 }
 
 /** The last post of a request and the reaction on the person's message, from how its turn ended. */
-function finalPost(activity: Exclude<MessagingActivity, { type: "started" }>, awaitsTeammate: boolean): PendingFinal {
+function finalPost(
+  activity: Exclude<MessagingActivity, { type: "started" | "joined" }>,
+  awaitsTeammate: boolean,
+): PendingFinal {
   // A follow-up turn answers a teammate's reply: the person's message already shows how its own turn ended.
   const reacts = activity.type === "cancelled" || !activity.followUp;
   if (activity.type === "cancelled" || activity.status === "interrupted")

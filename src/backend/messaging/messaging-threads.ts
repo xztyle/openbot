@@ -16,7 +16,13 @@ import { causeHelpers } from "../effect-boundary";
 import type { DeliveryContext, MailboxStore, MessagingOrigin } from "../mailbox-store";
 import type { OpenBotDatabase } from "../openbot-database";
 import { MessagingMemoryStore } from "./messaging-memory-store";
-import { type MessagingContextMessage, messagingPromptText } from "./messaging-prompt";
+import {
+  JOINED_MESSAGES_HEADER,
+  joinedMessageText,
+  type MessagingContextMessage,
+  messagingJoinText,
+  messagingPromptText,
+} from "./messaging-prompt";
 import type { MessagingOperationFailed } from "./messaging-service";
 import { type MessagingLink, MessagingStore } from "./messaging-store";
 import { boundedHistory, parseMessagingOutboundTool, parseMessagingTool } from "./messaging-tools";
@@ -48,7 +54,9 @@ export type MessagingActivity =
       answer: string | null;
       files: MessagingAnswerFile[];
     }
-  | { type: "cancelled"; link: MessagingLink; origin: MessagingOrigin };
+  | { type: "cancelled"; link: MessagingLink; origin: MessagingOrigin }
+  /** A newer message of the conversation joined the running turn, which now answers `origin`. */
+  | { type: "joined"; link: MessagingLink; turnId: string; origin: MessagingOrigin; previous: MessagingOrigin };
 
 export interface MessagingReceiveInput {
   connectionId: string;
@@ -64,10 +72,22 @@ export interface MessagingReceiveInput {
   mainThreadId?: string;
   /** Stable for one external message, so a redelivered event enqueues nothing. */
   idempotencyKey: string;
+  /**
+   * The conversation's messages are answered together: a message joins the running turn of the
+   * same conversation, or the request of it that waits in the queue, instead of a turn of its own.
+   */
+  batch?: boolean;
 }
 
 export type MessagingReceiveResult =
-  | { status: "queued"; link: MessagingLink; deliveryId: string; waiting: boolean }
+  | {
+      status: "queued";
+      link: MessagingLink;
+      deliveryId: string;
+      waiting: boolean;
+      /** The earlier message whose waiting request this one joined: the answer replies to the new one. */
+      replaced?: MessagingOrigin;
+    }
   | { status: "duplicate" }
   | { status: "busy"; link: MessagingLink };
 
@@ -126,6 +146,8 @@ export interface MessagingThreadsHooks {
   ownChat(threadId: string): boolean;
   /** The deliveries of the requests whose open waits this routine run wakes. */
   wokenWaitRequests?(deliveryId: string): string[];
+  /** Steers a queued delivery into the running turn. False when the turn did not take it. */
+  steer?(agentId: string, deliveryId: string, turnId: string): Effect.Effect<boolean>;
 }
 
 /** The one-time routines made in a turn that answered a Discord message in an agent's own chat. */
@@ -501,6 +523,10 @@ export class MessagingThreads {
     const byAuthor = pending.filter(
       (context) => this.#mailbox.messagingOrigin(context.delivery.id)?.authorId === input.origin.authorId,
     );
+    if (input.batch) {
+      const joined = yield* this.#joinQueued(agentId, link, input);
+      if (joined) return joined;
+    }
     if (pending.length >= AGENT_QUEUE_LIMIT || byAuthor.length >= AUTHOR_QUEUE_LIMIT) return { status: "busy", link };
     const waiting = this.#hooks.busy(agentId);
     const receipt = yield* this.#mailbox
@@ -519,9 +545,78 @@ export class MessagingThreads {
         cause: new Error(sourceText("error.agent.queuedMessageCreateFailed")),
       });
     yield* threadsStep(() => this.store.touch(link.linkId));
+    if (input.batch) yield* this.#joinRunning(agentId, link, deliveryId);
     this.#hooks.schedule(agentId);
     return { status: "queued", link, deliveryId, waiting };
   });
+
+  /** Adds a message to the request of its conversation that waits in the queue, when one waits. */
+  readonly #joinQueued = Effect.fn("MessagingThreads.joinQueued")(function* (
+    this: MessagingThreads,
+    agentId: string,
+    link: MessagingLink,
+    input: MessagingReceiveInput,
+  ): Effect.fn.Return<MessagingReceiveResult | null, MessagingThreadFailed> {
+    // Files go with a delivery of their own.
+    if (input.sourcePaths.length) return null;
+    const queued = this.#mailbox
+      .unresolvedMessagingDeliveries(link.linkId)
+      .findLast((context) => context.delivery.status === "queued" && context.delivery.sender.kind === "user");
+    const previous = queued ? this.#mailbox.messagingOrigin(queued.delivery.id) : null;
+    if (!queued || !previous) return null;
+    const earlier = queued.delivery.text.startsWith(JOINED_MESSAGES_HEADER)
+      ? queued.delivery.text
+      : `${JOINED_MESSAGES_HEADER}\n\n${joinedMessageText(previous.authorName, queued.delivery.text)}`;
+    const joined = yield* this.#mailbox
+      .joinQueuedMessaging(
+        queued.delivery.id,
+        `${earlier}\n\n${joinedMessageText(input.origin.authorName, input.text)}`,
+        { ...input.origin, linkId: link.linkId },
+        input.idempotencyKey,
+      )
+      .pipe(toMessagingThreadFailed);
+    if (!joined) return null;
+    yield* threadsStep(() => this.store.touch(link.linkId));
+    this.#hooks.queueChanged(agentId);
+    return { status: "queued", link, deliveryId: queued.delivery.id, waiting: false, replaced: previous };
+  });
+
+  /**
+   * Steers a new message into the running turn when that turn answers a person's message of the
+   * same conversation. The turn then answers the new message: its answer replies to it.
+   */
+  readonly #joinRunning = Effect.fn("MessagingThreads.joinRunning")(function* (
+    this: MessagingThreads,
+    agentId: string,
+    link: MessagingLink,
+    deliveryId: string,
+  ) {
+    const steer = this.#hooks.steer;
+    const running = this.runningOrigin(link.linkId);
+    const started = running ? this.#turnOrigins.get(running.turnId) : undefined;
+    if (!steer || !running || !started?.origin || started.followUp || started.link.linkId !== link.linkId) return;
+    if (!(yield* steer(agentId, deliveryId, running.turnId))) return;
+    const origin = this.#mailbox.messagingOrigin(deliveryId);
+    // The turn can end while the steer is on its way: its end already told the conversation.
+    if (!origin || this.#turnOrigins.get(running.turnId) !== started) return;
+    this.#turnOrigins.set(running.turnId, { ...started, origin });
+    this.#publish({ type: "joined", link, turnId: running.turnId, origin, previous: started.origin });
+  });
+
+  /** The provider text of a messaging delivery that joins the running turn of its conversation. */
+  steerText(deliveryId: string): string | undefined {
+    const origin = this.#mailbox.messagingOrigin(deliveryId);
+    const link = origin ? this.store.link(origin.linkId) : null;
+    const context = this.#mailbox.getDelivery(deliveryId);
+    if (!origin || !link || context?.delivery.sender.kind !== "user") return undefined;
+    return messagingJoinText({
+      platform: this.store.connection(link.connectionId)?.platform ?? "slack",
+      mainChat: isMainChatLink(link),
+      authorName: origin.authorName,
+      authorId: origin.authorId,
+      text: context.delivery.text,
+    });
+  }
 
   /** The execution thread of a messaging delivery, or null for any other delivery. */
   threadForDelivery(deliveryId: string): string | null {
@@ -547,9 +642,15 @@ export class MessagingThreads {
     );
   }
 
-  /** Whether this running turn answers an external message: nothing else may steer into it. */
-  answersExternalMessage(turnId: string): boolean {
-    return this.#turnOrigins.get(turnId)?.origin != null;
+  /**
+   * Whether this running turn answers an external message: nothing else may steer into it, except a
+   * newer message of the same conversation (`deliveryId`), which the turn then answers too.
+   */
+  answersExternalMessage(turnId: string, deliveryId?: string): boolean {
+    const started = this.#turnOrigins.get(turnId);
+    if (!started?.origin) return false;
+    const joining = deliveryId ? this.#mailbox.messagingOrigin(deliveryId) : null;
+    return !(joining && !started.followUp && joining.linkId === started.link.linkId);
   }
 
   /** Whether a platform message is in the mailbox, by its idempotency key. */

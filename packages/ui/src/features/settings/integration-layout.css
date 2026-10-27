@@ -204,6 +204,11 @@
   transform: translate(-50%, -50%);
 }
 
+/* A select inside a wizard dialog opens its list above the dialog, not behind it. */
+.integration-select-content {
+  z-index: calc(var(--openbot-layer-dialog) + 2);
+}
+
 .integration-wizard-dialog h2 {
   margin: 0;
 }

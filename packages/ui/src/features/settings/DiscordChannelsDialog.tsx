@@ -29,7 +29,8 @@ export interface DiscordChannelsControl {
 }
 
 /** The empty value of an agent picker: the next default. */
-const DEFAULT = "";
+/** The "default" choice. Not empty: the select treats an empty value as no choice and shows nothing. */
+const DEFAULT = "default";
 
 interface ChannelDraft {
   agentId: string;
@@ -155,7 +156,8 @@ export function DiscordChannelsDialog(props: {
   const picker = (input: { label: string; value: string; fallback: string; onChange: (id: string) => void }) => (
     <Select<string>
       options={[DEFAULT, ...props.agents.map((agent) => agent.id)]}
-      value={input.value}
+      // A saved agent that is gone shows the default, as routing does.
+      value={props.agents.some((agent) => agent.id === input.value) ? input.value : DEFAULT}
       disabled={view.status !== "ready"}
       onChange={(next) => {
         if (next !== null && next !== input.value) input.onChange(next);
@@ -167,7 +169,7 @@ export function DiscordChannelsDialog(props: {
       <SelectTrigger size="sm" aria-label={input.label}>
         <SelectValue<string>>{(state) => agentName(state.selectedOption() ?? DEFAULT, input.fallback)}</SelectValue>
       </SelectTrigger>
-      <SelectContent />
+      <SelectContent class="integration-select-content" />
     </Select>
   );
   return (

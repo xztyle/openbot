@@ -85,6 +85,18 @@ export const messages = {
   "error.backend.channelAssigneeUnavailable": "L’agent assigné est indisponible.",
   "error.backend.channelAssignmentChanged": "Cette tâche de canal a changé.",
   "error.backend.channelMemberRequired": "Sélectionnez un membre disponible de ce canal.",
+  "error.backend.channelExists": "Un canal avec cet identifiant existe déjà.",
+  "error.backend.channelThreadNotFound": "Ce fil n'est pas disponible.",
+  "error.backend.channelMessageNotFound": "Ce message n'est pas disponible.",
+  "error.backend.channelPersonUnavailable": "Une personne choisie n'est pas un membre actif de ce serveur.",
+  "error.backend.channelDirectParticipants": "Un message direct a 2 participants, et un groupe de 3 à 9.",
+  "error.backend.channelDirectFixed": "Les personnes d'un message direct ne peuvent pas changer.",
+  "error.backend.channelJoinPrivate": "Demande à une personne de ce canal privé de t'ajouter.",
+  "error.backend.channelManageRequired": "Seules les personnes de ce canal peuvent le modifier.",
+  "error.backend.channelRemovePeople":
+    "Seul un propriétaire, un admin ou le créateur du canal peut retirer d'autres personnes.",
+  "error.backend.channelEditOwnOnly": "Tu ne peux modifier que tes propres messages.",
+  "error.backend.channelDeleteOwnOnly": "Tu ne peux supprimer que tes propres messages.",
   "error.backend.memoryEssentialBudget":
     "Les souvenirs essentiels dépassent la limite du prompt. Réglez une entrée sur « Rechercher au besoin », puis réessayez.",
   "error.backend.memorySelectionConflict": "Le souvenir a changé. Rechargez-le et réessayez.",

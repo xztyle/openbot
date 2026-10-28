@@ -1,8 +1,30 @@
 import { INPUT_LIMITS } from "./input-limits";
 import { isBoundedString, isIdentifier } from "./ipc-bounded-values";
+import {
+  CHANNEL_DESCRIPTION_LIMIT,
+  CHANNEL_FOCUS_LIMIT,
+  CHANNEL_GROUP_LIMIT,
+  CHANNEL_HUMAN_MEMBER_LIMIT,
+  CHANNEL_KINDS,
+  CHANNEL_TOPIC_LIMIT,
+  CHANNEL_VISIBILITIES,
+  type ChannelAnswerMode,
+  type ChannelKind,
+  type ChannelMemberWorkspaceFields,
+  type ChannelMessageWorkspaceFields,
+  type ChannelVisibility,
+  type ChannelWorkspaceFields,
+  hasValidChannelMemberWorkspaceFields,
+  hasValidChannelMessageWorkspaceFields,
+  hasValidChannelWorkspaceFields,
+  isChannelAnswerMode,
+  isChannelEmoji,
+} from "./ipc-chat-workspace";
 import { type ConversationMessage, isConversationMessage } from "./ipc-conversation-messages";
 import { optionalHistoryExtent } from "./ipc-decoding";
 import { type DynamicRecord, isDynamicRecord, isOneOf, isString } from "./runtime-values";
+
+export * from "./ipc-chat-workspace";
 
 export const CHANNEL_CHATS_CAPABILITY = "channel-chats-v1";
 export const CHANNEL_DELETE_CAPABILITY = "channel-delete-v1";
@@ -15,7 +37,7 @@ export const SIGNED_OUT_CHANNEL_MEMBER_ID = "local";
 export const CHANNEL_PARALLEL_LIMIT = 2;
 export const CHANNEL_ASSIGNMENT_LIMIT = 8;
 
-export interface ChannelMember {
+export interface ChannelMember extends ChannelMemberWorkspaceFields {
   agentId: string;
 }
 
@@ -27,7 +49,7 @@ export interface ChannelDraft {
   leadAgentId: string | null;
 }
 
-export interface Channel extends ChannelDraft {
+export interface Channel extends ChannelDraft, ChannelWorkspaceFields {
   id: string;
   archived: boolean;
   revision: number;
@@ -55,7 +77,7 @@ export interface ChannelTask {
   error: string | null;
 }
 
-export interface ChannelMessage {
+export interface ChannelMessage extends ChannelMessageWorkspaceFields {
   id: string;
   channelId: string;
   sequence: number;
@@ -103,6 +125,8 @@ export interface ChannelPage {
   /** As in `ConversationPageInfo`: the unloaded length, for the scroll rail. Absent from a remote host. */
   olderCount?: number;
   oldestAt?: string;
+  /** Set on the page of one thread: the root comes first, then its replies. */
+  threadRootId?: string;
 }
 
 export type ChannelCommand =
@@ -129,6 +153,10 @@ export type ChannelCommand =
       recipientAgentId: string | null;
       replyToMessageId: string | null;
       attachmentDraftIds: string[];
+      /** A reply in the thread of this root message. */
+      threadRootId?: string | null;
+      /** A thread reply that is also shown in the channel. */
+      alsoToChannel?: boolean;
     }
   | {
       /**
@@ -152,11 +180,92 @@ export type ChannelCommand =
       taskId: string;
       recipientAgentId: string | null;
     }
-  | { type: "read"; operationId: string; channelId: string; throughSequence: number };
+  | { type: "read"; operationId: string; channelId: string; throughSequence: number }
+  | WorkspaceChannelCommand;
+
+/**
+ * The workspace commands. Only a client that the host advertises the workspace to sends them; the
+ * released channel route refuses each one, so a host without them fails closed.
+ */
+export type WorkspaceChannelCommand =
+  | {
+      /** Makes a channel, a DM or a group with this id. The creator is always one of its people. */
+      type: "create";
+      operationId: string;
+      channelId: string;
+      kind: ChannelKind;
+      visibility: ChannelVisibility;
+      name: string;
+      title?: string;
+      topic?: string;
+      description?: string;
+      instructions?: string;
+      humanMemberIds: string[];
+      members: ChannelMember[];
+      leadAgentId?: string | null;
+    }
+  | { type: "join" | "leave"; operationId: string; channelId: string }
+  | { type: "invite"; operationId: string; channelId: string; humanMemberIds: string[]; members: ChannelMember[] }
+  | { type: "remove"; operationId: string; channelId: string; humanMemberIds: string[]; agentIds: string[] }
+  | {
+      /** Changes how one member agent answers. `null` clears the field. */
+      type: "set-member";
+      operationId: string;
+      channelId: string;
+      agentId: string;
+      answerMode?: ChannelAnswerMode | null;
+      focus?: string | null;
+    }
+  | { type: "set-meta"; operationId: string; channelId: string; name?: string; topic?: string; description?: string }
+  | {
+      type: "react";
+      operationId: string;
+      channelId: string;
+      messageId: string;
+      emoji: string;
+      action: "add" | "remove";
+    }
+  | { type: "edit"; operationId: string; channelId: string; messageId: string; text: string }
+  | { type: "delete"; operationId: string; channelId: string; messageId: string }
+  | {
+      /**
+       * Opens the DM or group of exactly these people and agents (the sender is added). It answers the
+       * channel that already exists for them, or makes one with `channelId`.
+       */
+      type: "open-dm";
+      operationId: string;
+      channelId: string;
+      memberIds: string[];
+      agentIds: string[];
+    };
+
+export const WORKSPACE_CHANNEL_COMMAND_TYPES = [
+  "create",
+  "join",
+  "leave",
+  "invite",
+  "remove",
+  "set-member",
+  "set-meta",
+  "react",
+  "edit",
+  "delete",
+  "open-dm",
+] as const satisfies readonly WorkspaceChannelCommand["type"][];
+
+/** A command that only the workspace route carries: a workspace command, or a send into a thread. */
+export function isWorkspaceChannelCommand(command: ChannelCommand): boolean {
+  return (
+    isOneOf(WORKSPACE_CHANNEL_COMMAND_TYPES, command.type) ||
+    (command.type === "send" && ((command.threadRootId ?? null) !== null || command.alsoToChannel === true))
+  );
+}
 
 export interface ChannelReadInput {
   channelId: string;
   beforeSequence?: number | undefined;
+  /** Reads one thread: its root and its replies. */
+  threadRootId?: string | undefined;
 }
 
 /**
@@ -190,7 +299,16 @@ export function isChannelDraft(value: unknown): value is ChannelDraft {
 }
 
 function isChannelMember(value: unknown): value is ChannelMember {
-  return isDynamicRecord(value) && isIdentifier(value.agentId);
+  return isDynamicRecord(value) && isIdentifier(value.agentId) && hasValidChannelMemberWorkspaceFields(value);
+}
+
+/** The known member fields only: a draft cannot carry another key into the stored channel. */
+function channelMember(member: ChannelMember): ChannelMember {
+  return {
+    agentId: member.agentId,
+    ...(member.answerMode === undefined ? {} : { answerMode: member.answerMode }),
+    ...(member.focus === undefined ? {} : { focus: member.focus }),
+  };
 }
 
 function identifiers(value: unknown): value is string[] {
@@ -213,7 +331,8 @@ export function isChannel(value: unknown): value is Channel {
     isIdentifier(value.id) &&
     typeof value.archived === "boolean" &&
     sequence(value.revision) &&
-    isBoundedString(value.createdAt, 80)
+    isBoundedString(value.createdAt, 80) &&
+    hasValidChannelWorkspaceFields(value)
   );
 }
 
@@ -255,7 +374,8 @@ export function isChannelMessage(value: unknown): value is ChannelMessage {
     isBoundedString(value.author.name, INPUT_LIMITS.accountName) &&
     (value.taskId === null || isIdentifier(value.taskId)) &&
     typeof value.superseded === "boolean" &&
-    isConversationMessage(value.message)
+    isConversationMessage(value.message) &&
+    hasValidChannelMessageWorkspaceFields(value)
   );
 }
 
@@ -337,11 +457,16 @@ export function parseChannelRead(value: unknown): ChannelReadInput {
   if (
     !isDynamicRecord(value) ||
     !isIdentifier(value.channelId) ||
-    !(value.beforeSequence === undefined || sequence(value.beforeSequence))
+    !(value.beforeSequence === undefined || sequence(value.beforeSequence)) ||
+    !(value.threadRootId === undefined || isIdentifier(value.threadRootId))
   ) {
     throw new Error("Provide a valid channel and message cursor.");
   }
-  return { channelId: value.channelId, beforeSequence: value.beforeSequence };
+  return {
+    channelId: value.channelId,
+    beforeSequence: value.beforeSequence,
+    ...(value.threadRootId === undefined ? {} : { threadRootId: value.threadRootId }),
+  };
 }
 
 export function parseChannelCommand(value: unknown): ChannelCommand {
@@ -350,7 +475,21 @@ export function parseChannelCommand(value: unknown): ChannelCommand {
   const common = { operationId: value.operationId, channelId: value.channelId };
   const draft = normalizeChannelDraft(value.draft);
   if (value.type === "save" && isChannelDraft(draft))
-    return { ...common, type: value.type, draft, ...(value.update === true ? { update: true } : {}) };
+    return {
+      ...common,
+      type: value.type,
+      // Only the draft fields: the workspace fields of a channel change through their own commands.
+      draft: {
+        name: draft.name,
+        title: draft.title,
+        instructions: draft.instructions,
+        members: draft.members.map(channelMember),
+        leadAgentId: draft.leadAgentId,
+      },
+      ...(value.update === true ? { update: true } : {}),
+    };
+  const workspace = parseWorkspaceChannelCommand(value, common);
+  if (workspace) return workspace;
   if (value.type === "archive" || value.type === "restore") return { ...common, type: value.type };
   if (value.type === "read" && sequence(value.throughSequence))
     return { ...common, type: value.type, throughSequence: value.throughSequence };
@@ -367,7 +506,9 @@ export function parseChannelCommand(value: unknown): ChannelCommand {
     (value.recipientAgentId === null || isIdentifier(value.recipientAgentId)) &&
     (value.replyToMessageId === null || isIdentifier(value.replyToMessageId)) &&
     identifiers(value.attachmentDraftIds) &&
-    (value.text.trim().length > 0 || value.attachmentDraftIds.length > 0)
+    (value.text.trim().length > 0 || value.attachmentDraftIds.length > 0) &&
+    (value.threadRootId === undefined || value.threadRootId === null || isIdentifier(value.threadRootId)) &&
+    (value.alsoToChannel === undefined || typeof value.alsoToChannel === "boolean")
   ) {
     return {
       ...common,
@@ -376,6 +517,8 @@ export function parseChannelCommand(value: unknown): ChannelCommand {
       recipientAgentId: value.recipientAgentId,
       replyToMessageId: value.replyToMessageId,
       attachmentDraftIds: value.attachmentDraftIds,
+      ...(isIdentifier(value.threadRootId) ? { threadRootId: value.threadRootId } : {}),
+      ...(isIdentifier(value.threadRootId) && value.alsoToChannel === true ? { alsoToChannel: true } : {}),
     };
   }
   if (
@@ -405,4 +548,129 @@ export function parseChannelCommand(value: unknown): ChannelCommand {
     };
   }
   throw new Error("Provide a valid channel command.");
+}
+
+function members(value: unknown): value is ChannelMember[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= INPUT_LIMITS.agents &&
+    value.every(isChannelMember) &&
+    new Set(value.map((member) => member.agentId)).size === value.length
+  );
+}
+
+function people(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= CHANNEL_HUMAN_MEMBER_LIMIT &&
+    value.every(isIdentifier) &&
+    new Set(value).size === value.length
+  );
+}
+
+function optionalText(value: unknown, maximum: number): value is string | undefined {
+  return value === undefined || isBoundedString(value, maximum);
+}
+
+function parseWorkspaceChannelCommand(
+  value: DynamicRecord,
+  common: { operationId: string; channelId: string },
+): WorkspaceChannelCommand | null {
+  switch (value.type) {
+    case "create":
+      if (
+        !isOneOf(CHANNEL_KINDS, value.kind) ||
+        !isOneOf(CHANNEL_VISIBILITIES, value.visibility) ||
+        !isBoundedString(value.name, INPUT_LIMITS.agentName) ||
+        !value.name.trim() ||
+        !optionalText(value.title, INPUT_LIMITS.agentTitle) ||
+        !optionalText(value.topic, CHANNEL_TOPIC_LIMIT) ||
+        !optionalText(value.description, CHANNEL_DESCRIPTION_LIMIT) ||
+        !optionalText(value.instructions, INPUT_LIMITS.agentDescription) ||
+        !people(value.humanMemberIds) ||
+        !members(value.members) ||
+        !(value.leadAgentId === undefined || value.leadAgentId === null || isIdentifier(value.leadAgentId)) ||
+        (isIdentifier(value.leadAgentId) && !value.members.some((member) => member.agentId === value.leadAgentId))
+      )
+        return null;
+      return {
+        ...common,
+        type: "create",
+        kind: value.kind,
+        visibility: value.visibility,
+        name: value.name,
+        ...(value.title === undefined ? {} : { title: value.title }),
+        ...(value.topic === undefined ? {} : { topic: value.topic }),
+        ...(value.description === undefined ? {} : { description: value.description }),
+        ...(value.instructions === undefined ? {} : { instructions: value.instructions }),
+        humanMemberIds: value.humanMemberIds,
+        members: value.members.map(channelMember),
+        ...(value.leadAgentId === undefined ? {} : { leadAgentId: value.leadAgentId }),
+      };
+    case "join":
+    case "leave":
+      return { ...common, type: value.type };
+    case "invite":
+      if (!people(value.humanMemberIds) || !members(value.members)) return null;
+      if (!value.humanMemberIds.length && !value.members.length) return null;
+      return {
+        ...common,
+        type: "invite",
+        humanMemberIds: value.humanMemberIds,
+        members: value.members.map(channelMember),
+      };
+    case "remove":
+      if (!people(value.humanMemberIds) || !identifiers(value.agentIds)) return null;
+      if (!value.humanMemberIds.length && !value.agentIds.length) return null;
+      return { ...common, type: "remove", humanMemberIds: value.humanMemberIds, agentIds: value.agentIds };
+    case "set-member":
+      if (
+        !isIdentifier(value.agentId) ||
+        !(value.answerMode === undefined || value.answerMode === null || isChannelAnswerMode(value.answerMode)) ||
+        !(value.focus === undefined || value.focus === null || isBoundedString(value.focus, CHANNEL_FOCUS_LIMIT)) ||
+        (value.answerMode === undefined && value.focus === undefined)
+      )
+        return null;
+      return {
+        ...common,
+        type: "set-member",
+        agentId: value.agentId,
+        ...(value.answerMode === undefined ? {} : { answerMode: value.answerMode }),
+        ...(value.focus === undefined ? {} : { focus: value.focus }),
+      };
+    case "set-meta":
+      if (
+        !(value.name === undefined || (isBoundedString(value.name, INPUT_LIMITS.agentName) && value.name.trim())) ||
+        !optionalText(value.topic, CHANNEL_TOPIC_LIMIT) ||
+        !optionalText(value.description, CHANNEL_DESCRIPTION_LIMIT) ||
+        (value.name === undefined && value.topic === undefined && value.description === undefined)
+      )
+        return null;
+      return {
+        ...common,
+        type: "set-meta",
+        ...(value.name === undefined ? {} : { name: value.name }),
+        ...(value.topic === undefined ? {} : { topic: value.topic }),
+        ...(value.description === undefined ? {} : { description: value.description }),
+      };
+    case "react":
+      if (!isIdentifier(value.messageId) || !isChannelEmoji(value.emoji)) return null;
+      if (value.action !== "add" && value.action !== "remove") return null;
+      return { ...common, type: "react", messageId: value.messageId, emoji: value.emoji, action: value.action };
+    case "edit":
+      if (!isIdentifier(value.messageId) || !isBoundedString(value.text, INPUT_LIMITS.messageText)) return null;
+      if (!value.text.trim()) return null;
+      return { ...common, type: "edit", messageId: value.messageId, text: value.text };
+    case "delete":
+      if (!isIdentifier(value.messageId)) return null;
+      return { ...common, type: "delete", messageId: value.messageId };
+    case "open-dm":
+      if (!people(value.memberIds) || !identifiers(value.agentIds)) return null;
+      // The sender is added, so the others are 1 to `CHANNEL_GROUP_LIMIT - 1`.
+      if (value.memberIds.length + value.agentIds.length < 1) return null;
+      if (value.memberIds.length + value.agentIds.length > CHANNEL_GROUP_LIMIT - 1) return null;
+      return { ...common, type: "open-dm", memberIds: value.memberIds, agentIds: value.agentIds };
+    default:
+      return null;
+  }
 }

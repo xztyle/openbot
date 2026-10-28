@@ -72,6 +72,7 @@ import { WEB_PUSH_CODECS } from "./web-push-v1";
 import { WEBHOOK_TESTS_CODECS } from "./webhook-tests-v1";
 import { WORKFLOWS_CODECS } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
+import { WORKSPACE_CODECS } from "./workspace-v1";
 
 export type { OptionalRouteCodec } from "./admin-wire";
 
@@ -146,6 +147,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WEBHOOK_TESTS_CODECS,
   ...WEB_PUSH_CODECS,
   ...WORKFLOWS_CODECS,
+  ...WORKSPACE_CODECS,
 ]);
 
 export function optionalRouteCodec(path: string): OptionalRouteCodec | undefined {

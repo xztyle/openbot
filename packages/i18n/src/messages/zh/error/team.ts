@@ -87,6 +87,7 @@ export const messages = {
   "error.team.routineResultsUnsupported": "当前连接不支持自动化任务的结果去向。",
   "error.team.agentMemoryLimitUnsupported": "当前连接不支持助手记忆上限。",
   "error.team.promptCacheTtlUnsupported": "当前连接不支持提示缓存时间。",
+  "error.team.workspaceUnsupported": "当前连接不支持工作区频道。",
   "error.team.agentAccessUnsupported": "当前连接不支持角色。",
   "error.team.agentAccessStale": "有人更改了角色。请重新打开并再进行更改。",
   "error.team.agentViewOnly": "你只能查看该助手。",

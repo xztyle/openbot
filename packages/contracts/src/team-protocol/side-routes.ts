@@ -13,6 +13,7 @@ import { isMcpRoute, mcpRequest, mcpResponse } from "./mcp-v1";
 import { optionalRouteCodec } from "./optional-routes";
 import { isStorageRoute, storageRequest, storageResponse } from "./storage-v1";
 import type { TeamProtocolV2Json } from "./v2";
+import { isWorkspaceChannelRoute, withWorkspaceChannels } from "./workspace-v1";
 
 export interface TeamSideRouteOptions {
   /**
@@ -25,6 +26,12 @@ export interface TeamSideRouteOptions {
    * keeps its UI blocks. A host passes the negotiated capability; a client passes `true`, as above.
    */
   channelAttention?: boolean;
+  /**
+   * workspace-v1 (`fork-host-v1`): a channel keeps its kind, visibility, people and member answer
+   * modes, and a message its thread, reactions, mentions and edit state. A host passes the
+   * negotiated capability; a client passes `true`, as above.
+   */
+  workspace?: boolean;
 }
 
 export interface TeamSideRouteCodec {
@@ -40,9 +47,13 @@ const CHANNEL_CODEC: TeamSideRouteCodec = {
       options?.historyExtent && status < 400 && isChannelHistoryExtentRoute(path)
         ? withChannelHistoryExtent(projected, value)
         : projected;
-    return options?.channelAttention && status < 400 && isChannelAttentionRoute(path)
-      ? withChannelAttention(path, extended, value)
-      : extended;
+    const attended =
+      options?.channelAttention && status < 400 && isChannelAttentionRoute(path)
+        ? withChannelAttention(path, extended, value)
+        : extended;
+    return options?.workspace && status < 400 && isWorkspaceChannelRoute(path)
+      ? withWorkspaceChannels(path, attended, value)
+      : attended;
   },
 };
 const MCP_CODEC: TeamSideRouteCodec = { request: mcpRequest, response: mcpResponse };

@@ -86,6 +86,18 @@ export const messages = {
   "error.backend.channelAssigneeUnavailable": "O agente responsável está indisponível.",
   "error.backend.channelAssignmentChanged": "Esta tarefa atribuída pelo canal mudou.",
   "error.backend.channelMemberRequired": "Selecione um membro disponível deste canal.",
+  "error.backend.channelExists": "Já existe um canal com este id.",
+  "error.backend.channelThreadNotFound": "Esta conversa não está disponível.",
+  "error.backend.channelMessageNotFound": "Esta mensagem não está disponível.",
+  "error.backend.channelPersonUnavailable": "Uma pessoa escolhida não é membro ativo deste servidor.",
+  "error.backend.channelDirectParticipants": "Uma mensagem direta tem 2 participantes, e um grupo de 3 a 9.",
+  "error.backend.channelDirectFixed": "As pessoas de uma mensagem direta não podem mudar.",
+  "error.backend.channelJoinPrivate": "Peça a uma pessoa deste canal privado para adicionar você.",
+  "error.backend.channelManageRequired": "Só as pessoas deste canal podem alterá-lo.",
+  "error.backend.channelRemovePeople":
+    "Só um proprietário, um administrador ou quem criou o canal pode remover outras pessoas.",
+  "error.backend.channelEditOwnOnly": "Você só pode editar suas próprias mensagens.",
+  "error.backend.channelDeleteOwnOnly": "Você só pode excluir suas próprias mensagens.",
   "error.backend.memoryEssentialBudget":
     "As memórias essenciais excedem o limite do prompt. Marque uma entrada para pesquisar quando necessário e tente de novo.",
   "error.backend.memorySelectionConflict": "A memória mudou. Recarregue-a e tente de novo.",

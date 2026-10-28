@@ -83,6 +83,18 @@ export const messages = {
   "error.backend.channelAssigneeUnavailable": "El agente asignado no está disponible.",
   "error.backend.channelAssignmentChanged": "Esta asignación del canal cambió.",
   "error.backend.channelMemberRequired": "Selecciona un miembro disponible de este canal.",
+  "error.backend.channelExists": "Ya existe un canal con este id.",
+  "error.backend.channelThreadNotFound": "Este hilo no está disponible.",
+  "error.backend.channelMessageNotFound": "Este mensaje no está disponible.",
+  "error.backend.channelPersonUnavailable": "Una persona que elegiste no es un miembro activo de este servidor.",
+  "error.backend.channelDirectParticipants": "Un mensaje directo tiene 2 participantes, y un grupo de 3 a 9.",
+  "error.backend.channelDirectFixed": "Las personas de un mensaje directo no pueden cambiar.",
+  "error.backend.channelJoinPrivate": "Pide a una persona de este canal privado que te añada.",
+  "error.backend.channelManageRequired": "Solo las personas de este canal pueden cambiarlo.",
+  "error.backend.channelRemovePeople":
+    "Solo un propietario, un administrador o quien creó el canal puede quitar a otras personas.",
+  "error.backend.channelEditOwnOnly": "Solo puedes editar tus propios mensajes.",
+  "error.backend.channelDeleteOwnOnly": "Solo puedes eliminar tus propios mensajes.",
   "error.backend.memoryEssentialBudget":
     "Los recuerdos esenciales superan el límite del prompt. Configura una entrada para buscarla cuando sea necesario e inténtalo de nuevo.",
   "error.backend.memorySelectionConflict": "El recuerdo cambió. Vuelve a cargarlo e inténtalo de nuevo.",

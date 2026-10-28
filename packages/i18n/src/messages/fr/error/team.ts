@@ -96,6 +96,7 @@ export const messages = {
   "error.team.routineResultsUnsupported": "Cette connexion ne prend pas en charge les destinations des routines.",
   "error.team.agentMemoryLimitUnsupported": "Cette connexion ne prend pas en charge la limite de souvenirs des agents.",
   "error.team.promptCacheTtlUnsupported": "Cette connexion ne prend pas en charge la durée du cache de prompt.",
+  "error.team.workspaceUnsupported": "Cette connexion ne prend pas en charge les canaux de l'espace de travail.",
   "error.team.attachmentNameRequired": "Un nom de pièce jointe sûr est requis.",
   "error.team.attachmentNotFound": "Pièce jointe introuvable.",
   "error.team.sharedFileTooLarge": "Le fichier partagé dépasse la limite de 100 Mo.",

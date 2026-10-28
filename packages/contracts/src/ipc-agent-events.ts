@@ -17,6 +17,7 @@ import {
 } from "./ipc-approvals";
 import { isIdentifier } from "./ipc-bounded-values";
 import type { BrowserControlState, BrowserTab } from "./ipc-browser";
+import { type ChannelMessage, isChannelMessage } from "./ipc-chat-channels";
 import { type AgentPromptQuestion, isAgentPromptQuestion, isConversationMessage } from "./ipc-conversation-messages";
 import {
   type ConversationPage,
@@ -38,6 +39,13 @@ function isAgentTurnOrigin(value: unknown): value is AgentTurnOrigin {
 
 export type AgentEvent =
   | { type: "channels-changed"; channelId: string; revision: number }
+  /**
+   * A message of a channel was added or changed (text, reactions, thread summary, edit, delete), so a
+   * client can show it without reading the page again. `revision` is the channel revision after it.
+   */
+  | { type: "channel-message"; channelId: string; message: ChannelMessage; revision: number }
+  /** A message left the channel transcript, as a deleted message with no replies does. */
+  | { type: "channel-message-removed"; channelId: string; messageId: string; revision: number }
   | { type: "status"; status: AgentStatus }
   | { type: "usage-changed"; usage: AccountUsage }
   | { type: "agents-changed"; agents: ClientAgentSummary[] }
@@ -167,6 +175,23 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
       return (
         isIdentifier(value.channelId) &&
         typeof value.revision === "number" &&
+        Number.isSafeInteger(value.revision) &&
+        value.revision >= 0
+      );
+    case "channel-message":
+      return (
+        isIdentifier(value.channelId) &&
+        isChannelMessage(value.message) &&
+        value.message.channelId === value.channelId &&
+        isNumber(value.revision) &&
+        Number.isSafeInteger(value.revision) &&
+        value.revision >= 0
+      );
+    case "channel-message-removed":
+      return (
+        isIdentifier(value.channelId) &&
+        isIdentifier(value.messageId) &&
+        isNumber(value.revision) &&
         Number.isSafeInteger(value.revision) &&
         value.revision >= 0
       );

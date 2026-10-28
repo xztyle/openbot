@@ -85,6 +85,18 @@ export const messages = {
   "error.backend.channelAssigneeUnavailable": "Der zugewiesene Agent ist nicht verfügbar.",
   "error.backend.channelAssignmentChanged": "Dieser Kanalauftrag wurde geändert.",
   "error.backend.channelMemberRequired": "Wähle ein verfügbares Mitglied dieses Kanals.",
+  "error.backend.channelExists": "Ein Kanal mit dieser ID existiert bereits.",
+  "error.backend.channelThreadNotFound": "Dieser Thread ist nicht verfügbar.",
+  "error.backend.channelMessageNotFound": "Diese Nachricht ist nicht verfügbar.",
+  "error.backend.channelPersonUnavailable": "Eine gewählte Person ist kein aktives Mitglied dieses Servers.",
+  "error.backend.channelDirectParticipants": "Eine Direktnachricht hat 2 Teilnehmende, eine Gruppe 3 bis 9.",
+  "error.backend.channelDirectFixed": "Die Personen einer Direktnachricht können sich nicht ändern.",
+  "error.backend.channelJoinPrivate": "Bitte eine Person in diesem privaten Kanal, dich hinzuzufügen.",
+  "error.backend.channelManageRequired": "Nur die Personen in diesem Kanal können ihn ändern.",
+  "error.backend.channelRemovePeople":
+    "Nur Inhaber, Admins oder die Person, die den Kanal erstellt hat, können andere entfernen.",
+  "error.backend.channelEditOwnOnly": "Du kannst nur deine eigenen Nachrichten bearbeiten.",
+  "error.backend.channelDeleteOwnOnly": "Du kannst nur deine eigenen Nachrichten löschen.",
   "error.backend.memoryEssentialBudget":
     "Die wesentlichen Erinnerungen überschreiten das Prompt-Limit. Stelle einen Eintrag auf „Bei Bedarf suchen“ und versuche es erneut.",
   "error.backend.memorySelectionConflict": "Die Erinnerung hat sich geändert. Lade sie neu und versuche es erneut.",

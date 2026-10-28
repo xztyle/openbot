@@ -50,8 +50,11 @@ const UNAVAILABLE_TAG_LABELS = {
   mcp: "chat.tag.unavailableMcp",
 } as const satisfies Record<UnavailableTagKind, AppTextKey>;
 
-/* A quote carries its own text, so it never depends on something that can go away. */
-type UnavailableTagKind = Exclude<ChatTagKind, "quote">;
+/*
+ * A quote carries its own text, so it never depends on something that can go away. A person or a
+ * channel shows as its name until the workspace view resolves it.
+ */
+type UnavailableTagKind = Exclude<ChatTagKind, "quote" | "member" | "channel">;
 
 export function RichMessageText(props: RichMessageTextProps) {
   const { t } = useText();
@@ -414,6 +417,10 @@ function semanticTagParts(body: string, agents: ComposerAgent[], skills: Compose
     if (reference.kind === "agent") {
       const agent = agents.find((candidate) => candidate.id === reference.id);
       parts.push(agent ? { text: agent.name, agent } : { text: reference.name, unavailableKind: "agent" });
+    } else if (reference.kind === "member") {
+      parts.push({ text: `@${reference.name}` });
+    } else if (reference.kind === "channel") {
+      parts.push({ text: `#${reference.name}` });
     } else if (reference.kind === "mcp") {
       parts.push({ text: reference.name, mcpName: reference.name });
     } else if (reference.kind === "quote") {

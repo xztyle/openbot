@@ -5,11 +5,14 @@
  * message id. A quote of a file that the side panel shows has a file quote id in place of the
  * message id (see `fileQuoteId`).
  *
+ * `member` is a person of the team (`@[Ana](member:<member id>)`), and `channel` is a link to a
+ * channel of the workspace. A channel link starts with `#`, not `@`: `#[general](channel:<id>)`.
+ *
  * An app that predates a kind does not match its marker, so it shows the marker text rather than
  * the name. Message bodies are stored as written, so an older app reading a newer message is a
  * real case, and it stays readable.
  */
-export type ChatTagKind = "agent" | "skill" | "mcp" | "quote";
+export type ChatTagKind = "agent" | "skill" | "mcp" | "quote" | "member" | "channel";
 
 export interface ChatTagReference {
   kind: ChatTagKind;
@@ -19,7 +22,14 @@ export interface ChatTagReference {
   end: number;
 }
 
-const CHAT_TAG_REFERENCE_PATTERN = /@\[([^\]\r\n]+)\]\((agent|skill|mcp|quote)(\+uri)?:([^)\r\n]+)\)/gu;
+// The sigil is `#` for a channel link and `@` for every other kind; a marker with the other sigil is
+// not a tag (see `sigilMatches`).
+const CHAT_TAG_REFERENCE_PATTERN =
+  /([@#])\[([^\]\r\n]+)\]\((agent|skill|mcp|quote|member|channel)(\+uri)?:([^)\r\n]+)\)/gu;
+
+function sigilMatches(sigil: string | undefined, kind: string | undefined): boolean {
+  return (sigil === "#") === (kind === "channel");
+}
 
 /*
  * Quoted text is any text, and Markdown reads the marker as a link. A bracket, a backslash, a
@@ -76,22 +86,26 @@ export function fileQuoteTarget(id: string): FileQuoteTarget | null {
 
 export function serializeChatTagReference(kind: ChatTagKind, name: string, id: string): string {
   const unsafeName = kind === "quote" ? UNSAFE_QUOTE_NAME : /[\]\r\n]/u;
-  if (name && id && !unsafeName.test(name) && !/[)\r\n]/u.test(id)) return `@[${name}](${kind}:${id})`;
-  return `@[${encodeChatTagComponent(name)}](${kind}+uri:${encodeChatTagComponent(id)})`;
+  const sigil = kind === "channel" ? "#" : "@";
+  if (name && id && !unsafeName.test(name) && !/[)\r\n]/u.test(id)) return `${sigil}[${name}](${kind}:${id})`;
+  return `${sigil}[${encodeChatTagComponent(name)}](${kind}+uri:${encodeChatTagComponent(id)})`;
 }
 
 export function chatTagReferences(value: string): ChatTagReference[] {
-  return [...value.matchAll(CHAT_TAG_REFERENCE_PATTERN)].map((match) => ({
-    kind: chatTagKind(match[2]),
-    id: decodeChatTagComponent(match[4] ?? "", match[3] !== undefined),
-    name: decodeChatTagComponent(match[1] ?? "", match[3] !== undefined),
-    start: match.index ?? 0,
-    end: (match.index ?? 0) + match[0].length,
-  }));
+  return [...value.matchAll(CHAT_TAG_REFERENCE_PATTERN)]
+    .filter((match) => sigilMatches(match[1], match[3]))
+    .map((match) => ({
+      kind: chatTagKind(match[3]),
+      id: decodeChatTagComponent(match[5] ?? "", match[4] !== undefined),
+      name: decodeChatTagComponent(match[2] ?? "", match[4] !== undefined),
+      start: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+    }));
 }
 
 function chatTagKind(value: string | undefined): ChatTagKind {
-  if (value === "skill" || value === "mcp" || value === "quote") return value;
+  if (value === "skill" || value === "mcp" || value === "quote" || value === "member" || value === "channel")
+    return value;
   return "agent";
 }
 
@@ -111,12 +125,14 @@ export function expandChatTagReferences(
     CHAT_TAG_REFERENCE_PATTERN,
     (
       marker,
+      sigil: string,
       encodedName: string,
       kind: ChatTagKind,
       encoding: string | undefined,
       encodedId: string,
       offset: number,
     ) => {
+      if (!sigilMatches(sigil, kind)) return marker;
       const name = decodeChatTagComponent(encodedName, encoding !== undefined);
       const id = decodeChatTagComponent(encodedId, encoding !== undefined);
       const reference = { kind, id, name, start: offset, end: offset + marker.length };
@@ -172,7 +188,8 @@ function fileQuoteHeading(file: FileQuoteTarget): string {
 
 /** What the provider reads in place of a marker. A name alone would not say what it names. */
 function expandedChatTag(kind: Exclude<ChatTagKind, "quote">, name: string): string {
-  if (kind === "agent") return `@${name}`;
+  if (kind === "agent" || kind === "member") return `@${name}`;
+  if (kind === "channel") return `#${name}`;
   return kind === "mcp" ? `${name} (MCP server)` : `${name} (skill)`;
 }
 

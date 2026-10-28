@@ -418,3 +418,10 @@ export function channelEvent(value: unknown): ChannelEvent | null {
     throw new Error("Invalid channel event.");
   return { type: "channels-changed", channelId: value.channelId, revision: value.revision };
 }
+
+/**
+ * The frozen decoders of one channel and one channel message, for the codecs that add optional
+ * fields beside them (`workspace-v1.ts`). Exporting them changes no wire format.
+ */
+export const decodeChannelWire: Decoder = channel;
+export const decodeChannelMessageWire: Decoder = message;

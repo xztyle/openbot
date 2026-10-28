@@ -80,6 +80,18 @@ export const messages = {
   "error.backend.channelAssigneeUnavailable": "Atanan ajan kullanılamıyor.",
   "error.backend.channelAssignmentChanged": "Bu kanal ataması değişti.",
   "error.backend.channelMemberRequired": "Bu kanalın kullanılabilir bir üyesini seçin.",
+  "error.backend.channelExists": "Bu kimliğe sahip bir kanal zaten var.",
+  "error.backend.channelThreadNotFound": "Bu ileti dizisi kullanılamıyor.",
+  "error.backend.channelMessageNotFound": "Bu mesaj kullanılamıyor.",
+  "error.backend.channelPersonUnavailable": "Seçtiğiniz bir kişi bu sunucunun etkin bir üyesi değil.",
+  "error.backend.channelDirectParticipants": "Doğrudan mesajda 2 katılımcı, grupta 3 ile 9 arası katılımcı olur.",
+  "error.backend.channelDirectFixed": "Doğrudan mesajdaki kişiler değiştirilemez.",
+  "error.backend.channelJoinPrivate": "Bu özel kanaldaki birinden sizi eklemesini isteyin.",
+  "error.backend.channelManageRequired": "Bu kanalı yalnızca kanaldaki kişiler değiştirebilir.",
+  "error.backend.channelRemovePeople":
+    "Diğer kişileri yalnızca sahip, yönetici veya kanalı oluşturan kişi çıkarabilir.",
+  "error.backend.channelEditOwnOnly": "Yalnızca kendi mesajlarınızı düzenleyebilirsiniz.",
+  "error.backend.channelDeleteOwnOnly": "Yalnızca kendi mesajlarınızı silebilirsiniz.",
   "error.backend.memoryEssentialBudget":
     "Temel bellekler istem sınırını aşıyor. Bir girdiyi gerektiğinde aranacak şekilde ayarlayın, ardından tekrar deneyin.",
   "error.backend.memorySelectionConflict": "Bellek değişti. Yeniden yükleyin ve tekrar deneyin.",

@@ -96,6 +96,8 @@ def prepare_worker():
     if config.get("name") != "delynith-openbot" or not config.get("no_bundle"):
         raise RuntimeError("Expected a prebuilt private Worker; refusing a public or source deployment.")
     config.pop("build", None)
+    # The web client's source maps passed Cloudflare's 60 MiB limit; the Worker runs without them.
+    config["upload_source_maps"] = False
     for binding in config.get("d1_databases", []):
         binding["migrations_dir"] = str(RELEASE / "worker/migrations")
     account = config.get("account_id")

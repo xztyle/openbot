@@ -14,6 +14,7 @@ import {
   type DiscordInboundAttachment,
   type DiscordInboundInteraction,
   type DiscordInboundMessage,
+  type DiscordInboundMessageChange,
   type DiscordInboundQuote,
 } from "@openbot/contracts/signal-protocol/discord-api";
 import {
@@ -147,6 +148,25 @@ export function normalizeGuildMessage(
   };
 }
 
+/**
+ * The change for one edit of a person's message in a channel whose changes the host asked for, or
+ * null: a bot or a webhook wrote it, the host did not ask, or Discord gave no text (an embed that
+ * loaded, or a Gateway without the Message Content intent).
+ */
+export function normalizeMessageUpdate(
+  message: Partial<DiscordMessageData> & { id: string; channel_id: string },
+  listensChanges: DiscordListens,
+): DiscordInboundMessageChange | null {
+  if (!message.guild_id || message.author?.bot === true || message.webhook_id) return null;
+  if (typeof message.content !== "string" || !listensChanges(message.guild_id, message.channel_id)) return null;
+  return {
+    id: message.id,
+    channelId: message.channel_id,
+    content: message.content,
+    attachments: attachmentsOf(message.attachments ?? []),
+  };
+}
+
 /** The attachments on Discord's CDN, up to Discord's limit. */
 export function attachmentsOf(list: DiscordAttachmentData[]): DiscordInboundAttachment[] {
   const attachments: DiscordInboundAttachment[] = [];
@@ -213,10 +233,17 @@ export class DiscordState {
   readonly #directReplies = new Map<string, number>();
 
   readonly #listens: DiscordListens;
+  readonly #listensChanges: DiscordListens;
 
-  constructor(applicationId: string, listens: DiscordListens = () => false) {
+  constructor(
+    applicationId: string,
+    listens: DiscordListens = () => false,
+    // Whether the host of a guild asked for the edits and deletions in a listened channel.
+    listensChanges: DiscordListens = () => false,
+  ) {
     this.#configuredApplicationId = applicationId;
     this.#listens = listens;
+    this.#listensChanges = listensChanges;
   }
 
   /** Whether the bot is in the guild, or null before the READY of every shard. */
@@ -326,6 +353,19 @@ export class DiscordState {
         return [];
       case GatewayDispatchEvents.MessageCreate:
         return this.#message(payload.d, now);
+      case GatewayDispatchEvents.MessageUpdate: {
+        const change = normalizeMessageUpdate(payload.d, this.#listensChanges);
+        return change && payload.d.guild_id
+          ? [{ type: "deliver", guildId: payload.d.guild_id, delivery: { kind: "message-update", change } }]
+          : [];
+      }
+      case GatewayDispatchEvents.MessageDelete: {
+        // Discord names no author for a deletion; the host mirrors only the messages it brought in.
+        const { guild_id: guildId, channel_id: channelId, id: messageId } = payload.d;
+        return guildId && this.#listensChanges(guildId, channelId)
+          ? [{ type: "deliver", guildId, delivery: { kind: "message-delete", channelId, messageId } }]
+          : [];
+      }
       case GatewayDispatchEvents.InteractionCreate:
         return this.#interaction(payload.d, now);
       default:

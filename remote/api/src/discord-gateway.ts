@@ -100,8 +100,10 @@ export class DiscordGateway extends Context.Service<DiscordGateway, { readonly a
           rejectOnRateLimit: () => true,
         }).setToken(config.botToken);
         const transport = makeDiscordRestTransport(rest);
-        const state = new DiscordState(config.applicationId, (guildId, channelId) =>
-          signal.discordListens(guildId, channelId),
+        const state = new DiscordState(
+          config.applicationId,
+          (guildId, channelId) => signal.discordListens(guildId, channelId),
+          (guildId, channelId) => signal.discordListensChanges(guildId, channelId),
         );
         const run = yield* FiberSet.makeRuntime<never>();
         // The guilds whose unlink is on its way, so that hosts that connect meanwhile do not repeat it.

@@ -108,8 +108,22 @@ export interface DiscordInboundInteraction {
   customId: string;
 }
 
+/**
+ * A person changed a message of a channel that the host named in `discord-listen` with `changes`:
+ * the new text and files of an edit, or a deletion. Only a host that asked for changes receives one.
+ */
+export interface DiscordInboundMessageChange {
+  id: string;
+  channelId: string;
+  /** Discord markdown after the edit. Mentions stay as `<@id>`. */
+  content: string;
+  attachments: DiscordInboundAttachment[];
+}
+
 export type DiscordDelivery =
   | { kind: "message"; message: DiscordInboundMessage }
+  | { kind: "message-update"; change: DiscordInboundMessageChange }
+  | { kind: "message-delete"; channelId: string; messageId: string }
   | { kind: "interaction"; interaction: DiscordInboundInteraction }
   // OpenBot was removed from the guild. The host stops the connection; the user must connect again.
   | { kind: "removed" };
@@ -356,6 +370,21 @@ export function decodeDiscordDelivery(value: unknown): DiscordDelivery {
   switch (item.kind) {
     case "message":
       return { kind: "message", message: inboundMessage(item.message) };
+    case "message-update": {
+      const change = record(item.change);
+      if (!Array.isArray(change.attachments) || change.attachments.length > DISCORD_ATTACHMENTS_LIMIT) invalid();
+      return {
+        kind: "message-update",
+        change: {
+          id: snowflake(change.id),
+          channelId: snowflake(change.channelId),
+          content: text(change.content),
+          attachments: change.attachments.map(attachment),
+        },
+      };
+    }
+    case "message-delete":
+      return { kind: "message-delete", channelId: snowflake(item.channelId), messageId: snowflake(item.messageId) };
     case "interaction":
       return { kind: "interaction", interaction: inboundInteraction(item.interaction) };
     case "removed":

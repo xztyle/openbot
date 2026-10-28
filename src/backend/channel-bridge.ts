@@ -18,7 +18,13 @@ import { Effect, Exit, Schema, Scope, Semaphore } from "effect";
 import { writeJsonFileAtomically } from "./atomic-json-file";
 import type { ChannelDiscordBridgePort, ChannelService } from "./channel-service";
 import { chunkMarkdown } from "./messaging/messaging-chunks";
-import type { BridgedDiscordMessage, MessagingAdapter, MessagingChannelBridge } from "./messaging/messaging-types";
+import type {
+  BridgedDiscordChange,
+  BridgedDiscordMessage,
+  InboundFile,
+  MessagingAdapter,
+  MessagingChannelBridge,
+} from "./messaging/messaging-types";
 
 const logger = createOpenBotLogger("channel-bridge");
 
@@ -210,6 +216,21 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     );
   });
 
+  readonly changeDiscord = Effect.fn("ChannelBridge.changeDiscord")(function* (
+    this: ChannelBridge,
+    change: BridgedDiscordChange,
+  ) {
+    const channelId = this.#index.get(`${change.guildId}:${change.channelId}`);
+    if (!channelId) return;
+    yield* this.#serialFor(channelId).withPermit(
+      this.#change(channelId, change).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() => logger.warn("A Discord edit did not reach its bridged channel.", errorName(error))),
+        ),
+      ),
+    );
+  });
+
   // --- ChannelDiscordBridgePort ---
 
   readonly link = Effect.fn("ChannelBridge.link")(function* (
@@ -284,11 +305,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const threadRootId =
       repliedMessage && !repliedMessage.deletedAt ? (repliedMessage.threadRootId ?? repliedMessage.id) : null;
     const root = threadRootId ? channels.store.message(channelId, threadRootId) : null;
-    const files = message.files.map((file) => `📎 [${file.name}](${file.url})`);
-    const text = [this.#agentTags(channel, message.text), ...files]
-      .filter(Boolean)
-      .join("\n")
-      .slice(0, INPUT_LIMITS.messageText);
+    const text = this.#inboundText(channel, message.text, message.files);
     if (!text.trim()) return;
     const author: ChannelExternalAuthor = {
       kind: "external",
@@ -321,6 +338,56 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     });
     yield* this.#save();
   });
+
+  /**
+   * Mirrors an edit or a deletion that a person made in Discord, for a message the bridge brought
+   * in. The edit or the deletion acts as the Discord author, who wrote the workspace message.
+   */
+  readonly #change = Effect.fn("ChannelBridge.changeOne")(function* (
+    this: ChannelBridge,
+    channelId: string,
+    change: BridgedDiscordChange,
+  ) {
+    const { channels } = this.#options;
+    const state = this.#state.get(channelId);
+    const known = state?.messages.find((item) => item.inbound && item.discordIds.includes(change.messageId));
+    if (!state || !known) return;
+    const channel = channels.store.get(channelId);
+    const message = channels.store.message(channelId, known.id);
+    if (channel.archived || !channel.discordLink || !message || message.deletedAt) return;
+    const actor = { id: message.author.id, name: message.author.name };
+    if (!change.edit) {
+      yield* channels.command(
+        { type: "delete", operationId: `discord-delete-${change.messageId}`, channelId, messageId: known.id },
+        actor,
+      );
+      this.#remember(channelId, { ...known, hash: "" });
+      return yield* this.#save();
+    }
+    const text = this.#inboundText(channel, change.edit.text, change.edit.files);
+    const hash = hashText(text);
+    if (!text.trim() || hash === known.hash) return;
+    yield* channels.command(
+      {
+        type: "edit",
+        operationId: `discord-edit-${change.messageId}-${hash}`,
+        channelId,
+        messageId: known.id,
+        text,
+      },
+      actor,
+    );
+    this.#remember(channelId, { ...known, hash });
+    yield* this.#save();
+  });
+
+  /** The workspace text of a Discord message: agent names as tags, then a line for each file. */
+  #inboundText(channel: Channel, text: string, files: readonly InboundFile[]): string {
+    return [this.#agentTags(channel, text), ...files.map((file) => `📎 [${file.name}](${file.url})`)]
+      .filter(Boolean)
+      .join("\n")
+      .slice(0, INPUT_LIMITS.messageText);
+  }
 
   /** `@Name` of a member agent, typed in Discord, as the workspace tag that addresses it. */
   #agentTags(channel: Channel, text: string): string {

@@ -7,7 +7,7 @@ import type {
   MessagingTransport,
   TransportSink,
 } from "../messaging-types";
-import { discordInboundAction, discordInboundMessage } from "./discord-events";
+import { discordInboundAction, discordInboundChange, discordInboundMessage } from "./discord-events";
 
 /** The Gateway can send an event again after a resume. */
 const RECENT_EVENTS = 2_000;
@@ -74,6 +74,15 @@ export class DiscordTransport implements MessagingTransport {
         if (this.#remember(`interaction:${event.interaction.id}`)) return OK;
         const action = discordInboundAction(event.interaction);
         if (action) sink.action(action);
+        return OK;
+      }
+      if (event.kind === "message-update") {
+        sink.changed?.(discordInboundChange(event.change.channelId, event.change.id, event.change));
+        return OK;
+      }
+      if (event.kind === "message-delete") {
+        if (this.#remember(`delete:${event.messageId}`)) return OK;
+        sink.changed?.(discordInboundChange(event.channelId, event.messageId, null));
         return OK;
       }
       if (this.#remember(`message:${event.message.id}`)) return OK;

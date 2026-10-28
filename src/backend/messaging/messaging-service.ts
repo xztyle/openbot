@@ -60,6 +60,7 @@ import {
   type InboundAction,
   type InboundFile,
   type InboundMessage,
+  type InboundMessageChange,
   type IngressAnswer,
   type IngressDelivery,
   type MessageTarget,
@@ -782,6 +783,34 @@ export class MessagingService {
     });
   });
 
+  /**
+   * An edit or a deletion in a Discord channel bridged with a workspace channel goes to the bridge.
+   * Any other change is dropped: a connector conversation keeps what the agent already read.
+   */
+  readonly #bridgeChange = Effect.fn("MessagingService.bridgeChange")(function* (
+    this: MessagingService,
+    live: LiveConnection,
+    change: InboundMessageChange,
+  ) {
+    const bridge = this.#bridge;
+    if (
+      live.record.platform !== "discord" ||
+      !bridge?.changeDiscord ||
+      !bridge.discordChannels(live.record.workspaceId).includes(change.platformChannelId)
+    )
+      return;
+    const edit = change.edit;
+    const mentioned = edit
+      ? yield* mentionNames(edit.mentionedUserIds, (userId) => live.adapter.authorName(userId))
+      : null;
+    yield* bridge.changeDiscord({
+      guildId: live.record.workspaceId,
+      channelId: change.platformChannelId,
+      messageId: change.platformMessageId,
+      edit: edit && mentioned ? { text: withMentionNames(edit.text, mentioned), files: edit.files } : null,
+    });
+  });
+
   /** False when this key arrived before: a redelivered event. */
   #firstDelivery(key: string): boolean {
     if (this.#recent.has(key)) return false;
@@ -1252,6 +1281,7 @@ export class MessagingService {
       },
       message: (message) => this.#dispatch(this.#receive(live, message)),
       action: (action) => this.#dispatch(this.#action(live, action)),
+      changed: (change) => this.#dispatch(this.#bridgeChange(live, change)),
       renamed: (workspaceName) => this.#dispatch(this.#renamed(live, workspaceName)),
       placeCreated: (platformChannelId) => {
         const join = live.adapter.joinPlace?.(platformChannelId);

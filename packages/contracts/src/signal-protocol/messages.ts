@@ -171,7 +171,15 @@ export type SignalClientMessage =
   // passes on the messages that do not mention OpenBot, with `mentioned: false`. Each frame replaces
   // the list of its guild; an empty list stops it. Sent only to a Signal whose `ready` named
   // `discord-listen` (`./discord-route.ts`). Signal keeps the list while the socket is open.
-  | { type: "discord-listen"; version: SignalProtocolVersion; guildId: string; channelIds: string[] }
+  // `changes: true` also asks for the edits and deletions of the people's messages in those
+  // channels (`message-update`, `message-delete` deliveries). An older Signal ignores the key.
+  | {
+      type: "discord-listen";
+      version: SignalProtocolVersion;
+      guildId: string;
+      channelIds: string[];
+      changes?: true;
+    }
   | {
       type: "slack-delivery-result";
       version: SignalProtocolVersion;

@@ -127,6 +127,9 @@ interface AuthenticatedPeer {
   // `ingress` only: for each guild of the route, the channels whose messages without a mention this
   // socket receives too (`discord-listen`).
   discordListen: Map<string, ReadonlySet<string>>;
+  // `ingress` only: the guilds whose listened channels also send the edits and deletions of
+  // messages (`discord-listen` with `changes`).
+  discordListenChanges: Set<string>;
   // `ingress` only: opaque generic webhook route IDs whose requests this socket receives.
   webhookRoutes: string[];
   // The TURN credentials of the last `turn-refresh`, and when Signal made them.
@@ -494,6 +497,8 @@ export class SignalService {
         }
         if (message.channelIds.length === 0) peer.discordListen.delete(message.guildId);
         else peer.discordListen.set(message.guildId, new Set(message.channelIds));
+        if (message.channelIds.length > 0 && message.changes === true) peer.discordListenChanges.add(message.guildId);
+        else peer.discordListenChanges.delete(message.guildId);
         return;
       }
       if (message.type === "queued-delivery-ack") {
@@ -700,6 +705,17 @@ export class SignalService {
     const socketId = this.#discordGuilds.get(guildId);
     if (socketId === undefined) return false;
     return this.#peers.get(socketId)?.discordListen.get(guildId)?.has(channelId) ?? false;
+  }
+
+  /**
+   * Whether the host of the guild also asked for the edits and deletions of the messages of a
+   * listened channel. An older host never asks, so it never receives a change it cannot read.
+   */
+  discordListensChanges(guildId: string, channelId: string): boolean {
+    const socketId = this.#discordGuilds.get(guildId);
+    if (socketId === undefined) return false;
+    const peer = this.#peers.get(socketId);
+    return Boolean(peer?.discordListenChanges.has(guildId) && peer.discordListen.get(guildId)?.has(channelId));
   }
 
   /**
@@ -1299,6 +1315,7 @@ export class SignalService {
           discordGuilds: discordRoute.guilds.map((guild) => guild.id),
           discordSession: null,
           discordListen: new Map(),
+          discordListenChanges: new Set(),
           webhookRoutes: webhookRoute.routes.map((route) => route.id),
           turnCredentials: null,
         };

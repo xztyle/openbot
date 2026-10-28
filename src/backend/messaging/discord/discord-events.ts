@@ -3,8 +3,9 @@ import {
   type DiscordInboundAttachment,
   type DiscordInboundInteraction,
   type DiscordInboundMessage,
+  type DiscordInboundMessageChange,
 } from "@openbot/contracts/signal-protocol/discord-api";
-import type { InboundAction, InboundFile, InboundMessage } from "../messaging-types";
+import type { InboundAction, InboundFile, InboundMessage, InboundMessageChange } from "../messaging-types";
 
 /** The actions of the buttons OpenBot posts, as the middle part of their custom id. */
 const DISCORD_BUTTON_ACTIONS = ["accept", "decline", "stop"] as const;
@@ -57,6 +58,25 @@ export function discordInboundMessage(message: DiscordInboundMessage): InboundMe
             .join("\n"),
           mentionedUserIds: discordMentionIds(quote.content),
           sentAt: quote.sentAt,
+        }
+      : null,
+  };
+}
+
+/** An edit (`change`) or a deletion of a person's message in a listened channel. */
+export function discordInboundChange(
+  channelId: string,
+  messageId: string,
+  change: DiscordInboundMessageChange | null,
+): InboundMessageChange {
+  return {
+    platformChannelId: channelId,
+    platformMessageId: messageId,
+    edit: change
+      ? {
+          text: discordPlainText(change.content),
+          mentionedUserIds: discordMentionIds(change.content),
+          files: change.attachments.map(inboundFile),
         }
       : null,
   };

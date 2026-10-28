@@ -211,9 +211,22 @@ export interface MessagingAdapter {
   ): Effect.Effect<{ webhookId: string; token: string }, MessagingAdapterError>;
 }
 
+/**
+ * A person edited or deleted a message on the platform. Only a Discord channel bridged with a
+ * workspace channel receives one (Signal sends them only for the channels the bridge listens to).
+ */
+export interface InboundMessageChange {
+  platformChannelId: string;
+  platformMessageId: string;
+  /** The new text and files; null for a deletion. Mentions are written as in `InboundMessage.text`. */
+  edit: { text: string; mentionedUserIds: string[]; files: InboundFile[] } | null;
+}
+
 export interface TransportSink {
   state(state: MessagingConnectionState, detail?: { retryAt?: string }): void;
   message(message: InboundMessage): void;
+  /** An edit or a deletion of a person's message, for a channel bridge. */
+  changed?(change: InboundMessageChange): void;
   action(action: InboundAction): void;
   /** A public place was created that OpenBot can join. */
   placeCreated?(platformChannelId: string): void;
@@ -387,6 +400,14 @@ export interface BridgedDiscordMessage {
   mentionedBot: boolean;
 }
 
+/** An edit (with the new text and files) or a deletion (`edit: null`) of a bridged Discord message. */
+export interface BridgedDiscordChange {
+  guildId: string;
+  channelId: string;
+  messageId: string;
+  edit: { text: string; files: readonly InboundFile[] } | null;
+}
+
 /**
  * The workspace channel bridge (`channel-bridge.ts`) as messaging sees it. A Discord channel that it
  * takes skips the connector's own routing: its messages go to the bridge, also without a mention.
@@ -396,4 +417,6 @@ export interface MessagingChannelBridge {
   discordChannels(guildId: string): readonly string[];
   /** Never fails: the bridge reports its own failures. */
   receiveDiscord(message: BridgedDiscordMessage): Effect.Effect<void>;
+  /** Mirrors an edit or a deletion of a message the bridge brought in. Never fails. */
+  changeDiscord?(change: BridgedDiscordChange): Effect.Effect<void>;
 }

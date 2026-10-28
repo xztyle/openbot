@@ -1,0 +1,6 @@
+/* The Slack-style workspace. This file is the ordered style manifest: shell first, then the message
+   pane, the right panels and the full views. Import the fragments only through this file. */
+@import "./styles/workspace-shell.css";
+@import "./styles/workspace-messages.css";
+@import "./styles/workspace-panels.css";
+@import "./styles/workspace-views.css";

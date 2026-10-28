@@ -51,6 +51,7 @@ import { messages as vault } from "./vault";
 import { messages as webClient } from "./webClient";
 import { messages as window } from "./window";
 import { messages as workflow } from "./workflow";
+import { messages as workspace } from "./workspace";
 
 /** Brazilian Portuguese: shared keys, source text, and desktop areas. */
 export const pt = {
@@ -105,4 +106,5 @@ export const pt = {
   ...vault,
   ...uiBlock,
   ...sitePage,
+  ...workspace,
 } as const satisfies PartialTranslation<AppMessages>;

@@ -51,6 +51,7 @@ import { messages as vault } from "./vault";
 import { messages as webClient } from "./webClient";
 import { messages as window } from "./window";
 import { messages as workflow } from "./workflow";
+import { messages as workspace } from "./workspace";
 
 /**
  * Japanese. Written from the English source and not yet reviewed by a native speaker: read it as a
@@ -115,4 +116,5 @@ export const ja = {
   ...vault,
   ...uiBlock,
   ...sitePage,
+  ...workspace,
 } as const satisfies PartialTranslation<AppMessages>;

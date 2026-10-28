@@ -51,6 +51,7 @@ import { messages as vault } from "./vault";
 import { messages as webClient } from "./webClient";
 import { messages as window } from "./window";
 import { messages as workflow } from "./workflow";
+import { messages as workspace } from "./workspace";
 
 export const de = {
   ...shared,
@@ -104,4 +105,5 @@ export const de = {
   ...vault,
   ...uiBlock,
   ...sitePage,
+  ...workspace,
 } as const satisfies PartialTranslation<AppMessages>;

@@ -8,6 +8,8 @@ export type WebMobilePane = "conversation" | "workspace";
 
 interface WebMobileNavigationProps {
   activePane: WebMobilePane;
+  /** The workspace has its own back buttons, so the switch steps aside. */
+  hidden?: boolean;
   /** The Routines view is on: the conversation pane shows the routine canvas. */
   routines?: boolean;
   onChange: (pane: WebMobilePane) => void;
@@ -87,6 +89,7 @@ export function WebMobileNavigation(props: WebMobileNavigationProps) {
   return (
     <nav
       class="web-mobile-navigation"
+      hidden={props.hidden}
       aria-label={t("webClient.pane.navigation")}
       data-keyboard-open={keyboardOpen() ? "true" : undefined}
     >

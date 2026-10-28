@@ -1,12 +1,16 @@
 import { CHANNEL_CHATS_CAPABILITY } from "@openbot/contracts/ipc";
 import { ROUTINE_FLOWS_CAPABILITY } from "@openbot/contracts/team-protocol/routine-flows-v1";
+import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import type { WebRuntimeFactory } from "../features/web-client/web-client-context";
 import type { WebRuntimeEvents, WebWorkspaceRuntime } from "../features/web-client/web-runtime";
 import { createMockOpenBot, type MockOpenBotControls } from "./mock-openbot";
 
 /** Use the desktop preview's data and actions for the browser composition too. */
 export const createMockWebRuntime: WebRuntimeFactory = (_accountId, events) =>
-  mockWebRuntimeFor(createMockOpenBot(), events);
+  mockWebRuntimeFor(createMockOpenBot({ channelMemberId: WEB_PREVIEW_MEMBER_ID }), events);
+
+/** The member the browser preview signs in as. The mock channels write as them. */
+export const WEB_PREVIEW_MEMBER_ID = "preview";
 
 /** The browser composition over a given mock host, for a fixture that also drives that host. */
 export function mockWebRuntimeFor(mock: MockOpenBotControls, events: WebRuntimeEvents): WebWorkspaceRuntime {
@@ -35,7 +39,7 @@ export function mockWebRuntimeFor(mock: MockOpenBotControls, events: WebRuntimeE
     mutateSidebarLayout: (action) => agent.mutateSidebarLayout(action),
     channels: agent,
     // The member the mock channels write as.
-    currentMemberId: async () => "preview",
+    currentMemberId: async () => WEB_PREVIEW_MEMBER_ID,
     respondToTakeover: (input) => agent.respondToBrowserTakeover(input),
     listHosts: async () => (removed ? [] : [host]),
     removeOwnedHost: async () => {
@@ -59,6 +63,7 @@ export function mockWebRuntimeFor(mock: MockOpenBotControls, events: WebRuntimeE
         "sidebar-layout",
         CHANNEL_CHATS_CAPABILITY,
         ROUTINE_FLOWS_CAPABILITY,
+        WORKSPACE_CAPABILITY,
       ];
     },
     disconnect: async () => {

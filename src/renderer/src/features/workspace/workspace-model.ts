@@ -43,6 +43,8 @@ export interface WorkspaceDirectory {
   isReader: (id: string) => boolean;
   reader: { id: string | null; name: string; avatarUrl: string | null };
   agentStates: Readonly<Record<string, SidebarAgentState>>;
+  /** Names that messages carry for people the roster does not list, such as people who left. */
+  names?: Readonly<Record<string, string>> | undefined;
 }
 
 /** The sidebar row id of an agent's DM that has no channel yet. */
@@ -91,7 +93,7 @@ export function memberById(directory: WorkspaceDirectory, id: string, fallbackNa
       avatarUrl: directory.reader.avatarUrl,
       presence: "active",
     };
-  return { id, kind: "human", name: fallbackName ?? id, presence: "offline" };
+  return { id, kind: "human", name: directory.names?.[id] ?? fallbackName ?? id, presence: "offline" };
 }
 
 /** The author of a channel message, with the external mark for a person a bridge brought. */
@@ -472,6 +474,7 @@ function artifactKindOf(url: URL): WorkspaceArtifact["kind"] | null {
   if (DECK_EXTENSIONS.test(path)) return "deck";
   if (SHEET_EXTENSIONS.test(path)) return "dashboard";
   if (DOC_EXTENSIONS.test(path)) return "doc";
+  if (host === "openbot.site" || host.endsWith(".openbot.site")) return "website";
   if (host.endsWith(".pages.dev") || host.endsWith(".netlify.app") || host.endsWith(".vercel.app")) return "website";
   return null;
 }
@@ -511,7 +514,7 @@ export function messageArtifacts(
       id: `${entry.id}:${url.href}`,
       kind,
       title: artifactTitle(url, match[1]),
-      description: url.hostname,
+      description: artifactTitle(url, match[1]) === url.hostname ? undefined : url.hostname,
       url: url.href,
       agent,
       channelId: entry.channelId,

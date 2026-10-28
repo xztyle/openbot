@@ -246,6 +246,8 @@ export interface MockOpenBotOptions
   storyForeignAgent?: boolean;
   /** The channels, and their history, when the preview starts. */
   channels?: MockChannelSeed[];
+  /** The member id the preview writes channel messages as. The browser preview names its own. */
+  channelMemberId?: string;
   /** The sidebar sections and assignments when the preview starts. */
   sidebarLayout?: SidebarLayoutSnapshot;
 }
@@ -945,6 +947,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     emitAgentEvent,
     (agentId) => agents.find((entry) => entry.id === agentId)?.name ?? agentId,
     options.channels,
+    options.channelMemberId,
   );
   const mockProviderRuntimes = createMockProviderRuntimes(options, runtime);
   const mockVoice = createMockVoice(options, runtime);

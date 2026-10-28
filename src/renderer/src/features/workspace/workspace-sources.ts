@@ -9,6 +9,7 @@ import type {
   AgentEvent,
   ChannelMessage,
   ChannelSummary,
+  TeamRealtimeEvent,
   WorkspaceArtifactRecord,
   WorkspaceFleetAgent,
 } from "@openbot/contracts/ipc";
@@ -117,7 +118,7 @@ export function createHostFleetSource(input: {
   port: () => ChannelsPort;
   directory: () => WorkspaceDirectory;
   channels: () => readonly ChannelSummary[];
-  onHostEvent: (listener: (event: AgentEvent) => void) => () => void;
+  onHostEvent: (listener: (event: AgentEvent | TeamRealtimeEvent) => void) => () => void;
   fallback: WorkspaceFleetSource;
 }): WorkspaceFleetSource {
   const [hosted, setHosted] = createSignal<readonly WorkspaceFleetAgent[] | null>(null);
@@ -217,7 +218,7 @@ export function createHostArtifactsSource(input: {
   port: () => ChannelsPort;
   directory: () => WorkspaceDirectory;
   channels: () => readonly ChannelSummary[];
-  onHostEvent: (listener: (event: AgentEvent) => void) => () => void;
+  onHostEvent: (listener: (event: AgentEvent | TeamRealtimeEvent) => void) => () => void;
   fallback: WorkspaceArtifactsSource;
 }) {
   const [records, setRecords] = createSignal<ReadonlyMap<string, readonly WorkspaceArtifactRecord[]>>(new Map());

@@ -12,7 +12,8 @@ import { WebHostIncompatibleError } from "../src/features/web-client/web-runtime
 import { createBenchWebRuntime } from "../src/preview/bench-web-runtime";
 import { MOCK_HOSTED_SERVER_CATALOG } from "../src/preview/mock-hosted-servers";
 import { createMockOpenBot } from "../src/preview/mock-openbot";
-import { createMockWebRuntime } from "../src/preview/mock-web-runtime";
+import { createMockWebRuntime, mockWebRuntimeFor, WEB_PREVIEW_MEMBER_ID } from "../src/preview/mock-web-runtime";
+import { seeds } from "./workspace/workspace-app-seeds";
 import "../src/features/web-client/web-client.css";
 
 const meta = {
@@ -41,6 +42,15 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Connected: Story = {};
+
+/** The Slack-style workspace with channels, a thread, a DM and a channel of 2,000 messages. */
+const slackRuntime: WebRuntimeFactory = (_accountId, events) =>
+  mockWebRuntimeFor(
+    createMockOpenBot({ channels: seeds(WEB_PREVIEW_MEMBER_ID), channelMemberId: WEB_PREVIEW_MEMBER_ID }),
+    events,
+  );
+
+export const SlackWorkspace: Story = { args: { createRuntime: slackRuntime } };
 
 /** A long conversation. `bun run perf:web` streams replies into it and counts the host requests. */
 export const LongConversation: Story = {

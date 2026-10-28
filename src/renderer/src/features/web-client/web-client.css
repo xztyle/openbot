@@ -218,6 +218,19 @@ body {
     display: none;
   }
 
+  /* The workspace has its own back buttons: the pane switch is hidden and gives its room back. */
+  .web-app-frame:has(.web-mobile-navigation[hidden]) {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .web-app-window:has(.web-mobile-navigation[hidden]) > .window-rail {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--openbot-space-3));
+  }
+
+  .web-mobile-navigation[hidden] {
+    display: none;
+  }
+
   .web-app-frame[data-web-mobile-pane="conversation"] .conversation-header {
     padding-inline: var(--openbot-space-2);
   }

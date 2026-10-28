@@ -142,9 +142,6 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
           hasOlder={Boolean(page()?.olderCursor)}
           onLoadOlder={() => ws.channels.loadOlder()}
           highlightedId={threadRoot()}
-          onAtEnd={(atEnd) => {
-            if (atEnd && ws.channels.state.unread) ws.markRead();
-          }}
           empty={<ChannelIntro channel={channel()} name={name()} />}
         />
       </Show>

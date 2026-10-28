@@ -66,9 +66,17 @@ export function RichMessageText(props: RichMessageTextProps) {
   const attachmentsById = createMemo(
     () => new Map((props.attachments ?? []).map((attachment) => [attachment.id, attachment])),
   );
-  const parts = createMemo(() =>
-    richMessageParts(props.body, props.agents, props.skills ?? [], citationsByNumber(), attachmentsById()),
-  );
+  const parts = createMemo(() => {
+    const found = richMessageParts(
+      props.body,
+      props.agents,
+      props.skills ?? [],
+      citationsByNumber(),
+      attachmentsById(),
+    );
+    // In the workspace, `@channel`, `@everyone` and `@here` address the reader too.
+    return mentions ? found.flatMap(broadcastParts) : found;
+  });
   const trail = useStreamingReveal();
   const tailAfter = createMemo(
     () =>
@@ -201,6 +209,13 @@ export function RichMessageText(props: RichMessageTextProps) {
                   </span>
                 )}
               </Show>
+            );
+          }
+          if (part.broadcast) {
+            return (
+              <span class="ws-mention message-member-mention" data-self="">
+                {part.text}
+              </span>
             );
           }
           if (part.channel) {
@@ -377,6 +392,7 @@ function plainTextPart(part: RichMessagePart): boolean {
     part.quote ||
     part.member ||
     part.channel ||
+    part.broadcast ||
     part.unavailableKind ||
     part.citation ||
     part.attachment ||
@@ -397,12 +413,32 @@ interface RichMessagePart {
   quote?: { messageId: string; text: string };
   /** A person of the workspace. The workspace view highlights it; elsewhere it is `@name` text. */
   member?: { id: string; name: string };
+  /** `@channel`, `@everyone` or `@here`. */
+  broadcast?: true;
   channel?: { id: string; name: string };
   unavailableKind?: UnavailableTagKind;
   citation?: MessageCitation;
   attachment?: AttachmentSummary;
   sharedPath?: string;
   url?: string;
+}
+
+const BROADCAST = /(^|[^\w@])(@(?:channel|everyone|here))\b/giu;
+
+/** Splits a plain text part at each `@channel`, `@everyone` and `@here`. */
+function broadcastParts(part: RichMessagePart): RichMessagePart[] {
+  if (!plainTextPart(part) || !part.text.includes("@")) return [part];
+  const result: RichMessagePart[] = [];
+  let cursor = 0;
+  for (const match of part.text.matchAll(BROADCAST)) {
+    const start = (match.index ?? 0) + (match[1]?.length ?? 0);
+    if (start > cursor) result.push({ text: part.text.slice(cursor, start) });
+    result.push({ text: match[2] ?? "", broadcast: true });
+    cursor = start + (match[2]?.length ?? 0);
+  }
+  if (cursor === 0) return [part];
+  if (cursor < part.text.length) result.push({ text: part.text.slice(cursor) });
+  return result;
 }
 
 function richMessageParts(

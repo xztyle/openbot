@@ -34,11 +34,12 @@ import {
 } from "@openbot/contracts/ipc";
 
 /**
- * The preview's own person: every message the preview sends is theirs. The preview runs as the
- * owner of its own computer, whose signed-out id (`SIGNED_OUT_CHANNEL_MEMBER_ID`) is theirs, so the workspace reads the messages as
- * the reader's own.
+ * The preview's own person on the desktop: every message the preview sends is theirs. The desktop
+ * preview runs as the owner of its own computer, whose signed-out id (`SIGNED_OUT_CHANNEL_MEMBER_ID`)
+ * is theirs, so the workspace reads the messages as the reader's own. The browser preview names its
+ * member itself.
  */
-const PREVIEW_MEMBER_ID = "local";
+export const PREVIEW_CHANNEL_MEMBER_ID = "local";
 
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 
@@ -52,6 +53,7 @@ export function createMockChannels(
   emit: (event: AgentEvent) => void,
   agentName: (agentId: string) => string,
   seeds: readonly MockChannelSeed[] = [],
+  PREVIEW_MEMBER_ID: string = PREVIEW_CHANNEL_MEMBER_ID,
 ) {
   const channels = new Map<string, Channel>(seeds.map((seed) => [seed.channel.id, structuredClone(seed.channel)]));
   const messages = new Map<string, ChannelMessage[]>(

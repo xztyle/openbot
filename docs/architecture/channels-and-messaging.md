@@ -396,6 +396,27 @@ it at least `view` and it is not hidden from the peer, and a channel as the chan
 On the desktop the IPC endpoints `agent.workspaceFleet`, `agent.workspaceSteps` and
 `agent.workspaceArtifacts` answer for the host user, or forward to a joined server.
 
+### Workspace view
+
+The renderer's workspace (`src/renderer/src/features/workspace/`) is the main view of the desktop
+(`WorkspaceShell.tsx`) and the web client (`WebWorkspace.tsx`) on a host with channels and
+`fork-host-v1`. `createWorkspaceController` takes a `WorkspaceEnvironment` from each shell (the
+channels controller, agents and their runtime states, the presence roster, the reader, host events)
+and holds the route (a channel, the owner's agent DM, or a view), the right panel, the open thread
+page, drafts per conversation (local storage), the activity read and every workspace command. The
+desktop keeps the frame's left column for the server rail and the workspace sidebar; the middle shows
+`WorkspaceMain` (the shared `WorkspaceLayout` with the message pane and the right panel) or, for the
+owner's agent DM, the existing agent chat under a DM header. The classic agent sidebar is a menu item
+(`workspace-mode.ts`, per computer), and the Routines view still uses it.
+
+Live updates: `channel-message` and `channel-message-removed` patch the open page
+(`ChannelsController.applyMessage`/`removeMessage`) and the open thread page; `channels-changed` for
+a revision the events already carried reads only the list (`ChannelsController.changed`). The message
+list is a `createChatVirtualizer` list with a static limit of 24 rows, so only the rows near the view
+render. Fleet and artifacts read the host through `WorkspaceFleetSource` and
+`WorkspaceArtifactsSource` (`workspace-sources.ts`), with fallbacks built from the agent list and the
+messages the client read.
+
 ## Messaging connections
 
 The agents of a computer can answer in an external chat platform: Slack, Discord (see **Discord**

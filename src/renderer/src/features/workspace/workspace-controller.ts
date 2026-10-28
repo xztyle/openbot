@@ -15,6 +15,7 @@ import {
   type ChannelSummary,
   channelKind,
   isChannelAnswerMode,
+  type TeamRealtimeEvent,
   type WorkspaceActivity,
   type WorkspaceChannelCommand,
   type WorkspaceSettings,
@@ -127,7 +128,7 @@ export interface WorkspaceEnvironment {
   /** The items of the workspace menu: the features of the app that stay reachable from here. */
   menu: () => readonly WorkspaceMenuItem[];
   /** Every event of the host. The workspace reads the live channel messages. */
-  onHostEvent: (listener: (event: AgentEvent) => void) => () => void;
+  onHostEvent: (listener: (event: AgentEvent | TeamRealtimeEvent) => void) => () => void;
   /** Every approval that waits on the host. A channel shows the ones of its own work. */
   approvals?: (() => readonly AgentApproval[]) | undefined;
   /** The Discord connections of the host, for the channel's Integrations tab. */
@@ -225,6 +226,19 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     steps: {},
   });
 
+  /** The names that the channel messages carry for their people, for the people the roster lacks. */
+  const names = createMemo(() => {
+    const found: Record<string, string> = {};
+    for (const channel of channels.state.channels) {
+      const last = channel.lastMessage;
+      if (last?.author?.kind === "member") found[last.author.id] = last.authorName;
+    }
+    for (const entry of channels.state.page?.messages ?? [])
+      if (entry.author.kind === "member" && !entry.externalAuthor) found[entry.author.id] = entry.author.name;
+    for (const item of state.activity.data?.items ?? [])
+      if (item.actor.kind === "member") found[item.actor.id] = item.actor.name;
+    return found;
+  });
   const directory = createMemo(
     (): WorkspaceDirectory => ({
       agents: env.agents(),
@@ -232,6 +246,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       isReader: env.isReader,
       reader: env.reader(),
       agentStates: env.agentStates(),
+      names: names(),
     }),
   );
 

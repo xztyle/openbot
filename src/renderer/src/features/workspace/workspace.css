@@ -455,6 +455,12 @@
   font-size: var(--openbot-text-md);
 }
 
+.ws-integration-note {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
 .ws-integration-form {
   display: flex;
   flex-wrap: wrap;
@@ -463,6 +469,10 @@
 }
 
 /* Dialogs ----------------------------------------------------------------------------------------- */
+
+.ws-switcher {
+  width: min(560px, calc(100vw - 32px));
+}
 
 .ws-dialog-wide {
   width: min(640px, calc(100vw - 32px));
@@ -516,6 +526,8 @@
 .ws-switcher-glyph {
   display: grid;
   width: 20px;
+  height: 20px;
+  overflow: hidden;
   place-items: center;
   color: var(--openbot-text-muted);
 }
@@ -598,4 +610,11 @@
 /* The DM header names the agent, so the chat header keeps only its controls. */
 .ws-agent-dm-body .conversation-header .conversation-heading-group {
   visibility: hidden;
+}
+
+/* The owner's agent DM sits outside the workspace layout, so its back button needs its own rule. */
+@media (max-width: 720px) {
+  .ws-agent-dm .ws-phone-only {
+    display: inline-flex;
+  }
 }

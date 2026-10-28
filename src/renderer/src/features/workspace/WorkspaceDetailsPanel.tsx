@@ -277,7 +277,7 @@ function DiscordIntegration(props: { channelId: string }) {
         <Show
           when={servers()?.length}
           fallback={
-            <p class="ws-muted">
+            <p class="ws-integration-note">
               {servers() === null ? t("workspace.app.discord.loading") : t("workspace.app.discord.noServers")}
             </p>
           }

@@ -26,14 +26,18 @@ export const WORKSPACE_FLEET_EVENT_INTERVAL_MS = 1_000;
 export const WORKSPACE_STEP_KINDS = ["search", "browse", "tool", "shell", "file", "skill", "think"] as const;
 export type WorkspaceStepKind = (typeof WORKSPACE_STEP_KINDS)[number];
 
-/** Why an agent waits: a question for a person, an approval, or a browser it needs a person in. */
-export const WORKSPACE_WAIT_REASONS = ["question", "approval", "browser"] as const;
+/**
+ * Why an agent waits: a question for a person, an approval, a browser it needs a person in, or a
+ * provider usage limit that holds its work until the limit resets.
+ */
+export const WORKSPACE_WAIT_REASONS = ["question", "approval", "browser", "usage-limit"] as const;
 export type WorkspaceWaitReason = (typeof WORKSPACE_WAIT_REASONS)[number];
 
 /**
  * What an agent does now. `working`: a turn runs; `what` is its channel task, agent task, routine or
- * request. `waiting`: a running turn waits for a person; `forMemberId` is the person who asked, when
- * the host knows them. `queued`: no turn runs and `count` messages wait for one.
+ * request. `waiting`: a running turn waits for a person, or a usage limit holds the agent's work;
+ * `forMemberId` is the person who must answer, when the host knows them; `resetsAt` is when a usage
+ * limit ends, when the provider said. `queued`: no turn runs and `count` messages wait for one.
  */
 export type WorkspaceFleetStatus =
   | { kind: "idle" }
@@ -53,6 +57,8 @@ export type WorkspaceFleetStatus =
       forMemberId?: string;
       channelId?: string;
       threadRootId?: string;
+      /** For `usage-limit`: when the limit resets, in epoch milliseconds. */
+      resetsAt?: number;
     }
   | { kind: "queued"; count: number };
 
@@ -201,7 +207,8 @@ export function isWorkspaceFleetStatus(value: unknown): value is WorkspaceFleetS
         isFleetText(value.what) &&
         optional(value.forMemberId, isIdentifier) &&
         optional(value.channelId, isIdentifier) &&
-        optional(value.threadRootId, isIdentifier)
+        optional(value.threadRootId, isIdentifier) &&
+        optional(value.resetsAt, isTime)
       );
     case "queued":
       return integerInRange(value.count, 1, Number.MAX_SAFE_INTEGER);

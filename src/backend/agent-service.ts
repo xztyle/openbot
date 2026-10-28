@@ -1451,6 +1451,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       liveTrace: (turnId) => this.#turn.liveTrace(turnId),
       loadedSnapshot: (threadId) => this.#conversation.loadedExecutionSnapshot(threadId),
       agentTaskTitle: (taskId) => this.#tasks.title(taskId),
+      usageLimit: (agentId) => this.#usageLimits.limitFor(agentId),
       emit: (event) => this.#emit(event),
     });
     this.#removal = new AgentRemoval({

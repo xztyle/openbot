@@ -20,6 +20,8 @@
 //   channelId?, messageId?, threadRootId?, createdAt, updatedAt, costUsd?, durationMs? }`. Without a
 //   channel: the channels the member can see and the own conversations of the agents they can see.
 // - The event `workspace-fleet-changed` (`{ revision }`), at most once a second while agents work.
+// - Later: the wait reason `usage-limit` (a provider usage limit holds the agent's work) with
+//   `resetsAt?` (epoch milliseconds) on a waiting status.
 //
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed. The bounds are written out: this file must not move with an IPC limit.
@@ -79,8 +81,8 @@ const status = variant({
     { channelId: identifier, threadRootId: identifier, taskId: identifier },
   ),
   waiting: fields(
-    { kind: oneOf("waiting"), reason: oneOf("question", "approval", "browser"), what: string(240) },
-    { forMemberId: identifier, channelId: identifier, threadRootId: identifier },
+    { kind: oneOf("waiting"), reason: oneOf("question", "approval", "browser", "usage-limit"), what: string(240) },
+    { forMemberId: identifier, channelId: identifier, threadRootId: identifier, resetsAt: count },
   ),
   queued: fields({ kind: oneOf("queued"), count: positive }),
 });

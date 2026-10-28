@@ -23,6 +23,8 @@ export interface FleetChannelWork {
   taskId: string;
   threadRootId: string | null;
   instruction: string | null;
+  /** The team member who wrote the request of the task, when a person did. */
+  requesterMemberId?: string;
 }
 
 export interface WorkspaceFleetTrackerOptions {
@@ -33,6 +35,8 @@ export interface WorkspaceFleetTrackerOptions {
   liveTrace(turnId: string): ConversationTurnTrace | null;
   channelWork(deliveryId: string): FleetChannelWork | null;
   agentTaskTitle(taskId: string): string | null;
+  /** The usage limit that holds an agent's work now: `resetsAt` in epoch seconds, or null. Null when none. */
+  usageLimit?(agentId: string): { resetsAt: number | null } | null;
   emit(event: AgentEvent): void;
 }
 
@@ -101,6 +105,7 @@ export class WorkspaceFleetTracker {
         this.#today.clear();
         break;
       case "turn-started":
+      case "usage-limit-reached":
       case "queue-changed":
       case "runtime-snapshot":
       case "agents-changed":
@@ -150,15 +155,28 @@ export class WorkspaceFleetTracker {
         const running = agentWork?.running ?? null;
         const channel = running ? this.#options.channelWork(running.deliveryId) : null;
         const pending = waiting.get(agent.id);
+        const limit = this.#options.usageLimit?.(agent.id) ?? null;
+        // The person who must answer: who asked for the channel task, or who sent the running message.
+        const forMemberId = channel ? channel.requesterMemberId : running?.senderMemberId;
         let status: WorkspaceFleetStatus;
         if (pending) {
           status = {
             kind: "waiting",
             reason: pending.reason,
             what: line(pending.what),
-            ...(running?.senderMemberId ? { forMemberId: running.senderMemberId } : {}),
+            ...(forMemberId ? { forMemberId } : {}),
             ...(channel ? { channelId: channel.channelId } : {}),
             ...(channel?.threadRootId ? { threadRootId: channel.threadRootId } : {}),
+          };
+        } else if (limit) {
+          // A spent plan window holds the agent's work until it resets: no person has to answer.
+          status = {
+            kind: "waiting",
+            reason: "usage-limit",
+            what: line(channel?.instruction ?? running?.text ?? ""),
+            ...(channel ? { channelId: channel.channelId } : {}),
+            ...(channel?.threadRootId ? { threadRootId: channel.threadRootId } : {}),
+            ...(limit.resetsAt === null ? {} : { resetsAt: limit.resetsAt * 1_000 }),
           };
         } else if (running) {
           const started = Date.parse(

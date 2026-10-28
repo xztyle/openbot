@@ -34,6 +34,8 @@ export interface WorkspaceInsightsOptions {
   /** The loaded conversation of an execution thread, which can be ahead of the stored one. */
   loadedSnapshot(threadId: string): ConversationSnapshot | undefined;
   agentTaskTitle(taskId: string): string | null;
+  /** The usage limit that holds an agent's work now, as `UsageLimitGate.limitFor` answers. */
+  usageLimit?(agentId: string): { resetsAt: number | null } | null;
   emit(event: AgentEvent): void;
 }
 
@@ -59,16 +61,24 @@ export class WorkspaceInsights {
       attention: options.attention,
       liveTrace: options.liveTrace,
       agentTaskTitle: options.agentTaskTitle,
+      ...(options.usageLimit ? { usageLimit: options.usageLimit } : {}),
       emit: options.emit,
       channelWork: (deliveryId) => {
         const assignment = options.channels.assignmentForDelivery(deliveryId);
         if (!assignment) return null;
         const task = options.channels.tasks(assignment.channelId).find((item) => item.id === assignment.taskId);
+        const request = task ? options.channels.message(assignment.channelId, task.requestMessageId) : null;
+        // A person's request; a routine, a bridged author or an agent names no team member.
+        const requester =
+          request?.author.kind === "member" && !request.externalAuthor && !request.author.id.startsWith("routine:")
+            ? request.author.id
+            : undefined;
         return {
           channelId: assignment.channelId,
           taskId: assignment.taskId,
           threadRootId: assignment.threadRootId,
           instruction: task?.instruction ?? null,
+          ...(requester ? { requesterMemberId: requester } : {}),
         };
       },
     });

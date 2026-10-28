@@ -5,7 +5,9 @@ import type {
   AttachmentSummary,
   TeamRealtimeEvent,
 } from "@openbot/contracts/ipc";
+import { decodeWorkspaceSettings } from "@openbot/contracts/ipc";
 import { decodeSideQuestionResponse, SIDE_QUESTION_ROUTES } from "@openbot/contracts/team-protocol/side-question-v1";
+import { WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import { eventCheckTemplatesApi } from "@openbot/team-client/event-check-templates-api";
 import { eventChecksApi } from "@openbot/team-client/event-checks-api";
@@ -37,6 +39,7 @@ import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
 import { webBrowserProfileCalls } from "./web-browser-profiles";
 import { webMessageLinks } from "./web-message-link-relay";
 import type { WebWorkspaceRuntime } from "./web-runtime";
+import { workspaceSettingsBody } from "./web-server-settings";
 import { isHostFileTypeError, planUploads, type UploadRejection, uploadRejectionNotice } from "./web-upload-plan";
 
 /** The events of the connected host. */
@@ -114,6 +117,12 @@ function webHostAdmin(
         runTeamEffect(unpublishAgentTemplate(request(), agentId).pipe(Effect.mapError((error) => error.cause))),
     },
     memories: (agentId, agentName) => webMemoriesPort(agentId, agentName, (...args) => request()(...args), onHostEvent),
+    // The caller shows it only for a host with `fork-host-v1`; an older host answers 404.
+    workspaceSettings: {
+      read: () => request()("POST", WORKSPACE_ROUTES.settings, decodeWorkspaceSettings, {}),
+      write: (settings) =>
+        request()("POST", WORKSPACE_ROUTES.settingsUpdate, decodeWorkspaceSettings, workspaceSettingsBody(settings)),
+    },
     get eventChecks() {
       return checksEnabled?.() === true ? checks : undefined;
     },

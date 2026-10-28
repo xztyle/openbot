@@ -2,6 +2,13 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/agentSettings";
 
 export const messages = {
+  "agentSettings.channels.title": "在频道中",
+  "agentSettings.channels.description": "在有人把此助手添加到频道时使用。",
+  "agentSettings.channels.readFailed": "无法加载频道默认设置。",
+  "agentSettings.channels.answerMode": "回答方式",
+  "agentSettings.channels.workspaceDefault": "工作区默认（{mode}）",
+  "agentSettings.channels.focus": "关注点",
+  "agentSettings.channels.focusPlaceholder": "此助手在频道中负责的内容",
   "agentSettings.session.title": "服务商设置",
   "agentSettings.session.readFailed": "无法读取服务商设置。",
   "agentSettings.session.pending": "已保存的更改将在下一轮开始前生效。",

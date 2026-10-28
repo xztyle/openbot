@@ -31,6 +31,7 @@ import {
   type UpdateHostIdentityInput,
   type UpdateRestartMode,
   type WorkspaceSettings,
+  withKeptAgentChannelDefaults,
 } from "@openbot/contracts/ipc";
 import { isOneOf } from "@openbot/contracts/runtime-values";
 import { AGENT_ACCESS_CAPABILITY, AGENT_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/agent-access-v1";
@@ -256,7 +257,8 @@ export function hostAdminIpcHandlers({
         remote: (serverId) => remoteWorkspaceSettings(serverId, WORKSPACE_ROUTES.settings, {}),
       }),
       setWorkspaceSettings: scopedHandler(decodeWorkspaceSettings, {
-        local: (settings) => runCauseEffect(workspaceSettings.set(settings)),
+        local: (settings) =>
+          runCauseEffect(workspaceSettings.set(withKeptAgentChannelDefaults(workspaceSettings.get(), settings))),
         remote: (settings, serverId) => remoteWorkspaceSettings(serverId, WORKSPACE_ROUTES.settingsUpdate, settings),
       }),
       getAgentAccess: scopedQueryHandler({

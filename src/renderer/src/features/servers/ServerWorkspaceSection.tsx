@@ -202,7 +202,10 @@ export function createServerWorkspaceSection(
     if (!next || !dirty()) return;
     const serverId = props.server.id;
     const request = generation;
-    const settings = structuredClone(snapshot(next));
+    const { gate, defaults } = structuredClone(snapshot(next));
+    // Without `defaults.agents`, the host keeps the channel defaults of each agent as they are now, also
+    // the ones that the agent settings changed after this section read them.
+    const settings: WorkspaceSettings = { gate, defaults: { agentAnswerMode: defaults.agentAnswerMode } };
     await run("workspace", async () => {
       const result = await calls().setWorkspaceSettings(settings, serverId);
       if (request !== generation) return;

@@ -387,7 +387,7 @@ export function createWebServerSettings(options: {
 }
 
 /** The request body: only the known fields, so the wire never carries more than the codec reads. */
-function workspaceSettingsBody(settings: WorkspaceSettings) {
+export function workspaceSettingsBody(settings: WorkspaceSettings) {
   return {
     gate: {
       provider: settings.gate.provider,
@@ -395,6 +395,21 @@ function workspaceSettingsBody(settings: WorkspaceSettings) {
       ...(settings.gate.effort === undefined ? {} : { effort: settings.gate.effort }),
       timeoutMs: settings.gate.timeoutMs,
     },
-    defaults: { agentAnswerMode: settings.defaults.agentAnswerMode },
+    defaults: {
+      agentAnswerMode: settings.defaults.agentAnswerMode,
+      ...(settings.defaults.agents === undefined
+        ? {}
+        : {
+            agents: Object.fromEntries(
+              Object.entries(settings.defaults.agents).map(([agentId, entry]) => [
+                agentId,
+                {
+                  ...(entry.answerMode === undefined ? {} : { answerMode: entry.answerMode }),
+                  ...(entry.focus === undefined ? {} : { focus: entry.focus }),
+                },
+              ]),
+            ),
+          }),
+    },
   };
 }

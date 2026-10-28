@@ -22,6 +22,8 @@
 // - `POST /v1/workspace/channels/thread`: `{ channelId, threadRootId, beforeSequence? }` answers a
 //   channel page whose messages are the root and at most 99 of its replies.
 // - `POST /v1/admin/workspace/settings` and `/update`: the workspace settings, owner and admin only.
+//   `defaults.agents` is optional: at most 500 agent ids, each `{ answerMode?, focus? (500) }`. A
+//   body without it keeps the map that the host has.
 // - Discord bridge: on each channel `discordLink` (`{ connectionId, channelId, channelName (100),
 //   webhook? }`, Discord ids); on each message `externalAuthor` (`{ kind: "external", platform:
 //   "discord", id, name (120), avatarUrl? (500, https) }`); the commands `link-discord`
@@ -280,9 +282,21 @@ const threadPage = (status: number, value: unknown): Json => {
   return withPageFields(withChannelAttention(CHANNEL_ROUTES.read, projected, value), value);
 };
 
+const agentDefaults: Decoder = (value) => {
+  if (!isDynamicRecord(value)) throw new Error("Invalid workspace agent defaults.");
+  const entries = Object.entries(value);
+  if (entries.length > 500) throw new Error("Invalid workspace agent defaults.");
+  // `fromEntries` defines each key as an own property, also an id such as `__proto__`.
+  return Object.fromEntries(
+    entries.map(([agentId, entry]) => {
+      if (!isString(identifier(agentId))) throw new Error("Invalid workspace agent defaults.");
+      return [agentId, fields({}, memberFields)(entry)];
+    }),
+  );
+};
 const settings = fields({
   gate: fields({ provider: identifier, model: nonEmpty(200), timeoutMs: count }, { effort: nonEmpty(32) }),
-  defaults: fields({ agentAnswerMode: answerMode }),
+  defaults: fields({ agentAnswerMode: answerMode }, { agents: agentDefaults }),
 });
 
 export const WORKSPACE_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([

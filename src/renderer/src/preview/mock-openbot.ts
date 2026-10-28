@@ -132,6 +132,7 @@ import {
   type UpdateStatus,
   type WorkspaceDirectory,
   type WorkspaceSettings,
+  withKeptAgentChannelDefaults,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import {
@@ -2795,7 +2796,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       },
       getWorkspaceSettings: async () => clone(workspaceSettings),
       setWorkspaceSettings: async (settings) => {
-        workspaceSettings = decodeWorkspaceSettings(settings);
+        workspaceSettings = withKeptAgentChannelDefaults(workspaceSettings, decodeWorkspaceSettings(settings));
         return clone(workspaceSettings);
       },
       // Preview has one host, and its user owns it, so `mine` gives every agent.

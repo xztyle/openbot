@@ -354,6 +354,8 @@ export function channelMentions(text: string): ChannelMention[] {
 }
 
 export const WORKSPACE_GATE_TIMEOUT_LIMITS = { minimum: 500, maximum: 60_000 } as const;
+/** The most agents that the workspace settings keep channel defaults for. */
+export const WORKSPACE_AGENT_DEFAULTS_LIMIT = 500;
 
 /** The cheap model that decides if an `always` member answers a message. */
 export interface WorkspaceGateSettings {
@@ -363,10 +365,23 @@ export interface WorkspaceGateSettings {
   timeoutMs: number;
 }
 
+/** What one agent takes when someone adds it to a channel. An absent field follows the workspace default. */
+export interface WorkspaceAgentChannelDefaults {
+  answerMode?: ChannelAnswerMode;
+  focus?: string;
+}
+
 /** Server-wide workspace settings, saved in `openbot-workspace-v1.json` on the host. */
 export interface WorkspaceSettings {
   gate: WorkspaceGateSettings;
-  defaults: { agentAnswerMode: ChannelAnswerMode };
+  defaults: {
+    agentAnswerMode: ChannelAnswerMode;
+    /**
+     * The channel defaults of single agents, by agent id. Absent in the settings of a client or a host
+     * that does not know the field; the host then keeps the map it has.
+     */
+    agents?: Record<string, WorkspaceAgentChannelDefaults>;
+  };
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
@@ -374,6 +389,18 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   gate: { provider: "claude", model: "claude-haiku-5-5", timeoutMs: 6_000 },
   defaults: { agentAnswerMode: "mention" },
 };
+
+function isAgentChannelDefaults(value: unknown): value is Record<string, WorkspaceAgentChannelDefaults> {
+  if (!isDynamicRecord(value)) return false;
+  const entries = Object.entries(value);
+  return (
+    entries.length <= WORKSPACE_AGENT_DEFAULTS_LIMIT &&
+    entries.every(
+      ([agentId, entry]) =>
+        isIdentifier(agentId) && isDynamicRecord(entry) && hasValidChannelMemberWorkspaceFields(entry),
+    )
+  );
+}
 
 export function isWorkspaceSettings(value: unknown): value is WorkspaceSettings {
   if (!isDynamicRecord(value) || !isDynamicRecord(value.gate) || !isDynamicRecord(value.defaults)) return false;
@@ -384,7 +411,8 @@ export function isWorkspaceSettings(value: unknown): value is WorkspaceSettings 
     gate.model.trim().length > 0 &&
     (gate.effort === undefined || (isBoundedString(gate.effort, 32) && gate.effort.length > 0)) &&
     integerInRange(gate.timeoutMs, WORKSPACE_GATE_TIMEOUT_LIMITS.minimum, WORKSPACE_GATE_TIMEOUT_LIMITS.maximum) &&
-    isChannelAnswerMode(value.defaults.agentAnswerMode)
+    isChannelAnswerMode(value.defaults.agentAnswerMode) &&
+    (value.defaults.agents === undefined || isAgentChannelDefaults(value.defaults.agents))
   );
 }
 
@@ -398,6 +426,34 @@ export function decodeWorkspaceSettings(value: unknown): WorkspaceSettings {
       ...(value.gate.effort === undefined ? {} : { effort: value.gate.effort }),
       timeoutMs: value.gate.timeoutMs,
     },
-    defaults: { agentAnswerMode: value.defaults.agentAnswerMode },
+    defaults: {
+      agentAnswerMode: value.defaults.agentAnswerMode,
+      ...(value.defaults.agents === undefined ? {} : { agents: decodeAgentChannelDefaults(value.defaults.agents) }),
+    },
   };
+}
+
+/** Only the known fields of each agent, and no agent whose defaults are all absent. */
+function decodeAgentChannelDefaults(
+  agents: Record<string, WorkspaceAgentChannelDefaults>,
+): Record<string, WorkspaceAgentChannelDefaults> {
+  // `fromEntries` defines each key as an own property, also an id such as `__proto__`.
+  return Object.fromEntries(
+    Object.entries(agents).flatMap(([agentId, entry]) => {
+      const next: WorkspaceAgentChannelDefaults = {
+        ...(entry.answerMode === undefined ? {} : { answerMode: entry.answerMode }),
+        ...(entry.focus === undefined || !entry.focus.trim() ? {} : { focus: entry.focus.trim() }),
+      };
+      return next.answerMode !== undefined || next.focus !== undefined ? [[agentId, next] as const] : [];
+    }),
+  );
+}
+
+/**
+ * The settings to save from `next`: a body without `defaults.agents` comes from a client that does
+ * not know the field, so the channel defaults of `current` stay.
+ */
+export function withKeptAgentChannelDefaults(current: WorkspaceSettings, next: WorkspaceSettings): WorkspaceSettings {
+  if (next.defaults.agents !== undefined || current.defaults.agents === undefined) return next;
+  return { ...next, defaults: { ...next.defaults, agents: current.defaults.agents } };
 }

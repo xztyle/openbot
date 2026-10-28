@@ -105,6 +105,12 @@ export const messages = {
     "Nur Inhaber, Admins oder die Person, die den Kanal erstellt hat, können andere entfernen.",
   "error.backend.channelEditOwnOnly": "Du kannst nur deine eigenen Nachrichten bearbeiten.",
   "error.backend.channelDeleteOwnOnly": "Du kannst nur deine eigenen Nachrichten löschen.",
+  "error.backend.channelEditEmpty": "Eine Nachricht ohne Dateien braucht Text.",
+  "error.backend.channelVisibilityAdmin": "Nur Besitzer und Admins können einen Kanal öffentlich oder privat machen.",
+  "error.backend.channelVisibilityKind":
+    "Nur ein Kanal kann öffentlich oder privat sein, keine Direktnachricht und keine Gruppe.",
+  "error.backend.channelAgentChatRequired":
+    "Du kannst eine Direktnachricht nur mit einem Agenten öffnen, mit dem du chatten darfst.",
   "error.backend.memoryEssentialBudget":
     "Die wesentlichen Erinnerungen überschreiten das Prompt-Limit. Stelle einen Eintrag auf „Bei Bedarf suchen“ und versuche es erneut.",
   "error.backend.memorySelectionConflict": "Die Erinnerung hat sich geändert. Lade sie neu und versuche es erneut.",

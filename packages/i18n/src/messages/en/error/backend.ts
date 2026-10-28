@@ -147,6 +147,10 @@ export const messages = defineMessages("error.backend", {
   "error.backend.channelRemovePeople": "Only an owner, an admin or the creator of the channel can remove other people.",
   "error.backend.channelEditOwnOnly": "You can edit only your own messages.",
   "error.backend.channelDeleteOwnOnly": "You can delete only your own messages.",
+  "error.backend.channelEditEmpty": "A message without files needs text.",
+  "error.backend.channelVisibilityAdmin": "Only owners and admins can make a channel public or private.",
+  "error.backend.channelVisibilityKind": "Only a channel can be public or private, not a DM or a group.",
+  "error.backend.channelAgentChatRequired": "You can open a direct message only with an agent you can chat with.",
   "error.backend.memoryEssentialBudget":
     "The essential memories exceed the prompt limit. Set an entry to search when needed, then try again.",
   "error.backend.memorySelectionConflict": "The memory changed. Reload it and try again.",

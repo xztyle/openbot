@@ -1,9 +1,11 @@
 import {
+  agentAccessRank,
   type ChannelCommand,
   decodeWorkspaceSettings,
   isWorkspaceChannelCommand,
   parseChannelCommand,
   parseChannelRead,
+  parseChannelTypingInput,
   parseWorkspaceActivityInput,
   withKeptAgentChannelDefaults,
 } from "@openbot/contracts/ipc";
@@ -58,7 +60,8 @@ function requireChatForAgents(
 
 /**
  * The workspace routes of this fork (`workspace-v1.ts`, under `fork-host-v1`): the workspace channel
- * commands, the page of one thread, the activity of the member, and the workspace settings.
+ * commands, the page of one thread, the activity of the member, the typing signal, the agents the
+ * member may DM, and the workspace settings.
  */
 export async function routeWorkspace(
   context: TeamApiRequestContext,
@@ -89,6 +92,23 @@ export async function routeWorkspace(
       items: activity.items.filter((item) => item.actor.kind !== "agent" || !hiddenAgentIds.has(item.actor.id)),
       threads: activity.threads,
     });
+  }
+  if (url.pathname === WORKSPACE_ROUTES.typing) {
+    channels.typing(parseChannelTypingInput(body), { id: member.id }, viewer);
+    return json(200, {});
+  }
+  if (url.pathname === WORKSPACE_ROUTES.dmAgents) {
+    // The agents that `open-dm` accepts from this member: visible to the peer, and `chat` or more.
+    const agentIds = channels.hooks
+      .agents()
+      .filter(
+        (agent) =>
+          agent.hiddenAt === undefined &&
+          !hiddenAgentIds.has(agent.id) &&
+          agentAccessRank(context.agentLevel(agent.id)) >= agentAccessRank("chat"),
+      )
+      .map((agent) => agent.id);
+    return json(200, { agentIds });
   }
   if (url.pathname === WORKSPACE_ROUTES.thread) {
     const input = parseChannelRead(body);

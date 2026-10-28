@@ -70,8 +70,26 @@ export interface ChannelGateDecision {
   /** How long the decision took, in milliseconds. */
   ms: number;
   fallback?: ChannelGateFallback;
-  /** The model decided to answer, but `CHANNEL_GATE_ANSWER_LIMIT` agents with a higher priority answer. */
+  /**
+   * The model decided to answer, but another agent answers first: one with a higher priority, or
+   * `CHANNEL_GATE_ANSWER_LIMIT` of them. In the first round the agent is then asked again (`round: 2`)
+   * after that answer.
+   */
   limited?: boolean;
+  /**
+   * `2` for a decision of the second round: the gate asked again, after the first agent answered,
+   * with that answer in the prompt. Absent for the first round.
+   */
+  round?: 2;
+}
+
+/**
+ * The gated members that wanted to answer a message but waited for the first one. When the task of
+ * `afterAgentId` for the message ends, the gate asks each of them again once, with its answer.
+ */
+export interface ChannelGateFollowUp {
+  afterAgentId: string;
+  agentIds: string[];
 }
 
 /** A person (`member`, a team member id) or an agent that acts in a channel. */
@@ -160,6 +178,8 @@ export interface ChannelMessageWorkspaceFields {
   gatePending?: string[];
   /** On a message of a person: the decisions of the gate. Only owners and admins receive them. */
   gateDecisions?: ChannelGateDecision[];
+  /** On a message of a person: the second round of the gate that waits for the first answer. Host state. */
+  gateFollowUp?: ChannelGateFollowUp;
   /** Set on a message that a bridge brought from another platform, such as Discord. */
   externalAuthor?: ChannelExternalAuthor;
 }
@@ -296,7 +316,17 @@ export function isChannelGateDecision(value: unknown): value is ChannelGateDecis
     isBoundedString(value.model, 300) &&
     integerInRange(value.ms, 0, Number.MAX_SAFE_INTEGER) &&
     (value.fallback === undefined || isOneOf(CHANNEL_GATE_FALLBACKS, value.fallback)) &&
-    (value.limited === undefined || isBoolean(value.limited))
+    (value.limited === undefined || isBoolean(value.limited)) &&
+    (value.round === undefined || value.round === 2)
+  );
+}
+
+export function isChannelGateFollowUp(value: unknown): value is ChannelGateFollowUp {
+  return (
+    isDynamicRecord(value) &&
+    isIdentifier(value.afterAgentId) &&
+    identifiers(value.agentIds, CHANNEL_GATE_DECISION_LIMIT) &&
+    value.agentIds.length > 0
   );
 }
 
@@ -321,6 +351,7 @@ export function hasValidChannelMessageWorkspaceFields(value: DynamicRecord): boo
       (Array.isArray(value.gateDecisions) &&
         value.gateDecisions.length <= CHANNEL_GATE_DECISION_LIMIT &&
         value.gateDecisions.every(isChannelGateDecision))) &&
+    (value.gateFollowUp === undefined || isChannelGateFollowUp(value.gateFollowUp)) &&
     (value.externalAuthor === undefined || isChannelExternalAuthor(value.externalAuthor))
   );
 }
@@ -456,4 +487,73 @@ function decodeAgentChannelDefaults(
 export function withKeptAgentChannelDefaults(current: WorkspaceSettings, next: WorkspaceSettings): WorkspaceSettings {
   if (next.defaults.agents !== undefined || current.defaults.agents === undefined) return next;
   return { ...next, defaults: { ...next.defaults, agents: current.defaults.agents } };
+}
+
+export const CHANNEL_TYPING_STATES = ["typing", "thinking", "working"] as const;
+/**
+ * What a member of a channel does now. `typing`: a person writes a message. `thinking`: the answer
+ * gate considers an agent for a message. `working`: an agent runs a task of the channel.
+ */
+export type ChannelTypingState = (typeof CHANNEL_TYPING_STATES)[number];
+
+/** The most entries of one `channel-typing` event. */
+export const CHANNEL_TYPING_LIMIT = 50;
+/** A person's typing ends this long after their last typing signal. */
+export const CHANNEL_TYPING_TIMEOUT_MS = 6_000;
+/** A client sends a typing signal again at most this often while the person types. */
+export const CHANNEL_TYPING_INTERVAL_MS = 3_000;
+
+/** One person or agent that types, thinks or works in a channel, in a thread when `threadRootId` is set. */
+export interface ChannelTypingEntry {
+  kind: "member" | "agent";
+  id: string;
+  state: ChannelTypingState;
+  threadRootId?: string;
+}
+
+/** The typing signal of a client: the person types in a channel, or in a thread of it, or stopped. */
+export interface ChannelTypingInput {
+  channelId: string;
+  threadRootId?: string;
+  typing: boolean;
+}
+
+export function isChannelTypingEntry(value: unknown): value is ChannelTypingEntry {
+  return (
+    isDynamicRecord(value) &&
+    (value.kind === "member" || value.kind === "agent") &&
+    isIdentifier(value.id) &&
+    isOneOf(CHANNEL_TYPING_STATES, value.state) &&
+    (value.threadRootId === undefined || isIdentifier(value.threadRootId))
+  );
+}
+
+export function isChannelTypingList(value: unknown): value is ChannelTypingEntry[] {
+  return Array.isArray(value) && value.length <= CHANNEL_TYPING_LIMIT && value.every(isChannelTypingEntry);
+}
+
+export function parseChannelTypingInput(value: unknown): ChannelTypingInput {
+  if (
+    !isDynamicRecord(value) ||
+    !isIdentifier(value.channelId) ||
+    !(value.threadRootId === undefined || value.threadRootId === null || isIdentifier(value.threadRootId)) ||
+    !isBoolean(value.typing)
+  )
+    throw new Error("Provide a valid typing signal.");
+  return {
+    channelId: value.channelId,
+    ...(isIdentifier(value.threadRootId) ? { threadRootId: value.threadRootId } : {}),
+    typing: value.typing,
+  };
+}
+
+/** The agents that a person may open a DM with: each one they can chat with and see. */
+export interface WorkspaceDmAgents {
+  agentIds: string[];
+}
+
+export function decodeWorkspaceDmAgents(value: unknown): WorkspaceDmAgents {
+  if (!isDynamicRecord(value) || !identifiers(value.agentIds, INPUT_LIMITS.agents))
+    throw new Error("Invalid DM agents.");
+  return { agentIds: [...value.agentIds] };
 }

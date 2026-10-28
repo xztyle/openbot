@@ -223,6 +223,7 @@ import { AgentWaitStore } from "./agent-waits/agent-wait-store";
 import { AgentWaits } from "./agent-waits/agent-waits";
 import { automationRunCommand } from "./automation-command";
 import { toChannelOperationError } from "./channel-effects";
+import type { ChannelGateGeneration } from "./channel-gate";
 import { ChannelRoutineScheduler } from "./channel-routine-scheduler";
 import { ChannelService } from "./channel-service";
 import type { BundledProviderExecutables } from "./cli";
@@ -371,6 +372,8 @@ export interface AgentServiceOptions {
   channelPerson?: (personId: string) => { id: string; name: string } | null;
   /** The workspace settings of this server. Omitted, the defaults. */
   workspaceSettings?: () => WorkspaceSettings;
+  /** Every active person of the team, the host user first, for the onboarding `#general`. */
+  channelPeople?: () => { id: string; name: string }[];
   deleteWithRevokedApproval?: (
     agentId: string,
     remove: () => Effect.Effect<void, AgentRemovalFailed>,
@@ -431,11 +434,16 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     createClient: (provider) => this.#providers.createProfileClient(provider),
     profileClients: this.#profileClients,
   });
+  /**
+   * The disposable generations of the channel answer gate. Apart from `#profileClients`, so the gate
+   * has its own concurrency budget (`GATE_CONCURRENCY`) and does not hold back the others.
+   */
+  readonly #gateClients = new ProfileClients();
   /** The warm clients of the channel answer gate, apart from the workflow one. */
   readonly #gateGenerations = new GateGenerations({
     ownerFor: (provider) => this.#providers.currentClient(provider),
     createClient: (provider) => this.#providers.createProfileClient(provider),
-    profileClients: this.#profileClients,
+    profileClients: this.#gateClients,
   });
   #scope = Scope.makeUnsafe();
   /** User sends still before their mailbox write, by idempotency key: a retry joins the first call. */
@@ -826,6 +834,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           this.#profileClients
             .stopOpenCode()
             .pipe(
+              Effect.andThen(this.#gateClients.stopOpenCode()),
               Effect.andThen(this.#warmGenerations.stopIdle("opencode")),
               Effect.andThen(this.#gateGenerations.stopIdle("opencode")),
             ),
@@ -1138,15 +1147,22 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(options.channelRemotePerson ? { remotePerson: options.channelRemotePerson } : {}),
       ...(options.channelPerson ? { person: options.channelPerson } : {}),
       defaultAnswerMode: () => (options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS).defaults.agentAnswerMode,
+      agentDefaults: (agentId) => {
+        const agents = (options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS).defaults.agents;
+        // An own property only: an id such as `constructor` names no saved default.
+        return agents && Object.hasOwn(agents, agentId) ? agents[agentId] : undefined;
+      },
+      ...(options.channelPeople ? { people: options.channelPeople } : {}),
       gate: () => {
         const settings = (options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS).gate;
         return {
           label: `${settings.provider}/${settings.model}`,
           timeoutMs: settings.timeoutMs,
-          generate: (agentId, prompt) => this.#generateGateText(settings, agentId, prompt),
+          generate: (agentId, prompt, generation) => this.#generateGateText(settings, agentId, prompt, generation),
         };
       },
       activity: (agentId) => this.#gateActivity(agentId),
+      typingChanged: (channelId, typing) => this.#emit({ type: "channel-typing", channelId, typing }),
       // Sent before `channels-changed`, so a client that appends the message has it when the list moves.
       messagesChanged: (channelId, changes, revision) => {
         for (const change of changes)
@@ -2368,14 +2384,18 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   /**
    * One question of the channel answer gate: a toolless generation on the workspace gate model, at
    * the lowest reasoning effort the model takes unless the settings name one. It fails at once when
-   * the provider or the model is not there, or when the disposable generations are at their limit;
-   * the gate then lets the member answer only when it is addressed.
+   * the provider or the model is not there; when the gate's own budget is full it waits for a place
+   * until the deadline. The gate then lets the member answer only when it is addressed.
    */
-  #generateGateText(settings: WorkspaceGateSettings, agentId: string, prompt: string) {
+  #generateGateText(
+    settings: WorkspaceGateSettings,
+    agentId: string,
+    prompt: string,
+    generation: ChannelGateGeneration,
+  ) {
     return Effect.gen({ self: this }, function* () {
       const failed = (message: string) => new ProfileGenerationFailed({ cause: new Error(message) });
       if (this.#stopping) return yield* failed(sourceText("error.backend.shuttingDown"));
-      if (this.#profileClients.busy()) return yield* failed(sourceText("error.workflow.modelBusy"));
       const provider = settings.provider;
       if (!isAgentProvider(provider)) return yield* failed(sourceText("error.provider.noModel"));
       yield* this.#providers.ensureProvider(provider);
@@ -2392,6 +2412,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         provider,
         { ...model, defaultReasoningEffort: effort },
         prompt,
+        generation,
         gateUsageObserver(this.#store.database.usage, provider, model.id, agentId),
       );
     });
@@ -4021,6 +4042,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   #isProviderBusy(provider: AgentProvider): boolean {
     return (
       this.#profileClients.usesProvider(provider) ||
+      this.#gateClients.usesProvider(provider) ||
       this.#drain.hasStartingDeliveries(provider) ||
       this.#store.list().some((agent) => providerForAgent(agent) === provider && this.#runsTurn(agent.id))
     );
@@ -4062,7 +4084,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#attention.clearPrompts();
     this.#attention.clearBrowserTakeovers();
     this.#attention.clearApprovals();
-    const clients = [...(yield* this.#providers.dispose()), ...this.#profileClients.release()];
+    const clients = [
+      ...(yield* this.#providers.dispose()),
+      ...this.#profileClients.release(),
+      ...this.#gateClients.release(),
+    ];
     for (const [agentId, snapshot] of this.#conversation.activeSnapshots()) {
       if (!snapshot.activeTurnId) continue;
       const agent = this.#store.list().find((item) => item.id === agentId);

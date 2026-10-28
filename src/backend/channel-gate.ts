@@ -48,6 +48,19 @@ export interface ChannelGateRequest {
   agents: readonly ChannelGateAgent[];
   /** Every member agent of the channel, the gated ones included. */
   members: readonly ChannelGateMember[];
+  /**
+   * The second round: the answers that agents already gave to the message, oldest first. The gate
+   * then lets an agent answer only when it adds something new.
+   */
+  answers?: readonly ChannelMessage[];
+}
+
+/** How the gate runs one generation: the warm clients it may use, and the time it must start by. */
+export interface ChannelGateGeneration {
+  /** How many questions the gate asks at once for this message: the warm pool it needs. */
+  pool: number;
+  /** Epoch milliseconds. A question that cannot start by then fails at once. */
+  deadline: number;
 }
 
 /** The cheap model: one toolless generation for each prompt. */
@@ -55,7 +68,7 @@ export interface ChannelGateModel {
   /** `provider/model`, for the decision log. */
   label: string;
   timeoutMs: number;
-  generate(agentId: string, prompt: string): Effect.Effect<string, unknown>;
+  generate(agentId: string, prompt: string, generation: ChannelGateGeneration): Effect.Effect<string, unknown>;
 }
 
 const GateAnswer = Schema.Struct({
@@ -82,8 +95,9 @@ export class ChannelGate {
     return Effect.gen(function* () {
       const started = Date.now();
       const deadline = started + model.timeoutMs;
+      const generation = { pool: request.agents.length, deadline };
       const fibers = yield* Effect.forEach(request.agents, (agent) =>
-        Effect.forkIn(model.generate(agent.agentId, gatePrompt(request, agent)), scope).pipe(
+        Effect.forkIn(model.generate(agent.agentId, gatePrompt(request, agent), generation), scope).pipe(
           Effect.map((fiber) => ({ agent, fiber })),
         ),
       );
@@ -99,7 +113,15 @@ export class ChannelGate {
             if (Option.isNone(outcome)) return fallback("timeout");
             if (Result.isFailure(outcome.value)) return fallback("error");
             const answer = parseGateAnswer(outcome.value.success);
-            return answer ? { agentId: agent.agentId, ...answer, model: model.label, ms } : fallback("invalid");
+            return answer
+              ? {
+                  agentId: agent.agentId,
+                  ...answer,
+                  model: model.label,
+                  ms,
+                  ...(request.answers ? { round: 2 as const } : {}),
+                }
+              : fallback("invalid");
           }),
         { concurrency: "unbounded" },
       );
@@ -110,6 +132,48 @@ export class ChannelGate {
 /** The decision for a member that the gate could not ask: it does not answer, as a `mention` member. */
 export function gateFallback(agentId: string, fallback: ChannelGateFallback, model = "", ms = 0): ChannelGateDecision {
   return { agentId, answer: false, reason: "", priority: 0, model, ms, fallback };
+}
+
+/** The decisions that wanted to answer, the highest priority first, and on a tie the earlier member. */
+function wanted(decisions: readonly ChannelGateDecision[]): string[] {
+  return decisions
+    .map((decision, order) => ({ decision, order }))
+    .filter(({ decision }) => decision.answer && decision.fallback === undefined)
+    .sort((left, right) => right.decision.priority - left.decision.priority || left.order - right.order)
+    .map(({ decision }) => decision.agentId);
+}
+
+/**
+ * The first round: only the agent with the highest priority answers now. Each other agent that
+ * wanted to answer gets `limited` and waits in `followUp`: the gate asks it again after that answer,
+ * with the answer in the prompt (`gateSecondRound`).
+ */
+export function gateFirstRound(decisions: readonly ChannelGateDecision[]): {
+  agentIds: string[];
+  decisions: ChannelGateDecision[];
+  followUp: string[];
+} {
+  const [first, ...rest] = wanted(decisions);
+  return {
+    agentIds: first ? [first] : [],
+    decisions: decisions.map((decision) =>
+      decision.answer && decision.fallback === undefined && decision.agentId !== first
+        ? { ...decision, limited: true }
+        : decision,
+    ),
+    followUp: rest,
+  };
+}
+
+/**
+ * The second round: the agents that still add something answer, at most as many as the answer limit
+ * leaves after the first answer.
+ */
+export function gateSecondRound(decisions: readonly ChannelGateDecision[]): {
+  agentIds: string[];
+  decisions: ChannelGateDecision[];
+} {
+  return gateWinners(decisions, CHANNEL_GATE_ANSWER_LIMIT - 1);
 }
 
 /** The decoded answer of the model, or null when it is not exactly the requested object. */
@@ -130,21 +194,18 @@ export function parseGateAnswer(text: string): { answer: boolean; reason: string
 }
 
 /**
- * The agents that answer, from the decisions in channel order: at most `CHANNEL_GATE_ANSWER_LIMIT`,
- * the highest priority first, and on a tie the earlier member. Each decision that wanted to answer
+ * The agents that answer, from the decisions in channel order: at most `limit`, the highest priority
+ * first, and on a tie the earlier member. Each decision that wanted to answer
  * and lost its place gets `limited`.
  */
-export function gateWinners(decisions: readonly ChannelGateDecision[]): {
+export function gateWinners(
+  decisions: readonly ChannelGateDecision[],
+  limit: number = CHANNEL_GATE_ANSWER_LIMIT,
+): {
   agentIds: string[];
   decisions: ChannelGateDecision[];
 } {
-  const wanted = decisions
-    .map((decision, order) => ({ decision, order }))
-    .filter(({ decision }) => decision.answer && decision.fallback === undefined)
-    .sort((left, right) => right.decision.priority - left.decision.priority || left.order - right.order)
-    .slice(0, CHANNEL_GATE_ANSWER_LIMIT)
-    .map(({ decision }) => decision.agentId);
-  const chosen = new Set(wanted);
+  const chosen = new Set(wanted(decisions).slice(0, Math.max(0, limit)));
   return {
     agentIds: decisions.filter((decision) => chosen.has(decision.agentId)).map((decision) => decision.agentId),
     decisions: decisions.map((decision) =>
@@ -229,7 +290,25 @@ export function gatePrompt(request: ChannelGateRequest, agent: ChannelGateAgent)
     request.threadRoot ? "Earlier replies in the thread, oldest first:" : "Earlier messages, oldest first:",
     ...(recent.length ? recent : ["(none)"]),
     "",
+    ...((request.message.mentions ?? []).some((mention) => mention.kind === "channel" || mention.kind === "here")
+      ? [
+          "The newest message addresses everyone in the channel (@channel, @here or @everyone). That alone is",
+          "no reason to answer: answer true only when the message is about this agent's remit or asks it for work.",
+          "",
+        ]
+      : []),
     "The newest message, which you decide about:",
     line(request.message, GATE_NEW_MESSAGE_CHARACTERS),
+    ...(request.answers?.length
+      ? [
+          "",
+          "Other agents already answered this message:",
+          ...request.answers.map((answer) => line(answer, GATE_NEW_MESSAGE_CHARACTERS)),
+          "",
+          "Answer true only when this agent adds something new and important that these answers do not cover,",
+          "such as a correction, a missing part of the work, or knowledge of its own remit. Repeating,",
+          "agreeing or adding small details is noise: answer false then.",
+        ]
+      : []),
   ].join("\n");
 }

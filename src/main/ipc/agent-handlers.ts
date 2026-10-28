@@ -23,6 +23,7 @@ import {
   decodeSaveAgentProfileResult,
   decodeWorkspaceActivity,
   decodeWorkspaceArtifacts,
+  decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
   decodeWorkspaceSteps,
   hostAnalyticsQuery,
@@ -32,6 +33,7 @@ import {
   parseAskSideQuestion,
   parseChannelCommand,
   parseChannelRead,
+  parseChannelTypingInput,
   parseGenerateAgentProfile,
   parseHostAnalyticsInput,
   parseLocalBrowserSecretResponse,
@@ -395,6 +397,35 @@ export function agentIpcHandlers({
             remoteServers.request(serverId, WORKSPACE_ROUTES.activity, decodeWorkspaceActivity, {
               method: "POST",
               body: input,
+            }),
+          );
+        },
+      }),
+      channelTyping: scopedHandler(parseChannelTypingInput, {
+        local: (input) => service.channels.typing(input, host.channelActor(), host.channelViewer()),
+        remote: async (input, serverId) => {
+          // A server without the workspace shows no typing; the signal is dropped.
+          if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY)) return;
+          await runCauseEffect(
+            remoteServers.request(serverId, WORKSPACE_ROUTES.typing, acceptEmpty, { method: "POST", body: input }),
+          );
+        },
+      }),
+      workspaceDmAgents: scopedQueryHandler({
+        // The host user owns the server: every agent that is not hidden.
+        local: () => ({
+          agentIds: service
+            .listAgents()
+            .filter((agent) => agent.hiddenAt === undefined)
+            .map((agent) => agent.id),
+        }),
+        remote: (serverId) => {
+          if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY))
+            throw new Error(sourceText("error.team.workspaceUnsupported"));
+          return runCauseEffect(
+            remoteServers.request(serverId, WORKSPACE_ROUTES.dmAgents, decodeWorkspaceDmAgents, {
+              method: "POST",
+              body: {},
             }),
           );
         },

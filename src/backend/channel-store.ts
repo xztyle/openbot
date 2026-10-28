@@ -107,6 +107,9 @@ export const ACTIVITY_ITEM_TYPES = ["plan", "subagents", "channel-change", "comm
 /**
  * Owns durable channel records. Every change and its retry receipt commit together.
  */
+/** How many of the newest messages of each channel a startup checks for an open answer gate. */
+const GATE_RECOVERY_MESSAGES = 200;
+
 export class ChannelStore {
   /** By channel: how many times a message changed in place after it was complete, in this process. */
   readonly #completedMessageChanges = new Map<string, number>();
@@ -415,13 +418,24 @@ export class ChannelStore {
    * is the root of a thread that still has replies.
    */
   /** The messages of people whose answer gate had not decided when the host stopped, in every channel. */
-  gatePendingMessages(): ChannelMessage[] {
+  /**
+   * The messages whose answer gate has not settled: still pending, or waiting for its second round.
+   * The gate marks only a new message and settles within seconds, so only the newest
+   * `GATE_RECOVERY_MESSAGES` of each channel are read, through the sequence index: a startup does
+   * not scan every stored message.
+   */
+  gateOpenMessages(): ChannelMessage[] {
     return databaseRows(
       this.database.connection
         .prepare(
-          "SELECT message_json FROM projection_channel_messages WHERE json_extract(message_json, '$.gatePending') IS NOT NULL",
+          `SELECT m.message_json FROM projection_channels AS c
+            JOIN projection_channel_messages AS m ON m.channel_id = c.channel_id
+              AND m.sequence > (SELECT COALESCE(MAX(l.sequence), 0) FROM projection_channel_messages AS l
+                                WHERE l.channel_id = c.channel_id) - ?
+            WHERE json_extract(m.message_json, '$.gatePending') IS NOT NULL
+               OR json_extract(m.message_json, '$.gateFollowUp') IS NOT NULL`,
         )
-        .all(),
+        .all(GATE_RECOVERY_MESSAGES),
     ).map((row) => storedMessage(requiredStringColumn(row, "message_json")));
   }
 

@@ -102,6 +102,13 @@ export const messages = {
     "Solo un propietario, un administrador o quien creó el canal puede quitar a otras personas.",
   "error.backend.channelEditOwnOnly": "Solo puedes editar tus propios mensajes.",
   "error.backend.channelDeleteOwnOnly": "Solo puedes eliminar tus propios mensajes.",
+  "error.backend.channelEditEmpty": "Un mensaje sin archivos necesita texto.",
+  "error.backend.channelVisibilityAdmin":
+    "Solo los propietarios y los administradores pueden hacer un canal público o privado.",
+  "error.backend.channelVisibilityKind":
+    "Solo un canal puede ser público o privado, no un mensaje directo ni un grupo.",
+  "error.backend.channelAgentChatRequired":
+    "Solo puedes abrir un mensaje directo con un agente con el que puedes chatear.",
   "error.backend.memoryEssentialBudget":
     "Los recuerdos esenciales superan el límite del prompt. Configura una entrada para buscarla cuando sea necesario e inténtalo de nuevo.",
   "error.backend.memorySelectionConflict": "El recuerdo cambió. Vuelve a cargarlo e inténtalo de nuevo.",

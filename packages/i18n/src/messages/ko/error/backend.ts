@@ -97,6 +97,11 @@ export const messages = {
   "error.backend.channelRemovePeople": "다른 사람은 소유자, 관리자 또는 채널을 만든 사람만 제거할 수 있습니다.",
   "error.backend.channelEditOwnOnly": "내 메시지만 편집할 수 있습니다.",
   "error.backend.channelDeleteOwnOnly": "내 메시지만 삭제할 수 있습니다.",
+  "error.backend.channelEditEmpty": "파일이 없는 메시지에는 텍스트가 필요합니다.",
+  "error.backend.channelVisibilityAdmin": "채널을 공개 또는 비공개로 바꿀 수 있는 사람은 소유자와 관리자뿐입니다.",
+  "error.backend.channelVisibilityKind":
+    "공개 또는 비공개로 바꿀 수 있는 것은 채널뿐입니다. DM이나 그룹은 바꿀 수 없습니다.",
+  "error.backend.channelAgentChatRequired": "채팅할 수 있는 에이전트와만 DM을 열 수 있습니다.",
   "error.backend.memoryEssentialBudget":
     "필수 메모리가 프롬프트 한도를 넘었어요. 항목 하나를 필요할 때 검색하도록 설정한 후 다시 시도해 주세요.",
   "error.backend.memorySelectionConflict": "메모리가 변경되었어요. 다시 불러온 후 시도해 주세요.",

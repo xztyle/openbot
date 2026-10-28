@@ -31,6 +31,7 @@ import {
   decodeRemoteAgentImportResult,
   decodeWorkspaceActivity,
   decodeWorkspaceArtifacts,
+  decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
   decodeWorkspaceSteps,
   type InstalledSkill,
@@ -308,6 +309,8 @@ export type TeamChannelsApi = Pick<
   | "readChannel"
   | "channelCommand"
   | "workspaceActivity"
+  | "channelTyping"
+  | "workspaceDmAgents"
   | "workspaceFleet"
   | "workspaceSteps"
   | "workspaceArtifacts"
@@ -356,6 +359,12 @@ export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOp
         ? workspacePost(WORKSPACE_ROUTES.command, decodeChannel, command)
         : post(CHANNEL_ROUTES.command, decodeChannel, command),
     workspaceActivity: (input) => workspacePost(WORKSPACE_ROUTES.activity, decodeWorkspaceActivity, input),
+    // A host without the workspace shows no typing: the signal is dropped there.
+    channelTyping: async (input) => {
+      if (options.supportsWorkspace?.() === false) return;
+      await post(WORKSPACE_ROUTES.typing, ignoreResponse, input);
+    },
+    workspaceDmAgents: () => workspacePost(WORKSPACE_ROUTES.dmAgents, decodeWorkspaceDmAgents, {}),
     workspaceFleet: (input) => workspacePost(WORKSPACE_FLEET_ROUTES.fleet, decodeWorkspaceFleet, input),
     workspaceSteps: (input) => workspacePost(WORKSPACE_FLEET_ROUTES.steps, decodeWorkspaceSteps, input),
     workspaceArtifacts: (input) => workspacePost(WORKSPACE_FLEET_ROUTES.artifacts, decodeWorkspaceArtifacts, input),

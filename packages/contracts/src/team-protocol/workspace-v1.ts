@@ -41,12 +41,30 @@
 // - The events `channel-message` (`{ channelId, message, revision }`) and `channel-message-removed`
 //   (`{ channelId, messageId, revision }`). The host sends them only to a peer that can see the
 //   channel.
+// - Phase 6 (polish): the commands `set-visibility` (`{ visibility: "public" | "private" }`, owner and
+//   admin only) and `ensure-general` (`{}`: makes `#general` with `channelId` when the workspace has
+//   no `channel`, and answers it); an `edit` whose `text` can be empty for a message with files; on
+//   each gate decision `round?: 2`.
+// - `POST /v1/workspace/channels/typing`: `{ channelId, threadRootId?, typing }` answers `{}`. The
+//   person of the session types in the channel, or stopped. A client sends it at most every 3
+//   seconds while the person types; the host ends the typing 6 seconds after the last one.
+// - `POST /v1/workspace/dm-agents`: `{}` answers `{ agentIds }` (at most 100): the agents that the
+//   member of the session can see and chat with, so may open a DM with (`open-dm`).
+// - The event `channel-typing` (`{ channelId, typing }`): the whole list, at most 50 entries, each
+//   `{ kind: "member" | "agent", id, state: "typing" | "thinking" | "working", threadRootId? }`.
+//   It replaces the last list of the channel. The host sends it only to a peer that can see the
+//   channel, without the agents that are hidden from the peer.
 //
 // The host adds the fields only for a peer that advertises `fork-host-v1`, so the wire of every
 // released client stays as it was. A client accepts them whenever they are present. A present
 // malformed value fails closed. A fork host built before these routes answers 404, so a client fails
 // closed there. The bounds are written out: this file must not move with an IPC limit.
-import { type ChannelMessage, isChannelMessage } from "../ipc-chat-channels";
+import {
+  type ChannelMessage,
+  type ChannelTypingEntry,
+  isChannelMessage,
+  isChannelTypingList,
+} from "../ipc-chat-channels";
 import { isDynamicRecord, isString } from "../runtime-values";
 import {
   adminRoute,
@@ -74,6 +92,8 @@ export const WORKSPACE_ROUTES = {
   activity: "/v1/workspace/activity",
   settings: "/v1/admin/workspace/settings",
   settingsUpdate: "/v1/admin/workspace/settings/update",
+  typing: "/v1/workspace/channels/typing",
+  dmAgents: "/v1/workspace/dm-agents",
 } as const;
 
 /** The largest thread page: the root and this many replies fit the frozen 100-message page bound. */
@@ -127,6 +147,10 @@ const unit: Decoder = (value) => {
     throw new Error("Invalid workspace priority.");
   return value;
 };
+const secondRound: Decoder = (value) => {
+  if (value !== 2) throw new Error("Invalid gate round.");
+  return value;
+};
 const gateDecision = fields(
   {
     agentId: identifier,
@@ -136,7 +160,7 @@ const gateDecision = fields(
     model: string(300),
     ms: count,
   },
-  { fallback: oneOf("timeout", "error", "invalid", "interrupted"), limited: boolean },
+  { fallback: oneOf("timeout", "error", "invalid", "interrupted"), limited: boolean, round: secondRound },
 );
 const MESSAGE_FIELDS: Record<string, Decoder> = {
   threadRootId: identifier,
@@ -227,6 +251,8 @@ const COMMAND_TYPES = [
   "open-dm",
   "link-discord",
   "unlink-discord",
+  "set-visibility",
+  "ensure-general",
 ];
 
 const COMMAND_FIELDS: Record<string, { required: Record<string, Decoder>; optional?: Record<string, Decoder> }> = {
@@ -265,11 +291,13 @@ const COMMAND_FIELDS: Record<string, { required: Record<string, Decoder>; option
   },
   "set-meta": { required: {}, optional: { name: nonEmpty(80), topic: string(250), description: string(2000) } },
   react: { required: { messageId: identifier, emoji: nonEmpty(64), action: oneOf("add", "remove") } },
-  edit: { required: { messageId: identifier, text: nonEmpty(100_000) } },
+  edit: { required: { messageId: identifier, text: string(100_000) } },
   delete: { required: { messageId: identifier } },
   "open-dm": { required: { memberIds: uniqueIdentifiers(8), agentIds: uniqueIdentifiers(8) } },
   "link-discord": { required: { connectionId: identifier, discordChannelId: identifier } },
   "unlink-discord": { required: {} },
+  "set-visibility": { required: { visibility: oneOf("public", "private") } },
+  "ensure-general": { required: {} },
 };
 
 const command: Decoder = (value) => {
@@ -339,20 +367,31 @@ const activityThread = fields({
 });
 const activity = fields({ items: list(activityItem, 200), threads: list(activityThread, 50) });
 
+const typingRequest = fields({ channelId: identifier, typing: boolean }, { threadRootId: identifier });
+const typingEntry = fields(
+  { kind: oneOf("member", "agent"), id: identifier, state: oneOf("typing", "thinking", "working") },
+  { threadRootId: identifier },
+);
+const dmAgents = fields({ agentIds: uniqueIdentifiers(100) });
+
 export const WORKSPACE_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [WORKSPACE_ROUTES.command, { request: command, response: channelResult }],
   [WORKSPACE_ROUTES.thread, { request: threadRequest, response: threadPage }],
   [WORKSPACE_ROUTES.activity, adminRoute(fields({}, { limit: activityLimit }), activity)],
   [WORKSPACE_ROUTES.settings, adminRoute(empty, settings)],
   [WORKSPACE_ROUTES.settingsUpdate, adminRoute(settings, settings)],
+  [WORKSPACE_ROUTES.typing, adminRoute(typingRequest, empty)],
+  [WORKSPACE_ROUTES.dmAgents, adminRoute(empty, dmAgents)],
 ]);
 
 export const CHANNEL_MESSAGE_EVENT = "channel-message";
 export const CHANNEL_MESSAGE_REMOVED_EVENT = "channel-message-removed";
+export const CHANNEL_TYPING_EVENT = "channel-typing";
 
 export type WorkspaceChannelEvent =
   | { type: typeof CHANNEL_MESSAGE_EVENT; channelId: string; message: ChannelMessage; revision: number }
-  | { type: typeof CHANNEL_MESSAGE_REMOVED_EVENT; channelId: string; messageId: string; revision: number };
+  | { type: typeof CHANNEL_MESSAGE_REMOVED_EVENT; channelId: string; messageId: string; revision: number }
+  | { type: typeof CHANNEL_TYPING_EVENT; channelId: string; typing: ChannelTypingEntry[] };
 
 /** The workspace event in `value`, or null for any other event. A malformed one throws. */
 export function workspaceChannelEvent(value: unknown): WorkspaceChannelEvent | null {
@@ -373,6 +412,12 @@ export function workspaceChannelEvent(value: unknown): WorkspaceChannelEvent | n
     if (!isString(channelId) || !isString(messageId) || typeof revision !== "number")
       throw new Error("Invalid channel message event.");
     return { type: CHANNEL_MESSAGE_REMOVED_EVENT, channelId, messageId, revision };
+  }
+  if (value.type === CHANNEL_TYPING_EVENT) {
+    const channelId = identifier(value.channelId);
+    const typing = list(typingEntry, 50)(value.typing);
+    if (!isString(channelId) || !isChannelTypingList(typing)) throw new Error("Invalid channel typing event.");
+    return { type: CHANNEL_TYPING_EVENT, channelId, typing };
   }
   return null;
 }

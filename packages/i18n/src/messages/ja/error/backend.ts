@@ -102,6 +102,10 @@ export const messages = {
   "error.backend.channelRemovePeople": "他の人を削除できるのは、オーナー、管理者、またはチャンネルの作成者だけです。",
   "error.backend.channelEditOwnOnly": "編集できるのは自分のメッセージだけです。",
   "error.backend.channelDeleteOwnOnly": "削除できるのは自分のメッセージだけです。",
+  "error.backend.channelEditEmpty": "ファイルのないメッセージにはテキストが必要です。",
+  "error.backend.channelVisibilityAdmin": "チャンネルを公開または非公開にできるのはオーナーと管理者だけです。",
+  "error.backend.channelVisibilityKind": "公開または非公開にできるのはチャンネルだけです。DM やグループはできません。",
+  "error.backend.channelAgentChatRequired": "DM を開けるのは、チャットできるエージェントとだけです。",
   "error.backend.memoryEssentialBudget":
     "必須メモリーがプロンプトの上限を超えています。エントリーを「必要なときに検索」に設定してから、もう一度お試しください。",
   "error.backend.memorySelectionConflict": "メモリーが変更されました。再読み込みして、もう一度お試しください。",

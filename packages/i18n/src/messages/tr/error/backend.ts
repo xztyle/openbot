@@ -99,6 +99,12 @@ export const messages = {
     "Diğer kişileri yalnızca sahip, yönetici veya kanalı oluşturan kişi çıkarabilir.",
   "error.backend.channelEditOwnOnly": "Yalnızca kendi mesajlarınızı düzenleyebilirsiniz.",
   "error.backend.channelDeleteOwnOnly": "Yalnızca kendi mesajlarınızı silebilirsiniz.",
+  "error.backend.channelEditEmpty": "Dosyası olmayan bir mesajın metni olmalıdır.",
+  "error.backend.channelVisibilityAdmin":
+    "Bir kanalı yalnızca sahipler ve yöneticiler herkese açık veya özel yapabilir.",
+  "error.backend.channelVisibilityKind":
+    "Yalnızca bir kanal herkese açık veya özel olabilir; doğrudan mesaj veya grup olamaz.",
+  "error.backend.channelAgentChatRequired": "Doğrudan mesajı yalnızca sohbet edebildiğiniz bir ajanla açabilirsiniz.",
   "error.backend.memoryEssentialBudget":
     "Temel bellekler istem sınırını aşıyor. Bir girdiyi gerektiğinde aranacak şekilde ayarlayın, ardından tekrar deneyin.",
   "error.backend.memorySelectionConflict": "Bellek değişti. Yeniden yükleyin ve tekrar deneyin.",

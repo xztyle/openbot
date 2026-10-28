@@ -17,7 +17,12 @@ import {
 } from "./ipc-approvals";
 import { isIdentifier } from "./ipc-bounded-values";
 import type { BrowserControlState, BrowserTab } from "./ipc-browser";
-import { type ChannelMessage, isChannelMessage } from "./ipc-chat-channels";
+import {
+  type ChannelMessage,
+  type ChannelTypingEntry,
+  isChannelMessage,
+  isChannelTypingList,
+} from "./ipc-chat-channels";
 import { type AgentPromptQuestion, isAgentPromptQuestion, isConversationMessage } from "./ipc-conversation-messages";
 import {
   type ConversationPage,
@@ -47,6 +52,11 @@ export type AgentEvent =
   | { type: "channel-message"; channelId: string; message: ChannelMessage; revision: number }
   /** A message left the channel transcript, as a deleted message with no replies does. */
   | { type: "channel-message-removed"; channelId: string; messageId: string; revision: number }
+  /**
+   * Who types, thinks or works in a channel now: the whole list, which replaces the last one. People
+   * type; the answer gate considers agents (`thinking`); agents run tasks (`working`).
+   */
+  | { type: "channel-typing"; channelId: string; typing: ChannelTypingEntry[] }
   /**
    * What an agent does changed: a turn started, ended, took a step or waits for a person, or the
    * queue changed. At most one each `WORKSPACE_FLEET_EVENT_INTERVAL_MS`. A fleet view reads
@@ -202,6 +212,8 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
         Number.isSafeInteger(value.revision) &&
         value.revision >= 0
       );
+    case "channel-typing":
+      return isIdentifier(value.channelId) && isChannelTypingList(value.typing);
     case "workspace-fleet-changed":
       return isWorkspaceFleetChange(value);
     case "status":

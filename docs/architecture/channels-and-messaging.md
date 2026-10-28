@@ -326,15 +326,26 @@ question for each gated member, all at the same time. The prompt carries the new
 root, the last 20 readable messages of the channel or thread (bounded), the agent's name, title,
 description and channel `focus`, what it does now (its open channel tasks, its own chat's running
 turn, its agent tasks) and the other members with their focus. The answer must be exactly
-`{"answer", "reason", "priority"}`. At most `CHANNEL_GATE_ANSWER_LIMIT` (2) gated members answer, the
-highest priority first, on a tie the earlier member. A question that fails, answers badly or is still
+`{"answer", "reason", "priority"}`. In the first round only the gated member with the highest
+priority answers (on a tie the earlier member); each other one that wanted to answer gets `limited`
+and waits on the message in `gateFollowUp` (`{ afterAgentId, agentIds }`). When the task of
+`afterAgentId` for the message completes or fails, `complete` makes those members pending again and
+the gate asks each of them once more, with the answers in the prompt (`round: 2` on their
+decisions); they answer only when they add something new, so at most `CHANNEL_GATE_ANSWER_LIMIT` (2)
+gated members answer one message. `@channel`, `@here` and `@everyone` do not force every member to
+answer: the gate also asks the `mention` members then, `always-no-gate` members answer, and an
+explicitly mentioned agent always answers. A question that fails, answers badly or is still
 running at the deadline counts as "do not answer" (the `mention` behavior); the late generation keeps
 running so its warm client stays warm. The outcome commits through the command queue: the tasks of
 the members that answer, and on the message `gateDecisions` (`{ agentId, answer, reason, priority,
-model, ms, fallback?, limited? }`) in place of `gatePending`. `recover` settles a message that a stop
-left pending as `interrupted`. The gate questions run on `GateGenerations` (`agent/gate-generations.ts`,
-two warm clients per provider), count against the disposable generation limit, and their usage is
-recorded under the agent they were about. `ChannelService.read` and the Team API `channel-message`
+model, ms, fallback?, limited?, round? }`) in place of `gatePending`. `recover` settles a message that
+a stop left pending as `interrupted`, and starts a second round whose first answer ended meanwhile; it
+reads only the newest 200 messages of each channel (`ChannelStore.gateOpenMessages`). The gate
+questions run on `GateGenerations` (`agent/gate-generations.ts`) with their own budget: at most
+`GATE_CONCURRENCY` (8) at once, apart from the disposable generation limit of the profile drafts and
+the workflow steps, and a warm pool that grows to the number of questions of one message (at most 8
+warm clients per provider). A question that finds the budget full waits for a place until the
+deadline. Their usage is recorded under the agent they were about. `ChannelService.read` and the Team API `channel-message`
 event leave `gateDecisions` out for a person who is not an owner or an admin.
 
 Each commit records the messages it wrote. `ChannelService.publish` sends a `channel-message` (or
@@ -354,6 +365,37 @@ gives one item, in this order. The reader's own messages, deleted messages, stre
 thinking, plans and routing events give none. `unread` compares the message sequence with the read
 position of the channel. `threads` are the threads in which the reader wrote, with the summary of the
 root and the unread replies. It only reads; a client reads it again on `channel-message`.
+
+#### Workspace polish (phase 6)
+
+- Typing: a client sends `agent.channelTyping` (`{ channelId, threadRootId?, typing }`; Team API
+  `POST /v1/workspace/channels/typing`) at most every `CHANNEL_TYPING_INTERVAL_MS` (3 s) while the
+  person types. `ChannelTyping` (`channel-typing.ts`) keeps, in memory, the people who typed in the
+  last 6 seconds, the agents that the gate considers (`thinking`) and the agents with a starting or
+  running assignment (`working`), and sends the whole list of a channel as `channel-typing` when it
+  changes. A message of the person ends their typing. The Team API sends it only to a peer that can
+  see the channel, without the agents hidden from it.
+- `set-visibility` (owners and admins) makes a `channel` public or private; a channel that turns
+  private keeps its people. `ensure-general` makes `#general` when the workspace has no `channel`
+  (public, every active person of the team, every agent that is not hidden or in the background, in
+  `mention` mode) and otherwise answers the first channel named general that the sender sees. It and
+  `open-dm` queue by the workspace and by the participants, so two clients that send them at once get
+  one channel.
+- An agent added to a channel without a mode or a focus (`create`, `invite`, a group DM, a released
+  client's save) takes its own channel defaults (`WorkspaceSettings.defaults.agents`), then the
+  workspace default. The agent of a one-to-one DM answers each message.
+- `agent.workspaceDmAgents` (Team API `POST /v1/workspace/dm-agents`) lists the agents that the
+  reader may open a DM with: visible to them and `chat` or more. `open-dm` refuses any other agent.
+- `edit` keeps the files of a message and accepts an empty text for a message with files. A deletion
+  takes the files out of the view; the mailbox keeps them until the channel is deleted.
+- `channel_history` takes `threadRootId` to read one thread. The history packet names the platform
+  and the name of a bridged author (`externalAuthor`).
+- Discord: messaging asks Signal for the edits and deletions of the bridged channels
+  (`discord-listen` with `changes: true`; Signal sends `message-update` and `message-delete`
+  deliveries only to a host that asked). The bridge edits or deletes the workspace message that it
+  brought in, as its Discord author.
+- The fleet shows an agent whose work a usage limit holds as `waiting` with `reason: "usage-limit"`
+  and `resetsAt`, and names in `forMemberId` the person who asked for the channel task.
 
 ### Workspace fleet, step trails and artifacts
 

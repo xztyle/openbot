@@ -125,7 +125,9 @@ export function createRendererForwarders({
     // The DMs of other people on this host stay with them, as the Team API keeps them.
     if (
       serverId === LOCAL_SERVER_ID &&
-      (event.type === "channel-message" || event.type === "channel-message-removed") &&
+      (event.type === "channel-message" ||
+        event.type === "channel-message-removed" ||
+        event.type === "channel-typing") &&
       !getHostService()?.channelVisibleToHostUser(event.channelId)
     )
       return;

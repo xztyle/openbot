@@ -1784,6 +1784,7 @@ export async function createApplicationServices({
     channelPersonAgentLevel: (personId, agentId) => host.channelPersonAgentLevel(personId, agentId),
     channelRemotePerson: (personId) => host.channelPersonIsRemote(personId),
     channelPerson: (personId) => host.channelPerson(personId),
+    channelPeople: () => host.channelPeople(),
     workspaceSettings: () => workspaceSettings.get(),
     // The delete also clears the agent from workflow nodes, so the editors of those workflows load
     // the new graph. `workflowStore` is built later, after the agent service.

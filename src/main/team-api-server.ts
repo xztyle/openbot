@@ -1283,10 +1283,25 @@ export class TeamApiServer {
       // A message reaches only a member who can see its channel: a private channel, a DM or a group
       // stays with its people.
       if (
-        (event.type === "channel-message" || event.type === "channel-message-removed") &&
+        (event.type === "channel-message" ||
+          event.type === "channel-message-removed" ||
+          event.type === "channel-typing") &&
         !this.#memberSeesChannel(member, event.channelId)
       )
         continue;
+      // An agent that this peer cannot see does not think or work for it either.
+      if (event.type === "channel-typing") {
+        const hidden = hiddenProviderAgentIds(
+          this.#options.agents.listAgents(),
+          eventProtocol(connection.capabilities),
+        );
+        event = {
+          ...event,
+          typing: event.typing.filter(
+            (entry) => entry.kind !== "agent" || (!blocked.has(entry.id) && !hidden.has(entry.id)),
+          ),
+        };
+      }
       // The answer gate's decisions are a debug view of the owners and admins.
       if (event.type === "channel-message" && event.message.gateDecisions && !canAdministerServer(member.role))
         event = { ...event, message: withoutChannelGateDecisions(event.message) };
@@ -2242,6 +2257,7 @@ function eventCapability(event: AgentEvent): TeamCurrentCapability | null {
   if (event.type === "runtime-snapshot") return "agent-runtime-snapshots";
   if (event.type === "agent-input-escalations-changed") return INPUT_ESCALATIONS_CAPABILITY;
   if (event.type === "channel-message" || event.type === "channel-message-removed") return WORKSPACE_CAPABILITY;
+  if (event.type === "channel-typing") return WORKSPACE_CAPABILITY;
   if (event.type === "workspace-fleet-changed") return WORKSPACE_CAPABILITY;
   if (event.type === "sidebar-layout-changed") return "sidebar-layout";
   if (event.type === "browser-changed" || event.type === "browser-control-changed") return "browser-control";

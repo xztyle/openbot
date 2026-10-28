@@ -27,9 +27,11 @@ const PERSON_ONLY =
 export const CHANNEL_TOOL_DEFINITIONS: readonly { name: string; description: string; shape: z.ZodRawShape }[] = [
   {
     name: "channel_history",
-    description: "Read earlier shared channel messages. This never starts another agent.",
+    description:
+      "Read earlier shared channel messages, or with threadRootId the root and the replies of one thread. This never starts another agent.",
     shape: {
       beforeSequence: z.number().int().min(0).optional(),
+      threadRootId: z.string().optional().describe("The id of a thread root: read that thread instead of the channel."),
       attachmentId: z.string().optional(),
     },
   },

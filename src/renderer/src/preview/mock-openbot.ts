@@ -948,6 +948,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     (agentId) => agents.find((entry) => entry.id === agentId)?.name ?? agentId,
     options.channels,
     options.channelMemberId,
+    () => agents.filter((entry) => entry.hiddenAt === undefined && entry.background !== true).map((entry) => entry.id),
   );
   const mockProviderRuntimes = createMockProviderRuntimes(options, runtime);
   const mockVoice = createMockVoice(options, runtime);

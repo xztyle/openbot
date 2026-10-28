@@ -1,6 +1,13 @@
 import type { Channel, ChannelAnswerMode, ChannelGateDecision, ChannelMessage } from "@openbot/contracts/ipc";
 import { Effect, type Scope } from "effect";
-import { ChannelGate, type ChannelGateModel, type ChannelGateRequest, gateFallback, gateWinners } from "./channel-gate";
+import {
+  ChannelGate,
+  type ChannelGateModel,
+  type ChannelGateRequest,
+  gateFallback,
+  gateFirstRound,
+  gateSecondRound,
+} from "./channel-gate";
 
 /** What `ChannelResponders.select` knows about a person's message besides the channel. */
 export interface ChannelResponderInput {
@@ -20,8 +27,9 @@ export interface ChannelResponderInput {
  * Which member agents answer one message of a person.
  *
  * - `agentIds` answer now: mentioned, replied to, taking part in the thread, or `always-no-gate`.
- * - `gated` are the `always` members that are not addressed. `ChannelResponders.gate` decides for
- *   each of them after the message is stored, so the person sees it at once.
+ * - `gated` are the `always` members that are not addressed, and on `@channel`, `@here` or
+ *   `@everyone` the `mention` members too. `ChannelResponders.gate` decides for each of them after
+ *   the message is stored, so the person sees it at once.
  * - `lead` is true when the channel routes the message with its lead as before the workspace: a
  *   member with no answer mode, or with `lead`, and no other member selected.
  */
@@ -40,16 +48,23 @@ export function memberAnswerMode(channel: Channel, agentId: string): ChannelAnsw
   return channel.members.find((member) => member.agentId === agentId)?.answerMode ?? "lead";
 }
 
-/** The gated members that answer, and the decision for each gated member, for the log. */
+/**
+ * The gated members that answer, and the decision for each gated member, for the log. After a first
+ * round, `followUp` holds the other members that wanted to answer, the highest priority first: they
+ * wait for the first answer and are asked again once.
+ */
 export interface ChannelGateOutcome {
   agentIds: string[];
   decisions: ChannelGateDecision[];
+  followUp?: string[];
 }
 
 /**
  * Selects the agents that answer a message of a person, in two steps: `select` at once, for the
  * addressed members and the `always-no-gate` ones, and `gate`, which asks the cheap model about each
- * `always` member and keeps at most `CHANNEL_GATE_ANSWER_LIMIT` of them. It never selects for a
+ * gated member. In the first round only the member with the highest priority answers; after its
+ * answer the gate asks the others that wanted to answer again, once, with that answer, so at most
+ * `CHANNEL_GATE_ANSWER_LIMIT` gated members answer one message. It never selects for a
  * message of an agent: agents start each other only with an explicit mention (`ChannelService` limits
  * that chain).
  */
@@ -70,7 +85,7 @@ export class ChannelResponders {
     const decisions = model
       ? this.#gate.decide(request, model, scope)
       : Effect.succeed(request.agents.map((agent) => gateFallback(agent.agentId, "error")));
-    return decisions.pipe(Effect.map(gateWinners));
+    return decisions.pipe(Effect.map(request.answers ? gateSecondRound : gateFirstRound));
   }
 
   select(channel: Channel, input: ChannelResponderInput): ChannelResponderSelection {
@@ -94,9 +109,11 @@ export class ChannelResponders {
       if (!eligible.has(member.agentId)) continue;
       const mode = member.answerMode ?? "lead";
       const inThread = thread?.threadSummary?.participantIds.includes(member.agentId) ?? false;
-      if (addressed.has(member.agentId) || (mode !== "lead" && (inThread || broadcast))) agentIds.push(member.agentId);
+      if (addressed.has(member.agentId) || (mode !== "lead" && inThread)) agentIds.push(member.agentId);
       else if (mode === "always-no-gate") agentIds.push(member.agentId);
-      else if (mode === "always") gated.push(member.agentId);
+      // A broadcast addresses every member, so the gate also asks the ones that answer only when
+      // mentioned: without it, each of them would answer the same message.
+      else if (mode === "always" || (mode === "mention" && broadcast)) gated.push(member.agentId);
       else if (mode === "lead") leadMembers += 1;
     }
     return { agentIds, gated, lead: agentIds.length === 0 && gated.length === 0 && leadMembers > 0 };

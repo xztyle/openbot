@@ -8,13 +8,13 @@ import {
   type AgentSummary,
   CHANNEL_ASSIGNMENT_LIMIT,
   CHANNEL_CHANGE_ITEM_TYPE,
+  CHANNEL_GATE_DECISION_LIMIT,
   CHANNEL_MENTION_CHAIN_LIMIT,
   CHANNEL_PARALLEL_LIMIT,
   type Channel,
   type ChannelAnswerMode,
   type ChannelCommand,
   type ChannelDiscordLink,
-  type ChannelGateDecision,
   type ChannelMember,
   type ChannelMemory,
   type ChannelMessage,
@@ -22,6 +22,8 @@ import {
   type ChannelReadInput,
   type ChannelRoutingConversationEventAction,
   type ChannelTask,
+  type ChannelTypingEntry,
+  type ChannelTypingInput,
   type ChannelWorkspaceFields,
   type ConversationSnapshot,
   type CreateChannelMemoryInput,
@@ -35,6 +37,7 @@ import {
   type UpdateChannelMemoryInput,
   type WorkspaceActivity,
   type WorkspaceActivityInput,
+  type WorkspaceAgentChannelDefaults,
   withoutChannelGateDecisions,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
@@ -61,14 +64,18 @@ import {
   PERSON_REQUEST_REQUIRED,
 } from "./channel-management";
 import { ChannelMemoryStore } from "./channel-memory-store";
-import { ChannelResponders, memberAnswerMode, usesAnswerModes } from "./channel-responders";
+import { type ChannelGateOutcome, ChannelResponders, memberAnswerMode, usesAnswerModes } from "./channel-responders";
 import { type ChannelAssignment, type ChannelContext, type ChannelMessageChange, ChannelStore } from "./channel-store";
+import { ChannelTyping } from "./channel-typing";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
 import {
   createdChannel,
   deletedMessage,
   directChannel,
+  directKey,
   editedMessage,
+  existingGeneral,
+  generalChannel,
   invitedChannel,
   joinedChannel,
   leftChannel,
@@ -76,6 +83,7 @@ import {
   metaChannel,
   reactedMessage,
   removedChannel,
+  visibilityChannel,
   type WorkspaceCommandContext,
 } from "./channel-workspace-commands";
 import type { DeliveryContext, MailboxStore } from "./mailbox-store";
@@ -148,6 +156,15 @@ export interface ChannelHooks {
   gate?(): ChannelGateModel | null;
   /** What an agent does now outside this channel, a few short lines, for the answer gate. */
   activity?(agentId: string): string[];
+  /**
+   * The channel defaults of one agent (`WorkspaceSettings.defaults.agents`): the answer mode and the
+   * focus it takes when someone adds it to a channel without them. Omitted, the workspace default.
+   */
+  agentDefaults?(agentId: string): WorkspaceAgentChannelDefaults | undefined;
+  /** Every active person of the team, the host user first, for `#general`. Omitted, only the sender. */
+  people?(): { id: string; name: string }[];
+  /** The people that type, and the agents that think or work, in a channel: the whole new list. */
+  typingChanged?(channelId: string, typing: ChannelTypingEntry[]): void;
   error(error: unknown): void;
 }
 
@@ -202,6 +219,8 @@ export class ChannelService {
   discordBridge: ChannelDiscordBridgePort | null = null;
   readonly #history: ChannelHistory;
   readonly #activity: ChannelActivity;
+  /** Who types, thinks or works in each channel now, for the `channel-typing` event. */
+  readonly #typing: ChannelTyping;
   #scope = Scope.makeUnsafe();
   readonly #pumps = new Map<string, Fiber.Fiber<void>>();
   readonly #commands = new Map<string, Deferred.Deferred<void>>();
@@ -248,6 +267,16 @@ export class ChannelService {
   ) {
     this.store = new ChannelStore(database);
     this.#activity = new ChannelActivity(this.store);
+    this.#typing = new ChannelTyping({
+      emit: (channelId, typing) => hooks.typingChanged?.(channelId, typing),
+      working: (channelId) =>
+        this.store.exists(channelId)
+          ? this.store
+              .assignments(channelId)
+              .filter((assignment) => assignment.state === "starting" || assignment.state === "running")
+              .map((assignment) => ({ agentId: assignment.agentId, threadRootId: assignment.threadRootId }))
+          : [],
+    });
     this.memories = new ChannelMemoryStore(database);
     this.#history = new ChannelHistory(this.store, hooks.generate, this.memories);
   }
@@ -281,9 +310,16 @@ export class ChannelService {
         const next = beforeApply(command);
         return next ? this.apply(next, actor, [], viewer) : channelSync(() => this.store.get(command.channelId));
       });
-      return command.type === "stop" || command.type === "archive"
-        ? operation
-        : this.#serialize(command.channelId, operation);
+      if (command.type === "stop" || command.type === "archive") return operation;
+      // Two clients that open the same DM, or onboard at once, send different new channel ids: the
+      // queue of the participants, or of the workspace, makes the second one find the first.
+      const queue =
+        command.type === "open-dm"
+          ? `workspace:dm:${directKey(command, actor.id)}`
+          : command.type === "ensure-general"
+            ? "workspace:ensure-general"
+            : command.channelId;
+      return this.#serialize(queue, operation);
     },
   );
 
@@ -336,6 +372,23 @@ export class ChannelService {
     return this.#activity.read(input, viewer, (agentId) => agents.get(agentId));
   }
 
+  /**
+   * A person types in a channel they can see, or stopped. It changes only the typing list in memory;
+   * a channel that does not exist, or that the person cannot see, answers as not found.
+   */
+  typing(input: ChannelTypingInput, actor: { id: string }, viewer?: ChannelViewer): void {
+    if (!this.store.exists(input.channelId)) throw new Error(sourceText("error.backend.channelNotFound"));
+    const channel = this.store.get(input.channelId);
+    if (viewer && !canSeeChannel(channel, viewer)) throw new Error(sourceText("error.backend.channelNotFound"));
+    if (channel.archived) throw new Error(sourceText("error.backend.channelArchived"));
+    this.#typing.person(channel.id, actor.id, input.threadRootId, input.typing);
+  }
+
+  /** Who types, thinks or works in a channel now. */
+  typingList(channelId: string): ChannelTypingEntry[] {
+    return this.#typing.list(channelId);
+  }
+
   readonly deleteChannel = Effect.fn("ChannelService.deleteChannel")((channelId: string) =>
     this.#serialize(
       channelId,
@@ -374,6 +427,7 @@ export class ChannelService {
           yield* this.mailbox.deleteChannelData(channelId, threadIds).pipe(Effect.mapError(channelFailure));
           for (const threadId of threadIds) yield* this.hooks.forgetThread?.(threadId) ?? Effect.void;
           yield* channelSync(() => this.store.delete(channelId));
+          this.#typing.forget(channelId);
           this.#pumps.delete(channelId);
           this.#wakeAgain.delete(channelId);
           this.#waitingForAgents.delete(channelId);
@@ -418,6 +472,19 @@ export class ChannelService {
       const created = yield* channelSync(() => createdChannel(command, this.#workspaceContext(actor, viewer)));
       const result = yield* channelSync(() => this.store.update(created, {}, operationId));
       this.publish(created.id);
+      return result;
+    }
+    if (command.type === "ensure-general") {
+      const channels = yield* channelSync(() => this.store.ids().map((id) => this.store.get(id)));
+      const existing = yield* channelSync(() => existingGeneral(channels, viewer));
+      if (existing) return existing;
+      if (yield* channelSync(() => this.store.exists(command.channelId)))
+        return yield* channelFailure(new Error(sourceText("error.backend.channelExists")));
+      const general = yield* channelSync(() =>
+        generalChannel(command.channelId, this.hooks.people?.() ?? [], this.#workspaceContext(actor, viewer)),
+      );
+      const result = yield* channelSync(() => this.store.update(general, {}, operationId));
+      this.publish(general.id);
       return result;
     }
     if (command.type === "open-dm") {
@@ -609,6 +676,10 @@ export class ChannelService {
       case "link-discord":
       case "unlink-discord":
         return yield* this.#linkDiscord(channel, command, viewer, operationId);
+      case "set-visibility": {
+        const next = yield* channelSync(() => visibilityChannel(channel, command.visibility, workspace));
+        return next === channel ? channel : yield* this.#commitChannel(next, operationId);
+      }
     }
     if (command.type === "send") {
       const recipientAgentId = command.recipientAgentId;
@@ -762,6 +833,7 @@ export class ChannelService {
         ),
       );
       const { current, previous, affected, task, message, result, gated } = stored;
+      this.#typing.personSent(current.id, actor.id);
       this.publish(current.id);
       // The person sees the message now; the gated members answer, or not, when the gate decides.
       if (gated.length) yield* this.#startGate(current.id, message.id, gated);
@@ -1841,12 +1913,35 @@ export class ChannelService {
     if (this.#scope.state._tag === "Closed") this.#scope = Scope.makeUnsafe();
     this.#stopped = false;
     // A gate that the last stop interrupted decides nothing: its members answer as `mention` members.
-    for (const message of yield* channelSync(() => this.store.gatePendingMessages()))
-      if (!this.#gating.has(message.id))
-        yield* this.#settleGate(message.channelId, message.id, {
-          agentIds: [],
-          decisions: (message.gatePending ?? []).map((agentId) => gateFallback(agentId, "interrupted")),
-        });
+    // A second round that waits for an answer starts when that answer has ended meanwhile.
+    for (const message of yield* channelSync(() => this.store.gateOpenMessages())) {
+      if (this.#gating.has(message.id)) continue;
+      if (message.gatePending?.length) {
+        yield* this.#settleGate(
+          message.channelId,
+          message.id,
+          {
+            agentIds: [],
+            decisions: message.gatePending.map((agentId) => gateFallback(agentId, "interrupted")),
+          },
+          message.gateDecisions?.length ? 2 : 1,
+        );
+        continue;
+      }
+      const followUp = message.gateFollowUp;
+      if (!followUp) continue;
+      const task = (yield* channelSync(() => this.store.tasks(message.channelId))).find(
+        (item) => item.requestMessageId === message.id && item.ownerAgentId === followUp.afterAgentId,
+      );
+      if (task && !terminal(task) && task.state !== "failed") continue;
+      if (task) {
+        yield* this.#startFollowUp(message.channelId, message);
+        continue;
+      }
+      const { gateFollowUp: _dropped, ...rest } = message;
+      yield* channelSync(() => this.store.update(this.store.get(message.channelId), { quietMessages: [rest] }));
+      this.publish(message.channelId);
+    }
     for (const context of yield* channelSync(() => this.store.executionThreads()))
       this.capture(yield* channelSync(() => this.store.database.readConversation(context.id, context.threadId)));
     const archived = yield* channelSync(() => this.store.archivedIds());
@@ -2265,6 +2360,11 @@ export class ChannelService {
       hidden: (agentId) => this.hooks.hidden?.(agentId) ?? false,
       person: (id) => (this.hooks.person ? this.hooks.person(id) : { id, name: id }),
       defaultAnswerMode: this.hooks.defaultAnswerMode?.() ?? "mention",
+      agentDefaults: (agentId) => this.hooks.agentDefaults?.(agentId),
+      // A person who sent the command reaches only the agents they may chat with.
+      ...(viewer && this.hooks.personAgentLevel
+        ? { agentLevel: (agentId: string) => this.hooks.personAgentLevel?.(viewer.id, agentId) ?? "manage" }
+        : {}),
       actor,
       viewer,
     };
@@ -2290,9 +2390,12 @@ export class ChannelService {
     const defaultMode = this.hooks.defaultAnswerMode?.() ?? "mention";
     return members.map((member) => {
       const stored = channel.members.find((item) => item.agentId === member.agentId);
+      // A member that joins a workspace channel takes its own channel defaults, then the workspace's.
+      const joins = channel.kind !== undefined && !stored;
+      const defaults = joins ? this.hooks.agentDefaults?.(member.agentId) : undefined;
       const answerMode =
-        member.answerMode ?? stored?.answerMode ?? (channel.kind !== undefined && !stored ? defaultMode : undefined);
-      const focus = member.focus ?? stored?.focus;
+        member.answerMode ?? stored?.answerMode ?? (joins ? (defaults?.answerMode ?? defaultMode) : undefined);
+      const focus = member.focus ?? stored?.focus ?? defaults?.focus;
       return {
         agentId: member.agentId,
         ...(answerMode === undefined ? {} : { answerMode }),
@@ -2376,31 +2479,52 @@ export class ChannelService {
    * behind the other commands of the channel. Shutdown interrupts it, and `recover` then settles the
    * message as `interrupted`.
    */
-  #startGate(channelId: string, messageId: string, agentIds: readonly string[]): Effect.Effect<void> {
+  #startGate(channelId: string, messageId: string, agentIds: readonly string[], round: 1 | 2 = 1): Effect.Effect<void> {
     const work = Effect.gen({ self: this }, function* () {
       const outcome = yield* Effect.gen({ self: this }, function* () {
-        const request = yield* channelSync(() => this.#gateRequest(channelId, messageId, agentIds));
+        const request = yield* channelSync(() => this.#gateRequest(channelId, messageId, agentIds, round));
         const model = yield* channelSync(() => this.hooks.gate?.() ?? null);
-        return request ? yield* this.responders.gate(request, model, this.#scope) : { agentIds: [], decisions: [] };
+        const none: ChannelGateOutcome = { agentIds: [], decisions: [] };
+        return request ? yield* this.responders.gate(request, model, this.#scope) : none;
       }).pipe(
         Effect.catch((failure) =>
-          Effect.sync(() => {
+          Effect.sync((): ChannelGateOutcome => {
             this.hooks.error(failure.cause);
             return { agentIds: [], decisions: agentIds.map((agentId) => gateFallback(agentId, "error")) };
           }),
         ),
       );
-      yield* this.#serialize(channelId, this.#settleGate(channelId, messageId, outcome));
+      yield* this.#serialize(channelId, this.#settleGate(channelId, messageId, outcome, round));
     }).pipe(
       Effect.catch((failure) => Effect.sync(() => this.hooks.error(failure.cause))),
-      Effect.ensuring(Effect.sync(() => this.#gating.delete(messageId))),
+      Effect.ensuring(
+        Effect.sync(() => {
+          this.#gating.delete(messageId);
+          this.#typing.gateSettled(channelId, messageId);
+        }),
+      ),
     );
     this.#gating.add(messageId);
+    this.#typing.gateStarted(channelId, messageId, agentIds, this.#threadOf(channelId, messageId));
     return Effect.forkIn(work, this.#scope, { startImmediately: false }).pipe(Effect.asVoid);
   }
 
+  /** The thread a message is in or starts, for the typing list. */
+  #threadOf(channelId: string, messageId: string): string | undefined {
+    try {
+      return this.store.message(channelId, messageId)?.threadRootId;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** What the gate reads about one message, or null when the message or the channel is gone. */
-  #gateRequest(channelId: string, messageId: string, agentIds: readonly string[]): ChannelGateRequest | null {
+  #gateRequest(
+    channelId: string,
+    messageId: string,
+    agentIds: readonly string[],
+    round: 1 | 2,
+  ): ChannelGateRequest | null {
     if (this.#deletedChannels.has(channelId)) return null;
     const channel = this.store.get(channelId);
     const message = this.store.message(channelId, messageId);
@@ -2463,7 +2587,26 @@ export class ChannelService {
       recent,
       agents,
       members,
+      ...(round === 2 ? { answers: this.#answersTo(channelId, messageId, tasks) } : {}),
     };
+  }
+
+  /** The completed answers of agents to one message, oldest first, for the second gate round. */
+  #answersTo(channelId: string, messageId: string, tasks: readonly ChannelTask[]): ChannelMessage[] {
+    const taskIds = new Set(tasks.filter((task) => task.requestMessageId === messageId).map((task) => task.id));
+    if (!taskIds.size) return [];
+    return this.store
+      .messages(channelId, Number.MAX_SAFE_INTEGER, 200)
+      .filter(
+        (item) =>
+          item.author.kind === "agent" &&
+          item.taskId !== null &&
+          taskIds.has(item.taskId) &&
+          item.message.status === "completed" &&
+          !item.superseded &&
+          gateReadable(item),
+      )
+      .slice(-4);
   }
 
   /**
@@ -2474,7 +2617,8 @@ export class ChannelService {
   #settleGate(
     channelId: string,
     messageId: string,
-    outcome: { agentIds: readonly string[]; decisions: readonly ChannelGateDecision[] },
+    outcome: ChannelGateOutcome,
+    round: 1 | 2 = 1,
   ): Effect.Effect<void, ChannelOperationError> {
     return Effect.gen({ self: this }, function* () {
       if (this.#deletedChannels.has(channelId) || !(yield* channelSync(() => this.store.exists(channelId)))) return;
@@ -2483,24 +2627,50 @@ export class ChannelService {
       if (!message) return;
       const eligible = new Set(this.eligibleMembers(channel));
       const tasks = yield* channelSync(() => this.store.tasks(channelId));
-      const answering =
+      // The first round names the agent that answers now and, after it, the ones that wait for its
+      // answer. One that can no longer answer gives its place to the next.
+      const ordered =
         channel.archived || message.deletedAt
           ? []
-          : outcome.agentIds.filter(
+          : [...outcome.agentIds, ...(outcome.followUp ?? [])].filter(
               (agentId) =>
                 eligible.has(agentId) &&
                 !tasks.some((task) => task.requestMessageId === messageId && task.ownerAgentId === agentId),
             );
+      const answering = round === 1 ? ordered.slice(0, 1) : ordered;
+      const waiting = round === 1 ? ordered.slice(1) : [];
       const added = answering.map((agentId) => this.newTask(channelId, messageId, message.message.text, agentId));
-      const { gatePending: _settled, ...rest } = message;
+      const { gatePending: _settled, gateFollowUp: _followUp, gateDecisions: previous, ...rest } = message;
+      // The second round adds its decisions to those of the first.
+      const decisions = [...(round === 2 ? (previous ?? []) : []), ...outcome.decisions].slice(
+        -CHANNEL_GATE_DECISION_LIMIT,
+      );
+      const first = answering[0];
       const settled: ChannelMessage = {
         ...rest,
-        ...(outcome.decisions.length ? { gateDecisions: [...outcome.decisions] } : {}),
+        ...(decisions.length ? { gateDecisions: decisions } : {}),
+        ...(first && waiting.length ? { gateFollowUp: { afterAgentId: first, agentIds: waiting } } : {}),
         taskId: rest.taskId ?? added[0]?.id ?? null,
       };
       yield* channelSync(() => this.store.update(channel, { quietMessages: [settled], tasks: added }));
       this.publish(channelId);
       if (added.length) yield* this.wake(channelId);
+    });
+  }
+
+  /**
+   * Starts the second gate round of a message: its waiting members become pending again, and the
+   * gate asks each of them once more, with the answers that the message has now.
+   */
+  #startFollowUp(channelId: string, message: ChannelMessage): Effect.Effect<void, ChannelOperationError> {
+    return Effect.gen({ self: this }, function* () {
+      const followUp = message.gateFollowUp;
+      if (!followUp) return;
+      const { gateFollowUp: _started, ...rest } = message;
+      const pending: ChannelMessage = message.deletedAt ? rest : { ...rest, gatePending: followUp.agentIds };
+      yield* channelSync(() => this.store.update(this.store.get(channelId), { quietMessages: [pending] }));
+      this.publish(channelId);
+      if (!message.deletedAt) yield* this.#startGate(channelId, message.id, followUp.agentIds, 2);
     });
   }
 
@@ -2623,6 +2793,13 @@ export class ChannelService {
       );
       this.resolveAssignmentTerminal(assignment.id);
       this.publish(channelId);
+      // The first gated answer to a person's message has ended: the others that wanted to answer
+      // decide again, with it.
+      const ended = updated.find((item) => item.id === task.id);
+      if (ended && (ended.state === "completed" || ended.state === "failed")) {
+        const request = yield* channelSync(() => this.store.message(channelId, task.requestMessageId));
+        if (request?.gateFollowUp?.afterAgentId === task.ownerAgentId) yield* this.#startFollowUp(channelId, request);
+      }
       yield* this.#releaseHeldAgents([assignment.agentId]);
     });
   }
@@ -2756,15 +2933,18 @@ export class ChannelService {
         if (!attachment) return yield* channelFailure(new Error("The attachment is unavailable."));
         return attachment;
       }
+      const before =
+        typeof args.beforeSequence === "number" && Number.isSafeInteger(args.beforeSequence) && args.beforeSequence >= 0
+          ? args.beforeSequence
+          : undefined;
+      const threadRootId = isString(args.threadRootId) && args.threadRootId ? args.threadRootId : null;
+      if (threadRootId) {
+        const root = yield* channelSync(() => this.store.message(channelId, threadRootId));
+        if (!root || root.threadRootId !== undefined)
+          return yield* channelFailure(new Error("Thread not found in this channel."));
+      }
       const page = yield* channelSync(() =>
-        this.store.page(
-          channelId,
-          typeof args.beforeSequence === "number" &&
-            Number.isSafeInteger(args.beforeSequence) &&
-            args.beforeSequence >= 0
-            ? args.beforeSequence
-            : undefined,
-        ),
+        threadRootId ? this.store.threadPage(channelId, threadRootId, before) : this.store.page(channelId, before),
       );
       // The cursors still count every row, so the next page starts where this one ended.
       return { ...page, messages: page.messages.filter((message) => !isMemberThinking(message)) };
@@ -3320,6 +3500,7 @@ export class ChannelService {
     if (changes.length) this.hooks.messagesChanged?.(channelId, changes, revision);
     this.hooks.changed(channelId, revision);
     this.#syncQueueHolds(channelId);
+    this.#typing.changed(channelId);
   }
 
   /**
@@ -3355,6 +3536,7 @@ export class ChannelService {
       ...this.#commandFibers.values(),
     ]);
     yield* Scope.close(this.#scope, Exit.void);
+    this.#typing.dispose();
   }, Effect.uninterruptible).bind(this);
 }
 

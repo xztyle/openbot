@@ -1672,6 +1672,20 @@ export class HostService extends EventEmitter<HostEvents> {
     return { id: member.id, name: member.name?.trim() || member.username };
   }
 
+  /**
+   * Every person who can be in a channel: the host user, then each active member of the team. The
+   * host user's own team member is the host user.
+   */
+  channelPeople(): { id: string; name: string }[] {
+    const actor = this.channelActor();
+    const self = this.#findCurrentMemberId();
+    const members = this.#options.store
+      .listMembers()
+      .filter((member) => !member.disabled && member.id !== actor.id && member.id !== self)
+      .map((member) => ({ id: member.id, name: member.name?.trim() || member.username }));
+    return [{ id: actor.id, name: actor.name }, ...members];
+  }
+
   /** The channel whose execution thread `threadId` is, or null for an agent's own thread. */
   channelForThread(threadId: string): { id: string; name: string } | null {
     const store = this.#options.channels?.store;

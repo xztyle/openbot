@@ -98,6 +98,13 @@ export const messages = {
   "error.backend.channelRemovePeople": "Удалять других могут только владелец, администратор или создатель канала.",
   "error.backend.channelEditOwnOnly": "Можно редактировать только свои сообщения.",
   "error.backend.channelDeleteOwnOnly": "Можно удалять только свои сообщения.",
+  "error.backend.channelEditEmpty": "В сообщении без файлов должен быть текст.",
+  "error.backend.channelVisibilityAdmin":
+    "Сделать канал открытым или закрытым могут только владельцы и администраторы.",
+  "error.backend.channelVisibilityKind":
+    "Открытым или закрытым может быть только канал, а не личное сообщение или группа.",
+  "error.backend.channelAgentChatRequired":
+    "Личное сообщение можно открыть только с агентом, с которым вам разрешено общаться.",
   "error.backend.memoryEssentialBudget":
     "Важные записи памяти превышают лимит промпта. Переведите какую-либо запись в режим «Искать при необходимости» и повторите попытку.",
   "error.backend.memorySelectionConflict": "Память изменилась. Перезагрузите её и повторите попытку.",

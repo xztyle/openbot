@@ -105,6 +105,13 @@ export const messages = {
     "Só um proprietário, um administrador ou quem criou o canal pode remover outras pessoas.",
   "error.backend.channelEditOwnOnly": "Você só pode editar suas próprias mensagens.",
   "error.backend.channelDeleteOwnOnly": "Você só pode excluir suas próprias mensagens.",
+  "error.backend.channelEditEmpty": "Uma mensagem sem arquivos precisa de texto.",
+  "error.backend.channelVisibilityAdmin":
+    "Só proprietários e administradores podem tornar um canal público ou privado.",
+  "error.backend.channelVisibilityKind":
+    "Só um canal pode ser público ou privado, não uma mensagem direta nem um grupo.",
+  "error.backend.channelAgentChatRequired":
+    "Você só pode abrir uma mensagem direta com um agente com quem pode conversar.",
   "error.backend.memoryEssentialBudget":
     "As memórias essenciais excedem o limite do prompt. Marque uma entrada para pesquisar quando necessário e tente de novo.",
   "error.backend.memorySelectionConflict": "A memória mudou. Recarregue-a e tente de novo.",

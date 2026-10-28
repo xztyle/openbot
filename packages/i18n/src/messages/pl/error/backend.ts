@@ -100,6 +100,13 @@ export const messages = {
   "error.backend.channelRemovePeople": "Tylko właściciel, administrator lub twórca kanału może usuwać inne osoby.",
   "error.backend.channelEditOwnOnly": "Możesz edytować tylko własne wiadomości.",
   "error.backend.channelDeleteOwnOnly": "Możesz usuwać tylko własne wiadomości.",
+  "error.backend.channelEditEmpty": "Wiadomość bez plików musi zawierać tekst.",
+  "error.backend.channelVisibilityAdmin":
+    "Tylko właściciele i administratorzy mogą ustawić kanał jako publiczny lub prywatny.",
+  "error.backend.channelVisibilityKind":
+    "Tylko kanał może być publiczny lub prywatny, a nie wiadomość prywatna ani grupa.",
+  "error.backend.channelAgentChatRequired":
+    "Wiadomość prywatną możesz otworzyć tylko z agentem, z którym możesz czatować.",
   "error.backend.memoryEssentialBudget":
     "Kluczowe wspomnienia przekraczają limit promptu. Ustaw wpis na wyszukiwanie w razie potrzeby i spróbuj ponownie.",
   "error.backend.memorySelectionConflict": "Wspomnienie się zmieniło. Wczytaj je ponownie i spróbuj jeszcze raz.",

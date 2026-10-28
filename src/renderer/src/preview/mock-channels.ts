@@ -9,6 +9,7 @@ import type {
   ChannelRoutineRun,
   ChannelSummary,
   ChannelTask,
+  ChannelTypingInput,
   CreateChannelMemoryInput,
   CreateChannelRoutineInput,
   DeleteChannelMemoryInput,
@@ -22,6 +23,7 @@ import type {
   WorkspaceActivity,
   WorkspaceActivityInput,
   WorkspaceActivityItem,
+  WorkspaceDmAgents,
   WorkspaceThreadActivity,
 } from "@openbot/contracts/ipc";
 import {
@@ -54,6 +56,8 @@ export function createMockChannels(
   agentName: (agentId: string) => string,
   seeds: readonly MockChannelSeed[] = [],
   PREVIEW_MEMBER_ID: string = PREVIEW_CHANNEL_MEMBER_ID,
+  /** The visible agents of the preview, for `#general`. */
+  agentIds: () => readonly string[] = () => [],
 ) {
   const channels = new Map<string, Channel>(seeds.map((seed) => [seed.channel.id, structuredClone(seed.channel)]));
   const messages = new Map<string, ChannelMessage[]>(
@@ -134,6 +138,10 @@ export function createMockChannels(
         const { discordLink: _removed, ...rest } = channel;
         return rest;
       }
+      case "set-visibility":
+        if ((channel.kind ?? "channel") !== "channel")
+          throw new Error("Only a channel can be public or private, not a DM or a group.");
+        return { ...channel, kind: "channel", visibility: input.visibility };
       case "set-meta":
         return {
           ...channel,
@@ -241,6 +249,33 @@ export function createMockChannels(
     channelCommand: async (input: ChannelCommand): Promise<Channel> => {
       const receipt = receipts.get(input.operationId);
       if (receipt) return structuredClone(receipt);
+      if (input.type === "ensure-general") {
+        const workspace = [...channels.values()]
+          .filter((item) => item.kind === "channel" && !item.archived)
+          .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+        const found = workspace.find((item) => item.name.toLowerCase() === "general") ?? workspace[0];
+        if (found) return structuredClone(found);
+        const general: Channel = {
+          id: input.channelId,
+          name: "general",
+          title: "",
+          instructions: "",
+          members: agentIds().map((agentId) => ({ agentId, answerMode: "mention" })),
+          leadAgentId: null,
+          archived: false,
+          revision: 1,
+          createdAt: new Date().toISOString(),
+          kind: "channel",
+          visibility: "public",
+          humanMemberIds: [PREVIEW_MEMBER_ID],
+          createdBy: { kind: "member", id: PREVIEW_MEMBER_ID },
+        };
+        channels.set(general.id, structuredClone(general));
+        messages.set(general.id, []);
+        receipts.set(input.operationId, structuredClone(general));
+        changed(general.id, general.revision);
+        return structuredClone(general);
+      }
       if (input.type === "create" || input.type === "open-dm") {
         const humans = [
           ...new Set([PREVIEW_MEMBER_ID, ...(input.type === "create" ? input.humanMemberIds : input.memberIds)]),
@@ -421,6 +456,9 @@ export function createMockChannels(
      * The activity of the preview's own person, as the host computes it, without read positions:
      * nothing is unread. Thinking, routing events and plans are not activity.
      */
+    // The preview has no other person, so nobody else types; its own signal changes nothing.
+    channelTyping: async (_input: ChannelTypingInput): Promise<void> => undefined,
+    workspaceDmAgents: async (): Promise<WorkspaceDmAgents> => ({ agentIds: [...agentIds()] }),
     workspaceActivity: async (input: WorkspaceActivityInput): Promise<WorkspaceActivity> => {
       const items: WorkspaceActivityItem[] = [];
       const threads: WorkspaceThreadActivity[] = [];

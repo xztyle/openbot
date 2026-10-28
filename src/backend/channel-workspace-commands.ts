@@ -1,5 +1,7 @@
 import {
+  type AgentAccessLevel,
   type AgentSummary,
+  agentAccessRank,
   CHANNEL_GROUP_LIMIT,
   CHANNEL_REACTION_ACTOR_LIMIT,
   CHANNEL_REACTION_LIMIT,
@@ -9,13 +11,16 @@ import {
   type ChannelMember,
   type ChannelMessage,
   type ChannelReaction,
+  type ChannelVisibility,
   canAdministerServer,
   channelKind,
   channelMentions,
+  channelVisibility,
+  type WorkspaceAgentChannelDefaults,
   type WorkspaceChannelCommand,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
-import { type ChannelViewer, canManageChannel, isChannelPerson } from "./channel-visibility";
+import { type ChannelViewer, canManageChannel, canSeeChannel, isChannelPerson } from "./channel-visibility";
 
 /**
  * What the workspace commands read besides the channel. `ChannelService` gives it; the functions
@@ -29,6 +34,10 @@ export interface WorkspaceCommandContext {
   person(id: string): { id: string; name: string } | null;
   /** The answer mode an agent gets when it joins a workspace channel without one. */
   defaultAnswerMode: ChannelAnswerMode;
+  /** The channel defaults of one agent, which come before `defaultAnswerMode`. */
+  agentDefaults(agentId: string): WorkspaceAgentChannelDefaults | undefined;
+  /** The access level of the sender for an agent. Absent: the sender may chat with every agent. */
+  agentLevel?(agentId: string): AgentAccessLevel;
   actor: { id: string; name: string };
   /** The person who sent the command. Absent for a command of this computer's own services. */
   viewer?: ChannelViewer | undefined;
@@ -56,9 +65,32 @@ function requireAgents(members: readonly ChannelMember[], context: WorkspaceComm
       throw new Error(sourceText("error.backend.recipientHidden"));
 }
 
-/** Members that come with no answer mode take the workspace default. */
-function withDefaultModes(members: readonly ChannelMember[], mode: ChannelAnswerMode): ChannelMember[] {
-  return members.map((member) => ({ ...member, answerMode: member.answerMode ?? mode }));
+/**
+ * Members that come with no answer mode take the agent's own channel default, or `mode`; members
+ * with no focus take the agent's default focus. `fixedMode` (a one-to-one DM) wins over the agent.
+ */
+function withDefaultModes(
+  members: readonly ChannelMember[],
+  mode: ChannelAnswerMode,
+  context: Pick<WorkspaceCommandContext, "agentDefaults">,
+  fixedMode = false,
+): ChannelMember[] {
+  return members.map((member) => {
+    const defaults = context.agentDefaults(member.agentId);
+    const focus = member.focus ?? defaults?.focus;
+    return {
+      ...member,
+      answerMode: member.answerMode ?? (fixedMode ? mode : (defaults?.answerMode ?? mode)),
+      ...(focus ? { focus } : {}),
+    };
+  });
+}
+
+/** A DM brings an agent to a person only when the person may chat with it. */
+function requireChatLevel(agentIds: readonly string[], context: WorkspaceCommandContext): void {
+  for (const agentId of agentIds)
+    if (context.agentLevel && agentAccessRank(context.agentLevel(agentId)) < agentAccessRank("chat"))
+      throw new Error(sourceText("error.backend.channelAgentChatRequired"));
 }
 
 /** A DM holds two participants, a group three to nine, people and agents together. */
@@ -85,7 +117,7 @@ export function createdChannel(command: Create, context: WorkspaceCommandContext
     name: command.name.trim(),
     title: command.title ?? "",
     instructions: command.instructions ?? "",
-    members: withDefaultModes(command.members, mode),
+    members: withDefaultModes(command.members, mode, context, kind === "dm"),
     leadAgentId: command.leadAgentId ?? null,
     archived: false,
     revision: 0,
@@ -94,6 +126,78 @@ export function createdChannel(command: Create, context: WorkspaceCommandContext
     visibility: kind === "channel" ? command.visibility : "private",
     ...(command.topic ? { topic: command.topic } : {}),
     ...(command.description ? { description: command.description } : {}),
+    humanMemberIds: humans,
+    createdBy: { kind: "member", id: context.actor.id },
+  };
+}
+
+/** The key of the DM or group of exactly these people and agents, the sender included. */
+export function directKey(command: OpenDm, actorId: string): string {
+  const humans = unique([actorId, ...command.memberIds]).sort();
+  const agents = unique(command.agentIds).sort();
+  return `${humans.join(",")}|${agents.join(",")}`;
+}
+
+/**
+ * Makes a channel public or private. Owners and admins only; a command of this computer's own
+ * services has no viewer and passes. A channel that turns private keeps the people who joined it.
+ */
+export function visibilityChannel(
+  channel: Channel,
+  visibility: ChannelVisibility,
+  context: WorkspaceCommandContext,
+): Channel {
+  if (channelKind(channel) !== "channel") throw new Error(sourceText("error.backend.channelVisibilityKind"));
+  if (context.viewer && !canAdministerServer(context.viewer.role))
+    throw new Error(sourceText("error.backend.channelVisibilityAdmin"));
+  if (channelVisibility(channel) === visibility) return channel;
+  return { ...channel, kind: "channel", visibility };
+}
+
+/** The name of the onboarding channel. */
+export const GENERAL_CHANNEL_NAME = "general";
+
+/**
+ * The channel that `ensure-general` answers when the workspace already has a `channel`: the first
+ * one named general that the sender sees, else the oldest one they see. Null when the workspace has
+ * no `channel`, so `#general` is made; a workspace whose channels the sender cannot see fails.
+ */
+export function existingGeneral(channels: readonly Channel[], viewer: ChannelViewer | undefined): Channel | null {
+  const workspace = channels
+    .filter((channel) => channel.kind === "channel" && !channel.archived)
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  if (!workspace.length) return null;
+  const visible = workspace.filter((channel) => !viewer || canSeeChannel(channel, viewer));
+  const found = visible.find((channel) => channel.name.trim().toLowerCase() === GENERAL_CHANNEL_NAME) ?? visible[0];
+  if (!found) throw new Error(sourceText("error.backend.channelNotFound"));
+  return found;
+}
+
+/**
+ * `#general`: public, with every person of the team and every visible agent of the server (not
+ * hidden, not in the background), which answer when mentioned.
+ */
+export function generalChannel(
+  channelId: string,
+  people: readonly { id: string }[],
+  context: WorkspaceCommandContext,
+): Channel {
+  const humans = unique([context.actor.id, ...people.map((person) => person.id)]);
+  const members: ChannelMember[] = context.agents
+    .filter((agent) => agent.hiddenAt === undefined && agent.background !== true && !context.hidden(agent.id))
+    .map((agent) => ({ agentId: agent.id, answerMode: "mention" }));
+  return {
+    id: channelId,
+    name: GENERAL_CHANNEL_NAME,
+    title: "",
+    instructions: "",
+    members,
+    leadAgentId: null,
+    archived: false,
+    revision: 0,
+    createdAt: new Date().toISOString(),
+    kind: "channel",
+    visibility: "public",
     humanMemberIds: humans,
     createdBy: { kind: "member", id: context.actor.id },
   };
@@ -128,6 +232,7 @@ export function directChannel(
         agentIds,
       ),
   );
+  requireChatLevel(agentIds, context);
   if (existing) return { channel: existing, created: false };
   requirePeople(humans, context);
   const members = agentIds.map((agentId) => ({ agentId }));
@@ -143,7 +248,7 @@ export function directChannel(
       name: names.join(", ").slice(0, 80).trim() || kind,
       title: "",
       instructions: "",
-      members: withDefaultModes(members, directMode(kind, context)),
+      members: withDefaultModes(members, directMode(kind, context), context, kind === "dm"),
       leadAgentId: null,
       archived: false,
       revision: 0,
@@ -197,7 +302,7 @@ export function invitedChannel(
   const added = members.filter((member) => !known.has(member.agentId));
   requireAgents(added, context);
   const humans = unique([...(channel.humanMemberIds ?? []), ...humanMemberIds]);
-  const agents = [...channel.members, ...withDefaultModes(added, context.defaultAnswerMode)];
+  const agents = [...channel.members, ...withDefaultModes(added, context.defaultAnswerMode, context)];
   if (kind === "group") requireDirectSize("group", humans.length, agents.length);
   return { ...channel, humanMemberIds: humans, members: agents };
 }
@@ -306,9 +411,15 @@ function isOwnMessage(message: ChannelMessage, context: WorkspaceCommandContext)
   return context.viewer ? context.viewer.ids.has(message.author.id) : message.author.id === context.actor.id;
 }
 
+/**
+ * The message with a new text. Its files stay: an edit changes only the text, and a message with
+ * files can have an empty text.
+ */
 export function editedMessage(message: ChannelMessage, text: string, context: WorkspaceCommandContext): ChannelMessage {
   if (message.deletedAt) throw new Error(sourceText("error.backend.channelMessageNotFound"));
   if (!isOwnMessage(message, context)) throw new Error(sourceText("error.backend.channelEditOwnOnly"));
+  if (!text.trim() && !message.message.attachments?.length)
+    throw new Error(sourceText("error.backend.channelEditEmpty"));
   const mentions = channelMentions(text);
   const { mentions: _previous, ...rest } = message;
   return {
@@ -322,6 +433,11 @@ export function editedMessage(message: ChannelMessage, text: string, context: Wo
 /**
  * The message as a deletion leaves it: no text, no files, no reactions. A thread root keeps its
  * place and its replies; any other message leaves the transcript.
+ *
+ * The files leave the view only: the mailbox keeps the request that owns them (`channelId`, the
+ * message id), so a task that already started still reads them, and they are removed with the
+ * channel (`MailboxStore.deleteChannelData`). No agent can ask for them again: `channel_history`
+ * gives only the files of a message that the channel still shows.
  */
 export function deletedMessage(message: ChannelMessage, context: WorkspaceCommandContext): ChannelMessage {
   if (message.deletedAt) return message;

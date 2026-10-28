@@ -257,7 +257,27 @@ export type WorkspaceChannelCommand =
       connectionId: string;
       discordChannelId: string;
     }
-  | { type: "unlink-discord"; operationId: string; channelId: string };
+  | { type: "unlink-discord"; operationId: string; channelId: string }
+  | {
+      /**
+       * Makes a `channel` public or private. Owners and admins only. A channel that turns private
+       * keeps the people it has; one that turns public shows to everyone.
+       */
+      type: "set-visibility";
+      operationId: string;
+      channelId: string;
+      visibility: ChannelVisibility;
+    }
+  | {
+      /**
+       * The onboarding channel. When the workspace has no `channel` yet, the host makes `#general`
+       * with `channelId`: public, with every person of the team and the visible agents, which answer
+       * when mentioned. It answers the first channel named general, or the new one. Idempotent.
+       */
+      type: "ensure-general";
+      operationId: string;
+      channelId: string;
+    };
 
 export const WORKSPACE_CHANNEL_COMMAND_TYPES = [
   "create",
@@ -273,6 +293,8 @@ export const WORKSPACE_CHANNEL_COMMAND_TYPES = [
   "open-dm",
   "link-discord",
   "unlink-discord",
+  "set-visibility",
+  "ensure-general",
 ] as const satisfies readonly WorkspaceChannelCommand["type"][];
 
 /** A command that only the workspace route carries: a workspace command, or a send into a thread. */
@@ -692,8 +714,8 @@ function parseWorkspaceChannelCommand(
       if (value.action !== "add" && value.action !== "remove") return null;
       return { ...common, type: "react", messageId: value.messageId, emoji: value.emoji, action: value.action };
     case "edit":
+      // An empty text is valid for a message with files; the host refuses it for one without.
       if (!isIdentifier(value.messageId) || !isBoundedString(value.text, INPUT_LIMITS.messageText)) return null;
-      if (!value.text.trim()) return null;
       return { ...common, type: "edit", messageId: value.messageId, text: value.text };
     case "delete":
       if (!isIdentifier(value.messageId)) return null;
@@ -714,6 +736,11 @@ function parseWorkspaceChannelCommand(
       };
     case "unlink-discord":
       return { ...common, type: "unlink-discord" };
+    case "set-visibility":
+      if (!isOneOf(CHANNEL_VISIBILITIES, value.visibility)) return null;
+      return { ...common, type: "set-visibility", visibility: value.visibility };
+    case "ensure-general":
+      return { ...common, type: "ensure-general" };
     default:
       return null;
   }

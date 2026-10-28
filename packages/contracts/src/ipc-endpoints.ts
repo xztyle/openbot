@@ -224,7 +224,15 @@ import type {
   TestChannelRoutineInput,
   UpdateChannelRoutineInput,
 } from "./ipc-channel-routines";
-import type { Channel, ChannelCommand, ChannelPage, ChannelReadInput, ChannelSummary } from "./ipc-chat-channels";
+import type {
+  Channel,
+  ChannelCommand,
+  ChannelPage,
+  ChannelReadInput,
+  ChannelSummary,
+  ChannelTypingInput,
+  WorkspaceDmAgents,
+} from "./ipc-chat-channels";
 import type { WorkspaceSettings } from "./ipc-chat-workspace";
 import type {
   CancelMessageLinkInput,
@@ -1330,6 +1338,12 @@ export const IPC_ENDPOINTS = {
     // The mentions, thread replies, DMs, reactions and threads of the reader, over every channel.
     // A joined server answers through `workspace-v1` (`fork-host-v1`).
     workspaceActivity: scopedRequest<WorkspaceActivityInput, WorkspaceActivity>()("agent:workspace:activity"),
+    // The person types in a channel, or stopped (`ChannelTypingInput`). `scopedEvent` carries
+    // `channel-typing` with the people who type and the agents that think or work there. A joined
+    // server answers through `workspace-v1` (`fork-host-v1`).
+    channelTyping: scopedRequest<ChannelTypingInput, void>()("agent:channels:typing"),
+    // The agents the reader may open a DM with: each one they can see and chat with.
+    workspaceDmAgents: scopedQuery<WorkspaceDmAgents>()("agent:workspace:dm-agents"),
     deleteChannel: scopedRequest<string, void>()("agent:channels:delete"),
     // The workspace fleet, the step trail of an agent's channel answer and the artifacts index. A
     // joined server answers through workspace-fleet-v1 (`fork-host-v1`); `scopedEvent` carries

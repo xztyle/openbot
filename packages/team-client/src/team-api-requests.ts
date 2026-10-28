@@ -41,6 +41,7 @@ import {
   isRoutineFlowCanvas,
   isRoutineFlowLink,
   isRoutineRun,
+  isWorkspaceChannelCommand,
   type OpenBotDesktopApi,
   type QueuedMessageReceipt,
   type RemoteAgentImportResult,
@@ -69,6 +70,8 @@ import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
 import { CONTEXT_RESET_ROUTES } from "@openbot/contracts/team-protocol/context-reset-v1";
 import { ROUTINE_FLOWS_ROUTES } from "@openbot/contracts/team-protocol/routine-flows-v1";
 import { decodeTeamProtocolV2Json, type TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
+import { WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
+import { sourceText } from "@openbot/i18n/source";
 import type { RemoteFileUpload } from "./file-upload";
 
 export class TeamRequestError extends Schema.TaggedError<TeamRequestError>()("TeamRequestError", {
@@ -312,14 +315,36 @@ export type TeamChannelsApi = Pick<
   | "listChannelRoutineRuns"
 >;
 
-/** Every channel route is a POST with the channel in the body, except the list. */
-export function teamChannelsApi(request: TeamApiRequest): TeamChannelsApi {
+export interface TeamChannelsOptions {
+  /**
+   * Whether the host advertises the workspace routes (`fork-host-v1`). Omitted, the client sends
+   * them and a host without them answers 404.
+   */
+  supportsWorkspace?: () => boolean;
+}
+
+/**
+ * Every channel route is a POST with the channel in the body, except the list. A workspace command,
+ * a send into a thread and the read of a thread go to the workspace routes, as on the desktop: the
+ * released routes refuse the one and drop the thread of the others.
+ */
+export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOptions = {}): TeamChannelsApi {
   const post = <T>(path: string, decode: (value: unknown) => T, body: unknown) =>
     request("POST", path, decode, decodeTeamProtocolV2Json(body));
+  const workspacePost = async <T>(path: string, decode: (value: unknown) => T, body: unknown) => {
+    if (options.supportsWorkspace?.() === false) throw new Error(sourceText("error.team.workspaceUnsupported"));
+    return post(path, decode, body);
+  };
   return {
     listChannels: () => request("GET", CHANNEL_ROUTES.list, decodeChannelSummaries),
-    readChannel: (input) => post(CHANNEL_ROUTES.read, decodeChannelPage, input),
-    channelCommand: (command) => post(CHANNEL_ROUTES.command, decodeChannel, command),
+    readChannel: (input) =>
+      input.threadRootId === undefined
+        ? post(CHANNEL_ROUTES.read, decodeChannelPage, input)
+        : workspacePost(WORKSPACE_ROUTES.thread, decodeChannelPage, input),
+    channelCommand: (command) =>
+      isWorkspaceChannelCommand(command)
+        ? workspacePost(WORKSPACE_ROUTES.command, decodeChannel, command)
+        : post(CHANNEL_ROUTES.command, decodeChannel, command),
     listChannelMemories: (channelId) => post(CHANNEL_ROUTES.memories, decodeChannelMemories, { channelId }),
     createChannelMemory: (input) => post(CHANNEL_ROUTES.memoryCreate, decodeChannelMemory, input),
     updateChannelMemory: (input) => post(CHANNEL_ROUTES.memoryUpdate, decodeChannelMemory, input),

@@ -113,6 +113,7 @@ import {
   CONTEXT_RESET_ITEM_TYPE,
   DEFAULT_BUSY_MESSAGE_MODE,
   DEFAULT_PROVIDER_ACCOUNT_ID,
+  DEFAULT_WORKSPACE_SETTINGS,
   isContextResetMarker,
   MODEL_SWITCH_ITEM_TYPES,
   type ModelSwitchReason,
@@ -120,6 +121,7 @@ import {
   sameAgentBrowserProfile,
   sameAgentModelChoice,
   WORKFLOWS_USAGE_ID,
+  type WorkspaceSettings,
   workspaceAccessEnforced,
 } from "@openbot/contracts/ipc";
 import { CLAUDE_API_KEY_ACCOUNT_ID } from "@openbot/contracts/team-protocol/claude-api-key-v1";
@@ -359,6 +361,10 @@ export interface AgentServiceOptions {
   channelPersonAgentLevel?: (personId: string, agentId: string) => AgentAccessLevel;
   /** Whether that person uses a remote client, which has only the released routine schedules. Omitted, no. */
   channelRemotePerson?: (personId: string) => boolean;
+  /** A person of the team by id, for channel invitations and DMs. Omitted, every id is a person. */
+  channelPerson?: (personId: string) => { id: string; name: string } | null;
+  /** The workspace settings of this server. Omitted, the defaults. */
+  workspaceSettings?: () => WorkspaceSettings;
   deleteWithRevokedApproval?: (
     agentId: string,
     remove: () => Effect.Effect<void, AgentRemovalFailed>,
@@ -1110,6 +1116,17 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       memoriesChanged: (channelId) => this.#emit({ type: "channel-memories-changed", channelId }),
       ...(options.channelPersonAgentLevel ? { personAgentLevel: options.channelPersonAgentLevel } : {}),
       ...(options.channelRemotePerson ? { remotePerson: options.channelRemotePerson } : {}),
+      ...(options.channelPerson ? { person: options.channelPerson } : {}),
+      defaultAnswerMode: () => (options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS).defaults.agentAnswerMode,
+      // Sent before `channels-changed`, so a client that appends the message has it when the list moves.
+      messagesChanged: (channelId, changes, revision) => {
+        for (const change of changes)
+          this.#emit(
+            change.removed
+              ? { type: "channel-message-removed", channelId, messageId: change.message.id, revision }
+              : { type: "channel-message", channelId, message: change.message, revision },
+          );
+      },
       routines: {
         list: (channelId) => this.#channelRoutines.list(channelId),
         create: (input) => this.#channelRoutines.create(input),

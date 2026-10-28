@@ -10,6 +10,7 @@ import {
   type ChannelSummary,
   type ChannelTask,
   type ChannelThread,
+  type ChannelThreadSummary,
   decodeChannel,
   isChannelMessage,
   isChannelTask,
@@ -18,6 +19,7 @@ import {
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
+import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
 import { deleteAggregateHistory, deleteThreadAttachments } from "./database/database-core";
 import {
   databaseRow,
@@ -55,6 +57,17 @@ export interface ChannelAssignment {
   awaitedTaskIds: string[];
   pendingRevision: number | null;
   pendingOutcome: string | null;
+  /**
+   * The thread of the message this assignment answers, so the agent's reply goes into it. Null for a
+   * top-level message, and for an assignment written before threads.
+   */
+  threadRootId: string | null;
+}
+
+/** A message that a commit wrote, and whether it left the transcript (a deleted message with no replies). */
+export interface ChannelMessageChange {
+  message: ChannelMessage;
+  removed: boolean;
 }
 
 export interface ChannelContext {
@@ -73,9 +86,23 @@ export interface ChannelHistorySummary {
 interface ChannelChange {
   channel: Channel;
   messages: ChannelMessage[];
+  /**
+   * Messages whose change does not alter what a member read: reactions and thread summaries. They
+   * keep the history summary and the read cursors of the member sessions.
+   */
+  quietMessages?: ChannelMessage[];
   tasks: ChannelTask[];
   assignments: ChannelAssignment[];
 }
+
+/** The SQL condition of a message row that the channel transcript shows: no thread reply, no deleted message. */
+const TOP_LEVEL_MESSAGE = `(json_extract(message_json, '$.threadRootId') IS NULL
+    OR json_extract(message_json, '$.alsoInChannel') = 1)
+  AND (json_extract(message_json, '$.deletedAt') IS NULL
+    OR COALESCE(json_extract(message_json, '$.threadSummary.replyCount'), 0) > 0)`;
+
+/** Item types that are activity, not a message a reader counts. */
+const ACTIVITY_ITEM_TYPES = ["plan", "subagents", "channel-change", "commentary"];
 
 /**
  * Owns durable channel records. Every change and its retry receipt commit together.
@@ -83,6 +110,8 @@ interface ChannelChange {
 export class ChannelStore {
   /** By channel: how many times a message changed in place after it was complete, in this process. */
   readonly #completedMessageChanges = new Map<string, number>();
+  /** By channel: the messages that commits wrote since the last `takeMessageChanges`. */
+  readonly #messageChanges = new Map<string, ChannelMessageChange[]>();
 
   constructor(readonly database: OpenBotDatabase) {}
 
@@ -133,7 +162,23 @@ export class ChannelStore {
    * messages are their own and are never unread for them. A remote member is a different person:
    * the host's signed-out messages are unread for them until they read them.
    */
-  list(memberId: string, signedOutMessagesAreTheirs = false): ChannelSummary[] {
+  /** The messages committed since the last call, oldest first, each once with its latest state. */
+  takeMessageChanges(channelId: string): ChannelMessageChange[] {
+    const changes = this.#messageChanges.get(channelId) ?? [];
+    this.#messageChanges.delete(channelId);
+    const latest = new Map<string, ChannelMessageChange>();
+    for (const change of changes) {
+      latest.delete(change.message.id);
+      latest.set(change.message.id, change);
+    }
+    return [...latest.values()];
+  }
+
+  /**
+   * @param viewer leaves out each channel that this person cannot see (`canSeeChannel`). Omitted,
+   * every channel: only a caller that is not a person, such as a test, omits it.
+   */
+  list(memberId: string, signedOutMessagesAreTheirs = false, viewer?: ChannelViewer): ChannelSummary[] {
     // The sidebar is rebuilt on every `channels-changed`, and a streaming reply emits those while
     // it arrives. One query returns every summary: the previous per-channel latest-message, unread,
     // and task queries made this O(channels x queries) per stream frame. A member's thinking is not
@@ -147,6 +192,9 @@ export class ChannelStore {
               WHERE m.channel_id = c.channel_id
                 AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'plan'
                 AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'subagents'
+                AND json_extract(m.message_json, '$.deletedAt') IS NULL
+                AND (json_extract(m.message_json, '$.threadRootId') IS NULL
+                  OR json_extract(m.message_json, '$.alsoInChannel') = 1)
               ORDER BY m.sequence DESC, m.message_id DESC LIMIT 1) AS latest_json,
             (SELECT COUNT(*) FROM projection_channel_messages AS m
               WHERE m.channel_id = c.channel_id
@@ -159,7 +207,10 @@ export class ChannelStore {
                 AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'subagents'
                 AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'channel-change'
                 AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'commentary'
-                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') NOT LIKE ?) AS unread,
+                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') NOT LIKE ?
+                AND json_extract(m.message_json, '$.deletedAt') IS NULL
+                AND (json_extract(m.message_json, '$.threadRootId') IS NULL
+                  OR json_extract(m.message_json, '$.alsoInChannel') = 1)) AS unread,
             (SELECT COUNT(*) FROM projection_channel_tasks AS t
               WHERE t.channel_id = c.channel_id
                 AND json_extract(t.task_json, '$.state') = 'running') AS running,
@@ -185,8 +236,9 @@ export class ChannelStore {
       };
       threads.set(channelId, [...(threads.get(channelId) ?? []), thread]);
     }
-    return rows.map((row) => {
+    return rows.flatMap((row) => {
       const channel = decodeChannel(JSON.parse(requiredStringColumn(row, "channel_json")));
+      if (viewer && !canSeeChannel(channel, viewer)) return [];
       const latestJson = row.latest_json;
       const latest =
         typeof latestJson === "string" && latestJson.length > 0
@@ -357,8 +409,13 @@ export class ChannelStore {
     return row ? decodeAssignment(JSON.parse(requiredStringColumn(row, "assignment_json"))) : null;
   }
 
+  /**
+   * The transcript of the channel: its top-level messages. A thread reply is on the page of its
+   * thread (`threadPage`), unless it was also sent to the channel. A deleted message leaves, unless it
+   * is the root of a thread that still has replies.
+   */
   page(channelId: string, before?: number): ChannelPage {
-    const messages = this.messages(channelId, before, 101);
+    const messages = this.#topLevelMessages(channelId, before ?? Number.MAX_SAFE_INTEGER, 101);
     const hasOlder = messages.length > 100;
     if (hasOlder) messages.shift();
     const olderCursor = hasOlder ? (messages[0]?.sequence ?? null) : null;
@@ -373,6 +430,80 @@ export class ChannelStore {
   }
 
   /**
+   * One thread: its root first, then at most `limit` replies before `before`, oldest first. The
+   * root is there on every page, so a client that reads older replies still has it.
+   */
+  threadPage(channelId: string, rootId: string, before?: number, limit = 99): ChannelPage {
+    const root = this.message(channelId, rootId);
+    if (!root || root.threadRootId !== undefined) throw new Error(sourceText("error.backend.channelThreadNotFound"));
+    const rows = databaseRows(
+      this.database.connection
+        .prepare(
+          `SELECT message_json FROM projection_channel_messages
+            WHERE channel_id = ? AND sequence < ? AND json_extract(message_json, '$.threadRootId') = ?
+              AND json_extract(message_json, '$.deletedAt') IS NULL
+            ORDER BY sequence DESC, message_id DESC LIMIT ?`,
+        )
+        .all(channelId, before ?? Number.MAX_SAFE_INTEGER, rootId, limit + 1),
+    );
+    const replies = rows.reverse().map((row) => storedMessage(requiredStringColumn(row, "message_json")));
+    const hasOlder = replies.length > limit;
+    if (hasOlder) replies.shift();
+    return {
+      channel: this.get(channelId),
+      tasks: this.tasks(channelId),
+      messages: [root, ...replies],
+      olderCursor: hasOlder ? (replies[0]?.sequence ?? null) : null,
+      throughSequence: this.messages(channelId, undefined, 1)[0]?.sequence ?? 0,
+      threadRootId: rootId,
+    };
+  }
+
+  /** The reply count, the time of the last reply and the latest repliers of a thread, from its stored replies. */
+  threadSummary(channelId: string, rootId: string): ChannelThreadSummary | undefined {
+    const excluded = ACTIVITY_ITEM_TYPES.map(() => "?").join(", ");
+    const rows = databaseRows(
+      this.database.connection
+        .prepare(
+          `SELECT json_extract(message_json, '$.author.id') AS author_id,
+              json_extract(message_json, '$.message.createdAt') AS created_at
+            FROM projection_channel_messages
+            WHERE channel_id = ? AND json_extract(message_json, '$.threadRootId') = ?
+              AND json_extract(message_json, '$.deletedAt') IS NULL
+              AND COALESCE(json_extract(message_json, '$.message.itemType'), '') NOT IN (${excluded})
+              AND COALESCE(json_extract(message_json, '$.message.itemType'), '') NOT LIKE ?
+            ORDER BY sequence DESC, message_id DESC`,
+        )
+        .all(channelId, rootId, ...ACTIVITY_ITEM_TYPES, `${CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX}%`),
+    );
+    const first = rows[0];
+    if (!first) return undefined;
+    const participantIds: string[] = [];
+    for (const row of rows) {
+      const id = optionalStringColumn(row, "author_id");
+      if (id && !participantIds.includes(id) && participantIds.length < 20) participantIds.push(id);
+    }
+    return {
+      replyCount: rows.length,
+      lastReplyAt: optionalStringColumn(first, "created_at") ?? new Date().toISOString(),
+      participantIds,
+    };
+  }
+
+  #topLevelMessages(channelId: string, before: number, limit: number): ChannelMessage[] {
+    const rows = databaseRows(
+      this.database.connection
+        .prepare(
+          `SELECT message_json FROM projection_channel_messages
+            WHERE channel_id = ? AND sequence < ? AND ${TOP_LEVEL_MESSAGE}
+            ORDER BY sequence DESC, message_id DESC LIMIT ?`,
+        )
+        .all(channelId, before, limit),
+    );
+    return rows.reverse().map((row) => storedMessage(requiredStringColumn(row, "message_json")));
+  }
+
+  /**
    * How many messages are older than a page, and when the first one was written: the day rail draws
    * the unloaded part from it. The time is only in the message JSON, so only the oldest row is read.
    */
@@ -383,7 +514,7 @@ export class ChannelStore {
           `SELECT COUNT(*) AS older_count,
              (SELECT json_extract(message_json, '$.message.createdAt') FROM projection_channel_messages
               WHERE channel_id = ? ORDER BY sequence LIMIT 1) AS oldest_at
-           FROM projection_channel_messages WHERE channel_id = ? AND sequence < ?`,
+           FROM projection_channel_messages WHERE channel_id = ? AND sequence < ? AND ${TOP_LEVEL_MESSAGE}`,
         )
         .get(channelId, channelId, before),
     );
@@ -398,17 +529,28 @@ export class ChannelStore {
     if (!change.tasks.every(isChannelTask)) throw new Error("Invalid channel task.");
     const channel = { ...change.channel, revision: change.channel.revision + 1 };
     const payload = { ...change, channel };
-    return this.database.dispatch(
+    const written: ChannelMessage[] = [];
+    const result = this.database.dispatch(
       commandId,
       [{ aggregateType: "channel", aggregateId: channel.id, eventType: "channel.changed", payload }],
       (db) => {
-        this.project(db, payload);
+        this.project(db, payload, written);
         return channel;
       },
     );
+    if (written.length) {
+      const pending = this.#messageChanges.get(channel.id) ?? [];
+      for (const message of written)
+        pending.push({
+          message,
+          removed: message.deletedAt !== undefined && (message.threadSummary?.replyCount ?? 0) === 0,
+        });
+      this.#messageChanges.set(channel.id, pending);
+    }
+    return result;
   }
 
-  private project(db: DatabaseSync, change: ChannelChange): void {
+  private project(db: DatabaseSync, change: ChannelChange, written?: ChannelMessage[]): void {
     db.prepare(
       "INSERT INTO projection_channels VALUES (?, ?) ON CONFLICT(channel_id) DO UPDATE SET channel_json = excluded.channel_json",
     ).run(change.channel.id, JSON.stringify(change.channel));
@@ -435,6 +577,7 @@ export class ChannelStore {
       db.prepare(
         "INSERT INTO projection_channel_messages VALUES (?, ?, ?, ?) ON CONFLICT(channel_id, message_id) DO UPDATE SET message_json = excluded.message_json",
       ).run(change.channel.id, message.id, assigned, JSON.stringify({ ...message, sequence: assigned }));
+      written?.push({ ...message, sequence: assigned });
       if (existing) {
         // A streaming message changes on each part of its text; a packet already leaves it unread.
         if (existing.status !== "streaming")
@@ -448,6 +591,22 @@ export class ChannelStore {
           "UPDATE projection_channel_contexts SET through_sequence = 0, summary_version = 0 WHERE channel_id = ? AND through_sequence >= ?",
         ).run(change.channel.id, assigned);
       }
+    }
+    // A reaction or a thread summary changes a stored message in place, and nothing a member read.
+    for (const message of change.quietMessages ?? []) {
+      const existing = databaseRow(
+        db
+          .prepare("SELECT sequence FROM projection_channel_messages WHERE channel_id = ? AND message_id = ?")
+          .get(change.channel.id, message.id),
+      );
+      if (!existing) continue;
+      const sequence = requiredNumberColumn(existing, "sequence");
+      db.prepare("UPDATE projection_channel_messages SET message_json = ? WHERE channel_id = ? AND message_id = ?").run(
+        JSON.stringify({ ...message, sequence }),
+        change.channel.id,
+        message.id,
+      );
+      written?.push({ ...message, sequence });
     }
     for (const task of change.tasks)
       db.prepare(
@@ -548,6 +707,7 @@ export class ChannelStore {
   /** Permanently removes a channel and its execution threads from every local projection. */
   delete(channelId: string, operationId: string = randomUUID()): void {
     if (!this.exists(channelId)) throw new Error(sourceText("error.backend.channelNotFound"));
+    this.#messageChanges.delete(channelId);
     const threadIds = this.contextThreads(channelId);
     this.database.dispatch(
       `channel-delete:${operationId}`,
@@ -769,9 +929,12 @@ export class ChannelStore {
         if (!isDynamicRecord(value)) throw new Error("Invalid channel event.");
         switch (event.event_type) {
           case "channel.changed": {
+            const quietMessages = value.quietMessages ?? [];
             if (
               !Array.isArray(value.messages) ||
               !value.messages.every(isChannelMessage) ||
+              !Array.isArray(quietMessages) ||
+              !quietMessages.every(isChannelMessage) ||
               !Array.isArray(value.tasks) ||
               !value.tasks.every(isChannelTask) ||
               !Array.isArray(value.assignments)
@@ -780,6 +943,7 @@ export class ChannelStore {
             this.project(db, {
               channel: decodeChannel(value.channel),
               messages: value.messages,
+              quietMessages,
               tasks: value.tasks,
               assignments: value.assignments.map(decodeAssignment),
             });
@@ -944,10 +1108,17 @@ function decodeAssignment(value: unknown): ChannelAssignment {
     awaitedTaskIds: value.awaitedTaskIds,
     pendingRevision: value.pendingRevision,
     pendingOutcome: value.pendingOutcome,
+    threadRootId: isString(value.threadRootId) ? value.threadRootId : null,
     throughSequence: value.throughSequence,
     summaryVersion: value.summaryVersion,
     deliveryId: value.deliveryId,
     turnId: value.turnId,
     state: value.state,
   };
+}
+
+function storedMessage(json: string): ChannelMessage {
+  const value = JSON.parse(json);
+  if (!isChannelMessage(value)) throw new Error("Invalid stored channel message.");
+  return value;
 }

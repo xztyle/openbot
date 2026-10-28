@@ -8,15 +8,22 @@ import {
   type AgentSummary,
   CHANNEL_ASSIGNMENT_LIMIT,
   CHANNEL_CHANGE_ITEM_TYPE,
+  CHANNEL_MENTION_CHAIN_LIMIT,
   CHANNEL_PARALLEL_LIMIT,
   type Channel,
+  type ChannelAnswerMode,
   type ChannelCommand,
+  type ChannelMember,
   type ChannelMemory,
   type ChannelMessage,
+  type ChannelPage,
+  type ChannelReadInput,
   type ChannelRoutingConversationEventAction,
   type ChannelTask,
+  type ChannelWorkspaceFields,
   type ConversationSnapshot,
   type CreateChannelMemoryInput,
+  channelMentions,
   channelRoutingConversationEventItemType,
   type DeleteChannelMemoryInput,
   type QueueHold,
@@ -44,7 +51,23 @@ import {
   PERSON_REQUEST_REQUIRED,
 } from "./channel-management";
 import { ChannelMemoryStore } from "./channel-memory-store";
-import { type ChannelAssignment, type ChannelContext, ChannelStore } from "./channel-store";
+import { ChannelResponders, memberAnswerMode, usesAnswerModes } from "./channel-responders";
+import { type ChannelAssignment, type ChannelContext, type ChannelMessageChange, ChannelStore } from "./channel-store";
+import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
+import {
+  createdChannel,
+  deletedMessage,
+  directChannel,
+  editedMessage,
+  invitedChannel,
+  joinedChannel,
+  leftChannel,
+  memberSettingsChannel,
+  metaChannel,
+  reactedMessage,
+  removedChannel,
+  type WorkspaceCommandContext,
+} from "./channel-workspace-commands";
 import type { DeliveryContext, MailboxStore } from "./mailbox-store";
 import type { OpenBotDatabase } from "./openbot-database";
 import { extractJsonObject, StructuredOutputError } from "./structured-output";
@@ -102,6 +125,12 @@ export interface ChannelHooks {
   remotePerson?(personId: string): boolean;
   /** The schedule routines of the channels, for the routine tools. Omitted, those tools fail. */
   routines?: ChannelRoutineToolPort;
+  /** A person of the team by id, or null when the id names no active member. Omitted, every id is a person. */
+  person?(id: string): { id: string; name: string } | null;
+  /** The answer mode an agent takes when it joins a workspace channel without one. Omitted, `mention`. */
+  defaultAnswerMode?(): ChannelAnswerMode;
+  /** The messages that commits wrote, sent before `changed` with the same revision. */
+  messagesChanged?(channelId: string, changes: readonly ChannelMessageChange[], revision: number): void;
   error(error: unknown): void;
 }
 
@@ -139,6 +168,8 @@ const decodeRoutingDecision = Schema.decodeUnknownResult(RoutingDecision, { onEx
 export class ChannelService {
   readonly store: ChannelStore;
   readonly memories: ChannelMemoryStore;
+  /** Which member agents answer a person's message. Phase 2 puts the gate behind `gated`. */
+  readonly responders = new ChannelResponders();
   readonly #history: ChannelHistory;
   #scope = Scope.makeUnsafe();
   readonly #pumps = new Map<string, Fiber.Fiber<void>>();
@@ -206,10 +237,15 @@ export class ChannelService {
       command: ChannelCommand,
       actor: { id: string; name: string },
       beforeApply: (command: ChannelCommand) => ChannelCommand | null = (queued) => queued,
+      /**
+       * The person who sent the command, for the visibility and permission checks of the workspace.
+       * Omitted for the commands of this computer's own services, such as a routine.
+       */
+      viewer?: ChannelViewer,
     ) => {
       const operation = Effect.suspend(() => {
         const next = beforeApply(command);
-        return next ? this.apply(next, actor) : channelSync(() => this.store.get(command.channelId));
+        return next ? this.apply(next, actor, [], viewer) : channelSync(() => this.store.get(command.channelId));
       });
       return command.type === "stop" || command.type === "archive"
         ? operation
@@ -240,6 +276,18 @@ export class ChannelService {
         }),
       ),
   );
+
+  /**
+   * A page of the channel transcript, or of one thread with `threadRootId`, for a person who can see
+   * the channel. A channel the viewer cannot see answers as one that does not exist.
+   */
+  read(input: ChannelReadInput, viewer?: ChannelViewer): ChannelPage {
+    if (viewer && !canSeeChannel(this.store.get(input.channelId), viewer))
+      throw new Error(sourceText("error.backend.channelNotFound"));
+    return input.threadRootId
+      ? this.store.threadPage(input.channelId, input.threadRootId, input.beforeSequence)
+      : this.store.page(input.channelId, input.beforeSequence);
+  }
 
   readonly deleteChannel = Effect.fn("ChannelService.deleteChannel")((channelId: string) =>
     this.#serialize(
@@ -295,6 +343,9 @@ export class ChannelService {
     actor: { id: string; name: string },
     /** Messages a save writes with the change, in the same commit. */
     notes: ChannelMessage[] = [],
+    viewer?: ChannelViewer,
+    /** Workspace fields a save writes with the draft, as a removal does with the people. */
+    overrides: ChannelWorkspaceFields = {},
   ): Effect.fn.Return<Channel, ChannelOperationError> {
     const operationId = `${actor.id}:${command.operationId}`;
     const receipt = yield* channelSync(() => this.store.database.commandResult(`channels:${operationId}`));
@@ -314,10 +365,35 @@ export class ChannelService {
       return channel;
     }
     const known = this.hooks.agents();
+    if (command.type === "create") {
+      if (yield* channelSync(() => this.store.exists(command.channelId)))
+        return yield* channelFailure(new Error(sourceText("error.backend.channelExists")));
+      const created = yield* channelSync(() => createdChannel(command, this.#workspaceContext(actor, viewer)));
+      const result = yield* channelSync(() => this.store.update(created, {}, operationId));
+      this.publish(created.id);
+      return result;
+    }
+    if (command.type === "open-dm") {
+      const opened = yield* channelSync(() =>
+        directChannel(
+          command,
+          this.store.ids().map((id) => this.store.get(id)),
+          this.#workspaceContext(actor, viewer),
+        ),
+      );
+      if (!opened.created) return opened.channel;
+      if (yield* channelSync(() => this.store.exists(command.channelId)))
+        return yield* channelFailure(new Error(sourceText("error.backend.channelExists")));
+      const result = yield* channelSync(() => this.store.update(opened.channel, {}, operationId));
+      this.publish(opened.channel.id);
+      return result;
+    }
     if (command.type === "save") {
       const existing = (yield* channelSync(() => this.store.exists(command.channelId)))
         ? yield* channelSync(() => this.store.get(command.channelId))
         : null;
+      if (existing && viewer && !canSeeChannel(existing, viewer))
+        return yield* channelFailure(new Error(sourceText("error.backend.channelNotFound")));
       // Agent deletion removes the agent from each channel, but a database from an older version can
       // still hold a deleted member, and the settings panel offers to remove it. Only a member the draft adds has to be available: rejecting the ones already stored would
       // hold every later save of the channel, so the reader could not remove the first of two
@@ -358,7 +434,7 @@ export class ChannelService {
           : [];
       const result = yield* channelSync(() =>
         this.store.update(
-          { ...channel, ...command.draft },
+          { ...channel, ...command.draft, ...overrides, members: this.#mergedMembers(channel, command.draft.members) },
           {
             messages: notes,
             tasks: [
@@ -390,6 +466,8 @@ export class ChannelService {
       return result;
     }
     const channel = yield* channelSync(() => this.store.get(command.channelId));
+    if (viewer && !canSeeChannel(channel, viewer))
+      return yield* channelFailure(new Error(sourceText("error.backend.channelNotFound")));
     if (command.type === "read") {
       const result = yield* channelSync(() =>
         this.store.markRead(channel.id, actor.id, command.throughSequence, command.operationId),
@@ -414,6 +492,74 @@ export class ChannelService {
       return result;
     }
     if (channel.archived) return yield* channelFailure(new Error(sourceText("error.backend.channelArchived")));
+    const workspace = this.#workspaceContext(actor, viewer);
+    switch (command.type) {
+      case "join":
+        return yield* this.#commitChannel(yield* channelSync(() => joinedChannel(channel, workspace)), operationId);
+      case "leave":
+        return yield* this.#commitChannel(yield* channelSync(() => leftChannel(channel, workspace)), operationId);
+      case "set-meta":
+        return yield* this.#commitChannel(
+          yield* channelSync(() => metaChannel(channel, command, workspace)),
+          operationId,
+        );
+      case "set-member":
+        return yield* this.#commitChannel(
+          yield* channelSync(() => memberSettingsChannel(channel, command, workspace)),
+          operationId,
+        );
+      case "invite":
+        return yield* this.#commitChannel(
+          yield* channelSync(() => invitedChannel(channel, command.humanMemberIds, command.members, workspace)),
+          operationId,
+        );
+      case "remove": {
+        const next = yield* channelSync(() =>
+          removedChannel(channel, command.humanMemberIds, command.agentIds, workspace),
+        );
+        if (next.members.length === channel.members.length) return yield* this.#commitChannel(next, operationId);
+        // A removed agent stops its open work here, as a save that removes it does.
+        return yield* this.apply(
+          {
+            type: "save",
+            operationId: command.operationId,
+            channelId: channel.id,
+            draft: {
+              name: next.name,
+              title: next.title,
+              instructions: next.instructions,
+              members: next.members,
+              leadAgentId: next.leadAgentId,
+            },
+            update: true,
+          },
+          actor,
+          [],
+          undefined,
+          { humanMemberIds: next.humanMemberIds ?? [] },
+        );
+      }
+      case "react": {
+        const message = yield* channelSync(() => this.store.message(channel.id, command.messageId));
+        if (!message) return yield* channelFailure(new Error(sourceText("error.backend.channelMessageNotFound")));
+        const reacted = yield* channelSync(() =>
+          reactedMessage(message, command.emoji, command.action, { kind: "member", id: actor.id }),
+        );
+        const result = yield* channelSync(() => this.store.update(channel, { quietMessages: [reacted] }, operationId));
+        this.publish(channel.id);
+        return result;
+      }
+      case "edit": {
+        const message = yield* channelSync(() => this.store.message(channel.id, command.messageId));
+        if (!message) return yield* channelFailure(new Error(sourceText("error.backend.channelMessageNotFound")));
+        const edited = yield* channelSync(() => editedMessage(message, command.text, workspace));
+        const result = yield* channelSync(() => this.store.update(channel, { messages: [edited] }, operationId));
+        this.publish(channel.id);
+        return result;
+      }
+      case "delete":
+        return yield* this.#deleteMessage(channel, command.messageId, workspace, operationId);
+    }
     if (command.type === "send") {
       const recipientAgentId = command.recipientAgentId;
       if (recipientAgentId) yield* channelSync(() => this.requireAvailableMember(channel, recipientAgentId));
@@ -450,11 +596,19 @@ export class ChannelService {
           : undefined;
         if (command.replyToMessageId && !referenced)
           return yield* channelFailure(new Error(sourceText("error.backend.channelReferenceUnavailable")));
+        const threadRootId = command.threadRootId ?? null;
+        const root = threadRootId ? messages.find((message) => message.id === threadRootId) : undefined;
+        if (threadRootId && (!root || root.threadRootId !== undefined || root.deletedAt))
+          return yield* channelFailure(new Error(sourceText("error.backend.channelThreadNotFound")));
+        // A channel whose members have answer modes answers as a workspace: each addressed agent
+        // gets its own task. A channel without them routes through its lead, as before.
+        const answerModes = usesAnswerModes(current);
         const allTasks = yield* channelSync(() => this.store.tasks(current.id));
         const open = allTasks.filter((task) => !terminal(task));
         const previous = referenced?.taskId
           ? allTasks.find((task) => task.id === referenced.taskId)
-          : open.length === 1 &&
+          : !answerModes &&
+              open.length === 1 &&
               /^(?:also|instead|actually|please change|change that|correction|continue|yes|no|use that|make it)\b/iu.test(
                 text.trim(),
               )
@@ -467,7 +621,7 @@ export class ChannelService {
           !previous && referenced && !referenced.taskId && referenced.author.kind === "agent"
             ? this.eligibleMembers(current).find((agentId) => agentId === referenced.author.id)
             : undefined;
-        const task = previous
+        const continued = previous
           ? {
               ...previous,
               instruction: text,
@@ -479,13 +633,47 @@ export class ChannelService {
               error: null,
               ownerAgentId: command.recipientAgentId ?? previous.ownerAgentId,
             }
-          : this.newTask(current.id, id, text, command.recipientAgentId ?? repliedMember ?? null);
-        const message = this.message(current.id, task.id, { kind: "member", ...actor }, text, id);
+          : null;
+        const mentions = channelMentions(text);
+        const draft = this.message(current.id, null, { kind: "member", ...actor }, text, id);
+        const message: ChannelMessage = {
+          ...draft,
+          ...(threadRootId ? { threadRootId } : {}),
+          ...(threadRootId && command.alsoToChannel ? { alsoInChannel: true } : {}),
+          ...(mentions.length ? { mentions } : {}),
+        };
+        let added: ChannelTask[];
+        if (!answerModes)
+          added = continued
+            ? []
+            : [this.newTask(current.id, id, text, command.recipientAgentId ?? repliedMember ?? null)];
+        else {
+          const selection = this.responders.select(current, {
+            eligible: this.eligibleMembers(current),
+            message,
+            replyTo: referenced ?? null,
+            threadRoot: root ?? null,
+            recipientAgentId: continued ? null : command.recipientAgentId,
+          });
+          // Phase 1 delivers to the gated members too; phase 2 asks the gate first.
+          const owners = [...selection.agentIds, ...selection.gated].filter(
+            (agentId) => agentId !== continued?.ownerAgentId,
+          );
+          added = owners.length
+            ? owners.map((agentId) => this.newTask(current.id, id, text, agentId))
+            : selection.lead && !continued
+              ? [this.newTask(current.id, id, text, null)]
+              : [];
+        }
+        const task = continued ?? added[0] ?? null;
+        message.taskId = task?.id ?? null;
         message.message.replyToMessageId = command.replyToMessageId;
         if (committed) message.message.attachments = committed.attachments;
+        // The root counts the reply in the same commit, so its summary never lags behind the thread.
+        const rootSummary = root ? this.#summaryWithReply(current.id, root, message) : null;
         const affected = previous ? descendants(allTasks, previous.id) : [];
         const stopped = affected
-          .filter((item) => item.id !== task.id)
+          .filter((item) => item.id !== previous?.id)
           .map(
             (item): ChannelTask => ({
               ...item,
@@ -504,12 +692,13 @@ export class ChannelService {
                   .map((entry) => ({ ...entry, superseded: true })),
                 message,
               ],
-              tasks: [...stopped, task],
+              quietMessages: rootSummary ? [rootSummary] : [],
+              tasks: [...stopped, ...(continued ? [continued] : []), ...added],
             },
             operationId,
           ),
         );
-        return { current, previous, affected, task, message, result };
+        return { current, previous, affected, task: continued, message, result };
       }).pipe(
         Effect.onExit((exit) =>
           committed
@@ -522,7 +711,7 @@ export class ChannelService {
       );
       const { current, previous, affected, task, message, result } = stored;
       this.publish(current.id);
-      if (previous) {
+      if (previous && task) {
         yield* this.interruptTasks(
           current.id,
           affected.filter((item) => item.id !== previous.id),
@@ -1100,6 +1289,7 @@ export class ChannelService {
         continue;
       }
       this.#queuePlaces.delete(task.id);
+      const request = yield* channelSync(() => this.store.message(channelId, task.requestMessageId));
       const assignment: ChannelAssignment = {
         id: randomUUID(),
         channelId,
@@ -1116,6 +1306,8 @@ export class ChannelService {
         awaitedTaskIds: [...task.dependencies],
         pendingRevision: null,
         pendingOutcome: null,
+        // The agent answers in the thread of the message it answers.
+        threadRootId: request?.threadRootId ?? null,
       };
       yield* channelSync(() => this.store.update(channel, { assignments: [assignment] }));
       // The request message belongs to the task that the request created, not to a child task that
@@ -1123,8 +1315,10 @@ export class ChannelService {
       // now only serves a task an earlier version queued with its drafts still open: it turns
       // those drafts into attachments and rewrites the stored request. Every other dispatch -
       // a resume, or a hand-off to another task - re-sends the committed copies instead.
-      const request = yield* channelSync(() => this.store.message(channelId, task.requestMessageId));
-      const ownsRequest = request?.taskId === task.id;
+      // Several agents can answer one message, each with a root task of its own; each gets its files.
+      const ownsRequest =
+        request !== null &&
+        (request.taskId === task.id || (task.parentTaskId === null && task.requestMessageId === request.id));
       const committing = ownsRequest && task.attachmentDraftIds.length > 0;
       try {
         const sourcePaths =
@@ -1918,6 +2112,8 @@ export class ChannelService {
       const result = existing(`channel-result-${assignment.id}-revision-${assignment.taskRevision}`);
       if (result?.message.text === message.text) continue;
       const original = existing(message.id);
+      // A person deleted this message; later text of its turn does not bring it back.
+      if (original?.deletedAt) continue;
       // The result is the answer of the turn. Answer text that the running turn writes after it, such
       // as a "Yes.", folds into its steps. Before, it showed as a second reply from the same member.
       // Text from before the result has a row with a lower sequence and stays as it is, and so do the
@@ -1939,6 +2135,7 @@ export class ChannelService {
           ? `${message.id}-revision-${task.revision}`
           : message.id;
       if (messageId !== message.id && JSON.stringify(original?.message) === JSON.stringify(message)) continue;
+      const mentions = channelMentions(message.text);
       const value: ChannelMessage = {
         id: messageId,
         channelId,
@@ -1948,6 +2145,12 @@ export class ChannelService {
         superseded:
           task?.revision !== assignment.taskRevision || (messageId === message.id && original?.superseded === true),
         message,
+        // The answer goes into the thread of the message it answers.
+        ...(assignment.threadRootId ? { threadRootId: assignment.threadRootId } : {}),
+        ...(mentions.length ? { mentions } : {}),
+        // What people added to the message stays while its text streams: reactions and replies.
+        ...(original?.reactions ? { reactions: original.reactions } : {}),
+        ...(original?.threadSummary ? { threadSummary: original.threadSummary } : {}),
       };
       const previous = existing(value.id);
       if (
@@ -1962,6 +2165,175 @@ export class ChannelService {
       this.publish(channelId);
     }
     return true;
+  }
+
+  /** Each thread that these messages answered in counts them in the summary of its root. */
+  #updateThreadSummaries(channelId: string, messages: readonly ChannelMessage[]): void {
+    const roots = new Set(messages.flatMap((message) => (message.threadRootId ? [message.threadRootId] : [])));
+    const updated: ChannelMessage[] = [];
+    for (const rootId of roots) {
+      const root = this.store.message(channelId, rootId);
+      if (!root) continue;
+      const summary = this.store.threadSummary(channelId, rootId);
+      if (JSON.stringify(summary) === JSON.stringify(root.threadSummary)) continue;
+      const { threadSummary: _previous, ...rest } = root;
+      updated.push(summary ? { ...rest, threadSummary: summary } : rest);
+    }
+    if (updated.length) this.store.update(this.store.get(channelId), { quietMessages: updated });
+  }
+
+  /** The root with the summary that counts `reply`, which the commit writes with it. */
+  #summaryWithReply(channelId: string, root: ChannelMessage, reply: ChannelMessage): ChannelMessage {
+    const stored = this.store.threadSummary(channelId, root.id);
+    return {
+      ...root,
+      threadSummary: {
+        replyCount: (stored?.replyCount ?? 0) + 1,
+        lastReplyAt: reply.message.createdAt,
+        participantIds: [
+          reply.author.id,
+          ...(stored?.participantIds ?? []).filter((id) => id !== reply.author.id),
+        ].slice(0, 20),
+      },
+    };
+  }
+
+  #workspaceContext(actor: { id: string; name: string }, viewer: ChannelViewer | undefined): WorkspaceCommandContext {
+    return {
+      agents: this.hooks.agents(),
+      hidden: (agentId) => this.hooks.hidden?.(agentId) ?? false,
+      person: (id) => (this.hooks.person ? this.hooks.person(id) : { id, name: id }),
+      defaultAnswerMode: this.hooks.defaultAnswerMode?.() ?? "mention",
+      actor,
+      viewer,
+    };
+  }
+
+  /** A change of the people, the details or the member settings of a channel: no task changes. */
+  #commitChannel(channel: Channel, operationId: string): Effect.Effect<Channel, ChannelOperationError> {
+    return Effect.gen({ self: this }, function* () {
+      const result = yield* channelSync(() => this.store.update(channel, {}, operationId));
+      this.publish(channel.id);
+      // A member that now answers, or answers in another way, can start queued work.
+      yield* this.wake(channel.id);
+      return result;
+    });
+  }
+
+  /**
+   * The members of a save. A client that does not know answer modes sends members without them, so
+   * a stored member keeps its mode and its focus. A member that joins a workspace channel without a
+   * mode takes the default.
+   */
+  #mergedMembers(channel: Channel, members: readonly ChannelMember[]): ChannelMember[] {
+    const defaultMode = this.hooks.defaultAnswerMode?.() ?? "mention";
+    return members.map((member) => {
+      const stored = channel.members.find((item) => item.agentId === member.agentId);
+      const answerMode =
+        member.answerMode ?? stored?.answerMode ?? (channel.kind !== undefined && !stored ? defaultMode : undefined);
+      const focus = member.focus ?? stored?.focus;
+      return {
+        agentId: member.agentId,
+        ...(answerMode === undefined ? {} : { answerMode }),
+        ...(focus === undefined ? {} : { focus }),
+      };
+    });
+  }
+
+  /**
+   * Deletes a message. A request that no member has started yet goes with it, and the root of its
+   * thread counts one reply less.
+   */
+  readonly #deleteMessage = Effect.fn("ChannelService.deleteMessage")(function* (
+    this: ChannelService,
+    channel: Channel,
+    messageId: string,
+    workspace: WorkspaceCommandContext,
+    operationId: string,
+  ): Effect.fn.Return<Channel, ChannelOperationError> {
+    const message = yield* channelSync(() => this.store.message(channel.id, messageId));
+    if (!message) return yield* channelFailure(new Error(sourceText("error.backend.channelMessageNotFound")));
+    const deleted = yield* channelSync(() => deletedMessage(message, workspace));
+    if (deleted === message) return channel;
+    const tasks = (yield* channelSync(() => this.store.tasks(channel.id))).filter(
+      (task) => task.requestMessageId === messageId && task.state === "queued",
+    );
+    const assignments = yield* channelSync(() => this.store.assignments(channel.id));
+    const unstarted = tasks.filter(
+      (task) => !assignments.some((assignment) => assignment.taskId === task.id && activeAssignment(assignment)),
+    );
+    const result = yield* channelSync(() =>
+      this.store.update(
+        channel,
+        {
+          messages: [deleted],
+          tasks: unstarted.map((task) => ({ ...task, state: "cancelled", revision: task.revision + 1 })),
+        },
+        operationId,
+      ),
+    );
+    this.publish(channel.id);
+    return result;
+  });
+
+  /**
+   * The agents that a finished answer mentions start on it, in a channel with answer modes. Only an
+   * explicit mention starts an agent from another agent's message, and one person's message starts
+   * at most `CHANNEL_MENTION_CHAIN_LIMIT` agent answers this way. A member in `lead` mode is left out:
+   * its work comes from the lead's routing.
+   */
+  #mentionedWork(channelId: string, assignment: ChannelAssignment): ChannelTask[] {
+    const channel = this.store.get(channelId);
+    if (channel.archived || !usesAnswerModes(channel) || !assignment.turnId) return [];
+    const eligible = new Set(this.eligibleMembers(channel));
+    const tasks = this.store.tasks(channelId);
+    const answers = this.store
+      .messages(channelId)
+      .filter(
+        (message) =>
+          message.author.kind === "agent" &&
+          message.author.id === assignment.agentId &&
+          message.taskId === assignment.taskId &&
+          message.message.turnId === assignment.turnId &&
+          message.message.status === "completed" &&
+          !message.superseded &&
+          !message.deletedAt &&
+          (!message.message.itemType ||
+            message.message.itemType === "agentMessage" ||
+            message.message.itemType === "final_answer"),
+      );
+    const added: ChannelTask[] = [];
+    for (const answer of answers) {
+      const mentioned = (answer.mentions ?? []).flatMap((mention) =>
+        mention.kind === "agent" &&
+        mention.id &&
+        mention.id !== assignment.agentId &&
+        eligible.has(mention.id) &&
+        memberAnswerMode(channel, mention.id) !== "lead"
+          ? [mention.id]
+          : [],
+      );
+      if (!mentioned.length || this.#chainDepth(channelId, answer, tasks) >= CHANNEL_MENTION_CHAIN_LIMIT) continue;
+      for (const agentId of mentioned)
+        if (!tasks.some((task) => task.requestMessageId === answer.id && task.ownerAgentId === agentId))
+          added.push(this.newTask(channelId, answer.id, answer.message.text, agentId));
+    }
+    return added;
+  }
+
+  /** How many agent answers lead from the person's message to this one, this one included. */
+  #chainDepth(channelId: string, message: ChannelMessage, tasks: readonly ChannelTask[]): number {
+    let depth = 0;
+    let current: ChannelMessage | null = message;
+    while (current?.author.kind === "agent" && depth <= CHANNEL_MENTION_CHAIN_LIMIT) {
+      depth += 1;
+      const taskId: string | null = current.taskId;
+      const messageId: string = current.id;
+      const task: ChannelTask | undefined = taskId ? tasks.find((item) => item.id === taskId) : undefined;
+      current =
+        task && task.requestMessageId !== messageId ? this.store.message(channelId, task.requestMessageId) : null;
+    }
+    return depth;
   }
 
   private complete(channelId: string, turnId: string, status: string): Effect.Effect<void, ChannelOperationError> {
@@ -2013,8 +2385,13 @@ export class ChannelService {
         )
           updated.push({ ...parent, state: "queued", revision: parent.revision + 1 });
       }
+      const mentioned =
+        state === "completed" ? yield* channelSync(() => this.#mentionedWork(channelId, assignment)) : [];
       yield* channelSync(() =>
-        this.store.update(this.store.get(channelId), { assignments: [{ ...assignment, state }], tasks: updated }),
+        this.store.update(this.store.get(channelId), {
+          assignments: [{ ...assignment, state }],
+          tasks: [...updated, ...mentioned],
+        }),
       );
       this.resolveAssignmentTerminal(assignment.id);
       this.publish(channelId);
@@ -2544,12 +2921,15 @@ export class ChannelService {
 
   private message(
     channelId: string,
-    taskId: string,
+    taskId: string | null,
     author: ChannelMessage["author"],
     text: string,
     id: string = randomUUID(),
     itemType?: string,
   ): ChannelMessage {
+    // A note about a task, such as a routing receipt, a result or a handoff, goes into the thread of
+    // the message that the task answers.
+    const threadRootId = taskId ? this.#taskThread(channelId, taskId) : undefined;
     return {
       id,
       channelId,
@@ -2557,6 +2937,7 @@ export class ChannelService {
       author,
       sequence: 0,
       superseded: false,
+      ...(threadRootId ? { threadRootId } : {}),
       message: {
         id,
         text,
@@ -2566,6 +2947,11 @@ export class ChannelService {
         ...(itemType ? { itemType } : {}),
       },
     };
+  }
+
+  #taskThread(channelId: string, taskId: string): string | undefined {
+    const task = this.store.tasks(channelId).find((item) => item.id === taskId);
+    return task ? (this.store.message(channelId, task.requestMessageId)?.threadRootId ?? undefined) : undefined;
   }
 
   /**
@@ -2688,7 +3074,23 @@ export class ChannelService {
   }
 
   private publish(channelId: string): void {
-    this.hooks.changed(channelId, this.store.get(channelId).revision);
+    let changes = this.store.takeMessageChanges(channelId);
+    // Every message written into a thread, by a person, an agent or a deletion, counts in its root.
+    if (changes.some((change) => change.message.threadRootId)) {
+      try {
+        this.#updateThreadSummaries(
+          channelId,
+          changes.map((change) => change.message),
+        );
+      } catch (error) {
+        this.hooks.error(error);
+      }
+      const roots = this.store.takeMessageChanges(channelId);
+      changes = [...changes.filter((change) => !roots.some((root) => root.message.id === change.message.id)), ...roots];
+    }
+    const revision = this.store.get(channelId).revision;
+    if (changes.length) this.hooks.messagesChanged?.(channelId, changes, revision);
+    this.hooks.changed(channelId, revision);
     this.#syncQueueHolds(channelId);
   }
 

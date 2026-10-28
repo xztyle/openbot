@@ -140,6 +140,21 @@ A toolless one-shot call through `WarmGenerations` on a cheap model chosen in Se
 6. **Polish**: empty states, onboarding into #general with the team's agents, i18n in all languages, docs,
    remove dead paths, performance (realtime append, virtualized lists).
 
+7. **Hyperagent-style fleet and artifacts** (owner reference: hyperagent.com — "Agents that ship real,
+   powerful work"):
+   - **Fleet / command center**: a workspace view listing every agent with live status (idle, working on
+     what, waiting for someone), current channel/thread, today's cost and time, quick DM/assign. Assigning
+     work = posting a brief in a channel or DM; agents keep it current ("the work never goes stale") through
+     routines and event checks.
+   - **Transparent execution**: each agent answer in a channel/thread has a collapsible step trail (searches,
+     tools, files, skills loaded) like the agent chat's "N steps", streaming live while the agent works.
+   - **Artifacts**: deliverables become first-class cards in the message pane and in an Artifacts view per
+     channel and per workspace — hosted apps/websites (apps broker, `https://<app>.delynith.com`), published
+     sites, HTML renders, documents, decks, dashboards, files — each with thumbnail, title, short
+     description, the agent that built it, cost and time, and "Open"/"View this artifact".
+   - **Agents with their own computer**: surface the existing browser, shell, bench (performance bench) and
+     hosting as the agent's "computer" in its profile.
+
 ## Done means
 
 - A human can create public and private channels, DMs and group DMs; invite humans and agents.
@@ -148,4 +163,5 @@ A toolless one-shot call through `WarmGenerations` on a cheap model chosen in Se
 - The gate stops off-topic answers in group chats, and logs why.
 - Threads, reactions, mentions, edits, unread, activity work like Slack on desktop and web.
 - Discord channels can be bridged to workspace channels.
+- A Fleet view, step trails on agent answers, and Artifacts cards/views exist (phase 7).
 - Everything deployed on the live server.

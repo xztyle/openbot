@@ -420,7 +420,7 @@ function GateModelRow(props: {
         {(catalog) => (
           <ItemActions>
             <ProviderModelPicker
-              variant="field"
+              variant="pill"
               ariaLabel={t("server.settings.workspaceGateModel")}
               provider={isAgentProvider(props.gate.provider) ? props.gate.provider : "claude"}
               foreignProvider={

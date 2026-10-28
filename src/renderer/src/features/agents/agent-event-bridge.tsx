@@ -398,7 +398,8 @@ export function AgentEventBridge() {
   onSettled(() => {
     const unsubscribe = agentsPort().agent.onEvent((event) => {
       if (event.type === "channels-changed") {
-        void channels.refresh();
+        // The live message events keep the open page; a change they carried reads the list only.
+        void channels.changed(event.channelId, event.revision);
         return;
       }
       flush(() => handleAgentEvent(event));

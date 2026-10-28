@@ -1,4 +1,10 @@
-import type { ChannelCommand, ChannelPage, ChannelSummary } from "@openbot/contracts/ipc";
+import {
+  type ChannelCommand,
+  type ChannelMessage,
+  type ChannelPage,
+  type ChannelSummary,
+  isChannelThreadReply,
+} from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import type { AgentProfile } from "@openbot/ui/data";
 import { currentText } from "@openbot/ui/text";
@@ -114,6 +120,12 @@ export function createChannelsController(env: ChannelsEnvironment) {
   let refreshId = 0;
   let failedCommand: ChannelCommand | null = null;
   const readThrough = new Map<string, number>();
+  /**
+   * The newest revision of each channel whose messages this controller applied from the live
+   * `channel-message` events. The host sends them before `channels-changed` with the same revision,
+   * so a change that the events already carried needs only the list, not the page.
+   */
+  const liveRevisions = new Map<string, number>();
   /** The channel whose unread part was kept for this opening, so a refresh does not keep it again. */
   let unreadKeptFor: string | null = null;
 
@@ -132,14 +144,14 @@ export function createChannelsController(env: ChannelsEnvironment) {
   let readToken = 0;
   let laterRead: Promise<void> | null = null;
   let settleLaterRead: (() => void) | null = null;
-  function refresh(selectedOverride?: string | null): Promise<void> {
+  function refresh(selectedOverride?: string | null, listOnly = false): Promise<void> {
     // Navigation carries the selection it wants, so it never waits behind the read it replaces.
     if (reading && selectedOverride === undefined) {
       readAgain = true;
       return reading;
     }
     const token = ++readToken;
-    const run = read(selectedOverride).finally(() => {
+    const run = read(selectedOverride, listOnly).finally(() => {
       if (token !== readToken) return;
       reading = null;
       const settle = settleLaterRead;
@@ -168,7 +180,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     });
     return laterRead;
   }
-  async function read(selectedOverride?: string | null) {
+  async function read(selectedOverride?: string | null, listOnly = false) {
     if (!supported()) return;
     const id = ++refreshId;
     const account = env.scopeKey();
@@ -176,7 +188,13 @@ export function createChannelsController(env: ChannelsEnvironment) {
     try {
       const channels = await env.port().agent.listChannels();
       const selectedExists = selected !== null && channels.some((channel) => channel.id === selected);
-      const page = selectedExists ? await env.port().agent.readChannel({ channelId: selected }) : null;
+      // A list-only read keeps the page that the live events keep current.
+      const keepPage = listOnly && selectedExists && state.page?.channel.id === selected;
+      const page = keepPage
+        ? state.page
+        : selectedExists
+          ? await env.port().agent.readChannel({ channelId: selected })
+          : null;
       if (disposed || account !== env.scopeKey() || id !== refreshId || selected !== state.selectedId) return;
       env.onList?.(channels, account);
       setState((state) => {
@@ -191,7 +209,21 @@ export function createChannelsController(env: ChannelsEnvironment) {
           readThrough.delete(selected);
           if (failedCommand?.channelId === selected) failedCommand = null;
         }
-        if (page && state.page?.channel.id === page.channel.id) {
+        if (keepPage) {
+          // The page in the store is current; only the channel record can be newer.
+          const summary = channels.find((channel) => channel.id === selected);
+          if (summary && state.page && summary.revision > state.page.channel.revision) {
+            const {
+              unreadCount: _unread,
+              activeTasks: _active,
+              openTasks: _open,
+              lastMessage: _last,
+              threads: _threads,
+              ...channel
+            } = summary;
+            state.page.channel = channel;
+          }
+        } else if (page && state.page?.channel.id === page.channel.id) {
           const merged = mergeChannelPage(state.page.messages, page.messages);
           reconcile(merged.messages, "id")(state.page.messages);
           reconcile(page.tasks, "id")(state.page.tasks);
@@ -388,6 +420,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
         const selected = next.supported ? env.readSelection(next.scope) : null;
         refreshId += 1;
         readThrough.clear();
+        liveRevisions.clear();
         unreadKeptFor = null;
         failedCommand = null;
         pendingCommands = 0;
@@ -437,6 +470,65 @@ export function createChannelsController(env: ChannelsEnvironment) {
       window.removeEventListener("focus", focus);
     };
   });
+  /** Marks the open channel read through a message that arrived while the reader looks at it. */
+  function readLive(channelId: string, sequence: number) {
+    if (!env.canMarkRead() || sequence <= (readThrough.get(channelId) ?? 0)) return;
+    readThrough.set(channelId, sequence);
+    void env
+      .port()
+      .agent.channelCommand({ type: "read", channelId, throughSequence: sequence, operationId: crypto.randomUUID() })
+      .catch(() => readThrough.delete(channelId));
+  }
+
+  /**
+   * Puts a message from a `channel-message` event into the open page: a new one at its place in the
+   * sequence, a changed one in place. A thread reply that stays in its thread is not in the
+   * transcript; its root carries the new summary in an event of its own.
+   */
+  function applyMessage(message: ChannelMessage, revision: number) {
+    const page = state.page;
+    if (!page || page.channel.id !== message.channelId) return;
+    liveRevisions.set(message.channelId, Math.max(revision, liveRevisions.get(message.channelId) ?? 0));
+    if (isChannelThreadReply(message)) return;
+    setState((draft) => {
+      const target = draft.page;
+      if (!target) return;
+      const index = target.messages.findIndex((entry) => entry.id === message.id);
+      if (index >= 0) target.messages[index] = message;
+      else {
+        // An event older than the loaded window belongs to history that "load earlier" brings.
+        const first = target.messages[0];
+        if (first && message.sequence < first.sequence && target.olderCursor !== null) return;
+        let at = target.messages.length;
+        while (at > 0 && (target.messages[at - 1]?.sequence ?? 0) > message.sequence) at -= 1;
+        target.messages.splice(at, 0, message);
+      }
+      if (message.sequence > target.throughSequence) target.throughSequence = message.sequence;
+    });
+    if (state.selectedId === message.channelId) readLive(message.channelId, state.page?.throughSequence ?? 0);
+  }
+
+  function removeMessage(channelId: string, messageId: string, revision: number) {
+    const page = state.page;
+    if (!page || page.channel.id !== channelId) return;
+    liveRevisions.set(channelId, Math.max(revision, liveRevisions.get(channelId) ?? 0));
+    setState((draft) => {
+      const target = draft.page;
+      if (!target) return;
+      const index = target.messages.findIndex((entry) => entry.id === messageId);
+      if (index >= 0) target.messages.splice(index, 1);
+    });
+  }
+
+  /**
+   * A `channels-changed` event. When the live events already brought this revision of the open
+   * channel, only the list is read again; otherwise the open page is read too.
+   */
+  function changed(channelId: string, revision: number): Promise<void> {
+    const live = state.selectedId === channelId && (liveRevisions.get(channelId) ?? -1) >= revision;
+    return refresh(undefined, live);
+  }
+
   /** Reads each unread channel's latest page for its boundary, since a summary has no sequence. */
   function markAllRead(): Promise<boolean> {
     const unread = state.channels.filter((channel) => channel.unreadCount > 0).map((channel) => channel.id);
@@ -476,6 +568,9 @@ export function createChannelsController(env: ChannelsEnvironment) {
     supported,
     deletionSupported: () => supported() && env.deletionSupported(),
     refresh,
+    changed,
+    applyMessage,
+    removeMessage,
     retry: async (onAccepted?: (accepted: ChannelCommand) => void) => {
       const previous = failedCommand;
       if (previous) return (await command(previous, onAccepted)) ? previous : null;

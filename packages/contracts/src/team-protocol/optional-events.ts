@@ -13,6 +13,7 @@ import { type QuietTurnCompletedEvent, quietTurnEvent } from "./quiet-turn-v1";
 import { type RoutineFlowsEvent, routineFlowsEvent } from "./routine-flows-v1";
 import { type SkillsEvent, skillsEvent } from "./skills-events-v1";
 import { type WorkflowsEvent, workflowsEvent } from "./workflows-v1";
+import { type WorkspaceFleetChangedEvent, workspaceFleetEvent } from "./workspace-fleet-v1";
 import { type WorkspaceChannelEvent, workspaceChannelEvent } from "./workspace-v1";
 
 export type OptionalTeamEvent =
@@ -29,7 +30,8 @@ export type OptionalTeamEvent =
   | QuietTurnCompletedEvent
   | RoutineFlowsEvent
   | WorkflowsEvent
-  | WorkspaceChannelEvent;
+  | WorkspaceChannelEvent
+  | WorkspaceFleetChangedEvent;
 
 /** The optional event in `value`, or null for any other event. A malformed optional event throws. */
 export function optionalTeamEvent(value: unknown): OptionalTeamEvent | null {
@@ -47,7 +49,8 @@ export function optionalTeamEvent(value: unknown): OptionalTeamEvent | null {
     quietTurnEvent(value) ??
     routineFlowsEvent(value) ??
     workflowsEvent(value) ??
-    workspaceChannelEvent(value)
+    workspaceChannelEvent(value) ??
+    workspaceFleetEvent(value)
   );
 }
 

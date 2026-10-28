@@ -8,6 +8,7 @@ import {
   type ConversationMessage,
   type ConversationTraceStep,
   type ConversationTraceStepKind,
+  type ConversationTraceToolCategory,
   type ConversationTurnTrace,
 } from "@openbot/contracts/ipc";
 import { redactText } from "@openbot/logging";
@@ -46,6 +47,8 @@ export class TurnTraces {
       text?: string | null;
       command?: string | null;
       recipientAgentIds?: string[] | null;
+      category?: ConversationTraceToolCategory;
+      label?: string | null;
     },
   ): void {
     const trace = this.#turns.get(turnId);
@@ -67,6 +70,9 @@ export class TurnTraces {
       step.command = redactText(command).slice(0, CONVERSATION_TRACE_TEXT_LIMIT);
     if (kind === "tool" && step.recipientAgentIds === undefined && event.recipientAgentIds?.length)
       step.recipientAgentIds = [...event.recipientAgentIds];
+    if (kind === "tool" && event.category && (step.category === undefined || step.category === "tool"))
+      step.category = event.category;
+    if (kind === "tool" && step.label === undefined && event.label) step.label = event.label;
     if (event.completed && step.endedAt === null) step.endedAt = now;
     if (event.completed && event.failed) step.failed = true;
   }
@@ -77,6 +83,17 @@ export class TurnTraces {
     this.#turns.delete(turnId);
     if (!trace) return null;
     return { startedAt: trace.startedAt, endedAt, steps: [...trace.steps.values()] };
+  }
+
+  /** A copy of the trace of a running turn, or null when the turn records none. It keeps the turn. */
+  peek(turnId: string): ConversationTurnTrace | null {
+    const trace = this.#turns.get(turnId);
+    if (!trace) return null;
+    return {
+      startedAt: trace.startedAt,
+      endedAt: null,
+      steps: [...trace.steps.values()].map((step) => ({ ...step })),
+    };
   }
 
   drop(turnId: string): void {

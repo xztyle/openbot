@@ -87,6 +87,11 @@ export class AgentTasks implements TaskLanes {
     return task && task.closedAt === null ? task.threadId : null;
   }
 
+  /** The title of a task, open or closed, or null when it is gone. */
+  title(taskId: string): string | null {
+    return this.#store.task(taskId)?.title ?? null;
+  }
+
   openTaskIds(agentId: string): readonly string[] {
     return this.#store.openTaskIds(agentId);
   }

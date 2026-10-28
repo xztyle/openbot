@@ -533,6 +533,14 @@ import type {
   WorkflowWebhookSecret,
 } from "./ipc-workflows";
 import type { WorkspaceActivity, WorkspaceActivityInput } from "./ipc-workspace-activity";
+import type {
+  WorkspaceArtifacts,
+  WorkspaceArtifactsInput,
+  WorkspaceFleet,
+  WorkspaceFleetInput,
+  WorkspaceSteps,
+  WorkspaceStepsInput,
+} from "./ipc-workspace-fleet";
 import type { LicenseCheckoutRequest, LicenseRenewalRequest, LicenseState, LicenseUsersRequest } from "./license";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
 
@@ -1323,6 +1331,12 @@ export const IPC_ENDPOINTS = {
     // A joined server answers through `workspace-v1` (`fork-host-v1`).
     workspaceActivity: scopedRequest<WorkspaceActivityInput, WorkspaceActivity>()("agent:workspace:activity"),
     deleteChannel: scopedRequest<string, void>()("agent:channels:delete"),
+    // The workspace fleet, the step trail of an agent's channel answer and the artifacts index. A
+    // joined server answers through workspace-fleet-v1 (`fork-host-v1`); `scopedEvent` carries
+    // `workspace-fleet-changed`.
+    workspaceFleet: scopedRequest<WorkspaceFleetInput, WorkspaceFleet>()("agent:workspace:fleet"),
+    workspaceSteps: scopedRequest<WorkspaceStepsInput, WorkspaceSteps>()("agent:workspace:steps"),
+    workspaceArtifacts: scopedRequest<WorkspaceArtifactsInput, WorkspaceArtifacts>()("agent:workspace:artifacts"),
     getSidebarLayout: scopedQuery<SidebarLayoutSnapshot>()("agent:get-sidebar-layout"),
     mutateSidebarLayout: scopedRequest<SidebarLayoutAction, SidebarLayoutSnapshot>()("agent:mutate-sidebar-layout"),
     // A joined server answers through `agent-hidden-v1`. A server without it has no hidden agents.

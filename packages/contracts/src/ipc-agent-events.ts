@@ -29,6 +29,7 @@ import { type HiddenAgent, isHiddenAgentsSnapshot } from "./ipc-hidden-agents";
 import { type AgentInputEscalation, isAgentInputEscalationList } from "./ipc-input-escalations";
 import { isQueueSnapshot, type QueueSnapshot } from "./ipc-queue";
 import { isSidebarLayoutSnapshot, type SidebarLayoutSnapshot } from "./ipc-sidebar-layout";
+import { isWorkspaceFleetChange } from "./ipc-workspace-fleet";
 import { isBoolean, isDynamicRecord, isNumber, isString } from "./runtime-values";
 
 export type AgentTurnOrigin = "user" | "routine" | "agent" | "unknown";
@@ -46,6 +47,12 @@ export type AgentEvent =
   | { type: "channel-message"; channelId: string; message: ChannelMessage; revision: number }
   /** A message left the channel transcript, as a deleted message with no replies does. */
   | { type: "channel-message-removed"; channelId: string; messageId: string; revision: number }
+  /**
+   * What an agent does changed: a turn started, ended, took a step or waits for a person, or the
+   * queue changed. At most one each `WORKSPACE_FLEET_EVENT_INTERVAL_MS`. A fleet view reads
+   * `workspaceFleet` again.
+   */
+  | { type: "workspace-fleet-changed"; revision: number }
   | { type: "status"; status: AgentStatus }
   | { type: "usage-changed"; usage: AccountUsage }
   | { type: "agents-changed"; agents: ClientAgentSummary[] }
@@ -195,6 +202,8 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
         Number.isSafeInteger(value.revision) &&
         value.revision >= 0
       );
+    case "workspace-fleet-changed":
+      return isWorkspaceFleetChange(value);
     case "status":
       return isDynamicRecord(value.status);
     case "usage-changed":

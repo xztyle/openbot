@@ -256,6 +256,7 @@ import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "./securit
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
 import type { VaultItems } from "./vault-items";
 import type { WorkflowRunEnd } from "./workflows/workflows";
+import { WorkspaceInsights } from "./workspace-insights";
 import {
   listWorkspaceDirectory,
   type ResolvedSharedFile,
@@ -420,6 +421,8 @@ export type AgentUpdate = UpdateAgentInput & { ownBrowserSession?: boolean; brow
 
 export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly channels: ChannelService;
+  /** The fleet, step trail and artifact views of the workspace. */
+  readonly workspace: WorkspaceInsights;
   readonly messaging: MessagingThreads;
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
@@ -1438,6 +1441,17 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         taskForThread: (threadId) => this.#tasks.taskForThread(threadId),
         taskFailed: (taskId, message) => this.#tasks.failed(taskId, this.#mcp.redact(message)),
       },
+    });
+    this.workspace = new WorkspaceInsights({
+      agents: () => this.listAgents(),
+      database: store.database,
+      channels: this.channels.store,
+      mailbox,
+      attention: this.#attention,
+      liveTrace: (turnId) => this.#turn.liveTrace(turnId),
+      loadedSnapshot: (threadId) => this.#conversation.loadedExecutionSnapshot(threadId),
+      agentTaskTitle: (taskId) => this.#tasks.title(taskId),
+      emit: (event) => this.#emit(event),
     });
     this.#removal = new AgentRemoval({
       store,
@@ -4037,6 +4051,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#routineTimer.dispose();
     yield* this.#memoryHold.dispose();
     this.#hostedSites.dispose();
+    this.workspace.dispose();
     this.#compaction.dispose();
     this.#deltas.dispose();
     this.#conversation.dispose();
@@ -4936,6 +4951,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     recordAgentRestartActivity(event);
     // Before the event: a client learns who delegated a request before the request arrives.
     this.#escalations?.observe(event);
+    // Before the channels and the tasks take theirs: the fleet follows the turns of channel threads too.
+    this.workspace?.observe(event);
     if (this.channels?.event(event) || this.messaging?.event(event, this.#scope) || this.#tasks?.event(event)) return;
     this.emit("event", event);
   }

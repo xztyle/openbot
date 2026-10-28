@@ -244,6 +244,7 @@ import { routeWebPush } from "./team-api/route-web-push";
 import { routeWorkflows } from "./team-api/route-workflows";
 import { routeWorkspace } from "./team-api/route-workspace";
 import { routeWorkspaceDirectory } from "./team-api/route-workspace-directory";
+import { routeWorkspaceFleet } from "./team-api/route-workspace-fleet";
 import { TeamStoreError } from "./team-store";
 
 const EVENT_PAYLOAD_LIMIT = 256 * 1_024;
@@ -882,6 +883,7 @@ export class TeamApiServer {
       if ((await this.#routeFiles(context)) === "handled") return;
       if ((await routeChannels(context, this.#options.channels, this.#options.agents, hidden)) === "handled") return;
       if ((await routeWorkspace(context, this.#options.channels, this.#options.admin, hidden)) === "handled") return;
+      if ((await routeWorkspaceFleet(context, this.#options.agents, hidden)) === "handled") return;
       if (
         (await routeMcpServers(context, this.#options.mcpServers, this.#options.mcpToolRuntimePreparation)) ===
         "handled"
@@ -2240,6 +2242,7 @@ function eventCapability(event: AgentEvent): TeamCurrentCapability | null {
   if (event.type === "runtime-snapshot") return "agent-runtime-snapshots";
   if (event.type === "agent-input-escalations-changed") return INPUT_ESCALATIONS_CAPABILITY;
   if (event.type === "channel-message" || event.type === "channel-message-removed") return WORKSPACE_CAPABILITY;
+  if (event.type === "workspace-fleet-changed") return WORKSPACE_CAPABILITY;
   if (event.type === "sidebar-layout-changed") return "sidebar-layout";
   if (event.type === "browser-changed" || event.type === "browser-control-changed") return "browser-control";
   if (event.type === "conversation-page") return "conversation-pagination";

@@ -40,6 +40,7 @@ import {
 import { type ProviderSession, ProviderSessions } from "./database/provider-sessions";
 import { ThreadReplay } from "./database/thread-replay";
 import { type StoredThreadSummary, ThreadSummaries } from "./database/thread-summaries";
+import { WorkspaceQueries } from "./database/workspace-queries";
 
 // Declared in this module before the split and part of the frozen public surface, so it stays
 // reachable from here rather than only from the controller that owns it now. Structural `Pick<...>`
@@ -70,6 +71,8 @@ export type { StoredThreadSummary } from "./database/thread-summaries";
 export class OpenBotDatabase {
   readonly #core: DatabaseCore;
   readonly usage: AgentUsage;
+  /** The reads of the workspace fleet, step trail and artifact views. */
+  readonly workspace: WorkspaceQueries;
   readonly #conversations: ConversationQueries;
   readonly #roster: AgentRoster;
   readonly #conversationWrites: ConversationWriter;
@@ -84,6 +87,7 @@ export class OpenBotDatabase {
   constructor(readonly userDataPath: string) {
     this.#core = new DatabaseCore({ userDataPath });
     this.usage = new AgentUsage(this.#core);
+    this.workspace = new WorkspaceQueries({ core: this.#core });
     this.#conversations = new ConversationQueries({ core: this.#core });
     this.#roster = new AgentRoster({ core: this.#core });
     this.#conversationWrites = new ConversationWriter({ core: this.#core, roster: this.#roster });

@@ -22,6 +22,9 @@ import {
   decodeChannelSummaries,
   decodeSaveAgentProfileResult,
   decodeWorkspaceActivity,
+  decodeWorkspaceArtifacts,
+  decodeWorkspaceFleet,
+  decodeWorkspaceSteps,
   hostAnalyticsQuery,
   isAgentModelOption,
   isWorkspaceChannelCommand,
@@ -37,7 +40,13 @@ import {
   parseSetAgentHiddenInput,
   parseSetAgentSessionSetting,
   parseWorkspaceActivityInput,
+  parseWorkspaceArtifactsInput,
+  parseWorkspaceFleetInput,
+  parseWorkspaceStepsInput,
   remoteBrowserSecretResponse,
+  type WorkspaceArtifactsInput,
+  type WorkspaceFleetInput,
+  type WorkspaceStepsInput,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
@@ -54,6 +63,10 @@ import {
   SIDE_QUESTION_CAPABILITY,
   SIDE_QUESTION_ROUTES,
 } from "@openbot/contracts/team-protocol/side-question-v1";
+import {
+  WORKSPACE_FLEET_CAPABILITY,
+  WORKSPACE_FLEET_ROUTES,
+} from "@openbot/contracts/team-protocol/workspace-fleet-v1";
 import { WORKSPACE_CAPABILITY, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
@@ -178,6 +191,17 @@ export function agentIpcHandlers({
 }: AgentIpcDependencies): Pick<IpcGroupHandlers, "agent"> {
   const remoteTaskRequest = <T>(serverId: string, path: string, decoder: ResponseDecoder<T>, body: RemoteTaskBody) => {
     if (!remoteServers.supportsCapability(serverId, AGENT_TASKS_CAPABILITY)) taskRemoteUnsupported();
+    return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
+  };
+  // A joined server without workspace-fleet-v1 (an upstream host, or a fork host before it) has no fleet.
+  const remoteWorkspace = <T>(
+    serverId: string,
+    path: string,
+    body: WorkspaceFleetInput | WorkspaceStepsInput | WorkspaceArtifactsInput,
+    decoder: ResponseDecoder<T>,
+  ) => {
+    if (!remoteServers.supportsCapability(serverId, WORKSPACE_FLEET_CAPABILITY))
+      throw new Error(sourceText("error.team.workspaceUnsupported"));
     return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
   };
   return {
@@ -387,6 +411,21 @@ export function agentIpcHandlers({
             }),
           );
         },
+      }),
+      workspaceFleet: scopedHandler(parseWorkspaceFleetInput, {
+        local: (input) => service.workspace.fleet(input),
+        remote: (input, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.fleet, input, decodeWorkspaceFleet),
+      }),
+      workspaceSteps: scopedHandler(parseWorkspaceStepsInput, {
+        local: (input) => service.workspace.steps(input, host.channelViewer()),
+        remote: (input, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.steps, input, decodeWorkspaceSteps),
+      }),
+      workspaceArtifacts: scopedHandler(parseWorkspaceArtifactsInput, {
+        local: (input) => service.workspace.artifacts(input, host.channelViewer()),
+        remote: (input, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.artifacts, input, decodeWorkspaceArtifacts),
       }),
       getSidebarLayout: scopedQueryHandler({
         local: () => sidebarLayout.getSnapshot(),

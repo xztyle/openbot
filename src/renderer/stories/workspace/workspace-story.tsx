@@ -201,7 +201,7 @@ export function CakemakerRoot(props: { highlighted?: boolean; withThread?: boole
       onOpenThread={fn()}
       menuItems={MESSAGE_MENU}
       highlighted={props.highlighted}
-      profile={profileOf(delynith)}
+      profile={() => profileOf(delynith)}
     />
   );
 }
@@ -217,7 +217,7 @@ export function CakemakerReplies(): JSX.Element {
         onToggleReaction={fn()}
         onOpenThread={fn()}
         menuItems={MESSAGE_MENU}
-        profile={profileOf(orchestrator)}
+        profile={() => profileOf(orchestrator)}
       >
         <StepTrail steps={STEPS} durationMs={27 * MINUTE + 12_000} />
         <ArtifactCard artifact={CAKEMAKER_SITE} onOpen={fn()} />
@@ -235,7 +235,7 @@ export function CakemakerReplies(): JSX.Element {
         onToggleReaction={fn()}
         onOpenThread={fn()}
         menuItems={MESSAGE_MENU}
-        profile={profileOf(qa)}
+        profile={() => profileOf(qa)}
       />
       <MessageRow
         author={qa}
@@ -252,7 +252,7 @@ export function CakemakerReplies(): JSX.Element {
         text={[text("Played it on the phone, it is so good. Ship the fix 🚀")]}
         onToggleReaction={fn()}
         menuItems={MESSAGE_MENU}
-        profile={profileOf(fonikad)}
+        profile={() => profileOf(fonikad)}
       />
     </>
   );
@@ -293,7 +293,7 @@ export function CakemakerMessages(): JSX.Element {
         onToggleReaction={fn()}
         onOpenThread={fn()}
         menuItems={MESSAGE_MENU}
-        profile={profileOf(orchestrator)}
+        profile={() => profileOf(orchestrator)}
       />
     </div>
   );

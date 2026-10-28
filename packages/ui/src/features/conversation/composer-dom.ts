@@ -17,6 +17,11 @@ export interface ComposerPasteResult {
 }
 
 export function placeSerializedCaret(editor: HTMLDivElement, position: number): void {
+  placeSerializedSelection(editor, position, position);
+}
+
+/** The visible offset of a position in the serialized draft. A token counts as one character. */
+function visibleOffset(editor: HTMLDivElement, position: number): number {
   let remaining = position;
   let visible = 0;
   for (const segment of editorSegments(editor)) {
@@ -29,7 +34,12 @@ export function placeSerializedCaret(editor: HTMLDivElement, position: number): 
     remaining -= serializedLength;
     visible += text ? serializedLength : 1;
   }
-  const range = rangeFromTextOffsets(editor, visible, visible);
+  return visible;
+}
+
+/** Selects the serialized range from `start` to `end`, or places the caret when they are equal. */
+export function placeSerializedSelection(editor: HTMLDivElement, start: number, end: number): void {
+  const range = rangeFromTextOffsets(editor, visibleOffset(editor, start), visibleOffset(editor, end));
   if (!range) return;
   const selection = editor.ownerDocument.getSelection();
   selection?.removeAllRanges();
@@ -64,7 +74,10 @@ function serializeNode(node: Node): string {
   }
   const mentionId = node.dataset.mentionId;
   const mentionName = node.dataset.mentionName;
-  if (mentionId && mentionName) return serializeChatTagReference("agent", mentionName, mentionId);
+  if (mentionId && mentionName) {
+    const kind = node.dataset.mentionKind;
+    return serializeChatTagReference(kind === "member" || kind === "channel" ? kind : "agent", mentionName, mentionId);
+  }
   const skillId = node.dataset.skillId;
   const skillName = node.dataset.skillName;
   if (skillId && skillName) return serializeChatTagReference("skill", skillName, skillId);

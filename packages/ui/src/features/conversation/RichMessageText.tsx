@@ -13,6 +13,7 @@ import { AnchoredTooltip } from "./AnchoredTooltip";
 import { AttachmentReferenceVisual, attachmentReferenceTone } from "./AttachmentReference";
 import { LinkIcon } from "./ConversationIcons";
 import { messageFileReferences } from "./FileReference";
+import { useMessageMentions } from "./message-mentions";
 import {
   sameStreamingTailOffsets,
   splitStreamingTrail,
@@ -58,6 +59,7 @@ type UnavailableTagKind = Exclude<ChatTagKind, "quote" | "member" | "channel">;
 
 export function RichMessageText(props: RichMessageTextProps) {
   const { t } = useText();
+  const mentions = useMessageMentions();
   const citationsByNumber = createMemo(
     () => new Map((props.citations ?? []).map((citation) => [citation.number, citation])),
   );
@@ -184,6 +186,38 @@ export function RichMessageText(props: RichMessageTextProps) {
                 icon={<TextQuote />}
                 onClick={onOpenQuote ? () => onOpenQuote(quote.messageId, quote.text) : undefined}
               />
+            );
+          }
+          if (part.member) {
+            const member = part.member;
+            return (
+              <Show when={mentions} fallback={part.text}>
+                {(context) => (
+                  <span
+                    class="ws-mention message-member-mention"
+                    data-self={context().isReader(member.id) ? "" : undefined}
+                  >
+                    {part.text}
+                  </span>
+                )}
+              </Show>
+            );
+          }
+          if (part.channel) {
+            const channel = part.channel;
+            return (
+              <Show when={mentions?.onOpenChannel} fallback={part.text}>
+                {(open) => (
+                  <Button
+                    variant="link"
+                    size="xs"
+                    class="ws-mention ws-channel-link message-channel-link"
+                    onClick={() => open()(channel.id)}
+                  >
+                    {part.text}
+                  </Button>
+                )}
+              </Show>
             );
           }
           if (part.unavailableKind) {
@@ -341,6 +375,8 @@ function plainTextPart(part: RichMessagePart): boolean {
     part.skill ||
     part.mcpName ||
     part.quote ||
+    part.member ||
+    part.channel ||
     part.unavailableKind ||
     part.citation ||
     part.attachment ||
@@ -359,6 +395,9 @@ interface RichMessagePart {
   mcpName?: string;
   /** Text the user quoted from a message of this chat. */
   quote?: { messageId: string; text: string };
+  /** A person of the workspace. The workspace view highlights it; elsewhere it is `@name` text. */
+  member?: { id: string; name: string };
+  channel?: { id: string; name: string };
   unavailableKind?: UnavailableTagKind;
   citation?: MessageCitation;
   attachment?: AttachmentSummary;
@@ -380,6 +419,8 @@ function richMessageParts(
       taggedReference.skill ||
       taggedReference.mcpName ||
       taggedReference.quote ||
+      taggedReference.member ||
+      taggedReference.channel ||
       taggedReference.unavailableKind
     ) {
       parts.push(taggedReference);
@@ -418,9 +459,9 @@ function semanticTagParts(body: string, agents: ComposerAgent[], skills: Compose
       const agent = agents.find((candidate) => candidate.id === reference.id);
       parts.push(agent ? { text: agent.name, agent } : { text: reference.name, unavailableKind: "agent" });
     } else if (reference.kind === "member") {
-      parts.push({ text: `@${reference.name}` });
+      parts.push({ text: `@${reference.name}`, member: { id: reference.id, name: reference.name } });
     } else if (reference.kind === "channel") {
-      parts.push({ text: `#${reference.name}` });
+      parts.push({ text: `#${reference.name}`, channel: { id: reference.id, name: reference.name } });
     } else if (reference.kind === "mcp") {
       parts.push({ text: reference.name, mcpName: reference.name });
     } else if (reference.kind === "quote") {

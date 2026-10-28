@@ -6,14 +6,17 @@ import { createStaticAvatarSvg } from "../../bloub-avatar";
 import type { ComposerAgent, ComposerMcpServer, ComposerSkill } from "../../data";
 import { currentText } from "../../text";
 import { appendAttachmentReferenceVisual } from "./AttachmentReference";
+import type { ComposerChannel, ComposerMember } from "./composer-picker";
 
 export const MENTION_PATTERN = /@\[([^\]]+)]\(([^)]+)\)/g;
+/** Every chat tag of a draft: `@` tags and `#` channel links. */
+const TAG_PATTERN = /[@#]\[([^\]]+)]\(([^)]+)\)/g;
 
 export function truncateComposerValue(value: string, limit: number): string {
   if (value.length <= limit) return value;
   let result = "";
   let cursor = 0;
-  for (const match of value.matchAll(MENTION_PATTERN)) {
+  for (const match of value.matchAll(TAG_PATTERN)) {
     const index = match.index ?? 0;
     const text = value.slice(cursor, index);
     if (result.length + text.length >= limit) {
@@ -146,6 +149,59 @@ export function createMentionToken(agent: ComposerAgent): HTMLSpanElement {
   name.textContent = agent.name;
   token.append(avatar, name);
   return token;
+}
+
+/** A person of the workspace, as `@[name](member:id)`. */
+export function createMemberToken(member: ComposerMember): HTMLSpanElement {
+  const token = document.createElement("span");
+  token.className = `composer-mention-token ${referenceChipClasses.root}`;
+  token.dataset.kind = "member";
+  token.title = member.name;
+  token.contentEditable = "false";
+  token.dataset.mentionId = member.id;
+  token.dataset.mentionName = member.name;
+  token.dataset.mentionKind = "member";
+  token.setAttribute("aria-label", currentText().t("composer.token.member", { name: member.name }));
+  const avatar = document.createElement("span");
+  avatar.className = `composer-mention-avatar composer-member-avatar ${referenceChipClasses.icon}`;
+  avatar.setAttribute("aria-hidden", "true");
+  if (member.avatarUrl) {
+    const image = document.createElement("img");
+    image.src = member.avatarUrl;
+    image.alt = "";
+    image.draggable = false;
+    image.addEventListener("error", () => {
+      avatar.textContent = initial(member.name);
+    });
+    avatar.append(image);
+  } else avatar.textContent = initial(member.name);
+  const name = document.createElement("span");
+  name.className = referenceChipClasses.name;
+  name.textContent = member.name;
+  token.append(avatar, name);
+  return token;
+}
+
+/** A channel link, as `#[name](channel:id)`. */
+export function createChannelToken(channel: ComposerChannel): HTMLSpanElement {
+  const token = document.createElement("span");
+  token.className = `composer-mention-token ${referenceChipClasses.root}`;
+  token.dataset.kind = "channel";
+  token.title = channel.name;
+  token.contentEditable = "false";
+  token.dataset.mentionId = channel.id;
+  token.dataset.mentionName = channel.name;
+  token.dataset.mentionKind = "channel";
+  token.setAttribute("aria-label", currentText().t("composer.token.channel", { name: channel.name }));
+  const name = document.createElement("span");
+  name.className = referenceChipClasses.name;
+  name.textContent = `#${channel.name}`;
+  token.append(name);
+  return token;
+}
+
+function initial(name: string): string {
+  return Array.from(name.trim())[0]?.toLocaleUpperCase() ?? "?";
 }
 
 export function createSkillToken(skill: ComposerSkill): HTMLSpanElement {
@@ -340,13 +396,28 @@ export function renderEditorValue(
   mcpServers: ComposerMcpServer[],
   attachments: DraftAttachment[],
   attachmentTokenActions: AttachmentTokenActions,
+  workspace: { members?: readonly ComposerMember[]; channels?: readonly ComposerChannel[] } = {},
 ) {
   editor.replaceChildren();
   let cursor = 0;
-  for (const match of value.matchAll(MENTION_PATTERN)) {
+  for (const match of value.matchAll(TAG_PATTERN)) {
     const index = match.index ?? 0;
-    if (index > cursor) editor.append(document.createTextNode(value.slice(cursor, index)));
     const semanticReference = chatTagReferences(match[0])[0];
+    // A `#` that is not a channel link is text, as is a channel link with `@`.
+    if (match[0].startsWith("#") !== (semanticReference?.kind === "channel")) continue;
+    if (index > cursor) editor.append(document.createTextNode(value.slice(cursor, index)));
+    if (semanticReference?.kind === "member") {
+      const member = workspace.members?.find((candidate) => candidate.id === semanticReference.id);
+      editor.append(createMemberToken(member ?? { id: semanticReference.id, name: semanticReference.name }));
+      cursor = index + match[0].length;
+      continue;
+    }
+    if (semanticReference?.kind === "channel") {
+      const channel = workspace.channels?.find((candidate) => candidate.id === semanticReference.id);
+      editor.append(createChannelToken(channel ?? { id: semanticReference.id, name: semanticReference.name }));
+      cursor = index + match[0].length;
+      continue;
+    }
     const name = semanticReference?.name ?? match[1] ?? "Agent";
     const target = semanticReference ? `${semanticReference.kind}:${semanticReference.id}` : (match[2] ?? "");
     if (target.startsWith("attachment:")) {

@@ -161,8 +161,11 @@ export function AgentStatusLine(props: { status: AgentWorkStatus; class?: string
 }
 
 export interface MemberProfilePopoverProps {
-  /** The card that opens. Without it the trigger is plain content. */
-  card?: JSX.Element;
+  /**
+   * Draws the card that opens. It runs only when the popover opens, so a long message list does not
+   * build a card for each row. Without it the trigger is plain content.
+   */
+  card?: (() => JSX.Element) | undefined;
   /** The accessible name of the trigger, such as "Open the profile of QA". */
   label: string;
   children: JSX.Element;
@@ -178,7 +181,7 @@ export function MemberProfilePopover(props: MemberProfilePopoverProps): JSX.Elem
           {props.children}
         </Popover.Trigger>
         <Popover.Portal>
-          <Popover.Content class="ui-popover-menu-surface ws-profile-popover">{props.card}</Popover.Content>
+          <Popover.Content class="ui-popover-menu-surface ws-profile-popover">{props.card?.()}</Popover.Content>
         </Popover.Portal>
       </Popover.Root>
     </Show>

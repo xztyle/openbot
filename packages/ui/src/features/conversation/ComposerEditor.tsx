@@ -3,7 +3,7 @@ import { attachmentReferenceIds } from "@openbot/contracts/attachment-references
 import { serializeChatTagReference } from "@openbot/contracts/chat-tag-references";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { DraftAttachment } from "@openbot/contracts/ipc";
-import { Badge, Blocks, Listbox, Puzzle } from "@openbot/ui";
+import { AtSign, Badge, Blocks, Hash, Listbox, Lock, Puzzle } from "@openbot/ui";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import { Dynamic, Portal } from "@solidjs/web";
 import {
@@ -35,6 +35,7 @@ import {
   placeCaretAtChildOffset,
   placeCaretAtEnd,
   placeSerializedCaret,
+  placeSerializedSelection,
   rangeFromTextOffsets,
   readEditorSelection,
   restoreEditorSelection,
@@ -42,7 +43,10 @@ import {
   serializeEditor,
 } from "./composer-dom";
 import { shouldRestoreComposerFocus } from "./composer-focus";
+import { applyComposerFormat, type ComposerTextFormat, composerFormatShortcut } from "./composer-format";
 import {
+  type ComposerChannel,
+  type ComposerMember,
   measurePickerFrame,
   type PickerFrame,
   type PickerOption,
@@ -57,7 +61,9 @@ import {
   type AttachmentTokenActions,
   clipToRoom,
   createAttachmentToken,
+  createChannelToken,
   createMcpToken,
+  createMemberToken,
   createMentionToken,
   createQuoteToken,
   createSkillToken,
@@ -124,6 +130,16 @@ interface ComposerEditorProps {
   ) => void;
   /** Told when the mention picker opens or closes, so the queue panel can give up the same space. */
   onPickerOpenChange?: (open: boolean) => void;
+  /** People that `@` offers beside the agents, as member tags. Only the workspace composer has them. */
+  members?: readonly ComposerMember[] | undefined;
+  /** Offers `@channel` and `@here`. */
+  broadcasts?: boolean | undefined;
+  /** Channels that `#` links. Without them `#` is plain text. */
+  channels?: readonly ComposerChannel[] | undefined;
+  /** A new id applies the format to the selection, as the formatting toolbar asks. */
+  formatRequest?: { id: number; format: ComposerTextFormat } | undefined;
+  /** Binds the formatting chords: the platform key with B, I, or with Shift and X, C, U, 8, 7. */
+  formatShortcuts?: boolean | undefined;
   /**
    * The words heard so far while the user dictates. `final` is set while the recording turns into
    * the final text. See `dictationWords` for how they show.
@@ -143,10 +159,11 @@ interface MentionContext {
   query: string;
   start: number;
   end: number;
-  trigger: "@" | "$";
+  trigger: "@" | "$" | "#";
 }
 
 const DICTATION_INTERIM_WORDS = 2;
+const BROADCASTS = ["channel", "here"] as const;
 
 export function expandComposerMentions(value: string): string {
   return value.replace(MENTION_PATTERN, (match, name: string, target: string) => {
@@ -232,8 +249,24 @@ export function ComposerEditor(props: ComposerEditorProps) {
       (server) => server.enabled && (!query || server.name.toLocaleLowerCase().includes(query)),
     );
   });
+  const matchingMembers = createMemo(() => {
+    const query = mention()?.query.trim().toLocaleLowerCase() ?? "";
+    return (props.members ?? []).filter((member) => !query || member.name.toLocaleLowerCase().includes(query));
+  });
+  const matchingBroadcasts = createMemo(() => {
+    if (!props.broadcasts) return [];
+    const query = mention()?.query.trim().toLocaleLowerCase() ?? "";
+    return BROADCASTS.filter(
+      (word) => !query || word.startsWith(query) || (word === "channel" && "everyone".startsWith(query)),
+    );
+  });
+  const matchingChannels = createMemo(() => {
+    const query = mention()?.query.trim().toLocaleLowerCase() ?? "";
+    return (props.channels ?? []).filter((channel) => !query || channel.name.toLocaleLowerCase().includes(query));
+  });
   const matchingOptions = createMemo<PickerOption[]>(() => {
     const trigger = mention()?.trigger;
+    if (trigger === "#") return matchingChannels().map((channel) => ({ type: "channel" as const, channel }));
     /* Skills first: a skill is what the user writes with, and a server is what one of them reaches. */
     if (trigger === "$")
       return [
@@ -243,6 +276,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
     if (trigger !== "@") return [];
     return [
       ...matchingAgents().map((agent) => ({ type: "agent" as const, agent })),
+      ...matchingMembers().map((member) => ({ type: "member" as const, member })),
+      ...matchingBroadcasts().map((broadcast) => ({ type: "broadcast" as const, broadcast })),
       ...matchingAttachments().map((attachment) => ({
         type: "attachment" as const,
         attachment,
@@ -296,6 +331,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
     () => matchingOptions().length,
     () => pickerFades.remeasure(),
   );
+  const workspaceTags = () => untrack(() => ({ members: props.members, channels: props.channels }));
   let editor: HTMLDivElement | undefined;
   let lastAgentId: string | undefined;
   let lastAttachmentKey = "";
@@ -308,6 +344,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
   let lastQuoteRequest = untrack(() => props.quoteRequest?.id ?? 0);
   /* Where the caret was when the editor last had it. A selection in a message takes the caret away. */
   let savedCaret: number | null = null;
+  /* The serialized selection while the editor had it, for a toolbar button that takes the focus. */
+  let savedSelection: { start: number; end: number } | null = null;
+  let lastFormatRequest = untrack(() => props.formatRequest?.id ?? 0);
   let isComposing = false;
   const [compositionRevision, setCompositionRevision] = createSignal(0);
   const attachmentTokenActions: AttachmentTokenActions = {
@@ -392,7 +431,16 @@ export function ComposerEditor(props: ComposerEditorProps) {
         lastAgentId = agentId;
         lastEmittedValue = value;
         setAttachmentTooltip(null);
-        renderEditorValue(editor, value, agents, skills, mcpServers, attachments, attachmentTokenActions);
+        renderEditorValue(
+          editor,
+          value,
+          agents,
+          skills,
+          mcpServers,
+          attachments,
+          attachmentTokenActions,
+          workspaceTags(),
+        );
         setMention(null);
       } else {
         if (attachmentsChanged) syncAttachmentTokens(editor, attachments, attachmentTokenActions);
@@ -427,6 +475,15 @@ export function ComposerEditor(props: ComposerEditorProps) {
     },
   );
 
+  createEffect(
+    () => props.formatRequest,
+    (request) => {
+      if (!request || request.id <= lastFormatRequest) return;
+      lastFormatRequest = request.id;
+      applyFormat(request.format);
+    },
+  );
+
   /*
    * Live dictation continues the draft's last line, where the final text lands, so nothing moves
    * when the recording finishes. The editor's text offsets and serializer must never see these
@@ -447,7 +504,16 @@ export function ComposerEditor(props: ComposerEditorProps) {
     }),
     ({ shown, value, agents, skills, mcpServers, attachments }) => {
       if (!shown || !dictationDraft) return;
-      renderEditorValue(dictationDraft, value, agents, skills, mcpServers, attachments, attachmentTokenActions);
+      renderEditorValue(
+        dictationDraft,
+        value,
+        agents,
+        skills,
+        mcpServers,
+        attachments,
+        attachmentTokenActions,
+        workspaceTags(),
+      );
       // The editor needs a closing <br> to show an empty last line; inline, it would push the words a line down.
       if (value.endsWith("\n")) dictationDraft.lastChild?.remove();
     },
@@ -511,7 +577,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const document = editor.ownerDocument;
     const view = document.defaultView;
     const selectionChanged = () => {
-      if (editor && document.activeElement === editor) savedCaret = readEditorSelection(editor)?.focus ?? savedCaret;
+      if (editor && document.activeElement === editor) {
+        savedCaret = readEditorSelection(editor)?.focus ?? savedCaret;
+        if (props.formatRequest !== undefined || props.formatShortcuts)
+          savedSelection = serializedEditorSelection(editor);
+      }
       // A dismissed picker stays closed until the user types or clicks again.
       if (mention()) updateMention();
     };
@@ -539,6 +609,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
         props.mcpServers ?? [],
         props.attachments ?? [],
         attachmentTokenActions,
+        workspaceTags(),
       );
       placeCaretAtEnd(editor);
     }
@@ -612,9 +683,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const selection = readEditorSelection(editor);
     if (!selection || selection.anchor !== selection.focus) return null;
     const beforeCaret = editorText(editor).slice(0, selection.focus);
-    const match = beforeCaret.match(/(?:^|\s)([@$])([^@$\n\uFFFC]{0,60})$/u);
+    const match = props.channels
+      ? beforeCaret.match(/(?:^|\s)([@$#])([^@$#\n\uFFFC]{0,60})$/u)
+      : beforeCaret.match(/(?:^|\s)([@$])([^@$\n\uFFFC]{0,60})$/u);
     if (!match) return null;
-    const trigger = match[1] === "$" ? "$" : "@";
+    const trigger = match[1] === "$" ? "$" : match[1] === "#" ? "#" : "@";
     const query = match[2] ?? "";
     return { query, start: beforeCaret.length - query.length - 1, end: beforeCaret.length, trigger };
   }
@@ -663,11 +736,17 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const token =
       option.type === "agent"
         ? createMentionToken(option.agent)
-        : option.type === "skill"
-          ? createSkillToken(option.skill)
-          : option.type === "mcp"
-            ? createMcpToken(option.server)
-            : createAttachmentToken(option.attachment, attachmentTokenActions);
+        : option.type === "member"
+          ? createMemberToken(option.member)
+          : option.type === "channel"
+            ? createChannelToken(option.channel)
+            : option.type === "broadcast"
+              ? document.createTextNode(`@${option.broadcast}`)
+              : option.type === "skill"
+                ? createSkillToken(option.skill)
+                : option.type === "mcp"
+                  ? createMcpToken(option.server)
+                  : createAttachmentToken(option.attachment, attachmentTokenActions);
     const trailingSpace = document.createTextNode(" ");
     range.insertNode(trailingSpace);
     range.insertNode(token);
@@ -679,6 +758,39 @@ export function ComposerEditor(props: ComposerEditorProps) {
     setMention(null);
     emitValue();
     editor.focus();
+  }
+
+  /** Puts the format around the selection, or takes it off. The draft re-renders with its tokens. */
+  function applyFormat(format: ComposerTextFormat) {
+    if (!editor || props.disabled) return;
+    const inEditor = editor.ownerDocument.activeElement === editor;
+    const value = serializeEditor(editor);
+    const selection = inEditor
+      ? serializedEditorSelection(editor)
+      : (savedSelection ?? { start: value.length, end: value.length });
+    const next = applyComposerFormat(value, selection, format);
+    if (next.value.length > INPUT_LIMITS.messageText) {
+      showLimitNotice(next.value.length - INPUT_LIMITS.messageText);
+      return;
+    }
+    lastEmittedValue = next.value;
+    setAttachmentTooltip(null);
+    renderEditorValue(
+      editor,
+      next.value,
+      props.agents,
+      props.skills ?? [],
+      props.mcpServers ?? [],
+      props.attachments ?? [],
+      attachmentTokenActions,
+      workspaceTags(),
+    );
+    setMention(null);
+    editor.focus({ preventScroll: true });
+    placeSerializedSelection(editor, next.selection.start, next.selection.end);
+    savedSelection = next.selection;
+    props.onValueChange(next.value);
+    scheduleCaretScroll();
   }
 
   function insertQuote(messageId: string, text: string) {
@@ -812,6 +924,14 @@ export function ComposerEditor(props: ComposerEditorProps) {
      */
     if (isComposing || event.isComposing || event.keyCode === 229 || event.key === "Process") return;
     if (handleMentionPickerKeyDown(event)) return;
+    if (props.formatShortcuts) {
+      const format = composerFormatShortcut(event, /Mac|iPhone|iPad/u.test(navigator.userAgent));
+      if (format) {
+        event.preventDefault();
+        applyFormat(format);
+        return;
+      }
+    }
     if (event.key === "Backspace" && removeAutomaticMentionSpace()) {
       event.preventDefault();
       return;
@@ -1067,7 +1187,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 class={["mention-picker-list", pickerFades.classes()]}
                 onScroll={pickerFades.measure}
                 aria-label={t(
-                  mention()?.trigger === "$" ? "composer.picker.skillLabel" : "composer.picker.mentionLabel",
+                  mention()?.trigger === "$"
+                    ? "composer.picker.skillLabel"
+                    : mention()?.trigger === "#"
+                      ? "composer.picker.channelLabel"
+                      : "composer.picker.mentionLabel",
                 )}
                 options={matchingOptions()}
                 optionValue={pickerOptionKey}
@@ -1111,6 +1235,22 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     >
                       {option.type === "agent" ? (
                         <AgentAvatar agent={option.agent} />
+                      ) : option.type === "member" ? (
+                        <span class="mention-picker-member-avatar" aria-hidden="true">
+                          <Show when={option.member.avatarUrl} fallback={Array.from(option.member.name)[0] ?? "?"}>
+                            {(url) => <img src={url()} alt="" draggable={false} />}
+                          </Show>
+                        </span>
+                      ) : option.type === "broadcast" ? (
+                        <span class="mention-picker-skill-icon" aria-hidden="true">
+                          <AtSign />
+                        </span>
+                      ) : option.type === "channel" ? (
+                        <span class="mention-picker-skill-icon" aria-hidden="true">
+                          <Show when={option.channel.private} fallback={<Hash />}>
+                            <Lock />
+                          </Show>
+                        </span>
                       ) : option.type === "skill" ? (
                         <span class="mention-picker-skill-icon" aria-hidden="true">
                           <Puzzle />
@@ -1126,7 +1266,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                       <Show when={option.type === "skill" && option.showSlug ? option.skill.slug : undefined}>
                         {(slug) => <span class="mention-picker-slug">{slug()}</span>}
                       </Show>
-                      <Show when={pickerOptionDescription(option, format)}>
+                      <Show when={pickerOptionDescription(option, format, t)}>
                         {(description) => <span class="mention-picker-description">{description()}</span>}
                       </Show>
                       <Badge class="mention-picker-badge" variant="ghost">

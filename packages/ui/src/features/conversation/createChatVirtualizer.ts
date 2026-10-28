@@ -17,6 +17,8 @@ interface ChatVirtualizerOptions<TScrollElement extends Element, TItemElement ex
   scrollMargin: () => number;
   /** Whether the reader is following new messages instead of reading older ones. */
   stickToLatest?: () => boolean;
+  /** Up to this many rows render all at once, without the virtual window. Default 100. */
+  staticLimit?: number;
   onChange?: (virtualizer: Virtualizer<TScrollElement, TItemElement>) => void;
 }
 
@@ -45,8 +47,11 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
 ): ChatVirtualizer<TItemElement> {
   // The first rows only; the effect below tracks the count, keys and margin from here on.
   const initialCount = untrack(options.count);
+  const staticLimit = options.staticLimit ?? STATIC_CHAT_LIMIT;
   const [virtualItems, setVirtualItems] = createSignal<VirtualItem[]>(
-    untrack(() => fallbackItems(initialCount, options.estimateSize, options.getItemKey, options.scrollMargin())),
+    untrack(() =>
+      fallbackItems(initialCount, options.estimateSize, options.getItemKey, options.scrollMargin(), staticLimit),
+    ),
   );
   const [totalSize, setTotalSize] = createSignal(initialCount * options.estimateSize(0));
   const stableItems = new Map<VirtualItem["key"], { item: VirtualItem; update: (next: VirtualItem) => void }>();
@@ -91,8 +96,8 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
     const measured = [...virtualizer.getVirtualItems()];
     const count = options.count();
     const items =
-      count <= STATIC_CHAT_LIMIT || measured.length === 0
-        ? fallbackItems(count, options.estimateSize, options.getItemKey, options.scrollMargin())
+      count <= staticLimit || measured.length === 0
+        ? fallbackItems(count, options.estimateSize, options.getItemKey, options.scrollMargin(), staticLimit)
         : measured;
     const activeKeys = new Set(items.map((item) => item.key));
     const nextItems = items.map((item) => {
@@ -168,7 +173,7 @@ export function createChatVirtualizer<TScrollElement extends Element, TItemEleme
       return virtualItems();
     },
     getTotalSize: totalSize,
-    isVirtualized: () => options.count() > STATIC_CHAT_LIMIT,
+    isVirtualized: () => options.count() > staticLimit,
     measureElement: (element) => {
       if (!element) {
         virtualizer.measureElement(null);
@@ -236,8 +241,9 @@ function fallbackItems(
   estimateSize: (index: number) => number,
   getItemKey: (index: number) => string | number,
   scrollMargin: number,
+  staticLimit: number,
 ): VirtualItem[] {
-  const startIndex = count <= 100 ? 0 : Math.max(0, count - 10);
+  const startIndex = count <= staticLimit ? 0 : Math.max(0, count - 10);
   return Array.from({ length: count - startIndex }, (_, offset): VirtualItem => {
     const index = startIndex + offset;
     const size = estimateSize(index);

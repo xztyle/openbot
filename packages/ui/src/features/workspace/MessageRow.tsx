@@ -46,8 +46,8 @@ export interface MessageRowProps {
   onOpenThread?: (() => void) | undefined;
   /** The items of the "more" menu: edit, copy link, mark unread, delete. */
   menuItems?: readonly WorkspaceMenuItem[] | undefined;
-  /** The author's profile card, which the avatar and the name open. */
-  profile?: JSX.Element;
+  /** Draws the author's profile card, which the avatar and the name open. */
+  profile?: (() => JSX.Element) | undefined;
   class?: string;
 }
 

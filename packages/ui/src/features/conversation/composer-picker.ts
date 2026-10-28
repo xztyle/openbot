@@ -1,5 +1,5 @@
 import type { DraftAttachment } from "@openbot/contracts/ipc";
-import { Bot, File, Folder, Plug, type Puzzle, ShieldCheck, Store } from "@openbot/ui";
+import { AtSign, Bot, File, Folder, Hash, Lock, Plug, type Puzzle, ShieldCheck, Store, UserRound } from "@openbot/ui";
 import type { ComposerAgent, ComposerMcpServer, ComposerSkill } from "../../data";
 import type { TextValue } from "../../text";
 
@@ -14,8 +14,30 @@ export interface PickerFrame {
   bottom: number;
 }
 
+/** A person of the workspace that `@` can mention, as a member tag. */
+export interface ComposerMember {
+  id: string;
+  name: string;
+  avatarUrl?: string | null | undefined;
+  /** A short line under the name, such as the role. */
+  description?: string | undefined;
+}
+
+/** A channel that `#` can link. */
+export interface ComposerChannel {
+  id: string;
+  name: string;
+  private?: boolean | undefined;
+}
+
+/** `@channel` and `@here` address everyone in the channel. */
+export type ComposerBroadcast = "channel" | "here";
+
 export type PickerOption =
   | { type: "agent"; agent: ComposerAgent }
+  | { type: "member"; member: ComposerMember }
+  | { type: "broadcast"; broadcast: ComposerBroadcast }
+  | { type: "channel"; channel: ComposerChannel }
   /** `showSlug` is set when another listed skill has the same name: the slug tells them apart. */
   | { type: "skill"; skill: ComposerSkill; showSlug: boolean }
   | { type: "mcp"; server: ComposerMcpServer }
@@ -23,12 +45,19 @@ export type PickerOption =
 
 export function pickerOptionKey(option: PickerOption): string {
   if (option.type === "agent") return `agent:${option.agent.id}`;
+  if (option.type === "member") return `member:${option.member.id}`;
+  if (option.type === "broadcast") return `broadcast:${option.broadcast}`;
+  if (option.type === "channel") return `channel:${option.channel.id}`;
   if (option.type === "skill") return `skill:${option.skill.skillId}`;
   return option.type === "mcp" ? `mcp:${option.server.id}` : `attachment:${option.attachment.id}`;
 }
 
 export function pickerOptionText(option: PickerOption, t: TextValue["t"]): string {
   if (option.type === "agent") return t("composer.picker.option.agent", { name: option.agent.name });
+  if (option.type === "member") return t("composer.picker.option.member", { name: option.member.name });
+  if (option.type === "broadcast")
+    return t(option.broadcast === "here" ? "composer.picker.option.here" : "composer.picker.option.channelAll");
+  if (option.type === "channel") return t("composer.picker.option.channel", { name: option.channel.name });
   if (option.type === "skill") {
     const name = option.showSlug ? `${option.skill.name} ${option.skill.slug}` : option.skill.name;
     return t("composer.picker.option.skill", { name });
@@ -40,11 +69,22 @@ export function pickerOptionText(option: PickerOption, t: TextValue["t"]): strin
 
 export function pickerOptionName(option: PickerOption): string {
   if (option.type === "agent") return option.agent.name;
+  if (option.type === "member") return option.member.name;
+  if (option.type === "broadcast") return `@${option.broadcast}`;
+  if (option.type === "channel") return option.channel.name;
   if (option.type === "skill") return option.skill.name;
   return option.type === "mcp" ? option.server.name : option.attachment.name;
 }
 
-export function pickerOptionDescription(option: PickerOption, format: TextValue["format"]): string | undefined {
+export function pickerOptionDescription(
+  option: PickerOption,
+  format: TextValue["format"],
+  t?: TextValue["t"],
+): string | undefined {
+  if (option.type === "member") return option.member.description;
+  if (option.type === "channel") return undefined;
+  if (option.type === "broadcast")
+    return t?.(option.broadcast === "here" ? "composer.picker.hereHint" : "composer.picker.channelAllHint");
   if (option.type === "attachment") return format.fileSize(option.attachment.size);
   if (option.type === "skill") return skillDescription(option.skill);
   if (option.type === "mcp") return mcpServerDescription(option.server);
@@ -59,8 +99,9 @@ function mcpServerDescription(server: ComposerMcpServer): string | undefined {
 
 /** Hangs the picker off the composer's top edge, inside the wrap the queue panel also sits in. */
 export function measurePickerFrame(editor: HTMLElement): PickerFrame {
-  const wrap = editor.closest(".composer-wrap");
-  const composer = editor.closest(".composer");
+  // The workspace composer marks its own wrap and box, so the picker hangs from it the same way.
+  const wrap = editor.closest(".composer-wrap, [data-picker-mount]");
+  const composer = editor.closest(".composer, [data-picker-anchor]");
   if (!(wrap instanceof HTMLElement) || !composer) return { mount: undefined, bottom: 0 };
   return { mount: wrap, bottom: wrap.getBoundingClientRect().bottom - composer.getBoundingClientRect().top };
 }
@@ -71,6 +112,10 @@ export function measurePickerFrame(editor: HTMLElement): PickerFrame {
  */
 export function pickerOptionBadge(option: PickerOption, t: TextValue["t"]): { label: string; icon: typeof Puzzle } {
   if (option.type === "agent") return { label: t("composer.picker.badge.agent"), icon: Bot };
+  if (option.type === "member") return { label: t("composer.picker.badge.person"), icon: UserRound };
+  if (option.type === "broadcast") return { label: t("composer.picker.badge.everyone"), icon: AtSign };
+  if (option.type === "channel")
+    return { label: t("composer.picker.badge.channel"), icon: option.channel.private ? Lock : Hash };
   if (option.type === "attachment") return { label: t("composer.picker.badge.file"), icon: File };
   if (option.type === "mcp") return { label: MCP_BADGE, icon: Plug };
   switch (option.skill.origin ?? "marketplace") {

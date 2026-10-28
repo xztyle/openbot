@@ -66,6 +66,8 @@ export interface ChannelDetailsProps {
   onGateChange?: ((agentId: string, enabled: boolean) => void) | undefined;
   /** The Discord link row and other bridges. */
   integrations?: JSX.Element;
+  /** Under the members: why each agent answered or stayed quiet, for owners and admins. */
+  answerLog?: JSX.Element;
   onVisibilityChange?: ((visibility: ChannelVisibility) => void) | undefined;
   onCoordinatorRoutingChange?: ((enabled: boolean) => void) | undefined;
   onArchive?: (() => void) | undefined;
@@ -159,6 +161,9 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
                 )}
               </For>
             </ul>
+          </Show>
+          <Show when={props.answerLog}>
+            <div class="ws-details-answer-log">{props.answerLog}</div>
           </Show>
           <h3 class="ws-details-section-title">{t("workspace.details.people", { count: humans().length })}</h3>
           <ul class="ws-details-members">

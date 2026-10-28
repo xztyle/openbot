@@ -339,6 +339,7 @@ import { VoiceTranscriptionService } from "./voice-transcription-service";
 import { WebPushService } from "./web-push";
 import { WebPushStore } from "./web-push-store";
 import { WebhookRelay } from "./webhook-relay";
+import { createWorkspaceSettingsStore, type WorkspaceSettingsStore } from "./workspace-settings-store";
 
 const logger = createOpenBotLogger("application-services");
 const SETUP_FILE = "openbot-setup-v2.json";
@@ -366,6 +367,7 @@ const AGENT_MEMORY_LIMIT_PREFERENCE_FILE = "openbot-agent-memory-limit-v1.json";
 const AGENT_CREATION_LIMIT_PREFERENCE_FILE = "openbot-agent-creation-limit-v1.json";
 const SERVER_TIMEZONE_PREFERENCE_FILE = "openbot-server-timezone-v1.json";
 const PROMPT_CACHE_TTL_PREFERENCE_FILE = "openbot-prompt-cache-ttl-v1.json";
+const WORKSPACE_SETTINGS_FILE = "openbot-workspace-v1.json";
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
 const EXTERNAL_LINK_PREFERENCE_FILE = "openbot-external-link-preference-v1.json";
 const REMOTE_NETWORK_ROUTE_PREFERENCE_FILE = "openbot-remote-network-route-v1.json";
@@ -576,6 +578,7 @@ export interface ApplicationServices {
   agentAccess: AgentAccessStore;
   serverTimezone: ServerTimezonePreferenceStore;
   promptCacheTtl: PromptCacheTtlPreferenceStore;
+  workspaceSettings: WorkspaceSettingsStore;
   agentCreationLimit: AgentCreationLimitPreferenceStore;
   remoteSessionReuse: RemoteSessionReusePreferenceStore;
   externalLinkPreference: ExternalLinkPreferenceStore;
@@ -1175,6 +1178,8 @@ export async function createApplicationServices({
     join(app.getPath("userData"), PROMPT_CACHE_TTL_PREFERENCE_FILE),
   );
   await runCauseEffect(promptCacheTtl.load());
+  const workspaceSettings = createWorkspaceSettingsStore(join(app.getPath("userData"), WORKSPACE_SETTINGS_FILE));
+  await runCauseEffect(workspaceSettings.load());
   const remoteSessionReuse = createRemoteSessionReusePreferenceStore(
     join(app.getPath("userData"), REMOTE_SESSION_REUSE_PREFERENCE_FILE),
   );
@@ -1773,6 +1778,8 @@ export async function createApplicationServices({
     // `host` is built later, after the agent service; a channel tool reads it when it runs.
     channelPersonAgentLevel: (personId, agentId) => host.channelPersonAgentLevel(personId, agentId),
     channelRemotePerson: (personId) => host.channelPersonIsRemote(personId),
+    channelPerson: (personId) => host.channelPerson(personId),
+    workspaceSettings: () => workspaceSettings.get(),
     // The delete also clears the agent from workflow nodes, so the editors of those workflows load
     // the new graph. `workflowStore` is built later, after the agent service.
     deleteWithRevokedApproval: (agentId, remove) =>
@@ -2405,6 +2412,7 @@ export async function createApplicationServices({
       timezone: serverTimezone,
       memoryLimit: agentMemoryLimitSetting,
       promptCacheTtl,
+      workspaceSettings,
       routineResults: routineResultRuntime,
     },
     // The host's Team API routes share the IPC handlers' runtime preparation: a first server
@@ -3115,6 +3123,7 @@ export async function createApplicationServices({
     agentAccess,
     serverTimezone,
     promptCacheTtl,
+    workspaceSettings,
     agentCreationLimit,
     remoteSessionReuse,
     externalLinkPreference,

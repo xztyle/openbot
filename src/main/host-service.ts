@@ -43,6 +43,7 @@ import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Cause, Context, Deferred, Effect, Fiber, Layer, ManagedRuntime, Result, Semaphore } from "effect";
 import type { AgentService } from "../backend/agent-service";
 import type { ChannelService } from "../backend/channel-service";
+import { type ChannelViewer, canSeeChannel, channelViewer } from "../backend/channel-visibility";
 import type { TeamChatStore } from "../backend/team-chat-store";
 import type { AgentAccessStore } from "./agent-access-store";
 import { BrowserViewGateway } from "./browser-view-gateway";
@@ -1638,7 +1639,37 @@ export class HostService extends EventEmitter<HostEvents> {
 
   /** The channel list as the host user reads it, as the IPC list does. Empty without channels. */
   listChannels(): ChannelSummary[] {
-    return this.#options.channels?.store.list(this.channelActor().id, true) ?? [];
+    return this.#options.channels?.store.list(this.channelActor().id, true, this.channelViewer()) ?? [];
+  }
+
+  /**
+   * The host user of this computer as a channel reader. They own the server. Their messages and
+   * their place in a channel can carry the signed-out id or the account id from before they joined
+   * a team, so those name them too.
+   */
+  channelViewer(): ChannelViewer {
+    const actor = this.channelActor();
+    let accountId: string | null = null;
+    try {
+      accountId = `local-user:${this.#options.getSignedInUser().id}`;
+    } catch {
+      accountId = null;
+    }
+    return channelViewer(actor.id, "owner", [SIGNED_OUT_CHANNEL_MEMBER_ID, ...(accountId ? [accountId] : [])]);
+  }
+
+  /** Whether the host user may see this channel, so its messages reach this computer's windows. */
+  channelVisibleToHostUser(channelId: string): boolean {
+    const store = this.#options.channels?.store;
+    return Boolean(store?.exists(channelId) && canSeeChannel(store.get(channelId), this.channelViewer()));
+  }
+
+  /** A person who can be in a channel: the host user, or an active member of the team. */
+  channelPerson(personId: string): { id: string; name: string } | null {
+    if (!this.channelPersonIsRemote(personId)) return { id: personId, name: this.channelActor().name };
+    const member = this.#options.store.getMember(personId);
+    if (!member || member.disabled) return null;
+    return { id: member.id, name: member.name?.trim() || member.username };
   }
 
   /** The channel whose execution thread `threadId` is, or null for an agent's own thread. */

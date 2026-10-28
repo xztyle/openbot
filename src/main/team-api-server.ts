@@ -140,12 +140,14 @@ import { TEAM_PI_MUSE_CAPABILITY } from "@openbot/contracts/team-protocol/v7";
 import { encodeTeamProtocolV7BaseCurrentEvent } from "@openbot/contracts/team-protocol/v7-base-adapter";
 import { TEAM_OPEN_PROVIDERS_CAPABILITY, TEAM_PROTOCOL_V8 } from "@openbot/contracts/team-protocol/v8";
 import { encodeTeamProtocolV8BaseCurrentEvent } from "@openbot/contracts/team-protocol/v8-base-adapter";
+import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { isFixedSourceText, sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Deferred, Effect, Exit, Scope } from "effect";
 import type * as Ws from "ws";
 import { AgentDuplicationFailed, duplicateAgentIntoLayout } from "../backend/agent/duplication-gate";
 import { AgentMemorySelectionError } from "../backend/agent-memory-store";
+import { canSeeChannel, channelViewer } from "../backend/channel-visibility";
 import { runCauseEffect } from "../backend/effect-boundary";
 import { EventCheckRefusal } from "../backend/event-check-refusal";
 import { McpServerError } from "../backend/mcp-server-store";
@@ -239,6 +241,7 @@ import { routeStorage } from "./team-api/route-storage";
 import { routeTeam } from "./team-api/route-team";
 import { routeWebPush } from "./team-api/route-web-push";
 import { routeWorkflows } from "./team-api/route-workflows";
+import { routeWorkspace } from "./team-api/route-workspace";
 import { routeWorkspaceDirectory } from "./team-api/route-workspace-directory";
 import { TeamStoreError } from "./team-store";
 
@@ -877,6 +880,7 @@ export class TeamApiServer {
       if ((await this.#routeBrowser(context)) === "handled") return;
       if ((await this.#routeFiles(context)) === "handled") return;
       if ((await routeChannels(context, this.#options.channels, this.#options.agents, hidden)) === "handled") return;
+      if ((await routeWorkspace(context, this.#options.channels, this.#options.admin, hidden)) === "handled") return;
       if (
         (await routeMcpServers(context, this.#options.mcpServers, this.#options.mcpToolRuntimePreparation)) ===
         "handled"
@@ -1273,6 +1277,13 @@ export class TeamApiServer {
         continue;
       }
       const { member, blocked, key: blockedKey } = accessFor(connection);
+      // A message reaches only a member who can see its channel: a private channel, a DM or a group
+      // stays with its people.
+      if (
+        (event.type === "channel-message" || event.type === "channel-message-removed") &&
+        !this.#memberSeesChannel(member, event.channelId)
+      )
+        continue;
       // An event this client's protocol cannot describe is skipped for this client only. Thrown
       // out of the loop, it would stop the event for every client after this one.
       const encodeEvent = (event: AgentEvent, options = {}) => {
@@ -1806,6 +1817,7 @@ export class TeamApiServer {
       preserveSemanticTags: supportsTeamSemanticTags(route.capabilities),
       historyExtent: route.capabilities.has(TEAM_HISTORY_EXTENT_CAPABILITY),
       channelAttention: route.capabilities.has(TEAM_CHANNEL_ATTENTION_CAPABILITY),
+      workspace: route.capabilities.has(WORKSPACE_CAPABILITY),
       uiBlocks: route.capabilities.has(TEAM_UI_BLOCKS_CAPABILITY),
       subagents: route.capabilities.has(TEAM_SUBAGENTS_CAPABILITY),
       promptMultiSelect: route.capabilities.has(TEAM_PROMPT_MULTI_SELECT_CAPABILITY),
@@ -1942,6 +1954,13 @@ export class TeamApiServer {
 
   #connectionMember(connection: EventClientState): AccessMember {
     return this.#options.store.authenticate(connection.token) ?? { id: connection.memberId, role: "member" };
+  }
+
+  /** Whether this member may see the channel. A channel that is gone shows to no one. */
+  #memberSeesChannel(member: AccessMember, channelId: string): boolean {
+    const channels = this.#options.channels;
+    if (!channels?.store.exists(channelId)) return false;
+    return canSeeChannel(channels.store.get(channelId), channelViewer(member.id, member.role));
   }
 
   /**
@@ -2216,6 +2235,7 @@ function eventCapability(event: AgentEvent): TeamCurrentCapability | null {
   if (event.type === "turn-progress") return TEAM_AGENT_ACTIVITY_CAPABILITY;
   if (event.type === "runtime-snapshot") return "agent-runtime-snapshots";
   if (event.type === "agent-input-escalations-changed") return INPUT_ESCALATIONS_CAPABILITY;
+  if (event.type === "channel-message" || event.type === "channel-message-removed") return WORKSPACE_CAPABILITY;
   if (event.type === "sidebar-layout-changed") return "sidebar-layout";
   if (event.type === "browser-changed" || event.type === "browser-control-changed") return "browser-control";
   if (event.type === "conversation-page") return "conversation-pagination";

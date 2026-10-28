@@ -24,6 +24,7 @@ import type { RemoteWorkflowError } from "../remote-service-effects";
 import type { RequestedUpdate } from "../requested-update";
 import type { ServerTimezonePreferenceStore } from "../server-timezone-preference-store";
 import type { SkillMarketplaceService } from "../skill-marketplace-service";
+import type { WorkspaceSettingsStore } from "../workspace-settings-store";
 // What `TeamApiServer` needs from the rest of the main process, and nothing else.
 //
 // Every service arrives as a `Pick<>` of the real class. The point is not brevity: the Team API is
@@ -341,6 +342,8 @@ export interface TeamApiAdmin {
   memoryLimit?: AgentMemoryLimitSetting;
   /** `prompt-cache-ttl-v1`: how long the provider keeps the prompt cache of this computer's agents. */
   promptCacheTtl?: Pick<PromptCacheTtlPreferenceStore, "get" | "set">;
+  /** workspace-v1 (`fork-host-v1`): the workspace settings of this server. */
+  workspaceSettings?: WorkspaceSettingsStore;
   /** `routine-results-v1`: the place where an agent routine sends its answers. */
   routineResults?: TeamApiRoutineResults;
 }

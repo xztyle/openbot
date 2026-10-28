@@ -18,6 +18,7 @@ import {
   decodeHostTimezoneSettings,
   decodeHostUpdateStatus,
   decodePromptCacheTtlSetting,
+  decodeWorkspaceSettings,
   type HostUpdateSettingsChange,
   type HostUpdateStatus,
   hostAgentMemoryLimit,
@@ -29,6 +30,7 @@ import {
   UPDATE_RESTART_MODES,
   type UpdateHostIdentityInput,
   type UpdateRestartMode,
+  type WorkspaceSettings,
 } from "@openbot/contracts/ipc";
 import { isOneOf } from "@openbot/contracts/runtime-values";
 import { AGENT_ACCESS_CAPABILITY, AGENT_ACCESS_ROUTES } from "@openbot/contracts/team-protocol/agent-access-v1";
@@ -44,6 +46,7 @@ import {
   PROMPT_CACHE_TTL_CAPABILITY,
   PROMPT_CACHE_TTL_ROUTES,
 } from "@openbot/contracts/team-protocol/prompt-cache-ttl-v1";
+import { WORKSPACE_CAPABILITY, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import { type AgentAccessStore, agentAccessSnapshot } from "../agent-access-store";
@@ -53,6 +56,7 @@ import type { PromptCacheTtlPreferenceStore } from "../prompt-cache-ttl-preferen
 import { acceptEmpty, decodeHostReleaseStatusFromHost, type ResponseDecoder } from "../remote-host-decoding";
 import type { RemoteRequestInit } from "../remote-server-client";
 import { parseServerTimezone, type ServerTimezonePreferenceStore } from "../server-timezone-preference-store";
+import type { WorkspaceSettingsStore } from "../workspace-settings-store";
 import { parseAgentMemoryLimitPreference, parseHostUpdateSettings } from "./app-inputs";
 import type { IpcGroupHandlers } from "./define-ipc-group";
 import { scopedHandler, scopedQueryHandler } from "./scoped-handler";
@@ -77,6 +81,7 @@ interface HostAdminIpcDependencies {
   serverTimezone: Pick<ServerTimezonePreferenceStore, "get" | "set">;
   agentMemoryLimit: AgentMemoryLimitSetting;
   promptCacheTtl: Pick<PromptCacheTtlPreferenceStore, "get" | "set">;
+  workspaceSettings: WorkspaceSettingsStore;
   agentAccess: Pick<AgentAccessStore, "levels" | "set">;
   /** The server ID of this computer's host, when it has one. Roles are stored by it. */
   localServerId: () => string | undefined;
@@ -95,6 +100,7 @@ export function hostAdminIpcHandlers({
   serverTimezone,
   agentMemoryLimit,
   promptCacheTtl,
+  workspaceSettings,
   agentAccess,
   localServerId,
   localAgentIds,
@@ -127,6 +133,11 @@ export function hostAdminIpcHandlers({
     return runCauseEffect(
       remoteServers.request(serverId, route, decodePromptCacheTtlSetting, { method: "POST", body }),
     );
+  }
+  function remoteWorkspaceSettings(serverId: string, route: string, body: WorkspaceSettings | Record<string, never>) {
+    if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY))
+      throw new Error(sourceText("error.team.workspaceUnsupported"));
+    return runCauseEffect(remoteServers.request(serverId, route, decodeWorkspaceSettings, { method: "POST", body }));
   }
   function localAccessServerId(): string {
     const serverId = localServerId();
@@ -239,6 +250,14 @@ export function hostAdminIpcHandlers({
       setPromptCacheTtl: scopedHandler(parsePromptCacheTtl, {
         local: (ttl) => runCauseEffect(promptCacheTtl.set(ttl)),
         remote: (ttl, serverId) => remotePromptCacheTtl(serverId, PROMPT_CACHE_TTL_ROUTES.update, { ttl }),
+      }),
+      getWorkspaceSettings: scopedQueryHandler({
+        local: () => workspaceSettings.get(),
+        remote: (serverId) => remoteWorkspaceSettings(serverId, WORKSPACE_ROUTES.settings, {}),
+      }),
+      setWorkspaceSettings: scopedHandler(decodeWorkspaceSettings, {
+        local: (settings) => runCauseEffect(workspaceSettings.set(settings)),
+        remote: (settings, serverId) => remoteWorkspaceSettings(serverId, WORKSPACE_ROUTES.settingsUpdate, settings),
       }),
       getAgentAccess: scopedQueryHandler({
         local: () => {

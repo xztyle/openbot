@@ -225,6 +225,7 @@ import type {
   UpdateChannelRoutineInput,
 } from "./ipc-channel-routines";
 import type { Channel, ChannelCommand, ChannelPage, ChannelReadInput, ChannelSummary } from "./ipc-chat-channels";
+import type { WorkspaceSettings } from "./ipc-chat-workspace";
 import type {
   CancelMessageLinkInput,
   ConversationFileSearchPage,
@@ -1109,6 +1110,11 @@ export const IPC_ENDPOINTS = {
     getPromptCacheTtl: scopedQuery<PromptCacheTtlSetting, "required">()("host-admin:get-prompt-cache-ttl"),
     setPromptCacheTtl: scopedRequest<PromptCacheTtl, PromptCacheTtlSetting, "required">()(
       "host-admin:set-prompt-cache-ttl",
+    ),
+    // The workspace settings of the server: the answer gate model and the default answer mode.
+    getWorkspaceSettings: scopedQuery<WorkspaceSettings, "required">()("host-admin:get-workspace-settings"),
+    setWorkspaceSettings: scopedRequest<WorkspaceSettings, WorkspaceSettings, "required">()(
+      "host-admin:set-workspace-settings",
     ),
     // The roles of the server and the level each gives for each agent. A member reads only `mine`.
     getAgentAccess: scopedQuery<AgentAccessSnapshot, "required">()("host-admin:get-agent-access"),

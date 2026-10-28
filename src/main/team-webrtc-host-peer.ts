@@ -64,6 +64,7 @@ import {
   decodeTeamProtocolV8WebRtcHttpRequest,
   encodeTeamProtocolV8WebRtcHttpResponse,
 } from "@openbot/contracts/team-protocol/v8-webrtc-adapter";
+import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
 import type * as Ws from "ws";
@@ -709,6 +710,7 @@ export class TeamWebRtcHostPeer {
             preserveSemanticTags,
             historyExtent: peerCapabilities.has(TEAM_HISTORY_EXTENT_CAPABILITY),
             channelAttention: peerCapabilities.has(TEAM_CHANNEL_ATTENTION_CAPABILITY),
+            workspace: peerCapabilities.has(WORKSPACE_CAPABILITY),
             uiBlocks: peerCapabilities.has(TEAM_UI_BLOCKS_CAPABILITY),
             subagents: peerCapabilities.has(TEAM_SUBAGENTS_CAPABILITY),
             promptMultiSelect: peerCapabilities.has(TEAM_PROMPT_MULTI_SELECT_CAPABILITY),

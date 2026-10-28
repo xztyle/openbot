@@ -74,11 +74,13 @@ import {
   DEFAULT_REMOTE_NETWORK_ROUTE,
   DEFAULT_REMOTE_SESSION_REUSE_PREFERENCE,
   DEFAULT_TRANSPARENT_WINDOW,
+  DEFAULT_WORKSPACE_SETTINGS,
   type DirectConversationSnapshot,
   type DirectMessageRealtimeEvent,
   type DirectTypingRealtimeEvent,
   type DynamicIslandPreference,
   type DynamicIslandPresentation,
+  decodeWorkspaceSettings,
   defaultProviderModel,
   type ExternalLinkBrowsers,
   type ExternalLinkPreference,
@@ -129,6 +131,7 @@ import {
   type UpdateQueuedMessageInput,
   type UpdateStatus,
   type WorkspaceDirectory,
+  type WorkspaceSettings,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import {
@@ -407,6 +410,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   let agentMemoryLimit: AgentMemoryLimitPreference = { limit: DEFAULT_AGENT_MEMORY_LIMIT };
   let agentCreationLimit: AgentCreationLimitPreference = { limit: DEFAULT_AGENT_CREATION_LIMIT };
   let promptCacheTtl: PromptCacheTtlSetting = { ...DEFAULT_PROMPT_CACHE_TTL };
+  let workspaceSettings: WorkspaceSettings = clone(DEFAULT_WORKSPACE_SETTINGS);
   let agentAccess: AgentAccessChange = { revision: 0, everyone: {}, roles: [] };
   const agentMemoryLimitListeners = new Set<(preference: AgentMemoryLimitPreference) => void>();
   let remoteSessionReuse: RemoteSessionReusePreference = { ...DEFAULT_REMOTE_SESSION_REUSE_PREFERENCE };
@@ -2788,6 +2792,11 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         if (!isPromptCacheTtl(ttl)) throw new Error("Prompt cache time is required.");
         promptCacheTtl = { ttl };
         return clone(promptCacheTtl);
+      },
+      getWorkspaceSettings: async () => clone(workspaceSettings),
+      setWorkspaceSettings: async (settings) => {
+        workspaceSettings = decodeWorkspaceSettings(settings);
+        return clone(workspaceSettings);
       },
       // Preview has one host, and its user owns it, so `mine` gives every agent.
       getAgentAccess: async () => ({

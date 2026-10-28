@@ -23,6 +23,7 @@ import {
   decodeSaveAgentProfileResult,
   hostAnalyticsQuery,
   isAgentModelOption,
+  isWorkspaceChannelCommand,
   parseAgentAnalyticsInput,
   parseAskSideQuestion,
   parseChannelCommand,
@@ -51,6 +52,7 @@ import {
   SIDE_QUESTION_CAPABILITY,
   SIDE_QUESTION_ROUTES,
 } from "@openbot/contracts/team-protocol/side-question-v1";
+import { WORKSPACE_CAPABILITY, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
 import { duplicateAgentIntoLayout } from "../../backend/agent/duplication-gate";
@@ -320,23 +322,43 @@ export function agentIpcHandlers({
       listChannels: scopedQueryHandler({
         // The reader here is the host user of this computer, so messages they wrote before they
         // signed in are their own.
-        local: () => service.channels.store.list(host.channelActor().id, true),
+        local: () => service.channels.store.list(host.channelActor().id, true, host.channelViewer()),
         remote: (serverId) =>
           runCauseEffect(remoteServers.request(serverId, CHANNEL_ROUTES.list, decodeChannelSummaries)),
       }),
       readChannel: scopedHandler(parseChannelRead, {
-        local: (input) => service.channels.store.page(input.channelId, input.beforeSequence),
-        remote: (input, serverId) =>
-          runCauseEffect(
-            remoteServers.request(serverId, CHANNEL_ROUTES.read, decodeChannelPage, { method: "POST", body: input }),
-          ),
+        local: (input) => service.channels.read(input, host.channelViewer()),
+        remote: (input, serverId) => {
+          if (input.threadRootId === undefined)
+            return runCauseEffect(
+              remoteServers.request(serverId, CHANNEL_ROUTES.read, decodeChannelPage, { method: "POST", body: input }),
+            );
+          if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY))
+            throw new Error(sourceText("error.team.workspaceUnsupported"));
+          return runCauseEffect(
+            remoteServers.request(serverId, WORKSPACE_ROUTES.thread, decodeChannelPage, {
+              method: "POST",
+              body: input,
+            }),
+          );
+        },
       }),
       channelCommand: scopedHandler(parseChannelCommand, {
-        local: (input) => runCauseEffect(service.channels.command(input, host.channelActor())),
-        remote: (input, serverId) =>
-          runCauseEffect(
-            remoteServers.request(serverId, CHANNEL_ROUTES.command, decodeChannel, { method: "POST", body: input }),
-          ),
+        local: (input) =>
+          runCauseEffect(service.channels.command(input, host.channelActor(), undefined, host.channelViewer())),
+        remote: (input, serverId) => {
+          // A workspace command, or a reply in a thread, has its own route: the released route
+          // refuses the one and drops the thread of the other.
+          if (!isWorkspaceChannelCommand(input))
+            return runCauseEffect(
+              remoteServers.request(serverId, CHANNEL_ROUTES.command, decodeChannel, { method: "POST", body: input }),
+            );
+          if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY))
+            throw new Error(sourceText("error.team.workspaceUnsupported"));
+          return runCauseEffect(
+            remoteServers.request(serverId, WORKSPACE_ROUTES.command, decodeChannel, { method: "POST", body: input }),
+          );
+        },
       }),
       deleteChannel: scopedHandler(parseChannelId, {
         local: (channelId) => runCauseEffect(service.deleteChannel(channelId)),

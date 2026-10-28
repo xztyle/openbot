@@ -130,7 +130,8 @@ and the web view that holds the connection does not connect again after Android 
 
 Channels are separate from sidebar sections. A channel has one host, a purpose, participating agents,
 a selected lead, and linked agent conversations. Agent membership selects who can receive work.
-It does not restrict human access: each authenticated server member can read and use its channels.
+Human access follows the channel visibility (see Workspace channels below): each server member can
+read and use a public channel.
 The Electron app provides the channel interface. A creation dialog provides member search and optional
 coordination settings. The chat shows each author and keeps settings in a side panel. Channels use the sidebar
 context menu for management and have no Pause or Resume controls. The mobile app has its own channel
@@ -276,6 +277,53 @@ Mobile channel settings use one native sheet with a nested stack for memories an
 memory and routine editors share their controls with agent settings and use channel API operations.
 Channel settings have no provider or model controls because each member retains its own runtime.
 No account API, Signal, IPC contract, or database migration changes are required for mobile channels.
+
+### Workspace channels
+
+The workspace (plan: `docs/plans/slack-workspace.md`, phase 1) adds optional fields in the existing
+JSON columns, so there is no migration. A channel and a message without them behave as before.
+
+- `Channel` (`ipc-chat-workspace.ts`): `kind` (`channel`, `dm`, `group`), `visibility` (`public`,
+  `private`; a DM and a group are always private), `topic`, `description`, `humanMemberIds` (team
+  member ids) and `createdBy`. Each member agent can have `answerMode` (`mention`, `always`,
+  `always-no-gate`, `lead`) and `focus`.
+- `ChannelMessage`: `threadRootId`, `alsoInChannel`, `threadSummary` on a thread root, `reactions`,
+  `mentions`, `editedAt` and `deletedAt`. Chat tags add `@[name](member:id)` and `#[name](channel:id)`.
+
+Visibility (`channel-visibility.ts`): a public channel shows to every member. A private channel
+shows to its people and to owners and admins. A DM or a group shows only to its people. The list,
+the read and every command check it with the person of the request (`ChannelViewer`): the
+authenticated Team API member, or the host user with the ids they had before they signed in. An
+agent sees and acts only in a channel where it is a member: the channel tools and the history packet
+read only the channel of its own assignment.
+
+The workspace commands (`create`, `join`, `leave`, `invite`, `remove`, `set-member`, `set-meta`,
+`react`, `edit`, `delete`, `open-dm`) go through `ChannelService.apply` and its command queue. The
+functions in `channel-workspace-commands.ts` compute each change; the service commits it. A reaction
+and a thread summary change a message without resetting what the members read (`quietMessages`).
+`open-dm` answers the existing DM or group of exactly those people and agents, or makes one. In a
+one-to-one DM with an agent, the agent answers each message (`always-no-gate`).
+
+A `send` with `threadRootId` stores a reply in that thread and updates the root's `threadSummary` in
+the same commit. The channel page leaves out thread replies (unless `alsoInChannel`) and deleted
+messages that have no replies; `ChannelStore.threadPage` reads one thread. An assignment keeps the
+thread of the message it answers (`ChannelAssignment.threadRootId`), so the agent's answer, its
+result and its notes go into that thread.
+
+In a channel where a member has an answer mode, `ChannelResponders.select` picks who answers a
+person's message: each mentioned or replied-to agent, the agents of the thread, `always-no-gate`
+members, and the `always` members (`gated`; phase 2 puts the answer gate there). Each one gets its
+own task and its own execution thread. With no selection, a member in `lead` mode (or with no mode)
+routes as before. A channel with no answer modes works as before. An agent message never starts an
+`always` member: a finished answer starts only the agents it mentions, at most three agent answers
+from one person's message (`CHANNEL_MENTION_CHAIN_LIMIT`).
+
+Each commit records the messages it wrote. `ChannelService.publish` sends a `channel-message` (or
+`channel-message-removed`) event for each one before `channels-changed`. The Team API sends them
+only to a member who can see the channel. Over the Team API the fields, the routes
+`/v1/workspace/channels/commands` and `/v1/workspace/channels/thread`, the workspace settings routes
+and the events share `fork-host-v1` (`workspace-v1.ts`). The workspace settings (gate model,
+default answer mode) are in `openbot-workspace-v1.json` on the host.
 
 ## Messaging connections
 

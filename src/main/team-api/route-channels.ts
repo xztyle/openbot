@@ -26,6 +26,7 @@ import type { TeamApiAgents } from "./dependencies";
 import { HttpError } from "./http-error";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
 import { readJson, requireAgentLevel, requireReleasedSchedule, stringField } from "./request-helpers";
+import { requestChannelViewer } from "./route-workspace";
 
 /**
  * The settings half of a channel is served from `AgentService`, the same object the IPC handlers
@@ -64,10 +65,11 @@ export async function routeChannels(
   if (!list && !read && !command && !remove && !settings) return "unmatched";
   if (!channels || !capabilities.has(CHANNEL_CHATS_CAPABILITY))
     throw new HttpError(400, sourceText("error.team.channelsUnsupported"));
-  if (list) return json(200, channels.store.list(member.id));
+  const viewer = requestChannelViewer(context);
+  if (list) return json(200, channels.store.list(member.id, false, viewer));
   if (read) {
     const input = parseChannelRead(channelRequest(url.pathname, await readJson(request)));
-    return json(200, channels.store.page(input.channelId, input.beforeSequence));
+    return json(200, channels.read({ channelId: input.channelId, beforeSequence: input.beforeSequence }, viewer));
   }
   if (remove) {
     if (!capabilities.has(CHANNEL_DELETE_CAPABILITY))
@@ -89,8 +91,11 @@ export async function routeChannels(
   return json(
     200,
     await runCauseEffect(
-      channels.command(input, { id: member.id, name: member.name ?? "Team member" }, (queued) =>
-        keepHiddenMembers(queued, channels, hiddenAgentIds),
+      channels.command(
+        input,
+        { id: member.id, name: member.name ?? "Team member" },
+        (queued) => keepHiddenMembers(queued, channels, hiddenAgentIds),
+        viewer,
       ),
     ),
   );

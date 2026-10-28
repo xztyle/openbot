@@ -122,6 +122,13 @@ export function createRendererForwarders({
   const inputEscalations = new Map<string, AgentInputEscalation[]>();
 
   function forwardAgentEvent(serverId: string, event: AgentEvent, bufferedLive = false): void {
+    // The DMs of other people on this host stay with them, as the Team API keeps them.
+    if (
+      serverId === LOCAL_SERVER_ID &&
+      (event.type === "channel-message" || event.type === "channel-message-removed") &&
+      !getHostService()?.channelVisibleToHostUser(event.channelId)
+    )
+      return;
     if (event.type === "agent-input-escalations-changed") inputEscalations.set(serverId, event.escalations);
     if (serverId === LOCAL_SERVER_ID) getHostAnalytics()?.handleAgentEvent(event);
     const window = getMainWindow();

@@ -85,6 +85,7 @@ export function createWebChannelsPort(
       listChannels: channels?.listChannels ?? unavailable,
       readChannel: channels?.readChannel ?? unavailable,
       channelCommand: channels?.channelCommand ?? unavailable,
+      workspaceActivity: channels?.workspaceActivity,
       listChannelMemories: channels?.listChannelMemories ?? unavailable,
       createChannelMemory: channels?.createChannelMemory ?? unavailable,
       updateChannelMemory: channels?.updateChannelMemory ?? unavailable,

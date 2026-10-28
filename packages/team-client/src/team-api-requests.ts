@@ -29,6 +29,7 @@ import {
   decodeInstalledSkills,
   decodeRemoteAgentImportPreview,
   decodeRemoteAgentImportResult,
+  decodeWorkspaceActivity,
   type InstalledSkill,
   isAgentMemory,
   isAgentMemorySelectionState,
@@ -302,6 +303,7 @@ export type TeamChannelsApi = Pick<
   | "listChannels"
   | "readChannel"
   | "channelCommand"
+  | "workspaceActivity"
   | "listChannelMemories"
   | "createChannelMemory"
   | "updateChannelMemory"
@@ -326,7 +328,8 @@ export interface TeamChannelsOptions {
 /**
  * Every channel route is a POST with the channel in the body, except the list. A workspace command,
  * a send into a thread and the read of a thread go to the workspace routes, as on the desktop: the
- * released routes refuse the one and drop the thread of the others.
+ * released routes refuse the one and drop the thread of the others. The workspace activity has only
+ * a workspace route.
  */
 export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOptions = {}): TeamChannelsApi {
   const post = <T>(path: string, decode: (value: unknown) => T, body: unknown) =>
@@ -345,6 +348,7 @@ export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOp
       isWorkspaceChannelCommand(command)
         ? workspacePost(WORKSPACE_ROUTES.command, decodeChannel, command)
         : post(CHANNEL_ROUTES.command, decodeChannel, command),
+    workspaceActivity: (input) => workspacePost(WORKSPACE_ROUTES.activity, decodeWorkspaceActivity, input),
     listChannelMemories: (channelId) => post(CHANNEL_ROUTES.memories, decodeChannelMemories, { channelId }),
     createChannelMemory: (input) => post(CHANNEL_ROUTES.memoryCreate, decodeChannelMemory, input),
     updateChannelMemory: (input) => post(CHANNEL_ROUTES.memoryUpdate, decodeChannelMemory, input),

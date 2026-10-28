@@ -25,7 +25,7 @@ export interface ChannelsPort {
   > &
     ChannelMemoriesApi &
     ChannelRoutinesApi &
-    Partial<Pick<OpenBotDesktopApi["agent"], "discardDraftAttachment" | "downloadAttachments">>;
+    Partial<Pick<OpenBotDesktopApi["agent"], "discardDraftAttachment" | "downloadAttachments" | "workspaceActivity">>;
   eventRoutines?: EventRoutinesApi | undefined;
   browser: Pick<OpenBotDesktopApi["browser"], "capturePreview">;
   openUrl: OpenBotDesktopApi["openUrl"];

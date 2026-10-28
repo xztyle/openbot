@@ -24,6 +24,7 @@ export const messages = defineMessages("conversation", {
   "conversation.globalSearch.keywords.usage": "cost spend tokens money limit report",
   "conversation.globalSearch.keywords.serverGeneral": "server name logo identity publish notifications",
   "conversation.globalSearch.keywords.serverMembers": "people team invite invitation users roles admin",
+  "conversation.globalSearch.keywords.serverWorkspace": "channels answer mode gate check model mention",
   "conversation.globalSearch.keywords.serverDesktop": "remote desktop screen sharing",
   "conversation.globalSearch.keywords.serverMcp": "mcp tools model context protocol",
   "conversation.globalSearch.keywords.serverStorage": "files disk space cleanup usage",

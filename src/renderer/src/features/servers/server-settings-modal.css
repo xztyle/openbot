@@ -287,6 +287,12 @@
   height: var(--openbot-icon-lg);
 }
 
+/* An answer mode in the Workspace select: its name over a short hint. */
+.server-workspace-mode-option {
+  display: grid;
+  gap: var(--openbot-space-1);
+}
+
 .server-settings-desktop-description {
   max-width: 360px;
   overflow: visible;

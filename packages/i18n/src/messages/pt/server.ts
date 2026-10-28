@@ -221,6 +221,25 @@ export const messages = {
     "Mova os agentes e as configurações deste servidor para um arquivo ou de um arquivo.",
   "server.settings.connectorsTitle": "Conectores",
   "server.settings.connectorsDescription": "Conecte contas que todos os agentes deste servidor podem usar.",
+  "server.settings.workspaceTitle": "Espaço de trabalho",
+  "server.settings.workspaceDescription": "Defina como os agentes respondem nos canais.",
+  "server.settings.unsavedWorkspaceChanges": "Alterações não salvas do espaço de trabalho",
+  "server.settings.workspaceLoadFailed":
+    "Não foi possível carregar as configurações do espaço de trabalho deste servidor.",
+  "server.settings.workspaceModelsFailed": "Não foi possível carregar os modelos deste servidor.",
+  "server.settings.workspaceDefaults": "Novos membros do canal",
+  "server.settings.workspaceDefaultsDescription":
+    "Vale quando alguém adiciona um agente a um canal. Você pode mudar isso em cada canal.",
+  "server.settings.workspaceDefaultMode": "Modo de resposta padrão",
+  "server.settings.workspaceGate": "Verificação rápida",
+  "server.settings.workspaceGateDescription":
+    "Para agentes que leem todas as mensagens, um modelo rápido decide se o agente responde.",
+  "server.settings.workspaceGateModel": "Modelo",
+  "server.settings.workspaceGateModelDescription": "Use um modelo rápido e de baixo custo.",
+  "server.settings.workspaceGateTimeout": "Limite de tempo",
+  "server.settings.workspaceGateTimeoutDescription":
+    "Se a verificação demorar mais, o agente só responde quando for mencionado.",
+  "server.settings.workspaceGateSeconds": "{seconds} s",
   "server.settings.routinesTitle": "Rotinas",
   "server.settings.routinesDescription": "Mostre o agendamento de rotinas deste computador em um app de calendário.",
   "server.routineFeed.title": "Feed de calendário",

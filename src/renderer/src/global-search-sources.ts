@@ -67,6 +67,11 @@ const SERVER_SECTION_RESULTS = {
   },
   vault: { title: "server.settings.vaultTitle", icon: KeyRound },
   roles: { title: "server.settings.rolesTitle", icon: ShieldCheck },
+  workspace: {
+    title: "server.settings.workspaceTitle",
+    keywords: "conversation.globalSearch.keywords.serverWorkspace",
+    icon: Hash,
+  },
   members: {
     title: "server.settings.membersTitle",
     keywords: "conversation.globalSearch.keywords.serverMembers",

@@ -1,6 +1,11 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import { agentProviderName, COMPUTER_USE_MCP_SERVER_NAME, DEFAULT_PROVIDER_ACCOUNT_ID } from "@openbot/contracts/ipc";
+import {
+  agentProviderName,
+  COMPUTER_USE_MCP_SERVER_NAME,
+  type ConversationTraceToolCategory,
+  DEFAULT_PROVIDER_ACCOUNT_ID,
+} from "@openbot/contracts/ipc";
 import { type DynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { redactText } from "@openbot/logging";
@@ -311,6 +316,91 @@ export function toolTraceDetail(item: ThreadItem): { command: string | null; rec
   const command = getString(item, "command");
   const recipients = openBotTool(item) === "send_message" ? messageRecipients(item) : [];
   return { command, recipientAgentIds: recipients.length > 0 ? recipients : null };
+}
+
+const TOOL_STEP_LABEL_LIMIT = 160;
+
+function stepLabel(value: string | null | undefined): string | null {
+  const line = value ? redactText(value).replace(/\s+/gu, " ").trim() : "";
+  if (!line) return null;
+  return line.length > TOOL_STEP_LABEL_LIMIT ? `${line.slice(0, TOOL_STEP_LABEL_LIMIT - 1).trimEnd()}…` : line;
+}
+
+/** The arguments of a tool item as a record. Some providers send them as JSON text. */
+function toolArguments(item: ThreadItem): DynamicRecord | null {
+  let value: unknown = bridgedToolName(item) ? getRecord(item, "arguments")?.arguments : item.arguments;
+  if (isString(value)) {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return isRecord(value) ? value : null;
+}
+
+const BROWSE_TOOL = /(browser|navigate|open_url|fetch|screenshot|page|tab)/u;
+const SEARCH_TOOL = /(search|grep|glob|find)/u;
+const FILE_TOOL = /(read|write|edit|file|patch|notebook|ls\b|list_dir)/u;
+
+/**
+ * What a tool step did and a short name of what it used, for the step trail of a workspace answer:
+ * the command of a shell step, the query of a search, the path of a file step, the skill it loaded,
+ * the address it browsed, or the tool's own name. Every label is redacted and cut.
+ */
+export function toolStepView(item: ThreadItem): { category: ConversationTraceToolCategory; label: string | null } {
+  const args = toolArguments(item);
+  const argument = (...keys: string[]) => {
+    for (const key of keys) {
+      const value = args ? getString(args, key) : null;
+      if (value?.trim()) return value;
+    }
+    return null;
+  };
+  if (item.type === "commandExecution") return { category: "shell", label: stepLabel(getString(item, "command")) };
+  if (item.type === "fileChange") {
+    const paths = getArray(item, "changes")
+      .map((change) => (isRecord(change) ? getString(change, "path") : null))
+      .filter(isString);
+    const more = paths.length > 1 ? ` +${paths.length - 1}` : "";
+    return { category: "file", label: stepLabel(paths[0] ? `${paths[0]}${more}` : null) };
+  }
+  if (item.type === "webSearch")
+    return { category: "search", label: stepLabel(getString(item, "query") ?? argument("query")) };
+  const skill = getString(item, "skill");
+  if (skill) return { category: "skill", label: stepLabel(skill) };
+  const openBot = openBotTool(item);
+  if (openBot === "read_local_skill") return { category: "skill", label: stepLabel(argument("name", "skill", "slug")) };
+  const acpKind = item.type === "toolCall" ? getString(item, "toolKind") : null;
+  const name =
+    bridgedToolName(item) ??
+    (getString(item, "server") && getString(item, "tool")
+      ? `${getString(item, "server")}.${getString(item, "tool")}`
+      : null) ??
+    getString(item, "tool") ??
+    getString(item, "name") ??
+    getString(item, "title") ??
+    item.type;
+  const readable = name.replace(/^mcp__(.+?)__/u, "$1.");
+  const descriptor = `${readable} ${acpKind ?? ""}`.toLowerCase();
+  if (getString(item, "command") || acpKind === "execute" || /\b(bash|shell|exec)\b/u.test(descriptor))
+    return { category: "shell", label: stepLabel(getString(item, "command") ?? argument("command", "cmd")) };
+  if (acpKind === "fetch" || BROWSE_TOOL.test(descriptor))
+    return { category: "browse", label: stepLabel(argument("url", "href") ?? readable) };
+  if (acpKind === "search" || /websearch|web_search/u.test(descriptor) || SEARCH_TOOL.test(descriptor))
+    return { category: "search", label: stepLabel(argument("query", "pattern", "q") ?? readable) };
+  if (
+    acpKind === "read" ||
+    acpKind === "edit" ||
+    acpKind === "delete" ||
+    acpKind === "move" ||
+    FILE_TOOL.test(descriptor)
+  )
+    return {
+      category: "file",
+      label: stepLabel(argument("file_path", "path", "filePath", "notebook_path") ?? readable),
+    };
+  return { category: "tool", label: stepLabel(acpKind ? (getString(item, "title") ?? readable) : readable) };
 }
 
 /** Whether a finished tool item failed: its status says so, or its command ended with an exit code other than 0. */

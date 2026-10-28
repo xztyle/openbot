@@ -11,6 +11,11 @@ import { isDynamicRecord, isNumber, isOneOf } from "./runtime-values";
 export const CONVERSATION_TRACE_STEP_KINDS = ["reasoning", "tool", "message"] as const;
 export type ConversationTraceStepKind = (typeof CONVERSATION_TRACE_STEP_KINDS)[number];
 
+/** What a tool step did, for a step trail. Absent on a step stored before the host kept it. */
+export const CONVERSATION_TRACE_TOOL_CATEGORIES = ["search", "browse", "shell", "file", "skill", "tool"] as const;
+export type ConversationTraceToolCategory = (typeof CONVERSATION_TRACE_TOOL_CATEGORIES)[number];
+export const CONVERSATION_TRACE_LABEL_LIMIT = 160;
+
 export interface ConversationTraceStep {
   /** The provider's item id. */
   id: string;
@@ -21,6 +26,10 @@ export interface ConversationTraceStep {
   command?: string | undefined;
   /** On a `send_message` step: the agents that the message went to. */
   recipientAgentIds?: string[] | undefined;
+  /** On a tool step: what it did. */
+  category?: ConversationTraceToolCategory | undefined;
+  /** On a tool step: a short name of what it used, such as a tool, a query, a path or a skill, with known secrets removed. */
+  label?: string | undefined;
   startedAt: string;
   /** Null when the turn ended before the provider completed the item. */
   endedAt: string | null;
@@ -67,6 +76,8 @@ function isConversationTraceStep(value: unknown): value is ConversationTraceStep
       (Array.isArray(value.recipientAgentIds) &&
         value.recipientAgentIds.length <= INPUT_LIMITS.messageRecipients &&
         value.recipientAgentIds.every(isIdentifier))) &&
+    (value.category === undefined || isOneOf(CONVERSATION_TRACE_TOOL_CATEGORIES, value.category)) &&
+    (value.label === undefined || isBoundedString(value.label, CONVERSATION_TRACE_LABEL_LIMIT)) &&
     isBoundedString(value.startedAt, TIME_LIMIT) &&
     isNullableBoundedString(value.endedAt, TIME_LIMIT) &&
     (value.failed === undefined || value.failed === true)

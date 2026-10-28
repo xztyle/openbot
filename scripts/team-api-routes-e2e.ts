@@ -382,6 +382,11 @@ const fakeAgents: TeamApiAgents = {
   respondToApproval: unused("respondToApproval"),
   respondToBrowserSecret: unused("respondToBrowserSecret"),
   respondToBrowserTakeover: unused("respondToBrowserTakeover"),
+  workspace: {
+    fleet: unused("workspace.fleet"),
+    steps: unused("workspace.steps"),
+    artifacts: unused("workspace.artifacts"),
+  },
 };
 
 const mailbox: TeamApiMailbox = {

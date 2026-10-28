@@ -546,6 +546,39 @@ export class AttentionRegistry {
     return { attentionComplete, pendingPrompts, pendingApprovals, pendingBrowserTakeovers };
   }
 
+  /**
+   * For each agent that waits for a person: why, and the request text (a question, a command or the
+   * reason of an approval). The first request of each agent wins. Unlike `runtimeAttention`, no
+   * agent is left out by the snapshot's attention limit.
+   */
+  waitingAgents(): Map<string, { reason: "question" | "approval" | "browser"; what: string; turnId: string }> {
+    const waiting = new Map<string, { reason: "question" | "approval" | "browser"; what: string; turnId: string }>();
+    for (const pending of this.#prompts.values()) {
+      if (waiting.has(pending.agentId)) continue;
+      const question = pending.questions[0];
+      waiting.set(pending.agentId, {
+        reason: "question",
+        what: question?.question || question?.header || "",
+        turnId: pending.turnId,
+      });
+    }
+    for (const pending of this.#approvals.values()) {
+      const approval = pending.approval;
+      if (waiting.has(approval.agentId)) continue;
+      waiting.set(approval.agentId, {
+        reason: "approval",
+        what: approval.reason ?? approval.command ?? "",
+        turnId: approval.turnId,
+      });
+    }
+    for (const pending of this.#takeovers.values()) {
+      const request = pending.request;
+      if (waiting.has(request.agentId)) continue;
+      waiting.set(request.agentId, { reason: "browser", what: request.reason ?? "", turnId: request.turnId });
+    }
+    return waiting;
+  }
+
   readonly respondToPrompt = Effect.fn("AttentionRegistry.respondToPrompt")(function* (
     this: AttentionRegistry,
     input: RespondToPromptInput,

@@ -195,6 +195,21 @@ interface EnqueueInput {
   idempotencyKey?: string;
 }
 
+/** The work of one agent for the workspace fleet: the delivery its turn runs, and the waiting ones. */
+export interface MailboxFleetWork {
+  running: {
+    deliveryId: string;
+    turnId: string | null;
+    text: string;
+    channelId?: string;
+    taskId?: string;
+    routineName?: string;
+    senderMemberId?: string;
+    createdAt: string;
+  } | null;
+  queued: number;
+}
+
 /** A file a chat message carries or an agent made, as the Storage view lists it. */
 export interface MailboxStoredFile {
   attachment: AttachmentSummary;
@@ -987,6 +1002,51 @@ export class MailboxStore {
         error: delivery.error?.slice(0, AGENT_RUNTIME_TEXT_LIMIT) ?? null,
       };
     });
+  }
+
+  /**
+   * For each agent with work: the delivery its turn runs now, if any, and how many deliveries wait.
+   * A paused queue still counts its waiting deliveries. The text is cut to `textLimit`.
+   */
+  fleetWork(textLimit: number): Map<string, MailboxFleetWork> {
+    const result = new Map<string, MailboxFleetWork>();
+    const entry = (agentId: string) => {
+      let work = result.get(agentId);
+      if (!work) {
+        work = { running: null, queued: 0 };
+        result.set(agentId, work);
+      }
+      return work;
+    };
+    const running = new Map<string, StoredDelivery>();
+    for (const delivery of this.#state.deliveries) {
+      if (delivery.status === "queued") entry(delivery.recipientAgentId).queued += 1;
+      else if (
+        (delivery.status === "starting" || delivery.status === "running") &&
+        !running.has(delivery.recipientAgentId)
+      )
+        running.set(delivery.recipientAgentId, delivery);
+    }
+    if (running.size === 0) return result;
+    const messageIds = new Set([...running.values()].map((delivery) => delivery.messageId));
+    const messages = new Map(
+      this.#state.messages.filter((message) => messageIds.has(message.id)).map((message) => [message.id, message]),
+    );
+    for (const [agentId, delivery] of running) {
+      const message = messages.get(delivery.messageId);
+      if (!message) continue;
+      entry(agentId).running = {
+        deliveryId: delivery.id,
+        turnId: delivery.turnId,
+        text: message.text.slice(0, textLimit),
+        ...(message.channelId ? { channelId: message.channelId } : {}),
+        ...(message.taskId ? { taskId: message.taskId } : {}),
+        ...(message.sender.kind === "routine" ? { routineName: message.sender.routineName } : {}),
+        ...(message.senderMember ? { senderMemberId: message.senderMember.id } : {}),
+        createdAt: delivery.createdAt,
+      };
+    }
+    return result;
   }
 
   conversationMessages(

@@ -56,6 +56,7 @@ import type { SidebarLayoutStore } from "../../backend/sidebar-layout-store";
 import type { StorageUsageService } from "../../backend/storage-usage";
 import type { TeamChatStore } from "../../backend/team-chat-store";
 import type { WorkflowsHandle } from "../../backend/workflows/workflows";
+import type { WorkspaceInsights } from "../../backend/workspace-insights";
 import type { AgentImportService } from "../agent-import-service";
 import type { BitwardenConnectorService } from "../bitwarden-connector-service";
 import type { BrowserViewGateway } from "../browser-view-gateway";
@@ -154,6 +155,8 @@ type TeamApiAgentMethods = Pick<
 >;
 
 export type TeamApiAgents = TeamApiAgentMethods & {
+  /** workspace-fleet-v1 (`fork-host-v1`): the fleet, step trail and artifact views. */
+  workspace: Pick<WorkspaceInsights, "fleet" | "steps" | "artifacts">;
   on: (event: "event", listener: (event: AgentEvent) => void) => void;
   off: (event: "event", listener: (event: AgentEvent) => void) => void;
 };

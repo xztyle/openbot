@@ -77,6 +77,7 @@ import {
   toolFailed,
   toolFailure,
   toolProgressText,
+  toolStepView,
   toolTraceDetail,
   toolUsage,
   toThreadItem,
@@ -299,6 +300,11 @@ export class TurnLifecycle {
 
   failedTurns(): ReadonlyMap<string, string> {
     return this.#failedTurns;
+  }
+
+  /** The steps a running turn took so far, or null when it records none. */
+  liveTrace(turnId: string): ConversationTurnTrace | null {
+    return this.#traces.peek(turnId);
   }
 
   forgetAgent(agentId: string): void {
@@ -1500,6 +1506,7 @@ export class TurnLifecycle {
         failed,
         text: toolProgress,
         ...toolTraceDetail(item),
+        ...toolStepView(item),
       });
     } else if (item.type === "agentMessage")
       this.#traces.observe(turnId, item.id, item.phase === "commentary" ? "reasoning" : "message", { completed });

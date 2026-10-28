@@ -344,6 +344,47 @@ only to a member who can see the channel. Over the Team API the fields, the rout
 and the events share `fork-host-v1` (`workspace-v1.ts`). The workspace settings (gate model,
 default answer mode) are in `openbot-workspace-v1.json` on the host.
 
+### Workspace fleet, step trails and artifacts
+
+Phase 7 of the plan adds three read-only views. `WorkspaceInsights` (`workspace-insights.ts`,
+`AgentService.workspace`) owns them; it stores nothing and needs no migration. The types are in
+`ipc-workspace-fleet.ts`; times are epoch milliseconds.
+
+- **Fleet** (`workspaceFleet`, `WorkspaceFleetTracker` in `workspace-fleet.ts`): for each listed
+  agent that is not hidden or in the background, its status: `waiting` (a question, an approval or a
+  browser hand-over from `AttentionRegistry.waitingAgents`), `working` (the delivery that its turn
+  runs, from `MailboxStore.fleetWork`; `what` is the channel task, the agent task, the routine or the
+  request), `queued` or `idle`. `currentStep` is the last tool step of the live turn trace, or the
+  last `turn-progress` line. `todayCostUsd` and `todayDurationMs` sum the priced usage records and the
+  turns of the reader's day (`timeZone`, the host's by default), cached for 15 seconds.
+  `AgentService.#emit` hands every event to the tracker before the channels take theirs, so the turns
+  of channel threads count. It sends `workspace-fleet-changed` (`{ revision }`) at most once a second
+  while turns start, end, take steps or wait, or a queue changes; a fleet view reads again on it.
+- **Step trail** (`workspaceSteps`, `workspace-steps.ts`): for an agent message of a channel the
+  reader sees, the steps of the turn that wrote it: the live trace of a running turn
+  (`TurnLifecycle.liveTrace`), else the trace stored on the turn's message. Thoughts take their first
+  line; tool steps take `category` and `label`, which the turn trace now keeps for each tool step
+  (`toolStepView` in `thread-items.ts`: the command, the search query, the path, the skill, the
+  address or the tool name, redacted). A step stored before that is read from its command and its
+  progress text. At most the last 60 steps, with `total`, the turn time and its cost.
+- **Artifacts** (`workspaceArtifacts`, `WorkspaceArtifactIndex` in `workspace-artifacts.ts`): links
+  in agent messages to the apps broker (`https://<app>.delynith.com`, `WORKSPACE_APP_DOMAINS`;
+  `dl.` download tickets are left out), openbot.site, Google Docs, Slides and Sheets, Notion, deck
+  and dashboard hosts; hosted sites from the `hosted-site-event:` messages (a later delete hides the
+  site); visual replies (`render`); and files that agents attached. Other links, such as cited
+  sources, are not artifacts. One artifact per address or attachment: the first message gives its
+  agent, place, creation time and the cost and time of its turn; the latest message gives
+  `updatedAt`. A channel is read once, then kept current from its `channel-message` events. The
+  agents' own conversations are read from `projection_thread_messages` in row order (the newest
+  20,000 rows first, then each new row; a row that still streams is read again). There are no
+  thumbnails yet.
+
+The Team API routes `/v1/workspace/fleet`, `/v1/workspace/steps` and `/v1/workspace/artifacts` and
+the event share `fork-host-v1` (`workspace-fleet-v1.ts`). A member sees an agent when the roles give
+it at least `view` and it is not hidden from the peer, and a channel as the channel routes decide.
+On the desktop the IPC endpoints `agent.workspaceFleet`, `agent.workspaceSteps` and
+`agent.workspaceArtifacts` answer for the host user, or forward to a joined server.
+
 ## Messaging connections
 
 The agents of a computer can answer in an external chat platform: Slack, Discord (see **Discord**

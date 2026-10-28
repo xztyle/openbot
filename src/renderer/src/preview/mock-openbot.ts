@@ -130,8 +130,12 @@ import {
   type UpdatePreference,
   type UpdateQueuedMessageInput,
   type UpdateStatus,
+  type WorkspaceArtifactRecord,
   type WorkspaceDirectory,
+  type WorkspaceFleetAgent,
+  type WorkspaceFleetStatus,
   type WorkspaceSettings,
+  type WorkspaceStep,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import {
@@ -1740,6 +1744,166 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       },
       listInstalledSkills: async (agentId) => clone(readInstalledSkills(agentId)),
       ...mockChannels,
+      // The workspace fleet, step trails and artifacts of the preview: fixed shapes over the preview
+      // agents and channels, so a story shows each status, step kind and artifact kind.
+      workspaceFleet: async () => {
+        const now = Date.now();
+        const [channel] = await mockChannels.listChannels();
+        const statuses: WorkspaceFleetStatus[] = [
+          {
+            kind: "working",
+            what: "Build the launch page for the bakery",
+            ...(channel ? { channelId: channel.id } : {}),
+            startedAt: now - 252_000,
+          },
+          { kind: "waiting", reason: "question", what: "Which domain should the shop use?" },
+          { kind: "queued", count: 2 },
+        ];
+        return {
+          revision: 0,
+          at: now,
+          agents: agents
+            .filter((agent) => agent.hiddenAt === undefined && agent.background !== true)
+            .map((agent, index): WorkspaceFleetAgent => {
+              const status = statuses[index] ?? { kind: "idle" };
+              return {
+                agentId: agent.id,
+                status,
+                ...(status.kind === "working"
+                  ? { currentStep: "npm run build", currentStepKind: "shell" as const, queued: 1 }
+                  : {}),
+                todayCostUsd: Math.round((3.4 / (index + 1)) * 100) / 100,
+                todayDurationMs: Math.round(5_400_000 / (index + 1)),
+                lastActiveAt: now - index * 1_800_000,
+              };
+            }),
+        };
+      },
+      workspaceSteps: async ({ channelId, messageId }) => {
+        const page = await mockChannels.readChannel({ channelId });
+        const message = page.messages.find((item) => item.id === messageId);
+        if (!message) throw new Error("This message is unavailable.");
+        if (message.author.kind !== "agent") return { steps: [], total: 0, durationMs: 0, streaming: false };
+        const start = Date.parse(message.message.createdAt) - 184_000;
+        const streaming = message.message.status === "streaming";
+        const steps: WorkspaceStep[] = [
+          {
+            id: `${messageId}-1`,
+            kind: "think",
+            label: "Plan the page and its sections",
+            status: "done",
+            at: start,
+            durationMs: 6_000,
+          },
+          {
+            id: `${messageId}-2`,
+            kind: "search",
+            label: "bakery landing page examples",
+            status: "done",
+            at: start + 7_000,
+            durationMs: 4_200,
+          },
+          {
+            id: `${messageId}-3`,
+            kind: "browse",
+            label: "https://example.com/inspiration",
+            status: "done",
+            at: start + 12_000,
+            durationMs: 9_100,
+          },
+          {
+            id: `${messageId}-4`,
+            kind: "skill",
+            label: "openbot-host-apps",
+            status: "done",
+            at: start + 22_000,
+            durationMs: 800,
+          },
+          {
+            id: `${messageId}-5`,
+            kind: "file",
+            label: "src/pages/index.astro +3",
+            status: "done",
+            at: start + 24_000,
+            durationMs: 41_000,
+          },
+          {
+            id: `${messageId}-6`,
+            kind: "shell",
+            label: "npm run build",
+            status: "failed",
+            at: start + 66_000,
+            durationMs: 18_000,
+          },
+          {
+            id: `${messageId}-7`,
+            kind: "shell",
+            label: "appctl deploy cakemaker-web",
+            status: streaming ? "running" : "done",
+            at: start + 86_000,
+            ...(streaming ? {} : { durationMs: 70_000 }),
+          },
+        ];
+        return { steps, total: steps.length, durationMs: 184_000, streaming, startedAt: start, costUsd: 0.42 };
+      },
+      workspaceArtifacts: async ({ channelId }) => {
+        const now = Date.now();
+        const [channel] = await mockChannels.listChannels();
+        const [first, second] = agents;
+        const records: WorkspaceArtifactRecord[] = [
+          {
+            id: "artifact-preview-app",
+            kind: "app",
+            source: "link",
+            title: "cakemaker-web",
+            description: "The bakery shop, with ordering and pickup times.",
+            url: "https://cakemaker-web.delynith.com",
+            ...(first ? { agentId: first.id } : {}),
+            ...(channel ? { channelId: channel.id } : {}),
+            createdAt: now - 7_200_000,
+            updatedAt: now - 600_000,
+            costUsd: 1.84,
+            durationMs: 1_260_000,
+          },
+          {
+            id: "artifact-preview-site",
+            kind: "website",
+            source: "site",
+            title: "Launch page",
+            url: "https://launch-page-23456789ab.openbot.site",
+            ...(second ? { agentId: second.id } : {}),
+            createdAt: now - 86_400_000,
+            updatedAt: now - 86_400_000,
+            costUsd: 0.37,
+            durationMs: 312_000,
+          },
+          {
+            id: "artifact-preview-deck",
+            kind: "deck",
+            source: "link",
+            title: "Q4 plan",
+            url: "https://docs.google.com/presentation/d/preview",
+            ...(first ? { agentId: first.id } : {}),
+            ...(channel ? { channelId: channel.id } : {}),
+            createdAt: now - 172_800_000,
+            updatedAt: now - 172_800_000,
+          },
+          {
+            id: "artifact-preview-file",
+            kind: "doc",
+            source: "attachment",
+            title: "market-research.pdf",
+            file: { id: "preview-attachment", name: "market-research.pdf", size: 482_133, mimeType: "application/pdf" },
+            ...(second ? { agentId: second.id } : {}),
+            ...(channel ? { channelId: channel.id } : {}),
+            createdAt: now - 259_200_000,
+            updatedAt: now - 259_200_000,
+            costUsd: 0.12,
+            durationMs: 95_000,
+          },
+        ];
+        return { artifacts: channelId ? records.filter((record) => record.channelId === channelId) : records };
+      },
       getAgentAdminSettings: async (agentId) => {
         const agent = agents.find((candidate) => candidate.id === agentId);
         if (!agent) throw new Error("Agent not found");

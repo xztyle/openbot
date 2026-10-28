@@ -13,6 +13,7 @@ import type { AttachmentMediaSource } from "@openbot/ui/features/conversation/At
 import type { AgentSkillCalls } from "../../skills-port";
 import type { AgentTemplatePublishCalls } from "../agent-templates/agent-templates-port";
 import type { BrowserProfileCalls } from "../browser/browser-profiles-port";
+import type { AgentChannelDefaultsApi } from "./AgentChannelDefaults";
 import type { SharedTableCalls } from "./conversation-port";
 import type { ConversationProps } from "./conversation-types";
 import type { MemoriesPort } from "./memories-port";
@@ -104,6 +105,8 @@ export interface ConversationRuntime {
         eventChecks?: EventCheckApi | undefined;
         /** The templates of the host, so an event check editor can show a picker setting as a list. */
         eventCheckTemplates?: Pick<EventCheckTemplateApi, "list" | "discoverCheck"> | undefined;
+        /** The workspace settings of the host (`fork-host-v1`), for the channel defaults of an agent. */
+        workspaceSettings?: AgentChannelDefaultsApi | undefined;
         sessionSettings?:
           | {
               read(agentId: string): Promise<AgentSessionSettings>;

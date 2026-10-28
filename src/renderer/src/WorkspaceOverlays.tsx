@@ -701,6 +701,7 @@ function ServerSettings(props: { connectors: ConnectorRegistry }) {
           hostMemoryLimit={{}}
           hostPromptCacheTtl={{}}
           agentAccess={{ listAgents: () => appPort().agent.listAgents(server().id) }}
+          workspaceSettings={{}}
           initialSection={serverSettingsSection()}
           // Any member imports into this computer or a remote host with `agent-import-v1`.
           agentImport={

@@ -5,6 +5,7 @@ import {
   EVENT_CHECK_DELIVERY_CAPABILITY,
 } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_CAPABILITY } from "@openbot/contracts/team-protocol/event-checks-v1";
+import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import { classifyFailure } from "@openbot/telemetry";
 import { SETTINGS_PANEL_DEFAULT, SETTINGS_PANEL_MAX } from "@openbot/ui/components/SettingsPanel";
 import type { AgentMessage } from "@openbot/ui/data";
@@ -24,6 +25,7 @@ import { desktopBrowserProfileCalls } from "../browser/browser-profiles-port";
 import type { AgentFilesOptions } from "../files/AgentFilesSettings";
 import { canManageStorage, serverHasStorage } from "../files/storage-usage";
 import { serverCanAdminister, serverSupportsCapability } from "../servers/server-capabilities";
+import type { AgentChannelDefaultsApi } from "./AgentChannelDefaults";
 import { htmlAttachmentPageHtml, htmlAttachmentPageUrl } from "./chat-visual-url";
 import { useConversationController } from "./conversation-controller-context";
 import { conversationRuntime } from "./conversation-runtime";
@@ -157,6 +159,17 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
     if (props.runtime) return props.runtime.browserProfiles;
     const serverId = browserProfileServerId();
     return serverId === undefined ? undefined : desktopBrowserProfileCalls(serverId);
+  });
+  /** The workspace settings of the server that runs the agent, for an owner or admin of a fork host. */
+  const channelDefaults = createMemo((): AgentChannelDefaultsApi | undefined => {
+    const server = props.server;
+    if (!serverCanAdminister(server, FORK_HOST_CAPABILITY)) return undefined;
+    if (props.runtime) return props.runtime.admin?.workspaceSettings;
+    const serverId = server.id;
+    return {
+      read: () => window.openbot.hostAdmin.getWorkspaceSettings(serverId),
+      write: (settings) => window.openbot.hostAdmin.setWorkspaceSettings(settings, serverId),
+    };
   });
   let browserPreviewTrigger: HTMLButtonElement | undefined;
   /** The panes this chat can open. The web client has no Files pane, and a chat without a thread has no files. */
@@ -594,6 +607,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
               }
               eventRoutines={desktopChatEventRoutinesApi(props.server, props.runtime)}
               routines={props.runtime?.routines}
+              channelDefaults={channelDefaults()}
             />
           </Loading>
         )}

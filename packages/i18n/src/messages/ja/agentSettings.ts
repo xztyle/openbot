@@ -2,6 +2,13 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/agentSettings";
 
 export const messages = {
+  "agentSettings.channels.title": "チャンネル内",
+  "agentSettings.channels.description": "このエージェントがチャンネルに追加されたときに使われます。",
+  "agentSettings.channels.readFailed": "チャンネルの既定値を読み込めませんでした。",
+  "agentSettings.channels.answerMode": "回答モード",
+  "agentSettings.channels.workspaceDefault": "ワークスペースの既定（{mode}）",
+  "agentSettings.channels.focus": "注目点",
+  "agentSettings.channels.focusPlaceholder": "チャンネルでこのエージェントが担当すること",
   "agentSettings.session.title": "プロバイダーの設定",
   "agentSettings.session.readFailed": "プロバイダーの設定を読み取れませんでした。",
   "agentSettings.session.pending": "保存した変更は次のターンの前に適用されます。",

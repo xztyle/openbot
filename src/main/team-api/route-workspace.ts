@@ -5,6 +5,7 @@ import {
   parseChannelCommand,
   parseChannelRead,
   parseWorkspaceActivityInput,
+  withKeptAgentChannelDefaults,
 } from "@openbot/contracts/ipc";
 import { WORKSPACE_CAPABILITY, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
@@ -74,7 +75,8 @@ export async function routeWorkspace(
     requireAdmin(member);
     const body = await readJson(request);
     if (url.pathname === WORKSPACE_ROUTES.settings) return json(200, settings.get());
-    return json(200, await runCauseEffect(settings.set(decodeWorkspaceSettings(body))));
+    const next = withKeptAgentChannelDefaults(settings.get(), decodeWorkspaceSettings(body));
+    return json(200, await runCauseEffect(settings.set(next)));
   }
   if (!channels) throw new HttpError(400, sourceText("error.team.channelsUnsupported"));
   const viewer = requestChannelViewer(context);

@@ -574,6 +574,14 @@ export const MembersWithRoles: Story = {
   args: { initialSection: "members", agentAccess: storyAgentAccess() },
 };
 
+/**
+ * The workspace settings of the preview host: the default answer mode of an agent that joins a
+ * channel, and the model and time limit of the quick check. A change shows the save bar.
+ */
+export const Workspace: Story = {
+  args: { initialSection: "workspace", workspaceSettings: {} },
+};
+
 /** Only the owner and no invitation: sample invitations land behind the invite action, one at a time. */
 export const MembersEmpty: Story = {
   args: {

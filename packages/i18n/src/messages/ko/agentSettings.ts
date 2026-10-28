@@ -2,6 +2,13 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/agentSettings";
 
 export const messages = {
+  "agentSettings.channels.title": "채널에서",
+  "agentSettings.channels.description": "누군가 이 에이전트를 채널에 추가할 때 사용돼요.",
+  "agentSettings.channels.readFailed": "채널 기본값을 불러오지 못했어요.",
+  "agentSettings.channels.answerMode": "답변 방식",
+  "agentSettings.channels.workspaceDefault": "워크스페이스 기본값({mode})",
+  "agentSettings.channels.focus": "관심사",
+  "agentSettings.channels.focusPlaceholder": "채널에서 이 에이전트가 맡는 일",
   "agentSettings.session.title": "제공자 설정",
   "agentSettings.session.readFailed": "제공자 설정을 읽을 수 없어요.",
   "agentSettings.session.pending": "저장한 변경 사항은 다음 턴 전에 적용돼요.",

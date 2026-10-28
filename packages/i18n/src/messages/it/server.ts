@@ -218,6 +218,24 @@ export const messages = {
     "Sposta gli agenti e le impostazioni di questo server in un file o da un file.",
   "server.settings.connectorsTitle": "Connettori",
   "server.settings.connectorsDescription": "Connetti gli account che tutti gli agenti di questo server possono usare.",
+  "server.settings.workspaceTitle": "Workspace",
+  "server.settings.workspaceDescription": "Imposta come rispondono gli agenti nei canali.",
+  "server.settings.unsavedWorkspaceChanges": "Modifiche al workspace non salvate",
+  "server.settings.workspaceLoadFailed": "Impossibile caricare le impostazioni del workspace di questo server.",
+  "server.settings.workspaceModelsFailed": "Impossibile caricare i modelli di questo server.",
+  "server.settings.workspaceDefaults": "Nuovi membri del canale",
+  "server.settings.workspaceDefaultsDescription":
+    "Si applica quando qualcuno aggiunge un agente a un canale. Puoi cambiarla in ogni canale.",
+  "server.settings.workspaceDefaultMode": "Modalità di risposta predefinita",
+  "server.settings.workspaceGate": "Verifica rapida",
+  "server.settings.workspaceGateDescription":
+    "Per gli agenti che leggono ogni messaggio, un modello veloce decide se l’agente risponde.",
+  "server.settings.workspaceGateModel": "Modello",
+  "server.settings.workspaceGateModelDescription": "Usa un modello veloce ed economico.",
+  "server.settings.workspaceGateTimeout": "Limite di tempo",
+  "server.settings.workspaceGateTimeoutDescription":
+    "Se la verifica dura di più, l’agente risponde solo quando viene menzionato.",
+  "server.settings.workspaceGateSeconds": "{seconds} s",
   "server.settings.routinesTitle": "Routine",
   "server.settings.routinesDescription":
     "Mostra la pianificazione delle routine di questo computer in un'app di calendario.",

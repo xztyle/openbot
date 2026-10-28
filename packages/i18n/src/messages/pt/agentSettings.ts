@@ -2,6 +2,13 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/agentSettings";
 
 export const messages = {
+  "agentSettings.channels.title": "Em canais",
+  "agentSettings.channels.description": "Usado quando alguém adiciona este agente a um canal.",
+  "agentSettings.channels.readFailed": "Não foi possível carregar os padrões de canal.",
+  "agentSettings.channels.answerMode": "Modo de resposta",
+  "agentSettings.channels.workspaceDefault": "Padrão do espaço de trabalho ({mode})",
+  "agentSettings.channels.focus": "Foco",
+  "agentSettings.channels.focusPlaceholder": "Do que este agente cuida nos canais",
   "agentSettings.session.title": "Configurações do provedor",
   "agentSettings.session.readFailed": "Não foi possível ler as configurações do provedor.",
   "agentSettings.session.pending": "As alterações salvas são aplicadas antes do próximo turno.",

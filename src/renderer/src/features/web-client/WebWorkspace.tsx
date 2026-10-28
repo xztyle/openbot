@@ -2382,6 +2382,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       hostMemoryLimit={{ calls: hostMemoryLimitCalls }}
                       hostPromptCacheTtl={{ calls: hostPromptCacheTtlCalls }}
                       agentAccess={{ calls: hostAgentAccessCalls, listAgents: () => workspace.runtime.listAgents() }}
+                      workspaceSettings={{
+                        calls: serverSettings.workspaceSettings,
+                        catalog: () => ({ modelOptions: models(), agentStatus: status() }),
+                      }}
                       browserProfiles={browserProfileSettings()}
                       // Any member imports into a host with `agent-import-v1`.
                       agentImport={

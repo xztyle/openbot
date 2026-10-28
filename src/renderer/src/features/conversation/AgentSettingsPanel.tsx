@@ -26,6 +26,7 @@ import type { BrowserProfileCalls } from "../browser/browser-profiles-port";
 import { createBrowserProfilesStore } from "../browser/stores/browser-profiles-store";
 import { type AgentFilesOptions, AgentFilesSettings } from "../files/AgentFilesSettings";
 import { createStorageUsage } from "../files/storage-usage";
+import { AgentChannelDefaults, type AgentChannelDefaultsApi } from "./AgentChannelDefaults";
 import { AgentMemoriesModal } from "./AgentMemoriesModal";
 import { AgentRoutinesSettings, type RoutineSelectionRequest } from "./AgentRoutinesSettings";
 import { AgentSkillsModal, type AgentSkillsMode, assignedSkillCount, type SkillDetail } from "./AgentSkillsModal";
@@ -88,6 +89,8 @@ interface AgentSettingsPanelProps
   browserProfileCalls?: BrowserProfileCalls | undefined;
   /** Opens the Browser profiles section of the settings of the server that runs the agent. */
   onManageBrowserProfiles?: ((trigger: HTMLElement) => void) | undefined;
+  /** The workspace settings of the server that runs the agent, for an owner or admin of a fork host. */
+  channelDefaults?: AgentChannelDefaultsApi | undefined;
 }
 
 export type { AgentSkillsMode };
@@ -429,6 +432,9 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                 api={api()}
               />
             )}
+          </Show>
+          <Show when={props.channelDefaults}>
+            {(api) => <AgentChannelDefaults agentId={props.agent.id} api={api()} />}
           </Show>
           <Show when={memoriesVisible() || skillsMode() !== "hidden" || props.tablesVisible !== false || props.files}>
             <SettingsLinkGroup inset title={t("agentSettings.groups.knows")}>

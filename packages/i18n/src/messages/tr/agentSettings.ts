@@ -2,6 +2,13 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/agentSettings";
 
 export const messages = {
+  "agentSettings.channels.title": "Kanallarda",
+  "agentSettings.channels.description": "Biri bu ajanı bir kanala eklediğinde kullanılır.",
+  "agentSettings.channels.readFailed": "Kanal varsayılanları yüklenemedi.",
+  "agentSettings.channels.answerMode": "Yanıt modu",
+  "agentSettings.channels.workspaceDefault": "Çalışma alanı varsayılanı ({mode})",
+  "agentSettings.channels.focus": "Odak",
+  "agentSettings.channels.focusPlaceholder": "Bu ajanın kanallarda ilgilendiği konular",
   "agentSettings.session.title": "Sağlayıcı ayarları",
   "agentSettings.session.readFailed": "Sağlayıcı ayarları okunamadı.",
   "agentSettings.session.pending": "Kaydedilen değişiklikler sonraki turdan önce uygulanır.",

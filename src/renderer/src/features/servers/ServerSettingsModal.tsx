@@ -27,6 +27,7 @@ import {
   Download,
   Globe2,
   HardDrive,
+  Hash,
   KeyRound,
   Monitor,
   Plug,
@@ -72,6 +73,7 @@ import { type ServerRoutineFeedOptions, ServerRoutineFeedPanel } from "./ServerR
 import type { ServerTimezoneOptions } from "./ServerTimezoneSetting";
 import { type ServerTransferOptions, ServerTransferPanel } from "./ServerTransferPanel";
 import { type ServerUpdateOptions, ServerUpdatePanel } from "./ServerUpdatePanel";
+import { createServerWorkspaceSection, type ServerWorkspaceSettingsOptions } from "./ServerWorkspaceSection";
 import { serverCanAdminister, serverRoleCanAdminister } from "./server-capabilities";
 import type { ServerSettingsSectionHost } from "./server-settings-section";
 
@@ -224,6 +226,11 @@ export interface ServerSettingsModalProps {
   browserProfiles?: ServerBrowserProfilesOptions | undefined;
   /** The Vault section appears only for this computer: a joined server keeps its Vault on its host. */
   vault?: ServerVaultOptions | undefined;
+  /**
+   * The Workspace section appears only when a caller supplies this, and only for the local server or
+   * a remote host with `fork-host-v1` that this member administers.
+   */
+  workspaceSettings?: ServerWorkspaceSettingsOptions | undefined;
   /** The section to show when the dialog opens. General shows when the server does not have that section. */
   initialSection?: ServerSettingsSection | null;
   /** Where the settings page shows, or nothing while the page is not on screen. */
@@ -243,6 +250,7 @@ export type ServerSettingsSection =
   | "vault"
   | "members"
   | "roles"
+  | "workspace"
   | "desktop"
   | "mcp"
   | "storage"
@@ -261,6 +269,7 @@ const sections = {
   vault: { title: "server.settings.vaultTitle", description: "server.settings.vaultDescription" },
   members: { title: "server.settings.membersTitle", description: "server.settings.membersDescription" },
   roles: { title: "server.settings.rolesTitle", description: "server.settings.rolesDescription" },
+  workspace: { title: "server.settings.workspaceTitle", description: "server.settings.workspaceDescription" },
   desktop: { title: "server.settings.desktopTitle", description: "server.settings.desktopDescription" },
   mcp: { title: "server.settings.mcpTitle", description: "server.settings.mcpDescription" },
   storage: { title: "server.settings.storageTitle", description: "server.settings.storageDescription" },
@@ -327,6 +336,8 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
         return Boolean(props.vault);
       case "roles":
         return roles.available();
+      case "workspace":
+        return workspaceSection.available();
       case "desktop":
         return remoteDesktopSection();
       case "mcp":
@@ -395,6 +406,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
   };
   const general = createServerGeneralSection(host);
   const roles = createServerRolesSection(host, () => section() === "roles" || section() === "members");
+  const workspaceSection = createServerWorkspaceSection(host, () => section() === "workspace");
   const members = createServerMembersSection(
     host,
     {
@@ -441,7 +453,9 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
   // Both save bars dock in the same place, so the toast has to lift for either one. It is
   // `position: absolute` over the footer: without this it covers the bar and swallows its clicks.
   const saveBarDocked = () =>
-    (section() === "general" && general.identityDirty()) || (section() === "mcp" && Boolean(mcpDetail()?.saveBar()));
+    (section() === "general" && general.identityDirty()) ||
+    (section() === "mcp" && Boolean(mcpDetail()?.saveBar())) ||
+    (section() === "workspace" && workspaceSection.dirty());
 
   createEffect(
     () => ({
@@ -459,6 +473,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
         general.resetForServer();
         members.resetForServer();
         roles.resetForServer();
+        workspaceSection.resetForServer();
       }
       if (!editing) general.syncFromServer(name, logoUrl);
     },
@@ -469,6 +484,14 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
     () => section() === "roles" && !roles.available(),
     (gone) => {
       if (gone) setSection("members");
+    },
+  );
+
+  /** Workspace leaves with the access that gives it: a host that goes offline or a role that changes. */
+  createEffect(
+    () => section() === "workspace" && !workspaceSection.available(),
+    (gone) => {
+      if (gone) setSection("general");
     },
   );
 
@@ -518,6 +541,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
         value === "vault" ||
         value === "members" ||
         value === "roles" ||
+        value === "workspace" ||
         value === "desktop" ||
         value === "mcp" ||
         value === "storage" ||
@@ -529,8 +553,11 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
         value === "routines" ||
         value === "browser-profiles" ||
         value === "connectors"
-      )
-        setSection(value);
+      ) {
+        // Changes of the Workspace section that are not saved ask first; the other sections keep their drafts.
+        if (section() === "workspace") workspaceSection.requestLeave(() => setSection(value));
+        else setSection(value);
+      }
     },
   };
 
@@ -637,6 +664,37 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
                 </SaveBarDock>
               )}
             </Show>
+            <SaveBarDock value={section() === "workspace" && workspaceSection.dirty() ? true : null}>
+              {() => (
+                <section class="settings-modal-save-bar" aria-label={t("server.settings.unsavedWorkspaceChanges")}>
+                  <Text variant="caption" tone="muted">
+                    {t("server.settings.changesNotSaved")}
+                  </Text>
+                  <div class="settings-modal-save-actions">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={Boolean(busy())}
+                      onClick={workspaceSection.reset}
+                    >
+                      {t("server.settings.reset")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      loading={workspaceSection.saving()}
+                      loadingLabel={t("common.saving")}
+                      disabled={Boolean(busy())}
+                      onClick={() => void workspaceSection.save()}
+                    >
+                      {t("common.save")}
+                    </Button>
+                  </div>
+                </section>
+              )}
+            </SaveBarDock>
             {/* `true` while the identity form is dirty: the dock only needs to know that there is
                 something to show, so the bar's own markup stays as it was. */}
             <SaveBarDock value={section() === "general" && general.identityDirty() ? true : null}>
@@ -692,6 +750,12 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
               <Tabs.Trigger class="settings-modal-nav-item" value="roles">
                 <ShieldCheck aria-hidden="true" />
                 <span>{t(sections.roles.title)}</span>
+              </Tabs.Trigger>
+            </Show>
+            <Show when={workspaceSection.available()}>
+              <Tabs.Trigger class="settings-modal-nav-item" value="workspace">
+                <Hash aria-hidden="true" />
+                <span>{t(sections.workspace.title)}</span>
               </Tabs.Trigger>
             </Show>
             <Show when={remoteDesktopSection()}>
@@ -779,6 +843,11 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
         <Show when={roles.available()}>
           <Tabs.Content value="roles" class="settings-modal-tab-panel server-settings-panel" data-tab="roles">
             <roles.Panel />
+          </Tabs.Content>
+        </Show>
+        <Show when={workspaceSection.available()}>
+          <Tabs.Content value="workspace" class="settings-modal-tab-panel server-settings-panel" data-tab="workspace">
+            <workspaceSection.Panel />
           </Tabs.Content>
         </Show>
         <Show when={remoteDesktopSection()}>
@@ -949,6 +1018,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
       <members.ConfirmDialogs />
       <general.LeaveDialog />
       <general.RotateKeyDialog />
+      <workspaceSection.DiscardDialog />
     </Tabs.Root>
   );
 }

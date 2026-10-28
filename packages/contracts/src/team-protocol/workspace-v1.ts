@@ -22,6 +22,8 @@
 // - `POST /v1/workspace/channels/thread`: `{ channelId, threadRootId, beforeSequence? }` answers a
 //   channel page whose messages are the root and at most 99 of its replies.
 // - `POST /v1/admin/workspace/settings` and `/update`: the workspace settings, owner and admin only.
+//   `defaults.agents` is optional: at most 500 agent ids, each `{ answerMode?, focus? (500) }`. A
+//   body without it keeps the map that the host has.
 // - `POST /v1/workspace/activity`: `{ limit? }` (1 to 200, default 100) answers the activity of the
 //   member of the session over the channels they can see: `{ items, threads }`. `items` (at most
 //   200, newest first) are each `{ id (512), kind: "mention" | "reply" | "dm" | "reaction", channelId,
@@ -290,9 +292,21 @@ const threadPage = (status: number, value: unknown): Json => {
   return withPageFields(withChannelAttention(CHANNEL_ROUTES.read, projected, value), value);
 };
 
+const agentDefaults: Decoder = (value) => {
+  if (!isDynamicRecord(value)) throw new Error("Invalid workspace agent defaults.");
+  const entries = Object.entries(value);
+  if (entries.length > 500) throw new Error("Invalid workspace agent defaults.");
+  // `fromEntries` defines each key as an own property, also an id such as `__proto__`.
+  return Object.fromEntries(
+    entries.map(([agentId, entry]) => {
+      if (!isString(identifier(agentId))) throw new Error("Invalid workspace agent defaults.");
+      return [agentId, fields({}, memberFields)(entry)];
+    }),
+  );
+};
 const settings = fields({
   gate: fields({ provider: identifier, model: nonEmpty(200), timeoutMs: count }, { effort: nonEmpty(32) }),
-  defaults: fields({ agentAnswerMode: answerMode }),
+  defaults: fields({ agentAnswerMode: answerMode }, { agents: agentDefaults }),
 });
 
 const activityLimit: Decoder = (value) => {

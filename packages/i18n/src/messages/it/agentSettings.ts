@@ -2,6 +2,13 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/agentSettings";
 
 export const messages = {
+  "agentSettings.channels.title": "Nei canali",
+  "agentSettings.channels.description": "Si usa quando qualcuno aggiunge questo agente a un canale.",
+  "agentSettings.channels.readFailed": "Impossibile caricare i valori predefiniti dei canali.",
+  "agentSettings.channels.answerMode": "Modalità di risposta",
+  "agentSettings.channels.workspaceDefault": "Predefinita del workspace ({mode})",
+  "agentSettings.channels.focus": "Focus",
+  "agentSettings.channels.focusPlaceholder": "Di cosa si occupa questo agente nei canali",
   "agentSettings.session.title": "Impostazioni del provider",
   "agentSettings.session.readFailed": "Impossibile leggere le impostazioni del provider.",
   "agentSettings.session.pending": "Le modifiche salvate si applicano prima del prossimo turno.",

@@ -226,6 +226,25 @@ export const messages = {
     "Die Agenten und Servereinstellungen dieses Servers in eine Datei übertragen oder aus einer Datei übernehmen.",
   "server.settings.connectorsTitle": "Konnektoren",
   "server.settings.connectorsDescription": "Verbinde Konten, die alle Agenten dieses Servers verwenden können.",
+  "server.settings.workspaceTitle": "Arbeitsbereich",
+  "server.settings.workspaceDescription": "Lege fest, wie Agenten in Kanälen antworten.",
+  "server.settings.unsavedWorkspaceChanges": "Ungespeicherte Änderungen am Arbeitsbereich",
+  "server.settings.workspaceLoadFailed":
+    "Die Einstellungen des Arbeitsbereichs dieses Servers konnten nicht geladen werden.",
+  "server.settings.workspaceModelsFailed": "Die Modelle dieses Servers konnten nicht geladen werden.",
+  "server.settings.workspaceDefaults": "Neue Kanalmitglieder",
+  "server.settings.workspaceDefaultsDescription":
+    "Gilt, wenn jemand einen Agenten zu einem Kanal hinzufügt. Du kannst es in jedem Kanal ändern.",
+  "server.settings.workspaceDefaultMode": "Standard-Antwortmodus",
+  "server.settings.workspaceGate": "Kurze Prüfung",
+  "server.settings.workspaceGateDescription":
+    "Bei Agenten, die jede Nachricht lesen, entscheidet ein schnelles Modell, ob der Agent antwortet.",
+  "server.settings.workspaceGateModel": "Modell",
+  "server.settings.workspaceGateModelDescription": "Nutze ein schnelles, günstiges Modell.",
+  "server.settings.workspaceGateTimeout": "Zeitlimit",
+  "server.settings.workspaceGateTimeoutDescription":
+    "Dauert die Prüfung länger, antwortet der Agent nur, wenn er erwähnt wird.",
+  "server.settings.workspaceGateSeconds": "{seconds} s",
   "server.settings.routinesTitle": "Routinen",
   "server.settings.routinesDescription": "Zeige den Routinenzeitplan dieses Computers in einer Kalender-App an.",
   "server.routineFeed.title": "Kalender-Feed",

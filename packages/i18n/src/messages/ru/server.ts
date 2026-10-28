@@ -225,6 +225,24 @@ export const messages = {
   "server.settings.connectorsTitle": "Коннекторы",
   "server.settings.connectorsDescription":
     "Подключайте аккаунты, которыми смогут пользоваться все агенты этого сервера.",
+  "server.settings.workspaceTitle": "Рабочее пространство",
+  "server.settings.workspaceDescription": "Настройте, как агенты отвечают в каналах.",
+  "server.settings.unsavedWorkspaceChanges": "Несохранённые изменения рабочего пространства",
+  "server.settings.workspaceLoadFailed": "Не удалось загрузить настройки рабочего пространства этого сервера.",
+  "server.settings.workspaceModelsFailed": "Не удалось загрузить модели этого сервера.",
+  "server.settings.workspaceDefaults": "Новые участники канала",
+  "server.settings.workspaceDefaultsDescription":
+    "Действует, когда агента добавляют в канал. Это можно изменить в каждом канале.",
+  "server.settings.workspaceDefaultMode": "Режим ответа по умолчанию",
+  "server.settings.workspaceGate": "Быстрая проверка",
+  "server.settings.workspaceGateDescription":
+    "Для агентов, которые читают каждое сообщение, быстрая модель решает, ответит ли агент.",
+  "server.settings.workspaceGateModel": "Модель",
+  "server.settings.workspaceGateModelDescription": "Используйте быструю и недорогую модель.",
+  "server.settings.workspaceGateTimeout": "Лимит времени",
+  "server.settings.workspaceGateTimeoutDescription":
+    "Если проверка длится дольше, агент отвечает только при упоминании.",
+  "server.settings.workspaceGateSeconds": "{seconds} с",
   "server.settings.routinesTitle": "Регулярные задачи",
   "server.settings.routinesDescription":
     "Показывать расписание регулярных задач этого компьютера в приложении-календаре.",

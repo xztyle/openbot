@@ -12,7 +12,10 @@ import type {
   TeamPresenceMember,
   TeamPresenceSnapshot,
   UpdateTeamMemberInput,
+  WorkspaceSettings,
 } from "@openbot/contracts/ipc";
+import { decodeWorkspaceSettings } from "@openbot/contracts/ipc";
+import { WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import {
   cancelMcpSignIn as cancelMcpSignInRequest,
@@ -34,6 +37,7 @@ import { currentText } from "@openbot/ui/text";
 import { Effect } from "effect";
 import { createEffect, createStore, untrack } from "solid-js";
 import { mcpSignInRecord } from "../servers/mcp-servers";
+import type { WorkspaceSettingsCalls } from "../servers/ServerWorkspaceSection";
 import { serverCanAdminister, serverRoleCanAdminister } from "../servers/server-capabilities";
 import { webMcpRelay } from "./web-mcp-relay";
 import type { WebAdminRuntime } from "./web-runtime";
@@ -299,9 +303,23 @@ export function createWebServerSettings(options: {
     return result;
   }
 
+  /** The workspace settings of the connected host (`fork-host-v1`). The host answers only an owner or admin. */
+  const workspaceSettings: WorkspaceSettingsCalls = {
+    getWorkspaceSettings: () =>
+      requireAdmin().admin.request("POST", WORKSPACE_ROUTES.settings, decodeWorkspaceSettings, {}),
+    setWorkspaceSettings: (settings) =>
+      requireAdmin().admin.request(
+        "POST",
+        WORKSPACE_ROUTES.settingsUpdate,
+        decodeWorkspaceSettings,
+        workspaceSettingsBody(settings),
+      ),
+  };
+
   return {
     state,
     restoreTarget: () => restoreTarget,
+    workspaceSettings,
     open,
     setOpen,
     refresh,
@@ -365,5 +383,33 @@ export function createWebServerSettings(options: {
       runTeamEffect(
         testMcpServerRequest(requireAdmin().admin.request, { config }).pipe(Effect.mapError((error) => error.cause)),
       ),
+  };
+}
+
+/** The request body: only the known fields, so the wire never carries more than the codec reads. */
+export function workspaceSettingsBody(settings: WorkspaceSettings) {
+  return {
+    gate: {
+      provider: settings.gate.provider,
+      model: settings.gate.model,
+      ...(settings.gate.effort === undefined ? {} : { effort: settings.gate.effort }),
+      timeoutMs: settings.gate.timeoutMs,
+    },
+    defaults: {
+      agentAnswerMode: settings.defaults.agentAnswerMode,
+      ...(settings.defaults.agents === undefined
+        ? {}
+        : {
+            agents: Object.fromEntries(
+              Object.entries(settings.defaults.agents).map(([agentId, entry]) => [
+                agentId,
+                {
+                  ...(entry.answerMode === undefined ? {} : { answerMode: entry.answerMode }),
+                  ...(entry.focus === undefined ? {} : { focus: entry.focus }),
+                },
+              ]),
+            ),
+          }),
+    },
   };
 }

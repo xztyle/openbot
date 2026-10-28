@@ -1,6 +1,7 @@
 import { MCP_SERVERS_CAPABILITY, type ServerSummary } from "@openbot/contracts/ipc";
 import { AGENT_ACCESS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-access-v1";
 import { BROWSER_PROFILES_CAPABILITY } from "@openbot/contracts/team-protocol/browser-profiles-v1";
+import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import { serverHasStorage } from "../files/storage-usage";
 import type { ServerSettingsSection } from "./ServerSettingsModal";
 import { remoteUpdateServer, serverCanAdminister, serverSupportsCapability } from "./server-capabilities";
@@ -11,6 +12,7 @@ export const SERVER_SETTINGS_SECTIONS: readonly ServerSettingsSection[] = [
   "vault",
   "members",
   "roles",
+  "workspace",
   "desktop",
   "mcp",
   "storage",
@@ -54,6 +56,9 @@ function hasSection(
     // The dialog also needs the roles to be set up; when they are not, the result opens General.
     case "roles":
       return serverCanAdminister(server, AGENT_ACCESS_CAPABILITY);
+    // The dialog also needs the host to be reachable; when it is not, the result opens General.
+    case "workspace":
+      return serverCanAdminister(server, FORK_HOST_CAPABILITY);
     case "transfer":
       return server.kind === "local" || serverCanAdminister(server, "instance-transfer-v1");
     case "browser-profiles":

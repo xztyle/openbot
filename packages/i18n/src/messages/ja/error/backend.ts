@@ -86,6 +86,13 @@ export const messages = {
   "error.backend.channelMemberRequired": "このチャンネルの使用可能なメンバーを選択してください。",
   "error.backend.channelExists": "この ID のチャンネルはすでに存在します。",
   "error.backend.channelThreadNotFound": "このスレッドは利用できません。",
+  "error.backend.channelDiscordAdmin": "チャンネルを Discord とつなげられるのはオーナーと管理者だけです。",
+  "error.backend.channelDiscordKind": "Discord とつなげられるのはチャンネルだけです。DM やグループはつなげられません。",
+  "error.backend.channelDiscordUnavailable":
+    "Discord サーバーが接続されていないか、動作していません。サーバー設定 > コネクタ > Discord で接続してから、もう一度お試しください。",
+  "error.backend.channelDiscordTaken": "この Discord チャンネルは、すでに別のチャンネルとつながっています。",
+  "error.backend.channelDiscordChannelMissing":
+    "OpenBot はこの Discord チャンネルに投稿できません。OpenBot が見えるテキストチャンネルを選んでください。",
   "error.backend.channelMessageNotFound": "このメッセージは利用できません。",
   "error.backend.channelPersonUnavailable": "選択した人はこのサーバーの有効なメンバーではありません。",
   "error.backend.channelDirectParticipants": "ダイレクトメッセージの参加者は 2 人、グループは 3〜9 人です。",

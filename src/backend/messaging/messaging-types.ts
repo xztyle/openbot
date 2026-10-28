@@ -69,6 +69,12 @@ export interface InboundMessage {
   mentioned?: boolean;
   /** For a reply to an OpenBot post: true. Lets a channel that answers every message find the conversation. */
   repliesToBot?: boolean;
+  /** The author's display name, when the platform gave it with the message (Discord). */
+  authorName?: string;
+  /** The author's picture, an `https` address of the platform, for a channel bridge. */
+  authorAvatarUrl?: string;
+  /** The platform id of the message this one replies to, any author. For a channel bridge. */
+  replyToMessageId?: string | null;
 }
 
 /** A replied-to message, given to the agent as context. Mentions are written as in `text`. */
@@ -198,6 +204,11 @@ export interface MessagingAdapter {
   joinPublicPlaces?(): Effect.Effect<void, MessagingAdapterError>;
   /** Joins one public place, such as a channel that was just created. */
   joinPlace?(platformChannelId: string): Effect.Effect<void, MessagingAdapterError>;
+  /** Makes a webhook in a channel, for a channel bridge (Discord). The token is a secret. */
+  createWebhook?(
+    platformChannelId: string,
+    name: string,
+  ): Effect.Effect<{ webhookId: string; token: string }, MessagingAdapterError>;
 }
 
 export interface TransportSink {
@@ -357,4 +368,32 @@ export interface MessagingDriver {
   readonly requiredCredential: string;
   createAdapter(credentials: Record<string, string>, options: MessagingDriverOptions): MessagingAdapter;
   createTransport(credentials: Record<string, string>, identity: ConnectionIdentity): MessagingTransport;
+}
+
+/** One message of a Discord channel that a channel bridge takes, with its mentions named. */
+export interface BridgedDiscordMessage {
+  guildId: string;
+  channelId: string;
+  messageId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatarUrl: string | null;
+  /** Plain text: each user mention as `@<name>`, or `@<id>` without a name. */
+  text: string;
+  files: readonly InboundFile[];
+  /** The Discord message it replies to, any author. */
+  replyToMessageId: string | null;
+  /** The message mentions OpenBot (the mention itself is taken out of `text`). */
+  mentionedBot: boolean;
+}
+
+/**
+ * The workspace channel bridge (`channel-bridge.ts`) as messaging sees it. A Discord channel that it
+ * takes skips the connector's own routing: its messages go to the bridge, also without a mention.
+ */
+export interface MessagingChannelBridge {
+  /** The channels of a Discord guild that are bridged with a workspace channel. */
+  discordChannels(guildId: string): readonly string[];
+  /** Never fails: the bridge reports its own failures. */
+  receiveDiscord(message: BridgedDiscordMessage): Effect.Effect<void>;
 }

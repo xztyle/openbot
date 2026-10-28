@@ -934,6 +934,15 @@ passes nothing on.
 - **Sent to Discord.** As for Slack: the answers, attached files of at most 10 MB, status posts,
   reactions, and redacted approval requests. A post never pings anyone. As for Slack, any agent can
   post redacted text to a channel or thread of the server, and list their names through Signal.
+- **Bridged channels.** When an owner or admin bridges a workspace channel with a Discord channel,
+  Signal passes on every message of a person in that Discord channel, also without a mention, with
+  the address of the author's Discord picture. The host keeps them as messages of the workspace
+  channel. The messages of team members and the answers of agents in that workspace channel are
+  posted to Discord with the author's name, and with the picture of a team member when it has an
+  `https` address. When the bot can make a webhook in the channel, Signal makes it once, and the
+  host then posts, edits and deletes through that webhook directly at Discord. The webhook secret
+  and the map of Discord and workspace message ids stay on the host, in a file only the user can
+  read. Ending the bridge deletes the webhook.
 
 Anyone who can post in a channel that OpenBot can view can give the agents work, unless the user
 chose roles: then only members with one of those roles can, and OpenBot ignores the others. The agents run on the

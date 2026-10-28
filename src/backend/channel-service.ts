@@ -13,6 +13,7 @@ import {
   type Channel,
   type ChannelAnswerMode,
   type ChannelCommand,
+  type ChannelDiscordLink,
   type ChannelGateDecision,
   type ChannelMember,
   type ChannelMemory,
@@ -25,6 +26,7 @@ import {
   type ConversationSnapshot,
   type CreateChannelMemoryInput,
   canAdministerServer,
+  channelKind,
   channelMentions,
   channelRoutingConversationEventItemType,
   type DeleteChannelMemoryInput,
@@ -146,6 +148,17 @@ export interface ChannelHooks {
   error(error: unknown): void;
 }
 
+/**
+ * The Discord side of the channel bridge (`channel-bridge.ts`). Messaging starts after the channels,
+ * so the bridge sets itself on `ChannelService.discordBridge` once it runs.
+ */
+export interface ChannelDiscordBridgePort {
+  /** Checks the Discord channel, and makes its webhook when it can. Fails with a text for the person. */
+  link(channel: Channel, guildId: string, discordChannelId: string): Effect.Effect<ChannelDiscordLink, Error>;
+  /** After the commit: the bridge follows the new link of the channel, or its removal. */
+  changed(channelId: string, previous: ChannelDiscordLink | undefined, next: ChannelDiscordLink | undefined): void;
+}
+
 class ChannelRoutingError extends Schema.TaggedError<ChannelRoutingError>()("ChannelRoutingError", {
   message: Schema.String,
 }) {
@@ -182,6 +195,8 @@ export class ChannelService {
   readonly memories: ChannelMemoryStore;
   /** Which member agents answer a person's message, the answer gate included. */
   readonly responders = new ChannelResponders();
+  /** The channel bridge with Discord, while messaging runs. Without it, `link-discord` fails. */
+  discordBridge: ChannelDiscordBridgePort | null = null;
   readonly #history: ChannelHistory;
   #scope = Scope.makeUnsafe();
   readonly #pumps = new Map<string, Fiber.Fiber<void>>();
@@ -577,11 +592,14 @@ export class ChannelService {
       }
       case "delete":
         return yield* this.#deleteMessage(channel, command.messageId, workspace, operationId);
+      case "link-discord":
+      case "unlink-discord":
+        return yield* this.#linkDiscord(channel, command, viewer, operationId);
     }
     if (command.type === "send") {
       const recipientAgentId = command.recipientAgentId;
       if (recipientAgentId) yield* channelSync(() => this.requireAvailableMember(channel, recipientAgentId));
-      const id = randomUUID();
+      const id = command.bridged?.messageId ?? randomUUID();
       // The files are committed here, not at the dispatch: a channel dispatches when a member is
       // free, which can be after a restart, and a restart clears every draft with its files. The
       // request would then hold ids that resolve to nothing, and no retry could bring the upload
@@ -659,6 +677,7 @@ export class ChannelService {
           ...(threadRootId ? { threadRootId } : {}),
           ...(threadRootId && command.alsoToChannel ? { alsoInChannel: true } : {}),
           ...(mentions.length ? { mentions } : {}),
+          ...(command.bridged ? { externalAuthor: command.bridged.author } : {}),
         };
         let added: ChannelTask[];
         // The `always` members that the gate asks about once the message is stored.
@@ -2267,6 +2286,39 @@ export class ChannelService {
       };
     });
   }
+
+  /**
+   * Bridges a channel with a Discord channel, or ends the bridge. Owners and admins only; a command
+   * of this computer's own services has no viewer and passes.
+   */
+  readonly #linkDiscord = Effect.fn("ChannelService.linkDiscord")(function* (
+    this: ChannelService,
+    channel: Channel,
+    command: Extract<ChannelCommand, { type: "link-discord" | "unlink-discord" }>,
+    viewer: ChannelViewer | undefined,
+    operationId: string,
+  ): Effect.fn.Return<Channel, ChannelOperationError> {
+    if (viewer && !canAdministerServer(viewer.role))
+      return yield* channelFailure(new Error(sourceText("error.backend.channelDiscordAdmin")));
+    const previous = channel.discordLink;
+    if (command.type === "unlink-discord") {
+      if (!previous) return channel;
+      const { discordLink: _removed, ...rest } = channel;
+      const result = yield* this.#commitChannel(rest, operationId);
+      this.discordBridge?.changed(channel.id, previous, undefined);
+      return result;
+    }
+    if (channelKind(channel) !== "channel")
+      return yield* channelFailure(new Error(sourceText("error.backend.channelDiscordKind")));
+    const bridge = this.discordBridge;
+    if (!bridge) return yield* channelFailure(new Error(sourceText("error.backend.channelDiscordUnavailable")));
+    const link = yield* bridge
+      .link(channel, command.connectionId, command.discordChannelId)
+      .pipe(Effect.mapError(channelFailure));
+    const result = yield* this.#commitChannel({ ...channel, discordLink: link }, operationId);
+    bridge.changed(channel.id, previous, link);
+    return result;
+  });
 
   /**
    * Deletes a message. A request that no member has started yet goes with it, and the root of its

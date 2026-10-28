@@ -65,6 +65,7 @@ import {
   type MessageTarget,
   type MessagingAdapter,
   type MessagingAdapterError,
+  type MessagingChannelBridge,
   MessagingConnectionError,
   type MessagingDriver,
   type MessagingIngress,
@@ -239,6 +240,8 @@ export class MessagingService {
   readonly #telegramApp: TelegramAppPort | null;
   readonly #sidebar: Pick<SidebarLayoutStore, "getSnapshot" | "mutate" | "removeAgent"> | null;
   readonly #discordChannels: DiscordChannelConfigStore;
+  /** The workspace channel bridge, set once the channels exist. */
+  #bridge: MessagingChannelBridge | null = null;
   #started = false;
   /** `start` asked every enabled connection to start. One with no live entry then does not start by itself. */
   #connectionsStarted = false;
@@ -702,16 +705,92 @@ export class MessagingService {
     return yield* this.discordChannelConfig(input.workspaceId);
   }).bind(this);
 
-  /** Tells Signal the channels of a running Discord server that answer every message. */
+  /**
+   * Tells Signal the channels of a running Discord server whose every message the host takes: the
+   * channels that answer every message, and the channels bridged with a workspace channel.
+   */
   #listen(record: MessagingConnectionRecord, stopped = false): void {
     if (record.platform !== "discord") return;
     const channels = stopped
       ? []
-      : this.#discordChannels
-          .get(record.connectionId)
-          .channels.filter((channel) => channel.answerAll)
-          .map((channel) => channel.channelId);
+      : [
+          ...new Set([
+            ...this.#discordChannels
+              .get(record.connectionId)
+              .channels.filter((channel) => channel.answerAll)
+              .map((channel) => channel.channelId),
+            ...(this.#bridge?.discordChannels(record.workspaceId) ?? []),
+          ]),
+        ].slice(0, MESSAGING_LIMITS.channelSettings);
     this.#ingress?.setDiscordListen?.(record.workspaceId, channels);
+  }
+
+  /** Sets the workspace channel bridge, and tells Signal the bridged channels of each running server. */
+  setChannelBridge(bridge: MessagingChannelBridge | null): void {
+    this.#bridge = bridge;
+    for (const live of this.#live.values()) if (live.transport) this.#listen(live.record);
+  }
+
+  /** Tells Signal again which channels of a Discord server the host takes, after a bridge changed. */
+  refreshDiscordListen(guildId: string): void {
+    const record = this.#threads.store.connectionForWorkspace("discord", guildId);
+    if (record && this.#live.get(record.connectionId)?.transport) this.#listen(record);
+  }
+
+  /** The adapter of a running Discord server, for the channel bridge. Null while it does not run. */
+  discordAdapter(guildId: string): MessagingAdapter | null {
+    const record = this.#threads.store.connectionForWorkspace("discord", guildId);
+    const live = record ? this.#live.get(record.connectionId) : undefined;
+    return live?.identity ? live.adapter : null;
+  }
+
+  /** A message of a Discord channel that is bridged with a workspace channel goes to the bridge. */
+  readonly #bridgeReceive = Effect.fn("MessagingService.bridgeReceive")(function* (
+    this: MessagingService,
+    live: LiveConnection,
+    bridge: MessagingChannelBridge,
+    message: InboundMessage,
+  ) {
+    if (!this.#firstDelivery(`${live.record.connectionId}:${message.dedupKey}`)) return;
+    const { adapter } = live;
+    const [authorName, mentioned] = yield* Effect.all(
+      [
+        message.authorName
+          ? Effect.succeed(message.authorName)
+          : adapter.authorName(message.authorId).pipe(
+              Effect.timeoutOrElse({
+                duration: RECEIVE_NAME_DEADLINE_MS,
+                orElse: () => Effect.succeed(message.authorId),
+              }),
+              Effect.catch(() => Effect.succeed(message.authorId)),
+            ),
+        mentionNames(message.mentionedUserIds, (userId) => adapter.authorName(userId)),
+      ],
+      { concurrency: "unbounded" },
+    );
+    yield* bridge.receiveDiscord({
+      guildId: live.record.workspaceId,
+      channelId: message.platformChannelId,
+      messageId: message.platformMessageId,
+      authorId: message.authorId,
+      authorName,
+      authorAvatarUrl: message.authorAvatarUrl ?? null,
+      text: withMentionNames(message.text, mentioned),
+      files: message.files,
+      replyToMessageId: message.replyToMessageId ?? null,
+      mentionedBot: message.mentioned !== false,
+    });
+  });
+
+  /** False when this key arrived before: a redelivered event. */
+  #firstDelivery(key: string): boolean {
+    if (this.#recent.has(key)) return false;
+    this.#recent.add(key);
+    if (this.#recent.size > RECENT_MESSAGES) {
+      const oldest = this.#recent.values().next().value;
+      if (oldest !== undefined) this.#recent.delete(oldest);
+    }
+    return true;
   }
 
   /** The agent of a new conversation: the channel's, the server's, or the orchestrator. Each must exist. */
@@ -1291,6 +1370,14 @@ export class MessagingService {
     if (inbound.authorId === live.identity.botUserId) return;
     // A connection with a role list ignores everyone else, before anything shows the message was seen.
     if (!this.#authorAllowed(live.record.connectionId, inbound)) return;
+    // A channel bridged with a workspace channel skips the routing below: every message of a person
+    // there goes to the workspace channel, whose answer modes decide who answers.
+    const bridge = this.#bridge;
+    if (
+      live.record.platform === "discord" &&
+      bridge?.discordChannels(live.record.workspaceId).includes(inbound.platformChannelId)
+    )
+      return yield* this.#bridgeReceive(live, bridge, inbound);
     const setting = this.#channelSetting(live.record, inbound.platformChannelId);
     const answerAll = setting?.answerAll === true;
     // A Discord channel that answers every message answers a quick run of messages in one turn.
@@ -1334,13 +1421,7 @@ export class MessagingService {
     const existing = message === inbound ? chained : ongoing;
     // Before the dedup key: a reply with a mention also arrives as `app_mention`, which must still run.
     if (message.requiresLink && !existing && !mainThreadId) return;
-    const dedupKey = `${live.record.connectionId}:${message.dedupKey}`;
-    if (this.#recent.has(dedupKey)) return;
-    this.#recent.add(dedupKey);
-    if (this.#recent.size > RECENT_MESSAGES) {
-      const oldest = this.#recent.values().next().value;
-      if (oldest !== undefined) this.#recent.delete(oldest);
-    }
+    if (!this.#firstDelivery(`${live.record.connectionId}:${message.dedupKey}`)) return;
     if (existing && CANCEL_TEXT.test(message.text) && message.files.length === 0) {
       if (yield* this.#threads.stop(existing.linkId, message.authorId).pipe(toMessagingOperationFailed)) {
         yield* live.adapter

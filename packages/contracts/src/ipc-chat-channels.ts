@@ -9,6 +9,7 @@ import {
   CHANNEL_TOPIC_LIMIT,
   CHANNEL_VISIBILITIES,
   type ChannelAnswerMode,
+  type ChannelExternalAuthor,
   type ChannelKind,
   type ChannelMemberWorkspaceFields,
   type ChannelMessageWorkspaceFields,
@@ -157,6 +158,11 @@ export type ChannelCommand =
       threadRootId?: string | null;
       /** A thread reply that is also shown in the channel. */
       alsoToChannel?: boolean;
+      /**
+       * Set only by the host's channel bridge, never parsed from a client: the message came from
+       * another platform. It keeps this id and shows this author.
+       */
+      bridged?: { messageId: string; author: ChannelExternalAuthor };
     }
   | {
       /**
@@ -237,7 +243,20 @@ export type WorkspaceChannelCommand =
       channelId: string;
       memberIds: string[];
       agentIds: string[];
-    };
+    }
+  | {
+      /**
+       * Bridges a `channel` with one text channel of a Discord server that the host connected
+       * (`connectionId` is its `workspaceId`, the guild id). Owners and admins only. A Discord channel
+       * has at most one bridge. The host reads the channel name from Discord and makes the webhook.
+       */
+      type: "link-discord";
+      operationId: string;
+      channelId: string;
+      connectionId: string;
+      discordChannelId: string;
+    }
+  | { type: "unlink-discord"; operationId: string; channelId: string };
 
 export const WORKSPACE_CHANNEL_COMMAND_TYPES = [
   "create",
@@ -251,6 +270,8 @@ export const WORKSPACE_CHANNEL_COMMAND_TYPES = [
   "edit",
   "delete",
   "open-dm",
+  "link-discord",
+  "unlink-discord",
 ] as const satisfies readonly WorkspaceChannelCommand["type"][];
 
 /** A command that only the workspace route carries: a workspace command, or a send into a thread. */
@@ -575,6 +596,11 @@ function people(value: unknown): value is string[] {
   );
 }
 
+/** A Discord snowflake: a guild or channel id. */
+function isDiscordId(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9]{1,24}$/u.test(value);
+}
+
 function optionalText(value: unknown, maximum: number): value is string | undefined {
   return value === undefined || isBoundedString(value, maximum);
 }
@@ -677,6 +703,16 @@ function parseWorkspaceChannelCommand(
       if (value.memberIds.length + value.agentIds.length < 1) return null;
       if (value.memberIds.length + value.agentIds.length > CHANNEL_GROUP_LIMIT - 1) return null;
       return { ...common, type: "open-dm", memberIds: value.memberIds, agentIds: value.agentIds };
+    case "link-discord":
+      if (!isDiscordId(value.connectionId) || !isDiscordId(value.discordChannelId)) return null;
+      return {
+        ...common,
+        type: "link-discord",
+        connectionId: value.connectionId,
+        discordChannelId: value.discordChannelId,
+      };
+    case "unlink-discord":
+      return { ...common, type: "unlink-discord" };
     default:
       return null;
   }

@@ -84,6 +84,13 @@ export const messages = {
   "error.backend.channelMemberRequired": "Wybierz dostępnego członka tego kanału.",
   "error.backend.channelExists": "Kanał o tym identyfikatorze już istnieje.",
   "error.backend.channelThreadNotFound": "Ten wątek jest niedostępny.",
+  "error.backend.channelDiscordAdmin": "Tylko właściciele i administratorzy mogą połączyć kanał z Discordem.",
+  "error.backend.channelDiscordKind": "Z Discordem można połączyć tylko kanał, nie wiadomość prywatną ani grupę.",
+  "error.backend.channelDiscordUnavailable":
+    "Serwer Discord nie jest połączony lub nie działa. Połącz go w Ustawieniach serwera > Łączniki > Discord i spróbuj ponownie.",
+  "error.backend.channelDiscordTaken": "Ten kanał Discord jest już połączony z innym kanałem.",
+  "error.backend.channelDiscordChannelMissing":
+    "OpenBot nie może pisać na tym kanale Discord. Wybierz kanał tekstowy, który OpenBot widzi.",
   "error.backend.channelMessageNotFound": "Ta wiadomość jest niedostępna.",
   "error.backend.channelPersonUnavailable": "Wybrana osoba nie jest aktywnym członkiem tego serwera.",
   "error.backend.channelDirectParticipants": "Wiadomość bezpośrednia ma 2 uczestników, a grupa od 3 do 9.",

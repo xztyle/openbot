@@ -517,6 +517,14 @@ the token and does the platform work for the hosts:
   bearer. Signal accepts an operation only for a guild routed to that socket, and only for a channel
   of that guild, and makes the call with `@discordjs/rest`. Every post has no allowed mention, so it
   pings nobody. Attachments are signed CDN addresses, which the host downloads directly.
+- **Channel bridge.** `src/backend/channel-bridge.ts` bridges a workspace channel (`discordLink` in
+  its JSON, set by the `link-discord` and `unlink-discord` workspace commands through
+  `ChannelService.discordBridge`) with one Discord channel. `MessagingService` names the bridged
+  channels in `discord-listen` and gives their messages to the bridge before its own routing; the
+  bridge sends each as a channel `send` with `bridged` (a fixed message id and `externalAuthor`), so
+  the answer modes apply. It follows `channel-message` events to post the messages of people and the
+  answers of agents, through a webhook (`createWebhook` through Signal, then direct webhook calls)
+  or as the bot. Secrets and the message id map are in `openbot-channel-bridge-v1.json`.
 - **Conversations.** A conversation is a reply chain, keyed by its first message. Every OpenBot post
   replies to that message, so a reply to an OpenBot post names the conversation through the replied
   post's own reference. A direct message has no guild, so Signal answers it once with a fixed line.

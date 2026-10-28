@@ -131,6 +131,13 @@ export const messages = defineMessages("error.backend", {
   "error.backend.channelMemberRequired": "Select an available member of this channel.",
   "error.backend.channelExists": "A channel with this id already exists.",
   "error.backend.channelThreadNotFound": "This thread is unavailable.",
+  "error.backend.channelDiscordAdmin": "Only owners and admins can bridge a channel with Discord.",
+  "error.backend.channelDiscordKind": "Only a channel can be bridged with Discord, not a DM or a group.",
+  "error.backend.channelDiscordUnavailable":
+    "The Discord server is not connected or not running. Connect it in Server settings > Connectors > Discord and try again.",
+  "error.backend.channelDiscordTaken": "This Discord channel is already bridged with another channel.",
+  "error.backend.channelDiscordChannelMissing":
+    "OpenBot cannot post in this Discord channel. Pick a text channel that OpenBot can see.",
   "error.backend.channelMessageNotFound": "This message is unavailable.",
   "error.backend.channelPersonUnavailable": "A person you chose is not an active member of this server.",
   "error.backend.channelDirectParticipants": "A direct message has 2 participants, and a group has 3 to 9.",

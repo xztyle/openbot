@@ -117,6 +117,38 @@ again.
 - An answer longer than 2,000 characters is sent in more than one post. A file larger than 10 MB is
   not sent, and the conversation says which files were not sent.
 
+## Bridge a workspace channel
+
+An owner or admin can bridge a workspace channel with one text channel of a connected Discord server
+(the `link-discord` workspace command; `unlink-discord` ends it). A Discord channel has at most one
+bridge. While it has one, its own settings (channel agent, "Answer every message", "Use the agent's
+main chat") do not apply: every message there goes to the workspace channel.
+
+- **Discord to the workspace.** Each message of a person in the Discord channel becomes a message of
+  the workspace channel, with the Discord name and picture of its author (`externalAuthor`). The
+  answer modes and the gate of the channel apply as to a message of a team member. `@Name` of a
+  member agent in the Discord text addresses that agent. A mention of @OpenBot without an agent name
+  addresses the channel lead, or the only member agent. A Discord reply to a bridged message goes to
+  the thread of that message. Files are shown as links to Discord.
+- **The workspace to Discord.** The messages of team members and the answers of agents in the
+  workspace channel are posted in the Discord channel. An agent's answer is posted when its task
+  stops running, so the steps of a turn do not reach Discord. When the bot has **Manage Webhooks**
+  in the channel at bridge time, OpenBot makes a webhook there and each post shows its author's name
+  and picture. Otherwise the bot posts with `**Name:**` in front. A thread reply links the Discord
+  post of its thread root (a bot post replies to it). An edit or a deletion in the workspace changes
+  or deletes the Discord post.
+- Signal leaves out the posts of bots and webhooks, so a bridged post does not come back.
+- The webhook secret and the map of message ids stay on the host, in
+  `openbot-channel-bridge-v1.json` (readable only by the user). Only `discordLink` (server id,
+  channel id and name, and whether a webhook posts) is in the channel and on the wire.
+
+Limits: Signal must name `discord-listen`, else only the messages that mention OpenBot are bridged,
+and `createWebhook`, else the bot posts with the name in front. Edits, deletions and reactions in
+Discord are not mirrored to the workspace. Discord threads of the bridged channel are not bridged.
+Files of workspace messages are named in Discord, not uploaded. Each channel remembers its 2,000
+newest bridged messages; an edit or a reply to an older one is not mirrored. Messages from before the
+bridge are not posted.
+
 ## Connect Telegram
 
 One OpenBot bot serves every user. People mention it in a group, or reply to its messages, and the

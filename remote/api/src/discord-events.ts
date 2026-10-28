@@ -49,7 +49,7 @@ export interface DiscordMessageData {
   content: string;
   timestamp: string;
   webhook_id?: string;
-  author: { id: string; username: string; global_name?: string | null; bot?: boolean };
+  author: { id: string; username: string; global_name?: string | null; bot?: boolean; avatar?: string | null };
   member?: { nick?: string | null; roles?: string[] };
   mentions: { id: string }[];
   message_reference?: { type?: number; message_id?: string };
@@ -91,6 +91,13 @@ export function discordAuthorName(message: {
 export function stripBotMention(content: string, botUserId: string | null): string {
   if (!botUserId) return content.trim();
   return content.split(`<@${botUserId}>`).join("").split(`<@!${botUserId}>`).join("").trim();
+}
+
+/** The author's picture on Discord's CDN, for a channel bridge of the host. */
+function avatarOf(author: DiscordMessageData["author"]): { authorAvatarUrl?: string } {
+  const hash = author.avatar;
+  if (!hash || !/^(?:a_)?[0-9a-f]{1,64}$/u.test(hash)) return {};
+  return { authorAvatarUrl: `https://cdn.discordapp.com/avatars/${author.id}/${hash}.png?size=128` };
 }
 
 /**
@@ -135,6 +142,7 @@ export function normalizeGuildMessage(
     replyTo,
     attachments: attachmentsOf(message.attachments),
     sentAt: message.timestamp,
+    ...avatarOf(message.author),
     ...(mentioned ? {} : { mentioned: false as const }),
   };
 }

@@ -3,6 +3,7 @@ import {
   DISCORD_LIST_MESSAGES_LIMIT,
   DISCORD_MESSAGE_TEXT_LIMIT,
   DISCORD_UPLOAD_BYTES_LIMIT,
+  DISCORD_WEBHOOK_NAME_LIMIT,
   type DiscordApiRequest,
   type DiscordButton,
   type DiscordHistoryMessage,
@@ -11,6 +12,7 @@ import {
   decodeDiscordMessageId,
   decodeDiscordName,
   decodeDiscordRoles,
+  decodeDiscordWebhook,
 } from "@openbot/contracts/signal-protocol/discord-api";
 import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect, Result } from "effect";
@@ -482,6 +484,19 @@ class DiscordAdapter implements MessagingAdapter {
   /** A Signal that predates `listRoles` refuses it as an invalid request. */
   roles(): Effect.Effect<Array<{ id: string; name: string }>, MessagingAdapterError> {
     return this.#call({ op: "listRoles", guildId: this.#guildId }, decodeDiscordRoles);
+  }
+
+  /** A Signal that predates `createWebhook` refuses it as an invalid request. */
+  createWebhook(platformChannelId: string, name: string) {
+    return this.#call(
+      {
+        op: "createWebhook",
+        guildId: this.#guildId,
+        channelId: platformChannelId,
+        name: name.slice(0, DISCORD_WEBHOOK_NAME_LIMIT),
+      },
+      decodeDiscordWebhook,
+    );
   }
 
   /** Signal posts with no mention allowed, so a mention shows the person and pings nobody. */

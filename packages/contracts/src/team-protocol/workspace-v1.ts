@@ -22,6 +22,11 @@
 // - `POST /v1/workspace/channels/thread`: `{ channelId, threadRootId, beforeSequence? }` answers a
 //   channel page whose messages are the root and at most 99 of its replies.
 // - `POST /v1/admin/workspace/settings` and `/update`: the workspace settings, owner and admin only.
+// - Discord bridge: on each channel `discordLink` (`{ connectionId, channelId, channelName (100),
+//   webhook? }`, Discord ids); on each message `externalAuthor` (`{ kind: "external", platform:
+//   "discord", id, name (120), avatarUrl? (500, https) }`); the commands `link-discord`
+//   (`{ connectionId, discordChannelId }`, owner and admin only) and `unlink-discord` (`{}`). The
+//   author of a bridged message stays a `member` with an id that names no team member.
 // - The events `channel-message` (`{ channelId, message, revision }`) and `channel-message-removed`
 //   (`{ channelId, messageId, revision }`). The host sends them only to a peer that can see the
 //   channel.
@@ -92,6 +97,10 @@ const CHANNEL_FIELDS: Record<string, Decoder> = {
   description: string(2000),
   humanMemberIds: uniqueIdentifiers(500),
   createdBy: actor,
+  discordLink: fields(
+    { connectionId: identifier, channelId: identifier, channelName: string(100) },
+    { webhook: boolean },
+  ),
 };
 const mention: Decoder = (value) => {
   if (!isDynamicRecord(value)) throw new Error("Invalid mention.");
@@ -127,6 +136,10 @@ const MESSAGE_FIELDS: Record<string, Decoder> = {
   deletedAt: string(80),
   gatePending: uniqueIdentifiers(100),
   gateDecisions: list(gateDecision, 100),
+  externalAuthor: fields(
+    { kind: oneOf("external"), platform: oneOf("discord"), id: identifier, name: string(120) },
+    { avatarUrl: string(500) },
+  ),
 };
 
 function present(source: unknown, decoders: Record<string, Decoder>): JsonObject {
@@ -200,6 +213,8 @@ const COMMAND_TYPES = [
   "edit",
   "delete",
   "open-dm",
+  "link-discord",
+  "unlink-discord",
 ];
 
 const COMMAND_FIELDS: Record<string, { required: Record<string, Decoder>; optional?: Record<string, Decoder> }> = {
@@ -241,6 +256,8 @@ const COMMAND_FIELDS: Record<string, { required: Record<string, Decoder>; option
   edit: { required: { messageId: identifier, text: nonEmpty(100_000) } },
   delete: { required: { messageId: identifier } },
   "open-dm": { required: { memberIds: uniqueIdentifiers(8), agentIds: uniqueIdentifiers(8) } },
+  "link-discord": { required: { connectionId: identifier, discordChannelId: identifier } },
+  "unlink-discord": { required: {} },
 };
 
 const command: Decoder = (value) => {

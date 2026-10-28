@@ -87,6 +87,14 @@ export const messages = {
   "error.backend.channelMemberRequired": "Sélectionnez un membre disponible de ce canal.",
   "error.backend.channelExists": "Un canal avec cet identifiant existe déjà.",
   "error.backend.channelThreadNotFound": "Ce fil n'est pas disponible.",
+  "error.backend.channelDiscordAdmin":
+    "Seuls les propriétaires et les administrateurs peuvent relier un canal à Discord.",
+  "error.backend.channelDiscordKind": "Seul un canal peut être relié à Discord, pas un message direct ni un groupe.",
+  "error.backend.channelDiscordUnavailable":
+    "Le serveur Discord n'est pas connecté ou ne fonctionne pas. Connecte-le dans Paramètres du serveur > Connecteurs > Discord et réessaie.",
+  "error.backend.channelDiscordTaken": "Ce canal Discord est déjà relié à un autre canal.",
+  "error.backend.channelDiscordChannelMissing":
+    "OpenBot ne peut pas publier dans ce canal Discord. Choisis un canal textuel qu'OpenBot voit.",
   "error.backend.channelMessageNotFound": "Ce message n'est pas disponible.",
   "error.backend.channelPersonUnavailable": "Une personne choisie n'est pas un membre actif de ce serveur.",
   "error.backend.channelDirectParticipants": "Un message direct a 2 participants, et un groupe de 3 à 9.",

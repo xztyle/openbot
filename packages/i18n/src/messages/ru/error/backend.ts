@@ -82,6 +82,13 @@ export const messages = {
   "error.backend.channelMemberRequired": "Выберите доступного участника этого канала.",
   "error.backend.channelExists": "Канал с этим идентификатором уже существует.",
   "error.backend.channelThreadNotFound": "Эта ветка недоступна.",
+  "error.backend.channelDiscordAdmin": "Связать канал с Discord могут только владельцы и администраторы.",
+  "error.backend.channelDiscordKind": "С Discord можно связать только канал, а не личное сообщение или группу.",
+  "error.backend.channelDiscordUnavailable":
+    "Сервер Discord не подключён или не работает. Подключите его в разделе «Настройки сервера > Коннекторы > Discord» и повторите попытку.",
+  "error.backend.channelDiscordTaken": "Этот канал Discord уже связан с другим каналом.",
+  "error.backend.channelDiscordChannelMissing":
+    "OpenBot не может писать в этот канал Discord. Выберите текстовый канал, который видит OpenBot.",
   "error.backend.channelMessageNotFound": "Это сообщение недоступно.",
   "error.backend.channelPersonUnavailable": "Выбранный человек не является активным участником этого сервера.",
   "error.backend.channelDirectParticipants": "В личных сообщениях 2 участника, в группе от 3 до 9.",

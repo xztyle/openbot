@@ -118,6 +118,7 @@ import { AgentLifecycleFailed, AgentService } from "../backend/agent-service";
 import { AgentStore } from "../backend/agent-store";
 import { BrowserHost } from "../backend/browser-host";
 import { BrowserProfileStore } from "../backend/browser-profiles/browser-profile-store";
+import { ChannelBridge } from "../backend/channel-bridge";
 import { runCauseEffect } from "../backend/effect-boundary";
 import { MailboxStore } from "../backend/mailbox-store";
 import { McpOAuth } from "../backend/mcp-oauth-provider";
@@ -368,6 +369,8 @@ const AGENT_CREATION_LIMIT_PREFERENCE_FILE = "openbot-agent-creation-limit-v1.js
 const SERVER_TIMEZONE_PREFERENCE_FILE = "openbot-server-timezone-v1.json";
 const PROMPT_CACHE_TTL_PREFERENCE_FILE = "openbot-prompt-cache-ttl-v1.json";
 const WORKSPACE_SETTINGS_FILE = "openbot-workspace-v1.json";
+// Webhook secrets and bridged message ids of the Discord channel bridges. Host only, never sent.
+const CHANNEL_BRIDGE_FILE = "openbot-channel-bridge-v1.json";
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
 const EXTERNAL_LINK_PREFERENCE_FILE = "openbot-external-link-preference-v1.json";
 const REMOTE_NETWORK_ROUTE_PREFERENCE_FILE = "openbot-remote-network-route-v1.json";
@@ -448,6 +451,8 @@ const TEARDOWN_ORDER = {
   remoteDesktop: 80,
   // Before messaging, so no routine answer starts a post while the connections stop.
   routineResults: 84,
+  // Before messaging, so no bridged post starts while the connections stop.
+  channelBridge: 84.5,
   // Before the host and the service: no new external message arrives while they stop.
   messaging: 85,
   hostEvents: 85.5,
@@ -2096,6 +2101,24 @@ export async function createApplicationServices({
   await runCauseEffect(teamStore.initialize());
   performance.mark("openbot:services.team");
   ingressHostId = () => teamStore.getIdentity()?.serverId ?? null;
+  // After the channels and messaging: a workspace channel bridged with a Discord channel.
+  const channelBridge = new ChannelBridge({
+    channels: service.channels,
+    messaging,
+    onEvent: (listener) => {
+      service.on("event", listener);
+      return () => service.off("event", listener);
+    },
+    path: join(app.getPath("userData"), CHANNEL_BRIDGE_FILE),
+    avatarUrl: (author) => {
+      const url = author.kind === "member" ? teamStore.getMember(author.id)?.avatarUrl : null;
+      return url?.startsWith("https://") ? url : null;
+    },
+  });
+  channelBridge.start();
+  teardown.push(TEARDOWN_ORDER.channelBridge, "the Discord channel bridges", () =>
+    Effect.runPromise(channelBridge.stop()),
+  );
   signalIngress.reconnect();
   const webhookRelay = new WebhookRelay({
     account: centralAuth,

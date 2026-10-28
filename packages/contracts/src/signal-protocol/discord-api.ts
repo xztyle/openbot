@@ -88,6 +88,8 @@ export interface DiscordInboundMessage {
   } | null;
   attachments: DiscordInboundAttachment[];
   sentAt: string;
+  /** The author's Discord picture on Discord's CDN. Absent without one, and from an older Signal. */
+  authorAvatarUrl?: string;
   /**
    * False for a message that does not mention OpenBot, which Signal passes on only in a channel that
    * the host named in `discord-listen`. Absent for a mention, and from an older Signal.
@@ -161,7 +163,21 @@ export type DiscordApiRequest =
    * One file, sent as `multipart/form-data`: this JSON in the `request` field and the bytes in the
    * `file` field.
    */
-  | { op: "upload"; guildId: string; channelId: string; replyTo: string | null; filename: string };
+  | { op: "upload"; guildId: string; channelId: string; replyTo: string | null; filename: string }
+  /**
+   * Makes a webhook in a text channel, for a channel bridge that posts with each author's name. The
+   * bot needs Manage Webhooks there (`forbidden` otherwise). An older Signal answers `invalid_request`.
+   */
+  | { op: "createWebhook"; guildId: string; channelId: string; name: string };
+
+/** The answer of `createWebhook`. The token is a secret: the host keeps it, and never logs it. */
+export interface DiscordWebhook {
+  webhookId: string;
+  token: string;
+}
+
+/** Discord's limit for a webhook name. */
+export const DISCORD_WEBHOOK_NAME_LIMIT = 80;
 
 export interface DiscordHistoryMessage {
   id: string;
@@ -296,8 +312,23 @@ function inboundMessage(value: unknown): DiscordInboundMessage {
     replyTo,
     attachments: item.attachments.map(attachment),
     sentAt: text(item.sentAt),
+    ...(item.authorAvatarUrl === undefined ? {} : { authorAvatarUrl: cdnUrl(item.authorAvatarUrl) }),
     ...(mentioned(item.mentioned) ? {} : { mentioned: false as const }),
   };
+}
+
+function cdnUrl(value: unknown): string {
+  const url = text(value);
+  if (url.length > 500 || new URL(url).protocol !== "https:") invalid();
+  return url;
+}
+
+/** The answer of `createWebhook`. */
+export function decodeDiscordWebhook(value: unknown): DiscordWebhook {
+  const item = record(value);
+  const token = text(item.token);
+  if (!/^[A-Za-z0-9_.-]{1,200}$/u.test(token)) invalid();
+  return { webhookId: snowflake(item.webhookId), token };
 }
 
 /** Absent is a mention: an older Signal passes on only mentions. */

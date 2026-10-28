@@ -82,6 +82,13 @@ export const messages = {
   "error.backend.channelMemberRequired": "Bu kanalın kullanılabilir bir üyesini seçin.",
   "error.backend.channelExists": "Bu kimliğe sahip bir kanal zaten var.",
   "error.backend.channelThreadNotFound": "Bu ileti dizisi kullanılamıyor.",
+  "error.backend.channelDiscordAdmin": "Bir kanalı Discord'a yalnızca sahipler ve yöneticiler bağlayabilir.",
+  "error.backend.channelDiscordKind": "Discord'a yalnızca bir kanal bağlanabilir; doğrudan mesaj veya grup bağlanamaz.",
+  "error.backend.channelDiscordUnavailable":
+    "Discord sunucusu bağlı değil veya çalışmıyor. Sunucu ayarları > Bağlayıcılar > Discord bölümünden bağlayın ve yeniden deneyin.",
+  "error.backend.channelDiscordTaken": "Bu Discord kanalı zaten başka bir kanala bağlı.",
+  "error.backend.channelDiscordChannelMissing":
+    "OpenBot bu Discord kanalına yazamıyor. OpenBot'un gördüğü bir metin kanalı seçin.",
   "error.backend.channelMessageNotFound": "Bu mesaj kullanılamıyor.",
   "error.backend.channelPersonUnavailable": "Seçtiğiniz bir kişi bu sunucunun etkin bir üyesi değil.",
   "error.backend.channelDirectParticipants": "Doğrudan mesajda 2 katılımcı, grupta 3 ile 9 arası katılımcı olur.",

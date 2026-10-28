@@ -38,6 +38,9 @@ export function discordInboundMessage(message: DiscordInboundMessage): InboundMe
     authorRoleIds: message.authorRoleIds,
     mentioned: message.mentioned !== false,
     repliesToBot: reply?.authorIsBot === true,
+    authorName: message.authorName,
+    ...(message.authorAvatarUrl ? { authorAvatarUrl: message.authorAvatarUrl } : {}),
+    replyToMessageId: reply?.messageId ?? null,
     // A reply to a person's message starts a new conversation, so it has no earlier messages: the
     // replied-to message is its context.
     replyTo: quote

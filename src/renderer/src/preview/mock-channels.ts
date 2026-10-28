@@ -103,6 +103,20 @@ export function createMockChannels(
             return { ...rest, ...(mode ? { answerMode: mode } : {}), ...(note ? { focus: note } : {}) };
           }),
         };
+      case "link-discord":
+        return {
+          ...channel,
+          discordLink: {
+            connectionId: input.connectionId,
+            channelId: input.discordChannelId,
+            channelName: "general",
+            webhook: true,
+          },
+        };
+      case "unlink-discord": {
+        const { discordLink: _removed, ...rest } = channel;
+        return rest;
+      }
       case "set-meta":
         return {
           ...channel,

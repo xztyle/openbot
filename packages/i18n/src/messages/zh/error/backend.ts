@@ -77,6 +77,12 @@ export const messages = {
   "error.backend.channelMemberRequired": "请选择该频道中一位可用的成员。",
   "error.backend.channelExists": "已存在使用此 ID 的频道。",
   "error.backend.channelThreadNotFound": "此话题不可用。",
+  "error.backend.channelDiscordAdmin": "只有所有者和管理员可以将频道与 Discord 桥接。",
+  "error.backend.channelDiscordKind": "只有频道可以与 Discord 桥接，私信和群组不行。",
+  "error.backend.channelDiscordUnavailable":
+    "Discord 服务器未连接或未运行。请在“服务器设置 > 连接器 > Discord”中连接后重试。",
+  "error.backend.channelDiscordTaken": "此 Discord 频道已与另一个频道桥接。",
+  "error.backend.channelDiscordChannelMissing": "OpenBot 无法在此 Discord 频道发帖。请选择 OpenBot 能看到的文本频道。",
   "error.backend.channelMessageNotFound": "此消息不可用。",
   "error.backend.channelPersonUnavailable": "你选择的某人不是此服务器的活跃成员。",
   "error.backend.channelDirectParticipants": "私信有 2 名参与者，群组有 3 到 9 名。",

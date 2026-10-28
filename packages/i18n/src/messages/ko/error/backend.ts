@@ -81,6 +81,13 @@ export const messages = {
   "error.backend.channelMemberRequired": "이 채널에서 사용 가능한 멤버를 선택하세요.",
   "error.backend.channelExists": "이 ID의 채널이 이미 있습니다.",
   "error.backend.channelThreadNotFound": "이 스레드를 사용할 수 없습니다.",
+  "error.backend.channelDiscordAdmin": "소유자와 관리자만 채널을 Discord와 연결할 수 있습니다.",
+  "error.backend.channelDiscordKind": "채널만 Discord와 연결할 수 있습니다. DM이나 그룹은 연결할 수 없습니다.",
+  "error.backend.channelDiscordUnavailable":
+    "Discord 서버가 연결되어 있지 않거나 실행 중이 아닙니다. 서버 설정 > 커넥터 > Discord에서 연결한 뒤 다시 시도하세요.",
+  "error.backend.channelDiscordTaken": "이 Discord 채널은 이미 다른 채널과 연결되어 있습니다.",
+  "error.backend.channelDiscordChannelMissing":
+    "OpenBot은 이 Discord 채널에 게시할 수 없습니다. OpenBot이 볼 수 있는 텍스트 채널을 선택하세요.",
   "error.backend.channelMessageNotFound": "이 메시지를 사용할 수 없습니다.",
   "error.backend.channelPersonUnavailable": "선택한 사람이 이 서버의 활성 멤버가 아닙니다.",
   "error.backend.channelDirectParticipants": "다이렉트 메시지는 참가자가 2명이고, 그룹은 3~9명입니다.",

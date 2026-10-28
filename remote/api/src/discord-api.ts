@@ -8,6 +8,7 @@ import {
   DISCORD_LIST_MESSAGES_LIMIT,
   DISCORD_MESSAGE_TEXT_LIMIT,
   DISCORD_ROLES_LIMIT,
+  DISCORD_WEBHOOK_NAME_LIMIT,
   type DiscordApiErrorCode,
   type DiscordApiRequest,
   type DiscordButton,
@@ -84,6 +85,12 @@ const discordApiRequestSchema = z.discriminatedUnion("op", [
     // No path separator and no control character.
     filename: z.string().regex(/^[^/\\\p{Cc}]{1,200}$/u),
   }),
+  z.strictObject({
+    op: z.literal("createWebhook"),
+    guildId: snowflakeSchema,
+    channelId: snowflakeSchema,
+    name: z.string().min(1).max(DISCORD_WEBHOOK_NAME_LIMIT),
+  }),
 ]) satisfies z.ZodType<DiscordApiRequest>;
 
 /** The request of a call, or null when it does not match the contract. */
@@ -141,6 +148,7 @@ type DiscordApiResult =
   | { messages: DiscordHistoryMessage[] }
   | { channels: DiscordChannelSummary[] }
   | { roles: DiscordRoleSummary[] }
+  | { webhookId: string; token: string }
   | Record<string, never>;
 
 export interface DiscordApi {
@@ -148,6 +156,7 @@ export interface DiscordApi {
 }
 
 const createdMessageSchema = z.object({ id: snowflakeSchema });
+const createdWebhookSchema = z.object({ id: snowflakeSchema, token: z.string().regex(/^[A-Za-z0-9_.-]{1,200}$/u) });
 const channelSchema = z.object({
   id: snowflakeSchema,
   guild_id: snowflakeSchema.optional(),
@@ -445,6 +454,17 @@ export function makeDiscordApi(transport: DiscordTransport, state: DiscordState)
           files: [{ ...file, name: request.filename }],
         }).pipe(Effect.flatMap((value) => decode(createdMessageSchema, value)));
         return { messageId: created.id };
+      }
+      // A channel bridge of the host posts through it with each author's name. Only a text or
+      // announcement channel of the guild; Discord refuses it without Manage Webhooks.
+      case "createWebhook": {
+        yield* guildChannel(request.guildId, request.channelId);
+        const created = yield* send({
+          method: "POST",
+          route: `/channels/${request.channelId}/webhooks`,
+          body: { name: request.name },
+        }).pipe(Effect.flatMap((value) => decode(createdWebhookSchema, value)));
+        return { webhookId: created.id, token: created.token };
       }
     }
   });

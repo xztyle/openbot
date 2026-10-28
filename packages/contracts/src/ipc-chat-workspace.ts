@@ -98,6 +98,40 @@ export interface ChannelMention {
   id?: string;
 }
 
+/**
+ * The Discord channel that a workspace channel is bridged with. `connectionId` is the Discord
+ * connection of the host: its `workspaceId`, the Discord server (guild) id. `webhook` is true when
+ * the host posts through a webhook of that channel, so each post shows its author's name and
+ * picture; false or absent, the OpenBot bot posts with the author's name in front. The webhook
+ * secret stays on the host.
+ */
+export interface ChannelDiscordLink {
+  connectionId: string;
+  channelId: string;
+  channelName: string;
+  webhook?: boolean;
+}
+
+export const CHANNEL_EXTERNAL_PLATFORMS = ["discord"] as const;
+export type ChannelExternalPlatform = (typeof CHANNEL_EXTERNAL_PLATFORMS)[number];
+
+/**
+ * The person on another platform who wrote a bridged message. The message `author` is then a
+ * `member` with an id that names no team member (`discord-<user id>`), so a client that does not
+ * know this field shows the name.
+ */
+export interface ChannelExternalAuthor {
+  kind: "external";
+  platform: ChannelExternalPlatform;
+  /** The user id on the platform. */
+  id: string;
+  name: string;
+  /** An `https` picture address of the platform. */
+  avatarUrl?: string;
+}
+
+export const CHANNEL_EXTERNAL_AVATAR_LIMIT = 500;
+
 /** The workspace fields of a channel. Absent, the channel is a public `channel` with no listed people. */
 export interface ChannelWorkspaceFields {
   kind?: ChannelKind;
@@ -107,6 +141,8 @@ export interface ChannelWorkspaceFields {
   /** Team member ids. In a public channel: the people who joined it. In a private channel, a DM or a group: the people who can see it. */
   humanMemberIds?: string[];
   createdBy?: ChannelActorRef;
+  /** The bridged Discord channel. Only owners and admins change it (`link-discord`, `unlink-discord`). */
+  discordLink?: ChannelDiscordLink;
 }
 
 /** The workspace fields of a channel message. */
@@ -124,6 +160,8 @@ export interface ChannelMessageWorkspaceFields {
   gatePending?: string[];
   /** On a message of a person: the decisions of the gate. Only owners and admins receive them. */
   gateDecisions?: ChannelGateDecision[];
+  /** Set on a message that a bridge brought from another platform, such as Discord. */
+  externalAuthor?: ChannelExternalAuthor;
 }
 
 /** The workspace fields of one member agent. */
@@ -161,6 +199,36 @@ export function isChannelActorRef(value: unknown): value is ChannelActorRef {
   return isDynamicRecord(value) && (value.kind === "member" || value.kind === "agent") && isIdentifier(value.id);
 }
 
+export function isChannelDiscordLink(value: unknown): value is ChannelDiscordLink {
+  return (
+    isDynamicRecord(value) &&
+    isIdentifier(value.connectionId) &&
+    isIdentifier(value.channelId) &&
+    isBoundedString(value.channelName, 100) &&
+    (value.webhook === undefined || isBoolean(value.webhook))
+  );
+}
+
+function isExternalAvatar(value: unknown): value is string {
+  if (!isBoundedString(value, CHANNEL_EXTERNAL_AVATAR_LIMIT)) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function isChannelExternalAuthor(value: unknown): value is ChannelExternalAuthor {
+  return (
+    isDynamicRecord(value) &&
+    value.kind === "external" &&
+    isOneOf(CHANNEL_EXTERNAL_PLATFORMS, value.platform) &&
+    isIdentifier(value.id) &&
+    isBoundedString(value.name, 120) &&
+    (value.avatarUrl === undefined || isExternalAvatar(value.avatarUrl))
+  );
+}
+
 export function isChannelAnswerMode(value: unknown): value is ChannelAnswerMode {
   return isOneOf(CHANNEL_ANSWER_MODES, value);
 }
@@ -185,7 +253,8 @@ export function hasValidChannelWorkspaceFields(value: DynamicRecord): boolean {
     (value.topic === undefined || isBoundedString(value.topic, CHANNEL_TOPIC_LIMIT)) &&
     (value.description === undefined || isBoundedString(value.description, CHANNEL_DESCRIPTION_LIMIT)) &&
     (value.humanMemberIds === undefined || identifiers(value.humanMemberIds, CHANNEL_HUMAN_MEMBER_LIMIT)) &&
-    (value.createdBy === undefined || isChannelActorRef(value.createdBy))
+    (value.createdBy === undefined || isChannelActorRef(value.createdBy)) &&
+    (value.discordLink === undefined || isChannelDiscordLink(value.discordLink))
   );
 }
 
@@ -251,7 +320,8 @@ export function hasValidChannelMessageWorkspaceFields(value: DynamicRecord): boo
     (value.gateDecisions === undefined ||
       (Array.isArray(value.gateDecisions) &&
         value.gateDecisions.length <= CHANNEL_GATE_DECISION_LIMIT &&
-        value.gateDecisions.every(isChannelGateDecision)))
+        value.gateDecisions.every(isChannelGateDecision))) &&
+    (value.externalAuthor === undefined || isChannelExternalAuthor(value.externalAuthor))
   );
 }
 

@@ -312,11 +312,30 @@ result and its notes go into that thread.
 
 In a channel where a member has an answer mode, `ChannelResponders.select` picks who answers a
 person's message: each mentioned or replied-to agent, the agents of the thread, `always-no-gate`
-members, and the `always` members (`gated`; phase 2 puts the answer gate there). Each one gets its
-own task and its own execution thread. With no selection, a member in `lead` mode (or with no mode)
-routes as before. A channel with no answer modes works as before. An agent message never starts an
-`always` member: a finished answer starts only the agents it mentions, at most three agent answers
-from one person's message (`CHANNEL_MENTION_CHAIN_LIMIT`).
+members, and the `always` members (`gated`). Each one gets its own task and its own execution
+thread. With no selection, a member in `lead` mode (or with no mode) routes as before. A channel with
+no answer modes works as before. An agent message never starts an `always` member: a finished answer
+starts only the agents it mentions, at most three agent answers from one person's message
+(`CHANNEL_MENTION_CHAIN_LIMIT`).
+
+The answer gate (`channel-gate.ts`) decides for the `gated` members. The `send` command stores the
+message with `gatePending` (the gated agent ids) and the tasks of the addressed members, and
+returns; the person sees the message at once. A fiber in the service scope then asks the gate model
+of the workspace settings (default `claude/claude-haiku-5-5`, `timeoutMs` 6000) one toolless
+question for each gated member, all at the same time. The prompt carries the new message, the thread
+root, the last 20 readable messages of the channel or thread (bounded), the agent's name, title,
+description and channel `focus`, what it does now (its open channel tasks, its own chat's running
+turn, its agent tasks) and the other members with their focus. The answer must be exactly
+`{"answer", "reason", "priority"}`. At most `CHANNEL_GATE_ANSWER_LIMIT` (2) gated members answer, the
+highest priority first, on a tie the earlier member. A question that fails, answers badly or is still
+running at the deadline counts as "do not answer" (the `mention` behavior); the late generation keeps
+running so its warm client stays warm. The outcome commits through the command queue: the tasks of
+the members that answer, and on the message `gateDecisions` (`{ agentId, answer, reason, priority,
+model, ms, fallback?, limited? }`) in place of `gatePending`. `recover` settles a message that a stop
+left pending as `interrupted`. The gate questions run on `GateGenerations` (`agent/gate-generations.ts`,
+two warm clients per provider), count against the disposable generation limit, and their usage is
+recorded under the agent they were about. `ChannelService.read` and the Team API `channel-message`
+event leave `gateDecisions` out for a person who is not an owner or an admin.
 
 Each commit records the messages it wrote. `ChannelService.publish` sends a `channel-message` (or
 `channel-message-removed`) event for each one before `channels-changed`. The Team API sends them

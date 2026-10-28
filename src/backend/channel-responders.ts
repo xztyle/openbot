@@ -1,4 +1,6 @@
-import type { Channel, ChannelAnswerMode, ChannelMessage } from "@openbot/contracts/ipc";
+import type { Channel, ChannelAnswerMode, ChannelGateDecision, ChannelMessage } from "@openbot/contracts/ipc";
+import { Effect, type Scope } from "effect";
+import { ChannelGate, type ChannelGateModel, type ChannelGateRequest, gateFallback, gateWinners } from "./channel-gate";
 
 /** What `ChannelResponders.select` knows about a person's message besides the channel. */
 export interface ChannelResponderInput {
@@ -18,8 +20,8 @@ export interface ChannelResponderInput {
  * Which member agents answer one message of a person.
  *
  * - `agentIds` answer now: mentioned, replied to, taking part in the thread, or `always-no-gate`.
- * - `gated` are the `always` members that are not addressed. Phase 1 delivers to them as well; the
- *   gate of phase 2 decides for each of them.
+ * - `gated` are the `always` members that are not addressed. `ChannelResponders.gate` decides for
+ *   each of them after the message is stored, so the person sees it at once.
  * - `lead` is true when the channel routes the message with its lead as before the workspace: a
  *   member with no answer mode, or with `lead`, and no other member selected.
  */
@@ -38,11 +40,39 @@ export function memberAnswerMode(channel: Channel, agentId: string): ChannelAnsw
   return channel.members.find((member) => member.agentId === agentId)?.answerMode ?? "lead";
 }
 
+/** The gated members that answer, and the decision for each gated member, for the log. */
+export interface ChannelGateOutcome {
+  agentIds: string[];
+  decisions: ChannelGateDecision[];
+}
+
 /**
- * Selects the agents that answer a message of a person. It never selects for a message of an agent:
- * agents start each other only with an explicit mention (`ChannelService` limits that chain).
+ * Selects the agents that answer a message of a person, in two steps: `select` at once, for the
+ * addressed members and the `always-no-gate` ones, and `gate`, which asks the cheap model about each
+ * `always` member and keeps at most `CHANNEL_GATE_ANSWER_LIMIT` of them. It never selects for a
+ * message of an agent: agents start each other only with an explicit mention (`ChannelService` limits
+ * that chain).
  */
 export class ChannelResponders {
+  readonly #gate = new ChannelGate();
+
+  /**
+   * The gated members that answer. With no gate model, or for a member whose question fails or takes
+   * longer than the budget, the member answers as a `mention` member would: not at all, because
+   * `select` already took every addressed member.
+   */
+  gate(
+    request: ChannelGateRequest,
+    model: ChannelGateModel | null,
+    scope: Scope.Scope,
+  ): Effect.Effect<ChannelGateOutcome> {
+    if (!request.agents.length) return Effect.succeed({ agentIds: [], decisions: [] });
+    const decisions = model
+      ? this.#gate.decide(request, model, scope)
+      : Effect.succeed(request.agents.map((agent) => gateFallback(agent.agentId, "error")));
+    return decisions.pipe(Effect.map(gateWinners));
+  }
+
   select(channel: Channel, input: ChannelResponderInput): ChannelResponderSelection {
     const eligible = new Set(input.eligible);
     if (input.recipientAgentId)

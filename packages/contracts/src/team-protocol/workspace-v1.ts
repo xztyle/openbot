@@ -10,7 +10,10 @@
 // - On each message of `POST /v1/channels/read`: `threadRootId`, `alsoInChannel`, `threadSummary`
 //   (`{ replyCount, lastReplyAt, participantIds }`, at most 20 ids), `reactions` (at most 50, each
 //   `{ emoji (64), actors }` with at most 200 actors), `mentions` (at most 100, each
-//   `{ kind: "member" | "agent" | "channel" | "here", id? }`), `editedAt` and `deletedAt`.
+//   `{ kind: "member" | "agent" | "channel" | "here", id? }`), `editedAt` and `deletedAt`;
+//   `gatePending` (at most 100 agent ids that the answer gate still considers) and, for an owner or
+//   an admin only, `gateDecisions` (at most 100, each `{ agentId, answer, reason (120), priority (0 to
+//   1), model (300), ms, fallback?: "timeout" | "error" | "invalid" | "interrupted", limited? }`).
 // - `POST /v1/workspace/channels/commands`: the workspace commands (`create`, `join`, `leave`,
 //   `invite`, `remove`, `set-member`, `set-meta`, `react`, `edit`, `delete`, `open-dm`) and a `send`
 //   that carries `threadRootId` and `alsoToChannel`. It answers the channel, as the released command
@@ -98,6 +101,22 @@ const mention: Decoder = (value) => {
   }
   return fields({ kind: oneOf("member", "agent"), id: identifier })(value);
 };
+const unit: Decoder = (value) => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1)
+    throw new Error("Invalid workspace priority.");
+  return value;
+};
+const gateDecision = fields(
+  {
+    agentId: identifier,
+    answer: boolean,
+    reason: string(120),
+    priority: unit,
+    model: string(300),
+    ms: count,
+  },
+  { fallback: oneOf("timeout", "error", "invalid", "interrupted"), limited: boolean },
+);
 const MESSAGE_FIELDS: Record<string, Decoder> = {
   threadRootId: identifier,
   alsoInChannel: boolean,
@@ -106,6 +125,8 @@ const MESSAGE_FIELDS: Record<string, Decoder> = {
   mentions: list(mention, 100),
   editedAt: string(80),
   deletedAt: string(80),
+  gatePending: uniqueIdentifiers(100),
+  gateDecisions: list(gateDecision, 100),
 };
 
 function present(source: unknown, decoders: Record<string, Decoder>): JsonObject {

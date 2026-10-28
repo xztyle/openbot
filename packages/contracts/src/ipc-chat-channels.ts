@@ -379,6 +379,13 @@ export function isChannelMessage(value: unknown): value is ChannelMessage {
   );
 }
 
+/** The message as a person who is not an owner or an admin receives it: without the gate decisions. */
+export function withoutChannelGateDecisions(message: ChannelMessage): ChannelMessage {
+  if (message.gateDecisions === undefined) return message;
+  const { gateDecisions: _hidden, ...rest } = message;
+  return rest;
+}
+
 export function decodeChannel(value: unknown): Channel {
   const channel = normalizeChannelDraft(value);
   if (!isChannel(channel)) throw new Error("Invalid channel response.");

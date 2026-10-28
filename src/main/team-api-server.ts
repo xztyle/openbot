@@ -25,6 +25,7 @@ import {
   type TeamMemberSummary,
   type TeamPresenceSnapshot,
   type TeamRealtimeEvent,
+  withoutChannelGateDecisions,
 } from "@openbot/contracts/ipc";
 import { isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
@@ -1253,7 +1254,7 @@ export class TeamApiServer {
     };
 
     for (const [client, connection] of this.#eventClients) {
-      const event = this.#eventFor(connection, broadcast);
+      let event = this.#eventFor(connection, broadcast);
       // Only accounts after the first: a client reads an empty reading as no provider reporting.
       if (event !== broadcast && event.type === "usage-changed" && event.usage.limits.length === 0) continue;
       if (event.type === "conversation") {
@@ -1284,6 +1285,9 @@ export class TeamApiServer {
         !this.#memberSeesChannel(member, event.channelId)
       )
         continue;
+      // The answer gate's decisions are a debug view of the owners and admins.
+      if (event.type === "channel-message" && event.message.gateDecisions && !canAdministerServer(member.role))
+        event = { ...event, message: withoutChannelGateDecisions(event.message) };
       // An event this client's protocol cannot describe is skipped for this client only. Thrown
       // out of the loop, it would stop the event for every client after this one.
       const encodeEvent = (event: AgentEvent, options = {}) => {

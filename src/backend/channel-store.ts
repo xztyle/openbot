@@ -414,6 +414,17 @@ export class ChannelStore {
    * thread (`threadPage`), unless it was also sent to the channel. A deleted message leaves, unless it
    * is the root of a thread that still has replies.
    */
+  /** The messages of people whose answer gate had not decided when the host stopped, in every channel. */
+  gatePendingMessages(): ChannelMessage[] {
+    return databaseRows(
+      this.database.connection
+        .prepare(
+          "SELECT message_json FROM projection_channel_messages WHERE json_extract(message_json, '$.gatePending') IS NOT NULL",
+        )
+        .all(),
+    ).map((row) => storedMessage(requiredStringColumn(row, "message_json")));
+  }
+
   page(channelId: string, before?: number): ChannelPage {
     const messages = this.#topLevelMessages(channelId, before ?? Number.MAX_SAFE_INTEGER, 101);
     const hasOlder = messages.length > 100;

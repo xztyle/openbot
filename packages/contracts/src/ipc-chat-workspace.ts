@@ -40,6 +40,39 @@ export const CHANNEL_MENTION_LIMIT = 100;
 export const CHANNEL_THREAD_PARTICIPANT_LIMIT = 20;
 /** How many agent replies one person's message can start through mentions between agents. */
 export const CHANNEL_MENTION_CHAIN_LIMIT = 3;
+/** How many `always` members the gate lets answer one message. A mentioned agent does not count. */
+export const CHANNEL_GATE_ANSWER_LIMIT = 2;
+export const CHANNEL_GATE_REASON_LIMIT = 120;
+export const CHANNEL_GATE_DECISION_LIMIT = 100;
+
+export const CHANNEL_GATE_FALLBACKS = ["timeout", "error", "invalid", "interrupted"] as const;
+/**
+ * Why the gate has no decision of the model for an agent: it took longer than the workspace budget,
+ * the generation failed, the model answered no valid decision, or the host stopped before it
+ * decided. The agent then answers only as a `mention` member: it does not answer.
+ */
+export type ChannelGateFallback = (typeof CHANNEL_GATE_FALLBACKS)[number];
+
+/**
+ * What the gate decided for one `always` member on one message of a person. Stored on that message
+ * and shown only to the owners and admins of the server ("why did or didn't this agent answer").
+ */
+export interface ChannelGateDecision {
+  agentId: string;
+  /** What the model decided. With `fallback`, false. */
+  answer: boolean;
+  /** The model's reason, at most `CHANNEL_GATE_REASON_LIMIT` characters. Empty with `fallback`. */
+  reason: string;
+  /** From 0 to 1. The gate keeps the highest ones when more agents want to answer than the limit. */
+  priority: number;
+  /** The gate model, as `provider/model`. */
+  model: string;
+  /** How long the decision took, in milliseconds. */
+  ms: number;
+  fallback?: ChannelGateFallback;
+  /** The model decided to answer, but `CHANNEL_GATE_ANSWER_LIMIT` agents with a higher priority answer. */
+  limited?: boolean;
+}
 
 /** A person (`member`, a team member id) or an agent that acts in a channel. */
 export interface ChannelActorRef {
@@ -87,6 +120,10 @@ export interface ChannelMessageWorkspaceFields {
   mentions?: ChannelMention[];
   editedAt?: string;
   deletedAt?: string;
+  /** On a message of a person: the `always` members that the gate still considers ("is thinking"). */
+  gatePending?: string[];
+  /** On a message of a person: the decisions of the gate. Only owners and admins receive them. */
+  gateDecisions?: ChannelGateDecision[];
 }
 
 /** The workspace fields of one member agent. */
@@ -178,6 +215,22 @@ export function isChannelMention(value: unknown): value is ChannelMention {
   return (value.kind === "member" || value.kind === "agent") && isIdentifier(value.id);
 }
 
+export function isChannelGateDecision(value: unknown): value is ChannelGateDecision {
+  return (
+    isDynamicRecord(value) &&
+    isIdentifier(value.agentId) &&
+    isBoolean(value.answer) &&
+    isBoundedString(value.reason, CHANNEL_GATE_REASON_LIMIT) &&
+    typeof value.priority === "number" &&
+    value.priority >= 0 &&
+    value.priority <= 1 &&
+    isBoundedString(value.model, 300) &&
+    integerInRange(value.ms, 0, Number.MAX_SAFE_INTEGER) &&
+    (value.fallback === undefined || isOneOf(CHANNEL_GATE_FALLBACKS, value.fallback)) &&
+    (value.limited === undefined || isBoolean(value.limited))
+  );
+}
+
 /** The optional message fields. Absent fields pass. */
 export function hasValidChannelMessageWorkspaceFields(value: DynamicRecord): boolean {
   return (
@@ -193,7 +246,12 @@ export function hasValidChannelMessageWorkspaceFields(value: DynamicRecord): boo
         value.mentions.length <= CHANNEL_MENTION_LIMIT &&
         value.mentions.every(isChannelMention))) &&
     (value.editedAt === undefined || timestamp(value.editedAt)) &&
-    (value.deletedAt === undefined || timestamp(value.deletedAt))
+    (value.deletedAt === undefined || timestamp(value.deletedAt)) &&
+    (value.gatePending === undefined || identifiers(value.gatePending, CHANNEL_GATE_DECISION_LIMIT)) &&
+    (value.gateDecisions === undefined ||
+      (Array.isArray(value.gateDecisions) &&
+        value.gateDecisions.length <= CHANNEL_GATE_DECISION_LIMIT &&
+        value.gateDecisions.every(isChannelGateDecision)))
   );
 }
 
@@ -227,7 +285,7 @@ export function channelMentions(text: string): ChannelMention[] {
 
 export const WORKSPACE_GATE_TIMEOUT_LIMITS = { minimum: 500, maximum: 60_000 } as const;
 
-/** The cheap model that decides if an `always` member answers a message (phase 2 uses it). */
+/** The cheap model that decides if an `always` member answers a message. */
 export interface WorkspaceGateSettings {
   provider: string;
   model: string;
@@ -242,7 +300,8 @@ export interface WorkspaceSettings {
 }
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
-  gate: { provider: "claude", model: "claude-haiku-5-5", timeoutMs: 3_000 },
+  // A warm generation answers in about two seconds; the first one after an idle time starts a process.
+  gate: { provider: "claude", model: "claude-haiku-5-5", timeoutMs: 6_000 },
   defaults: { agentAnswerMode: "mention" },
 };
 

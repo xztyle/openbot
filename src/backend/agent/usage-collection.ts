@@ -258,3 +258,23 @@ function sum(tokens: UsageTokens): number | null {
 function cost(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
+
+/**
+ * Collects the usage of one answer-gate question under the agent it was asked about, so the cost of
+ * an `always` member includes the questions that kept it quiet. Each question is its own session.
+ */
+export function gateUsageObserver(
+  usage: AgentUsage,
+  provider: ProviderSession["provider"],
+  model: AgentSummary["model"],
+  agentId: string,
+): (notification: { method: string; params?: unknown }) => void {
+  const session = { id: `gate:${randomUUID()}`, provider, createdAt: new Date().toISOString() };
+  return ({ method, params }) => {
+    try {
+      collectProviderUsage(usage, { id: agentId, model }, session, method, params);
+    } catch (error) {
+      logger.warn("Could not save the usage of a channel gate question.", { provider, error });
+    }
+  };
+}

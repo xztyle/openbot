@@ -13,6 +13,7 @@ import {
   type Channel,
   type ChannelAnswerMode,
   type ChannelCommand,
+  type ChannelGateDecision,
   type ChannelMember,
   type ChannelMemory,
   type ChannelMessage,
@@ -23,16 +24,20 @@ import {
   type ChannelWorkspaceFields,
   type ConversationSnapshot,
   type CreateChannelMemoryInput,
+  canAdministerServer,
   channelMentions,
   channelRoutingConversationEventItemType,
   type DeleteChannelMemoryInput,
+  isChannelThreadReply,
   type QueueHold,
   type UpdateChannelMemoryInput,
+  withoutChannelGateDecisions,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { isFixedSourceText, matchingSourceKeys, sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect, Exit, Fiber, Result, Schema, Scope } from "effect";
 import { type ChannelOperationError, channelFailure, channelResult, channelSync } from "./channel-effects";
+import { type ChannelGateAgent, type ChannelGateModel, type ChannelGateRequest, gateFallback } from "./channel-gate";
 import {
   ChannelHistory,
   type ChannelTextModel,
@@ -131,6 +136,13 @@ export interface ChannelHooks {
   defaultAnswerMode?(): ChannelAnswerMode;
   /** The messages that commits wrote, sent before `changed` with the same revision. */
   messagesChanged?(channelId: string, changes: readonly ChannelMessageChange[], revision: number): void;
+  /**
+   * The cheap model of the answer gate, read for each message. Omitted or null, an `always` member
+   * answers only when it is addressed, as a `mention` member does.
+   */
+  gate?(): ChannelGateModel | null;
+  /** What an agent does now outside this channel, a few short lines, for the answer gate. */
+  activity?(agentId: string): string[];
   error(error: unknown): void;
 }
 
@@ -168,7 +180,7 @@ const decodeRoutingDecision = Schema.decodeUnknownResult(RoutingDecision, { onEx
 export class ChannelService {
   readonly store: ChannelStore;
   readonly memories: ChannelMemoryStore;
-  /** Which member agents answer a person's message. Phase 2 puts the gate behind `gated`. */
+  /** Which member agents answer a person's message, the answer gate included. */
   readonly responders = new ChannelResponders();
   readonly #history: ChannelHistory;
   #scope = Scope.makeUnsafe();
@@ -177,6 +189,8 @@ export class ChannelService {
   readonly #commandFibers = new Set<Fiber.Fiber<Channel | void, ChannelOperationError>>();
   readonly #interrupts = new Set<Fiber.Fiber<void>>();
   readonly #events = new Set<Fiber.Fiber<void>>();
+  /** The messages whose answer gate runs in this process. */
+  readonly #gating = new Set<string>();
   #stopped = false;
   readonly #wakeAgain = new Set<string>();
   /**
@@ -284,9 +298,13 @@ export class ChannelService {
   read(input: ChannelReadInput, viewer?: ChannelViewer): ChannelPage {
     if (viewer && !canSeeChannel(this.store.get(input.channelId), viewer))
       throw new Error(sourceText("error.backend.channelNotFound"));
-    return input.threadRootId
+    const page = input.threadRootId
       ? this.store.threadPage(input.channelId, input.threadRootId, input.beforeSequence)
       : this.store.page(input.channelId, input.beforeSequence);
+    // The gate decisions are a debug view of the owners and admins of the server.
+    return !viewer || canAdministerServer(viewer.role)
+      ? page
+      : { ...page, messages: page.messages.map(withoutChannelGateDecisions) };
   }
 
   readonly deleteChannel = Effect.fn("ChannelService.deleteChannel")((channelId: string) =>
@@ -643,6 +661,8 @@ export class ChannelService {
           ...(mentions.length ? { mentions } : {}),
         };
         let added: ChannelTask[];
+        // The `always` members that the gate asks about once the message is stored.
+        let gated: string[] = [];
         if (!answerModes)
           added = continued
             ? []
@@ -655,10 +675,9 @@ export class ChannelService {
             threadRoot: root ?? null,
             recipientAgentId: continued ? null : command.recipientAgentId,
           });
-          // Phase 1 delivers to the gated members too; phase 2 asks the gate first.
-          const owners = [...selection.agentIds, ...selection.gated].filter(
-            (agentId) => agentId !== continued?.ownerAgentId,
-          );
+          const owners = selection.agentIds.filter((agentId) => agentId !== continued?.ownerAgentId);
+          gated = selection.gated.filter((agentId) => agentId !== continued?.ownerAgentId);
+          if (gated.length) message.gatePending = gated;
           added = owners.length
             ? owners.map((agentId) => this.newTask(current.id, id, text, agentId))
             : selection.lead && !continued
@@ -698,7 +717,7 @@ export class ChannelService {
             operationId,
           ),
         );
-        return { current, previous, affected, task: continued, message, result };
+        return { current, previous, affected, task: continued, message, result, gated };
       }).pipe(
         Effect.onExit((exit) =>
           committed
@@ -709,8 +728,10 @@ export class ChannelService {
             : Effect.void,
         ),
       );
-      const { current, previous, affected, task, message, result } = stored;
+      const { current, previous, affected, task, message, result, gated } = stored;
       this.publish(current.id);
+      // The person sees the message now; the gated members answer, or not, when the gate decides.
+      if (gated.length) yield* this.#startGate(current.id, message.id, gated);
       if (previous && task) {
         yield* this.interruptTasks(
           current.id,
@@ -1786,6 +1807,13 @@ export class ChannelService {
   ): Effect.fn.Return<void, ChannelOperationError> {
     if (this.#scope.state._tag === "Closed") this.#scope = Scope.makeUnsafe();
     this.#stopped = false;
+    // A gate that the last stop interrupted decides nothing: its members answer as `mention` members.
+    for (const message of yield* channelSync(() => this.store.gatePendingMessages()))
+      if (!this.#gating.has(message.id))
+        yield* this.#settleGate(message.channelId, message.id, {
+          agentIds: [],
+          decisions: (message.gatePending ?? []).map((agentId) => gateFallback(agentId, "interrupted")),
+        });
     for (const context of yield* channelSync(() => this.store.executionThreads()))
       this.capture(yield* channelSync(() => this.store.database.readConversation(context.id, context.threadId)));
     const archived = yield* channelSync(() => this.store.archivedIds());
@@ -2275,6 +2303,140 @@ export class ChannelService {
     this.publish(channel.id);
     return result;
   });
+
+  /**
+   * Asks the answer gate about the `always` members of one message of a person. It runs outside the
+   * command queue, so the send does not wait for the model; only the commit of its outcome queues
+   * behind the other commands of the channel. Shutdown interrupts it, and `recover` then settles the
+   * message as `interrupted`.
+   */
+  #startGate(channelId: string, messageId: string, agentIds: readonly string[]): Effect.Effect<void> {
+    const work = Effect.gen({ self: this }, function* () {
+      const outcome = yield* Effect.gen({ self: this }, function* () {
+        const request = yield* channelSync(() => this.#gateRequest(channelId, messageId, agentIds));
+        const model = yield* channelSync(() => this.hooks.gate?.() ?? null);
+        return request ? yield* this.responders.gate(request, model, this.#scope) : { agentIds: [], decisions: [] };
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.sync(() => {
+            this.hooks.error(failure.cause);
+            return { agentIds: [], decisions: agentIds.map((agentId) => gateFallback(agentId, "error")) };
+          }),
+        ),
+      );
+      yield* this.#serialize(channelId, this.#settleGate(channelId, messageId, outcome));
+    }).pipe(
+      Effect.catch((failure) => Effect.sync(() => this.hooks.error(failure.cause))),
+      Effect.ensuring(Effect.sync(() => this.#gating.delete(messageId))),
+    );
+    this.#gating.add(messageId);
+    return Effect.forkIn(work, this.#scope, { startImmediately: false }).pipe(Effect.asVoid);
+  }
+
+  /** What the gate reads about one message, or null when the message or the channel is gone. */
+  #gateRequest(channelId: string, messageId: string, agentIds: readonly string[]): ChannelGateRequest | null {
+    if (this.#deletedChannels.has(channelId)) return null;
+    const channel = this.store.get(channelId);
+    const message = this.store.message(channelId, messageId);
+    if (!message || message.deletedAt || channel.archived) return null;
+    const rootId = message.threadRootId;
+    const threadRoot = rootId ? this.store.message(channelId, rootId) : null;
+    const recent = (
+      rootId
+        ? this.store.threadPage(channelId, rootId, message.sequence, 30).messages.slice(1)
+        : this.store.messages(channelId, message.sequence, 80).filter((item) => !isChannelThreadReply(item))
+    ).filter(gateReadable);
+    const live = new Map(
+      this.hooks
+        .agents()
+        .filter((agent) => !this.hooks.hidden?.(agent.id))
+        .map((agent) => [agent.id, agent]),
+    );
+    const tasks = this.store.tasks(channelId);
+    const members = channel.members.flatMap((member) => {
+      const agent = live.get(member.agentId);
+      return agent
+        ? [
+            {
+              agentId: agent.id,
+              name: agent.name,
+              title: agent.title,
+              answerMode: member.answerMode ?? ("lead" as const),
+              ...(member.focus ? { focus: member.focus } : {}),
+            },
+          ]
+        : [];
+    });
+    const agents = channel.members.flatMap((member): ChannelGateAgent[] => {
+      const agent = agentIds.includes(member.agentId) ? live.get(member.agentId) : undefined;
+      if (!agent) return [];
+      const work = tasks
+        .filter((task) => task.ownerAgentId === agent.id && !terminal(task) && task.requestMessageId !== messageId)
+        .slice(-3)
+        .map((task) => `a task in this channel: ${task.instruction}`);
+      return [
+        {
+          agentId: agent.id,
+          name: agent.name,
+          title: agent.title,
+          description: agent.description,
+          activity: [...work, ...(this.hooks.activity?.(agent.id) ?? [])],
+          ...(member.focus ? { focus: member.focus } : {}),
+        },
+      ];
+    });
+    return {
+      channel: {
+        name: channel.name,
+        title: channel.title,
+        ...(channel.topic ? { topic: channel.topic } : {}),
+        ...(channel.description ? { description: channel.description } : {}),
+      },
+      message,
+      threadRoot,
+      recent,
+      agents,
+      members,
+    };
+  }
+
+  /**
+   * Stores the gate's decisions on the message, takes its pending mark away, and gives each member
+   * that answers a task. A member that left, was hidden or already has a task for the message gets
+   * none; a deleted message or an archived channel starts no work.
+   */
+  #settleGate(
+    channelId: string,
+    messageId: string,
+    outcome: { agentIds: readonly string[]; decisions: readonly ChannelGateDecision[] },
+  ): Effect.Effect<void, ChannelOperationError> {
+    return Effect.gen({ self: this }, function* () {
+      if (this.#deletedChannels.has(channelId) || !(yield* channelSync(() => this.store.exists(channelId)))) return;
+      const channel = yield* channelSync(() => this.store.get(channelId));
+      const message = yield* channelSync(() => this.store.message(channelId, messageId));
+      if (!message) return;
+      const eligible = new Set(this.eligibleMembers(channel));
+      const tasks = yield* channelSync(() => this.store.tasks(channelId));
+      const answering =
+        channel.archived || message.deletedAt
+          ? []
+          : outcome.agentIds.filter(
+              (agentId) =>
+                eligible.has(agentId) &&
+                !tasks.some((task) => task.requestMessageId === messageId && task.ownerAgentId === agentId),
+            );
+      const added = answering.map((agentId) => this.newTask(channelId, messageId, message.message.text, agentId));
+      const { gatePending: _settled, ...rest } = message;
+      const settled: ChannelMessage = {
+        ...rest,
+        ...(outcome.decisions.length ? { gateDecisions: [...outcome.decisions] } : {}),
+        taskId: rest.taskId ?? added[0]?.id ?? null,
+      };
+      yield* channelSync(() => this.store.update(channel, { quietMessages: [settled], tasks: added }));
+      this.publish(channelId);
+      if (added.length) yield* this.wake(channelId);
+    });
+  }
 
   /**
    * The agents that a finished answer mentions start on it, in a channel with answer modes. Only an
@@ -3143,6 +3305,16 @@ function routingFailureText(error: unknown): string | null {
   const keys = matchingSourceKeys(error.message);
   if (keys.some((key) => key.startsWith("error.agent.profile"))) return sourceText("error.backend.channelLeadFailed");
   return keys.some((key) => key.startsWith("error.backend.")) ? error.message : null;
+}
+
+/** A message the answer gate reads: a person's text or an agent's answer, not activity or thinking. */
+function gateReadable(message: ChannelMessage): boolean {
+  const itemType = message.message.itemType;
+  return (
+    !message.deletedAt &&
+    message.message.text.trim().length > 0 &&
+    (!itemType || itemType === "agentMessage" || itemType === "final_answer")
+  );
 }
 
 function terminal(task: ChannelTask): boolean {

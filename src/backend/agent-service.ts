@@ -103,6 +103,7 @@ import type {
   UpdateRoutineInput,
 } from "@openbot/contracts/ipc";
 import {
+  AGENT_REASONING_EFFORTS,
   type AgentDefaults,
   type AgentModelChoice,
   agentAutomationAllowed,
@@ -114,13 +115,16 @@ import {
   DEFAULT_BUSY_MESSAGE_MODE,
   DEFAULT_PROVIDER_ACCOUNT_ID,
   DEFAULT_WORKSPACE_SETTINGS,
+  isAgentProvider,
   isContextResetMarker,
+  isReasoningEffort,
   MODEL_SWITCH_ITEM_TYPES,
   type ModelSwitchReason,
   type QueueSteerFallback,
   sameAgentBrowserProfile,
   sameAgentModelChoice,
   WORKFLOWS_USAGE_ID,
+  type WorkspaceGateSettings,
   type WorkspaceSettings,
   workspaceAccessEnforced,
 } from "@openbot/contracts/ipc";
@@ -156,6 +160,7 @@ import type { SectionTeammates } from "./agent/developer-instructions";
 import { DrainScheduler } from "./agent/drain-scheduler";
 import { DuplicationGate, toAgentDuplicationFailed } from "./agent/duplication-gate";
 import type { FailureContext, FailureSignal } from "./agent/failure-signal";
+import { GateGenerations } from "./agent/gate-generations";
 import { type AgentHostedSites, HostedSiteCoordinator } from "./agent/hosted-site-coordinator";
 import { ImageGenRuntime } from "./agent/image-gen-runtime";
 import { InputEscalations } from "./agent/input-escalations";
@@ -204,7 +209,7 @@ import {
 import { ThreadLifecycle } from "./agent/thread-lifecycle";
 import { toToolOperationFailed } from "./agent/tool-operation";
 import { type AgentBrowserHost, TurnLifecycle } from "./agent/turn-lifecycle";
-import { workflowUsageObserver } from "./agent/usage-collection";
+import { gateUsageObserver, workflowUsageObserver } from "./agent/usage-collection";
 import { toUsageReadFailed, UsageLimitGate, type UsageLimitKey } from "./agent/usage-limit-gate";
 import { WarmGenerations } from "./agent/warm-generations";
 import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
@@ -419,6 +424,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
   readonly #warmGenerations = new WarmGenerations({
+    ownerFor: (provider) => this.#providers.currentClient(provider),
+    createClient: (provider) => this.#providers.createProfileClient(provider),
+    profileClients: this.#profileClients,
+  });
+  /** The warm clients of the channel answer gate, apart from the workflow one. */
+  readonly #gateGenerations = new GateGenerations({
     ownerFor: (provider) => this.#providers.currentClient(provider),
     createClient: (provider) => this.#providers.createProfileClient(provider),
     profileClients: this.#profileClients,
@@ -702,6 +713,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             this.#attention.clearApprovals(client);
             this.#compaction.clientEnded(client);
             yield* this.#warmGenerations.ownerStopped(client);
+            yield* this.#gateGenerations.ownerStopped(client);
             yield* this.#turn.interruptTurnsOf(client);
           }),
         onAgentClientLost: (agentId, client) =>
@@ -808,7 +820,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         // changes what that pull answers while no provider state moves.
         modelsChanged: () => this.#emit({ type: "status", status: this.getStatus() }),
         stopProfileClients: () =>
-          this.#profileClients.stopOpenCode().pipe(Effect.andThen(this.#warmGenerations.stopIdle("opencode"))),
+          this.#profileClients
+            .stopOpenCode()
+            .pipe(
+              Effect.andThen(this.#warmGenerations.stopIdle("opencode")),
+              Effect.andThen(this.#gateGenerations.stopIdle("opencode")),
+            ),
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         providerAvailable: (provider) => this.#providerAvailable(provider),
         preference: () => this.#preference(),
@@ -1118,6 +1135,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(options.channelRemotePerson ? { remotePerson: options.channelRemotePerson } : {}),
       ...(options.channelPerson ? { person: options.channelPerson } : {}),
       defaultAnswerMode: () => (options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS).defaults.agentAnswerMode,
+      gate: () => {
+        const settings = (options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS).gate;
+        return {
+          label: `${settings.provider}/${settings.model}`,
+          timeoutMs: settings.timeoutMs,
+          generate: (agentId, prompt) => this.#generateGateText(settings, agentId, prompt),
+        };
+      },
+      activity: (agentId) => this.#gateActivity(agentId),
       // Sent before `channels-changed`, so a client that appends the message has it when the list moves.
       messagesChanged: (channelId, changes, revision) => {
         for (const change of changes)
@@ -2323,6 +2349,52 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       (failure) => new AgentLifecycleFailed({ operation: "generate workflow text", cause: failure.cause }),
     ),
   ).bind(this);
+
+  /**
+   * One question of the channel answer gate: a toolless generation on the workspace gate model, at
+   * the lowest reasoning effort the model takes unless the settings name one. It fails at once when
+   * the provider or the model is not there, or when the disposable generations are at their limit;
+   * the gate then lets the member answer only when it is addressed.
+   */
+  #generateGateText(settings: WorkspaceGateSettings, agentId: string, prompt: string) {
+    return Effect.gen({ self: this }, function* () {
+      const failed = (message: string) => new ProfileGenerationFailed({ cause: new Error(message) });
+      if (this.#stopping) return yield* failed(sourceText("error.backend.shuttingDown"));
+      if (this.#profileClients.busy()) return yield* failed(sourceText("error.workflow.modelBusy"));
+      const provider = settings.provider;
+      if (!isAgentProvider(provider)) return yield* failed(sourceText("error.provider.noModel"));
+      yield* this.#providers.ensureProvider(provider);
+      const model = this.#endpoints
+        .available()
+        .find((candidate) => candidate.provider === provider && candidate.id === settings.model);
+      if (!model) return yield* failed(sourceText("error.provider.noModel"));
+      const efforts = model.supportedReasoningEfforts;
+      const effort =
+        isReasoningEffort(settings.effort) && efforts.includes(settings.effort)
+          ? settings.effort
+          : (AGENT_REASONING_EFFORTS.find((candidate) => efforts.includes(candidate)) ?? model.defaultReasoningEffort);
+      return yield* this.#gateGenerations.generate(
+        provider,
+        { ...model, defaultReasoningEffort: effort },
+        prompt,
+        gateUsageObserver(this.#store.database.usage, provider, model.id, agentId),
+      );
+    });
+  }
+
+  /** What an agent does now, for the channel answer gate: its own chat's running turn and its open tasks. */
+  #gateActivity(agentId: string): string[] {
+    const lines: string[] = [];
+    const working = this.#conversation.workingSnapshot(agentId);
+    if (working?.activeTurnId) {
+      const request = working.messages.findLast((message) => message.author === "user")?.text.trim();
+      lines.push(request ? `working in its own chat on: ${request.slice(0, 200)}` : "working in its own chat");
+    }
+    for (const task of this.#tasks.snapshot(agentId).tasks)
+      if (task.state !== "closed" && lines.length < 6)
+        lines.push(`${task.state === "running" ? "running" : "open"} task: ${task.title}`);
+    return lines;
+  }
 
   saveProfile(
     input: SaveAgentProfileInput,
@@ -3990,6 +4062,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       discard: true,
     });
     yield* this.#warmGenerations.dispose();
+    yield* this.#gateGenerations.dispose();
     yield* Fiber.join(channelStop);
     // After the clients: a provider that still runs would see its MCP servers fail.
     yield* this.#mcp.close();

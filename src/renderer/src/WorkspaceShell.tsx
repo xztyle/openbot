@@ -36,8 +36,15 @@ import { useUsage } from "./features/usage/usage-context";
 import { WindowPageView } from "./features/window/WindowPageView";
 import { WorkspacePageRail } from "./features/window/WorkspacePageRail";
 import { useWindowPage } from "./features/window/window-page-context";
+import { DesktopWorkspaceProvider, useDesktopWorkspaceMode } from "./features/workspace/desktop-workspace";
+import { WorkspaceSidebarPane } from "./features/workspace/WorkspaceSidebarPane";
+import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "./features/workspace/WorkspaceView";
+import { useWorkspace } from "./features/workspace/workspace-context";
+import { setWorkspaceClassic } from "./features/workspace/workspace-mode";
+import { globalSearchShortcutLabel } from "./global-search-shortcut";
 import { useLayout } from "./layout";
 import { usePlatform } from "./platform";
+import { currentDevicePlatform } from "./send-shortcut-preference";
 import { WorkspaceFrame } from "./WorkspaceFrame";
 import { WorkspaceOverlays } from "./WorkspaceOverlays";
 
@@ -62,7 +69,17 @@ import { WorkspaceOverlays } from "./WorkspaceOverlays";
  * group and inert it.
  */
 export function WorkspaceShell(props: { account: () => CentralAuthUser }) {
+  return (
+    <DesktopWorkspaceProvider>
+      <WorkspaceShellFrame account={props.account} />
+    </DesktopWorkspaceProvider>
+  );
+}
+
+function WorkspaceShellFrame(props: { account: () => CentralAuthUser }) {
   const platform = usePlatform();
+  const workspaceMode = useDesktopWorkspaceMode();
+  const workspace = useWorkspace();
   /** A window that main opened for one chat shows that chat alone, with no rail and no sidebar. */
   const chatWindow = platform.chatWindow !== null;
   const { sourceText, t } = useText();
@@ -93,10 +110,13 @@ export function WorkspaceShell(props: { account: () => CentralAuthUser }) {
    * The pane in the middle. The Tasks page wins, as it covered the panes when it was a page over them.
    * Then the Agent form, then a channel, then a person, then the Agent or its routines.
    */
+  /** The workspace replaces the agent sidebar and the channel view; a chat window keeps its one chat. */
+  const workspaceOn = () => !chatWindow && workspaceMode.on();
   const middlePane = createMemo(() => {
     if (chatWindow) return "agent";
     if (windowPage.page() === "tasks") return "tasks";
     if (agentSetupOpen()) return "agent-setup";
+    if (workspaceOn()) return workspace.route().kind === "agent" ? "agent" : "workspace";
     if (channelOpen()) return "channel";
     if (activeDirectMember()) return "direct";
     return layout.sidebarView() === "routines" ? "routines" : "agent";
@@ -204,7 +224,7 @@ export function WorkspaceShell(props: { account: () => CentralAuthUser }) {
         <WorkspacePageRail hidden={chatWindow || remoteDesktopWorkspaceVisible()} />
         <WorkspaceFrame
           class={chatWindow ? "app-frame-chat-window" : undefined}
-          compact={layout.leftPanelCompact()}
+          compact={!workspaceOn() && layout.leftPanelCompact()}
           initialLoading={!serversLoaded() || !scope.connection.hasContent}
           connection={
             <>
@@ -265,13 +285,30 @@ export function WorkspaceShell(props: { account: () => CentralAuthUser }) {
           left={
             <Show when={!chatWindow}>
               <WorkspaceServerRail />
-              <WorkspaceSidebar peopleEnabled={activePeopleEnabled()} />
+              <Show
+                when={workspaceOn()}
+                fallback={
+                  <WorkspaceSidebar
+                    peopleEnabled={activePeopleEnabled()}
+                    onWorkspace={workspaceMode.supported() ? () => setWorkspaceClassic(false) : undefined}
+                  />
+                }
+              >
+                <div class="sidebar ws-frame-sidebar">
+                  <WorkspaceSidebarPane
+                    searchShortcut={globalSearchShortcutLabel(platform.appInfo()?.platform ?? currentDevicePlatform())}
+                  />
+                </div>
+              </Show>
             </Show>
           }
           page={<WindowPageView />}
           after={
             <>
               <WorkspaceOverlays account={props.account} />
+              <Show when={workspaceOn()}>
+                <WorkspaceChrome />
+              </Show>
               <Show when={!chatWindow}>
                 <ServerUpdateDialogHost hosts={remoteHosts()} />
               </Show>
@@ -300,7 +337,19 @@ export function WorkspaceShell(props: { account: () => CentralAuthUser }) {
             <Show when={activeDirectMember()}>{(member) => <WorkspaceDirectConversation member={member()} />}</Show>
           </Show>
           <Show when={agentChatOpen()}>
-            <WorkspaceConversation account={props.account} />
+            <Show
+              when={workspaceOn() ? activeAgent() : null}
+              fallback={<WorkspaceConversation account={props.account} />}
+            >
+              {(agent) => (
+                <WorkspaceAgentFrame agentId={agent().id}>
+                  <WorkspaceConversation account={props.account} />
+                </WorkspaceAgentFrame>
+              )}
+            </Show>
+          </Show>
+          <Show when={middlePane() === "workspace"}>
+            <WorkspaceMain />
           </Show>
           <Show when={middlePane() === "routines"}>
             <WorkspaceRoutineFlows />

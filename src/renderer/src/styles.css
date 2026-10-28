@@ -42,6 +42,7 @@
 @import "./features/schedule/schedule.css";
 @import "@openbot/ui/features/tasks/tasks.css";
 @import "@openbot/ui/features/workspace/workspace.css";
+@import "./features/workspace/workspace.css";
 @import "@openbot/ui/styles/chart.css";
 @import "@openbot/ui/features/files/files.css";
 @import "@openbot/ui/features/import/agent-import.css";

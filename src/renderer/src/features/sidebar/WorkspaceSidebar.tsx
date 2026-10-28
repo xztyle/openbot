@@ -35,6 +35,7 @@ import { useSettings } from "../settings/settings-context";
 import { usePresence } from "../team/team-context";
 import { SidebarUpdateIsland } from "../updates/SidebarUpdateIsland";
 import { useWindowPage } from "../window/window-page-context";
+import { WorkspaceViewButton } from "../workspace/WorkspaceViewButton";
 import { createCommunityCardVisibility } from "./community-card";
 import { useSidebar } from "./sidebar-context";
 import { createStorageCard } from "./storage-card";
@@ -53,7 +54,7 @@ const MOBILE_APP_DISMISSED_STORAGE_KEY = "openbot:mobile-app-card-dismissed";
  * decide which pane renders. Deriving it a second time here would let the two
  * answers disagree for a frame.
  */
-export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
+export function WorkspaceSidebar(props: { peopleEnabled: boolean; onWorkspace?: (() => void) | undefined }) {
   const { t } = useText();
   const layout = useLayout();
   const windowPage = useWindowPage();
@@ -356,6 +357,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
             />
           </Show>
           <SidebarUpdateIsland />
+          <Show when={props.onWorkspace}>{(open) => <WorkspaceViewButton onOpen={open()} />}</Show>
         </>
       }
       onOpenMarketplace={() => setSkillsMarketplaceOpen(true)}

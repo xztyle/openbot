@@ -33,8 +33,12 @@ import {
   workspaceActivityLimit,
 } from "@openbot/contracts/ipc";
 
-/** The preview's own person: every message the preview sends is theirs. */
-const PREVIEW_MEMBER_ID = "preview";
+/**
+ * The preview's own person: every message the preview sends is theirs. The preview runs as the
+ * owner of its own computer, whose signed-out id (`SIGNED_OUT_CHANNEL_MEMBER_ID`) is theirs, so the workspace reads the messages as
+ * the reader's own.
+ */
+const PREVIEW_MEMBER_ID = "local";
 
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 
@@ -206,22 +210,28 @@ export function createMockChannels(
     readChannel: async ({
       channelId,
       threadRootId,
+      beforeSequence,
     }: {
       channelId: string;
       threadRootId?: string;
+      beforeSequence?: number;
     }): Promise<ChannelPage> => {
       const all = messages.get(channelId) ?? [];
       const root = threadRootId ? all.find((message) => message.id === threadRootId) : undefined;
       if (threadRootId && !root) throw new Error("This thread is unavailable.");
+      // Pages of 100, newest first, as the host reads them.
+      const transcript = all.filter(
+        (message) => topLevel(message) && (beforeSequence === undefined || message.sequence < beforeSequence),
+      );
+      const page = transcript.slice(-100);
+      const older = transcript.length > page.length ? (page[0]?.sequence ?? null) : null;
       return {
         channel: structuredClone(requireChannel(channelId)),
         messages: structuredClone(
-          root
-            ? [root, ...all.filter((message) => message.threadRootId === root.id && !message.deletedAt)]
-            : all.filter(topLevel),
+          root ? [root, ...all.filter((message) => message.threadRootId === root.id && !message.deletedAt)] : page,
         ),
         tasks: structuredClone(tasks.get(channelId) ?? []),
-        olderCursor: null,
+        olderCursor: root ? null : older,
         throughSequence: all.length,
         ...(root ? { threadRootId: root.id } : {}),
       };

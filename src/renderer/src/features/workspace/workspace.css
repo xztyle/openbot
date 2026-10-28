@@ -1,0 +1,601 @@
+/*
+ * The workspace in the app frame: the sidebar column, the message pane around the shared message
+ * rows, the composer frame, the right panel's extras, the dialogs of the renderer and the owner's
+ * agent DM. The shared parts are dressed in `packages/ui/src/features/workspace/styles`.
+ */
+
+/* The frame's sidebar column ------------------------------------------------------------------- */
+
+.ws-frame-sidebar {
+  --ws-row-height: var(--openbot-control-sm);
+  --ws-hover: var(--openbot-hover);
+  --ws-active: var(--openbot-accent-strong);
+  --ws-active-text: var(--openbot-text-primary);
+  --ws-line: color-mix(in srgb, var(--openbot-text-primary) 9%, transparent);
+
+  position: relative;
+  min-height: 0;
+  border-right: 1px solid var(--ws-line);
+}
+
+.ws-frame-sidebar > .ws-sidebar {
+  flex: 1 1 auto;
+}
+
+/* The header of the sidebar is the window's drag area on the desktop, as the old top bar was. */
+.app-frame-edge .ws-frame-sidebar .ws-sidebar-header {
+  -webkit-app-region: drag;
+}
+
+.app-frame-edge .ws-frame-sidebar .ws-sidebar-header :is(button, [role="button"]) {
+  -webkit-app-region: no-drag;
+}
+
+.ws-jump.ui-button {
+  width: 100%;
+  height: var(--openbot-control-sm);
+  justify-content: flex-start;
+  gap: var(--openbot-space-2);
+  border: 1px solid var(--ws-line);
+  padding: 0 var(--openbot-space-2);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.ws-jump.ui-button > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-jump-label {
+  flex: 1 1 auto;
+  text-align: start;
+}
+
+.ws-jump-key {
+  color: var(--openbot-text-dim);
+  font-family: var(--openbot-font-sans);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-back-to-workspace.ui-button {
+  margin: var(--openbot-space-2);
+}
+
+/* The middle of the frame ------------------------------------------------------------------------ */
+
+.ws-main-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.ws-channel-pane {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.ws-pane-loading {
+  margin: auto;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+}
+
+.ws-pane-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-4);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+}
+
+.ws-message-list {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.ws-message-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: var(--openbot-space-2);
+}
+
+.ws-virtual-list {
+  position: relative;
+  width: 100%;
+}
+
+.ws-virtual-row {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+}
+
+.ws-virtual-list[data-static] .ws-virtual-row {
+  position: relative;
+  inset: auto;
+}
+
+.ws-message-older {
+  margin: 0;
+  padding: var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  text-align: center;
+}
+
+.ws-jump-latest.ui-button {
+  position: absolute;
+  bottom: var(--openbot-space-3);
+  left: 50%;
+  z-index: 2;
+  gap: var(--openbot-space-1);
+  border-radius: var(--openbot-radius-pill);
+  box-shadow: var(--openbot-shadow-dialog);
+  transform: translateX(-50%);
+}
+
+.ws-message-content {
+  min-width: 0;
+  color: var(--openbot-text-primary);
+}
+
+/* The body of a message reuses the chat's renderer without its bubble. */
+.ws-message-content .message-markdown {
+  font-size: var(--openbot-text-lg);
+}
+
+.ws-message-content > :first-child {
+  margin-top: 0;
+}
+
+.ws-message-artifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+  margin-top: var(--openbot-space-2);
+}
+
+.message-member-mention {
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-channel-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-8) var(--openbot-space-4) var(--openbot-space-4);
+}
+
+.ws-message-start {
+  border-bottom: 1px solid var(--ws-line);
+}
+
+.ws-channel-intro-glyph {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-secondary);
+}
+
+.ws-channel-intro-glyph > svg {
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
+}
+
+.ws-channel-intro-faces {
+  display: flex;
+  gap: var(--openbot-space-1);
+}
+
+.ws-channel-intro-title {
+  margin: 0;
+  font-size: var(--openbot-text-2xl);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-channel-intro-text {
+  max-width: 640px;
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-lg);
+}
+
+.ws-channel-bottom {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  padding: 0 var(--openbot-space-4) var(--openbot-space-3);
+}
+
+.ws-interaction {
+  display: flex;
+  max-height: 50vh;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  overflow-y: auto;
+}
+
+.ws-interaction-title {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-channel-notice {
+  margin: 0;
+  border: 1px solid var(--ws-line);
+  border-radius: var(--openbot-radius-lg);
+  padding: var(--openbot-space-3);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-md);
+  text-align: center;
+}
+
+.ws-join-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-3);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--openbot-radius-lg);
+  padding: var(--openbot-space-3) var(--openbot-space-4);
+  background: var(--openbot-bg-control);
+  font-size: var(--openbot-text-md);
+}
+
+.ws-join-banner > p {
+  margin: 0;
+}
+
+/* The composer ------------------------------------------------------------------------------------ */
+
+.ws-composer-frame {
+  position: relative;
+}
+
+.ws-composer-editor-anchor {
+  position: relative;
+}
+
+.ws-composer-editor-anchor .composer-editor-root {
+  min-height: var(--openbot-control-md);
+}
+
+.ws-composer-editor-anchor .composer-editor-surface {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.ws-composer-frame .mention-picker {
+  --mention-picker-side-inset: 0px;
+}
+
+.mention-picker-member-avatar,
+.composer-member-avatar {
+  display: inline-grid;
+  overflow: hidden;
+  place-items: center;
+  border-radius: var(--openbot-radius-sm);
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.mention-picker-member-avatar {
+  width: 20px;
+  height: 20px;
+}
+
+.mention-picker-member-avatar > img,
+.composer-member-avatar > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ws-composer-edit-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-composer-error {
+  margin: 0;
+  color: var(--openbot-danger-text);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-composer-editing .ws-composer-box {
+  border-color: var(--openbot-warning);
+}
+
+.ws-composer-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-composer-file {
+  display: inline-flex;
+  max-width: 240px;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--openbot-radius-md);
+  padding: var(--openbot-space-1) var(--openbot-space-1) var(--openbot-space-1) var(--openbot-space-2);
+  background: var(--openbot-bg-control);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-composer-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The right panel --------------------------------------------------------------------------------- */
+
+.ws-thread-frame {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.ws-thread-frame .ws-thread-bottom {
+  padding: 0 var(--openbot-space-3) var(--openbot-space-3);
+}
+
+.ws-details-answer-log {
+  margin-top: var(--openbot-space-3);
+}
+
+.ws-answer-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-answer-log-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--openbot-space-2);
+  align-items: start;
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-answer-log-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+}
+
+.ws-answer-log-head {
+  color: var(--openbot-text-secondary);
+}
+
+.ws-answer-log-item[data-answer] .ws-answer-log-head > strong {
+  color: var(--openbot-accent-text);
+}
+
+.ws-answer-log-reason {
+  color: var(--openbot-text-primary);
+}
+
+.ws-answer-log-message {
+  overflow: hidden;
+  color: var(--openbot-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-integration {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-3);
+}
+
+.ws-integration-head {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-3);
+}
+
+.ws-integration-logo {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-accent-soft);
+  color: var(--openbot-accent-text);
+}
+
+.ws-integration-logo > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-integration-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  font-size: var(--openbot-text-md);
+}
+
+.ws-integration-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+/* Dialogs ----------------------------------------------------------------------------------------- */
+
+.ws-dialog-wide {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.ws-switcher-field {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+}
+
+.ws-switcher-field > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-switcher-field > .ui-input {
+  flex: 1 1 auto;
+}
+
+.ws-switcher-list,
+.ws-browse-list {
+  display: flex;
+  max-height: min(420px, 55vh);
+  flex-direction: column;
+  gap: 1px;
+  margin: var(--openbot-space-2) 0 0;
+  overflow-y: auto;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-switcher-item.ui-button {
+  width: 100%;
+  height: var(--openbot-control-md);
+  justify-content: flex-start;
+  gap: var(--openbot-space-2);
+  padding: 0 var(--openbot-space-2);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.ws-switcher-item[data-active].ui-button {
+  background: var(--openbot-hover);
+}
+
+.ws-switcher-item[data-unread] .ws-switcher-label {
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-switcher-glyph {
+  display: grid;
+  width: 20px;
+  place-items: center;
+  color: var(--openbot-text-muted);
+}
+
+.ws-switcher-glyph > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-switcher-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-browse-item {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-3);
+  border-bottom: 1px solid var(--ws-line);
+  padding: var(--openbot-space-2) var(--openbot-space-1);
+}
+
+.ws-browse-glyph {
+  color: var(--openbot-text-muted);
+}
+
+.ws-browse-glyph > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-browse-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  font-size: var(--openbot-text-md);
+}
+
+.ws-browse-copy > .ws-muted {
+  overflow: hidden;
+  font-size: var(--openbot-text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-browse-footer {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: var(--openbot-space-2);
+}
+
+/* The owner's DM with an agent -------------------------------------------------------------------- */
+
+.ws-agent-dm {
+  --ws-line: color-mix(in srgb, var(--openbot-text-primary) 9%, transparent);
+
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.ws-agent-dm-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.ws-agent-dm-body > .conversation-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The DM header names the agent, so the chat header keeps only its controls. */
+.ws-agent-dm-body .conversation-header .conversation-heading-group {
+  visibility: hidden;
+}

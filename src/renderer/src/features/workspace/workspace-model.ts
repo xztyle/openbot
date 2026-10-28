@@ -20,6 +20,7 @@ import type { SidebarAgentState } from "@openbot/ui/features/sidebar/sidebar-typ
 import type { SidebarChannel, SidebarDirectMessage } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import type {
   AgentStepView,
+  MessageSegment,
   ThreadSummary,
   WorkspaceArtifact,
   WorkspaceMember,
@@ -561,4 +562,67 @@ export function workingAgents(
   for (const entry of entries.slice(-30))
     if (entry.author.kind === "agent" && entry.message.status === "streaming") ids.add(entry.author.id);
   return [...ids];
+}
+
+/** Markdown that the light row cannot show: emphasis, code, quotes, headings, lists, tables, links. */
+const MARKDOWN = /[*_`~|\\]|^\s{0,3}(?:#|>|[-+]\s|\d+[.)]\s)|\]\(|<\w|\n\s*\n/mu;
+const PLAIN_TOKEN =
+  /([@#])\[([^\]\r\n]+)\]\((agent|member|channel)(\+uri)?:([^)\r\n]+)\)|(^|[^\w@])(@(?:channel|everyone|here))\b|https?:\/\/[^\s<>()]+/gu;
+
+/**
+ * The runs of a short plain message: text, mentions, channel links, broadcasts and bare links. A
+ * message with Markdown, files, a question or a streaming body returns null and gets the full
+ * renderer. Most chat lines are plain, and the light row keeps a long channel fast to scroll.
+ */
+export function plainMessageSegments(directory: WorkspaceDirectory, entry: ChannelMessage): MessageSegment[] | null {
+  const message = entry.message;
+  if (
+    message.status === "streaming" ||
+    message.attachments?.length ||
+    message.questionPrompt ||
+    message.uiBlock ||
+    message.text.length > 2_000 ||
+    MARKDOWN.test(message.text)
+  )
+    return null;
+  const text = message.text;
+  const segments: MessageSegment[] = [];
+  let cursor = 0;
+  const push = (value: string) => {
+    if (value) segments.push({ kind: "text", text: value });
+  };
+  for (const match of text.matchAll(PLAIN_TOKEN)) {
+    const index = match.index ?? 0;
+    if (match[3] !== undefined) {
+      if (match[4]) return null;
+      const kind = match[3];
+      if ((match[1] === "#") !== (kind === "channel")) continue;
+      push(text.slice(cursor, index));
+      const id = match[5] ?? "";
+      const name = match[2] ?? "";
+      if (kind === "channel") segments.push({ kind: "channel", name, channelId: id });
+      else
+        segments.push({
+          kind: "mention",
+          label: kind === "agent" ? (directory.agents.find((agent) => agent.id === id)?.name ?? name) : name,
+          memberId: id,
+          self: kind === "member" && directory.isReader(id),
+        });
+      cursor = index + match[0].length;
+      continue;
+    }
+    if (match[7] !== undefined) {
+      const start = index + (match[6]?.length ?? 0);
+      push(text.slice(cursor, start));
+      segments.push({ kind: "broadcast", label: match[7].slice(1).toLowerCase() === "here" ? "here" : "channel" });
+      cursor = start + match[7].length;
+      continue;
+    }
+    const href = match[0].replace(/[.,!?;:]+$/u, "");
+    push(text.slice(cursor, index));
+    segments.push({ kind: "link", text: href, href });
+    cursor = index + href.length;
+  }
+  push(text.slice(cursor));
+  return segments;
 }

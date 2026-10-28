@@ -16,6 +16,7 @@ import {
   mentionsReader,
   messageArtifacts,
   messageAuthor,
+  plainMessageSegments,
   reactionViews,
   threadSummaryView,
   type WorkspaceMessageRowModel,
@@ -97,6 +98,8 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
       streaming: host.streaming,
     };
   });
+  /** A plain line takes the light row; Markdown, files and questions take the chat's renderer. */
+  const plain = createMemo(() => (props.row.pending ? null : plainMessageSegments(ws.directory(), entry())));
   const threadRootId = () => (props.inThread ? (entry().threadRootId ?? null) : null);
   const copy = (text: string, done: string) =>
     void navigator.clipboard?.writeText(text).then(
@@ -159,6 +162,7 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
       <MessageRow
         author={author()}
         sentAt={Date.parse(entry().message.createdAt)}
+        text={plain() ?? undefined}
         grouped={props.row.grouped}
         edited={Boolean(entry().editedAt)}
         deleted={deleted()}
@@ -189,7 +193,7 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
             />
           )}
         </Show>
-        <Show when={!props.row.pending}>
+        <Show when={!props.row.pending && !plain()}>
           <WorkspaceMessageBody entry={entry()} />
         </Show>
         <Show when={artifacts().length}>

@@ -4,6 +4,7 @@ import {
   isWorkspaceChannelCommand,
   parseChannelCommand,
   parseChannelRead,
+  parseWorkspaceActivityInput,
 } from "@openbot/contracts/ipc";
 import { WORKSPACE_CAPABILITY, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
@@ -56,7 +57,7 @@ function requireChatForAgents(
 
 /**
  * The workspace routes of this fork (`workspace-v1.ts`, under `fork-host-v1`): the workspace channel
- * commands, the page of one thread, and the workspace settings.
+ * commands, the page of one thread, the activity of the member, and the workspace settings.
  */
 export async function routeWorkspace(
   context: TeamApiRequestContext,
@@ -79,6 +80,14 @@ export async function routeWorkspace(
   const viewer = requestChannelViewer(context);
   // `readJson` has already run the body through the workspace wire codec.
   const body = await readJson(request);
+  if (url.pathname === WORKSPACE_ROUTES.activity) {
+    const activity = channels.workspaceActivity(parseWorkspaceActivityInput(body), viewer);
+    // An agent hidden from this peer does not exist for it, so it did nothing here either.
+    return json(200, {
+      items: activity.items.filter((item) => item.actor.kind !== "agent" || !hiddenAgentIds.has(item.actor.id)),
+      threads: activity.threads,
+    });
+  }
   if (url.pathname === WORKSPACE_ROUTES.thread) {
     const input = parseChannelRead(body);
     if (!input.threadRootId) throw new HttpError(400, "Provide a thread.");

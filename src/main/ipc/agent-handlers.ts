@@ -21,6 +21,7 @@ import {
   decodeChannelPage,
   decodeChannelSummaries,
   decodeSaveAgentProfileResult,
+  decodeWorkspaceActivity,
   hostAnalyticsQuery,
   isAgentModelOption,
   isWorkspaceChannelCommand,
@@ -35,6 +36,7 @@ import {
   parseSaveAgentProfile,
   parseSetAgentHiddenInput,
   parseSetAgentSessionSetting,
+  parseWorkspaceActivityInput,
   remoteBrowserSecretResponse,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
@@ -357,6 +359,19 @@ export function agentIpcHandlers({
             throw new Error(sourceText("error.team.workspaceUnsupported"));
           return runCauseEffect(
             remoteServers.request(serverId, WORKSPACE_ROUTES.command, decodeChannel, { method: "POST", body: input }),
+          );
+        },
+      }),
+      workspaceActivity: scopedHandler(parseWorkspaceActivityInput, {
+        local: (input) => service.channels.workspaceActivity(input, host.channelViewer()),
+        remote: (input, serverId) => {
+          if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY))
+            throw new Error(sourceText("error.team.workspaceUnsupported"));
+          return runCauseEffect(
+            remoteServers.request(serverId, WORKSPACE_ROUTES.activity, decodeWorkspaceActivity, {
+              method: "POST",
+              body: input,
+            }),
           );
         },
       }),

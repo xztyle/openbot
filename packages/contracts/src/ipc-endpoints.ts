@@ -532,6 +532,7 @@ import type {
   WorkflowVersionInput,
   WorkflowWebhookSecret,
 } from "./ipc-workflows";
+import type { WorkspaceActivity, WorkspaceActivityInput } from "./ipc-workspace-activity";
 import type { LicenseCheckoutRequest, LicenseRenewalRequest, LicenseState, LicenseUsersRequest } from "./license";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
 
@@ -1318,6 +1319,9 @@ export const IPC_ENDPOINTS = {
     listChannels: scopedQuery<ChannelSummary[]>()("agent:channels:list"),
     readChannel: scopedRequest<ChannelReadInput, ChannelPage>()("agent:channels:read"),
     channelCommand: scopedRequest<ChannelCommand, Channel>()("agent:channels:command"),
+    // The mentions, thread replies, DMs, reactions and threads of the reader, over every channel.
+    // A joined server answers through `workspace-v1` (`fork-host-v1`).
+    workspaceActivity: scopedRequest<WorkspaceActivityInput, WorkspaceActivity>()("agent:workspace:activity"),
     deleteChannel: scopedRequest<string, void>()("agent:channels:delete"),
     getSidebarLayout: scopedQuery<SidebarLayoutSnapshot>()("agent:get-sidebar-layout"),
     mutateSidebarLayout: scopedRequest<SidebarLayoutAction, SidebarLayoutSnapshot>()("agent:mutate-sidebar-layout"),

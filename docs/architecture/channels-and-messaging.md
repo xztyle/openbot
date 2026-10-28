@@ -340,9 +340,20 @@ event leave `gateDecisions` out for a person who is not an owner or an admin.
 Each commit records the messages it wrote. `ChannelService.publish` sends a `channel-message` (or
 `channel-message-removed`) event for each one before `channels-changed`. The Team API sends them
 only to a member who can see the channel. Over the Team API the fields, the routes
-`/v1/workspace/channels/commands` and `/v1/workspace/channels/thread`, the workspace settings routes
-and the events share `fork-host-v1` (`workspace-v1.ts`). The workspace settings (gate model,
-default answer mode) are in `openbot-workspace-v1.json` on the host.
+`/v1/workspace/channels/commands`, `/v1/workspace/channels/thread` and `/v1/workspace/activity`, the
+workspace settings routes and the events share `fork-host-v1` (`workspace-v1.ts`). The workspace
+settings (gate model, default answer mode) are in `openbot-workspace-v1.json` on the host.
+
+The Activity and Threads views read `agent.workspaceActivity` (`ipc-workspace-activity.ts`).
+`ChannelActivity` (`channel-activity.ts`) computes it on the host for the reader, over the channels
+they can see that are not archived: the newest 300 messages of each channel, at most 30 days old. An
+item is a `mention` (of the reader, or `@channel`/`@here` in a channel the reader is one of the
+people of), a `reply` in a thread whose root or an earlier reply the reader wrote, a `dm` (a message
+of another in a DM or a group), or a `reaction` of another on a message of the reader. A message
+gives one item, in this order. The reader's own messages, deleted messages, streaming parts,
+thinking, plans and routing events give none. `unread` compares the message sequence with the read
+position of the channel. `threads` are the threads in which the reader wrote, with the summary of the
+root and the unread replies. It only reads; a client reads it again on `channel-message`.
 
 ## Messaging connections
 

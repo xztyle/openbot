@@ -102,7 +102,7 @@ const TOP_LEVEL_MESSAGE = `(json_extract(message_json, '$.threadRootId') IS NULL
     OR COALESCE(json_extract(message_json, '$.threadSummary.replyCount'), 0) > 0)`;
 
 /** Item types that are activity, not a message a reader counts. */
-const ACTIVITY_ITEM_TYPES = ["plan", "subagents", "channel-change", "commentary"];
+export const ACTIVITY_ITEM_TYPES = ["plan", "subagents", "channel-change", "commentary"];
 
 /**
  * Owns durable channel records. Every change and its retry receipt commit together.
@@ -258,7 +258,7 @@ export class ChannelStore {
               authorName: latest.author.name,
               author: { kind: latest.author.kind, id: latest.author.id },
               status: latest.message.status,
-              text: previewText(latest),
+              text: channelPreviewText(latest),
               at: latest.message.createdAt,
             }
           : null,
@@ -1069,7 +1069,7 @@ const CHANNEL_PREVIEW_SOURCE_LIMIT = CHANNEL_PREVIEW_LIMIT * 16;
  * One line for a sidebar row. A message can carry no text at all (an attachment, or a question
  * the agent asked), so fall back to a description of what arrived instead of showing an empty row.
  */
-function previewText(entry: ChannelMessage): string {
+export function channelPreviewText(entry: ChannelMessage): string {
   // The text is Markdown with mention markup (`@[Chief](agent:chief)`): show what a reader sees.
   // Only the start is parsed, so a very long message does not slow down every channel list.
   const text = markdownPreviewText(entry.message.text.slice(0, CHANNEL_PREVIEW_SOURCE_LIMIT));

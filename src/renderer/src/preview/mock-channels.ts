@@ -19,8 +19,19 @@ import type {
   TestChannelRoutineInput,
   UpdateChannelMemoryInput,
   UpdateChannelRoutineInput,
+  WorkspaceActivity,
+  WorkspaceActivityInput,
+  WorkspaceActivityItem,
+  WorkspaceThreadActivity,
 } from "@openbot/contracts/ipc";
-import { channelMentions, channelRoutingConversationEventItemType } from "@openbot/contracts/ipc";
+import {
+  CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX,
+  channelMentions,
+  channelRoutingConversationEventItemType,
+  WORKSPACE_ACTIVITY_PREVIEW_LIMIT,
+  WORKSPACE_ACTIVITY_THREAD_LIMIT,
+  workspaceActivityLimit,
+} from "@openbot/contracts/ipc";
 
 /** The preview's own person: every message the preview sends is theirs. */
 const PREVIEW_MEMBER_ID = "preview";
@@ -393,6 +404,101 @@ export function createMockChannels(
       receipts.set(input.operationId, structuredClone(channel));
       changed(channel.id, channel.revision);
       return structuredClone(channel);
+    },
+    /**
+     * The activity of the preview's own person, as the host computes it, without read positions:
+     * nothing is unread. Thinking, routing events and plans are not activity.
+     */
+    workspaceActivity: async (input: WorkspaceActivityInput): Promise<WorkspaceActivity> => {
+      const items: WorkspaceActivityItem[] = [];
+      const threads: WorkspaceThreadActivity[] = [];
+      const own = (message: ChannelMessage) =>
+        message.author.kind === "member" && message.author.id === PREVIEW_MEMBER_ID;
+      const noise = (message: ChannelMessage) => {
+        const itemType = message.message.itemType ?? "";
+        return (
+          message.message.status === "streaming" ||
+          ["plan", "subagents", "channel-change", "commentary"].includes(itemType) ||
+          itemType.startsWith(CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX)
+        );
+      };
+      const preview = (message: ChannelMessage) =>
+        markdownPreviewText(message.message.text).slice(0, WORKSPACE_ACTIVITY_PREVIEW_LIMIT);
+      for (const channel of channels.values()) {
+        if (channel.archived) continue;
+        const all = (messages.get(channel.id) ?? []).filter((message) => !noise(message) && !message.deletedAt);
+        const person = (channel.humanMemberIds ?? []).includes(PREVIEW_MEMBER_ID);
+        const direct = channel.kind === "dm" || channel.kind === "group";
+        const joined = new Set<string>();
+        for (const message of all) {
+          const common = {
+            channelId: channel.id,
+            messageId: message.id,
+            ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+            at: message.message.createdAt,
+            unread: false,
+          };
+          if (own(message)) {
+            const rootId = message.threadRootId ?? (message.threadSummary?.replyCount ? message.id : undefined);
+            if (rootId) joined.add(rootId);
+            for (const reaction of message.reactions ?? [])
+              for (const actor of reaction.actors)
+                if (actor.id !== PREVIEW_MEMBER_ID)
+                  items.push({
+                    ...common,
+                    id: `reaction:${message.id}:${reaction.emoji}:${actor.kind}:${actor.id}`,
+                    kind: "reaction",
+                    actor: {
+                      kind: actor.kind,
+                      id: actor.id,
+                      name: actor.kind === "agent" ? agentName(actor.id) : actor.id,
+                    },
+                    preview: preview(message),
+                    emoji: reaction.emoji,
+                  });
+            continue;
+          }
+          const mentioned = (message.mentions ?? []).some((mention) =>
+            mention.kind === "member" ? mention.id === PREVIEW_MEMBER_ID : mention.kind !== "agent" && person,
+          );
+          const root = message.threadRootId ? all.find((item) => item.id === message.threadRootId) : undefined;
+          const reply = Boolean(message.threadRootId && (joined.has(message.threadRootId) || (root && own(root))));
+          const shown = !message.threadRootId || message.alsoInChannel === true;
+          const kind = mentioned ? "mention" : reply ? "reply" : direct && shown ? "dm" : null;
+          if (!kind) continue;
+          const author = message.externalAuthor;
+          items.push({
+            ...common,
+            id: `${kind}:${message.id}`,
+            kind,
+            actor: author
+              ? { kind: "external", id: author.id, name: author.name }
+              : { kind: message.author.kind, id: message.author.id, name: message.author.name },
+            preview: preview(message),
+          });
+        }
+        for (const rootId of joined) {
+          const root = all.find((message) => message.id === rootId);
+          const summary = root?.threadSummary;
+          if (!root || !summary?.replyCount) continue;
+          threads.push({
+            channelId: channel.id,
+            rootId,
+            rootAuthor: { kind: root.author.kind, id: root.author.id, name: root.author.name },
+            rootText: preview(root),
+            replyCount: summary.replyCount,
+            lastReplyAt: summary.lastReplyAt,
+            participantIds: [...summary.participantIds],
+            unreadCount: 0,
+          });
+        }
+      }
+      return {
+        items: items.sort((left, right) => right.at.localeCompare(left.at)).slice(0, workspaceActivityLimit(input)),
+        threads: threads
+          .sort((left, right) => right.lastReplyAt.localeCompare(left.lastReplyAt))
+          .slice(0, WORKSPACE_ACTIVITY_THREAD_LIMIT),
+      };
     },
     deleteChannel: async (channelId: string): Promise<void> => {
       requireChannel(channelId);

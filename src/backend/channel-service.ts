@@ -33,11 +33,14 @@ import {
   isChannelThreadReply,
   type QueueHold,
   type UpdateChannelMemoryInput,
+  type WorkspaceActivity,
+  type WorkspaceActivityInput,
   withoutChannelGateDecisions,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { isFixedSourceText, matchingSourceKeys, sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect, Exit, Fiber, Result, Schema, Scope } from "effect";
+import { ChannelActivity } from "./channel-activity";
 import { type ChannelOperationError, channelFailure, channelResult, channelSync } from "./channel-effects";
 import { type ChannelGateAgent, type ChannelGateModel, type ChannelGateRequest, gateFallback } from "./channel-gate";
 import {
@@ -198,6 +201,7 @@ export class ChannelService {
   /** The channel bridge with Discord, while messaging runs. Without it, `link-discord` fails. */
   discordBridge: ChannelDiscordBridgePort | null = null;
   readonly #history: ChannelHistory;
+  readonly #activity: ChannelActivity;
   #scope = Scope.makeUnsafe();
   readonly #pumps = new Map<string, Fiber.Fiber<void>>();
   readonly #commands = new Map<string, Deferred.Deferred<void>>();
@@ -243,6 +247,7 @@ export class ChannelService {
     readonly hooks: ChannelHooks,
   ) {
     this.store = new ChannelStore(database);
+    this.#activity = new ChannelActivity(this.store);
     this.memories = new ChannelMemoryStore(database);
     this.#history = new ChannelHistory(this.store, hooks.generate, this.memories);
   }
@@ -320,6 +325,15 @@ export class ChannelService {
     return !viewer || canAdministerServer(viewer.role)
       ? page
       : { ...page, messages: page.messages.map(withoutChannelGateDecisions) };
+  }
+
+  /**
+   * The mentions, thread replies, direct messages and reactions of a person, and the threads they
+   * take part in, over the channels they can see (`ipc-workspace-activity.ts`).
+   */
+  workspaceActivity(input: WorkspaceActivityInput, viewer: ChannelViewer): WorkspaceActivity {
+    const agents = new Map(this.hooks.agents().map((agent) => [agent.id, agent.name]));
+    return this.#activity.read(input, viewer, (agentId) => agents.get(agentId));
   }
 
   readonly deleteChannel = Effect.fn("ChannelService.deleteChannel")((channelId: string) =>

@@ -22,6 +22,15 @@
 // - `POST /v1/workspace/channels/thread`: `{ channelId, threadRootId, beforeSequence? }` answers a
 //   channel page whose messages are the root and at most 99 of its replies.
 // - `POST /v1/admin/workspace/settings` and `/update`: the workspace settings, owner and admin only.
+// - `POST /v1/workspace/activity`: `{ limit? }` (1 to 200, default 100) answers the activity of the
+//   member of the session over the channels they can see: `{ items, threads }`. `items` (at most
+//   200, newest first) are each `{ id (512), kind: "mention" | "reply" | "dm" | "reaction", channelId,
+//   messageId, threadRootId?, actor: { kind: "member" | "agent" | "coordinator" | "external", id,
+//   name (120) }, preview (160), emoji? (64, on a reaction only), at (80), unread }`. `threads` (at
+//   most 50, newest last reply first) are each `{ channelId, rootId, rootAuthor: { kind: "member" |
+//   "agent" | "coordinator", id, name (120) }, rootText (160), replyCount, lastReplyAt (80),
+//   participantIds (at most 20), unreadCount }`. It only reads; a client reads it again on the
+//   `channel-message` event.
 // - Discord bridge: on each channel `discordLink` (`{ connectionId, channelId, channelName (100),
 //   webhook? }`, Discord ids); on each message `externalAuthor` (`{ kind: "external", platform:
 //   "discord", id, name (120), avatarUrl? (500, https) }`); the commands `link-discord`
@@ -60,6 +69,7 @@ export const WORKSPACE_CAPABILITY = FORK_HOST_CAPABILITY;
 export const WORKSPACE_ROUTES = {
   command: "/v1/workspace/channels/commands",
   thread: "/v1/workspace/channels/thread",
+  activity: "/v1/workspace/activity",
   settings: "/v1/admin/workspace/settings",
   settingsUpdate: "/v1/admin/workspace/settings/update",
 } as const;
@@ -285,9 +295,40 @@ const settings = fields({
   defaults: fields({ agentAnswerMode: answerMode }),
 });
 
+const activityLimit: Decoder = (value) => {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 200)
+    throw new Error("Invalid workspace activity limit.");
+  return value;
+};
+const activityItem = fields(
+  {
+    id: nonEmpty(512),
+    kind: oneOf("mention", "reply", "dm", "reaction"),
+    channelId: identifier,
+    messageId: identifier,
+    actor: fields({ kind: oneOf("member", "agent", "coordinator", "external"), id: identifier, name: string(120) }),
+    preview: string(160),
+    at: string(80),
+    unread: boolean,
+  },
+  { threadRootId: identifier, emoji: nonEmpty(64) },
+);
+const activityThread = fields({
+  channelId: identifier,
+  rootId: identifier,
+  rootAuthor: fields({ kind: oneOf("member", "agent", "coordinator"), id: identifier, name: string(120) }),
+  rootText: string(160),
+  replyCount: count,
+  lastReplyAt: string(80),
+  participantIds: list(identifier, 20),
+  unreadCount: count,
+});
+const activity = fields({ items: list(activityItem, 200), threads: list(activityThread, 50) });
+
 export const WORKSPACE_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [WORKSPACE_ROUTES.command, { request: command, response: channelResult }],
   [WORKSPACE_ROUTES.thread, { request: threadRequest, response: threadPage }],
+  [WORKSPACE_ROUTES.activity, adminRoute(fields({}, { limit: activityLimit }), activity)],
   [WORKSPACE_ROUTES.settings, adminRoute(empty, settings)],
   [WORKSPACE_ROUTES.settingsUpdate, adminRoute(settings, settings)],
 ]);

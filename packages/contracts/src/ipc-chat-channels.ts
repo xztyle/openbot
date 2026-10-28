@@ -26,6 +26,7 @@ import { optionalHistoryExtent } from "./ipc-decoding";
 import { type DynamicRecord, isDynamicRecord, isOneOf, isString } from "./runtime-values";
 
 export * from "./ipc-chat-workspace";
+export * from "./ipc-workspace-activity";
 
 export const CHANNEL_CHATS_CAPABILITY = "channel-chats-v1";
 export const CHANNEL_DELETE_CAPABILITY = "channel-delete-v1";

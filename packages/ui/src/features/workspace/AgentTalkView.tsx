@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { For, Show } from "solid-js";
+import { createEffect, For, Show } from "solid-js";
 import { Button } from "../../button";
 import { ArrowLeftRight, ChevronLeft, X } from "../../icons";
 import { useText } from "../../text";
@@ -54,6 +54,22 @@ export interface AgentTalkViewProps {
  */
 export function AgentTalkView(props: AgentTalkViewProps): JSX.Element {
   const { t, format } = useText();
+  let scroller: HTMLDivElement | undefined;
+  /** The pair whose newest message the list scrolled to. Older pages keep the place. */
+  let scrolledFor: string | null = null;
+  createEffect(
+    () => (props.selected && props.messages?.length ? props.selected.id : null),
+    (pairId) => {
+      if (!pairId || pairId === scrolledFor) {
+        if (!pairId) scrolledFor = null;
+        return;
+      }
+      scrolledFor = pairId;
+      requestAnimationFrame(() => {
+        if (scroller) scroller.scrollTop = scroller.scrollHeight;
+      });
+    },
+  );
   const pairName = (pair: AgentTalkPair) =>
     t("workspace.agentTalk.pair", { first: pair.members[0].name, second: pair.members[1].name });
   return (
@@ -101,7 +117,7 @@ export function AgentTalkView(props: AgentTalkViewProps): JSX.Element {
           </div>
         )}
       </Show>
-      <div class="ws-view-scroll">
+      <div class="ws-view-scroll" ref={(element: HTMLDivElement) => (scroller = element)}>
         <Show
           when={props.selected}
           fallback={

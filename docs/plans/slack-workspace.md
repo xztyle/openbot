@@ -186,6 +186,13 @@ Checked by scripts on real services (temporary profile, fake provider and gate m
 DMs) and `scripts/workspace-limits-e2e.ts` (the Discord bridge: reactions, custom emoji, cleared
 reactions, threads, deletions; artifact index and thumbnails).
 
+Live check with real agents on 2026-10-29 (private #gate-test: three agents on "every message
+(smart)", one on "when mentioned"): an off-topic message kept all three quiet (decisions in 1.7 to
+2.7 s); a release-risk question for the team got one answer (QA 2, priority 0.6) while the pastry
+assistant judged it off its remit and the UX Director, held back by the limit, saw that answer in
+the second round and stayed quiet; an @mention of the mention-only agent got only its answer, and
+the gate did not run.
+
 Verified live on 2026-10-29: the gate (an off-topic message stayed quiet, an on-topic one got an
 answer), threads, reactions, Fleet, Storage, a private channel, and the Discord bridge both ways
 (a reply and a 👍 from Discord in the workspace thread, the agent's answer back in Discord, unlink).
@@ -206,7 +213,8 @@ the sidebar order and mutes for the account.
   people and agents stay, and OpenBot does not add its removed reactions back.
 - A Discord person's reaction is stored as the member `discord-<user id>`, the author id of their
   bridged messages. It shows their name once one of their messages is loaded in the channel.
-- A workspace post that someone deletes in Discord stays in the workspace (by design); the bridge
+- A workspace post that someone deletes in Discord stays in the workspace (the owner chose this on
+  2026-10-29, so a Discord moderator cannot erase workspace history); the bridge
   forgets its Discord ids, so a later edit or deletion does not call Discord.
 - Artifact thumbnails are PNG: Electron's `nativeImage` has no WebP encoder. The address check
   resolves the name before Chromium does, so a DNS answer that changes in between (rebinding) is not

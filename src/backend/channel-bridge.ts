@@ -61,6 +61,7 @@ const Bridged = Schema.Struct({
   // Later fields; an older build ignores them.
   threadId: Schema.optional(Schema.String),
   postedIn: Schema.optional(Schema.String),
+  root: Schema.optional(Schema.String),
   reactions: Schema.optional(Schema.Array(Schema.String)),
 });
 const Link = Schema.Struct({ linkedAt: Schema.String, messages: Schema.Array(Bridged) });
@@ -85,6 +86,8 @@ interface BridgedMessage {
   threadId?: string;
   /** The Discord thread that the posts are in, when they are not in the bridged channel itself. */
   postedIn?: string;
+  /** On a thread reply: the workspace message at the root of its thread. */
+  root?: string;
   /** The unicode emoji that OpenBot added in Discord, for the workspace reactions of the message. */
   reactions?: string[];
 }
@@ -411,6 +414,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
       viaWebhook: false,
       hash: hashText(text),
       inbound: true,
+      ...(threadRoot ? { root: threadRoot.id } : {}),
       ...(threadId && !threadRoot ? { threadId } : {}),
       ...(threadId ? { postedIn: threadId } : {}),
     });
@@ -719,6 +723,22 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     );
   }
 
+  /**
+   * The Discord post that a message answers. A thread reply answers the newest post of its thread, so
+   * Discord shows the conversation as it goes on rather than every reply under the first message.
+   */
+  #repliedDiscordId(message: ChannelMessage, state: LinkState): string | undefined {
+    const rootId = message.threadRootId;
+    if (rootId) {
+      const latest = state.messages.findLast(
+        (item) => item.root === rootId && item.id !== message.id && item.discordIds.length > 0,
+      );
+      return latest?.discordIds.at(-1) ?? state.messages.find((item) => item.id === rootId)?.discordIds[0];
+    }
+    const repliedId = message.message.replyToMessageId;
+    return repliedId ? state.messages.find((item) => item.id === repliedId)?.discordIds[0] : undefined;
+  }
+
   /** The text that Discord shows: the reply line for a thread or a reply, the text, the file names. */
   #outboundText(message: ChannelMessage, state: LinkState, link: ChannelDiscordLink, viaWebhook: boolean): string {
     const files = (message.message.attachments ?? []).map((file) => `📎 ${file.name}`);
@@ -726,8 +746,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const name = viaWebhook ? "" : `**${message.author.name.replace(/[*_`~|]/gu, "")}:** `;
     // A reply that goes into a Discord thread needs no reply line.
     if (this.#discordThread(message, state)) return `${name}${body}`;
-    const repliedId = message.threadRootId ?? message.message.replyToMessageId ?? null;
-    const replied = repliedId ? state.messages.find((item) => item.id === repliedId)?.discordIds[0] : undefined;
+    const replied = this.#repliedDiscordId(message, state);
     // A webhook post cannot reply in Discord, so it links the message it answers.
     const replyLine =
       replied && viaWebhook
@@ -748,6 +767,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const ids: string[] = [];
     const thread = this.#discordThread(message, this.#state.get(channelId) ?? { linkedAt: "", messages: [] });
     const inThread = thread ? { postedIn: thread } : {};
+    const inRoot = message.threadRootId ? { root: message.threadRootId } : {};
     if (webhook) {
       const username = webhookName(message.author.name);
       const avatarUrl = this.#options.avatarUrl?.(message.author) ?? null;
@@ -774,6 +794,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
           viaWebhook: true,
           hash: hashText(text),
           inbound: false,
+          ...inRoot,
           ...inThread,
         });
         return;
@@ -783,9 +804,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const adapter = this.#options.messaging.discordAdapter(link.connectionId);
     if (!adapter) return;
     const state = this.#state.get(channelId);
-    const repliedId = message.threadRootId ?? message.message.replyToMessageId ?? null;
-    const replyTo =
-      repliedId && !thread ? (state?.messages.find((item) => item.id === repliedId)?.discordIds[0] ?? null) : null;
+    const replyTo = state && !thread ? (this.#repliedDiscordId(message, state) ?? null) : null;
     for (const content of chunkMarkdown(text, CHUNK_CHARACTERS))
       ids.push(
         yield* adapter.post({ platformChannelId: thread ?? link.channelId, replyThreadId: replyTo }, { text: content }),
@@ -796,6 +815,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
       viaWebhook: false,
       hash: hashText(text),
       inbound: false,
+      ...inRoot,
       ...inThread,
     });
   });

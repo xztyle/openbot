@@ -197,16 +197,18 @@ sudo -n chown -R ubuntu:ubuntu "$release"
   for name in "${!phases[@]}"; do printf ' %s=%ss' "$name" "${phases[$name]}"; done
   printf '\nRelease: %s\n' "$release"
 }
+deploy_args=(--existing-image)
+[[ $worker_only == 1 ]] && deploy_args=(--existing-image --worker-only)
 if [[ $deploy == 1 ]]; then
   # wrangler sometimes answers 7403 while it refreshes its login; that step runs before the host is
   # touched, so one more attempt is safe.
-  python3 -I scripts/private-release-deploy.py "$release" --existing-image && exit 0
+  python3 -I scripts/private-release-deploy.py "$release" "${deploy_args[@]}" && exit 0
   if grep -q 7403 "$release/logs/worker-migrations.log" 2>/dev/null; then
     echo "Cloudflare login refresh (7403); trying once more."
-    python3 -I scripts/private-release-deploy.py "$release" --existing-image
+    python3 -I scripts/private-release-deploy.py "$release" "${deploy_args[@]}"
   else
     exit 1
   fi
 else
-  printf 'Deploy: python3 -I scripts/private-release-deploy.py %q --existing-image\n' "$release"
+  printf 'Deploy: python3 -I scripts/private-release-deploy.py %q %s\n' "$release" "${deploy_args[*]}"
 fi

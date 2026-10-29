@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
+  parseWorkspaceAgentExchangeInput,
+  parseWorkspaceAgentPairsInput,
   parseWorkspaceArtifactsInput,
   parseWorkspaceFleetInput,
   parseWorkspaceStepsInput,
@@ -79,6 +81,14 @@ export async function routeWorkspaceFleet(
   const body = await readJson(request);
   if (url.pathname === WORKSPACE_FLEET_ROUTES.fleet)
     return json(200, agents.workspace.fleet(parsed(parseWorkspaceFleetInput, body), visible));
+  if (url.pathname === WORKSPACE_FLEET_ROUTES.agentPairs)
+    return json(200, agents.workspace.agentPairs(parsed(parseWorkspaceAgentPairsInput, body), visible));
+  if (url.pathname === WORKSPACE_FLEET_ROUTES.agentExchange) {
+    const input = parsed(parseWorkspaceAgentExchangeInput, body);
+    // An agent that this member cannot see is not found, as a channel they cannot see is not.
+    if (!input.agentIds.every(visible)) throw new HttpError(404, sourceText("error.backend.channelNotFound"));
+    return json(200, agents.workspace.agentExchange(input, visible));
+  }
   const viewer = requestChannelViewer(context);
   if (url.pathname === WORKSPACE_FLEET_ROUTES.steps) {
     const input = parsed(parseWorkspaceStepsInput, body);

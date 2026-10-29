@@ -22,6 +22,8 @@ import {
   decodeChannelSummaries,
   decodeSaveAgentProfileResult,
   decodeWorkspaceActivity,
+  decodeWorkspaceAgentExchange,
+  decodeWorkspaceAgentPairs,
   decodeWorkspaceArtifacts,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
@@ -44,6 +46,8 @@ import {
   parseSetAgentHiddenInput,
   parseSetAgentSessionSetting,
   parseWorkspaceActivityInput,
+  parseWorkspaceAgentExchangeInput,
+  parseWorkspaceAgentPairsInput,
   parseWorkspaceArtifactsInput,
   parseWorkspaceFleetInput,
   parseWorkspaceStepsInput,
@@ -473,6 +477,16 @@ export function agentIpcHandlers({
         local: (input) => service.workspace.artifacts(input, host.channelViewer()),
         remote: (input, serverId) =>
           remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.artifacts, input, decodeWorkspaceArtifacts),
+      }),
+      workspaceAgentPairs: scopedHandler(parseWorkspaceAgentPairsInput, {
+        local: (input) => service.workspace.agentPairs(input),
+        remote: (input, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.agentPairs, input, decodeWorkspaceAgentPairs),
+      }),
+      workspaceAgentExchange: scopedHandler(parseWorkspaceAgentExchangeInput, {
+        local: (input) => service.workspace.agentExchange(input),
+        remote: (input, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.agentExchange, input, decodeWorkspaceAgentExchange),
       }),
       // The host user of this computer is a member under the id their channel messages carry.
       workspaceSidebar: scopedQueryHandler({

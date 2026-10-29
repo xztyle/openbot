@@ -6,6 +6,7 @@ import { type ThreadListItem, ThreadsView } from "@openbot/ui/features/workspace
 import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-types";
 import { createEffect, createMemo, Match, Switch } from "solid-js";
+import { WorkspaceAgentTalkView } from "./WorkspaceAgentTalk";
 import { WorkspaceStorageView } from "./WorkspaceStorageView";
 import { useWorkspace } from "./workspace-context";
 import { conversationName, memberById, previewText } from "./workspace-model";
@@ -25,6 +26,9 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
       </Match>
       <Match when={props.view === "artifacts"}>
         <WorkspaceArtifactsView />
+      </Match>
+      <Match when={props.view === "agents"}>
+        <WorkspaceAgentTalkView />
       </Match>
       <Match when={props.view === "storage"}>
         <WorkspaceStorageView />

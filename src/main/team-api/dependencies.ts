@@ -159,7 +159,10 @@ type TeamApiAgentMethods = Pick<
 
 export type TeamApiAgents = TeamApiAgentMethods & {
   /** workspace-fleet-v1 (`fork-host-v1`): the fleet, step trail and artifact views. */
-  workspace: Pick<WorkspaceInsights, "fleet" | "steps" | "artifacts" | "artifactThumbnail">;
+  workspace: Pick<
+    WorkspaceInsights,
+    "fleet" | "steps" | "artifacts" | "artifactThumbnail" | "agentPairs" | "agentExchange"
+  >;
   on: (event: "event", listener: (event: AgentEvent) => void) => void;
   off: (event: "event", listener: (event: AgentEvent) => void) => void;
 };

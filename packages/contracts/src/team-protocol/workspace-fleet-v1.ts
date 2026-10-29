@@ -28,6 +28,13 @@
 //   another version, an artifact they cannot see or one with no image. `thumbnailUrl` keeps its
 //   meaning: an http or https image address. A fork host built before it sends no
 //   `thumbnailVersion`, so a client never asks it for an image.
+// - Later: `POST /v1/workspace/agent-pairs` `{ agentId?, limit? (1 to 200) }` answers `{ pairs }`,
+//   at most 200, newest first: two agents that sent each other messages (`send_message`), both seen
+//   by the member, each `{ agentIds: [a, b], count, lastAt, lastSenderId, lastText (240) }`.
+// - Later: `POST /v1/workspace/agent-exchange` `{ agentIds: [a, b], before?, limit? (1 to 100) }`
+//   answers `{ messages, hasOlder }`: the messages between the two, oldest first, each `{ id,
+//   senderAgentId, recipientAgentIds (at most 20), text (8000), truncated?, createdAt,
+//   replyToMessageId?, attachmentCount? }`. An agent that the member cannot see answers 404.
 //
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed. The bounds are written out: this file must not move with an IPC limit.
@@ -53,6 +60,8 @@ export const WORKSPACE_FLEET_ROUTES = {
   fleet: "/v1/workspace/fleet",
   steps: "/v1/workspace/steps",
   artifacts: "/v1/workspace/artifacts",
+  agentPairs: "/v1/workspace/agent-pairs",
+  agentExchange: "/v1/workspace/agent-exchange",
 } as const;
 
 /** The largest thumbnail image that a host sends and a client accepts. */
@@ -181,6 +190,39 @@ const artifactLimit: Decoder = (value) => {
   return result;
 };
 
+const pairLimit: Decoder = (value) => {
+  const result = positive(value);
+  if (typeof result !== "number" || result > 200) throw new Error("Invalid agent pair limit.");
+  return result;
+};
+const exchangeLimit: Decoder = (value) => {
+  const result = positive(value);
+  if (typeof result !== "number" || result > 100) throw new Error("Invalid agent exchange limit.");
+  return result;
+};
+const agentIdPair: Decoder = (value) => {
+  const ids = list(identifier, 2)(value);
+  if (!Array.isArray(ids) || ids.length !== 2 || ids[0] === ids[1]) throw new Error("Invalid agent pair.");
+  return ids;
+};
+const agentPair = fields({
+  agentIds: agentIdPair,
+  count,
+  lastAt: count,
+  lastSenderId: identifier,
+  lastText: string(240),
+});
+const exchangeMessage = fields(
+  {
+    id: identifier,
+    senderAgentId: identifier,
+    recipientAgentIds: list(identifier, 20),
+    text: string(8_000),
+    createdAt: count,
+  },
+  { truncated: boolean, replyToMessageId: identifier, attachmentCount: count },
+);
+
 export const WORKSPACE_FLEET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [
     WORKSPACE_FLEET_ROUTES.fleet,
@@ -190,6 +232,17 @@ export const WORKSPACE_FLEET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = n
   [
     WORKSPACE_FLEET_ROUTES.artifacts,
     adminRoute(fields({}, { channelId: identifier, limit: artifactLimit }), fields({ artifacts: list(artifact, 200) })),
+  ],
+  [
+    WORKSPACE_FLEET_ROUTES.agentPairs,
+    adminRoute(fields({}, { agentId: identifier, limit: pairLimit }), fields({ pairs: list(agentPair, 200) })),
+  ],
+  [
+    WORKSPACE_FLEET_ROUTES.agentExchange,
+    adminRoute(
+      fields({ agentIds: agentIdPair }, { before: count, limit: exchangeLimit }),
+      fields({ messages: list(exchangeMessage, 100), hasOlder: boolean }),
+    ),
   ],
 ]);
 

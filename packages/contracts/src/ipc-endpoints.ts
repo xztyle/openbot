@@ -548,6 +548,10 @@ import type {
 } from "./ipc-workflows";
 import type { WorkspaceActivity, WorkspaceActivityInput } from "./ipc-workspace-activity";
 import type {
+  WorkspaceAgentExchange,
+  WorkspaceAgentExchangeInput,
+  WorkspaceAgentPairs,
+  WorkspaceAgentPairsInput,
   WorkspaceArtifacts,
   WorkspaceArtifactsInput,
   WorkspaceFleet,
@@ -1358,6 +1362,11 @@ export const IPC_ENDPOINTS = {
     workspaceFleet: scopedRequest<WorkspaceFleetInput, WorkspaceFleet>()("agent:workspace:fleet"),
     workspaceSteps: scopedRequest<WorkspaceStepsInput, WorkspaceSteps>()("agent:workspace:steps"),
     workspaceArtifacts: scopedRequest<WorkspaceArtifactsInput, WorkspaceArtifacts>()("agent:workspace:artifacts"),
+    // The messages that agents send each other, as DMs between two agents, read only.
+    workspaceAgentPairs: scopedRequest<WorkspaceAgentPairsInput, WorkspaceAgentPairs>()("agent:workspace:agent-pairs"),
+    workspaceAgentExchange: scopedRequest<WorkspaceAgentExchangeInput, WorkspaceAgentExchange>()(
+      "agent:workspace:agent-exchange",
+    ),
     // The reader's own sidebar order and mutes, kept on the host per member. A joined server answers
     // through workspace-sidebar-v1 (`fork-host-v1`); one without it fails, and the window keeps the
     // value on this computer.

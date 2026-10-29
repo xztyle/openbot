@@ -1852,6 +1852,33 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         ];
         return { steps, total: steps.length, durationMs: 184_000, streaming, startedAt: start, costUsd: 0.42 };
       },
+      workspaceAgentPairs: async () => {
+        const [first, second] = agents;
+        if (!first || !second) return { pairs: [] };
+        const ids: [string, string] = first.id < second.id ? [first.id, second.id] : [second.id, first.id];
+        return {
+          pairs: [{ agentIds: ids, count: 2, lastAt: Date.now() - 60_000, lastSenderId: first.id, lastText: "Done." }],
+        };
+      },
+      workspaceAgentExchange: async ({ agentIds }) => ({
+        messages: [
+          {
+            id: "agent-talk-1",
+            senderAgentId: agentIds[1],
+            recipientAgentIds: [agentIds[0]],
+            text: "Can you check the level layout?",
+            createdAt: Date.now() - 120_000,
+          },
+          {
+            id: "agent-talk-2",
+            senderAgentId: agentIds[0],
+            recipientAgentIds: [agentIds[1]],
+            text: "Done.",
+            createdAt: Date.now() - 60_000,
+          },
+        ],
+        hasOlder: false,
+      }),
       workspaceArtifacts: async ({ channelId }) => {
         const now = Date.now();
         const [channel] = await mockChannels.listChannels();

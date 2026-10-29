@@ -10,6 +10,15 @@ import type {
   WorkspaceSteps,
   WorkspaceStepsInput,
 } from "@openbot/contracts/ipc";
+import {
+  WORKSPACE_AGENT_EXCHANGE_LIMIT,
+  WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT,
+  WORKSPACE_AGENT_PAIR_LIMIT,
+  type WorkspaceAgentExchange,
+  type WorkspaceAgentExchangeInput,
+  type WorkspaceAgentPairs,
+  type WorkspaceAgentPairsInput,
+} from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import type { AttentionRegistry } from "./agent/attention-registry";
@@ -175,6 +184,54 @@ export class WorkspaceInsights {
       costUsd,
       now: Date.now(),
     });
+  }
+
+  /**
+   * The pairs of agents that sent each other messages, newest first, where the reader sees both
+   * agents. Their talk stays in each agent's own chat; this is the view of it as a DM.
+   */
+  agentPairs(input: WorkspaceAgentPairsInput, visible: (agentId: string) => boolean = () => true): WorkspaceAgentPairs {
+    const limit = input.limit ?? WORKSPACE_AGENT_PAIR_LIMIT;
+    const pairs = this.#options.database.workspace
+      .agentPairs()
+      .filter(
+        (pair) =>
+          visible(pair.agentIds[0]) &&
+          visible(pair.agentIds[1]) &&
+          (input.agentId === undefined || pair.agentIds.includes(input.agentId)),
+      )
+      .slice(0, limit)
+      .map((pair) => ({ ...pair, lastAt: Date.parse(pair.lastAt) || 0 }));
+    return { pairs };
+  }
+
+  /** The messages between two agents that the reader sees, oldest first. Empty when one is not seen. */
+  agentExchange(
+    input: WorkspaceAgentExchangeInput,
+    visible: (agentId: string) => boolean = () => true,
+  ): WorkspaceAgentExchange {
+    const [first, second] = input.agentIds;
+    if (!visible(first) || !visible(second)) return { messages: [], hasOlder: false };
+    const limit = input.limit ?? WORKSPACE_AGENT_EXCHANGE_LIMIT;
+    const before = input.before === undefined ? null : new Date(input.before).toISOString();
+    const rows = this.#options.database.workspace.agentExchange(first, second, before, limit + 1);
+    const messages = rows
+      .slice(0, limit)
+      .reverse()
+      .map((row) => {
+        const truncated = row.text.length > WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT;
+        return {
+          id: row.id,
+          senderAgentId: row.senderAgentId,
+          recipientAgentIds: row.recipientAgentIds.slice(0, 20),
+          text: truncated ? row.text.slice(0, WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT) : row.text,
+          ...(truncated ? { truncated: true } : {}),
+          createdAt: Date.parse(row.createdAt) || 0,
+          ...(row.replyToMessageId ? { replyToMessageId: row.replyToMessageId } : {}),
+          ...(row.attachmentCount > 0 ? { attachmentCount: row.attachmentCount } : {}),
+        };
+      });
+    return { messages, hasOlder: rows.length > limit };
   }
 
   /**

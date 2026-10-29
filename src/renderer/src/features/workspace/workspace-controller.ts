@@ -102,6 +102,8 @@ interface EditingState {
 
 interface WorkspaceState {
   view: WorkspaceView | null;
+  /** The agent whose talks with other agents the Between agents view lists, or null for all. */
+  agentTalkAgentId: string | null;
   panel: WorkspacePanel | null;
   phonePane: WorkspacePhonePane;
   dialog: WorkspaceDialog | null;
@@ -405,6 +407,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   const channels = env.channels;
   const [state, setState] = createStore<WorkspaceState>({
     view: null,
+    agentTalkAgentId: null,
     panel: null,
     phonePane: "sidebar",
     dialog: null,
@@ -1228,6 +1231,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (view === "artifacts") artifacts.refresh?.();
   }
 
+  /** The Between agents view, with the talks of one agent, or of all when `agentId` is null. */
+  function openAgentTalk(agentId: string | null) {
+    setState((draft) => {
+      draft.agentTalkAgentId = agentId;
+    });
+    openView("agents");
+  }
+
   function moveConversation(delta: number) {
     const order = conversationOrder();
     if (!order.length) return;
@@ -1757,6 +1768,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     openConversation,
     openLink,
     openView,
+    openAgentTalk,
     moveConversation,
     openThread,
     reloadThread: () => {

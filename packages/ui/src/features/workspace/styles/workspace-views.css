@@ -418,3 +418,76 @@
 .ws-thread-row .ws-mention-badge {
   margin-left: 0;
 }
+
+/* Between agents ------------------------------------------------------------------------------- */
+
+.ws-agent-talk-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  margin: 0;
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  list-style: none;
+}
+
+.ws-agent-talk-pair {
+  display: flex;
+  width: 100%;
+  height: auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  text-align: start;
+}
+
+.ws-agent-talk-faces {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.ws-agent-talk-faces > * + * {
+  margin-inline-start: calc(-1 * var(--openbot-space-2));
+}
+
+.ws-agent-talk-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+}
+
+.ws-agent-talk-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--openbot-space-2);
+}
+
+.ws-agent-talk-preview,
+.ws-agent-talk-count {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-agent-talk-count {
+  flex: 0 0 auto;
+}
+
+.ws-agent-talk-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+}
+
+.ws-agent-talk-transcript {
+  display: flex;
+  flex-direction: column;
+  padding-block: var(--openbot-space-2);
+}
+
+.ws-agent-talk-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

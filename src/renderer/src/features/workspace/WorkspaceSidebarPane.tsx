@@ -1,5 +1,6 @@
 import {
   ArrowDown,
+  ArrowLeftRight,
   ArrowUp,
   Bell,
   BellOff,
@@ -72,6 +73,12 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
               label: t("workspace.profile.settings"),
               icon: <Settings aria-hidden="true" />,
               onSelect: () => ws.env.openAgentSettings(agentId),
+            },
+            {
+              id: "agent-talk",
+              label: t("workspace.agentTalk.open"),
+              icon: <ArrowLeftRight aria-hidden="true" />,
+              onSelect: () => ws.openAgentTalk(agentId),
             },
           ]
         : [

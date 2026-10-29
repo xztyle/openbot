@@ -4,6 +4,7 @@ import { createSignal, For, Show } from "solid-js";
 import { Button, IconButton } from "../../button";
 import {
   Activity,
+  ArrowLeftRight,
   AtSign,
   Blocks,
   ChevronDown,
@@ -27,7 +28,7 @@ import { WorkspaceMenu } from "./WorkspaceMenu";
 import type { ChannelVisibility, WorkspaceMember, WorkspaceMenuItem } from "./workspace-types";
 
 /** The views above the channel list. */
-export type WorkspaceView = "threads" | "activity" | "fleet" | "artifacts" | "storage";
+export type WorkspaceView = "threads" | "activity" | "fleet" | "artifacts" | "agents" | "storage";
 
 export interface SidebarChannel {
   id: string;
@@ -177,6 +178,13 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
               icon={<LayoutDashboard aria-hidden="true" />}
               label={t("workspace.view.artifacts")}
               active={props.activeView === "artifacts"}
+              onSelect={props.onSelectView}
+            />
+            <QuickRow
+              view="agents"
+              icon={<ArrowLeftRight aria-hidden="true" />}
+              label={t("workspace.view.agents")}
+              active={props.activeView === "agents"}
               onSelect={props.onSelectView}
             />
             <Show when={props.showStorage}>

@@ -34,6 +34,26 @@ export interface WorkspaceThreadMessageRow {
   message: ConversationMessage;
 }
 
+/** Two agents that sent each other messages. Times are ISO strings, as stored. */
+export interface WorkspaceAgentPairRow {
+  agentIds: [string, string];
+  count: number;
+  lastAt: string;
+  lastSenderId: string;
+  lastText: string;
+}
+
+/** One message from an agent to other agents. */
+export interface WorkspaceAgentExchangeRow {
+  id: string;
+  senderAgentId: string;
+  recipientAgentIds: string[];
+  text: string;
+  createdAt: string;
+  replyToMessageId: string | null;
+  attachmentCount: number;
+}
+
 /**
  * The reads of the workspace fleet, step trail and artifact views: today's usage and turn times of
  * each agent, one turn and its messages, and the agent messages that can hold an artifact. Read
@@ -204,5 +224,71 @@ export class WorkspaceQueries {
         found.add(requiredStringColumn(row, "message_id"));
     }
     return found;
+  }
+
+  /**
+   * Each two agents that sent each other messages, newest first: the count of both directions and
+   * the newest message. A message to several agents counts once for each pair.
+   */
+  agentPairs(): WorkspaceAgentPairRow[] {
+    return databaseRows(
+      this.#core.connection
+        .prepare(
+          `WITH exchange AS (
+             SELECT message.sender_agent_id AS sender, delivery.recipient_agent_id AS recipient,
+                    message.text, message.created_at,
+                    MIN(message.sender_agent_id, delivery.recipient_agent_id) AS first_agent,
+                    MAX(message.sender_agent_id, delivery.recipient_agent_id) AS second_agent
+               FROM projection_deliveries delivery
+               JOIN projection_mailbox_messages message ON message.message_id = delivery.message_id
+              WHERE message.sender_kind = 'agent' AND message.sender_agent_id IS NOT NULL
+                AND message.sender_agent_id != delivery.recipient_agent_id
+           ), ranked AS (
+             SELECT *, ROW_NUMBER() OVER (PARTITION BY first_agent, second_agent ORDER BY created_at DESC) AS rank,
+                    COUNT(*) OVER (PARTITION BY first_agent, second_agent) AS total
+               FROM exchange
+           )
+           SELECT first_agent, second_agent, total, created_at, sender, substr(text, 1, 240) AS last_text
+             FROM ranked WHERE rank = 1 ORDER BY created_at DESC`,
+        )
+        .all(),
+    ).map((row) => ({
+      agentIds: [requiredStringColumn(row, "first_agent"), requiredStringColumn(row, "second_agent")],
+      count: requiredNumberColumn(row, "total"),
+      lastAt: requiredStringColumn(row, "created_at"),
+      lastSenderId: requiredStringColumn(row, "sender"),
+      lastText: requiredStringColumn(row, "last_text"),
+    }));
+  }
+
+  /** The messages between two agents, newest first, before `before` (an ISO time) when given. */
+  agentExchange(first: string, second: string, before: string | null, limit: number): WorkspaceAgentExchangeRow[] {
+    return databaseRows(
+      this.#core.connection
+        .prepare(
+          `SELECT DISTINCT message.message_id, message.sender_agent_id, message.text, message.created_at,
+                  message.reply_to_message_id,
+                  COALESCE(json_array_length(message.message_json, '$.attachments'), 0) AS attachment_count,
+                  (SELECT group_concat(other.recipient_agent_id, ',') FROM projection_deliveries other
+                    WHERE other.message_id = message.message_id) AS recipients
+             FROM projection_deliveries delivery
+             JOIN projection_mailbox_messages message ON message.message_id = delivery.message_id
+            WHERE message.sender_kind = 'agent'
+              AND ((message.sender_agent_id = ? AND delivery.recipient_agent_id = ?)
+                OR (message.sender_agent_id = ? AND delivery.recipient_agent_id = ?))
+              AND (? IS NULL OR message.created_at < ?)
+            ORDER BY message.created_at DESC
+            LIMIT ?`,
+        )
+        .all(first, second, second, first, before, before, limit),
+    ).map((row) => ({
+      id: requiredStringColumn(row, "message_id"),
+      senderAgentId: requiredStringColumn(row, "sender_agent_id"),
+      recipientAgentIds: (optionalStringColumn(row, "recipients") ?? "").split(",").filter(Boolean),
+      text: requiredStringColumn(row, "text"),
+      createdAt: requiredStringColumn(row, "created_at"),
+      replyToMessageId: optionalStringColumn(row, "reply_to_message_id"),
+      attachmentCount: requiredNumberColumn(row, "attachment_count"),
+    }));
   }
 }

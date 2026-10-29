@@ -385,3 +385,142 @@ export function parseWorkspaceArtifactsInput(value: unknown): WorkspaceArtifacts
 export function isWorkspaceFleetChange(value: DynamicRecord): boolean {
   return isTime(value.revision);
 }
+
+// --- Between agents: the messages that agents send each other ------------------------------------
+
+export const WORKSPACE_AGENT_PAIR_LIMIT = 200;
+export const WORKSPACE_AGENT_EXCHANGE_LIMIT = 100;
+/** The longest text of one message between agents that the host sends. A longer one is cut. */
+export const WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT = 8_000;
+export const WORKSPACE_AGENT_EXCHANGE_RECIPIENT_LIMIT = 20;
+
+/** Two agents that sent each other messages: the count of both directions, and the newest one. */
+export interface WorkspaceAgentPair {
+  /** The two agent ids, in the order of the strings. */
+  agentIds: [string, string];
+  count: number;
+  lastAt: number;
+  lastSenderId: string;
+  /** The start of the newest message, at most `WORKSPACE_FLEET_TEXT_LIMIT`. */
+  lastText: string;
+}
+
+export interface WorkspaceAgentPairs {
+  /** The newest first, by `lastAt`. Only pairs of agents that the reader can see. */
+  pairs: WorkspaceAgentPair[];
+}
+
+export interface WorkspaceAgentPairsInput {
+  /** Only the pairs of this agent. */
+  agentId?: string;
+  limit?: number;
+}
+
+/** One message from an agent to one or more agents, as `send_message` sent it. */
+export interface WorkspaceAgentExchangeMessage {
+  id: string;
+  senderAgentId: string;
+  recipientAgentIds: string[];
+  text: string;
+  /** The host cut the text at `WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT`. */
+  truncated?: boolean;
+  createdAt: number;
+  replyToMessageId?: string;
+  attachmentCount?: number;
+}
+
+export interface WorkspaceAgentExchange {
+  /** The oldest first. */
+  messages: WorkspaceAgentExchangeMessage[];
+  /** Older messages exist before the first one. */
+  hasOlder: boolean;
+}
+
+export interface WorkspaceAgentExchangeInput {
+  agentIds: [string, string];
+  /** Only messages older than this time, for the previous page. */
+  before?: number;
+  limit?: number;
+}
+
+function isAgentPair(value: unknown): value is [string, string] {
+  return Array.isArray(value) && value.length === 2 && value.every(isIdentifier) && value[0] !== value[1];
+}
+
+function isWorkspaceAgentPair(value: unknown): value is WorkspaceAgentPair {
+  return (
+    isDynamicRecord(value) &&
+    isAgentPair(value.agentIds) &&
+    isTime(value.count) &&
+    isTime(value.lastAt) &&
+    isIdentifier(value.lastSenderId) &&
+    isBoundedString(value.lastText, WORKSPACE_FLEET_TEXT_LIMIT)
+  );
+}
+
+function isWorkspaceAgentExchangeMessage(value: unknown): value is WorkspaceAgentExchangeMessage {
+  return (
+    isDynamicRecord(value) &&
+    isIdentifier(value.id) &&
+    isIdentifier(value.senderAgentId) &&
+    Array.isArray(value.recipientAgentIds) &&
+    value.recipientAgentIds.length <= WORKSPACE_AGENT_EXCHANGE_RECIPIENT_LIMIT &&
+    value.recipientAgentIds.every(isIdentifier) &&
+    isBoundedString(value.text, WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT) &&
+    optional(value.truncated, isBoolean) &&
+    isTime(value.createdAt) &&
+    optional(value.replyToMessageId, isIdentifier) &&
+    optional(value.attachmentCount, isTime)
+  );
+}
+
+export function decodeWorkspaceAgentPairs(value: unknown): WorkspaceAgentPairs {
+  if (
+    !isDynamicRecord(value) ||
+    !Array.isArray(value.pairs) ||
+    value.pairs.length > WORKSPACE_AGENT_PAIR_LIMIT ||
+    !value.pairs.every(isWorkspaceAgentPair)
+  )
+    throw new Error("Invalid agent pairs.");
+  return { pairs: value.pairs };
+}
+
+export function decodeWorkspaceAgentExchange(value: unknown): WorkspaceAgentExchange {
+  if (
+    !isDynamicRecord(value) ||
+    !Array.isArray(value.messages) ||
+    value.messages.length > WORKSPACE_AGENT_EXCHANGE_LIMIT ||
+    !value.messages.every(isWorkspaceAgentExchangeMessage) ||
+    !isBoolean(value.hasOlder)
+  )
+    throw new Error("Invalid agent exchange.");
+  return { messages: value.messages, hasOlder: value.hasOlder };
+}
+
+export function parseWorkspaceAgentPairsInput(value: unknown): WorkspaceAgentPairsInput {
+  if (value === undefined || value === null) return {};
+  if (
+    !isDynamicRecord(value) ||
+    !optional(value.agentId, isIdentifier) ||
+    !optional(value.limit, (limit) => integerInRange(limit, 1, WORKSPACE_AGENT_PAIR_LIMIT))
+  )
+    throw new Error("Invalid agent pairs input.");
+  const input: WorkspaceAgentPairsInput = {};
+  if (isIdentifier(value.agentId)) input.agentId = value.agentId;
+  if (integerInRange(value.limit, 1, WORKSPACE_AGENT_PAIR_LIMIT)) input.limit = value.limit;
+  return input;
+}
+
+export function parseWorkspaceAgentExchangeInput(value: unknown): WorkspaceAgentExchangeInput {
+  if (
+    !isDynamicRecord(value) ||
+    !isAgentPair(value.agentIds) ||
+    !optional(value.before, isTime) ||
+    !optional(value.limit, (limit) => integerInRange(limit, 1, WORKSPACE_AGENT_EXCHANGE_LIMIT))
+  )
+    throw new Error("Invalid agent exchange input.");
+  const input: WorkspaceAgentExchangeInput = { agentIds: [value.agentIds[0], value.agentIds[1]] };
+  if (isTime(value.before)) input.before = value.before;
+  if (integerInRange(value.limit, 1, WORKSPACE_AGENT_EXCHANGE_LIMIT)) input.limit = value.limit;
+  return input;
+}

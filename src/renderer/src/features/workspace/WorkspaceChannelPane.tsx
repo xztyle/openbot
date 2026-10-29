@@ -5,12 +5,14 @@ import {
   channelMembersAnswer,
   channelVisibility,
 } from "@openbot/contracts/ipc";
-import { Button, Hash, Lock } from "@openbot/ui";
+import { Bell, BellOff, Button, Hash, Info, Lock, LogOut, UsersRound } from "@openbot/ui";
 import { QuestionPromptBubble } from "@openbot/ui/components/QuestionPromptBubble";
 import { ApprovalCard, BrowserTakeoverCard } from "@openbot/ui/features/conversation/ConversationPrompts";
 import { ChannelHeader } from "@openbot/ui/features/workspace/ChannelHeader";
 import { TypingIndicator } from "@openbot/ui/features/workspace/TypingIndicator";
 import { MemberAvatar } from "@openbot/ui/features/workspace/WorkspaceAvatar";
+import { WorkspaceContextMenu } from "@openbot/ui/features/workspace/WorkspaceContextMenu";
+import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { createMemo, Show } from "solid-js";
 import {
@@ -146,27 +148,64 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     const current = panel();
     return current?.kind === "thread" ? current.rootId : undefined;
   };
+  /** Right-click on the header: details, members, mute, and leave for a channel. */
+  const headerMenu = (): WorkspaceMenuItem[] => {
+    const muted = ws.isMuted(props.channelId);
+    return [
+      {
+        id: "details",
+        label: t("workspace.details.title"),
+        icon: <Info aria-hidden="true" />,
+        onSelect: () => ws.openDetails(props.channelId, "about"),
+      },
+      {
+        id: "members",
+        label: t("workspace.details.membersTab", { count: members().length }),
+        icon: <UsersRound aria-hidden="true" />,
+        onSelect: () => ws.openDetails(props.channelId, "members"),
+      },
+      {
+        id: "mute",
+        label: t(muted ? "workspace.sidebar.unmute" : "workspace.sidebar.mute"),
+        icon: muted ? <Bell aria-hidden="true" /> : <BellOff aria-hidden="true" />,
+        onSelect: () => ws.setMuted(props.channelId, !muted),
+      },
+      ...(kind() === "channel" && joined() && !archived()
+        ? [
+            {
+              id: "leave",
+              label: t("workspace.details.leave"),
+              icon: <LogOut aria-hidden="true" />,
+              danger: true,
+              onSelect: () => void ws.leave(props.channelId),
+            },
+          ]
+        : []),
+    ];
+  };
   return (
     <section class="ws-channel-pane" aria-label={name()}>
-      <ChannelHeader
-        kind={kind()}
-        name={name()}
-        visibility={visibility()}
-        dmMember={kind() === "dm" ? others()[0] : undefined}
-        topic={channel()?.topic}
-        onEditTopic={
-          kind() === "channel" && !archived() && joined()
-            ? () => ws.openDialog({ kind: "edit-meta", channelId: props.channelId, field: "topic" })
-            : undefined
-        }
-        members={members()}
-        memberCount={members().length}
-        onShowMembers={() => ws.openDetails(props.channelId, "members")}
-        onShowDetails={() => ws.openDetails(props.channelId, "about")}
-        onShowArtifacts={() => ws.openArtifactsPanel(props.channelId)}
-        activePanel={panel()?.kind === "details" ? "details" : panel()?.kind === "artifacts" ? "artifacts" : null}
-        onBack={() => ws.back()}
-      />
+      <WorkspaceContextMenu items={headerMenu} label={t("workspace.details.title")}>
+        <ChannelHeader
+          kind={kind()}
+          name={name()}
+          visibility={visibility()}
+          dmMember={kind() === "dm" ? others()[0] : undefined}
+          topic={channel()?.topic}
+          onEditTopic={
+            kind() === "channel" && !archived() && joined()
+              ? () => ws.openDialog({ kind: "edit-meta", channelId: props.channelId, field: "topic" })
+              : undefined
+          }
+          members={members()}
+          memberCount={members().length}
+          onShowMembers={() => ws.openDetails(props.channelId, "members")}
+          onShowDetails={() => ws.openDetails(props.channelId, "about")}
+          onShowArtifacts={() => ws.openArtifactsPanel(props.channelId)}
+          activePanel={panel()?.kind === "details" ? "details" : panel()?.kind === "artifacts" ? "artifacts" : null}
+          onBack={() => ws.back()}
+        />
+      </WorkspaceContextMenu>
       <Show when={page()} fallback={<p class="ws-pane-loading">{t("workspace.app.channel.loading")}</p>}>
         <WorkspaceMessageList
           channelId={props.channelId}

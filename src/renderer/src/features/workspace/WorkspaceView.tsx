@@ -1,11 +1,14 @@
 import { MessageMentionsContext } from "@openbot/ui/features/conversation/message-mentions";
 import { ChannelHeader } from "@openbot/ui/features/workspace/ChannelHeader";
+import { WorkspaceContextMenu } from "@openbot/ui/features/workspace/WorkspaceContextMenu";
 import { WorkspaceLayout } from "@openbot/ui/features/workspace/WorkspaceLayout";
+import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createMemo, Match, onSettled, type ParentProps, Show, Switch } from "solid-js";
 import { WorkspaceChannelPane } from "./WorkspaceChannelPane";
 import { WorkspaceDetailsPanel } from "./WorkspaceDetailsPanel";
 import { WorkspaceDialogs } from "./WorkspaceDialogs";
+import { useWorkspaceMenu } from "./WorkspaceSidebarPane";
 import { WorkspaceThreadPanel } from "./WorkspaceThreadPanel";
 import { WorkspaceChannelArtifacts, WorkspaceViewPane } from "./WorkspaceViews";
 import { WorkspaceWelcome } from "./WorkspaceWelcome";
@@ -78,6 +81,8 @@ export function WorkspaceMentions(props: ParentProps) {
 /** The workspace's middle and right panes: a conversation or a view, and the thread or details. */
 export function WorkspaceMain() {
   const ws = useWorkspace();
+  const { t } = useText();
+  const workspaceMenu = useWorkspaceMenu();
   const panel = createMemo((): JSX.Element | undefined => {
     const current = ws.state.panel;
     if (!current) return undefined;
@@ -88,40 +93,49 @@ export function WorkspaceMain() {
   });
   return (
     <WorkspaceMentions>
-      <WorkspaceLayout
-        class="ws-main-layout"
-        sidebar={null}
-        sidebarCollapsed
-        phonePane={ws.state.phonePane === "panel" ? "panel" : "main"}
-        main={
-          <Switch>
-            <Match
-              when={(() => {
-                const route = ws.route();
-                return route.kind === "channel" ? route.channelId : undefined;
-              })()}
-              keyed
-            >
-              {(channelId) => <WorkspaceChannelPane channelId={channelId} />}
-            </Match>
-            <Match
-              when={(() => {
-                const route = ws.route();
-                return route.kind === "view" ? route.view : undefined;
-              })()}
-              keyed
-            >
-              {(view) => (
-                // A new workspace opens on its welcome until it has a channel or the reader picks a view.
-                <Show when={ws.workspaceEmpty() && ws.state.view === null} fallback={<WorkspaceViewPane view={view} />}>
-                  <WorkspaceWelcome />
-                </Show>
-              )}
-            </Match>
-          </Switch>
-        }
-        panel={panel()}
-      />
+      {/* Where nothing nearer has a right-click menu, the workspace's own actions show. */}
+      <WorkspaceContextMenu
+        items={workspaceMenu}
+        label={t("workspace.sidebar.workspaceMenu", { name: ws.env.serverName() })}
+      >
+        <WorkspaceLayout
+          class="ws-main-layout"
+          sidebar={null}
+          sidebarCollapsed
+          phonePane={ws.state.phonePane === "panel" ? "panel" : "main"}
+          main={
+            <Switch>
+              <Match
+                when={(() => {
+                  const route = ws.route();
+                  return route.kind === "channel" ? route.channelId : undefined;
+                })()}
+                keyed
+              >
+                {(channelId) => <WorkspaceChannelPane channelId={channelId} />}
+              </Match>
+              <Match
+                when={(() => {
+                  const route = ws.route();
+                  return route.kind === "view" ? route.view : undefined;
+                })()}
+                keyed
+              >
+                {(view) => (
+                  // A new workspace opens on its welcome until it has a channel or the reader picks a view.
+                  <Show
+                    when={ws.workspaceEmpty() && ws.state.view === null}
+                    fallback={<WorkspaceViewPane view={view} />}
+                  >
+                    <WorkspaceWelcome />
+                  </Show>
+                )}
+              </Match>
+            </Switch>
+          }
+          panel={panel()}
+        />
+      </WorkspaceContextMenu>
     </WorkspaceMentions>
   );
 }
@@ -142,25 +156,32 @@ export function WorkspaceChrome() {
  */
 export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
   const ws = useWorkspace();
+  const { t } = useText();
+  const workspaceMenu = useWorkspaceMenu();
   const agent = () => ws.env.agents().find((candidate) => candidate.id === props.agentId);
   return (
-    <section class="ws-agent-dm">
-      <Show when={agent()}>
-        {(current) => (
-          <ChannelHeader
-            class="ws-agent-dm-header"
-            kind="dm"
-            name={current().name}
-            dmMember={agentMember(current(), agentWorking(ws.directory(), current().id))}
-            topic={current().title || undefined}
-            members={[]}
-            memberCount={1}
-            onShowDetails={() => ws.env.openAgentSettings(current().id)}
-            onBack={() => ws.back()}
-          />
-        )}
-      </Show>
-      <div class="ws-agent-dm-body">{props.children}</div>
-    </section>
+    <WorkspaceContextMenu
+      items={workspaceMenu}
+      label={t("workspace.sidebar.workspaceMenu", { name: ws.env.serverName() })}
+    >
+      <section class="ws-agent-dm">
+        <Show when={agent()}>
+          {(current) => (
+            <ChannelHeader
+              class="ws-agent-dm-header"
+              kind="dm"
+              name={current().name}
+              dmMember={agentMember(current(), agentWorking(ws.directory(), current().id))}
+              topic={current().title || undefined}
+              members={[]}
+              memberCount={1}
+              onShowDetails={() => ws.env.openAgentSettings(current().id)}
+              onBack={() => ws.back()}
+            />
+          )}
+        </Show>
+        <div class="ws-agent-dm-body">{props.children}</div>
+      </section>
+    </WorkspaceContextMenu>
   );
 }

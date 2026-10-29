@@ -681,3 +681,8 @@
     opacity: 1;
   }
 }
+
+/* The box of a right-click menu's trigger: its content keeps its own place in the layout. */
+.ws-context-trigger {
+  display: contents;
+}

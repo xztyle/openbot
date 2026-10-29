@@ -9,6 +9,7 @@ import { cx } from "../../utils";
 import { EmojiPicker, type EmojiPickerProps } from "./EmojiPicker";
 import { MemberProfilePopover } from "./MemberProfileCard";
 import { AvatarStack, MemberAvatar, MemberName } from "./WorkspaceAvatar";
+import { WorkspaceContextMenu } from "./WorkspaceContextMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 import { useMessageTime, useRecentTime } from "./workspace-format";
 import type {
@@ -74,121 +75,128 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
   const fullTime = () => format.date(props.sentAt, { dateStyle: "full", timeStyle: "short" });
   const profileLabel = () => t("workspace.profile.open", { name: props.author.name });
   return (
-    <article
-      class={cx("ws-message", props.class)}
-      tabindex="0"
-      data-grouped={props.grouped ? "" : undefined}
-      data-highlighted={props.highlighted ? "" : undefined}
-      data-mention={props.mentionsReader ? "" : undefined}
-      data-menu-open={menuOpen() ? "" : undefined}
-      aria-label={t("workspace.message.label", { name: props.author.name, time: time(props.sentAt) })}
-      onPointerEnter={arm}
-      onFocusIn={arm}
-    >
-      <div class="ws-message-gutter">
-        <Show
-          when={!props.grouped}
-          fallback={
-            <time class="ws-message-gutter-time" datetime={new Date(props.sentAt).toISOString()} title={fullTime()}>
-              {time(props.sentAt)}
-            </time>
-          }
-        >
-          <MemberProfilePopover card={armed() ? props.profile : undefined} label={profileLabel()}>
-            <MemberAvatar member={props.author} size="lg" />
-          </MemberProfilePopover>
-        </Show>
-      </div>
-      <div class="ws-message-body">
-        <Show when={!props.grouped}>
-          <div class="ws-message-meta">
-            <MemberProfilePopover
-              card={armed() ? props.profile : undefined}
-              label={profileLabel()}
-              class="ws-message-author"
-            >
-              <MemberName member={props.author} />
+    <WorkspaceContextMenu items={() => props.menuItems ?? []} label={t("workspace.message.more")}>
+      <article
+        class={cx("ws-message", props.class)}
+        tabindex="0"
+        data-grouped={props.grouped ? "" : undefined}
+        data-highlighted={props.highlighted ? "" : undefined}
+        data-mention={props.mentionsReader ? "" : undefined}
+        data-menu-open={menuOpen() ? "" : undefined}
+        aria-label={t("workspace.message.label", { name: props.author.name, time: time(props.sentAt) })}
+        onPointerEnter={arm}
+        onFocusIn={arm}
+      >
+        <div class="ws-message-gutter">
+          <Show
+            when={!props.grouped}
+            fallback={
+              <time class="ws-message-gutter-time" datetime={new Date(props.sentAt).toISOString()} title={fullTime()}>
+                {time(props.sentAt)}
+              </time>
+            }
+          >
+            <MemberProfilePopover card={armed() ? props.profile : undefined} label={profileLabel()}>
+              <MemberAvatar member={props.author} size="lg" />
             </MemberProfilePopover>
-            <time class="ws-message-time" datetime={new Date(props.sentAt).toISOString()} title={fullTime()}>
-              {time(props.sentAt)}
-            </time>
-          </div>
-        </Show>
-        <Show
-          when={!props.deleted}
-          fallback={<p class="ws-message-text ws-message-deleted">{t("workspace.message.deleted")}</p>}
-        >
-          <Show when={props.text?.length}>
-            <p class="ws-message-text">
-              <MessageText segments={props.text ?? []} />
-              <Show when={props.edited}>
-                <span class="ws-message-edited">{t("workspace.message.edited")}</span>
-              </Show>
-            </p>
-          </Show>
-          {props.children}
-          <Show when={props.reactions?.length}>
-            <ReactionBar
-              reactions={props.reactions ?? []}
-              onToggle={props.onToggleReaction}
-              quickReactions={props.quickReactions}
-              onOpenEmojiPicker={props.onOpenEmojiPicker}
-              emojiPicker={props.emojiPicker}
-            />
-          </Show>
-          <Show when={props.thread}>
-            {(thread) => <ThreadSummaryRow thread={thread()} onOpen={props.onOpenThread} />}
-          </Show>
-        </Show>
-      </div>
-      <Show when={armed() && !props.deleted}>
-        <div class="ws-message-actions" role="toolbar" aria-label={t("workspace.message.actions")}>
-          <Show when={props.onToggleReaction}>
-            {(toggle) => (
-              <>
-                <For each={(props.quickReactions ?? QUICK_REACTIONS).slice(0, 3)}>
-                  {(emoji) => (
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      class="ws-message-action-emoji"
-                      aria-label={t("workspace.reaction.add", { emoji })}
-                      title={t("workspace.reaction.add", { emoji })}
-                      onClick={() => toggle()(emoji)}
-                    >
-                      {emoji}
-                    </Button>
-                  )}
-                </For>
-                <ReactionPicker
-                  quickReactions={props.quickReactions}
-                  onPick={toggle()}
-                  onOpenEmojiPicker={props.onOpenEmojiPicker}
-                  emojiPicker={props.emojiPicker}
-                />
-              </>
-            )}
-          </Show>
-          <Show when={props.onOpenThread}>
-            {(open) => (
-              <IconButton variant="ghost" size="icon-xs" label={t("workspace.message.reply")} onClick={() => open()()}>
-                <MessageSquareReply />
-              </IconButton>
-            )}
-          </Show>
-          <Show when={props.menuItems?.length}>
-            <WorkspaceMenu
-              items={props.menuItems ?? []}
-              label={t("workspace.message.more")}
-              triggerClass="ws-message-action-more"
-              onOpenChange={setMenuOpen}
-            >
-              <Ellipsis aria-hidden="true" />
-            </WorkspaceMenu>
           </Show>
         </div>
-      </Show>
-    </article>
+        <div class="ws-message-body">
+          <Show when={!props.grouped}>
+            <div class="ws-message-meta">
+              <MemberProfilePopover
+                card={armed() ? props.profile : undefined}
+                label={profileLabel()}
+                class="ws-message-author"
+              >
+                <MemberName member={props.author} />
+              </MemberProfilePopover>
+              <time class="ws-message-time" datetime={new Date(props.sentAt).toISOString()} title={fullTime()}>
+                {time(props.sentAt)}
+              </time>
+            </div>
+          </Show>
+          <Show
+            when={!props.deleted}
+            fallback={<p class="ws-message-text ws-message-deleted">{t("workspace.message.deleted")}</p>}
+          >
+            <Show when={props.text?.length}>
+              <p class="ws-message-text">
+                <MessageText segments={props.text ?? []} />
+                <Show when={props.edited}>
+                  <span class="ws-message-edited">{t("workspace.message.edited")}</span>
+                </Show>
+              </p>
+            </Show>
+            {props.children}
+            <Show when={props.reactions?.length}>
+              <ReactionBar
+                reactions={props.reactions ?? []}
+                onToggle={props.onToggleReaction}
+                quickReactions={props.quickReactions}
+                onOpenEmojiPicker={props.onOpenEmojiPicker}
+                emojiPicker={props.emojiPicker}
+              />
+            </Show>
+            <Show when={props.thread}>
+              {(thread) => <ThreadSummaryRow thread={thread()} onOpen={props.onOpenThread} />}
+            </Show>
+          </Show>
+        </div>
+        <Show when={armed() && !props.deleted}>
+          <div class="ws-message-actions" role="toolbar" aria-label={t("workspace.message.actions")}>
+            <Show when={props.onToggleReaction}>
+              {(toggle) => (
+                <>
+                  <For each={(props.quickReactions ?? QUICK_REACTIONS).slice(0, 3)}>
+                    {(emoji) => (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        class="ws-message-action-emoji"
+                        aria-label={t("workspace.reaction.add", { emoji })}
+                        title={t("workspace.reaction.add", { emoji })}
+                        onClick={() => toggle()(emoji)}
+                      >
+                        {emoji}
+                      </Button>
+                    )}
+                  </For>
+                  <ReactionPicker
+                    quickReactions={props.quickReactions}
+                    onPick={toggle()}
+                    onOpenEmojiPicker={props.onOpenEmojiPicker}
+                    emojiPicker={props.emojiPicker}
+                  />
+                </>
+              )}
+            </Show>
+            <Show when={props.onOpenThread}>
+              {(open) => (
+                <IconButton
+                  variant="ghost"
+                  size="icon-xs"
+                  label={t("workspace.message.reply")}
+                  onClick={() => open()()}
+                >
+                  <MessageSquareReply />
+                </IconButton>
+              )}
+            </Show>
+            <Show when={props.menuItems?.length}>
+              <WorkspaceMenu
+                items={props.menuItems ?? []}
+                label={t("workspace.message.more")}
+                triggerClass="ws-message-action-more"
+                onOpenChange={setMenuOpen}
+              >
+                <Ellipsis aria-hidden="true" />
+              </WorkspaceMenu>
+            </Show>
+          </div>
+        </Show>
+      </article>
+    </WorkspaceContextMenu>
   );
 }
 

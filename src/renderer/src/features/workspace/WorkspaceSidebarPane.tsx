@@ -1,15 +1,31 @@
-import { ArrowDown, ArrowUp, Bell, BellOff, Button, Hash, Input, Plus, Search, SquarePen } from "@openbot/ui";
+import {
+  ArrowDown,
+  ArrowUp,
+  Bell,
+  BellOff,
+  Button,
+  Hash,
+  Info,
+  Input,
+  LogOut,
+  MessageSquare,
+  Plus,
+  Search,
+  Settings,
+  SquarePen,
+} from "@openbot/ui";
 import { type SidebarGroupId, WorkspaceSidebar } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { createMemo } from "solid-js";
 import { useWorkspace } from "./workspace-context";
+import { AGENT_DM_PREFIX } from "./workspace-model";
 
-/** The workspace sidebar: the server's name and menu, the jump field, the views, channels and DMs. */
-export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
+/** The workspace's own actions: the server menu, and the right-click menu where nothing nearer has one. */
+export function useWorkspaceMenu(): () => WorkspaceMenuItem[] {
   const { t } = useText();
   const ws = useWorkspace();
-  const menu = createMemo((): WorkspaceMenuItem[] => [
+  return createMemo((): WorkspaceMenuItem[] => [
     {
       id: "create-channel",
       label: t("workspace.app.menu.createChannel"),
@@ -30,10 +46,45 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
     },
     ...ws.env.menu(),
   ]);
-  /** Mute, and the keyboard's way to move a row; dragging moves it too. */
+}
+
+/** The workspace sidebar: the server's name and menu, the jump field, the views, channels and DMs. */
+export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
+  const { t } = useText();
+  const ws = useWorkspace();
+  const menu = useWorkspaceMenu();
+  /** Open, details or settings, mute, the keyboard's way to move a row (dragging moves it too), leave. */
   const rowMenu = (id: string, group: SidebarGroupId): WorkspaceMenuItem[] => {
     const muted = ws.isMuted(id);
+    const agentId = id.startsWith(AGENT_DM_PREFIX) ? id.slice(AGENT_DM_PREFIX.length) : null;
+    const channel = agentId ? undefined : ws.summary(id);
     return [
+      {
+        id: "open",
+        label: t("common.open"),
+        icon: <MessageSquare aria-hidden="true" />,
+        onSelect: () => ws.openConversation(id),
+      },
+      ...(agentId
+        ? [
+            {
+              id: "agent-settings",
+              label: t("workspace.profile.settings"),
+              icon: <Settings aria-hidden="true" />,
+              onSelect: () => ws.env.openAgentSettings(agentId),
+            },
+          ]
+        : [
+            {
+              id: "details",
+              label: t("workspace.details.title"),
+              icon: <Info aria-hidden="true" />,
+              onSelect: () => {
+                ws.openConversation(id);
+                ws.openDetails(id, "about");
+              },
+            },
+          ]),
       {
         id: "mute",
         label: t(muted ? "workspace.sidebar.unmute" : "workspace.sidebar.mute"),
@@ -52,6 +103,17 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         icon: <ArrowDown aria-hidden="true" />,
         onSelect: () => ws.moveSidebarRow(group, id, 1),
       },
+      ...(group === "channels" && channel && !channel.archived
+        ? [
+            {
+              id: "leave",
+              label: t("workspace.details.leave"),
+              icon: <LogOut aria-hidden="true" />,
+              danger: true,
+              onSelect: () => void ws.leave(id),
+            },
+          ]
+        : []),
     ];
   };
   const view = () => {

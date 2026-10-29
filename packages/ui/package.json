@@ -431,6 +431,7 @@
     "./features/workspace/TypingIndicator": "./src/features/workspace/TypingIndicator.tsx",
     "./features/workspace/WorkspaceAvatar": "./src/features/workspace/WorkspaceAvatar.tsx",
     "./features/workspace/WorkspaceLayout": "./src/features/workspace/WorkspaceLayout.tsx",
+    "./features/workspace/WorkspaceContextMenu": "./src/features/workspace/WorkspaceContextMenu.tsx",
     "./features/workspace/WorkspaceMenu": "./src/features/workspace/WorkspaceMenu.tsx",
     "./features/workspace/WorkspacePaneHeader": "./src/features/workspace/WorkspacePaneHeader.tsx",
     "./features/workspace/WorkspaceSelect": "./src/features/workspace/WorkspaceSelect.tsx",

@@ -22,6 +22,7 @@ import {
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { AiBadge, AvatarStack, MemberAvatar, presenceLabelKey } from "./WorkspaceAvatar";
+import { WorkspaceContextMenu } from "./WorkspaceContextMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 import type { ChannelVisibility, WorkspaceMember, WorkspaceMenuItem } from "./workspace-types";
 
@@ -100,202 +101,210 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
   const [channelsOpen, setChannelsOpen] = createSignal(true);
   const [directOpen, setDirectOpen] = createSignal(true);
   return (
-    <nav class={cx("ws-sidebar", props.class)} aria-label={t("workspace.sidebar.label")} onKeyDown={moveRowFocus}>
-      <header class="ws-sidebar-header">
-        <Show when={props.workspaceMenu?.length} fallback={<h2 class="ws-sidebar-workspace">{props.workspaceName}</h2>}>
-          <WorkspaceMenu
-            items={props.workspaceMenu ?? []}
-            label={t("workspace.sidebar.workspaceMenu", { name: props.workspaceName })}
-            triggerClass="ws-sidebar-workspace ws-sidebar-workspace-trigger"
-            placement="bottom-start"
+    <WorkspaceContextMenu
+      items={() => props.workspaceMenu ?? []}
+      label={t("workspace.sidebar.workspaceMenu", { name: props.workspaceName })}
+    >
+      <nav class={cx("ws-sidebar", props.class)} aria-label={t("workspace.sidebar.label")} onKeyDown={moveRowFocus}>
+        <header class="ws-sidebar-header">
+          <Show
+            when={props.workspaceMenu?.length}
+            fallback={<h2 class="ws-sidebar-workspace">{props.workspaceName}</h2>}
           >
-            <span class="ws-truncate">{props.workspaceName}</span>
-            <ChevronDown aria-hidden="true" />
-          </WorkspaceMenu>
-        </Show>
-        <Show when={props.onNewMessage}>
-          {(onNew) => (
-            <IconButton
-              class="ws-sidebar-compose"
-              variant="secondary"
-              label={t("workspace.sidebar.newMessage")}
-              onClick={() => onNew()()}
+            <WorkspaceMenu
+              items={props.workspaceMenu ?? []}
+              label={t("workspace.sidebar.workspaceMenu", { name: props.workspaceName })}
+              triggerClass="ws-sidebar-workspace ws-sidebar-workspace-trigger"
+              placement="bottom-start"
             >
-              <SquarePen />
-            </IconButton>
-          )}
+              <span class="ws-truncate">{props.workspaceName}</span>
+              <ChevronDown aria-hidden="true" />
+            </WorkspaceMenu>
+          </Show>
+          <Show when={props.onNewMessage}>
+            {(onNew) => (
+              <IconButton
+                class="ws-sidebar-compose"
+                variant="secondary"
+                label={t("workspace.sidebar.newMessage")}
+                onClick={() => onNew()()}
+              >
+                <SquarePen />
+              </IconButton>
+            )}
+          </Show>
+        </header>
+        <Show when={props.search}>
+          <div class="ws-sidebar-search">{props.search}</div>
         </Show>
-      </header>
-      <Show when={props.search}>
-        <div class="ws-sidebar-search">{props.search}</div>
-      </Show>
-      <div class="ws-sidebar-scroll">
-        <div class="ws-sidebar-quick">
-          <QuickRow
-            view="threads"
-            icon={<MessageSquareText aria-hidden="true" />}
-            label={t("workspace.view.threads")}
-            active={props.activeView === "threads"}
-            unread={props.threadsUnread}
-            onSelect={props.onSelectView}
-          />
-          <QuickRow
-            view="activity"
-            icon={<AtSign aria-hidden="true" />}
-            label={t("workspace.view.activity")}
-            active={props.activeView === "activity"}
-            count={props.activityCount}
-            onSelect={props.onSelectView}
-          />
-          <QuickRow
-            view="fleet"
-            icon={<Activity aria-hidden="true" />}
-            label={t("workspace.view.fleet")}
-            active={props.activeView === "fleet"}
-            trailing={
-              <Show when={props.workingAgentCount}>
-                {(count) => (
-                  <span class="ws-sidebar-working-count">
-                    <span class="ws-working-pulse" aria-hidden="true" />
-                    {t("workspace.sidebar.workingCount", { count: count() })}
-                  </span>
-                )}
-              </Show>
-            }
-            onSelect={props.onSelectView}
-          />
-          <QuickRow
-            view="artifacts"
-            icon={<LayoutDashboard aria-hidden="true" />}
-            label={t("workspace.view.artifacts")}
-            active={props.activeView === "artifacts"}
-            onSelect={props.onSelectView}
-          />
-          <Show when={props.showStorage}>
+        <div class="ws-sidebar-scroll">
+          <div class="ws-sidebar-quick">
             <QuickRow
-              view="storage"
-              icon={<HardDrive aria-hidden="true" />}
-              label={t("storageHygiene.title")}
-              active={props.activeView === "storage"}
+              view="threads"
+              icon={<MessageSquareText aria-hidden="true" />}
+              label={t("workspace.view.threads")}
+              active={props.activeView === "threads"}
+              unread={props.threadsUnread}
               onSelect={props.onSelectView}
             />
-          </Show>
-          <Show when={props.onOpenApps}>
-            {(open) => (
-              <Button variant="ghost" class="ws-sidebar-row" data-ws-row="" onClick={() => open()()}>
-                <span class="ws-sidebar-row-icon">
-                  <Blocks aria-hidden="true" />
-                </span>
-                <span class="ws-sidebar-row-label">{t("workspace.view.apps")}</span>
-              </Button>
-            )}
-          </Show>
-        </div>
-
-        <SidebarGroup
-          label={t("workspace.sidebar.channels")}
-          open={channelsOpen()}
-          onToggle={() => setChannelsOpen((open) => !open)}
-          onAdd={props.onAddChannel}
-          addLabel={t("workspace.sidebar.addChannel")}
-        >
-          <Show when={props.filtering && props.channels.length === 0}>
-            <p class="ws-sidebar-empty">{t("workspace.sidebar.noMatches")}</p>
-          </Show>
-          <For each={props.channels} keyed={(channel) => channel.id}>
-            {(channel) => (
-              <SidebarRow
-                id={channel().id}
-                active={props.activeConversationId === channel().id}
-                unread={channel().unread}
-                mentionCount={channel().mentionCount}
-                muted={channel().muted}
-                dragHandle={props.dragHandle}
-                group="channels"
-                order={() => props.channels.map((row) => row.id)}
-                onReorder={props.onReorder}
-                menu={props.rowMenu}
-                label={channel().name}
-                accessibleLabel={t(
-                  channel().visibility === "private"
-                    ? "workspace.sidebar.privateChannel"
-                    : "workspace.sidebar.publicChannel",
-                  { name: channel().name },
-                )}
-                icon={
-                  <Show when={channel().visibility === "private"} fallback={<Hash aria-hidden="true" />}>
-                    <Lock aria-hidden="true" />
-                  </Show>
-                }
-                onSelect={props.onSelectConversation}
-              />
-            )}
-          </For>
-          <Show when={props.onAddChannel}>
-            {(add) => (
-              <Button variant="ghost" class="ws-sidebar-row ws-sidebar-add" data-ws-row="" onClick={() => add()()}>
-                <span class="ws-sidebar-row-icon ws-sidebar-add-icon">
-                  <Plus aria-hidden="true" />
-                </span>
-                <span class="ws-sidebar-row-label">{t("workspace.sidebar.addChannels")}</span>
-              </Button>
-            )}
-          </Show>
-        </SidebarGroup>
-
-        <SidebarGroup
-          label={t("workspace.sidebar.directMessages")}
-          open={directOpen()}
-          onToggle={() => setDirectOpen((open) => !open)}
-          onAdd={props.onNewMessage}
-          addLabel={t("workspace.sidebar.newMessage")}
-        >
-          <Show when={props.filtering && props.directMessages.length === 0}>
-            <p class="ws-sidebar-empty">{t("workspace.sidebar.noMatches")}</p>
-          </Show>
-          <For each={props.directMessages} keyed={(dm) => dm.id}>
-            {(dm) => (
-              <SidebarRow
-                id={dm().id}
-                active={props.activeConversationId === dm().id}
-                unread={dm().unread}
-                mentionCount={dm().mentionCount}
-                muted={dm().muted}
-                dragHandle={props.dragHandle}
-                group="direct"
-                order={() => props.directMessages.map((row) => row.id)}
-                onReorder={props.onReorder}
-                menu={props.rowMenu}
-                label={dm()
-                  .members.map((member) => member.name)
-                  .join(", ")}
-                accessibleLabel={directLabel(dm(), t)}
-                icon={<DirectIcon dm={dm()} />}
-                badge={
-                  <Show when={dm().kind === "dm" && dm().members[0]?.kind === "agent"}>
-                    <AiBadge />
-                    <Show when={dm().members[0]?.working}>
+            <QuickRow
+              view="activity"
+              icon={<AtSign aria-hidden="true" />}
+              label={t("workspace.view.activity")}
+              active={props.activeView === "activity"}
+              count={props.activityCount}
+              onSelect={props.onSelectView}
+            />
+            <QuickRow
+              view="fleet"
+              icon={<Activity aria-hidden="true" />}
+              label={t("workspace.view.fleet")}
+              active={props.activeView === "fleet"}
+              trailing={
+                <Show when={props.workingAgentCount}>
+                  {(count) => (
+                    <span class="ws-sidebar-working-count">
                       <span class="ws-working-pulse" aria-hidden="true" />
-                    </Show>
-                  </Show>
-                }
-                onSelect={props.onSelectConversation}
+                      {t("workspace.sidebar.workingCount", { count: count() })}
+                    </span>
+                  )}
+                </Show>
+              }
+              onSelect={props.onSelectView}
+            />
+            <QuickRow
+              view="artifacts"
+              icon={<LayoutDashboard aria-hidden="true" />}
+              label={t("workspace.view.artifacts")}
+              active={props.activeView === "artifacts"}
+              onSelect={props.onSelectView}
+            />
+            <Show when={props.showStorage}>
+              <QuickRow
+                view="storage"
+                icon={<HardDrive aria-hidden="true" />}
+                label={t("storageHygiene.title")}
+                active={props.activeView === "storage"}
+                onSelect={props.onSelectView}
               />
-            )}
-          </For>
-          <Show when={props.onAddTeammate}>
-            {(add) => (
-              <Button variant="ghost" class="ws-sidebar-row ws-sidebar-add" data-ws-row="" onClick={() => add()()}>
-                <span class="ws-sidebar-row-icon ws-sidebar-add-icon">
-                  <UserRoundPlus aria-hidden="true" />
-                </span>
-                <span class="ws-sidebar-row-label">{t("workspace.sidebar.addTeammates")}</span>
-              </Button>
-            )}
-          </Show>
-        </SidebarGroup>
-      </div>
-    </nav>
+            </Show>
+            <Show when={props.onOpenApps}>
+              {(open) => (
+                <Button variant="ghost" class="ws-sidebar-row" data-ws-row="" onClick={() => open()()}>
+                  <span class="ws-sidebar-row-icon">
+                    <Blocks aria-hidden="true" />
+                  </span>
+                  <span class="ws-sidebar-row-label">{t("workspace.view.apps")}</span>
+                </Button>
+              )}
+            </Show>
+          </div>
+
+          <SidebarGroup
+            label={t("workspace.sidebar.channels")}
+            open={channelsOpen()}
+            onToggle={() => setChannelsOpen((open) => !open)}
+            onAdd={props.onAddChannel}
+            addLabel={t("workspace.sidebar.addChannel")}
+          >
+            <Show when={props.filtering && props.channels.length === 0}>
+              <p class="ws-sidebar-empty">{t("workspace.sidebar.noMatches")}</p>
+            </Show>
+            <For each={props.channels} keyed={(channel) => channel.id}>
+              {(channel) => (
+                <SidebarRow
+                  id={channel().id}
+                  active={props.activeConversationId === channel().id}
+                  unread={channel().unread}
+                  mentionCount={channel().mentionCount}
+                  muted={channel().muted}
+                  dragHandle={props.dragHandle}
+                  group="channels"
+                  order={() => props.channels.map((row) => row.id)}
+                  onReorder={props.onReorder}
+                  menu={props.rowMenu}
+                  label={channel().name}
+                  accessibleLabel={t(
+                    channel().visibility === "private"
+                      ? "workspace.sidebar.privateChannel"
+                      : "workspace.sidebar.publicChannel",
+                    { name: channel().name },
+                  )}
+                  icon={
+                    <Show when={channel().visibility === "private"} fallback={<Hash aria-hidden="true" />}>
+                      <Lock aria-hidden="true" />
+                    </Show>
+                  }
+                  onSelect={props.onSelectConversation}
+                />
+              )}
+            </For>
+            <Show when={props.onAddChannel}>
+              {(add) => (
+                <Button variant="ghost" class="ws-sidebar-row ws-sidebar-add" data-ws-row="" onClick={() => add()()}>
+                  <span class="ws-sidebar-row-icon ws-sidebar-add-icon">
+                    <Plus aria-hidden="true" />
+                  </span>
+                  <span class="ws-sidebar-row-label">{t("workspace.sidebar.addChannels")}</span>
+                </Button>
+              )}
+            </Show>
+          </SidebarGroup>
+
+          <SidebarGroup
+            label={t("workspace.sidebar.directMessages")}
+            open={directOpen()}
+            onToggle={() => setDirectOpen((open) => !open)}
+            onAdd={props.onNewMessage}
+            addLabel={t("workspace.sidebar.newMessage")}
+          >
+            <Show when={props.filtering && props.directMessages.length === 0}>
+              <p class="ws-sidebar-empty">{t("workspace.sidebar.noMatches")}</p>
+            </Show>
+            <For each={props.directMessages} keyed={(dm) => dm.id}>
+              {(dm) => (
+                <SidebarRow
+                  id={dm().id}
+                  active={props.activeConversationId === dm().id}
+                  unread={dm().unread}
+                  mentionCount={dm().mentionCount}
+                  muted={dm().muted}
+                  dragHandle={props.dragHandle}
+                  group="direct"
+                  order={() => props.directMessages.map((row) => row.id)}
+                  onReorder={props.onReorder}
+                  menu={props.rowMenu}
+                  label={dm()
+                    .members.map((member) => member.name)
+                    .join(", ")}
+                  accessibleLabel={directLabel(dm(), t)}
+                  icon={<DirectIcon dm={dm()} />}
+                  badge={
+                    <Show when={dm().kind === "dm" && dm().members[0]?.kind === "agent"}>
+                      <AiBadge />
+                      <Show when={dm().members[0]?.working}>
+                        <span class="ws-working-pulse" aria-hidden="true" />
+                      </Show>
+                    </Show>
+                  }
+                  onSelect={props.onSelectConversation}
+                />
+              )}
+            </For>
+            <Show when={props.onAddTeammate}>
+              {(add) => (
+                <Button variant="ghost" class="ws-sidebar-row ws-sidebar-add" data-ws-row="" onClick={() => add()()}>
+                  <span class="ws-sidebar-row-icon ws-sidebar-add-icon">
+                    <UserRoundPlus aria-hidden="true" />
+                  </span>
+                  <span class="ws-sidebar-row-label">{t("workspace.sidebar.addTeammates")}</span>
+                </Button>
+              )}
+            </Show>
+          </SidebarGroup>
+        </div>
+      </nav>
+    </WorkspaceContextMenu>
   );
 }
 
@@ -473,36 +482,41 @@ function SidebarRow(props: {
       }}
     >
       <Show when={props.dragHandle}>{(handle) => <span class="ws-sidebar-drag">{handle()(props.id)}</span>}</Show>
-      <Button
-        variant="ghost"
-        class="ws-sidebar-row"
-        data-ws-row=""
-        data-active={props.active ? "" : undefined}
-        data-unread={(props.unread || mentions() > 0) && !props.muted ? "" : undefined}
-        data-muted={props.muted ? "" : undefined}
-        aria-current={props.active ? "page" : undefined}
-        aria-label={[
-          props.accessibleLabel,
-          mentions() > 0
-            ? t("workspace.sidebar.mentions", { count: mentions() })
-            : props.unread
-              ? t("workspace.sidebar.unread")
-              : "",
-          props.muted ? t("workspace.sidebar.muted") : "",
-        ]
-          .filter(Boolean)
-          .join(", ")}
-        onClick={() => props.onSelect(props.id)}
+      <WorkspaceContextMenu
+        items={() => props.menu?.(props.id, props.group) ?? []}
+        label={t("workspace.sidebar.rowMenu", { name: props.label })}
       >
-        <span class="ws-sidebar-row-icon">{props.icon}</span>
-        <span class="ws-sidebar-row-label">{props.label}</span>
-        {props.badge}
-        <Show when={mentions() > 0}>
-          <span class="ws-mention-badge" aria-hidden="true">
-            {Math.min(mentions(), 99)}
-          </span>
-        </Show>
-      </Button>
+        <Button
+          variant="ghost"
+          class="ws-sidebar-row"
+          data-ws-row=""
+          data-active={props.active ? "" : undefined}
+          data-unread={(props.unread || mentions() > 0) && !props.muted ? "" : undefined}
+          data-muted={props.muted ? "" : undefined}
+          aria-current={props.active ? "page" : undefined}
+          aria-label={[
+            props.accessibleLabel,
+            mentions() > 0
+              ? t("workspace.sidebar.mentions", { count: mentions() })
+              : props.unread
+                ? t("workspace.sidebar.unread")
+                : "",
+            props.muted ? t("workspace.sidebar.muted") : "",
+          ]
+            .filter(Boolean)
+            .join(", ")}
+          onClick={() => props.onSelect(props.id)}
+        >
+          <span class="ws-sidebar-row-icon">{props.icon}</span>
+          <span class="ws-sidebar-row-label">{props.label}</span>
+          {props.badge}
+          <Show when={mentions() > 0}>
+            <span class="ws-mention-badge" aria-hidden="true">
+              {Math.min(mentions(), 99)}
+            </span>
+          </Show>
+        </Button>
+      </WorkspaceContextMenu>
       <Show when={armed() && props.menu}>
         {(menu) => (
           <WorkspaceMenu

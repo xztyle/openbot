@@ -2048,6 +2048,8 @@ export async function createApplicationServices({
   // reconciling against the agents alone would read every channel as gone and drop where it sits.
   performance.mark("openbot:services.messaging");
   await runCauseEffect(sidebarLayout.reconcileAgents(service.sidebarChatIds()));
+  // A member's other sessions read their sidebar again after a save.
+  workspaceSidebar.onChanged((memberId) => service.emit("event", { type: "workspace-sidebar-changed", memberId }));
 
   /*
    * The runtime manager decides which provider has an update waiting, by comparing against the

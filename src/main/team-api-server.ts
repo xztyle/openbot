@@ -141,6 +141,7 @@ import { TEAM_PI_MUSE_CAPABILITY } from "@openbot/contracts/team-protocol/v7";
 import { encodeTeamProtocolV7BaseCurrentEvent } from "@openbot/contracts/team-protocol/v7-base-adapter";
 import { TEAM_OPEN_PROVIDERS_CAPABILITY, TEAM_PROTOCOL_V8 } from "@openbot/contracts/team-protocol/v8";
 import { encodeTeamProtocolV8BaseCurrentEvent } from "@openbot/contracts/team-protocol/v8-base-adapter";
+import { WORKSPACE_SIDEBAR_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-sidebar-v1";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { isFixedSourceText, sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
@@ -1306,6 +1307,11 @@ export class TeamApiServer {
           ),
         };
       }
+      // A member's sidebar is theirs: only their own sessions hear of a change, and not whose it was.
+      if (event.type === "workspace-sidebar-changed") {
+        if (event.memberId !== member.id) continue;
+        event = { type: "workspace-sidebar-changed" };
+      }
       // The answer gate's decisions are a debug view of the owners and admins.
       if (event.type === "channel-message" && event.message.gateDecisions && !canAdministerServer(member.role))
         event = { ...event, message: withoutChannelGateDecisions(event.message) };
@@ -2263,6 +2269,7 @@ function eventCapability(event: AgentEvent): TeamCurrentCapability | null {
   if (event.type === "channel-message" || event.type === "channel-message-removed") return WORKSPACE_CAPABILITY;
   if (event.type === "channel-typing") return WORKSPACE_CAPABILITY;
   if (event.type === "workspace-fleet-changed") return WORKSPACE_CAPABILITY;
+  if (event.type === "workspace-sidebar-changed") return WORKSPACE_SIDEBAR_CAPABILITY;
   if (event.type === "sidebar-layout-changed") return "sidebar-layout";
   if (event.type === "browser-changed" || event.type === "browser-control-changed") return "browser-control";
   if (event.type === "conversation-page") return "conversation-pagination";

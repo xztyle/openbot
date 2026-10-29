@@ -211,8 +211,6 @@ the sidebar order and mutes for the account.
 - Artifact thumbnails are PNG: Electron's `nativeImage` has no WebP encoder. The address check
   resolves the name before Chromium does, so a DNS answer that changes in between (rebinding) is not
   caught; every request of the page goes through the check again.
-- A change of the sidebar order or the mutes on another computer shows when this window gets the
-  focus again, or at a reconnect: the host sends no event for it.
 - With coordinator routing, the answer modes, the gate and the mention chains between agents do not
   apply; only an agent that a person mentions answers directly.
 - A message link opens only on a server that this computer joined, in a channel the reader can see.

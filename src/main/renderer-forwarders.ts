@@ -131,6 +131,13 @@ export function createRendererForwarders({
       !getHostService()?.channelVisibleToHostUser(event.channelId)
     )
       return;
+    // The sidebar of another member of this host is not this computer's.
+    if (
+      serverId === LOCAL_SERVER_ID &&
+      event.type === "workspace-sidebar-changed" &&
+      event.memberId !== getHostService()?.channelActor().id
+    )
+      return;
     if (event.type === "agent-input-escalations-changed") inputEscalations.set(serverId, event.escalations);
     if (serverId === LOCAL_SERVER_ID) getHostAnalytics()?.handleAgentEvent(event);
     const window = getMainWindow();

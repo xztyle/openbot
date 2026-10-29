@@ -1031,6 +1031,11 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       settleSteps(null);
       return;
     }
+    if (event.type === "workspace-sidebar-changed") {
+      // Another session of the reader changed the order or the mutes.
+      if (!event.memberId || env.isReader(event.memberId)) void loadHostSidebar();
+      return;
+    }
     if (event.type === "channel-typing") {
       setState((draft) => {
         draft.typing[event.channelId] = event.typing;

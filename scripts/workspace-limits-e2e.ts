@@ -21,6 +21,7 @@ import { join, resolve } from "node:path";
 import type { AgentEvent, ChannelMessage } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { decodeDiscordApiError, decodeDiscordDelivery } from "@openbot/contracts/signal-protocol/discord-api";
+import { optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
 import { Effect } from "effect";
 import { type DiscordRestRequest, DiscordTransportError, makeDiscordApi } from "../remote/api/src/discord-api";
 import { type DiscordAction, DiscordState } from "../remote/api/src/discord-events";
@@ -668,6 +669,9 @@ try {
     const first = new WorkspaceSidebarStore(path);
     await Effect.runPromise(first.load());
     assert.equal(first.get("member-a"), null);
+    // Each save tells whose sidebar changed; the wire event carries nothing else.
+    const changed: string[] = [];
+    first.onChanged((memberId) => changed.push(memberId));
     await Effect.runPromise(
       first.set("member-a", { order: { channels: ["c2", "c1", "c2"], direct: ["d1"] }, muted: ["c1"] }),
     );
@@ -681,6 +685,8 @@ try {
       ),
     );
     assert.equal(tooMany._tag, "Failure", "The store took more than 500 ids.");
+    assert.deepEqual(changed, ["member-a", "member-b"], "A failed save must not announce a change.");
+    assert.deepEqual(optionalTeamEvent({ type: "workspace-sidebar-changed" }), { type: "workspace-sidebar-changed" });
     const second = new WorkspaceSidebarStore(path);
     await Effect.runPromise(second.load());
     // A repeated id keeps its first place; each member has their own value.

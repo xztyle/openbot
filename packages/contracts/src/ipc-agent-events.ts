@@ -63,6 +63,11 @@ export type AgentEvent =
    * `workspaceFleet` again.
    */
   | { type: "workspace-fleet-changed"; revision: number }
+  /**
+   * A member's own sidebar order and mutes changed on the host. `memberId` stays on the host: a
+   * client receives the event only for its own member, without it, and reads the sidebar again.
+   */
+  | { type: "workspace-sidebar-changed"; memberId?: string }
   | { type: "status"; status: AgentStatus }
   | { type: "usage-changed"; usage: AccountUsage }
   | { type: "agents-changed"; agents: ClientAgentSummary[] }
@@ -216,6 +221,8 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
       return isIdentifier(value.channelId) && isChannelTypingList(value.typing);
     case "workspace-fleet-changed":
       return isWorkspaceFleetChange(value);
+    case "workspace-sidebar-changed":
+      return value.memberId === undefined || isIdentifier(value.memberId);
     case "status":
       return isDynamicRecord(value.status);
     case "usage-changed":

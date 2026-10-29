@@ -11,10 +11,15 @@
 // - `POST /v1/workspace/sidebar/save` with a sidebar replaces the value of the member of the session
 //   and answers `{ sidebar }`, the value the host keeps (a repeated id keeps its first place).
 //
+// - The event `workspace-sidebar-changed` (`{}` beside its type): the member's sidebar changed on
+//   the host, from another session of theirs. The host sends it only to that member's sessions; a
+//   client reads the sidebar again. An older client ignores it.
+//
 // The host takes the member from the session, never from the body: a member reads and writes only
 // their own value. A fork host built before these routes answers 404; a client then keeps the value
 // on its own computer. A present malformed value fails closed. The bounds are written out: this file
 // must not move with an IPC limit.
+import { isDynamicRecord } from "../runtime-values";
 import { adminRoute, empty, fields, list, nullable, type OptionalRouteCodec, string } from "./admin-wire";
 import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
 import type { TeamProtocolV2Json } from "./v2";
@@ -38,3 +43,15 @@ export const WORKSPACE_SIDEBAR_CODECS: ReadonlyMap<string, OptionalRouteCodec> =
   [WORKSPACE_SIDEBAR_ROUTES.read, adminRoute(empty, fields({ sidebar: nullable(sidebar) }))],
   [WORKSPACE_SIDEBAR_ROUTES.save, adminRoute(sidebar, fields({ sidebar }))],
 ]);
+
+export const WORKSPACE_SIDEBAR_CHANGED_EVENT = "workspace-sidebar-changed";
+
+export interface WorkspaceSidebarChangedEvent {
+  type: typeof WORKSPACE_SIDEBAR_CHANGED_EVENT;
+}
+
+/** The sidebar event in `value`, or null for any other event. It carries nothing else. */
+export function workspaceSidebarEvent(value: unknown): WorkspaceSidebarChangedEvent | null {
+  if (!isDynamicRecord(value) || value.type !== WORKSPACE_SIDEBAR_CHANGED_EVENT) return null;
+  return { type: WORKSPACE_SIDEBAR_CHANGED_EVENT };
+}

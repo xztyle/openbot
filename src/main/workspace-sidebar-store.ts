@@ -49,6 +49,7 @@ export class WorkspaceSidebarStore {
   readonly #file: PreferenceStore<StoredSidebars>;
   /** A save reads the members and writes them back; two at once would lose one. */
   readonly #saves = Semaphore.makeUnsafe(1);
+  readonly #listeners = new Set<(memberId: string) => void>();
 
   constructor(path: string) {
     this.#file = new PreferenceStore<StoredSidebars>({
@@ -56,6 +57,12 @@ export class WorkspaceSidebarStore {
       defaultValue: { members: {} },
       decode: decodeStoredSidebars,
     });
+  }
+
+  /** Called after each save with the member whose value changed. */
+  onChanged(listener: (memberId: string) => void): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
   }
 
   /** Reads the file. A missing or unreadable file reads as no member having a value. */
@@ -89,6 +96,7 @@ export class WorkspaceSidebarStore {
           return this.#file.set({ members });
         }),
       );
+      for (const listener of this.#listeners) listener(memberId);
       return value;
     }).pipe(Effect.withSpan("WorkspaceSidebarStore.set"));
   }

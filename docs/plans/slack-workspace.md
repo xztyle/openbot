@@ -191,7 +191,8 @@ Live check with real agents on 2026-10-29 (private #gate-test: three agents on "
 2.7 s); a release-risk question for the team got one answer (QA 2, priority 0.6) while the pastry
 assistant judged it off its remit and the UX Director, held back by the limit, saw that answer in
 the second round and stayed quiet; an @mention of the mention-only agent got only its answer, and
-the gate did not run.
+the gate did not run. A moderator's "Remove All Reactions" in Discord removed the mirrored ❤️ in the
+workspace too.
 
 Verified live on 2026-10-29: the gate (an off-topic message stayed quiet, an on-topic one got an
 answer), threads, reactions, Fleet, Storage, a private channel, and the Discord bridge both ways

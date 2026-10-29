@@ -612,6 +612,32 @@
   visibility: hidden;
 }
 
+/*
+ * On a wide screen the controls sit in the DM header's row, left of its details button, as in a
+ * Slack header. A row of their own left an empty band over the messages that seemed to cut them.
+ */
+@media (min-width: 721px) {
+  .ws-agent-dm-header {
+    height: 50px;
+  }
+
+  .ws-agent-dm .ws-agent-dm-body .conversation-panel > .conversation-header {
+    position: absolute;
+    z-index: 12;
+    top: -50px;
+    right: 48px;
+    width: auto;
+    max-width: calc(100% - 48px - 200px);
+    height: 49px;
+    padding: 0 0 0 var(--openbot-space-6);
+    background: linear-gradient(to right, transparent, var(--openbot-bg-canvas) var(--openbot-space-6));
+  }
+
+  .ws-agent-dm .ws-agent-dm-body .conversation-header .conversation-heading-group {
+    display: none;
+  }
+}
+
 /* The owner's agent DM sits outside the workspace layout, so its back button needs its own rule. */
 @media (max-width: 720px) {
   .ws-agent-dm .ws-phone-only {

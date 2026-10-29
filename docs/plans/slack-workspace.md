@@ -168,9 +168,8 @@ A toolless one-shot call through `WarmGenerations` on a cheap model chosen in Se
 
 ## Status (2026-10-29)
 
-All seven phases are done on `main`. The final gaps (coordinator routing as a channel option,
-message links from outside the app, Discord bulk deletions) are on `wip/ws-final`, not yet merged or
-deployed.
+All seven phases are done on `main` and deployed on the live server, including the final gaps
+(coordinator routing as a channel option, message links from outside the app, Discord bulk deletions).
 
 | Phase | Status | What shipped |
 | --- | --- | --- |

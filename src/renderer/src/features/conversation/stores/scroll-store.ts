@@ -24,6 +24,7 @@ import { createEffect, createMemo, createSignal, onCleanup, untrack } from "soli
 import { eventCheckOrigins, eventCheckOriginsEqual, isEventCheckMarkerMessage } from "../../../app-message-projection";
 import { useShowAgentMessages, useShowAgentReasoning } from "../../../chat-visibility-preferences";
 import { groupAgentMessageMarkers, markOpenAgentMessages } from "../agent-message-timeline";
+import { agentOnlyTurns, foldAgentTurns } from "../agent-turn-folds";
 import type { ConversationProps, ConversationTarget } from "../conversation-types";
 import {
   expandRoutineRunGroups,
@@ -105,9 +106,31 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     ),
   );
   const routineRunTurns = createMemo(() => routineRunTurnMessages(deps.props.messages, shownMessages()));
-  /* The messages of a routine run follow its row and open and close with it. */
+  /*
+   * In the agent's own chat, the turns that only another agent started fold into one row for each
+   * run of turns with the same agent. A channel draws every turn.
+   */
+  const foldedTurns = createMemo(() =>
+    deps.props.channel ? new Map<string, string>() : agentOnlyTurns(deps.props.messages),
+  );
+  /* The keys of the folded rows that the person opened. */
+  const [openAgentTurns, setOpenAgentTurns] = createSignal<ReadonlySet<string>>(new Set());
+  function toggleAgentTurns(key: string): void {
+    setOpenAgentTurns((open) => {
+      const next = new Set(open);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }
+  /*
+   * The messages of a routine run follow its row and open and close with it. The messages of a
+   * folded run of agent turns follow its row in the same way.
+   */
   const drawnMessages = createMemo(() => [
-    ...placeRoutineRunTurns(summarizeRoutineRunMessages(shownMessages()), routineRunTurns(), openRoutineRuns()),
+    ...foldAgentTurns(
+      placeRoutineRunTurns(summarizeRoutineRunMessages(shownMessages()), routineRunTurns(), openRoutineRuns()),
+      { turns: foldedTurns(), open: openAgentTurns(), activeTurnId: deps.props.activeTurnId },
+    ),
     ...deps.pendingMessages(),
   ]);
   /* The chip of an event check, by the id of the agent message that carries it. */
@@ -181,11 +204,17 @@ export function createScrollStore(deps: ScrollStoreDeps) {
   const timelineIndexById = createMemo(
     () => new Map<VirtualItem["key"], number>(timelineMessages().map((message, index) => [message.id, index])),
   );
-  /* Every row anchors the count, but only some rows add to it. */
+  /*
+   * Every row anchors the count, but only some rows add to it. A message of a folded agent turn does
+   * not add to it, as it does not add to the unread count.
+   */
   const timelineRows = createMemo(() =>
     deps.props.messages.map((message) => ({
       id: message.id,
-      countable: countableTimelineMessage(message) && !switchedOff(message, showReasoning(), showAgentMessages()),
+      countable:
+        countableTimelineMessage(message) &&
+        !switchedOff(message, showReasoning(), showAgentMessages()) &&
+        !(message.turnId !== undefined && foldedTurns().has(message.turnId)),
     })),
   );
 
@@ -365,6 +394,7 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     timelineMessages,
     toggleRoutineRun,
     toggleAgentMessage,
+    toggleAgentTurns,
     timelineIndexById,
     eventCheckOriginById,
     unreadBoundaryMessageId,

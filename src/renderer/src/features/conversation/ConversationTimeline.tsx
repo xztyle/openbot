@@ -9,6 +9,7 @@ import { AgentChatEmptyState } from "@openbot/ui/features/conversation/AgentChat
 import { AgentMessageDialog } from "@openbot/ui/features/conversation/AgentMessageDialog";
 import { AgentStepsDisclosure, type AgentStepsTrace } from "@openbot/ui/features/conversation/AgentSteps";
 import { AgentTaskChips } from "@openbot/ui/features/conversation/AgentTasks";
+import { AgentTurnsFoldMarker } from "@openbot/ui/features/conversation/AgentTurnsFold";
 import { AttachmentCards } from "@openbot/ui/features/conversation/AttachmentCards";
 import { UsageLimitAskCard } from "@openbot/ui/features/conversation/BackupModels";
 import { ChatActionMarker } from "@openbot/ui/features/conversation/ChatActionMarker";
@@ -89,12 +90,17 @@ function rowDrawsTime(message: AgentMessage): boolean {
     message.kind !== "plan" &&
     message.kind !== "subagents" &&
     message.kind !== "memory-changes" &&
+    message.kind !== "agent-turns" &&
     chatVisualReply(message) === null
   );
 }
 
-/** Marker-only rows that render attachment cards below the marker do not end with one. */
+/**
+ * Marker-only rows that render attachment cards below the marker do not end with one. A fold of agent
+ * turns is a marker row too.
+ */
 function markerRowEndsWithMarker(message: AgentMessage): boolean {
+  if (message.agentTurns) return true;
   if (!markerOnlyMessage(message)) return false;
   return !drawsAttachmentCards(message);
 }
@@ -151,6 +157,7 @@ export function ConversationTimeline() {
     timelineMessages,
     toggleRoutineRun,
     toggleAgentMessage,
+    toggleAgentTurns,
     timelineIndexById,
     eventCheckOriginById,
     eventCheckIconUrl,
@@ -759,11 +766,49 @@ export function ConversationTimeline() {
                 // Consecutive markers keep the tighter marker gap so they read as one group.
                 const groupedWithMarker = createMemo(() => {
                   const current = message();
-                  if (!current?.actionMarker) return false;
+                  if (!current?.actionMarker && !current?.agentTurns) return false;
                   if (current.id === unreadBoundaryMessageId()) return false;
                   const previous = previousMessage();
                   return previous !== undefined && markerRowEndsWithMarker(previous);
                 });
+                const initialFold = untrack(() => initialMessage.agentTurns);
+                if (initialFold) {
+                  // The turns between this agent and another agent, folded into one row that opens in place.
+                  const fold = () => message()?.agentTurns ?? initialFold;
+                  return (
+                    <div
+                      data-index={virtualRow.index}
+                      data-grouped={groupedWithMarker() ? "marker" : undefined}
+                      ref={messageVirtualizer.measureElement}
+                      class="virtual-chat-row"
+                      style={{
+                        transform: messageVirtualizer.isVirtualized()
+                          ? `translateY(${virtualRow.start - messageVirtualizer.scrollMargin()}px)`
+                          : "none",
+                      }}
+                    >
+                      <Show when={message()?.id === compactionBefore()}>
+                        <CompactionMarker />
+                      </Show>
+                      <Show when={dayMarker()}>
+                        {(label) => (
+                          <div class="time-marker">
+                            <span>{label()}</span>
+                          </div>
+                        )}
+                      </Show>
+                      <ChatRowBoundary>
+                        <article
+                          data-chat-search-message={message()?.id}
+                          data-chat-search-group={fold().expanded ? undefined : fold().messageIds.join(" ")}
+                          class={{ "chat-action-entry-animated": animateEntrance }}
+                        >
+                          <AgentTurnsFoldMarker fold={fold()} agents={props.agents} onToggle={toggleAgentTurns} />
+                        </article>
+                      </ChatRowBoundary>
+                    </div>
+                  );
+                }
                 if (markerOnly) {
                   return (
                     <div

@@ -163,6 +163,13 @@ export const messages = {
     other: "Masquer {count} messages avec {agents}",
   },
   "chat.marker.groupMessages": "Messages avec les agents",
+  "chat.agentTurns.count": { one: "{count} message avec {name}", other: "{count} messages avec {name}" },
+  "chat.agentTurns.show": {
+    one: "Afficher {count} message avec {name}",
+    other: "Afficher {count} messages avec {name}",
+  },
+  "chat.agentTurns.hide": { one: "Masquer {count} message avec {name}", other: "Masquer {count} messages avec {name}" },
+  "chat.agentTurns.working": "En cours",
   "chat.marker.messaged": "Message envoyé à",
   "chat.marker.messageFrom": "Message de",
   "chat.marker.informed": "Informé",

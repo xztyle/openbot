@@ -41,7 +41,28 @@ export type MessageKind =
   | "plan"
   | "subagents"
   | "memory-changes"
+  | "agent-turns"
   | "error";
+
+/**
+ * The turns that another agent started and no person joined, drawn as one row. The row opens to
+ * show the rows of those turns under it. The stored messages stay unchanged.
+ */
+export interface AgentTurnsFold {
+  /** The key of the open state: the id of the first message in the row. */
+  key: string;
+  /** The other agent of the turns. */
+  agentId: string;
+  /** The ids of the messages in the row, so a search or a focus request finds the row. */
+  messageIds: string[];
+  /** The number of messages that the person can read in the row. */
+  count: number;
+  /** The time of the newest message in the row. */
+  timestamp: string | undefined;
+  /** A turn of the row still runs. */
+  working: boolean;
+  expanded: boolean;
+}
 
 /** The plan of one turn. `stopped` is true when the turn was stopped or failed before it ended. */
 export interface AgentMessagePlan extends ConversationPlan {
@@ -245,6 +266,8 @@ export interface AgentMessage {
    * turn that holds them. Absent on an older turn and from a Team API host.
    */
   trace?: ConversationTurnTrace | undefined;
+  /** The turns between this agent and another agent, on an `agent-turns` row. */
+  agentTurns?: AgentTurnsFold | undefined;
 }
 
 export interface AgentProfile {

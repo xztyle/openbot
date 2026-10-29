@@ -102,6 +102,7 @@
     "./features/conversation/ChatActionCard": "./src/features/conversation/ChatActionCard.tsx",
     "./features/conversation/MarketplaceSuggestionCard": "./src/features/conversation/MarketplaceSuggestionCard.tsx",
     "./features/conversation/McpSignInCard": "./src/features/conversation/McpSignInCard.tsx",
+    "./features/conversation/AgentTurnsFold": "./src/features/conversation/AgentTurnsFold.tsx",
     "./features/conversation/ChatActionMarker": "./src/features/conversation/ChatActionMarker.tsx",
     "./features/conversation/SidePanel": "./src/features/conversation/SidePanel.tsx",
     "./features/conversation/SideQuestionPanel": "./src/features/conversation/SideQuestionPanel.tsx",

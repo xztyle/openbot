@@ -169,6 +169,13 @@ export const messages = {
     other: "Nascondi {count} messaggi con {agents}",
   },
   "chat.marker.groupMessages": "Messaggi con gli agenti",
+  "chat.agentTurns.count": { one: "{count} messaggio con {name}", other: "{count} messaggi con {name}" },
+  "chat.agentTurns.show": { one: "Mostra {count} messaggio con {name}", other: "Mostra {count} messaggi con {name}" },
+  "chat.agentTurns.hide": {
+    one: "Nascondi {count} messaggio con {name}",
+    other: "Nascondi {count} messaggi con {name}",
+  },
+  "chat.agentTurns.working": "Al lavoro",
   "chat.marker.messaged": "Ha scritto a",
   "chat.marker.messageFrom": "Messaggio da",
   "chat.marker.informed": "Ha informato",

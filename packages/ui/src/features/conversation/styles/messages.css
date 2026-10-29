@@ -961,6 +961,25 @@ button.chat-action-target:active,
   text-align: start;
 }
 
+/* A fold of agent turns: the chevron turns when the rows of the turns show under the fold. */
+.chat-action-agent-turns-chevron {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  flex: 0 0 var(--openbot-icon-xs);
+  color: var(--openbot-text-muted);
+  transition: transform var(--chat-action-history-close) var(--openbot-ease-out);
+}
+
+.chat-action-target[aria-expanded="true"] > .chat-action-agent-turns-chevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-action-agent-turns-chevron {
+    transition: none;
+  }
+}
+
 .chat-action-target-status-in-progress .ui-marker-icon {
   color: var(--openbot-accent);
 }

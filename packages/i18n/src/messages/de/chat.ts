@@ -169,6 +169,16 @@ export const messages = {
     other: "{count} Nachrichten mit {agents} ausblenden",
   },
   "chat.marker.groupMessages": "Nachrichten mit Agenten",
+  "chat.agentTurns.count": { one: "{count} Nachricht mit {name}", other: "{count} Nachrichten mit {name}" },
+  "chat.agentTurns.show": {
+    one: "{count} Nachricht mit {name} anzeigen",
+    other: "{count} Nachrichten mit {name} anzeigen",
+  },
+  "chat.agentTurns.hide": {
+    one: "{count} Nachricht mit {name} ausblenden",
+    other: "{count} Nachrichten mit {name} ausblenden",
+  },
+  "chat.agentTurns.working": "Arbeitet",
   "chat.marker.messaged": "Nachricht gesendet an",
   "chat.marker.messageFrom": "Nachricht von",
   "chat.marker.informed": "Informiert",

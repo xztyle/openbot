@@ -177,7 +177,8 @@ export type SignalClientMessage =
   // `reactions: true` also asks for the reactions that people add and remove on the messages in
   // those channels (`reaction` deliveries). `threads: true` also asks for the messages, the changes
   // and the reactions in the threads of those channels, with `threadParentId`. An older Signal
-  // ignores both keys.
+  // ignores both keys. `reactionClears: true` also asks for the reactions that a moderator clears at
+  // once (`reaction-clear` deliveries); an older Signal ignores it.
   | {
       type: "discord-listen";
       version: SignalProtocolVersion;
@@ -186,6 +187,7 @@ export type SignalClientMessage =
       changes?: true;
       reactions?: true;
       threads?: true;
+      reactionClears?: true;
     }
   | {
       type: "slack-delivery-result";

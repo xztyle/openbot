@@ -130,8 +130,9 @@ export interface DiscordInboundMessageChange {
 
 /**
  * A person added or removed a reaction on a message of a channel that the host named in
- * `discord-listen` with `reactions`. Only a unicode emoji: Signal leaves out custom emoji, and the
- * reactions of bots, OpenBot's own too.
+ * `discord-listen` with `reactions`. A unicode emoji, or `:name:` for a custom emoji of the guild
+ * (an older Signal leaves custom emoji out). Signal leaves out the reactions of bots, OpenBot's own
+ * too.
  */
 export interface DiscordInboundReaction {
   channelId: string;
@@ -154,6 +155,9 @@ export type DiscordDelivery =
   | { kind: "message-delete"; channelId: string; messageId: string; threadParentId?: string }
   // Only to a host that asked for `reactions` in `discord-listen`: an older host never receives one.
   | { kind: "reaction"; reaction: DiscordInboundReaction }
+  // Only to a host that asked for `reactionClears`: a moderator removed all the reactions of a
+  // message, or all of one `emoji`.
+  | { kind: "reaction-clear"; channelId: string; messageId: string; emoji?: string; threadParentId?: string }
   | { kind: "interaction"; interaction: DiscordInboundInteraction }
   // OpenBot was removed from the guild. The host stops the connection; the user must connect again.
   | { kind: "removed" };
@@ -445,6 +449,20 @@ export function decodeDiscordDelivery(value: unknown): DiscordDelivery {
       };
     case "reaction":
       return { kind: "reaction", reaction: inboundReaction(item.reaction) };
+    case "reaction-clear": {
+      let emoji: string | undefined;
+      if (item.emoji !== undefined) {
+        emoji = text(item.emoji);
+        if (!emoji.trim() || emoji.length > DISCORD_REACTION_EMOJI_LIMIT) invalid();
+      }
+      return {
+        kind: "reaction-clear",
+        channelId: snowflake(item.channelId),
+        messageId: snowflake(item.messageId),
+        ...(emoji === undefined ? {} : { emoji }),
+        ...threadParent(item.threadParentId),
+      };
+    }
     case "interaction":
       return { kind: "interaction", interaction: inboundInteraction(item.interaction) };
     case "removed":

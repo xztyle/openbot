@@ -135,6 +135,9 @@ interface AuthenticatedPeer {
   // `ingress` only: the guilds whose listened channels also send what happens in their threads
   // (`threads`).
   discordListenThreads: Set<string>;
+  // `ingress` only: the guilds whose listened channels also send the reactions that a moderator
+  // clears at once (`reactionClears`).
+  discordListenReactionClears: Set<string>;
   // `ingress` only: opaque generic webhook route IDs whose requests this socket receives.
   webhookRoutes: string[];
   // The TURN credentials of the last `turn-refresh`, and when Signal made them.
@@ -509,6 +512,8 @@ export class SignalService {
         else peer.discordListenReactions.delete(message.guildId);
         if (listening && message.threads === true) peer.discordListenThreads.add(message.guildId);
         else peer.discordListenThreads.delete(message.guildId);
+        if (listening && message.reactionClears === true) peer.discordListenReactionClears.add(message.guildId);
+        else peer.discordListenReactionClears.delete(message.guildId);
         return;
       }
       if (message.type === "queued-delivery-ack") {
@@ -734,6 +739,17 @@ export class SignalService {
     if (socketId === undefined) return false;
     const peer = this.#peers.get(socketId);
     return Boolean(peer?.discordListenReactions.has(guildId) && peer.discordListen.get(guildId)?.has(channelId));
+  }
+
+  /**
+   * Whether the host of the guild also asked for the reactions that a moderator clears at once on the
+   * messages of a listened channel. An older host never asks, so it never receives a `reaction-clear`.
+   */
+  discordListensReactionClears(guildId: string, channelId: string): boolean {
+    const socketId = this.#discordGuilds.get(guildId);
+    if (socketId === undefined) return false;
+    const peer = this.#peers.get(socketId);
+    return Boolean(peer?.discordListenReactionClears.has(guildId) && peer.discordListen.get(guildId)?.has(channelId));
   }
 
   /**
@@ -1347,6 +1363,7 @@ export class SignalService {
           discordListenChanges: new Set(),
           discordListenReactions: new Set(),
           discordListenThreads: new Set(),
+          discordListenReactionClears: new Set(),
           webhookRoutes: webhookRoute.routes.map((route) => route.id),
           turnCredentials: null,
         };

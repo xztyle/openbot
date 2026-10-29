@@ -62,6 +62,7 @@ import {
   type InboundMessage,
   type InboundMessageChange,
   type InboundReaction,
+  type InboundReactionClear,
   type IngressAnswer,
   type IngressDelivery,
   type MessageTarget,
@@ -843,6 +844,28 @@ export class MessagingService {
     });
   });
 
+  readonly #bridgeClearReactions = Effect.fn("MessagingService.bridgeClearReactions")(function* (
+    this: MessagingService,
+    live: LiveConnection,
+    clear: InboundReactionClear,
+  ) {
+    const bridge = this.#bridge;
+    const channelId = clear.threadParentId ?? clear.platformChannelId;
+    if (
+      live.record.platform !== "discord" ||
+      !bridge?.clearDiscordReactions ||
+      !bridge.discordChannels(live.record.workspaceId).includes(channelId)
+    )
+      return;
+    yield* bridge.clearDiscordReactions({
+      guildId: live.record.workspaceId,
+      channelId,
+      threadId: clear.threadParentId ? clear.platformChannelId : null,
+      messageId: clear.platformMessageId,
+      emoji: clear.emoji ?? null,
+    });
+  });
+
   /** False when this key arrived before: a redelivered event. */
   #firstDelivery(key: string): boolean {
     if (this.#recent.has(key)) return false;
@@ -1315,6 +1338,7 @@ export class MessagingService {
       action: (action) => this.#dispatch(this.#action(live, action)),
       changed: (change) => this.#dispatch(this.#bridgeChange(live, change)),
       reacted: (reaction) => this.#dispatch(this.#bridgeReact(live, reaction)),
+      reactionsCleared: (clear) => this.#dispatch(this.#bridgeClearReactions(live, clear)),
       renamed: (workspaceName) => this.#dispatch(this.#renamed(live, workspaceName)),
       placeCreated: (platformChannelId) => {
         const join = live.adapter.joinPlace?.(platformChannelId);

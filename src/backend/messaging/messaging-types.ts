@@ -245,6 +245,15 @@ export interface InboundReaction {
   threadParentId?: string;
 }
 
+/** A moderator removed all the reactions of a message, or all of one emoji. Discord names no people. */
+export interface InboundReactionClear {
+  platformChannelId: string;
+  platformMessageId: string;
+  /** Absent: every emoji. */
+  emoji?: string;
+  threadParentId?: string;
+}
+
 export interface TransportSink {
   state(state: MessagingConnectionState, detail?: { retryAt?: string }): void;
   message(message: InboundMessage): void;
@@ -252,6 +261,8 @@ export interface TransportSink {
   changed?(change: InboundMessageChange): void;
   /** A reaction of a person, for a channel bridge. */
   reacted?(reaction: InboundReaction): void;
+  /** Reactions that a moderator cleared at once, for a channel bridge. */
+  reactionsCleared?(clear: InboundReactionClear): void;
   action(action: InboundAction): void;
   /** A public place was created that OpenBot can join. */
   placeCreated?(platformChannelId: string): void;
@@ -437,7 +448,10 @@ export interface BridgedDiscordChange {
   threadId?: string | null;
 }
 
-/** A person's reaction with a unicode emoji on a message of a bridged Discord channel or one of its threads. */
+/**
+ * A person's reaction on a message of a bridged Discord channel or one of its threads: a unicode
+ * emoji, or `:name:` for a custom emoji.
+ */
 export interface BridgedDiscordReaction {
   guildId: string;
   channelId: string;
@@ -447,6 +461,15 @@ export interface BridgedDiscordReaction {
   userName: string | null;
   emoji: string;
   on: boolean;
+}
+
+/** A moderator's removal of all the reactions of a bridged message, or of all of one emoji (`emoji`). */
+export interface BridgedDiscordReactionClear {
+  guildId: string;
+  channelId: string;
+  threadId: string | null;
+  messageId: string;
+  emoji: string | null;
 }
 
 /**
@@ -462,4 +485,6 @@ export interface MessagingChannelBridge {
   changeDiscord?(change: BridgedDiscordChange): Effect.Effect<void>;
   /** Mirrors a person's reaction on a bridged message. Never fails. */
   reactDiscord?(reaction: BridgedDiscordReaction): Effect.Effect<void>;
+  /** Mirrors a moderator's removal of reactions on a bridged message. Never fails. */
+  clearDiscordReactions?(clear: BridgedDiscordReactionClear): Effect.Effect<void>;
 }

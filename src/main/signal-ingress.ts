@@ -370,9 +370,11 @@ export class SignalIngress implements MessagingIngress {
       version: SIGNAL_PROTOCOL_VERSION,
       guildId,
       channelIds: [...channelIds],
-      // The edits, deletions and reactions in those channels and their threads too, for the
+      // The edits, deletions, reactions and cleared reactions in those channels and their threads too, for the
       // workspace channel bridge. An older Signal drops the keys and sends only new messages.
-      ...(channelIds.length ? { changes: true as const, reactions: true as const, threads: true as const } : {}),
+      ...(channelIds.length
+        ? { changes: true as const, reactions: true as const, threads: true as const, reactionClears: true as const }
+        : {}),
     };
     socket.send(JSON.stringify(frame));
   }

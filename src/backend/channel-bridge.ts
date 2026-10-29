@@ -25,6 +25,7 @@ import {
   type BridgedDiscordChange,
   type BridgedDiscordMessage,
   type BridgedDiscordReaction,
+  type BridgedDiscordReactionClear,
   DiscordApiError,
   type InboundFile,
   type MessagingAdapter,
@@ -130,6 +131,11 @@ export function isUnicodeReaction(emoji: string): boolean {
     /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\p{Emoji_Modifier}|\u200D|\uFE0F|\u20E3)+$/u.test(emoji) &&
     /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3/u.test(emoji)
   );
+}
+
+/** A custom emoji of a Discord server as Signal names it, `:name:`. It shows as text in the workspace. */
+export function isCustomReaction(emoji: string): boolean {
+  return /^:[\w~-]{1,32}:$/u.test(emoji);
 }
 
 /** The member id of a Discord person in the workspace: the author id of their bridged messages. */
@@ -281,6 +287,23 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
       this.#react(channelId, reaction).pipe(
         Effect.catch((error) =>
           Effect.sync(() => logger.warn("A Discord reaction did not reach its bridged channel.", errorName(error))),
+        ),
+      ),
+    );
+  });
+
+  readonly clearDiscordReactions = Effect.fn("ChannelBridge.clearDiscordReactions")(function* (
+    this: ChannelBridge,
+    clear: BridgedDiscordReactionClear,
+  ) {
+    const channelId = this.#index.get(`${clear.guildId}:${clear.channelId}`);
+    if (!channelId) return;
+    yield* this.#serialFor(channelId).withPermit(
+      this.#clearReactions(channelId, clear).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() =>
+            logger.warn("Cleared Discord reactions did not reach their bridged channel.", errorName(error)),
+          ),
         ),
       ),
     );
@@ -485,7 +508,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const { channels } = this.#options;
     const state = this.#state.get(channelId);
     const known = state?.messages.find((item) => item.discordIds.includes(reaction.messageId));
-    if (!state || !known || !isUnicodeReaction(reaction.emoji)) return;
+    if (!state || !known || !(isUnicodeReaction(reaction.emoji) || isCustomReaction(reaction.emoji))) return;
     const channel = channels.store.get(channelId);
     const message = channels.store.message(channelId, known.id);
     if (channel.archived || !channel.discordLink || !message || message.deletedAt) return;
@@ -507,6 +530,43 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
       },
       { id: actorId, name },
     );
+  });
+
+  /**
+   * A moderator removed all the reactions of a Discord post, or all of one emoji. The reactions of
+   * the Discord people go in the workspace too; those of the workspace's own people and agents stay,
+   * as a workspace post that someone deletes in Discord stays. The bridge keeps its record of
+   * OpenBot's reactions, so it does not add back what the moderator removed.
+   */
+  readonly #clearReactions = Effect.fn("ChannelBridge.clearReactionsOne")(function* (
+    this: ChannelBridge,
+    channelId: string,
+    clear: BridgedDiscordReactionClear,
+  ) {
+    const { channels } = this.#options;
+    const state = this.#state.get(channelId);
+    const known = state?.messages.find((item) => item.discordIds.includes(clear.messageId));
+    if (!state || !known) return;
+    const channel = channels.store.get(channelId);
+    const message = channels.store.message(channelId, known.id);
+    if (channel.archived || !channel.discordLink || !message || message.deletedAt) return;
+    for (const reaction of message.reactions ?? []) {
+      if (clear.emoji !== null && reaction.emoji !== clear.emoji) continue;
+      for (const actor of reaction.actors) {
+        if (actor.kind !== "member" || !actor.id.startsWith("discord-")) continue;
+        yield* channels.command(
+          {
+            type: "react",
+            operationId: `discord-react-${randomUUID()}`,
+            channelId,
+            messageId: known.id,
+            emoji: reaction.emoji,
+            action: "remove",
+          },
+          { id: actor.id, name: actor.id },
+        );
+      }
+    }
   });
 
   /** The workspace text of a Discord message: agent names as tags, then a line for each file. */

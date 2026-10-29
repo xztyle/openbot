@@ -177,6 +177,7 @@ const signal = new DiscordState(
   {
     reactions: (_guildId, channelId) => listened.has(channelId),
     threads: (_guildId, parentChannelId) => listened.has(parentChannelId),
+    reactionClears: (_guildId, channelId) => listened.has(channelId),
   },
 );
 signal.handle(
@@ -452,13 +453,40 @@ try {
       await waitFor("the workspace reaction", () =>
         hasReaction(agents.channels.store.message(CHANNEL, id), "🎉", `discord-${ANA}`),
       );
-      // OpenBot's own reaction and a custom emoji do not come in.
+      // OpenBot's own reaction does not come in.
       const own = signal.handle(gateway("MESSAGE_REACTION_ADD", reaction(anaPost, APP, { id: null, name: "👀" })));
-      const custom = signal.handle(
-        gateway("MESSAGE_REACTION_ADD", reaction(anaPost, BOB, { id: "130000000000000001", name: "party" })),
-      );
       assert.equal(own.length, 0, "Signal passed OpenBot's own reaction on.");
-      assert.equal(custom.length, 0, "Signal passed a custom emoji on.");
+      // A custom emoji comes in as :name:, and is not mirrored back.
+      await discordEvent("MESSAGE_REACTION_ADD", reaction(anaPost, BOB, { id: "130000000000000001", name: "party" }));
+      await waitFor("the custom emoji reaction", () =>
+        hasReaction(agents.channels.store.message(CHANNEL, id), ":party:", `discord-${BOB}`),
+      );
+      assert.ok(!calls.some((call) => call.route.includes("party")), "The bridge mirrored a custom emoji back.");
+      // A moderator's "remove this emoji", then "remove all": the Discord people's reactions go.
+      await discordEvent("MESSAGE_REACTION_ADD", reaction(anaPost, BOB, { id: null, name: "🔥" }));
+      await waitFor("the second reaction", () =>
+        hasReaction(agents.channels.store.message(CHANNEL, id), "🔥", `discord-${BOB}`),
+      );
+      await discordEvent("MESSAGE_REACTION_REMOVE_EMOJI", {
+        channel_id: DISCORD_CHANNEL,
+        message_id: anaPost,
+        guild_id: GUILD,
+        emoji: { id: "130000000000000001", name: "party" },
+      });
+      await waitFor(
+        "the custom emoji goes",
+        () => !hasReaction(agents.channels.store.message(CHANNEL, id), ":party:", `discord-${BOB}`),
+      );
+      assert.ok(hasReaction(agents.channels.store.message(CHANNEL, id), "🔥", `discord-${BOB}`));
+      await discordEvent("MESSAGE_REACTION_REMOVE_ALL", {
+        channel_id: DISCORD_CHANNEL,
+        message_id: anaPost,
+        guild_id: GUILD,
+      });
+      await waitFor(
+        "every Discord reaction goes",
+        () => !hasReaction(agents.channels.store.message(CHANNEL, id), "🔥", `discord-${BOB}`),
+      );
       await discordEvent("MESSAGE_REACTION_REMOVE", reaction(anaPost, ANA, { id: null, name: "🎉" }));
       await waitFor(
         "the workspace reaction goes",

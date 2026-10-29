@@ -191,9 +191,19 @@ export interface DiscordReactionData {
 }
 
 /**
- * The reaction of a person with a unicode emoji, or null: a bot reacted (OpenBot's own reactions
- * too, so a mirrored reaction does not come back), the emoji is a custom one, or it is a super
- * reaction. Discord names no member on a removal, so a removal has no name.
+ * The text of a reaction's emoji: the unicode emoji, or `:name:` for a custom emoji of the guild.
+ * Null when Discord gave no name, as for a custom emoji that was deleted since.
+ */
+export function reactionEmojiText(emoji: { id: string | null; name: string | null }): string | null {
+  if (!emoji.name) return null;
+  if (emoji.id === null) return emoji.name.length > DISCORD_REACTION_EMOJI_LIMIT ? null : emoji.name;
+  return /^[\w~-]{1,32}$/u.test(emoji.name) ? `:${emoji.name}:` : null;
+}
+
+/**
+ * The reaction of a person, or null when a bot reacted: OpenBot's own reactions too, so a mirrored
+ * reaction does not come back. A custom emoji is `:name:`, and a super reaction counts as a plain
+ * one. Discord names no member on a removal, so a removal has no name.
  */
 export function normalizeReaction(
   reaction: DiscordReactionData,
@@ -201,9 +211,9 @@ export function normalizeReaction(
   botUserId: string | null,
 ): DiscordInboundReaction | null {
   if (!reaction.guild_id || !botUserId || reaction.user_id === botUserId) return null;
-  if (reaction.member?.user?.bot === true || reaction.burst === true) return null;
-  const emoji = reaction.emoji.name;
-  if (reaction.emoji.id !== null || !emoji || emoji.length > DISCORD_REACTION_EMOJI_LIMIT) return null;
+  if (reaction.member?.user?.bot === true) return null;
+  const emoji = reactionEmojiText(reaction.emoji);
+  if (!emoji) return null;
   const user = reaction.member?.user;
   return {
     channelId: reaction.channel_id,
@@ -284,6 +294,7 @@ export class DiscordState {
   readonly #listensChanges: DiscordListens;
   readonly #listensReactions: DiscordListens;
   readonly #listensThreads: DiscordListens;
+  readonly #listensReactionClears: DiscordListens;
 
   constructor(
     applicationId: string,
@@ -291,13 +302,15 @@ export class DiscordState {
     // Whether the host of a guild asked for the edits and deletions in a listened channel.
     listensChanges: DiscordListens = () => false,
     // Whether the host asked for the reactions in a listened channel, and for the threads of one.
-    more: { reactions?: DiscordListens; threads?: DiscordListens } = {},
+    // and for the reactions that a moderator clears at once.
+    more: { reactions?: DiscordListens; threads?: DiscordListens; reactionClears?: DiscordListens } = {},
   ) {
     this.#configuredApplicationId = applicationId;
     this.#listens = listens;
     this.#listensChanges = listensChanges;
     this.#listensReactions = more.reactions ?? (() => false);
     this.#listensThreads = more.threads ?? (() => false);
+    this.#listensReactionClears = more.reactionClears ?? (() => false);
   }
 
   /**
@@ -503,6 +516,34 @@ export class DiscordState {
             type: "deliver",
             guildId,
             delivery: { kind: "reaction", reaction: { ...reaction, ...(parent ? { threadParentId: parent } : {}) } },
+          },
+        ];
+      }
+      case GatewayDispatchEvents.MessageReactionRemoveAll:
+      case GatewayDispatchEvents.MessageReactionRemoveEmoji: {
+        // A moderator removed all the reactions of a message, or all of one emoji. Discord names no
+        // people, so the host removes the reactions of every Discord person it mirrored.
+        const { guild_id: guildId, channel_id: channelId, message_id: messageId } = payload.d;
+        if (!guildId) return [];
+        let emoji: string | undefined;
+        if (payload.t === GatewayDispatchEvents.MessageReactionRemoveEmoji) {
+          const text = reactionEmojiText(payload.d.emoji);
+          if (!text) return [];
+          emoji = text;
+        }
+        const parent = this.#threadParent(guildId, channelId);
+        if (!this.#listensReactionClears(guildId, parent ?? channelId)) return [];
+        return [
+          {
+            type: "deliver",
+            guildId,
+            delivery: {
+              kind: "reaction-clear",
+              channelId,
+              messageId,
+              ...(emoji ? { emoji } : {}),
+              ...(parent ? { threadParentId: parent } : {}),
+            },
           },
         ];
       }

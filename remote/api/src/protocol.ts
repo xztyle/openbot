@@ -213,6 +213,7 @@ const signalClientMessageSchema = z.discriminatedUnion("type", [
     changes: z.literal(true).optional(),
     reactions: z.literal(true).optional(),
     threads: z.literal(true).optional(),
+    reactionClears: z.literal(true).optional(),
   }),
   z.object({
     type: z.literal("queued-delivery-ack"),

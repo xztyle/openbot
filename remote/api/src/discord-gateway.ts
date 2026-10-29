@@ -107,6 +107,7 @@ export class DiscordGateway extends Context.Service<DiscordGateway, { readonly a
           {
             reactions: (guildId, channelId) => signal.discordListensReactions(guildId, channelId),
             threads: (guildId, parentChannelId) => signal.discordListensThreads(guildId, parentChannelId),
+            reactionClears: (guildId, channelId) => signal.discordListensReactionClears(guildId, channelId),
           },
         );
         const run = yield* FiberSet.makeRuntime<never>();

@@ -92,6 +92,16 @@ export class DiscordTransport implements MessagingTransport {
         sink.changed?.(discordInboundChange(event.channelId, event.messageId, null, event.threadParentId));
         return OK;
       }
+      if (event.kind === "reaction-clear") {
+        // Clearing twice changes nothing, so a redelivery needs no check.
+        sink.reactionsCleared?.({
+          platformChannelId: event.channelId,
+          platformMessageId: event.messageId,
+          ...(event.emoji ? { emoji: event.emoji } : {}),
+          ...(event.threadParentId ? { threadParentId: event.threadParentId } : {}),
+        });
+        return OK;
+      }
       if (event.kind === "reaction") {
         // Adding or removing a reaction twice changes nothing, so a redelivery needs no check.
         sink.reacted?.(discordInboundReaction(event.reaction));

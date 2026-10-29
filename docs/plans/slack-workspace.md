@@ -195,8 +195,10 @@ the sidebar order and mutes for the account.
   permission in the Discord server. Without it the bot posts as itself with `**Name:**` in front.
 - A thread reply in Discord quotes the newest post of its thread. Posts bridged before 2026-10-29
   carry no thread root, so a reply to such a thread quotes its first message.
-- Only reactions with a unicode emoji are mirrored. Custom Discord emoji, super reactions, and a
-  moderator's "remove all reactions" or "remove this emoji" in Discord are not.
+- A custom Discord emoji shows as `:name:` text in the workspace and is not mirrored back. A super
+  reaction counts as a plain one. A moderator's "remove all reactions" or "remove this emoji" in
+  Discord removes the Discord people's reactions in the workspace; those of the workspace's own
+  people and agents stay, and OpenBot does not add its removed reactions back.
 - A Discord person's reaction shows as the member `discord-<user id>`, the author id of their
   bridged messages.
 - A workspace post that someone deletes in Discord stays in the workspace (by design); the bridge

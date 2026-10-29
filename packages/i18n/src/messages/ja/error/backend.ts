@@ -105,6 +105,9 @@ export const messages = {
   "error.backend.channelEditEmpty": "ファイルのないメッセージにはテキストが必要です。",
   "error.backend.channelVisibilityAdmin": "チャンネルを公開または非公開にできるのはオーナーと管理者だけです。",
   "error.backend.channelVisibilityKind": "公開または非公開にできるのはチャンネルだけです。DM やグループはできません。",
+  "error.backend.channelRoutingAdmin": "チャンネルのメッセージの振り分け方を変更できるのはオーナーと管理者だけです。",
+  "error.backend.channelRoutingKind":
+    "コーディネーターによる振り分けを使えるのはチャンネルだけです。DM やグループでは使えません。",
   "error.backend.channelAgentChatRequired": "DM を開けるのは、チャットできるエージェントとだけです。",
   "error.backend.memoryEssentialBudget":
     "必須メモリーがプロンプトの上限を超えています。エントリーを「必要なときに検索」に設定してから、もう一度お試しください。",

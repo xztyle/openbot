@@ -101,6 +101,9 @@ export const messages = {
   "error.backend.channelVisibilityAdmin": "채널을 공개 또는 비공개로 바꿀 수 있는 사람은 소유자와 관리자뿐입니다.",
   "error.backend.channelVisibilityKind":
     "공개 또는 비공개로 바꿀 수 있는 것은 채널뿐입니다. DM이나 그룹은 바꿀 수 없습니다.",
+  "error.backend.channelRoutingAdmin": "채널의 메시지 라우팅 방식은 소유자와 관리자만 바꿀 수 있습니다.",
+  "error.backend.channelRoutingKind":
+    "코디네이터 라우팅은 채널에서만 사용할 수 있습니다. DM이나 그룹에서는 사용할 수 없습니다.",
   "error.backend.channelAgentChatRequired": "채팅할 수 있는 에이전트와만 DM을 열 수 있습니다.",
   "error.backend.memoryEssentialBudget":
     "필수 메모리가 프롬프트 한도를 넘었어요. 항목 하나를 필요할 때 검색하도록 설정한 후 다시 시도해 주세요.",

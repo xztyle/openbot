@@ -96,6 +96,7 @@ import { updateIpcHandlers } from "./ipc/update-handlers";
 import { vaultIpcHandlers } from "./ipc/vault-handlers";
 import { voiceIpcHandlers } from "./ipc/voice-handlers";
 import { workflowIpcHandlers } from "./ipc/workflow-handlers";
+import { workspaceLinkIpcHandlers } from "./ipc/workspace-link-handlers";
 import { KeepAwake } from "./keep-awake";
 import { stopAppImageCrashpadHandlerAtExit } from "./linux-appimage-crashpad";
 import { installLinuxDesktopEntry } from "./linux-desktop-entry";
@@ -708,6 +709,9 @@ function registerIpcHandlers({
     ...pluginIpcHandlers({
       takePendingPluginSlug: () => takePendingDeepLink("plugin"),
     }),
+    ...workspaceLinkIpcHandlers({
+      takePendingWorkspaceLink: () => takePendingDeepLink("workspace"),
+    }),
     ...memoryIpcHandlers({ service, remoteServers }),
     ...sharedTableIpcHandlers({ service, remoteServers }),
     ...routineIpcHandlers({ service, remoteServers }),
@@ -942,7 +946,9 @@ function acceptDeepLink(link: DeepLink): void {
       ? sendToRenderer(window, IPC_ENDPOINTS.servers.invite, link.url)
       : link.kind === "plugin"
         ? sendToRenderer(window, IPC_ENDPOINTS.plugins.openListing, link.slug)
-        : sendToRenderer(window, IPC_ENDPOINTS.agentTemplates.openLink, link.id);
+        : link.kind === "workspace"
+          ? sendToRenderer(window, IPC_ENDPOINTS.workspaceLinks.openLink, link.url)
+          : sendToRenderer(window, IPC_ENDPOINTS.agentTemplates.openLink, link.id);
   if (delivered) pendingDeepLink = null;
 }
 
@@ -955,7 +961,7 @@ function takePendingDeepLink(kind: RendererDeepLink["kind"]): string | null {
   const link = pendingDeepLink;
   if (link?.kind !== kind) return null;
   pendingDeepLink = null;
-  return link.kind === "invite" ? link.url : link.kind === "plugin" ? link.slug : link.id;
+  return link.kind === "invite" || link.kind === "workspace" ? link.url : link.kind === "plugin" ? link.slug : link.id;
 }
 
 /** A link of a kind a renderer can be sent, or null for one it cannot - which includes no link. */

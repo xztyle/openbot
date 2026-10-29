@@ -3,7 +3,7 @@ import { createSignal, For, Show } from "solid-js";
 import { Button, IconButton } from "../../button";
 import { Tabs } from "../../complex";
 import { Input } from "../../form";
-import { Archive, Hash, Lock, LogOut, Pencil, ShieldCheck, Trash2, UserRoundPlus, Waypoints } from "../../icons";
+import { Archive, Crown, Hash, Lock, LogOut, Pencil, ShieldCheck, Trash2, UserRoundPlus, Waypoints } from "../../icons";
 import { Switch } from "../../switch";
 import { useText } from "../../text";
 import { cx } from "../../utils";
@@ -46,6 +46,8 @@ export interface ChannelDetailsInfo {
   createdBy?: WorkspaceMember | undefined;
   createdAt?: number | undefined;
   coordinatorRouting?: boolean | undefined;
+  /** The agent that routes each message with coordinator routing. */
+  leadAgentId?: string | null | undefined;
   archived?: boolean | undefined;
 }
 
@@ -70,6 +72,8 @@ export interface ChannelDetailsProps {
   answerLog?: JSX.Element;
   onVisibilityChange?: ((visibility: ChannelVisibility) => void) | undefined;
   onCoordinatorRoutingChange?: ((enabled: boolean) => void) | undefined;
+  /** Picks the lead agent of coordinator routing. */
+  onLeadChange?: ((agentId: string) => void) | undefined;
   onArchive?: (() => void) | undefined;
   onLeave?: (() => void) | undefined;
   class?: string;
@@ -230,6 +234,26 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
                 onChange={(checked: boolean) => props.onCoordinatorRoutingChange?.(checked)}
               />
             </SettingRow>
+            <Show when={props.channel.coordinatorRouting && agents().length > 0}>
+              <SettingRow
+                icon={<Crown aria-hidden="true" />}
+                label={t("workspace.details.lead")}
+                description={t("workspace.details.leadHint")}
+              >
+                <WorkspaceSelect
+                  label={t("workspace.details.lead")}
+                  value={props.channel.leadAgentId ?? ""}
+                  options={[
+                    ...(props.channel.leadAgentId ? [] : [{ value: "", label: t("workspace.details.leadNone") }]),
+                    ...agents().map((entry) => ({ value: entry.member.id, label: entry.member.name })),
+                  ]}
+                  disabled={!props.onLeadChange}
+                  onChange={(agentId) => {
+                    if (agentId) props.onLeadChange?.(agentId);
+                  }}
+                />
+              </SettingRow>
+            </Show>
           </div>
           <div class="ws-details-danger">
             <Show when={props.onLeave}>

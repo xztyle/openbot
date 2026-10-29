@@ -27,6 +27,16 @@ export const CHANNEL_ANSWER_MODES = ["mention", "always", "always-no-gate", "lea
  */
 export type ChannelAnswerMode = (typeof CHANNEL_ANSWER_MODES)[number];
 
+export const CHANNEL_ROUTINGS = ["responders", "coordinator"] as const;
+/**
+ * How a channel gives the messages of people to its agents. `responders`: each member agent answers
+ * by its own answer mode, the gate included. `coordinator`: the lead agent gives each message to one
+ * owner and the answer modes do not apply; only an agent that a message mentions answers it directly.
+ * Absent (a channel stored before the field): `responders` when a member has an answer mode, else the
+ * lead routes, as before.
+ */
+export type ChannelRouting = (typeof CHANNEL_ROUTINGS)[number];
+
 export const CHANNEL_TOPIC_LIMIT = 250;
 export const CHANNEL_DESCRIPTION_LIMIT = INPUT_LIMITS.agentDescription;
 export const CHANNEL_FOCUS_LIMIT = 500;
@@ -161,6 +171,8 @@ export interface ChannelWorkspaceFields {
   createdBy?: ChannelActorRef;
   /** The bridged Discord channel. Only owners and admins change it (`link-discord`, `unlink-discord`). */
   discordLink?: ChannelDiscordLink;
+  /** How the channel routes messages. Only owners and admins change it (`set-routing`). */
+  routing?: ChannelRouting;
 }
 
 /** The workspace fields of a channel message. */
@@ -198,6 +210,19 @@ export function channelKind(channel: ChannelWorkspaceFields): ChannelKind {
 /** A DM and a group are always private. */
 export function channelVisibility(channel: ChannelWorkspaceFields): ChannelVisibility {
   return channelKind(channel) !== "channel" ? "private" : (channel.visibility ?? "public");
+}
+
+/**
+ * The routing of a channel as the host applies it: the stored field, or for a channel without it,
+ * `responders` when a member has an answer mode other than `lead`, else `coordinator`.
+ */
+export function channelRouting(
+  channel: ChannelWorkspaceFields & { members: readonly ChannelMemberWorkspaceFields[] },
+): ChannelRouting {
+  if (channel.routing) return channel.routing;
+  return channel.members.some((member) => member.answerMode !== undefined && member.answerMode !== "lead")
+    ? "responders"
+    : "coordinator";
 }
 
 /** A thread reply that the channel transcript leaves out. */
@@ -274,7 +299,8 @@ export function hasValidChannelWorkspaceFields(value: DynamicRecord): boolean {
     (value.description === undefined || isBoundedString(value.description, CHANNEL_DESCRIPTION_LIMIT)) &&
     (value.humanMemberIds === undefined || identifiers(value.humanMemberIds, CHANNEL_HUMAN_MEMBER_LIMIT)) &&
     (value.createdBy === undefined || isChannelActorRef(value.createdBy)) &&
-    (value.discordLink === undefined || isChannelDiscordLink(value.discordLink))
+    (value.discordLink === undefined || isChannelDiscordLink(value.discordLink)) &&
+    (value.routing === undefined || isOneOf(CHANNEL_ROUTINGS, value.routing))
   );
 }
 

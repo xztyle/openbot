@@ -174,6 +174,7 @@ import {
   decodeOnePasswordConnectorStatus,
   decodePendingAgentTemplate,
   decodePendingListing,
+  decodePendingWorkspaceLink,
   decodeProviderDetectionSettings,
   decodeRemoteDesktopSetupFromMain,
   decodeRemoteDesktopTestFromMain,
@@ -1241,6 +1242,10 @@ const openbotApi: OpenBotDesktopApi = {
   plugins: bridgeGroup(IPC_ENDPOINTS.plugins, {
     takePendingListing: decodePendingListing,
     openListing: dropInvalid(decodePendingListing),
+  }),
+  workspaceLinks: bridgeGroup(IPC_ENDPOINTS.workspaceLinks, {
+    takePendingLink: decodePendingWorkspaceLink,
+    openLink: dropInvalid(decodePendingWorkspaceLink),
   }),
   host: bridgeGroup(IPC_ENDPOINTS.host, {
     getStatus: decodeHostStatus,

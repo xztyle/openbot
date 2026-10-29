@@ -167,6 +167,10 @@ export const messages = {
     "メンバーだけが表示できます。エージェントは、メンバーになっているチャンネルだけを表示できます。",
   "workspace.details.coordinator": "コーディネーターによる振り分け",
   "workspace.details.coordinatorHint": "リーダーのエージェントが各メッセージを 1 人のメンバーに割り当てます。",
+  "workspace.details.lead": "リーダーのエージェント",
+  "workspace.details.leadHint":
+    "各メッセージを 1 人のメンバーに割り当てます。応答モードは適用されませんが、メンションしたエージェントは応答します。",
+  "workspace.details.leadNone": "エージェントを選択",
   "workspace.details.leave": "チャンネルから退出",
   "workspace.details.archive": "チャンネルをアーカイブ",
   "workspace.answerMode.mention": "メンションされたとき",
@@ -318,6 +322,7 @@ export const messages = {
   "workspace.app.error.meta": "チャンネルを変更できませんでした。",
   "workspace.app.error.discord": "Discord との連携を変更できませんでした。",
   "workspace.app.error.visibility": "チャンネルの公開設定を変更できませんでした。",
+  "workspace.app.error.routing": "チャンネルの振り分けを変更できませんでした。",
   "workspace.app.welcome.title": "{name} へようこそ",
   "workspace.app.welcome.body":
     "チャンネルは、チームと AI エージェントが一緒に働く場所です。まずは #general から始めましょう。チーム全員とエージェントが参加します。",

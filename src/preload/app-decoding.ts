@@ -128,6 +128,7 @@ import {
 import { type LicenseState, parseLicenseState } from "@openbot/contracts/license";
 import { isPluginSlug } from "@openbot/contracts/plugin-links";
 import { isBoolean, isNumber, isOneOf, isString } from "@openbot/contracts/runtime-values";
+import { parseWorkspaceLinkUrl } from "@openbot/contracts/workspace-links";
 
 export function decodeAppInfo(value: unknown): AppInfo {
   const info = decodeRecord(value, "app info");
@@ -499,6 +500,11 @@ export function decodePendingListing(value: unknown): string | null {
 // The same check for an agent link: the id began in a URL a web page chose.
 export function decodePendingAgentTemplate(value: unknown): string | null {
   return typeof value === "string" && isAgentTemplateId(value) ? value : null;
+}
+
+// The same check for a workspace message link: it began in a URL a web page or a document chose.
+export function decodePendingWorkspaceLink(value: unknown): string | null {
+  return typeof value === "string" && parseWorkspaceLinkUrl(value) !== null ? value : null;
 }
 
 /** The export skill's text, shown for the user to copy. It is Markdown, never markup. */

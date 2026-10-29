@@ -1482,6 +1482,23 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     );
   }
 
+  /**
+   * Turns coordinator routing on or off, or picks its lead. Owners and admins only; the host checks
+   * it again and refuses coordinator routing without a lead.
+   */
+  async function setRouting(channelId: string, routing: "responders" | "coordinator", leadAgentId?: string) {
+    return run(
+      {
+        type: "set-routing",
+        operationId: crypto.randomUUID(),
+        channelId,
+        routing,
+        ...(leadAgentId ? { leadAgentId } : {}),
+      },
+      "workspace.app.error.routing",
+    );
+  }
+
   async function linkDiscord(channelId: string, connectionId: string, discordChannelId: string) {
     return run(
       { type: "link-discord", operationId: crypto.randomUUID(), channelId, connectionId, discordChannelId },
@@ -1582,6 +1599,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     setMember,
     setMeta,
     setVisibility,
+    setRouting,
     linkDiscord,
     unlinkDiscord,
     messageMember,

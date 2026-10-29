@@ -38,6 +38,7 @@ function Details(props: { tab: ChannelDetailsTab }) {
         }
         onVisibilityChange={fn()}
         onCoordinatorRoutingChange={fn()}
+        onLeadChange={fn()}
         onArchive={fn()}
         onLeave={fn()}
       />

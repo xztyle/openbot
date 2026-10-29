@@ -150,6 +150,8 @@ export const messages = defineMessages("error.backend", {
   "error.backend.channelEditEmpty": "A message without files needs text.",
   "error.backend.channelVisibilityAdmin": "Only owners and admins can make a channel public or private.",
   "error.backend.channelVisibilityKind": "Only a channel can be public or private, not a DM or a group.",
+  "error.backend.channelRoutingAdmin": "Only owners and admins can change how a channel routes messages.",
+  "error.backend.channelRoutingKind": "Only a channel can use coordinator routing, not a DM or a group.",
   "error.backend.channelAgentChatRequired": "You can open a direct message only with an agent you can chat with.",
   "error.backend.memoryEssentialBudget":
     "The essential memories exceed the prompt limit. Set an entry to search when needed, then try again.",

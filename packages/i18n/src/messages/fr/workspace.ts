@@ -153,6 +153,10 @@ export const messages = {
     "Seuls les membres peuvent le voir. Les agents ne voient un canal que s’ils en sont membres.",
   "workspace.details.coordinator": "Routage par coordinateur",
   "workspace.details.coordinatorHint": "Un agent principal confie chaque message à un membre.",
+  "workspace.details.lead": "Agent principal",
+  "workspace.details.leadHint":
+    "Confie chaque message à un membre. Les modes de réponse ne s’appliquent pas ; un agent que vous mentionnez répond toujours.",
+  "workspace.details.leadNone": "Choisir un agent",
   "workspace.details.leave": "Quitter le canal",
   "workspace.details.archive": "Archiver le canal",
   "workspace.answerMode.mention": "Si mentionné",
@@ -304,6 +308,7 @@ export const messages = {
   "workspace.app.error.meta": "Le canal n’a pas été modifié.",
   "workspace.app.error.discord": "La liaison Discord n’a pas été modifiée.",
   "workspace.app.error.visibility": "La confidentialité du canal n’a pas été modifiée.",
+  "workspace.app.error.routing": "Le routage du canal n’a pas été modifié.",
   "workspace.app.welcome.title": "Bienvenue dans {name}",
   "workspace.app.welcome.body":
     "Les canaux sont l’endroit où votre équipe et ses agents IA travaillent ensemble. Commencez par #general : toute l’équipe et vos agents y sont.",

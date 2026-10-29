@@ -2934,6 +2934,14 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         return () => undefined;
       },
     },
+    workspaceLinks: {
+      // The same for a workspace message link: the preview opens message links in place.
+      takePendingLink: async () => null,
+      onOpenLink: (listener) => {
+        void listener;
+        return () => undefined;
+      },
+    },
     host: mockTeam.host,
     events: mockEvents,
     eventChecks: mockEventChecks,

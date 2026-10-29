@@ -165,3 +165,36 @@ A toolless one-shot call through `WarmGenerations` on a cheap model chosen in Se
 - Discord channels can be bridged to workspace channels.
 - A Fleet view, step trails on agent answers, and Artifacts cards/views exist (phase 7).
 - Everything deployed on the live server.
+
+## Status (2026-10-29)
+
+All seven phases are done on `main`. The final gaps (coordinator routing as a channel option,
+message links from outside the app, Discord bulk deletions) are on `wip/ws-final`, not yet merged or
+deployed.
+
+| Phase | Status | What shipped |
+| --- | --- | --- |
+| 1. Model + backend core | Done | Channel `kind`, `visibility`, `topic`, `description`, `humanMemberIds`, `createdBy`; per-agent `answerMode` and `focus`; visibility filtering for people and agents; threads, reactions, mentions, edit and delete; DMs and group DMs on channels; `workspace-v1` routes and IPC; `channel-message` and `channel-message-removed` events; `openbot-workspace-v1.json`. No migration was necessary. |
+| 2. Responder pipeline + gate | Done | Answer modes (`mention`, `always`, `always-no-gate`, `lead`); the gate on `GateGenerations` with its own budget; one answer first, a second round for the others, at most 2 gated answers; thread-aware delivery; mention chain limit 3; decision log for owners and admins. Coordinator routing is now a channel option (`routing`, `set-routing`, with a lead picker in Channel details → Settings). |
+| 3. Slack UI | Done | Desktop and web: layout, sidebar (Threads, Activity, Fleet, Artifacts, channels, DMs), Slack rows, composer with mentions, `#` links and formatting, thread panel, channel details, create-channel and new-message dialogs, profiles, ⌘K, Alt+Up/Down, Escape; one pane at a time on a phone. |
+| 4. Agent behavior settings | Done | Server settings → Workspace (default answer mode, gate model, effort and time limit); agent settings → In channels (answer mode and focus defaults); DM list shows only agents the reader can chat with; the owner's agent DM is the main chat. |
+| 5. Discord bridge | Done | Link a channel with a Discord text channel; both directions, Discord name and picture, webhook posts with each author's name; edits and deletions in both directions; bulk deletions in Discord (`MESSAGE_DELETE_BULK`) delete the bridged messages. |
+| 6. Polish | Done | Typing, thinking and working lines; public/private switch; onboarding into `#general`; emoji picker; unread banner and jump; sidebar filter, order and mute; message links (in place in the app, and now from outside the app through `openbot://workspace/...`); fast long channels; i18n in all 12 catalogs. |
+| 7. Fleet and artifacts | Done | Fleet view with live status, last step, cost and time today, usage-limit waits; step trails on agent answers; Artifacts cards and views for apps, sites, documents, decks, dashboards and files. |
+
+### Known limits
+
+- Discord reactions and Discord threads (thread channels) are not mirrored. A workspace thread
+  reply goes to Discord as a reply to its root, and a Discord reply to a bridged message goes into
+  its workspace thread.
+- A workspace post that someone deletes in Discord stays in the workspace; only the messages that
+  the bridge brought in from Discord follow a Discord deletion.
+- The webhook posts and the Discord pictures need the Signal update with the bridge changes.
+- Artifact cards have no thumbnails: a card without one shows a drawing of its kind.
+- The artifact index is in memory on the host. It is built again after a restart and is not stored.
+- A person shows as typing only while their composer has the keyboard focus.
+- The emoji picker grid uses table semantics; a screen reader reads rows and cells, not a listbox.
+- The sidebar order and the mutes are saved on each computer, not for the account.
+- With coordinator routing, the answer modes, the gate and the mention chains between agents do not
+  apply; only an agent that a person mentions answers directly.
+- A message link opens only on a server that this computer joined, in a channel the reader can see.

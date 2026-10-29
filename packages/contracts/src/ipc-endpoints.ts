@@ -1798,6 +1798,12 @@ export const IPC_ENDPOINTS = {
     takePendingListing: request<undefined, string | null>()("plugins:take-pending-listing"),
     openListing: event<string>()("plugins:open-listing"),
   },
+  // The workspace message deep link (`openbot://workspace/<server>/<channel>/<message>`), its own
+  // group for the same reason as `plugins`. Both carry the canonical link that main built again.
+  workspaceLinks: {
+    takePendingLink: request<undefined, string | null>()("workspace-links:take-pending-link"),
+    openLink: event<string>()("workspace-links:open-link"),
+  },
   host: {
     getStatus: request<undefined, HostStatus>()("host:get-status"),
     configure: request<ConfigureHostInput, HostStatus>()("host:configure"),
@@ -1914,6 +1920,7 @@ export const IPC_GROUP_PATHS = {
   agentImport: "agentImport",
   instanceTransfer: "instanceTransfer",
   plugins: "plugins",
+  workspaceLinks: "workspaceLinks",
   host: "host",
   events: "events",
   eventChecks: "eventChecks",

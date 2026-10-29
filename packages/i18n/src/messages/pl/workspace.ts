@@ -221,6 +221,10 @@ export const messages = {
   "workspace.details.privateHint": "Widzą go tylko członkowie. Agenci widzą kanał tylko wtedy, gdy są jego członkami.",
   "workspace.details.coordinator": "Kierowanie przez koordynatora",
   "workspace.details.coordinatorHint": "Agent prowadzący przekazuje każdą wiadomość jednemu członkowi.",
+  "workspace.details.lead": "Agent prowadzący",
+  "workspace.details.leadHint":
+    "Przekazuje każdą wiadomość jednemu członkowi. Tryby odpowiedzi nie obowiązują; wspomniany agent nadal odpowiada.",
+  "workspace.details.leadNone": "Wybierz agenta",
   "workspace.details.leave": "Opuść kanał",
   "workspace.details.archive": "Archiwizuj kanał",
   "workspace.answerMode.mention": "Po wzmiance",
@@ -405,6 +409,7 @@ export const messages = {
   "workspace.app.error.meta": "Nie zmieniono kanału.",
   "workspace.app.error.discord": "Nie zmieniono połączenia z Discord.",
   "workspace.app.error.visibility": "Nie zmieniono widoczności kanału.",
+  "workspace.app.error.routing": "Nie zmieniono kierowania w kanale.",
   "workspace.app.welcome.title": "Witaj w {name}",
   "workspace.app.welcome.body":
     "Kanały to miejsce, w którym zespół pracuje razem ze swoimi agentami AI. Zacznij od #general: są w nim wszyscy członkowie zespołu i Twoi agenci.",

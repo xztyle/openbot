@@ -221,6 +221,10 @@ export const messages = {
   "workspace.details.privateHint": "Его видят только участники. Агенты видят канал, только если они его участники.",
   "workspace.details.coordinator": "Маршрутизация через координатора",
   "workspace.details.coordinatorHint": "Ведущий агент передаёт каждое сообщение одному участнику.",
+  "workspace.details.lead": "Ведущий агент",
+  "workspace.details.leadHint":
+    "Передаёт каждое сообщение одному участнику. Режимы ответа не действуют; упомянутый агент всё равно отвечает.",
+  "workspace.details.leadNone": "Выберите агента",
   "workspace.details.leave": "Покинуть канал",
   "workspace.details.archive": "Архивировать канал",
   "workspace.answerMode.mention": "При упоминании",
@@ -406,6 +410,7 @@ export const messages = {
   "workspace.app.error.meta": "Канал не изменён.",
   "workspace.app.error.discord": "Связь с Discord не изменена.",
   "workspace.app.error.visibility": "Видимость канала не изменена.",
+  "workspace.app.error.routing": "Маршрутизация канала не изменена.",
   "workspace.app.welcome.title": "Добро пожаловать в {name}",
   "workspace.app.welcome.body":
     "Каналы — это место, где команда работает вместе со своими ИИ-агентами. Начните с #general: в нём вся команда и ваши агенты.",

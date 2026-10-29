@@ -6,6 +6,7 @@ import {
   CHANNEL_GROUP_LIMIT,
   CHANNEL_HUMAN_MEMBER_LIMIT,
   CHANNEL_KINDS,
+  CHANNEL_ROUTINGS,
   CHANNEL_TOPIC_LIMIT,
   CHANNEL_VISIBILITIES,
   type ChannelAnswerMode,
@@ -13,6 +14,7 @@ import {
   type ChannelKind,
   type ChannelMemberWorkspaceFields,
   type ChannelMessageWorkspaceFields,
+  type ChannelRouting,
   type ChannelVisibility,
   type ChannelWorkspaceFields,
   hasValidChannelMemberWorkspaceFields,
@@ -270,6 +272,18 @@ export type WorkspaceChannelCommand =
     }
   | {
       /**
+       * Sets how a `channel` routes the messages of people. Owners and admins only. `coordinator`
+       * needs a lead: `leadAgentId`, or the lead the channel has, or its only member agent.
+       * `leadAgentId` must name a member agent; absent, the lead stays.
+       */
+      type: "set-routing";
+      operationId: string;
+      channelId: string;
+      routing: ChannelRouting;
+      leadAgentId?: string;
+    }
+  | {
+      /**
        * The onboarding channel. When the workspace has no `channel` yet, the host makes `#general`
        * with `channelId`: public, with every person of the team and the visible agents, which answer
        * when mentioned. It answers the first channel named general, or the new one. Idempotent.
@@ -295,6 +309,7 @@ export const WORKSPACE_CHANNEL_COMMAND_TYPES = [
   "unlink-discord",
   "set-visibility",
   "ensure-general",
+  "set-routing",
 ] as const satisfies readonly WorkspaceChannelCommand["type"][];
 
 /** A command that only the workspace route carries: a workspace command, or a send into a thread. */
@@ -741,6 +756,15 @@ function parseWorkspaceChannelCommand(
       return { ...common, type: "set-visibility", visibility: value.visibility };
     case "ensure-general":
       return { ...common, type: "ensure-general" };
+    case "set-routing":
+      if (!isOneOf(CHANNEL_ROUTINGS, value.routing)) return null;
+      if (!(value.leadAgentId === undefined || isIdentifier(value.leadAgentId))) return null;
+      return {
+        ...common,
+        type: "set-routing",
+        routing: value.routing,
+        ...(value.leadAgentId === undefined ? {} : { leadAgentId: value.leadAgentId }),
+      };
     default:
       return null;
   }

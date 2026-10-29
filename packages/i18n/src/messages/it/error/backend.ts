@@ -108,6 +108,10 @@ export const messages = {
     "Solo i proprietari e gli amministratori possono rendere un canale pubblico o privato.",
   "error.backend.channelVisibilityKind":
     "Solo un canale può essere pubblico o privato, non un messaggio diretto né un gruppo.",
+  "error.backend.channelRoutingAdmin":
+    "Solo i proprietari e gli amministratori possono cambiare come un canale smista i messaggi.",
+  "error.backend.channelRoutingKind":
+    "Solo un canale può usare lo smistamento con coordinatore, non un messaggio diretto o un gruppo.",
   "error.backend.channelAgentChatRequired":
     "Puoi aprire un messaggio diretto solo con un agente con cui puoi chattare.",
   "error.backend.memoryEssentialBudget":

@@ -107,6 +107,10 @@ export const messages = {
     "Solo los propietarios y los administradores pueden hacer un canal público o privado.",
   "error.backend.channelVisibilityKind":
     "Solo un canal puede ser público o privado, no un mensaje directo ni un grupo.",
+  "error.backend.channelRoutingAdmin":
+    "Solo los propietarios y administradores pueden cambiar cómo un canal enruta los mensajes.",
+  "error.backend.channelRoutingKind":
+    "Solo un canal puede usar el enrutamiento por coordinador, no un mensaje directo ni un grupo.",
   "error.backend.channelAgentChatRequired":
     "Solo puedes abrir un mensaje directo con un agente con el que puedes chatear.",
   "error.backend.memoryEssentialBudget":

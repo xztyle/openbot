@@ -172,7 +172,8 @@ export type SignalClientMessage =
   // the list of its guild; an empty list stops it. Sent only to a Signal whose `ready` named
   // `discord-listen` (`./discord-route.ts`). Signal keeps the list while the socket is open.
   // `changes: true` also asks for the edits and deletions of the people's messages in those
-  // channels (`message-update`, `message-delete` deliveries). An older Signal ignores the key.
+  // channels (`message-update`, `message-delete` deliveries; a bulk deletion is one `message-delete`
+  // for each message). An older Signal ignores the key.
   | {
       type: "discord-listen";
       version: SignalProtocolVersion;

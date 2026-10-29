@@ -95,6 +95,8 @@ export const messages = {
   "error.backend.channelEditEmpty": "没有文件的消息需要文字。",
   "error.backend.channelVisibilityAdmin": "只有所有者和管理员可以将频道设为公开或私密。",
   "error.backend.channelVisibilityKind": "只有频道可以设为公开或私密，私信和群组不可以。",
+  "error.backend.channelRoutingAdmin": "只有所有者和管理员可以更改频道分配消息的方式。",
+  "error.backend.channelRoutingKind": "只有频道可以使用协调者分配，私信和群组不可以。",
   "error.backend.channelAgentChatRequired": "你只能与可以聊天的智能体开启私信。",
   "error.backend.memoryEssentialBudget": "核心记忆超出了提示词上限。请把其中一条设为按需检索，然后重试。",
   "error.backend.memorySelectionConflict": "记忆已变更，请重新加载后重试。",

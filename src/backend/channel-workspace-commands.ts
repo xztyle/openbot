@@ -11,6 +11,7 @@ import {
   type ChannelMember,
   type ChannelMessage,
   type ChannelReaction,
+  type ChannelRouting,
   type ChannelVisibility,
   canAdministerServer,
   channelKind,
@@ -152,6 +153,33 @@ export function visibilityChannel(
     throw new Error(sourceText("error.backend.channelVisibilityAdmin"));
   if (channelVisibility(channel) === visibility) return channel;
   return { ...channel, kind: "channel", visibility };
+}
+
+/**
+ * Sets how a `channel` routes the messages of people, and its lead. Owners and admins only; a
+ * command of this computer's own services has no viewer and passes. `coordinator` needs a lead: the
+ * one of the command, the one the channel has, or its only member agent.
+ */
+export function routingChannel(
+  channel: Channel,
+  command: { routing: ChannelRouting; leadAgentId?: string | undefined },
+  context: WorkspaceCommandContext,
+): Channel {
+  if (channelKind(channel) !== "channel") throw new Error(sourceText("error.backend.channelRoutingKind"));
+  if (context.viewer && !canAdministerServer(context.viewer.role))
+    throw new Error(sourceText("error.backend.channelRoutingAdmin"));
+  const isMember = (agentId: string | null | undefined): agentId is string =>
+    Boolean(agentId) && channel.members.some((member) => member.agentId === agentId);
+  if (command.leadAgentId !== undefined && !isMember(command.leadAgentId))
+    throw new Error(sourceText("error.backend.channelMemberRequired"));
+  const only = channel.members.length === 1 ? channel.members[0]?.agentId : undefined;
+  const kept = isMember(channel.leadAgentId) ? channel.leadAgentId : null;
+  const leadAgentId =
+    command.leadAgentId ?? (command.routing === "coordinator" ? (kept ?? only ?? null) : channel.leadAgentId);
+  if (command.routing === "coordinator" && !leadAgentId)
+    throw new Error(sourceText("error.backend.channelLeadRequired"));
+  if (channel.routing === command.routing && channel.leadAgentId === leadAgentId) return channel;
+  return { ...channel, routing: command.routing, leadAgentId };
 }
 
 /** The name of the onboarding channel. */

@@ -166,6 +166,10 @@ export const messages = {
   "workspace.details.privateHint": "Yalnızca üyeler görebilir. Ajanlar bir kanalı yalnızca üyesi olduklarında görür.",
   "workspace.details.coordinator": "Koordinatör yönlendirmesi",
   "workspace.details.coordinatorHint": "Lider ajan her mesajı bir üyeye verir.",
+  "workspace.details.lead": "Lider ajan",
+  "workspace.details.leadHint":
+    "Her mesajı bir üyeye verir. Yanıt modları uygulanmaz; andığınız ajan yine yanıt verir.",
+  "workspace.details.leadNone": "Ajan seçin",
   "workspace.details.leave": "Kanaldan ayrıl",
   "workspace.details.archive": "Kanalı arşivle",
   "workspace.answerMode.mention": "Bahsedildiğinde",
@@ -319,6 +323,7 @@ export const messages = {
   "workspace.app.error.meta": "Kanal değiştirilmedi.",
   "workspace.app.error.discord": "Discord bağlantısı değiştirilmedi.",
   "workspace.app.error.visibility": "Kanalın gizliliği değiştirilmedi.",
+  "workspace.app.error.routing": "Kanal yönlendirmesi değiştirilemedi.",
   "workspace.app.welcome.title": "{name} alanına hoş geldiniz",
   "workspace.app.welcome.body":
     "Kanallar, ekibinizin yapay zekâ ajanlarıyla birlikte çalıştığı yerdir. #general ile başlayın: tüm ekip ve ajanlarınız orada.",

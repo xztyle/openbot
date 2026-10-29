@@ -1,6 +1,6 @@
 import type { AddedAgent, AgentProviderId, NotificationOpenedEvent, ServerSummary } from "@openbot/contracts/ipc";
 import { currentText } from "@openbot/ui/text";
-import { onSettled } from "solid-js";
+import { createEffect, onSettled } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";
 import { usePlatform } from "../../platform";
@@ -41,8 +41,14 @@ const ServerSelection = createSimpleContext({
     const { pendingInviteUrl, setPendingInviteUrl, saveSetup } = useSetup();
     const { setSkillsMarketplaceOpen } = useSettings();
     const { disconnectRemoteDesktopWorkspace } = useRemoteDesktop();
-    const { setBrowserVisibilitySuspended, setPendingAgentSelection, setPendingChannelSelection, setPreviousServerId } =
-      useServerSwitch();
+    const {
+      setBrowserVisibilitySuspended,
+      setPendingAgentSelection,
+      setPendingChannelSelection,
+      pendingWorkspaceLink,
+      setPendingWorkspaceLink,
+      setPreviousServerId,
+    } = useServerSwitch();
     const { agentSetupOpen, creatingAgent } = useAgents();
     const { stopComposerTyping } = useConversationController();
     const { setDirectTyping } = useDirectMessages();
@@ -152,6 +158,24 @@ const ServerSelection = createSimpleContext({
       if (event.channelId) setPendingChannelSelection(event.channelId);
       else setPendingAgentSelection(event.agentId);
     }
+
+    // A workspace message link names its server. The workspace of that server opens the link; a
+    // link to a server this computer has not joined does nothing.
+    createEffect(
+      () => pendingWorkspaceLink()?.hostId ?? null,
+      (hostId) => {
+        if (!hostId || servers().find((server) => server.active)?.id === hostId) return;
+        if (!servers().some((server) => server.id === hostId)) {
+          setPendingWorkspaceLink(null);
+          return;
+        }
+        void selectServer(hostId, false)
+          .then((selected) => {
+            if (!selected) setPendingWorkspaceLink(null);
+          })
+          .catch(() => setPendingWorkspaceLink(null));
+      },
+    );
 
     onSettled(() =>
       serversPort().notifications.onOpened((event) => {

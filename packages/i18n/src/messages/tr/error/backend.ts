@@ -104,6 +104,10 @@ export const messages = {
     "Bir kanalı yalnızca sahipler ve yöneticiler herkese açık veya özel yapabilir.",
   "error.backend.channelVisibilityKind":
     "Yalnızca bir kanal herkese açık veya özel olabilir; doğrudan mesaj veya grup olamaz.",
+  "error.backend.channelRoutingAdmin":
+    "Bir kanalın mesajları nasıl yönlendirdiğini yalnızca sahipler ve yöneticiler değiştirebilir.",
+  "error.backend.channelRoutingKind":
+    "Koordinatör yönlendirmesini yalnızca bir kanal kullanabilir; doğrudan mesaj veya grup kullanamaz.",
   "error.backend.channelAgentChatRequired": "Doğrudan mesajı yalnızca sohbet edebildiğiniz bir ajanla açabilirsiniz.",
   "error.backend.memoryEssentialBudget":
     "Temel bellekler istem sınırını aşıyor. Bir girdiyi gerektiğinde aranacak şekilde ayarlayın, ardından tekrar deneyin.",

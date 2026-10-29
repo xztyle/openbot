@@ -1,7 +1,9 @@
+import { parseWorkspaceLinkUrl } from "@openbot/contracts/workspace-links";
 import { createEffect, flush, onSettled } from "solid-js";
 import { appPort } from "./app-port";
 import { useAuth } from "./features/account/account-context";
 import { useSetup } from "./features/onboarding/onboarding-context";
+import { useServerSwitch } from "./features/servers/server-switch";
 import { useServers } from "./features/servers/servers-context";
 import { useSettings } from "./features/settings/settings-context";
 
@@ -22,6 +24,9 @@ import { useSettings } from "./features/settings/settings-context";
  * marketplace on one listing, and installs nothing. An agent link is the same:
  * it opens the install dialog on one template, and installs nothing by itself.
  *
+ * A workspace message link is published for the server scope, which switches to its server; the
+ * workspace of that server then opens the channel and the thread the reader can see.
+ *
  * The MCP notice below belongs here for the same reason: the MCP list is
  * machine-scoped, the notice is owed once per computer and not once per
  * workspace, and it has to reach a user who never opens the MCP panel.
@@ -31,6 +36,7 @@ export function AppBootstrap() {
   const { setupState, pendingInviteUrl, setPendingInviteUrl } = useSetup();
   const { setJoinServerOpen } = useServers();
   const { setPendingAgentTemplateId, setPendingPluginSlug, setSkillsMarketplaceOpen } = useSettings();
+  const { setPendingWorkspaceLink } = useServerSwitch();
 
   onSettled(() => {
     const receiveInvite = (inviteUrl: string) => {
@@ -57,6 +63,13 @@ export function AppBootstrap() {
     const unsubscribeAgentTemplate = appPort().agentTemplates.onOpenLink((id) => {
       receiveAgentTemplate(id);
     });
+    const receiveWorkspaceLink = (url: string) => {
+      const target = parseWorkspaceLinkUrl(url);
+      if (target) flush(() => setPendingWorkspaceLink(target));
+    };
+    const unsubscribeWorkspaceLink = appPort().workspaceLinks.onOpenLink((url) => {
+      receiveWorkspaceLink(url);
+    });
     // Every subscription is in place before any link is asked for, because the first of these
     // requests is what tells main that a window is listening.
     void appPort()
@@ -71,10 +84,15 @@ export function AppBootstrap() {
       .agentTemplates.takePendingLink()
       .then((id) => id && receiveAgentTemplate(id))
       .catch(() => undefined);
+    void appPort()
+      .workspaceLinks.takePendingLink()
+      .then((url) => url && receiveWorkspaceLink(url))
+      .catch(() => undefined);
     return () => {
       unsubscribeInvite();
       unsubscribePlugin();
       unsubscribeAgentTemplate();
+      unsubscribeWorkspaceLink();
     };
   });
 

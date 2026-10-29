@@ -14,6 +14,9 @@
  * `discord-guild` the sealed link of a Discord guild that installed it. Each is for the sign-in only, so `src/main/index.ts` hands it to the sign-in that is waiting for it and sends nothing on. They are classified here anyway, because the four entry
  * points must keep asking one question.
  *
+ * A `workspace` link names a message by three strictly checked ids and opens only a conversation the
+ * reader can already see; the renderer switches to its server and opens the channel and the thread.
+ *
  * Anything this module does not recognise is `null`, which every caller drops without a message.
  * That is the existing behaviour for junk in argv, and it is what keeps an older build safe in
  * front of a link kind it has never heard of.
@@ -22,11 +25,14 @@
 import { parseAgentTemplateUrl } from "@openbot/contracts/agent-template-links";
 import { type InviteLinkOptions, parseInviteUrl } from "@openbot/contracts/invite-links";
 import { parsePluginUrl } from "@openbot/contracts/plugin-links";
+import { createWorkspaceLinkUrl, parseWorkspaceLinkUrl } from "@openbot/contracts/workspace-links";
 
 export type DeepLink =
   | { kind: "invite"; url: string }
   | { kind: "plugin"; slug: string }
   | { kind: "agent-template"; id: string }
+  /** A workspace message: the canonical `openbot://workspace/<server>/<channel>/<message>`, built again from its ids. */
+  | { kind: "workspace"; url: string }
   | { kind: "mcp-auth"; state: string; code: string }
   | { kind: "slack-workspace"; nonce: string; grant: string }
   | { kind: "discord-guild"; nonce: string; grant: string };
@@ -64,6 +70,9 @@ export function parseDeepLink(value: string, options: InviteLinkOptions = {}): D
   } catch {
     // Not an agent template. It carries no query either, so it can never be a sign-in grant.
   }
+
+  const workspace = parseWorkspaceLinkUrl(value);
+  if (workspace) return { kind: "workspace", url: createWorkspaceLinkUrl(workspace) };
 
   return parseMcpAuthUrl(value) ?? parseSlackUrl(value);
 }

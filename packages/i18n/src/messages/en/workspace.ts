@@ -166,6 +166,10 @@ export const messages = defineMessages("workspace", {
   "workspace.details.privateHint": "Only members can see it. Agents see a channel only when they are members.",
   "workspace.details.coordinator": "Coordinator routing",
   "workspace.details.coordinatorHint": "A lead agent gives each message to one member.",
+  "workspace.details.lead": "Lead agent",
+  "workspace.details.leadHint":
+    "Gives each message to one member. Answer modes do not apply; an agent that you mention still answers.",
+  "workspace.details.leadNone": "Choose an agent",
   "workspace.details.leave": "Leave channel",
   "workspace.details.archive": "Archive channel",
   "workspace.answerMode.mention": "When mentioned",
@@ -318,6 +322,7 @@ export const messages = defineMessages("workspace", {
   "workspace.app.error.meta": "The channel was not changed.",
   "workspace.app.error.discord": "The Discord link was not changed.",
   "workspace.app.error.visibility": "The channel privacy was not changed.",
+  "workspace.app.error.routing": "The channel routing was not changed.",
   "workspace.app.welcome.title": "Welcome to {name}",
   "workspace.app.welcome.body":
     "Channels are where your team and its AI agents work together. Start with #general: everyone on the team and your agents are in it.",

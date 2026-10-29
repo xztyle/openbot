@@ -109,6 +109,9 @@ export const messages = {
   "error.backend.channelVisibilityAdmin": "Nur Besitzer und Admins können einen Kanal öffentlich oder privat machen.",
   "error.backend.channelVisibilityKind":
     "Nur ein Kanal kann öffentlich oder privat sein, keine Direktnachricht und keine Gruppe.",
+  "error.backend.channelRoutingAdmin": "Nur Besitzer und Admins können ändern, wie ein Kanal Nachrichten verteilt.",
+  "error.backend.channelRoutingKind":
+    "Nur ein Kanal kann die Koordinator-Verteilung nutzen, keine DM und keine Gruppe.",
   "error.backend.channelAgentChatRequired":
     "Du kannst eine Direktnachricht nur mit einem Agenten öffnen, mit dem du chatten darfst.",
   "error.backend.memoryEssentialBudget":

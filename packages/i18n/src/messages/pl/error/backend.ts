@@ -105,6 +105,10 @@ export const messages = {
     "Tylko właściciele i administratorzy mogą ustawić kanał jako publiczny lub prywatny.",
   "error.backend.channelVisibilityKind":
     "Tylko kanał może być publiczny lub prywatny, a nie wiadomość prywatna ani grupa.",
+  "error.backend.channelRoutingAdmin":
+    "Tylko właściciele i administratorzy mogą zmienić sposób kierowania wiadomości w kanale.",
+  "error.backend.channelRoutingKind":
+    "Tylko kanał może używać kierowania przez koordynatora, nie wiadomość bezpośrednia ani grupa.",
   "error.backend.channelAgentChatRequired":
     "Wiadomość prywatną możesz otworzyć tylko z agentem, z którym możesz czatować.",
   "error.backend.memoryEssentialBudget":

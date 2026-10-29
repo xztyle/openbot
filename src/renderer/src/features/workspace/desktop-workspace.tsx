@@ -1,11 +1,12 @@
 import { type BrowserTakeoverRequest, CHANNEL_CHATS_CAPABILITY } from "@openbot/contracts/ipc";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
+import { createWorkspaceLinkUrl } from "@openbot/contracts/workspace-links";
 import { Bot, CheckCheck, PanelLeft, Search, Settings, Store, Workflow } from "@openbot/ui";
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
-import { createMemo, type ParentProps } from "solid-js";
+import { createEffect, createMemo, type ParentProps } from "solid-js";
 import { useLayout } from "../../layout";
 import { useNavigation } from "../../navigation";
 import { useTurns } from "../../turns";
@@ -22,6 +23,7 @@ import { useConversation } from "../conversation/conversation-context";
 import { serverRoleCanAdminister } from "../servers/server-capabilities";
 import { useServerScope } from "../servers/server-scope";
 import { useServerSettings } from "../servers/server-settings";
+import { useServerSwitch } from "../servers/server-switch";
 import { useServers } from "../servers/servers-context";
 import { useSettings } from "../settings/settings-context";
 import { desktopStorageHygieneCalls, serverHasStorageHygiene } from "../storage-hygiene/storage-hygiene-port";
@@ -226,5 +228,23 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     storageKey: () => `${accountId() ?? "local"}:${activeServerId()}`,
     phone: () => false,
   });
+  // A message link opened from outside the app: the scope of another server switched here, and
+  // the link opens once the channel list is in. A channel the reader cannot see is not in the list,
+  // so the link does nothing. With the classic sidebar the channel opens in the channel view.
+  const workspaceMode = useDesktopWorkspaceMode();
+  const { pendingWorkspaceLink, setPendingWorkspaceLink } = useServerSwitch();
+  createEffect(
+    () => {
+      const link = pendingWorkspaceLink();
+      return link && link.hostId === activeServerId() && channels.state.listed ? link : null;
+    },
+    (link) => {
+      if (!link) return;
+      setPendingWorkspaceLink(null);
+      if (workspaceMode.on()) controller.openLink(createWorkspaceLinkUrl(link));
+      else if (channels.state.channels.some((channel) => channel.id === link.channelId))
+        void channels.open(link.channelId);
+    },
+  );
   return <WorkspaceProvider controller={controller}>{props.children}</WorkspaceProvider>;
 }

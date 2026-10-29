@@ -45,6 +45,8 @@
 //   admin only) and `ensure-general` (`{}`: makes `#general` with `channelId` when the workspace has
 //   no `channel`, and answers it); an `edit` whose `text` can be empty for a message with files; on
 //   each gate decision `round?: 2`.
+// - Final phase: on each channel `routing` (`responders` | `coordinator`), and the command
+//   `set-routing` (`{ routing: "responders" | "coordinator", leadAgentId? }`, owner and admin only).
 // - `POST /v1/workspace/channels/typing`: `{ channelId, threadRootId?, typing }` answers `{}`. The
 //   person of the session types in the channel, or stopped. A client sends it at most every 3
 //   seconds while the person types; the host ends the typing 6 seconds after the last one.
@@ -133,6 +135,7 @@ const CHANNEL_FIELDS: Record<string, Decoder> = {
     { connectionId: identifier, channelId: identifier, channelName: string(100) },
     { webhook: boolean },
   ),
+  routing: oneOf("responders", "coordinator"),
 };
 const mention: Decoder = (value) => {
   if (!isDynamicRecord(value)) throw new Error("Invalid mention.");
@@ -253,6 +256,7 @@ const COMMAND_TYPES = [
   "unlink-discord",
   "set-visibility",
   "ensure-general",
+  "set-routing",
 ];
 
 const COMMAND_FIELDS: Record<string, { required: Record<string, Decoder>; optional?: Record<string, Decoder> }> = {
@@ -298,6 +302,7 @@ const COMMAND_FIELDS: Record<string, { required: Record<string, Decoder>; option
   "unlink-discord": { required: {} },
   "set-visibility": { required: { visibility: oneOf("public", "private") } },
   "ensure-general": { required: {} },
+  "set-routing": { required: { routing: oneOf("responders", "coordinator") }, optional: { leadAgentId: identifier } },
 };
 
 const command: Decoder = (value) => {

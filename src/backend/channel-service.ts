@@ -83,6 +83,7 @@ import {
   metaChannel,
   reactedMessage,
   removedChannel,
+  routingChannel,
   visibilityChannel,
   type WorkspaceCommandContext,
 } from "./channel-workspace-commands";
@@ -680,6 +681,30 @@ export class ChannelService {
         const next = yield* channelSync(() => visibilityChannel(channel, command.visibility, workspace));
         return next === channel ? channel : yield* this.#commitChannel(next, operationId);
       }
+      case "set-routing": {
+        const next = yield* channelSync(() => routingChannel(channel, command, workspace));
+        if (next === channel) return channel;
+        // A save, so a request that waits for a lead goes to the new lead and the channel wakes.
+        return yield* this.apply(
+          {
+            type: "save",
+            operationId: command.operationId,
+            channelId: channel.id,
+            draft: {
+              name: next.name,
+              title: next.title,
+              instructions: next.instructions,
+              members: next.members,
+              leadAgentId: next.leadAgentId,
+            },
+            update: true,
+          },
+          actor,
+          [],
+          undefined,
+          next.routing ? { routing: next.routing } : {},
+        );
+      }
     }
     if (command.type === "send") {
       const recipientAgentId = command.recipientAgentId;
@@ -722,8 +747,11 @@ export class ChannelService {
         if (threadRootId && (!root || root.threadRootId !== undefined || root.deletedAt))
           return yield* channelFailure(new Error(sourceText("error.backend.channelThreadNotFound")));
         // A channel whose members have answer modes answers as a workspace: each addressed agent
-        // gets its own task. A channel without them routes through its lead, as before.
-        const answerModes = usesAnswerModes(current);
+        // gets its own task. A channel without them routes through its lead, as before. A channel
+        // set to coordinator routing routes through its lead whatever the answer modes are; only the
+        // agents that the person mentions get the message directly.
+        const coordinator = current.routing === "coordinator";
+        const answerModes = !coordinator && (current.routing === "responders" || usesAnswerModes(current));
         const allTasks = yield* channelSync(() => this.store.tasks(current.id));
         const open = allTasks.filter((task) => !terminal(task));
         const previous = referenced?.taskId
@@ -767,7 +795,15 @@ export class ChannelService {
         let added: ChannelTask[];
         // The `always` members that the gate asks about once the message is stored.
         let gated: string[] = [];
-        if (!answerModes)
+        const eligibleNow = coordinator && !continued ? new Set(this.eligibleMembers(current)) : null;
+        const mentioned =
+          eligibleNow && !command.recipientAgentId
+            ? mentions.flatMap((mention) =>
+                mention.kind === "agent" && mention.id && eligibleNow.has(mention.id) ? [mention.id] : [],
+              )
+            : [];
+        if (mentioned.length) added = mentioned.map((agentId) => this.newTask(current.id, id, text, agentId));
+        else if (!answerModes)
           added = continued
             ? []
             : [this.newTask(current.id, id, text, command.recipientAgentId ?? repliedMember ?? null)];
@@ -2682,7 +2718,8 @@ export class ChannelService {
    */
   #mentionedWork(channelId: string, assignment: ChannelAssignment): ChannelTask[] {
     const channel = this.store.get(channelId);
-    if (channel.archived || !usesAnswerModes(channel) || !assignment.turnId) return [];
+    if (channel.archived || channel.routing === "coordinator" || !assignment.turnId) return [];
+    if (channel.routing !== "responders" && !usesAnswerModes(channel)) return [];
     const eligible = new Set(this.eligibleMembers(channel));
     const tasks = this.store.tasks(channelId);
     const answers = this.store

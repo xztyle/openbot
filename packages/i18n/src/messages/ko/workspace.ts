@@ -166,6 +166,10 @@ export const messages = {
   "workspace.details.privateHint": "멤버만 볼 수 있어요. 에이전트는 멤버로 속한 채널만 볼 수 있어요.",
   "workspace.details.coordinator": "코디네이터 라우팅",
   "workspace.details.coordinatorHint": "리드 에이전트가 각 메시지를 멤버 한 명에게 맡겨요.",
+  "workspace.details.lead": "리드 에이전트",
+  "workspace.details.leadHint":
+    "각 메시지를 멤버 한 명에게 맡겨요. 응답 모드는 적용되지 않지만, 멘션한 에이전트는 계속 답해요.",
+  "workspace.details.leadNone": "에이전트 선택",
   "workspace.details.leave": "채널 나가기",
   "workspace.details.archive": "채널 보관",
   "workspace.answerMode.mention": "멘션될 때",
@@ -317,6 +321,7 @@ export const messages = {
   "workspace.app.error.meta": "채널을 변경하지 못했어요.",
   "workspace.app.error.discord": "Discord 연결을 변경하지 못했어요.",
   "workspace.app.error.visibility": "채널 공개 범위가 변경되지 않았습니다.",
+  "workspace.app.error.routing": "채널 라우팅을 바꾸지 못했어요.",
   "workspace.app.welcome.title": "{name}에 오신 것을 환영합니다",
   "workspace.app.welcome.body":
     "채널은 팀과 AI 에이전트가 함께 일하는 곳입니다. #general로 시작하세요. 팀원 모두와 에이전트가 참여합니다.",

@@ -397,6 +397,24 @@ root and the unread replies. It only reads; a client reads it again on `channel-
 - The fleet shows an agent whose work a usage limit holds as `waiting` with `reason: "usage-limit"`
   and `resetsAt`, and names in `forMemberId` the person who asked for the channel task.
 
+#### Workspace final
+
+- `Channel.routing` (`responders` | `coordinator`) is the channel option "Coordinator routing".
+  `set-routing` (`{ routing, leadAgentId? }`, owners and admins, `channel` kind only) sets it and the
+  lead; `coordinator` needs a lead (the one of the command, the stored one, or the only member agent)
+  and goes through a `save`, so a request that waits for a lead starts. With `coordinator` the member
+  answer modes, the gate and agent-to-agent mention chains do not apply: an agent that the person's
+  message mentions gets its own task, and every other message is one lead-routed task.
+  `responders` uses the answer modes. A channel without the field keeps its earlier behavior:
+  answer modes when a member has one, else the lead. `channelRouting` gives the value that the UI shows.
+- A message link `openbot://workspace/<server>/<channel>/<message>` from outside the app goes through
+  `deep-link-router.ts` (`workspace-links.ts` checks the three ids strictly and builds the link again)
+  to the `workspaceLinks` IPC group. Main shows the window; the renderer switches to the server
+  (`pendingWorkspaceLink` in `server-switch.tsx`) and opens the channel and the thread once the
+  channel list is in. A server or a channel the reader does not have does nothing.
+- Signal turns a Discord `MESSAGE_DELETE_BULK` of a channel with `changes` into one `message-delete`
+  delivery for each message, so the bridge deletes each workspace message that it brought in.
+
 ### Workspace fleet, step trails and artifacts
 
 Phase 7 of the plan adds three read-only views. `WorkspaceInsights` (`workspace-insights.ts`,

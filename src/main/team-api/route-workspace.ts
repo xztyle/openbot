@@ -43,7 +43,9 @@ function requireChatForAgents(
           ? input.type === "remove"
             ? input.agentIds
             : [input.agentId]
-          : [];
+          : input.type === "set-routing" && input.leadAgentId
+            ? [input.leadAgentId]
+            : [];
   const stored = new Set(
     input.type !== "create" && input.type !== "open-dm" && channels.store.exists(input.channelId)
       ? channels.store.get(input.channelId).members.map((member) => member.agentId)

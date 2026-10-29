@@ -36,6 +36,7 @@ export interface AppPort {
   routineFeed: OpenBotDesktopApi["routineFeed"];
   events: OpenBotDesktopApi["events"];
   plugins: Pick<OpenBotDesktopApi["plugins"], "onOpenListing" | "takePendingListing">;
+  workspaceLinks: Pick<OpenBotDesktopApi["workspaceLinks"], "onOpenLink" | "takePendingLink">;
   servers: Pick<OpenBotDesktopApi["servers"], "onInvite" | "takePendingInvite">;
 }
 

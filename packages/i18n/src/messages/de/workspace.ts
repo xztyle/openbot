@@ -152,6 +152,10 @@ export const messages = {
   "workspace.details.privateHint": "Nur Mitglieder sehen ihn. Agenten sehen einen Kanal nur, wenn sie Mitglied sind.",
   "workspace.details.coordinator": "Koordinator-Verteilung",
   "workspace.details.coordinatorHint": "Ein leitender Agent gibt jede Nachricht an ein Mitglied.",
+  "workspace.details.lead": "Leitender Agent",
+  "workspace.details.leadHint":
+    "Gibt jede Nachricht an ein Mitglied. Antwortmodi gelten nicht; ein erwähnter Agent antwortet weiterhin.",
+  "workspace.details.leadNone": "Agent wählen",
   "workspace.details.leave": "Kanal verlassen",
   "workspace.details.archive": "Kanal archivieren",
   "workspace.answerMode.mention": "Bei Erwähnung",
@@ -302,6 +306,7 @@ export const messages = {
   "workspace.app.error.meta": "Der Kanal wurde nicht geändert.",
   "workspace.app.error.discord": "Die Discord-Verbindung wurde nicht geändert.",
   "workspace.app.error.visibility": "Die Sichtbarkeit des Kanals wurde nicht geändert.",
+  "workspace.app.error.routing": "Die Verteilung des Kanals wurde nicht geändert.",
   "workspace.app.welcome.title": "Willkommen bei {name}",
   "workspace.app.welcome.body":
     "In Kanälen arbeitet dein Team mit seinen KI-Agenten zusammen. Beginne mit #general: Das ganze Team und deine Agenten sind dabei.",

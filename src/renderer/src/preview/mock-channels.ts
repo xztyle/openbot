@@ -142,6 +142,19 @@ export function createMockChannels(
         if ((channel.kind ?? "channel") !== "channel")
           throw new Error("Only a channel can be public or private, not a DM or a group.");
         return { ...channel, kind: "channel", visibility: input.visibility };
+      case "set-routing": {
+        if ((channel.kind ?? "channel") !== "channel")
+          throw new Error("Only a channel can use coordinator routing, not a DM or a group.");
+        const leadAgentId =
+          input.leadAgentId ??
+          (input.routing === "coordinator" ? (channel.leadAgentId ?? channel.members[0]?.agentId ?? null) : null) ??
+          channel.leadAgentId;
+        if (input.leadAgentId && !channel.members.some((member) => member.agentId === input.leadAgentId))
+          throw new Error("This agent is not a member of the channel.");
+        if (input.routing === "coordinator" && !leadAgentId)
+          throw new Error("Choose an available channel lead or assign this task to a member.");
+        return { ...channel, routing: input.routing, leadAgentId };
+      }
       case "set-meta":
         return {
           ...channel,

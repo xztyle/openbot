@@ -2,6 +2,7 @@ import {
   type ChannelGateDecision,
   type ChannelGateFallback,
   channelKind,
+  channelRouting,
   channelVisibility,
 } from "@openbot/contracts/ipc";
 import { Button, Plug } from "@openbot/ui";
@@ -54,8 +55,8 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
               description: live().description,
               createdBy: live().createdBy ? memberById(ws.directory(), live().createdBy?.id ?? "") : undefined,
               createdAt: Date.parse(live().createdAt),
-              coordinatorRouting:
-                Boolean(live().leadAgentId) || live().members.some((member) => member.answerMode === "lead"),
+              coordinatorRouting: channelRouting(live()) === "coordinator",
+              leadAgentId: live().leadAgentId,
               archived: live().archived,
             }}
             members={members()}
@@ -106,6 +107,21 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
             onVisibilityChange={
               ws.isAdmin() && kind === "channel" && !live().archived
                 ? (visibility) => void ws.setVisibility(props.channelId, visibility)
+                : undefined
+            }
+            onCoordinatorRoutingChange={
+              ws.isAdmin() && kind === "channel" && !live().archived
+                ? (enabled) =>
+                    void ws.setRouting(
+                      props.channelId,
+                      enabled ? "coordinator" : "responders",
+                      enabled ? (live().leadAgentId ?? live().members[0]?.agentId) : undefined,
+                    )
+                : undefined
+            }
+            onLeadChange={
+              ws.isAdmin() && kind === "channel" && !live().archived
+                ? (agentId) => void ws.setRouting(props.channelId, channelRouting(live()), agentId)
                 : undefined
             }
             onArchive={

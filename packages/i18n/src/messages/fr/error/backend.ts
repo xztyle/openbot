@@ -109,6 +109,10 @@ export const messages = {
   "error.backend.channelVisibilityAdmin":
     "Seuls les propriétaires et les admins peuvent rendre un canal public ou privé.",
   "error.backend.channelVisibilityKind": "Seul un canal peut être public ou privé, pas un message direct ni un groupe.",
+  "error.backend.channelRoutingAdmin":
+    "Seuls les propriétaires et les administrateurs peuvent changer le routage des messages d’un canal.",
+  "error.backend.channelRoutingKind":
+    "Seul un canal peut utiliser le routage par coordinateur, pas un message direct ni un groupe.",
   "error.backend.channelAgentChatRequired":
     "Tu ne peux ouvrir un message direct qu’avec un agent avec lequel tu peux discuter.",
   "error.backend.memoryEssentialBudget":

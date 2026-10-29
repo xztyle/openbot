@@ -165,6 +165,9 @@ export const messages = {
   "workspace.details.privateHint": "只有成员可以看到。助手只有在成为成员后才能看到频道。",
   "workspace.details.coordinator": "协调者分配",
   "workspace.details.coordinatorHint": "由一个主导助手把每条消息分配给一位成员。",
+  "workspace.details.lead": "主导助手",
+  "workspace.details.leadHint": "把每条消息分配给一位成员。回复模式不适用；你提及的助手仍会回复。",
+  "workspace.details.leadNone": "选择助手",
   "workspace.details.leave": "退出频道",
   "workspace.details.archive": "归档频道",
   "workspace.answerMode.mention": "被提及时",
@@ -315,6 +318,7 @@ export const messages = {
   "workspace.app.error.meta": "频道未更改。",
   "workspace.app.error.discord": "Discord 关联未更改。",
   "workspace.app.error.visibility": "频道的公开范围未更改。",
+  "workspace.app.error.routing": "频道的分配方式未更改。",
   "workspace.app.welcome.title": "欢迎来到 {name}",
   "workspace.app.welcome.body":
     "频道是团队和 AI 智能体一起工作的地方。从 #general 开始：团队所有人和你的智能体都在其中。",

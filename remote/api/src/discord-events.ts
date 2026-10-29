@@ -33,6 +33,8 @@ const MAXIMUM_INTERACTIONS = 10_000;
 const DIRECT_REPLY_INTERVAL_MILLISECONDS = 60 * 60_000;
 const MAXIMUM_DIRECT_REPLIES = 10_000;
 const ATTACHMENT_HOSTS = new Set(["cdn.discordapp.com", "media.discordapp.net"]);
+/** Discord deletes at most 100 messages in one bulk deletion. */
+const DISCORD_BULK_DELETE_LIMIT = 100;
 
 type DiscordAttachmentData = {
   id: string;
@@ -365,6 +367,17 @@ export class DiscordState {
         return guildId && this.#listensChanges(guildId, channelId)
           ? [{ type: "deliver", guildId, delivery: { kind: "message-delete", channelId, messageId } }]
           : [];
+      }
+      case GatewayDispatchEvents.MessageDeleteBulk: {
+        // A moderator or a bot deleted many messages at once. Each one is a `message-delete`, the
+        // delivery that every host with `changes` already knows.
+        const { guild_id: guildId, channel_id: channelId, ids } = payload.d;
+        if (!guildId || !this.#listensChanges(guildId, channelId)) return [];
+        return [...new Set(ids)].slice(0, DISCORD_BULK_DELETE_LIMIT).map((messageId) => ({
+          type: "deliver" as const,
+          guildId,
+          delivery: { kind: "message-delete" as const, channelId, messageId },
+        }));
       }
       case GatewayDispatchEvents.InteractionCreate:
         return this.#interaction(payload.d, now);

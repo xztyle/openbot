@@ -152,6 +152,10 @@ export const messages = {
   "workspace.details.privateHint": "Solo los miembros pueden verlo. Los agentes solo ven un canal si son miembros.",
   "workspace.details.coordinator": "Enrutamiento por coordinador",
   "workspace.details.coordinatorHint": "Un agente principal asigna cada mensaje a un miembro.",
+  "workspace.details.lead": "Agente principal",
+  "workspace.details.leadHint":
+    "Asigna cada mensaje a un miembro. Los modos de respuesta no se aplican; un agente que mencionas sigue respondiendo.",
+  "workspace.details.leadNone": "Elige un agente",
   "workspace.details.leave": "Salir del canal",
   "workspace.details.archive": "Archivar canal",
   "workspace.answerMode.mention": "Cuando lo mencionan",
@@ -296,6 +300,7 @@ export const messages = {
   "workspace.app.error.meta": "No se cambió el canal.",
   "workspace.app.error.discord": "No se cambió la conexión con Discord.",
   "workspace.app.error.visibility": "No se cambió la privacidad del canal.",
+  "workspace.app.error.routing": "No se cambió el enrutamiento del canal.",
   "workspace.app.welcome.title": "Te damos la bienvenida a {name}",
   "workspace.app.welcome.body":
     "Los canales son donde tu equipo y sus agentes de IA trabajan juntos. Empieza con #general: todo el equipo y tus agentes están en él.",

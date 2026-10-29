@@ -204,6 +204,56 @@ export function draftKey(channelId: string, threadRootId?: string | null): strin
   return threadRootId ? `${channelId}/${threadRootId}` : channelId;
 }
 
+function sameRecord(left: Readonly<Record<string, string>>, right: Readonly<Record<string, string>>): boolean {
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every((key) => left[key] === right[key]);
+}
+
+function samePeople(left: readonly WorkspacePerson[], right: readonly WorkspacePerson[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((person, index) => {
+      const other = right[index];
+      return (
+        other !== undefined &&
+        person.id === other.id &&
+        person.name === other.name &&
+        person.avatarUrl === other.avatarUrl &&
+        person.role === other.role &&
+        person.online === other.online
+      );
+    })
+  );
+}
+
+function sameAgentStates(
+  left: Readonly<Record<string, SidebarAgentState>>,
+  right: Readonly<Record<string, SidebarAgentState>>,
+): boolean {
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => left[key] === right[key] || JSON.stringify(left[key]) === JSON.stringify(right[key]))
+  );
+}
+
+/**
+ * The directory changes only when what it says changes. The roster and the agent states are built
+ * again on each presence or turn event; every row on screen reads the directory.
+ */
+function sameDirectory(left: WorkspaceDirectory, right: WorkspaceDirectory): boolean {
+  return (
+    left.agents === right.agents &&
+    left.isReader === right.isReader &&
+    left.reader.id === right.reader.id &&
+    left.reader.name === right.reader.name &&
+    left.reader.avatarUrl === right.reader.avatarUrl &&
+    left.names === right.names &&
+    samePeople(left.people, right.people) &&
+    sameAgentStates(left.agentStates, right.agentStates)
+  );
+}
+
 function failureToast(error: unknown, fallback: AppTextKey): void {
   const text = currentText();
   actionToast.error(text.errorMessage(error, text.t(fallback)), {
@@ -226,19 +276,26 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     steps: {},
   });
 
-  /** The names that the channel messages carry for their people, for the people the roster lacks. */
-  const names = createMemo(() => {
-    const found: Record<string, string> = {};
-    for (const channel of channels.state.channels) {
-      const last = channel.lastMessage;
-      if (last?.author?.kind === "member") found[last.author.id] = last.authorName;
-    }
-    for (const entry of channels.state.page?.messages ?? [])
-      if (entry.author.kind === "member" && !entry.externalAuthor) found[entry.author.id] = entry.author.name;
-    for (const item of state.activity.data?.items ?? [])
-      if (item.actor.kind === "member") found[item.actor.id] = item.actor.name;
-    return found;
-  });
+  /**
+   * The names that the channel messages carry for their people, for the people the roster lacks.
+   * Each live message reads the page again; the same names keep the same directory, so the rows on
+   * screen do not build their authors, reactions and mentions again for each message.
+   */
+  const names = createMemo(
+    () => {
+      const found: Record<string, string> = {};
+      for (const channel of channels.state.channels) {
+        const last = channel.lastMessage;
+        if (last?.author?.kind === "member") found[last.author.id] = last.authorName;
+      }
+      for (const entry of channels.state.page?.messages ?? [])
+        if (entry.author.kind === "member" && !entry.externalAuthor) found[entry.author.id] = entry.author.name;
+      for (const item of state.activity.data?.items ?? [])
+        if (item.actor.kind === "member") found[item.actor.id] = item.actor.name;
+      return found;
+    },
+    { equals: sameRecord },
+  );
   const directory = createMemo(
     (): WorkspaceDirectory => ({
       agents: env.agents(),
@@ -248,6 +305,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       agentStates: env.agentStates(),
       names: names(),
     }),
+    { equals: sameDirectory },
   );
 
   const summaries = () => channels.state.channels;

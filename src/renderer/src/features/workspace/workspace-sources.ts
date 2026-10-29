@@ -87,6 +87,11 @@ export function createLocalFleetSource(input: LocalFleetInput): WorkspaceFleetSo
  */
 export function createMessageArtifactsSource(directory: () => WorkspaceDirectory) {
   const [byChannel, setByChannel] = createSignal<ReadonlyMap<string, readonly WorkspaceArtifact[]>>(new Map());
+  /** The artifacts of each message already read. A new page adds messages; it does not change the others. */
+  const scanned = new WeakMap<
+    ChannelMessage,
+    { directory: WorkspaceDirectory; channelName: string; artifacts: readonly WorkspaceArtifact[] }
+  >();
   const source: WorkspaceArtifactsSource = {
     artifacts: (scope) => {
       const map = byChannel();
@@ -98,7 +103,16 @@ export function createMessageArtifactsSource(directory: () => WorkspaceDirectory
     source,
     /** Records the artifacts of the messages of one channel that the client read. */
     note(channelId: string, channelName: string, messages: readonly ChannelMessage[]) {
-      const found = messages.flatMap((entry) => messageArtifacts(directory(), entry, channelName));
+      const current = directory();
+      const found = messages.flatMap((entry) => {
+        // Only agents deliver artifacts, and a message keeps its object until it changes.
+        if (entry.author.kind !== "agent") return [];
+        const known = scanned.get(entry);
+        if (known && known.directory === current && known.channelName === channelName) return known.artifacts;
+        const artifacts = messageArtifacts(current, entry, channelName);
+        scanned.set(entry, { directory: current, channelName, artifacts });
+        return artifacts;
+      });
       setByChannel((current) => {
         const known = current.get(channelId) ?? [];
         const ids = new Set(found.map((artifact) => artifact.id));

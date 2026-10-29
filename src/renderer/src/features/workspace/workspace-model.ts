@@ -304,8 +304,64 @@ function stepsOf(turn: readonly ChannelMessage[], answer: ChannelMessage | null)
   };
 }
 
-function dayKey(at: number): string {
-  return new Date(at).toDateString();
+/** The time and the local day of each send time that the lists parsed: a long channel has thousands. */
+const sendTimes = new Map<string, { at: number; day: number }>();
+const SEND_TIME_CACHE_LIMIT = 20_000;
+
+function sendTime(createdAt: string): { at: number; day: number } {
+  const known = sendTimes.get(createdAt);
+  if (known) return known;
+  const at = Date.parse(createdAt);
+  const date = new Date(at);
+  const value = { at, day: date.getFullYear() * 10_000 + date.getMonth() * 100 + date.getDate() };
+  if (sendTimes.size >= SEND_TIME_CACHE_LIMIT) sendTimes.clear();
+  sendTimes.set(createdAt, value);
+  return value;
+}
+
+function sameSteps(left: WorkspaceStepTrailView | null, right: WorkspaceStepTrailView | null): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    left.streaming === right.streaming &&
+    left.durationMs === right.durationMs &&
+    left.steps.length === right.steps.length &&
+    left.steps.every((step, index) => {
+      const other = right.steps[index];
+      return other !== undefined && step.id === other.id && step.label === other.label && step.status === other.status;
+    })
+  );
+}
+
+function sameRow(left: WorkspaceMessageRowModel, right: WorkspaceMessageRowModel): boolean {
+  return (
+    left.entry === right.entry &&
+    left.pending === right.pending &&
+    left.grouped === right.grouped &&
+    left.dayStart === right.dayStart &&
+    left.firstUnread === right.firstUnread &&
+    sameSteps(left.steps, right.steps)
+  );
+}
+
+/**
+ * Keeps the row objects of `previous` that did not change. A live message or an older page builds
+ * the rows again; the rows on screen then keep their objects and do not draw again.
+ */
+export function keepUnchangedRows(
+  rows: readonly WorkspaceMessageRowModel[],
+  previous: readonly WorkspaceMessageRowModel[] | undefined,
+): readonly WorkspaceMessageRowModel[] {
+  if (!previous?.length) return rows;
+  const byKey = new Map(previous.map((row) => [row.key, row]));
+  let same = rows.length === previous.length;
+  const kept = rows.map((row, index) => {
+    const old = byKey.get(row.key);
+    const next = old && sameRow(old, row) ? old : row;
+    if (next !== previous[index]) same = false;
+    return next;
+  });
+  return same ? previous : kept;
 }
 
 /**
@@ -333,10 +389,9 @@ export function messageRows(
   }
   const answered = new Set<string>();
   const rows: WorkspaceMessageRowModel[] = [];
-  let previous: { authorKey: string; at: number; day: string } | null = null;
+  let previous: { authorKey: string; at: number; day: number } | null = null;
   const push = (entry: ChannelMessage, pending: boolean, steps: WorkspaceStepTrailView | null) => {
-    const at = Date.parse(entry.message.createdAt);
-    const day = dayKey(at);
+    const { at, day } = sendTime(entry.message.createdAt);
     const authorKey = `${entry.author.kind}:${entry.externalAuthor?.id ?? entry.author.id}`;
     const firstUnread = !pending && options.firstUnreadId === entry.id;
     const dayStart = previous?.day === day ? null : at;

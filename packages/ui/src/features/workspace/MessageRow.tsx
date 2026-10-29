@@ -59,15 +59,25 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
   const { t, format } = useText();
   const time = useMessageTime();
   const [menuOpen, setMenuOpen] = createSignal(false);
+  // The action bar and the profile popovers are built when the row is first hovered or focused. A
+  // long channel builds a few rows on each scroll frame, and those controls were most of their cost.
+  const [armed, setArmed] = createSignal(alwaysShowsActions());
+  const arm = () => {
+    if (!armed()) setArmed(true);
+  };
   const fullTime = () => format.date(props.sentAt, { dateStyle: "full", timeStyle: "short" });
+  const profileLabel = () => t("workspace.profile.open", { name: props.author.name });
   return (
     <article
       class={cx("ws-message", props.class)}
+      tabindex="0"
       data-grouped={props.grouped ? "" : undefined}
       data-highlighted={props.highlighted ? "" : undefined}
       data-mention={props.mentionsReader ? "" : undefined}
       data-menu-open={menuOpen() ? "" : undefined}
       aria-label={t("workspace.message.label", { name: props.author.name, time: time(props.sentAt) })}
+      onPointerEnter={arm}
+      onFocusIn={arm}
     >
       <div class="ws-message-gutter">
         <Show
@@ -78,7 +88,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
             </time>
           }
         >
-          <MemberProfilePopover card={props.profile} label={t("workspace.profile.open", { name: props.author.name })}>
+          <MemberProfilePopover card={armed() ? props.profile : undefined} label={profileLabel()}>
             <MemberAvatar member={props.author} size="lg" />
           </MemberProfilePopover>
         </Show>
@@ -87,8 +97,8 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
         <Show when={!props.grouped}>
           <div class="ws-message-meta">
             <MemberProfilePopover
-              card={props.profile}
-              label={t("workspace.profile.open", { name: props.author.name })}
+              card={armed() ? props.profile : undefined}
+              label={profileLabel()}
               class="ws-message-author"
             >
               <MemberName member={props.author} />
@@ -124,7 +134,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
           </Show>
         </Show>
       </div>
-      <Show when={!props.deleted}>
+      <Show when={armed() && !props.deleted}>
         <div class="ws-message-actions" role="toolbar" aria-label={t("workspace.message.actions")}>
           <Show when={props.onToggleReaction}>
             {(toggle) => (
@@ -156,6 +166,13 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
       </Show>
     </article>
   );
+}
+
+/** A screen without hover shows the action bar of every message, so its rows build it at once. */
+let actionsAlwaysShown: boolean | undefined;
+function alwaysShowsActions(): boolean {
+  actionsAlwaysShown ??= typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
+  return actionsAlwaysShown;
 }
 
 /** Message text with highlighted mentions, channel links, links and inline code. */

@@ -403,7 +403,10 @@ export function createChannelsController(env: ChannelsEnvironment) {
           const page = state.page;
           if (!page || page.olderCursor !== beforeSequence) return;
           const ids = new Set(page.messages.map((item) => item.id));
-          reconcile([...older.messages.filter((item) => !ids.has(item.id)), ...page.messages], "id")(page.messages);
+          // The older page goes in front. A diff of the whole transcript would compare every
+          // loaded message again, and a long channel grows by a page each time.
+          const fresh = older.messages.filter((item) => !ids.has(item.id));
+          if (fresh.length) page.messages.unshift(...fresh);
           takeOlderWindow(page, older);
         });
     } catch (error) {

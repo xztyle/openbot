@@ -9,7 +9,7 @@ import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { WorkspaceMessage } from "./WorkspaceMessage";
-import { messageRows } from "./workspace-model";
+import { keepUnchangedRows, messageRows, type WorkspaceMessageRowModel } from "./workspace-model";
 
 /** How close to the end still counts as reading the newest messages. */
 const FOLLOW_DISTANCE = 80;
@@ -48,8 +48,11 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   let follow = true;
   let opened = false;
 
-  const rows = createMemo(() =>
-    messageRows(props.entries, { firstUnreadId: props.firstUnreadId, working: props.working }),
+  const rows = createMemo<readonly WorkspaceMessageRowModel[]>((previous) =>
+    keepUnchangedRows(
+      messageRows(props.entries, { firstUnreadId: props.firstUnreadId, working: props.working }),
+      previous,
+    ),
   );
   const indexByKey = createMemo(() => new Map(rows().map((row, index) => [row.key, index])));
 

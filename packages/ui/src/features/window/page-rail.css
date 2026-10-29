@@ -187,8 +187,11 @@
   transition: background-color var(--openbot-duration-hover) var(--openbot-ease-out);
 }
 
-/* The whole line highlights, for the page and for its pin. The items have no background of their own. */
-.ui-action-menu.window-rail-more-menu .window-rail-more-row:is(:hover, :has([data-highlighted])) {
+/* The whole line highlights, for the page and for its pin. The items have no background of their own.
+ * A menu item takes the focus when the pointer or the keyboard highlights it, so `:focus-within`
+ * marks the highlighted row. Do not use `:has([data-highlighted])` here: in Chromium that selector
+ * made every change of the page lay out the whole document again (about 12 ms a frame). */
+.ui-action-menu.window-rail-more-menu .window-rail-more-row:is(:hover, :focus-within) {
   background: var(--ui-menu-item-hover);
 }
 
@@ -230,14 +233,14 @@
 
 /* The page icon follows the line, also when the pin is highlighted. */
 .ui-action-menu.window-rail-more-menu
-  .window-rail-more-row:is(:hover, :has([data-highlighted]))
+  .window-rail-more-row:is(:hover, :focus-within)
   > [role="menuitem"]
   > .agent-context-icon {
   color: var(--openbot-text-primary);
 }
 
 .ui-action-menu.window-rail-more-menu
-  .window-rail-more-row:is(:hover, :has([data-highlighted]))
+  .window-rail-more-row:is(:hover, :focus-within)
   > [role="menuitem"]
   > .agent-context-icon
   > * {

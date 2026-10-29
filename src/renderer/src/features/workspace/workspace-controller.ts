@@ -1225,6 +1225,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     setPhonePane("panel");
   }
 
+  /** Keeps the details tab the reader picked, so a re-render after a change does not reset it. */
+  function setDetailsTab(tab: ChannelDetailsTab) {
+    setState((draft) => {
+      if (draft.panel?.kind === "details") draft.panel.tab = tab;
+    });
+  }
+
   function openArtifactsPanel(channelId: string) {
     setState((draft) => {
       draft.panel = { kind: "artifacts", channelId };
@@ -1728,6 +1735,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       if (thread) void loadThread(thread.channelId, thread.rootId);
     },
     openDetails,
+    setDetailsTab,
     openArtifactsPanel,
     closePanel,
     back,

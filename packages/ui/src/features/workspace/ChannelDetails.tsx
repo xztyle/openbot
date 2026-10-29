@@ -56,6 +56,8 @@ export interface ChannelDetailsProps {
   members: readonly ChannelDetailsMember[];
   /** The tab that opens first. The panel keeps the tab that the reader picks. */
   defaultTab?: ChannelDetailsTab | undefined;
+  /** Called when the reader picks a tab, so the owner can keep it across a re-render. */
+  onTabChange?: ((tab: ChannelDetailsTab) => void) | undefined;
   onClose: () => void;
   onBack?: (() => void) | undefined;
   onEditTopic?: (() => void) | undefined;
@@ -101,8 +103,10 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
         class="ws-details-tabs"
         value={tab()}
         onChange={(value) => {
-          if (value === "about" || value === "members" || value === "integrations" || value === "settings")
+          if (value === "about" || value === "members" || value === "integrations" || value === "settings") {
             setTab(value);
+            props.onTabChange?.(value);
+          }
         }}
       >
         <Tabs.List class="ws-tabs-list" aria-label={t("workspace.details.title")}>

@@ -61,6 +61,7 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
             }}
             members={members()}
             defaultTab={tab()}
+            onTabChange={(next) => ws.setDetailsTab(next)}
             onClose={() => ws.closePanel()}
             onBack={() => ws.back()}
             onEditTopic={

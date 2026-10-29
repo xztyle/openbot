@@ -218,6 +218,13 @@ Each item of "Done means" and the plan items that an audit of the code found ope
 | i18n in all languages | 12 catalogs with the same workspace keys. |
 | Everything deployed on the live server | Yes (see the memory of the live head). |
 
+### To do
+
+- Test "Share the main chat with everyone" with a second account (deferred by the owner on
+  2026-10-29): turn it on for an agent, have another person with chat access send it a DM, and check
+  that the message lands in the agent's main chat. Only the settings and DM-list contracts are
+  checked so far (`scripts/workspace-limits-e2e.ts`).
+
 ### Known limits
 
 Closed on `wip/ws-limits`: Discord reactions and threads, a workspace post deleted in Discord,

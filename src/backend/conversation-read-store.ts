@@ -273,7 +273,12 @@ export class ConversationReadStore {
       AND COALESCE(item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'
       AND COALESCE(item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'
       AND COALESCE(item_type, '') NOT LIKE '${MODEL_SWITCH_ITEM_TYPE_PREFIX}%'
-      AND COALESCE(item_type, '') != '${CONTEXT_RESET_ITEM_TYPE}'`;
+      AND COALESCE(item_type, '') != '${CONTEXT_RESET_ITEM_TYPE}'
+      AND NOT (
+        author = 'assistant' AND turn_id IS NOT NULL
+        AND turn_id IN (SELECT turn_id FROM ordered WHERE author = 'agent' AND item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND turn_id IS NOT NULL)
+        AND turn_id NOT IN (SELECT turn_id FROM ordered WHERE author = 'user' AND turn_id IS NOT NULL)
+      )`;
     // One pass over the ordered thread: the first unread row carries the count of all of them.
     const firstRow = this.database.connection
       .prepare(
@@ -356,15 +361,33 @@ export class ConversationReadStore {
   }
 }
 
+/**
+ * The turns that another agent's message started and no person's message joined. What the agent
+ * answers there is its talk with that agent, not news for the person who reads its chat.
+ */
+function agentOnlyTurns(messages: ConversationSnapshot["messages"]): Set<string> {
+  const fromAgent = new Set<string>();
+  const fromPerson = new Set<string>();
+  for (const message of messages) {
+    if (!message.turnId) continue;
+    if (message.author === "agent" && message.itemType === AGENT_EXCHANGE_ITEM_TYPE) fromAgent.add(message.turnId);
+    if (message.author === "user") fromPerson.add(message.turnId);
+  }
+  for (const turnId of fromPerson) fromAgent.delete(turnId);
+  return fromAgent;
+}
+
 function stateFromSnapshot(snapshot: ConversationSnapshot, throughMessageId: string | null): ConversationReadState {
   const throughIndex = throughMessageId
     ? snapshot.messages.findIndex((message) => message.id === throughMessageId)
     : -1;
+  const agentTurns = agentOnlyTurns(snapshot.messages);
   const unread = snapshot.messages
     .slice(throughIndex + 1)
     .filter(
       (message) =>
         message.author !== "user" &&
+        !(message.author === "assistant" && message.turnId !== undefined && agentTurns.has(message.turnId)) &&
         message.itemType !== "commentary" &&
         message.itemType !== CONVERSATION_PLAN_ITEM_TYPE &&
         message.itemType !== CONVERSATION_SUBAGENTS_ITEM_TYPE &&

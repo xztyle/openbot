@@ -643,7 +643,7 @@ export class ConversationQueries {
  * thread id.
  */
 export const ORDERED_THREAD_MESSAGES = `WITH ordered AS (
-  SELECT created_at, ordinal, message_id, author, item_type, group_start, group_first, group_id, turn_rank
+  SELECT created_at, ordinal, message_id, author, item_type, turn_id, group_start, group_first, group_id, turn_rank
   FROM projection_thread_messages WHERE thread_id = ?
 )`;
 export const ORDER_KEY_COLUMNS = "group_start, group_first, group_id, turn_rank, created_at, ordinal, message_id";

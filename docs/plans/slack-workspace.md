@@ -205,7 +205,8 @@ artifact thumbnails, the stored artifact index, typing without the focus, the em
 the sidebar order and mutes for the account.
 
 - Webhook posts (each author's own name and picture in Discord) need the bot's Manage Webhooks
-  permission in the Discord server. Without it the bot posts as itself with `**Name:**` in front.
+  permission in the Discord server; the bridge makes the webhook when a channel is linked. Granted
+  on 2026-10-29 and checked live: a workspace post arrived in Discord as its author, via the webhook.
 - A thread reply in Discord quotes the newest post of its thread. Posts bridged before 2026-10-29
   carry no thread root, so a reply to such a thread quotes its first message.
 - A custom Discord emoji shows as `:name:` text in the workspace and is not mirrored back. A super

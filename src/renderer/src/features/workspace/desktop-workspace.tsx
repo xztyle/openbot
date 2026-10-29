@@ -24,6 +24,7 @@ import { useServerScope } from "../servers/server-scope";
 import { useServerSettings } from "../servers/server-settings";
 import { useServers } from "../servers/servers-context";
 import { useSettings } from "../settings/settings-context";
+import { desktopStorageHygieneCalls, serverHasStorageHygiene } from "../storage-hygiene/storage-hygiene-port";
 import { isReaderAuthor } from "../team/reader-identity";
 import { usePresence } from "../team/team-context";
 import { WorkspaceProvider } from "./workspace-context";
@@ -214,6 +215,14 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     takeovers,
     localHost: local,
     openBrowserTab: (tabId) => activateBrowserTab(tabId),
+    storageHygiene: () => {
+      const server = activeServer();
+      return serverHasStorageHygiene(server) ? desktopStorageHygieneCalls(() => server.id) : undefined;
+    },
+    openStorageRules: () => {
+      const server = activeServer();
+      if (server) openServerSettings(server.id, null, "storage");
+    },
     storageKey: () => `${accountId() ?? "local"}:${activeServerId()}`,
     phone: () => false,
   });

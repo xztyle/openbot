@@ -90,6 +90,7 @@ import { routineResultIpcHandlers } from "./ipc/routine-result-handlers";
 import { sharedTableIpcHandlers } from "./ipc/shared-table-handlers";
 import { skillIpcHandlers } from "./ipc/skill-handlers";
 import { storageIpcHandlers } from "./ipc/storage-handlers";
+import { storageHygieneIpcHandlers } from "./ipc/storage-hygiene-handlers";
 import { teamIpcHandlers } from "./ipc/team-handlers";
 import { updateIpcHandlers } from "./ipc/update-handlers";
 import { vaultIpcHandlers } from "./ipc/vault-handlers";
@@ -588,6 +589,8 @@ function registerIpcHandlers({
   computerUsePermissionHelp,
   analytics,
   storageUsage,
+  storageHygiene,
+  storageHygieneSettings,
   trace,
   resourceMonitor,
   routineFlows,
@@ -774,6 +777,15 @@ function registerIpcHandlers({
       translate: language.translate,
       agents: () => service.listAgents(),
       openPath: (path) => shell.openPath(path),
+    }),
+    ...storageHygieneIpcHandlers({
+      storageHygiene,
+      settings: storageHygieneSettings,
+      remoteServers,
+      localActor: () => {
+        const account = centralAuth.getState();
+        return account.status === "signed_in" ? (account.user.name ?? account.user.email) : undefined;
+      },
     }),
     ...agentIpcHandlers({
       service,

@@ -24,6 +24,7 @@ import type { RemoteWorkflowError } from "../remote-service-effects";
 import type { RequestedUpdate } from "../requested-update";
 import type { ServerTimezonePreferenceStore } from "../server-timezone-preference-store";
 import type { SkillMarketplaceService } from "../skill-marketplace-service";
+import type { StorageHygieneSettingsStore } from "../storage-hygiene-settings-store";
 import type { WorkspaceSettingsStore } from "../workspace-settings-store";
 // What `TeamApiServer` needs from the rest of the main process, and nothing else.
 //
@@ -53,6 +54,7 @@ import type { MailboxStore } from "../../backend/mailbox-store";
 import type { MessagingService } from "../../backend/messaging/messaging-service";
 import type { RoutineFlowsHandle } from "../../backend/routine-flows/routine-flows";
 import type { SidebarLayoutStore } from "../../backend/sidebar-layout-store";
+import type { StorageHygieneService } from "../../backend/storage-hygiene";
 import type { StorageUsageService } from "../../backend/storage-usage";
 import type { TeamChatStore } from "../../backend/team-chat-store";
 import type { WorkflowsHandle } from "../../backend/workflows/workflows";
@@ -231,6 +233,12 @@ export type TeamApiProviderUsageResets = Pick<AgentService, "providerUsageResets
 
 /** Its presence is what `#protocolSupport` advertises `storage-v1` and `storage-disk-v1` on. */
 export type TeamApiStorage = Pick<StorageUsageService, "usage" | "deleteFile" | "clear" | "disk">;
+
+/** storage-hygiene-v1 (`fork-host-v1`): the scan, the cleanup and the automatic rules. Admin only. */
+export interface TeamApiStorageHygiene {
+  service: Pick<StorageHygieneService, "state" | "apply">;
+  settings: StorageHygieneSettingsStore;
+}
 /** `hosted-sites-v1`: the openbot.site sites of this server. Members list; only admins delete. */
 export type TeamApiHostedSites = Pick<HostedSiteDesktopService, "listServerSites" | "deleteServerSite">;
 
@@ -479,6 +487,7 @@ export interface TeamApiOptions {
   /** Starts and waits for the managed tool runtimes behind the MCP save, enable, and test routes. */
   mcpToolRuntimePreparation?: McpToolRuntimePreparation;
   storage?: TeamApiStorage;
+  storageHygiene?: TeamApiStorageHygiene;
   hostedSites?: TeamApiHostedSites;
   agentImport?: TeamApiAgentImport;
   instanceTransfer?: TeamApiInstanceTransfer;

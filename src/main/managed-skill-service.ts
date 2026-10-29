@@ -16,6 +16,7 @@ export const DATA_SKILL_SLUG = "openbot-data";
 export const EVENT_CHECKS_SKILL_SLUG = "openbot-event-checks";
 export const HOST_APPS_SKILL_SLUG = "openbot-host-apps";
 export const BENCH_SKILL_SLUG = "openbot-bench";
+export const STORAGE_SKILL_SLUG = "openbot-storage";
 /** The skills OpenBot writes into every agent workspace. Add a new managed skill here too. */
 export const MANAGED_SKILL_SLUGS: ReadonlySet<string> = new Set([
   MANAGED_SKILL_SLUG,
@@ -24,6 +25,7 @@ export const MANAGED_SKILL_SLUGS: ReadonlySet<string> = new Set([
   EVENT_CHECKS_SKILL_SLUG,
   HOST_APPS_SKILL_SLUG,
   BENCH_SKILL_SLUG,
+  STORAGE_SKILL_SLUG,
 ]);
 export const OWNERSHIP_MARKER = ".openbot-managed.json";
 /** The workspace skill folders OpenBot writes. Each provider reads at least one of them. */

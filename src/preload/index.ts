@@ -57,6 +57,8 @@ import {
   decodeRegistryInstallResult,
   decodeRegistryOperations,
   decodeSaveAgentProfileResult,
+  decodeStorageHygieneSettings,
+  decodeStorageHygieneState,
   decodeWorkspaceActivity,
   decodeWorkspaceArtifacts,
   decodeWorkspaceDirectory,
@@ -1303,6 +1305,13 @@ const openbotApi: OpenBotDesktopApi = {
     openLocation: decodeVoid,
     getOldRuntimeVersions: decodeOldRuntimeVersions,
     removeOldRuntimeVersions: decodeOldRuntimeVersions,
+  }),
+  // The shared contract decoders: a remote answer was decoded in main before it reached this point.
+  storageHygiene: bridgeGroup(IPC_ENDPOINTS.storageHygiene, {
+    getState: (value) => (value === null ? null : decodeStorageHygieneState(value)),
+    apply: decodeStorageHygieneState,
+    getSettings: decodeStorageHygieneSettings,
+    setSettings: decodeStorageHygieneSettings,
   }),
   remoteDesktop: bridgeGroup(IPC_ENDPOINTS.remoteDesktop, {
     checkSetup: decodeRemoteDesktopSetupFromMain,

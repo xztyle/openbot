@@ -198,6 +198,7 @@ import { type MockRoutineResultsOptions, mockRoutineResults } from "./mock-routi
 import { applySidebarLayoutAction } from "./mock-sidebar-layout";
 import { createMockSkills, type MockSkillsOptions } from "./mock-skills";
 import { createMockStorage } from "./mock-storage";
+import { createMockStorageHygiene } from "./mock-storage-hygiene";
 import { clone, type Listener, type MockRuntime, matchesQuery } from "./mock-support";
 import { createMockTeam, type MockTeamOptions } from "./mock-team";
 import { createMockVault } from "./mock-vault";
@@ -2983,6 +2984,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       },
     },
     storage: createMockStorage(),
+    storageHygiene: createMockStorageHygiene(),
     agentImport: {
       choose: async () => clone(AGENT_IMPORT_PREVIEW),
       apply: async ({ token, keys, channelKeys }) => {

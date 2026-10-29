@@ -119,6 +119,7 @@
     "./team-protocol/prompt-cache-ttl-v1": "./src/team-protocol/prompt-cache-ttl-v1.ts",
     "./team-protocol/workspace-v1": "./src/team-protocol/workspace-v1.ts",
     "./team-protocol/workspace-fleet-v1": "./src/team-protocol/workspace-fleet-v1.ts",
+    "./team-protocol/storage-hygiene-v1": "./src/team-protocol/storage-hygiene-v1.ts",
     "./team-protocol/discord-access-v1": "./src/team-protocol/discord-access-v1.ts",
     "./team-protocol/discord-channels-v1": "./src/team-protocol/discord-channels-v1.ts",
     "./team-protocol/agent-import-v1": "./src/team-protocol/agent-import-v1.ts",

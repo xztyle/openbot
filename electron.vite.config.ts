@@ -32,6 +32,9 @@ export default defineConfig({
           // sherpa-onnx addon by path.
           "voice-transcription-host": resolve("src/main/voice-transcription-host.ts"),
           "voice-speech-host": resolve("src/main/voice-speech-host.ts"),
+          // The storage hygiene host scans and cleans the agents' projects at a low priority. It
+          // imports only node:* and its scan and cleanup modules.
+          "storage-hygiene-host": resolve("src/backend/storage-hygiene-host.ts"),
         },
       },
     },

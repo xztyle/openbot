@@ -42,6 +42,7 @@ import { useServers } from "./features/servers/servers-context";
 import type { HostProviderSettings } from "./features/settings/ProviderSettingsSection";
 import { useSettings } from "./features/settings/settings-context";
 import { settingsPort } from "./features/settings/settings-port";
+import { desktopStorageHygieneCalls, serverHasStorageHygiene } from "./features/storage-hygiene/storage-hygiene-port";
 import { useUpdates } from "./features/updates/updates-context";
 import { useWhatsNew } from "./features/updates/whats-new-context";
 import { usePlanLimitRows } from "./features/usage/plan-limit-rows";
@@ -600,6 +601,7 @@ function ServerSettings(props: { connectors: ConnectorRegistry }) {
     onOpenAgent: (agentId) => openOnServer(server, agentId, () => selectAgent(agentId)),
     onShowMessage: (agentId, messageId) =>
       openOnServer(server, agentId, () => selectGlobalSearchMessage(agentId, messageId)),
+    hygiene: serverHasStorageHygiene(server) ? desktopStorageHygieneCalls(() => server.id) : undefined,
   });
 
   return (

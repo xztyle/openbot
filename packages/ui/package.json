@@ -417,6 +417,8 @@
     "./features/workspace/emoji-data": "./src/features/workspace/emoji-data.ts",
     "./features/workspace/CreateChannelDialog": "./src/features/workspace/CreateChannelDialog.tsx",
     "./features/workspace/FleetView": "./src/features/workspace/FleetView.tsx",
+    "./features/workspace/StorageView": "./src/features/workspace/StorageView.tsx",
+    "./features/workspace/storage-plan": "./src/features/workspace/storage-plan.ts",
     "./features/workspace/MemberPicker": "./src/features/workspace/MemberPicker.tsx",
     "./features/workspace/MemberProfileCard": "./src/features/workspace/MemberProfileCard.tsx",
     "./features/workspace/MessageComposer": "./src/features/workspace/MessageComposer.tsx",

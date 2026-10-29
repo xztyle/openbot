@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   Ellipsis,
+  HardDrive,
   Hash,
   LayoutDashboard,
   Lock,
@@ -24,7 +25,7 @@ import { WorkspaceMenu } from "./WorkspaceMenu";
 import type { ChannelVisibility, WorkspaceMember, WorkspaceMenuItem } from "./workspace-types";
 
 /** The views above the channel list. */
-export type WorkspaceView = "threads" | "activity" | "fleet" | "artifacts";
+export type WorkspaceView = "threads" | "activity" | "fleet" | "artifacts" | "storage";
 
 export interface SidebarChannel {
   id: string;
@@ -64,6 +65,8 @@ export interface WorkspaceSidebarProps {
   threadsUnread?: boolean | undefined;
   /** Agents that work now. */
   workingAgentCount?: number | undefined;
+  /** Shows the Storage view, for an owner or an admin of a host that reports its storage. */
+  showStorage?: boolean | undefined;
   channels: readonly SidebarChannel[];
   directMessages: readonly SidebarDirectMessage[];
   onAddChannel?: (() => void) | undefined;
@@ -165,6 +168,15 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
             active={props.activeView === "artifacts"}
             onSelect={props.onSelectView}
           />
+          <Show when={props.showStorage}>
+            <QuickRow
+              view="storage"
+              icon={<HardDrive aria-hidden="true" />}
+              label={t("storageHygiene.title")}
+              active={props.activeView === "storage"}
+              onSelect={props.onSelectView}
+            />
+          </Show>
         </div>
 
         <SidebarGroup

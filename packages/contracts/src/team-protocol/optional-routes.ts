@@ -68,6 +68,7 @@ import { SIDE_QUESTION_CODECS } from "./side-question-v1";
 import { SIGN_IN_RELAY_CODECS } from "./sign-in-relay-v1";
 import { SKILLS_ADMIN_CODECS } from "./skills-admin-v1";
 import { STORAGE_DISK_CODECS } from "./storage-disk-v1";
+import { STORAGE_HYGIENE_CODECS } from "./storage-hygiene-v1";
 import { WEB_PUSH_CODECS } from "./web-push-v1";
 import { WEBHOOK_TESTS_CODECS } from "./webhook-tests-v1";
 import { WORKFLOWS_CODECS } from "./workflows-v1";
@@ -150,6 +151,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WORKFLOWS_CODECS,
   ...WORKSPACE_CODECS,
   ...WORKSPACE_FLEET_CODECS,
+  ...STORAGE_HYGIENE_CODECS,
 ]);
 
 export function optionalRouteCodec(path: string): OptionalRouteCodec | undefined {

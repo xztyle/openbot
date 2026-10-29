@@ -43,6 +43,7 @@ import { messages as sitePage } from "./sitePage";
 import { messages as skill } from "./skill";
 import { source } from "./source";
 import { messages as startup } from "./startup";
+import { messages as storageHygiene } from "./storageHygiene";
 import { messages as team } from "./team";
 import { messages as uiBlock } from "./uiBlock";
 import { messages as update } from "./update";
@@ -118,4 +119,5 @@ export const pl = {
   ...uiBlock,
   ...sitePage,
   ...workspace,
+  ...storageHygiene,
 } as const satisfies PartialTranslation<AppMessages>;

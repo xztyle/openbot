@@ -130,6 +130,8 @@ import { OpenBotDatabase } from "../backend/openbot-database";
 import { passwordVaultRouter } from "../backend/password-vault-router";
 import { sweepProviderTemp } from "../backend/provider-temp";
 import { SidebarLayoutStore } from "../backend/sidebar-layout-store";
+import { StorageHygieneService } from "../backend/storage-hygiene";
+import { processStorageHygieneWorker } from "../backend/storage-hygiene-worker";
 import { StorageUsageScanner, StorageUsageService } from "../backend/storage-usage";
 import { TeamChatStore } from "../backend/team-chat-store";
 import { AGENT_ACCESS_FILE, AgentAccessStore } from "./agent-access-store";
@@ -304,6 +306,8 @@ import { readSilentTurnThresholdMs, SilentTurnMonitor } from "./silent-turn-moni
 import { SkillMarketplaceService } from "./skill-marketplace-service";
 import { SLACK_DEV_CALLBACK_PATH, startSlackDevCallbackServer } from "./slack-dev-callback-server";
 import { SpeechPreferenceStore } from "./speech-preference-store";
+import { spawnStorageHygieneHost } from "./storage-hygiene-host-process";
+import { createStorageHygieneSettingsStore, type StorageHygieneSettingsStore } from "./storage-hygiene-settings-store";
 import { hiddenProviderAgentIds } from "./team-api/provider-visibility";
 import { TeamStore } from "./team-store";
 import { TeamWebRtcBridge } from "./team-webrtc-bridge";
@@ -369,6 +373,7 @@ const AGENT_CREATION_LIMIT_PREFERENCE_FILE = "openbot-agent-creation-limit-v1.js
 const SERVER_TIMEZONE_PREFERENCE_FILE = "openbot-server-timezone-v1.json";
 const PROMPT_CACHE_TTL_PREFERENCE_FILE = "openbot-prompt-cache-ttl-v1.json";
 const WORKSPACE_SETTINGS_FILE = "openbot-workspace-v1.json";
+const STORAGE_HYGIENE_SETTINGS_FILE = "openbot-storage-hygiene-v1.json";
 // Webhook secrets and bridged message ids of the Discord channel bridges. Host only, never sent.
 const CHANNEL_BRIDGE_FILE = "openbot-channel-bridge-v1.json";
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
@@ -477,6 +482,8 @@ const TEARDOWN_ORDER = {
   // Before the agent service, so no script starts a run while the service stops.
   automation: 108,
   storageUsage: 109,
+  // Before the agent service: a scan or a cleanup reads the agent list.
+  storageHygiene: 109.5,
   service: 110,
   mcpOAuth: 111,
   analytics: 112,
@@ -552,6 +559,9 @@ export interface ApplicationServices {
   vault: VaultService;
   mailbox: MailboxStore;
   storageUsage: StorageUsageService;
+  /** The scan and cleanup of the agents' projects, and its automatic rules. */
+  storageHygiene: StorageHygieneService;
+  storageHygieneSettings: StorageHygieneSettingsStore;
   browser: BrowserHost;
   browserPictureInPicture: BrowserPictureInPicture;
   localSignIn: LocalSignInWindows;
@@ -1024,7 +1034,8 @@ export async function createApplicationServices({
   // Closing copies the write-ahead log into the database file and removes it. A step that passed its
   // limit, such as a slow agent stop, still writes, so the close waits a short time for it.
   teardown.push(TEARDOWN_ORDER.database, "the database", () => store.database.close(), { afterAbandonedSteps: true });
-  // Every managed skill (`MANAGED_SKILL_SLUGS`): site hosting, skill creator, data, event checks, host apps and bench.
+  // Every managed skill (`MANAGED_SKILL_SLUGS`): site hosting, skill creator, data, event checks, host apps,
+  // bench and storage.
   const managedSkills = createApplicationManagedSkills(
     app.isPackaged
       ? join(process.resourcesPath, "managed-skills")
@@ -2071,6 +2082,20 @@ export async function createApplicationServices({
   };
   const storageUsage = new StorageUsageService(new StorageUsageScanner(storageSources), storageSources);
   teardown.push(TEARDOWN_ORDER.storageUsage, "storage scans", () => Effect.runPromise(storageUsage.dispose()));
+  const storageHygieneSettings = createStorageHygieneSettingsStore(join(userData, STORAGE_HYGIENE_SETTINGS_FILE));
+  await runCauseEffect(storageHygieneSettings.load());
+  const storageHygiene = new StorageHygieneService({
+    sharedRoot: store.sharedRoot,
+    agents: () => service.listAgents(),
+    diskPath: store.sharedRoot,
+    stateDirectory: join(userData, "storage-hygiene"),
+    settings: () => storageHygieneSettings.get(),
+    worker: processStorageHygieneWorker(spawnStorageHygieneHost),
+    onBackgroundFailure: (error) => logger.warn("Storage hygiene background run failed.", toLogValue(error)),
+  });
+  // The automatic rules are off by default; the timer only reads the settings until one is on.
+  storageHygiene.start();
+  teardown.push(TEARDOWN_ORDER.storageHygiene, "storage hygiene", () => Effect.runPromise(storageHygiene.dispose()));
   // A deleted or renamed agent changes every scope, so no surface keeps its old answer.
   service.on("event", (event) => {
     if (event.type === "agents-changed") storageUsage.invalidate();
@@ -2386,6 +2411,8 @@ export async function createApplicationServices({
     providerUsageResets: service,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
+    // storage-hygiene-v1 under `fork-host-v1`. Every route is admin-only.
+    storageHygiene: { service: storageHygiene, settings: storageHygieneSettings },
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.
     hostedSites,
     // Present, so the host advertises `agent-import-v1`. Any member can import.
@@ -3123,6 +3150,8 @@ export async function createApplicationServices({
     vault,
     mailbox,
     storageUsage,
+    storageHygiene,
+    storageHygieneSettings,
     browser,
     browserPictureInPicture,
     localSignIn,

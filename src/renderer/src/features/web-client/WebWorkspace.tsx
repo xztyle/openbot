@@ -219,6 +219,7 @@ import {
 import { licenseContactUs, trackLicenseEvent } from "../settings/license-analytics";
 import type { HostPromptCacheTtlCalls } from "../settings/provider-prompt-cache";
 import { createCommunityCardVisibility } from "../sidebar/community-card";
+import { hostStorageHygieneCalls, serverHasStorageHygiene } from "../storage-hygiene/storage-hygiene-port";
 import { isReaderAuthor } from "../team/reader-identity";
 import { RailHelpMenu } from "../window/RailHelpMenu";
 import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPageFrame";
@@ -1093,6 +1094,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     },
   );
   const saveFile = createWebFileSaver();
+  const storageHygieneCalls = hostStorageHygieneCalls(() => hostRequest());
   const storageCalls: FilesPort = {
     agent: { listAgents: () => workspace.runtime.listAgents() },
     storage: {
@@ -1907,6 +1909,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     hostId: () => workspace.state.host?.hostId ?? null,
     messaging: () => (connectorTarget() ? workspaceMessaging : undefined),
     workspaceSettings: () => serverSettings.workspaceSettings.getWorkspaceSettings(server()?.id ?? ""),
+    storageHygiene: () => (serverHasStorageHygiene(server()) ? storageHygieneCalls : undefined),
+    openStorageRules: () => {
+      const id = server()?.id;
+      if (id) void openServerSettings(id, null, "storage");
+    },
     messageLink: (channelId, messageId, threadRootId) => {
       const hostId = workspace.state.host?.hostId;
       return hostId
@@ -2730,6 +2737,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       storage={{
                         hostName: target().name,
                         calls: storageCalls,
+                        hygiene: serverHasStorageHygiene(target()) ? storageHygieneCalls : undefined,
                         onOpenAgent: (agentId) => {
                           serverSettings.setOpen(false);
                           setMobilePane("conversation");

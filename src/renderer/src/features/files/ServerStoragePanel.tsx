@@ -1,8 +1,10 @@
 import { LOCAL_SERVER_ID } from "@openbot/contracts/ipc";
 import type { AgentProfile } from "@openbot/ui/data";
 import { StorageOverview } from "@openbot/ui/features/files/StorageOverview";
-import { createEffect, createSignal, untrack } from "solid-js";
+import { createEffect, createSignal, Show, untrack } from "solid-js";
 import { toAgentProfile } from "../../app-message-projection";
+import { StorageHygieneRules } from "../storage-hygiene/StorageHygieneRules";
+import type { StorageHygieneCalls } from "../storage-hygiene/storage-hygiene-port";
 import { type FilesPort, filesPort } from "./files-port";
 import { createStorageUsage } from "./storage-usage";
 
@@ -15,6 +17,8 @@ export interface ServerStorageOptions {
   onShowMessage: (agentId: string, messageId: string) => void;
   /** The storage calls of a client with no `window.openbot`, such as the web client. */
   calls?: FilesPort;
+  /** The cleanup rules of the agents' projects, for an owner or admin of a host that has them. */
+  hygiene?: StorageHygieneCalls | undefined;
 }
 
 /**
@@ -85,36 +89,39 @@ export function ServerStoragePanel(props: ServerStorageOptions & { serverId: str
   const usage = () => storage.state.usage;
 
   return (
-    <StorageOverview
-      hostName={props.hostName}
-      state={storage.scanState()}
-      error={storage.error()}
-      scannedAt={usage()?.scannedAt ?? null}
-      breakdown={usage()?.breakdown ?? []}
-      freeBytes={usage()?.freeBytes ?? null}
-      agents={agents()}
-      agentUsage={usage()?.agents ?? []}
-      conversations={usage()?.conversations ?? []}
-      files={usage()?.files ?? []}
-      canManage={props.canManage}
-      onRescan={() => void storage.refresh(true)}
-      onOpenAgent={props.onOpenAgent}
-      onOpenConversation={(conversationId) => {
-        const agentId = usage()?.conversations.find((chat) => chat.id === conversationId)?.agentId;
-        if (agentId) props.onOpenAgent(agentId);
-      }}
-      onClear={storage.clear}
-      oldRuntimeBytes={runtimes() ? oldRuntimeBytes() : 0}
-      onRemoveOldRuntimes={removeOldRuntimes}
-      // Settings has no preview pane, so a preview opens the file in its app.
-      onPreviewFile={(file) => void storage.fileAction(file, "open", { onShowInChat: () => undefined })}
-      onFileAction={(file, action) =>
-        storage.fileAction(file, action, {
-          onShowInChat: (row) => {
-            if (row.agentId && row.messageId) props.onShowMessage(row.agentId, row.messageId);
-          },
-        })
-      }
-    />
+    <>
+      <StorageOverview
+        hostName={props.hostName}
+        state={storage.scanState()}
+        error={storage.error()}
+        scannedAt={usage()?.scannedAt ?? null}
+        breakdown={usage()?.breakdown ?? []}
+        freeBytes={usage()?.freeBytes ?? null}
+        agents={agents()}
+        agentUsage={usage()?.agents ?? []}
+        conversations={usage()?.conversations ?? []}
+        files={usage()?.files ?? []}
+        canManage={props.canManage}
+        onRescan={() => void storage.refresh(true)}
+        onOpenAgent={props.onOpenAgent}
+        onOpenConversation={(conversationId) => {
+          const agentId = usage()?.conversations.find((chat) => chat.id === conversationId)?.agentId;
+          if (agentId) props.onOpenAgent(agentId);
+        }}
+        onClear={storage.clear}
+        oldRuntimeBytes={runtimes() ? oldRuntimeBytes() : 0}
+        onRemoveOldRuntimes={removeOldRuntimes}
+        // Settings has no preview pane, so a preview opens the file in its app.
+        onPreviewFile={(file) => void storage.fileAction(file, "open", { onShowInChat: () => undefined })}
+        onFileAction={(file, action) =>
+          storage.fileAction(file, action, {
+            onShowInChat: (row) => {
+              if (row.agentId && row.messageId) props.onShowMessage(row.agentId, row.messageId);
+            },
+          })
+        }
+      />
+      <Show when={props.canManage && props.hygiene}>{(hygiene) => <StorageHygieneRules calls={hygiene()} />}</Show>
+    </>
   );
 }

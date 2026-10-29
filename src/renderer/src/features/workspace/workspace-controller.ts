@@ -38,6 +38,7 @@ import { createEffect, createMemo, createStore, onCleanup, untrack } from "solid
 import { actionToast } from "../../action-toast";
 import type { ChannelsController } from "../channels/channels-controller";
 import type { MessagingApi } from "../connectors/messaging-connector";
+import type { StorageHygieneCalls } from "../storage-hygiene/storage-hygiene-port";
 import {
   AGENT_DM_PREFIX,
   humanIds,
@@ -173,6 +174,10 @@ export interface WorkspaceEnvironment {
   fleet?: WorkspaceFleetSource | undefined;
   /** A host artifacts index. Absent, the artifacts come from the messages this client read. */
   artifacts?: WorkspaceArtifactsSource | undefined;
+  /** The storage hygiene calls of the host, for an owner or admin. Absent, there is no Storage view. */
+  storageHygiene?: (() => StorageHygieneCalls | undefined) | undefined;
+  /** Opens Server settings > Storage, where the cleanup rules are. */
+  openStorageRules?: (() => void) | undefined;
   /** Opens the form of a new agent. */
   createAgent?: (() => void) | undefined;
   /** Opens the invitation of people to the server. */

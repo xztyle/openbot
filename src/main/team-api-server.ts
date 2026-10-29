@@ -239,6 +239,7 @@ import { routeSideQuestion } from "./team-api/route-side-question";
 import { routeSignInRelay } from "./team-api/route-sign-in-relay";
 import { routeSkillsAdmin } from "./team-api/route-skills-admin";
 import { routeStorage } from "./team-api/route-storage";
+import { routeStorageHygiene } from "./team-api/route-storage-hygiene";
 import { routeTeam } from "./team-api/route-team";
 import { routeWebPush } from "./team-api/route-web-push";
 import { routeWorkflows } from "./team-api/route-workflows";
@@ -903,6 +904,7 @@ export class TeamApiServer {
       if ((await routeProviderAccounts(context, this.#options.providerAccounts)) === "handled") return;
       if ((await routeProviderUsageReset(context, this.#options.providerUsageResets)) === "handled") return;
       if ((await routeStorage(context, this.#options.storage)) === "handled") return;
+      if ((await routeStorageHygiene(context, this.#options.storageHygiene)) === "handled") return;
       if ((await routeHostedSites(context, this.#options.hostedSites)) === "handled") return;
       if ((await routeAgentAdmin(context, this.#options.admin, hidden)) === "handled") return;
       if ((await routeAgentHostSettings(context, this.#options.admin, hidden)) === "handled") return;

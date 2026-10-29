@@ -1,0 +1,15 @@
+/* Server settings > Storage > Cleanup rules. */
+
+.storage-hygiene-rules {
+  margin-top: var(--openbot-space-6);
+}
+
+.storage-hygiene-rules .ui-slider-field {
+  margin-top: var(--openbot-space-2);
+}
+
+.storage-hygiene-saved {
+  margin: 0;
+  color: var(--openbot-success-text);
+  font-size: var(--openbot-text-sm);
+}

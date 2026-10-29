@@ -468,6 +468,12 @@ import type {
   StorageUsage,
 } from "./ipc-storage";
 import type {
+  StorageHygieneApplyInput,
+  StorageHygieneSettings,
+  StorageHygieneState,
+  StorageHygieneStateInput,
+} from "./ipc-storage-hygiene";
+import type {
   ConfigureHostInput,
   CreateTeamInviteInput,
   DirectConversationPage,
@@ -1744,6 +1750,19 @@ export const IPC_ENDPOINTS = {
     /** Removes the old versions no instance uses now, and answers what is left. */
     removeOldRuntimeVersions: request<undefined, OldRuntimeVersions>()("storage:remove-old-runtime-versions"),
   },
+  // Bound against the storage hygiene service: the scan of the agents' projects, the cleanup an owner or
+  // admin starts, and the automatic rules. A joined server answers through storage-hygiene-v1
+  // (`fork-host-v1`); a server without it answers null for the state.
+  storageHygiene: {
+    getState: scopedRequest<StorageHygieneStateInput, StorageHygieneState | null, "required">()(
+      "storage-hygiene:get-state",
+    ),
+    apply: scopedRequest<StorageHygieneApplyInput, StorageHygieneState, "required">()("storage-hygiene:apply"),
+    getSettings: scopedQuery<StorageHygieneSettings, "required">()("storage-hygiene:get-settings"),
+    setSettings: scopedRequest<StorageHygieneSettings, StorageHygieneSettings, "required">()(
+      "storage-hygiene:set-settings",
+    ),
+  },
   // Bound against the agent import service, which holds the staged archives. A remote server is
   // reached with `agent-import-v1`; main still opens the file dialog and sends the file.
   agentImport: {
@@ -1891,6 +1910,7 @@ export const IPC_GROUP_PATHS = {
   agentAdmin: "agent",
   mcpServers: "agent",
   storage: "storage",
+  storageHygiene: "storageHygiene",
   agentImport: "agentImport",
   instanceTransfer: "instanceTransfer",
   plugins: "plugins",

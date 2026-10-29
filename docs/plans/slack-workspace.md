@@ -181,6 +181,11 @@ All seven phases are done on `main` and deployed on the live server, including t
 | 6. Polish | Done | Typing, thinking and working lines; public/private switch; onboarding into `#general`; emoji picker; unread banner and jump; sidebar filter, order and mute; message links (in place in the app, and now from outside the app through `openbot://workspace/...`); fast long channels; i18n in all 12 catalogs. |
 | 7. Fleet and artifacts | Done | Fleet view with live status, last step, cost and time today, usage-limit waits; step trails on agent answers; Artifacts cards and views for apps, sites, documents, decks, dashboards and files. |
 
+Checked by scripts on real services (temporary profile, fake provider and gate model):
+`scripts/workspace-scope-e2e.ts` (answer modes, the gate and its limit of two, private channels,
+DMs) and `scripts/workspace-limits-e2e.ts` (the Discord bridge: reactions, custom emoji, cleared
+reactions, threads, deletions; artifact index and thumbnails).
+
 Verified live on 2026-10-29: the gate (an off-topic message stayed quiet, an on-topic one got an
 answer), threads, reactions, Fleet, Storage, a private channel, and the Discord bridge both ways
 (a reply and a 👍 from Discord in the workspace thread, the agent's answer back in Discord, unlink).
@@ -199,15 +204,15 @@ the sidebar order and mutes for the account.
   reaction counts as a plain one. A moderator's "remove all reactions" or "remove this emoji" in
   Discord removes the Discord people's reactions in the workspace; those of the workspace's own
   people and agents stay, and OpenBot does not add its removed reactions back.
-- A Discord person's reaction shows as the member `discord-<user id>`, the author id of their
-  bridged messages.
+- A Discord person's reaction is stored as the member `discord-<user id>`, the author id of their
+  bridged messages. It shows their name once one of their messages is loaded in the channel.
 - A workspace post that someone deletes in Discord stays in the workspace (by design); the bridge
   forgets its Discord ids, so a later edit or deletion does not call Discord.
 - Artifact thumbnails are PNG: Electron's `nativeImage` has no WebP encoder. The address check
   resolves the name before Chromium does, so a DNS answer that changes in between (rebinding) is not
   caught; every request of the page goes through the check again.
-- A change of the sidebar order or the mutes on another computer shows at the next load or
-  reconnect: the host sends no event for it.
+- A change of the sidebar order or the mutes on another computer shows when this window gets the
+  focus again, or at a reconnect: the host sends no event for it.
 - With coordinator routing, the answer modes, the gate and the mention chains between agents do not
   apply; only an agent that a person mentions answers directly.
 - A message link opens only on a server that this computer joined, in a channel the reader can see.

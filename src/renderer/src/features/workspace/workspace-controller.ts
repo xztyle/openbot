@@ -432,8 +432,9 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         const last = channel.lastMessage;
         if (last?.author?.kind === "member") found[last.author.id] = last.authorName;
       }
+      // A Discord person's messages carry their name, so their reactions (as `discord-<id>`) show it too.
       for (const entry of channels.state.page?.messages ?? [])
-        if (entry.author.kind === "member" && !entry.externalAuthor) found[entry.author.id] = entry.author.name;
+        if (entry.author.kind === "member") found[entry.author.id] = entry.externalAuthor?.name ?? entry.author.name;
       for (const item of state.activity.data?.items ?? [])
         if (item.actor.kind === "member") found[item.actor.id] = item.actor.name;
       return found;
@@ -659,6 +660,20 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       if (current.ready && (!previous?.ready || current.key !== previous.key)) void loadHostSidebar();
     },
   );
+  // Coming back to this window reads again too, so an order or a mute set on another computer shows
+  // without a reload. The host sends no event for it.
+  if (typeof document !== "undefined") {
+    const reread = () => {
+      if (document.visibilityState === "visible" && channels.supported() && env.connectionReady())
+        void loadHostSidebar();
+    };
+    document.addEventListener("visibilitychange", reread);
+    window.addEventListener("focus", reread);
+    onCleanup(() => {
+      document.removeEventListener("visibilitychange", reread);
+      window.removeEventListener("focus", reread);
+    });
+  }
 
   function saveSidebar() {
     writeLocalSidebar();

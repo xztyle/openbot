@@ -181,14 +181,20 @@ All seven phases are done on `main` and deployed on the live server, including t
 | 6. Polish | Done | Typing, thinking and working lines; public/private switch; onboarding into `#general`; emoji picker; unread banner and jump; sidebar filter, order and mute; message links (in place in the app, and now from outside the app through `openbot://workspace/...`); fast long channels; i18n in all 12 catalogs. |
 | 7. Fleet and artifacts | Done | Fleet view with live status, last step, cost and time today, usage-limit waits; step trails on agent answers; Artifacts cards and views for apps, sites, documents, decks, dashboards and files. |
 
+Verified live on 2026-10-29: the gate (an off-topic message stayed quiet, an on-topic one got an
+answer), threads, reactions, Fleet, Storage, a private channel, and the Discord bridge both ways
+(a reply and a 👍 from Discord in the workspace thread, the agent's answer back in Discord, unlink).
+
 ### Known limits
 
 Closed on `wip/ws-limits`: Discord reactions and threads, a workspace post deleted in Discord,
 artifact thumbnails, the stored artifact index, typing without the focus, the emoji listbox, and
 the sidebar order and mutes for the account.
 
-- The webhook posts, the Discord pictures, the reactions and the threads need the Signal update
-  with the bridge changes. An older Signal ignores `reactions` and `threads` in `discord-listen`.
+- Webhook posts (each author's own name and picture in Discord) need the bot's Manage Webhooks
+  permission in the Discord server. Without it the bot posts as itself with `**Name:**` in front.
+- A thread reply in Discord quotes the newest post of its thread. Posts bridged before 2026-10-29
+  carry no thread root, so a reply to such a thread quotes its first message.
 - Only reactions with a unicode emoji are mirrored. Custom Discord emoji, super reactions, and a
   moderator's "remove all reactions" or "remove this emoji" in Discord are not.
 - A Discord person's reaction shows as the member `discord-<user id>`, the author id of their

@@ -113,7 +113,14 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     return current ? channelMembersAnswer(current) : false;
   };
   /** Agents answer only when mentioned in a channel the reader may change: say it once. */
-  const showModesHint = () => kind() === "channel" && joined() && !archived() && (channel()?.members.length ?? 0) > 0;
+  // The tip says that agents answer on a mention, so it shows only while every agent here does.
+  const showModesHint = () => {
+    const current = channel();
+    if (!current || kind() !== "channel" || !joined() || archived() || current.members.length === 0) return false;
+    return current.members.every(
+      (member) => (member.answerMode ?? (current.leadAgentId === member.agentId ? "lead" : "mention")) === "mention",
+    );
+  };
   const respond = async (action: () => Promise<void>) => {
     try {
       await action();

@@ -101,6 +101,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
       threadsUnread={ws.threadsUnread()}
       workingAgentCount={ws.fleet.agents().filter((agent) => agent.status.state === "working").length}
       showStorage={Boolean(ws.env.storageHygiene?.())}
+      onOpenApps={ws.env.openApps}
       channels={ws.sidebarChannels()}
       directMessages={ws.sidebarDirectMessages()}
       onAddChannel={() => ws.openDialog({ kind: "browse" })}

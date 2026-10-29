@@ -9,6 +9,9 @@ export const messages = {
   "agentSettings.channels.workspaceDefault": "워크스페이스 기본값({mode})",
   "agentSettings.channels.focus": "관심사",
   "agentSettings.channels.focusPlaceholder": "채널에서 이 에이전트가 맡는 일",
+  "agentSettings.channels.shareMainChat": "메인 채팅을 모두와 공유",
+  "agentSettings.channels.shareMainChatHint":
+    "이 에이전트와 채팅할 수 있는 사람은 모두 전체 맥락이 있는 메인 채팅에서 대화합니다. 끄면 각자 비공개 DM을 사용합니다.",
   "agentSettings.session.title": "제공자 설정",
   "agentSettings.session.readFailed": "제공자 설정을 읽을 수 없어요.",
   "agentSettings.session.pending": "저장한 변경 사항은 다음 턴 전에 적용돼요.",

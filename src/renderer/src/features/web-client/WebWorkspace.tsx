@@ -1851,6 +1851,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           if (id) void openServerSettings(id, null, "members");
         }
       : undefined,
+    openApps: canAdministerServer(workspace.state.host?.role)
+      ? () => {
+          const id = server()?.id;
+          if (id) void openServerSettings(id, null, "connectors");
+        }
+      : undefined,
     serverName: () => workspace.state.host?.name ?? "OpenBot",
     connectionReady: () => workspace.state.status === "online",
     menu: () => {

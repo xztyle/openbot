@@ -9,6 +9,9 @@ export const messages = {
   "agentSettings.channels.workspaceDefault": "ワークスペースの既定（{mode}）",
   "agentSettings.channels.focus": "注目点",
   "agentSettings.channels.focusPlaceholder": "チャンネルでこのエージェントが担当すること",
+  "agentSettings.channels.shareMainChat": "メインチャットを全員と共有",
+  "agentSettings.channels.shareMainChatHint":
+    "このエージェントとチャットできる人は全員、すべての文脈を持つメインチャットで話します。オフの場合、各自に非公開の DM があります。",
   "agentSettings.session.title": "プロバイダーの設定",
   "agentSettings.session.readFailed": "プロバイダーの設定を読み取れませんでした。",
   "agentSettings.session.pending": "保存した変更は次のターンの前に適用されます。",

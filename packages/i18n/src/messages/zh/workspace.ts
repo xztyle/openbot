@@ -22,6 +22,7 @@ export const messages = {
   "workspace.view.activity": "动态",
   "workspace.view.fleet": "助手",
   "workspace.view.artifacts": "成果",
+  "workspace.view.apps": "应用",
 
   "workspace.sidebar.label": "工作区",
   "workspace.sidebar.workspaceMenu": "{name} 菜单",

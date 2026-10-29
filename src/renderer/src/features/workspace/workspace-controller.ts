@@ -119,6 +119,8 @@ interface WorkspaceState {
   typing: Record<string, ChannelTypingEntry[]>;
   /** The agents the reader may open a DM with, as the host says. Null: the host does not say. */
   dmAgentIds: string[] | null;
+  /** The agents whose main chat is the reader's DM with them, as the host says. */
+  mainChatAgentIds: string[];
   /** The first-run hints the reader closed, on this computer. */
   hintsSeen: Record<string, true>;
   /** `ensure-general` runs. */
@@ -187,6 +189,8 @@ export interface WorkspaceEnvironment {
   createAgent?: (() => void) | undefined;
   /** Opens the invitation of people to the server. */
   inviteTeammates?: (() => void) | undefined;
+  /** Opens the server's apps: Discord, Slack, Telegram and the other connectors. Admins only. */
+  openApps?: (() => void) | undefined;
   /** The id of the host in message links: a link to another host opens as a plain link. */
   hostId?: (() => string | null) | undefined;
   /** A link to a message that opens it again, where the client has one. */
@@ -412,6 +416,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     steps: {},
     typing: {},
     dmAgentIds: null,
+    mainChatAgentIds: [],
     hintsSeen: readHints(),
     creatingGeneral: false,
     agentChosen: false,
@@ -469,8 +474,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (channelId) return { kind: "channel", channelId };
     if (state.view) return { kind: "view", view: state.view };
     const agentId = env.activeAgentId();
-    if (agentId && env.agentDmIsMainChat() && (state.agentChosen || !workspaceEmpty()))
-      return { kind: "agent", agentId };
+    if (agentId && dmIsMainChat(agentId) && (state.agentChosen || !workspaceEmpty())) return { kind: "agent", agentId };
     return { kind: "view", view: "activity" };
   });
 
@@ -499,10 +503,11 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (!read || !channels.supported() || !env.connectionReady()) return;
     const run = ++dmAgentsRun;
     try {
-      const { agentIds } = await read();
+      const { agentIds, mainChatAgentIds } = await read();
       if (run === dmAgentsRun)
         setState((draft) => {
           draft.dmAgentIds = agentIds;
+          draft.mainChatAgentIds = mainChatAgentIds ?? [];
         });
     } catch {
       // A host without the route lets the reader message each agent the list shows.
@@ -522,11 +527,15 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       if (previous && current.key !== previous.key)
         setState((draft) => {
           draft.dmAgentIds = null;
+          draft.mainChatAgentIds = [];
         });
       if (current.ready) void refreshDmAgents();
     },
   );
   const dmAgentSet = createMemo(() => (state.dmAgentIds ? new Set(state.dmAgentIds) : null));
+  const mainChatAgentSet = createMemo(() => new Set(state.mainChatAgentIds));
+  /** The owner's DM with each agent is its main chat; another person's is, when the agent shares it. */
+  const dmIsMainChat = (agentId: string) => env.agentDmIsMainChat() || mainChatAgentSet().has(agentId);
   /** Whether the reader may open a DM with an agent, or add it: the host's list, or every agent it shows. */
   const canMessageAgent = (agentId: string) => dmAgentSet()?.has(agentId) ?? true;
 
@@ -545,7 +554,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       sidebarDirectMessages({
         directory: directory(),
         summaries: summaries(),
-        agentDmIsMainChat: env.agentDmIsMainChat(),
+        agentDmIsMainChat: dmIsMainChat,
         hiddenAgentIds: env.hiddenAgentIds(),
         dmAgentIds: dmAgentSet(),
       }).map((row) => (mutedSet().has(row.id) ? { ...row, muted: true } : row)),
@@ -1169,7 +1178,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   function openAgent(agentId: string) {
-    if (env.agentDmIsMainChat()) {
+    if (dmIsMainChat(agentId)) {
       channels.close();
       setState((draft) => {
         draft.agentChosen = true;
@@ -1487,7 +1496,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     const agents = new Set(env.agents().map((agent) => agent.id));
     const agentIds = memberIds.filter((id) => agents.has(id));
     const people = memberIds.filter((id) => !agents.has(id));
-    if (env.agentDmIsMainChat() && people.length === 0 && agentIds.length === 1 && agentIds[0]) {
+    if (people.length === 0 && agentIds.length === 1 && agentIds[0] && dmIsMainChat(agentIds[0])) {
       openAgent(agentIds[0]);
       return;
     }

@@ -221,8 +221,8 @@ export function sidebarChannels(
 export interface DirectMessagesInput {
   directory: WorkspaceDirectory;
   summaries: readonly ChannelSummary[];
-  /** The server owner reads each agent's main chat as its DM. */
-  agentDmIsMainChat: boolean;
+  /** Whether the reader's DM with an agent is its main chat: the owner's always, another person's when shared. */
+  agentDmIsMainChat: (agentId: string) => boolean;
   hiddenAgentIds: ReadonlySet<string>;
   /** The agents the reader may open a DM with, when the host says. Null: every agent it shows. */
   dmAgentIds?: ReadonlySet<string> | null | undefined;
@@ -241,8 +241,8 @@ export function sidebarDirectMessages(input: DirectMessagesInput): SidebarDirect
     const kind = channelKind(channel);
     if (channel.archived || kind === "channel" || !readerJoined(directory, channel)) continue;
     const soleAgent = soleAgentOf(directory, channel);
-    if (soleAgent && input.agentDmIsMainChat && !channel.lastMessage) continue;
-    if (soleAgent && !input.agentDmIsMainChat) agentsWithChannel.add(soleAgent);
+    if (soleAgent && input.agentDmIsMainChat(soleAgent) && !channel.lastMessage) continue;
+    if (soleAgent && !input.agentDmIsMainChat(soleAgent)) agentsWithChannel.add(soleAgent);
     const members = otherMembers(directory, channel);
     rows.push({
       row: {
@@ -271,7 +271,7 @@ export function sidebarDirectMessages(input: DirectMessagesInput): SidebarDirect
         kind: "dm",
         members: [agentMember(agent, state?.kind === "working")],
         unread: unread > 0 || state?.kind === "responded",
-        mentionCount: input.agentDmIsMainChat ? unread : 0,
+        mentionCount: input.agentDmIsMainChat(agent.id) ? unread : 0,
       };
     });
   return [...rows.map((entry) => entry.row), ...agentRows];

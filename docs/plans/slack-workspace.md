@@ -198,6 +198,26 @@ Verified live on 2026-10-29: the gate (an off-topic message stayed quiet, an on-
 answer), threads, reactions, Fleet, Storage, a private channel, and the Discord bridge both ways
 (a reply and a 👍 from Discord in the workspace thread, the agent's answer back in Discord, unlink).
 
+### Completion check (2026-10-29)
+
+Each item of "Done means" and the plan items that an audit of the code found open:
+
+| Item | Evidence |
+| --- | --- |
+| Public and private channels, DMs, group DMs; invite people and agents | Live: #bridge-test and #gate-test (private), #general (49 members), agent DMs. Script: `workspace-scope-e2e.ts` (private channel, DM). |
+| Agents see only their channels; private channels hidden from non-members | Script: a person outside a private channel does not see it, an admin does, an agent outside it cannot be addressed in it. |
+| Per agent per channel: mention, always (gated), always (no gate), coordinator | Live: Channel details → Members in #gate-test. Script: all three answer modes; coordinator routing under Settings. |
+| The gate stops off-topic answers and logs why | Live with real agents in #gate-test (decisions in 1.7 to 2.7 s, reasons in "Why agents answered"). |
+| Max 2 answers, priority order, second round | Live: QA 2 answered, UX Director held back and quiet in round 2. Script: two answers by priority, third limited. |
+| Threads, reactions, mentions, edits, unread, activity | Live: thread with 4 replies, reactions, @mention in #gate-test, Activity view. |
+| Discord channels bridged to workspace channels | Live: both directions, thread replies, reactions, "Remove All Reactions", webhook post as the author. Script: `workspace-limits-e2e.ts`. |
+| Fleet view, step trails, Artifacts | Live: Fleet with real cost, step trails on answers, Artifacts view. |
+| Sidebar "Apps" | Added: opens Server settings → Connectors (Discord, Slack, Telegram and others), owners and admins. |
+| Per-agent "Share the main chat with everyone" | Added: agent settings → In channels. Shared: every person's DM with the agent is its main chat. Script: settings and DM list contracts. |
+| Agent's own computer in its profile | Profile → "Its computer": browser, shell, bench, hosting. |
+| i18n in all languages | 12 catalogs with the same workspace keys. |
+| Everything deployed on the live server | Yes (see the memory of the live head). |
+
 ### Known limits
 
 Closed on `wip/ws-limits`: Discord reactions and threads, a workspace post deleted in Discord,

@@ -174,6 +174,9 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.channels.workspaceDefault": "Workspace default ({mode})",
   "agentSettings.channels.focus": "Focus",
   "agentSettings.channels.focusPlaceholder": "What this agent cares about in channels",
+  "agentSettings.channels.shareMainChat": "Share the main chat with everyone",
+  "agentSettings.channels.shareMainChatHint":
+    "Each person who can chat with this agent talks in its main chat, with its full context. Off: each person gets a private DM.",
   "agentSettings.session.title": "Provider settings",
   "agentSettings.session.readFailed": "Could not read provider settings.",
   "agentSettings.session.pending": "Saved changes apply before the next turn.",

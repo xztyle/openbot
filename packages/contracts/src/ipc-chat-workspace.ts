@@ -478,6 +478,11 @@ export interface WorkspaceGateSettings {
 export interface WorkspaceAgentChannelDefaults {
   answerMode?: ChannelAnswerMode;
   focus?: string;
+  /**
+   * The agent's main chat is the DM of every person who can chat with it, as before the workspace.
+   * Absent: each person other than the owner has a private DM with it.
+   */
+  shareMainChat?: boolean;
 }
 
 /** Server-wide workspace settings, saved in `openbot-workspace-v1.json` on the host. */
@@ -506,7 +511,10 @@ function isAgentChannelDefaults(value: unknown): value is Record<string, Workspa
     entries.length <= WORKSPACE_AGENT_DEFAULTS_LIMIT &&
     entries.every(
       ([agentId, entry]) =>
-        isIdentifier(agentId) && isDynamicRecord(entry) && hasValidChannelMemberWorkspaceFields(entry),
+        isIdentifier(agentId) &&
+        isDynamicRecord(entry) &&
+        hasValidChannelMemberWorkspaceFields(entry) &&
+        (entry.shareMainChat === undefined || typeof entry.shareMainChat === "boolean"),
     )
   );
 }
@@ -552,8 +560,9 @@ function decodeAgentChannelDefaults(
       const next: WorkspaceAgentChannelDefaults = {
         ...(entry.answerMode === undefined ? {} : { answerMode: entry.answerMode }),
         ...(entry.focus === undefined || !entry.focus.trim() ? {} : { focus: entry.focus.trim() }),
+        ...(entry.shareMainChat === true ? { shareMainChat: true } : {}),
       };
-      return next.answerMode !== undefined || next.focus !== undefined ? [[agentId, next] as const] : [];
+      return Object.keys(next).length > 0 ? [[agentId, next] as const] : [];
     }),
   );
 }
@@ -628,10 +637,19 @@ export function parseChannelTypingInput(value: unknown): ChannelTypingInput {
 /** The agents that a person may open a DM with: each one they can chat with and see. */
 export interface WorkspaceDmAgents {
   agentIds: string[];
+  /** Of `agentIds`, the agents whose main chat is the DM (`shareMainChat`). Absent from an older host. */
+  mainChatAgentIds?: string[];
 }
 
 export function decodeWorkspaceDmAgents(value: unknown): WorkspaceDmAgents {
-  if (!isDynamicRecord(value) || !identifiers(value.agentIds, INPUT_LIMITS.agents))
+  if (
+    !isDynamicRecord(value) ||
+    !identifiers(value.agentIds, INPUT_LIMITS.agents) ||
+    (value.mainChatAgentIds !== undefined && !identifiers(value.mainChatAgentIds, INPUT_LIMITS.agents))
+  )
     throw new Error("Invalid DM agents.");
-  return { agentIds: [...value.agentIds] };
+  return {
+    agentIds: [...value.agentIds],
+    ...(value.mainChatAgentIds === undefined ? {} : { mainChatAgentIds: [...value.mainChatAgentIds] }),
+  };
 }

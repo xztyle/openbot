@@ -200,6 +200,12 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
           if (server) openServerSettings(server.id, null, "members");
         }
       : undefined,
+    openApps: serverRoleCanAdminister(activeServer())
+      ? () => {
+          const server = activeServer();
+          if (server) openServerSettings(server.id, null, "connectors");
+        }
+      : undefined,
     serverName: () => activeServer()?.name ?? t("sidebar.topbar.localServer"),
     connectionReady: () => scope.loaded(),
     menu,

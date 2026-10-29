@@ -22,6 +22,7 @@ export const messages = defineMessages("workspace", {
   "workspace.view.activity": "Activity",
   "workspace.view.fleet": "Fleet",
   "workspace.view.artifacts": "Artifacts",
+  "workspace.view.apps": "Apps",
 
   "workspace.sidebar.label": "Workspace",
   "workspace.sidebar.workspaceMenu": "{name} menu",

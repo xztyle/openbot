@@ -6,7 +6,17 @@ import {
   type WorkspaceSettings,
 } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
-import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Text } from "@openbot/ui";
+import {
+  Button,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  SwitchField,
+  Text,
+} from "@openbot/ui";
 import { SettingsField, SettingsLinkGroup } from "@openbot/ui/components/SettingsPanel";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createStore, onCleanup, Show } from "solid-js";
@@ -47,13 +57,14 @@ function withAgentDefaults(
   const entry: WorkspaceAgentChannelDefaults = {
     ...(next.answerMode === undefined ? {} : { answerMode: next.answerMode }),
     ...(next.focus === undefined || !next.focus.trim() ? {} : { focus: next.focus.trim() }),
+    ...(next.shareMainChat ? { shareMainChat: true } : {}),
   };
   const agents = Object.fromEntries(Object.entries(settings.defaults.agents ?? {}).filter(([id]) => id !== agentId));
   return {
     ...settings,
     defaults: {
       ...settings.defaults,
-      agents: entry.answerMode !== undefined || entry.focus !== undefined ? { ...agents, [agentId]: entry } : agents,
+      agents: Object.keys(entry).length > 0 ? { ...agents, [agentId]: entry } : agents,
     },
   };
 }
@@ -229,6 +240,13 @@ export function AgentChannelDefaults(props: { agentId: string; api: AgentChannel
             }}
           />
         </SettingsField>
+        <SwitchField
+          label={t("agentSettings.channels.shareMainChat")}
+          description={t("agentSettings.channels.shareMainChatHint")}
+          checked={state.saved?.shareMainChat === true}
+          disabled={state.busy}
+          onChange={(shareMainChat) => void save(props.agentId, props.api, { shareMainChat })}
+        />
       </Show>
     </SettingsLinkGroup>
   );

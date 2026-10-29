@@ -9,6 +9,9 @@ export const messages = {
   "agentSettings.channels.workspaceDefault": "工作区默认（{mode}）",
   "agentSettings.channels.focus": "关注点",
   "agentSettings.channels.focusPlaceholder": "此助手在频道中负责的内容",
+  "agentSettings.channels.shareMainChat": "与所有人共享主聊天",
+  "agentSettings.channels.shareMainChatHint":
+    "每个可以与此代理聊天的人都在其主聊天中交流，拥有完整上下文。关闭时：每个人都有一个私人私信。",
   "agentSettings.session.title": "服务商设置",
   "agentSettings.session.readFailed": "无法读取服务商设置。",
   "agentSettings.session.pending": "已保存的更改将在下一轮开始前生效。",

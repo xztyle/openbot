@@ -9,6 +9,9 @@ export const messages = {
   "agentSettings.channels.workspaceDefault": "Standard des Arbeitsbereichs ({mode})",
   "agentSettings.channels.focus": "Fokus",
   "agentSettings.channels.focusPlaceholder": "Worum sich dieser Agent in Kanälen kümmert",
+  "agentSettings.channels.shareMainChat": "Hauptchat mit allen teilen",
+  "agentSettings.channels.shareMainChatHint":
+    "Jede Person, die mit diesem Agenten chatten darf, schreibt in seinem Hauptchat mit dem vollen Kontext. Aus: Jede Person erhält eine private Direktnachricht.",
   "agentSettings.session.title": "Anbietereinstellungen",
   "agentSettings.session.readFailed": "Die Anbietereinstellungen konnten nicht gelesen werden.",
   "agentSettings.session.pending": "Gespeicherte Änderungen gelten vor dem nächsten Durchlauf.",

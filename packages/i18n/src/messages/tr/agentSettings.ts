@@ -9,6 +9,9 @@ export const messages = {
   "agentSettings.channels.workspaceDefault": "Çalışma alanı varsayılanı ({mode})",
   "agentSettings.channels.focus": "Odak",
   "agentSettings.channels.focusPlaceholder": "Bu ajanın kanallarda ilgilendiği konular",
+  "agentSettings.channels.shareMainChat": "Ana sohbeti herkesle paylaş",
+  "agentSettings.channels.shareMainChatHint":
+    "Bu ajanla sohbet edebilen herkes, tüm bağlamıyla ana sohbetinde konuşur. Kapalı: herkesin özel bir doğrudan mesajı olur.",
   "agentSettings.session.title": "Sağlayıcı ayarları",
   "agentSettings.session.readFailed": "Sağlayıcı ayarları okunamadı.",
   "agentSettings.session.pending": "Kaydedilen değişiklikler sonraki turdan önce uygulanır.",

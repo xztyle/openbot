@@ -20,6 +20,7 @@ export const messages = {
   "workspace.view.activity": "Actividad",
   "workspace.view.fleet": "Flota",
   "workspace.view.artifacts": "Artefactos",
+  "workspace.view.apps": "Aplicaciones",
   "workspace.sidebar.label": "Espacio de trabajo",
   "workspace.sidebar.workspaceMenu": "Menú de {name}",
   "workspace.sidebar.newMessage": "Nuevo mensaje",

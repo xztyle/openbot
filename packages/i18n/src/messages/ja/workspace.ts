@@ -22,6 +22,7 @@ export const messages = {
   "workspace.view.activity": "アクティビティ",
   "workspace.view.fleet": "エージェント",
   "workspace.view.artifacts": "成果物",
+  "workspace.view.apps": "アプリ",
 
   "workspace.sidebar.label": "ワークスペース",
   "workspace.sidebar.workspaceMenu": "{name} メニュー",

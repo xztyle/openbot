@@ -111,7 +111,9 @@ export async function routeWorkspace(
           agentAccessRank(context.agentLevel(agent.id)) >= agentAccessRank("chat"),
       )
       .map((agent) => agent.id);
-    return json(200, { agentIds });
+    const defaults = admin?.workspaceSettings?.get().defaults.agents ?? {};
+    const mainChatAgentIds = agentIds.filter((id) => Object.hasOwn(defaults, id) && defaults[id]?.shareMainChat);
+    return json(200, { agentIds, mainChatAgentIds });
   }
   if (url.pathname === WORKSPACE_ROUTES.thread) {
     const input = parseChannelRead(body);

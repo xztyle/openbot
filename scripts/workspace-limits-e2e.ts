@@ -18,10 +18,16 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { AgentEvent, ChannelMessage } from "@openbot/contracts/ipc";
+import {
+  type AgentEvent,
+  type ChannelMessage,
+  decodeWorkspaceDmAgents,
+  decodeWorkspaceSettings,
+} from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { decodeDiscordApiError, decodeDiscordDelivery } from "@openbot/contracts/signal-protocol/discord-api";
 import { optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
+import { WORKSPACE_CODECS, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { Effect } from "effect";
 import { type DiscordRestRequest, DiscordTransportError, makeDiscordApi } from "../remote/api/src/discord-api";
 import { type DiscordAction, DiscordState } from "../remote/api/src/discord-events";
@@ -693,6 +699,32 @@ try {
     assert.deepEqual(second.get("member-a"), { order: { channels: ["c2", "c1"], direct: ["d1"] }, muted: ["c1"] });
     assert.deepEqual(second.get("member-b")?.muted, ["d9"]);
     return { members: 2 };
+  });
+
+  await step("an agent's shared main chat goes through the settings and the DM list", async () => {
+    // The settings keep `shareMainChat: true`, drop `false`, and the wire carries it both ways.
+    const settings = decodeWorkspaceSettings({
+      gate: { provider: "claude", model: "claude-haiku-5-5", timeoutMs: 6000 },
+      defaults: {
+        agentAnswerMode: "mention",
+        agents: { shared: { shareMainChat: true }, private: { shareMainChat: false } },
+      },
+    });
+    assert.deepEqual(settings.defaults.agents, { shared: { shareMainChat: true } });
+    const codec = WORKSPACE_CODECS.get(WORKSPACE_ROUTES.settingsUpdate);
+    assert.ok(codec);
+    const wire = codec.request(JSON.parse(JSON.stringify(settings)));
+    assert.deepEqual(decodeWorkspaceSettings(wire).defaults.agents, { shared: { shareMainChat: true } });
+    // The DM list names the agents whose main chat is the DM; an older host leaves the field out.
+    const dmCodec = WORKSPACE_CODECS.get(WORKSPACE_ROUTES.dmAgents);
+    assert.ok(dmCodec);
+    const answer = dmCodec.response(200, { agentIds: ["shared", "private"], mainChatAgentIds: ["shared"] });
+    assert.deepEqual(decodeWorkspaceDmAgents(answer), {
+      agentIds: ["shared", "private"],
+      mainChatAgentIds: ["shared"],
+    });
+    assert.deepEqual(decodeWorkspaceDmAgents(dmCodec.response(200, { agentIds: ["a"] })), { agentIds: ["a"] });
+    return { shared: ["shared"] };
   });
 
   await step("the artifact index is stored, and a new instance reads only the new messages", async () => {

@@ -22,7 +22,8 @@
 // - `POST /v1/workspace/channels/thread`: `{ channelId, threadRootId, beforeSequence? }` answers a
 //   channel page whose messages are the root and at most 99 of its replies.
 // - `POST /v1/admin/workspace/settings` and `/update`: the workspace settings, owner and admin only.
-//   `defaults.agents` is optional: at most 500 agent ids, each `{ answerMode?, focus? (500) }`. A
+//   `defaults.agents` is optional: at most 500 agent ids, each `{ answerMode?, focus? (500),
+//   shareMainChat? }`. `shareMainChat: true` makes the agent's main chat the DM of every person. A
 //   body without it keeps the map that the host has.
 // - `POST /v1/workspace/activity`: `{ limit? }` (1 to 200, default 100) answers the activity of the
 //   member of the session over the channels they can see: `{ items, threads }`. `items` (at most
@@ -50,8 +51,9 @@
 // - `POST /v1/workspace/channels/typing`: `{ channelId, threadRootId?, typing }` answers `{}`. The
 //   person of the session types in the channel, or stopped. A client sends it at most every 3
 //   seconds while the person types; the host ends the typing 6 seconds after the last one.
-// - `POST /v1/workspace/dm-agents`: `{}` answers `{ agentIds }` (at most 100): the agents that the
-//   member of the session can see and chat with, so may open a DM with (`open-dm`).
+// - `POST /v1/workspace/dm-agents`: `{}` answers `{ agentIds, mainChatAgentIds? }` (at most 100
+//   each): the agents that the member of the session can see and chat with, so may open a DM with
+//   (`open-dm`), and of those the agents whose main chat is the DM of every person.
 // - The event `channel-typing` (`{ channelId, typing }`): the whole list, at most 50 entries, each
 //   `{ kind: "member" | "agent", id, state: "typing" | "thinking" | "working", threadRootId? }`.
 //   It replaces the last list of the channel. The host sends it only to a peer that can see the
@@ -333,7 +335,7 @@ const agentDefaults: Decoder = (value) => {
   return Object.fromEntries(
     entries.map(([agentId, entry]) => {
       if (!isString(identifier(agentId))) throw new Error("Invalid workspace agent defaults.");
-      return [agentId, fields({}, memberFields)(entry)];
+      return [agentId, fields({}, { ...memberFields, shareMainChat: boolean })(entry)];
     }),
   );
 };
@@ -377,7 +379,7 @@ const typingEntry = fields(
   { kind: oneOf("member", "agent"), id: identifier, state: oneOf("typing", "thinking", "working") },
   { threadRootId: identifier },
 );
-const dmAgents = fields({ agentIds: uniqueIdentifiers(100) });
+const dmAgents = fields({ agentIds: uniqueIdentifiers(100) }, { mainChatAgentIds: uniqueIdentifiers(100) });
 
 export const WORKSPACE_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [WORKSPACE_ROUTES.command, { request: command, response: channelResult }],

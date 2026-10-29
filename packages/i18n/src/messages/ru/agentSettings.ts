@@ -9,6 +9,9 @@ export const messages = {
   "agentSettings.channels.workspaceDefault": "По умолчанию рабочего пространства ({mode})",
   "agentSettings.channels.focus": "Фокус",
   "agentSettings.channels.focusPlaceholder": "Чем этот агент занимается в каналах",
+  "agentSettings.channels.shareMainChat": "Общий основной чат для всех",
+  "agentSettings.channels.shareMainChatHint":
+    "Каждый, кто может общаться с этим агентом, пишет в его основной чат со всем контекстом. Выключено: у каждого свой личный чат.",
   "agentSettings.session.title": "Настройки провайдера",
   "agentSettings.session.readFailed": "Не удалось прочитать настройки провайдера.",
   "agentSettings.session.pending": "Сохранённые изменения вступят в силу перед следующим ходом.",

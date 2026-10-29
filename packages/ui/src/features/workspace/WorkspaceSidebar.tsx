@@ -5,6 +5,7 @@ import { Button, IconButton } from "../../button";
 import {
   Activity,
   AtSign,
+  Blocks,
   ChevronDown,
   ChevronRight,
   Ellipsis,
@@ -67,6 +68,8 @@ export interface WorkspaceSidebarProps {
   workingAgentCount?: number | undefined;
   /** Shows the Storage view, for an owner or an admin of a host that reports its storage. */
   showStorage?: boolean | undefined;
+  /** Opens the server's apps (Discord, Slack, Telegram and other connectors), for an owner or an admin. */
+  onOpenApps?: (() => void) | undefined;
   channels: readonly SidebarChannel[];
   directMessages: readonly SidebarDirectMessage[];
   onAddChannel?: (() => void) | undefined;
@@ -176,6 +179,16 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
               active={props.activeView === "storage"}
               onSelect={props.onSelectView}
             />
+          </Show>
+          <Show when={props.onOpenApps}>
+            {(open) => (
+              <Button variant="ghost" class="ws-sidebar-row" data-ws-row="" onClick={() => open()()}>
+                <span class="ws-sidebar-row-icon">
+                  <Blocks aria-hidden="true" />
+                </span>
+                <span class="ws-sidebar-row-label">{t("workspace.view.apps")}</span>
+              </Button>
+            )}
           </Show>
         </div>
 

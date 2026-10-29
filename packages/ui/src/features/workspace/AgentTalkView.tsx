@@ -151,6 +151,9 @@ export function AgentTalkView(props: AgentTalkViewProps): JSX.Element {
               </Button>
             </Show>
             <Show when={props.messages} fallback={<p class="ws-view-empty">{t("workspace.agentTalk.loading")}</p>}>
+              <Show when={props.messages?.length === 0}>
+                <p class="ws-view-empty">{t("workspace.agentTalk.empty")}</p>
+              </Show>
               <For each={props.messages ?? []} keyed={(message) => message.id}>
                 {(message, index) => (
                   <MessageRow

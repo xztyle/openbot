@@ -66,7 +66,8 @@ export function WorkspaceAgentTalkView() {
       draft.loading = true;
     });
     try {
-      const result = await read({ agentIds, ...(before === undefined ? {} : { before }) });
+      // A plain copy: a store array cannot cross the IPC boundary.
+      const result = await read({ agentIds: [agentIds[0], agentIds[1]], ...(before === undefined ? {} : { before }) });
       if (run !== readRun) return;
       setState((draft) => {
         draft.messages = before === undefined ? result.messages : [...result.messages, ...(draft.messages ?? [])];

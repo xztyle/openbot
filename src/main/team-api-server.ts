@@ -246,6 +246,7 @@ import { routeWorkflows } from "./team-api/route-workflows";
 import { routeWorkspace } from "./team-api/route-workspace";
 import { routeWorkspaceDirectory } from "./team-api/route-workspace-directory";
 import { routeWorkspaceFleet } from "./team-api/route-workspace-fleet";
+import { routeWorkspaceSidebar } from "./team-api/route-workspace-sidebar";
 import { TeamStoreError } from "./team-store";
 
 const EVENT_PAYLOAD_LIMIT = 256 * 1_024;
@@ -885,6 +886,7 @@ export class TeamApiServer {
       if ((await routeChannels(context, this.#options.channels, this.#options.agents, hidden)) === "handled") return;
       if ((await routeWorkspace(context, this.#options.channels, this.#options.admin, hidden)) === "handled") return;
       if ((await routeWorkspaceFleet(context, this.#options.agents, hidden)) === "handled") return;
+      if ((await routeWorkspaceSidebar(context, this.#options.workspaceSidebar)) === "handled") return;
       if (
         (await routeMcpServers(context, this.#options.mcpServers, this.#options.mcpToolRuntimePreparation)) ===
         "handled"

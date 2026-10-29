@@ -492,6 +492,12 @@ export const messages = {
   "workspace.emoji.searchPlaceholder": "Искать среди всех эмодзи",
   "workspace.emoji.noResults": "Нет эмодзи по запросу «{query}».",
   "workspace.emoji.results": "Результаты поиска",
+  "workspace.emoji.resultCount": {
+    one: "{count} эмодзи",
+    few: "{count} эмодзи",
+    many: "{count} эмодзи",
+    other: "{count} эмодзи",
+  },
   "workspace.emoji.categories": "Категории эмодзи",
   "workspace.emoji.category.recent": "Часто используемые",
   "workspace.emoji.category.people": "Смайлики и люди",

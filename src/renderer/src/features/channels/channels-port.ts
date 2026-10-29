@@ -36,6 +36,8 @@ export interface ChannelsPort {
         | "workspaceFleet"
         | "workspaceSteps"
         | "workspaceArtifacts"
+        | "workspaceSidebar"
+        | "setWorkspaceSidebar"
       >
     >;
   eventRoutines?: EventRoutinesApi | undefined;

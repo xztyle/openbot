@@ -7,7 +7,12 @@ import type {
   MessagingTransport,
   TransportSink,
 } from "../messaging-types";
-import { discordInboundAction, discordInboundChange, discordInboundMessage } from "./discord-events";
+import {
+  discordInboundAction,
+  discordInboundChange,
+  discordInboundMessage,
+  discordInboundReaction,
+} from "./discord-events";
 
 /** The Gateway can send an event again after a resume. */
 const RECENT_EVENTS = 2_000;
@@ -77,12 +82,19 @@ export class DiscordTransport implements MessagingTransport {
         return OK;
       }
       if (event.kind === "message-update") {
-        sink.changed?.(discordInboundChange(event.change.channelId, event.change.id, event.change));
+        sink.changed?.(
+          discordInboundChange(event.change.channelId, event.change.id, event.change, event.change.threadParentId),
+        );
         return OK;
       }
       if (event.kind === "message-delete") {
         if (this.#remember(`delete:${event.messageId}`)) return OK;
-        sink.changed?.(discordInboundChange(event.channelId, event.messageId, null));
+        sink.changed?.(discordInboundChange(event.channelId, event.messageId, null, event.threadParentId));
+        return OK;
+      }
+      if (event.kind === "reaction") {
+        // Adding or removing a reaction twice changes nothing, so a redelivery needs no check.
+        sink.reacted?.(discordInboundReaction(event.reaction));
         return OK;
       }
       if (this.#remember(`message:${event.message.id}`)) return OK;

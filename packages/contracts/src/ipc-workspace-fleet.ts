@@ -1,6 +1,7 @@
 // The fleet, step trail and artifact views of the Slack-style workspace (phase 7): what each agent
 // does now, the steps of the turn that wrote an agent's channel answer, and the deliverables that
-// agents shared. The host derives all three from state it already keeps; nothing here is stored.
+// agents shared. The host derives all three from state it already keeps; the artifact index and
+// the page thumbnails are host-only files, never sent whole.
 //
 // Times are epoch milliseconds. Every text is host text, cut to the limits below.
 
@@ -18,6 +19,7 @@ export const WORKSPACE_ARTIFACT_DEFAULT_LIMIT = 100;
 export const WORKSPACE_ARTIFACT_TITLE_LIMIT = 200;
 export const WORKSPACE_ARTIFACT_DESCRIPTION_LIMIT = 300;
 export const WORKSPACE_ARTIFACT_URL_LIMIT = 2_048;
+export const WORKSPACE_ARTIFACT_THUMBNAIL_VERSION_LIMIT = 64;
 export const WORKSPACE_TIME_ZONE_LIMIT = 64;
 /** The host sends one `workspace-fleet-changed` event at most this often. */
 export const WORKSPACE_FLEET_EVENT_INTERVAL_MS = 1_000;
@@ -144,7 +146,13 @@ export interface WorkspaceArtifactRecord {
   title: string;
   description?: string;
   url?: string;
+  /** An http or https image address for the card. */
   thumbnailUrl?: string;
+  /**
+   * The version of the image that the host drew of the page at `url`. The client reads the image
+   * from the host with this version: `workspaceArtifactThumbnailRoute` over the Team API.
+   */
+  thumbnailVersion?: string;
   file?: WorkspaceArtifactFile;
   /** The agent whose message first shared it. */
   agentId?: string;
@@ -302,6 +310,11 @@ function isArtifactUrl(value: unknown): boolean {
   }
 }
 
+/** A host thumbnail version: letters, digits, `-` and `_`, at most 64. */
+export function isWorkspaceThumbnailVersion(value: unknown): value is string {
+  return isBoundedString(value, WORKSPACE_ARTIFACT_THUMBNAIL_VERSION_LIMIT) && /^[A-Za-z0-9_-]+$/u.test(value);
+}
+
 function isWorkspaceArtifactRecord(value: unknown): value is WorkspaceArtifactRecord {
   return (
     isDynamicRecord(value) &&
@@ -313,6 +326,7 @@ function isWorkspaceArtifactRecord(value: unknown): value is WorkspaceArtifactRe
     optional(value.description, (text) => isBoundedString(text, WORKSPACE_ARTIFACT_DESCRIPTION_LIMIT)) &&
     optional(value.url, isArtifactUrl) &&
     optional(value.thumbnailUrl, isArtifactUrl) &&
+    optional(value.thumbnailVersion, isWorkspaceThumbnailVersion) &&
     optional(value.file, isArtifactFile) &&
     optional(value.agentId, isIdentifier) &&
     optional(value.channelId, isIdentifier) &&

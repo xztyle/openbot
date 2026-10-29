@@ -25,6 +25,8 @@ import {
   decodeWorkspaceArtifacts,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
+  decodeWorkspaceSidebar,
+  decodeWorkspaceSidebarPrefs,
   decodeWorkspaceSteps,
   hostAnalyticsQuery,
   isAgentModelOption,
@@ -48,6 +50,7 @@ import {
   remoteBrowserSecretResponse,
   type WorkspaceArtifactsInput,
   type WorkspaceFleetInput,
+  type WorkspaceSidebarPrefs,
   type WorkspaceStepsInput,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
@@ -69,6 +72,10 @@ import {
   WORKSPACE_FLEET_CAPABILITY,
   WORKSPACE_FLEET_ROUTES,
 } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
+import {
+  WORKSPACE_SIDEBAR_CAPABILITY,
+  WORKSPACE_SIDEBAR_ROUTES,
+} from "@openbot/contracts/team-protocol/workspace-sidebar-v1";
 import { WORKSPACE_CAPABILITY, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
@@ -99,6 +106,7 @@ import {
 import { acceptEmpty, decodeVoid, type ResponseDecoder } from "../remote-host-decoding";
 import type { RemoteServerManager } from "../remote-server-manager";
 import type { SkillMarketplaceService } from "../skill-marketplace-service";
+import type { WorkspaceSidebarStore } from "../workspace-sidebar-store";
 import {
   parseAcknowledgeFailedTurn,
   parseAgentId,
@@ -175,6 +183,7 @@ function logRejectedModels<T>(models: T, source: "local" | "remote"): T {
 export interface AgentIpcDependencies {
   service: AgentService;
   sidebarLayout: SidebarLayoutStore;
+  workspaceSidebar: Pick<WorkspaceSidebarStore, "get" | "set">;
   host: HostService;
   remoteServers: RemoteServerManager;
   skills: SkillMarketplaceService;
@@ -185,6 +194,7 @@ export interface AgentIpcDependencies {
 export function agentIpcHandlers({
   service,
   sidebarLayout,
+  workspaceSidebar,
   host,
   remoteServers,
   skills,
@@ -205,6 +215,12 @@ export function agentIpcHandlers({
     if (!remoteServers.supportsCapability(serverId, WORKSPACE_FLEET_CAPABILITY))
       throw new Error(sourceText("error.team.workspaceUnsupported"));
     return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
+  };
+  // A joined server without workspace-sidebar-v1 fails; the window then keeps the value on this computer.
+  const remoteSidebar = (serverId: string, path: string, body: WorkspaceSidebarPrefs | Record<string, never>) => {
+    if (!remoteServers.supportsCapability(serverId, WORKSPACE_SIDEBAR_CAPABILITY))
+      throw new Error(sourceText("error.team.workspaceUnsupported"));
+    return runCauseEffect(remoteServers.request(serverId, path, decodeWorkspaceSidebar, { method: "POST", body }));
   };
   return {
     agent: {
@@ -457,6 +473,17 @@ export function agentIpcHandlers({
         local: (input) => service.workspace.artifacts(input, host.channelViewer()),
         remote: (input, serverId) =>
           remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.artifacts, input, decodeWorkspaceArtifacts),
+      }),
+      // The host user of this computer is a member under the id their channel messages carry.
+      workspaceSidebar: scopedQueryHandler({
+        local: () => ({ sidebar: workspaceSidebar.get(host.channelActor().id) }),
+        remote: (serverId) => remoteSidebar(serverId, WORKSPACE_SIDEBAR_ROUTES.read, {}),
+      }),
+      setWorkspaceSidebar: scopedHandler(decodeWorkspaceSidebarPrefs, {
+        local: async (prefs) => ({
+          sidebar: await runCauseEffect(workspaceSidebar.set(host.channelActor().id, prefs)),
+        }),
+        remote: (prefs, serverId) => remoteSidebar(serverId, WORKSPACE_SIDEBAR_ROUTES.save, prefs),
       }),
       getSidebarLayout: scopedQueryHandler({
         local: () => sidebarLayout.getSnapshot(),

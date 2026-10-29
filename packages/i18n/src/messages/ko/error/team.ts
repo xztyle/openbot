@@ -89,6 +89,7 @@ export const messages = {
   "error.team.routineResultsUnsupported": "이 연결에서는 루틴 결과 전송 위치를 지원하지 않아요.",
   "error.team.agentMemoryLimitUnsupported": "이 연결에서는 에이전트 메모리 한도를 지원하지 않아요.",
   "error.team.workspaceUnsupported": "이 연결은 워크스페이스 채널을 지원하지 않습니다.",
+  "error.team.workspaceThumbnailNotFound": "이 결과물의 이미지를 사용할 수 없습니다.",
   "error.team.agentAccessUnsupported": "이 연결에서는 역할을 지원하지 않아요.",
   "error.team.agentAccessStale": "다른 사람이 역할을 변경했어요. 역할을 다시 열어서 변경해 주세요.",
   "error.team.agentViewOnly": "이 에이전트는 볼 수만 있어요.",

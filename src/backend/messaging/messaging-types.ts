@@ -75,6 +75,8 @@ export interface InboundMessage {
   authorAvatarUrl?: string;
   /** The platform id of the message this one replies to, any author. For a channel bridge. */
   replyToMessageId?: string | null;
+  /** For a message in a Discord thread (`platformChannelId`): the channel of the thread. For a channel bridge. */
+  threadParentId?: string;
 }
 
 /** A replied-to message, given to the agent as context. Mentions are written as in `text`. */
@@ -204,6 +206,13 @@ export interface MessagingAdapter {
   joinPublicPlaces?(): Effect.Effect<void, MessagingAdapterError>;
   /** Joins one public place, such as a channel that was just created. */
   joinPlace?(platformChannelId: string): Effect.Effect<void, MessagingAdapterError>;
+  /** Adds or removes OpenBot's own reaction with a unicode emoji, for a channel bridge (Discord). */
+  reactEmoji?(
+    target: MessageTarget,
+    messageId: string,
+    emoji: string,
+    on: boolean,
+  ): Effect.Effect<void, MessagingAdapterError>;
   /** Makes a webhook in a channel, for a channel bridge (Discord). The token is a secret. */
   createWebhook?(
     platformChannelId: string,
@@ -220,6 +229,20 @@ export interface InboundMessageChange {
   platformMessageId: string;
   /** The new text and files; null for a deletion. Mentions are written as in `InboundMessage.text`. */
   edit: { text: string; mentionedUserIds: string[]; files: InboundFile[] } | null;
+  /** As on `InboundMessage`. */
+  threadParentId?: string;
+}
+
+/** A person added or removed a reaction with a unicode emoji, in a Discord channel of a channel bridge. */
+export interface InboundReaction {
+  platformChannelId: string;
+  platformMessageId: string;
+  userId: string;
+  userName?: string;
+  emoji: string;
+  on: boolean;
+  /** As on `InboundMessage`. */
+  threadParentId?: string;
 }
 
 export interface TransportSink {
@@ -227,6 +250,8 @@ export interface TransportSink {
   message(message: InboundMessage): void;
   /** An edit or a deletion of a person's message, for a channel bridge. */
   changed?(change: InboundMessageChange): void;
+  /** A reaction of a person, for a channel bridge. */
+  reacted?(reaction: InboundReaction): void;
   action(action: InboundAction): void;
   /** A public place was created that OpenBot can join. */
   placeCreated?(platformChannelId: string): void;
@@ -398,6 +423,8 @@ export interface BridgedDiscordMessage {
   replyToMessageId: string | null;
   /** The message mentions OpenBot (the mention itself is taken out of `text`). */
   mentionedBot: boolean;
+  /** The Discord thread of the message, in `channelId`. Null outside a thread. */
+  threadId?: string | null;
 }
 
 /** An edit (with the new text and files) or a deletion (`edit: null`) of a bridged Discord message. */
@@ -406,6 +433,20 @@ export interface BridgedDiscordChange {
   channelId: string;
   messageId: string;
   edit: { text: string; files: readonly InboundFile[] } | null;
+  /** The Discord thread of the message, in `channelId`. Null outside a thread. */
+  threadId?: string | null;
+}
+
+/** A person's reaction with a unicode emoji on a message of a bridged Discord channel or one of its threads. */
+export interface BridgedDiscordReaction {
+  guildId: string;
+  channelId: string;
+  threadId: string | null;
+  messageId: string;
+  userId: string;
+  userName: string | null;
+  emoji: string;
+  on: boolean;
 }
 
 /**
@@ -419,4 +460,6 @@ export interface MessagingChannelBridge {
   receiveDiscord(message: BridgedDiscordMessage): Effect.Effect<void>;
   /** Mirrors an edit or a deletion of a message the bridge brought in. Never fails. */
   changeDiscord?(change: BridgedDiscordChange): Effect.Effect<void>;
+  /** Mirrors a person's reaction on a bridged message. Never fails. */
+  reactDiscord?(reaction: BridgedDiscordReaction): Effect.Effect<void>;
 }

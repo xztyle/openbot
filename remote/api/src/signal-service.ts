@@ -130,6 +130,11 @@ interface AuthenticatedPeer {
   // `ingress` only: the guilds whose listened channels also send the edits and deletions of
   // messages (`discord-listen` with `changes`).
   discordListenChanges: Set<string>;
+  // `ingress` only: the guilds whose listened channels also send reactions (`reactions`).
+  discordListenReactions: Set<string>;
+  // `ingress` only: the guilds whose listened channels also send what happens in their threads
+  // (`threads`).
+  discordListenThreads: Set<string>;
   // `ingress` only: opaque generic webhook route IDs whose requests this socket receives.
   webhookRoutes: string[];
   // The TURN credentials of the last `turn-refresh`, and when Signal made them.
@@ -497,8 +502,13 @@ export class SignalService {
         }
         if (message.channelIds.length === 0) peer.discordListen.delete(message.guildId);
         else peer.discordListen.set(message.guildId, new Set(message.channelIds));
-        if (message.channelIds.length > 0 && message.changes === true) peer.discordListenChanges.add(message.guildId);
+        const listening = message.channelIds.length > 0;
+        if (listening && message.changes === true) peer.discordListenChanges.add(message.guildId);
         else peer.discordListenChanges.delete(message.guildId);
+        if (listening && message.reactions === true) peer.discordListenReactions.add(message.guildId);
+        else peer.discordListenReactions.delete(message.guildId);
+        if (listening && message.threads === true) peer.discordListenThreads.add(message.guildId);
+        else peer.discordListenThreads.delete(message.guildId);
         return;
       }
       if (message.type === "queued-delivery-ack") {
@@ -716,6 +726,25 @@ export class SignalService {
     if (socketId === undefined) return false;
     const peer = this.#peers.get(socketId);
     return Boolean(peer?.discordListenChanges.has(guildId) && peer.discordListen.get(guildId)?.has(channelId));
+  }
+
+  /** Whether the host of the guild also asked for the reactions on the messages of a listened channel. */
+  discordListensReactions(guildId: string, channelId: string): boolean {
+    const socketId = this.#discordGuilds.get(guildId);
+    if (socketId === undefined) return false;
+    const peer = this.#peers.get(socketId);
+    return Boolean(peer?.discordListenReactions.has(guildId) && peer.discordListen.get(guildId)?.has(channelId));
+  }
+
+  /**
+   * Whether the host of the guild also asked for what happens in the threads of a listened channel.
+   * An older host never asks, so it never receives a message with `threadParentId`.
+   */
+  discordListensThreads(guildId: string, parentChannelId: string): boolean {
+    const socketId = this.#discordGuilds.get(guildId);
+    if (socketId === undefined) return false;
+    const peer = this.#peers.get(socketId);
+    return Boolean(peer?.discordListenThreads.has(guildId) && peer.discordListen.get(guildId)?.has(parentChannelId));
   }
 
   /**
@@ -1316,6 +1345,8 @@ export class SignalService {
           discordSession: null,
           discordListen: new Map(),
           discordListenChanges: new Set(),
+          discordListenReactions: new Set(),
+          discordListenThreads: new Set(),
           webhookRoutes: webhookRoute.routes.map((route) => route.id),
           turnCredentials: null,
         };

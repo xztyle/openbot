@@ -91,6 +91,7 @@ export const messages = {
   "error.team.agentMemoryLimitUnsupported": "Bu bağlantı ajanların bellek sınırını desteklemiyor.",
   "error.team.promptCacheTtlUnsupported": "Bu bağlantı istem önbelleği süresini desteklemiyor.",
   "error.team.workspaceUnsupported": "Bu bağlantı çalışma alanı kanallarını desteklemiyor.",
+  "error.team.workspaceThumbnailNotFound": "Bu yapıtın görseli kullanılamıyor.",
   "error.team.attachmentNameRequired": "Güvenli bir ek adı gereklidir.",
   "error.team.attachmentNotFound": "Ek bulunamadı.",
   "error.team.sharedFileTooLarge": "Paylaşılan dosya 100 MB sınırını aşıyor.",

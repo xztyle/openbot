@@ -11,6 +11,7 @@ import type {
   WorkspaceStepsInput,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
+import { Effect } from "effect";
 import type { AttentionRegistry } from "./agent/attention-registry";
 import type { ChannelStore } from "./channel-store";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
@@ -19,6 +20,7 @@ import type { OpenBotDatabase } from "./openbot-database";
 import { WorkspaceArtifactIndex } from "./workspace-artifacts";
 import { WorkspaceFleetTracker } from "./workspace-fleet";
 import { workspaceSteps } from "./workspace-steps";
+import type { WorkspaceThumbnailMimeType, WorkspaceThumbnails } from "./workspace-thumbnails";
 
 /** Usage of a running turn is read from this long before its start, as the turn trace reads it. */
 const TURN_USAGE_MARGIN_MS = 60 * 60 * 1_000;
@@ -26,7 +28,10 @@ const TURN_USAGE_MARGIN_MS = 60 * 60 * 1_000;
 export interface WorkspaceInsightsOptions {
   agents(): readonly AgentSummary[];
   database: Pick<OpenBotDatabase, "workspace" | "usage">;
-  channels: Pick<ChannelStore, "exists" | "get" | "ids" | "message" | "messages" | "assignmentForDelivery" | "tasks">;
+  channels: Pick<
+    ChannelStore,
+    "exists" | "get" | "ids" | "message" | "messages" | "messagesAfter" | "assignmentForDelivery" | "tasks"
+  >;
   mailbox: Pick<MailboxStore, "fleetWork">;
   attention: Pick<AttentionRegistry, "waitingAgents">;
   /** The steps of a running turn so far. */
@@ -37,6 +42,10 @@ export interface WorkspaceInsightsOptions {
   /** The usage limit that holds an agent's work now, as `UsageLimitGate.limitFor` answers. */
   usageLimit?(agentId: string): { resetsAt: number | null } | null;
   emit(event: AgentEvent): void;
+  /** The host-only file of the artifact index. Omitted or null, the index is kept in memory only. */
+  artifactsPath?: string | null;
+  /** The thumbnails of the artifacts that are web pages. Omitted or null, no artifact has one. */
+  thumbnails?: Pick<WorkspaceThumbnails, "request" | "version" | "file"> | null;
 }
 
 const NO_STEPS: WorkspaceSteps = { steps: [], total: 0, durationMs: 0, streaming: false };
@@ -84,7 +93,9 @@ export class WorkspaceInsights {
     });
     this.#artifacts = new WorkspaceArtifactIndex({
       database: options.database,
-      channelMessages: (channelId) => options.channels.messages(channelId),
+      channels: options.channels,
+      path: options.artifactsPath ?? null,
+      thumbnails: options.thumbnails ?? null,
     });
   }
 
@@ -93,9 +104,11 @@ export class WorkspaceInsights {
     this.#artifacts.observe(event);
   }
 
-  dispose(): void {
+  /** Stops the fleet events and writes the artifact index file. */
+  readonly stop = Effect.fn("WorkspaceInsights.stop")(function* (this: WorkspaceInsights) {
     this.#fleet.dispose();
-  }
+    yield* this.#artifacts.stop();
+  });
 
   fleet(input: WorkspaceFleetInput, visible: (agentId: string) => boolean = () => true): WorkspaceFleet {
     return this.#fleet.read(input, visible);
@@ -177,5 +190,37 @@ export class WorkspaceInsights {
       channelIds,
       agentVisible: (agentId) => listed.has(agentId) && agentVisible(agentId),
     });
+  }
+
+  #access(viewer: ChannelViewer, agentVisible: (agentId: string) => boolean) {
+    const channels = this.#options.channels;
+    const listed = new Set(this.#options.agents().map((agent) => agent.id));
+    return {
+      channelIds: channels.ids().filter((channelId) => canSeeChannel(channels.get(channelId), viewer)),
+      agentVisible: (agentId: string) => listed.has(agentId) && agentVisible(agentId),
+    };
+  }
+
+  /**
+   * The thumbnail image of an artifact that the reader may see, when `version` is its current one.
+   * Null for any other artifact or version.
+   */
+  artifactThumbnail(
+    artifactId: string,
+    version: string,
+    viewer: ChannelViewer,
+    agentVisible: (agentId: string) => boolean = () => true,
+  ): { path: string; mimeType: WorkspaceThumbnailMimeType } | null {
+    const file = this.#options.thumbnails?.file(artifactId, version) ?? null;
+    if (!file || !this.#artifacts.visible(artifactId, this.#access(viewer, agentVisible))) return null;
+    return file;
+  }
+
+  /** The thumbnail image of an artifact for the user of this computer, who sees every artifact. */
+  localArtifactThumbnail(
+    artifactId: string,
+    version: string,
+  ): { path: string; mimeType: WorkspaceThumbnailMimeType } | null {
+    return this.#options.thumbnails?.file(artifactId, version) ?? null;
   }
 }

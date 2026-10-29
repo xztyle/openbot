@@ -402,6 +402,7 @@ export const messages = {
   "workspace.emoji.searchPlaceholder": "Buscar em todos os emoji",
   "workspace.emoji.noResults": "Nenhum emoji corresponde a “{query}”.",
   "workspace.emoji.results": "Resultados da busca",
+  "workspace.emoji.resultCount": { one: "{count} emoji", other: "{count} emojis" },
   "workspace.emoji.categories": "Categorias de emoji",
   "workspace.emoji.category.recent": "Usados com frequência",
   "workspace.emoji.category.people": "Carinhas e pessoas",

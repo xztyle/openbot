@@ -789,6 +789,11 @@ Network traffic can also occur when:
   page in a web view, so the server gets the network address of the phone. On iPhone and iPad the
   web view keeps cookies and storage in memory only; on Android it has no page storage and no
   cookies for the files that the page loads. The page cannot call the app or read its files;
+- the workspace lists an artifact that is a link to a web page, such as an app or a site that an
+  agent shared. The host loads the page in a hidden window with its own session in memory and no
+  OpenBot cookies, and keeps a small image of it for the artifact card in its user data folder, at
+  most once a day for each page. The server of the page gets the request and the network address of
+  the host. The host does not load pages on this computer or its local network;
 - a user opens an explicitly labeled external support or setup link;
 - a Slack workspace is connected. See [Slack connections](#slack-connections);
 - a Discord server is connected. See [Discord connections](#discord-connections);

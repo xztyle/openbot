@@ -300,6 +300,22 @@ export class ChannelStore {
     });
   }
 
+  /** The messages after `sequence`, oldest first, read through the sequence index. */
+  messagesAfter(channelId: string, sequence: number): ChannelMessage[] {
+    const rows = databaseRows(
+      this.database.connection
+        .prepare(
+          "SELECT message_json FROM projection_channel_messages WHERE channel_id = ? AND sequence > ? ORDER BY sequence, message_id",
+        )
+        .all(channelId, sequence),
+    );
+    return rows.map((row) => {
+      const value = JSON.parse(requiredStringColumn(row, "message_json"));
+      if (!isChannelMessage(value)) throw new Error("Invalid stored channel message.");
+      return value;
+    });
+  }
+
   /** One message by id, read through the primary key rather than the whole history. */
   message(channelId: string, messageId: string): ChannelMessage | null {
     const row = databaseRow(

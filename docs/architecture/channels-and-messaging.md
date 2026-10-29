@@ -447,11 +447,31 @@ Phase 7 of the plan adds three read-only views. `WorkspaceInsights` (`workspace-
   agent, place, creation time and the cost and time of its turn; the latest message gives
   `updatedAt`. A channel is read once, then kept current from its `channel-message` events. The
   agents' own conversations are read from `projection_thread_messages` in row order (the newest
-  20,000 rows first, then each new row; a row that still streams is read again). There are no
-  thumbnails yet.
+  20,000 rows first, then each new row; a row that still streams is read again). The index is kept
+  between runs in the host-only `<userData>/openbot-workspace-artifacts-v1.json` (version 1: per
+  channel the sightings, the last read `sequence` and the messages that streamed; for the threads
+  the sightings, the last row and the rows that streamed; the newest 5,000 messages). It is written
+  5 seconds after a change and when the service stops. After a restart a channel is caught up: its
+  stored messages are read again (a deleted one is dropped), then the messages after the stored
+  sequence (`ChannelStore.messagesAfter`); a sequence that went back reads the channel whole. The
+  thread scan goes on from the stored row, drops stored messages that no longer exist, and reads
+  the newest rows again after a vacuum. A bad file starts empty.
+- **Thumbnails** (`WorkspaceThumbnails` in `workspace-thumbnails.ts`, Electron adapter
+  `WorkspaceThumbnailCapturer` in `src/main/workspace-thumbnail-capture.ts`): a listed website, app
+  or dashboard link or hosted site is asked for an image of its page; the list never waits. One page
+  at a time is drawn in an offscreen window (1280x800, own in-memory session, no permission,
+  download, popup or preload, muted), saved 480 px wide as PNG (`nativeImage` writes no WebP) in
+  `<userData>/workspace-thumbnails/<hash>.png` with `thumbnails-v1.json`. An image is drawn again
+  after 24 hours; a failure waits 6 hours; a capture times out after 15 seconds. Only an http or
+  https page on the default port with no credentials and a public address (literal or every DNS
+  answer) is drawn, and each request of the page is checked the same way. The record carries
+  `thumbnailVersion`; the desktop shows `openbot-avatar://artifact/<id>?v=` for this computer and
+  `openbot-remote-avatar://<serverId>/artifact/<id>?v=` for a joined server, which main reads from
+  `GET /v1/workspace/artifacts/<id>/thumbnail?v=`. The web client reads the same route into a blob
+  URL.
 
-The Team API routes `/v1/workspace/fleet`, `/v1/workspace/steps` and `/v1/workspace/artifacts` and
-the event share `fork-host-v1` (`workspace-fleet-v1.ts`). A member sees an agent when the roles give
+The Team API routes `/v1/workspace/fleet`, `/v1/workspace/steps`, `/v1/workspace/artifacts` and
+`/v1/workspace/artifacts/<id>/thumbnail` and the event share `fork-host-v1` (`workspace-fleet-v1.ts`). A member sees an agent when the roles give
 it at least `view` and it is not hidden from the peer, and a channel as the channel routes decide.
 On the desktop the IPC endpoints `agent.workspaceFleet`, `agent.workspaceSteps` and
 `agent.workspaceArtifacts` answer for the host user, or forward to a joined server.
@@ -626,8 +646,8 @@ the token and does the platform work for the hosts:
   `discord_guild_routes`), the page `/discord/connect` and `openbot://discord-guild`. The sealed grant
   (`@openbot/contracts/discord-guild-grant`, on `host-grant.ts`) names the guild and holds no token.
   Another account gets `discord_guild_taken`.
-- **Events.** Signal keeps one Gateway connection (`@discordjs/ws`) with the guilds, guild messages
-  and direct messages intents, and no privileged intent. It passes on only a guild message that
+- **Events.** Signal keeps one Gateway connection (`@discordjs/ws`) with the guilds, guild messages,
+  guild message reactions and direct messages intents, and no privileged intent besides Message Content. It passes on only a guild message that
   mentions the bot, and a press of an OpenBot button, which it acknowledges to Discord at once. It
   normalizes each into `DiscordDelivery` (`@openbot/contracts/signal-protocol/discord-api`), takes the
   bot's own mention out, and sends a `discord-delivery` frame to the `ingress` socket that holds a
@@ -658,6 +678,15 @@ the token and does the platform work for the hosts:
   the answer modes apply. It follows `channel-message` events to post the messages of people and the
   answers of agents, through a webhook (`createWebhook` through Signal, then direct webhook calls)
   or as the bot. Secrets and the message id map are in `openbot-channel-bridge-v1.json`.
+  `discord-listen` also asks for `changes`, `reactions` and `threads`. A reaction with a unicode
+  emoji goes both ways: a person's Discord reaction is a workspace reaction of the member
+  `discord-<user id>`; a workspace reaction on a bridged message is a reaction of the bot on its
+  Discord posts (custom emoji are skipped). A Discord thread maps to the workspace thread of its root:
+  a thread that starts from a bridged message has the id of that message, and a thread that starts
+  without one makes its first message the root. Its messages are thread replies; the workspace
+  replies of a root with a Discord thread go into that thread. A workspace post that someone deletes
+  in Discord stays in the workspace: the bridge drops its ids, so a later edit or deletion does not
+  call Discord again.
 - **Conversations.** A conversation is a reply chain, keyed by its first message. Every OpenBot post
   replies to that message, so a reply to an OpenBot post names the conversation through the replied
   post's own reference. A direct message has no guild, so Signal answers it once with a fixed line.

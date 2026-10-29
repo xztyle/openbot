@@ -67,8 +67,8 @@ a person replies to and of the conversation history. Turn on **Message Content I
 Developer Portal. When Discord refuses the intent (close code 4014), Signal logs one line and connects
 without it. `DISCORD_MESSAGE_CONTENT=false` stops Signal asking for it.
 
-Signal keeps the bot's Gateway connection with the intents `Guilds`, `GuildMessages` and
-`DirectMessages`, plus `MessageContent` unless `DISCORD_MESSAGE_CONTENT` is `false`. Without the
+Signal keeps the bot's Gateway connection with the intents `Guilds`, `GuildMessages`,
+`GuildMessageReactions` and `DirectMessages`, plus `MessageContent` unless `DISCORD_MESSAGE_CONTENT` is `false`. Without the
 Message Content intent, Discord gives the bot the text of a message only when the message mentions
 the bot. With it, Discord sends the text of every message in the channels the bot can see; Signal
 still passes on only the messages that mention the bot. From the Gateway, Signal reads:

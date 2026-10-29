@@ -398,6 +398,7 @@ export const messages = defineMessages("workspace", {
   "workspace.emoji.searchPlaceholder": "Search all emoji",
   "workspace.emoji.noResults": "No emoji match “{query}”.",
   "workspace.emoji.results": "Search results",
+  "workspace.emoji.resultCount": { one: "{count} emoji", other: "{count} emoji" },
   "workspace.emoji.categories": "Emoji categories",
   "workspace.emoji.category.recent": "Frequently used",
   "workspace.emoji.category.people": "Smileys & people",

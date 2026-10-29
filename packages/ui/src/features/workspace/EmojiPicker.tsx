@@ -1,10 +1,11 @@
 import type { AppTextKey } from "@openbot/i18n";
 import type { ComponentProps, JSX } from "@solidjs/web";
-import { createMemo, createSignal, createUniqueId, For, flush, onSettled, Repeat, Show } from "solid-js";
+import { createMemo, createSignal, createUniqueId, For, flush, onSettled, Show } from "solid-js";
 import { Button, buttonVariants, IconButton } from "../../button";
 import { Popover } from "../../complex";
 import { Input } from "../../form";
 import { Clock3, Search } from "../../icons";
+import { OptionGrid, OptionGridOption } from "../../option-grid";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import {
@@ -17,7 +18,7 @@ import {
   withSkinTone,
 } from "./emoji-data";
 
-/** The cells in one grid row. The stylesheet uses the same count. */
+/** The options in one grid row. The stylesheet uses the same count. */
 const COLUMNS = 9;
 /** Three rows of recent emoji, as Slack shows. */
 const RECENT_LIMIT = COLUMNS * 3;
@@ -64,17 +65,14 @@ interface PickerSection<Id extends SectionId = SectionId> {
   readonly id: Id;
   readonly icon?: string | undefined;
   readonly entries: readonly EmojiEntry[];
-  readonly rows: readonly (readonly PickerCell[])[];
+  readonly cells: readonly PickerCell[];
+  /** The rows that the cells take in the grid. */
+  readonly rowCount: number;
 }
 
 function pickerSection<Id extends SectionId>(id: Id, entries: readonly EmojiEntry[], icon?: string): PickerSection<Id> {
-  const rows: PickerCell[][] = [];
-  entries.forEach((entry, index) => {
-    const cell = { entry, index, key: `${id}:${index}` };
-    if (index % COLUMNS === 0) rows.push([cell]);
-    else rows[rows.length - 1]?.push(cell);
-  });
-  return { id, icon, entries, rows };
+  const cells = entries.map((entry, index) => ({ entry, index, key: `${id}:${index}` }));
+  return { id, icon, entries, cells, rowCount: Math.ceil(entries.length / COLUMNS) };
 }
 
 // The category sections never change, so they are built once, when a picker first opens.
@@ -179,7 +177,7 @@ export function EmojiPicker(props: EmojiPickerProps): JSX.Element {
     const key = active();
     const nav = navSections();
     const inView = key !== undefined && nav.some((section) => key.startsWith(`${section.id}:`));
-    return inView ? key : nav[0]?.rows[0]?.[0]?.key;
+    return inView ? key : nav[0]?.cells[0]?.key;
   });
   const shown = (entry: EmojiEntry) => withSkinTone(entry, tone());
 
@@ -294,6 +292,16 @@ export function EmojiPicker(props: EmojiPickerProps): JSX.Element {
       searchField?.focus();
       return;
     }
+    if (event.key === "Home" || event.key === "End") {
+      // The first or the last emoji of the section; with Ctrl or Cmd, of the whole picker.
+      event.preventDefault();
+      const nav = navSections();
+      const whole = event.ctrlKey || event.metaKey;
+      const section = whole ? (event.key === "Home" ? 0 : nav.length - 1) : hit.position.section;
+      const length = nav[section]?.entries.length ?? 0;
+      if (length > 0) focusCell({ section, index: event.key === "Home" ? 0 : length - 1 });
+      return;
+    }
     if (!event.key.startsWith("Arrow")) return;
     event.preventDefault();
     const next = nextPosition(navSections(), hit.position, event.key);
@@ -317,11 +325,10 @@ export function EmojiPicker(props: EmojiPickerProps): JSX.Element {
     if (hit) setPreview({ entry: hit.entry, emoji: hit.cell.textContent ?? hit.entry.e });
   };
 
-  // A table of focusable cells with one tab stop. A cell is a light element rather than a kit button,
-  // and the table handles click, keys and focus for all of its cells. Biome rejects both a `grid` role on
-  // a div and on a table, so the cells keep the table semantics.
+  // A listbox per section, with one tab stop over all of them. An option is a plain button with the
+  // cell style rather than a kit button, and the grid handles click, keys and focus for all of its options.
   const grid = (section: PickerSection, label: { labelledBy?: string; label?: string }) => (
-    <table
+    <OptionGrid
       class="ws-emoji-grid"
       aria-labelledby={label.labelledBy}
       aria-label={label.label}
@@ -338,33 +345,30 @@ export function EmojiPicker(props: EmojiPickerProps): JSX.Element {
       }}
       onPointerOver={(event) => showPreview(event.target)}
     >
-      <colgroup>
-        <Repeat count={COLUMNS}>{() => <col />}</Repeat>
-      </colgroup>
-      <tbody>
-        <For each={section.rows}>
-          {(row) => (
-            <tr>
-              <For each={row}>
-                {(cell) => (
-                  <td
-                    class="ws-emoji-cell"
-                    data-emoji-cell=""
-                    data-section={section.id}
-                    data-index={cell.index}
-                    tabindex={tabStop() === cell.key ? 0 : -1}
-                    aria-label={cell.entry.n}
-                  >
-                    {cell.entry.s ? shown(cell.entry) : cell.entry.e}
-                  </td>
-                )}
-              </For>
-            </tr>
-          )}
-        </For>
-      </tbody>
-    </table>
+      <For each={section.cells}>
+        {(cell) => (
+          <OptionGridOption
+            class="ws-emoji-cell"
+            data-emoji-cell=""
+            data-section={section.id}
+            data-index={cell.index}
+            active={tabStop() === cell.key}
+            aria-label={cell.entry.n}
+          >
+            {cell.entry.s ? shown(cell.entry) : cell.entry.e}
+          </OptionGridOption>
+        )}
+      </For>
+    </OptionGrid>
   );
+
+  /** What a screen reader hears after the query changes. */
+  const resultStatus = () => {
+    const count = results().entries.length;
+    return count > 0
+      ? t("workspace.emoji.resultCount", { count })
+      : t("workspace.emoji.noResults", { query: query().trim() });
+  };
 
   return (
     <div class={cx("ws-emoji-picker", props.class)}>
@@ -385,6 +389,9 @@ export function EmojiPicker(props: EmojiPickerProps): JSX.Element {
           onKeyDown={onSearchKeyDown}
         />
       </div>
+      <p class="sr-only" aria-live="polite">
+        <Show when={searching()}>{resultStatus()}</Show>
+      </p>
       <div class="ws-emoji-tabs" role="toolbar" aria-label={t("workspace.emoji.categories")}>
         <For each={sections()}>
           {(section) => (
@@ -424,7 +431,7 @@ export function EmojiPicker(props: EmojiPickerProps): JSX.Element {
                   fallback={
                     <SectionPlaceholder
                       section={section.id}
-                      rows={section.rows.length}
+                      rows={section.rowCount}
                       observe={observe}
                       unobserve={unobserve}
                     />

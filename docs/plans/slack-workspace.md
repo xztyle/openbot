@@ -183,17 +183,23 @@ All seven phases are done on `main` and deployed on the live server, including t
 
 ### Known limits
 
-- Discord reactions and Discord threads (thread channels) are not mirrored. A workspace thread
-  reply goes to Discord as a reply to its root, and a Discord reply to a bridged message goes into
-  its workspace thread.
-- A workspace post that someone deletes in Discord stays in the workspace; only the messages that
-  the bridge brought in from Discord follow a Discord deletion.
-- The webhook posts and the Discord pictures need the Signal update with the bridge changes.
-- Artifact cards have no thumbnails: a card without one shows a drawing of its kind.
-- The artifact index is in memory on the host. It is built again after a restart and is not stored.
-- A person shows as typing only while their composer has the keyboard focus.
-- The emoji picker grid uses table semantics; a screen reader reads rows and cells, not a listbox.
-- The sidebar order and the mutes are saved on each computer, not for the account.
+Closed on `wip/ws-limits`: Discord reactions and threads, a workspace post deleted in Discord,
+artifact thumbnails, the stored artifact index, typing without the focus, the emoji listbox, and
+the sidebar order and mutes for the account.
+
+- The webhook posts, the Discord pictures, the reactions and the threads need the Signal update
+  with the bridge changes. An older Signal ignores `reactions` and `threads` in `discord-listen`.
+- Only reactions with a unicode emoji are mirrored. Custom Discord emoji, super reactions, and a
+  moderator's "remove all reactions" or "remove this emoji" in Discord are not.
+- A Discord person's reaction shows as the member `discord-<user id>`, the author id of their
+  bridged messages.
+- A workspace post that someone deletes in Discord stays in the workspace (by design); the bridge
+  forgets its Discord ids, so a later edit or deletion does not call Discord.
+- Artifact thumbnails are PNG: Electron's `nativeImage` has no WebP encoder. The address check
+  resolves the name before Chromium does, so a DNS answer that changes in between (rebinding) is not
+  caught; every request of the page goes through the check again.
+- A change of the sidebar order or the mutes on another computer shows at the next load or
+  reconnect: the host sends no event for it.
 - With coordinator routing, the answer modes, the gate and the mention chains between agents do not
   apply; only an agent that a person mentions answers directly.
 - A message link opens only on a server that this computer joined, in a channel the reader can see.

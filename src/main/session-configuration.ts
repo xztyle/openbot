@@ -151,6 +151,20 @@ export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: 
   session.defaultSession.protocol.handle("openbot-avatar", async (request) => {
     try {
       const url = new URL(request.url);
+      // `openbot-avatar://artifact/<artifactId>?v=<version>`: the image of a workspace artifact's page.
+      if (url.hostname === "artifact") {
+        const artifactId = decodeURIComponent(url.pathname.split("/").filter(Boolean)[0] ?? "");
+        const version = url.searchParams.get("v");
+        const thumbnail = artifactId && version ? agents.workspace.localArtifactThumbnail(artifactId, version) : null;
+        if (!thumbnail) return new Response("Not found", { status: 404 });
+        return await runCauseEffect(
+          fileResponse(thumbnail.path, {
+            "Content-Type": thumbnail.mimeType,
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+          }),
+        );
+      }
       if (url.hostname !== "agent") return new Response("Not found", { status: 404 });
       const agentId = decodeURIComponent(url.pathname.split("/").filter(Boolean)[0] ?? "");
       const avatar = agentId ? agents.resolveAvatar(agentId) : null;
@@ -172,9 +186,24 @@ export function configureAttachmentProtocol({ mailbox, agents, remoteServers }: 
     try {
       const url = new URL(request.url);
       const serverId = decodeURIComponent(url.hostname);
-      const agentId = decodeURIComponent(url.pathname.split("/").filter(Boolean)[0] ?? "");
-      if (!serverId || !agentId) return new Response("Not found", { status: 404 });
+      const segments = url.pathname.split("/").filter(Boolean);
       const version = url.searchParams.get("v");
+      // `openbot-remote-avatar://<serverId>/artifact/<artifactId>?v=<version>`: two segments, so it
+      // never names an agent.
+      if (segments.length === 2 && segments[0] === "artifact") {
+        const artifactId = decodeURIComponent(segments[1] ?? "");
+        if (!serverId || !artifactId || !version) return new Response("Not found", { status: 404 });
+        const thumbnail = await runCauseEffect(remoteServers.downloadArtifactThumbnail(artifactId, serverId, version));
+        return new Response(Buffer.from(thumbnail.bytes), {
+          headers: {
+            "Content-Type": thumbnail.mimeType,
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      }
+      const agentId = decodeURIComponent(segments[0] ?? "");
+      if (!serverId || !agentId) return new Response("Not found", { status: 404 });
       if (!version) return new Response("Not found", { status: 404 });
       const avatar = await runCauseEffect(remoteServers.downloadAgentAvatar(agentId, serverId, version));
       return new Response(Buffer.from(avatar.bytes), {

@@ -22,6 +22,12 @@
 // - The event `workspace-fleet-changed` (`{ revision }`), at most once a second while agents work.
 // - Later: the wait reason `usage-limit` (a provider usage limit holds the agent's work) with
 //   `resetsAt?` (epoch milliseconds) on a waiting status.
+// - Later: `thumbnailVersion?` (1 to 64 of `A-Z a-z 0-9 - _`) on an artifact: the host drew the page
+//   at `url`. `GET /v1/workspace/artifacts/<id>/thumbnail?v=<thumbnailVersion>` answers that image
+//   (`image/webp` or `image/png`, at most 2 MB) when the member can see the artifact, and 404 for
+//   another version, an artifact they cannot see or one with no image. `thumbnailUrl` keeps its
+//   meaning: an http or https image address. A fork host built before it sends no
+//   `thumbnailVersion`, so a client never asks it for an image.
 //
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed. The bounds are written out: this file must not move with an IPC limit.
@@ -49,6 +55,27 @@ export const WORKSPACE_FLEET_ROUTES = {
   artifacts: "/v1/workspace/artifacts",
 } as const;
 
+/** The largest thumbnail image that a host sends and a client accepts. */
+export const WORKSPACE_ARTIFACT_THUMBNAIL_BYTES = 2 * 1024 * 1024;
+export const WORKSPACE_ARTIFACT_THUMBNAIL_TYPES = ["image/webp", "image/png"] as const;
+const THUMBNAIL_ROUTE = /^\/v1\/workspace\/artifacts\/([^/]{1,300})\/thumbnail$/u;
+
+/** The image route of one artifact. The client adds `?v=<thumbnailVersion>`. */
+export function workspaceArtifactThumbnailRoute(artifactId: string): string {
+  return `/v1/workspace/artifacts/${encodeURIComponent(artifactId)}/thumbnail`;
+}
+
+/** The artifact id of an image route path, or null for any other path. */
+export function workspaceArtifactThumbnailId(pathname: string): string | null {
+  const match = THUMBNAIL_ROUTE.exec(pathname);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 type Decoder = (value: unknown) => TeamProtocolV2Json;
 
 const cost: Decoder = (value) => {
@@ -70,6 +97,11 @@ const httpUrl: Decoder = (value) => {
 const artifactId: Decoder = (value) => {
   const text = string(300)(value);
   if (!text) throw new Error("Invalid workspace artifact.");
+  return text;
+};
+const thumbnailVersion: Decoder = (value) => {
+  const text = string(64)(value);
+  if (typeof text !== "string" || !/^[A-Za-z0-9_-]+$/u.test(text)) throw new Error("Invalid workspace thumbnail.");
   return text;
 };
 const stepKind = oneOf("search", "browse", "tool", "shell", "file", "skill", "think");
@@ -132,6 +164,7 @@ const artifact = fields(
     description: string(300),
     url: httpUrl,
     thumbnailUrl: httpUrl,
+    thumbnailVersion,
     file: fields({ id: identifier, name: string(255), size: count, mimeType: string(255) }),
     agentId: identifier,
     channelId: identifier,

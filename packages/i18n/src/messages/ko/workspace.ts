@@ -395,6 +395,7 @@ export const messages = {
   "workspace.emoji.searchPlaceholder": "모든 이모지 검색",
   "workspace.emoji.noResults": "“{query}”에 맞는 이모지가 없어요.",
   "workspace.emoji.results": "검색 결과",
+  "workspace.emoji.resultCount": { other: "이모지 {count}개" },
   "workspace.emoji.categories": "이모지 카테고리",
   "workspace.emoji.category.recent": "자주 사용",
   "workspace.emoji.category.people": "스마일리 및 사람",

@@ -62,6 +62,12 @@ import { FOCUS_USE_CAPABILITY, FOCUS_USE_ROUTES } from "@openbot/contracts/team-
 import type { HostRestartEvent } from "@openbot/contracts/team-protocol/host-update-v1";
 import { INSTANCE_TRANSFER_ROUTES } from "@openbot/contracts/team-protocol/instance-transfer-v1";
 import { decodeTeamProtocolV1CurrentHttpResponse } from "@openbot/contracts/team-protocol/v1-adapter";
+import {
+  WORKSPACE_ARTIFACT_THUMBNAIL_BYTES,
+  WORKSPACE_ARTIFACT_THUMBNAIL_TYPES,
+  WORKSPACE_FLEET_CAPABILITY,
+  workspaceArtifactThumbnailRoute,
+} from "@openbot/contracts/team-protocol/workspace-fleet-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { createFocusUsePing } from "@openbot/team-client/focus-use";
 import { followHostKeyHandovers } from "@openbot/team-client/host-key-handover";
@@ -1820,6 +1826,35 @@ export class RemoteServerManager extends EventEmitter<RemoteServerEvents> {
         bytes: new Uint8Array(yield* remoteCall(() => response.arrayBuffer())),
         mimeType: response.headers.get("content-type") ?? "application/octet-stream",
       };
+    },
+    (operation) => this.#owned(operation),
+  ).bind(this);
+
+  /** The image that the host drew of a workspace artifact's page (`workspace-fleet-v1`, `fork-host-v1`). */
+  readonly downloadArtifactThumbnail = Effect.fn("RemoteManager.downloadArtifactThumbnail")(
+    function* (
+      this: RemoteServerManager,
+      artifactId: string,
+      serverId: string,
+      version: string,
+    ): Effect.fn.Return<{ bytes: Uint8Array; mimeType: string }, RemoteWorkflowError, RemoteRequest> {
+      const server = yield* remoteDecode(() => this.#store.require(serverId));
+      if (!this.supportsCapability(server.id, WORKSPACE_FLEET_CAPABILITY))
+        return yield* new RemoteWorkflowError({ cause: new Error("The host has no workspace thumbnails.") });
+      const url = new URL(workspaceArtifactThumbnailRoute(artifactId), server.apiUrl);
+      url.searchParams.set("v", version);
+      const response = yield* this.#client.fetch(server, url);
+      if (!response.ok)
+        return yield* new RemoteWorkflowError({ cause: new Error(`The host returned ${response.status}.`) });
+      const mimeType = response.headers.get("content-type")?.split(";", 1)[0]?.trim() ?? "";
+      const bytes = new Uint8Array(yield* remoteCall(() => response.arrayBuffer()));
+      if (
+        !WORKSPACE_ARTIFACT_THUMBNAIL_TYPES.some((type) => type === mimeType) ||
+        bytes.byteLength === 0 ||
+        bytes.byteLength > WORKSPACE_ARTIFACT_THUMBNAIL_BYTES
+      )
+        return yield* new RemoteWorkflowError({ cause: new Error("The workspace thumbnail response is invalid.") });
+      return { bytes, mimeType };
     },
     (operation) => this.#owned(operation),
   ).bind(this);

@@ -386,6 +386,7 @@ const fakeAgents: TeamApiAgents = {
     fleet: unused("workspace.fleet"),
     steps: unused("workspace.steps"),
     artifacts: unused("workspace.artifacts"),
+    artifactThumbnail: unused("workspace.artifactThumbnail"),
   },
 };
 

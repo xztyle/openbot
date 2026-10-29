@@ -91,6 +91,7 @@ export const messages = {
   "error.team.agentMemoryLimitUnsupported": "To połączenie nie obsługuje limitu wspomnień agentów.",
   "error.team.promptCacheTtlUnsupported": "To połączenie nie obsługuje czasu pamięci podręcznej promptów.",
   "error.team.workspaceUnsupported": "To połączenie nie obsługuje kanałów obszaru roboczego.",
+  "error.team.workspaceThumbnailNotFound": "Obraz tego artefaktu jest niedostępny.",
   "error.team.attachmentNameRequired": "Wymagana jest bezpieczna nazwa załącznika.",
   "error.team.attachmentNotFound": "Nie znaleziono załącznika.",
   "error.team.sharedFileTooLarge": "Udostępniony plik przekracza limit 100 MB.",

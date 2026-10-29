@@ -24,12 +24,15 @@ import type {
   WorkspaceActivityInput,
   WorkspaceActivityItem,
   WorkspaceDmAgents,
+  WorkspaceSidebar,
+  WorkspaceSidebarPrefs,
   WorkspaceThreadActivity,
 } from "@openbot/contracts/ipc";
 import {
   CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX,
   channelMentions,
   channelRoutingConversationEventItemType,
+  decodeWorkspaceSidebarPrefs,
   WORKSPACE_ACTIVITY_PREVIEW_LIMIT,
   WORKSPACE_ACTIVITY_THREAD_LIMIT,
   workspaceActivityLimit,
@@ -68,6 +71,7 @@ export function createMockChannels(
   const memories = new Map<string, ChannelMemory[]>();
   const routines = new Map<string, ChannelRoutine[]>();
   const routineRuns = new Map<string, ChannelRoutineRun[]>();
+  const sidebars = new Map<string, WorkspaceSidebarPrefs>();
   const changed = (channelId: string, revision: number) => emit({ type: "channels-changed", channelId, revision });
   const messageChanged = (channel: Channel, message: ChannelMessage) =>
     emit({
@@ -472,6 +476,17 @@ export function createMockChannels(
     // The preview has no other person, so nobody else types; its own signal changes nothing.
     channelTyping: async (_input: ChannelTypingInput): Promise<void> => undefined,
     workspaceDmAgents: async (): Promise<WorkspaceDmAgents> => ({ agentIds: [...agentIds()] }),
+    // The preview's own person has one sidebar per server, as a host keeps one per member. None
+    // until the first save, so the window uploads what this computer had.
+    workspaceSidebar: async (serverId?: string): Promise<WorkspaceSidebar> => {
+      const saved = sidebars.get(serverId ?? "local");
+      return { sidebar: saved ? structuredClone(saved) : null };
+    },
+    setWorkspaceSidebar: async (prefs: WorkspaceSidebarPrefs, serverId?: string): Promise<WorkspaceSidebar> => {
+      const saved = decodeWorkspaceSidebarPrefs(prefs);
+      sidebars.set(serverId ?? "local", saved);
+      return { sidebar: structuredClone(saved) };
+    },
     workspaceActivity: async (input: WorkspaceActivityInput): Promise<WorkspaceActivity> => {
       const items: WorkspaceActivityItem[] = [];
       const threads: WorkspaceThreadActivity[] = [];

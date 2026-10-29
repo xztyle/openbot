@@ -134,6 +134,7 @@ import { StorageHygieneService } from "../backend/storage-hygiene";
 import { processStorageHygieneWorker } from "../backend/storage-hygiene-worker";
 import { StorageUsageScanner, StorageUsageService } from "../backend/storage-usage";
 import { TeamChatStore } from "../backend/team-chat-store";
+import { WorkspaceThumbnails } from "../backend/workspace-thumbnails";
 import { AGENT_ACCESS_FILE, AgentAccessStore } from "./agent-access-store";
 import { AgentCreationLimitPreferenceStore } from "./agent-creation-limit-preference-store";
 import {
@@ -345,6 +346,8 @@ import { WebPushService } from "./web-push";
 import { WebPushStore } from "./web-push-store";
 import { WebhookRelay } from "./webhook-relay";
 import { createWorkspaceSettingsStore, type WorkspaceSettingsStore } from "./workspace-settings-store";
+import { WorkspaceSidebarStore } from "./workspace-sidebar-store";
+import { WorkspaceThumbnailCapturer } from "./workspace-thumbnail-capture";
 
 const logger = createOpenBotLogger("application-services");
 const SETUP_FILE = "openbot-setup-v2.json";
@@ -373,9 +376,14 @@ const AGENT_CREATION_LIMIT_PREFERENCE_FILE = "openbot-agent-creation-limit-v1.js
 const SERVER_TIMEZONE_PREFERENCE_FILE = "openbot-server-timezone-v1.json";
 const PROMPT_CACHE_TTL_PREFERENCE_FILE = "openbot-prompt-cache-ttl-v1.json";
 const WORKSPACE_SETTINGS_FILE = "openbot-workspace-v1.json";
+/** The sidebar order and mutes of each member. Only this host reads it. */
+const WORKSPACE_SIDEBAR_FILE = "openbot-workspace-sidebar-v1.json";
 const STORAGE_HYGIENE_SETTINGS_FILE = "openbot-storage-hygiene-v1.json";
 // Webhook secrets and bridged message ids of the Discord channel bridges. Host only, never sent.
 const CHANNEL_BRIDGE_FILE = "openbot-channel-bridge-v1.json";
+// The artifact index of the workspace and the images of its pages. Host only, never sent whole.
+const WORKSPACE_ARTIFACTS_FILE = "openbot-workspace-artifacts-v1.json";
+const WORKSPACE_THUMBNAILS_DIRECTORY = "workspace-thumbnails";
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
 const EXTERNAL_LINK_PREFERENCE_FILE = "openbot-external-link-preference-v1.json";
 const REMOTE_NETWORK_ROUTE_PREFERENCE_FILE = "openbot-remote-network-route-v1.json";
@@ -484,6 +492,8 @@ const TEARDOWN_ORDER = {
   storageUsage: 109,
   // Before the agent service: a scan or a cleanup reads the agent list.
   storageHygiene: 109.5,
+  // Before the agent service: no capture starts for a list while the service stops.
+  workspaceThumbnails: 109.7,
   service: 110,
   mcpOAuth: 111,
   analytics: 112,
@@ -594,6 +604,7 @@ export interface ApplicationServices {
   serverTimezone: ServerTimezonePreferenceStore;
   promptCacheTtl: PromptCacheTtlPreferenceStore;
   workspaceSettings: WorkspaceSettingsStore;
+  workspaceSidebar: WorkspaceSidebarStore;
   agentCreationLimit: AgentCreationLimitPreferenceStore;
   remoteSessionReuse: RemoteSessionReusePreferenceStore;
   externalLinkPreference: ExternalLinkPreferenceStore;
@@ -1196,6 +1207,8 @@ export async function createApplicationServices({
   await runCauseEffect(promptCacheTtl.load());
   const workspaceSettings = createWorkspaceSettingsStore(join(app.getPath("userData"), WORKSPACE_SETTINGS_FILE));
   await runCauseEffect(workspaceSettings.load());
+  const workspaceSidebar = new WorkspaceSidebarStore(join(app.getPath("userData"), WORKSPACE_SIDEBAR_FILE));
+  await runCauseEffect(workspaceSidebar.load());
   const remoteSessionReuse = createRemoteSessionReusePreferenceStore(
     join(app.getPath("userData"), REMOTE_SESSION_REUSE_PREFERENCE_FILE),
   );
@@ -1673,10 +1686,22 @@ export async function createApplicationServices({
   await Effect.runPromise(agentApiKeys.registerSaved());
   // The schedule triggers of workflows share the routine timer; built after the workflows below.
   let workflowTriggers: WorkflowTriggers | null = null;
+  // Draws the pages of the workspace artifacts, one at a time, in a window that is never shown.
+  const workspaceThumbnailCapturer = new WorkspaceThumbnailCapturer();
+  const workspaceThumbnails = new WorkspaceThumbnails({
+    directory: join(app.getPath("userData"), WORKSPACE_THUMBNAILS_DIRECTORY),
+    capture: workspaceThumbnailCapturer.capture,
+  });
+  teardown.push(TEARDOWN_ORDER.workspaceThumbnails, "the workspace thumbnails", async () => {
+    await Effect.runPromise(workspaceThumbnails.stop());
+    workspaceThumbnailCapturer.close();
+  });
   const service: AgentService = new AgentService({
     store,
     mailbox,
     browser,
+    workspaceArtifactsPath: join(app.getPath("userData"), WORKSPACE_ARTIFACTS_FILE),
+    workspaceThumbnails,
     visualPreview: new ChatVisualPreviewer(),
     prepareMcpTest: (config) =>
       prepareToolRuntimeForTest(config, {
@@ -2374,6 +2399,8 @@ export async function createApplicationServices({
     events,
     skills,
     sidebarLayout,
+    // workspace-sidebar-v1 under `fork-host-v1`. Each member reads and writes only their own value.
+    workspaceSidebar,
     mailbox,
     browser,
     chat: teamChatStore,
@@ -3177,6 +3204,7 @@ export async function createApplicationServices({
     serverTimezone,
     promptCacheTtl,
     workspaceSettings,
+    workspaceSidebar,
     agentCreationLimit,
     remoteSessionReuse,
     externalLinkPreference,

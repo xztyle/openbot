@@ -1864,6 +1864,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
             title: "cakemaker-web",
             description: "The bakery shop, with ordering and pickup times.",
             url: "https://cakemaker-web.delynith.com",
+            // The host drew this page. The preview cannot read the host's image, so the card keeps its drawing.
+            thumbnailVersion: "0f3a9c2b7d1e4a65",
             ...(first ? { agentId: first.id } : {}),
             ...(channel ? { channelId: channel.id } : {}),
             createdAt: now - 7_200_000,

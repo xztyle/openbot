@@ -211,6 +211,8 @@ const signalClientMessageSchema = z.discriminatedUnion("type", [
     guildId: discordSnowflakeSchema,
     channelIds: z.array(discordSnowflakeSchema).max(DISCORD_LISTEN_CHANNELS_LIMIT),
     changes: z.literal(true).optional(),
+    reactions: z.literal(true).optional(),
+    threads: z.literal(true).optional(),
   }),
   z.object({
     type: z.literal("queued-delivery-ack"),

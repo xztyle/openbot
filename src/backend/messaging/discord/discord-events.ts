@@ -4,8 +4,15 @@ import {
   type DiscordInboundInteraction,
   type DiscordInboundMessage,
   type DiscordInboundMessageChange,
+  type DiscordInboundReaction,
 } from "@openbot/contracts/signal-protocol/discord-api";
-import type { InboundAction, InboundFile, InboundMessage, InboundMessageChange } from "../messaging-types";
+import type {
+  InboundAction,
+  InboundFile,
+  InboundMessage,
+  InboundMessageChange,
+  InboundReaction,
+} from "../messaging-types";
 
 /** The actions of the buttons OpenBot posts, as the middle part of their custom id. */
 const DISCORD_BUTTON_ACTIONS = ["accept", "decline", "stop"] as const;
@@ -42,6 +49,7 @@ export function discordInboundMessage(message: DiscordInboundMessage): InboundMe
     authorName: message.authorName,
     ...(message.authorAvatarUrl ? { authorAvatarUrl: message.authorAvatarUrl } : {}),
     replyToMessageId: reply?.messageId ?? null,
+    ...(message.threadParentId ? { threadParentId: message.threadParentId } : {}),
     // A reply to a person's message starts a new conversation, so it has no earlier messages: the
     // replied-to message is its context.
     replyTo: quote
@@ -68,10 +76,12 @@ export function discordInboundChange(
   channelId: string,
   messageId: string,
   change: DiscordInboundMessageChange | null,
+  threadParentId?: string,
 ): InboundMessageChange {
   return {
     platformChannelId: channelId,
     platformMessageId: messageId,
+    ...(threadParentId ? { threadParentId } : {}),
     edit: change
       ? {
           text: discordPlainText(change.content),
@@ -79,6 +89,19 @@ export function discordInboundChange(
           files: change.attachments.map(inboundFile),
         }
       : null,
+  };
+}
+
+/** A person's reaction in a channel that the host listens to. */
+export function discordInboundReaction(reaction: DiscordInboundReaction): InboundReaction {
+  return {
+    platformChannelId: reaction.channelId,
+    platformMessageId: reaction.messageId,
+    userId: reaction.userId,
+    ...(reaction.userName ? { userName: reaction.userName } : {}),
+    emoji: reaction.emoji,
+    on: reaction.on,
+    ...(reaction.threadParentId ? { threadParentId: reaction.threadParentId } : {}),
   };
 }
 

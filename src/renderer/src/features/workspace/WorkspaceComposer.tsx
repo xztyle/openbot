@@ -70,8 +70,10 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const setValue = (text: string) => {
     if (editing()) setEditText(text);
     else {
+      // Only an edit counts as typing, not the editor saying again what the draft holds.
+      const edited = text !== ws.draft(key());
       ws.setDraft(key(), text);
-      ws.noteTyping(props.channelId, props.threadRootId ?? null, text.trim().length > 0);
+      if (edited) ws.noteTyping(props.channelId, props.threadRootId ?? null, text.trim().length > 0);
     }
   };
   // Leaving the conversation or the thread ends the typing there.

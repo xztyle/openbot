@@ -555,6 +555,7 @@ import type {
   WorkspaceSteps,
   WorkspaceStepsInput,
 } from "./ipc-workspace-fleet";
+import type { WorkspaceSidebar, WorkspaceSidebarPrefs } from "./ipc-workspace-sidebar";
 import type { LicenseCheckoutRequest, LicenseRenewalRequest, LicenseState, LicenseUsersRequest } from "./license";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
 
@@ -1357,6 +1358,11 @@ export const IPC_ENDPOINTS = {
     workspaceFleet: scopedRequest<WorkspaceFleetInput, WorkspaceFleet>()("agent:workspace:fleet"),
     workspaceSteps: scopedRequest<WorkspaceStepsInput, WorkspaceSteps>()("agent:workspace:steps"),
     workspaceArtifacts: scopedRequest<WorkspaceArtifactsInput, WorkspaceArtifacts>()("agent:workspace:artifacts"),
+    // The reader's own sidebar order and mutes, kept on the host per member. A joined server answers
+    // through workspace-sidebar-v1 (`fork-host-v1`); one without it fails, and the window keeps the
+    // value on this computer.
+    workspaceSidebar: scopedQuery<WorkspaceSidebar>()("agent:workspace:sidebar"),
+    setWorkspaceSidebar: scopedRequest<WorkspaceSidebarPrefs, WorkspaceSidebar>()("agent:workspace:sidebar:set"),
     getSidebarLayout: scopedQuery<SidebarLayoutSnapshot>()("agent:get-sidebar-layout"),
     mutateSidebarLayout: scopedRequest<SidebarLayoutAction, SidebarLayoutSnapshot>()("agent:mutate-sidebar-layout"),
     // A joined server answers through `agent-hidden-v1`. A server without it has no hidden agents.

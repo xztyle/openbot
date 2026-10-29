@@ -32,6 +32,7 @@ import { usePresence } from "../team/team-context";
 import { WorkspaceProvider } from "./workspace-context";
 import { createWorkspaceController, desktopMessageLink } from "./workspace-controller";
 import { setWorkspaceClassic, workspaceClassic } from "./workspace-mode";
+import { desktopArtifactThumbnailUrl } from "./workspace-sources";
 
 /**
  * Whether the desktop shows the workspace: the server has channels and the workspace routes, the
@@ -209,6 +210,10 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     },
     workspaceSettings: () => window.openbot.hostAdmin.getWorkspaceSettings(activeServerId()),
     hostId: () => activeServerId() ?? null,
+    artifactThumbnailUrl: (record) => {
+      const server = activeServer();
+      return server ? desktopArtifactThumbnailUrl(server.id, server.kind === "local", record) : undefined;
+    },
     // The desktop has no page address; its link opens in this app.
     messageLink: (channelId, messageId, threadRootId) => {
       const serverId = activeServerId();

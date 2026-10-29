@@ -174,12 +174,18 @@ export type SignalClientMessage =
   // `changes: true` also asks for the edits and deletions of the people's messages in those
   // channels (`message-update`, `message-delete` deliveries; a bulk deletion is one `message-delete`
   // for each message). An older Signal ignores the key.
+  // `reactions: true` also asks for the reactions that people add and remove on the messages in
+  // those channels (`reaction` deliveries). `threads: true` also asks for the messages, the changes
+  // and the reactions in the threads of those channels, with `threadParentId`. An older Signal
+  // ignores both keys.
   | {
       type: "discord-listen";
       version: SignalProtocolVersion;
       guildId: string;
       channelIds: string[];
       changes?: true;
+      reactions?: true;
+      threads?: true;
     }
   | {
       type: "slack-delivery-result";

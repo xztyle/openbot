@@ -257,7 +257,7 @@ import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "./securit
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
 import type { VaultItems } from "./vault-items";
 import type { WorkflowRunEnd } from "./workflows/workflows";
-import { WorkspaceInsights } from "./workspace-insights";
+import { WorkspaceInsights, type WorkspaceInsightsOptions } from "./workspace-insights";
 import {
   listWorkspaceDirectory,
   type ResolvedSharedFile,
@@ -412,6 +412,10 @@ export interface AgentServiceOptions {
    * while memory is low, and only a fixed number of turns run at the same time.
    */
   hostMemory?: HostMemory | null;
+  /** The host-only file of the workspace artifact index. Omitted or null, it is kept in memory only. */
+  workspaceArtifactsPath?: string | null;
+  /** The thumbnails of the workspace artifacts that are web pages. Omitted or null, none is drawn. */
+  workspaceThumbnails?: WorkspaceInsightsOptions["thumbnails"];
 }
 
 /** How long a user send's `clientMessageId` answers a retry. A retry follows a lost reply, not a day. */
@@ -1469,6 +1473,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       agentTaskTitle: (taskId) => this.#tasks.title(taskId),
       usageLimit: (agentId) => this.#usageLimits.limitFor(agentId),
       emit: (event) => this.#emit(event),
+      artifactsPath: options.workspaceArtifactsPath ?? null,
+      thumbnails: options.workspaceThumbnails ?? null,
     });
     this.#removal = new AgentRemoval({
       store,
@@ -4074,7 +4080,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#routineTimer.dispose();
     yield* this.#memoryHold.dispose();
     this.#hostedSites.dispose();
-    this.workspace.dispose();
+    yield* this.workspace.stop();
     this.#compaction.dispose();
     this.#deltas.dispose();
     this.#conversation.dispose();

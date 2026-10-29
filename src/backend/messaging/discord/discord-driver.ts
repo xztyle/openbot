@@ -190,6 +190,20 @@ class DiscordAdapter implements MessagingAdapter {
     );
   });
 
+  /** OpenBot's own reaction with a unicode emoji, for the channel bridge. */
+  readonly reactEmoji = Effect.fnUntraced(function* (
+    this: DiscordAdapter,
+    target: MessageTarget,
+    messageId: string,
+    emoji: string,
+    on: boolean,
+  ): Effect.fn.Return<void, MessagingAdapterError> {
+    yield* this.#call(
+      { op: "react", guildId: this.#guildId, channelId: target.platformChannelId, messageId, emoji, on },
+      ignoreAnswer,
+    );
+  });
+
   readonly postAnswer = Effect.fnUntraced(function* (
     this: DiscordAdapter,
     target: MessageTarget,

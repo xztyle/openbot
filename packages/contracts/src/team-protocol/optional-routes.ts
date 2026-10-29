@@ -74,6 +74,7 @@ import { WEBHOOK_TESTS_CODECS } from "./webhook-tests-v1";
 import { WORKFLOWS_CODECS } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CODECS } from "./workspace-directory-v1";
 import { WORKSPACE_FLEET_CODECS } from "./workspace-fleet-v1";
+import { WORKSPACE_SIDEBAR_CODECS } from "./workspace-sidebar-v1";
 import { WORKSPACE_CODECS } from "./workspace-v1";
 
 export type { OptionalRouteCodec } from "./admin-wire";
@@ -151,6 +152,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...WORKFLOWS_CODECS,
   ...WORKSPACE_CODECS,
   ...WORKSPACE_FLEET_CODECS,
+  ...WORKSPACE_SIDEBAR_CODECS,
   ...STORAGE_HYGIENE_CODECS,
 ]);
 

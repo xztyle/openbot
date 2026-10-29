@@ -104,6 +104,10 @@ export class DiscordGateway extends Context.Service<DiscordGateway, { readonly a
           config.applicationId,
           (guildId, channelId) => signal.discordListens(guildId, channelId),
           (guildId, channelId) => signal.discordListensChanges(guildId, channelId),
+          {
+            reactions: (guildId, channelId) => signal.discordListensReactions(guildId, channelId),
+            threads: (guildId, parentChannelId) => signal.discordListensThreads(guildId, parentChannelId),
+          },
         );
         const run = yield* FiberSet.makeRuntime<never>();
         // The guilds whose unlink is on its way, so that hosts that connect meanwhile do not repeat it.
@@ -162,11 +166,13 @@ export class DiscordGateway extends Context.Service<DiscordGateway, { readonly a
                   auth: false,
                   body: { type: 6 },
                 })
-              : transport.request({
-                  method: "POST",
-                  route: `/channels/${action.channelId}/messages`,
-                  body: { content: DISCORD_DIRECT_MESSAGE_REPLY, allowed_mentions: { parse: [] } },
-                });
+              : action.type === "join-thread"
+                ? transport.request({ method: "PUT", route: `/channels/${action.channelId}/thread-members/@me` })
+                : transport.request({
+                    method: "POST",
+                    route: `/channels/${action.channelId}/messages`,
+                    body: { content: DISCORD_DIRECT_MESSAGE_REPLY, allowed_mentions: { parse: [] } },
+                  });
           run(
             call.pipe(
               Effect.catch((error) =>

@@ -34,7 +34,8 @@ Make one application for production and one for development at
 The install asks for the permissions in `DISCORD_BOT_PERMISSIONS`
 (`packages/contracts/src/discord-app.ts`): view channels, send messages, send messages in threads,
 embed links, attach files, read message history and add reactions. Signal asks for the intents in
-`DISCORD_GATEWAY_INTENTS`: guilds, guild messages and direct messages, and adds
+`DISCORD_GATEWAY_INTENTS`: guilds, guild messages, guild message reactions and direct messages
+(none is privileged), and adds
 `DISCORD_MESSAGE_CONTENT_INTENT` unless `DISCORD_MESSAGE_CONTENT` is `false`.
 
 ## Secrets

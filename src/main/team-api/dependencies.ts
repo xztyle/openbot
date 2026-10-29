@@ -77,6 +77,7 @@ import type { RemoteScreenGateway } from "../remote-screen-gateway";
 import type { SignInRelayHost } from "../sign-in-relay-host";
 import type { TeamStore } from "../team-store";
 import type { WebPushService } from "../web-push";
+import type { WorkspaceSidebarStore } from "../workspace-sidebar-store";
 
 type TeamApiAgentMethods = Pick<
   AgentService,
@@ -158,7 +159,7 @@ type TeamApiAgentMethods = Pick<
 
 export type TeamApiAgents = TeamApiAgentMethods & {
   /** workspace-fleet-v1 (`fork-host-v1`): the fleet, step trail and artifact views. */
-  workspace: Pick<WorkspaceInsights, "fleet" | "steps" | "artifacts">;
+  workspace: Pick<WorkspaceInsights, "fleet" | "steps" | "artifacts" | "artifactThumbnail">;
   on: (event: "event", listener: (event: AgentEvent) => void) => void;
   off: (event: "event", listener: (event: AgentEvent) => void) => void;
 };
@@ -394,6 +395,8 @@ interface TeamApiProviders {
 }
 
 export type TeamApiMailbox = Pick<MailboxStore, "resolveAttachment">;
+/** `workspace-sidebar-v1` (`fork-host-v1`): the sidebar order and mutes of each member. */
+export type TeamApiWorkspaceSidebar = Pick<WorkspaceSidebarStore, "get" | "set">;
 export type TeamApiSidebarLayout = Pick<
   SidebarLayoutStore,
   "getSnapshot" | "mutate" | "removeAgent" | "placeDuplicateAfter" | "withProfileAssignment"
@@ -509,6 +512,7 @@ export interface TeamApiOptions {
   agentsReady?: (() => Effect.Effect<void>) | undefined;
   skills?: Pick<SkillMarketplaceService, "listInstalledForChatTags"> | undefined;
   sidebarLayout?: TeamApiSidebarLayout | undefined;
+  workspaceSidebar?: TeamApiWorkspaceSidebar | undefined;
   mailbox: TeamApiMailbox;
   browser: TeamApiBrowser;
   browserView?: TeamApiBrowserView | undefined;

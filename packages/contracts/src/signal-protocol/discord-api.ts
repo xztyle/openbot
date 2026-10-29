@@ -95,6 +95,12 @@ export interface DiscordInboundMessage {
    * the host named in `discord-listen`. Absent for a mention, and from an older Signal.
    */
   mentioned?: false;
+  /**
+   * For a message in a thread (then `channelId` is the thread): the channel of the thread. Signal
+   * sets it only for a host that asked for `threads` in `discord-listen`, in a thread of a listened
+   * channel. A thread that starts from a message has the id of that message.
+   */
+  threadParentId?: string;
 }
 
 /** A press of a button on an OpenBot message. Signal has already acknowledged it to Discord. */
@@ -118,12 +124,36 @@ export interface DiscordInboundMessageChange {
   /** Discord markdown after the edit. Mentions stay as `<@id>`. */
   content: string;
   attachments: DiscordInboundAttachment[];
+  /** The channel of the thread `channelId`, as on `DiscordInboundMessage`. */
+  threadParentId?: string;
 }
+
+/**
+ * A person added or removed a reaction on a message of a channel that the host named in
+ * `discord-listen` with `reactions`. Only a unicode emoji: Signal leaves out custom emoji, and the
+ * reactions of bots, OpenBot's own too.
+ */
+export interface DiscordInboundReaction {
+  channelId: string;
+  messageId: string;
+  userId: string;
+  /** The display name, when Discord gave it (an addition). */
+  userName?: string;
+  emoji: string;
+  on: boolean;
+  /** The channel of the thread `channelId`, as on `DiscordInboundMessage`. */
+  threadParentId?: string;
+}
+
+/** The longest emoji text of a reaction that Signal passes on. */
+export const DISCORD_REACTION_EMOJI_LIMIT = 64;
 
 export type DiscordDelivery =
   | { kind: "message"; message: DiscordInboundMessage }
   | { kind: "message-update"; change: DiscordInboundMessageChange }
-  | { kind: "message-delete"; channelId: string; messageId: string }
+  | { kind: "message-delete"; channelId: string; messageId: string; threadParentId?: string }
+  // Only to a host that asked for `reactions` in `discord-listen`: an older host never receives one.
+  | { kind: "reaction"; reaction: DiscordInboundReaction }
   | { kind: "interaction"; interaction: DiscordInboundInteraction }
   // OpenBot was removed from the guild. The host stops the connection; the user must connect again.
   | { kind: "removed" };
@@ -328,6 +358,28 @@ function inboundMessage(value: unknown): DiscordInboundMessage {
     sentAt: text(item.sentAt),
     ...(item.authorAvatarUrl === undefined ? {} : { authorAvatarUrl: cdnUrl(item.authorAvatarUrl) }),
     ...(mentioned(item.mentioned) ? {} : { mentioned: false as const }),
+    ...threadParent(item.threadParentId),
+  };
+}
+
+/** The optional channel of a thread. Absent from an older Signal, and outside a thread. */
+function threadParent(value: unknown): { threadParentId?: string } {
+  return value === undefined ? {} : { threadParentId: snowflake(value) };
+}
+
+function inboundReaction(value: unknown): DiscordInboundReaction {
+  const item = record(value);
+  if (!isBoolean(item.on)) invalid();
+  const emoji = text(item.emoji);
+  if (!emoji.trim() || emoji.length > DISCORD_REACTION_EMOJI_LIMIT) invalid();
+  return {
+    channelId: snowflake(item.channelId),
+    messageId: snowflake(item.messageId),
+    userId: snowflake(item.userId),
+    ...(item.userName === undefined ? {} : { userName: text(item.userName).slice(0, 120) }),
+    emoji,
+    on: item.on,
+    ...threadParent(item.threadParentId),
   };
 }
 
@@ -380,11 +432,19 @@ export function decodeDiscordDelivery(value: unknown): DiscordDelivery {
           channelId: snowflake(change.channelId),
           content: text(change.content),
           attachments: change.attachments.map(attachment),
+          ...threadParent(change.threadParentId),
         },
       };
     }
     case "message-delete":
-      return { kind: "message-delete", channelId: snowflake(item.channelId), messageId: snowflake(item.messageId) };
+      return {
+        kind: "message-delete",
+        channelId: snowflake(item.channelId),
+        messageId: snowflake(item.messageId),
+        ...threadParent(item.threadParentId),
+      };
+    case "reaction":
+      return { kind: "reaction", reaction: inboundReaction(item.reaction) };
     case "interaction":
       return { kind: "interaction", interaction: inboundInteraction(item.interaction) };
     case "removed":

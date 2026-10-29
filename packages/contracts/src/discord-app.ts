@@ -16,10 +16,11 @@ export const DISCORD_BOT_PERMISSIONS = (
 ).toString();
 
 /**
- * The Gateway intents Signal always asks for: guilds, guild messages and direct messages. Without a
- * privileged intent, Discord gives a bot the text of a message that mentions it, and of a direct message.
+ * The Gateway intents Signal always asks for: guilds, guild messages, guild message reactions (for
+ * the channel bridge) and direct messages. None of them is privileged. Without a privileged intent,
+ * Discord gives a bot the text of a message that mentions it, and of a direct message.
  */
-export const DISCORD_GATEWAY_INTENTS = (1 << 0) | (1 << 9) | (1 << 12);
+export const DISCORD_GATEWAY_INTENTS = (1 << 0) | (1 << 9) | (1 << 10) | (1 << 12);
 
 /**
  * The privileged Message Content intent. Signal adds it unless `DISCORD_MESSAGE_CONTENT` is `false`, so

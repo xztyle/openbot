@@ -9,6 +9,7 @@ import {
   DISCORD_ATTACHMENTS_LIMIT,
   DISCORD_CUSTOM_ID_PREFIX,
   DISCORD_QUOTE_TEXT_LIMIT,
+  DISCORD_REACTION_EMOJI_LIMIT,
   DISCORD_ROLES_LIMIT,
   type DiscordDelivery,
   type DiscordInboundAttachment,
@@ -16,6 +17,7 @@ import {
   type DiscordInboundMessage,
   type DiscordInboundMessageChange,
   type DiscordInboundQuote,
+  type DiscordInboundReaction,
 } from "@openbot/contracts/signal-protocol/discord-api";
 import {
   GatewayDispatchEvents,
@@ -35,6 +37,8 @@ const MAXIMUM_DIRECT_REPLIES = 10_000;
 const ATTACHMENT_HOSTS = new Set(["cdn.discordapp.com", "media.discordapp.net"]);
 /** Discord deletes at most 100 messages in one bulk deletion. */
 const DISCORD_BULK_DELETE_LIMIT = 100;
+/** System messages about a thread: "started a thread" in the channel, and the first post of a thread. */
+const THREAD_SYSTEM_MESSAGE_TYPES = new Set([18, 21]);
 
 type DiscordAttachmentData = {
   id: string;
@@ -47,6 +51,8 @@ type DiscordAttachmentData = {
 /** The fields of a Gateway or REST message that Signal reads. */
 export interface DiscordMessageData {
   id: string;
+  /** Discord's message type. Absent in a test fixture: a plain message. */
+  type?: number;
   channel_id: string;
   guild_id?: string;
   content: string;
@@ -73,6 +79,9 @@ export type DiscordAction =
   // Acknowledge a button press at once, as a deferred update: Discord waits 3 seconds.
   | { type: "acknowledge"; interactionId: string; interactionToken: string }
   | { type: "direct-reply"; channelId: string }
+  // A new thread in a channel whose threads a host asked for: the bot joins it, so the Gateway sends
+  // its messages.
+  | { type: "join-thread"; channelId: string }
   // The Gateway listed every guild of the bot: the account service drops the links of the others.
   | { type: "reconcile" };
 
@@ -120,6 +129,7 @@ export function normalizeGuildMessage(
   listens: DiscordListens = () => false,
 ): DiscordInboundMessage | null {
   if (!message.guild_id || message.author.bot === true || message.webhook_id) return null;
+  if (message.type !== undefined && THREAD_SYSTEM_MESSAGE_TYPES.has(message.type)) return null;
   const mentioned = message.mentions.some((user) => user.id === botUserId);
   if (!mentioned && !listens(message.guild_id, message.channel_id)) return null;
   const reference = message.message_reference;
@@ -166,6 +176,42 @@ export function normalizeMessageUpdate(
     channelId: message.channel_id,
     content: message.content,
     attachments: attachmentsOf(message.attachments ?? []),
+  };
+}
+
+/** The fields of a Gateway reaction event that Signal reads. */
+export interface DiscordReactionData {
+  user_id: string;
+  channel_id: string;
+  message_id: string;
+  guild_id?: string;
+  member?: { nick?: string | null; user?: { username: string; global_name?: string | null; bot?: boolean } };
+  emoji: { id: string | null; name: string | null };
+  burst?: boolean;
+}
+
+/**
+ * The reaction of a person with a unicode emoji, or null: a bot reacted (OpenBot's own reactions
+ * too, so a mirrored reaction does not come back), the emoji is a custom one, or it is a super
+ * reaction. Discord names no member on a removal, so a removal has no name.
+ */
+export function normalizeReaction(
+  reaction: DiscordReactionData,
+  on: boolean,
+  botUserId: string | null,
+): DiscordInboundReaction | null {
+  if (!reaction.guild_id || !botUserId || reaction.user_id === botUserId) return null;
+  if (reaction.member?.user?.bot === true || reaction.burst === true) return null;
+  const emoji = reaction.emoji.name;
+  if (reaction.emoji.id !== null || !emoji || emoji.length > DISCORD_REACTION_EMOJI_LIMIT) return null;
+  const user = reaction.member?.user;
+  return {
+    channelId: reaction.channel_id,
+    messageId: reaction.message_id,
+    userId: reaction.user_id,
+    ...(user ? { userName: discordAuthorName({ author: user, member: reaction.member }) } : {}),
+    emoji,
+    on,
   };
 }
 
@@ -228,24 +274,47 @@ export class DiscordState {
   // The shards whose connection closed. Their guilds can be stale until the shard resumes, when the
   // Gateway sends the missed events, or until its next READY.
   readonly #closedShards = new Set<number>();
-  // Channel or thread ID to its guild and name.
-  readonly #channels = new Map<string, { guildId: string; name: string }>();
+  // Channel or thread ID to its guild and name, and for a thread its channel.
+  readonly #channels = new Map<string, { guildId: string; name: string; parentId?: string }>();
   readonly #interactions = new Map<string, StoredInteraction>();
   // User ID to the time of the last reply to a direct message from that user.
   readonly #directReplies = new Map<string, number>();
 
   readonly #listens: DiscordListens;
   readonly #listensChanges: DiscordListens;
+  readonly #listensReactions: DiscordListens;
+  readonly #listensThreads: DiscordListens;
 
   constructor(
     applicationId: string,
     listens: DiscordListens = () => false,
     // Whether the host of a guild asked for the edits and deletions in a listened channel.
     listensChanges: DiscordListens = () => false,
+    // Whether the host asked for the reactions in a listened channel, and for the threads of one.
+    more: { reactions?: DiscordListens; threads?: DiscordListens } = {},
   ) {
     this.#configuredApplicationId = applicationId;
     this.#listens = listens;
     this.#listensChanges = listensChanges;
+    this.#listensReactions = more.reactions ?? (() => false);
+    this.#listensThreads = more.threads ?? (() => false);
+  }
+
+  /**
+   * The channel of a thread whose host asked for the threads of that channel, or null: the channel
+   * is not a thread, Signal does not know its channel, or the host did not ask.
+   */
+  #threadParent(guildId: string, channelId: string): string | null {
+    const parentId = this.#channels.get(channelId)?.parentId;
+    return parentId && this.#listensThreads(guildId, parentId) ? parentId : null;
+  }
+
+  #rememberThread(thread: { id: string; parent_id?: string | null; name?: string | null }, guildId: string): void {
+    this.#channels.set(thread.id, {
+      guildId,
+      name: thread.name ?? "",
+      ...(thread.parent_id ? { parentId: thread.parent_id } : {}),
+    });
   }
 
   /** Whether the bot is in the guild, or null before the READY of every shard. */
@@ -322,9 +391,10 @@ export class DiscordState {
         this.#guilds.set(guild.id, guild.name);
         if (this.#shardCount !== null) this.#shardGuilds.get(this.#shardOf(guild.id))?.add(guild.id);
         if (payload.t === GatewayDispatchEvents.GuildCreate) {
-          for (const channel of [...(payload.d.channels ?? []), ...(payload.d.threads ?? [])]) {
+          for (const channel of payload.d.channels ?? []) {
             this.#channels.set(channel.id, { guildId: guild.id, name: channel.name ?? "" });
           }
+          for (const thread of payload.d.threads ?? []) this.#rememberThread(thread, guild.id);
         }
         return [];
       }
@@ -335,49 +405,106 @@ export class DiscordState {
         return [{ type: "deliver", guildId: payload.d.id, delivery: { kind: "removed" } }];
       }
       case GatewayDispatchEvents.ChannelCreate:
-      case GatewayDispatchEvents.ChannelUpdate:
-      case GatewayDispatchEvents.ThreadCreate:
-      case GatewayDispatchEvents.ThreadUpdate: {
+      case GatewayDispatchEvents.ChannelUpdate: {
         const channel = payload.d;
         if ("guild_id" in channel && channel.guild_id) {
           this.#channels.set(channel.id, { guildId: channel.guild_id, name: channel.name ?? "" });
         }
         return [];
       }
+      case GatewayDispatchEvents.ThreadCreate:
+      case GatewayDispatchEvents.ThreadUpdate: {
+        const thread = payload.d;
+        if (!thread.guild_id) return [];
+        this.#rememberThread(thread, thread.guild_id);
+        return payload.t === GatewayDispatchEvents.ThreadCreate &&
+          payload.d.newly_created === true &&
+          this.#threadParent(thread.guild_id, thread.id)
+          ? [{ type: "join-thread", channelId: thread.id }]
+          : [];
+      }
       case GatewayDispatchEvents.ChannelDelete:
       case GatewayDispatchEvents.ThreadDelete:
         this.#channels.delete(payload.d.id);
         return [];
       case GatewayDispatchEvents.ThreadListSync:
-        for (const thread of payload.d.threads) {
-          this.#channels.set(thread.id, { guildId: payload.d.guild_id, name: thread.name ?? "" });
-        }
+        for (const thread of payload.d.threads) this.#rememberThread(thread, payload.d.guild_id);
         return [];
       case GatewayDispatchEvents.MessageCreate:
         return this.#message(payload.d, now);
       case GatewayDispatchEvents.MessageUpdate: {
-        const change = normalizeMessageUpdate(payload.d, this.#listensChanges);
+        // In a thread, the changes of the thread's channel count.
+        const parent = payload.d.guild_id ? this.#threadParent(payload.d.guild_id, payload.d.channel_id) : null;
+        const change = normalizeMessageUpdate(payload.d, (guildId, channelId) =>
+          this.#listensChanges(guildId, parent ?? channelId),
+        );
         return change && payload.d.guild_id
-          ? [{ type: "deliver", guildId: payload.d.guild_id, delivery: { kind: "message-update", change } }]
+          ? [
+              {
+                type: "deliver",
+                guildId: payload.d.guild_id,
+                delivery: {
+                  kind: "message-update",
+                  change: { ...change, ...(parent ? { threadParentId: parent } : {}) },
+                },
+              },
+            ]
           : [];
       }
       case GatewayDispatchEvents.MessageDelete: {
         // Discord names no author for a deletion; the host mirrors only the messages it brought in.
         const { guild_id: guildId, channel_id: channelId, id: messageId } = payload.d;
-        return guildId && this.#listensChanges(guildId, channelId)
-          ? [{ type: "deliver", guildId, delivery: { kind: "message-delete", channelId, messageId } }]
+        const parent = guildId ? this.#threadParent(guildId, channelId) : null;
+        return guildId && this.#listensChanges(guildId, parent ?? channelId)
+          ? [
+              {
+                type: "deliver",
+                guildId,
+                delivery: {
+                  kind: "message-delete",
+                  channelId,
+                  messageId,
+                  ...(parent ? { threadParentId: parent } : {}),
+                },
+              },
+            ]
           : [];
       }
       case GatewayDispatchEvents.MessageDeleteBulk: {
         // A moderator or a bot deleted many messages at once. Each one is a `message-delete`, the
         // delivery that every host with `changes` already knows.
         const { guild_id: guildId, channel_id: channelId, ids } = payload.d;
-        if (!guildId || !this.#listensChanges(guildId, channelId)) return [];
+        const parent = guildId ? this.#threadParent(guildId, channelId) : null;
+        if (!guildId || !this.#listensChanges(guildId, parent ?? channelId)) return [];
         return [...new Set(ids)].slice(0, DISCORD_BULK_DELETE_LIMIT).map((messageId) => ({
           type: "deliver" as const,
           guildId,
-          delivery: { kind: "message-delete" as const, channelId, messageId },
+          delivery: {
+            kind: "message-delete" as const,
+            channelId,
+            messageId,
+            ...(parent ? { threadParentId: parent } : {}),
+          },
         }));
+      }
+      case GatewayDispatchEvents.MessageReactionAdd:
+      case GatewayDispatchEvents.MessageReactionRemove: {
+        const reaction = normalizeReaction(
+          payload.d,
+          payload.t === GatewayDispatchEvents.MessageReactionAdd,
+          this.#botUserId,
+        );
+        const guildId = payload.d.guild_id;
+        if (!reaction || !guildId) return [];
+        const parent = this.#threadParent(guildId, reaction.channelId);
+        if (!this.#listensReactions(guildId, parent ?? reaction.channelId)) return [];
+        return [
+          {
+            type: "deliver",
+            guildId,
+            delivery: { kind: "reaction", reaction: { ...reaction, ...(parent ? { threadParentId: parent } : {}) } },
+          },
+        ];
       }
       case GatewayDispatchEvents.InteractionCreate:
         return this.#interaction(payload.d, now);
@@ -389,9 +516,17 @@ export class DiscordState {
   #message(message: DiscordMessageData, now: number): DiscordAction[] {
     if (!message.guild_id) return this.#directMessage(message, now);
     if (!this.#botUserId) return [];
-    const normalized = normalizeGuildMessage(message, this.#botUserId, this.#listens);
+    // A message in a thread of a listened channel, for a host that asked for the threads.
+    const parent = this.#threadParent(message.guild_id, message.channel_id);
+    const normalized = normalizeGuildMessage(message, this.#botUserId, parent ? () => true : this.#listens);
     return normalized
-      ? [{ type: "deliver", guildId: message.guild_id, delivery: { kind: "message", message: normalized } }]
+      ? [
+          {
+            type: "deliver",
+            guildId: message.guild_id,
+            delivery: { kind: "message", message: { ...normalized, ...(parent ? { threadParentId: parent } : {}) } },
+          },
+        ]
       : [];
   }
 

@@ -188,4 +188,21 @@ export class WorkspaceQueries {
       }),
     };
   }
+
+  /** The thread messages of `threadId` among `messageIds` that still exist, read through the primary key. */
+  existingThreadMessages(threadId: string, messageIds: readonly string[]): Set<string> {
+    const found = new Set<string>();
+    for (let start = 0; start < messageIds.length; start += 500) {
+      const batch = messageIds.slice(start, start + 500);
+      for (const row of databaseRows(
+        this.#core.connection
+          .prepare(
+            `SELECT message_id FROM projection_thread_messages WHERE thread_id = ? AND message_id IN (${placeholders(batch)})`,
+          )
+          .all(threadId, ...batch),
+      ))
+        found.add(requiredStringColumn(row, "message_id"));
+    }
+    return found;
+  }
 }

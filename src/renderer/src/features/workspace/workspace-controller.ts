@@ -9,6 +9,7 @@ import {
   type AgentApproval,
   type AgentEvent,
   type BrowserTakeoverRequest,
+  boundedWorkspaceSidebar,
   CHANNEL_TYPING_INTERVAL_MS,
   type ChannelCommand,
   type ChannelMember,
@@ -22,6 +23,7 @@ import {
   type WorkspaceActivity,
   type WorkspaceChannelCommand,
   type WorkspaceSettings,
+  type WorkspaceSidebarPrefs,
   type WorkspaceSteps,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
@@ -51,6 +53,7 @@ import {
   type WorkspacePerson,
 } from "./workspace-model";
 import {
+  type ArtifactThumbnailUrl,
   createHostArtifactsSource,
   createHostFleetSource,
   createLocalFleetSource,
@@ -122,7 +125,10 @@ interface WorkspaceState {
   creatingGeneral: boolean;
   /** The reader opened an agent's chat in this session: a new workspace then shows it, not the welcome. */
   agentChosen: boolean;
-  /** The reader's own sidebar: the order they dragged the rows into and the muted conversations. */
+  /**
+   * The reader's own sidebar: the order they dragged the rows into and the muted conversations. The
+   * host keeps it per member; this computer keeps a copy for a host that cannot.
+   */
   sidebar: SidebarPrefs;
   /** The text that filters the sidebar rows. */
   sidebarFilter: string;
@@ -130,10 +136,7 @@ interface WorkspaceState {
   emoji: { recent: string[]; skinTone: number };
 }
 
-interface SidebarPrefs {
-  order: { channels: string[]; direct: string[] };
-  muted: string[];
-}
+type SidebarPrefs = WorkspaceSidebarPrefs;
 
 /** What the workspace needs from the app around it. Each shell builds it from its own contexts. */
 export interface WorkspaceEnvironment {
@@ -174,6 +177,8 @@ export interface WorkspaceEnvironment {
   fleet?: WorkspaceFleetSource | undefined;
   /** A host artifacts index. Absent, the artifacts come from the messages this client read. */
   artifacts?: WorkspaceArtifactsSource | undefined;
+  /** The address of the host's image of an artifact page. Absent, the artifact cards keep their drawing. */
+  artifactThumbnailUrl?: ArtifactThumbnailUrl | undefined;
   /** The storage hygiene calls of the host, for an owner or admin. Absent, there is no Storage view. */
   storageHygiene?: (() => StorageHygieneCalls | undefined) | undefined;
   /** Opens Server settings > Storage, where the cleanup rules are. */
@@ -218,7 +223,7 @@ function idList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").slice(0, 500) : [];
 }
 
-/** The reader's sidebar order and mutes on this computer, per reader and server. */
+/** The copy of the reader's sidebar order and mutes on this computer, per reader and server. */
 function readSidebar(key: string): SidebarPrefs {
   try {
     const value = JSON.parse(window.localStorage.getItem(`${SIDEBAR_KEY}:${key}`) ?? "{}");
@@ -557,14 +562,110 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       : allDirectRows();
   });
 
-  function saveSidebar() {
+  // ---------------------------------------------------------------- sidebar on the host
+
+  /**
+   * Where the sidebar lives for this reader and server. `pending`: the host value is not read yet.
+   * `host`: the host keeps it per member, so it follows the account. `local`: the host has no
+   * sidebar route (an older host), so only this computer keeps it.
+   */
+  let sidebarHome: "pending" | "host" | "local" = "pending";
+  /** A change that the host has not taken. A read then sends it instead of showing the host value. */
+  let sidebarUnsent = false;
+  /** Changes with the reader or the server. A read or write of the previous one does nothing. */
+  let sidebarKeyRun = 0;
+  let sidebarReadRun = 0;
+  /** The `sidebarKeyRun` of the write on its way, or -1. */
+  let sidebarSendingRun = -1;
+
+  function writeLocalSidebar() {
     try {
       window.localStorage.setItem(`${SIDEBAR_KEY}:${env.storageKey()}`, JSON.stringify(state.sidebar));
     } catch {
       // The order and the mutes stay for this session.
     }
   }
-  /** The reader dragged or moved a row: the group keeps this order on this computer. */
+  /** Sends the newest value. A change made while one write is on its way goes in one more write. */
+  async function sendSidebar() {
+    const write = channels.port().agent.setWorkspaceSidebar;
+    const run = sidebarKeyRun;
+    if (!write || sidebarHome !== "host" || sidebarSendingRun === run) return;
+    sidebarSendingRun = run;
+    try {
+      while (sidebarUnsent && run === sidebarKeyRun) {
+        sidebarUnsent = false;
+        const { order, muted } = state.sidebar;
+        try {
+          await write(
+            boundedWorkspaceSidebar({
+              order: { channels: [...order.channels], direct: [...order.direct] },
+              muted: [...muted],
+            }),
+          );
+        } catch {
+          // This computer keeps the change; the next read of the host sends it again.
+          if (run === sidebarKeyRun) sidebarUnsent = true;
+          return;
+        }
+      }
+    } finally {
+      if (sidebarSendingRun === run) sidebarSendingRun = -1;
+    }
+  }
+  /**
+   * Reads the host value. It replaces the copy of this computer, unless the reader changed the
+   * sidebar meanwhile. A host with no value gets the copy of this computer, once.
+   */
+  async function loadHostSidebar() {
+    const read = channels.port().agent.workspaceSidebar;
+    if (!read) {
+      sidebarHome = "local";
+      return;
+    }
+    const keyRun = sidebarKeyRun;
+    const readRun = ++sidebarReadRun;
+    let hosted: SidebarPrefs | null;
+    try {
+      hosted = (await read()).sidebar;
+    } catch {
+      // A host without the route, or one that cannot answer now: this computer keeps the sidebar.
+      if (keyRun === sidebarKeyRun && readRun === sidebarReadRun) sidebarHome = "local";
+      return;
+    }
+    if (keyRun !== sidebarKeyRun || readRun !== sidebarReadRun) return;
+    sidebarHome = "host";
+    if (hosted && !sidebarUnsent && sidebarSendingRun !== keyRun) {
+      const value = hosted;
+      setState((draft) => {
+        draft.sidebar = value;
+      });
+      writeLocalSidebar();
+      return;
+    }
+    const { order, muted } = untrack(() => state.sidebar);
+    if (!hosted && !order.channels.length && !order.direct.length && !muted.length) return;
+    sidebarUnsent = true;
+    void sendSidebar();
+  }
+  createEffect(
+    () => ({ ready: channels.supported() && env.connectionReady(), key: env.storageKey() }),
+    (current, previous) => {
+      if (previous && current.key !== previous.key) {
+        sidebarKeyRun += 1;
+        sidebarUnsent = false;
+        sidebarHome = "pending";
+      }
+      // A reconnect reads again: another computer of the reader may have changed it.
+      if (current.ready && (!previous?.ready || current.key !== previous.key)) void loadHostSidebar();
+    },
+  );
+
+  function saveSidebar() {
+    writeLocalSidebar();
+    sidebarUnsent = true;
+    void sendSidebar();
+  }
+  /** The reader dragged or moved a row: the group keeps this order for the reader's account. */
   function reorderSidebar(group: "channels" | "direct", ids: string[]) {
     setState((draft) => {
       draft.sidebar.order[group] = ids;
@@ -581,7 +682,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     ids.splice(to, 0, id);
     reorderSidebar(group, ids);
   }
-  /** A muted conversation stays in the list but shows no unread mark. Only on this computer. */
+  /** A muted conversation stays in the list but shows no unread mark. It follows the reader's account. */
   function setMuted(id: string, muted: boolean) {
     setState((draft) => {
       const others = draft.sidebar.muted.filter((item) => item !== id);
@@ -647,6 +748,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     channels: summaries,
     onHostEvent: env.onHostEvent,
     fallback: artifactsFallback.source,
+    thumbnailUrl: env.artifactThumbnailUrl,
   });
   const artifacts: WorkspaceArtifactsSource = env.artifacts ?? hostArtifacts.source;
   const fleet: WorkspaceFleetSource =
@@ -892,10 +994,18 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
 
   // ---------------------------------------------------------------- typing
 
-  /** The typing signals this client sent, per conversation or thread. */
+  /**
+   * The typing signals this client sends, per conversation or thread. `refresh` repeats the signal
+   * while the entry lives, so the reader stays typing on the host also when the focus left the box.
+   */
   const ownTyping = new Map<
     string,
-    { channelId: string; threadRootId: string | null; sentAt: number; idle: ReturnType<typeof setTimeout> }
+    {
+      channelId: string;
+      threadRootId: string | null;
+      refresh: ReturnType<typeof setInterval>;
+      idle: ReturnType<typeof setTimeout>;
+    }
   >();
   /** A person who stops typing for this long stops showing as typing, before the host's timeout. */
   const TYPING_IDLE_MS = 5_000;
@@ -907,8 +1017,9 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   /**
-   * The reader typed in a composer (`typing`), or emptied it, sent it or left it. The host hears it
-   * at most every `CHANNEL_TYPING_INTERVAL_MS` while the reader types, and once when they stop.
+   * The reader edited a draft that has text (`typing`), or emptied it, sent it or left it. While the
+   * last edit is less than `TYPING_IDLE_MS` old, the host hears `typing` every
+   * `CHANNEL_TYPING_INTERVAL_MS`, wherever the focus is; it hears once when the reader stops.
    */
   function noteTyping(channelId: string, threadRootId: string | null, typing: boolean, sent = false) {
     const key = draftKey(channelId, threadRootId);
@@ -916,24 +1027,26 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (!typing) {
       if (!current) return;
       clearTimeout(current.idle);
+      clearInterval(current.refresh);
       ownTyping.delete(key);
       // A sent message ends the typing on the host by itself.
       if (!sent) sendTyping(channelId, threadRootId, false);
       return;
     }
-    const now = Date.now();
-    if (current) clearTimeout(current.idle);
     const idle = setTimeout(() => noteTyping(channelId, threadRootId, false), TYPING_IDLE_MS);
-    if (current && now - current.sentAt < CHANNEL_TYPING_INTERVAL_MS) {
+    if (current) {
+      clearTimeout(current.idle);
       current.idle = idle;
       return;
     }
-    ownTyping.set(key, { channelId, threadRootId, sentAt: now, idle });
+    const refresh = setInterval(() => sendTyping(channelId, threadRootId, true), CHANNEL_TYPING_INTERVAL_MS);
+    ownTyping.set(key, { channelId, threadRootId, refresh, idle });
     sendTyping(channelId, threadRootId, true);
   }
   onCleanup(() => {
     for (const entry of ownTyping.values()) {
       clearTimeout(entry.idle);
+      clearInterval(entry.refresh);
       sendTyping(entry.channelId, entry.threadRootId, false);
     }
     ownTyping.clear();

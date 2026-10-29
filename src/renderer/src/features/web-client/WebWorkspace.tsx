@@ -236,6 +236,7 @@ import { WebMobileNavigation, type WebMobilePane } from "./WebMobileNavigation";
 import { createWebAccountCalls } from "./web-account";
 import { createWebAccountUsage } from "./web-account-usage";
 import { createWebAgentImportCalls } from "./web-agent-import";
+import { createWebArtifactThumbnails } from "./web-artifact-thumbnails";
 import { openWebLink } from "./web-attachments";
 import { createWebBillingCalls, createWebLicenseCalls } from "./web-billing";
 import { webBitwardenConnectorPort } from "./web-bitwarden-connector";
@@ -1798,8 +1799,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     () => connectorTarget()?.id,
     () => webMessaging.api,
   );
+  const artifactThumbnails = createWebArtifactThumbnails(workspace.runtime, () => workspace.state.host?.hostId ?? "");
+  onCleanup(() => artifactThumbnails.dispose());
   const ws = createWorkspaceController({
     channels,
+    artifactThumbnailUrl: artifactThumbnails.url,
     agents: workspace.profiles,
     hiddenAgentIds: () => new Set(workspace.state.userHiddenAgents.map((agent) => agent.agentId)),
     agentStates: sidebarAgentStates,

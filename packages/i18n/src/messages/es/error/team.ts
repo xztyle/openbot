@@ -92,6 +92,7 @@ export const messages = {
   "error.team.agentMemoryLimitUnsupported": "Esta conexión no admite el límite de recuerdos de los agentes.",
   "error.team.promptCacheTtlUnsupported": "Esta conexión no admite la duración de la caché de prompts.",
   "error.team.workspaceUnsupported": "Esta conexión no admite los canales del espacio de trabajo.",
+  "error.team.workspaceThumbnailNotFound": "La imagen de este artefacto no está disponible.",
   "error.team.attachmentNameRequired": "Se requiere un nombre seguro para el archivo adjunto.",
   "error.team.attachmentNotFound": "No se encontró el archivo adjunto.",
   "error.team.sharedFileTooLarge": "El archivo compartido supera el límite de 100 MB.",

@@ -100,6 +100,7 @@ import {
   WORKSPACE_DIRECTORY_CAPABILITY,
   WORKSPACE_DIRECTORY_ROUTES,
 } from "@openbot/contracts/team-protocol/workspace-directory-v1";
+import { workspaceArtifactThumbnailRoute } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import { bytesToBase64 } from "@openbot/team-client/base64";
@@ -249,6 +250,8 @@ export interface WebWorkspaceRuntime {
   cancelUpload(): Promise<void>;
   discard(attachmentId: string): Promise<void>;
   download(attachmentId: string): Promise<WebFile>;
+  /** The image that the host drew of a workspace artifact's page, at its `thumbnailVersion`. */
+  artifactThumbnail?(artifactId: string, version: string): Promise<WebFile>;
   /**
    * A link that the browser downloads from the host's own download address, so a file of any size
    * streams to disk and not through the connection. `null` when the host has none.
@@ -1046,6 +1049,10 @@ export function createWebWorkspaceRuntime(
     },
     async download(id) {
       return decodeWebFile(await request("GET", TEAM_API_ROUTES.attachment(id)));
+    },
+    async artifactThumbnail(artifactId, version) {
+      const query = new URLSearchParams({ v: version });
+      return decodeWebFile(await request("GET", `${workspaceArtifactThumbnailRoute(artifactId)}?${query}`));
     },
     async fileLink(source) {
       try {

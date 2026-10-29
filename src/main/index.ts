@@ -549,6 +549,7 @@ function registerIpcHandlers({
   serverTimezone,
   promptCacheTtl,
   workspaceSettings,
+  workspaceSidebar,
   remoteSessionReuse,
   externalLinkPreference,
   externalLinks,
@@ -794,6 +795,7 @@ function registerIpcHandlers({
     ...agentIpcHandlers({
       service,
       sidebarLayout,
+      workspaceSidebar,
       host,
       remoteServers,
       skills,

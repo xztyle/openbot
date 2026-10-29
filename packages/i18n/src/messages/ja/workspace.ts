@@ -399,6 +399,7 @@ export const messages = {
   "workspace.emoji.searchPlaceholder": "すべての絵文字を検索",
   "workspace.emoji.noResults": "「{query}」に一致する絵文字はありません。",
   "workspace.emoji.results": "検索結果",
+  "workspace.emoji.resultCount": { other: "絵文字 {count} 件" },
   "workspace.emoji.categories": "絵文字のカテゴリ",
   "workspace.emoji.category.recent": "よく使う絵文字",
   "workspace.emoji.category.people": "スマイリーと人",

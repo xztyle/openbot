@@ -398,6 +398,7 @@ export const messages = {
   "workspace.emoji.searchPlaceholder": "Tüm emojilerde ara",
   "workspace.emoji.noResults": "“{query}” ile eşleşen emoji yok.",
   "workspace.emoji.results": "Arama sonuçları",
+  "workspace.emoji.resultCount": { one: "{count} emoji", other: "{count} emoji" },
   "workspace.emoji.categories": "Emoji kategorileri",
   "workspace.emoji.category.recent": "Sık kullanılanlar",
   "workspace.emoji.category.people": "İfadeler ve insanlar",

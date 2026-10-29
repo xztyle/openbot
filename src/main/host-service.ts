@@ -122,6 +122,7 @@ interface HostServiceOptions {
   agentsReady: NonNullable<ForwardedApiOptions["agentsReady"]>;
   skills: NonNullable<ForwardedApiOptions["skills"]>;
   sidebarLayout: NonNullable<ForwardedApiOptions["sidebarLayout"]>;
+  workspaceSidebar?: ForwardedApiOptions["workspaceSidebar"];
   mailbox: ForwardedApiOptions["mailbox"];
   browser: ForwardedApiOptions["browser"];
   chat?: TeamChatStore;
@@ -425,6 +426,7 @@ export class HostService extends EventEmitter<HostEvents> {
       },
       skills: options.skills,
       sidebarLayout: options.sidebarLayout,
+      ...(options.workspaceSidebar === undefined ? {} : { workspaceSidebar: options.workspaceSidebar }),
       mailbox: options.mailbox,
       browser: options.browser,
       browserView: this.#browserView,

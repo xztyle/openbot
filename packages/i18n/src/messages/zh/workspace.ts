@@ -390,6 +390,7 @@ export const messages = {
   "workspace.emoji.searchPlaceholder": "搜索所有表情",
   "workspace.emoji.noResults": "没有与“{query}”匹配的表情。",
   "workspace.emoji.results": "搜索结果",
+  "workspace.emoji.resultCount": { one: "{count} 个表情", other: "{count} 个表情" },
   "workspace.emoji.categories": "表情类别",
   "workspace.emoji.category.recent": "常用",
   "workspace.emoji.category.people": "笑脸和人物",

@@ -491,6 +491,12 @@ export const messages = {
   "workspace.emoji.searchPlaceholder": "Szukaj wśród wszystkich emoji",
   "workspace.emoji.noResults": "Żadne emoji nie pasuje do „{query}”.",
   "workspace.emoji.results": "Wyniki wyszukiwania",
+  "workspace.emoji.resultCount": {
+    one: "{count} emoji",
+    few: "{count} emoji",
+    many: "{count} emoji",
+    other: "{count} emoji",
+  },
   "workspace.emoji.categories": "Kategorie emoji",
   "workspace.emoji.category.recent": "Często używane",
   "workspace.emoji.category.people": "Buźki i ludzie",

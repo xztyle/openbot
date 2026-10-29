@@ -18,12 +18,15 @@ import { Effect, Exit, Schema, Scope, Semaphore } from "effect";
 import { writeJsonFileAtomically } from "./atomic-json-file";
 import type { ChannelDiscordBridgePort, ChannelService } from "./channel-service";
 import { chunkMarkdown } from "./messaging/messaging-chunks";
-import type {
-  BridgedDiscordChange,
-  BridgedDiscordMessage,
-  InboundFile,
-  MessagingAdapter,
-  MessagingChannelBridge,
+import {
+  type BridgedDiscordChange,
+  type BridgedDiscordMessage,
+  type BridgedDiscordReaction,
+  DiscordApiError,
+  type InboundFile,
+  type MessagingAdapter,
+  MessagingAdapterError,
+  type MessagingChannelBridge,
 } from "./messaging/messaging-types";
 
 const logger = createOpenBotLogger("channel-bridge");
@@ -52,6 +55,10 @@ const Bridged = Schema.Struct({
   viaWebhook: Schema.Boolean,
   hash: Schema.String,
   inbound: Schema.Boolean,
+  // Later fields; an older build ignores them.
+  threadId: Schema.optional(Schema.String),
+  postedIn: Schema.optional(Schema.String),
+  reactions: Schema.optional(Schema.Array(Schema.String)),
 });
 const Link = Schema.Struct({ linkedAt: Schema.String, messages: Schema.Array(Bridged) });
 const BridgeFile = Schema.Struct({
@@ -71,6 +78,12 @@ interface BridgedMessage {
   hash: string;
   /** It came from Discord. */
   inbound: boolean;
+  /** On a thread root: the Discord thread (a channel) that holds its replies. */
+  threadId?: string;
+  /** The Discord thread that the posts are in, when they are not in the bridged channel itself. */
+  postedIn?: string;
+  /** The unicode emoji that OpenBot added in Discord, for the workspace reactions of the message. */
+  reactions?: string[];
 }
 interface LinkState {
   linkedAt: string;
@@ -103,6 +116,20 @@ interface WebhookBody {
 
 class WebhookGone extends Schema.TaggedError<WebhookGone>()("WebhookGone", {}) {}
 class WebhookFailed extends Schema.TaggedError<WebhookFailed>()("WebhookFailed", { status: Schema.Number }) {}
+
+/** A unicode emoji that Discord takes as a reaction. A custom emoji or a short code is not one. */
+export function isUnicodeReaction(emoji: string): boolean {
+  return (
+    emoji.length <= 64 &&
+    /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\p{Emoji_Modifier}|\u200D|\uFE0F|\u20E3)+$/u.test(emoji) &&
+    /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3/u.test(emoji)
+  );
+}
+
+/** The member id of a Discord person in the workspace: the author id of their bridged messages. */
+function discordMemberId(userId: string): string {
+  return `discord-${userId}`;
+}
 
 function hashText(text: string): string {
   return createHash("sha256").update(text).digest("base64url").slice(0, 22);
@@ -144,6 +171,13 @@ function webhookName(name: string): string {
  * The link itself is in the channel (`discordLink`). The webhook secrets and the map between
  * Discord and workspace message ids stay in a host-only file, never on the wire. Signal leaves out
  * the posts of bots and webhooks, so a bridged post does not come back.
+ *
+ * Reactions with a unicode emoji go both ways: a person's reaction in Discord is a reaction of the
+ * member `discord-<user id>`, and the reactions of the workspace's own people and agents are
+ * OpenBot's reactions on the Discord post. A Discord thread maps to the workspace thread of its
+ * root: a thread that starts from a bridged message has that message's id, and a thread without one
+ * makes its first message the root. A deletion in Discord of a workspace post leaves the workspace
+ * message; the bridge forgets its Discord ids, so an edit later does not call Discord again.
  */
 export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBridgePort {
   readonly #options: ChannelBridgeOptions;
@@ -231,6 +265,21 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     );
   });
 
+  readonly reactDiscord = Effect.fn("ChannelBridge.reactDiscord")(function* (
+    this: ChannelBridge,
+    reaction: BridgedDiscordReaction,
+  ) {
+    const channelId = this.#index.get(`${reaction.guildId}:${reaction.channelId}`);
+    if (!channelId) return;
+    yield* this.#serialFor(channelId).withPermit(
+      this.#react(channelId, reaction).pipe(
+        Effect.catch((error) =>
+          Effect.sync(() => logger.warn("A Discord reaction did not reach its bridged channel.", errorName(error))),
+        ),
+      ),
+    );
+  });
+
   // --- ChannelDiscordBridgePort ---
 
   readonly link = Effect.fn("ChannelBridge.link")(function* (
@@ -298,13 +347,19 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     if (!state || state.messages.some((item) => item.inbound && item.discordIds.includes(message.messageId))) return;
     const channel = channels.store.get(channelId);
     if (channel.archived || !channel.discordLink) return;
-    const replied = message.replyToMessageId
-      ? state.messages.find((item) => item.discordIds.includes(message.replyToMessageId ?? ""))
-      : undefined;
-    const repliedMessage = replied ? channels.store.message(channelId, replied.id) : null;
+    // In a Discord thread: the thread's root. Else the message it replies to.
+    const threadId = message.threadId ?? null;
+    const anchor = threadId
+      ? (state.messages.find((item) => item.threadId === threadId) ??
+        state.messages.find((item) => item.discordIds.includes(threadId)))
+      : message.replyToMessageId
+        ? state.messages.find((item) => item.discordIds.includes(message.replyToMessageId ?? ""))
+        : undefined;
+    const anchorMessage = anchor ? channels.store.message(channelId, anchor.id) : null;
     const threadRootId =
-      repliedMessage && !repliedMessage.deletedAt ? (repliedMessage.threadRootId ?? repliedMessage.id) : null;
+      anchorMessage && !anchorMessage.deletedAt ? (anchorMessage.threadRootId ?? anchorMessage.id) : null;
     const root = threadRootId ? channels.store.message(channelId, threadRootId) : null;
+    const threadRoot = root && !root.deletedAt && !root.threadRootId ? root : null;
     const text = this.#inboundText(channel, message.text, message.files);
     if (!text.trim()) return;
     const author: ChannelExternalAuthor = {
@@ -324,17 +379,37 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
         recipientAgentId: this.#addressedAgent(channel, text, message.mentionedBot),
         replyToMessageId: null,
         attachmentDraftIds: [],
-        ...(root && !root.deletedAt && !root.threadRootId ? { threadRootId: root.id } : {}),
+        ...(threadRoot ? { threadRootId: threadRoot.id } : {}),
         bridged: { messageId, author },
       },
-      { id: `discord-${message.authorId}`, name: author.name },
+      { id: discordMemberId(message.authorId), name: author.name },
     );
+    if (threadId && threadRoot) {
+      // The root keeps its Discord thread, so the workspace replies go into it.
+      const rootRecord = state.messages.find((item) => item.id === threadRoot.id);
+      if (!rootRecord)
+        // A root that the bridge never posted, as when the thread starts from one of its replies.
+        this.#remember(channelId, {
+          id: threadRoot.id,
+          discordIds: [],
+          viaWebhook: false,
+          hash: "",
+          inbound: threadRoot.externalAuthor !== undefined,
+          threadId,
+        });
+      else if (!rootRecord.threadId) this.#remember(channelId, { ...rootRecord, threadId });
+    } else if (threadId) {
+      // A thread without a known root: its first message is the root of the workspace thread.
+      for (const item of state.messages) if (item.threadId === threadId) delete item.threadId;
+    }
     this.#remember(channelId, {
       id: messageId,
       discordIds: [message.messageId],
       viaWebhook: false,
       hash: hashText(text),
       inbound: true,
+      ...(threadId && !threadRoot ? { threadId } : {}),
+      ...(threadId ? { postedIn: threadId } : {}),
     });
     yield* this.#save();
   });
@@ -350,6 +425,16 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
   ) {
     const { channels } = this.#options;
     const state = this.#state.get(channelId);
+    const posted = state?.messages.find((item) => !item.inbound && item.discordIds.includes(change.messageId));
+    if (state && posted) {
+      // Someone deleted a workspace post in Discord. The workspace keeps the message; the bridge
+      // forgets the deleted post, so an edit or a deletion later does not call Discord for it.
+      if (!change.edit) {
+        this.#remember(channelId, { ...posted, discordIds: posted.discordIds.filter((id) => id !== change.messageId) });
+        yield* this.#save();
+      }
+      return;
+    }
     const known = state?.messages.find((item) => item.inbound && item.discordIds.includes(change.messageId));
     if (!state || !known) return;
     const channel = channels.store.get(channelId);
@@ -379,6 +464,42 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     );
     this.#remember(channelId, { ...known, hash });
     yield* this.#save();
+  });
+
+  /**
+   * Mirrors a person's reaction in Discord on a bridged message, of either direction, as a reaction
+   * of the member `discord-<user id>`. OpenBot's own reactions never arrive: Signal leaves them out.
+   */
+  readonly #react = Effect.fn("ChannelBridge.reactOne")(function* (
+    this: ChannelBridge,
+    channelId: string,
+    reaction: BridgedDiscordReaction,
+  ) {
+    const { channels } = this.#options;
+    const state = this.#state.get(channelId);
+    const known = state?.messages.find((item) => item.discordIds.includes(reaction.messageId));
+    if (!state || !known || !isUnicodeReaction(reaction.emoji)) return;
+    const channel = channels.store.get(channelId);
+    const message = channels.store.message(channelId, known.id);
+    if (channel.archived || !channel.discordLink || !message || message.deletedAt) return;
+    const actorId = discordMemberId(reaction.userId);
+    const has = (message.reactions ?? []).some(
+      (item) =>
+        item.emoji === reaction.emoji && item.actors.some((actor) => actor.kind === "member" && actor.id === actorId),
+    );
+    if (has === reaction.on) return;
+    const name = (reaction.userName ?? "").slice(0, 120) || reaction.userId;
+    yield* channels.command(
+      {
+        type: "react",
+        operationId: `discord-react-${randomUUID()}`,
+        channelId,
+        messageId: known.id,
+        emoji: reaction.emoji,
+        action: reaction.on ? "add" : "remove",
+      },
+      { id: actorId, name },
+    );
   });
 
   /** The workspace text of a Discord message: agent names as tags, then a line for each file. */
@@ -501,8 +622,66 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
         if (known.hash !== hashText(text)) yield* this.#mirror("be edited", this.#edit(link, channelId, known, text));
       } else yield* this.#mirror("be posted", this.#post(link, channelId, message, text));
     }
+    // The reactions of the workspace's people and agents, on the bridged messages of both directions.
+    for (const id of pending) {
+      if (waiting.has(id)) continue;
+      const message = store.message(channelId, id);
+      const known = state.messages.find((item) => item.id === id);
+      if (message && !message.deletedAt && known) yield* this.#syncReactions(link, channelId, known, message);
+    }
     yield* this.#save();
   });
+
+  /**
+   * Adds and removes OpenBot's reactions on the first Discord post of a message, so that they follow
+   * the unicode reactions that people and agents of the workspace have on it. The reactions of
+   * Discord people (`discord-<id>`) are in Discord already. Only the bot can react: a webhook cannot.
+   */
+  readonly #syncReactions = Effect.fn("ChannelBridge.syncReactions")(function* (
+    this: ChannelBridge,
+    link: ChannelDiscordLink,
+    channelId: string,
+    known: BridgedMessage,
+    message: ChannelMessage,
+  ) {
+    const [first] = known.discordIds;
+    const adapter = this.#options.messaging.discordAdapter(link.connectionId);
+    if (!first || !adapter?.reactEmoji) return;
+    const wanted = new Set(
+      (message.reactions ?? [])
+        .filter(
+          (reaction) =>
+            isUnicodeReaction(reaction.emoji) &&
+            reaction.actors.some((actor) => actor.kind === "agent" || !actor.id.startsWith("discord-")),
+        )
+        .map((reaction) => reaction.emoji),
+    );
+    const current = new Set(known.reactions ?? []);
+    const target = { platformChannelId: known.postedIn ?? link.channelId, replyThreadId: null };
+    for (const emoji of [...wanted].filter((item) => !current.has(item)))
+      yield* this.#mirror(
+        "be reacted to",
+        adapter.reactEmoji(target, first, emoji, true).pipe(Effect.tap(() => Effect.sync(() => current.add(emoji)))),
+      );
+    for (const emoji of [...current].filter((item) => !wanted.has(item)))
+      yield* this.#mirror(
+        "be reacted to",
+        adapter
+          .reactEmoji(target, first, emoji, false)
+          .pipe(Effect.tap(() => Effect.sync(() => current.delete(emoji)))),
+      );
+    const reactions = [...current];
+    const record = this.#state.get(channelId)?.messages.find((item) => item.id === known.id);
+    if (!record) return;
+    if (reactions.length) record.reactions = reactions;
+    else delete record.reactions;
+  });
+
+  /** The Discord thread that holds the replies of a workspace thread reply's root, if it has one. */
+  #discordThread(message: ChannelMessage, state: LinkState): string | null {
+    if (!message.threadRootId) return null;
+    return state.messages.find((item) => item.id === message.threadRootId)?.threadId ?? null;
+  }
 
   /** One failed post does not hold the next ones. Discord's answer text is not logged. */
   #mirror(action: string, effect: Effect.Effect<void, unknown>): Effect.Effect<void> {
@@ -529,6 +708,8 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const files = (message.message.attachments ?? []).map((file) => `📎 ${file.name}`);
     const body = [discordText(message.message.text), ...files].filter(Boolean).join("\n");
     const name = viaWebhook ? "" : `**${message.author.name.replace(/[*_`~|]/gu, "")}:** `;
+    // A reply that goes into a Discord thread needs no reply line.
+    if (this.#discordThread(message, state)) return `${name}${body}`;
     const repliedId = message.threadRootId ?? message.message.replyToMessageId ?? null;
     const replied = repliedId ? state.messages.find((item) => item.id === repliedId)?.discordIds[0] : undefined;
     // A webhook post cannot reply in Discord, so it links the message it answers.
@@ -549,11 +730,13 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const chunks = chunkMarkdown(text, CHUNK_CHARACTERS);
     const webhook = this.#webhooks.get(channelId);
     const ids: string[] = [];
+    const thread = this.#discordThread(message, this.#state.get(channelId) ?? { linkedAt: "", messages: [] });
+    const inThread = thread ? { postedIn: thread } : {};
     if (webhook) {
       const username = webhookName(message.author.name);
       const avatarUrl = this.#options.avatarUrl?.(message.author) ?? null;
       const posted = yield* Effect.forEach(chunks, (content) =>
-        this.#webhookCall(webhook, "POST", "?wait=true", {
+        this.#webhookCall(webhook, "POST", `?wait=true${threadQuery(thread, "&")}`, {
           content,
           username,
           ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
@@ -575,6 +758,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
           viaWebhook: true,
           hash: hashText(text),
           inbound: false,
+          ...inThread,
         });
         return;
       }
@@ -584,15 +768,19 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     if (!adapter) return;
     const state = this.#state.get(channelId);
     const repliedId = message.threadRootId ?? message.message.replyToMessageId ?? null;
-    const replyTo = repliedId ? (state?.messages.find((item) => item.id === repliedId)?.discordIds[0] ?? null) : null;
+    const replyTo =
+      repliedId && !thread ? (state?.messages.find((item) => item.id === repliedId)?.discordIds[0] ?? null) : null;
     for (const content of chunkMarkdown(text, CHUNK_CHARACTERS))
-      ids.push(yield* adapter.post({ platformChannelId: link.channelId, replyThreadId: replyTo }, { text: content }));
+      ids.push(
+        yield* adapter.post({ platformChannelId: thread ?? link.channelId, replyThreadId: replyTo }, { text: content }),
+      );
     this.#remember(channelId, {
       id: message.id,
       discordIds: ids,
       viaWebhook: false,
       hash: hashText(text),
       inbound: false,
+      ...inThread,
     });
   });
 
@@ -608,16 +796,26 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     if (!first) return;
     const content = chunkMarkdown(text, CHUNK_CHARACTERS)[0] ?? text.slice(0, CHUNK_CHARACTERS);
     const webhook = this.#webhooks.get(channelId);
+    // A post that is gone in Discord is forgotten, so the next edit does not try it again.
+    let gone = false;
     if (known.viaWebhook) {
       if (!webhook) return;
-      yield* this.#webhookCall(webhook, "PATCH", `/messages/${first}`, { content }).pipe(
+      yield* this.#webhookCall(webhook, "PATCH", `/messages/${first}${threadQuery(known.postedIn, "?")}`, {
+        content,
+      }).pipe(
         Effect.catchTag("WebhookGone", () => Effect.void),
+        Effect.catchTag("WebhookFailed", (error) =>
+          error.status === 404 ? Effect.sync(() => (gone = true)) : Effect.fail(error),
+        ),
       );
     } else {
       const adapter = this.#options.messaging.discordAdapter(link.connectionId);
       if (!adapter) return;
-      yield* adapter.edit({ platformChannelId: link.channelId, replyThreadId: null }, first, { text: content });
+      yield* adapter
+        .edit({ platformChannelId: known.postedIn ?? link.channelId, replyThreadId: null }, first, { text: content })
+        .pipe(Effect.catch((error) => (isNotFound(error) ? Effect.sync(() => (gone = true)) : Effect.fail(error))));
     }
+    if (gone) known.discordIds = known.discordIds.filter((id) => id !== first);
     known.hash = hashText(text);
   });
 
@@ -631,12 +829,12 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const adapter = this.#options.messaging.discordAdapter(link.connectionId);
     for (const id of known.discordIds) {
       if (known.viaWebhook && webhook)
-        yield* this.#webhookCall(webhook, "DELETE", `/messages/${id}`, null).pipe(
+        yield* this.#webhookCall(webhook, "DELETE", `/messages/${id}${threadQuery(known.postedIn, "?")}`, null).pipe(
           Effect.catch(() => Effect.succeed(null)),
         );
       else if (!known.viaWebhook && adapter?.remove)
         yield* adapter
-          .remove({ platformChannelId: link.channelId, replyThreadId: null }, id)
+          .remove({ platformChannelId: known.postedIn ?? link.channelId, replyThreadId: null }, id)
           .pipe(Effect.catch(() => Effect.void));
     }
     const state = this.#state.get(channelId);
@@ -813,7 +1011,11 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
           id,
           {
             linkedAt: link.linkedAt,
-            messages: link.messages.map((item) => ({ ...item, discordIds: [...item.discordIds] })),
+            messages: link.messages.map(({ reactions, ...item }) => ({
+              ...item,
+              discordIds: [...item.discordIds],
+              ...(reactions ? { reactions: [...reactions] } : {}),
+            })),
           },
         ]),
       );
@@ -838,6 +1040,18 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
       ),
     );
   });
+}
+
+/** The `thread_id` query of a webhook call into a Discord thread, or nothing outside a thread. */
+function threadQuery(thread: string | null | undefined, separator: "?" | "&"): string {
+  return thread ? `${separator}thread_id=${encodeURIComponent(thread)}` : "";
+}
+
+/** Discord answered that the post is not there (any more). */
+function isNotFound(error: unknown): boolean {
+  if (!(error instanceof MessagingAdapterError)) return false;
+  const cause = error.cause;
+  return cause instanceof DiscordApiError && cause.code === "not_found";
 }
 
 /** One field of a Discord answer, as text. Discord's answer is never logged. */

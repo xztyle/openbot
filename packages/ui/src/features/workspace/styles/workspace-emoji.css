@@ -101,35 +101,36 @@
   font-weight: var(--openbot-weight-semibold);
 }
 
+/* Nine columns, as `COLUMNS` in EmojiPicker.tsx. */
 .ws-emoji-grid {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  table-layout: fixed;
-}
-
-.ws-emoji-grid col {
-  width: calc(100% / 9);
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
 }
 
 .ws-emoji-cell {
+  display: flex;
+  width: 100%;
   height: var(--ws-emoji-cell);
+  align-items: center;
+  justify-content: center;
+  border: 0;
   border-radius: var(--openbot-radius-sm);
+  background: transparent;
   padding: 0;
+  color: inherit;
   cursor: pointer;
   font-family: var(--ws-emoji-font);
   font-size: var(--openbot-text-3xl);
   line-height: 1;
-  text-align: center;
   user-select: none;
-  vertical-align: middle;
 }
 
 .ws-emoji-cell:hover {
   background: var(--openbot-hover);
 }
 
-.ws-emoji-cell:focus-visible {
+/* The grid class outweighs the global `button:not(.ui-button):focus-visible` outline. */
+.ws-emoji-grid .ws-emoji-cell:focus-visible {
   outline: 2px solid var(--openbot-border-focus);
   outline-offset: -2px;
   background: var(--openbot-hover);

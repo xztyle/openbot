@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import {
   parseWorkspaceArtifactsInput,
   parseWorkspaceFleetInput,
@@ -6,6 +7,7 @@ import {
 import {
   WORKSPACE_FLEET_CAPABILITY,
   WORKSPACE_FLEET_ROUTES,
+  workspaceArtifactThumbnailId,
 } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
 import { sourceText } from "@openbot/i18n/source";
 import type { TeamApiAgents } from "./dependencies";
@@ -40,21 +42,41 @@ function found<T>(read: () => T): T {
 /**
  * The fleet, step trail and artifact routes of this fork (`workspace-fleet-v1.ts`, under
  * `fork-host-v1`). An agent shows when the member's roles give at least `view` on it and it is not
- * hidden from this peer; a channel shows when the member can see it.
+ * hidden from this peer; a channel shows when the member can see it. The thumbnail of an artifact
+ * answers only for an artifact that the artifact list would show this member.
  */
 export async function routeWorkspaceFleet(
   context: TeamApiRequestContext,
   agents: Pick<TeamApiAgents, "workspace">,
   hiddenAgentIds: ReadonlySet<string> = new Set(),
 ): Promise<RouteOutcome> {
-  const { method, url, capabilities, request, json } = context;
+  const { method, url, capabilities, request, response, json } = context;
+  const visible = (agentId: string) => !hiddenAgentIds.has(agentId) && context.agentLevel(agentId) !== "none";
+  const thumbnailId = method === "GET" ? workspaceArtifactThumbnailId(url.pathname) : null;
+  if (thumbnailId !== null) {
+    if (!capabilities.has(WORKSPACE_FLEET_CAPABILITY))
+      throw new HttpError(400, sourceText("error.team.workspaceUnsupported"));
+    const version = url.searchParams.get("v") ?? "";
+    const thumbnail = version
+      ? agents.workspace.artifactThumbnail(thumbnailId, version, requestChannelViewer(context), visible)
+      : null;
+    const bytes = thumbnail ? await readFile(thumbnail.path).catch(() => null) : null;
+    if (!thumbnail || !bytes) throw new HttpError(404, sourceText("error.team.workspaceThumbnailNotFound"));
+    response.writeHead(200, {
+      "Content-Type": thumbnail.mimeType,
+      "Content-Length": String(bytes.length),
+      "Cache-Control": "private, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+    });
+    response.end(bytes);
+    return "handled";
+  }
   if (method !== "POST" || !Object.values(WORKSPACE_FLEET_ROUTES).some((route) => route === url.pathname))
     return "unmatched";
   if (!capabilities.has(WORKSPACE_FLEET_CAPABILITY))
     throw new HttpError(400, sourceText("error.team.workspaceUnsupported"));
   // `readJson` has already run the body through the workspace-fleet wire codec.
   const body = await readJson(request);
-  const visible = (agentId: string) => !hiddenAgentIds.has(agentId) && context.agentLevel(agentId) !== "none";
   if (url.pathname === WORKSPACE_FLEET_ROUTES.fleet)
     return json(200, agents.workspace.fleet(parsed(parseWorkspaceFleetInput, body), visible));
   const viewer = requestChannelViewer(context);

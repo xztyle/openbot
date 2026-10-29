@@ -61,6 +61,7 @@ import {
   type InboundFile,
   type InboundMessage,
   type InboundMessageChange,
+  type InboundReaction,
   type IngressAnswer,
   type IngressDelivery,
   type MessageTarget,
@@ -771,7 +772,9 @@ export class MessagingService {
     );
     yield* bridge.receiveDiscord({
       guildId: live.record.workspaceId,
-      channelId: message.platformChannelId,
+      // A message of a thread goes to the bridge of the thread's channel.
+      channelId: message.threadParentId ?? message.platformChannelId,
+      threadId: message.threadParentId ? message.platformChannelId : null,
       messageId: message.platformMessageId,
       authorId: message.authorId,
       authorName,
@@ -793,10 +796,11 @@ export class MessagingService {
     change: InboundMessageChange,
   ) {
     const bridge = this.#bridge;
+    const channelId = change.threadParentId ?? change.platformChannelId;
     if (
       live.record.platform !== "discord" ||
       !bridge?.changeDiscord ||
-      !bridge.discordChannels(live.record.workspaceId).includes(change.platformChannelId)
+      !bridge.discordChannels(live.record.workspaceId).includes(channelId)
     )
       return;
     const edit = change.edit;
@@ -805,9 +809,37 @@ export class MessagingService {
       : null;
     yield* bridge.changeDiscord({
       guildId: live.record.workspaceId,
-      channelId: change.platformChannelId,
+      channelId,
+      threadId: change.threadParentId ? change.platformChannelId : null,
       messageId: change.platformMessageId,
       edit: edit && mentioned ? { text: withMentionNames(edit.text, mentioned), files: edit.files } : null,
+    });
+  });
+
+  /** A person's reaction in a Discord channel bridged with a workspace channel goes to the bridge. */
+  readonly #bridgeReact = Effect.fn("MessagingService.bridgeReact")(function* (
+    this: MessagingService,
+    live: LiveConnection,
+    reaction: InboundReaction,
+  ) {
+    const bridge = this.#bridge;
+    const channelId = reaction.threadParentId ?? reaction.platformChannelId;
+    if (
+      live.record.platform !== "discord" ||
+      !bridge?.reactDiscord ||
+      !bridge.discordChannels(live.record.workspaceId).includes(channelId) ||
+      reaction.userId === live.identity?.botUserId
+    )
+      return;
+    yield* bridge.reactDiscord({
+      guildId: live.record.workspaceId,
+      channelId,
+      threadId: reaction.threadParentId ? reaction.platformChannelId : null,
+      messageId: reaction.platformMessageId,
+      userId: reaction.userId,
+      userName: reaction.userName ?? null,
+      emoji: reaction.emoji,
+      on: reaction.on,
     });
   });
 
@@ -1282,6 +1314,7 @@ export class MessagingService {
       message: (message) => this.#dispatch(this.#receive(live, message)),
       action: (action) => this.#dispatch(this.#action(live, action)),
       changed: (change) => this.#dispatch(this.#bridgeChange(live, change)),
+      reacted: (reaction) => this.#dispatch(this.#bridgeReact(live, reaction)),
       renamed: (workspaceName) => this.#dispatch(this.#renamed(live, workspaceName)),
       placeCreated: (platformChannelId) => {
         const join = live.adapter.joinPlace?.(platformChannelId);
@@ -1405,7 +1438,7 @@ export class MessagingService {
     const bridge = this.#bridge;
     if (
       live.record.platform === "discord" &&
-      bridge?.discordChannels(live.record.workspaceId).includes(inbound.platformChannelId)
+      bridge?.discordChannels(live.record.workspaceId).includes(inbound.threadParentId ?? inbound.platformChannelId)
     )
       return yield* this.#bridgeReceive(live, bridge, inbound);
     const setting = this.#channelSetting(live.record, inbound.platformChannelId);

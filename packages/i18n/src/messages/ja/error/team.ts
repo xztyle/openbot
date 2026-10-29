@@ -91,6 +91,7 @@ export const messages = {
   "error.team.agentMemoryLimitUnsupported": "この接続はエージェントのメモリー上限に対応していません。",
   "error.team.promptCacheTtlUnsupported": "この接続はプロンプトキャッシュ時間に対応していません。",
   "error.team.workspaceUnsupported": "この接続はワークスペースのチャンネルに対応していません。",
+  "error.team.workspaceThumbnailNotFound": "この成果物の画像は利用できません。",
   "error.team.attachmentNameRequired": "安全な添付ファイル名が必要です。",
   "error.team.attachmentNotFound": "添付ファイルが見つかりません。",
   "error.team.sharedFileTooLarge": "共有ファイルが 100 MB の上限を超えています。",

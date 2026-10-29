@@ -203,19 +203,43 @@ export function createHostFleetSource(input: {
   return { agents, loading, refresh: () => void load() };
 }
 
+/** The address of the image that the host drew of an artifact's page, or undefined while there is none. */
+export type ArtifactThumbnailUrl = (
+  record: WorkspaceArtifactRecord & { thumbnailVersion: string },
+) => string | undefined;
+
+/**
+ * The desktop address of the host's image of an artifact page: `openbot-avatar` for this computer and
+ * `openbot-remote-avatar` for a joined server, which main reads through the Team API.
+ */
+export function desktopArtifactThumbnailUrl(
+  serverId: string,
+  local: boolean,
+  record: { id: string; thumbnailVersion: string },
+): string {
+  const version = encodeURIComponent(record.thumbnailVersion);
+  const artifactId = encodeURIComponent(record.id);
+  return local
+    ? `openbot-avatar://artifact/${artifactId}?v=${version}`
+    : `openbot-remote-avatar://${encodeURIComponent(serverId)}/artifact/${artifactId}?v=${version}`;
+}
+
 function artifactView(
   directory: WorkspaceDirectory,
   channels: readonly ChannelSummary[],
   record: WorkspaceArtifactRecord,
+  thumbnail: ArtifactThumbnailUrl | undefined,
 ): WorkspaceArtifact {
   const agent = record.agentId ? directory.agents.find((candidate) => candidate.id === record.agentId) : undefined;
+  const version = record.thumbnailVersion;
   return {
     id: record.id,
     kind: record.kind,
     title: record.title,
     description: record.description,
     url: record.url,
-    thumbnailUrl: record.thumbnailUrl,
+    thumbnailUrl:
+      record.thumbnailUrl ?? (version && thumbnail ? thumbnail({ ...record, thumbnailVersion: version }) : undefined),
     agent: agent ? agentMember(agent) : undefined,
     channelId: record.channelId,
     channelName: record.channelId ? channels.find((channel) => channel.id === record.channelId)?.name : undefined,
@@ -235,6 +259,8 @@ export function createHostArtifactsSource(input: {
   channels: () => readonly ChannelSummary[];
   onHostEvent: (listener: (event: AgentEvent | TeamRealtimeEvent) => void) => () => void;
   fallback: WorkspaceArtifactsSource;
+  /** The image of an artifact page that the host drew. Absent, the cards keep their drawing. */
+  thumbnailUrl?: ArtifactThumbnailUrl | undefined;
 }) {
   const [records, setRecords] = createSignal<ReadonlyMap<string, readonly WorkspaceArtifactRecord[]>>(new Map());
   const [loading, setLoading] = createSignal(false);
@@ -278,7 +304,7 @@ export function createHostArtifactsSource(input: {
       if (!list) return input.fallback.artifacts(scope);
       const directory = input.directory();
       const channels = input.channels();
-      return list.map((record) => artifactView(directory, channels, record));
+      return list.map((record) => artifactView(directory, channels, record, input.thumbnailUrl));
     },
     loading,
     refresh: (scope) => void load(scope?.channelId),

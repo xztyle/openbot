@@ -129,6 +129,12 @@
   background: var(--ws-hover);
 }
 
+/* A message takes the keyboard focus, so its actions are reachable without a pointer. */
+.ws-message:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--openbot-border-focus);
+}
+
 .ws-message[data-mention] {
   box-shadow: inset 2px 0 0 var(--ws-mention-edge);
   background: var(--ws-mention-tint);
@@ -769,6 +775,173 @@ button.ws-profile-trigger.ws-message-author:hover {
   stroke-width: 1.25;
 }
 
+/* The sketch of the kind: a tint per kind, and a drawing of a page, a slide or a chart. */
+.ws-artifact {
+  --ws-artifact-tint: var(--openbot-accent);
+}
+
+.ws-artifact[data-kind="app"] {
+  --ws-artifact-tint: var(--openbot-success);
+}
+
+.ws-artifact[data-kind="deck"] {
+  --ws-artifact-tint: var(--openbot-warning);
+}
+
+.ws-artifact[data-kind="dashboard"] {
+  --ws-artifact-tint: var(--openbot-success);
+}
+
+.ws-artifact[data-kind="file"],
+.ws-artifact[data-kind="doc"] {
+  --ws-artifact-tint: var(--openbot-text-secondary);
+}
+
+.ws-artifact-thumb[data-placeholder] {
+  background:
+    radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--ws-artifact-tint) 18%, transparent), transparent 60%),
+    linear-gradient(160deg, var(--openbot-bg-surface-raised), var(--openbot-bg-sheet));
+}
+
+.ws-artifact-sketch {
+  display: flex;
+  width: 56%;
+  aspect-ratio: 16 / 10;
+  flex-direction: column;
+  gap: 6%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ws-artifact-tint) 35%, var(--ws-line));
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-surface);
+  padding: 6%;
+  box-shadow: 0 6px 18px var(--openbot-shadow-menu);
+}
+
+.ws-artifact-sketch[data-kind="file"] {
+  place-items: center;
+  justify-content: center;
+  align-items: center;
+}
+
+.ws-artifact-sketch-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--ws-artifact-tint);
+  stroke-width: 1.25;
+}
+
+.ws-artifact-sketch i {
+  display: block;
+  border-radius: var(--openbot-radius-pill);
+  background: color-mix(in srgb, var(--openbot-text-primary) 12%, transparent);
+}
+
+.ws-artifact-sketch-bar {
+  display: flex;
+  gap: 3%;
+}
+
+.ws-artifact-sketch-bar > i {
+  width: 6%;
+  aspect-ratio: 1;
+}
+
+.ws-artifact-sketch-hero {
+  flex: 0 0 34%;
+  border-radius: var(--openbot-radius-sm);
+  background: color-mix(in srgb, var(--ws-artifact-tint) 30%, transparent);
+}
+
+.ws-artifact-sketch-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8%;
+}
+
+.ws-artifact-sketch-lines > i {
+  height: 6px;
+}
+
+.ws-artifact-sketch-lines > i:nth-child(odd) {
+  width: 82%;
+}
+
+.ws-artifact-sketch-lines > i:nth-child(even) {
+  width: 64%;
+}
+
+.ws-artifact-sketch-lines[data-dense] {
+  gap: 9%;
+}
+
+.ws-artifact-sketch-lines[data-dense] > i {
+  height: 4px;
+}
+
+.ws-artifact-sketch-lines[data-dense] > i:first-child {
+  width: 46%;
+  height: 7px;
+  background: color-mix(in srgb, var(--ws-artifact-tint) 40%, transparent);
+}
+
+.ws-artifact-sketch-slide {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10%;
+  border-radius: var(--openbot-radius-sm);
+  background: color-mix(in srgb, var(--ws-artifact-tint) 22%, transparent);
+  padding: 0 12%;
+}
+
+.ws-artifact-sketch-slide > i:first-child {
+  width: 70%;
+  height: 8px;
+}
+
+.ws-artifact-sketch-slide > i:last-child {
+  width: 45%;
+  height: 5px;
+}
+
+.ws-artifact-sketch-chart {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-end;
+  gap: 6%;
+}
+
+.ws-artifact-sketch-chart > i {
+  flex: 1 1 0;
+  border-radius: var(--openbot-radius-xs) var(--openbot-radius-xs) 0 0;
+  background: color-mix(in srgb, var(--ws-artifact-tint) 55%, transparent);
+}
+
+.ws-artifact-sketch-chart > i:nth-child(1) {
+  height: 40%;
+}
+
+.ws-artifact-sketch-chart > i:nth-child(2) {
+  height: 65%;
+}
+
+.ws-artifact-sketch-chart > i:nth-child(3) {
+  height: 50%;
+}
+
+.ws-artifact-sketch-chart > i:nth-child(4) {
+  height: 85%;
+}
+
+.ws-artifact-sketch-chart > i:nth-child(5) {
+  height: 70%;
+}
+
+.ws-artifact-sketch-chart > i:nth-child(6) {
+  height: 95%;
+}
+
 .ws-artifact-thumb-host {
   font-family: var(--openbot-font-mono);
   font-size: var(--openbot-text-sm);
@@ -957,4 +1130,13 @@ button.ws-profile-trigger.ws-message-author:hover {
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-md);
   cursor: pointer;
+}
+
+/* The frequent emoji of the hover bar, before the react button, as in Slack. */
+.ws-message-action-emoji.ui-button {
+  width: var(--openbot-control-xs);
+  height: var(--openbot-control-xs);
+  padding: 0;
+  font-size: var(--openbot-text-md);
+  line-height: 1;
 }

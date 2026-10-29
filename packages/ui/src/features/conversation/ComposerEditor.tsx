@@ -99,6 +99,8 @@ interface ComposerEditorProps {
   skillPickerRequest?: number;
   /** A new id puts a quote chip for the text at the caret, or at the end when the caret is unknown. */
   quoteRequest?: QuoteRequest | undefined;
+  /** A new id puts the text at the caret, or at the end when the caret is unknown, such as a picked emoji. */
+  textRequest?: { id: number; text: string } | undefined;
   /** Opens the passage that a quote chip in the draft points to. */
   onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
   /** The last skill list request failed, so an empty picker says so instead of "no skills". */
@@ -347,6 +349,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   /* The serialized selection while the editor had it, for a toolbar button that takes the focus. */
   let savedSelection: { start: number; end: number } | null = null;
   let lastFormatRequest = untrack(() => props.formatRequest?.id ?? 0);
+  let lastTextRequest = untrack(() => props.textRequest?.id ?? 0);
   let isComposing = false;
   const [compositionRevision, setCompositionRevision] = createSignal(0);
   const attachmentTokenActions: AttachmentTokenActions = {
@@ -481,6 +484,15 @@ export function ComposerEditor(props: ComposerEditorProps) {
       if (!request || request.id <= lastFormatRequest) return;
       lastFormatRequest = request.id;
       applyFormat(request.format);
+    },
+  );
+
+  createEffect(
+    () => props.textRequest,
+    (request) => {
+      if (!request || request.id <= lastTextRequest) return;
+      lastTextRequest = request.id;
+      insertTextAtCaret(request.text);
     },
   );
 
@@ -791,6 +803,23 @@ export function ComposerEditor(props: ComposerEditorProps) {
     savedSelection = next.selection;
     props.onValueChange(next.value);
     scheduleCaretScroll();
+  }
+
+  /** Puts plain text where the caret was, as a typed character, and keeps the caret after it. */
+  function insertTextAtCaret(text: string) {
+    if (!editor || props.disabled) return;
+    editor.focus({ preventScroll: true });
+    const value = editorText(editor);
+    const offset = savedCaret !== null && savedCaret <= value.length ? savedCaret : value.length;
+    const range = rangeFromTextOffsets(editor, offset, offset);
+    if (!range) return;
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    if (insertWithinLimit(text)) {
+      emitValue();
+      scheduleCaretScroll();
+    }
   }
 
   function insertQuote(messageId: string, text: string) {

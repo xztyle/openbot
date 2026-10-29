@@ -31,6 +31,8 @@ export interface ChannelsPort {
         | "discardDraftAttachment"
         | "downloadAttachments"
         | "workspaceActivity"
+        | "channelTyping"
+        | "workspaceDmAgents"
         | "workspaceFleet"
         | "workspaceSteps"
         | "workspaceArtifacts"

@@ -456,6 +456,57 @@
   align-items: center;
 }
 
+/* Where a dragged row lands: a line above or below the row under the pointer. */
+.ws-sidebar-item[data-drop]::after {
+  position: absolute;
+  right: var(--openbot-space-1);
+  left: var(--openbot-space-1);
+  height: 2px;
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-accent);
+  content: "";
+  pointer-events: none;
+}
+
+.ws-sidebar-item[data-drop="before"]::after {
+  top: -1px;
+}
+
+.ws-sidebar-item[data-drop="after"]::after {
+  bottom: -1px;
+}
+
+/* The row menu: on the right of a hovered or focused row, over the mention badge. */
+.ws-sidebar-row-more.ui-button {
+  position: absolute;
+  right: var(--openbot-space-1);
+  width: var(--openbot-control-xs);
+  height: var(--openbot-control-xs);
+  opacity: 0;
+}
+
+.ws-sidebar-item:hover > .ws-sidebar-row-more.ui-button,
+.ws-sidebar-item:focus-within > .ws-sidebar-row-more.ui-button,
+.ws-sidebar-item[data-menu-open] > .ws-sidebar-row-more.ui-button {
+  opacity: 1;
+}
+
+.ws-sidebar-item:hover > .ws-sidebar-row .ws-mention-badge,
+.ws-sidebar-item[data-menu-open] > .ws-sidebar-row .ws-mention-badge {
+  visibility: hidden;
+}
+
+.ws-sidebar-empty {
+  margin: 0;
+  padding: var(--openbot-space-1) var(--openbot-space-3);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-sidebar-filter {
+  margin-top: var(--openbot-space-1);
+}
+
 .ws-sidebar-drag {
   position: absolute;
   left: calc(-1 * var(--openbot-space-1));

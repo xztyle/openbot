@@ -45,7 +45,9 @@ export function WorkspaceMessageBody(props: { entry: ChannelMessage }) {
         message={message()}
         agents={ws.env.agents()}
         onSelectAgent={(agentId) => ws.openAgent(agentId)}
-        onOpenLink={(url) => void port().openUrl(url)}
+        onOpenLink={(url) => {
+          if (!ws.openLink(url)) void port().openUrl(url);
+        }}
         onPreview={(attachment) => attachmentAction(attachment, "open")}
         onAttachmentAction={attachmentAction}
         onDownload={(attachment) => attachmentAction(attachment, "download")}
@@ -116,7 +118,7 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         icon: <MessageSquareReply aria-hidden="true" />,
         onSelect: () => ws.openThread(props.channelId, entry().id),
       });
-    if (own() && entry().message.text.trim())
+    if (own() && (entry().message.text.trim() || entry().message.attachments?.length))
       items.push({
         id: "edit",
         label: t("workspace.app.message.edit"),
@@ -169,6 +171,8 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         highlighted={props.highlighted}
         mentionsReader={!props.row.pending && mentionsReader(ws.directory(), entry())}
         reactions={reactionViews(ws.directory(), entry().reactions)}
+        quickReactions={ws.quickReactions()}
+        emojiPicker={ws.reactionPicker}
         onToggleReaction={
           props.row.pending || deleted()
             ? undefined

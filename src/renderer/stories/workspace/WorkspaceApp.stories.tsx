@@ -15,3 +15,8 @@ type Story = StoryObj<typeof meta>;
 export const Workspace: Story = {
   render: () => <OpenBotPlayground options={{ channels: seeds() }} />,
 };
+
+/** A workspace with no channel yet: the welcome, with "Create #general with your team". */
+export const EmptyWorkspace: Story = {
+  render: () => <OpenBotPlayground options={{ channels: [] }} />,
+};

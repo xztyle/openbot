@@ -618,3 +618,148 @@
     display: inline-flex;
   }
 }
+
+/* Welcome of a new workspace ------------------------------------------------------------------- */
+
+.ws-welcome {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  justify-content: center;
+  padding: var(--openbot-space-8) var(--openbot-space-4);
+}
+
+.ws-welcome-inner {
+  display: flex;
+  width: 100%;
+  max-width: 720px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--openbot-space-3);
+}
+
+.ws-welcome-title {
+  margin: 0;
+  font-size: var(--openbot-text-3xl);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-welcome-text {
+  margin: 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-lg);
+}
+
+.ws-welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+  margin-top: var(--openbot-space-2);
+}
+
+.ws-welcome-subtitle {
+  margin: var(--openbot-space-6) 0 0;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+  text-transform: uppercase;
+}
+
+.ws-welcome-modes {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--openbot-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-welcome-mode {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
+  gap: var(--openbot-space-1) var(--openbot-space-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-3);
+}
+
+.ws-welcome-mode-icon {
+  display: grid;
+  grid-row: span 2;
+  width: var(--openbot-control-sm);
+  height: var(--openbot-control-sm);
+  place-items: center;
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-accent-soft);
+  color: var(--openbot-accent-text);
+}
+
+.ws-welcome-mode-icon > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-welcome-mode-title {
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-welcome-mode-text {
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
+/* A first-run hint over the composer ----------------------------------------------------------- */
+
+.ws-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-accent-soft);
+  padding: var(--openbot-space-1) var(--openbot-space-1) var(--openbot-space-1) var(--openbot-space-2);
+}
+
+.ws-hint-icon {
+  display: grid;
+  flex: 0 0 auto;
+  color: var(--openbot-accent-text);
+}
+
+.ws-hint-icon > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-hint-text {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-sm);
+}
+
+/* "New messages since 10:32", over the transcript while the "new" divider is above the screen. */
+.ws-unread-banner {
+  position: absolute;
+  top: var(--openbot-space-2);
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  border: 1px solid var(--ws-line);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-accent-strong);
+  padding: 0 var(--openbot-space-1);
+  box-shadow: var(--openbot-shadow-dialog);
+  color: var(--openbot-text-primary);
+  transform: translateX(-50%);
+}
+
+.ws-unread-banner .ui-button {
+  color: inherit;
+}

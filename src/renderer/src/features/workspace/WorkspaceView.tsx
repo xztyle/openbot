@@ -8,6 +8,7 @@ import { WorkspaceDetailsPanel } from "./WorkspaceDetailsPanel";
 import { WorkspaceDialogs } from "./WorkspaceDialogs";
 import { WorkspaceThreadPanel } from "./WorkspaceThreadPanel";
 import { WorkspaceChannelArtifacts, WorkspaceViewPane } from "./WorkspaceViews";
+import { WorkspaceWelcome } from "./WorkspaceWelcome";
 import { useWorkspace } from "./workspace-context";
 import { agentMember, agentWorking } from "./workspace-model";
 
@@ -110,7 +111,12 @@ export function WorkspaceMain() {
               })()}
               keyed
             >
-              {(view) => <WorkspaceViewPane view={view} />}
+              {(view) => (
+                // A new workspace opens on its welcome until it has a channel or the reader picks a view.
+                <Show when={ws.workspaceEmpty() && ws.state.view === null} fallback={<WorkspaceViewPane view={view} />}>
+                  <WorkspaceWelcome />
+                </Show>
+              )}
             </Match>
           </Switch>
         }

@@ -1903,6 +1903,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     },
     onHostEvent: workspace.onHostEvent,
     approvals: () => workspace.state.approvals,
+    takeovers: () => workspace.state.takeovers,
+    hostId: () => workspace.state.host?.hostId ?? null,
     messaging: () => (connectorTarget() ? workspaceMessaging : undefined),
     workspaceSettings: () => serverSettings.workspaceSettings.getWorkspaceSettings(server()?.id ?? ""),
     messageLink: (channelId, messageId, threadRootId) => {

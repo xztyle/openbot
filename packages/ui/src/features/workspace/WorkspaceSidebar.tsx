@@ -7,6 +7,7 @@ import {
   AtSign,
   ChevronDown,
   ChevronRight,
+  Ellipsis,
   Hash,
   LayoutDashboard,
   Lock,
@@ -69,8 +70,20 @@ export interface WorkspaceSidebarProps {
   onAddTeammate?: (() => void) | undefined;
   /** A drag handle for a row, when the caller lets the reader sort them. */
   dragHandle?: ((id: string) => JSX.Element) | undefined;
+  /**
+   * Lets the reader drag the rows of a group into their own order. It gets the ids of the group in
+   * the new order.
+   */
+  onReorder?: ((group: SidebarGroupId, ids: string[]) => void) | undefined;
+  /** The items of a row's menu, such as mute and move. The menu is built when the row is hovered. */
+  rowMenu?: ((id: string, group: SidebarGroupId) => readonly WorkspaceMenuItem[]) | undefined;
+  /** A filter is on: the groups show what matches, and say so when nothing does. */
+  filtering?: boolean | undefined;
   class?: string;
 }
+
+/** The groups of conversations in the sidebar. */
+export type SidebarGroupId = "channels" | "direct";
 
 /**
  * The Slack sidebar: workspace header, Threads, Activity, Fleet and Artifacts, then Channels and
@@ -161,6 +174,9 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
           onAdd={props.onAddChannel}
           addLabel={t("workspace.sidebar.addChannel")}
         >
+          <Show when={props.filtering && props.channels.length === 0}>
+            <p class="ws-sidebar-empty">{t("workspace.sidebar.noMatches")}</p>
+          </Show>
           <For each={props.channels} keyed={(channel) => channel.id}>
             {(channel) => (
               <SidebarRow
@@ -170,6 +186,10 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 mentionCount={channel().mentionCount}
                 muted={channel().muted}
                 dragHandle={props.dragHandle}
+                group="channels"
+                order={() => props.channels.map((row) => row.id)}
+                onReorder={props.onReorder}
+                menu={props.rowMenu}
                 label={channel().name}
                 accessibleLabel={t(
                   channel().visibility === "private"
@@ -205,6 +225,9 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
           onAdd={props.onNewMessage}
           addLabel={t("workspace.sidebar.newMessage")}
         >
+          <Show when={props.filtering && props.directMessages.length === 0}>
+            <p class="ws-sidebar-empty">{t("workspace.sidebar.noMatches")}</p>
+          </Show>
           <For each={props.directMessages} keyed={(dm) => dm.id}>
             {(dm) => (
               <SidebarRow
@@ -214,6 +237,10 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 mentionCount={dm().mentionCount}
                 muted={dm().muted}
                 dragHandle={props.dragHandle}
+                group="direct"
+                order={() => props.directMessages.map((row) => row.id)}
+                onReorder={props.onReorder}
+                menu={props.rowMenu}
                 label={dm()
                   .members.map((member) => member.name)
                   .join(", ")}
@@ -347,6 +374,9 @@ function SidebarGroup(props: {
   );
 }
 
+/** The row that a drag in the sidebar carries. One drag at a time, so one record. */
+let dragged: { id: string; group: SidebarGroupId } | null = null;
+
 function SidebarRow(props: {
   id: string;
   label: string;
@@ -358,12 +388,65 @@ function SidebarRow(props: {
   mentionCount?: number | undefined;
   muted?: boolean | undefined;
   dragHandle?: ((id: string) => JSX.Element) | undefined;
+  group: SidebarGroupId;
+  /** The ids of the group, in the order it shows. */
+  order: () => string[];
+  onReorder?: ((group: SidebarGroupId, ids: string[]) => void) | undefined;
+  menu?: ((id: string, group: SidebarGroupId) => readonly WorkspaceMenuItem[]) | undefined;
   onSelect: (id: string) => void;
 }): JSX.Element {
   const { t } = useText();
   const mentions = () => props.mentionCount ?? 0;
+  const [armed, setArmed] = createSignal(false);
+  const [menuOpen, setMenuOpen] = createSignal(false);
+  const [drop, setDrop] = createSignal<"before" | "after" | null>(null);
+  const arm = () => {
+    if (!armed()) setArmed(true);
+  };
+  const dropSide = (element: HTMLElement, event: DragEvent) => {
+    const box = element.getBoundingClientRect();
+    return event.clientY < box.top + box.height / 2 ? "before" : "after";
+  };
   return (
-    <div class="ws-sidebar-item">
+    <div
+      class="ws-sidebar-item"
+      draggable={props.onReorder ? "true" : undefined}
+      data-drop={drop() ?? undefined}
+      data-menu-open={menuOpen() ? "" : undefined}
+      ref={(element: HTMLDivElement) => {
+        // The row's button takes the pointer and the keyboard; the item only builds its menu on the
+        // first visit, and carries the drag. Move up and Move down in the menu reorder by keyboard.
+        element.addEventListener("pointerenter", arm);
+        element.addEventListener("focusin", arm);
+        element.addEventListener("dragstart", (event) => {
+          if (!props.onReorder) return;
+          dragged = { id: props.id, group: props.group };
+          event.dataTransfer?.setData("text/plain", props.label);
+          if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+        });
+        element.addEventListener("dragend", () => {
+          dragged = null;
+          setDrop(null);
+        });
+        element.addEventListener("dragover", (event) => {
+          if (!props.onReorder || !dragged || dragged.group !== props.group || dragged.id === props.id) return;
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+          setDrop(dropSide(element, event));
+        });
+        element.addEventListener("dragleave", () => setDrop(null));
+        element.addEventListener("drop", (event) => {
+          const source = dragged;
+          setDrop(null);
+          if (!props.onReorder || !source || source.group !== props.group || source.id === props.id) return;
+          event.preventDefault();
+          const ids = props.order().filter((id) => id !== source.id);
+          const at = ids.indexOf(props.id) + (dropSide(element, event) === "after" ? 1 : 0);
+          ids.splice(at, 0, source.id);
+          props.onReorder(props.group, ids);
+        });
+      }}
+    >
       <Show when={props.dragHandle}>{(handle) => <span class="ws-sidebar-drag">{handle()(props.id)}</span>}</Show>
       <Button
         variant="ghost"
@@ -395,6 +478,19 @@ function SidebarRow(props: {
           </span>
         </Show>
       </Button>
+      <Show when={armed() && props.menu}>
+        {(menu) => (
+          <WorkspaceMenu
+            items={menu()(props.id, props.group)}
+            label={t("workspace.sidebar.rowMenu", { name: props.label })}
+            triggerClass="ws-sidebar-row-more"
+            placement="bottom-start"
+            onOpenChange={setMenuOpen}
+          >
+            <Ellipsis aria-hidden="true" />
+          </WorkspaceMenu>
+        )}
+      </Show>
     </div>
   );
 }

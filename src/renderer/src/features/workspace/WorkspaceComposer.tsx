@@ -46,6 +46,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const [format, setFormat] = createSignal<{ id: number; format: ComposerTextFormat } | undefined>();
   const [focus, setFocus] = createSignal(untrack(() => props.focusRequest ?? 0));
   const [editText, setEditText] = createSignal("");
+  const [textRequest, setTextRequest] = createSignal<{ id: number; text: string } | undefined>();
   createEffect(
     () => props.focusRequest ?? 0,
     (request) => {
@@ -68,8 +69,19 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const value = () => (editing() ? editText() : ws.draft(key()));
   const setValue = (text: string) => {
     if (editing()) setEditText(text);
-    else ws.setDraft(key(), text);
+    else {
+      ws.setDraft(key(), text);
+      ws.noteTyping(props.channelId, props.threadRootId ?? null, text.trim().length > 0);
+    }
   };
+  // Leaving the conversation or the thread ends the typing there.
+  createEffect(
+    () => ({ channelId: props.channelId, threadRootId: props.threadRootId ?? null }),
+    (_current, previous) => {
+      if (previous) ws.noteTyping(previous.channelId, previous.threadRootId, false);
+    },
+  );
+  onCleanup(() => ws.noteTyping(props.channelId, props.threadRootId ?? null, false));
 
   function transcript() {
     if (props.threadRootId) {
@@ -155,7 +167,13 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     };
   };
 
-  const canSend = () => !sending() && (value().trim().length > 0 || (!editing() && attachments().length > 0));
+  /** A message with files may lose its text in an edit; the files stay. */
+  const editedHasFiles = () => {
+    const current = editing();
+    return current ? Boolean(findMessage(current.messageId)?.message.attachments?.length) : false;
+  };
+  const canSend = () =>
+    !sending() && (value().trim().length > 0 || (editing() ? editedHasFiles() : attachments().length > 0));
 
   async function submit() {
     if (!canSend() || props.disabled) return;
@@ -163,7 +181,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     const current = editing();
     if (current) {
       const text = value().trim();
-      if (!text) return;
+      if (!text && !editedHasFiles()) return;
       setSending(true);
       try {
         await ws.editMessage(current.channelId, current.messageId, text);
@@ -179,6 +197,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     const body = text.trim();
     setSending(true);
     ws.setDraft(key(), "");
+    ws.noteTyping(props.channelId, props.threadRootId ?? null, false, true);
     setAttachments([]);
     try {
       await ws.send({
@@ -297,6 +316,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
               disabled={props.disabled === true}
               focusRequest={focus()}
               formatRequest={format()}
+              textRequest={textRequest()}
               formatShortcuts
               onValueChange={setValue}
               onSubmit={() => void submit()}
@@ -307,6 +327,15 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
         onFormat={(next) => setFormat((current) => ({ id: (current?.id ?? 0) + 1, format: next }))}
         defaultToolbarHidden={Boolean(props.threadRootId)}
         onAttach={editing() ? undefined : () => void attach()}
+        emojiPicker={{
+          onPick: (emoji) => {
+            ws.noteEmoji(emoji);
+            setTextRequest((current) => ({ id: (current?.id ?? 0) + 1, text: emoji }));
+          },
+          recent: ws.state.emoji.recent,
+          skinTone: ws.state.emoji.skinTone,
+          onSkinToneChange: (tone) => ws.setSkinTone(tone),
+        }}
         onSend={() => void submit()}
         canSend={canSend()}
         sending={sending()}

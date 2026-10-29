@@ -193,6 +193,8 @@ export interface DirectMessagesInput {
   /** The server owner reads each agent's main chat as its DM. */
   agentDmIsMainChat: boolean;
   hiddenAgentIds: ReadonlySet<string>;
+  /** The agents the reader may open a DM with, when the host says. Null: every agent it shows. */
+  dmAgentIds?: ReadonlySet<string> | null | undefined;
 }
 
 /**
@@ -224,7 +226,12 @@ export function sidebarDirectMessages(input: DirectMessagesInput): SidebarDirect
   }
   rows.sort((left, right) => right.at - left.at);
   const agentRows = directory.agents
-    .filter((agent) => !input.hiddenAgentIds.has(agent.id) && !agentsWithChannel.has(agent.id))
+    .filter(
+      (agent) =>
+        !input.hiddenAgentIds.has(agent.id) &&
+        !agentsWithChannel.has(agent.id) &&
+        (input.dmAgentIds?.has(agent.id) ?? true),
+    )
     .map((agent): SidebarDirectMessage => {
       const state = directory.agentStates[agent.id];
       const unread = state?.kind === "unread" ? state.count : state?.kind === "waiting" ? 1 : 0;

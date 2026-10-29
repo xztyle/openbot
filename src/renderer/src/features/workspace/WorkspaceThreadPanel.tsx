@@ -28,10 +28,19 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
   const root = () => rows().find((row) => row.entry.id === props.rootId && !row.pending);
   const replies = () => rows().filter((row) => row !== root());
   const replyCount = () => replies().filter((row) => !row.pending).length;
+  const live = createMemo(() => ws.typingIn(props.channelId, props.rootId));
+  const typingPeople = createMemo(() => (live()?.humans ?? []).map((id) => memberById(ws.directory(), id)));
   const typing = createMemo(() => {
+    const host = live();
     const replies = entries().filter((entry) => entry.id !== props.rootId);
-    const thinking = thinkingAgents([...entries()]);
-    const busy = workingAgents(replies, []).filter((id) => !thinking.includes(id));
+    const thinking = host
+      ? host.agents.filter((agent) => agent.state === "thinking").map((agent) => agent.id)
+      : thinkingAgents([...entries()]);
+    const busy = (
+      host
+        ? host.agents.filter((agent) => agent.state === "working").map((agent) => agent.id)
+        : workingAgents(replies, [])
+    ).filter((id) => !thinking.includes(id));
     return [
       ...thinking.map((id) => ({ member: memberById(ws.directory(), id), state: "thinking" as const })),
       ...busy.map((id) => ({ member: memberById(ws.directory(), id), state: "working" as const })),
@@ -97,7 +106,7 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
             {(row) => <WorkspaceMessage row={row()} channelId={props.channelId} channelName={name()} inThread />}
           </For>
         }
-        typing={<TypingIndicator humans={[]} agents={typing()} />}
+        typing={<TypingIndicator humans={typingPeople()} agents={typing()} />}
         composer={
           <WorkspaceComposer
             channelId={props.channelId}

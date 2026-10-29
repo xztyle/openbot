@@ -6,6 +6,7 @@ import { ChevronRight, Ellipsis, MessageSquareReply, SmilePlus } from "../../ico
 import { useText } from "../../text";
 import { LabelTooltip, LabelTooltipTrigger } from "../../tooltip";
 import { cx } from "../../utils";
+import { EmojiPicker, type EmojiPickerProps } from "./EmojiPicker";
 import { MemberProfilePopover } from "./MemberProfileCard";
 import { AvatarStack, MemberAvatar, MemberName } from "./WorkspaceAvatar";
 import { WorkspaceMenu } from "./WorkspaceMenu";
@@ -17,6 +18,9 @@ import type {
   WorkspaceMenuItem,
   WorkspaceReaction,
 } from "./workspace-types";
+
+/** What the reaction picker needs for its full emoji list. */
+export type ReactionEmojiPicker = Pick<EmojiPickerProps, "recent" | "skinTone" | "onSkinToneChange">;
 
 /** The emoji that the react button offers first, as Slack's frequent row. */
 export const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀", "✅"] as const;
@@ -42,6 +46,8 @@ export interface MessageRowProps {
   /** Opens the full emoji picker. The quick row of the react button does not need it. */
   onOpenEmojiPicker?: (() => void) | undefined;
   quickReactions?: readonly string[] | undefined;
+  /** The full emoji picker behind the react button's "more": recent emoji and the skin tone. */
+  emojiPicker?: ReactionEmojiPicker | undefined;
   thread?: ThreadSummary | undefined;
   onOpenThread?: (() => void) | undefined;
   /** The items of the "more" menu: edit, copy link, mark unread, delete. */
@@ -127,6 +133,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
               onToggle={props.onToggleReaction}
               quickReactions={props.quickReactions}
               onOpenEmojiPicker={props.onOpenEmojiPicker}
+              emojiPicker={props.emojiPicker}
             />
           </Show>
           <Show when={props.thread}>
@@ -138,11 +145,28 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
         <div class="ws-message-actions" role="toolbar" aria-label={t("workspace.message.actions")}>
           <Show when={props.onToggleReaction}>
             {(toggle) => (
-              <ReactionPicker
-                quickReactions={props.quickReactions}
-                onPick={toggle()}
-                onOpenEmojiPicker={props.onOpenEmojiPicker}
-              />
+              <>
+                <For each={(props.quickReactions ?? QUICK_REACTIONS).slice(0, 3)}>
+                  {(emoji) => (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      class="ws-message-action-emoji"
+                      aria-label={t("workspace.reaction.add", { emoji })}
+                      title={t("workspace.reaction.add", { emoji })}
+                      onClick={() => toggle()(emoji)}
+                    >
+                      {emoji}
+                    </Button>
+                  )}
+                </For>
+                <ReactionPicker
+                  quickReactions={props.quickReactions}
+                  onPick={toggle()}
+                  onOpenEmojiPicker={props.onOpenEmojiPicker}
+                  emojiPicker={props.emojiPicker}
+                />
+              </>
             )}
           </Show>
           <Show when={props.onOpenThread}>
@@ -232,6 +256,7 @@ export interface ReactionBarProps {
   onToggle?: ((emoji: string) => void) | undefined;
   quickReactions?: readonly string[] | undefined;
   onOpenEmojiPicker?: (() => void) | undefined;
+  emojiPicker?: ReactionEmojiPicker | undefined;
 }
 
 /** The reaction pills under a message, and the button that adds one. */
@@ -269,6 +294,7 @@ export function ReactionBar(props: ReactionBarProps): JSX.Element {
             quickReactions={props.quickReactions}
             onPick={toggle()}
             onOpenEmojiPicker={props.onOpenEmojiPicker}
+            emojiPicker={props.emojiPicker}
             triggerClass="ws-reaction ws-reaction-add"
           />
         )}
@@ -281,12 +307,19 @@ function ReactionPicker(props: {
   quickReactions?: readonly string[] | undefined;
   onPick: (emoji: string) => void;
   onOpenEmojiPicker?: (() => void) | undefined;
+  emojiPicker?: ReactionEmojiPicker | undefined;
   triggerClass?: string;
 }): JSX.Element {
   const { t } = useText();
   const [open, setOpen] = createSignal(false);
+  /** The popover shows every emoji, after "more" in the quick row. */
+  const [full, setFull] = createSignal(false);
+  const changeOpen = (next: boolean) => {
+    setOpen(next);
+    if (!next) setFull(false);
+  };
   return (
-    <Popover.Root open={open()} onOpenChange={setOpen} placement="top-end" gutter={4}>
+    <Popover.Root open={open()} onOpenChange={changeOpen} placement="top-end" gutter={4}>
       <Popover.Trigger
         class={cx(buttonVariants({ variant: "ghost", size: "icon-xs" }), "ui-icon-button", props.triggerClass)}
         aria-label={t("workspace.message.react")}
@@ -295,40 +328,80 @@ function ReactionPicker(props: {
         <SmilePlus aria-hidden="true" />
       </Popover.Trigger>
       <Popover.Portal>
-        <Popover.Content class="ui-popover-menu-surface ws-quick-reactions">
-          <For each={props.quickReactions ?? QUICK_REACTIONS}>
-            {(emoji) => (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                class="ws-quick-reaction"
-                aria-label={t("workspace.reaction.add", { emoji })}
-                onClick={() => {
+        <Show
+          when={full() && props.emojiPicker}
+          fallback={
+            <Popover.Content class="ui-popover-menu-surface ws-quick-reactions">
+              <QuickReactionRow
+                quickReactions={props.quickReactions}
+                onPick={(emoji) => {
                   props.onPick(emoji);
-                  setOpen(false);
+                  changeOpen(false);
                 }}
-              >
-                {emoji}
-              </Button>
-            )}
-          </For>
-          <Show when={props.onOpenEmojiPicker}>
-            {(more) => (
-              <IconButton
-                variant="ghost"
-                label={t("workspace.reaction.more")}
-                onClick={() => {
-                  setOpen(false);
-                  more()();
+                onMore={
+                  props.emojiPicker
+                    ? () => setFull(true)
+                    : props.onOpenEmojiPicker
+                      ? () => {
+                          changeOpen(false);
+                          props.onOpenEmojiPicker?.();
+                        }
+                      : undefined
+                }
+              />
+            </Popover.Content>
+          }
+        >
+          {(picker) => (
+            <Popover.Content class="ui-popover-menu-surface ws-emoji-popover" aria-label={t("workspace.emoji.label")}>
+              <EmojiPicker
+                autofocus
+                recent={picker().recent}
+                skinTone={picker().skinTone}
+                onSkinToneChange={picker().onSkinToneChange}
+                onPick={(emoji) => {
+                  props.onPick(emoji);
+                  changeOpen(false);
                 }}
-              >
-                <Ellipsis />
-              </IconButton>
-            )}
-          </Show>
-        </Popover.Content>
+              />
+            </Popover.Content>
+          )}
+        </Show>
       </Popover.Portal>
     </Popover.Root>
+  );
+}
+
+/** The frequent emoji in a row, and the button that opens every emoji. */
+function QuickReactionRow(props: {
+  quickReactions?: readonly string[] | undefined;
+  onPick: (emoji: string) => void;
+  onMore?: (() => void) | undefined;
+}): JSX.Element {
+  const { t } = useText();
+  return (
+    <>
+      <For each={props.quickReactions ?? QUICK_REACTIONS}>
+        {(emoji) => (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="ws-quick-reaction"
+            aria-label={t("workspace.reaction.add", { emoji })}
+            onClick={() => props.onPick(emoji)}
+          >
+            {emoji}
+          </Button>
+        )}
+      </For>
+      <Show when={props.onMore}>
+        {(more) => (
+          <IconButton variant="ghost" label={t("workspace.reaction.more")} onClick={() => more()()}>
+            <Ellipsis />
+          </IconButton>
+        )}
+      </Show>
+    </>
   );
 }
 

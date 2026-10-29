@@ -103,6 +103,11 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
             }
             integrations={kind === "channel" ? <DiscordIntegration channelId={props.channelId} /> : undefined}
             answerLog={ws.isAdmin() ? <AnswerLog channelId={props.channelId} /> : undefined}
+            onVisibilityChange={
+              ws.isAdmin() && kind === "channel" && !live().archived
+                ? (visibility) => void ws.setVisibility(props.channelId, visibility)
+                : undefined
+            }
             onArchive={
               manage() && kind === "channel" && !live().archived ? () => void ws.archive(props.channelId) : undefined
             }
@@ -170,6 +175,9 @@ function AnswerLog(props: { channelId: string }) {
                   <span class="ws-answer-log-copy">
                     <span class="ws-answer-log-head">
                       <strong>{agent().name}</strong> {outcome(item().decision)}
+                      <Show when={item().decision.round === 2}>
+                        <span class="ws-muted"> · {t("workspace.app.gate.round2")}</span>
+                      </Show>
                       <span class="ws-muted">
                         {" · "}
                         {format.date(item().at, { hour: "numeric", minute: "2-digit" })}

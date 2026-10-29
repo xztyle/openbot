@@ -86,6 +86,8 @@ export function createWebChannelsPort(
       readChannel: channels?.readChannel ?? unavailable,
       channelCommand: channels?.channelCommand ?? unavailable,
       workspaceActivity: channels?.workspaceActivity,
+      channelTyping: channels?.channelTyping,
+      workspaceDmAgents: channels?.workspaceDmAgents,
       workspaceFleet: channels?.workspaceFleet,
       workspaceSteps: channels?.workspaceSteps,
       workspaceArtifacts: channels?.workspaceArtifacts,

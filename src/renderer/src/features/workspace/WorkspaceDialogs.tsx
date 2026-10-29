@@ -33,7 +33,7 @@ export function WorkspaceDialogs() {
       .map(personMember),
     ...ws.env
       .agents()
-      .filter((agent) => !ws.env.hiddenAgentIds().has(agent.id))
+      .filter((agent) => !ws.env.hiddenAgentIds().has(agent.id) && ws.canMessageAgent(agent.id))
       .map((agent) => agentMember(agent)),
   ]);
   return (
@@ -261,7 +261,7 @@ function QuickSwitcher(props: { onClose: () => void }) {
       });
     }
     for (const agent of ws.env.agents()) {
-      if (ws.env.hiddenAgentIds().has(agent.id)) continue;
+      if (ws.env.hiddenAgentIds().has(agent.id) || !ws.canMessageAgent(agent.id)) continue;
       list.push({
         id: `${AGENT_DM_PREFIX}${agent.id}`,
         label: agent.name,

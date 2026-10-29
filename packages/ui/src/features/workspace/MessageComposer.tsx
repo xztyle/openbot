@@ -18,6 +18,7 @@ import {
 } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
+import { EmojiPickerPopover, type EmojiPickerProps } from "./EmojiPicker";
 
 export type ComposerFormat = "bold" | "italic" | "strike" | "code" | "link" | "bulleted-list" | "numbered-list";
 
@@ -55,6 +56,8 @@ export interface MessageComposerProps {
   activeFormats?: readonly ComposerFormat[] | undefined;
   onAttach?: (() => void) | undefined;
   onEmoji?: (() => void) | undefined;
+  /** The emoji picker of the toolbar's emoji button. It takes the place of `onEmoji`. */
+  emojiPicker?: Omit<EmojiPickerProps, "class" | "autofocus"> | undefined;
   /** Puts `@` at the caret and opens the member list. */
   onMention?: (() => void) | undefined;
   onSend: () => void;
@@ -78,6 +81,7 @@ export function MessageComposer(props: MessageComposerProps): JSX.Element {
   const { t } = useText();
   const alsoSendId = createUniqueId();
   const [toolbar, setToolbar] = createSignal(!props.defaultToolbarHidden);
+  const [emojiOpen, setEmojiOpen] = createSignal(false);
   const active = (format: ComposerFormat) => props.activeFormats?.includes(format) ?? false;
   return (
     <div class={cx("ws-composer", props.class)} data-disabled={props.disabled ? "" : undefined}>
@@ -135,7 +139,23 @@ export function MessageComposer(props: MessageComposerProps): JSX.Element {
                 <Type />
               </IconButton>
             </Show>
-            <Show when={props.onEmoji}>
+            <Show when={props.emojiPicker}>
+              {(picker) => (
+                <EmojiPickerPopover
+                  open={emojiOpen()}
+                  onOpenChange={setEmojiOpen}
+                  trigger={<SmilePlus aria-hidden="true" />}
+                  triggerLabel={t("workspace.composer.emoji")}
+                  triggerClass="ws-composer-emoji"
+                  placement="top-start"
+                  onPick={(emoji) => picker().onPick(emoji)}
+                  recent={picker().recent}
+                  skinTone={picker().skinTone}
+                  onSkinToneChange={picker().onSkinToneChange}
+                />
+              )}
+            </Show>
+            <Show when={!props.emojiPicker && props.onEmoji}>
               {(emoji) => (
                 <IconButton
                   variant="ghost"

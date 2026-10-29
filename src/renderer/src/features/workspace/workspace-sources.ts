@@ -185,6 +185,7 @@ export function createHostFleetSource(input: {
                 state: "waiting",
                 personName: status.forMemberId ? memberById(directory, status.forMemberId).name : directory.reader.name,
                 channelName: channelName(status.channelId),
+                ...(status.reason === "usage-limit" ? { usageLimit: { resetsAt: status.resetsAt } } : {}),
               }
             : status?.kind === "queued"
               ? { state: "working", task: t("workspace.app.fleet.queued", { count: status.count }) }

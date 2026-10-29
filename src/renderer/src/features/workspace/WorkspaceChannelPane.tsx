@@ -1,7 +1,7 @@
 import { type Channel, type ChannelSummary, channelKind, channelVisibility } from "@openbot/contracts/ipc";
 import { Button, Hash, Lock } from "@openbot/ui";
 import { QuestionPromptBubble } from "@openbot/ui/components/QuestionPromptBubble";
-import { ApprovalCard } from "@openbot/ui/features/conversation/ConversationPrompts";
+import { ApprovalCard, BrowserTakeoverCard } from "@openbot/ui/features/conversation/ConversationPrompts";
 import { ChannelHeader } from "@openbot/ui/features/workspace/ChannelHeader";
 import { TypingIndicator } from "@openbot/ui/features/workspace/TypingIndicator";
 import { MemberAvatar } from "@openbot/ui/features/workspace/WorkspaceAvatar";
@@ -9,11 +9,13 @@ import { useText } from "@openbot/ui/text";
 import { createMemo, Show } from "solid-js";
 import {
   channelApproval,
+  channelBrowserTakeover,
   firstUnreadChannelMessageId,
   waitingChannelPrompt,
 } from "../channels/channel-conversation-rows";
 import { WorkspaceComposer } from "./WorkspaceComposer";
 import { WorkspaceMessageList } from "./WorkspaceMessageList";
+import { AnswerModesHint } from "./WorkspaceWelcome";
 import { useWorkspace } from "./workspace-context";
 import {
   channelMembers,
@@ -67,9 +69,16 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     if (!held || held.channelId !== props.channelId) return null;
     return firstUnreadChannelMessageId(entries(), held.count, ws.env.isReader);
   });
+  /** The host's typing list once it sent one; until then the gate marks and the running tasks of the page. */
+  const live = createMemo(() => ws.typingIn(props.channelId, null));
   const typing = createMemo(() => {
-    const thinking = thinkingAgents(entries());
-    const busy = [...working()].filter((id) => !thinking.includes(id));
+    const host = live();
+    const thinking = host
+      ? host.agents.filter((agent) => agent.state === "thinking").map((agent) => agent.id)
+      : thinkingAgents(entries());
+    const busy = (
+      host ? host.agents.filter((agent) => agent.state === "working").map((agent) => agent.id) : [...working()]
+    ).filter((id) => !thinking.includes(id));
     const fleet = ws.fleet.agents();
     const step = (id: string) => fleet.find((agent) => agent.member.id === id)?.currentStep;
     return [
@@ -77,6 +86,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
       ...busy.map((id) => ({ member: memberById(ws.directory(), id), state: "working" as const, label: step(id) })),
     ];
   });
+  const typingPeople = createMemo(() => (live()?.humans ?? []).map((id) => memberById(ws.directory(), id)));
   const prompt = createMemo(() => {
     const current = page();
     return current ? waitingChannelPrompt(current) : null;
@@ -86,6 +96,14 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     const approvals = ws.env.approvals?.() ?? [];
     return current ? channelApproval(current, summary()?.threads, approvals) : undefined;
   });
+  /** A browser takeover of the channel's work: the agent waits for a person in its browser. */
+  const takeover = createMemo(() => {
+    const current = page();
+    const takeovers = ws.env.takeovers?.() ?? [];
+    return current && takeovers.length ? channelBrowserTakeover(current, summary()?.threads, takeovers) : undefined;
+  });
+  /** Agents answer only when mentioned in a channel the reader may change: say it once. */
+  const showModesHint = () => kind() === "channel" && joined() && !archived() && (channel()?.members.length ?? 0) > 0;
   const respond = async (action: () => Promise<void>) => {
     try {
       await action();
@@ -143,6 +161,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
           onLoadOlder={() => ws.channels.loadOlder()}
           highlightedId={threadRoot()}
           empty={<ChannelIntro channel={channel()} name={name()} />}
+          onMarkRead={() => ws.markRead()}
         />
       </Show>
       <div class="ws-channel-bottom">
@@ -169,6 +188,39 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
             </div>
           )}
         </Show>
+        <Show when={takeover()} keyed>
+          {(request) => (
+            <div class="ws-interaction">
+              <BrowserTakeoverCard
+                request={request}
+                agentName={memberById(ws.directory(), request.agentId).name}
+                tab={undefined}
+                preview={null}
+                previewStatus="idle"
+                onOpen={ws.env.openBrowserTab ? () => ws.env.openBrowserTab?.(request.tabId) : undefined}
+                onComplete={() =>
+                  respond(() =>
+                    ws.channels
+                      .port()
+                      .agent.respondToBrowserTakeover({ requestId: request.requestId, decision: "complete" }),
+                  )
+                }
+                onCancel={() =>
+                  respond(() =>
+                    ws.channels
+                      .port()
+                      .agent.respondToBrowserTakeover({ requestId: request.requestId, decision: "cancel" }),
+                  )
+                }
+                browserSecret={{
+                  loadPreview: (tabId) => ws.channels.port().browser.capturePreview(tabId),
+                  vaultSave: ws.env.localHost?.() === true,
+                  onRespond: (input) => ws.channels.port().agent.respondToBrowserSecret(input),
+                }}
+              />
+            </div>
+          )}
+        </Show>
         <Show when={prompt()} keyed>
           {(waiting) => (
             <div class="ws-interaction">
@@ -186,7 +238,10 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
             </div>
           )}
         </Show>
-        <TypingIndicator humans={[]} agents={typing()} />
+        <Show when={showModesHint()}>
+          <AnswerModesHint channelId={props.channelId} />
+        </Show>
+        <TypingIndicator humans={typingPeople()} agents={typing()} />
         <Show when={!archived()} fallback={<p class="ws-channel-notice">{t("workspace.app.channel.archived")}</p>}>
           <Show
             when={joined()}
@@ -219,6 +274,7 @@ function ChannelIntro(props: { channel: ChannelSummary | Channel | undefined; na
   const ws = useWorkspace();
   const kind = () => (props.channel ? channelKind(props.channel) : "channel");
   const others = () => (props.channel ? otherMembers(ws.directory(), props.channel) : []);
+  const soleAgent = () => (props.channel ? ws.soleAgent(props.channel) : null);
   return (
     <div class="ws-channel-intro">
       <Show
@@ -233,7 +289,11 @@ function ChannelIntro(props: { channel: ChannelSummary | Channel | undefined; na
                 ))}
             </div>
             <h2 class="ws-channel-intro-title">{props.name}</h2>
-            <p class="ws-channel-intro-text">{t("workspace.app.channel.dmIntro", { name: props.name })}</p>
+            <p class="ws-channel-intro-text">
+              {t(soleAgent() ? "workspace.app.channel.agentDmIntro" : "workspace.app.channel.dmIntro", {
+                name: props.name,
+              })}
+            </p>
           </>
         }
       >

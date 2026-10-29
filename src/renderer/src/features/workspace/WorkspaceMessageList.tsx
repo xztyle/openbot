@@ -1,5 +1,5 @@
 import type { ChannelMessage } from "@openbot/contracts/ipc";
-import { Button, ChevronDown } from "@openbot/ui";
+import { ArrowUp, Button, ChevronDown } from "@openbot/ui";
 import {
   calculateChatScrollMargin,
   chatHistoryBoundaryReached,
@@ -9,6 +9,7 @@ import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { WorkspaceMessage } from "./WorkspaceMessage";
+import { useWorkspace } from "./workspace-context";
 import { keepUnchangedRows, messageRows, type WorkspaceMessageRowModel } from "./workspace-model";
 
 /** How close to the end still counts as reading the newest messages. */
@@ -30,6 +31,8 @@ export interface WorkspaceMessageListProps {
   empty?: JSX.Element;
   /** Reports whether the reader reads the newest messages. */
   onAtEnd?: (atEnd: boolean) => void;
+  /** Marks the conversation read: the unread banner's button. */
+  onMarkRead?: () => void;
 }
 
 /**
@@ -39,7 +42,8 @@ export interface WorkspaceMessageListProps {
  * older page when the reader reaches the top.
  */
 export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
-  const { t } = useText();
+  const { t, format } = useText();
+  const ws = useWorkspace();
   let scroller: HTMLDivElement | undefined;
   let virtualRoot: HTMLDivElement | undefined;
   const [margin, setMargin] = createSignal(0);
@@ -55,6 +59,20 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     ),
   );
   const indexByKey = createMemo(() => new Map(rows().map((row, index) => [row.key, index])));
+  const unreadIndex = createMemo(() => rows().findIndex((row) => row.firstUnread));
+  /** The last row when the reader left the end: the rows after it are new to them. */
+  const [awayKey, setAwayKey] = createSignal<string | null>(null);
+  const newSinceAway = createMemo(() => {
+    const key = awayKey();
+    if (key === null) return 0;
+    const from = indexByKey().get(key);
+    if (from === undefined) return 0;
+    return rows()
+      .slice(from + 1)
+      .filter((row) => !row.pending).length;
+  });
+  /** The "new" divider is above the screen: the banner offers to jump back to it. */
+  const [unreadAbove, setUnreadAbove] = createSignal(false);
 
   async function loadOlder() {
     if (loadingOlder() || !props.hasOlder) return;
@@ -100,8 +118,21 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     follow = remaining <= FOLLOW_DISTANCE;
     if (follow !== atEnd()) {
       setAtEnd(follow);
+      setAwayKey(follow ? null : (untrack(rows).at(-1)?.key ?? null));
       props.onAtEnd?.(follow);
     }
+    const unread = untrack(unreadIndex);
+    const start = unread >= 0 ? virtualizer.itemStart(unread) : undefined;
+    const above = start !== undefined && start + untrack(margin) < scroller.scrollTop;
+    if (above !== untrack(unreadAbove)) setUnreadAbove(above);
+  }
+
+  function jumpToUnread() {
+    const unread = untrack(unreadIndex);
+    if (unread < 0) return;
+    follow = false;
+    virtualizer.scrollToIndex(Math.max(0, unread - 1));
+    requestAnimationFrame(updateAtEnd);
   }
 
   // The first rows open at the "new" divider, or at the end. Each later change follows the end
@@ -142,7 +173,16 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   return (
     <div class="ws-message-list">
       <div
-        ref={(element) => (scroller = element)}
+        ref={(element) => {
+          scroller = element;
+          // A link to a message of this workspace opens it here, not in the browser. The links
+          // take the keyboard themselves, so the list only hears their clicks.
+          element.addEventListener("click", (event) => {
+            const target = event.target;
+            const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>("a.ws-link[href]") : null;
+            if (anchor && ws.openLink(anchor.href)) event.preventDefault();
+          });
+        }}
         class="ws-message-scroll"
         onScroll={() => {
           updateAtEnd();
@@ -197,9 +237,28 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
           </For>
         </div>
       </div>
+      <Show when={unreadAbove() && unreadIndex() >= 0}>
+        <div class="ws-unread-banner" role="status">
+          <Button variant="ghost" size="xs" class="ws-unread-banner-jump" onClick={jumpToUnread}>
+            <ArrowUp aria-hidden="true" />
+            {t("workspace.app.channel.unreadSince", {
+              time: format.date(Date.parse(rows()[unreadIndex()]?.entry.message.createdAt ?? ""), {
+                timeStyle: "short",
+              }),
+            })}
+          </Button>
+          <Show when={props.onMarkRead}>
+            {(markRead) => (
+              <Button variant="ghost" size="xs" onClick={() => markRead()()}>
+                {t("workspace.app.channel.markRead")}
+              </Button>
+            )}
+          </Show>
+        </div>
+      </Show>
       <Show when={!atEnd()}>
         <Button
-          variant="secondary"
+          variant={newSinceAway() > 0 ? "default" : "secondary"}
           size="xs"
           class="ws-jump-latest"
           onClick={() => {
@@ -208,7 +267,9 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
           }}
         >
           <ChevronDown aria-hidden="true" />
-          {t("workspace.app.channel.jumpToLatest")}
+          {newSinceAway() > 0
+            ? t("workspace.app.channel.newMessages", { count: newSinceAway() })
+            : t("workspace.app.channel.jumpToLatest")}
         </Button>
       </Show>
     </div>

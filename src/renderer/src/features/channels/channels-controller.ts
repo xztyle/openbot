@@ -43,6 +43,8 @@ export interface HeldUnread {
 
 interface ChannelsState {
   channels: ChannelSummary[];
+  /** The list of this scope was read at least once, so an empty list means no channels. */
+  listed: boolean;
   selectedId: string | null;
   page: ChannelPage | null;
   /** Null when nothing was unread at the opening, or after the reader released it. */
@@ -104,6 +106,7 @@ function channelAction(input: ChannelCommand, creating: boolean, page: ChannelPa
 export function createChannelsController(env: ChannelsEnvironment) {
   const [state, setState] = createStore<ChannelsState>({
     channels: [],
+    listed: false,
     selectedId: null,
     page: null,
     unread: null,
@@ -201,6 +204,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
         // Keep each summary object, so the sidebar, which keys its rows by object, does not remount
         // every channel row (and close an open menu) on each refresh.
         reconcile(channels, "id")(state.channels);
+        state.listed = true;
         if (selected && !selectedExists) {
           state.selectedId = null;
           state.editing = null;
@@ -431,6 +435,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
           setState((state) => {
             Object.assign(state, {
               channels: [],
+              listed: false,
               selectedId: selected,
               page: null,
               unread: null,

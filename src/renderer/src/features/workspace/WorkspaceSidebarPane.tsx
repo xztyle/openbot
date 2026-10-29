@@ -1,5 +1,5 @@
-import { Button, Hash, Plus, Search, SquarePen } from "@openbot/ui";
-import { WorkspaceSidebar } from "@openbot/ui/features/workspace/WorkspaceSidebar";
+import { ArrowDown, ArrowUp, Bell, BellOff, Button, Hash, Input, Plus, Search, SquarePen } from "@openbot/ui";
+import { type SidebarGroupId, WorkspaceSidebar } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { createMemo } from "solid-js";
@@ -30,7 +30,33 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
     },
     ...ws.env.menu(),
   ]);
+  /** Mute, and the keyboard's way to move a row; dragging moves it too. */
+  const rowMenu = (id: string, group: SidebarGroupId): WorkspaceMenuItem[] => {
+    const muted = ws.isMuted(id);
+    return [
+      {
+        id: "mute",
+        label: t(muted ? "workspace.sidebar.unmute" : "workspace.sidebar.mute"),
+        icon: muted ? <Bell aria-hidden="true" /> : <BellOff aria-hidden="true" />,
+        onSelect: () => ws.setMuted(id, !muted),
+      },
+      {
+        id: "move-up",
+        label: t("workspace.sidebar.moveUp"),
+        icon: <ArrowUp aria-hidden="true" />,
+        onSelect: () => ws.moveSidebarRow(group, id, -1),
+      },
+      {
+        id: "move-down",
+        label: t("workspace.sidebar.moveDown"),
+        icon: <ArrowDown aria-hidden="true" />,
+        onSelect: () => ws.moveSidebarRow(group, id, 1),
+      },
+    ];
+  };
   const view = () => {
+    // The welcome of a new workspace is no view of the list.
+    if (ws.workspaceEmpty() && ws.state.view === null) return undefined;
     const route = ws.route();
     return route.kind === "view" ? route.view : undefined;
   };
@@ -40,12 +66,33 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
       workspaceMenu={menu()}
       onNewMessage={() => ws.openDialog({ kind: "new-message" })}
       search={
-        <Button variant="ghost" class="ws-jump" onClick={() => ws.openDialog({ kind: "switcher" })}>
-          <Search aria-hidden="true" />
-          <span class="ws-jump-label">{t("workspace.app.switcher.jump")}</span>
-          <kbd class="ws-jump-key">{props.searchShortcut}</kbd>
-        </Button>
+        <>
+          <Button variant="ghost" class="ws-jump" onClick={() => ws.openDialog({ kind: "switcher" })}>
+            <Search aria-hidden="true" />
+            <span class="ws-jump-label">{t("workspace.app.switcher.jump")}</span>
+            <kbd class="ws-jump-key">{props.searchShortcut}</kbd>
+          </Button>
+          <Input
+            type="search"
+            size="sm"
+            class="ws-sidebar-filter"
+            value={ws.state.sidebarFilter}
+            placeholder={t("workspace.sidebar.filter")}
+            aria-label={t("workspace.sidebar.filter")}
+            onValueChange={(text: string) => ws.setSidebarFilter(text)}
+            onKeyDown={(event: KeyboardEvent) => {
+              if (event.key === "Escape" && ws.state.sidebarFilter) {
+                event.preventDefault();
+                event.stopPropagation();
+                ws.setSidebarFilter("");
+              }
+            }}
+          />
+        </>
       }
+      filtering={ws.state.sidebarFilter.trim().length > 0}
+      onReorder={(group, ids) => ws.reorderSidebar(group, ids)}
+      rowMenu={rowMenu}
       activeView={view()}
       activeConversationId={ws.activeConversationId()}
       onSelectView={(next) => ws.openView(next)}

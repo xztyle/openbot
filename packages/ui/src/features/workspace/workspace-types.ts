@@ -105,7 +105,13 @@ export interface AgentStepView {
 export type AgentWorkStatus =
   | { state: "idle" }
   | { state: "working"; task: string; channelName?: string | undefined }
-  | { state: "waiting"; personName: string; channelName?: string | undefined };
+  | {
+      state: "waiting";
+      personName: string;
+      channelName?: string | undefined;
+      /** The agent waits for a provider usage limit, not a person; `resetsAt` is when it ends. */
+      usageLimit?: { resetsAt?: number | undefined } | undefined;
+    };
 
 /** The parts of the computer an agent can use. */
 export type AgentComputerPart = "browser" | "shell" | "bench" | "hosting";

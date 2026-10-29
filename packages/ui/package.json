@@ -413,6 +413,8 @@
     "./features/workspace/ArtifactsView": "./src/features/workspace/ArtifactsView.tsx",
     "./features/workspace/ChannelDetails": "./src/features/workspace/ChannelDetails.tsx",
     "./features/workspace/ChannelHeader": "./src/features/workspace/ChannelHeader.tsx",
+    "./features/workspace/EmojiPicker": "./src/features/workspace/EmojiPicker.tsx",
+    "./features/workspace/emoji-data": "./src/features/workspace/emoji-data.ts",
     "./features/workspace/CreateChannelDialog": "./src/features/workspace/CreateChannelDialog.tsx",
     "./features/workspace/FleetView": "./src/features/workspace/FleetView.tsx",
     "./features/workspace/MemberPicker": "./src/features/workspace/MemberPicker.tsx",

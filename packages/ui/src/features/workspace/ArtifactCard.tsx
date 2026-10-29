@@ -1,5 +1,5 @@
 import { Dynamic, type JSX } from "@solidjs/web";
-import { createSignal, Show } from "solid-js";
+import { createSignal, Match, Show, Switch } from "solid-js";
 import { Button } from "../../button";
 import { AppWindow, ExternalLink, File, FileText, Globe2, LayoutDashboard, Presentation } from "../../icons";
 import { useText } from "../../text";
@@ -61,12 +61,15 @@ export function ArtifactCard(props: ArtifactCardProps): JSX.Element {
       aria-label={t("workspace.artifact.label", { kind: t(kind().label), title: props.artifact.title })}
     >
       <Show when={!props.compact}>
-        <div class="ws-artifact-thumb">
+        <div
+          class="ws-artifact-thumb"
+          data-placeholder={props.artifact.thumbnailUrl && !thumbnailFailed() ? undefined : ""}
+        >
           <Show
             when={props.artifact.thumbnailUrl && !thumbnailFailed() ? props.artifact.thumbnailUrl : null}
             fallback={
               <span class="ws-artifact-thumb-fallback" aria-hidden="true">
-                <Dynamic component={kind().icon} />
+                <ArtifactSketch kind={props.artifact.kind} icon={kind().icon} />
                 <Show when={host()}>{(value) => <span class="ws-artifact-thumb-host">{value()}</span>}</Show>
               </span>
             }
@@ -115,5 +118,38 @@ export function ArtifactCard(props: ArtifactCardProps): JSX.Element {
         </div>
       </div>
     </article>
+  );
+}
+
+/**
+ * A drawing of the kind while the artifact has no thumbnail: a page in a browser for a site or an
+ * app, lines of text for a document, a slide for a deck, bars for a dashboard, an icon for a file.
+ */
+function ArtifactSketch(props: { kind: ArtifactKind; icon: typeof File }): JSX.Element {
+  const lines = (count: number) => Array.from({ length: count }, () => <i />);
+  return (
+    <span class="ws-artifact-sketch" data-kind={props.kind}>
+      <Switch fallback={<Dynamic component={props.icon} class="ws-artifact-sketch-icon" />}>
+        <Match when={props.kind === "website" || props.kind === "app"}>
+          <span class="ws-artifact-sketch-bar">{lines(3)}</span>
+          <span class="ws-artifact-sketch-hero" />
+          <span class="ws-artifact-sketch-lines">{lines(3)}</span>
+        </Match>
+        <Match when={props.kind === "doc"}>
+          <span class="ws-artifact-sketch-lines" data-dense="">
+            {lines(7)}
+          </span>
+        </Match>
+        <Match when={props.kind === "deck"}>
+          <span class="ws-artifact-sketch-slide">
+            <i />
+            <i />
+          </span>
+        </Match>
+        <Match when={props.kind === "dashboard"}>
+          <span class="ws-artifact-sketch-chart">{lines(6)}</span>
+        </Match>
+      </Switch>
+    </span>
   );
 }

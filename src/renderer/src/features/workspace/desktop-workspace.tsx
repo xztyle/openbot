@@ -1,4 +1,4 @@
-import { CHANNEL_CHATS_CAPABILITY } from "@openbot/contracts/ipc";
+import { type BrowserTakeoverRequest, CHANNEL_CHATS_CAPABILITY } from "@openbot/contracts/ipc";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { Bot, CheckCheck, PanelLeft, Search, Settings, Store, Workflow } from "@openbot/ui";
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
@@ -14,6 +14,7 @@ import { useAgentActions } from "../agents/agent-actions";
 import { agentThreadAttention } from "../agents/agent-thread-attention";
 import { useAgents } from "../agents/agents-context";
 import { agentsPort } from "../agents/agents-port";
+import { useBrowserTabs } from "../browser/browser-context";
 import { useChannels } from "../channels/channels-context";
 import { hostMessagingApi } from "../connectors/host-messaging-port";
 import { localMessagingApi } from "../connectors/messaging-connector";
@@ -26,7 +27,7 @@ import { useSettings } from "../settings/settings-context";
 import { isReaderAuthor } from "../team/reader-identity";
 import { usePresence } from "../team/team-context";
 import { WorkspaceProvider } from "./workspace-context";
-import { createWorkspaceController } from "./workspace-controller";
+import { createWorkspaceController, desktopMessageLink } from "./workspace-controller";
 import { setWorkspaceClassic, workspaceClassic } from "./workspace-mode";
 
 /**
@@ -68,6 +69,13 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     return state.status === "signed_in" ? state.user.id : null;
   };
   const local = () => activeServer()?.kind === "local";
+  const { activateBrowserTab } = useBrowserTabs();
+  const takeovers = createMemo(() => {
+    const requests: BrowserTakeoverRequest[] = [];
+    for (const event of Object.values(pendingPrompts()))
+      if (event?.type === "browser-takeover-requested") requests.push(event.request);
+    return requests;
+  });
   const reader = createMemo(() => {
     const state = centralAuth();
     const member = currentTeamMember();
@@ -197,6 +205,15 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
         : undefined;
     },
     workspaceSettings: () => window.openbot.hostAdmin.getWorkspaceSettings(activeServerId()),
+    hostId: () => activeServerId() ?? null,
+    // The desktop has no page address; its link opens in this app.
+    messageLink: (channelId, messageId, threadRootId) => {
+      const serverId = activeServerId();
+      return serverId ? desktopMessageLink(serverId, channelId, threadRootId ?? messageId) : null;
+    },
+    takeovers,
+    localHost: local,
+    openBrowserTab: (tabId) => activateBrowserTab(tabId),
     storageKey: () => `${accountId() ?? "local"}:${activeServerId()}`,
     phone: () => false,
   });

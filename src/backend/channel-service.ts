@@ -29,10 +29,12 @@ import {
   type CreateChannelMemoryInput,
   canAdministerServer,
   channelKind,
+  channelMembersAnswer,
   channelMentions,
   channelRoutingConversationEventItemType,
   type DeleteChannelMemoryInput,
   isChannelThreadReply,
+  isChannelTurnAnswer,
   type QueueHold,
   type UpdateChannelMemoryInput,
   type WorkspaceActivity,
@@ -2998,6 +3000,24 @@ export class ChannelService {
         return { accepted: true };
       if (!isString(args.text) || !args.text.trim() || args.text.length > 100_000)
         return yield* channelFailure(new Error("Provide a task result."));
+      // Where the members answer for themselves, the reply of the turn is its answer. A result would
+      // only restate it as a second message, such as "Answer posted in the channel: …", so it writes
+      // nothing, and the task ends with the turn.
+      if (channelMembersAnswer(channel)) {
+        const answered = (yield* channelSync(() => this.store.messages(channelId))).some((entry) =>
+          isChannelTurnAnswer(entry, agentId, turnId),
+        );
+        return answered
+          ? {
+              accepted: true,
+              instruction: "Your answer is already in the channel. End this turn without repeating it.",
+            }
+          : {
+              accepted: false,
+              reason:
+                "In this channel your reply is your answer. Write the result as your reply text, not with channel_result.",
+            };
+      }
       const message = this.message(
         channelId,
         task.id,

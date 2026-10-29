@@ -59,6 +59,7 @@ import type { RemoteDesktopRuntimePaths } from "./remote-desktop-runtime-artifac
 import { appendRemoteDiagnosticLog } from "./remote-diagnostics";
 import { RemoteScreenGateway, type RemoteScreenGatewayCreateRuntime } from "./remote-screen-gateway";
 import { RemoteWorkflowError, remoteDecode } from "./remote-service-effects";
+import { emailLocalPart, teamPersonName } from "./team-api/person-name";
 import { TeamApiServer } from "./team-api-server";
 import type { RemoteDirectoryMember, TeamIdentity, TeamStore } from "./team-store";
 import type { TeamWebRtcBridge } from "./team-webrtc-bridge";
@@ -1612,7 +1613,12 @@ export class HostService extends EventEmitter<HostEvents> {
     } catch {
       return { id: SIGNED_OUT_CHANNEL_MEMBER_ID, name: "You" };
     }
-    return { id: this.#currentAgentReaderId(), name: user.name ?? "You" };
+    const id = this.#currentAgentReaderId();
+    const member = this.#options.store.getMember(id);
+    return {
+      id,
+      name: member?.name?.trim() || user.name?.trim() || emailLocalPart(user.email) || "You",
+    };
   }
 
   /**
@@ -1673,7 +1679,7 @@ export class HostService extends EventEmitter<HostEvents> {
     if (!this.channelPersonIsRemote(personId)) return { id: personId, name: this.channelActor().name };
     const member = this.#options.store.getMember(personId);
     if (!member || member.disabled) return null;
-    return { id: member.id, name: member.name?.trim() || member.username };
+    return { id: member.id, name: teamPersonName(member) };
   }
 
   /**
@@ -1686,7 +1692,7 @@ export class HostService extends EventEmitter<HostEvents> {
     const members = this.#options.store
       .listMembers()
       .filter((member) => !member.disabled && member.id !== actor.id && member.id !== self)
-      .map((member) => ({ id: member.id, name: member.name?.trim() || member.username }));
+      .map((member) => ({ id: member.id, name: teamPersonName(member) }));
     return [{ id: actor.id, name: actor.name }, ...members];
   }
 

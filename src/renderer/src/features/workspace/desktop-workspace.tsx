@@ -3,7 +3,6 @@ import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace
 import { createWorkspaceLinkUrl } from "@openbot/contracts/workspace-links";
 import { Bot, CheckCheck, PanelLeft, Search, Settings, Store, Workflow } from "@openbot/ui";
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
-import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, type ParentProps } from "solid-js";
@@ -32,6 +31,7 @@ import { usePresence } from "../team/team-context";
 import { WorkspaceProvider } from "./workspace-context";
 import { createWorkspaceController, desktopMessageLink } from "./workspace-controller";
 import { setWorkspaceClassic, workspaceClassic } from "./workspace-mode";
+import { workspacePersonName } from "./workspace-model";
 import { desktopArtifactThumbnailUrl } from "./workspace-sources";
 
 /**
@@ -87,8 +87,13 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     const server = activeServer();
     return {
       id,
-      name: member ? teamMemberName(member) : state.status === "signed_in" ? (state.user.name ?? state.user.email) : "",
-      avatarUrl: member?.avatarUrl ?? (state.status === "signed_in" ? (state.user.avatarUrl ?? null) : null),
+      // The member's name, else the account's, as the account menu names it; the start of the email last.
+      name: workspacePersonName({
+        name: member?.name?.trim() || (state.status === "signed_in" ? state.user.name : null),
+        email: member?.email ?? (state.status === "signed_in" ? state.user.email : null),
+        username: member?.username,
+      }),
+      avatarUrl: (state.status === "signed_in" ? state.user.avatarUrl : null) ?? member?.avatarUrl ?? null,
       role: local() ? ("owner" as const) : (server?.role ?? "member"),
     };
   });
@@ -169,7 +174,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
         .members.filter((member) => !member.disabled)
         .map((member) => ({
           id: member.id,
-          name: teamMemberName(member),
+          name: workspacePersonName(member),
           avatarUrl: member.avatarUrl ?? null,
           role: member.role,
           online: member.online,

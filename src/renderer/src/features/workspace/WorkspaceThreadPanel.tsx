@@ -1,4 +1,4 @@
-import { channelKind, channelVisibility } from "@openbot/contracts/ipc";
+import { channelKind, channelMembersAnswer, channelVisibility } from "@openbot/contracts/ipc";
 import { Button } from "@openbot/ui";
 import { ThreadPanel } from "@openbot/ui/features/workspace/ThreadPanel";
 import { TypingIndicator } from "@openbot/ui/features/workspace/TypingIndicator";
@@ -24,7 +24,10 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
     return current ? conversationName(ws.directory(), current) : "";
   };
   const entries = () => thread()?.page?.messages ?? [];
-  const rows = createMemo(() => messageRows(entries(), { thread: true }));
+  const rows = createMemo(() => {
+    const current = channel();
+    return messageRows(entries(), { thread: true, membersAnswer: current ? channelMembersAnswer(current) : false });
+  });
   const root = () => rows().find((row) => row.entry.id === props.rootId && !row.pending);
   const replies = () => rows().filter((row) => row !== root());
   const replyCount = () => replies().filter((row) => !row.pending).length;

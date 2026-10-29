@@ -16,6 +16,7 @@ import { type ChannelViewer, channelViewer } from "../../backend/channel-visibil
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { TeamApiAdmin } from "./dependencies";
 import { HttpError } from "./http-error";
+import { teamPersonName } from "./person-name";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
 import { readJson, requireAdmin, requireAgentLevel } from "./request-helpers";
 
@@ -122,8 +123,6 @@ export async function routeWorkspace(
   requireChatForAgents(context, input, channels, hiddenAgentIds);
   return json(
     200,
-    await runCauseEffect(
-      channels.command(input, { id: member.id, name: member.name ?? member.username }, undefined, viewer),
-    ),
+    await runCauseEffect(channels.command(input, { id: member.id, name: teamPersonName(member) }, undefined, viewer)),
   );
 }

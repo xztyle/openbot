@@ -23,6 +23,8 @@ export interface WorkspaceMessageListProps {
   firstUnreadId: string | null;
   /** Agents whose work runs in the channel. */
   working: ReadonlySet<string>;
+  /** The members answer for themselves, so a result note that restates an answer is left out. */
+  membersAnswer?: boolean;
   hasOlder: boolean;
   onLoadOlder: () => Promise<void> | void;
   /** The root of the open thread. */
@@ -54,7 +56,11 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
 
   const rows = createMemo<readonly WorkspaceMessageRowModel[]>((previous) =>
     keepUnchangedRows(
-      messageRows(props.entries, { firstUnreadId: props.firstUnreadId, working: props.working }),
+      messageRows(props.entries, {
+        firstUnreadId: props.firstUnreadId,
+        working: props.working,
+        membersAnswer: props.membersAnswer === true,
+      }),
       previous,
     ),
   );

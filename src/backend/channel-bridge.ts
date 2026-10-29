@@ -4,11 +4,14 @@ import { chatTagReferences } from "@openbot/contracts/chat-tag-references";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentEvent,
+  CHANNEL_RESULT_MESSAGE_PREFIX,
   type Channel,
   type ChannelDiscordLink,
   type ChannelExternalAuthor,
   type ChannelMessage,
+  channelMembersAnswer,
   channelMentions,
+  isRestatedChannelResult,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { DISCORD_MESSAGE_TEXT_LIMIT } from "@openbot/contracts/signal-protocol/discord-api";
@@ -594,10 +597,23 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const tasks = new Map(store.tasks(channelId).map((task) => [task.id, task]));
     const waiting = new Set<string>();
     const changed: ChannelMessage[] = [];
+    // A result note that restates an answer of its turn is never posted. The history is read only
+    // when such a note changed.
+    const membersAnswer = channelMembersAnswer(store.get(channelId));
+    let history: ChannelMessage[] | null = null;
+    const restated = (message: ChannelMessage): boolean => {
+      if (!membersAnswer || !message.id.startsWith(CHANNEL_RESULT_MESSAGE_PREFIX)) return false;
+      history ??= store.messages(channelId);
+      return isRestatedChannelResult(
+        message,
+        history.filter((item) => item.message.turnId === message.message.turnId),
+        true,
+      );
+    };
     for (const id of pending) {
       const message = store.message(channelId, id);
       const known = state.messages.find((item) => item.id === id);
-      if (!message || message.deletedAt || (known && !this.#postable(message))) {
+      if (!message || message.deletedAt || (known && !this.#postable(message)) || restated(message)) {
         if (known && !known.inbound) yield* this.#mirror("be deleted", this.#remove(link, channelId, known));
         continue;
       }

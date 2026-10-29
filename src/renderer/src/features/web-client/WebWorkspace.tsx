@@ -133,7 +133,6 @@ import {
 // Copying a selection with a formula in it gives its LaTeX source, as on desktop.
 import "katex/contrib/copy-tex";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
-import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { actionToast } from "../../action-toast";
 import { desktopAnalytics } from "../../analytics";
 import { toAgentMessage } from "../../app-message-projection";
@@ -230,6 +229,7 @@ import { WorkspaceViewButton } from "../workspace/WorkspaceViewButton";
 import { WorkspaceProvider } from "../workspace/workspace-context";
 import { createWorkspaceController } from "../workspace/workspace-controller";
 import { setWorkspaceClassic, workspaceClassic } from "../workspace/workspace-mode";
+import { workspacePersonName } from "../workspace/workspace-model";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
 import { WebMobileNavigation, type WebMobilePane } from "./WebMobileNavigation";
@@ -1812,17 +1812,25 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         .filter((member) => !member.disabled)
         .map((member) => ({
           id: member.id,
-          name: teamMemberName(member),
+          name: workspacePersonName(member),
           avatarUrl: member.avatarUrl ?? null,
           role: member.role,
           online: member.online,
         })),
-    reader: () => ({
-      id: workspace.state.memberId,
-      name: props.accountName ?? props.accountEmail ?? "",
-      avatarUrl: props.accountAvatarUrl ?? null,
-      role: workspace.state.host?.role ?? "member",
-    }),
+    reader: () => {
+      const member = workspace.state.presence?.members.find((entry) => entry.id === workspace.state.memberId);
+      return {
+        id: workspace.state.memberId,
+        // The member's name, else the account's; the start of the email address last.
+        name: workspacePersonName({
+          name: member?.name?.trim() || props.accountName,
+          email: props.accountEmail ?? member?.email,
+          username: member?.username,
+        }),
+        avatarUrl: props.accountAvatarUrl ?? member?.avatarUrl ?? null,
+        role: workspace.state.host?.role ?? "member",
+      };
+    },
     isReader: (id) =>
       isReaderAuthor(id, { memberId: workspace.state.memberId, accountUserId: props.accountId, onOwnComputer: false }),
     agentDmIsMainChat: () => workspace.state.host?.role === "owner",

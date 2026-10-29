@@ -36,6 +36,11 @@ export interface WorkspaceInsightsOptions {
   attention: Pick<AttentionRegistry, "waitingAgents">;
   /** The steps of a running turn so far. */
   liveTrace(turnId: string): ConversationTurnTrace | null;
+  /**
+   * Whether the host still runs this turn. The stored row closes a moment after the turn ends, so the
+   * step trail of a finished turn reads this to stop streaming at once.
+   */
+  turnRunning?(turnId: string): boolean;
   /** The loaded conversation of an execution thread, which can be ahead of the stored one. */
   loadedSnapshot(threadId: string): ConversationSnapshot | undefined;
   agentTaskTitle(taskId: string): string | null;
@@ -143,7 +148,8 @@ export class WorkspaceInsights {
         : NO_STEPS;
     }
     if (turn.agentId !== message.author.id) return NO_STEPS;
-    const running = turn.status === "running" && turn.completedAt === null;
+    const running =
+      turn.status === "running" && turn.completedAt === null && (this.#options.turnRunning?.(turnId) ?? true);
     const loaded = this.#options.loadedSnapshot(turn.threadId);
     const messages =
       loaded?.agentId === turn.agentId

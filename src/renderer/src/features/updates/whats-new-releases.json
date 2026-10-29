@@ -5,6 +5,12 @@
     "notices": [],
     "groups": [
       {
+        "type": "added",
+        "items": [
+          "Slack-style workspace: channels, DMs, threads, AI teammates with answer modes and a smart gate, Discord bridge, Fleet, Artifacts, Storage."
+        ]
+      },
+      {
         "type": "fixed",
         "items": [
           "DeepSeek, Inception and OpenRouter now download the Pi CLI when you save their API key.",
@@ -672,9 +678,7 @@
   {
     "version": "0.38.1",
     "date": "2026-10-13",
-    "notices": [
-      "Put agents that work together in one sidebar section. Channels are no longer supported, and OpenBot archives and hides them. Your channel history stays on your computer for now. The next release removes channels and their data."
-    ],
+    "notices": [],
     "groups": [
       {
         "type": "added",

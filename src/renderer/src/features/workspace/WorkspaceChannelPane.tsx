@@ -1,4 +1,10 @@
-import { type Channel, type ChannelSummary, channelKind, channelVisibility } from "@openbot/contracts/ipc";
+import {
+  type Channel,
+  type ChannelSummary,
+  channelKind,
+  channelMembersAnswer,
+  channelVisibility,
+} from "@openbot/contracts/ipc";
 import { Button, Hash, Lock } from "@openbot/ui";
 import { QuestionPromptBubble } from "@openbot/ui/components/QuestionPromptBubble";
 import { ApprovalCard, BrowserTakeoverCard } from "@openbot/ui/features/conversation/ConversationPrompts";
@@ -102,6 +108,10 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     const takeovers = ws.env.takeovers?.() ?? [];
     return current && takeovers.length ? channelBrowserTakeover(current, summary()?.threads, takeovers) : undefined;
   });
+  const membersAnswer = () => {
+    const current = channel();
+    return current ? channelMembersAnswer(current) : false;
+  };
   /** Agents answer only when mentioned in a channel the reader may change: say it once. */
   const showModesHint = () => kind() === "channel" && joined() && !archived() && (channel()?.members.length ?? 0) > 0;
   const respond = async (action: () => Promise<void>) => {
@@ -157,6 +167,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
           entries={entries()}
           firstUnreadId={firstUnreadId()}
           working={working()}
+          membersAnswer={membersAnswer()}
           hasOlder={Boolean(page()?.olderCursor)}
           onLoadOlder={() => ws.channels.loadOlder()}
           highlightedId={threadRoot()}

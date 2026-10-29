@@ -6,6 +6,7 @@ import {
   type ChannelReaction,
   type ChannelThreadSummary,
   channelKind,
+  channelMembersAnswer,
   decodeChannel,
   isChannelMention,
   isChannelMessage,
@@ -21,7 +22,7 @@ import {
   workspaceActivityLimit,
 } from "@openbot/contracts/ipc";
 import type { DynamicRecord } from "@openbot/contracts/runtime-values";
-import { ACTIVITY_ITEM_TYPES, type ChannelStore, channelPreviewText } from "./channel-store";
+import { ACTIVITY_ITEM_TYPES, type ChannelStore, channelPreviewText, restatedResultSql } from "./channel-store";
 import { type ChannelViewer, canSeeChannel, isChannelPerson } from "./channel-visibility";
 import {
   databaseRow,
@@ -287,18 +288,21 @@ export class ChannelActivity {
   /** The replies of a thread after the read position that the reader did not write. */
   #unreadReplies(channelId: string, rootId: string, through: number, viewer: ChannelViewer): number {
     const ids = [...viewer.ids];
+    // A result note that restates an answer is not a reply.
+    const restated = channelMembersAnswer(this.store.get(channelId)) ? `AND NOT ${restatedResultSql("reply")}` : "";
     const row = databaseRow(
       this.store.database.connection
         .prepare(
-          `SELECT COUNT(*) AS unread FROM projection_channel_messages
-            WHERE channel_id = ? AND sequence > ? AND json_extract(message_json, '$.threadRootId') = ?
-              AND json_extract(message_json, '$.deletedAt') IS NULL
-              AND COALESCE(json_extract(message_json, '$.message.status'), '') != 'streaming'
-              AND COALESCE(json_extract(message_json, '$.message.itemType'), '') NOT IN (${placeholders(ACTIVITY_ITEM_TYPES)})
-              AND COALESCE(json_extract(message_json, '$.message.itemType'), '') NOT LIKE ?
-              AND NOT (json_extract(message_json, '$.author.kind') = 'member'
-                AND json_extract(message_json, '$.externalAuthor') IS NULL
-                AND json_extract(message_json, '$.author.id') IN (${placeholders(ids)}))`,
+          `SELECT COUNT(*) AS unread FROM projection_channel_messages reply
+            WHERE reply.channel_id = ? AND reply.sequence > ? AND json_extract(reply.message_json, '$.threadRootId') = ?
+              AND json_extract(reply.message_json, '$.deletedAt') IS NULL
+              AND COALESCE(json_extract(reply.message_json, '$.message.status'), '') != 'streaming'
+              AND COALESCE(json_extract(reply.message_json, '$.message.itemType'), '') NOT IN (${placeholders(ACTIVITY_ITEM_TYPES)})
+              AND COALESCE(json_extract(reply.message_json, '$.message.itemType'), '') NOT LIKE ?
+              ${restated}
+              AND NOT (json_extract(reply.message_json, '$.author.kind') = 'member'
+                AND json_extract(reply.message_json, '$.externalAuthor') IS NULL
+                AND json_extract(reply.message_json, '$.author.id') IN (${placeholders(ids)}))`,
         )
         .get(channelId, through, rootId, ...ACTIVITY_ITEM_TYPES, `${CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX}%`, ...ids),
     );

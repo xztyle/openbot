@@ -225,6 +225,58 @@ export function channelRouting(
     : "coordinator";
 }
 
+/**
+ * Whether the members of a channel answer for themselves (answer modes), as the host routes a
+ * person's message: each addressed agent gets its own task, and the reply of its turn is its answer.
+ */
+export function channelMembersAnswer(
+  channel: ChannelWorkspaceFields & { members: readonly ChannelMemberWorkspaceFields[] },
+): boolean {
+  if (channel.routing === "coordinator") return false;
+  return channel.routing === "responders" || channel.members.some((member) => member.answerMode !== undefined);
+}
+
+/** The id of the message that a `channel_result` call writes starts with this. */
+export const CHANNEL_RESULT_MESSAGE_PREFIX = "channel-result-";
+
+interface ChannelResultEntry {
+  id: string;
+  author: { kind: string; id: string };
+  deletedAt?: string | undefined;
+  message: { author: string; turnId?: string | undefined; itemType?: string | undefined; text: string };
+}
+
+/** Whether a channel message is the answer that turn `turnId` of agent `agentId` wrote as its reply. */
+export function isChannelTurnAnswer(entry: ChannelResultEntry, agentId: string, turnId: string): boolean {
+  const itemType = entry.message.itemType;
+  return (
+    !entry.id.startsWith(CHANNEL_RESULT_MESSAGE_PREFIX) &&
+    entry.deletedAt === undefined &&
+    entry.author.kind === "agent" &&
+    entry.author.id === agentId &&
+    entry.message.turnId === turnId &&
+    entry.message.author === "assistant" &&
+    (!itemType || itemType === "agentMessage" || itemType === "final_answer") &&
+    entry.message.text.trim() !== ""
+  );
+}
+
+/**
+ * A `channel_result` note, such as "Answer posted in the channel: …", that restates the answer its
+ * turn already posted, in a channel whose members answer for themselves. It is not drawn, bridged or
+ * counted as a reply. A result that is the only answer of its turn stays. `turn` holds the other
+ * messages that may be of the same turn.
+ */
+export function isRestatedChannelResult(
+  message: ChannelResultEntry,
+  turn: readonly ChannelResultEntry[],
+  membersAnswer: boolean,
+): boolean {
+  if (!membersAnswer || !message.id.startsWith(CHANNEL_RESULT_MESSAGE_PREFIX)) return false;
+  const turnId = message.message.turnId;
+  return turnId !== undefined && turn.some((other) => isChannelTurnAnswer(other, message.author.id, turnId));
+}
+
 /** A thread reply that the channel transcript leaves out. */
 export function isChannelThreadReply(message: ChannelMessageWorkspaceFields): boolean {
   return message.threadRootId !== undefined && message.alsoInChannel !== true;

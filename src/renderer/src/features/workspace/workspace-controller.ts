@@ -770,14 +770,24 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
 
   const stepsLoading = new Set<string>();
   const stepTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** The channel of each message whose steps were read, so a host event can read them again. */
+  const stepChannels = new Map<string, string>();
+  /** The messages whose steps change while a read of them runs. */
+  const stepsAgain = new Set<string>();
   let stepsUnsupported = false;
   onCleanup(() => {
     for (const timer of stepTimers.values()) clearTimeout(timer);
   });
   async function loadSteps(channelId: string, messageId: string) {
     const read = channels.port().agent.workspaceSteps;
-    if (!read || stepsUnsupported || stepsLoading.has(messageId)) return;
+    if (!read || stepsUnsupported) return;
+    // A read asked for while one runs follows it: the running one can be from before the turn ended.
+    if (stepsLoading.has(messageId)) {
+      stepsAgain.add(messageId);
+      return;
+    }
     stepsLoading.add(messageId);
+    stepChannels.set(messageId, channelId);
     try {
       const steps = await read({ channelId, messageId });
       setState((draft) => {
@@ -788,6 +798,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       stepsUnsupported = true;
     } finally {
       stepsLoading.delete(messageId);
+      if (stepsAgain.delete(messageId)) void loadSteps(channelId, messageId);
     }
   }
   /** The host's step trail of an agent message: undefined until it answers, null when it has none. */
@@ -803,8 +814,34 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     clearTimeout(stepTimers.get(message.id));
     stepTimers.set(
       message.id,
-      setTimeout(() => void loadSteps(message.channelId, message.id), streaming ? 1_500 : 200),
+      setTimeout(
+        () => {
+          stepTimers.delete(message.id);
+          void loadSteps(message.channelId, message.id);
+        },
+        streaming ? 1_500 : 200,
+      ),
     );
+  }
+  /**
+   * A turn can go on after its answer was posted, so the last message event can arrive while the
+   * host still reports the turn as running. The end of the turn changes the channel (its task ends)
+   * and the fleet, so each of those events reads again the steps that still stream.
+   */
+  function settleSteps(channelId: string | null) {
+    for (const [messageId, steps] of Object.entries(state.steps)) {
+      // A read that is already due covers the change.
+      if (!steps?.streaming || stepTimers.has(messageId)) continue;
+      const stepChannel = stepChannels.get(messageId);
+      if (!stepChannel || (channelId !== null && stepChannel !== channelId)) continue;
+      stepTimers.set(
+        messageId,
+        setTimeout(() => {
+          stepTimers.delete(messageId);
+          void loadSteps(stepChannel, messageId);
+        }, 200),
+      );
+    }
   }
 
   // The artifacts of each page the reader opens go to the session list.
@@ -969,6 +1006,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       noteStepsChange(event.message);
       const author = event.message.author;
       if (!(author.kind === "member" && env.isReader(author.id))) scheduleActivity();
+      return;
+    }
+    if (event.type === "channels-changed") {
+      settleSteps(event.channelId);
+      return;
+    }
+    if (event.type === "workspace-fleet-changed" || event.type === "turn-completed") {
+      settleSteps(null);
       return;
     }
     if (event.type === "channel-typing") {

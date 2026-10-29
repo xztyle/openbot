@@ -6,6 +6,7 @@
 
 import { chatTagReferences } from "@openbot/contracts/chat-tag-references";
 import {
+  CHANNEL_RESULT_MESSAGE_PREFIX,
   type ChannelMessage,
   type ChannelReaction,
   type ChannelSummary,
@@ -13,6 +14,7 @@ import {
   channelKind,
   channelVisibility,
   isChannelThreadReply,
+  isRestatedChannelResult,
 } from "@openbot/contracts/ipc";
 import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import type { AgentProfile } from "@openbot/ui/data";
@@ -80,21 +82,50 @@ export function personMember(person: WorkspacePerson): WorkspaceMember {
   };
 }
 
-/** The member an id names: an agent, a person of the roster, the reader, or the name the record carries. */
+/** The part of an email address before the `@`, or null for an empty one. */
+function emailLocalPart(email: string | null | undefined): string | null {
+  const local = email?.trim().split("@", 1)[0]?.trim();
+  return local || null;
+}
+
+/**
+ * The name the workspace shows for a person: their name, else the start of their email address, as
+ * the account menu names the signed-in account. A username that is an email address is shortened too.
+ */
+export function workspacePersonName(person: {
+  name?: string | null | undefined;
+  email?: string | null | undefined;
+  username?: string | null | undefined;
+}): string {
+  const username = person.username?.trim() ?? "";
+  return (
+    person.name?.trim() ||
+    emailLocalPart(person.email) ||
+    (username.includes("@") ? emailLocalPart(username) : null) ||
+    username
+  );
+}
+
+/**
+ * The member an id names: an agent, the reader, a person of the roster, or the name the record
+ * carries. The reader comes before the roster: the roster can name them by their email address, and
+ * the reader carries the account's name and photo.
+ */
 export function memberById(directory: WorkspaceDirectory, id: string, fallbackName?: string): WorkspaceMember {
   const agent = directory.agents.find((candidate) => candidate.id === id);
   if (agent) return agentMember(agent, agentWorking(directory, id));
   const person = directory.people.find((candidate) => candidate.id === id);
-  if (person) return personMember(person);
   if (directory.isReader(id))
     return {
       id,
       kind: "human",
-      name: directory.reader.name,
-      avatarUrl: directory.reader.avatarUrl,
+      name: directory.reader.name || person?.name || workspacePersonName({ name: fallbackName }) || id,
+      avatarUrl: directory.reader.avatarUrl ?? person?.avatarUrl ?? null,
       presence: "active",
     };
-  return { id, kind: "human", name: directory.names?.[id] ?? fallbackName ?? id, presence: "offline" };
+  if (person) return personMember(person);
+  const stored = directory.names?.[id] ?? fallbackName;
+  return { id, kind: "human", name: (stored && workspacePersonName({ username: stored })) || id, presence: "offline" };
 }
 
 /** The author of a channel message, with the external mark for a person a bridge brought. */
@@ -371,6 +402,20 @@ export function keepUnchangedRows(
   return same ? previous : kept;
 }
 
+/** The entries without the `channel_result` notes that restate an answer of the same turn. */
+function withoutRestatedResults(entries: readonly ChannelMessage[]): readonly ChannelMessage[] {
+  if (!entries.some((entry) => entry.id.startsWith(CHANNEL_RESULT_MESSAGE_PREFIX))) return entries;
+  const byTurn = new Map<string, ChannelMessage[]>();
+  for (const entry of entries) {
+    const turnId = entry.message.turnId;
+    if (!turnId) continue;
+    const turn = byTurn.get(turnId);
+    if (turn) turn.push(entry);
+    else byTurn.set(turnId, [entry]);
+  }
+  return entries.filter((entry) => !isRestatedChannelResult(entry, byTurn.get(entry.message.turnId ?? "") ?? [], true));
+}
+
 /**
  * The rows of a channel transcript or a thread. The steps of each agent turn go on its answer; a
  * turn that has not answered yet is a row of its own. Messages of one author within five minutes
@@ -383,9 +428,12 @@ export function messageRows(
     thread?: boolean;
     /** Agents whose work runs here: their newest turn without an answer shows as working. */
     working?: ReadonlySet<string>;
+    /** The members answer for themselves, so a result note that restates an answer is left out. */
+    membersAnswer?: boolean;
   } = {},
 ): WorkspaceMessageRowModel[] {
-  const shown = options.thread ? entries : entries.filter((entry) => !isChannelThreadReply(entry));
+  const listed = options.thread ? entries : entries.filter((entry) => !isChannelThreadReply(entry));
+  const shown = options.membersAnswer ? withoutRestatedResults(listed) : listed;
   const turns = new Map<string, ChannelMessage[]>();
   for (const entry of shown) {
     if (!isStepEntry(entry)) continue;

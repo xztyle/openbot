@@ -50,7 +50,7 @@ export const CHANNEL_TOOL_DEFINITIONS: readonly { name: string; description: str
   {
     name: "channel_result",
     description:
-      "Publish the requested task result once in the shared chat when answering an assigned or transferred task. End your turn without repeating it.",
+      "Publish the requested task result once in the shared chat when answering an assigned or transferred task. Do not use it to restate an answer that your reply already gives. End your turn without repeating it.",
     shape: { text: z.string().min(1).max(INPUT_LIMITS.messageText) },
   },
   {

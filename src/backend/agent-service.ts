@@ -1469,6 +1469,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       mailbox,
       attention: this.#attention,
       liveTrace: (turnId) => this.#turn.liveTrace(turnId),
+      turnRunning: (turnId) => this.#turn.turnStartedAt(turnId) !== null,
       loadedSnapshot: (threadId) => this.#conversation.loadedExecutionSnapshot(threadId),
       agentTaskTitle: (taskId) => this.#tasks.title(taskId),
       usageLimit: (agentId) => this.#usageLimits.limitFor(agentId),

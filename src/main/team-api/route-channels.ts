@@ -24,6 +24,7 @@ import {
 } from "../ipc/agent-inputs";
 import type { TeamApiAgents } from "./dependencies";
 import { HttpError } from "./http-error";
+import { teamPersonName } from "./person-name";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
 import { readJson, requireAgentLevel, requireReleasedSchedule, stringField } from "./request-helpers";
 import { requestChannelViewer } from "./route-workspace";
@@ -93,7 +94,7 @@ export async function routeChannels(
     await runCauseEffect(
       channels.command(
         input,
-        { id: member.id, name: member.name ?? "Team member" },
+        { id: member.id, name: teamPersonName(member) },
         (queued) => keepHiddenMembers(queued, channels, hiddenAgentIds),
         viewer,
       ),

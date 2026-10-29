@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import {
   CHANNEL_PREVIEW_LIMIT,
+  CHANNEL_RESULT_MESSAGE_PREFIX,
   CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX,
   type Channel,
   type ChannelDraft,
@@ -11,6 +12,7 @@ import {
   type ChannelTask,
   type ChannelThread,
   type ChannelThreadSummary,
+  channelMembersAnswer,
   decodeChannel,
   isChannelMessage,
   isChannelTask,
@@ -103,6 +105,26 @@ const TOP_LEVEL_MESSAGE = `(json_extract(message_json, '$.threadRootId') IS NULL
 
 /** Item types that are activity, not a message a reader counts. */
 export const ACTIVITY_ITEM_TYPES = ["plan", "subagents", "channel-change", "commentary"];
+
+/**
+ * The SQL condition of a `channel_result` row named `alias` that restates an answer of its turn, as
+ * `isRestatedChannelResult` decides. It applies only to a channel whose members answer for themselves.
+ */
+export function restatedResultSql(alias: string): string {
+  return `(${alias}.message_id LIKE '${CHANNEL_RESULT_MESSAGE_PREFIX}%'
+    AND json_extract(${alias}.message_json, '$.message.turnId') IS NOT NULL
+    AND EXISTS (SELECT 1 FROM projection_channel_messages answer
+      WHERE answer.channel_id = ${alias}.channel_id
+        AND answer.message_id != ${alias}.message_id
+        AND answer.message_id NOT LIKE '${CHANNEL_RESULT_MESSAGE_PREFIX}%'
+        AND json_extract(answer.message_json, '$.deletedAt') IS NULL
+        AND json_extract(answer.message_json, '$.author.kind') = 'agent'
+        AND json_extract(answer.message_json, '$.author.id') = json_extract(${alias}.message_json, '$.author.id')
+        AND json_extract(answer.message_json, '$.message.turnId') = json_extract(${alias}.message_json, '$.message.turnId')
+        AND json_extract(answer.message_json, '$.message.author') = 'assistant'
+        AND COALESCE(json_extract(answer.message_json, '$.message.itemType'), '') IN ('', 'agentMessage', 'final_answer')
+        AND trim(COALESCE(json_extract(answer.message_json, '$.message.text'), '')) != ''))`;
+}
 
 /**
  * Owns durable channel records. Every change and its retry receipt commit together.
@@ -503,17 +525,20 @@ export class ChannelStore {
   /** The reply count, the time of the last reply and the latest repliers of a thread, from its stored replies. */
   threadSummary(channelId: string, rootId: string): ChannelThreadSummary | undefined {
     const excluded = ACTIVITY_ITEM_TYPES.map(() => "?").join(", ");
+    // A result note that restates an answer is not a reply.
+    const restated = channelMembersAnswer(this.get(channelId)) ? `AND NOT ${restatedResultSql("reply")}` : "";
     const rows = databaseRows(
       this.database.connection
         .prepare(
-          `SELECT json_extract(message_json, '$.author.id') AS author_id,
-              json_extract(message_json, '$.message.createdAt') AS created_at
-            FROM projection_channel_messages
-            WHERE channel_id = ? AND json_extract(message_json, '$.threadRootId') = ?
-              AND json_extract(message_json, '$.deletedAt') IS NULL
-              AND COALESCE(json_extract(message_json, '$.message.itemType'), '') NOT IN (${excluded})
-              AND COALESCE(json_extract(message_json, '$.message.itemType'), '') NOT LIKE ?
-            ORDER BY sequence DESC, message_id DESC`,
+          `SELECT json_extract(reply.message_json, '$.author.id') AS author_id,
+              json_extract(reply.message_json, '$.message.createdAt') AS created_at
+            FROM projection_channel_messages reply
+            WHERE reply.channel_id = ? AND json_extract(reply.message_json, '$.threadRootId') = ?
+              AND json_extract(reply.message_json, '$.deletedAt') IS NULL
+              AND COALESCE(json_extract(reply.message_json, '$.message.itemType'), '') NOT IN (${excluded})
+              AND COALESCE(json_extract(reply.message_json, '$.message.itemType'), '') NOT LIKE ?
+              ${restated}
+            ORDER BY reply.sequence DESC, reply.message_id DESC`,
         )
         .all(channelId, rootId, ...ACTIVITY_ITEM_TYPES, `${CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX}%`),
     );

@@ -104,7 +104,11 @@ const Auth = createSimpleContext({
     }
 
     onSettled(() => {
+      // An event is newer than the bootstrap read: the read can answer after it with the state it
+      // saw first, such as `loading`, and the window would wait on the account service forever.
+      let eventSeen = false;
       const unsubscribe = accountPort().auth.onEvent((state) => {
+        eventSeen = true;
         flush(() => applyCentralAuthState(state));
       });
       // The bootstrap read sets the signal directly, not through
@@ -113,17 +117,34 @@ const Auth = createSimpleContext({
       // play the success hold.
       void accountPort()
         .auth.getState()
-        .then(setCentralAuth)
-        .catch(() =>
+        .then((state) => {
+          if (!eventSeen) setCentralAuth(state);
+        })
+        .catch(() => {
+          if (eventSeen) return;
           setCentralAuth({
             status: "error",
             issue: {
               code: "auth_unavailable",
               message: currentText().t("account.login.loadFailed"),
             },
-          }),
-        );
-      return unsubscribe;
+          });
+        });
+      // A change that the window missed while it loaded leaves it on `loading`: read the state again
+      // until it is no longer loading.
+      const poll = setInterval(() => {
+        if (centralAuth().status !== "loading") return;
+        void accountPort()
+          .auth.getState()
+          .then((state) => {
+            if (state.status !== "loading" && centralAuth().status === "loading") applyCentralAuthState(state);
+          })
+          .catch(() => undefined);
+      }, 2_000);
+      return () => {
+        clearInterval(poll);
+        unsubscribe();
+      };
     });
 
     async function requestEmailCode(email: string): Promise<void> {

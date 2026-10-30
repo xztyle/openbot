@@ -33,6 +33,7 @@ import { createWorkspaceController, desktopMessageLink } from "./workspace-contr
 import { setWorkspaceClassic, workspaceClassic } from "./workspace-mode";
 import { workspacePersonName } from "./workspace-model";
 import { desktopArtifactThumbnailUrl } from "./workspace-sources";
+import { createWorkspaceSupport } from "./workspace-support";
 
 /**
  * Whether the desktop shows the workspace: the server has channels and the workspace routes, the
@@ -42,10 +43,17 @@ export function useDesktopWorkspaceMode() {
   const channels = useChannels();
   const layout = useLayout();
   const { activeServer, activeServerSupportsCapability } = useServers();
-  const supported = () =>
-    channels.supported() &&
-    activeServerSupportsCapability(CHANNEL_CHATS_CAPABILITY) &&
-    (activeServer()?.kind === "local" || activeServerSupportsCapability(WORKSPACE_CAPABILITY));
+  const supported = createWorkspaceSupport({
+    live: () =>
+      channels.supported() &&
+      activeServerSupportsCapability(CHANNEL_CHATS_CAPABILITY) &&
+      (activeServer()?.kind === "local" || activeServerSupportsCapability(WORKSPACE_CAPABILITY)),
+    serverId: () => activeServer()?.id,
+    reconnecting: () => {
+      const state = activeServer()?.state;
+      return state === "connecting" || state === "offline";
+    },
+  });
   return {
     supported,
     on: () => supported() && !workspaceClassic() && layout.sidebarView() !== "routines",

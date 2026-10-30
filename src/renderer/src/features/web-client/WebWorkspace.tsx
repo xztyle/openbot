@@ -230,6 +230,7 @@ import { WorkspaceProvider } from "../workspace/workspace-context";
 import { createWorkspaceController } from "../workspace/workspace-controller";
 import { setWorkspaceClassic, workspaceClassic } from "../workspace/workspace-mode";
 import { workspacePersonName } from "../workspace/workspace-model";
+import { createWorkspaceSupport } from "../workspace/workspace-support";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
 import { WebMobileNavigation, type WebMobilePane } from "./WebMobileNavigation";
@@ -1793,7 +1794,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
    * The Slack-style workspace: the main view on a host with channels and the workspace routes,
    * unless the reader chose the classic sidebar or opened the Routines view.
    */
-  const workspaceSupported = () => channelsSupported() && workspace.state.capabilities.includes(WORKSPACE_CAPABILITY);
+  const workspaceSupported = createWorkspaceSupport({
+    live: () => channelsSupported() && workspace.state.capabilities.includes(WORKSPACE_CAPABILITY),
+    serverId: () => server()?.id,
+    reconnecting: () => workspace.state.status !== "online",
+  });
   const workspaceOn = () => workspaceSupported() && !workspaceClassic() && !routinesView();
   const workspaceMessaging = hostMessagingApi(
     () => connectorTarget()?.id,

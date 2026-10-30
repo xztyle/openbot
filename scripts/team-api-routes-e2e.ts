@@ -389,6 +389,7 @@ const fakeAgents: TeamApiAgents = {
     artifactThumbnail: unused("workspace.artifactThumbnail"),
     agentPairs: unused("workspace.agentPairs"),
     agentExchange: unused("workspace.agentExchange"),
+    recentDmAgentIds: () => [],
   },
 };
 

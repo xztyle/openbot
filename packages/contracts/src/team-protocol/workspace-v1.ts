@@ -53,7 +53,8 @@
 //   seconds while the person types; the host ends the typing 6 seconds after the last one.
 // - `POST /v1/workspace/dm-agents`: `{}` answers `{ agentIds, mainChatAgentIds? }` (at most 100
 //   each): the agents that the member of the session can see and chat with, so may open a DM with
-//   (`open-dm`), and of those the agents whose main chat is the DM of every person.
+//   (`open-dm`), and of those the agents whose main chat is the DM of every person. Later:
+//   `recentAgentIds?`, of those the agents that a person wrote to in their main chat in 30 days.
 // - The event `channel-typing` (`{ channelId, typing }`): the whole list, at most 50 entries, each
 //   `{ kind: "member" | "agent", id, state: "typing" | "thinking" | "working", threadRootId? }`.
 //   It replaces the last list of the channel. The host sends it only to a peer that can see the
@@ -379,7 +380,10 @@ const typingEntry = fields(
   { kind: oneOf("member", "agent"), id: identifier, state: oneOf("typing", "thinking", "working") },
   { threadRootId: identifier },
 );
-const dmAgents = fields({ agentIds: uniqueIdentifiers(100) }, { mainChatAgentIds: uniqueIdentifiers(100) });
+const dmAgents = fields(
+  { agentIds: uniqueIdentifiers(100) },
+  { mainChatAgentIds: uniqueIdentifiers(100), recentAgentIds: uniqueIdentifiers(100) },
+);
 
 export const WORKSPACE_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [WORKSPACE_ROUTES.command, { request: command, response: channelResult }],

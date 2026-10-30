@@ -186,6 +186,12 @@ export class WorkspaceInsights {
     });
   }
 
+  /** The agents that a person wrote to in their own chat in the last `days` days. */
+  recentDmAgentIds(days = 30): string[] {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    return this.#options.database.workspace.agentsWithPersonMessagesSince(since);
+  }
+
   /**
    * The pairs of agents that sent each other messages, newest first, where the reader sees both
    * agents. Their talk stays in each agent's own chat; this is the view of it as a DM.

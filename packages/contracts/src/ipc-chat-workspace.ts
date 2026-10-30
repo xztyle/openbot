@@ -639,17 +639,25 @@ export interface WorkspaceDmAgents {
   agentIds: string[];
   /** Of `agentIds`, the agents whose main chat is the DM (`shareMainChat`). Absent from an older host. */
   mainChatAgentIds?: string[];
+  /**
+   * Of `agentIds`, the agents that a person wrote to in their main chat in the last 30 days. The DM
+   * list shows only these rows, the agents that wait for the reader, and the ones the reader opens.
+   * Absent from an older host: the list shows every agent.
+   */
+  recentAgentIds?: string[];
 }
 
 export function decodeWorkspaceDmAgents(value: unknown): WorkspaceDmAgents {
   if (
     !isDynamicRecord(value) ||
     !identifiers(value.agentIds, INPUT_LIMITS.agents) ||
-    (value.mainChatAgentIds !== undefined && !identifiers(value.mainChatAgentIds, INPUT_LIMITS.agents))
+    (value.mainChatAgentIds !== undefined && !identifiers(value.mainChatAgentIds, INPUT_LIMITS.agents)) ||
+    (value.recentAgentIds !== undefined && !identifiers(value.recentAgentIds, INPUT_LIMITS.agents))
   )
     throw new Error("Invalid DM agents.");
   return {
     agentIds: [...value.agentIds],
     ...(value.mainChatAgentIds === undefined ? {} : { mainChatAgentIds: [...value.mainChatAgentIds] }),
+    ...(value.recentAgentIds === undefined ? {} : { recentAgentIds: [...value.recentAgentIds] }),
   };
 }

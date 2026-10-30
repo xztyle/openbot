@@ -71,6 +71,8 @@ export async function routeWorkspace(
   channels: ChannelService | undefined,
   admin: TeamApiAdmin | undefined,
   hiddenAgentIds: ReadonlySet<string> = new Set(),
+  /** The agents that a person wrote to lately, for the DM list. */
+  recentAgentIds?: () => readonly string[],
 ): Promise<RouteOutcome> {
   const { method, url, capabilities, member, request, json } = context;
   if (method !== "POST" || !Object.values(WORKSPACE_ROUTES).some((route) => route === url.pathname)) return "unmatched";
@@ -113,7 +115,8 @@ export async function routeWorkspace(
       .map((agent) => agent.id);
     const defaults = admin?.workspaceSettings?.get().defaults.agents ?? {};
     const mainChatAgentIds = agentIds.filter((id) => Object.hasOwn(defaults, id) && defaults[id]?.shareMainChat);
-    return json(200, { agentIds, mainChatAgentIds });
+    const recent = new Set(recentAgentIds?.() ?? []);
+    return json(200, { agentIds, mainChatAgentIds, recentAgentIds: agentIds.filter((id) => recent.has(id)) });
   }
   if (url.pathname === WORKSPACE_ROUTES.thread) {
     const input = parseChannelRead(body);

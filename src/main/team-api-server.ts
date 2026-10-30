@@ -885,7 +885,12 @@ export class TeamApiServer {
       if ((await this.#routeBrowser(context)) === "handled") return;
       if ((await this.#routeFiles(context)) === "handled") return;
       if ((await routeChannels(context, this.#options.channels, this.#options.agents, hidden)) === "handled") return;
-      if ((await routeWorkspace(context, this.#options.channels, this.#options.admin, hidden)) === "handled") return;
+      if (
+        (await routeWorkspace(context, this.#options.channels, this.#options.admin, hidden, () =>
+          this.#options.agents.workspace.recentDmAgentIds(),
+        )) === "handled"
+      )
+        return;
       if ((await routeWorkspaceFleet(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeWorkspaceSidebar(context, this.#options.workspaceSidebar)) === "handled") return;
       if (

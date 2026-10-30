@@ -291,4 +291,19 @@ export class WorkspaceQueries {
       attachmentCount: requiredNumberColumn(row, "attachment_count"),
     }));
   }
+
+  /** The agents whose own chat has a message that a person wrote since `since` (an ISO time). */
+  agentsWithPersonMessagesSince(since: string): string[] {
+    return databaseRows(
+      this.#core.connection
+        .prepare(
+          `SELECT DISTINCT agent.agent_id
+             FROM projection_agents agent
+             JOIN projection_thread_messages message ON message.thread_id = agent.thread_id
+            WHERE message.author = 'user' AND message.created_at >= ?
+              AND COALESCE(json_extract(message.message_json, '$.source'), 'user') = 'user'`,
+        )
+        .all(since),
+    ).map((row) => requiredStringColumn(row, "agent_id"));
+  }
 }

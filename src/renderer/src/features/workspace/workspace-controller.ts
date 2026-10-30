@@ -36,7 +36,7 @@ import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSide
 import { slugChannelName } from "@openbot/ui/features/workspace/workspace-format";
 import type { AgentAnswerMode, WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { currentText } from "@openbot/ui/text";
-import { createEffect, createMemo, createStore, onCleanup, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, createStore, onCleanup, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import type { ChannelsController } from "../channels/channels-controller";
 import type { MessagingApi } from "../connectors/messaging-connector";
@@ -123,6 +123,8 @@ interface WorkspaceState {
   dmAgentIds: string[] | null;
   /** The agents whose main chat is the reader's DM with them, as the host says. */
   mainChatAgentIds: string[];
+  /** The agents that a person wrote to lately, as the host says. Null: the host does not say, so all show. */
+  recentAgentIds: string[] | null;
   /** The first-run hints the reader closed, on this computer. */
   hintsSeen: Record<string, true>;
   /** `ensure-general` runs. */
@@ -235,7 +237,11 @@ function readSidebar(key: string): SidebarPrefs {
     const value = JSON.parse(window.localStorage.getItem(`${SIDEBAR_KEY}:${key}`) ?? "{}");
     if (!isDynamicRecord(value)) return { order: { channels: [], direct: [] }, muted: [] };
     const order = isDynamicRecord(value.order) ? value.order : {};
-    return { order: { channels: idList(order.channels), direct: idList(order.direct) }, muted: idList(value.muted) };
+    return {
+      order: { channels: idList(order.channels), direct: idList(order.direct) },
+      muted: idList(value.muted),
+      ...(Array.isArray(value.closed) ? { closed: idList(value.closed) } : {}),
+    };
   } catch {
     return { order: { channels: [], direct: [] }, muted: [] };
   }
@@ -420,6 +426,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     typing: {},
     dmAgentIds: null,
     mainChatAgentIds: [],
+    recentAgentIds: null,
     hintsSeen: readHints(),
     creatingGeneral: false,
     agentChosen: false,
@@ -506,11 +513,12 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (!read || !channels.supported() || !env.connectionReady()) return;
     const run = ++dmAgentsRun;
     try {
-      const { agentIds, mainChatAgentIds } = await read();
+      const { agentIds, mainChatAgentIds, recentAgentIds } = await read();
       if (run === dmAgentsRun)
         setState((draft) => {
           draft.dmAgentIds = agentIds;
           draft.mainChatAgentIds = mainChatAgentIds ?? [];
+          draft.recentAgentIds = recentAgentIds ?? null;
         });
     } catch {
       // A host without the route lets the reader message each agent the list shows.
@@ -531,12 +539,27 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         setState((draft) => {
           draft.dmAgentIds = null;
           draft.mainChatAgentIds = [];
+          draft.recentAgentIds = null;
         });
       if (current.ready) void refreshDmAgents();
     },
   );
   const dmAgentSet = createMemo(() => (state.dmAgentIds ? new Set(state.dmAgentIds) : null));
   const mainChatAgentSet = createMemo(() => new Set(state.mainChatAgentIds));
+  const recentAgentSet = createMemo(() => (state.recentAgentIds ? new Set(state.recentAgentIds) : null));
+  const closedSet = createMemo(() => new Set(state.sidebar.closed ?? []));
+  /** The agents that the reader opened in this session: their DM rows stay while they talk. */
+  const [openedAgentIds, setOpenedAgentIds] = createSignal<ReadonlySet<string>>(new Set());
+  /**
+   * Whether an agent's DM row shows: the reader wrote to it lately, it waits for the reader, or the
+   * reader opened it now. Every other agent stays one step away, in New message, Jump to and Fleet.
+   */
+  const showAgentRow = (agentId: string) => {
+    if (directory().agentStates[agentId]?.kind === "waiting") return true;
+    if (closedSet().has(`${AGENT_DM_PREFIX}${agentId}`)) return false;
+    const recent = recentAgentSet();
+    return !recent || recent.has(agentId) || openedAgentIds().has(agentId) || env.activeAgentId() === agentId;
+  };
   /** The owner's DM with each agent is its main chat; another person's is, when the agent shares it. */
   const dmIsMainChat = (agentId: string) => env.agentDmIsMainChat() || mainChatAgentSet().has(agentId);
   /** Whether the reader may open a DM with an agent, or add it: the host's list, or every agent it shows. */
@@ -560,6 +583,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         agentDmIsMainChat: dmIsMainChat,
         hiddenAgentIds: env.hiddenAgentIds(),
         dmAgentIds: dmAgentSet(),
+        closed: closedSet(),
+        showAgentRow,
       }).map((row) => (mutedSet().has(row.id) ? { ...row, muted: true } : row)),
       state.sidebar.order.direct,
     ),
@@ -607,12 +632,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     try {
       while (sidebarUnsent && run === sidebarKeyRun) {
         sidebarUnsent = false;
-        const { order, muted } = state.sidebar;
+        const { order, muted, closed } = state.sidebar;
         try {
           await write(
             boundedWorkspaceSidebar({
               order: { channels: [...order.channels], direct: [...order.direct] },
               muted: [...muted],
+              closed: [...(closed ?? [])],
             }),
           );
         } catch {
@@ -710,6 +736,23 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     reorderSidebar(group, ids);
   }
   /** A muted conversation stays in the list but shows no unread mark. It follows the reader's account. */
+  /** Takes a DM out of the list until the reader opens it again. */
+  function closeConversation(id: string) {
+    setState((draft) => {
+      const others = (draft.sidebar.closed ?? []).filter((item) => item !== id);
+      draft.sidebar.closed = [...others, id];
+    });
+    saveSidebar();
+    if (activeConversationId() === id) openView("activity");
+  }
+  /** A DM that the reader opens comes back to the list. */
+  function reopenConversation(id: string) {
+    if (!(state.sidebar.closed ?? []).includes(id)) return;
+    setState((draft) => {
+      draft.sidebar.closed = (draft.sidebar.closed ?? []).filter((item) => item !== id);
+    });
+    saveSidebar();
+  }
   function setMuted(id: string, muted: boolean) {
     setState((draft) => {
       const others = draft.sidebar.muted.filter((item) => item !== id);
@@ -1153,6 +1196,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   // ---------------------------------------------------------------- navigation
 
   function openChannel(channelId: string) {
+    reopenConversation(channelId);
     setState((draft) => {
       draft.view = null;
       draft.editing = null;
@@ -1181,6 +1225,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   function openAgent(agentId: string) {
+    if (!openedAgentIds().has(agentId)) setOpenedAgentIds((current) => new Set(current).add(agentId));
+    reopenConversation(`${AGENT_DM_PREFIX}${agentId}`);
     if (dmIsMainChat(agentId)) {
       channels.close();
       setState((draft) => {
@@ -1746,6 +1792,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     reorderSidebar,
     moveSidebarRow,
     setMuted,
+    closeConversation,
     isMuted: (id: string) => mutedSet().has(id),
     setSidebarFilter,
     noteEmoji,

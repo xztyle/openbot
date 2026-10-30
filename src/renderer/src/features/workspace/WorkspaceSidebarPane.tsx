@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   SquarePen,
+  X,
 } from "@openbot/ui";
 import { type SidebarGroupId, WorkspaceSidebar } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
@@ -110,6 +111,16 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         icon: <ArrowDown aria-hidden="true" />,
         onSelect: () => ws.moveSidebarRow(group, id, 1),
       },
+      ...(group === "direct"
+        ? [
+            {
+              id: "close",
+              label: t("workspace.sidebar.close"),
+              icon: <X aria-hidden="true" />,
+              onSelect: () => ws.closeConversation(id),
+            },
+          ]
+        : []),
       ...(group === "channels" && channel && !channel.archived
         ? [
             {

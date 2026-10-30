@@ -61,6 +61,7 @@ export const messages = {
   "workspace.sidebar.rowMenu": "{name} 的选项",
   "workspace.sidebar.mute": "静音",
   "workspace.sidebar.unmute": "取消静音",
+  "workspace.sidebar.close": "关闭对话",
   "workspace.sidebar.moveUp": "上移",
   "workspace.sidebar.moveDown": "下移",
 

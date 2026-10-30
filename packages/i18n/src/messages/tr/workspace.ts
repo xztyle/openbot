@@ -62,6 +62,7 @@ export const messages = {
   "workspace.sidebar.rowMenu": "{name} seçenekleri",
   "workspace.sidebar.mute": "Sessize al",
   "workspace.sidebar.unmute": "Sesi aç",
+  "workspace.sidebar.close": "Konuşmayı kapat",
   "workspace.sidebar.moveUp": "Yukarı taşı",
   "workspace.sidebar.moveDown": "Aşağı taşı",
 

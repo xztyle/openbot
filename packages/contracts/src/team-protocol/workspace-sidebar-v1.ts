@@ -7,7 +7,7 @@
 //   direct }, muted }`: three lists of at most 500 ids each, each id 1 to 200 characters (a channel
 //   id, or `agent:` and an agent id for the owner's DM with an agent). `order.channels` and
 //   `order.direct` are the rows in the order the member dragged them; `muted` are the conversations
-//   that show no unread mark.
+//   that show no unread mark. Later: `closed?`, at most 500 ids, the DMs that the member closed.
 // - `POST /v1/workspace/sidebar/save` with a sidebar replaces the value of the member of the session
 //   and answers `{ sidebar }`, the value the host keeps (a repeated id keeps its first place).
 //
@@ -37,7 +37,7 @@ const sidebarId = (value: unknown): TeamProtocolV2Json => {
   return id;
 };
 const ids = list(sidebarId, 500);
-const sidebar = fields({ order: fields({ channels: ids, direct: ids }), muted: ids });
+const sidebar = fields({ order: fields({ channels: ids, direct: ids }), muted: ids }, { closed: ids });
 
 export const WORKSPACE_SIDEBAR_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [WORKSPACE_SIDEBAR_ROUTES.read, adminRoute(empty, fields({ sidebar: nullable(sidebar) }))],

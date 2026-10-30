@@ -61,6 +61,7 @@ export const messages = defineMessages("workspace", {
   "workspace.sidebar.rowMenu": "Options for {name}",
   "workspace.sidebar.mute": "Mute",
   "workspace.sidebar.unmute": "Unmute",
+  "workspace.sidebar.close": "Close conversation",
   "workspace.sidebar.moveUp": "Move up",
   "workspace.sidebar.moveDown": "Move down",
 

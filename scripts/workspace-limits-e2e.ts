@@ -681,7 +681,9 @@ try {
     await Effect.runPromise(
       first.set("member-a", { order: { channels: ["c2", "c1", "c2"], direct: ["d1"] }, muted: ["c1"] }),
     );
-    await Effect.runPromise(first.set("member-b", { order: { channels: [], direct: [] }, muted: ["d9"] }));
+    await Effect.runPromise(
+      first.set("member-b", { order: { channels: [], direct: [] }, muted: ["d9"], closed: ["agent:a1", "agent:a1"] }),
+    );
     const tooMany = await Effect.runPromise(
       Effect.exit(
         first.set("member-a", {
@@ -698,6 +700,9 @@ try {
     // A repeated id keeps its first place; each member has their own value.
     assert.deepEqual(second.get("member-a"), { order: { channels: ["c2", "c1"], direct: ["d1"] }, muted: ["c1"] });
     assert.deepEqual(second.get("member-b")?.muted, ["d9"]);
+    // The closed DMs follow the member too, without repeats; a value without them stays without.
+    assert.deepEqual(second.get("member-b")?.closed, ["agent:a1"]);
+    assert.equal(second.get("member-a")?.closed, undefined);
     return { members: 2 };
   });
 

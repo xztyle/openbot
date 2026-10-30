@@ -61,6 +61,7 @@ export const messages = {
   "workspace.sidebar.rowMenu": "{name} のオプション",
   "workspace.sidebar.mute": "ミュート",
   "workspace.sidebar.unmute": "ミュートを解除",
+  "workspace.sidebar.close": "会話を閉じる",
   "workspace.sidebar.moveUp": "上へ移動",
   "workspace.sidebar.moveDown": "下へ移動",
 

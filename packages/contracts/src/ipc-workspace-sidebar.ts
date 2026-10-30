@@ -13,6 +13,11 @@ export const WORKSPACE_SIDEBAR_ID_LENGTH = 200;
 export interface WorkspaceSidebarPrefs {
   order: { channels: string[]; direct: string[] };
   muted: string[];
+  /**
+   * The DMs that the reader closed: they leave the list until the reader opens them again, or a new
+   * message comes in a DM channel. Absent from an older client or host.
+   */
+  closed?: string[];
 }
 
 /** The value of the member on the host. Null: the host has none for them yet. */
@@ -38,6 +43,7 @@ export function decodeWorkspaceSidebarPrefs(value: unknown): WorkspaceSidebarPre
   return {
     order: { channels: idList(value.order.channels, "order"), direct: idList(value.order.direct, "order") },
     muted: idList(value.muted, "mutes"),
+    ...(value.closed === undefined ? {} : { closed: idList(value.closed, "closed conversations") }),
   };
 }
 
@@ -55,5 +61,6 @@ export function boundedWorkspaceSidebar(prefs: WorkspaceSidebarPrefs): Workspace
   return {
     order: { channels: bounded(prefs.order.channels), direct: bounded(prefs.order.direct) },
     muted: bounded(prefs.muted),
+    ...(prefs.closed === undefined ? {} : { closed: bounded(prefs.closed) }),
   };
 }

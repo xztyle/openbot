@@ -82,6 +82,7 @@ export const messages = {
   "workspace.sidebar.rowMenu": "Параметры: {name}",
   "workspace.sidebar.mute": "Отключить уведомления",
   "workspace.sidebar.unmute": "Включить уведомления",
+  "workspace.sidebar.close": "Закрыть разговор",
   "workspace.sidebar.moveUp": "Переместить вверх",
   "workspace.sidebar.moveDown": "Переместить вниз",
 

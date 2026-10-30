@@ -53,6 +53,7 @@ import {
   parseWorkspaceStepsInput,
   remoteBrowserSecretResponse,
   type WorkspaceArtifactsInput,
+  type WorkspaceDmAgents,
   type WorkspaceFleetInput,
   type WorkspaceSidebarPrefs,
   type WorkspaceStepsInput,
@@ -433,12 +434,14 @@ export function agentIpcHandlers({
       }),
       workspaceDmAgents: scopedQueryHandler({
         // The host user owns the server: every agent that is not hidden.
-        local: () => ({
-          agentIds: service
+        local: (): WorkspaceDmAgents => {
+          const agentIds = service
             .listAgents()
             .filter((agent) => agent.hiddenAt === undefined)
-            .map((agent) => agent.id),
-        }),
+            .map((agent) => agent.id);
+          const recent = new Set(service.workspace.recentDmAgentIds());
+          return { agentIds, recentAgentIds: agentIds.filter((id) => recent.has(id)) };
+        },
         remote: (serverId) => {
           if (!remoteServers.supportsCapability(serverId, WORKSPACE_CAPABILITY))
             throw new Error(sourceText("error.team.workspaceUnsupported"));

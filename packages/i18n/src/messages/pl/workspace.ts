@@ -82,6 +82,7 @@ export const messages = {
   "workspace.sidebar.rowMenu": "Opcje: {name}",
   "workspace.sidebar.mute": "Wycisz",
   "workspace.sidebar.unmute": "Wyłącz wyciszenie",
+  "workspace.sidebar.close": "Zamknij rozmowę",
   "workspace.sidebar.moveUp": "Przenieś wyżej",
   "workspace.sidebar.moveDown": "Przenieś niżej",
 

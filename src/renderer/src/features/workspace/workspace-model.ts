@@ -226,6 +226,10 @@ export interface DirectMessagesInput {
   hiddenAgentIds: ReadonlySet<string>;
   /** The agents the reader may open a DM with, when the host says. Null: every agent it shows. */
   dmAgentIds?: ReadonlySet<string> | null | undefined;
+  /** The DMs the reader closed. A DM channel with a new message shows again. */
+  closed?: ReadonlySet<string> | undefined;
+  /** Whether the row of an agent with no DM channel shows. Absent: every agent's row shows. */
+  showAgentRow?: ((agentId: string) => boolean) | undefined;
 }
 
 /**
@@ -240,6 +244,7 @@ export function sidebarDirectMessages(input: DirectMessagesInput): SidebarDirect
   for (const channel of input.summaries) {
     const kind = channelKind(channel);
     if (channel.archived || kind === "channel" || !readerJoined(directory, channel)) continue;
+    if (input.closed?.has(channel.id) && channel.unreadCount === 0) continue;
     const soleAgent = soleAgentOf(directory, channel);
     if (soleAgent && input.agentDmIsMainChat(soleAgent) && !channel.lastMessage) continue;
     if (soleAgent && !input.agentDmIsMainChat(soleAgent)) agentsWithChannel.add(soleAgent);
@@ -261,7 +266,8 @@ export function sidebarDirectMessages(input: DirectMessagesInput): SidebarDirect
       (agent) =>
         !input.hiddenAgentIds.has(agent.id) &&
         !agentsWithChannel.has(agent.id) &&
-        (input.dmAgentIds?.has(agent.id) ?? true),
+        (input.dmAgentIds?.has(agent.id) ?? true) &&
+        (input.showAgentRow?.(agent.id) ?? true),
     )
     .map((agent): SidebarDirectMessage => {
       const state = directory.agentStates[agent.id];

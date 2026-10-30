@@ -73,7 +73,13 @@ export class WorkspaceSidebarStore {
   /** The value of `memberId`, or null when they have none. */
   get(memberId: string): WorkspaceSidebarPrefs | null {
     const stored = this.#file.get().members[memberId];
-    return stored ? { order: { ...stored.order }, muted: [...stored.muted] } : null;
+    return stored
+      ? {
+          order: { ...stored.order },
+          muted: [...stored.muted],
+          ...(stored.closed === undefined ? {} : { closed: [...stored.closed] }),
+        }
+      : null;
   }
 
   /**

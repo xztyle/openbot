@@ -62,6 +62,7 @@ export const messages = {
   "workspace.sidebar.rowMenu": "{name} 옵션",
   "workspace.sidebar.mute": "알림 끄기",
   "workspace.sidebar.unmute": "알림 켜기",
+  "workspace.sidebar.close": "대화 닫기",
   "workspace.sidebar.moveUp": "위로 이동",
   "workspace.sidebar.moveDown": "아래로 이동",
 

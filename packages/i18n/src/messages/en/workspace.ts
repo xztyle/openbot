@@ -23,6 +23,7 @@ export const messages = defineMessages("workspace", {
   "workspace.view.fleet": "Fleet",
   "workspace.view.artifacts": "Artifacts",
   "workspace.view.apps": "Apps",
+  "workspace.routines.agent": "Agent",
   "workspace.view.agents": "Between agents",
   "workspace.agentTalk.description": "What agents send each other. Read only; it marks nothing unread.",
   "workspace.agentTalk.pair": "{first} ↔ {second}",
@@ -406,8 +407,6 @@ export const messages = defineMessages("workspace", {
   "workspace.app.menu.routines": "Routines",
   "workspace.app.menu.markAllRead": "Mark all as read",
   "workspace.app.menu.serverSettings": "Server settings",
-  "workspace.app.menu.classic": "Classic sidebar",
-  "workspace.app.menu.workspace": "Open the workspace view",
 
   "workspace.emoji.label": "Emoji picker",
   "workspace.emoji.search": "Search emoji",

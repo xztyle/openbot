@@ -22,7 +22,7 @@ import { useServers } from "../servers/servers-context";
 import { RoutineFlowsCanvas } from "./RoutineFlowsCanvas";
 import { desktopRoutineFlowsHost } from "./routine-flows-port";
 
-export function WorkspaceRoutineFlows() {
+export function WorkspaceRoutineFlows(props: { onOpenAgent?: ((agentId: string) => void) | undefined } = {}) {
   const { t } = useText();
   const {
     activeAgent,
@@ -75,8 +75,11 @@ export function WorkspaceRoutineFlows() {
   const webhooks = () => serverCanAdminister(activeServer(), EVENTS_CAPABILITY);
   /** A routine is made in the agent's settings, so the agent's chat opens with a new routine in them. */
   function createRoutine(agentId: string): void {
-    layout.setSidebarView("agents");
-    selectAgent(agentId);
+    if (props.onOpenAgent) props.onOpenAgent(agentId);
+    else {
+      layout.setSidebarView("agents");
+      selectAgent(agentId);
+    }
     setSettingsRequest({ agentId, nonce: Date.now(), routine: "new" });
   }
 

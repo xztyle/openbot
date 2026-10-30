@@ -72,18 +72,7 @@ import {
 } from "@openbot/team-client/team-admin-requests";
 import { clearAgentContext, type TeamApiRequest } from "@openbot/team-client/team-api-requests";
 import { classifyFailure } from "@openbot/telemetry";
-import {
-  Bot,
-  Button,
-  CheckCheck,
-  hasVisibleToasts,
-  PanelLeft,
-  Search,
-  Settings,
-  Store,
-  toast,
-  Workflow,
-} from "@openbot/ui";
+import { Bot, Button, CheckCheck, hasVisibleToasts, Search, Settings, Store, toast } from "@openbot/ui";
 import { accountUsageProviderRows } from "@openbot/ui/features/account/account-usage-view";
 import { computeAgentAvatarMoods } from "@openbot/ui/features/agents/agent-avatar-mood";
 import { createFirstAgentDraft, type FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
@@ -225,10 +214,8 @@ import { ServerSettingsPageTitle, SettingsPageFrame } from "../window/SettingsPa
 import type { SettingsKind, WindowPage } from "../window/window-page-context";
 import { WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspace/WorkspaceView";
-import { WorkspaceViewButton } from "../workspace/WorkspaceViewButton";
 import { WorkspaceProvider } from "../workspace/workspace-context";
 import { createWorkspaceController } from "../workspace/workspace-controller";
-import { setWorkspaceClassic, workspaceClassic } from "../workspace/workspace-mode";
 import { workspacePersonName } from "../workspace/workspace-model";
 import { createWorkspaceSupport } from "../workspace/workspace-support";
 import { WebAgentSettings } from "./WebAgentSettings";
@@ -1799,7 +1786,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     serverId: () => server()?.id,
     reconnecting: () => workspace.state.status !== "online",
   });
-  const workspaceOn = () => workspaceSupported() && !workspaceClassic() && !routinesView();
+  // The workspace is the only layout. While a host connects, it shows before the host says what it
+  // serves; only a host without the workspace (an older version) keeps the agent sidebar.
+  const workspaceOn = () => !noHost() && (workspaceSupported() || workspace.state.status !== "online");
   const workspaceMessaging = hostMessagingApi(
     () => connectorTarget()?.id,
     () => webMessaging.api,
@@ -1856,6 +1845,35 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           if (id) void openServerSettings(id, null, "members");
         }
       : undefined,
+    routines: {
+      available: routinesSupported,
+      agentId: () => workspace.state.selectedId ?? null,
+      selectAgent: (agentId) => void select(agentId),
+      // A host switch starts the canvas again, with that host's webhook relay status.
+      pane: (actions) => (
+        <Show when={routineFlowsHost ? workspace.state.host?.hostId : undefined} keyed>
+          {(_hostId) => (
+            <Show when={routineFlowsHost}>
+              {(host) => (
+                <Loading>
+                  <RoutineFlowsCanvas
+                    host={host()}
+                    agent={conversationAgent()}
+                    agents={workspace.profiles()}
+                    newAgentModels={newAgentModels()}
+                    createAgent={createCanvasAgent}
+                    onCreateRoutine={(agentId) => {
+                      actions.openAgent(agentId);
+                      createRoutine(agentId);
+                    }}
+                  />
+                </Loading>
+              )}
+            </Show>
+          )}
+        </Show>
+      ),
+    },
     openApps: canAdministerServer(workspace.state.host?.role)
       ? () => {
           const id = server()?.id;
@@ -1889,16 +1907,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           icon: <Store aria-hidden="true" />,
           onSelect: () => setMarketplaceOpen(true),
         },
-        ...(routinesSupported()
-          ? [
-              {
-                id: "routines",
-                label: t("workspace.app.menu.routines"),
-                icon: <Workflow aria-hidden="true" />,
-                onSelect: () => showSidebarView("routines"),
-              },
-            ]
-          : []),
         {
           id: "mark-read",
           label: t("workspace.app.menu.markAllRead"),
@@ -1918,12 +1926,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
               },
             ]
           : []),
-        {
-          id: "classic",
-          label: t("workspace.app.menu.classic"),
-          icon: <PanelLeft aria-hidden="true" />,
-          onSelect: () => setWorkspaceClassic(true),
-        },
       ];
     },
     onHostEvent: workspace.onHostEvent,
@@ -2006,10 +2008,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     setSettingsRequest({ agentId, nonce: Date.now(), routine: "new" });
   }
   /** As on desktop: the empty canvas opens the agent's chat with a new routine in its settings. */
-  function createCanvasRoutine(agentId: string): void {
-    layout.setSidebarView("agents");
-    createRoutine(agentId);
-  }
   /** Whether something covers the pane, so the history holds an entry for it. */
   const overlayOpen = () =>
     hostPage() !== null ||
@@ -2210,7 +2208,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
             onPinChange={layout.setRailPinned}
             usageRows={usageRows()}
             onAgents={() => showSidebarView("agents")}
-            onRoutines={routinesSupported() ? () => showSidebarView("routines") : undefined}
+            onRoutines={
+              routinesSupported()
+                ? () => {
+                    showSidebarView("agents");
+                    ws.openView("routines");
+                  }
+                : undefined
+            }
             onTasks={
               tasksSupported()
                 ? (button) => {
@@ -2521,14 +2526,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                               onJoinDiscord={() => void openWebDestination("discord")}
                               onFollowX={() => void openWebDestination("x")}
                               onDismiss={communityCard.dismiss}
-                            />
-                          </Show>
-                          <Show when={workspaceSupported()}>
-                            <WorkspaceViewButton
-                              onOpen={() => {
-                                setWorkspaceClassic(false);
-                                layout.setSidebarView("agents");
-                              }}
                             />
                           </Show>
                         </>
@@ -3068,29 +3065,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 }
                 onRefresh={() => void workspace.run(workspace.refreshHosts)}
               />
-            </Show>
-            <Show
-              when={!tasksOpen() && !agentFormOpen() && !channelOpen() && !noHost() && !hostOffline() && routinesView()}
-            >
-              {/* A host switch starts the canvas again, with that host's webhook relay status. */}
-              <Show when={routineFlowsHost ? workspace.state.host?.hostId : undefined} keyed>
-                {(_hostId) => (
-                  <Show when={routineFlowsHost}>
-                    {(host) => (
-                      <Loading>
-                        <RoutineFlowsCanvas
-                          host={host()}
-                          agent={conversationAgent()}
-                          agents={workspace.profiles()}
-                          newAgentModels={newAgentModels()}
-                          createAgent={createCanvasAgent}
-                          onCreateRoutine={createCanvasRoutine}
-                        />
-                      </Loading>
-                    )}
-                  </Show>
-                )}
-              </Show>
             </Show>
             <Show when={agentChatOpen()}>
               <Show when={workspaceOn() ? workspace.state.selectedId : null} fallback={webConversation()}>

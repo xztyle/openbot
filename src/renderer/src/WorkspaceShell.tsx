@@ -40,7 +40,6 @@ import { DesktopWorkspaceProvider, useDesktopWorkspaceMode } from "./features/wo
 import { WorkspaceSidebarPane } from "./features/workspace/WorkspaceSidebarPane";
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "./features/workspace/WorkspaceView";
 import { useWorkspace } from "./features/workspace/workspace-context";
-import { setWorkspaceClassic } from "./features/workspace/workspace-mode";
 import { globalSearchShortcutLabel } from "./global-search-shortcut";
 import { useLayout } from "./layout";
 import { usePlatform } from "./platform";
@@ -285,15 +284,7 @@ function WorkspaceShellFrame(props: { account: () => CentralAuthUser }) {
           left={
             <Show when={!chatWindow}>
               <WorkspaceServerRail />
-              <Show
-                when={workspaceOn()}
-                fallback={
-                  <WorkspaceSidebar
-                    peopleEnabled={activePeopleEnabled()}
-                    onWorkspace={workspaceMode.supported() ? () => setWorkspaceClassic(false) : undefined}
-                  />
-                }
-              >
+              <Show when={workspaceOn()} fallback={<WorkspaceSidebar peopleEnabled={activePeopleEnabled()} />}>
                 <div class="sidebar ws-frame-sidebar">
                   <WorkspaceSidebarPane
                     searchShortcut={globalSearchShortcutLabel(platform.appInfo()?.platform ?? currentDevicePlatform())}

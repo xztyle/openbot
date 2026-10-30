@@ -1,7 +1,7 @@
 import { type BrowserTakeoverRequest, CHANNEL_CHATS_CAPABILITY } from "@openbot/contracts/ipc";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { createWorkspaceLinkUrl } from "@openbot/contracts/workspace-links";
-import { Bot, CheckCheck, PanelLeft, Search, Settings, Store, Workflow } from "@openbot/ui";
+import { Bot, CheckCheck, Search, Settings, Store } from "@openbot/ui";
 import { computeSidebarAgentStates } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
@@ -19,6 +19,7 @@ import { useChannels } from "../channels/channels-context";
 import { hostMessagingApi } from "../connectors/host-messaging-port";
 import { localMessagingApi } from "../connectors/messaging-connector";
 import { useConversation } from "../conversation/conversation-context";
+import { WorkspaceRoutineFlows } from "../routine-flows/WorkspaceRoutineFlows";
 import { serverRoleCanAdminister } from "../servers/server-capabilities";
 import { useServerScope } from "../servers/server-scope";
 import { useServerSettings } from "../servers/server-settings";
@@ -30,7 +31,6 @@ import { isReaderAuthor } from "../team/reader-identity";
 import { usePresence } from "../team/team-context";
 import { WorkspaceProvider } from "./workspace-context";
 import { createWorkspaceController, desktopMessageLink } from "./workspace-controller";
-import { setWorkspaceClassic, workspaceClassic } from "./workspace-mode";
 import { workspacePersonName } from "./workspace-model";
 import { desktopArtifactThumbnailUrl } from "./workspace-sources";
 import { createWorkspaceSupport } from "./workspace-support";
@@ -41,7 +41,6 @@ import { createWorkspaceSupport } from "./workspace-support";
  */
 export function useDesktopWorkspaceMode() {
   const channels = useChannels();
-  const layout = useLayout();
   const { activeServer, activeServerSupportsCapability } = useServers();
   const supported = createWorkspaceSupport({
     live: () =>
@@ -56,7 +55,9 @@ export function useDesktopWorkspaceMode() {
   });
   return {
     supported,
-    on: () => supported() && !workspaceClassic() && layout.sidebarView() !== "routines",
+    // The workspace is the only layout. A server that connects shows it before it says what it
+    // serves; only a server without the workspace (an older version) keeps the agent sidebar.
+    on: () => supported() || activeServer()?.state === "connecting",
   };
 }
 
@@ -142,12 +143,6 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
         onSelect: () => setSkillsMarketplaceOpen(true),
       },
       {
-        id: "routines",
-        label: t("workspace.app.menu.routines"),
-        icon: <Workflow aria-hidden="true" />,
-        onSelect: () => layout.setSidebarView("routines"),
-      },
-      {
         id: "mark-read",
         label: t("workspace.app.menu.markAllRead"),
         icon: <CheckCheck aria-hidden="true" />,
@@ -164,12 +159,6 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
         icon: <Settings aria-hidden="true" />,
         onSelect: () => openServerSettings(server.id, null),
       });
-    items.push({
-      id: "classic",
-      label: t("workspace.app.menu.classic"),
-      icon: <PanelLeft aria-hidden="true" />,
-      onSelect: () => setWorkspaceClassic(true),
-    });
     return items;
   });
   const controller = createWorkspaceController({
@@ -251,7 +240,23 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     },
     storageKey: () => `${accountId() ?? "local"}:${activeServerId()}`,
     phone: () => false,
+    routines: {
+      // The canvas says itself when a server does not serve routine flows.
+      available: () => true,
+      agentId: () => activeAgent()?.id ?? null,
+      selectAgent: (agentId) => void selectAgent(agentId),
+      pane: (actions) => <WorkspaceRoutineFlows onOpenAgent={actions.openAgent} />,
+    },
   });
+  // Routines from the page rail open the workspace's Routines view; the agent sidebar is gone.
+  createEffect(
+    () => layout.sidebarView() === "routines",
+    (routines) => {
+      if (!routines) return;
+      layout.setSidebarView("agents");
+      controller.openView("routines");
+    },
+  );
   // A message link opened from outside the app: the scope of another server switched here, and
   // the link opens once the channel list is in. A channel the reader cannot see is not in the list,
   // so the link does nothing. With the classic sidebar the channel opens in the channel view.

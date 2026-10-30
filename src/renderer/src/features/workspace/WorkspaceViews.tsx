@@ -1,11 +1,15 @@
 import { channelVisibility } from "@openbot/contracts/ipc";
+import { Workflow } from "@openbot/ui";
 import { type ActivityItem, ActivityView } from "@openbot/ui/features/workspace/ActivityView";
 import { ArtifactsView } from "@openbot/ui/features/workspace/ArtifactsView";
 import { FleetView } from "@openbot/ui/features/workspace/FleetView";
 import { type ThreadListItem, ThreadsView } from "@openbot/ui/features/workspace/ThreadsView";
+import { WorkspacePaneHeader } from "@openbot/ui/features/workspace/WorkspacePaneHeader";
+import { WorkspaceSelect } from "@openbot/ui/features/workspace/WorkspaceSelect";
 import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-types";
-import { createEffect, createMemo, Match, Switch } from "solid-js";
+import { useText } from "@openbot/ui/text";
+import { createEffect, createMemo, Match, Show, Switch } from "solid-js";
 import { WorkspaceAgentTalkView } from "./WorkspaceAgentTalk";
 import { WorkspaceStorageView } from "./WorkspaceStorageView";
 import { useWorkspace } from "./workspace-context";
@@ -29,6 +33,9 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
       </Match>
       <Match when={props.view === "agents"}>
         <WorkspaceAgentTalkView />
+      </Match>
+      <Match when={props.view === "routines"}>
+        <WorkspaceRoutinesView />
       </Match>
       <Match when={props.view === "storage"}>
         <WorkspaceStorageView />
@@ -173,5 +180,41 @@ export function WorkspaceChannelArtifacts(props: { channelId: string }) {
       onBack={() => ws.back()}
       onClose={() => ws.closePanel()}
     />
+  );
+}
+
+/** The routine canvas of one agent, with a picker of the agent, in the workspace layout. */
+function WorkspaceRoutinesView() {
+  const { t } = useText();
+  const ws = useWorkspace();
+  const options = createMemo(() =>
+    ws.env
+      .agents()
+      .filter((agent) => !ws.env.hiddenAgentIds().has(agent.id))
+      .map((agent) => ({ value: agent.id, label: agent.name })),
+  );
+  return (
+    <Show when={ws.env.routines}>
+      {(routines) => (
+        <section class="ws-view ws-routines" aria-label={t("workspace.app.menu.routines")}>
+          <WorkspacePaneHeader
+            icon={<Workflow aria-hidden="true" />}
+            title={t("workspace.app.menu.routines")}
+            onBack={() => ws.back()}
+            actions={
+              <Show when={options().length}>
+                <WorkspaceSelect
+                  label={t("workspace.routines.agent")}
+                  value={routines().agentId() ?? options()[0]?.value ?? ""}
+                  options={options()}
+                  onChange={(agentId) => routines().selectAgent(agentId)}
+                />
+              </Show>
+            }
+          />
+          <div class="ws-routines-canvas">{routines().pane({ openAgent: (agentId) => ws.openAgent(agentId) })}</div>
+        </section>
+      )}
+    </Show>
   );
 }

@@ -491,3 +491,11 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Routines: the canvas fills the view under its header. */
+.ws-routines-canvas {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}

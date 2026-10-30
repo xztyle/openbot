@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   SquarePen,
+  Workflow,
   X,
 } from "@openbot/ui";
 import { type SidebarGroupId, WorkspaceSidebar } from "@openbot/ui/features/workspace/WorkspaceSidebar";
@@ -46,6 +47,16 @@ export function useWorkspaceMenu(): () => WorkspaceMenuItem[] {
       icon: <SquarePen aria-hidden="true" />,
       onSelect: () => ws.openDialog({ kind: "new-message" }),
     },
+    ...(ws.env.routines?.available()
+      ? [
+          {
+            id: "routines",
+            label: t("workspace.app.menu.routines"),
+            icon: <Workflow aria-hidden="true" />,
+            onSelect: () => ws.openView("routines"),
+          },
+        ]
+      : []),
     ...ws.env.menu(),
   ]);
 }

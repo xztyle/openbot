@@ -36,6 +36,7 @@ import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSide
 import { slugChannelName } from "@openbot/ui/features/workspace/workspace-format";
 import type { AgentAnswerMode, WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { currentText } from "@openbot/ui/text";
+import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, createStore, onCleanup, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import type { ChannelsController } from "../channels/channels-controller";
@@ -144,6 +145,15 @@ interface WorkspaceState {
 
 type SidebarPrefs = WorkspaceSidebarPrefs;
 
+/** The routine canvas that a shell draws in the workspace's Routines view. */
+export interface WorkspaceRoutines {
+  available: () => boolean;
+  agentId: () => string | null;
+  selectAgent: (agentId: string) => void;
+  /** `openAgent` opens an agent's chat, as making a routine does. */
+  pane: (actions: { openAgent: (agentId: string) => void }) => JSX.Element;
+}
+
 /** What the workspace needs from the app around it. Each shell builds it from its own contexts. */
 export interface WorkspaceEnvironment {
   channels: ChannelsController;
@@ -195,6 +205,11 @@ export interface WorkspaceEnvironment {
   inviteTeammates?: (() => void) | undefined;
   /** Opens the server's apps: Discord, Slack, Telegram and the other connectors. Admins only. */
   openApps?: (() => void) | undefined;
+  /**
+   * The routine canvas of one agent, as a workspace view. `available` is false on a host that does
+   * not serve routine flows. `selectAgent` changes the agent that the canvas shows.
+   */
+  routines?: WorkspaceRoutines | undefined;
   /** The id of the host in message links: a link to another host opens as a plain link. */
   hostId?: (() => string | null) | undefined;
   /** A link to a message that opens it again, where the client has one. */

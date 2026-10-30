@@ -23,6 +23,7 @@ export const messages = {
   "workspace.view.fleet": "助手",
   "workspace.view.artifacts": "成果",
   "workspace.view.apps": "应用",
+  "workspace.routines.agent": "代理",
   "workspace.view.agents": "代理之间",
   "workspace.agentTalk.description": "代理之间互相发送的消息。只读，不会标记为未读。",
   "workspace.agentTalk.pair": "{first} ↔ {second}",
@@ -398,8 +399,6 @@ export const messages = {
   "workspace.app.menu.routines": "自动化任务",
   "workspace.app.menu.markAllRead": "全部标为已读",
   "workspace.app.menu.serverSettings": "服务器设置",
-  "workspace.app.menu.classic": "经典侧边栏",
-  "workspace.app.menu.workspace": "打开工作区视图",
 
   "workspace.emoji.label": "表情选择器",
   "workspace.emoji.search": "搜索表情",

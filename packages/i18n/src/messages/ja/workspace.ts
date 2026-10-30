@@ -23,6 +23,7 @@ export const messages = {
   "workspace.view.fleet": "エージェント",
   "workspace.view.artifacts": "成果物",
   "workspace.view.apps": "アプリ",
+  "workspace.routines.agent": "エージェント",
   "workspace.view.agents": "エージェント間",
   "workspace.agentTalk.description": "エージェント同士が送り合ったメッセージ。閲覧のみで、未読にはなりません。",
   "workspace.agentTalk.pair": "{first} ↔ {second}",
@@ -407,8 +408,6 @@ export const messages = {
   "workspace.app.menu.routines": "ルーティン",
   "workspace.app.menu.markAllRead": "すべて既読にする",
   "workspace.app.menu.serverSettings": "サーバーの設定",
-  "workspace.app.menu.classic": "クラシックサイドバー",
-  "workspace.app.menu.workspace": "ワークスペース表示を開く",
 
   "workspace.emoji.label": "絵文字ピッカー",
   "workspace.emoji.search": "絵文字を検索",

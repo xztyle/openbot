@@ -23,6 +23,7 @@ export const messages = {
   "workspace.view.fleet": "에이전트",
   "workspace.view.artifacts": "결과물",
   "workspace.view.apps": "앱",
+  "workspace.routines.agent": "에이전트",
   "workspace.view.agents": "에이전트 간",
   "workspace.agentTalk.description":
     "에이전트끼리 주고받은 메시지입니다. 읽기 전용이며 읽지 않음으로 표시되지 않습니다.",
@@ -404,8 +405,6 @@ export const messages = {
   "workspace.app.menu.routines": "루틴",
   "workspace.app.menu.markAllRead": "모두 읽음으로 표시",
   "workspace.app.menu.serverSettings": "서버 설정",
-  "workspace.app.menu.classic": "클래식 사이드바",
-  "workspace.app.menu.workspace": "워크스페이스 보기 열기",
 
   "workspace.emoji.label": "이모지 선택기",
   "workspace.emoji.search": "이모지 검색",

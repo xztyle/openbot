@@ -28,7 +28,7 @@ import { WorkspaceMenu } from "./WorkspaceMenu";
 import type { ChannelVisibility, WorkspaceMember, WorkspaceMenuItem } from "./workspace-types";
 
 /** The views above the channel list. */
-export type WorkspaceView = "threads" | "activity" | "fleet" | "artifacts" | "agents" | "storage";
+export type WorkspaceView = "threads" | "activity" | "fleet" | "artifacts" | "agents" | "storage" | "routines";
 
 export interface SidebarChannel {
   id: string;

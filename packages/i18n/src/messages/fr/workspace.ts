@@ -21,6 +21,7 @@ export const messages = {
   "workspace.view.fleet": "Flotte",
   "workspace.view.artifacts": "Artefacts",
   "workspace.view.apps": "Applications",
+  "workspace.routines.agent": "Agent",
   "workspace.view.agents": "Entre agents",
   "workspace.agentTalk.description": "Ce que les agents s’envoient. Lecture seule ; rien n’est marqué comme non lu.",
   "workspace.agentTalk.pair": "{first} ↔ {second}",
@@ -392,8 +393,6 @@ export const messages = {
   "workspace.app.menu.routines": "Routines",
   "workspace.app.menu.markAllRead": "Tout marquer comme lu",
   "workspace.app.menu.serverSettings": "Réglages du serveur",
-  "workspace.app.menu.classic": "Barre latérale classique",
-  "workspace.app.menu.workspace": "Ouvrir l’espace de travail",
 
   "workspace.emoji.label": "Sélecteur d’emoji",
   "workspace.emoji.search": "Rechercher un emoji",

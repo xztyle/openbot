@@ -23,6 +23,7 @@ export const messages = {
   "workspace.view.fleet": "Filo",
   "workspace.view.artifacts": "Yapıtlar",
   "workspace.view.apps": "Uygulamalar",
+  "workspace.routines.agent": "Ajan",
   "workspace.view.agents": "Ajanlar arası",
   "workspace.agentTalk.description":
     "Ajanların birbirine gönderdikleri. Salt okunur; hiçbir şeyi okunmadı olarak işaretlemez.",
@@ -407,8 +408,6 @@ export const messages = {
   "workspace.app.menu.routines": "Rutinler",
   "workspace.app.menu.markAllRead": "Tümünü okundu işaretle",
   "workspace.app.menu.serverSettings": "Sunucu ayarları",
-  "workspace.app.menu.classic": "Klasik kenar çubuğu",
-  "workspace.app.menu.workspace": "Çalışma alanını aç",
 
   "workspace.emoji.label": "Emoji seçici",
   "workspace.emoji.search": "Emoji ara",

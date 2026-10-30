@@ -60,10 +60,6 @@
   font-size: var(--openbot-text-sm);
 }
 
-.ws-back-to-workspace.ui-button {
-  margin: var(--openbot-space-2);
-}
-
 /* The middle of the frame ------------------------------------------------------------------------ */
 
 .ws-main-layout {

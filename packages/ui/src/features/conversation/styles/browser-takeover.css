@@ -108,9 +108,7 @@
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
   line-height: 1;
-  opacity: 0;
   pointer-events: none;
-  transition: opacity var(--openbot-duration-fast) var(--openbot-ease-out);
 }
 
 .browser-takeover-preview-open-label > svg {
@@ -119,9 +117,10 @@
   stroke-width: var(--openbot-icon-stroke);
 }
 
+/* Open is what the card asks for, so it shows without a hover; a touch screen has none. */
 .browser-takeover-preview-open:hover .browser-takeover-preview-open-label,
 .browser-takeover-preview-open:focus-visible .browser-takeover-preview-open-label {
-  opacity: 1;
+  background: var(--openbot-bg-control-hover);
 }
 
 .browser-takeover-preview-viewport img,

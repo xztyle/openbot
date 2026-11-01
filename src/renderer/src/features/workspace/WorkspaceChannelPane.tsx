@@ -1,4 +1,5 @@
 import {
+  type BrowserPreview,
   type Channel,
   type ChannelSummary,
   channelKind,
@@ -160,6 +161,38 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     const takeovers = ws.env.takeovers?.() ?? [];
     return current && takeovers.length ? channelBrowserTakeover(current, summary()?.threads, takeovers) : undefined;
   });
+  /** The page the agent waits on, captured again every 4 s while the card shows. */
+  const [takeoverPreview, setTakeoverPreview] = createSignal<{
+    preview: BrowserPreview | null;
+    status: "idle" | "loading" | "ready" | "failed";
+  }>({ preview: null, status: "idle" });
+  createEffect(
+    () => takeover()?.tabId,
+    (tabId) => {
+      setTakeoverPreview({ preview: null, status: tabId ? "loading" : "idle" });
+      if (!tabId) return;
+      let stopped = false;
+      const capture = () =>
+        ws.channels
+          .port()
+          .browser.capturePreview(tabId)
+          .then(
+            (preview) => {
+              if (!stopped) setTakeoverPreview({ preview, status: "ready" });
+            },
+            () => {
+              if (!stopped)
+                setTakeoverPreview((current) => (current.preview ? current : { preview: null, status: "failed" }));
+            },
+          );
+      void capture();
+      const timer = setInterval(() => void capture(), 4_000);
+      return () => {
+        stopped = true;
+        clearInterval(timer);
+      };
+    },
+  );
   const membersAnswer = () => {
     const current = channel();
     return current ? channelMembersAnswer(current) : false;
@@ -302,9 +335,13 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
                 request={request}
                 agentName={memberById(ws.directory(), request.agentId).name}
                 tab={undefined}
-                preview={null}
-                previewStatus="idle"
-                onOpen={ws.env.openBrowserTab ? () => ws.env.openBrowserTab?.(request.tabId) : undefined}
+                preview={takeoverPreview().preview}
+                previewStatus={takeoverPreview().status}
+                onOpen={() => {
+                  // The agent's chat holds its browser, where the person finishes the step.
+                  ws.openAgent(request.agentId);
+                  ws.env.openBrowserTab?.(request.tabId);
+                }}
                 onComplete={() =>
                   respond(() =>
                     ws.channels

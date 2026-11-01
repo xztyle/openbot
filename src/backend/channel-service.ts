@@ -215,6 +215,8 @@ const decodeRoutingDecision = Schema.decodeUnknownResult(RoutingDecision, { onEx
  * Owns channel commands and assignment scheduling. It never starts provider turns itself.
  */
 const channelLogger = createOpenBotLogger("channel-service");
+/** How long a channel stays unchanged before its history summary is brought up to date in the background. */
+const SUMMARY_DELAY_MS = 5_000;
 /** How long the gate model may take for one channel history summary before the member's model writes it. */
 const SUMMARY_GATE_TIMEOUT_MS = 45_000;
 
@@ -232,6 +234,10 @@ export class ChannelService {
   #scope = Scope.makeUnsafe();
   readonly #pumps = new Map<string, Fiber.Fiber<void>>();
   readonly #commands = new Map<string, Deferred.Deferred<void>>();
+  /** The background history summaries: the timer of each channel, the runs, and the channels to run again. */
+  readonly #summaryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  readonly #summaryRuns = new Set<string>();
+  readonly #summaryAgain = new Set<string>();
   readonly #commandFibers = new Set<Fiber.Fiber<Channel | void, ChannelOperationError>>();
   readonly #interrupts = new Set<Fiber.Fiber<void>>();
   readonly #events = new Set<Fiber.Fiber<void>>();
@@ -290,6 +296,45 @@ export class ChannelService {
   }
 
   /**
+   * Brings the history summary of a channel up to date a few seconds after it changes, so that the
+   * next request finds it ready instead of waiting for a model. One run per channel at a time; a
+   * change during a run schedules one more.
+   */
+  #scheduleSummary(channelId: string): void {
+    if (this.#stopped) return;
+    const pending = this.#summaryTimers.get(channelId);
+    if (pending) clearTimeout(pending);
+    const timer = setTimeout(() => {
+      this.#summaryTimers.delete(channelId);
+      if (this.#summaryRuns.has(channelId)) {
+        this.#summaryAgain.add(channelId);
+        return;
+      }
+      if (this.#stopped || this.#deletedChannels.has(channelId) || !this.store.exists(channelId)) return;
+      const channel = this.store.get(channelId);
+      if (channel.archived) return;
+      const agents = this.hooks.agents();
+      const lead = agents.find((agent) => agent.id === channel.leadAgentId);
+      const writer = lead ?? agents.find((agent) => channel.members.some((member) => member.agentId === agent.id));
+      if (!writer) return;
+      this.#summaryRuns.add(channelId);
+      Effect.runFork(
+        this.#history.catchUp(channelId, writer, lead).pipe(
+          Effect.catch((failure) => Effect.sync(() => this.hooks.error(failure))),
+          Effect.ensuring(
+            Effect.sync(() => {
+              this.#summaryRuns.delete(channelId);
+              if (this.#summaryAgain.delete(channelId)) this.#scheduleSummary(channelId);
+            }),
+          ),
+        ),
+      );
+    }, SUMMARY_DELAY_MS);
+    timer.unref?.();
+    this.#summaryTimers.set(channelId, timer);
+  }
+
+  /**
    * The channel history summary, which a request waits for before its turn starts. The gate's cheap,
    * fast model writes it; the member's own model, often a large one at high effort, takes a minute
    * on a busy channel. Without a gate model, or when it fails, the member's model writes it.
@@ -300,7 +345,12 @@ export class ChannelService {
     return gate.generate(lead.id, prompt, { pool: 1, deadline: Date.now() + gate.timeoutMs }).pipe(
       Effect.timeout(SUMMARY_GATE_TIMEOUT_MS),
       Effect.flatMap((text) => (text.trim() ? Effect.succeed(text) : Effect.fail(new Error("empty")))),
-      Effect.catch(() => this.hooks.generate(lead, prompt)),
+      Effect.catch((failure) => {
+        channelLogger.warn("The gate model did not write a channel summary; the member's model writes it.", {
+          reason: failure instanceof Error ? failure.message : String(failure),
+        });
+        return this.hooks.generate(lead, prompt);
+      }),
     );
   }
 
@@ -3694,6 +3744,7 @@ export class ChannelService {
     }
     const revision = this.store.get(channelId).revision;
     if (changes.length) this.hooks.messagesChanged?.(channelId, changes, revision);
+    if (changes.length) this.#scheduleSummary(channelId);
     this.hooks.changed(channelId, revision);
     this.#syncQueueHolds(channelId);
     this.#typing.changed(channelId);
@@ -3725,6 +3776,8 @@ export class ChannelService {
     this: ChannelService,
   ): Effect.fn.Return<void, ChannelOperationError> {
     this.#stopped = true;
+    for (const timer of this.#summaryTimers.values()) clearTimeout(timer);
+    this.#summaryTimers.clear();
     yield* Fiber.awaitAll([
       ...this.#events,
       ...this.#pumps.values(),

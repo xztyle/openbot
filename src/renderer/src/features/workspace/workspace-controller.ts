@@ -184,7 +184,7 @@ export interface WorkspaceEnvironment {
   /** Whether the host is this computer: a browser secret can then be saved to the Vault. */
   localHost?: (() => boolean) | undefined;
   /** Opens the browser tab of a takeover, where the shell has the browser. */
-  openBrowserTab?: ((tabId: string) => void) | undefined;
+  openBrowserTab?: ((tabId: string, agentId: string) => void) | undefined;
   /** The Discord connections of the host, for the channel's Integrations tab. */
   messaging?: (() => MessagingApi | undefined) | undefined;
   /** The workspace settings of the host. Only owners and admins may read them. */

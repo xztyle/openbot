@@ -1931,7 +1931,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onHostEvent: workspace.onHostEvent,
     approvals: () => workspace.state.approvals,
     takeovers: () => workspace.state.takeovers,
-    openBrowserTab: (tabId) => workspace.activateBrowserTab(tabId),
+    openBrowserTab: (tabId, agentId) => {
+      workspace.activateBrowserTab(tabId);
+      setSettingsRequest({ agentId, nonce: Date.now(), browser: true });
+    },
     hostId: () => workspace.state.host?.hostId ?? null,
     messaging: () => (connectorTarget() ? workspaceMessaging : undefined),
     workspaceSettings: () => serverSettings.workspaceSettings.getWorkspaceSettings(server()?.id ?? ""),

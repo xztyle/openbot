@@ -340,7 +340,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
                 onOpen={() => {
                   // The agent's chat holds its browser, where the person finishes the step.
                   ws.openAgent(request.agentId);
-                  ws.env.openBrowserTab?.(request.tabId);
+                  ws.env.openBrowserTab?.(request.tabId, request.agentId);
                 }}
                 onComplete={() =>
                   respond(() =>

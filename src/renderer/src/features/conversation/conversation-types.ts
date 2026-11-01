@@ -83,6 +83,8 @@ export interface AgentSettingsRequest {
   nonce: number;
   routine?: { routineId: string; name: string } | "new";
   page?: AgentSettingsPage | undefined;
+  /** Opens the agent's browser instead of its settings, as a channel's browser step asks. */
+  browser?: true | undefined;
 }
 
 /** The conversation that a draft, an error or a send belongs to. For a channel, `agentId` is the channel id. */

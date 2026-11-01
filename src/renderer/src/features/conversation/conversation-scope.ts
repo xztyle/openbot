@@ -1334,7 +1334,7 @@ export function createConversationViewScope(props: ConversationProps) {
       if (!request || !settingsRequested) return;
       handledSettingsRequests.add(request);
       if (request.routine) openRoutineSettings(request.routine);
-      else setActiveRightPanel("settings", agentId);
+      else setActiveRightPanel(request.browser ? "browser-expanded" : "settings", agentId);
     },
   );
 

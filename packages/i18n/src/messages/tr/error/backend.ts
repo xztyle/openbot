@@ -129,7 +129,6 @@ export const messages = {
     "{limit} bellekten {saved} tanesi kayıtlı. Yer açmak için ilgili iki belleğin birleşik metniyle bir belleği memoryId ile güncelleyin ve diğerini silin ya da artık doğru olmayan bir belleği silin. Sonra tekrar deneyin.",
   "error.backend.agentMemoryLimitExceeded":
     "{saved} belleğiniz var ve sınır {limit}. Kullanıcı sınırı kayıtlı bellek sayısının altına ayarladı. Yer açmak için bellek silmeyin. Kullanıcıya bu belleğin kaydedilmediğini söyleyin.",
-  "error.backend.channelHistoryLeadRequired": "Paylaşılan geçmişi hazırlamak için bir kanal lideri seçin.",
   "error.backend.channelHistoryArriving": "Paylaşılan bir mesaj hâlâ geliyor. Tamamlandığında devam edin.",
   "error.backend.channelHistoryInvalid": "Geçmiş özeti geçersiz. Tekrar denemek için devam edin.",
   "error.backend.channelContextTooLong":

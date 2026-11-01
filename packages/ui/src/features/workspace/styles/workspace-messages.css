@@ -1140,3 +1140,23 @@ button.ws-profile-trigger.ws-message-author:hover {
   font-size: var(--openbot-text-md);
   line-height: 1;
 }
+
+/* The steps of a working agent, in the line over the composer. */
+
+.ws-typing-agent:has(.ws-typing-steps[data-open]) {
+  flex-basis: 100%;
+  flex-wrap: wrap;
+}
+
+.ws-typing .ws-typing-steps {
+  margin-top: 0;
+}
+
+.ws-typing-steps[data-open] {
+  flex-basis: 100%;
+}
+
+.ws-typing-steps .ws-steps-list {
+  max-height: 32vh;
+  overflow-y: auto;
+}

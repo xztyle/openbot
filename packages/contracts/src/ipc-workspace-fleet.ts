@@ -117,7 +117,10 @@ export interface WorkspaceSteps {
 
 export interface WorkspaceStepsInput {
   channelId: string;
-  messageId: string;
+  /** The agent message whose turn's steps to read. */
+  messageId?: string;
+  /** Without a message: the turn this agent runs now for the channel, before it answers. */
+  agentId?: string;
 }
 
 export const WORKSPACE_ARTIFACT_KINDS = ["website", "app", "doc", "deck", "dashboard", "file"] as const;
@@ -362,9 +365,14 @@ export function parseWorkspaceFleetInput(value: unknown): WorkspaceFleetInput {
 }
 
 export function parseWorkspaceStepsInput(value: unknown): WorkspaceStepsInput {
-  if (!isDynamicRecord(value) || !isIdentifier(value.channelId) || !isIdentifier(value.messageId))
-    throw new Error("Invalid workspace steps input.");
-  return { channelId: value.channelId, messageId: value.messageId };
+  // A message or an agent, not both.
+  if (isDynamicRecord(value) && isIdentifier(value.channelId)) {
+    if (isIdentifier(value.messageId) && value.agentId === undefined)
+      return { channelId: value.channelId, messageId: value.messageId };
+    if (isIdentifier(value.agentId) && value.messageId === undefined)
+      return { channelId: value.channelId, agentId: value.agentId };
+  }
+  throw new Error("Invalid workspace steps input.");
 }
 
 export function parseWorkspaceArtifactsInput(value: unknown): WorkspaceArtifactsInput {

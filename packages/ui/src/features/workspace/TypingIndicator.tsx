@@ -1,14 +1,17 @@
 import type { JSX } from "@solidjs/web";
 import { For, Show } from "solid-js";
 import { useText } from "../../text";
+import { StepTrail } from "./StepTrail";
 import { MemberAvatar } from "./WorkspaceAvatar";
-import type { WorkspaceMember } from "./workspace-types";
+import type { AgentStepView, WorkspaceMember } from "./workspace-types";
 
 export interface TypingAgent {
   member: WorkspaceMember;
   state: "thinking" | "working";
   /** What it works on, such as "Running the level tests". */
   label?: string | undefined;
+  /** The steps of its turn so far. They open from the line, so a person can see what it does. */
+  trail?: { steps: readonly AgentStepView[]; durationMs?: number | undefined } | undefined;
 }
 
 export interface TypingIndicatorProps {
@@ -19,8 +22,9 @@ export interface TypingIndicatorProps {
 }
 
 /**
- * The line over the composer: "Fonikad is typing…" and "QA is working… Running the level tests".
- * It keeps its height when nobody types, so the messages do not jump.
+ * The line over the composer: "Fonikad is typing…" and "QA is working… Running the level tests",
+ * with the steps of the agent's turn so far behind "Working · 5 steps". It keeps its height when
+ * nobody types, so the messages do not jump.
  */
 export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
   const { t, format } = useText();
@@ -44,6 +48,17 @@ export function TypingIndicator(props: TypingIndicatorProps): JSX.Element {
             </span>
             <Show when={agent().label}>
               <span class="ws-typing-agent-label">{agent().label}</span>
+            </Show>
+            <Show when={agent().trail}>
+              {(trail) => (
+                <StepTrail
+                  class="ws-typing-steps"
+                  steps={trail().steps}
+                  durationMs={trail().durationMs}
+                  streaming
+                  defaultOpen={false}
+                />
+              )}
             </Show>
           </span>
         )}

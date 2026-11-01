@@ -134,13 +134,29 @@ export class WorkspaceInsights {
       throw new Error(sourceText("error.backend.channelNotFound"));
   }
 
-  /** The step trail of the turn that wrote an agent message of a channel. Empty for any other message. */
+  /**
+   * The step trail of the turn that wrote an agent message of a channel. Empty for any other message.
+   * With an agent instead of a message: the turn the agent runs now for the channel, before it answers.
+   */
   steps(input: WorkspaceStepsInput, viewer: ChannelViewer): WorkspaceSteps {
     this.#requireChannel(input.channelId, viewer);
+    if (input.messageId === undefined) return this.#runningSteps(input.channelId, input.agentId ?? "");
     const message = this.#options.channels.message(input.channelId, input.messageId);
     if (!message || message.deletedAt) throw new Error(sourceText("error.backend.channelMessageNotFound"));
     const turnId = message.message.turnId;
     if (message.author.kind !== "agent" || !turnId) return NO_STEPS;
+    return this.#turnSteps(turnId, message.author.id, message.message.trace ?? null);
+  }
+
+  #runningSteps(channelId: string, agentId: string): WorkspaceSteps {
+    const running = this.#options.mailbox.fleetWork(0).get(agentId)?.running;
+    if (!running?.turnId) return NO_STEPS;
+    const assignment = this.#options.channels.assignmentForDelivery(running.deliveryId);
+    if (assignment?.channelId !== channelId) return NO_STEPS;
+    return this.#turnSteps(running.turnId, agentId, null);
+  }
+
+  #turnSteps(turnId: string, agentId: string, storedTrace: ConversationTurnTrace | null): WorkspaceSteps {
     const turn = this.#options.database.workspace.turn(turnId);
     if (!turn) {
       // A turn that just started can be ahead of its stored row.
@@ -156,7 +172,7 @@ export class WorkspaceInsights {
           })
         : NO_STEPS;
     }
-    if (turn.agentId !== message.author.id) return NO_STEPS;
+    if (turn.agentId !== agentId) return NO_STEPS;
     const running =
       turn.status === "running" && turn.completedAt === null && (this.#options.turnRunning?.(turnId) ?? true);
     const loaded = this.#options.loadedSnapshot(turn.threadId);
@@ -165,10 +181,7 @@ export class WorkspaceInsights {
         ? loaded.messages.filter((item) => item.turnId === turnId)
         : this.#options.database.workspace.turnMessages(turn.threadId, turnId);
     const trace =
-      (running ? this.#options.liveTrace(turnId) : null) ??
-      messages.find((item) => item.trace)?.trace ??
-      message.message.trace ??
-      null;
+      (running ? this.#options.liveTrace(turnId) : null) ?? messages.find((item) => item.trace)?.trace ?? storedTrace;
     let costUsd = trace?.costUsd;
     if (costUsd === undefined && running) {
       const started = Date.parse(turn.startedAt);

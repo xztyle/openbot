@@ -4,6 +4,7 @@ import {
   channelKind,
   channelMembersAnswer,
   channelVisibility,
+  type WorkspaceSteps,
 } from "@openbot/contracts/ipc";
 import { Bell, BellOff, Button, Hash, Info, Lock, LogOut, UsersRound } from "@openbot/ui";
 import { QuestionPromptBubble } from "@openbot/ui/components/QuestionPromptBubble";
@@ -14,7 +15,7 @@ import { MemberAvatar } from "@openbot/ui/features/workspace/WorkspaceAvatar";
 import { WorkspaceContextMenu } from "@openbot/ui/features/workspace/WorkspaceContextMenu";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
-import { createMemo, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, Show } from "solid-js";
 import {
   channelApproval,
   channelBrowserTakeover,
@@ -77,6 +78,8 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     if (!held || held.channelId !== props.channelId) return null;
     return firstUnreadChannelMessageId(entries(), held.count, ws.env.isReader);
   });
+  /** The steps so far of each agent that works for the channel, read every 2 s while it works. */
+  const [liveSteps, setLiveSteps] = createSignal<Record<string, WorkspaceSteps>>({});
   /** The host's typing list once it sent one; until then the gate marks and the running tasks of the page. */
   const live = createMemo(() => ws.typingIn(props.channelId, null));
   const typing = createMemo(() => {
@@ -89,11 +92,58 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     ).filter((id) => !thinking.includes(id));
     const fleet = ws.fleet.agents();
     const step = (id: string) => fleet.find((agent) => agent.member.id === id)?.currentStep;
+    const trail = (id: string) => {
+      const steps = liveSteps()[id];
+      return steps ? { steps: steps.steps, durationMs: steps.durationMs || undefined } : undefined;
+    };
     return [
       ...thinking.map((id) => ({ member: memberById(ws.directory(), id), state: "thinking" as const })),
-      ...busy.map((id) => ({ member: memberById(ws.directory(), id), state: "working" as const, label: step(id) })),
+      ...busy.map((id) => ({
+        member: memberById(ws.directory(), id),
+        state: "working" as const,
+        label: step(id),
+        trail: trail(id),
+      })),
     ];
   });
+  createEffect(
+    () =>
+      typing()
+        .filter((agent) => agent.state === "working")
+        .map((agent) => agent.member.id)
+        .join(" "),
+    (key) => {
+      const read = ws.channels.port().agent.workspaceSteps;
+      if (!key || !read) {
+        setLiveSteps({});
+        return;
+      }
+      const channelId = props.channelId;
+      const agentIds = key.split(" ");
+      let stopped = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const poll = async () => {
+        const results = await Promise.all(
+          agentIds.map((agentId) =>
+            read({ channelId, agentId }).then(
+              (steps) => [agentId, steps] as const,
+              () => [agentId, null] as const,
+            ),
+          ),
+        );
+        if (stopped) return;
+        const next: Record<string, WorkspaceSteps> = {};
+        for (const [agentId, steps] of results) if (steps && steps.total > 0) next[agentId] = steps;
+        setLiveSteps(next);
+        timer = setTimeout(() => void poll(), 2_000);
+      };
+      void poll();
+      return () => {
+        stopped = true;
+        clearTimeout(timer);
+      };
+    },
+  );
   const typingPeople = createMemo(() => (live()?.humans ?? []).map((id) => memberById(ws.directory(), id)));
   const prompt = createMemo(() => {
     const current = page();

@@ -9,8 +9,9 @@
 //   taskId?, startedAt }`, `{ kind: "waiting", reason: "question" | "approval" | "browser", what
 //   (240), forMemberId?, channelId?, threadRootId? }` or `{ kind: "queued", count }`. At most 500
 //   agents. Times are epoch milliseconds.
-// - `POST /v1/workspace/steps` `{ channelId, messageId }` answers `{ steps, total, durationMs,
-//   streaming, startedAt?, costUsd? }` for a message of a channel the member can see: at most 60
+// - `POST /v1/workspace/steps` `{ channelId, messageId?, agentId? }` answers `{ steps, total,
+//   durationMs, streaming, startedAt?, costUsd? }` for a message of a channel the member can see, or
+//   with `agentId` and no `messageId` for the turn that agent runs now for the channel: at most 60
 //   steps, each `{ id, kind: "search" | "browse" | "tool" | "shell" | "file" | "skill" | "think",
 //   label (160), detail? (300), status: "running" | "done" | "failed", at, durationMs? }`.
 // - `POST /v1/workspace/artifacts` `{ channelId?, limit? (1 to 200) }` answers `{ artifacts }`, at
@@ -228,7 +229,10 @@ export const WORKSPACE_FLEET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = n
     WORKSPACE_FLEET_ROUTES.fleet,
     adminRoute(fields({}, { timeZone: string(64) }), fields({ agents: list(agent, 500), revision: count, at: count })),
   ],
-  [WORKSPACE_FLEET_ROUTES.steps, adminRoute(fields({ channelId: identifier, messageId: identifier }), steps)],
+  [
+    WORKSPACE_FLEET_ROUTES.steps,
+    adminRoute(fields({ channelId: identifier }, { messageId: identifier, agentId: identifier }), steps),
+  ],
   [
     WORKSPACE_FLEET_ROUTES.artifacts,
     adminRoute(fields({}, { channelId: identifier, limit: artifactLimit }), fields({ artifacts: list(artifact, 200) })),

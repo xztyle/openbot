@@ -296,14 +296,14 @@ export class ChannelService {
   }
 
   /**
-   * Brings the history summary of a channel up to date a few seconds after it changes, so that the
+   * Brings the history summary of a channel up to date a few seconds after it first changes, so that the
    * next request finds it ready instead of waiting for a model. One run per channel at a time; a
    * change during a run schedules one more.
    */
   #scheduleSummary(channelId: string): void {
-    if (this.#stopped) return;
-    const pending = this.#summaryTimers.get(channelId);
-    if (pending) clearTimeout(pending);
+    // A busy channel changes every few seconds, so a timer that each change restarted would never
+    // fire: the first change sets it, and the later ones join that run.
+    if (this.#stopped || this.#summaryTimers.has(channelId)) return;
     const timer = setTimeout(() => {
       this.#summaryTimers.delete(channelId);
       if (this.#summaryRuns.has(channelId)) {

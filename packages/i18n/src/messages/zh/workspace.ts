@@ -48,6 +48,7 @@ export const messages = {
   "workspace.sidebar.addChannel": "添加频道",
   "workspace.sidebar.addChannels": "添加频道",
   "workspace.sidebar.addTeammates": "添加队友",
+  "workspace.sidebar.addAgent": "添加智能体",
   "workspace.sidebar.publicChannel": "频道 {name}",
   "workspace.sidebar.privateChannel": "私密频道 {name}",
   "workspace.sidebar.humanDm": "{name}，{presence}",

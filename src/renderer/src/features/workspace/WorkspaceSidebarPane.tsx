@@ -196,6 +196,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
       channels={ws.sidebarChannels()}
       directMessages={ws.sidebarDirectMessages()}
       onAddChannel={() => ws.openDialog({ kind: "browse" })}
+      onAddAgent={ws.env.createAgent}
       onAddTeammate={ws.env.inviteTeammates}
     />
   );

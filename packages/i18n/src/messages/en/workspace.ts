@@ -48,6 +48,7 @@ export const messages = defineMessages("workspace", {
   "workspace.sidebar.addChannel": "Add a channel",
   "workspace.sidebar.addChannels": "Add channels",
   "workspace.sidebar.addTeammates": "Add teammates",
+  "workspace.sidebar.addAgent": "Add an agent",
   "workspace.sidebar.publicChannel": "Channel {name}",
   "workspace.sidebar.privateChannel": "Private channel {name}",
   "workspace.sidebar.humanDm": "{name}, {presence}",

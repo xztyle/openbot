@@ -45,6 +45,7 @@ export const messages = {
   "workspace.sidebar.addChannel": "Ajouter un canal",
   "workspace.sidebar.addChannels": "Ajouter des canaux",
   "workspace.sidebar.addTeammates": "Ajouter des coéquipiers",
+  "workspace.sidebar.addAgent": "Ajouter un agent",
   "workspace.sidebar.publicChannel": "Canal {name}",
   "workspace.sidebar.privateChannel": "Canal privé {name}",
   "workspace.sidebar.humanDm": "{name}, {presence}",

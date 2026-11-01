@@ -48,6 +48,7 @@ export const messages = {
   "workspace.sidebar.addChannel": "チャンネルを追加",
   "workspace.sidebar.addChannels": "チャンネルを追加",
   "workspace.sidebar.addTeammates": "メンバーを追加",
+  "workspace.sidebar.addAgent": "エージェントを追加",
   "workspace.sidebar.publicChannel": "チャンネル {name}",
   "workspace.sidebar.privateChannel": "プライベートチャンネル {name}",
   "workspace.sidebar.humanDm": "{name}、{presence}",

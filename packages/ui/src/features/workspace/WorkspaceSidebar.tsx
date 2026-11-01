@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   AtSign,
   Blocks,
+  Bot,
   ChevronDown,
   ChevronRight,
   Ellipsis,
@@ -76,6 +77,7 @@ export interface WorkspaceSidebarProps {
   directMessages: readonly SidebarDirectMessage[];
   onAddChannel?: (() => void) | undefined;
   onAddTeammate?: (() => void) | undefined;
+  onAddAgent?: (() => void) | undefined;
   /** A drag handle for a row, when the caller lets the reader sort them. */
   dragHandle?: ((id: string) => JSX.Element) | undefined;
   /**
@@ -299,6 +301,16 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 />
               )}
             </For>
+            <Show when={props.onAddAgent}>
+              {(add) => (
+                <Button variant="ghost" class="ws-sidebar-row ws-sidebar-add" data-ws-row="" onClick={() => add()()}>
+                  <span class="ws-sidebar-row-icon ws-sidebar-add-icon">
+                    <Bot aria-hidden="true" />
+                  </span>
+                  <span class="ws-sidebar-row-label">{t("workspace.sidebar.addAgent")}</span>
+                </Button>
+              )}
+            </Show>
             <Show when={props.onAddTeammate}>
               {(add) => (
                 <Button variant="ghost" class="ws-sidebar-row ws-sidebar-add" data-ws-row="" onClick={() => add()()}>

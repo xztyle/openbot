@@ -38,7 +38,7 @@ export const CHANNEL_DELETE_CAPABILITY = "channel-delete-v1";
  * their own messages stay their own in the transcript.
  */
 export const SIGNED_OUT_CHANNEL_MEMBER_ID = "local";
-export const CHANNEL_PARALLEL_LIMIT = 2;
+export const CHANNEL_PARALLEL_LIMIT = 4;
 export const CHANNEL_ASSIGNMENT_LIMIT = 8;
 
 export interface ChannelMember extends ChannelMemberWorkspaceFields {

@@ -391,6 +391,34 @@ try {
   pass("An agent answers each message of its DM without a mention", true);
   await idle(dmChannel.id);
 
+  // --- Agent talk in the team channel ---
+  const testerAnswers = answersOf(team, tester.id).length;
+  await runCauseEffect(
+    channels().relayAgentMessage({
+      senderAgentId: baker.id,
+      recipientAgentIds: [tester.id],
+      text: "Full spec: rotate the tires every 10,000 km, check the pressure monthly, and log every change.",
+      summary: "Sent you the tire spec: rotate every 10,000 km.",
+    }),
+  );
+  const relayed = channels().store.messages(team).at(-1);
+  pass(
+    "A message between agents shows as one short line in their team channel",
+    relayed?.author.id === baker.id &&
+      relayed.message.text.includes("Sent you the tire spec") &&
+      relayed.message.text.includes(`agent:${tester.id}`) &&
+      !relayed.message.text.includes("check the pressure monthly"),
+    JSON.stringify(relayed?.message.text),
+  );
+  await stays("the relayed line starts work", () => answersOf(team, tester.id).length > testerAnswers);
+  pass("The relayed line starts no work", answersOf(team, tester.id).length === testerAnswers);
+  pass(
+    "The line stays out of a channel the recipient is not in",
+    !channels()
+      .store.messages(secret)
+      .some((message) => message.message.text.includes("tire spec")),
+  );
+
   report.passed = true;
 } catch (error) {
   report.error = error instanceof Error ? (error.stack ?? error.message) : String(error);

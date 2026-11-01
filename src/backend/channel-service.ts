@@ -989,10 +989,122 @@ export class ChannelService {
     // alone does not show that the task is free: the assignment of the previous owner does.
     return (
       assignments.some((assignment) => assignment.agentId === task.ownerAgentId || assignment.taskId === task.id) ||
-      assignments.filter((assignment) => assignment.channelId === task.channelId).length >= CHANNEL_PARALLEL_LIMIT ||
+      // A person waits for no teammate's long work: only the agent's own work holds their request.
+      (assignments.filter((assignment) => assignment.channelId === task.channelId).length >= CHANNEL_PARALLEL_LIMIT &&
+        !this.#personRequest(task)) ||
       task.dependencies.some((id) => tasks.get(id)?.state !== "completed")
     );
   }
+
+  /** Whether a person wrote the request of a task, not an agent, a routine or a bridged author. */
+  #personRequest(task: ChannelTask): boolean {
+    const request = this.store.message(task.channelId, task.requestMessageId);
+    return request?.author.kind === "member" && !request.externalAuthor && !request.author.id.startsWith("routine:");
+  }
+
+  /**
+   * Shows, in a team channel, one short line about a message that an agent sent other agents
+   * outside channel work: the people follow the team's talk while the agents keep the full text in
+   * their own chats. The line goes to the channel of the sender's running channel work when a
+   * recipient is in it, else to the most recently active channel that the sender and a recipient
+   * share; with none, nothing shows. The sender's own `summary` is the line; without one, the gate
+   * model writes it, and without that, the first sentence of the message. The line is not a request:
+   * it starts no task and no gate.
+   */
+  readonly relayAgentMessage = Effect.fn("ChannelService.relayAgentMessage")(function* (
+    this: ChannelService,
+    input: { senderAgentId: string; recipientAgentIds: readonly string[]; text: string; summary?: string | undefined },
+  ) {
+    const agents = this.hooks.agents();
+    const sender = agents.find((agent) => agent.id === input.senderAgentId);
+    const recipients = agents.filter((agent) => input.recipientAgentIds.includes(agent.id));
+    if (!sender || recipients.length === 0 || this.#stopped) return;
+    const target = this.#relayTarget(
+      sender.id,
+      recipients.map((agent) => agent.id),
+    );
+    if (!target) return;
+    const line = yield* this.#relayLine(sender.id, recipients, input);
+    if (!line || this.#deletedChannels.has(target.channelId)) return;
+    const channel = this.store.get(target.channelId);
+    if (channel.archived) return;
+    const shown = recipients.filter((agent) => channel.members.some((member) => member.agentId === agent.id));
+    const mentions = shown.map((agent) => `@[${agent.name}](agent:${agent.id})`).join(" ");
+    const id = randomUUID();
+    const message: ChannelMessage = {
+      id,
+      channelId: target.channelId,
+      taskId: null,
+      author: { kind: "agent", id: sender.id, name: sender.name },
+      sequence: 0,
+      superseded: false,
+      ...(target.threadRootId ? { threadRootId: target.threadRootId } : {}),
+      message: {
+        id,
+        text: `${mentions} ${line}`.trim(),
+        author: "assistant",
+        createdAt: new Date().toISOString(),
+        status: "completed",
+      },
+    };
+    this.store.update(channel, { messages: [message] });
+    this.publish(target.channelId);
+  });
+
+  #relayTarget(
+    senderId: string,
+    recipientIds: readonly string[],
+  ): { channelId: string; threadRootId: string | null } | null {
+    const archived = this.store.archivedIds();
+    const shares = (channelId: string) => {
+      if (archived.has(channelId) || this.#deletedChannels.has(channelId)) return false;
+      const channel = this.store.get(channelId);
+      if (channelKind(channel) !== "channel") return false;
+      const members = new Set(channel.members.map((member) => member.agentId));
+      return members.has(senderId) && recipientIds.some((id) => members.has(id));
+    };
+    const ids = this.store.ids().filter(shares);
+    for (const channelId of ids) {
+      const running = this.store
+        .assignments(channelId)
+        .find((assignment) => assignment.agentId === senderId && activeAssignment(assignment));
+      if (running) return { channelId, threadRootId: running.threadRootId };
+    }
+    const latest = (channelId: string) => {
+      const at = this.store.messages(channelId, Number.MAX_SAFE_INTEGER, 1)[0]?.message.createdAt;
+      return at ? Date.parse(at) : 0;
+    };
+    const channelId = ids.sort((first, second) => latest(second) - latest(first))[0];
+    return channelId ? { channelId, threadRootId: null } : null;
+  }
+
+  readonly #relayLine = Effect.fn("ChannelService.relayLine")(function* (
+    this: ChannelService,
+    senderId: string,
+    recipients: readonly AgentSummary[],
+    input: { text: string; summary?: string | undefined },
+  ) {
+    const given = oneLine(input.summary ?? "");
+    if (given) return given;
+    const gate = this.hooks.gate?.();
+    if (gate) {
+      const prompt = [
+        "Write one short sentence, at most 25 words, that tells the people of a team chat what this message says.",
+        `The sender writes it to ${recipients.map((agent) => agent.name).join(", ")}, in the first person, plainly, like a teammate in Slack: what it hands over, asks or concludes, such as "Sent you the data plan: Alpaca SIP covers daily bars." or "Can you rerun the backtest with doubled costs?".`,
+        "Answer with the sentence only: no quotes, no names at the start, no markdown. Never repeat a key, a token, a password or a path.",
+        "",
+        "Message:",
+        input.text.slice(0, 6_000),
+      ].join("\n");
+      const written = yield* gate.generate(senderId, prompt, { pool: 1, deadline: Date.now() + gate.timeoutMs }).pipe(
+        Effect.timeout(gate.timeoutMs + 10_000),
+        Effect.map((text) => oneLine(text)),
+        Effect.catch(() => Effect.succeed("")),
+      );
+      if (written) return written;
+    }
+    return oneLine(input.text.split(/(?<=[.!?])\s/)[0] ?? "");
+  });
 
   /** Gives a task that resources hold back its place in the queue, once. */
   #holdPlace(taskId: string): void {
@@ -3685,4 +3797,13 @@ function canonicalWorkspace(path: string): string {
     if (parent === path) return normalize(path);
     return join(canonicalWorkspace(parent), basename(path));
   }
+}
+
+/** The first line of a model's or an agent's text, without quotes or markdown emphasis, at most 240 characters. */
+function oneLine(text: string): string {
+  const line = (text.trim().split("\n")[0] ?? "")
+    .trim()
+    .replace(/^["'“]+|["'”]+$/g, "")
+    .replace(/\*\*/g, "");
+  return line.length > 240 ? `${line.slice(0, 239).trimEnd()}…` : line;
 }

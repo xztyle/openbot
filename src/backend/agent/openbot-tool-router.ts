@@ -1850,11 +1850,13 @@ export class OpenBotToolRouter {
         .map(({ delivery }) => this.#mailbox.messagingOrigin(delivery.id))
         .find((origin) => origin !== null);
       const text = params.arguments.text;
+      const summary = isString(params.arguments.summary) ? params.arguments.summary.slice(0, 240) : undefined;
       const receipt = yield* this.#mailbox
         .enqueue({
           sender: { kind: "agent", agentId: senderAgentId },
           recipientAgentIds: recipientValues,
           text,
+          ...(summary ? { summary } : {}),
           sourcePaths: paths,
           // An agent can send "" for no reply. Every reader rejects an empty id.
           replyToMessageId: replyToMessageId?.trim() || null,

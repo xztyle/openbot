@@ -1049,6 +1049,16 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         deliverySettled: (deliveryId, terminal) => this.messaging.deliverySettled(deliveryId, terminal),
       },
     });
+    // The team channel shows one short line for each message between agents outside channel work.
+    mailbox.onAgentMessage = (message) =>
+      Effect.runFork(
+        this.channels.relayAgentMessage(message).pipe(
+          Effect.catch((failure) =>
+            Effect.sync(() => this.#emitError("channel_relay_failed", failure, message.senderAgentId)),
+          ),
+          Effect.forkIn(this.#scope),
+        ),
+      );
     this.channels = new ChannelService(store.database, mailbox, {
       agents: () => this.listAgents(),
       hidden: (agentId) => this.#store.isHidden(agentId),

@@ -714,6 +714,13 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     shape: {
       recipientAgentIds: z.array(z.string()).min(1).max(32),
       text: z.string().min(1).max(100_000),
+      summary: z
+        .string()
+        .max(240)
+        .describe(
+          'One short sentence, at most 25 words, that the people of your team channel see instead of the full text, in the first person, such as "Sent you the data plan: Alpaca SIP covers daily bars." or "Can you rerun the backtest with doubled costs?". Never a key, a token or a path.',
+        )
+        .optional(),
       paths: z.array(z.string()).max(10).optional(),
       replyToMessageId: z.string().nullable().optional(),
       expectsReply: z

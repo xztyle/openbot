@@ -193,6 +193,20 @@ interface EnqueueInput {
   voiceRecordingDraftId?: string;
   sourcePaths?: string[];
   idempotencyKey?: string;
+  /**
+   * One short line about an agent's message for the people of a team channel, which the sender wrote.
+   * Not stored: `onAgentMessage` passes it on.
+   */
+  summary?: string | undefined;
+}
+
+/** A new message from one agent to others, outside channel work: what a team channel shows of it. */
+export interface MailboxAgentMessage {
+  messageId: string;
+  senderAgentId: string;
+  recipientAgentIds: string[];
+  text: string;
+  summary?: string | undefined;
 }
 
 /** The work of one agent for the workspace fleet: the delivery its turn runs, and the waiting ones. */
@@ -261,6 +275,8 @@ export class MailboxStore {
   readonly #deliveryGate = new MailboxDeliveryGate();
   readonly #stagedGeneratedAttachments = new Map<string, StoredGeneratedAttachment>();
   #state: StoredState = structuredClone(EMPTY_STATE);
+  /** Told of each new message from an agent to other agents, outside channel work, once it is saved. */
+  onAgentMessage: ((message: MailboxAgentMessage) => void) | null = null;
   /**
    * The connection on which `initialize` last finished. A failed attempt leaves it unset, so the next
    * call retries, and a database that was closed since then has no such connection, so it runs again.
@@ -647,6 +663,20 @@ export class MailboxStore {
       // The message is saved: failing now would hide a delivery that runs from its caller. A draft
       // folder left behind holds copies only, and a restart clears it with the other drafts.
       yield* this.#files.removeAttachmentDirectories(usedDrafts.map((draft) => draft.path)).pipe(Effect.ignore);
+      if (input.sender.kind === "agent" && input.channelId === undefined && input.taskId === undefined) {
+        const senderAgentId = input.sender.agentId;
+        try {
+          this.onAgentMessage?.({
+            messageId,
+            senderAgentId,
+            recipientAgentIds: recipients,
+            text,
+            ...(input.summary ? { summary: input.summary } : {}),
+          });
+        } catch {
+          // What a channel shows of the message never fails the send.
+        }
+      }
       return this.#receipt(messageId);
     } catch (cause) {
       return yield* new StoredStateFailure({ cause });

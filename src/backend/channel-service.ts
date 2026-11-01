@@ -213,6 +213,9 @@ const decodeRoutingDecision = Schema.decodeUnknownResult(RoutingDecision, { onEx
 /**
  * Owns channel commands and assignment scheduling. It never starts provider turns itself.
  */
+/** How long the gate model may take for one channel history summary before the member's model writes it. */
+const SUMMARY_GATE_TIMEOUT_MS = 45_000;
+
 export class ChannelService {
   readonly store: ChannelStore;
   readonly memories: ChannelMemoryStore;
@@ -281,7 +284,22 @@ export class ChannelService {
           : [],
     });
     this.memories = new ChannelMemoryStore(database);
-    this.#history = new ChannelHistory(this.store, hooks.generate, this.memories);
+    this.#history = new ChannelHistory(this.store, (lead, prompt) => this.#summaryText(lead, prompt), this.memories);
+  }
+
+  /**
+   * The channel history summary, which a request waits for before its turn starts. The gate's cheap,
+   * fast model writes it; the member's own model, often a large one at high effort, takes a minute
+   * on a busy channel. Without a gate model, or when it fails, the member's model writes it.
+   */
+  #summaryText(lead: AgentSummary, prompt: string): Effect.Effect<string, ChannelOperationError> {
+    const gate = this.hooks.gate?.();
+    if (!gate) return this.hooks.generate(lead, prompt);
+    return gate.generate(lead.id, prompt, { pool: 1, deadline: Date.now() + gate.timeoutMs }).pipe(
+      Effect.timeout(SUMMARY_GATE_TIMEOUT_MS),
+      Effect.flatMap((text) => (text.trim() ? Effect.succeed(text) : Effect.fail(new Error("empty")))),
+      Effect.catch(() => this.hooks.generate(lead, prompt)),
+    );
   }
 
   /**

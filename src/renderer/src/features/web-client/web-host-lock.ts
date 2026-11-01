@@ -3,19 +3,24 @@ import { currentText } from "@openbot/ui/text";
 
 /**
  * A logical host session belongs to one account credential. Prevent tabs from replacing each other's peer.
- * With `wait`, the request queues until the lock is free or the signal aborts.
+ * With `wait`, the request queues until the lock is free or the signal aborts. With `steal`, it takes
+ * the lock from a holder that no longer answers.
  */
 export async function acquireWebHostLock(
   accountId: string,
   hostId: string,
-  options: { wait?: AbortSignal } = {},
+  options: { wait?: AbortSignal; steal?: boolean } = {},
 ): Promise<() => void> {
   if (!navigator.locks) throw new Error(currentText().t("webClient.error.noLocks"));
   let release: () => void = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const lockOptions: LockOptions = options.wait ? { signal: options.wait } : { ifAvailable: true };
+  const lockOptions: LockOptions = options.steal
+    ? { steal: true }
+    : options.wait
+      ? { signal: options.wait }
+      : { ifAvailable: true };
   return new Promise((resolve, reject) => {
     void navigator.locks
       .request(`openbot.web.host:${accountId}:${hostId}`, lockOptions, async (lock) => {
@@ -74,7 +79,9 @@ export function openWebHostChannel(accountId: string): BroadcastChannel | null {
 
 /**
  * The lock of a host this tab opens. When another tab holds it, asks that tab to let its status
- * connection go and waits for the lock. A tab that has the host open refuses at once.
+ * connection go and waits for the lock. A tab that has the host open refuses at once. A holder that
+ * does not answer at all is a page the browser froze or replaced, such as a suspended iPhone tab:
+ * no live tab uses the host, so this tab takes the lock.
  */
 export async function acquireOpenedWebHostLock(
   accountId: string,
@@ -82,7 +89,7 @@ export async function acquireOpenedWebHostLock(
   channel: BroadcastChannel | null,
   acquire: typeof acquireWebHostLock = acquireWebHostLock,
   // The other tab ends its session before it gives up the lock, which is a request to the account service.
-  timeoutMs = 15_000,
+  timeoutMs = 6_000,
 ): Promise<() => void> {
   try {
     return await acquire(accountId, hostId);
@@ -92,9 +99,13 @@ export async function acquireOpenedWebHostLock(
   const requestId = crypto.randomUUID();
   const stop = new AbortController();
   const timer = setTimeout(() => stop.abort(), timeoutMs);
+  let busy = false;
   const listen = (event: MessageEvent) => {
     const message = decodeWebHostTabMessage(event.data);
-    if (message?.type === "busy" && message.requestId === requestId) stop.abort();
+    if (message?.type === "busy" && message.requestId === requestId) {
+      busy = true;
+      stop.abort();
+    }
   };
   channel.addEventListener("message", listen);
   try {
@@ -102,7 +113,8 @@ export async function acquireOpenedWebHostLock(
     return await acquire(accountId, hostId, { wait: stop.signal });
   } catch (error) {
     if (!stop.signal.aborted) throw error;
-    throw new Error(currentText().t("webClient.error.otherTab"));
+    if (busy) throw new Error(currentText().t("webClient.error.otherTab"));
+    return await acquire(accountId, hostId, { steal: true });
   } finally {
     clearTimeout(timer);
     channel.removeEventListener("message", listen);

@@ -59,6 +59,7 @@ import type { StorageUsageService } from "../../backend/storage-usage";
 import type { TeamChatStore } from "../../backend/team-chat-store";
 import type { WorkflowsHandle } from "../../backend/workflows/workflows";
 import type { WorkspaceInsights } from "../../backend/workspace-insights";
+import type { WorkspaceSecretsService } from "../../backend/workspace-secrets";
 import type { AgentImportService } from "../agent-import-service";
 import type { BitwardenConnectorService } from "../bitwarden-connector-service";
 import type { BrowserViewGateway } from "../browser-view-gateway";
@@ -163,6 +164,8 @@ export type TeamApiAgents = TeamApiAgentMethods & {
     WorkspaceInsights,
     "fleet" | "steps" | "artifacts" | "artifactThumbnail" | "agentPairs" | "agentExchange" | "recentDmAgentIds"
   >;
+  /** workspace-fleet-v1 (`fork-host-v1`): the agent key store, for the owner and the admins. */
+  secrets: Pick<WorkspaceSecretsService, "list" | "read" | "save" | "remove">;
   on: (event: "event", listener: (event: AgentEvent) => void) => void;
   off: (event: "event", listener: (event: AgentEvent) => void) => void;
 };

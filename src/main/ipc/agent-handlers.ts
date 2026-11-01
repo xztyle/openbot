@@ -27,6 +27,8 @@ import {
   decodeWorkspaceArtifacts,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
+  decodeWorkspaceSecrets,
+  decodeWorkspaceSecretValue,
   decodeWorkspaceSidebar,
   decodeWorkspaceSidebarPrefs,
   decodeWorkspaceSteps,
@@ -50,13 +52,12 @@ import {
   parseWorkspaceAgentPairsInput,
   parseWorkspaceArtifactsInput,
   parseWorkspaceFleetInput,
+  parseWorkspaceSecretInput,
+  parseWorkspaceSecretSaveInput,
   parseWorkspaceStepsInput,
   remoteBrowserSecretResponse,
-  type WorkspaceArtifactsInput,
   type WorkspaceDmAgents,
-  type WorkspaceFleetInput,
   type WorkspaceSidebarPrefs,
-  type WorkspaceStepsInput,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
@@ -211,12 +212,7 @@ export function agentIpcHandlers({
     return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
   };
   // A joined server without workspace-fleet-v1 (an upstream host, or a fork host before it) has no fleet.
-  const remoteWorkspace = <T>(
-    serverId: string,
-    path: string,
-    body: WorkspaceFleetInput | WorkspaceStepsInput | WorkspaceArtifactsInput,
-    decoder: ResponseDecoder<T>,
-  ) => {
+  const remoteWorkspace = <T>(serverId: string, path: string, body: object, decoder: ResponseDecoder<T>) => {
     if (!remoteServers.supportsCapability(serverId, WORKSPACE_FLEET_CAPABILITY))
       throw new Error(sourceText("error.team.workspaceUnsupported"));
     return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
@@ -480,6 +476,27 @@ export function agentIpcHandlers({
         local: (input) => service.workspace.artifacts(input, host.channelViewer()),
         remote: (input, serverId) =>
           remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.artifacts, input, decodeWorkspaceArtifacts),
+      }),
+      workspaceSecrets: scopedQueryHandler({
+        local: () => service.secrets.list(),
+        remote: (serverId) => remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.secrets, {}, decodeWorkspaceSecrets),
+      }),
+      workspaceSecretRead: scopedHandler(parseWorkspaceSecretInput, {
+        local: (input) => service.secrets.read(input),
+        remote: (input, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.secretRead, input, decodeWorkspaceSecretValue),
+      }),
+      workspaceSecretSave: scopedHandler(parseWorkspaceSecretSaveInput, {
+        local: (input) => service.secrets.save(input),
+        remote: async (input, serverId) => {
+          await remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.secretSave, input, acceptEmpty);
+        },
+      }),
+      workspaceSecretRemove: scopedHandler(parseWorkspaceSecretInput, {
+        local: (input) => service.secrets.remove(input),
+        remote: async (input, serverId) => {
+          await remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.secretRemove, input, acceptEmpty);
+        },
       }),
       workspaceAgentPairs: scopedHandler(parseWorkspaceAgentPairsInput, {
         local: (input) => service.workspace.agentPairs(input),

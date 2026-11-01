@@ -123,6 +123,39 @@ export interface WorkspaceStepsInput {
   agentId?: string;
 }
 
+/** The scope of a key that every agent of the server reads. Any other scope is an agent id. */
+export const WORKSPACE_SHARED_SECRET_SCOPE = "shared";
+/** An environment variable name, which is also the name of a key in the store. */
+export const WORKSPACE_SECRET_NAME_PATTERN = /^[A-Z][A-Z0-9_]{0,63}$/;
+/** The largest value, in bytes. */
+export const WORKSPACE_SECRET_VALUE_LIMIT = 16 * 1024;
+
+/** A key of the agent key store, as the Secrets view lists it. Never its value. */
+export interface WorkspaceSecret {
+  /** `shared` or the id of the agent that reads it. */
+  scope: string;
+  name: string;
+  /** Epoch milliseconds of the last save. */
+  updatedAt: number;
+}
+
+export interface WorkspaceSecrets {
+  secrets: WorkspaceSecret[];
+}
+
+export interface WorkspaceSecretInput {
+  scope: string;
+  name: string;
+}
+
+export interface WorkspaceSecretSaveInput extends WorkspaceSecretInput {
+  value: string;
+}
+
+export interface WorkspaceSecretValue {
+  value: string;
+}
+
 export const WORKSPACE_ARTIFACT_KINDS = ["website", "app", "doc", "deck", "dashboard", "file"] as const;
 export type WorkspaceArtifactKind = (typeof WORKSPACE_ARTIFACT_KINDS)[number];
 
@@ -531,4 +564,42 @@ export function parseWorkspaceAgentExchangeInput(value: unknown): WorkspaceAgent
   if (isTime(value.before)) input.before = value.before;
   if (integerInRange(value.limit, 1, WORKSPACE_AGENT_EXCHANGE_LIMIT)) input.limit = value.limit;
   return input;
+}
+
+const isSecretScope = (value: unknown): value is string =>
+  value === WORKSPACE_SHARED_SECRET_SCOPE || isIdentifier(value);
+const isSecretName = (value: unknown): value is string =>
+  typeof value === "string" && WORKSPACE_SECRET_NAME_PATTERN.test(value);
+
+function isWorkspaceSecret(value: unknown): value is WorkspaceSecret {
+  return isDynamicRecord(value) && isSecretScope(value.scope) && isSecretName(value.name) && isTime(value.updatedAt);
+}
+
+export function decodeWorkspaceSecrets(value: unknown): WorkspaceSecrets {
+  if (!isDynamicRecord(value) || !Array.isArray(value.secrets) || !value.secrets.every(isWorkspaceSecret))
+    throw new Error("Invalid secrets.");
+  return { secrets: value.secrets };
+}
+
+export function decodeWorkspaceSecretValue(value: unknown): WorkspaceSecretValue {
+  if (!isDynamicRecord(value) || typeof value.value !== "string") throw new Error("Invalid secret.");
+  return { value: value.value };
+}
+
+export function parseWorkspaceSecretInput(value: unknown): WorkspaceSecretInput {
+  if (!isDynamicRecord(value) || !isSecretScope(value.scope) || !isSecretName(value.name))
+    throw new Error("Invalid secret input.");
+  return { scope: value.scope, name: value.name };
+}
+
+export function parseWorkspaceSecretSaveInput(value: unknown): WorkspaceSecretSaveInput {
+  const input = parseWorkspaceSecretInput(value);
+  const secret = isDynamicRecord(value) ? value.value : undefined;
+  if (
+    typeof secret !== "string" ||
+    secret.trim() === "" ||
+    new TextEncoder().encode(secret).length > WORKSPACE_SECRET_VALUE_LIMIT
+  )
+    throw new Error("Invalid secret input.");
+  return { ...input, value: secret };
 }

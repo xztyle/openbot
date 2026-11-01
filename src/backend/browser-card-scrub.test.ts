@@ -94,3 +94,26 @@ describe("CardValueScrub", () => {
     expect(new CardValueScrub().snapshot(raw)).toBe(raw);
   });
 });
+
+describe("a secret saved from the page", () => {
+  // A made-up key shape, not a real credential.
+  const SECRET = "PKTEST7ABCDEF1234567890";
+
+  it("hides the secret in snapshots, titles and targets for the life of the tab", () => {
+    const scrub = new CardValueScrub();
+    scrub.addSecret(SECRET);
+    scrub.endDocument();
+    const page = scrub.snapshot(snapshot(`Your key: ${SECRET}`, [element("e1", "Secret", SECRET)]));
+    expect(JSON.stringify(page)).not.toContain(SECRET);
+    expect(page.text).toBe("Your key: [saved secret]");
+    expect(scrub.text(`https://example.test/?k=${SECRET}`)).toBe("https://example.test/?k=[saved secret]");
+    expect(scrub.reveals(SECRET)).toBe(true);
+  });
+
+  it("does not hide a value too short to be a secret", () => {
+    const scrub = new CardValueScrub();
+    scrub.addSecret("short");
+    expect(scrub.active).toBe(false);
+    expect(scrub.text("a short note")).toBe("a short note");
+  });
+});

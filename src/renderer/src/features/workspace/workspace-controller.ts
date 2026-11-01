@@ -197,6 +197,8 @@ export interface WorkspaceEnvironment {
   artifactThumbnailUrl?: ArtifactThumbnailUrl | undefined;
   /** The storage hygiene calls of the host, for an owner or admin. Absent, there is no Storage view. */
   storageHygiene?: (() => StorageHygieneCalls | undefined) | undefined;
+  /** True when the reader may see the agent key store: the server owner or an admin. */
+  secrets?: (() => boolean) | undefined;
   /** Opens Server settings > Storage, where the cleanup rules are. */
   openStorageRules?: (() => void) | undefined;
   /** Opens the form of a new agent. */

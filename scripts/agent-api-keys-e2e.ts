@@ -13,7 +13,7 @@ import { redactText } from "@openbot/logging";
 import { Effect } from "effect";
 import { AttentionRegistry, type PromptResponder } from "../src/backend/agent/attention-registry";
 import { API_KEY_FIELD_ID, apiKeyFormSpec } from "../src/backend/agent/prompts";
-import { AgentApiKeys } from "../src/backend/agent-api-keys";
+import { AgentApiKeys, removeKeySourceFile } from "../src/backend/agent-api-keys";
 import { CodexAppServerClient } from "../src/backend/app-server-client";
 import { runCauseEffect } from "../src/backend/effect-boundary";
 import { requestApiKeyToolSchema } from "../src/backend/openbot-tools";
@@ -98,7 +98,7 @@ function requestKey(args: unknown, turnId: string) {
   registry.surfaceUiBlock(
     client,
     { id, method: "item/tool/call", params: { threadId: THREAD, turnId } },
-    { blockId: `block-${id}`, spec, apiKey: { name: parsed.name } },
+    { blockId: `block-${id}`, spec, apiKey: { name: parsed.name, ...(parsed.shared ? { shared: true } : {}) } },
   );
   return { id, spec };
 }
@@ -232,6 +232,50 @@ try {
     await Effect.runPromise(apiKeys.removeAgent("agent-2"));
     await assert.rejects(stat(join(root, "agent-api-keys", "agent-2")));
     await assert.rejects(Effect.runPromise(apiKeys.list("../agent-1")));
+  });
+
+  await step("a shared key from the form reaches every agent, and an agent's own key wins", async () => {
+    const { id, spec } = requestKey({ name: "ALPACA_KEY", title: "Alpaca key", shared: true }, "turn-6");
+    await answer(id, submitted(spec, "shared-value-1"), ADMIN);
+    const saved = agentAnswer(client.answers.get(id));
+    assert.equal(saved.status, "saved");
+    assert.equal(await readFile(join(root, "agent-api-keys", "_shared", "ALPACA_KEY"), "utf8"), "shared-value-1");
+    const other = await Effect.runPromise(apiKeys.listForAgent("agent-3"));
+    assert.deepEqual(
+      other.map((key) => [key.name, key.shared === true]),
+      [["ALPACA_KEY", true]],
+    );
+    await Effect.runPromise(apiKeys.save("agent-3", "ALPACA_KEY", "own-value"));
+    const own = await Effect.runPromise(apiKeys.listForAgent("agent-3"));
+    assert.deepEqual(
+      own.map((key) => [key.name, key.shared === true]),
+      [["ALPACA_KEY", false]],
+    );
+  });
+
+  await step("the Secrets view lists every key without values, and reads one on request", async () => {
+    const all = await Effect.runPromise(apiKeys.listAll());
+    assert.deepEqual(
+      all.map((entry) => `${entry.scope}/${entry.name}`),
+      ["shared/ALPACA_KEY", "agent-3/ALPACA_KEY"],
+    );
+    assert.ok(!JSON.stringify(all).includes("shared-value-1"));
+    assert.equal(await Effect.runPromise(apiKeys.read("shared", "ALPACA_KEY")), "shared-value-1");
+    assert.equal(await Effect.runPromise(apiKeys.read("shared", "MISSING_KEY")), null);
+  });
+
+  await step("save_api_key takes a file only from the workspace or the temp folder, and deletes it", async () => {
+    const workspace = join(root, "workspace");
+    await mkdir(workspace, { recursive: true });
+    const source = join(workspace, "key.txt");
+    await writeFile(source, "generated-key-5521\n");
+    const read = await Effect.runPromise(apiKeys.sourceFile(source, workspace));
+    assert.equal(read.value, "generated-key-5521");
+    await Effect.runPromise(removeKeySourceFile(read.path));
+    await assert.rejects(stat(source));
+    await assert.rejects(Effect.runPromise(apiKeys.sourceFile("key.txt", workspace)));
+    const outside = join(root, "agent-api-keys", "agent-3", "ALPACA_KEY");
+    await assert.rejects(Effect.runPromise(apiKeys.sourceFile(outside, workspace)));
   });
 
   await writeFile(join(OUT, "report.json"), `${JSON.stringify({ passed: true, steps }, null, 2)}\n`);

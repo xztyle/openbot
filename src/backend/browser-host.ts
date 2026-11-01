@@ -48,6 +48,7 @@ import {
   WebContentsView,
   webContents,
 } from "electron";
+import { type AgentApiKeys, API_KEY_VALUE_LIMIT, SHARED_API_KEY_SCOPE } from "./agent-api-keys";
 import { writeJsonFileAtomically } from "./atomic-json-file";
 import type { BrowserCardFillResult } from "./browser-card-fill";
 import {
@@ -57,6 +58,7 @@ import {
   type BrowserViewportInput,
   type SnapshotReadResult,
 } from "./browser-cdp";
+import { PAGE_SECRET_MIN_LENGTH } from "./browser-cdp-snapshot";
 import { BrowserControlSessions } from "./browser-control-sessions";
 import { browserViewCursor } from "./browser-cursor";
 import { BrowserDiagnostics } from "./browser-diagnostics";
@@ -324,6 +326,7 @@ export class BrowserHost {
   readonly #tabSessions = new Map<string, Session>();
   readonly #browserProfile: (agentId: string) => AgentBrowserProfile;
   readonly #profileExists: (profileId: string) => boolean;
+  readonly #apiKeys: AgentApiKeys | null;
   readonly #downloadsRoot: string;
   readonly #statePath: string;
   readonly #tabs = new Map<string, BrowserHostTab>();
@@ -375,12 +378,15 @@ export class BrowserHost {
       browserProfile?: (agentId: string) => AgentBrowserProfile;
       /** Whether a named profile still exists. A tab never opens in a deleted profile. */
       profileExists?: (profileId: string) => boolean;
+      /** Where `save_secret_from_page` saves. Absent, the tool fails. */
+      apiKeys?: AgentApiKeys | null;
     } = {},
   ) {
     this.#window = window;
     this.#memoryLow = options.memoryLow ?? (() => false);
     this.#browserProfile = options.browserProfile ?? (() => ({ kind: "shared" }));
     this.#profileExists = options.profileExists ?? (() => false);
+    this.#apiKeys = options.apiKeys ?? null;
     this.#downloadsRoot = downloadsRoot;
     this.#statePath = statePath;
     this.#session = session.fromPartition("persist:openbot-browser", { cache: true });
@@ -1280,7 +1286,11 @@ export class BrowserHost {
   }
 
   #requireNoSecretDocument(tab: BrowserHostTab, action: string): void {
-    if ([...this.#connectedTabs(tab)].some((connected) => connected.secretDocument || connected.filledCard))
+    if (
+      [...this.#connectedTabs(tab)].some(
+        (connected) => connected.secretDocument || connected.filledCard || connected.savedSecret,
+      )
+    )
       throw new Error(
         `${action} is unavailable while a page that received a secret is open. Use snapshots and actions until it navigates.`,
       );
@@ -1290,6 +1300,14 @@ export class BrowserHost {
   #requireNoFilledCard(tab: BrowserHostTab, action: string): void {
     if (tab.filledCard)
       throw new Error(`${action} is unavailable while the page shows a filled card. Use snapshots until it navigates.`);
+  }
+
+  /** A saved secret shows on the page, so no image of the tab goes to an agent until it navigates. */
+  #requireNoSavedSecret(tab: BrowserHostTab, action: string): void {
+    if (tab.savedSecret)
+      throw new Error(
+        `${action} is unavailable while the page shows a saved secret. Use snapshots until it navigates.`,
+      );
   }
 
   #connectedTabs(tab: BrowserHostTab): Set<BrowserHostTab> {
@@ -1436,6 +1454,7 @@ export class BrowserHost {
     return yield* this.#enqueue(tabId, (tab, keepQueueBlocked) =>
       Effect.gen({ self: this }, function* () {
         yield* browserSync(() => this.#requireNoFilledCard(tab, "Browser screenshot"));
+        yield* browserSync(() => this.#requireNoSavedSecret(tab, "Browser screenshot"));
         const image = yield* boundEngineOperation(
           tab,
           tab.engine.screenshot(),
@@ -1679,8 +1698,12 @@ export class BrowserHost {
         const capture = yield* this.#enqueue(tabId, (tab, keepQueueBlocked) =>
           Effect.gen({ self: this }, function* () {
             const result = yield* readTabSnapshot(tab, tab.revision + 1, keepQueueBlocked);
-            if (mode === "always") yield* browserSync(() => this.#requireNoFilledCard(tab, "A snapshot image"));
-            const includeImage = mode === "always" || (mode === "auto" && result.recommendImage && !tab.filledCard);
+            if (mode === "always") {
+              yield* browserSync(() => this.#requireNoFilledCard(tab, "A snapshot image"));
+              yield* browserSync(() => this.#requireNoSavedSecret(tab, "A snapshot image"));
+            }
+            const includeImage =
+              mode === "always" || (mode === "auto" && result.recommendImage && !tab.filledCard && !tab.savedSecret);
             if (!includeImage) return { result, imageUrl: null };
             const image = yield* boundEngineOperation(
               tab,
@@ -1778,6 +1801,41 @@ export class BrowserHost {
         const second = yield* this.#fillCard(args, card, vault);
         if (second.status === "filled") return second.result;
         return yield* browserFailure(new Error("The card page changed during the approval. Take a fresh snapshot."));
+      }),
+    save_secret_from_page: ({ args }, params) =>
+      Effect.gen({ self: this }, function* () {
+        yield* browserSync(() => this.#requireToolTab(params, args.tabId));
+        const apiKeys = this.#apiKeys;
+        if (!apiKeys) return yield* browserFailure(new Error("This OpenBot server cannot save secrets."));
+        const shared = args.shared !== false;
+        const agentId = params.ownerAgentId;
+        if (!shared && !agentId) return yield* browserFailure(new Error("Only an agent can keep a secret for itself."));
+        const tab = yield* this.#requireTab(args.tabId);
+        if (tab.secret) return yield* browserFailure(new Error(sourceText("error.backend.authActive")));
+        let value = "";
+        const snapshot = yield* this.#runAction(
+          args.tabId,
+          "save_secret_from_page",
+          args.target,
+          (current, deadline) =>
+            Effect.gen(function* () {
+              value = yield* current.engine.readSecret(args.target, deadline);
+              if (value.length < PAGE_SECRET_MIN_LENGTH)
+                return yield* browserFailure(
+                  new Error("The target shows no secret of 8 characters or more. Point it at the key itself."),
+                );
+              if (Buffer.byteLength(value) > API_KEY_VALUE_LIMIT)
+                return yield* browserFailure(
+                  new Error("The target shows more than 16 KiB. Point it at the key itself."),
+                );
+              current.savedSecret = true;
+            }),
+          browserToolTimeout(args.timeoutMs),
+        );
+        const saved = yield* apiKeys
+          .save(shared ? SHARED_API_KEY_SCOPE : (agentId ?? ""), args.name, value)
+          .pipe(Effect.mapError((failure) => browserFailure(failure.cause)));
+        return textResult({ status: "saved", name: saved.name, path: saved.path, shared, snapshot });
       }),
     wait_for: ({ args }, params) =>
       Effect.gen({ self: this }, function* () {
@@ -2536,6 +2594,11 @@ export class BrowserHost {
       // The next document has no card in its fields. History would bring the filled page back.
       if (tab.filledCard) {
         tab.filledCard = false;
+        contents.navigationHistory.clear();
+      }
+      // The next document no longer shows the saved secret; its text stays hidden in snapshots.
+      if (tab.savedSecret) {
+        tab.savedSecret = false;
         contents.navigationHistory.clear();
       }
       if (tab.secret?.submitted) {

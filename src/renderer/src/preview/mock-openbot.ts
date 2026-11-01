@@ -205,6 +205,11 @@ import { createMockVault } from "./mock-vault";
 import { createMockVoice, type MockVoiceOptions } from "./mock-voice";
 import { type MockWorkflowSeed, mockWorkflows } from "./mock-workflows";
 
+/** The agent key store of the preview: `scope/NAME` to its value. */
+const mockSecrets = new Map<string, { value: string; updatedAt: number }>([
+  ["shared/ALPACA_API_KEY", { value: "PKTEST1234567890", updatedAt: Date.now() - 3_600_000 }],
+]);
+
 export interface MockOpenBotOptions
   extends MockProviderRuntimeOptions,
     MockVoiceOptions,
@@ -1879,6 +1884,23 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         ],
         hasOlder: false,
       }),
+      workspaceSecrets: async () => ({
+        secrets: [...mockSecrets.entries()].map(([key, secret]) => {
+          const [scope = "shared", name = ""] = key.split("/");
+          return { scope, name, updatedAt: secret.updatedAt };
+        }),
+      }),
+      workspaceSecretRead: async ({ scope, name }) => {
+        const secret = mockSecrets.get(`${scope}/${name}`);
+        if (!secret) throw new Error("This secret is unavailable.");
+        return { value: secret.value };
+      },
+      workspaceSecretSave: async ({ scope, name, value }) => {
+        mockSecrets.set(`${scope}/${name}`, { value, updatedAt: Date.now() });
+      },
+      workspaceSecretRemove: async ({ scope, name }) => {
+        mockSecrets.delete(`${scope}/${name}`);
+      },
       workspaceArtifacts: async ({ channelId }) => {
         const now = Date.now();
         const [channel] = await mockChannels.listChannels();

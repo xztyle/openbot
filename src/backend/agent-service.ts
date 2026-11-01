@@ -264,6 +264,7 @@ import {
   resolveSharedFile,
   resolveWorkspaceFile,
 } from "./workspace-paths";
+import { WorkspaceSecretsService } from "./workspace-secrets";
 
 const logger = createOpenBotLogger("agent-service");
 
@@ -430,6 +431,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly channels: ChannelService;
   /** The fleet, step trail and artifact views of the workspace. */
   readonly workspace: WorkspaceInsights;
+  /** The Secrets view: the agent key store, for the owner and the admins. */
+  readonly secrets: WorkspaceSecretsService;
   readonly messaging: MessagingThreads;
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
@@ -1462,6 +1465,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         taskFailed: (taskId, message) => this.#tasks.failed(taskId, this.#mcp.redact(message)),
       },
     });
+    this.secrets = new WorkspaceSecretsService(options.agentApiKeys ?? null, (agentId) =>
+      this.listAgents().some((agent) => agent.id === agentId),
+    );
     this.workspace = new WorkspaceInsights({
       agents: () => this.listAgents(),
       database: store.database,

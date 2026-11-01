@@ -192,6 +192,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
       threadsUnread={ws.threadsUnread()}
       workingAgentCount={ws.fleet.agents().filter((agent) => agent.status.state === "working").length}
       showStorage={Boolean(ws.env.storageHygiene?.())}
+      showSecrets={ws.env.secrets?.() === true && Boolean(ws.channels.port().agent.workspaceSecrets)}
       onOpenApps={ws.env.openApps}
       channels={ws.sidebarChannels()}
       directMessages={ws.sidebarDirectMessages()}

@@ -36,7 +36,7 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, redactText, toLogValue } from "@openbot/logging";
 import { Deferred, Effect, Result, Schema } from "effect";
-import type { AgentApiKeys } from "../agent-api-keys";
+import { type AgentApiKeys, SHARED_API_KEY_SCOPE } from "../agent-api-keys";
 import type { AgentClient } from "../agent-client";
 import { type BrowserOperationError, browserFailure } from "../browser-effects";
 import type { PreparedBrowserSecret } from "../browser-host";
@@ -113,7 +113,8 @@ interface PendingPrompt {
 export interface SurfacedUiBlock {
   blockId: string;
   spec: UiBlockSpec;
-  apiKey?: { name: string };
+  /** `shared`: saved for every agent of the server, not only the asking one. */
+  apiKey?: { name: string; shared?: true };
 }
 
 /**
@@ -661,10 +662,16 @@ export class AttentionRegistry {
         throw new ForbiddenAttentionAnswer(sourceText("error.backend.apiKeyNotAllowed"));
       if (!this.#apiKeys) throw new Error(sourceText("error.backend.apiKeySaveFailed"));
       pending.savingApiKey = true;
-      return { pending, apiKeys: this.#apiKeys, name: apiKey.name, value };
+      return {
+        pending,
+        apiKeys: this.#apiKeys,
+        scope: apiKey.shared ? SHARED_API_KEY_SCOPE : pending.agentId,
+        name: apiKey.name,
+        value,
+      };
     });
     if (!answer) return null;
-    const key = yield* answer.apiKeys.save(answer.pending.agentId, answer.name, answer.value).pipe(
+    const key = yield* answer.apiKeys.save(answer.scope, answer.name, answer.value).pipe(
       toAttentionOperationFailed,
       Effect.ensuring(
         Effect.sync(() => {

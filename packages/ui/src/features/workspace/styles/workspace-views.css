@@ -499,3 +499,114 @@
   flex: 1 1 auto;
   flex-direction: column;
 }
+
+/* Secrets -------------------------------------------------------------------------------------- */
+
+.ws-secrets-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--openbot-space-3);
+  margin: var(--openbot-space-3) 0;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-3);
+}
+
+.ws-secrets-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-secrets-form-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: var(--openbot-space-2);
+}
+
+.ws-secrets-mono,
+.ws-secret-name,
+.ws-secret-value {
+  font-family: var(--openbot-font-mono);
+}
+
+.ws-secrets-error {
+  color: var(--openbot-danger-text);
+}
+
+.ws-secrets-group {
+  margin-top: var(--openbot-space-4);
+}
+
+.ws-secrets-group-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  margin: 0 0 var(--openbot-space-1);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ws-secrets-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  padding: 0;
+  list-style: none;
+}
+
+.ws-secret {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+}
+
+.ws-secret + .ws-secret {
+  border-top: 1px solid var(--openbot-border);
+}
+
+.ws-secret-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+}
+
+.ws-secret-copy {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--openbot-space-1) var(--openbot-space-3);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-secret-actions {
+  display: inline-flex;
+  flex: none;
+  gap: var(--openbot-space-0-5);
+}
+
+.ws-secret-value {
+  overflow-wrap: anywhere;
+  border-radius: var(--openbot-radius-sm);
+  background: var(--openbot-bg-surface-raised);
+  padding: var(--openbot-space-1-5) var(--openbot-space-2);
+  font-size: var(--openbot-text-sm);
+  user-select: all;
+}
+
+.ws-secret-replace {
+  display: flex;
+  gap: var(--openbot-space-2);
+}

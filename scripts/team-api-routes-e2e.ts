@@ -391,6 +391,12 @@ const fakeAgents: TeamApiAgents = {
     agentExchange: unused("workspace.agentExchange"),
     recentDmAgentIds: () => [],
   },
+  secrets: {
+    list: unused("secrets.list"),
+    read: unused("secrets.read"),
+    save: unused("secrets.save"),
+    remove: unused("secrets.remove"),
+  },
 };
 
 const mailbox: TeamApiMailbox = {

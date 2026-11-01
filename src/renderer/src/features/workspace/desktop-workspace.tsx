@@ -230,6 +230,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     takeovers,
     localHost: local,
     openBrowserTab: (tabId) => activateBrowserTab(tabId),
+    secrets: () => local() || serverRoleCanAdminister(activeServer()),
     storageHygiene: () => {
       const server = activeServer();
       return serverHasStorageHygiene(server) ? desktopStorageHygieneCalls(() => server.id) : undefined;

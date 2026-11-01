@@ -13,6 +13,7 @@ import {
   Ellipsis,
   HardDrive,
   Hash,
+  KeyRound,
   LayoutDashboard,
   Lock,
   MessageSquareText,
@@ -29,7 +30,15 @@ import { WorkspaceMenu } from "./WorkspaceMenu";
 import type { ChannelVisibility, WorkspaceMember, WorkspaceMenuItem } from "./workspace-types";
 
 /** The views above the channel list. */
-export type WorkspaceView = "threads" | "activity" | "fleet" | "artifacts" | "agents" | "storage" | "routines";
+export type WorkspaceView =
+  | "threads"
+  | "activity"
+  | "fleet"
+  | "artifacts"
+  | "agents"
+  | "storage"
+  | "routines"
+  | "secrets";
 
 export interface SidebarChannel {
   id: string;
@@ -71,6 +80,8 @@ export interface WorkspaceSidebarProps {
   workingAgentCount?: number | undefined;
   /** Shows the Storage view, for an owner or an admin of a host that reports its storage. */
   showStorage?: boolean | undefined;
+  /** The agent key store, for the owner and the admins. */
+  showSecrets?: boolean | undefined;
   /** Opens the server's apps (Discord, Slack, Telegram and other connectors), for an owner or an admin. */
   onOpenApps?: (() => void) | undefined;
   channels: readonly SidebarChannel[];
@@ -195,6 +206,15 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 icon={<HardDrive aria-hidden="true" />}
                 label={t("storageHygiene.title")}
                 active={props.activeView === "storage"}
+                onSelect={props.onSelectView}
+              />
+            </Show>
+            <Show when={props.showSecrets}>
+              <QuickRow
+                view="secrets"
+                icon={<KeyRound aria-hidden="true" />}
+                label={t("workspace.view.secrets")}
+                active={props.activeView === "secrets"}
                 onSelect={props.onSelectView}
               />
             </Show>

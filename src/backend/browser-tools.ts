@@ -1,6 +1,7 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { BROWSER_TAKEOVER_REASONS, VAULT_TEXT_LIMIT, type VaultContactFields } from "@openbot/contracts/ipc";
 import { z } from "zod";
+import { API_KEY_NAME_PATTERN } from "./agent-api-keys";
 import {
   BROWSER_FILL_FIELDS_MAX_FIELDS,
   BROWSER_FILL_FIELDS_MAX_TEXT_BYTES,
@@ -214,6 +215,28 @@ const BROWSER_TOOL_DEFINITIONS = [
     description:
       "Delete a login, card or contact from the OpenBot Vault by its id from list_vault_items (not from list_logins). A card that uses a deleted contact for billing keeps no billing address. This cannot be undone: ask first unless you added the item or the user asked for the delete.",
     shape: { id: identifier },
+  }),
+  browserTool({
+    name: "save_secret_from_page",
+    description: [
+      "Save a secret that the page shows, such as an API key or a token that a service just generated, straight into the OpenBot key store. The value never reaches you: OpenBot reads the element, saves it, and returns only the name and the file path.",
+      "Take a fresh snapshot first and point the target at the element that shows the secret, a field or the text itself, with its ref. Never target it by its text: that would put the secret in your arguments.",
+      "From then on the tab's snapshots, titles and addresses show [saved secret] in its place, and screenshots and evaluate are unavailable until the page navigates. The snapshot you took before still holds the value: do not repeat, quote, log or remember it.",
+      "shared defaults to true: every agent of this server can read it, so a teammate can use the key you got. Set false to keep it for you only. A new value replaces a saved key with the same name.",
+      "Use the key only by reading the file in your command, and quote the path: NAME=\"$(cat '<path>')\" command. It refuses an empty value, one shorter than 8 characters, or one larger than 16 KiB.",
+    ].join(" "),
+    shape: {
+      tabId,
+      target: browserTargetSchema,
+      name: z
+        .string()
+        .regex(API_KEY_NAME_PATTERN)
+        .describe(
+          "The environment variable name of the key, such as ALPACA_API_SECRET: A-Z, 0-9 and _, up to 64 characters.",
+        ),
+      shared: z.boolean().optional().describe("True (the default) for every agent of the server; false for you only."),
+      timeoutMs: timeout,
+    },
   }),
   browserTool({
     name: "fill_card",

@@ -4,6 +4,8 @@ import {
   parseWorkspaceAgentPairsInput,
   parseWorkspaceArtifactsInput,
   parseWorkspaceFleetInput,
+  parseWorkspaceSecretInput,
+  parseWorkspaceSecretSaveInput,
   parseWorkspaceStepsInput,
 } from "@openbot/contracts/ipc";
 import {
@@ -15,8 +17,15 @@ import { sourceText } from "@openbot/i18n/source";
 import type { TeamApiAgents } from "./dependencies";
 import { HttpError } from "./http-error";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
-import { readJson } from "./request-helpers";
+import { readJson, requireAdmin } from "./request-helpers";
 import { requestChannelViewer } from "./route-workspace";
+
+const SECRET_ROUTES: ReadonlySet<string> = new Set([
+  WORKSPACE_FLEET_ROUTES.secrets,
+  WORKSPACE_FLEET_ROUTES.secretRead,
+  WORKSPACE_FLEET_ROUTES.secretSave,
+  WORKSPACE_FLEET_ROUTES.secretRemove,
+]);
 
 function parsed<T>(parse: (value: unknown) => T, value: unknown): T {
   try {
@@ -49,7 +58,7 @@ function found<T>(read: () => T): T {
  */
 export async function routeWorkspaceFleet(
   context: TeamApiRequestContext,
-  agents: Pick<TeamApiAgents, "workspace">,
+  agents: Pick<TeamApiAgents, "workspace" | "secrets">,
   hiddenAgentIds: ReadonlySet<string> = new Set(),
 ): Promise<RouteOutcome> {
   const { method, url, capabilities, request, response, json } = context;
@@ -79,6 +88,17 @@ export async function routeWorkspaceFleet(
     throw new HttpError(400, sourceText("error.team.workspaceUnsupported"));
   // `readJson` has already run the body through the workspace-fleet wire codec.
   const body = await readJson(request);
+  if (SECRET_ROUTES.has(url.pathname)) {
+    // The keys go to agents that every member may run, and their values are the server's: owner and admins.
+    requireAdmin(context.member);
+    if (url.pathname === WORKSPACE_FLEET_ROUTES.secrets) return json(200, await agents.secrets.list());
+    if (url.pathname === WORKSPACE_FLEET_ROUTES.secretRead)
+      return json(200, await agents.secrets.read(parsed(parseWorkspaceSecretInput, body)));
+    if (url.pathname === WORKSPACE_FLEET_ROUTES.secretSave)
+      await agents.secrets.save(parsed(parseWorkspaceSecretSaveInput, body));
+    else await agents.secrets.remove(parsed(parseWorkspaceSecretInput, body));
+    return json(200, {});
+  }
   if (url.pathname === WORKSPACE_FLEET_ROUTES.fleet)
     return json(200, agents.workspace.fleet(parsed(parseWorkspaceFleetInput, body), visible));
   if (url.pathname === WORKSPACE_FLEET_ROUTES.agentPairs)

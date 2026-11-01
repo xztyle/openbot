@@ -41,6 +41,13 @@ export interface BrowserHostTab {
    */
   filledCard?: boolean;
   /**
+   * `save_secret_from_page` read a secret that the current document shows. Snapshots hide its text,
+   * but an image or page code would not, so the agent's screenshots, snapshot images, evaluation and
+   * recording stay blocked until a main-frame navigation replaces the document. The person's own
+   * view of the page stays.
+   */
+  savedSecret?: boolean;
+  /**
    * A session of this tab and its popups only, kept in memory: a sign-in page that the host opened
    * for someone else. Such a tab is not saved, and its cookies go when it closes.
    */

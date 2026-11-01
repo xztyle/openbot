@@ -36,6 +36,11 @@
 //   answers `{ messages, hasOlder }`: the messages between the two, oldest first, each `{ id,
 //   senderAgentId, recipientAgentIds (at most 20), text (8000), truncated?, createdAt,
 //   replyToMessageId?, attachmentCount? }`. An agent that the member cannot see answers 404.
+// - Later, for the owner and the admins only (403 for any other member): the agent key store.
+//   `POST /v1/workspace/secrets` `{}` answers `{ secrets }`, at most 2000, each `{ scope ("shared"
+//   or an agent id), name (64), updatedAt }`, never a value. `/secrets/read` `{ scope, name }`
+//   answers `{ value (16384) }`. `/secrets/save` `{ scope, name, value (16384) }` and
+//   `/secrets/remove` `{ scope, name }` answer `{}`.
 //
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed. The bounds are written out: this file must not move with an IPC limit.
@@ -63,6 +68,10 @@ export const WORKSPACE_FLEET_ROUTES = {
   artifacts: "/v1/workspace/artifacts",
   agentPairs: "/v1/workspace/agent-pairs",
   agentExchange: "/v1/workspace/agent-exchange",
+  secrets: "/v1/workspace/secrets",
+  secretRead: "/v1/workspace/secrets/read",
+  secretSave: "/v1/workspace/secrets/save",
+  secretRemove: "/v1/workspace/secrets/remove",
 } as const;
 
 /** The largest thumbnail image that a host sends and a client accepts. */
@@ -224,6 +233,9 @@ const exchangeMessage = fields(
   { truncated: boolean, replyToMessageId: identifier, attachmentCount: count },
 );
 
+const secret = fields({ scope: identifier, name: string(64), updatedAt: count });
+const secretKey = fields({ scope: identifier, name: string(64) });
+
 export const WORKSPACE_FLEET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [
     WORKSPACE_FLEET_ROUTES.fleet,
@@ -248,6 +260,13 @@ export const WORKSPACE_FLEET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = n
       fields({ messages: list(exchangeMessage, 100), hasOlder: boolean }),
     ),
   ],
+  [WORKSPACE_FLEET_ROUTES.secrets, adminRoute(fields({}), fields({ secrets: list(secret, 2000) }))],
+  [WORKSPACE_FLEET_ROUTES.secretRead, adminRoute(secretKey, fields({ value: string(16384) }))],
+  [
+    WORKSPACE_FLEET_ROUTES.secretSave,
+    adminRoute(fields({ scope: identifier, name: string(64), value: string(16384) }), fields({})),
+  ],
+  [WORKSPACE_FLEET_ROUTES.secretRemove, adminRoute(secretKey, fields({}))],
 ]);
 
 export const WORKSPACE_FLEET_CHANGED_EVENT = "workspace-fleet-changed";

@@ -270,6 +270,12 @@ const apiKeyNameSchema = z
   .regex(API_KEY_NAME_PATTERN)
   .describe("The environment variable name of the key, such as OPENAI_API_KEY: A-Z, 0-9 and _, up to 64 characters.");
 
+const sharedApiKeySchema = z
+  .boolean()
+  .describe(
+    "True: the key is shared, and every agent of this server reads it, such as a key the whole team uses. False or absent: only you read it.",
+  );
+
 export const requestApiKeyToolSchema = z.strictObject({
   name: apiKeyNameSchema,
   title: uiTextSchema(UI_BLOCK_LIMITS.title).describe(
@@ -277,9 +283,23 @@ export const requestApiKeyToolSchema = z.strictObject({
   ),
   placeholder: uiLabelSchema.optional().describe("A hint for the field, such as sk-…. Never a real key."),
   submit: uiLabelSchema.optional().describe("The submit button label."),
+  shared: sharedApiKeySchema.optional(),
 });
 
-export const removeApiKeyToolSchema = z.strictObject({ name: apiKeyNameSchema });
+export const removeApiKeyToolSchema = z.strictObject({ name: apiKeyNameSchema, shared: sharedApiKeySchema.optional() });
+
+export const saveApiKeyToolSchema = z.strictObject({
+  name: apiKeyNameSchema,
+  file: z
+    .string()
+    .trim()
+    .min(1)
+    .max(4096)
+    .describe(
+      "The absolute path of a file in your workspace or the system temp folder that holds only the key, such as the output of a command that created it. OpenBot moves it into the key store and deletes this file.",
+    ),
+  shared: sharedApiKeySchema.optional(),
+});
 
 /** Shared declarations for Codex, Grok, and Claude. Service handlers enforce execution rules. */
 export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
@@ -646,15 +666,25 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
     shape: requestApiKeyToolSchema.shape,
   },
   {
+    name: "save_api_key",
+    description: [
+      "Save a key or token that you created yourself, such as one a command printed into a file, into the OpenBot key store, where the user sees it in the Secrets view.",
+      'Write the key to a file without printing it, for example `create-key > "$TMPDIR/key"`, then call this with that file: OpenBot moves the value into a private file outside your workspace and deletes yours.',
+      "For a key that a web page shows, use openbot_browser.save_secret_from_page instead.",
+      'The result is JSON: {"status":"saved","name","path","shared"}. Use the key by reading that path in your command, as with request_api_key. A saved key with the same name is replaced.',
+    ].join(" "),
+    shape: saveApiKeyToolSchema.shape,
+  },
+  {
     name: "list_api_keys",
     description:
-      "List the API keys that the user saved for you with request_api_key: the name and the file path of each. Values are never shown.",
+      "List the keys that you read: yours, and the shared keys of the server (shared: true), with the name and the file path of each. Your own key wins over a shared one with the same name. Values are never shown.",
     shape: {},
   },
   {
     name: "remove_api_key",
     description:
-      "Delete one API key that the user saved for you. Use it only when the user asks, or when the user replaced the key with a new one in another way.",
+      "Delete one saved key: yours, or with shared true a shared key. Use it only when the user asks, or when the key was replaced in another way.",
     shape: removeApiKeyToolSchema.shape,
   },
   {

@@ -1931,6 +1931,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onHostEvent: workspace.onHostEvent,
     approvals: () => workspace.state.approvals,
     takeovers: () => workspace.state.takeovers,
+    secrets: () => canAdministerServer(workspace.state.host?.role),
     openBrowserTab: (tabId, agentId) => {
       workspace.activateBrowserTab(tabId);
       setSettingsRequest({ agentId, nonce: Date.now(), browser: true });

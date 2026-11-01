@@ -38,6 +38,10 @@ export interface ChannelsPort {
         | "workspaceArtifacts"
         | "workspaceAgentPairs"
         | "workspaceAgentExchange"
+        | "workspaceSecrets"
+        | "workspaceSecretRead"
+        | "workspaceSecretSave"
+        | "workspaceSecretRemove"
         | "workspaceSidebar"
         | "setWorkspaceSidebar"
       >

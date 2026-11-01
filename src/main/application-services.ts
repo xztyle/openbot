@@ -1110,6 +1110,8 @@ export async function createApplicationServices({
     teardown.push(TEARDOWN_ORDER.serverMemory, "the server memory reading", () => Effect.runPromise(hostMemory.stop()));
   }
   const browserProfileStore = new BrowserProfileStore(store.database);
+  // The browser saves a secret that a page shows into the same store as the agents' API keys.
+  const agentApiKeys = new AgentApiKeys(join(app.getPath("userData"), "agent-api-keys"));
   const browser = new BrowserHost(mainWindow, store.downloadsRoot, join(app.getPath("userData"), BROWSER_STATE_FILE), {
     memoryLow: () => (hostMemory?.level() ?? "ok") !== "ok",
     browserProfile: (agentId) => {
@@ -1117,6 +1119,7 @@ export async function createApplicationServices({
       return agent ? agentBrowserProfile(agent) : { kind: "shared" };
     },
     profileExists: (profileId) => browserProfileStore.get(profileId) !== undefined,
+    apiKeys: agentApiKeys,
   });
   teardown.push(TEARDOWN_ORDER.browser, "the browser", () => runCauseEffect(browser.destroy()));
   await runCauseEffect(browser.restore(store.list().map((agent) => ({ id: agent.id, threadId: agent.threadId }))));
@@ -1682,7 +1685,6 @@ export async function createApplicationServices({
   performance.mark("openbot:services.computer-use");
   if (process.platform === "win32") await Effect.runPromise(sweepProviderTemp(providerTempDirectory));
   // Outside every workspace. Each saved key is masked in the logs before the first agent starts.
-  const agentApiKeys = new AgentApiKeys(join(app.getPath("userData"), "agent-api-keys"));
   await Effect.runPromise(agentApiKeys.registerSaved());
   // The schedule triggers of workflows share the routine timer; built after the workflows below.
   let workflowTriggers: WorkflowTriggers | null = null;

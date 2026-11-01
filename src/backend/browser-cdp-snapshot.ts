@@ -833,17 +833,22 @@ function nodeAttributes(value: unknown): Record<string, string> {
 }
 
 const HIDDEN_SECURITY_CODE = "•••";
+const HIDDEN_SECRET = "[saved secret]";
+/** A shorter value would also hide ordinary words; `save_secret_from_page` refuses it. */
+export const PAGE_SECRET_MIN_LENGTH = 8;
 
 /**
  * Hides the card values that `fill_card` typed from what an agent reads of the page: snapshots, tab
  * titles and URLs, and the text of a target or a wait. A page can copy a field anywhere, so every
  * string goes through it. The number stays hidden for the life of the tab. A security code is three
  * or four digits and also hides prices and dates, so it stays hidden only until the filled document
- * goes. Logs do not use it: the main process registers the number with the log redaction.
+ * goes. Logs do not use it: the main process registers the number with the log redaction. A secret
+ * that `save_secret_from_page` read from the page also stays hidden for the life of the tab.
  */
 export class CardValueScrub {
   readonly #numbers = new Map<string, { pattern: RegExp; replacement: string }>();
   #securityCodes = new Map<string, RegExp>();
+  readonly #secrets = new Set<string>();
 
   add(number: string, securityCode: string): void {
     const digits = number.replace(/[^0-9]/gu, "");
@@ -858,17 +863,23 @@ export class CardValueScrub {
       this.#securityCodes.set(securityCode, new RegExp(`(?<![0-9])${securityCode}(?![0-9])`, "gu"));
   }
 
+  /** A secret read from the page, hidden wherever it shows as is. */
+  addSecret(value: string): void {
+    if (value.length >= PAGE_SECRET_MIN_LENGTH) this.#secrets.add(value);
+  }
+
   /** The filled document was replaced: its security code is no longer on the page. */
   endDocument(): void {
     this.#securityCodes = new Map();
   }
 
   get active(): boolean {
-    return this.#numbers.size > 0 || this.#securityCodes.size > 0;
+    return this.#numbers.size > 0 || this.#securityCodes.size > 0 || this.#secrets.size > 0;
   }
 
   text(value: string): string {
     let result = value;
+    for (const secret of this.#secrets) result = result.replaceAll(secret, HIDDEN_SECRET);
     for (const { pattern, replacement } of this.#numbers.values()) result = result.replace(pattern, replacement);
     for (const pattern of this.#securityCodes.values()) result = result.replace(pattern, HIDDEN_SECURITY_CODE);
     return result;

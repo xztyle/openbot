@@ -556,6 +556,10 @@ import type {
   WorkspaceArtifactsInput,
   WorkspaceFleet,
   WorkspaceFleetInput,
+  WorkspaceSecretInput,
+  WorkspaceSecretSaveInput,
+  WorkspaceSecrets,
+  WorkspaceSecretValue,
   WorkspaceSteps,
   WorkspaceStepsInput,
 } from "./ipc-workspace-fleet";
@@ -1367,6 +1371,11 @@ export const IPC_ENDPOINTS = {
     workspaceAgentExchange: scopedRequest<WorkspaceAgentExchangeInput, WorkspaceAgentExchange>()(
       "agent:workspace:agent-exchange",
     ),
+    // The agent key store, for the owner and the admins: names only, a value on request.
+    workspaceSecrets: scopedQuery<WorkspaceSecrets>()("agent:workspace:secrets"),
+    workspaceSecretRead: scopedRequest<WorkspaceSecretInput, WorkspaceSecretValue>()("agent:workspace:secret-read"),
+    workspaceSecretSave: scopedRequest<WorkspaceSecretSaveInput, void>()("agent:workspace:secret-save"),
+    workspaceSecretRemove: scopedRequest<WorkspaceSecretInput, void>()("agent:workspace:secret-remove"),
     // The reader's own sidebar order and mutes, kept on the host per member. A joined server answers
     // through workspace-sidebar-v1 (`fork-host-v1`); one without it fails, and the window keeps the
     // value on this computer.

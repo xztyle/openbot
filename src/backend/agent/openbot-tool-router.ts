@@ -33,7 +33,7 @@ import { createOpenBotLogger, redactText } from "@openbot/logging";
 import { Effect, Result } from "effect";
 import { z } from "zod";
 import pluginCatalog from "../../../resources/plugin-catalog/catalog.json";
-import type { AgentApiKeys } from "../agent-api-keys";
+import { type AgentApiKeys, removeKeySourceFile, SHARED_API_KEY_SCOPE } from "../agent-api-keys";
 import type { AgentClient, AgentProvider } from "../agent-client";
 import type { AgentTables } from "../agent-data/agent-tables";
 import type { AgentStore } from "../agent-store";
@@ -58,6 +58,7 @@ import {
   removeApiKeyToolSchema,
   requestApiKeyToolSchema,
   routineReportFailureToolSchema,
+  saveApiKeyToolSchema,
 } from "../openbot-tools";
 import { type AppServerRequest, type DynamicToolCallParams, type DynamicToolResult, isRecord } from "../protocol";
 import { handleRoutineFlowTool, type RoutineFlowTools } from "../routine-flows/routine-flow-tools";
@@ -128,7 +129,12 @@ const logger = createOpenBotLogger("openbot-tool-router");
 const ACKNOWLEDGE_START_MS = 10_000;
 
 /** The tools that `#apiKeyTool` answers. */
-const API_KEY_TOOLS: ReadonlySet<string> = new Set(["request_api_key", "list_api_keys", "remove_api_key"]);
+const API_KEY_TOOLS: ReadonlySet<string> = new Set([
+  "request_api_key",
+  "save_api_key",
+  "list_api_keys",
+  "remove_api_key",
+]);
 
 /** The Marketplace apps that the chat draws a card for: the bundled catalog plugins and the connectors. */
 const MARKETPLACE_APP_IDS: readonly string[] = [
@@ -642,15 +648,31 @@ export class OpenBotToolRouter {
         ),
       );
     if (params.tool === "list_api_keys")
-      return yield* apiKeys.list(agentId).pipe(
+      return yield* apiKeys.listForAgent(agentId).pipe(
         Effect.map((keys) => openBotToolResult({ keys })),
         Effect.catch(failed),
       );
+    if (params.tool === "save_api_key") {
+      const parsed = saveApiKeyToolSchema.safeParse(params.arguments);
+      if (!parsed.success)
+        return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
+      const agent = this.#hooks.listAgents().find((candidate) => candidate.id === agentId);
+      const scope = parsed.data.shared ? SHARED_API_KEY_SCOPE : agentId;
+      return yield* apiKeys.sourceFile(parsed.data.file, agent?.workspacePath ?? null).pipe(
+        Effect.flatMap((source) =>
+          apiKeys.save(scope, parsed.data.name, source.value).pipe(Effect.tap(() => removeKeySourceFile(source.path))),
+        ),
+        Effect.map((key) =>
+          openBotToolResult({ status: "saved", name: key.name, path: key.path, shared: key.shared === true }),
+        ),
+        Effect.catch(failed),
+      );
+    }
     if (params.tool === "remove_api_key") {
       const parsed = removeApiKeyToolSchema.safeParse(params.arguments);
       if (!parsed.success)
         return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
-      return yield* apiKeys.remove(agentId, parsed.data.name).pipe(
+      return yield* apiKeys.remove(parsed.data.shared ? SHARED_API_KEY_SCOPE : agentId, parsed.data.name).pipe(
         Effect.map((removed) =>
           openBotToolResult({ status: removed ? "removed" : "not_found", name: parsed.data.name }),
         ),
@@ -669,7 +691,7 @@ export class OpenBotToolRouter {
     this.#attention.surfaceUiBlock(client, request, {
       blockId: randomUUID(),
       spec,
-      apiKey: { name: parsed.data.name },
+      apiKey: { name: parsed.data.name, ...(parsed.data.shared ? { shared: true } : {}) },
     });
     return null;
   });

@@ -219,6 +219,13 @@ function shortcutLetter(key: string, code: string): string {
   return /^Key[A-Z]$/u.test(code) ? code.slice(3).toLowerCase() : "";
 }
 
+/** The text a secret shows in: a field's value, or the rendered text of any other element. */
+const PAGE_SECRET_TEXT_FUNCTION = `function() {
+  if (!this.isConnected) return null;
+  if (this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement) return this.value;
+  return this.innerText ?? this.textContent ?? '';
+}`;
+
 /** Ctrl or Meta: either one is the command modifier, whichever system the client runs. */
 const COMMAND_MODIFIERS = 2 | 4;
 
@@ -1520,6 +1527,29 @@ export class BrowserCdpEngine {
     this.#targets.clear();
     this.#lastSnapshot = null;
   }
+
+  /**
+   * The secret that an element shows, for `save_secret_from_page`: the value of a field, or the text of
+   * any other element, trimmed. It stays in the host: from now on the tab's snapshots, titles and
+   * addresses hide it, and a target or a wait that names it is refused.
+   */
+  readonly readSecret = Effect.fn("BrowserCdp.readSecret")(function* (
+    this: BrowserCdpEngine,
+    target: BrowserTarget,
+    deadline: number,
+  ): Effect.fn.Return<string, BrowserOperationError> {
+    return yield* this.#leaseEffect((send) =>
+      Effect.gen({ self: this }, function* () {
+        const node = yield* this.#resolveElementEffect(send, target, deadline);
+        const text = yield* this.#callOnNode(send, node.backendNodeId, PAGE_SECRET_TEXT_FUNCTION, [], node.sessionId);
+        if (!isString(text))
+          return yield* browserFailure(new Error("The target is unavailable. Take a fresh snapshot."));
+        const value = text.trim();
+        this.#cardScrub.addSecret(value);
+        return value;
+      }),
+    );
+  });
 
   /** `value` without the card values that `fillCard` typed in this tab, for a title or a URL. */
   scrubText(value: string): string {

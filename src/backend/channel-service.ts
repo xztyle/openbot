@@ -44,6 +44,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { isFixedSourceText, matchingSourceKeys, sourceText } from "@openbot/i18n/source";
+import { createOpenBotLogger } from "@openbot/logging";
 import { Deferred, Effect, Exit, Fiber, Result, Schema, Scope } from "effect";
 import { ChannelActivity } from "./channel-activity";
 import { type ChannelOperationError, channelFailure, channelResult, channelSync } from "./channel-effects";
@@ -213,6 +214,7 @@ const decodeRoutingDecision = Schema.decodeUnknownResult(RoutingDecision, { onEx
 /**
  * Owns channel commands and assignment scheduling. It never starts provider turns itself.
  */
+const channelLogger = createOpenBotLogger("channel-service");
 /** How long the gate model may take for one channel history summary before the member's model writes it. */
 const SUMMARY_GATE_TIMEOUT_MS = 45_000;
 
@@ -2191,6 +2193,7 @@ export class ChannelService {
     const context = yield* channelSync(() => this.store.context(channel.id, agent.id));
     this.#preparedChanges.set(delivery.delivery.id, this.store.completedMessageChanges(channel.id));
     const delivered = this.#deliveredContext(channel.id, context, agent);
+    const preparing = Date.now();
     const history = yield* this.#history.prepare(
       task,
       agent,
@@ -2198,6 +2201,12 @@ export class ChannelService {
       delivered,
       this.hooks.contextCharacters?.(agent.id, context.threadId),
     );
+    channelLogger.info("Prepared the channel context of a turn.", {
+      durationMs: Date.now() - preparing,
+      characters: history.text.length,
+      delta: delivered !== null && history.delta !== null,
+      summaryVersion: history.summaryVersion,
+    });
     if (delivered && history.delta !== null)
       this.#deltas.set(delivery.delivery.id, { sessionId: delivered.sessionId, text: history.delta });
     else this.#deltas.delete(delivery.delivery.id);

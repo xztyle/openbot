@@ -620,7 +620,9 @@ export class DrainScheduler {
       yield* drainStep(requireServedModel);
       yield* this.#threads.applyPendingRuntimeRefresh(agent, new Set(batch.map((item) => item.delivery.id)));
       releaseRuntimeRefresh = this.#threads.holdRuntimeRefresh(agent.id);
+      const startedAt = Date.now();
       const client = yield* this.#providers.ensureAgentClient(agent).pipe(toDeliveryStartFailed);
+      const clientReadyAt = Date.now();
       const messaging = this.#messaging;
       const channels = this.#channels;
       const taskThreadId = taskId === null ? null : this.#tasks.threadId(taskId);
@@ -653,6 +655,7 @@ export class DrainScheduler {
         this.#mailboxSync.emitQueue(agent.id);
         return;
       }
+      const contextReadyAt = Date.now();
       if (taskThreadId) this.#conversation.registerTaskThread(agent.id, taskThreadId);
       if (ownSession) {
         const publicThreadId = yield* this.#store.ensureThreadId(agent.id).pipe(toDeliveryStartFailed);
@@ -802,7 +805,18 @@ export class DrainScheduler {
       // Claude, ACP and Pi take the delivery id as the turn id. A delivery that a refused turn put back
       // in the queue keeps its id, and the end of that turn must not end this new run (#2468).
       this.#hooks.turnRestarting(delivery.id);
+      const threadReadyAt = Date.now();
       const firstStart = yield* Effect.result(startTurn(threadId));
+      // Where the wait before a turn goes: the provider process, the channel or messaging context,
+      // the provider thread, and `turn/start` itself.
+      logger.info("Started a turn.", {
+        provider: client.provider,
+        channel: channelDelivery,
+        clientMs: clientReadyAt - startedAt,
+        contextMs: contextReadyAt - clientReadyAt,
+        threadMs: threadReadyAt - contextReadyAt,
+        startMs: Date.now() - threadReadyAt,
+      });
       let response: Effect.Success<ReturnType<typeof startTurn>>;
       if (Result.isSuccess(firstStart)) response = firstStart.success;
       else {

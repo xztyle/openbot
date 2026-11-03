@@ -131,7 +131,8 @@ export class BrowserRecorder {
             );
             openedWindow = recorderWindow;
             recorderWindow.webContents.session.setPermissionCheckHandler(
-              (_webContents, permission) => permission === "media",
+              // Electron 45 reports a tab capture as `display-capture`, no longer as `media`.
+              (_webContents, permission) => permission === "media" || permission === "display-capture",
             );
             recorderWindow.webContents.session.setPermissionRequestHandler((_webContents, permission, callback) =>
               callback(permission === "media" || permission === "display-capture"),

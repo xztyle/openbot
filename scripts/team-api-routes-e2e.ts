@@ -390,6 +390,7 @@ const fakeAgents: TeamApiAgents = {
     agentPairs: unused("workspace.agentPairs"),
     agentExchange: unused("workspace.agentExchange"),
     recentDmAgentIds: () => [],
+    decisions: unused("workspace.decisions"),
   },
   secrets: {
     list: unused("secrets.list"),

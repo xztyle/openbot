@@ -189,6 +189,8 @@ export interface WorkspaceEnvironment {
   messaging?: (() => MessagingApi | undefined) | undefined;
   /** The workspace settings of the host. Only owners and admins may read them. */
   workspaceSettings?: (() => Promise<WorkspaceSettings>) | undefined;
+  /** Saves the workspace settings of the host and answers the saved ones. Only owners and admins may. */
+  saveWorkspaceSettings?: ((settings: WorkspaceSettings) => Promise<WorkspaceSettings>) | undefined;
   /** A host fleet endpoint. Absent, the fleet comes from the agent list and its runtime state. */
   fleet?: WorkspaceFleetSource | undefined;
   /** A host artifacts index. Absent, the artifacts come from the messages this client read. */
@@ -1428,6 +1430,31 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
   }
 
+  /**
+   * Turns hands-off mode of a channel on or off: its agents then never wait for a person. Reads the
+   * current settings first, so a change that another admin made meanwhile stays.
+   */
+  async function setHandsOff(channelId: string, enabled: boolean): Promise<void> {
+    const read = env.workspaceSettings;
+    const save = env.saveWorkspaceSettings;
+    if (!read || !save || env.reader().role === "member") return;
+    try {
+      const current = await read();
+      const others = (current.handsOffChannelIds ?? []).filter((id) => id !== channelId);
+      // Without `defaults.agents`, the host keeps the channel defaults of each agent as they are.
+      const saved = await save({
+        gate: current.gate,
+        defaults: { agentAnswerMode: current.defaults.agentAnswerMode },
+        handsOffChannelIds: enabled ? [...others, channelId] : others,
+      });
+      setState((draft) => {
+        draft.settings = saved;
+      });
+    } catch (error) {
+      failureToast(error, "workspace.app.handsOff.failed");
+    }
+  }
+
   /** How an agent added to a channel answers: its own default, else the workspace default. */
   async function newMember(agentId: string): Promise<ChannelMember> {
     const settings = await workspaceSettings();
@@ -1875,5 +1902,6 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     unlinkDiscord,
     messageMember,
     workspaceSettings,
+    setHandsOff,
   };
 }

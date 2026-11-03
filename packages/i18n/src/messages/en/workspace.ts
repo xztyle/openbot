@@ -212,6 +212,13 @@ export const messages = defineMessages("workspace", {
   "workspace.details.leadHint":
     "Gives each message to one member. Answer modes do not apply; an agent that you mention still answers.",
   "workspace.details.leadNone": "Choose an agent",
+  "workspace.details.decisions": "Decisions",
+  "workspace.details.decisionsLoading": "Loading decisions…",
+  "workspace.details.decisionsEmpty":
+    "No decisions yet. In hands-off mode, agents do not wait for you: each decision that they make without you shows here.",
+  "workspace.details.handsOff": "Hands-off mode",
+  "workspace.details.handsOffHint":
+    "Agents never wait for you: they take the recommended path and log each decision under Decisions.",
   "workspace.details.leave": "Leave channel",
   "workspace.details.archive": "Archive channel",
   "workspace.answerMode.mention": "When mentioned",
@@ -387,6 +394,7 @@ export const messages = defineMessages("workspace", {
     "Agents here answer when you @mention them. To let an agent answer every message, change it in Members.",
   "workspace.app.hint.openMembers": "Open Members",
   "workspace.app.hint.dismiss": "Close the hint",
+  "workspace.app.handsOff.failed": "Could not change hands-off mode.",
   "workspace.app.fleet.queued": { one: "{count} message waits", other: "{count} messages wait" },
   "workspace.app.gate.title": "Why agents answered",
   "workspace.app.gate.empty": "No decisions yet. Agents that answer every message (smart) show here.",

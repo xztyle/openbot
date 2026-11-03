@@ -1939,6 +1939,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     hostId: () => workspace.state.host?.hostId ?? null,
     messaging: () => (connectorTarget() ? workspaceMessaging : undefined),
     workspaceSettings: () => serverSettings.workspaceSettings.getWorkspaceSettings(server()?.id ?? ""),
+    saveWorkspaceSettings: (settings) =>
+      serverSettings.workspaceSettings.setWorkspaceSettings(settings, server()?.id ?? ""),
     storageHygiene: () => (serverHasStorageHygiene(server()) ? storageHygieneCalls : undefined),
     openStorageRules: () => {
       const id = server()?.id;

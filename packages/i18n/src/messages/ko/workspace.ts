@@ -213,6 +213,12 @@ export const messages = {
   "workspace.details.leadHint":
     "각 메시지를 멤버 한 명에게 맡겨요. 응답 모드는 적용되지 않지만, 멘션한 에이전트는 계속 답해요.",
   "workspace.details.leadNone": "에이전트 선택",
+  "workspace.details.decisions": "결정",
+  "workspace.details.decisionsLoading": "결정을 불러오는 중…",
+  "workspace.details.decisionsEmpty":
+    "아직 결정이 없어요. 자율 모드에서는 에이전트가 기다리지 않아요. 에이전트가 직접 내린 결정이 모두 여기에 표시돼요.",
+  "workspace.details.handsOff": "자율 모드",
+  "workspace.details.handsOffHint": "에이전트가 기다리지 않고 권장 방향으로 진행하며, 각 결정을 결정 탭에 기록해요.",
   "workspace.details.leave": "채널 나가기",
   "workspace.details.archive": "채널 보관",
   "workspace.answerMode.mention": "멘션될 때",
@@ -386,6 +392,7 @@ export const messages = {
     "여기서는 에이전트를 @멘션해야 답합니다. 모든 메시지에 답하게 하려면 멤버에서 변경하세요.",
   "workspace.app.hint.openMembers": "멤버 열기",
   "workspace.app.hint.dismiss": "도움말 닫기",
+  "workspace.app.handsOff.failed": "자율 모드를 바꾸지 못했어요.",
   "workspace.app.fleet.queued": { other: "메시지 {count}개 대기 중" },
   "workspace.app.gate.title": "에이전트가 답한 이유",
   "workspace.app.gate.empty": "아직 판단 기록이 없어요. 모든 메시지(스마트)에 답하는 에이전트가 여기에 표시돼요.",

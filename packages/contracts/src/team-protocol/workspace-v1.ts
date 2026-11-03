@@ -340,10 +340,13 @@ const agentDefaults: Decoder = (value) => {
     }),
   );
 };
-const settings = fields({
-  gate: fields({ provider: identifier, model: nonEmpty(200), timeoutMs: count }, { effort: nonEmpty(32) }),
-  defaults: fields({ agentAnswerMode: answerMode }, { agents: agentDefaults }),
-});
+const settings = fields(
+  {
+    gate: fields({ provider: identifier, model: nonEmpty(200), timeoutMs: count }, { effort: nonEmpty(32) }),
+    defaults: fields({ agentAnswerMode: answerMode }, { agents: agentDefaults }),
+  },
+  { handsOffChannelIds: list(identifier, 500) },
+);
 
 const activityLimit: Decoder = (value) => {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 200)

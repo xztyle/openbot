@@ -189,7 +189,21 @@ export const acknowledgeRequestToolSchema = z.object({
     .describe("A smaller option that the user may prefer, such as Only find the cause."),
 });
 
+const privateQuestionSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    "Only for work of a team channel: true keeps the question in your own chat with the person, for something private to them. Otherwise OpenBot posts it in the team channel and you do not wait for the answer.",
+  );
+
+export const logDecisionToolSchema = z.strictObject({
+  decision: z.string().trim().min(1).max(400).describe("What you decided, in one plain sentence."),
+  why: z.string().trim().min(1).max(600).describe("Why this is the recommended path, in one or two sentences."),
+  alternatives: z.string().trim().max(400).optional().describe("The options you rejected, in a few words each."),
+});
+
 export const askUiToolSchema = z.object({
+  private: privateQuestionSchema,
   blockId: uiBlockIdSchema.optional().describe("Your id for this block. OpenBot makes one when you omit it."),
   block: z.discriminatedUnion("type", [
     z.strictObject({
@@ -623,7 +637,14 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
         )
         .min(1)
         .max(3),
+      private: privateQuestionSchema,
     },
+  },
+  {
+    name: "log_decision",
+    description:
+      "Record a decision that a person would normally have made, in a hands-off team channel, where nobody answers questions: the channel shows it, and the people review the list of decisions made without them. Call it once per decision, then continue the work.",
+    shape: logDecisionToolSchema.shape,
   },
   {
     name: "acknowledge_request",

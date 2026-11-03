@@ -33,6 +33,7 @@ import {
   decodeWorkspaceAgentExchange,
   decodeWorkspaceAgentPairs,
   decodeWorkspaceArtifacts,
+  decodeWorkspaceDecisions,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
   decodeWorkspaceSecrets,
@@ -326,6 +327,7 @@ export type TeamChannelsApi = Pick<
   | "workspaceSecretRead"
   | "workspaceSecretSave"
   | "workspaceSecretRemove"
+  | "workspaceDecisions"
   | "workspaceSidebar"
   | "setWorkspaceSidebar"
   | "listChannelMemories"
@@ -393,6 +395,7 @@ export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOp
     workspaceSecretRemove: async (input) => {
       await workspacePost(WORKSPACE_FLEET_ROUTES.secretRemove, ignoreResponse, input);
     },
+    workspaceDecisions: (input) => workspacePost(WORKSPACE_FLEET_ROUTES.decisions, decodeWorkspaceDecisions, input),
     // A fork host built before workspace-sidebar-v1 answers 404; the caller then keeps the value locally.
     workspaceSidebar: () => workspacePost(WORKSPACE_SIDEBAR_ROUTES.read, decodeWorkspaceSidebar, {}),
     setWorkspaceSidebar: (prefs) => workspacePost(WORKSPACE_SIDEBAR_ROUTES.save, decodeWorkspaceSidebar, prefs),

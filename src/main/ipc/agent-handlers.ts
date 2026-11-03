@@ -25,6 +25,7 @@ import {
   decodeWorkspaceAgentExchange,
   decodeWorkspaceAgentPairs,
   decodeWorkspaceArtifacts,
+  decodeWorkspaceDecisions,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
   decodeWorkspaceSecrets,
@@ -51,6 +52,7 @@ import {
   parseWorkspaceAgentExchangeInput,
   parseWorkspaceAgentPairsInput,
   parseWorkspaceArtifactsInput,
+  parseWorkspaceDecisionsInput,
   parseWorkspaceFleetInput,
   parseWorkspaceSecretInput,
   parseWorkspaceSecretSaveInput,
@@ -497,6 +499,11 @@ export function agentIpcHandlers({
         remote: async (input, serverId) => {
           await remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.secretRemove, input, acceptEmpty);
         },
+      }),
+      workspaceDecisions: scopedHandler(parseWorkspaceDecisionsInput, {
+        local: (input) => service.workspace.decisions(input, host.channelViewer()),
+        remote: (input, serverId) =>
+          remoteWorkspace(serverId, WORKSPACE_FLEET_ROUTES.decisions, input, decodeWorkspaceDecisions),
       }),
       workspaceAgentPairs: scopedHandler(parseWorkspaceAgentPairsInput, {
         local: (input) => service.workspace.agentPairs(input),

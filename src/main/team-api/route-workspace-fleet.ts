@@ -3,6 +3,7 @@ import {
   parseWorkspaceAgentExchangeInput,
   parseWorkspaceAgentPairsInput,
   parseWorkspaceArtifactsInput,
+  parseWorkspaceDecisionsInput,
   parseWorkspaceFleetInput,
   parseWorkspaceSecretInput,
   parseWorkspaceSecretSaveInput,
@@ -115,6 +116,14 @@ export async function routeWorkspaceFleet(
     return json(
       200,
       found(() => agents.workspace.steps(input, viewer)),
+    );
+  }
+  // Any member who sees the channel reads its decisions, as they read its messages.
+  if (url.pathname === WORKSPACE_FLEET_ROUTES.decisions) {
+    const input = parsed(parseWorkspaceDecisionsInput, body);
+    return json(
+      200,
+      found(() => agents.workspace.decisions(input, viewer)),
     );
   }
   const input = parsed(parseWorkspaceArtifactsInput, body);

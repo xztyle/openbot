@@ -200,6 +200,13 @@ export const messages = {
   "workspace.details.leadHint":
     "Gibt jede Nachricht an ein Mitglied. Antwortmodi gelten nicht; ein erwähnter Agent antwortet weiterhin.",
   "workspace.details.leadNone": "Agent wählen",
+  "workspace.details.decisions": "Entscheidungen",
+  "workspace.details.decisionsLoading": "Entscheidungen werden geladen…",
+  "workspace.details.decisionsEmpty":
+    "Noch keine Entscheidungen. Im Hands-off-Modus warten Agenten nicht auf dich: Jede Entscheidung, die sie ohne dich treffen, erscheint hier.",
+  "workspace.details.handsOff": "Hands-off-Modus",
+  "workspace.details.handsOffHint":
+    "Agenten warten nie auf dich: Sie nehmen den empfohlenen Weg und protokollieren jede Entscheidung unter Entscheidungen.",
   "workspace.details.leave": "Kanal verlassen",
   "workspace.details.archive": "Kanal archivieren",
   "workspace.answerMode.mention": "Bei Erwähnung",
@@ -373,6 +380,7 @@ export const messages = {
     "Agenten antworten hier, wenn du sie mit @ erwähnst. Damit ein Agent auf jede Nachricht antwortet, ändere es unter Mitglieder.",
   "workspace.app.hint.openMembers": "Mitglieder öffnen",
   "workspace.app.hint.dismiss": "Hinweis schließen",
+  "workspace.app.handsOff.failed": "Hands-off-Modus konnte nicht geändert werden.",
   "workspace.app.fleet.queued": { one: "{count} Nachricht wartet", other: "{count} Nachrichten warten" },
   "workspace.app.gate.title": "Warum Agenten antworteten",
   "workspace.app.gate.empty":

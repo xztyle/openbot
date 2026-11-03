@@ -280,6 +280,13 @@ export const messages = {
   "workspace.details.leadHint":
     "Передаёт каждое сообщение одному участнику. Режимы ответа не действуют; упомянутый агент всё равно отвечает.",
   "workspace.details.leadNone": "Выберите агента",
+  "workspace.details.decisions": "Решения",
+  "workspace.details.decisionsLoading": "Загрузка решений…",
+  "workspace.details.decisionsEmpty":
+    "Решений пока нет. В автономном режиме агенты не ждут вас: каждое решение, принятое без вас, появляется здесь.",
+  "workspace.details.handsOff": "Автономный режим",
+  "workspace.details.handsOffHint":
+    "Агенты никогда не ждут вас: они выбирают рекомендуемый путь и записывают каждое решение во вкладку «Решения».",
   "workspace.details.leave": "Покинуть канал",
   "workspace.details.archive": "Архивировать канал",
   "workspace.answerMode.mention": "При упоминании",
@@ -488,6 +495,7 @@ export const messages = {
     "Здесь агенты отвечают, когда вы упоминаете их через @. Чтобы агент отвечал на каждое сообщение, измените это в разделе «Участники».",
   "workspace.app.hint.openMembers": "Открыть участников",
   "workspace.app.hint.dismiss": "Закрыть подсказку",
+  "workspace.app.handsOff.failed": "Не удалось изменить автономный режим.",
   "workspace.app.fleet.queued": {
     one: "{count} сообщение ждёт",
     few: "{count} сообщения ждут",

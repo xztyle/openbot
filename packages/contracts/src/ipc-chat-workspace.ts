@@ -496,7 +496,16 @@ export interface WorkspaceSettings {
      */
     agents?: Record<string, WorkspaceAgentChannelDefaults>;
   };
+  /**
+   * The channels in hands-off mode: their agents never wait for a person's decision. They take the
+   * recommended path and log each decision a person did not make. Absent from a client or a host
+   * that does not know the field; the host then keeps the list it has.
+   */
+  handsOffChannelIds?: string[];
 }
+
+/** The most channels in hands-off mode. */
+export const WORKSPACE_HANDS_OFF_LIMIT = 500;
 
 export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   // A warm generation answers in about two seconds; the first one after an idle time starts a process.
@@ -529,7 +538,11 @@ export function isWorkspaceSettings(value: unknown): value is WorkspaceSettings 
     (gate.effort === undefined || (isBoundedString(gate.effort, 32) && gate.effort.length > 0)) &&
     integerInRange(gate.timeoutMs, WORKSPACE_GATE_TIMEOUT_LIMITS.minimum, WORKSPACE_GATE_TIMEOUT_LIMITS.maximum) &&
     isChannelAnswerMode(value.defaults.agentAnswerMode) &&
-    (value.defaults.agents === undefined || isAgentChannelDefaults(value.defaults.agents))
+    (value.defaults.agents === undefined || isAgentChannelDefaults(value.defaults.agents)) &&
+    (value.handsOffChannelIds === undefined ||
+      (Array.isArray(value.handsOffChannelIds) &&
+        value.handsOffChannelIds.length <= WORKSPACE_HANDS_OFF_LIMIT &&
+        value.handsOffChannelIds.every(isIdentifier)))
   );
 }
 
@@ -547,6 +560,7 @@ export function decodeWorkspaceSettings(value: unknown): WorkspaceSettings {
       agentAnswerMode: value.defaults.agentAnswerMode,
       ...(value.defaults.agents === undefined ? {} : { agents: decodeAgentChannelDefaults(value.defaults.agents) }),
     },
+    ...(value.handsOffChannelIds === undefined ? {} : { handsOffChannelIds: [...new Set(value.handsOffChannelIds)] }),
   };
 }
 
@@ -572,8 +586,14 @@ function decodeAgentChannelDefaults(
  * not know the field, so the channel defaults of `current` stay.
  */
 export function withKeptAgentChannelDefaults(current: WorkspaceSettings, next: WorkspaceSettings): WorkspaceSettings {
-  if (next.defaults.agents !== undefined || current.defaults.agents === undefined) return next;
-  return { ...next, defaults: { ...next.defaults, agents: current.defaults.agents } };
+  const keptAgents =
+    next.defaults.agents !== undefined || current.defaults.agents === undefined
+      ? next
+      : { ...next, defaults: { ...next.defaults, agents: current.defaults.agents } };
+  // The hands-off channels stay too when the body comes from a client that does not know them.
+  return keptAgents.handsOffChannelIds !== undefined || current.handsOffChannelIds === undefined
+    ? keptAgents
+    : { ...keptAgents, handsOffChannelIds: current.handsOffChannelIds };
 }
 
 export const CHANNEL_TYPING_STATES = ["typing", "thinking", "working"] as const;

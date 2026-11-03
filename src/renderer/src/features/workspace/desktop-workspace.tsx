@@ -217,6 +217,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
         : undefined;
     },
     workspaceSettings: () => window.openbot.hostAdmin.getWorkspaceSettings(activeServerId()),
+    saveWorkspaceSettings: (settings) => window.openbot.hostAdmin.setWorkspaceSettings(settings, activeServerId()),
     hostId: () => activeServerId() ?? null,
     artifactThumbnailUrl: (record) => {
       const server = activeServer();

@@ -3,7 +3,19 @@ import { createSignal, For, Show } from "solid-js";
 import { Button, IconButton } from "../../button";
 import { Tabs } from "../../complex";
 import { Input } from "../../form";
-import { Archive, Crown, Hash, Lock, LogOut, Pencil, ShieldCheck, Trash2, UserRoundPlus, Waypoints } from "../../icons";
+import {
+  Archive,
+  Crown,
+  Hash,
+  Lock,
+  LogOut,
+  Pencil,
+  ShieldCheck,
+  Trash2,
+  UserRoundPlus,
+  Waypoints,
+  Zap,
+} from "../../icons";
 import { Switch } from "../../switch";
 import { useText } from "../../text";
 import { cx } from "../../utils";
@@ -11,9 +23,33 @@ import { roleLabelKey, type WorkspaceRole } from "./MemberProfileCard";
 import { AiBadge, MemberAvatar, presenceLabelKey } from "./WorkspaceAvatar";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { WorkspaceSelect } from "./WorkspaceSelect";
+import { useRecentTime } from "./workspace-format";
 import type { AgentAnswerMode, ChannelVisibility, WorkspaceMember } from "./workspace-types";
 
-export type ChannelDetailsTab = "about" | "members" | "integrations" | "settings";
+export type ChannelDetailsTab = "about" | "members" | "integrations" | "decisions" | "settings";
+
+const TABS: readonly string[] = [
+  "about",
+  "members",
+  "integrations",
+  "decisions",
+  "settings",
+] satisfies ChannelDetailsTab[];
+
+function isChannelDetailsTab(value: string): value is ChannelDetailsTab {
+  return TABS.includes(value);
+}
+
+/** A decision that an agent made without a person in a hands-off channel. */
+export interface ChannelDecisionItem {
+  /** The id of the channel message that holds it. */
+  id: string;
+  agent: WorkspaceMember;
+  /** The decision, without its prefix. */
+  text: string;
+  /** In milliseconds since the epoch. */
+  at: number;
+}
 
 const ANSWER_MODES = [
   { value: "mention", label: "workspace.answerMode.mention", description: "workspace.answerMode.mentionHint" },
@@ -78,10 +114,21 @@ export interface ChannelDetailsProps {
   onLeadChange?: ((agentId: string) => void) | undefined;
   onArchive?: (() => void) | undefined;
   onLeave?: (() => void) | undefined;
+  /**
+   * The decisions that agents made without a person here, newest first; null while they load.
+   * Absent, the panel has no Decisions tab.
+   */
+  decisions?: readonly ChannelDecisionItem[] | null | undefined;
+  /** Opens the message of a decision. */
+  onOpenDecision?: ((id: string) => void) | undefined;
+  /** Whether the channel is in hands-off mode. */
+  handsOff?: boolean | undefined;
+  /** Turns hands-off mode on or off. Absent, the setting is hidden: only owners and admins change it. */
+  onHandsOffChange?: ((enabled: boolean) => void) | undefined;
   class?: string;
 }
 
-/** The channel details panel: About, Members (with per-agent answer modes), Integrations, Settings. */
+/** The channel details panel: About, Members (with per-agent answer modes), Integrations, Decisions, Settings. */
 export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
   const { t } = useText();
   const [tab, setTab] = createSignal<ChannelDetailsTab>(props.defaultTab ?? "about");
@@ -103,7 +150,7 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
         class="ws-details-tabs"
         value={tab()}
         onChange={(value) => {
-          if (value === "about" || value === "members" || value === "integrations" || value === "settings") {
+          if (isChannelDetailsTab(value)) {
             setTab(value);
             props.onTabChange?.(value);
           }
@@ -119,6 +166,11 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
           <Tabs.Trigger class="ws-tab" value="integrations">
             {t("workspace.details.integrations")}
           </Tabs.Trigger>
+          <Show when={props.decisions !== undefined}>
+            <Tabs.Trigger class="ws-tab" value="decisions">
+              {t("workspace.details.decisions")}
+            </Tabs.Trigger>
+          </Show>
           <Tabs.Trigger class="ws-tab" value="settings">
             {t("workspace.details.settings")}
           </Tabs.Trigger>
@@ -212,6 +264,12 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
           </Show>
         </Tabs.Content>
 
+        <Show when={props.decisions !== undefined}>
+          <Tabs.Content class="ws-details-content" value="decisions">
+            <DecisionList decisions={props.decisions ?? null} onOpen={props.onOpenDecision} />
+          </Tabs.Content>
+        </Show>
+
         <Tabs.Content class="ws-details-content" value="settings">
           <div class="ws-details-card">
             <SettingRow
@@ -258,6 +316,21 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
                 />
               </SettingRow>
             </Show>
+            <Show when={props.onHandsOffChange}>
+              {(change) => (
+                <SettingRow
+                  icon={<Zap aria-hidden="true" />}
+                  label={t("workspace.details.handsOff")}
+                  description={t("workspace.details.handsOffHint")}
+                >
+                  <Switch
+                    aria-label={t("workspace.details.handsOff")}
+                    checked={props.handsOff ?? false}
+                    onChange={(checked: boolean) => change()(checked)}
+                  />
+                </SettingRow>
+              )}
+            </Show>
           </div>
           <div class="ws-details-danger">
             <Show when={props.onLeave}>
@@ -280,6 +353,60 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
         </Tabs.Content>
       </Tabs.Root>
     </section>
+  );
+}
+
+/** The decisions of a hands-off channel, newest first. Each one opens its message. */
+function DecisionList(props: {
+  decisions: readonly ChannelDecisionItem[] | null;
+  onOpen?: ((id: string) => void) | undefined;
+}): JSX.Element {
+  const { t, format } = useText();
+  const recent = useRecentTime();
+  return (
+    <Show when={props.decisions} fallback={<p class="ws-details-empty">{t("workspace.details.decisionsLoading")}</p>}>
+      {(decisions) => (
+        <Show
+          when={decisions().length > 0}
+          fallback={<p class="ws-details-empty">{t("workspace.details.decisionsEmpty")}</p>}
+        >
+          <ul class="ws-feed">
+            <For each={decisions()} keyed={(item) => item.id}>
+              {(item) => (
+                <li>
+                  <Button
+                    variant="ghost"
+                    class="ws-feed-row"
+                    disabled={!props.onOpen}
+                    onClick={() => props.onOpen?.(item().id)}
+                  >
+                    <span class="ws-feed-avatar">
+                      <MemberAvatar member={item().agent} size="md" />
+                    </span>
+                    <span class="ws-feed-copy">
+                      <span class="ws-feed-heading">
+                        <span class="ws-feed-what">
+                          {item().agent.name}
+                          <AiBadge />
+                        </span>
+                        <time
+                          class="ws-feed-time"
+                          datetime={new Date(item().at).toISOString()}
+                          title={format.date(item().at, { dateStyle: "medium", timeStyle: "short" })}
+                        >
+                          {recent(item().at)}
+                        </time>
+                      </span>
+                      <span class="ws-decision-text">{item().text}</span>
+                    </span>
+                  </Button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
+      )}
+    </Show>
   );
 }
 

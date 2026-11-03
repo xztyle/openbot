@@ -554,6 +554,8 @@ import type {
   WorkspaceAgentPairsInput,
   WorkspaceArtifacts,
   WorkspaceArtifactsInput,
+  WorkspaceDecisions,
+  WorkspaceDecisionsInput,
   WorkspaceFleet,
   WorkspaceFleetInput,
   WorkspaceSecretInput,
@@ -1376,6 +1378,8 @@ export const IPC_ENDPOINTS = {
     workspaceSecretRead: scopedRequest<WorkspaceSecretInput, WorkspaceSecretValue>()("agent:workspace:secret-read"),
     workspaceSecretSave: scopedRequest<WorkspaceSecretSaveInput, void>()("agent:workspace:secret-save"),
     workspaceSecretRemove: scopedRequest<WorkspaceSecretInput, void>()("agent:workspace:secret-remove"),
+    // The decisions that agents made without a person in a hands-off channel the reader can see.
+    workspaceDecisions: scopedRequest<WorkspaceDecisionsInput, WorkspaceDecisions>()("agent:workspace:decisions"),
     // The reader's own sidebar order and mutes, kept on the host per member. A joined server answers
     // through workspace-sidebar-v1 (`fork-host-v1`); one without it fails, and the window keeps the
     // value on this computer.

@@ -41,6 +41,10 @@
 //   or an agent id), name (64), updatedAt }`, never a value. `/secrets/read` `{ scope, name }`
 //   answers `{ value (16384) }`. `/secrets/save` `{ scope, name, value (16384) }` and
 //   `/secrets/remove` `{ scope, name }` answer `{}`.
+// - Later: `POST /v1/workspace/decisions` `{ channelId }` answers `{ decisions }`, at most 200, newest
+//   first: the decisions that agents made without a person in a hands-off channel, as they posted
+//   them there, each `{ id, agentId, text (8000, without the decision prefix), createdAt,
+//   threadRootId? }`. Any member who can see the channel may read them; another channel answers 404.
 //
 // A fork host built before these routes answers 404, so a client fails closed there. A present
 // malformed value fails closed. The bounds are written out: this file must not move with an IPC limit.
@@ -72,6 +76,7 @@ export const WORKSPACE_FLEET_ROUTES = {
   secretRead: "/v1/workspace/secrets/read",
   secretSave: "/v1/workspace/secrets/save",
   secretRemove: "/v1/workspace/secrets/remove",
+  decisions: "/v1/workspace/decisions",
 } as const;
 
 /** The largest thumbnail image that a host sends and a client accepts. */
@@ -233,6 +238,11 @@ const exchangeMessage = fields(
   { truncated: boolean, replyToMessageId: identifier, attachmentCount: count },
 );
 
+const decision = fields(
+  { id: identifier, agentId: identifier, text: string(8_000), createdAt: count },
+  { threadRootId: identifier },
+);
+
 const secret = fields({ scope: identifier, name: string(64), updatedAt: count });
 const secretKey = fields({ scope: identifier, name: string(64) });
 
@@ -267,6 +277,10 @@ export const WORKSPACE_FLEET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = n
     adminRoute(fields({ scope: identifier, name: string(64), value: string(16384) }), fields({})),
   ],
   [WORKSPACE_FLEET_ROUTES.secretRemove, adminRoute(secretKey, fields({}))],
+  [
+    WORKSPACE_FLEET_ROUTES.decisions,
+    adminRoute(fields({ channelId: identifier }), fields({ decisions: list(decision, 200) })),
+  ],
 ]);
 
 export const WORKSPACE_FLEET_CHANGED_EVENT = "workspace-fleet-changed";

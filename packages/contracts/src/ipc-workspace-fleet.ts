@@ -603,3 +603,57 @@ export function parseWorkspaceSecretSaveInput(value: unknown): WorkspaceSecretSa
     throw new Error("Invalid secret input.");
   return { ...input, value: secret };
 }
+
+// --- Hands-off decisions: what agents decided without a person in a channel ------------------------
+
+export const WORKSPACE_DECISION_LIMIT = 200;
+/** The longest decision text that the host sends. A longer one is cut. */
+export const WORKSPACE_DECISION_TEXT_LIMIT = 8_000;
+
+/** A decision that an agent made without a person in a hands-off channel, as it posted it there. */
+export interface WorkspaceDecision {
+  /** The id of the channel message. */
+  id: string;
+  agentId: string;
+  /** The message text without `CHANNEL_DECISION_PREFIX`, trimmed. */
+  text: string;
+  createdAt: number;
+  /** The thread that holds the message, when it is a thread reply. */
+  threadRootId?: string;
+}
+
+export interface WorkspaceDecisions {
+  /** The newest first. */
+  decisions: WorkspaceDecision[];
+}
+
+export interface WorkspaceDecisionsInput {
+  channelId: string;
+}
+
+function isWorkspaceDecision(value: unknown): value is WorkspaceDecision {
+  return (
+    isDynamicRecord(value) &&
+    isIdentifier(value.id) &&
+    isIdentifier(value.agentId) &&
+    isBoundedString(value.text, WORKSPACE_DECISION_TEXT_LIMIT) &&
+    isTime(value.createdAt) &&
+    optional(value.threadRootId, isIdentifier)
+  );
+}
+
+export function decodeWorkspaceDecisions(value: unknown): WorkspaceDecisions {
+  if (
+    !isDynamicRecord(value) ||
+    !Array.isArray(value.decisions) ||
+    value.decisions.length > WORKSPACE_DECISION_LIMIT ||
+    !value.decisions.every(isWorkspaceDecision)
+  )
+    throw new Error("Invalid workspace decisions.");
+  return { decisions: value.decisions };
+}
+
+export function parseWorkspaceDecisionsInput(value: unknown): WorkspaceDecisionsInput {
+  if (!isDynamicRecord(value) || !isIdentifier(value.channelId)) throw new Error("Invalid workspace decisions input.");
+  return { channelId: value.channelId };
+}

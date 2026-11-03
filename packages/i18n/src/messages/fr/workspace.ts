@@ -201,6 +201,13 @@ export const messages = {
   "workspace.details.leadHint":
     "Confie chaque message à un membre. Les modes de réponse ne s’appliquent pas ; un agent que vous mentionnez répond toujours.",
   "workspace.details.leadNone": "Choisir un agent",
+  "workspace.details.decisions": "Décisions",
+  "workspace.details.decisionsLoading": "Chargement des décisions…",
+  "workspace.details.decisionsEmpty":
+    "Aucune décision pour l’instant. En mode autonome, les agents ne vous attendent pas : chaque décision prise sans vous s’affiche ici.",
+  "workspace.details.handsOff": "Mode autonome",
+  "workspace.details.handsOffHint":
+    "Les agents ne vous attendent jamais : ils suivent la voie recommandée et consignent chaque décision dans Décisions.",
   "workspace.details.leave": "Quitter le canal",
   "workspace.details.archive": "Archiver le canal",
   "workspace.answerMode.mention": "Si mentionné",
@@ -374,6 +381,7 @@ export const messages = {
     "Ici, les agents répondent quand vous les @mentionnez. Pour qu’un agent réponde à chaque message, modifiez-le dans Membres.",
   "workspace.app.hint.openMembers": "Ouvrir Membres",
   "workspace.app.hint.dismiss": "Fermer le conseil",
+  "workspace.app.handsOff.failed": "Impossible de modifier le mode autonome.",
   "workspace.app.fleet.queued": { one: "{count} message en attente", other: "{count} messages en attente" },
   "workspace.app.gate.title": "Pourquoi les agents ont répondu",
   "workspace.app.gate.empty":

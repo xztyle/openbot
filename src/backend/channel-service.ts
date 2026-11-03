@@ -8,6 +8,7 @@ import {
   type AgentSummary,
   CHANNEL_ASSIGNMENT_LIMIT,
   CHANNEL_CHANGE_ITEM_TYPE,
+  CHANNEL_DECISION_PREFIX,
   CHANNEL_GATE_DECISION_LIMIT,
   CHANNEL_MENTION_CHAIN_LIMIT,
   CHANNEL_PARALLEL_LIMIT,
@@ -153,6 +154,8 @@ export interface ChannelHooks {
   defaultAnswerMode?(): ChannelAnswerMode;
   /** The messages that commits wrote, sent before `changed` with the same revision. */
   messagesChanged?(channelId: string, changes: readonly ChannelMessageChange[], revision: number): void;
+  /** Whether a channel is in hands-off mode: its agents never wait for a person's decision. */
+  handsOff?(channelId: string): boolean;
   /**
    * The cheap model of the answer gate, read for each message. Omitted or null, an `always` member
    * answers only when it is addressed, as a `mention` member does.
@@ -214,6 +217,9 @@ const decodeRoutingDecision = Schema.decodeUnknownResult(RoutingDecision, { onEx
 /**
  * Owns channel commands and assignment scheduling. It never starts provider turns itself.
  */
+/** What every member of a hands-off channel reads with each assignment, and what a refused question says. */
+export const HANDS_OFF_INSTRUCTION =
+  "Hands-off mode: the people of this channel want the goal reached without waiting for them. Never ask a person to decide, approve or provide something, and never wait for an answer: take the path the team recommends, within the rules and limits that the people already set (no real money unless they allowed it). For each decision that a person would normally have made, call openbot.log_decision (through openbot.tool_call when it is not in your tool list) once with the decision, why, and the alternatives you rejected, then continue. Ask a teammate when you need its expertise.";
 const channelLogger = createOpenBotLogger("channel-service");
 /** How long a channel stays unchanged before its history summary is brought up to date in the background. */
 const SUMMARY_DELAY_MS = 5_000;
@@ -285,10 +291,27 @@ export class ChannelService {
       emit: (channelId, typing) => hooks.typingChanged?.(channelId, typing),
       working: (channelId) =>
         this.store.exists(channelId)
-          ? this.store
-              .assignments(channelId)
-              .filter((assignment) => assignment.state === "starting" || assignment.state === "running")
-              .map((assignment) => ({ agentId: assignment.agentId, threadRootId: assignment.threadRootId }))
+          ? [
+              ...this.store
+                .assignments(channelId)
+                .filter((assignment) => assignment.state === "starting" || assignment.state === "running")
+                .map((assignment) => ({ agentId: assignment.agentId, threadRootId: assignment.threadRootId })),
+              // A person's request that waits for its agent's other work: the channel shows the agent
+              // working, not silence, until the request starts.
+              ...this.store
+                .tasks(channelId)
+                .filter(
+                  (task): task is ChannelTask & { ownerAgentId: string } =>
+                    task.state === "queued" &&
+                    task.ownerAgentId !== null &&
+                    this.hooks.busy(task.ownerAgentId) &&
+                    this.#personRequest(task),
+                )
+                .map((task) => ({
+                  agentId: task.ownerAgentId,
+                  threadRootId: this.store.message(channelId, task.requestMessageId)?.threadRootId ?? null,
+                })),
+            ]
           : [],
     });
     this.memories = new ChannelMemoryStore(database);
@@ -1100,26 +1123,114 @@ export class ChannelService {
     if (channel.archived) return;
     const shown = recipients.filter((agent) => channel.members.some((member) => member.agentId === agent.id));
     const mentions = shown.map((agent) => `@[${agent.name}](agent:${agent.id})`).join(" ");
+    this.#postAgentLine(target.channelId, sender, `${mentions} ${line}`.trim(), target.threadRootId);
+  });
+
+  /**
+   * Posts a line from an agent that is not a turn's answer: a teammate summary, a question for the
+   * people, a decision. It starts no task and no gate. Null when the channel cannot take it.
+   */
+  #postAgentLine(
+    channelId: string,
+    agent: { id: string; name: string },
+    text: string,
+    threadRootId: string | null,
+  ): ChannelMessage | null {
+    if (this.#stopped || this.#deletedChannels.has(channelId) || !this.store.exists(channelId)) return null;
+    const channel = this.store.get(channelId);
+    if (channel.archived) return null;
     const id = randomUUID();
     const message: ChannelMessage = {
       id,
-      channelId: target.channelId,
+      channelId,
       taskId: null,
-      author: { kind: "agent", id: sender.id, name: sender.name },
+      author: { kind: "agent", id: agent.id, name: agent.name },
       sequence: 0,
       superseded: false,
-      ...(target.threadRootId ? { threadRootId: target.threadRootId } : {}),
-      message: {
-        id,
-        text: `${mentions} ${line}`.trim(),
-        author: "assistant",
-        createdAt: new Date().toISOString(),
-        status: "completed",
-      },
+      ...(threadRootId ? { threadRootId } : {}),
+      message: { id, text, author: "assistant", createdAt: new Date().toISOString(), status: "completed" },
     };
     this.store.update(channel, { messages: [message] });
-    this.publish(target.channelId);
-  });
+    this.publish(channelId);
+    return message;
+  }
+
+  /**
+   * The team channel that an agent's turn works for: the channel of its channel task, else the team
+   * channel it shares with the teammate whose message it answers, else, for a routine run, its most
+   * recently active team channel. Null for a person's own chat with the agent and for other work.
+   */
+  teamContext(
+    agentId: string,
+    turnId: string,
+  ): { channelId: string; threadRootId: string | null; channelTurn: boolean; handsOff: boolean; name: string } | null {
+    const contexts = this.mailbox.findDeliveriesByTurn(agentId, turnId);
+    let found: { channelId: string; threadRootId: string | null; channelTurn: boolean } | null = null;
+    for (const context of contexts) {
+      const assignment = this.store.assignmentForDelivery(context.delivery.id);
+      if (assignment) {
+        found = { channelId: assignment.channelId, threadRootId: assignment.threadRootId, channelTurn: true };
+        break;
+      }
+    }
+    if (!found)
+      for (const context of contexts) {
+        const sender = context.delivery.sender;
+        const target =
+          sender.kind === "agent"
+            ? this.#relayTarget(sender.agentId, [agentId])
+            : sender.kind === "routine"
+              ? this.#relayTarget(agentId, [agentId])
+              : null;
+        if (target) {
+          found = { ...target, channelTurn: false };
+          break;
+        }
+      }
+    if (!found || !this.store.exists(found.channelId)) return null;
+    return {
+      ...found,
+      handsOff: this.hooks.handsOff?.(found.channelId) ?? false,
+      name: this.store.get(found.channelId).name,
+    };
+  }
+
+  /**
+   * Posts a question that an agent asked outside a channel task into the team channel its work
+   * belongs to, as a new thread that mentions the people of the channel: a reply in that thread goes
+   * back to the agent as channel work. The agent does not wait for it.
+   */
+  postTeamQuestion(agentId: string, channelId: string, text: string): boolean {
+    const agent = this.hooks.agents().find((item) => item.id === agentId);
+    if (!agent || !this.store.exists(channelId)) return false;
+    const channel = this.store.get(channelId);
+    const people = (channel.humanMemberIds ?? [])
+      .map((id) => this.hooks.person?.(id))
+      .filter((person): person is { id: string; name: string } => Boolean(person));
+    const mentions = people.map((person) => `@[${person.name}](member:${person.id})`).join(" ");
+    return this.#postAgentLine(channelId, agent, `${mentions} ${text}`.trim(), null) !== null;
+  }
+
+  /** Posts a decision that an agent made in hands-off mode, where everyone sees it and the Decisions list finds it. */
+  postDecision(agentId: string, channelId: string, threadRootId: string | null, text: string): boolean {
+    const agent = this.hooks.agents().find((item) => item.id === agentId);
+    if (!agent) return false;
+    return this.#postAgentLine(channelId, agent, `${CHANNEL_DECISION_PREFIX} ${text}`, threadRootId) !== null;
+  }
+
+  /** The decisions that agents made without a person in a channel, newest first. */
+  decisions(channelId: string, limit = 200): ChannelMessage[] {
+    return this.store
+      .messages(channelId)
+      .filter(
+        (message) =>
+          message.author.kind === "agent" &&
+          !message.deletedAt &&
+          message.message.text.startsWith(CHANNEL_DECISION_PREFIX),
+      )
+      .reverse()
+      .slice(0, limit);
+  }
 
   #relayTarget(
     senderId: string,
@@ -2257,6 +2368,11 @@ export class ChannelService {
       delta: delivered !== null && history.delta !== null,
       summaryVersion: history.summaryVersion,
     });
+    // Read on each turn, so switching the mode reaches the next turn of every member.
+    if (this.hooks.handsOff?.(channel.id)) {
+      history.text = `${history.text}\n\n${HANDS_OFF_INSTRUCTION}`;
+      if (history.delta !== null) history.delta = `${history.delta}\n\n${HANDS_OFF_INSTRUCTION}`;
+    }
     if (delivered && history.delta !== null)
       this.#deltas.set(delivery.delivery.id, { sessionId: delivered.sessionId, text: history.delta });
     else this.#deltas.delete(delivery.delivery.id);

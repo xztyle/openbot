@@ -39,6 +39,8 @@ export const CHANNEL_DELETE_CAPABILITY = "channel-delete-v1";
  */
 export const SIGNED_OUT_CHANNEL_MEMBER_ID = "local";
 export const CHANNEL_PARALLEL_LIMIT = 4;
+/** The start of a channel message that records a decision an agent made in hands-off mode. */
+export const CHANNEL_DECISION_PREFIX = "**Decision made without you:**";
 export const CHANNEL_ASSIGNMENT_LIMIT = 8;
 
 export interface ChannelMember extends ChannelMemberWorkspaceFields {

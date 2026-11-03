@@ -280,6 +280,13 @@ export const messages = {
   "workspace.details.leadHint":
     "Przekazuje każdą wiadomość jednemu członkowi. Tryby odpowiedzi nie obowiązują; wspomniany agent nadal odpowiada.",
   "workspace.details.leadNone": "Wybierz agenta",
+  "workspace.details.decisions": "Decyzje",
+  "workspace.details.decisionsLoading": "Wczytywanie decyzji…",
+  "workspace.details.decisionsEmpty":
+    "Brak decyzji. W trybie bez nadzoru agenci nie czekają na ciebie: każda decyzja podjęta bez ciebie pojawia się tutaj.",
+  "workspace.details.handsOff": "Tryb bez nadzoru",
+  "workspace.details.handsOffHint":
+    "Agenci nigdy na ciebie nie czekają: wybierają zalecaną drogę i zapisują każdą decyzję w zakładce Decyzje.",
   "workspace.details.leave": "Opuść kanał",
   "workspace.details.archive": "Archiwizuj kanał",
   "workspace.answerMode.mention": "Po wzmiance",
@@ -487,6 +494,7 @@ export const messages = {
     "Agenci odpowiadają tu, gdy oznaczysz ich przez @. Aby agent odpowiadał na każdą wiadomość, zmień to w sekcji Członkowie.",
   "workspace.app.hint.openMembers": "Otwórz Członków",
   "workspace.app.hint.dismiss": "Zamknij wskazówkę",
+  "workspace.app.handsOff.failed": "Nie udało się zmienić trybu bez nadzoru.",
   "workspace.app.fleet.queued": {
     one: "{count} wiadomość czeka",
     few: "{count} wiadomości czekają",

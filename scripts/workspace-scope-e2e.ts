@@ -51,6 +51,7 @@ if (process.argv.includes("--version")) {
 }
 const config = { config: { mcp_servers: {} }, layers: [{ name: { type: "user", file: "/fake/.codex/config.toml", profile: null }, version: "1", config: { mcp_servers: {} } }] };
 let buffer = "";
+const pending = new Map();
 let threads = 0;
 let turns = 0;
 process.stdout.on("error", (error) => {
@@ -78,11 +79,23 @@ const answer = (message) => {
       const turnId = "turn-" + (++turns);
       write({ id: message.id, result: { turn: { id: turnId, status: "inProgress", items: [] } } });
       write({ method: "turn/started", params: { threadId: params.threadId, turn: { id: turnId } } });
-      return setTimeout(() => {
-        const item = { type: "agentMessage", id: "message-" + turnId, text: "Done.", phase: "final_answer" };
+      const finish = (text) => {
+        const item = { type: "agentMessage", id: "message-" + turnId, text, phase: "final_answer" };
         write({ method: "item/completed", params: { threadId: params.threadId, turnId, item } });
         write({ method: "turn/completed", params: { threadId: params.threadId, turn: { id: turnId, status: "completed" } } });
-      }, 20);
+      };
+      // Markers in the input make the turn call one OpenBot tool first, then answer with its result.
+      const input = JSON.stringify(params.input || "");
+      const call = (tool, args) => {
+        const id = "fake-call-" + turnId;
+        pending.set(id, (result) => finish("TOOL " + tool + " " + JSON.stringify(result)));
+        write({ id, method: "item/tool/call", params: { threadId: params.threadId, turnId, callId: "call-" + turnId, namespace: "openbot", tool, arguments: args } });
+      };
+      const send = input.match(/E2E_SEND:([A-Za-z0-9_-]+):([A-Z0-9_]+)/);
+      if (send) return call("send_message", { recipientAgentIds: [send[1]], text: send[2] + " please", expectsReply: false });
+      if (input.includes("E2E_ASK_USER")) return call("ask_user", { questions: [{ question: "Which broker should we use?", options: [{ label: "Alpaca" }, { label: "IBKR" }] }] });
+      if (input.includes("E2E_DECIDE")) return call("log_decision", { decision: "Use Alpaca paper trading.", why: "It is free and already set up." });
+      return setTimeout(() => finish("Done."), 20);
     }
     case "turn/interrupt": {
       write({ id: message.id, result: {} });
@@ -102,6 +115,11 @@ process.stdin.on("data", (chunk) => {
     if (line) {
       const message = JSON.parse(line);
       if (message.method && message.id !== undefined) answer(message);
+      else if (message.id !== undefined && pending.has(message.id)) {
+        const done = pending.get(message.id);
+        pending.delete(message.id);
+        done(message.result ?? message.error);
+      }
     }
     newline = buffer.indexOf("\\n");
   }
@@ -417,6 +435,50 @@ try {
     !channels()
       .store.messages(secret)
       .some((message) => message.message.text.includes("tire spec")),
+  );
+
+  // --- Questions of team work go to the team channel; hands-off mode turns them into logged decisions ---
+  const handsOff = new Set<string>();
+  Object.assign(channels().hooks, { handsOff: (channelId: string) => handsOff.has(channelId) });
+  const lineFrom = (agentId: string, part: string) =>
+    channels()
+      .store.messages(team)
+      .find((entry) => entry.author.id === agentId && entry.message.text.includes(part));
+  const relayTo = async (marker: string) => {
+    await runCauseEffect(agents.sendMessage({ agentId: baker.id, text: `E2E_SEND:${tester.id}:${marker}` }));
+  };
+  await relayTo("E2E_ASK_USER");
+  await waitFor("the teammate's question in the team channel", () =>
+    lineFrom(tester.id, "Which broker should we use?"),
+  );
+  pass("A teammate's question of team work is posted in the team channel", true);
+  pass(
+    "It does not wait in the teammate's own chat",
+    !agents.getRuntimeSnapshot().pendingPrompts.some((prompt) => prompt.agentId === tester.id),
+  );
+  handsOff.add(team);
+  const handsOffStart = channels().store.messages(team).length;
+  await relayTo("E2E_ASK_USER");
+  await stays("a question posted in hands-off mode", () =>
+    channels()
+      .store.messages(team)
+      .slice(handsOffStart)
+      .some((entry) => entry.message.text.includes("Which broker should we use?")),
+  );
+  pass(
+    "In hands-off mode the question is not posted",
+    !channels()
+      .store.messages(team)
+      .slice(handsOffStart)
+      .some((entry) => entry.message.text.includes("Which broker should we use?")),
+  );
+  await relayTo("E2E_DECIDE");
+  await waitFor("the logged decision", () => lineFrom(tester.id, "Use Alpaca paper trading."));
+  pass(
+    "A decision made without the people is posted and listed",
+    channels()
+      .decisions(team)
+      .some((entry) => entry.author.id === tester.id && entry.message.text.includes("Why: It is free")),
   );
 
   report.passed = true;

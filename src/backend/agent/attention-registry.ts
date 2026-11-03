@@ -320,6 +320,20 @@ export interface AttentionRegistryOptions {
   noteVaultChange?(agentId: string, threadId: string, turnId: string, text: string): void;
   /** Where the answer of `request_api_key` is saved; null where nothing can save it. */
   apiKeys?: AgentApiKeys | null | undefined;
+  /**
+   * The team channel that a turn works for, outside a channel task: a question from it goes to that
+   * channel, not to the agent's own chat, where the people of the conversation would not see it.
+   */
+  teamQuestion?: TeamQuestionRouting | undefined;
+}
+
+/** How a question of work that belongs to a team channel reaches the people of that channel. */
+export interface TeamQuestionRouting {
+  context(
+    agentId: string,
+    turnId: string,
+  ): { channelId: string; name: string; handsOff: boolean; channelTurn: boolean } | null;
+  post(agentId: string, channelId: string, text: string): boolean;
 }
 
 export type RuntimeAttention = Pick<
@@ -379,6 +393,7 @@ export class AttentionRegistry {
   readonly #agentName: (agentId: string) => string | undefined;
   readonly #noteVaultChange: (agentId: string, threadId: string, turnId: string, text: string) => void;
   readonly #apiKeys: AgentApiKeys | null;
+  readonly #teamQuestion: TeamQuestionRouting | null;
   readonly #prompts = new Map<RequestId, PendingPrompt>();
   readonly #approvals = new Map<RequestId, PendingApproval>();
   readonly #takeovers = new Map<RequestId, PendingBrowserTakeover>();
@@ -399,6 +414,53 @@ export class AttentionRegistry {
     this.#agentName = options.agentName ?? (() => undefined);
     this.#noteVaultChange = options.noteVaultChange ?? (() => undefined);
     this.#apiKeys = options.apiKeys ?? null;
+    this.#teamQuestion = options.teamQuestion ?? null;
+  }
+
+  /**
+   * Sends a question of team work to its channel instead of the agent's own chat. Returns what the
+   * agent reads instead of an answer, or null when the question stays a card here: a person's own
+   * chat, a channel task (whose cards the channel already shows), or a question the agent marked
+   * private. In hands-off mode no question reaches anyone: the agent decides and logs it. A key
+   * request becomes a request in the channel to add the key in Secrets.
+   */
+  #routeTeamQuestion(
+    agentId: string,
+    turnId: string,
+    questions: readonly AgentPromptQuestion[],
+    options: { private?: boolean; apiKey?: string; purpose?: string },
+  ): string | null {
+    const context = this.#teamQuestion?.context(agentId, turnId);
+    // A card of a channel task shows in its channel already; hands-off mode refuses that one too.
+    if (!context || (context.channelTurn && !context.handsOff)) return null;
+    const channel = `#${context.name}`;
+    if (options.apiKey && !context.channelTurn) {
+      const posted = this.#teamQuestion?.post(
+        agentId,
+        context.channelId,
+        `I need the key \`${options.apiKey}\`${options.purpose ? ` (${options.purpose})` : ""}. Add it in Secrets (shared), or tell me to create it myself.`,
+      );
+      return posted
+        ? `No form here: this work belongs to ${channel}. OpenBot asked the people there to add ${options.apiKey} in Secrets. ${
+            context.handsOff
+              ? "Hands-off mode: do not wait. Create the key yourself if you can (openbot_browser.save_secret_from_page or openbot.save_api_key), or continue without it and log the decision with openbot.log_decision."
+              : "Do not wait for it: continue without the key or end your turn. Check openbot.list_api_keys later."
+          }`
+        : null;
+    }
+    if (context.handsOff)
+      return `Not asked: ${channel} is in hands-off mode, so no person answers questions. Decide yourself: take the path the team recommends, call openbot.log_decision (through openbot.tool_call when it is not in your tool list) with the decision, why, and the alternatives, then continue.`;
+    if (options.private || context.channelTurn) return null;
+    const text = questions
+      .map((question) => {
+        const choices = question.options?.length
+          ? `\n${question.options.map((option, index) => `${String.fromCharCode(65 + index)}) ${option.label}${option.description ? ` - ${option.description}` : ""}`).join("\n")}`
+          : "";
+        return `${question.question}${choices}`;
+      })
+      .join("\n\n");
+    if (!this.#teamQuestion?.post(agentId, context.channelId, `${text}\n\nReply in this thread.`)) return null;
+    return `Not shown in your own chat: this work belongs to ${channel}, so OpenBot posted your question there for the people. Do not wait: end your turn, or continue with work that does not depend on the answer. The answer comes back to you as channel work in the thread of your question. Ask privately only for something private to one person: openbot.ask_ui with private true.`;
   }
 
   /** The agent that asks `requestId`: a prompt, an approval, a browser takeover or a browser secret. */
@@ -1314,6 +1376,11 @@ export class AttentionRegistry {
       });
       return;
     }
+    const routed = this.#routeTeamQuestion(agentId, turnId, questions, { private: args?.private === true });
+    if (routed) {
+      client.respond(request.id, { success: true, contentItems: [{ type: "inputText", text: routed }] });
+      return;
+    }
 
     const messageId = this.#persistQuestionPrompt(agentId, publicThreadId, turnId, request.id, questions);
     this.#prompts.set(request.id, {
@@ -1370,6 +1437,20 @@ export class AttentionRegistry {
       client.respond(request.id, {
         success: false,
         contentItems: [{ type: "inputText", text: "OpenBot could not show this block." }],
+      });
+      return;
+    }
+    // A block that answers itself, such as the plan card, never holds the agent.
+    const routed = autoAnswer
+      ? null
+      : this.#routeTeamQuestion(agentId, turnId, questions, {
+          private: getRecord(request.params, "arguments")?.private === true,
+          ...(block.apiKey ? { apiKey: block.apiKey.name, purpose: block.spec.title } : {}),
+        });
+    if (routed) {
+      client.respond(request.id, {
+        success: true,
+        contentItems: [{ type: "inputText", text: JSON.stringify({ status: "not_asked_here", note: routed }) }],
       });
       return;
     }
@@ -1438,6 +1519,14 @@ export class AttentionRegistry {
     // No answers is what the provider gets for a question that nobody answered.
     if (this.#messagingThread(publicThreadId)) {
       client.respond(request.id, { answers: {} });
+      return;
+    }
+    // The provider's own question tool has no private flag: in team work it always goes to the channel.
+    const routed = this.#routeTeamQuestion(agentId, turnId, questions, {});
+    if (routed) {
+      client.respond(request.id, {
+        answers: Object.fromEntries(questions.map((question) => [question.id, { answers: [routed] }])),
+      });
       return;
     }
     const messageId = this.#persistQuestionPrompt(agentId, publicThreadId, turnId, request.id, questions);

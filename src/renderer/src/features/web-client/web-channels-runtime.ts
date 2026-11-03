@@ -97,6 +97,7 @@ export function createWebChannelsPort(
       workspaceSecretRead: channels?.workspaceSecretRead,
       workspaceSecretSave: channels?.workspaceSecretSave,
       workspaceSecretRemove: channels?.workspaceSecretRemove,
+      workspaceDecisions: channels?.workspaceDecisions,
       workspaceSidebar: channels?.workspaceSidebar,
       setWorkspaceSidebar: channels?.setWorkspaceSidebar,
       listChannelMemories: channels?.listChannelMemories ?? unavailable,

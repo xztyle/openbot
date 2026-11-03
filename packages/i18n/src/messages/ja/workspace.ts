@@ -214,6 +214,12 @@ export const messages = {
   "workspace.details.leadHint":
     "各メッセージを 1 人のメンバーに割り当てます。応答モードは適用されませんが、メンションしたエージェントは応答します。",
   "workspace.details.leadNone": "エージェントを選択",
+  "workspace.details.decisions": "判断",
+  "workspace.details.decisionsLoading": "判断を読み込み中…",
+  "workspace.details.decisionsEmpty":
+    "まだ判断はありません。おまかせモードでは、エージェントはあなたを待ちません。あなた抜きで下した判断はすべてここに表示されます。",
+  "workspace.details.handsOff": "おまかせモード",
+  "workspace.details.handsOffHint": "エージェントはあなたを待たずに推奨の方針で進め、各判断を「判断」に記録します。",
   "workspace.details.leave": "チャンネルから退出",
   "workspace.details.archive": "チャンネルをアーカイブ",
   "workspace.answerMode.mention": "メンションされたとき",
@@ -388,6 +394,7 @@ export const messages = {
     "ここではエージェントは @メンションされたときに返信します。すべてのメッセージに返信させるには、メンバーで変更してください。",
   "workspace.app.hint.openMembers": "メンバーを開く",
   "workspace.app.hint.dismiss": "ヒントを閉じる",
+  "workspace.app.handsOff.failed": "おまかせモードを変更できませんでした。",
   "workspace.app.fleet.queued": { other: "{count} 件のメッセージが待機中" },
   "workspace.app.gate.title": "エージェントが回答した理由",
   "workspace.app.gate.empty":

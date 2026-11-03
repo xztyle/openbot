@@ -1,19 +1,25 @@
 import type {
   AgentEvent,
   AgentSummary,
+  ChannelMessage,
   ConversationSnapshot,
   ConversationTurnTrace,
   WorkspaceArtifacts,
   WorkspaceArtifactsInput,
+  WorkspaceDecisions,
+  WorkspaceDecisionsInput,
   WorkspaceFleet,
   WorkspaceFleetInput,
   WorkspaceSteps,
   WorkspaceStepsInput,
 } from "@openbot/contracts/ipc";
 import {
+  CHANNEL_DECISION_PREFIX,
   WORKSPACE_AGENT_EXCHANGE_LIMIT,
   WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT,
   WORKSPACE_AGENT_PAIR_LIMIT,
+  WORKSPACE_DECISION_LIMIT,
+  WORKSPACE_DECISION_TEXT_LIMIT,
   type WorkspaceAgentExchange,
   type WorkspaceAgentExchangeInput,
   type WorkspaceAgentPairs,
@@ -60,6 +66,8 @@ export interface WorkspaceInsightsOptions {
   artifactsPath?: string | null;
   /** The thumbnails of the artifacts that are web pages. Omitted or null, no artifact has one. */
   thumbnails?: Pick<WorkspaceThumbnails, "request" | "version" | "file"> | null;
+  /** The decision messages that agents posted in a hands-off channel, newest first. Omitted, none. */
+  channelDecisions?(channelId: string): readonly ChannelMessage[];
 }
 
 const NO_STEPS: WorkspaceSteps = { steps: [], total: 0, durationMs: 0, streaming: false };
@@ -197,6 +205,24 @@ export class WorkspaceInsights {
       costUsd,
       now: Date.now(),
     });
+  }
+
+  /** The decisions that agents made without a person in a channel that the reader can see, newest first. */
+  decisions(input: WorkspaceDecisionsInput, viewer: ChannelViewer): WorkspaceDecisions {
+    this.#requireChannel(input.channelId, viewer);
+    const messages = this.#options.channelDecisions?.(input.channelId) ?? [];
+    const decisions = messages.slice(0, WORKSPACE_DECISION_LIMIT).map((message) => {
+      const text = message.message.text.slice(CHANNEL_DECISION_PREFIX.length).trim();
+      const createdAt = Date.parse(message.message.createdAt);
+      return {
+        id: message.id,
+        agentId: message.author.id,
+        text: text.slice(0, WORKSPACE_DECISION_TEXT_LIMIT),
+        createdAt: Number.isFinite(createdAt) ? createdAt : 0,
+        ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+      };
+    });
+    return { decisions };
   }
 
   /** The agents that a person wrote to in their own chat in the last `days` days. */

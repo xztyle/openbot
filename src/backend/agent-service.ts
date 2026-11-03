@@ -862,6 +862,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       compacted: (threadId) => this.channels.contextCompacted(threadId),
     });
     this.#attention = new AttentionRegistry({
+      // The channel service starts later; a question only arrives once both run.
+      teamQuestion: {
+        context: (agentId, turnId) => this.channels.teamContext(agentId, turnId),
+        post: (agentId, channelId, text) => this.channels.postTeamQuestion(agentId, channelId, text),
+      },
       conversation: this.#conversation,
       browser: this.#browser,
       hostedSites: this.#hostedSites,
@@ -1164,6 +1169,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...(options.channelRemotePerson ? { remotePerson: options.channelRemotePerson } : {}),
       ...(options.channelPerson ? { person: options.channelPerson } : {}),
       defaultAnswerMode: () => (options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS).defaults.agentAnswerMode,
+      handsOff: (channelId) =>
+        (options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS).handsOffChannelIds?.includes(channelId) ?? false,
       agentDefaults: (agentId) => {
         const agents = (options.workspaceSettings?.() ?? DEFAULT_WORKSPACE_SETTINGS).defaults.agents;
         // An own property only: an id such as `constructor` names no saved default.
@@ -1492,6 +1499,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       emit: (event) => this.#emit(event),
       artifactsPath: options.workspaceArtifactsPath ?? null,
       thumbnails: options.workspaceThumbnails ?? null,
+      channelDecisions: (channelId) => this.channels.decisions(channelId),
     });
     this.#removal = new AgentRemoval({
       store,

@@ -1,12 +1,18 @@
 import {
+  CHANNEL_DECISION_PREFIX,
   type ChannelGateDecision,
   type ChannelGateFallback,
   channelKind,
   channelRouting,
   channelVisibility,
+  type WorkspaceDecision,
 } from "@openbot/contracts/ipc";
 import { Button, Plug } from "@openbot/ui";
-import { ChannelDetails, type ChannelDetailsMember } from "@openbot/ui/features/workspace/ChannelDetails";
+import {
+  type ChannelDecisionItem,
+  ChannelDetails,
+  type ChannelDetailsMember,
+} from "@openbot/ui/features/workspace/ChannelDetails";
 import { MemberAvatar } from "@openbot/ui/features/workspace/WorkspaceAvatar";
 import { WorkspaceSelect } from "@openbot/ui/features/workspace/WorkspaceSelect";
 import { useText } from "@openbot/ui/text";
@@ -14,7 +20,62 @@ import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { useWorkspace } from "./workspace-context";
 import { conversationName, humanIds, memberById, previewText, readerJoined } from "./workspace-model";
 
-/** The right panel of a channel: About, Members with each agent's answer mode, Integrations, Settings. */
+/**
+ * The decisions that agents made without a person in a hands-off channel. They load when the
+ * Decisions tab opens, and again when a new decision message comes into the open channel. Undefined
+ * when the host has no decisions call.
+ */
+function useChannelDecisions(channelId: string, open: () => boolean) {
+  const ws = useWorkspace();
+  const [decisions, setDecisions] = createSignal<WorkspaceDecision[] | null>(null);
+  const newestDecision = createMemo(() => {
+    const page = ws.channels.state.page;
+    if (page?.channel.id !== channelId) return "";
+    const found = page.messages.findLast(
+      (entry) => entry.author.kind === "agent" && entry.message.text.startsWith(CHANNEL_DECISION_PREFIX),
+    );
+    return found?.id ?? "";
+  });
+  let run = 0;
+  createEffect(
+    () => (open() ? newestDecision() : null),
+    (key) => {
+      if (key === null) return;
+      const read = ws.channels.port().agent.workspaceDecisions;
+      if (!read) return;
+      const current = ++run;
+      read({ channelId }).then(
+        (result) => {
+          if (current === run) setDecisions(result.decisions);
+        },
+        () => {
+          // A host without the decisions route has none to show.
+          if (current === run) setDecisions([]);
+        },
+      );
+    },
+  );
+  return {
+    items: (): ChannelDecisionItem[] | null | undefined => {
+      if (!ws.channels.port().agent.workspaceDecisions) return undefined;
+      return (
+        decisions()?.map((decision) => ({
+          id: decision.id,
+          agent: memberById(ws.directory(), decision.agentId),
+          text: decision.text,
+          at: decision.createdAt,
+        })) ?? null
+      );
+    },
+    /** The message to open for a decision: the root of its thread, or the decision message itself. */
+    target: (id: string) => {
+      const decision = decisions()?.find((item) => item.id === id);
+      return decision ? (decision.threadRootId ?? decision.id) : null;
+    },
+  };
+}
+
+/** The right panel of a channel: About, Members with each agent's answer mode, Integrations, Decisions, Settings. */
 export function WorkspaceDetailsPanel(props: { channelId: string }) {
   const ws = useWorkspace();
   const channel = () => {
@@ -46,6 +107,10 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
           return [...people, ...agents];
         });
         const live = () => channel() ?? current;
+        const decisions = useChannelDecisions(current.id, () => tab() === "decisions");
+        // The hands-off list is in the workspace settings, which only owners and admins read.
+        if (ws.isAdmin()) void ws.workspaceSettings();
+        const handsOff = () => ws.state.settings?.handsOffChannelIds?.includes(current.id) ?? false;
         return (
           <ChannelDetails
             channel={{
@@ -131,6 +196,19 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
             onLeave={
               joined() && kind !== "dm" && humanIds(live()).length > 0
                 ? () => void ws.leave(props.channelId)
+                : undefined
+            }
+            decisions={kind === "channel" ? decisions.items() : undefined}
+            onOpenDecision={(id) => {
+              // A thread reply opens its thread; a channel message opens as the root of its own
+              // thread, as a message link does.
+              const target = decisions.target(id);
+              if (target) ws.openThread(props.channelId, target);
+            }}
+            handsOff={handsOff()}
+            onHandsOffChange={
+              ws.isAdmin() && ws.state.settings && kind === "channel" && !live().archived
+                ? (enabled) => void ws.setHandsOff(props.channelId, enabled)
                 : undefined
             }
           />

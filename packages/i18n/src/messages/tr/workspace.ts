@@ -214,6 +214,13 @@ export const messages = {
   "workspace.details.leadHint":
     "Her mesajı bir üyeye verir. Yanıt modları uygulanmaz; andığınız ajan yine yanıt verir.",
   "workspace.details.leadNone": "Ajan seçin",
+  "workspace.details.decisions": "Kararlar",
+  "workspace.details.decisionsLoading": "Kararlar yükleniyor…",
+  "workspace.details.decisionsEmpty":
+    "Henüz karar yok. Elleri serbest modda ajanlar seni beklemez: senin yerine verdikleri her karar burada görünür.",
+  "workspace.details.handsOff": "Elleri serbest mod",
+  "workspace.details.handsOffHint":
+    "Ajanlar seni hiç beklemez: önerilen yolu izler ve her kararı Kararlar altında kaydeder.",
   "workspace.details.leave": "Kanaldan ayrıl",
   "workspace.details.archive": "Kanalı arşivle",
   "workspace.answerMode.mention": "Bahsedildiğinde",
@@ -389,6 +396,7 @@ export const messages = {
     "Buradaki ajanlar @ ile anıldıklarında yanıt verir. Bir ajanın her mesaja yanıt vermesi için bunu Üyeler bölümünde değiştirin.",
   "workspace.app.hint.openMembers": "Üyeleri aç",
   "workspace.app.hint.dismiss": "İpucunu kapat",
+  "workspace.app.handsOff.failed": "Elleri serbest mod değiştirilemedi.",
   "workspace.app.fleet.queued": { one: "{count} mesaj bekliyor", other: "{count} mesaj bekliyor" },
   "workspace.app.gate.title": "Ajanlar neden yanıtladı",
   "workspace.app.gate.empty": "Henüz karar yok. Her mesajı yanıtlayan (akıllı) ajanlar burada görünür.",

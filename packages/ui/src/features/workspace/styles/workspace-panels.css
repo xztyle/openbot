@@ -718,3 +718,12 @@
 .ws-agent-status[data-state="waiting"] {
   color: var(--openbot-warning-text);
 }
+
+/* Decisions ------------------------------------------------------------------------------------- */
+
+.ws-decision-text {
+  color: var(--openbot-text-secondary);
+  line-height: var(--openbot-leading-md);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -55,6 +55,7 @@ import {
   CHAT_VISUAL_PREVIEW_DEFAULT_WIDTH,
   htmlPreviewToolSchema,
   htmlRenderToolSchema,
+  logDecisionToolSchema,
   removeApiKeyToolSchema,
   requestApiKeyToolSchema,
   routineReportFailureToolSchema,
@@ -1133,6 +1134,29 @@ export class OpenBotToolRouter {
     }
 
     if (params.tool === "react_to_user_message") return yield* this.#react(params, senderAgentId);
+
+    if (params.tool === "log_decision") {
+      const parsed = logDecisionToolSchema.safeParse(params.arguments);
+      if (!parsed.success)
+        return openBotToolFailure(`${z.prettifyError(parsed.error)}\nCorrect the arguments and retry.`);
+      const context = this.#channels.teamContext(senderAgentId, params.turnId);
+      if (!context)
+        return openBotToolFailure(
+          "log_decision records decisions of a team channel's work, and this turn works for no team channel. Tell the person about the decision in your answer instead.",
+        );
+      const { decision, why, alternatives } = parsed.data;
+      const posted = this.#channels.postDecision(
+        senderAgentId,
+        context.channelId,
+        context.threadRootId,
+        `${decision} Why: ${why}${alternatives ? ` Rejected: ${alternatives}` : ""}`,
+      );
+      return posted
+        ? openBotToolResult({ status: "logged", channel: context.name })
+        : openBotToolFailure(
+            "OpenBot could not post the decision in the channel. Continue, and name it in your report.",
+          );
+    }
 
     return yield* this.#sendMessage(params, senderAgentId);
   });

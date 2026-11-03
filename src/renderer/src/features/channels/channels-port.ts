@@ -42,6 +42,7 @@ export interface ChannelsPort {
         | "workspaceSecretRead"
         | "workspaceSecretSave"
         | "workspaceSecretRemove"
+        | "workspaceDecisions"
         | "workspaceSidebar"
         | "setWorkspaceSidebar"
       >

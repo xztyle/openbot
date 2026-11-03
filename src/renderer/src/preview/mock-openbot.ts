@@ -1901,6 +1901,20 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       workspaceSecretRemove: async ({ scope, name }) => {
         mockSecrets.delete(`${scope}/${name}`);
       },
+      workspaceDecisions: async () => {
+        const [first] = agents;
+        if (!first) return { decisions: [] };
+        return {
+          decisions: [
+            {
+              id: "decision-preview-1",
+              agentId: first.id,
+              text: "Used the dark theme for the landing page.\n**Why:** it matches the brand guide.",
+              createdAt: Date.now() - 300_000,
+            },
+          ],
+        };
+      },
       workspaceArtifacts: async ({ channelId }) => {
         const now = Date.now();
         const [channel] = await mockChannels.listChannels();

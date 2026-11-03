@@ -199,6 +199,13 @@ export const messages = {
   "workspace.details.leadHint":
     "Asigna cada mensaje a un miembro. Los modos de respuesta no se aplican; un agente que mencionas sigue respondiendo.",
   "workspace.details.leadNone": "Elige un agente",
+  "workspace.details.decisions": "Decisiones",
+  "workspace.details.decisionsLoading": "Cargando decisiones…",
+  "workspace.details.decisionsEmpty":
+    "Aún no hay decisiones. En el modo sin intervención, los agentes no te esperan: cada decisión que toman sin ti aparece aquí.",
+  "workspace.details.handsOff": "Modo sin intervención",
+  "workspace.details.handsOffHint":
+    "Los agentes nunca te esperan: siguen el camino recomendado y registran cada decisión en Decisiones.",
   "workspace.details.leave": "Salir del canal",
   "workspace.details.archive": "Archivar canal",
   "workspace.answerMode.mention": "Cuando lo mencionan",
@@ -365,6 +372,7 @@ export const messages = {
     "Aquí los agentes responden cuando los mencionas con @. Para que un agente responda a cada mensaje, cámbialo en Miembros.",
   "workspace.app.hint.openMembers": "Abrir Miembros",
   "workspace.app.hint.dismiss": "Cerrar la sugerencia",
+  "workspace.app.handsOff.failed": "No se pudo cambiar el modo sin intervención.",
   "workspace.app.fleet.queued": { one: "{count} mensaje en espera", other: "{count} mensajes en espera" },
   "workspace.app.gate.title": "Por qué respondieron los agentes",
   "workspace.app.gate.empty":

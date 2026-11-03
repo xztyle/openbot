@@ -162,7 +162,14 @@ export type TeamApiAgents = TeamApiAgentMethods & {
   /** workspace-fleet-v1 (`fork-host-v1`): the fleet, step trail and artifact views. */
   workspace: Pick<
     WorkspaceInsights,
-    "fleet" | "steps" | "artifacts" | "artifactThumbnail" | "agentPairs" | "agentExchange" | "recentDmAgentIds"
+    | "fleet"
+    | "steps"
+    | "artifacts"
+    | "artifactThumbnail"
+    | "agentPairs"
+    | "agentExchange"
+    | "recentDmAgentIds"
+    | "decisions"
   >;
   /** workspace-fleet-v1 (`fork-host-v1`): the agent key store, for the owner and the admins. */
   secrets: Pick<WorkspaceSecretsService, "list" | "read" | "save" | "remove">;

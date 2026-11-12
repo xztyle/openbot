@@ -276,7 +276,7 @@ export class ConversationReadStore {
       AND COALESCE(item_type, '') != '${CONTEXT_RESET_ITEM_TYPE}'
       AND NOT (
         author = 'assistant' AND turn_id IS NOT NULL
-        AND turn_id IN (SELECT turn_id FROM ordered WHERE author = 'agent' AND item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND turn_id IS NOT NULL)
+        AND turn_id IN (${AGENT_TALK_TURNS})
         AND turn_id NOT IN (SELECT turn_id FROM ordered WHERE author = 'user' AND turn_id IS NOT NULL)
       )`;
     // One pass over the ordered thread: the first unread row carries the count of all of them.
@@ -362,19 +362,53 @@ export class ConversationReadStore {
 }
 
 /**
- * The turns that another agent's message started and no person's message joined. What the agent
- * answers there is its talk with that agent, not news for the person who reads its chat.
+ * The turns of the agent's talk with another agent: no person wrote in them, and their answer goes to
+ * an agent, because another agent's request started the turn or OpenBot sent the answer on to an
+ * agent. That answer is not news for the person who reads the chat. A turn that a teammate's report
+ * started (no answer wanted) and that sent nothing on is the agent telling the person, so it counts.
+ * The same rule as `AGENT_TALK_TURNS` and the renderer's `agentOnlyTurns`.
  */
+/**
+ * The turns, of the thread that `ordered` reads, whose answer goes to another agent: an agent's
+ * request started them, or OpenBot sent the answer on to an agent (an outgoing exchange with the
+ * answer's text). A message stored before the exchange summary counts as a request, as it did before.
+ */
+const AGENT_TALK_TURNS = `SELECT exchange.turn_id FROM ordered exchange
+  JOIN projection_thread_messages stored ON stored.thread_id = exchange.thread_id AND stored.message_id = exchange.message_id
+  WHERE exchange.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND exchange.turn_id IS NOT NULL AND (
+    (exchange.author = 'agent' AND COALESCE(json_extract(stored.message_json, '$.exchange.expectsReply'), 1) != 0)
+    OR (exchange.author != 'agent' AND EXISTS (
+      SELECT 1 FROM ordered answer
+      JOIN projection_thread_messages said ON said.thread_id = answer.thread_id AND said.message_id = answer.message_id
+      WHERE answer.turn_id = exchange.turn_id AND answer.author = 'assistant' AND COALESCE(answer.item_type, 'agentMessage') = 'agentMessage'
+        AND trim(json_extract(said.message_json, '$.text')) = trim(json_extract(stored.message_json, '$.text'))
+    ))
+  )`;
+
 function agentOnlyTurns(messages: ConversationSnapshot["messages"]): Set<string> {
-  const fromAgent = new Set<string>();
+  const talk = new Set<string>();
+  const reports = new Set<string>();
+  const answers = new Map<string, Set<string>>();
+  const forwarded = new Map<string, string[]>();
   const fromPerson = new Set<string>();
   for (const message of messages) {
-    if (!message.turnId) continue;
-    if (message.author === "agent" && message.itemType === AGENT_EXCHANGE_ITEM_TYPE) fromAgent.add(message.turnId);
-    if (message.author === "user") fromPerson.add(message.turnId);
+    const turnId = message.turnId;
+    if (!turnId) continue;
+    if (message.author === "user") fromPerson.add(turnId);
+    if (message.itemType === AGENT_EXCHANGE_ITEM_TYPE) {
+      // A message stored before the exchange summary counts as a request, as it did before.
+      const direction = message.exchange?.direction ?? (message.author === "agent" ? "incoming" : "outgoing");
+      if (direction === "incoming") (message.exchange?.expectsReply === false ? reports : talk).add(turnId);
+      else forwarded.set(turnId, [...(forwarded.get(turnId) ?? []), message.text.trim()]);
+    } else if (message.author === "assistant" && (!message.itemType || message.itemType === "agentMessage"))
+      answers.set(turnId, (answers.get(turnId) ?? new Set()).add(message.text.trim()));
   }
-  for (const turnId of fromPerson) fromAgent.delete(turnId);
-  return fromAgent;
+  for (const turnId of reports) {
+    const said = answers.get(turnId);
+    if (said && (forwarded.get(turnId) ?? []).some((text) => said.has(text))) talk.add(turnId);
+  }
+  for (const turnId of fromPerson) talk.delete(turnId);
+  return talk;
 }
 
 function stateFromSnapshot(snapshot: ConversationSnapshot, throughMessageId: string | null): ConversationReadState {

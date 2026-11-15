@@ -10,6 +10,9 @@
     "render-services",
     "posthog-health",
     "discord-activity",
-    "git-remote-refs"
+    "git-remote-refs",
+    "meta-ads-performance",
+    "meta-ads-review",
+    "meta-lead-forms"
   ]
 }

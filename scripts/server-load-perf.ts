@@ -9,6 +9,7 @@
 //
 // Run: node --import tsx scripts/server-load-perf.ts --db=<copy of openbot.db> [--agents=12]
 //      [--seconds=60] [--crash-at=30] [--transcript-mb=40] [--profile=<file.cpuprofile>] [--label=x]
+//      [--stall-stacks=<ms>]   (the JavaScript stack of each main-thread task of at least that long)
 // The database file is copied again into a temporary folder (`--tmp`) for each run. The run fails when a
 // completed turn has no stored answer. Writes .openbot-build/server-load-perf/<label>.json. A profile of
 // a run through tsx names the functions; bundle the script with esbuild first for exact line numbers.
@@ -18,6 +19,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Session } from "node:inspector/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { performance as nodePerformance } from "node:perf_hooks";
 import { DatabaseSync } from "node:sqlite";
 import { AGENT_PROVIDERS, defaultProviderModel } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
@@ -39,6 +41,8 @@ const SECONDS = Number(argument("seconds") ?? 60);
 const CRASH_AT = Number(argument("crash-at") ?? 30);
 const TRANSCRIPT_MB = Number(argument("transcript-mb") ?? 40);
 const PROFILE = argument("profile");
+/** `--stall-stacks=<ms>` keeps the JavaScript stack of each main-thread task of at least that long. */
+const STALL_STACKS_MS = argument("stall-stacks") ? Number(argument("stall-stacks")) : null;
 const LABEL = argument("label") ?? "run";
 const OPEN_CHATS = 3;
 /** `--reads=0` leaves out the unread-state read that the app makes after each conversation event. */
@@ -497,8 +501,20 @@ if (PROFILE) {
   await session.post("Profiler.setSamplingInterval", { interval: 1_000 });
   await session.post("Profiler.start");
 }
+const stallRoutes =
+  STALL_STACKS_MS === null
+    ? null
+    : (await import("../src/main/server-debug-profiler")).createServerDebugRoutes({ userDataPath: userData, log });
+if (stallRoutes)
+  await stallRoutes.route(
+    "POST",
+    "/v1/debug/stall-watch",
+    JSON.stringify({ seconds: Math.max(10, SECONDS + 5), threshold_ms: STALL_STACKS_MS }),
+  );
 measuring = true;
 const loadStart = performance.now();
+// The main thread's busy time in the load phase, without the cost of a profile.
+const utilizationStart = nodePerformance.eventLoopUtilization();
 for (const agent of busy) await sendNext(agent.agentId);
 log(`Sent the first message to ${busy.length} agents.`);
 
@@ -529,6 +545,7 @@ const crashTimer =
 await new Promise((done) => setTimeout(done, SECONDS * 1_000));
 measuring = false;
 const loadMs = performance.now() - loadStart;
+const utilization = nodePerformance.eventLoopUtilization(utilizationStart);
 stopping = true;
 if (crashTimer) clearTimeout(crashTimer);
 if (session) {
@@ -537,6 +554,10 @@ if (session) {
   session.disconnect();
   log(`Profile: ${PROFILE}`);
 }
+const stallStacks = stallRoutes
+  ? JSON.parse((await stallRoutes.route("GET", "/v1/debug/stalls", ""))?.body ?? "{}").stalls
+  : undefined;
+stallRoutes?.close();
 clearInterval(watcher);
 clearInterval(snapshots);
 clearInterval(ticker);
@@ -631,6 +652,8 @@ const result = {
   problems,
   killedProcesses: crashed,
   reconciledEvents: reconciled,
+  busyMs: Math.round(utilization.active),
+  busyShare: Number(utilization.utilization.toFixed(3)),
   events,
   eventMb: Number((eventBytes / 1e6).toFixed(1)),
   eventTypes: Object.fromEntries(eventTypes),
@@ -640,6 +663,24 @@ const result = {
     maxMs: sorted[0] ?? 0,
     top: sorted.slice(0, 10),
   },
+  ...(stallStacks
+    ? {
+        stallStacks: stallStacks.map(
+          (stall: {
+            blockedMs: number;
+            late: boolean;
+            frames: { functionName: string; url: string; line: number }[];
+          }) =>
+            `${stall.blockedMs} ms${stall.late ? " (late)" : ""}: ${stall.frames
+              .slice(0, 14)
+              .map(
+                (frame) =>
+                  `${frame.functionName || "(anonymous)"} ${frame.url.split("/").slice(-2).join("/")}:${frame.line}`,
+              )
+              .join(" < ")}`,
+        ),
+      }
+    : {}),
   timed: Object.fromEntries(
     [...timed.entries()].map(([name, entry]) => [
       name,

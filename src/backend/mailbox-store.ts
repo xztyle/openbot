@@ -1098,8 +1098,17 @@ export class MailboxStore {
     options: { fromCreatedAt?: string; limit?: number } = {},
   ): ConversationMessage[] {
     const limit = Math.max(1, Math.min(options.limit ?? 100, 100));
+    // Only the messages this agent sent or got are indexed: the rest are skipped below anyway, and
+    // indexing the deliveries of the whole mailbox took most of each call. A queue change reads this
+    // for the agent and for every agent that ever sent it a message.
+    const relevantMessageIds = new Set<string>();
+    for (const delivery of this.#state.deliveries)
+      if (delivery.recipientAgentId === agentId) relevantMessageIds.add(delivery.messageId);
+    for (const message of this.#state.messages)
+      if (message.sender.kind === "agent" && message.sender.agentId === agentId) relevantMessageIds.add(message.id);
     const deliveriesByMessage = new Map<string, StoredDelivery[]>();
     for (const delivery of this.#state.deliveries) {
+      if (!relevantMessageIds.has(delivery.messageId)) continue;
       const deliveries = deliveriesByMessage.get(delivery.messageId) ?? [];
       deliveries.push(delivery);
       deliveriesByMessage.set(delivery.messageId, deliveries);
@@ -1133,7 +1142,13 @@ export class MailboxStore {
     selectedStoredMessages.reverse();
     const messages: ConversationMessage[] = [];
     const positions = this.#queuedPositions();
-    const turnIds = this.#sourceTurnIds();
+    const turnIds = this.#sourceTurnIds(
+      new Set(
+        selectedStoredMessages
+          .filter((message) => message.sender.kind === "agent" && message.sender.agentId === agentId)
+          .map((message) => message.id),
+      ),
+    );
     for (const message of selectedStoredMessages) {
       const deliveries = deliveriesByMessage.get(message.id) ?? [];
       if (message.sender.kind === "agent" && message.sender.agentId === agentId) {
@@ -1306,11 +1321,13 @@ export class MailboxStore {
   /**
    * The turn that sent each message, by message id, read once for a whole lookup: agent keys are
    * kept for good, so a scan of every key for each message grows with the square of the history.
+   * `only` limits the result to those messages: splitting every key of a large mailbox took about
+   * 5 ms, and a conversation read needs the turns of a few messages.
    */
-  #sourceTurnIds(): Map<string, string | undefined> {
+  #sourceTurnIds(only?: ReadonlySet<string>): Map<string, string | undefined> {
     const turnIds = new Map<string, string | undefined>();
     for (const [key, messageId] of Object.entries(this.#state.idempotency)) {
-      if (turnIds.has(messageId)) continue;
+      if ((only && !only.has(messageId)) || turnIds.has(messageId)) continue;
       const parts = key.split(":");
       turnIds.set(messageId, parts.length >= 3 ? parts.at(-2) : undefined);
     }
@@ -1318,10 +1335,13 @@ export class MailboxStore {
   }
 
   senderAgentIdsForRecipient(agentId: string): string[] {
+    const deliveries = this.#state.deliveries.filter((delivery) => delivery.recipientAgentId === agentId);
+    // Each queue change asks this, so only the messages to this agent are indexed.
+    const messageIds = new Set(deliveries.map((delivery) => delivery.messageId));
+    const messages = new Map<string, StoredMessage>();
+    for (const message of this.#state.messages) if (messageIds.has(message.id)) messages.set(message.id, message);
     const result = new Set<string>();
-    const messages = this.#messagesById();
-    for (const delivery of this.#state.deliveries) {
-      if (delivery.recipientAgentId !== agentId) continue;
+    for (const delivery of deliveries) {
       const sender = this.#requireMessage(delivery.messageId, messages).sender;
       if (sender.kind === "agent") result.add(sender.agentId);
     }

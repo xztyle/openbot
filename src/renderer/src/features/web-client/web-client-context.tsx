@@ -688,7 +688,7 @@ export function createWebWorkspace(
           });
         if (event.type === "agents-changed") {
           reconcileAgents(event.agents);
-          for (const agent of event.agents) if (!state.queues[agent.id]) loadQueue(agent.id);
+          loadQueues(event.agents.filter((agent) => !state.queues[agent.id]).map((agent) => agent.id));
         }
         if (event.type === "queue-changed") {
           const { snapshot } = event;
@@ -699,7 +699,7 @@ export function createWebWorkspace(
           });
         }
         if (event.type === "queue-invalidated" && state.agents.some((agent) => agent.id === event.agentId))
-          loadQueue(event.agentId);
+          void loadQueue(event.agentId);
         if (event.type === "sidebar-layout-changed")
           setState((draft) => {
             if (event.layout.revision >= draft.sidebarLayout.revision) draft.sidebarLayout = event.layout;
@@ -1176,7 +1176,7 @@ export function createWebWorkspace(
         agents.map((agent) => agent.id),
       );
       preferences.reconcileActiveServerPins(agents.map((agent) => agent.id));
-      for (const agent of agents) loadQueue(agent.id);
+      loadQueues(agents.map((agent) => agent.id));
       loadReads();
       void runtime
         .currentMemberId?.()
@@ -1421,15 +1421,16 @@ export function createWebWorkspace(
     if (otherThread) void refresh();
   }
   // Coalesce event bursts per agent, as `refresh` does for the conversation.
-  function loadQueue(id: string): void {
+  /** Resolves when this read ends. A read that joins one in progress resolves at once. */
+  function loadQueue(id: string): Promise<void> {
     const running = queueLoads.get(id);
     if (running?.generation === generation) {
       running.again = true;
-      return;
+      return Promise.resolve();
     }
     const load = { generation, again: true };
     queueLoads.set(id, load);
-    void (async () => {
+    return (async () => {
       try {
         while (load.again && !disposed && load.generation === generation) {
           load.again = false;
@@ -1442,11 +1443,25 @@ export function createWebWorkspace(
           });
         }
       } catch (error) {
-        if (load.generation === generation) report(error);
+        // Nobody asked for this read; a lost connection is the status's to show.
+        if (load.generation === generation) reportBackground(error);
       } finally {
         if (queueLoads.get(id) === load) queueLoads.delete(id);
       }
     })();
+  }
+  /**
+   * Reads the queues of many agents a few at a time. A host with 90 agents got 90 requests at once on
+   * each connect, and the read of the open chat waited behind them.
+   */
+  function loadQueues(ids: readonly string[]): void {
+    const waiting = [...ids];
+    const current = generation;
+    const next = (): Promise<void> => {
+      const id = current === generation && !disposed ? waiting.shift() : undefined;
+      return id === undefined ? Promise.resolve() : loadQueue(id).then(next);
+    };
+    for (let index = 0; index < QUEUE_READS_AT_ONCE; index += 1) void next();
   }
   /**
    * Reads the unread count of every agent chat. Reads coalesce as queue reads do. A host that does not
@@ -1509,7 +1524,7 @@ export function createWebWorkspace(
     selectedId = id;
     if (hostId) writeAgentSelection(AGENT_SELECTION_STORAGE_KEY, webAgentSelectionKey(props.accountId, hostId), id);
     // A resync after the background read only the queue of the opened chat. This one is read now.
-    if (staleQueues.delete(id)) loadQueue(id);
+    if (staleQueues.delete(id)) void loadQueue(id);
     setState((draft) => {
       const previous = draft.selectedId;
       if (previous && previous !== id) {
@@ -1571,7 +1586,7 @@ export function createWebWorkspace(
       });
       staleQueues.clear();
       for (const agent of agents) if (agent.id !== selectedId) staleQueues.add(agent.id);
-      if (selectedId) loadQueue(selectedId);
+      if (selectedId) void loadQueue(selectedId);
       loadReads();
       if (!selectedId) {
         const first = initialAgentId(
@@ -2205,6 +2220,8 @@ export function createWebWorkspace(
 
 /** A focus within this time after a full read of an online host does not read it again. */
 const FOCUS_RESYNC_MS = 30_000;
+/** Queue reads in flight at once when many agents need theirs. */
+const QUEUE_READS_AT_ONCE = 4;
 
 /** The agent whose conversation an event changes, for the events that can change it. */
 function changedConversation(event: AgentEvent | TeamRealtimeEvent): string | undefined {

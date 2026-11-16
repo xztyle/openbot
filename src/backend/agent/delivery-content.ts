@@ -1,5 +1,6 @@
 import { createHash, hash } from "node:crypto";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { expandAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
 import type {
@@ -44,10 +45,109 @@ export interface MessageDigest {
   bytes: number;
 }
 
-/** SHA-1 detects a change here: nothing compares a signature with one an attacker made, and it is faster. */
-export function messageDigest(message: ConversationMessage): MessageDigest {
+/**
+ * The digest of a message object, kept until one of its own fields changes. A chat change digests
+ * every message of the chat (about 100), and most of them have not changed since the last change:
+ * serializing them again was a tenth of the main thread's work while agents streamed.
+ *
+ * A hit needs the same field names in the same order with the same values (`===`), so each
+ * assignment, deletion or replacement of a field misses. A change inside a nested object or array
+ * would not miss: the messages whose nested parts code changes in place (a question prompt or block
+ * that gets its answer, a list of subagents or a plan that grows, an image that ends) are never
+ * kept (`changesInPlace`). Every other nested part is replaced whole when it changes.
+ */
+interface KeptDigest {
+  digest: MessageDigest;
+  keys: string[];
+  values: unknown[];
+  /** A frozen copy of the message, made at its first publish (`publishedMessage`). */
+  copy: ConversationMessage | null;
+}
+
+const keptDigests = new WeakMap<ConversationMessage, KeptDigest>();
+
+/**
+ * Set `OPENBOT_VERIFY_CONVERSATION_COPIES=1` to compare each kept digest and each shared copy with a
+ * fresh one, and to throw on a difference. The E2E checks and the load harness use it.
+ */
+const verifyKept = process.env.OPENBOT_VERIFY_CONVERSATION_COPIES === "1";
+/** How many kept digests and copies the verification compared; for the checks. */
+export const keptMessageChecks = { digests: 0, copies: 0 };
+
+function changesInPlace(message: ConversationMessage): boolean {
+  return (
+    message.status === "streaming" ||
+    message.questionPrompt !== undefined ||
+    message.uiBlock !== undefined ||
+    message.subagents !== undefined ||
+    message.plan !== undefined ||
+    message.imageGeneration !== undefined ||
+    message.memoryChanges !== undefined
+  );
+}
+
+function sameFields(kept: KeptDigest, message: ConversationMessage): boolean {
+  const keys = Object.keys(message);
+  if (keys.length !== kept.keys.length) return false;
+  const values: unknown[] = Object.values(message);
+  for (let index = 0; index < keys.length; index += 1)
+    if (keys[index] !== kept.keys[index] || values[index] !== kept.values[index]) return false;
+  return true;
+}
+
+function keptFor(message: ConversationMessage): KeptDigest | null {
+  const kept = keptDigests.get(message);
+  if (!kept) return null;
+  if (!changesInPlace(message) && sameFields(kept, message)) return kept;
+  keptDigests.delete(message);
+  return null;
+}
+
+function freshDigest(message: ConversationMessage): MessageDigest {
   const json = JSON.stringify(message);
   return { signature: hash("sha1", json, "base64"), bytes: Buffer.byteLength(json, "utf8") };
+}
+
+/** SHA-1 detects a change here: nothing compares a signature with one an attacker made, and it is faster. */
+export function messageDigest(message: ConversationMessage): MessageDigest {
+  const kept = keptFor(message);
+  if (kept) {
+    if (verifyKept) {
+      keptMessageChecks.digests += 1;
+      const fresh = freshDigest(message);
+      if (fresh.signature !== kept.digest.signature)
+        throw new Error(`A kept digest of message ${message.id} differs from its content.`);
+    }
+    return kept.digest;
+  }
+  const digest = freshDigest(message);
+  if (!changesInPlace(message)) {
+    keptDigests.set(message, { digest, keys: Object.keys(message), values: Object.values(message), copy: null });
+  }
+  return digest;
+}
+
+/**
+ * The copy of a message that an event carries. A kept message gives one frozen copy, shared by every
+ * event until the message changes; each event made a deep copy of every message of the chat before.
+ * The others get a copy of their own, as before. Listeners only read event messages.
+ */
+export function publishedMessage(message: ConversationMessage): ConversationMessage {
+  const kept = keptFor(message);
+  if (!kept) return structuredClone(message);
+  kept.copy ??= deepFreeze(structuredClone(message));
+  if (verifyKept) {
+    keptMessageChecks.copies += 1;
+    if (!isDeepStrictEqual(kept.copy, message))
+      throw new Error(`A shared copy of message ${message.id} differs from the message.`);
+  }
+  return kept.copy;
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
 }
 
 /**

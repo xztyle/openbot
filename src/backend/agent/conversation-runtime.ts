@@ -13,7 +13,12 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import type { AgentClient } from "../agent-client";
 import type { AgentStore } from "../agent-store";
-import { conversationContentSignature, digestMessages, type MessageDigests } from "./delivery-content";
+import {
+  conversationContentSignature,
+  digestMessages,
+  type MessageDigests,
+  publishedMessage,
+} from "./delivery-content";
 
 /**
  * The chats that main keeps in memory only because something read them. A chat of 2,000 messages
@@ -636,7 +641,7 @@ export class ConversationRuntime {
   publishConversation(snapshot: ConversationSnapshot, signature = conversationContentSignature(snapshot)): void {
     if (snapshot.threadId && this.#forgottenExecutionThreads.has(snapshot.threadId)) return;
     this.#conversationSignatures.set(snapshot.threadId ?? snapshot.agentId, signature);
-    this.#emit({ type: "conversation", snapshot: structuredClone(snapshot) });
+    this.#emit({ type: "conversation", snapshot: publishedSnapshot(snapshot) });
   }
 
   rememberConversationSignature(snapshot: ConversationSnapshot): void {
@@ -839,6 +844,15 @@ export class ConversationRuntime {
     if (!agent) throw new Error(sourceText("error.agent.unknown", { id: agentId }));
     return agent;
   }
+}
+
+/**
+ * The snapshot that a conversation event carries: a copy that later changes of the live snapshot do
+ * not reach. Each unchanged message is one frozen copy shared by the events (`publishedMessage`).
+ */
+function publishedSnapshot(snapshot: ConversationSnapshot): ConversationSnapshot {
+  const { messages, ...fields } = snapshot;
+  return { ...structuredClone(fields), messages: messages.map(publishedMessage) };
 }
 
 /**

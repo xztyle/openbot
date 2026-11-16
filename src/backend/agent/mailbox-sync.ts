@@ -120,17 +120,22 @@ export class MailboxSync {
     for (const message of snapshot.messages) {
       const next = reactions.get(message.id) ?? [];
       const reaction = next.find((item) => item.actor.kind === "user")?.emoji ?? null;
-      if (
-        changed &&
-        (message.reaction !== reaction ||
-          message.reactions === undefined ||
-          JSON.stringify(message.reactions) !== JSON.stringify(next))
-      )
-        changed.add(message);
-      message.reactions = next;
+      const sameReactions =
+        message.reactions !== undefined &&
+        (message.reactions.length === 0
+          ? next.length === 0
+          : JSON.stringify(message.reactions) === JSON.stringify(next));
+      if (changed && (message.reaction !== reaction || !sameReactions)) changed.add(message);
+      // An equal list stays: a new array would make the message look changed and serialize it again.
+      if (!sameReactions) message.reactions = next;
       message.reaction = reaction;
     }
     sortConversationMessages(snapshot.messages);
+  }
+
+  /** Moves with each committed change of the mailbox (`MailboxStore.revision`). */
+  get mailboxRevision(): number {
+    return this.#mailbox.revision;
   }
 
   reconcilePersistedMailboxMessages(agent: AgentSummary): void {

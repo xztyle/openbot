@@ -12,6 +12,7 @@
 //      [--stall-stacks=<ms>]   (the JavaScript stack of each main-thread task of at least that long)
 //      [--read-workers=2]      (0: every read on the main thread, as before the database read workers)
 //      [--clients=1]           (connected apps that each read after each event)
+//      [--verify-copies]       (check each kept message digest and shared event copy; a difference fails)
 // The database file is copied again into a temporary folder (`--tmp`) for each run. The run fails when a
 // completed turn has no stored answer. Writes .openbot-build/server-load-perf/<label>.json. A profile of
 // a run through tsx names the functions; bundle the script with esbuild first for exact line numbers.
@@ -49,6 +50,9 @@ const LABEL = argument("label") ?? "run";
 const OPEN_CHATS = 3;
 /** `--clients=N`: how many connected apps read after each event, as a desktop, a phone and a browser do. */
 const CLIENTS = Math.max(1, Number(argument("clients") ?? 1));
+/** `--verify-copies`: compare each kept message digest and shared event copy with a fresh one. */
+const VERIFY_COPIES = process.argv.includes("--verify-copies");
+if (VERIFY_COPIES) process.env.OPENBOT_VERIFY_CONVERSATION_COPIES = "1";
 /** `--reads=0` leaves out the unread-state read that the app makes after each conversation event. */
 const readStates = argument("reads") !== "0";
 /** `--read-workers=0` keeps every read on the main thread, as before the database read workers. */
@@ -265,6 +269,7 @@ process.stdin.on("end", () => process.exit(0));
 await writeFile(claudeExecutable, STAND_IN_CLAUDE, { mode: 0o755 });
 
 const { AgentService } = await import("../src/backend/agent-service");
+const { keptMessageChecks } = await import("../src/backend/agent/delivery-content");
 const { AgentStore } = await import("../src/backend/agent-store");
 const { ClaudeAgentClient } = await import("../src/backend/claude-client");
 const { runCauseEffect } = await import("../src/backend/effect-boundary");
@@ -659,6 +664,7 @@ const result = {
   crashAt: CRASH_AT,
   readWorkers: READ_WORKERS,
   clients: CLIENTS,
+  ...(VERIFY_COPIES ? { verifiedCopies: { ...keptMessageChecks } } : {}),
   initMs: Math.round(initMs),
   messagesSent: sent,
   completedTurns,

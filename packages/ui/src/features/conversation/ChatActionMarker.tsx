@@ -16,6 +16,7 @@ import {
   MessageCircle,
   Play,
   Puzzle,
+  Text,
   TriangleAlert,
   X,
 } from "@openbot/ui";
@@ -28,6 +29,7 @@ import type {
   AgentProfile,
   ChatActionMarkerModel,
   ChatActionMarkerStatus,
+  RoutineRunMarkerModel,
   RoutineRunMarkerTransition,
 } from "../../data";
 import { useText } from "../../text";
@@ -56,6 +58,8 @@ interface ChatActionMarkerProps {
   onToggleAgentMessage?: ((messageId: string) => void) | undefined;
   /** Draws the text of an open agent message under its marker, by its `messageId`. */
   agentMessageText?: ((messageId: string) => JSX.Element) | undefined;
+  /** Why a run failed, needs attention or stopped, in the host's words, once the host has said it. */
+  routineRunReason?: ((marker: RoutineRunMarkerModel) => string | null | undefined) | undefined;
 }
 
 /** The parts of a marker that open the text of an agent message, for the markers in a group. */
@@ -133,6 +137,7 @@ export function ChatActionMarker(props: ChatActionMarkerProps) {
                   onOpenAgentMessage={props.onOpenAgentMessage}
                   onToggleRoutineRun={props.onToggleRoutineRun}
                   onToggleAgentMessage={props.onToggleAgentMessage}
+                  routineRunReason={props.routineRunReason}
                   agentMessageText={props.agentMessageText}
                 />
               )}
@@ -578,6 +583,13 @@ function SingleChatActionMarker(
             </Button>
           </Show>
         </MarkerContent>
+        <Show when={props.marker.kind === "routine-run" && props.routineRunReason?.(props.marker)}>
+          {(reason) => (
+            <Text as="p" variant="caption" tone="muted" class="chat-action-marker-reason">
+              {sourceText(reason())}
+            </Text>
+          )}
+        </Show>
         <Show when={openableMessage()}>
           {(marker) => (
             /* A button that covers the row, behind the agent controls. A click or Enter anywhere else

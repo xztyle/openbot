@@ -288,7 +288,8 @@ export const RoutineRunGroup: Story = {
         Routine run group
       </Heading>
       <Text tone="secondary">
-        Consecutive completed runs of one routine show as one row that opens. A failed run keeps its own row.
+        Consecutive completed runs of one routine show as one row that opens. A failed run keeps its own row, with its
+        reason under it.
       </Text>
       <section class="chat-primitives-stage chat-primitives-stage-narrow" aria-label="Routine run group">
         <ChatActionMarker
@@ -302,6 +303,7 @@ export const RoutineRunGroup: Story = {
           agents={agents}
           onSelectAgent={onSelectAgent}
           onOpenRoutine={onOpenRoutine}
+          routineRunReason={() => "Connect Claude to continue."}
         />
         <ChatActionMarker
           marker={routineRunGroupMarker(["18:30", "18:45"])}

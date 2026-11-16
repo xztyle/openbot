@@ -955,6 +955,14 @@ button.chat-action-target:active,
 }
 
 /* The open text of an agent message reads as a chat message under its centred marker. */
+/* Why a routine run failed or stopped, in one short line under its row. */
+.chat-action-marker-reason {
+  max-width: min(100%, 60ch);
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
 .chat-action-message-text {
   align-self: stretch;
   margin-block: var(--openbot-space-2);

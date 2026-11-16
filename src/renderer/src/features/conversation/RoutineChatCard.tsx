@@ -16,13 +16,15 @@ import {
 import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal } from "solid-js";
 import { routineNextRunLabel, routineTimeZoneLabel } from "./routine-next-run";
-import { agentRoutinesPort } from "./routines-port";
+import { type AgentRoutinesApi, agentRoutinesPort } from "./routines-port";
 
 export interface RoutineChatCardProps {
   action: "created" | "updated";
   /** The chat shows the plain marker for a routine that no longer exists: its schedule is unknown. */
   routine: RoutineFields;
   agentId: string;
+  /** The routine calls of the chat's host. Without them the schedule cannot be saved here. */
+  api: AgentRoutinesApi | undefined;
   /** False when a later card in this chat is for the same routine. */
   latest: boolean;
   onOpenRoutine: (routine: { routineId: string; name: string }) => void;
@@ -90,7 +92,8 @@ export function RoutineChatCard(props: RoutineChatCardProps) {
     const done = routineOnceCompleted({ ...current, schedule: current.trigger.schedule });
     const later = !routineOncePassed(schedule, current.timezone);
     try {
-      const { routine: saved } = await agentRoutinesPort(props.agentId).save({
+      if (!props.api) throw new Error(text.t("routine.card.saveFailed"));
+      const { routine: saved } = await agentRoutinesPort(props.agentId, false, false, props.api).save({
         routineId: current.id,
         name: current.name,
         instruction: current.instruction,

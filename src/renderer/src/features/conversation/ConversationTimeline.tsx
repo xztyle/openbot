@@ -2,7 +2,7 @@ import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import type { ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
 import { Button } from "@openbot/ui";
-import type { AgentMessage, ChatActionMarkerModel } from "@openbot/ui/data";
+import type { AgentMessage, ChatActionMarkerModel, RoutineRunMarkerModel } from "@openbot/ui/data";
 import { ChannelActivityIndicator } from "@openbot/ui/features/channels/ChannelActivityIndicator";
 import { AgentActivityIndicator } from "@openbot/ui/features/conversation/AgentActivity";
 import { AgentChatEmptyState } from "@openbot/ui/features/conversation/AgentChatEmptyState";
@@ -30,7 +30,7 @@ import { UnreadMessagesBanner, UnreadMessagesDivider } from "@openbot/ui/feature
 import { VoicePlayer } from "@openbot/ui/features/conversation/VoicePlayer";
 import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { useText } from "@openbot/ui/text";
-import { createMemo, createSignal, For, Loading, lazy, onCleanup, Show, untrack } from "solid-js";
+import { createMemo, createSignal, createStore, For, Loading, lazy, onCleanup, Show, untrack } from "solid-js";
 import { useShowAgentSteps } from "../../agent-steps-preference";
 import { planItems, planTitle } from "../../app-message-projection";
 import { currentDevicePlatform, deviceSendShortcut } from "../../send-shortcut-preference";
@@ -50,7 +50,7 @@ import { groupedMessageIds } from "./agent-message-timeline";
 import { continuesSenderRun } from "./chat-grouping";
 import { isChatVisualAppShortcut } from "./chat-visual-shortcuts";
 import { chatVisualPageUrl } from "./chat-visual-url";
-import { conversationRuntime } from "./conversation-runtime";
+import { conversationRoutinesApi, conversationRuntime } from "./conversation-runtime";
 import { useConversationViewScope } from "./conversation-scope";
 import type { ConversationProps } from "./conversation-types";
 import { agentSkillsMode } from "./installed-skills-source";
@@ -455,6 +455,35 @@ export function ConversationTimeline() {
     },
   );
   const webhookRoutines = createChatWebhookRoutines(webhookRoutineSource);
+  /**
+   * Why a run failed, needs attention or stopped. Its chat row knows only the state; the routine's
+   * history has the host's reason. One read of a routine's recent runs fills every row it covers.
+   */
+  const [runReasons, setRunReasons] = createStore<Record<string, string | null>>({});
+  const requestedRunReasons = new Set<string>();
+  const routineRunReason = (marker: RoutineRunMarkerModel): string | null | undefined => {
+    if (marker.status !== "failed" && marker.status !== "needs-attention" && marker.status !== "interrupted")
+      return undefined;
+    if (marker.runId in runReasons) return runReasons[marker.runId];
+    const agentId = marker.sourceAgentId ?? props.agent?.id;
+    const api = conversationRoutinesApi(props);
+    const key = `${agentId}\u0000${marker.runId}`;
+    if (!agentId || !api || requestedRunReasons.has(key)) return undefined;
+    requestedRunReasons.add(key);
+    void api.listRoutineRuns({ agentId, routineId: marker.routineId, limit: 20 }).then(
+      (runs) =>
+        setRunReasons((reasons) => {
+          for (const run of runs) reasons[run.id] = run.error;
+          if (!(marker.runId in reasons)) reasons[marker.runId] = null;
+        }),
+      // The row keeps its state alone when the host cannot list the runs.
+      () =>
+        setRunReasons((reasons) => {
+          reasons[marker.runId] = null;
+        }),
+    );
+    return undefined;
+  };
   // The plain marker of a webhook routine opens it too: the host lists those routines on their own.
   const availableRoutineIds = createMemo(() =>
     props.availableRoutineIds
@@ -882,6 +911,7 @@ export function ConversationTimeline() {
                                                   setOpenedAgentMessage({ messageId, trigger })
                                                 }
                                                 agentMessageText={agentMessageText}
+                                                routineRunReason={routineRunReason}
                                               />
                                             }
                                           >
@@ -937,6 +967,7 @@ export function ConversationTimeline() {
                                       action={card().action}
                                       routine={card().routine}
                                       agentId={card().agentId}
+                                      api={conversationRoutinesApi(props)}
                                       latest={latestMessageId() === rowMessageId()}
                                       onOpenRoutine={openRoutineSettings}
                                       onShowLatest={

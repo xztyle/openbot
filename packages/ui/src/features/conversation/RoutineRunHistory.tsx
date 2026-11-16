@@ -179,7 +179,8 @@ export function RoutineRunHistory(props: RoutineRunHistoryProps) {
 
 /** A result a person must read: the run did not do its work, or waits for them. */
 function showsReason(status: RoutineRunFields["status"]): boolean {
-  return status === "failed" || status === "needs-attention";
+  // An interrupted run says why too, such as a restart of OpenBot before the run ended.
+  return status === "failed" || status === "needs-attention" || status === "interrupted";
 }
 
 function RunRow(props: { run: RoutineRunFields; onOpenRun?: ((messageId: string) => void) | undefined }) {

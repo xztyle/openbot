@@ -119,6 +119,14 @@ export interface ConversationRuntime {
     | undefined;
 }
 
+/**
+ * The routine calls of the chat's host: the client's own, or the desktop port. The web client has no
+ * desktop port, so a routine card that reached for it failed there.
+ */
+export function conversationRoutinesApi(props: Pick<ConversationProps, "runtime">): AgentRoutinesApi | undefined {
+  return props.runtime?.routines ?? (typeof window.openbot === "undefined" ? undefined : window.openbot.agent);
+}
+
 export function conversationRuntime(props: Pick<ConversationProps, "runtime">): ConversationRuntime {
   return props.runtime ?? window.openbot;
 }

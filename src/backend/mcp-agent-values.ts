@@ -1,10 +1,11 @@
 import type { McpKeyValue, McpServerConfig } from "@openbot/contracts/ipc";
 import { registerSecretValue } from "@openbot/logging";
 
-/** The agent an MCP connection is opened for. */
+/** The agent an MCP connection is opened for, and the space it works in. */
 export interface McpAgent {
   id: string;
   name: string;
+  space: { id: string; name: string; slug: string };
 }
 
 /** Reads one saved key: the agent's own when `agentId` is set and it has one, else the shared key. */
@@ -17,7 +18,10 @@ export type McpSecretReader = (
 const NAME = "[A-Z][A-Z0-9_]{0,63}";
 // A whole value that is a link to a key in Secrets, the same form event checks store.
 const LINK = new RegExp(`^openbot-secret:(shared|agent)/(${NAME})$`);
-const TEMPLATE = new RegExp(`\\{\\{\\s*(agent\\.id|agent\\.name|secret:(?:shared/)?${NAME})\\s*\\}\\}`, "g");
+const TEMPLATE = new RegExp(
+  `\\{\\{\\s*(agent\\.id|agent\\.name|space\\.id|space\\.name|space\\.slug|secret:(?:shared/)?${NAME})\\s*\\}\\}`,
+  "g",
+);
 
 /**
  * Whether a configuration names a key in Secrets or the agent it runs for. Such a row is filled
@@ -37,9 +41,10 @@ function hasTemplate(value: string): boolean {
  *
  * - `openbot-secret:shared/NAME` or `openbot-secret:agent/NAME` as a whole value is that key.
  * - `{{secret:NAME}}` is the agent's own key, else the shared one; `{{secret:shared/NAME}}` the shared one.
- * - `{{agent.id}}` and `{{agent.name}}` name the agent. In a header the name is percent-encoded,
- *   because a header carries only ASCII. A pair that names the agent is left out when there is none,
- *   such as the Test button, so the server answers as the token's owner.
+ * - `{{agent.id}}` and `{{agent.name}}` name the agent, `{{space.id}}`, `{{space.name}}` and
+ *   `{{space.slug}}` its space (General is `general`). In a header a name is percent-encoded,
+ *   because a header carries only ASCII. A pair that names the agent or its space is left out when
+ *   there is no agent, such as the Test button, so the server answers as the token's owner.
  *
  * Answers null when a named key is missing: the connection would only fail, so it is not offered.
  */
@@ -74,16 +79,24 @@ function fillValue(
   if (link?.[1] && link[2]) return secret(link[1] === "shared" ? "shared" : "agent", link[2]);
   let withoutAgent = false;
   const filled = value.replace(TEMPLATE, (_match, token: string) => {
-    if (token === "agent.id" || token === "agent.name") {
-      if (!agent) {
-        withoutAgent = true;
-        return "";
-      }
-      if (token === "agent.id") return agent.id;
-      return header ? encodeURIComponent(agent.name) : agent.name;
+    const named = token.startsWith("secret:") ? undefined : agentValue(agent, token);
+    if (named === null) {
+      withoutAgent = true;
+      return "";
     }
+    if (named !== undefined) return header && token.endsWith(".name") ? encodeURIComponent(named) : named;
     const name = token.slice("secret:".length);
     return name.startsWith("shared/") ? secret("shared", name.slice("shared/".length)) : secret("any", name);
   });
   return withoutAgent ? null : filled;
+}
+
+/** The value of an `agent.*` or `space.*` template, or null when there is no agent. */
+function agentValue(agent: McpAgent | null, token: string): string | null {
+  if (!agent) return null;
+  if (token === "agent.id") return agent.id;
+  if (token === "agent.name") return agent.name;
+  if (token === "space.id") return agent.space.id;
+  if (token === "space.slug") return agent.space.slug;
+  return agent.space.name;
 }

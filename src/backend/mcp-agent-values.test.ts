@@ -21,7 +21,11 @@ const secret: McpSecretReader = (scope, agentId, name) => {
   const own = scope !== "shared" && agentId ? keys[`${agentId}/${name}`] : undefined;
   return own ?? (scope === "agent" ? null : (keys[`shared/${name}`] ?? null));
 };
-const agent = { id: "agent-1", name: "Diseñador de Curso" };
+const agent = {
+  id: "agent-1",
+  name: "Diseñador de Curso",
+  space: { id: "54e4359b", name: "Universidad Online", slug: "universidad-online" },
+};
 
 describe("personalizeMcpConfig", () => {
   it("leaves a plain row as stored", () => {
@@ -46,6 +50,24 @@ describe("personalizeMcpConfig", () => {
       { key: "X-Motion-Agent-Name", value: "Dise%C3%B1ador%20de%20Curso" },
     ]);
     expect(filled?.env).toEqual([{ key: "TOKEN", value: "mt_own" }]);
+  });
+
+  it("fills the agent's space, percent-encoding its name in headers", () => {
+    const config = row(
+      [
+        ["X-Motion-Workspace-Key", "{{space.id}}"],
+        ["X-Motion-Workspace-Name", "{{ space.name }}"],
+      ],
+      [["SPACE", "{{space.slug}}/{{space.name}}"]],
+    );
+    expect(mcpConfigIsPersonal(config)).toBe(true);
+    const filled = personalizeMcpConfig(config, agent, secret);
+    expect(filled?.headers).toEqual([
+      { key: "X-Motion-Workspace-Key", value: "54e4359b" },
+      { key: "X-Motion-Workspace-Name", value: "Universidad%20Online" },
+    ]);
+    expect(filled?.env).toEqual([{ key: "SPACE", value: "universidad-online/Universidad Online" }]);
+    expect(personalizeMcpConfig(config, null, secret)?.headers).toEqual([]);
   });
 
   it("prefers the agent's own key for {{secret:NAME}}", () => {

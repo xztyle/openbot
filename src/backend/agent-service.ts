@@ -2239,8 +2239,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       this.#conversation.agentForThread(threadId) ??
       this.channels.store.agentForThread(threadId) ??
       undefined;
-    const agent = agentId ? agents.find((item) => item.id === agentId) : undefined;
-    return agent ? { id: agent.id, name: agent.name } : null;
+    return agentId ? this.mcpAgent(agentId) : null;
+  }
+
+  /** An agent and its space as an MCP row names them, or null when there is no such agent. */
+  mcpAgent(agentId: string): McpAgent | null {
+    const agent = this.listAgents().find((item) => item.id === agentId);
+    if (!agent) return null;
+    const { id, name, slug } = this.#store.spaces.agentSpace(agent.id);
+    return { id: agent.id, name: agent.name, space: { id, name, slug } };
   }
 
   /** One row filled for an agent, or null when it names a key that is not saved. */

@@ -176,10 +176,15 @@ export class SpaceStore {
     return join(this.#spacesRoot, space.slug, SPACE_SHARED_DIRECTORY);
   }
 
-  /** The shared folder of the agent's space; null, or an agent whose space row is gone, uses `general`'s. */
-  agentSharedDirectory(agentId: string | null): string {
+  /** The agent's space; null, or an agent whose space row is gone, gets `general`. */
+  agentSpace(agentId: string | null): Pick<WorkspaceSpace, "id" | "name" | "slug"> {
     const space = (agentId === null ? undefined : this.get(this.agentSpaceId(agentId))) ?? this.get(GENERAL_SPACE_ID);
-    return this.sharedDirectory(space ?? { slug: GENERAL_SPACE_ID });
+    return space ?? { id: GENERAL_SPACE_ID, name: "General", slug: GENERAL_SPACE_ID };
+  }
+
+  /** The shared folder of the agent's space. */
+  agentSharedDirectory(agentId: string | null): string {
+    return this.sharedDirectory(this.agentSpace(agentId));
   }
 
   #assignments(): { agents: Map<string, string>; channels: Map<string, string> } {

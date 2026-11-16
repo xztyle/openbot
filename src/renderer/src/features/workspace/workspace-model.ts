@@ -15,6 +15,7 @@ import {
   channelVisibility,
   isChannelThreadReply,
   isRestatedChannelResult,
+  parseChannelRoutingConversationEventItemType,
   type WorkspaceAgentExchangeMessage,
 } from "@openbot/contracts/ipc";
 import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
@@ -292,6 +293,9 @@ export function isStepEntry(entry: ChannelMessage): boolean {
 /** A message the transcript draws: text, files, a question, or a deleted message that keeps replies. */
 export function visibleEntry(entry: ChannelMessage): boolean {
   if (isStepEntry(entry)) return false;
+  // A lead's routing receipt ("Assigned to …") is internal bookkeeping: the answer itself says who
+  // replied, so the transcript does not show which member the lead picked.
+  if (parseChannelRoutingConversationEventItemType(entry.message.itemType)) return false;
   if (entry.deletedAt) return (entry.threadSummary?.replyCount ?? 0) > 0;
   return Boolean(
     entry.message.text.trim() ||

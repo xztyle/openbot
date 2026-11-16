@@ -322,7 +322,7 @@ export async function routeAgents(
     const input = parseBrowserSecretResponse(await readJson(request));
     // The agent service refuses an agent ID that is not the request's own.
     requireRequestAgent(input.agentId);
-    await runCauseEffect(agents.respondToBrowserSecret(input));
+    await runCauseEffect(agents.respondToBrowserSecret(input)).catch(inactiveAsConflict);
     return empty(204);
   }
   if (method === "POST" && url.pathname === TEAM_API_ROUTES.respond.browserTakeover) {
@@ -334,7 +334,7 @@ export async function routeAgents(
         requestId,
         decision: browserTakeoverDecision(body.decision),
       }),
-    );
+    ).catch(inactiveAsConflict);
     return empty(204);
   }
 

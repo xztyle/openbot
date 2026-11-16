@@ -13,3 +13,4 @@
 - Continue on a stopped channel task whose agent is hidden or in another space says so, and the task stays in the list to reassign.
 - The reasons of stopped channel tasks show in your language, also for tasks that stopped before this version.
 - In the web app, the Permissions level of an open agent updates when someone changes it on another computer or window. Before, it kept the old level until you opened another agent.
+- A second answer to a browser step that someone already finished, for example from another window, says that the step is no longer active. Before, the server logged an error and the app showed a general failure.

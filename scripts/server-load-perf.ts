@@ -400,7 +400,6 @@ let eventBytes = 0;
 const eventTypes = new Map<string, number>();
 const openChats = busy.slice(0, OPEN_CHATS).map((agent) => agent.agentId);
 const pageDue = new Map<string, NodeJS.Timeout>();
-const queueDue = new Map<string, NodeJS.Timeout>();
 /** The message that each busy agent works on now, by agent. */
 const pending = new Map<string, string>();
 const isActive = (status: string) => status === "queued" || status === "starting" || status === "running";
@@ -423,16 +422,8 @@ service.on("event", (event) => {
     const delivery = pending.get(event.snapshot.agentId);
     if (delivery && !event.snapshot.deliveries.some((item) => item.id === delivery && isActive(item.status)))
       settle(event.snapshot.agentId);
-    if (openChats.includes(event.snapshot.agentId) && !queueDue.has(event.snapshot.agentId)) {
-      const agentId = event.snapshot.agentId;
-      queueDue.set(
-        agentId,
-        setTimeout(() => {
-          queueDue.delete(agentId);
-          time("client: open chat queue", () => JSON.stringify(service.listQueue(agentId)).length);
-        }, 300),
-      );
-    }
+    // The web app reads the queue of the agent after each queue invalidation.
+    time("client: queue read", () => JSON.stringify(service.listQueue(event.snapshot.agentId)).length);
   }
   if (
     event.type === "conversation" &&
@@ -549,7 +540,7 @@ if (session) {
 clearInterval(watcher);
 clearInterval(snapshots);
 clearInterval(ticker);
-for (const timer of [...pageDue.values(), ...queueDue.values()]) clearTimeout(timer);
+for (const timer of pageDue.values()) clearTimeout(timer);
 
 const reconciled = (() => {
   const check = new DatabaseSync(join(userData, "openbot.db"), { readOnly: true });

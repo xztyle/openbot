@@ -207,11 +207,12 @@ def resume_interrupted():
             answer = docker("exec", "openbot", "curl", "-s", "--max-time", "60", "--unix-socket", "/run/openbot/control.sock",
                             "-X", "POST", "-H", "content-type: application/json", "-d", body,
                             "http://openbot/v1/resume-interrupted", name="resume-interrupted")
-            (RELEASE / "resumed-agents.json").write_text(answer)
-            parsed = json.loads(answer)
-            if isinstance(parsed, dict) and not parsed.get("error"):
-                return parsed
-        except (RuntimeError, ValueError):
+            (RELEASE / "resumed-agents.txt").write_text(answer)
+            # The route answers `key=value` lines: found=, resumed=, and one line per agent.
+            lines = dict(line.split("=", 1) for line in answer.splitlines() if "=" in line and not line.startswith("agent"))
+            if "found" in lines:
+                return {key: lines[key] for key in ("found", "resumed", "already_resumed", "newer_work") if key in lines}
+        except RuntimeError:
             pass
         time.sleep(10)
     return "failed: see resume-interrupted.log"

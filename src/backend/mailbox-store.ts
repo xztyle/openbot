@@ -268,6 +268,31 @@ export interface CommittedChannelAttachments {
   revert: Effect.Effect<void, StoredStateFailure>;
 }
 
+/**
+ * Lookups over the stored messages and deliveries. Valid while the two arrays are the same objects
+ * with the same lengths: the store replaces an array to remove rows and only pushes to add them, and a
+ * delivery or message changes in place only in fields that this index does not key on.
+ */
+interface MailIndex {
+  messages: readonly StoredMessage[];
+  messageCount: number;
+  deliveries: readonly StoredDelivery[];
+  deliveryCount: number;
+  messageById: ReadonlyMap<string, StoredMessage>;
+  /** The position of each message in the stored order. */
+  messagePosition: ReadonlyMap<string, number>;
+  deliveryById: ReadonlyMap<string, StoredDelivery>;
+  /** In stored order. */
+  deliveriesByRecipient: ReadonlyMap<string, readonly StoredDelivery[]>;
+  /** In stored order. */
+  deliveriesByMessage: ReadonlyMap<string, readonly StoredDelivery[]>;
+  /** The messages that each agent sent, in stored order. */
+  messagesBySenderAgent: ReadonlyMap<string, readonly StoredMessage[]>;
+}
+
+const NO_DELIVERIES: readonly StoredDelivery[] = [];
+const NO_MESSAGES: readonly StoredMessage[] = [];
+
 export class MailboxStore {
   readonly #statePath: string;
   readonly #files: AttachmentFiles;
@@ -285,6 +310,68 @@ export class MailboxStore {
     this.#stateValue = value;
     this.#revision += 1;
     this.#idempotencyChanged = true;
+    this.#idempotencyVersion += 1;
+  }
+  #mailIndex: MailIndex | null = null;
+
+  /**
+   * The lookups of the stored mail, built again only after rows were added or removed. Each queue
+   * change and each chat read scanned every stored message and delivery, often several times, and
+   * built a map of all messages for each call.
+   */
+  #index(): MailIndex {
+    const { messages, deliveries } = this.#state;
+    const known = this.#mailIndex;
+    if (
+      known &&
+      known.messages === messages &&
+      known.messageCount === messages.length &&
+      known.deliveries === deliveries &&
+      known.deliveryCount === deliveries.length
+    )
+      return known;
+    const messageById = new Map<string, StoredMessage>();
+    const messagePosition = new Map<string, number>();
+    const messagesBySenderAgent = new Map<string, StoredMessage[]>();
+    messages.forEach((message, position) => {
+      messageById.set(message.id, message);
+      messagePosition.set(message.id, position);
+      if (message.sender.kind === "agent") {
+        const sent = messagesBySenderAgent.get(message.sender.agentId);
+        if (sent) sent.push(message);
+        else messagesBySenderAgent.set(message.sender.agentId, [message]);
+      }
+    });
+    const deliveryById = new Map<string, StoredDelivery>();
+    const deliveriesByRecipient = new Map<string, StoredDelivery[]>();
+    const deliveriesByMessage = new Map<string, StoredDelivery[]>();
+    for (const delivery of deliveries) {
+      deliveryById.set(delivery.id, delivery);
+      const received = deliveriesByRecipient.get(delivery.recipientAgentId);
+      if (received) received.push(delivery);
+      else deliveriesByRecipient.set(delivery.recipientAgentId, [delivery]);
+      const ofMessage = deliveriesByMessage.get(delivery.messageId);
+      if (ofMessage) ofMessage.push(delivery);
+      else deliveriesByMessage.set(delivery.messageId, [delivery]);
+    }
+    const index: MailIndex = {
+      messages,
+      messageCount: messages.length,
+      deliveries,
+      deliveryCount: deliveries.length,
+      messageById,
+      messagePosition,
+      deliveryById,
+      deliveriesByRecipient,
+      deliveriesByMessage,
+      messagesBySenderAgent,
+    };
+    this.#mailIndex = index;
+    return index;
+  }
+
+  #deliveriesTo(agentId: string): readonly StoredDelivery[] {
+    return this.#index().deliveriesByRecipient.get(agentId) ?? NO_DELIVERIES;
   }
   /**
    * Moves at each write and each replacement of the state. A reader that keeps something it derived
@@ -315,20 +402,26 @@ export class MailboxStore {
    * stores the keys only when it is set. A new state sets it too.
    */
   #idempotencyChanged = true;
+  /** Moves with each change of the idempotency keys, for `#sourceTurnIds`. */
+  #idempotencyVersion = 0;
+  #turnIdsByMessage: { version: number; turnIds: ReadonlyMap<string, string | undefined> } | null = null;
 
   #setIdempotencyKey(key: string, messageId: string): void {
     this.#state.idempotency[key] = messageId;
     this.#idempotencyChanged = true;
+    this.#idempotencyVersion += 1;
   }
 
   #deleteIdempotencyKey(key: string): void {
     delete this.#state.idempotency[key];
     this.#idempotencyChanged = true;
+    this.#idempotencyVersion += 1;
   }
 
   #replaceIdempotency(keys: Record<string, string>): void {
     this.#state.idempotency = keys;
     this.#idempotencyChanged = true;
+    this.#idempotencyVersion += 1;
   }
 
   /** The rows that the next write stores. */
@@ -876,10 +969,8 @@ export class MailboxStore {
     // Only this agent's deliveries and their messages are indexed. Indexing the whole mailbox cost
     // about 1.4 ms for each call with a few thousand stored messages, and a client reads the queue of
     // each agent when it connects and again after each queue change.
-    const own = this.#state.deliveries.filter((delivery) => delivery.recipientAgentId === agentId);
-    const messageIds = new Set(own.map((delivery) => delivery.messageId));
-    const messages = new Map<string, StoredMessage>();
-    for (const message of this.#state.messages) if (messageIds.has(message.id)) messages.set(message.id, message);
+    const own = this.#deliveriesTo(agentId);
+    const messages = this.#index().messageById;
     // A queued channel, messaging or task delivery takes a place in the agent's queue too.
     const positions = new Map(
       own
@@ -930,21 +1021,18 @@ export class MailboxStore {
   }
 
   /** Indexed once for a whole read, so a read over many deliveries does not scan the messages for each one. */
-  #messagesById(): Map<string, StoredMessage> {
-    return new Map(this.#state.messages.map((message) => [message.id, message]));
+  #messagesById(): ReadonlyMap<string, StoredMessage> {
+    return this.#index().messageById;
   }
 
   /** The task a delivery runs in, or null for the agent's own chat. */
   taskIdForDelivery(deliveryId: string): string | null {
-    const delivery = this.#state.deliveries.find((candidate) => candidate.id === deliveryId);
+    const delivery = this.#index().deliveryById.get(deliveryId);
     return delivery ? this.#taskIdOf(delivery) : null;
   }
 
   #taskIdOf(delivery: StoredDelivery, messages?: ReadonlyMap<string, StoredMessage>): string | null {
-    const message = messages
-      ? messages.get(delivery.messageId)
-      : this.#state.messages.find((candidate) => candidate.id === delivery.messageId);
-    return message?.taskId ?? null;
+    return (messages ?? this.#index().messageById).get(delivery.messageId)?.taskId ?? null;
   }
 
   /**
@@ -982,19 +1070,16 @@ export class MailboxStore {
 
   /** Whether a delivery of this lane is starting or running: the agent's own chat when `taskId` is null. */
   laneActive(agentId: string, taskId: string | null): boolean {
-    return this.#state.deliveries.some(
+    return this.#deliveriesTo(agentId).some(
       (delivery) =>
-        delivery.recipientAgentId === agentId &&
-        (delivery.status === "starting" || delivery.status === "running") &&
-        this.#taskIdOf(delivery) === taskId,
+        (delivery.status === "starting" || delivery.status === "running") && this.#taskIdOf(delivery) === taskId,
     );
   }
 
   /** Whether a message of this task is queued, starting or running. */
   taskBusy(agentId: string, taskId: string): boolean {
-    return this.#state.deliveries.some(
-      (delivery) =>
-        delivery.recipientAgentId === agentId && isActiveDelivery(delivery) && this.#taskIdOf(delivery) === taskId,
+    return this.#deliveriesTo(agentId).some(
+      (delivery) => isActiveDelivery(delivery) && this.#taskIdOf(delivery) === taskId,
     );
   }
 
@@ -1171,23 +1256,22 @@ export class MailboxStore {
     // Only the messages this agent sent or got are indexed: the rest are skipped below anyway, and
     // indexing the deliveries of the whole mailbox took most of each call. A queue change reads this
     // for the agent and for every agent that ever sent it a message.
+    const mail = this.#index();
     const relevantMessageIds = new Set<string>();
-    for (const delivery of this.#state.deliveries)
-      if (delivery.recipientAgentId === agentId) relevantMessageIds.add(delivery.messageId);
-    for (const message of this.#state.messages)
-      if (message.sender.kind === "agent" && message.sender.agentId === agentId) relevantMessageIds.add(message.id);
-    const deliveriesByMessage = new Map<string, StoredDelivery[]>();
-    for (const delivery of this.#state.deliveries) {
-      if (!relevantMessageIds.has(delivery.messageId)) continue;
-      const deliveries = deliveriesByMessage.get(delivery.messageId) ?? [];
-      deliveries.push(delivery);
-      deliveriesByMessage.set(delivery.messageId, deliveries);
-    }
+    for (const delivery of this.#deliveriesTo(agentId)) relevantMessageIds.add(delivery.messageId);
+    for (const message of mail.messagesBySenderAgent.get(agentId) ?? NO_MESSAGES) relevantMessageIds.add(message.id);
+    const deliveriesByMessage = mail.deliveriesByMessage;
+    // The relevant messages, newest first in stored order: the others were skipped below anyway.
+    const relevantMessages = [...relevantMessageIds]
+      .flatMap((id) => {
+        const message = mail.messageById.get(id);
+        return message ? [message] : [];
+      })
+      .sort((left, right) => (mail.messagePosition.get(right.id) ?? 0) - (mail.messagePosition.get(left.id) ?? 0));
     const selectedStoredMessages: StoredMessage[] = [];
     let completedCount = 0;
-    for (let index = this.#state.messages.length - 1; index >= 0; index -= 1) {
-      const message = this.#state.messages[index];
-      if (!message || message.channelId || message.messaging || message.taskId) continue;
+    for (const message of relevantMessages) {
+      if (message.channelId || message.messaging || message.taskId) continue;
       // A request the agent sent from a Slack thread belongs to that thread, not to its own chat.
       // The teammate it went to still sees it.
       if (message.messagingReturn && message.sender.kind === "agent" && message.sender.agentId === agentId) continue;
@@ -1395,12 +1479,23 @@ export class MailboxStore {
    * 5 ms, and a conversation read needs the turns of a few messages.
    */
   #sourceTurnIds(only?: ReadonlySet<string>): Map<string, string | undefined> {
-    const turnIds = new Map<string, string | undefined>();
-    for (const [key, messageId] of Object.entries(this.#state.idempotency)) {
-      if ((only && !only.has(messageId)) || turnIds.has(messageId)) continue;
-      const parts = key.split(":");
-      turnIds.set(messageId, parts.length >= 3 ? parts.at(-2) : undefined);
+    // Every key is read once for each change of the keys, not once for each read of a chat.
+    let cached = this.#turnIdsByMessage;
+    if (cached?.version !== this.#idempotencyVersion) {
+      const all = new Map<string, string | undefined>();
+      for (const [key, messageId] of Object.entries(this.#state.idempotency)) {
+        if (all.has(messageId)) continue;
+        const parts = key.split(":");
+        all.set(messageId, parts.length >= 3 ? parts.at(-2) : undefined);
+      }
+      cached = { version: this.#idempotencyVersion, turnIds: all };
+      this.#turnIdsByMessage = cached;
     }
+    const turnIds = new Map<string, string | undefined>();
+    if (only) {
+      for (const messageId of only)
+        if (cached.turnIds.has(messageId)) turnIds.set(messageId, cached.turnIds.get(messageId));
+    } else for (const [messageId, turnId] of cached.turnIds) turnIds.set(messageId, turnId);
     return turnIds;
   }
 
@@ -1410,12 +1505,13 @@ export class MailboxStore {
    * outbox copy that a queue change moves.
    */
   agentSenderDeliveryKeys(agentId: string): Map<string, { senderAgentId: string; key: string }> {
-    const own = this.#state.deliveries.filter((delivery) => delivery.recipientAgentId === agentId);
-    const messageIds = new Set(own.map((delivery) => delivery.messageId));
+    const own = this.#deliveriesTo(agentId);
+    const messages = this.#index().messageById;
     const senders = new Map<string, string>();
-    for (const message of this.#state.messages)
-      if (messageIds.has(message.id) && message.sender.kind === "agent")
-        senders.set(message.id, message.sender.agentId);
+    for (const delivery of own) {
+      const sender = messages.get(delivery.messageId)?.sender;
+      if (sender?.kind === "agent") senders.set(delivery.messageId, sender.agentId);
+    }
     // The position as `#queuedPositions` counts it: in the recipient's own queue order.
     const positions = new Map(
       own
@@ -1436,11 +1532,8 @@ export class MailboxStore {
   }
 
   senderAgentIdsForRecipient(agentId: string): string[] {
-    const deliveries = this.#state.deliveries.filter((delivery) => delivery.recipientAgentId === agentId);
-    // Each queue change asks this, so only the messages to this agent are indexed.
-    const messageIds = new Set(deliveries.map((delivery) => delivery.messageId));
-    const messages = new Map<string, StoredMessage>();
-    for (const message of this.#state.messages) if (messageIds.has(message.id)) messages.set(message.id, message);
+    const deliveries = this.#deliveriesTo(agentId);
+    const messages = this.#index().messageById;
     const result = new Set<string>();
     for (const delivery of deliveries) {
       const sender = this.#requireMessage(delivery.messageId, messages).sender;
@@ -1658,8 +1751,8 @@ export class MailboxStore {
   }
 
   #queuedFor(agentId: string): StoredDelivery[] {
-    return this.#state.deliveries
-      .filter((candidate) => candidate.recipientAgentId === agentId && candidate.status === "queued")
+    return this.#deliveriesTo(agentId)
+      .filter((candidate) => candidate.status === "queued")
       .sort(compareQueueOrder);
   }
 
@@ -1737,7 +1830,7 @@ export class MailboxStore {
   }
 
   getDelivery(deliveryId: string): DeliveryContext | null {
-    const delivery = this.#state.deliveries.find((candidate) => candidate.id === deliveryId);
+    const delivery = this.#index().deliveryById.get(deliveryId);
     return delivery ? this.#context(delivery) : null;
   }
 
@@ -3032,7 +3125,7 @@ export class MailboxStore {
   }
 
   #requireMessage(id: string, messages?: ReadonlyMap<string, StoredMessage>): StoredMessage {
-    const message = messages ? messages.get(id) : this.#state.messages.find((candidate) => candidate.id === id);
+    const message = (messages ?? this.#index().messageById).get(id);
     if (!message) throw new Error(`Mailbox message is missing: ${id}`);
     return message;
   }

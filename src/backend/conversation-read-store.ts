@@ -59,21 +59,53 @@ export class ConversationReadStore {
     agents: AgentSummary[],
     options: ConversationMarkerExclusions = {},
   ): Record<string, ConversationReadState> {
+    // The member's cursors and the thread versions, each in one query: the app reads every chat's
+    // state after each change in a chat, and two queries for each chat took most of a read.
+    const lookups = this.#lookups(memberId);
     return Object.fromEntries(
-      agents.map((agent) => [agent.id, this.readStateForThread(memberId, agent.threadId, options)]),
+      agents.map((agent) => [agent.id, this.readStateForThread(memberId, agent.threadId, options, lookups)]),
     );
+  }
+
+  #lookups(memberId: string): ReadLookups {
+    const cursors = new Map<string, string | null>();
+    for (const row of this.database.connection
+      .prepare("SELECT thread_id, through_message_id FROM projection_thread_reads WHERE member_id = ?")
+      .all(memberId)) {
+      if (!isDynamicRecord(row) || !isString(row.thread_id))
+        throw new Error("The stored conversation read state is malformed.");
+      const cursor = row.through_message_id;
+      if (cursor !== null && !isString(cursor)) throw new Error("The stored conversation read cursor is malformed.");
+      cursors.set(row.thread_id, cursor);
+    }
+    if (this.database.connection.isTransaction) return { cursors, versions: null };
+    const versions = new Map<string, string>();
+    for (const row of this.database.connection
+      .prepare("SELECT thread_id, last_event_sequence, updated_at FROM projection_threads")
+      .all()) {
+      if (
+        isDynamicRecord(row) &&
+        isString(row.thread_id) &&
+        isNumber(row.last_event_sequence) &&
+        isString(row.updated_at)
+      )
+        versions.set(row.thread_id, `${row.last_event_sequence}\u0000${row.updated_at}`);
+    }
+    return { cursors, versions };
   }
 
   readStateForThread(
     memberId: string,
     threadId: string | null,
     options: ConversationMarkerExclusions = {},
+    lookups?: ReadLookups,
   ): ConversationReadState {
     if (!threadId) return emptyReadState();
-    const stored = this.#storedCursor(threadId, memberId);
+    const stored = lookups ? lookups.cursors.get(threadId) : this.#storedCursor(threadId, memberId);
     // Only a stored cursor that the thread still holds goes in the cache, so a hit needs no other check.
     const cacheKey = stored === undefined ? null : readStateCacheKey(threadId, stored, options);
-    const version = cacheKey === null ? null : this.#threadVersion(threadId);
+    const version =
+      cacheKey === null ? null : lookups ? (lookups.versions?.get(threadId) ?? null) : this.#threadVersion(threadId);
     const cached = cacheKey === null ? undefined : this.#cache.get(cacheKey);
     if (cached && version !== null && cached.version === version) return { ...cached.state };
     let state: ConversationReadState;
@@ -577,6 +609,15 @@ type MessageOrderKey = [
 
 function emptyReadState(): ConversationReadState {
   return { unreadCount: 0, firstUnreadMessageId: null, throughMessageId: null };
+}
+
+/**
+ * One member's stored cursors and every thread's version, read once for a list of chats. `versions` is
+ * null inside a transaction, as `#threadVersion` is.
+ */
+interface ReadLookups {
+  cursors: ReadonlyMap<string, string | null>;
+  versions: ReadonlyMap<string, string> | null;
 }
 
 function readStateCacheKey(threadId: string, cursor: string | null, options: ConversationMarkerExclusions): string {

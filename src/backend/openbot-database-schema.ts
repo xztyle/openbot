@@ -592,6 +592,58 @@ const V49_DROP_TEMP_SQL = `
   DROP TABLE IF EXISTS temp.v49_imported;
 `;
 
+// Migration 51 deletes the channel messages that copy a Claude history import (migration 49 removed the
+// thread rows): a channel task shows the messages of its thread, so an imported copy reached the channel
+// too. The rule is the rule of migration 49, inside one channel: an agent message whose message id an
+// import event wrote, of 20 or more characters and with no live ID, whose text another message of the same
+// author in the channel, from within a day, has, and no import wrote that one; or a "No response
+// requested." message that a Claude import wrote. Frozen with the migration.
+const V51_CHANNEL_COPIES_SQL = `
+  CREATE TEMP TABLE v51_imported (message_id TEXT PRIMARY KEY, from_claude INTEGER NOT NULL);
+  INSERT INTO temp.v51_imported (message_id, from_claude)
+    SELECT json_extract(payload_json, '$.importedMessage.id'),
+      MAX(COALESCE(json_extract(payload_json, '$.detail.provider'), '') = 'claude')
+    FROM orchestration_events
+    WHERE aggregate_type = 'thread' AND event_type = 'provider-history.message-imported'
+      AND json_extract(payload_json, '$.importedMessage.id') IS NOT NULL
+    GROUP BY 1;
+  CREATE TEMP TABLE v51_rows (
+    channel_id TEXT NOT NULL, message_id TEXT NOT NULL, sequence INTEGER NOT NULL, author_id TEXT,
+    inner_id TEXT, text TEXT, created_at TEXT, imported INTEGER NOT NULL, from_claude INTEGER NOT NULL,
+    PRIMARY KEY (channel_id, message_id)
+  );
+  INSERT INTO temp.v51_rows
+    SELECT message.channel_id, message.message_id, message.sequence, json_extract(message.message_json, '$.author.id'),
+      json_extract(message.message_json, '$.message.id'), trim(json_extract(message.message_json, '$.message.text')),
+      json_extract(message.message_json, '$.message.createdAt'),
+      imported.message_id IS NOT NULL, COALESCE(imported.from_claude, 0)
+    FROM projection_channel_messages message
+    LEFT JOIN temp.v51_imported imported ON imported.message_id = json_extract(message.message_json, '$.message.id')
+    WHERE json_extract(message.message_json, '$.author.kind') = 'agent'
+      AND json_extract(message.message_json, '$.deletedAt') IS NULL;
+  CREATE INDEX temp.v51_rows_text ON v51_rows(channel_id, author_id, text);
+  CREATE TEMP TABLE v51_copies (channel_id TEXT NOT NULL, message_id TEXT NOT NULL, sequence INTEGER NOT NULL,
+    PRIMARY KEY (channel_id, message_id));
+  INSERT INTO temp.v51_copies (channel_id, message_id, sequence)
+    SELECT copy.channel_id, copy.message_id, copy.sequence FROM temp.v51_rows copy
+    WHERE copy.imported = 1
+      AND copy.inner_id NOT LIKE '%:assistant' AND copy.inner_id NOT LIKE '%:narration:%' AND copy.inner_id NOT LIKE '%:plan'
+      AND (
+        (length(copy.text) >= 20 AND EXISTS (
+          SELECT 1 FROM temp.v51_rows live
+          WHERE live.channel_id = copy.channel_id AND live.author_id = copy.author_id AND live.text = copy.text
+            AND live.message_id <> copy.message_id AND live.imported = 0
+            AND abs(julianday(live.created_at) - julianday(copy.created_at)) <= 1))
+        OR (copy.text = 'No response requested.' AND copy.from_claude = 1)
+      );
+`;
+
+const V51_DROP_TEMP_SQL = `
+  DROP TABLE IF EXISTS temp.v51_copies;
+  DROP TABLE IF EXISTS temp.v51_rows;
+  DROP TABLE IF EXISTS temp.v51_imported;
+`;
+
 // Migration 41 indexes attachments by owner. Each conversation write deletes the attachments of each
 // changed message by owner, which without it is a scan of every attachment (#2241). Frozen with the migration.
 const V41_ATTACHMENT_OWNER_INDEX_SQL = `
@@ -1027,6 +1079,12 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
     // Only creates tables and the `general` space, so no foreign-key pause and no vacuum. No agent or
     // channel gets a row: an item with none is in `general`, which is where every one of them was before.
     up: (db) => db.exec(SPACE_SCHEMA_SQL),
+  },
+  {
+    version: 51,
+    // Changes a few dozen channel messages and appends one event for each channel, so no foreign-key pause
+    // and no vacuum.
+    up: deleteImportedChannelCopies,
   },
 ];
 
@@ -1513,6 +1571,69 @@ function removeImportedLiveCopies(db: DatabaseSync, appliedAt: string): void {
     }
   } finally {
     db.exec(V49_DROP_TEMP_SQL);
+  }
+}
+
+// Migration 51 deletes the channel copies of Claude history imports (see `V51_CHANNEL_COPIES_SQL`) as a
+// person's deletion does: the message stays with no text, files, reactions or mentions, and a `deletedAt`,
+// so it leaves the transcript and a thread root keeps its replies. A channel is rebuilt from its
+// `channel.changed` events, which an earlier version also reads, so each channel gets one with the
+// deleted messages; an import event does not reach a channel. A summary or an agent's context through a
+// deleted message is read again, as after any change to a message. It finds nothing a second time.
+function deleteImportedChannelCopies(db: DatabaseSync, appliedAt: string): void {
+  db.exec(V51_DROP_TEMP_SQL);
+  db.exec(V51_CHANNEL_COPIES_SQL);
+  try {
+    const deleted = `json_set(
+      json_remove(message.message_json, '$.reactions', '$.mentions', '$.message.attachments', '$.message.questionPrompt'),
+      '$.deletedAt', ?1, '$.message.text', '')`;
+    const channels = db
+      .prepare(
+        `SELECT channel.channel_id,
+           json_set(channel.channel_json, '$.revision', json_extract(channel.channel_json, '$.revision') + 1) AS channel_json,
+           (SELECT json_group_array(json(${deleted})) FROM projection_channel_messages message
+             JOIN temp.v51_copies copy ON copy.channel_id = message.channel_id AND copy.message_id = message.message_id
+             WHERE message.channel_id = channel.channel_id) AS messages,
+           (SELECT MIN(copy.sequence) FROM temp.v51_copies copy WHERE copy.channel_id = channel.channel_id) AS first_sequence
+         FROM projection_channels channel
+         WHERE EXISTS (SELECT 1 FROM temp.v51_copies copy WHERE copy.channel_id = channel.channel_id)
+         ORDER BY channel.channel_id`,
+      )
+      .all(appliedAt);
+    const append = db.prepare(
+      `INSERT INTO orchestration_events (event_id, command_id, aggregate_type, aggregate_id, event_type, occurred_at, payload_json)
+       VALUES (?, ?, 'channel', ?, 'channel.changed', ?, ?)`,
+    );
+    for (const row of channels) {
+      if (
+        !isDynamicRecord(row) ||
+        !isString(row.channel_id) ||
+        !isString(row.channel_json) ||
+        !isString(row.messages) ||
+        !isNumber(row.first_sequence)
+      )
+        throw new Error("Migration 51 read an invalid channel row.");
+      // Both are JSON that SQLite wrote, so the payload joins their text.
+      const payload = `{"channel":${row.channel_json},"messages":${row.messages},"tasks":[],"assignments":[]}`;
+      append.run(randomUUID(), `migration:51:${row.channel_id}`, row.channel_id, appliedAt, payload);
+      db.prepare("UPDATE projection_channels SET channel_json = ? WHERE channel_id = ?").run(
+        row.channel_json,
+        row.channel_id,
+      );
+      db.prepare(
+        "UPDATE projection_channel_summaries SET version = version + 1, through_sequence = 0, text = '' WHERE channel_id = ? AND through_sequence >= ?",
+      ).run(row.channel_id, row.first_sequence);
+      db.prepare(
+        "UPDATE projection_channel_contexts SET through_sequence = 0, summary_version = 0 WHERE channel_id = ? AND through_sequence >= ?",
+      ).run(row.channel_id, row.first_sequence);
+    }
+    db.prepare(
+      `UPDATE projection_channel_messages AS message SET message_json = ${deleted}
+       WHERE EXISTS (SELECT 1 FROM temp.v51_copies copy
+         WHERE copy.channel_id = message.channel_id AND copy.message_id = message.message_id)`,
+    ).run(appliedAt);
+  } finally {
+    db.exec(V51_DROP_TEMP_SQL);
   }
 }
 

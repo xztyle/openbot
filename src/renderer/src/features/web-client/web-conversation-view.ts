@@ -80,7 +80,14 @@ export function createWebConversationView(options: {
       (item) =>
         item.agentId === page.agentId && item.threadId === page.threadId && !isAnswered(item.turnId, item.requestId),
     );
-    if (pending) return pending;
+    if (pending) {
+      // A runtime snapshot cuts long questions. The page's message of the same request has them whole.
+      const stored = page.messages.findLast(
+        (item) =>
+          item.turnId === pending.turnId && String(item.questionPrompt?.requestId) === String(pending.requestId),
+      );
+      return stored?.questionPrompt ? { ...pending, questions: stored.questionPrompt.questions } : pending;
+    }
     const answered = answeredPrompt();
     if (
       answered &&

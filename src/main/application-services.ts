@@ -291,6 +291,7 @@ import { clearRoutineHold, ROUTINE_HOLD_FILE, takeRoutineHold, writeRoutineHold 
 import { RunMarker } from "./run-marker";
 import { ScreenCapturer } from "./screen-capture";
 import { createServerAgentOperations } from "./server-agent-operations";
+import { createServerDebugRoutes } from "./server-debug-profiler";
 import { agentProcessEnvironment, ServerMemory } from "./server-memory";
 import { ServerMode, type ServerModeEnvironment } from "./server-mode";
 import { createServerOperations } from "./server-operations";
@@ -3142,6 +3143,11 @@ export async function createApplicationServices({
     silentTurns.start();
     teardown.push(TEARDOWN_ORDER.serverMode, "the silent turn monitor", () => silentTurns.stop());
   }
+  const serverDebugRoutes = serverModeEnvironment
+    ? createServerDebugRoutes({ userDataPath: app.getPath("userData"), log: (message) => logger.info(message) })
+    : undefined;
+  if (serverDebugRoutes)
+    teardown.push(TEARDOWN_ORDER.serverMode, "the stall recorder", () => serverDebugRoutes.close());
   const serverMode = serverModeEnvironment
     ? new ServerMode({
         environment: serverModeEnvironment,
@@ -3162,6 +3168,7 @@ export async function createApplicationServices({
           markerFile: join(app.getPath("userData"), "openbot-restart-resumes-v1.json"),
           log: (message) => logger.info(message),
         }),
+        debug: serverDebugRoutes,
         spaces: {
           spaces: service.spaces,
           agents: () => service.listAgents(),

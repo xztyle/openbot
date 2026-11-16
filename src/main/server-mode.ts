@@ -9,7 +9,8 @@
  * full access to its files, so the socket gives them nothing new. The socket answers a closed list
  * of requests: status, health, the email-code sign-in, the sign-in with an operator's one-time claim,
  * the server name, sign-out, a Mobile Connect code, an operator-started database snapshot, the
- * sanitized diagnostics report, the analytics switch and the security audit rows. It never sends the
+ * sanitized diagnostics report, the analytics switch, the security audit rows, and a CPU profile or
+ * stall stacks of the main process (`server-debug-profiler.ts`). It never sends the
  * session token, the sign-in code or the claim back. The Mobile Connect code signs one phone in to
  * the account of the server; the account service lets it work for one sign-in, for two minutes.
  *
@@ -112,6 +113,10 @@ export interface ServerModeOptions {
   };
   /** The spaces routes; see `server-mode-spaces.ts`. */
   spaces?: ControlSpacesOptions;
+  /** The CPU profile and stall routes (`server-debug-profiler.ts`). They read the raw body. */
+  debug?: {
+    route(method: string | undefined, path: string, rawBody: string): Promise<Answer | null>;
+  };
   /** Tests only. */
   uid?: number;
 }
@@ -248,6 +253,7 @@ export class ServerMode {
         (raw === null
           ? failure(413, "too_large")
           : ((await this.#options.agentOperations?.route(request.method, path, raw)) ??
+            (await this.#options.debug?.route(request.method, path, raw)) ??
             (await this.#route(request.method, request.url, new URLSearchParams(raw)))));
     } catch (error) {
       this.#options.onError("A server control request failed.", error);

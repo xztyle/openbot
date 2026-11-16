@@ -5,7 +5,7 @@ import type {
   AttachmentSummary,
   TeamRealtimeEvent,
 } from "@openbot/contracts/ipc";
-import { decodeWorkspaceSettings } from "@openbot/contracts/ipc";
+import { decodeWorkspaceSettings, LOCAL_SERVER_ID } from "@openbot/contracts/ipc";
 import { decodeSideQuestionResponse, SIDE_QUESTION_ROUTES } from "@openbot/contracts/team-protocol/side-question-v1";
 import { WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { runTeamEffect } from "@openbot/team-client";
@@ -260,7 +260,8 @@ export function createWebConversationRuntime(
             importing = undefined;
           }
         }),
-      discardDraftAttachment: (id) => remote.discard(id),
+      // A voice recording is a draft of this client's own host. Another host's upload waits for that host.
+      discardDraftAttachment: (id, serverId) => remote.discard(id, serverId === LOCAL_SERVER_ID ? undefined : serverId),
       downloadAttachments: unavailable,
       editQueuedMessage: async (input, serverId) => {
         // The edit belongs to the host that queued the message. This client talks only to the connected one.

@@ -274,7 +274,16 @@ export interface WebWorkspaceRuntime {
   answer(input: RespondToPromptInput): Promise<void>;
   upload(file: File): Promise<AttachmentSummary>;
   cancelUpload(): Promise<void>;
-  discard(attachmentId: string): Promise<void>;
+  /**
+   * Discards an upload. An upload of another host than the open one is discarded when this tab opens
+   * that host again: its id never goes to another host.
+   */
+  discard(attachmentId: string, hostId?: string): Promise<void>;
+  /**
+   * Names the uploads that the sends not yet stored hold, such as a failed send that waits for Retry.
+   * A change of host keeps them, so that Retry on the person's return still has its files.
+   */
+  holdDrafts?(held: () => ReadonlySet<string>): void;
   download(attachmentId: string): Promise<WebFile>;
   /** The image that the host drew of a workspace artifact's page, at its `thumbnailVersion`. */
   artifactThumbnail?(artifactId: string, version: string): Promise<WebFile>;
@@ -500,6 +509,10 @@ export function createWebWorkspaceRuntime(
   const duplicateOperationIds = new Map<string, string>();
   const completedDraftIdsByHost = new Map<string, Set<string>>();
   const draftCleanupRetryHosts = new Set<string>();
+  let heldDrafts: () => ReadonlySet<string> = () => new Set();
+  /** The composer backup that each queue edit retains on its host, by host and edit. */
+  const retainedEditDrafts = new Map<string, string[]>();
+  const retainedEditKey = (hostId: string, editId: string) => `${hostId}\u0000${editId}`;
   function trackCompletedDraft(id: string, hostId = lockedHostId): void {
     if (!hostId) return;
     // The released API has no draft listing. A request that commits before returning cannot be
@@ -521,17 +534,23 @@ export function createWebWorkspaceRuntime(
       draftCleanupRetryHosts.delete(hostId);
     }
   }
-  async function discardCompletedDrafts(hostId = lockedHostId): Promise<void> {
+  /** `keepHeld` keeps the uploads of pending sends for a later return. Only the end of the page drops them. */
+  async function discardCompletedDrafts(hostId = lockedHostId, keepHeld = true): Promise<void> {
     if (!hostId || lockedHostId !== hostId) return;
     const ids = completedDraftIdsByHost.get(hostId);
     if (!ids?.size) {
       draftCleanupRetryHosts.delete(hostId);
       return;
     }
+    const held = keepHeld ? heldDrafts() : new Set<string>();
     for (const id of [...ids]) {
       if (lockedHostId !== hostId) {
         draftCleanupRetryHosts.add(hostId);
         return;
+      }
+      if (held.has(id)) {
+        draftCleanupRetryHosts.add(hostId);
+        continue;
       }
       try {
         await Effect.runPromise(discardAttachmentDraft(teamApi, id).pipe(Effect.mapError((error) => error.cause)));
@@ -1128,6 +1147,15 @@ export function createWebWorkspaceRuntime(
       // saved message holds its new files. A change of host must not discard them as leftover uploads.
       if ((edit.action === "retain-attachments" || edit.action === "save") && edit.attachmentDraftIds)
         removeCompletedDrafts(edit.attachmentDraftIds);
+      if (!lockedHostId) return snapshot;
+      const key = retainedEditKey(lockedHostId, edit.editId);
+      if (edit.action === "retain-attachments") retainedEditDrafts.set(key, edit.attachmentDraftIds);
+      else if (edit.action === "cancel" || edit.action === "save") {
+        // Cancel and Save put the backup back in the composer, so its files are uploads not sent again.
+        const saved = new Set(edit.action === "save" ? edit.attachmentDraftIds : []);
+        for (const id of retainedEditDrafts.get(key) ?? []) if (!saved.has(id)) trackCompletedDraft(id);
+        retainedEditDrafts.delete(key);
+      }
       return snapshot;
     },
     cancelQueued: (input) =>
@@ -1195,9 +1223,17 @@ export function createWebWorkspaceRuntime(
       uploadGeneration += 1;
       await peer.cancelUpload();
     },
-    async discard(id) {
+    async discard(id, hostId) {
+      if (hostId !== undefined && hostId !== lockedHostId) {
+        trackCompletedDraft(id, hostId);
+        draftCleanupRetryHosts.add(hostId);
+        return;
+      }
       await Effect.runPromise(discardAttachmentDraft(teamApi, id).pipe(Effect.mapError((error) => error.cause)));
       removeCompletedDrafts([id]);
+    },
+    holdDrafts(held) {
+      heldDrafts = held;
     },
     async download(id) {
       return decodeWebFile(await request("GET", TEAM_API_ROUTES.attachment(id)));
@@ -1333,7 +1369,8 @@ export function createWebWorkspaceRuntime(
     },
     async dispose(options) {
       if (options?.sessionsEnded) sessionsEnded = true;
-      await discardCompletedDrafts();
+      // The pending sends end with the page, so their uploads go too.
+      await discardCompletedDrafts(lockedHostId, false);
       await releaseLiveView();
       browserView.disconnect();
       viewListeners.clear();

@@ -376,6 +376,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     ...createStableConversationState({ onTypingChange: setTyping }),
     ...createServerConversationState(),
   };
+  // A change of host keeps the files of a send that failed there, so Retry on the return still has them.
+  workspace.runtime.holdDrafts?.(controller.pendingSends.heldAttachmentIds);
   const draftsKey = accountComposerDraftsKey(props.accountId);
   const storedDrafts = readStoredComposerDrafts(draftsKey);
   // After the first render: a signal that a component body writes would run the body again.

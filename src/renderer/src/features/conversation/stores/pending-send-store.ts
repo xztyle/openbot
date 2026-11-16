@@ -217,10 +217,20 @@ export function createPendingSendStore() {
     );
   }
 
+  /** The uploaded files of each send the host has not stored yet, such as a failed send that waits for Retry. */
+  function heldAttachmentIds(): Set<string> {
+    return new Set(
+      [...queues.values()].flatMap((queue) =>
+        queue.filter((send) => send.state !== "sent").flatMap((send) => send.draft.attachments.map((item) => item.id)),
+      ),
+    );
+  }
+
   return {
     list: (target: ConversationTarget | undefined): readonly PendingSend[] =>
       target ? (sends[composerDraftKey(target)] ?? []) : [],
     unsentTexts,
+    heldAttachmentIds,
     add,
     retry,
     remove,

@@ -1579,14 +1579,20 @@ export function createWebWorkspace(
    */
   async function returnFromBackground() {
     const current = generation;
-    runtime.networkRestored?.();
     try {
       // The compatibility read is the smallest one. A runtime without raw requests reads the status.
+      // The peer judges its path while this probe waits, and replaces a dead one in a few seconds.
+      // The path is not renewed first: a desktop browser keeps its connections in a hidden tab, and
+      // each renewal restarts ICE, which the host allows only 10 times on one connection before it
+      // drops the connection. A tab switch must not use them up.
       const probe = runtime.admin?.request;
       if (probe) await probe("GET", TEAM_API_ROUTES.compatibility, () => undefined);
       else await runtime.status();
     } catch {
-      if (!disposed && current === generation && state.status === "online") recover();
+      if (!disposed && current === generation && state.status === "online") {
+        runtime.networkRestored?.();
+        recover();
+      }
       return;
     }
     if (disposed || current !== generation) return;

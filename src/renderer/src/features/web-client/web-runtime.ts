@@ -662,6 +662,9 @@ export function createWebWorkspaceRuntime(
       throw new WebHostRequestError(
         hostRefusal(result.status, result.body) ?? currentText().t("webClient.error.requestIncomplete"),
         result.status === undefined ? (result.reference ?? null) : referenceFrom("http", result.status),
+        false,
+        false,
+        result.status !== undefined && result.status < 500,
       );
     return result.body;
   }

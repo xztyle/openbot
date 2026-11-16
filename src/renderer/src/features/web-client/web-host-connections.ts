@@ -38,6 +38,8 @@ export class WebHostRequestError extends Error {
     readonly reference: string | null,
     readonly resend = false,
     readonly transport = false,
+    /** The host answered and refused the request, so it made no change. */
+    readonly refused = false,
   ) {
     super(message);
   }

@@ -11,6 +11,7 @@ import { useText } from "@openbot/ui/text";
 import { createEffect, createStore, onSettled } from "solid-js";
 import { type CreationPreference, resolveCreationModel } from "../agents/agent-creation-model";
 import { createAgentInitialMessage } from "../agents/agent-initial-message";
+import { WebHostRequestError } from "./web-host-connections";
 import type { WebWorkspaceRuntime } from "./web-runtime";
 
 export function WebAgentSettings(props: {
@@ -36,7 +37,7 @@ export function WebAgentSettings(props: {
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const [state, setState] = createStore<{
     draft: FirstAgentDraft;
     models: ClientAgentModelOption[];
@@ -159,11 +160,17 @@ export function WebAgentSettings(props: {
         await props.onSaved();
         props.onClose();
       }
-    } catch {
+    } catch (error) {
+      // A refusal from the host made no agent, so the user can correct the form and send it again.
+      const refused = !created && error instanceof WebHostRequestError && error.refused;
       if (!disposed)
         setState((draft) => {
-          draft.error = created ? t("webClient.agent.refreshFailed") : t("webClient.agent.unconfirmed");
-          draft.uncertain = true;
+          draft.error = refused
+            ? errorMessage(error, t("webClient.error.requestFailed"))
+            : created
+              ? t("webClient.agent.refreshFailed")
+              : t("webClient.agent.unconfirmed");
+          draft.uncertain = !refused;
         });
     } finally {
       if (!disposed)

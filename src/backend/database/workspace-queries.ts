@@ -277,7 +277,7 @@ export class WorkspaceQueries {
               AND ((message.sender_agent_id = ? AND delivery.recipient_agent_id = ?)
                 OR (message.sender_agent_id = ? AND delivery.recipient_agent_id = ?))
               AND (? IS NULL OR message.created_at < ?)
-            ORDER BY message.created_at DESC
+            ORDER BY message.created_at DESC, message.message_id DESC
             LIMIT ?`,
         )
         .all(first, second, second, first, before, before, limit),

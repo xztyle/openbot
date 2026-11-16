@@ -260,22 +260,20 @@ export class WorkspaceInsights {
     const limit = input.limit ?? WORKSPACE_AGENT_EXCHANGE_LIMIT;
     const before = input.before === undefined ? null : new Date(input.before).toISOString();
     const rows = this.#options.database.workspace.agentExchange(first, second, before, limit + 1);
-    const messages = rows
-      .slice(0, limit)
-      .reverse()
-      .map((row) => {
-        const truncated = row.text.length > WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT;
-        return {
-          id: row.id,
-          senderAgentId: row.senderAgentId,
-          recipientAgentIds: row.recipientAgentIds.slice(0, 20),
-          text: truncated ? row.text.slice(0, WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT) : row.text,
-          ...(truncated ? { truncated: true } : {}),
-          createdAt: Date.parse(row.createdAt) || 0,
-          ...(row.replyToMessageId ? { replyToMessageId: row.replyToMessageId } : {}),
-          ...(row.attachmentCount > 0 ? { attachmentCount: row.attachmentCount } : {}),
-        };
-      });
+    const page = exchangePage(rows, limit);
+    const messages = page.reverse().map((row) => {
+      const truncated = row.text.length > WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT;
+      return {
+        id: row.id,
+        senderAgentId: row.senderAgentId,
+        recipientAgentIds: row.recipientAgentIds.slice(0, 20),
+        text: truncated ? row.text.slice(0, WORKSPACE_AGENT_EXCHANGE_TEXT_LIMIT) : row.text,
+        ...(truncated ? { truncated: true } : {}),
+        createdAt: Date.parse(row.createdAt) || 0,
+        ...(row.replyToMessageId ? { replyToMessageId: row.replyToMessageId } : {}),
+        ...(row.attachmentCount > 0 ? { attachmentCount: row.attachmentCount } : {}),
+      };
+    });
     return { messages, hasOlder: rows.length > limit };
   }
 
@@ -331,4 +329,17 @@ export class WorkspaceInsights {
   ): { path: string; mimeType: WorkspaceThumbnailMimeType } | null {
     return this.#options.thumbnails?.file(artifactId, version) ?? null;
   }
+}
+
+/**
+ * The newest `limit` of `rows` (newest first, at most `limit + 1`) that a page shows. The next page asks
+ * for the messages before the oldest time it shows, so a page does not end inside a millisecond that
+ * more messages share: those go to the next page, unless all of the page shares it.
+ */
+export function exchangePage<Row extends { createdAt: string }>(rows: readonly Row[], limit: number): Row[] {
+  if (rows.length <= limit) return [...rows];
+  const boundary = rows[limit]?.createdAt;
+  let end = limit;
+  while (end > 0 && rows[end - 1]?.createdAt === boundary) end -= 1;
+  return rows.slice(0, end === 0 ? limit : end);
 }

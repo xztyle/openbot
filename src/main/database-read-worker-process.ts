@@ -1,5 +1,5 @@
 // How the app starts a database read worker: a worker thread of the main process that runs the
-// bundled `database-read-worker.js` (see `src/backend/database/database-read-worker.ts`). A worker
+// bundled `database-read-worker.js` (see `database-read-worker.ts` here). A worker
 // thread loads its file from inside `app.asar`, as Electron 45 does for the main process, and has
 // `node:sqlite`. It needs no process of its own: a worker that is stuck in SQLite is replaced, and
 // the main thread does not wait for it.

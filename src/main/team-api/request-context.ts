@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AgentAccessLevel, TeamMemberSummary } from "@openbot/contracts/ipc";
+import type { TeamResponseRoute } from "./response-encoding";
 
 // What a route module says when it is asked about a request.
 //
@@ -37,6 +38,10 @@ export interface TeamApiRequestContext {
   /** What the roles let the member do with one agent. Owners and admins always get `manage`. */
   readonly agentLevel: (agentId: string) => AgentAccessLevel;
   readonly json: (status: number, value: object | null) => RouteOutcome;
+  /** Writes a body that `encodeTeamResponseBody` made for `responseRoute()`, such as in a read worker. */
+  readonly encodedJson: (status: number, body: string) => RouteOutcome;
+  /** What `json` encodes against: the route, the protocol, the capabilities and the hidden agents. */
+  readonly responseRoute: () => TeamResponseRoute;
   readonly empty: (status: number) => RouteOutcome;
 }
 

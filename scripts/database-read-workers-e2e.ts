@@ -9,6 +9,8 @@
 //   a main transaction stays on the main connection;
 // - a worker that passes the deadline, crashes or fails a query changes nothing that a caller reads:
 //   the read runs on the main connection, with the same answer or the same error;
+// - the app's worker encodes a chat page as the body that the Team API route makes on the main
+//   thread, and apps that read the same page at once share one read;
 // - the database closes the workers' connections first, so the write-ahead log is removed.
 //
 // The agent service is not initialized, so no provider CLI starts.
@@ -25,17 +27,26 @@ import { join, resolve } from "node:path";
 import { Worker } from "node:worker_threads";
 import type { AgentSummary, ConversationMessage, ConversationPageAnchor } from "@openbot/contracts/ipc";
 import { AGENT_EXCHANGE_ITEM_TYPE } from "@openbot/contracts/ipc";
+import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { TEAM_CURRENT_CAPABILITIES } from "@openbot/contracts/team-protocol/current";
 import { Effect } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
 import { AgentService } from "../src/backend/agent-service";
 import { AgentStore } from "../src/backend/agent-store";
 import { ConversationReadStore } from "../src/backend/conversation-read-store";
-import type { DatabaseReadResults } from "../src/backend/database/database-read-protocol";
+import type {
+  DatabaseReadRequestOf,
+  DatabaseReadResults,
+  PageResponseResult,
+} from "../src/backend/database/database-read-protocol";
 import { spawnSourceDatabaseReadWorker } from "../src/backend/database/database-read-worker-source";
 import type { DatabaseReadWorkerHandle } from "../src/backend/database/database-reader";
 import { runCauseEffect } from "../src/backend/effect-boundary";
 import { MailboxStore } from "../src/backend/mailbox-store";
 import { OpenBotDatabase } from "../src/backend/openbot-database";
+import { spawnSourceAppReadWorker } from "../src/main/database-read-worker-source";
+import { markerExclusionsForCapabilities, WEBRTC_FRAME_BODY_BUDGET } from "../src/main/team-api/request-helpers";
+import { encodeTeamResponseBody } from "../src/main/team-api/response-encoding";
 
 const OUT = resolve(import.meta.dirname, "../.openbot-build/database-read-workers-e2e");
 const MEMBER = "owner";
@@ -181,6 +192,139 @@ try {
     database.close();
   });
 
+  await step("the app's worker encodes a page as the Team API route does on the main thread", async () => {
+    const { database, reads, agents } = await seededDatabase();
+    database.useReadWorkers(spawnSourceAppReadWorker);
+    const chief = agents[0];
+    const helper = agents[1];
+    if (!chief?.threadId || !helper?.threadId) throw new Error("The test agents have no thread.");
+    const capabilities = new Set<string>(TEAM_CURRENT_CAPABILITIES);
+    const exclusions = markerExclusionsForCapabilities(capabilities);
+    for (const [protocol, hidden] of [
+      [8, []],
+      [8, [helper.id]],
+      [7, []],
+    ] as const) {
+      const route = {
+        method: "GET",
+        path: TEAM_API_ROUTES.agent.conversationPage(chief.id),
+        protocol,
+        capabilities,
+        hiddenAgentIds: new Set<string>(hidden),
+      };
+      const encodedRoute = { ...route, capabilities: [...capabilities], hiddenAgentIds: [...hidden] };
+      for (const maxBytes of [WEBRTC_FRAME_BODY_BUDGET, 2_000]) {
+        const answer = await workerPageResponse(database, {
+          kind: "conversation-page-response",
+          agentId: chief.id,
+          threadId: chief.threadId ?? "",
+          anchor: { type: "latest" },
+          limit: 20,
+          options: exclusions,
+          memberId: MEMBER,
+          route: encodedRoute,
+          maxBytes,
+        });
+        // The route on the main thread: halve the page until it fits, then encode it.
+        let expected = "";
+        for (let limit = 20; ; limit = Math.floor(limit / 2)) {
+          const page = {
+            ...database.readConversationPage(chief.id, chief.threadId, { type: "latest" }, limit, exclusions),
+            readState: reads.readStateForThread(MEMBER, chief.threadId, exclusions),
+          };
+          if (Buffer.byteLength(JSON.stringify(page)) <= maxBytes) {
+            expected = encodeTeamResponseBody(route, 200, page);
+            break;
+          }
+          assert.notEqual(limit, 1, "The test page fits one frame.");
+        }
+        assert.deepEqual(answer, { body: expected });
+      }
+    }
+    const tiny = await workerPageResponse(database, {
+      kind: "conversation-page-response",
+      agentId: chief.id,
+      threadId: chief.threadId ?? "",
+      anchor: { type: "latest" },
+      limit: 20,
+      options: {},
+      memberId: MEMBER,
+      route: { method: "GET", path: "/", protocol: 8, capabilities: [], hiddenAgentIds: null },
+      maxBytes: 10,
+    });
+    assert.deepEqual(tiny, { tooLarge: true });
+    const newMember = await workerPageResponse(database, {
+      kind: "conversation-page-response",
+      agentId: chief.id,
+      threadId: chief.threadId ?? "",
+      anchor: { type: "latest" },
+      limit: 20,
+      options: {},
+      memberId: "member-with-no-cursor",
+      route: { method: "GET", path: "/", protocol: 8, capabilities: [], hiddenAgentIds: null },
+      maxBytes: WEBRTC_FRAME_BODY_BUDGET,
+    });
+    assert.deepEqual(newMember, { needsMain: true }, "A member with no cursor yet is answered on main.");
+    database.close();
+  });
+
+  await step("apps that read the same page at once share one worker read", async () => {
+    const { database, agents } = await seededDatabase();
+    const service = await agentService(database);
+    database.useReadWorkers(spawnSourceAppReadWorker);
+    const chief = agents[0];
+    if (!chief) throw new Error("The test agent is missing.");
+    const route = {
+      method: "GET",
+      path: TEAM_API_ROUTES.agent.conversationPage(chief.id),
+      protocol: 8,
+      capabilities: [...TEAM_CURRENT_CAPABILITIES],
+      hiddenAgentIds: [],
+    };
+    const page = () =>
+      runCauseEffect(
+        service.readConversationPageResponseFor(chief.id, MEMBER, { type: "latest" }, 20, {}, route, 100_000),
+      );
+    const before = database.readsOffMain;
+    const answers = await Promise.all([page(), page(), page()]);
+    assert.equal(database.readsOffMain - before, 1, "Three requests at once make one worker read.");
+    assert.ok(answers[0] && "body" in answers[0]);
+    assert.deepEqual(answers[1], answers[0]);
+    assert.deepEqual(answers[2], answers[0]);
+    // A write between two requests makes the second one read again. The worker gets each read 100 ms
+    // late here, so the first read is still in flight when the write commits.
+    let sent: () => void = () => {};
+    const firstSent = new Promise<void>((resolve) => {
+      sent = resolve;
+    });
+    database.useReadWorkers((data) => {
+      const worker = spawnSourceAppReadWorker(data);
+      return {
+        postMessage: (message) => {
+          if (message.type !== "read") return worker.postMessage(message);
+          sent();
+          setTimeout(() => worker.postMessage(message), 100);
+        },
+        on: worker.on.bind(worker),
+        terminate: () => worker.terminate(),
+      };
+    });
+    const reads = database.readsOffMain;
+    const first = page();
+    await firstSent;
+    const snapshot = database.readConversation(chief.id, chief.threadId);
+    database.persistConversation(
+      { ...snapshot, messages: [...snapshot.messages, message("m-40", "assistant", "turn-40", 58)] },
+      "conversation.test",
+    );
+    const second = page();
+    const [older, newer] = await Promise.all([first, second]);
+    assert.ok(older && "body" in older && newer && "body" in newer);
+    assert.equal(database.readsOffMain - reads, 2, "The request after the write did not join the read before it.");
+    assert.equal(newer.body.includes("m-40"), true);
+    database.close();
+  });
+
   await step("the workers close first, so the write-ahead log is removed", async () => {
     // The same close without workers, as a baseline: Bun's `node:sqlite` keeps the log of this database
     // after a close, Node removes it. The app runs on Node (Electron).
@@ -241,6 +385,13 @@ function workerPage(
       }),
     ),
   );
+}
+
+function workerPageResponse(
+  database: OpenBotDatabase,
+  request: DatabaseReadRequestOf<"conversation-page-response">,
+): Promise<PageResponseResult | null> {
+  return read(database.readOffMain((reader) => reader.conversationPageResponse(request)));
 }
 
 function threadsOf(agents: AgentSummary[]) {

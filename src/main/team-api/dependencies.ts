@@ -135,6 +135,7 @@ type TeamApiAgentMethods = Pick<
   | "readConversation"
   | "readConversationFor"
   | "readConversationPageFor"
+  | "readConversationPageResponseFor"
   | "searchConversationMessages"
   | "searchConversationMessagesOffMain"
   | "searchConversationFiles"

@@ -371,6 +371,7 @@ const fakeAgents: TeamApiAgents = {
   readConversation: unused("readConversation"),
   readConversationFor: unused("readConversationFor"),
   readConversationPageFor: unused("readConversationPageFor"),
+  readConversationPageResponseFor: unused("readConversationPageResponseFor"),
   searchConversationMessages: unused("searchConversationMessages"),
   searchConversationFiles: unused("searchConversationFiles"),
   searchConversationMessagesOffMain: unused("searchConversationMessagesOffMain"),

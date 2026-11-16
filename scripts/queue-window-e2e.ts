@@ -159,6 +159,11 @@ function requestContext(request: IncomingMessage, response: ServerResponse, url:
       response.writeHead(status, { "content-type": "application/json" }).end(body);
       return "handled";
     },
+    encodedJson: (status, body) => {
+      response.writeHead(status, { "content-type": "application/json" }).end(body);
+      return "handled";
+    },
+    responseRoute: () => ({ method, path: url.pathname, protocol, capabilities }),
     empty: (status) => {
       response.writeHead(status).end();
       return "handled";

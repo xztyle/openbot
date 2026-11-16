@@ -90,6 +90,11 @@ async function send(method: string, path: string, dependencies: TeamRouteDepende
       statuses.push(status);
       return "handled";
     },
+    encodedJson: (status) => {
+      statuses.push(status);
+      return "handled";
+    },
+    responseRoute: () => ({ method, path, protocol: 3, capabilities: new Set() }),
     empty: (status) => {
       statuses.push(status);
       return "handled";

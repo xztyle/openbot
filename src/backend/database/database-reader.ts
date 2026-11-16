@@ -101,6 +101,13 @@ export class DatabaseReader {
     return this.#send(request, (reply) => (reply.kind === "conversation-page" ? reply.result : null));
   }
 
+  /** A page with its read state, encoded as the body of a Team API response. */
+  conversationPageResponse(
+    request: DatabaseReadRequestOf<"conversation-page-response">,
+  ): Promise<DatabaseReadResults["conversation-page-response"]> {
+    return this.#send(request, (reply) => (reply.kind === "conversation-page-response" ? reply.result : null));
+  }
+
   /** The read states of chats, by agent. */
   readStates(request: DatabaseReadRequestOf<"read-states">): Promise<DatabaseReadResults["read-states"]> {
     return this.#send(request, (reply) => (reply.kind === "read-states" ? reply.result : null));

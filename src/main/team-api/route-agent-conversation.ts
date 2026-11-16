@@ -34,6 +34,7 @@ export interface AgentConversationRouteDependencies {
     | "listAgents"
     | "readConversationFor"
     | "readConversationPageFor"
+    | "readConversationPageResponseFor"
     | "markConversationRead"
     | "markConversationUnread"
     | "sendMessage"
@@ -57,6 +58,27 @@ export async function routeAgentConversation(
     requireListedAgent(agents, agentId);
     const anchor = pageAnchor(url);
     const exclusions = markerExclusionsForCapabilities(capabilities);
+    // A read worker reads the page and encodes the response, so neither holds the main thread.
+    const route = context.responseRoute();
+    const encoded = await runCauseEffect(
+      agents.readConversationPageResponseFor(
+        agentId,
+        member.id,
+        anchor,
+        pageLimit(url),
+        exclusions,
+        {
+          method: route.method,
+          path: route.path,
+          protocol: route.protocol,
+          capabilities: [...route.capabilities],
+          hiddenAgentIds: route.hiddenAgentIds ? [...route.hiddenAgentIds] : null,
+        },
+        WEBRTC_FRAME_BODY_BUDGET,
+      ),
+    );
+    if (encoded && "tooLarge" in encoded) throw new HttpError(413, sourceText("error.team.conversationPageTooLarge"));
+    if (encoded) return context.encodedJson(200, encoded.body);
     // Long messages make a page of fewer messages, so it fits one WebRTC frame. The client reads the
     // rest as older pages. A page larger than the frame cannot reach a remote client.
     for (let limit = pageLimit(url); ; limit = Math.floor(limit / 2)) {

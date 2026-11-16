@@ -6,10 +6,11 @@ import type {
   ConversationReadState,
   ConversationSearchPage,
 } from "@openbot/contracts/ipc";
-import { Effect, Schema } from "effect";
+import { Deferred, Effect, Schema } from "effect";
 import type { AgentStore } from "../agent-store";
 import { type ConversationMarkerExclusions, ConversationReadStore } from "../conversation-read-store";
 import { mergeConversationSnapshots } from "../conversation-snapshots";
+import type { EncodedResponseRoute } from "../database/database-read-protocol";
 import { causeHelpers } from "../effect-boundary";
 import type { ConversationRuntime } from "./conversation-runtime";
 import type { MailboxSync } from "./mailbox-sync";
@@ -38,6 +39,8 @@ export class ConversationReader {
   readonly #mailboxSync: MailboxSync;
   readonly #reads: ConversationReadStore;
   readonly #hooks: ConversationReaderHooks;
+  /** The page responses that a read worker reads now, by request (`readPageResponseFor`). */
+  readonly #pageResponses = new Map<string, { token: string; answer: Deferred.Deferred<PageResponse | null> }>();
 
   constructor(options: ConversationReaderOptions) {
     this.#store = options.store;
@@ -115,6 +118,65 @@ export class ConversationReader {
       };
     });
   }, Effect.uninterruptible);
+
+  /**
+   * `readPageFor` as the body of a Team API response, read and encoded by a read worker. Null when the
+   * main thread must answer: no worker, a read state that needs a cursor write first, or a failure.
+   */
+  readonly readPageResponseFor = Effect.fn("ConversationReader.readPageResponseFor")(function* (
+    this: ConversationReader,
+    agentId: string,
+    memberId: string,
+    anchor: ConversationPageAnchor,
+    limit: number,
+    options: ConversationMarkerExclusions,
+    route: EncodedResponseRoute,
+    maxBytes: number,
+  ) {
+    const agent = yield* this.#store.existing(agentId).pipe(toConversationReadFailed);
+    const threadId = agent.threadId;
+    if (!threadId) return null;
+    // Each app of a member reads the open chat after each change of it: the same answer, two or three
+    // times. A request joins a read in flight that it would repeat exactly: the same page for the
+    // same member and response, and no write to the database or the mailbox since that read began, so
+    // its answer is at least as new as this request.
+    const key = JSON.stringify([agentId, memberId, anchor, limit, options, route, maxBytes]);
+    const shared = this.#pageResponses.get(key);
+    if (shared && shared.token === this.#writeToken()) return yield* Deferred.await(shared.answer);
+    yield* readerStep(() => this.#mailboxSync.reconcilePersistedMailboxMessages(agent));
+    const entry = { token: this.#writeToken(), answer: yield* Deferred.make<PageResponse | null>() };
+    this.#pageResponses.set(key, entry);
+    const result = yield* this.#store.database
+      .readOffMain((reader) =>
+        reader.conversationPageResponse({
+          kind: "conversation-page-response",
+          agentId,
+          threadId,
+          anchor,
+          limit,
+          options,
+          memberId,
+          route,
+          maxBytes,
+        }),
+      )
+      .pipe(
+        Effect.map((answer) => (answer && !("needsMain" in answer) ? answer : null)),
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (this.#pageResponses.get(key) === entry) this.#pageResponses.delete(key);
+          }),
+        ),
+      );
+    yield* Deferred.succeed(entry.answer, result);
+    return result;
+  }, Effect.uninterruptible);
+
+  /** Moves with each write of the main connection and each committed change of the mailbox. */
+  #writeToken(): string {
+    const row = this.#store.database.connection.prepare("SELECT total_changes() AS changes").get();
+    return `${String(row?.changes)}:${this.#mailboxSync.mailboxRevision}`;
+  }
 
   /** `search`, read by a read worker when one runs. */
   readonly searchOffMain = Effect.fn("ConversationReader.searchOffMain")(function* (
@@ -226,6 +288,9 @@ export class ConversationReader {
     });
   }, Effect.uninterruptible);
 }
+
+/** A page encoded by a read worker, or a page too large for one frame. */
+type PageResponse = { body: string } | { tooLarge: true };
 
 class ConversationReadFailed extends Schema.TaggedError<ConversationReadFailed>()("ConversationReadFailed", {
   cause: Schema.Defect(),

@@ -29,6 +29,19 @@ export type DatabaseReadRequest =
       threads: { agentId: string; threadId: string }[];
       options: ConversationMarkerExclusions;
     }
+  | {
+      kind: "conversation-page-response";
+      agentId: string;
+      threadId: string;
+      anchor: ConversationPageAnchor;
+      limit: number;
+      options: ConversationMarkerExclusions;
+      memberId: string;
+      /** The response this page is encoded for. */
+      route: EncodedResponseRoute;
+      /** A page whose JSON is larger is read again with half the messages, down to one. */
+      maxBytes: number;
+    }
   | { kind: "search-messages"; query: string; agentId?: string; cursor?: string; limit?: number }
   | { kind: "search-files"; query: string; cursor?: string; limit?: number };
 
@@ -39,7 +52,28 @@ export type DatabaseReadRequest =
  */
 export type WorkerReadState = ConversationReadState | null;
 
+/**
+ * The route, protocol, capabilities and hidden agents that a response is encoded against, as plain
+ * data for a worker. The main process says how to encode (`DatabaseReadWorkerOptions.encodePage`).
+ */
+export interface EncodedResponseRoute {
+  method: string;
+  path: string;
+  protocol: number;
+  capabilities: string[];
+  hiddenAgentIds: string[] | null;
+}
+
+/** A page with its read state, encoded as the response body; or why the main process must answer. */
+export type PageResponseResult =
+  | { body: string }
+  /** Even a page of one message is larger than `maxBytes`. */
+  | { tooLarge: true }
+  /** The read state needs a cursor write first, or this worker cannot encode. */
+  | { needsMain: true };
+
 export interface DatabaseReadResults {
+  "conversation-page-response": PageResponseResult;
   "conversation-page": { page: ConversationPage; readState: WorkerReadState };
   /** By agent id; null as in `WorkerReadState`. */
   "read-states": Record<string, WorkerReadState>;

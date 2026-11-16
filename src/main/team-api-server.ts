@@ -92,9 +92,7 @@ import {
   STORAGE_CAPABILITY,
   supportsTeamSemanticTags,
   TEAM_AGENT_ACTIVITY_CAPABILITY,
-  TEAM_CHANNEL_ATTENTION_CAPABILITY,
   TEAM_CURRENT_CAPABILITIES,
-  TEAM_HISTORY_EXTENT_CAPABILITY,
   TEAM_PROMPT_MULTI_SELECT_CAPABILITY,
   TEAM_SUBAGENTS_CAPABILITY,
   TEAM_UI_BLOCKS_CAPABILITY,
@@ -118,7 +116,6 @@ import {
 } from "@openbot/contracts/team-protocol/input-escalations-v1";
 import { type OptionalTeamEvent, optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
 import { PROVIDERS_V8_CAPABILITY } from "@openbot/contracts/team-protocol/providers-v8";
-import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import { STORAGE_DISK_CAPABILITY } from "@openbot/contracts/team-protocol/storage-disk-v1";
 import {
   TEAM_APP_VERSION_HEADER,
@@ -183,6 +180,7 @@ import {
   requestProtocol,
   stringField,
 } from "./team-api/request-helpers";
+import { encodeTeamResponseBody, type TeamResponseRoute } from "./team-api/response-encoding";
 import { routeAcpRegistry } from "./team-api/route-acp-registry";
 import { routeAgentAccess } from "./team-api/route-agent-access";
 import {
@@ -1881,37 +1879,24 @@ export class TeamApiServer {
   #json(response: ServerResponse, status: number, value: object | null): RouteOutcome {
     const route = this.#responseRoutes.get(response);
     if (!route) throw new Error("Team API response route is unavailable.");
-    const options = {
-      preserveSemanticTags: supportsTeamSemanticTags(route.capabilities),
-      historyExtent: route.capabilities.has(TEAM_HISTORY_EXTENT_CAPABILITY),
-      channelAttention: route.capabilities.has(TEAM_CHANNEL_ATTENTION_CAPABILITY),
-      workspace: route.capabilities.has(WORKSPACE_CAPABILITY),
-      uiBlocks: route.capabilities.has(TEAM_UI_BLOCKS_CAPABILITY),
-      subagents: route.capabilities.has(TEAM_SUBAGENTS_CAPABILITY),
-      promptMultiSelect: route.capabilities.has(TEAM_PROMPT_MULTI_SELECT_CAPABILITY),
-    };
-    // The body is encoded before the head is written. A response the negotiated protocol cannot
-    // represent - a route its frozen adapter does not classify - makes the encoder throw, and with
-    // the headers already sent that throw could neither answer the caller nor end the request: it
-    // surfaced as a hung socket and an `ERR_HTTP_HEADERS_SENT` rejection out of `#handle`'s own
-    // error path. Encoding first lets that failure become the 500 the caller can read.
-    const visibleValue =
-      status < 400 && route.hiddenAgentIds
-        ? route.protocol < 4
-          ? legacyProviderView(value, route.hiddenAgentIds)
-          : hiddenAgentView(
-              value,
-              route.hiddenAgentIds,
-              route.protocol < 5 ? 4 : route.protocol < 6 ? 5 : route.protocol < 7 ? 6 : route.protocol < 8 ? 7 : 8,
-            )
-        : value;
-    const sideRoute = teamSideRouteCodec(route.path);
-    const body = sideRoute
-      ? JSON.stringify(sideRoute.response(route.path, status, visibleValue, options))
-      : teamHttpCodec(route.protocol).encodeResponse(route.method, route.path, status, visibleValue, options);
+    const body = encodeTeamResponseBody(route, status, value);
     response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
     response.end(`${body}\n`);
     return "handled";
+  }
+
+  /** A body that `encodeTeamResponseBody` made for this route elsewhere, such as in a read worker. */
+  #encodedJson(response: ServerResponse, status: number, body: string): RouteOutcome {
+    response.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(`${body}\n`);
+    return "handled";
+  }
+
+  /** What the responses of this request are encoded against, once the request is authenticated. */
+  #responseRoute(response: ServerResponse): TeamResponseRoute {
+    const route = this.#responseRoutes.get(response);
+    if (!route) throw new Error("Team API response route is unavailable.");
+    return route;
   }
 
   /**
@@ -2218,6 +2203,8 @@ export class TeamApiServer {
       sessionExpiresAt: authenticated.sessionExpiresAt,
       agentLevel: (agentId) => this.agentLevel(authenticated.member, agentId),
       json: (status, value) => this.#json(response, status, value),
+      encodedJson: (status, body) => this.#encodedJson(response, status, body),
+      responseRoute: () => this.#responseRoute(response),
       empty: (status) => this.#empty(response, status),
     };
   }

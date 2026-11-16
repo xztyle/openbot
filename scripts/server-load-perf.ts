@@ -13,6 +13,7 @@
 //      [--read-workers=2]      (0: every read on the main thread, as before the database read workers)
 //      [--clients=1]           (connected apps that each read after each event)
 //      [--verify-copies]       (check each kept message digest and shared event copy; a difference fails)
+//      [--encode-pages=main]   (read and encode the open chats' pages on the main thread, as before)
 // The database file is copied again into a temporary folder (`--tmp`) for each run. The run fails when a
 // completed turn has no stored answer. Writes .openbot-build/server-load-perf/<label>.json. A profile of
 // a run through tsx names the functions; bundle the script with esbuild first for exact line numbers.
@@ -25,6 +26,8 @@ import { join, resolve } from "node:path";
 import { performance as nodePerformance } from "node:perf_hooks";
 import { DatabaseSync } from "node:sqlite";
 import { AGENT_PROVIDERS, defaultProviderModel } from "@openbot/contracts/ipc";
+import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { TEAM_CURRENT_CAPABILITIES } from "@openbot/contracts/team-protocol/current";
 import { Effect } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
 import type { AgentClient, DiagnosticOrigin } from "../src/backend/agent-client";
@@ -52,6 +55,8 @@ const OPEN_CHATS = 3;
 const CLIENTS = Math.max(1, Number(argument("clients") ?? 1));
 /** `--verify-copies`: compare each kept message digest and shared event copy with a fresh one. */
 const VERIFY_COPIES = process.argv.includes("--verify-copies");
+/** `--encode-pages=main` reads and encodes the open chats' pages on the main thread, as before. */
+const ENCODE_PAGES_OFF_MAIN = argument("encode-pages") !== "main";
 if (VERIFY_COPIES) process.env.OPENBOT_VERIFY_CONVERSATION_COPIES = "1";
 /** `--reads=0` leaves out the unread-state read that the app makes after each conversation event. */
 const readStates = argument("reads") !== "0";
@@ -270,12 +275,17 @@ await writeFile(claudeExecutable, STAND_IN_CLAUDE, { mode: 0o755 });
 
 const { AgentService } = await import("../src/backend/agent-service");
 const { keptMessageChecks } = await import("../src/backend/agent/delivery-content");
+const { encodeTeamResponseBody } = await import("../src/main/team-api/response-encoding");
+const { markerExclusionsForCapabilities, WEBRTC_FRAME_BODY_BUDGET } = await import(
+  "../src/main/team-api/request-helpers"
+);
+const { spawnSourceAppReadWorker } = await import("../src/main/database-read-worker-source");
+const ROUTE_CAPABILITIES: ReadonlySet<string> = new Set<string>(TEAM_CURRENT_CAPABILITIES);
 const { AgentStore } = await import("../src/backend/agent-store");
 const { ClaudeAgentClient } = await import("../src/backend/claude-client");
 const { runCauseEffect } = await import("../src/backend/effect-boundary");
 const { MailboxStore } = await import("../src/backend/mailbox-store");
 const { OpenBotDatabase } = await import("../src/backend/openbot-database");
-const { spawnSourceDatabaseReadWorker } = await import("../src/backend/database/database-read-worker-source");
 
 interface ClientEvents {
   notification: [notification: AppServerNotification];
@@ -398,7 +408,7 @@ function time<T>(name: string, run: () => T): T {
 
 const initStart = performance.now();
 const database = new OpenBotDatabase(userData);
-if (READ_WORKERS > 0) database.useReadWorkers(spawnSourceDatabaseReadWorker, { workers: READ_WORKERS });
+if (READ_WORKERS > 0) database.useReadWorkers(spawnSourceAppReadWorker, { workers: READ_WORKERS });
 const store = new AgentStore(userData, home, database);
 const mailbox = new MailboxStore(userData, store.sharedRoot, store.database);
 const service = new AgentService({
@@ -466,17 +476,51 @@ service.on("event", (event) => {
         pageDue.delete(agentId);
         for (let client = 0; client < CLIENTS; client += 1) {
           const start = performance.now();
-          void runCauseEffect(service.readConversationPageFor(agentId, memberId, undefined, 60))
-            .then((page) => {
-              JSON.stringify(page);
-              record("client: open chat page", performance.now() - start);
-            })
+          void clientPage(agentId)
+            .then(() => record("client: open chat page", performance.now() - start))
             .catch(() => {});
         }
       }, 300),
     );
   }
 });
+/**
+ * The open chat's page as the Team API route answers it (`routeAgentConversation`): encoded by a read
+ * worker when one runs, or read and encoded here, with the halving of a page larger than one frame.
+ */
+async function clientPage(agentId: string): Promise<number> {
+  const route = {
+    method: "GET",
+    path: TEAM_API_ROUTES.agent.conversationPage(agentId),
+    protocol: 8,
+    capabilities: ROUTE_CAPABILITIES,
+    hiddenAgentIds: new Set<string>(),
+  };
+  const exclusions = markerExclusionsForCapabilities(ROUTE_CAPABILITIES);
+  if (ENCODE_PAGES_OFF_MAIN) {
+    const encoded = await runCauseEffect(
+      service.readConversationPageResponseFor(
+        agentId,
+        memberId,
+        { type: "latest" },
+        60,
+        exclusions,
+        { ...route, capabilities: [...route.capabilities], hiddenAgentIds: [] },
+        WEBRTC_FRAME_BODY_BUDGET,
+      ),
+    );
+    if (encoded && "body" in encoded) return encoded.body.length;
+  }
+  for (let limit = 60; ; limit = Math.floor(limit / 2)) {
+    const page = await runCauseEffect(
+      service.readConversationPageFor(agentId, memberId, { type: "latest" }, limit, exclusions),
+    );
+    if (Buffer.byteLength(JSON.stringify(page)) <= WEBRTC_FRAME_BODY_BUDGET)
+      return encodeTeamResponseBody(route, 200, page).length;
+    if (limit === 1) return 0;
+  }
+}
+
 const snapshots = setInterval(() => {
   time("client: runtime snapshot", () => JSON.stringify(service.getRuntimeSnapshot()).length);
 }, 1_000);
@@ -664,6 +708,7 @@ const result = {
   crashAt: CRASH_AT,
   readWorkers: READ_WORKERS,
   clients: CLIENTS,
+  encodePages: ENCODE_PAGES_OFF_MAIN ? "worker" : "main",
   ...(VERIFY_COPIES ? { verifiedCopies: { ...keptMessageChecks } } : {}),
   initMs: Math.round(initMs),
   messagesSent: sent,

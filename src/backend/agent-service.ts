@@ -230,6 +230,7 @@ import { ChannelService } from "./channel-service";
 import type { BundledProviderExecutables } from "./cli";
 import type { ConversationMarkerExclusions } from "./conversation-read-store";
 import { createEventCheckScheduler } from "./create-event-check-scheduler";
+import type { EncodedResponseRoute } from "./database/database-read-protocol";
 import type { ProviderSession } from "./database/provider-sessions";
 import { reportOriginalFailure } from "./effect-boundary";
 import type { EventCheckApiReader } from "./event-check-api-reader";
@@ -4333,6 +4334,29 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       .pipe(
         Effect.mapError(
           (failure) => new AgentLifecycleFailed({ operation: "listConversationReads", cause: failure.cause }),
+        ),
+      );
+  }
+
+  /**
+   * A page of `readConversationPageFor`, read and encoded by a database read worker as the body of
+   * a Team API response. Null when the caller must read and encode it on the main thread; `tooLarge`
+   * when even one message is larger than `maxBytes`.
+   */
+  readConversationPageResponseFor(
+    agentId: string,
+    memberId: string,
+    anchor: ConversationPageAnchor,
+    limit: number,
+    options: ConversationMarkerExclusions,
+    route: EncodedResponseRoute,
+    maxBytes: number,
+  ): Effect.Effect<{ body: string } | { tooLarge: true } | null, AgentLifecycleFailed> {
+    return this.#reader
+      .readPageResponseFor(agentId, memberId, anchor, limit, options, route, maxBytes)
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "readConversationPageFor", cause: failure.cause }),
         ),
       );
   }

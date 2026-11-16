@@ -32,4 +32,15 @@ export function agentSpaceSetting(agentId: string) {
   };
 }
 
+/**
+ * The agent that shows when the open one is gone, as after a delete: the first of `agents` in the
+ * space that shows, so the chat stays in that space, else the first of all.
+ */
+export function firstAgentOfActiveSpace<Agent extends { id: string }>(agents: readonly Agent[]): Agent | undefined {
+  const spaces = activeSpaces();
+  if (!spaces) return agents[0];
+  const current = spaces.current();
+  return agents.find((agent) => spaces.agentSpace(agent.id) === current) ?? agents[0];
+}
+
 export { activeSpaces, setActiveSpaces };

@@ -12,6 +12,7 @@ import type { AgentProfile } from "@openbot/ui/data";
 import { createFirstAgentDraft, type FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { firstAgentOfActiveSpace } from "../../active-space";
 import { desktopAnalytics } from "../../analytics";
 import { FALLBACK_STATUS } from "../../app-defaults";
 import { agentProfilesEqual, toAgentProfile } from "../../app-message-projection";
@@ -182,7 +183,7 @@ const Agents = createSimpleContext({
 
     const activeAgent = createMemo(() => {
       if (activeDirectMember()) return undefined;
-      return agentList().find((agent) => agent.id === activeAgentId()) ?? agentList()[0];
+      return agentList().find((agent) => agent.id === activeAgentId()) ?? firstAgentOfActiveSpace(agentList());
     });
 
     function setActiveAgentId(value: string | ((current: string) => string)): void {

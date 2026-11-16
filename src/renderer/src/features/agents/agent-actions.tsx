@@ -9,7 +9,7 @@ import { duplicateSection as duplicateSectionWith } from "@openbot/ui/features/s
 import { currentText } from "@openbot/ui/text";
 import { createSignal, onCleanup } from "solid-js";
 import { actionToast } from "../../action-toast";
-import { activeSpace } from "../../active-space";
+import { activeSpace, firstAgentOfActiveSpace } from "../../active-space";
 import { desktopAnalytics } from "../../analytics";
 import { toAgentProfile, withoutAgent } from "../../app-message-projection";
 import { createStoredProfile } from "../../app-stored-values";
@@ -266,7 +266,9 @@ const AgentActions = createSimpleContext({
       // Read before the roster changes: a read after a write returns the old value until the flush.
       const others = agentList().filter((candidate) => candidate.id !== agentId);
       const userHidden = userHiddenAgentIds();
-      const nextAgentId = (others.find((candidate) => !userHidden.has(candidate.id)) ?? others[0])?.id ?? "";
+      // The next chat is one of the space that shows, so a delete does not open a chat of another space.
+      const nextAgentId =
+        (firstAgentOfActiveSpace(others.filter((candidate) => !userHidden.has(candidate.id))) ?? others[0])?.id ?? "";
       const hidden = hideAgent(agentId);
       if (!hidden) return;
       const showAgent: () => void = hidden;

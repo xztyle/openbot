@@ -24,15 +24,19 @@ const WORKFLOW_TABLES = [
   "workflow_webhook_receipts",
   "workflows",
 ];
-// Migration 47 adds the event check tables after this one, empty.
-const EMPTY_WORKFLOW_TABLES = Object.fromEntries(
-  [
-    ...WORKFLOW_TABLES,
-    "projection_event_check_executions",
-    "projection_event_check_outbox",
-    "projection_event_checks",
-  ].map((table) => [table, []]),
-);
+// Migration 47 adds the event check tables after this one, empty, and 49 the spaces with only `general`.
+const EMPTY_WORKFLOW_TABLES = {
+  ...Object.fromEntries(
+    [
+      ...WORKFLOW_TABLES,
+      "projection_event_check_executions",
+      "projection_event_check_outbox",
+      "projection_event_checks",
+      "space_assignments",
+    ].map((table) => [table, []]),
+  ),
+  spaces: [{ space_id: "general", name: "General", slug: "general", icon: null, hue: null, position: 0 }],
+};
 
 function databaseAt(version: number): DatabaseSync {
   const db = new DatabaseSync(":memory:");
@@ -89,7 +93,7 @@ function workflowTables(db: DatabaseSync) {
 }
 
 function expectHealthy(db: DatabaseSync): void {
-  expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 49 });
+  expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 50 });
   expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
   expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
   expect(db.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
@@ -171,9 +175,9 @@ describe("workflow migration", () => {
     const db = databaseAt(45);
     seed(db, 45);
     const before = contents(db);
-    db.exec("INSERT INTO schema_migrations VALUES(50,'now')");
+    db.exec("INSERT INTO schema_migrations VALUES(51,'now')");
     expect(() => migrateOpenBotDatabase(db)).toThrow("newer than this application supports");
-    db.exec("DELETE FROM schema_migrations WHERE version = 50; DELETE FROM schema_migrations WHERE version=20");
+    db.exec("DELETE FROM schema_migrations WHERE version = 51; DELETE FROM schema_migrations WHERE version=20");
     expect(() => migrateOpenBotDatabase(db)).toThrow("missing version 20");
     expect(contents(db)).toEqual(before);
     expect(workflowTables(db)).toEqual([]);

@@ -394,4 +394,20 @@ export const messages = defineMessages("error.backend", {
     "This agent has {count} open tasks. Close a task, then start or open another one.",
   "error.backend.taskRemoteUnsupported": "Tasks are only available for agents on this computer.",
   "error.backend.taskStartFailed": "OpenBot could not start the task. Do the work in this turn instead.",
+  "error.backend.spaceNotFound": "This space no longer exists.",
+  "error.backend.spaceNameTaken": "A space with this name already exists.",
+  "error.backend.spaceLimit": "OpenBot can keep at most {limit} spaces.",
+  "error.backend.spaceNotEmpty": "Move the agents and channels of this space to another space before you delete it.",
+  "error.backend.spaceGeneralKept":
+    "The General space cannot be deleted. It holds every agent and channel that is not in another space.",
+  "error.backend.spaceOrderInvalid": "Name every space once to change their order.",
+  "error.backend.spaceDmFollowsAgent":
+    "A direct message with one agent is in the space of that agent. Move the agent instead.",
+  "error.backend.spaceUnknownItem": "OpenBot has no agent or channel with the id {id}.",
+  "error.backend.spaceOtherAgent":
+    "{agent} is in another space. You can see and reach only the agents of your own space.",
+  "error.backend.spaceOtherChannel":
+    "This channel is in another space. You can see and use only the channels of your own space.",
+  "error.backend.spaceChannelMember":
+    "{agent} is in another space than this channel. A channel can have only agents of its own space.",
 });

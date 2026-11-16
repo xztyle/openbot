@@ -75,6 +75,7 @@ import type { AgentModelChange } from "./database/agent-roster";
 import { OpenBotDatabase, type ProviderSession, stableThreadId } from "./openbot-database";
 import { isPathInside } from "./path-containment";
 import { isRecord } from "./protocol";
+import { SpaceStore } from "./spaces/space-store";
 import { StoredStateFailure, storedIO, storedSync } from "./stored-state-effects";
 
 /** The agent that created this one through the `create_agent` tool, and when. */
@@ -202,6 +203,7 @@ export class AgentStore {
   readonly #automationRoot: string;
   readonly #profileCreationRecovery: ProfileCreationRecovery;
   readonly #database: OpenBotDatabase;
+  readonly #spaces: SpaceStore;
   #state: StoredState = { version: 2, examplesInitialized: false, agents: [] };
   /**
    * The connection on which `initialize` last finished. A failed attempt leaves it unset, so the next
@@ -229,6 +231,7 @@ export class AgentStore {
     this.#duplicationsRoot = join(userDataPath, "agent-duplications");
     this.#automationRoot = automationRoot(userDataPath);
     this.#database = database;
+    this.#spaces = new SpaceStore(database, openbotRoot);
     this.#agentDefaults = agentDefaults;
     this.#profileCreationRecovery = new ProfileCreationRecovery(
       join(userDataPath, "agent-profile-creations"),
@@ -245,8 +248,18 @@ export class AgentStore {
     return this.#database;
   }
 
+  /**
+   * The old global shared folder, `OpenBot/Shared`. No agent is told of it any more: each one uses the
+   * shared folder of its space (`spaces.agentSharedDirectory`). It stays for paths that agents wrote
+   * before spaces, which still resolve through it.
+   */
   get sharedRoot(): string {
     return this.#sharedRoot;
+  }
+
+  /** The spaces and the space of each agent and channel. */
+  get spaces(): SpaceStore {
+    return this.#spaces;
   }
 
   get downloadsRoot(): string {
@@ -278,6 +291,14 @@ export class AgentStore {
       );
 
       yield* this.#database.initialize();
+      // Every space's shared folder exists before an agent starts with it as a writable root.
+      yield* storedIO(() =>
+        Promise.all(
+          this.#spaces
+            .list()
+            .map((space) => mkdir(this.#spaces.sharedDirectory(space), { recursive: true, mode: 0o700 })),
+        ),
+      );
       const persisted = this.#database.listAgents();
       if (persisted.length > 0 || this.#database.hasAggregateEvents("agents", "agents")) {
         // Repaired field by field rather than accepted or refused as a whole. One stored value this build

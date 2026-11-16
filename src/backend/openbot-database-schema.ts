@@ -22,6 +22,7 @@ import {
 } from "./messaging/messaging-schema";
 import { ROUTINE_FLOW_SCHEMA_SQL } from "./routine-flows/routine-flow-schema";
 import { ROUTINE_RESULT_SCHEMA_SQL } from "./routine-results/routine-result-schema";
+import { SPACE_SCHEMA_SQL } from "./spaces/space-schema";
 import { WORKFLOW_SCHEMA_SQL } from "./workflows/workflow-schema";
 
 const BASELINE_SCHEMA_VERSION = 8;
@@ -732,7 +733,8 @@ const LATEST_SCHEMA_SQL =
   MESSAGING_ALLOWED_ROLES_SCHEMA_SQL +
   BROWSER_PROFILE_SCHEMA_SQL +
   WORKFLOW_SCHEMA_SQL +
-  EVENT_CHECK_SCHEMA_SQL;
+  EVENT_CHECK_SCHEMA_SQL +
+  SPACE_SCHEMA_SQL;
 
 /** The end of the thread message table with the migration 40 columns before its PRIMARY KEY constraint. */
 function withThreadMessageOrderColumns(tableEnd: string): string {
@@ -1019,6 +1021,12 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
     // Removes rows and appends one event for each thread, so no foreign-key pause. A few hundred rows
     // of about 43,000 in the largest install go, which needs no vacuum.
     up: removeImportedLiveCopies,
+  },
+  {
+    version: 50,
+    // Only creates tables and the `general` space, so no foreign-key pause and no vacuum. No agent or
+    // channel gets a row: an item with none is in `general`, which is where every one of them was before.
+    up: (db) => db.exec(SPACE_SCHEMA_SQL),
   },
 ];
 

@@ -66,7 +66,8 @@ async function tellPages() {
 
 async function openChat(hostId, agentId) {
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  const page = windows.find((client) => /^\/app\/?$/u.test(new URL(client.url).pathname));
+  // The web client shows its place in the path, `/app/<space>/c/<channel>`, so any page under /app is one.
+  const page = windows.find((client) => /^\/app(?:\/.*)?$/u.test(new URL(client.url).pathname));
   if (page) {
     await page.focus();
     page.postMessage({ type: "openbot:open-chat", hostId, agentId });

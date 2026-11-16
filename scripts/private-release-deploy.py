@@ -147,8 +147,9 @@ def validate_after(before, expected_schema, environment_hash):
     after = database_state(BASE / "data/.config/OpenBot/openbot.db")
     if after["schema"] != expected_schema or after["integrity"] != "ok" or after["foreign_key_violations"]:
         raise RuntimeError("The saved database verification failed; do not downgrade its schema.")
+    # --allow-row-drop: a release whose migration deletes rows on purpose (a cleanup) passes this.
     for name, count in before["counts"].items():
-        if after["counts"].get(name, 0) < count:
+        if after["counts"].get(name, 0) < count and "--allow-row-drop" not in sys.argv[2:]:
             raise RuntimeError(f"Saved row count fell for {name}; investigate before further deployments.")
     if hashlib.sha256((BASE / ".env.runtime").read_bytes()).hexdigest() != environment_hash:
         raise RuntimeError("The runtime settings changed unexpectedly.")

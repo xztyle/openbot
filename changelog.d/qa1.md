@@ -5,3 +5,5 @@
 - In a channel, after you answer one approval, the next approval shows with working buttons. Before, it could stay on "Sending" until you opened the channel again.
 - In a busy channel, a question card keeps the options you picked and the text you typed when new messages arrive. Before, each new message reset the card.
 - In the web app, an answer to an agent's question that fails shows why. Before, the question card came back with no message.
+- An MCP connection that a chat uses through "Apps for this chat" now gets the values of the agent that calls it: `{{agent.id}}`, `{{agent.name}}` and the agent's own keys in Secrets. Before, every agent reached the server as the owner of the shared key, and a connection that used a key of one agent only was not offered.
+- The Test and Sign in buttons of an MCP server fill its `{{secret:…}}` values and Secrets links before they connect. Before, they sent the template text, and the server refused it. A key that is missing from Secrets now gets its own message.

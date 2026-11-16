@@ -27,7 +27,9 @@ export const createChatMcp = Effect.fn("ChatMcp.create")(function* (options: Opt
   const proxy = new ChatMcpProxy({
     policies,
     stateDirectory: join(options.path, "mcp-app-state"),
-    configs: () => options.service().enabledMcpServers(),
+    // Stored rows: the proxy fills each one for the agent named in its URL. A row filled here, with
+    // no agent, would lose its agent values and its agent's own Secrets keys.
+    configs: () => options.service().storedMcpServers(),
     chatKey: (threadId) => chatKey(options.service(), threadId),
     endpoint: options.endpoint,
     runtimes: options.runtimes,
@@ -44,7 +46,7 @@ export const createChatMcp = Effect.fn("ChatMcp.create")(function* (options: Opt
     configs: () =>
       options
         .service()
-        .enabledMcpServers()
+        .storedMcpServers()
         .filter((config) => config.id !== COMPUTER_USE_MCP_SERVER_ID),
     changed: () => options.service().refreshAllAgentRuntimes().pipe(toMcpOperationError),
   });

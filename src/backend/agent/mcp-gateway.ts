@@ -369,10 +369,11 @@ export class McpGateway {
     input: TestMcpServerInput,
     options: TestMcpServerOptions = {},
   ) {
-    const config = normalizeMcpConfig(input.config);
-    const errors = mcpConfigErrors(config);
+    const written = normalizeMcpConfig(input.config);
+    const errors = mcpConfigErrors(written);
     const firstError = errors.name ?? errors.command ?? errors.url;
     if (firstError) return yield* new McpGatewayFailed({ cause: new Error(firstError) });
+    const config = yield* this.#filledForTest(written);
     // A browser only opens when a person is waiting for it. The remote Team API route asks for the
     // same test and gets the silent answer, because nobody is at this machine to finish a sign-in.
     // The stored sign-ins are still spent: without them the probe cannot read or refresh the host's
@@ -395,14 +396,26 @@ export class McpGateway {
   });
 
   /**
+   * A row as a test sends it: its Secrets links and templates filled as for no agent, so the server
+   * answers as the shared key's owner. A row that names a missing key fails as its agents would.
+   */
+  #filledForTest(config: McpServerConfig): Effect.Effect<McpServerConfig, McpGatewayFailed> {
+    const [filled] = this.#personalize(undefined, [config]);
+    return filled
+      ? Effect.succeed(filled)
+      : Effect.fail(new McpGatewayFailed({ cause: new McpServerError(sourceText("error.backend.mcpSecretMissing")) }));
+  }
+
+  /**
    * The test an agent asks for. Silent like the Test button: it spends the sign-ins this computer
    * holds and never opens a browser, because the user hands a sign-in over from the conversation.
    */
   readonly inspect = Effect.fnUntraced(function* (this: McpGateway, config: McpServerConfig) {
-    const normalized = normalizeMcpConfig(config);
-    const errors = mcpConfigErrors(normalized);
+    const written = normalizeMcpConfig(config);
+    const errors = mcpConfigErrors(written);
     const firstError = errors.name ?? errors.command ?? errors.url;
     if (firstError) return yield* new McpGatewayFailed({ cause: new Error(firstError) });
+    const normalized = yield* this.#filledForTest(written);
     const stored = this.#authority(config.id);
     const silent: Pick<McpOAuthAuthority, "accessToken" | "signIn"> | undefined = stored
       ? { accessToken: (url) => stored.accessToken(url), signIn: () => null }
@@ -543,14 +556,22 @@ export class McpGateway {
    * name: a server the user added keeps working as they set it up, and two entries with one name
    * would collide in every provider's configuration.
    */
-  enabled(threadId?: string): McpServerConfig[] {
+  /**
+   * The enabled rows and built-in connections as stored, with their Secrets links and agent
+   * templates not filled. The chat-app proxy fills a row for the agent that calls it.
+   */
+  stored(): McpServerConfig[] {
     const configured = this.#servers.listEnabled();
     const builtIn: McpServerConfig[] = [];
     const computerUse = this.#computerUseMcpServer();
     if (computerUse) builtIn.push(computerUse);
     const github = this.#githubConnector?.mcpServer() ?? null;
     if (github && !configured.some((config) => config.name === github.name)) builtIn.push(github);
-    const configs = [...configured, ...builtIn];
+    return [...configured, ...builtIn];
+  }
+
+  enabled(threadId?: string): McpServerConfig[] {
+    const configs = this.stored();
     // Filled after the scope: a chat-app entry is a loopback URL, and the proxy fills its upstream.
     const scoped = threadId && this.#scope ? this.#scope(threadId, configs) : configs;
     return this.#handoff.record(this.#personalize(threadId, scoped));

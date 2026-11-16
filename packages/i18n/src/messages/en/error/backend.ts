@@ -374,6 +374,8 @@ export const messages = defineMessages("error.backend", {
   "error.backend.mcpServerHttpCredentials": "The server answered {status}. Check the API key or other credentials.",
   "error.backend.mcpServerHttpUrl":
     "The server answered {status}. Check the URL. The link may be wrong, expired, or deleted.",
+  "error.backend.mcpSecretMissing":
+    "A key in Secrets that this connection uses is missing. Add the key in Secrets, then try again.",
   "error.backend.mcpSignInAppUrl": "The sign-in app needs a valid server URL.",
   "error.backend.mcpSignInAppClientId": "Enter the client ID of the sign-in app.",
   "error.backend.mcpSignInAppIssuerChanged":

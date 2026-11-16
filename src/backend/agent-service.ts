@@ -2227,6 +2227,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return this.#mcp.enabled(threadId);
   }
 
+  /** The enabled MCP rows before their Secrets links and agent templates are filled. */
+  storedMcpServers(): McpServerConfig[] {
+    return this.#mcp.stored();
+  }
+
   /** The agent a thread belongs to, as an MCP row names it. */
   mcpAgentForThread(threadId: string | undefined): McpAgent | null {
     if (!threadId) return null;

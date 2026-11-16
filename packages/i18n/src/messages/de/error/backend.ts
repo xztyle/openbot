@@ -358,6 +358,8 @@ export const messages = {
     "Der Server hat mit {status} geantwortet. Prüfe den API-Schlüssel oder andere Zugangsdaten.",
   "error.backend.mcpServerHttpUrl":
     "Der Server hat mit {status} geantwortet. Prüfe die URL. Der Link ist möglicherweise falsch, abgelaufen oder gelöscht.",
+  "error.backend.mcpSecretMissing":
+    "Ein Schlüssel aus Geheimnisse, den diese Verbindung nutzt, fehlt. Füge ihn in Geheimnisse hinzu und versuche es erneut.",
   "error.backend.mcpSignInAppUrl": "Die Anmelde-App braucht eine gültige Server-URL.",
   "error.backend.mcpSignInAppClientId": "Gib die Client-ID der Anmelde-App ein.",
   "error.backend.mcpSignInAppIssuerChanged":

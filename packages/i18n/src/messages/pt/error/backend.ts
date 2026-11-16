@@ -343,6 +343,8 @@ export const messages = {
     "O servidor respondeu com {status}. Verifique a chave de API ou outras credenciais.",
   "error.backend.mcpServerHttpUrl":
     "O servidor respondeu com {status}. Verifique a URL. O link pode estar incorreto, expirado ou excluído.",
+  "error.backend.mcpSecretMissing":
+    "Falta uma chave de Segredos que esta conexão usa. Adicione a chave em Segredos e tente de novo.",
   "error.backend.mcpSignInAppUrl": "O app de login precisa de uma URL de servidor válida.",
   "error.backend.mcpSignInAppClientId": "Digite o ID do cliente do app de login.",
   "error.backend.mcpSignInAppIssuerChanged":

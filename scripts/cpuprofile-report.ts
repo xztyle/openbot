@@ -3,7 +3,7 @@
 // tasks (busy stretches of the main thread without an idle sample) with the functions that filled them.
 //
 // Run: bun scripts/cpuprofile-report.ts <file.cpuprofile> [--top=40] [--long-ms=100] [--tasks=15]
-//      [--focus=<function name>]   (callers and callees of one function)
+//      [--task-top=14] [--focus=<function name>]   (callers and callees of one function)
 // Prints text. Reads only the file.
 import { readFileSync } from "node:fs";
 
@@ -37,6 +37,7 @@ if (!file) {
 const top = Number(argument("top") ?? 40);
 const longMs = Number(argument("long-ms") ?? 100);
 const taskCount = Number(argument("tasks") ?? 15);
+const taskTop = Number(argument("task-top") ?? 14);
 const focus = argument("focus");
 
 const profile: CpuProfile = JSON.parse(readFileSync(file, "utf8"));
@@ -174,7 +175,7 @@ for (const task of [...tasks].sort((left, right) => right.ms - left.ms).slice(0,
   for (const [name, value] of [...inTask.entries()]
     .filter(([name]) => !SPECIAL.has(name))
     .sort((left, right) => right[1] - left[1])
-    .slice(0, 14))
+    .slice(0, taskTop))
     out.push(`  ${ms(value)} ${pct(value, task.ms)}  ${name}`);
 }
 

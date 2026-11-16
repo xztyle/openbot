@@ -229,6 +229,26 @@ async function runProviderHistoryReimportCheck(outputPath: string): Promise<Repo
       },
     ]);
     const notificationTexts = messageTexts();
+    // The turn has a row now. A later read that changed the turn must still not store the copy.
+    const claudeNotificationAgain = await runImport("claude-notification-session", "claude", [
+      {
+        turnId: "claude-notification-turn",
+        status: "completed",
+        startedAt: 11,
+        itemOffset: 0,
+        complete: true,
+        items: [
+          { type: "agentMessage", id: "notification-copy", text: LIVE_ANSWER, phase: "commentary" },
+          {
+            type: "agentMessage",
+            id: "notification-answer",
+            text: `${TRANSCRIPT_ONLY_ANSWER} Again.`,
+            status: "completed",
+          },
+        ],
+      },
+    ]);
+    const notificationAgainTexts = messageTexts();
 
     // A turn that an import did not finish keeps `imported = 0` and is imported at the next start.
     database.connection
@@ -253,6 +273,7 @@ async function runProviderHistoryReimportCheck(outputPath: string): Promise<Repo
         claudeQuiet,
         claudeFailed,
         claudeNotification,
+        claudeNotificationAgain,
         unfinished,
       },
       acceptance: {
@@ -283,6 +304,10 @@ async function runProviderHistoryReimportCheck(outputPath: string): Promise<Repo
           claudeNotification.turns === 1 &&
           notificationTexts.filter((text) => text === LIVE_ANSWER).length === 1 &&
           notificationTexts.includes(TRANSCRIPT_ONLY_ANSWER),
+        claudeNotificationReimportStoresNoLiveCopy:
+          claudeNotificationAgain.turns === 1 &&
+          notificationAgainTexts.filter((text) => text === LIVE_ANSWER).length === 1 &&
+          notificationAgainTexts.includes(`${TRANSCRIPT_ONLY_ANSWER} Again.`),
         unfinishedTurnImportsAgain: unfinished.turns === 1,
         importCompleted: database.providerHistoryImport("codex-session")?.state === "complete",
       },

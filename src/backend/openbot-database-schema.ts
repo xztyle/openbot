@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { statfsSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -499,6 +500,97 @@ WHERE message.thread_id = keyed.thread_id AND message.message_id = keyed.message
   AND (message.group_start, message.group_first, message.group_id, message.turn_rank)
     IS NOT (keyed.group_start, keyed.group_first, keyed.group_id, keyed.turn_rank)`;
 
+// Migration 49 removes the rows that a Claude history import stored as a second copy of a message that a
+// live turn already showed, and the synthetic "No response requested." rows that Claude Code writes and a
+// live turn never shows. Frozen with the migration.
+//
+// A copy is an assistant row that a `provider-history.message-imported` event wrote, of 20 or more
+// characters, whose text another assistant row of the thread, from within a day, has, and no import event
+// wrote that other row. So for each removed copy a row with the same text stays. A row with a live ID
+// (`:assistant`, `:narration:N`, `:plan`) is never a copy: an import that reconciled a live row writes it
+// under the live ID. A "No response requested." row goes when a Claude import wrote it or the agent runs
+// on Claude: some import events are gone, and the live Claude answer has a live ID.
+const V49_IMPORTED_COPIES_SQL = `
+  CREATE TEMP TABLE v49_imported (
+    thread_id TEXT NOT NULL, message_id TEXT NOT NULL, from_claude INTEGER NOT NULL, PRIMARY KEY (thread_id, message_id)
+  );
+  INSERT INTO temp.v49_imported (thread_id, message_id, from_claude)
+    SELECT aggregate_id, json_extract(payload_json, '$.importedMessage.id'),
+      MAX(COALESCE(json_extract(payload_json, '$.detail.provider'), '') = 'claude')
+    FROM orchestration_events
+    WHERE aggregate_type = 'thread' AND event_type = 'provider-history.message-imported'
+      AND json_extract(payload_json, '$.importedMessage.id') IS NOT NULL
+    GROUP BY 1, 2;
+  CREATE TEMP TABLE v49_assistant_rows (
+    thread_id TEXT NOT NULL, message_id TEXT NOT NULL, created_at TEXT NOT NULL, text TEXT, imported INTEGER NOT NULL,
+    from_claude INTEGER NOT NULL, PRIMARY KEY (thread_id, message_id)
+  );
+  INSERT INTO temp.v49_assistant_rows (thread_id, message_id, created_at, text, imported, from_claude)
+    SELECT message.thread_id, message.message_id, message.created_at, trim(json_extract(message.message_json, '$.text')),
+      imported.message_id IS NOT NULL, COALESCE(imported.from_claude, 0)
+    FROM projection_thread_messages message
+    LEFT JOIN temp.v49_imported imported
+      ON imported.thread_id = message.thread_id AND imported.message_id = message.message_id
+    WHERE message.author = 'assistant';
+  CREATE INDEX temp.v49_assistant_rows_text ON v49_assistant_rows(thread_id, text);
+  CREATE TEMP TABLE v49_copies (thread_id TEXT NOT NULL, message_id TEXT NOT NULL, PRIMARY KEY (thread_id, message_id));
+  INSERT INTO temp.v49_copies (thread_id, message_id)
+    SELECT copy.thread_id, copy.message_id FROM temp.v49_assistant_rows copy
+    WHERE copy.message_id NOT LIKE '%:assistant' AND copy.message_id NOT LIKE '%:narration:%'
+      AND copy.message_id NOT LIKE '%:plan'
+      AND (
+        (copy.imported = 1 AND length(copy.text) >= 20 AND EXISTS (
+          SELECT 1 FROM temp.v49_assistant_rows live
+          WHERE live.thread_id = copy.thread_id AND live.text = copy.text AND live.message_id <> copy.message_id
+            AND live.imported = 0 AND abs(julianday(live.created_at) - julianday(copy.created_at)) <= 1))
+        OR (copy.text = 'No response requested.' AND (copy.from_claude = 1 OR EXISTS (
+          SELECT 1 FROM projection_threads thread JOIN projection_agents agent ON agent.agent_id = thread.agent_id
+          WHERE thread.thread_id = copy.thread_id AND json_extract(agent.agent_json, '$.provider') = 'claude')))
+      );
+`;
+
+// A read cursor, a baseline or a summary on a removed row moves to the last row before it that stays, in
+// the shown order, so what the reader had read stays read. Run before the rows are removed.
+const V49_MOVE_CURSORS_SQL = [
+  "projection_thread_reads",
+  "projection_thread_read_baselines",
+  "projection_thread_summaries",
+]
+  .map(
+    (table) => `
+  UPDATE ${table} AS target SET through_message_id = (
+    SELECT kept.message_id FROM projection_thread_messages kept, projection_thread_messages gone
+    WHERE gone.thread_id = target.thread_id AND gone.message_id = target.through_message_id
+      AND kept.thread_id = target.thread_id
+      AND NOT EXISTS (SELECT 1 FROM temp.v49_copies copy
+        WHERE copy.thread_id = kept.thread_id AND copy.message_id = kept.message_id)
+      AND (kept.group_start, kept.group_first, kept.group_id, kept.turn_rank, kept.created_at, kept.ordinal, kept.message_id)
+        < (gone.group_start, gone.group_first, gone.group_id, gone.turn_rank, gone.created_at, gone.ordinal, gone.message_id)
+    ORDER BY kept.group_start DESC, kept.group_first DESC, kept.group_id DESC, kept.turn_rank DESC,
+      kept.created_at DESC, kept.ordinal DESC, kept.message_id DESC
+    LIMIT 1)
+  WHERE EXISTS (SELECT 1 FROM temp.v49_copies copy
+    WHERE copy.thread_id = target.thread_id AND copy.message_id = target.through_message_id);`,
+  )
+  .join("");
+
+const V49_REMOVE_COPIES_SQL = `
+  DELETE FROM projection_attachments WHERE owner_kind = 'thread-message'
+    AND owner_id IN (SELECT thread_id || ':' || message_id FROM temp.v49_copies);
+  DELETE FROM projection_reactions WHERE EXISTS (
+    SELECT 1 FROM temp.v49_copies copy JOIN projection_threads thread ON thread.thread_id = copy.thread_id
+    WHERE thread.agent_id = projection_reactions.agent_id AND copy.message_id = projection_reactions.message_id);
+  DELETE FROM projection_thread_messages WHERE EXISTS (
+    SELECT 1 FROM temp.v49_copies copy
+    WHERE copy.thread_id = projection_thread_messages.thread_id AND copy.message_id = projection_thread_messages.message_id);
+`;
+
+const V49_DROP_TEMP_SQL = `
+  DROP TABLE IF EXISTS temp.v49_copies;
+  DROP TABLE IF EXISTS temp.v49_assistant_rows;
+  DROP TABLE IF EXISTS temp.v49_imported;
+`;
+
 // Migration 41 indexes attachments by owner. Each conversation write deletes the attachments of each
 // changed message by owner, which without it is a scan of every attachment (#2241). Frozen with the migration.
 const V41_ATTACHMENT_OWNER_INDEX_SQL = `
@@ -921,6 +1013,12 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
     // Only updates the order keys of the rows of steered turns, so no foreign-key pause and no vacuum.
     // A cursor that a client holds on such a row moves with the new order, as a page read again does.
     up: (db) => db.exec(V48_THREAD_MESSAGE_STEER_ORDER_SQL),
+  },
+  {
+    version: 49,
+    // Removes rows and appends one event for each thread, so no foreign-key pause. A few hundred rows
+    // of about 43,000 in the largest install go, which needs no vacuum.
+    up: removeImportedLiveCopies,
   },
 ];
 
@@ -1363,6 +1461,50 @@ function addRoutineRunSource(db: DatabaseSync): void {
     const columns = db.prepare(`PRAGMA table_info(${table})`).all();
     if (columns.some((column) => isDynamicRecord(column) && column.name === "run_source")) continue;
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${V35_ROUTINE_RUN_SOURCE_COLUMN_SQL}`);
+  }
+}
+
+// Migration 49 removes the copies that Claude history imports stored (see `V49_IMPORTED_COPIES_SQL`). A
+// replay of a thread starts from its events, and an import event would add a copy back, so each thread
+// with a removed row gets one event that removes them, after its other events. The order keys of the
+// turns that lost a row are computed again with the order of migration 48. It finds nothing to remove a
+// second time.
+function removeImportedLiveCopies(db: DatabaseSync, appliedAt: string): void {
+  db.exec(V49_DROP_TEMP_SQL);
+  db.exec(V49_IMPORTED_COPIES_SQL);
+  try {
+    const threads = db
+      .prepare(
+        `SELECT thread_id, json_group_array(message_id) AS message_ids
+         FROM (SELECT thread_id, message_id FROM temp.v49_copies ORDER BY thread_id, message_id)
+         GROUP BY thread_id ORDER BY thread_id`,
+      )
+      .all();
+    if (threads.length === 0) return;
+    db.exec(V49_MOVE_CURSORS_SQL);
+    db.exec(V49_REMOVE_COPIES_SQL);
+    db.exec(V48_THREAD_MESSAGE_STEER_ORDER_SQL);
+    const append = db.prepare(
+      `INSERT INTO orchestration_events (event_id, command_id, aggregate_type, aggregate_id, event_type, occurred_at, payload_json)
+       VALUES (?, ?, 'thread', ?, 'conversation.imported-copies-removed', ?, ?)`,
+    );
+    const revise = db.prepare("UPDATE projection_threads SET last_event_sequence = ? WHERE thread_id = ?");
+    for (const row of threads) {
+      if (!isDynamicRecord(row) || !isString(row.thread_id) || !isString(row.message_ids)) {
+        throw new Error("Migration 49 read an invalid copy row.");
+      }
+      const result = append.run(
+        randomUUID(),
+        `migration:49:${row.thread_id}`,
+        row.thread_id,
+        appliedAt,
+        // `json_group_array` wrote the ids as a JSON array.
+        `{"detail":{"migration":49},"changedMessages":[],"removedMessageIds":${row.message_ids}}`,
+      );
+      revise.run(Number(result.lastInsertRowid), row.thread_id);
+    }
+  } finally {
+    db.exec(V49_DROP_TEMP_SQL);
   }
 }
 

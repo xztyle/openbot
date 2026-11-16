@@ -239,9 +239,7 @@ function importCompletedTurn(
             )
           : [...pageMessages];
       const kept =
-        input.provider === "claude"
-          ? withoutLiveCopies(input.database, input.publicThreadId, fragment.turnId, reconciled)
-          : reconciled;
+        input.provider === "claude" ? withoutLiveCopies(input.database, input.publicThreadId, reconciled) : reconciled;
       yield* providerSync(() =>
         input.database.importProviderHistoryMessages({
           sessionId: input.sessionId,
@@ -343,32 +341,28 @@ const LIVE_COPY_WINDOW_BEFORE_MS = 60 * 60 * 1000;
 const LIVE_COPY_WINDOW_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /**
- * The messages of a Claude transcript turn that OpenBot does not know, without the ones a live turn
- * already shows. Claude Code starts a transcript turn at entries that OpenBot did not send as a turn,
- * such as the notification of a background task that ended. The output after one is under the
- * transcript's ID there, and the live turn showed it under its own ID, so the reconciliation, which
- * matches by turn ID, cannot see the copy. An assistant message is left out when a stored assistant
- * message of another turn, from about the same time, has the same text.
+ * The messages of a Claude transcript turn without the ones that another stored row already shows.
+ * Claude Code starts a transcript turn at entries that OpenBot did not send as a turn, such as the
+ * notification of a background task that ended. The output after one is under the transcript's ID
+ * there, and the live turn showed it under its own ID, so the reconciliation, which matches by turn
+ * ID, cannot see the copy. An assistant message is left out when a stored assistant row with another
+ * ID, from about the same time, has the same text. This also holds for a turn that still has rows
+ * after migration 49 removed its copies, so a later import does not bring them back.
  */
 function withoutLiveCopies(
   database: ProviderHistoryImportDatabase,
   threadId: string,
-  turnId: string,
   messages: readonly ConversationMessage[],
 ): ConversationMessage[] {
   const candidates = messages.filter(
     (message) => message.author === "assistant" && message.text.trim().length >= LIVE_COPY_MIN_TEXT,
   );
   if (candidates.length === 0) return [...messages];
-  const known = database.connection
-    .prepare("SELECT 1 FROM projection_thread_messages WHERE thread_id = ? AND turn_id = ? LIMIT 1")
-    .get(threadId, turnId);
-  if (known) return [...messages];
   const times = candidates.map((message) => Date.parse(message.createdAt)).filter(Number.isFinite);
   if (times.length === 0) return [...messages];
   const rows = database.connection
     .prepare(
-      `SELECT json_extract(message_json, '$.text') AS text FROM projection_thread_messages
+      `SELECT message_id, json_extract(message_json, '$.text') AS text FROM projection_thread_messages
        WHERE thread_id = ? AND author = 'assistant' AND created_at >= ? AND created_at <= ?`,
     )
     .all(
@@ -376,13 +370,18 @@ function withoutLiveCopies(
       new Date(Math.min(...times) - LIVE_COPY_WINDOW_BEFORE_MS).toISOString(),
       new Date(Math.max(...times) + LIVE_COPY_WINDOW_AFTER_MS).toISOString(),
     );
-  const liveTexts = new Set(
-    rows.flatMap((row) => {
-      const value = databaseRow(row);
-      return typeof value?.text === "string" ? [value.text.trim()] : [];
-    }),
-  );
-  return messages.filter((message) => !(candidates.includes(message) && liveTexts.has(message.text.trim())));
+  const storedByText = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const value = databaseRow(row);
+    if (typeof value?.text !== "string" || typeof value.message_id !== "string") continue;
+    const text = value.text.trim();
+    storedByText.set(text, (storedByText.get(text) ?? new Set()).add(value.message_id));
+  }
+  return messages.filter((message) => {
+    if (!candidates.includes(message)) return true;
+    const ids = storedByText.get(message.text.trim());
+    return !ids || [...ids].every((id) => id === message.id);
+  });
 }
 
 function readStoredTurnMessages(

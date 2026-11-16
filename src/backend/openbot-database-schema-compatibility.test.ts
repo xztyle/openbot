@@ -15,7 +15,7 @@ import schemaHistory from "./openbot-database-schema-history.json";
 
 const sourceAt = "2026-10-08T10:00:00.000Z";
 const appliedAt = "2026-10-09T10:00:00.000Z";
-const latestVersion = 48;
+const latestVersion = 49;
 const connections: DatabaseSync[] = [];
 const sources = ["upstream 31", "fork 31", "fork 32", "upstream 32", "upstream 46"] as const;
 type Source = (typeof sources)[number];

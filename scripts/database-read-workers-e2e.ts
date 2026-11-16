@@ -2,12 +2,16 @@
 // pages, unread states, message and file search) so the main thread's event loop runs on. A real
 // `OpenBotDatabase` on a temporary profile starts real workers from the sources. The check:
 //
-// - each read that a worker answers equals the same read on the main connection;
+// - each read that a worker answers equals the same read on the main connection, through the
+//   database and through the agent service that the Team API routes call;
 // - a read state that needs a cursor write comes back for the main connection to write;
 // - a worker sees each write that the main connection committed before the read, and a read inside
 //   a main transaction stays on the main connection;
+// - a worker that passes the deadline, crashes or fails a query changes nothing that a caller reads:
+//   the read runs on the main connection, with the same answer or the same error;
 // - the database closes the workers' connections first, so the write-ahead log is removed.
 //
+// The agent service is not initialized, so no provider CLI starts.
 // Run: `node --import tsx scripts/database-read-workers-e2e.ts`, as the app runs on Node. Under
 // `bun scripts/database-read-workers-e2e.ts` the close check compares with a close without workers,
 // because Bun's `node:sqlite` keeps the write-ahead log at a close.
@@ -18,13 +22,19 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Worker } from "node:worker_threads";
 import type { AgentSummary, ConversationMessage, ConversationPageAnchor } from "@openbot/contracts/ipc";
 import { AGENT_EXCHANGE_ITEM_TYPE } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
+import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
+import { AgentService } from "../src/backend/agent-service";
+import { AgentStore } from "../src/backend/agent-store";
 import { ConversationReadStore } from "../src/backend/conversation-read-store";
 import type { DatabaseReadResults } from "../src/backend/database/database-read-protocol";
 import { spawnSourceDatabaseReadWorker } from "../src/backend/database/database-read-worker-source";
+import type { DatabaseReadWorkerHandle } from "../src/backend/database/database-reader";
 import { runCauseEffect } from "../src/backend/effect-boundary";
+import { MailboxStore } from "../src/backend/mailbox-store";
 import { OpenBotDatabase } from "../src/backend/openbot-database";
 
 const OUT = resolve(import.meta.dirname, "../.openbot-build/database-read-workers-e2e");
@@ -128,6 +138,49 @@ try {
     database.close();
   });
 
+  await step("the agent service reads give the same answers with and without workers", async () => {
+    const { database, agents } = await seededDatabase();
+    const service = await agentService(database);
+    const before = await serviceReads(service, agents);
+    database.useReadWorkers(spawnSourceDatabaseReadWorker);
+    const after = await serviceReads(service, agents);
+    assert.deepEqual(after, before);
+    // Two pages, two lists of read states and two searches.
+    assert.equal(database.readsOffMain, 6, "The workers answered each read.");
+    database.close();
+  });
+
+  await step("a worker that is slow, crashes or fails a query changes no answer", async () => {
+    const { database, agents } = await seededDatabase();
+    const service = await agentService(database);
+    const expected = await serviceReads(service, agents);
+    const badCursor = await runCauseEffect(service.searchConversationMessagesOffMain("answer", undefined, "%%%")).then(
+      () => "no error",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    // Every read passes a deadline of 1 ms: it runs on the main connection.
+    database.useReadWorkers(spawnSourceDatabaseReadWorker, { deadlineMs: 1 });
+    assert.deepEqual(await serviceReads(service, agents), expected);
+    // Each worker fails at its start; after three, the reader turns itself off.
+    let started = 0;
+    database.useReadWorkers((data) => {
+      started += 1;
+      return crashingWorker(data);
+    });
+    for (let attempt = 0; attempt < 4; attempt += 1) assert.deepEqual(await serviceReads(service, agents), expected);
+    assert.equal(started, 3, "The reader stops starting workers after three failures.");
+    // A query that fails in the worker fails in the same way on the main connection.
+    database.useReadWorkers(spawnSourceDatabaseReadWorker);
+    const failed = await runCauseEffect(service.searchConversationMessagesOffMain("answer", undefined, "%%%")).then(
+      () => "no error",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    assert.notEqual(badCursor, "no error");
+    assert.equal(failed, badCursor);
+    assert.deepEqual(await serviceReads(service, agents), expected);
+    database.close();
+  });
+
   await step("the workers close first, so the write-ahead log is removed", async () => {
     // The same close without workers, as a baseline: Bun's `node:sqlite` keeps the log of this database
     // after a close, Node removes it. The app runs on Node (Electron).
@@ -162,6 +215,11 @@ function runtime(): string {
   return bun ? `bun ${bun}` : `node ${process.versions.node}`;
 }
 
+/** A worker thread that throws before it reads anything, as a worker whose bundle is broken does. */
+function crashingWorker(_data: unknown): DatabaseReadWorkerHandle {
+  return new Worker('throw new Error("The read worker cannot start.");', { eval: true });
+}
+
 function workerPage(
   database: OpenBotDatabase,
   agentId: string,
@@ -187,6 +245,44 @@ function workerPage(
 
 function threadsOf(agents: AgentSummary[]) {
   return agents.flatMap((agent) => (agent.threadId ? [{ agentId: agent.id, threadId: agent.threadId }] : []));
+}
+
+async function serviceReads(service: AgentService, agents: AgentSummary[]) {
+  const pages = [];
+  for (const agent of agents)
+    pages.push(await runCauseEffect(service.readConversationPageFor(agent.id, MEMBER, { type: "latest" }, 6)));
+  return {
+    pages,
+    reads: await runCauseEffect(service.listConversationReadsOffMain(MEMBER)),
+    readsOfNewMember: await runCauseEffect(service.listConversationReadsOffMain("second-member")),
+    search: await runCauseEffect(service.searchConversationMessagesOffMain("answer", undefined, undefined, 7)),
+    files: await runCauseEffect(service.searchConversationFilesOffMain("")),
+  };
+}
+
+async function agentService(database: OpenBotDatabase): Promise<AgentService> {
+  const root = database.userDataPath;
+  const store = new AgentStore(root, join(root, "home"), database);
+  await runCauseEffect(store.initialize());
+  const mailbox = new MailboxStore(root, store.sharedRoot, store.database);
+  const unused = () => Effect.die(new Error("Not used by this check."));
+  const browser: AgentBrowserHost = {
+    listTabs: () => [],
+    beginTakeover: unused,
+    endTakeover: () => {},
+    userControlTabFor: () => null,
+    awaitUserControlRelease: unused,
+    resolveUploadTarget: unused,
+    handleDynamicTool: unused,
+    onChanged: () => () => {},
+    onControlChanged: () => () => {},
+    onDocumentChanged: () => () => {},
+    clearControls: () => {},
+    endControl: () => {},
+    close: () => Effect.void,
+    clearAgentSession: () => Effect.void,
+  };
+  return new AgentService({ store, mailbox, browser, preferredProvider: "claude" });
 }
 
 function message(

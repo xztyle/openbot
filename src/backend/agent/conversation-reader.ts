@@ -85,15 +85,89 @@ export class ConversationReader {
     options: ConversationMarkerExclusions = {},
   ) {
     const agent = yield* this.#store.existing(agentId).pipe(toConversationReadFailed);
+    const threadId = agent.threadId;
+    yield* readerStep(() => this.#mailboxSync.reconcilePersistedMailboxMessages(agent));
+    // After the reconcile: its writes are committed, so the worker's read sees them.
+    const offMain = threadId
+      ? yield* this.#store.database.readOffMain((reader) =>
+          reader.conversationPage({
+            kind: "conversation-page",
+            agentId,
+            threadId,
+            anchor,
+            limit,
+            options,
+            readStateFor: memberId,
+          }),
+        )
+      : null;
     return yield* readerStep(() => {
-      this.#mailboxSync.reconcilePersistedMailboxMessages(agent);
-      const page = this.#store.database.readConversationPage(agentId, agent.threadId, anchor, limit, options);
+      if (offMain)
+        return {
+          ...offMain.page,
+          // A member with no cursor yet, or one that the thread lost, gets it written here first.
+          readState: offMain.readState ?? this.#reads.readStateForThread(memberId, threadId, options),
+        };
+      const page = this.#store.database.readConversationPage(agentId, threadId, anchor, limit, options);
       return {
         ...page,
-        readState: this.#reads.readStateForThread(memberId, agent.threadId, options),
+        readState: this.#reads.readStateForThread(memberId, threadId, options),
       };
     });
   }, Effect.uninterruptible);
+
+  /** `search`, read by a read worker when one runs. */
+  readonly searchOffMain = Effect.fn("ConversationReader.searchOffMain")(function* (
+    this: ConversationReader,
+    query: string,
+    agentId?: string,
+    cursor?: string,
+    limit = 100,
+  ) {
+    const offMain = yield* this.#store.database.readOffMain((reader) =>
+      reader.searchMessages({ kind: "search-messages", query, agentId, cursor, limit }),
+    );
+    return offMain ?? (yield* readerStep(() => this.search(query, agentId, cursor, limit)));
+  });
+
+  /** `searchFiles`, read by a read worker when one runs. */
+  readonly searchFilesOffMain = Effect.fn("ConversationReader.searchFilesOffMain")(function* (
+    this: ConversationReader,
+    query: string,
+    cursor?: string,
+    limit = 50,
+  ) {
+    const offMain = yield* this.#store.database.readOffMain((reader) =>
+      reader.searchFiles({ kind: "search-files", query, cursor, limit }),
+    );
+    return offMain ?? (yield* readerStep(() => this.searchFiles(query, cursor, limit)));
+  });
+
+  /** `listReads`, with each read state that needs no cursor write computed by a read worker when one runs. */
+  readonly listReadsOffMain = Effect.fn("ConversationReader.listReadsOffMain")(function* (
+    this: ConversationReader,
+    memberId: string,
+    options: ConversationMarkerExclusions = {},
+  ) {
+    const agents = this.#hooks.listAgents();
+    const offMain = yield* this.#store.database.readOffMain((reader) =>
+      reader.readStates({
+        kind: "read-states",
+        memberId,
+        threads: agents.flatMap((agent) => (agent.threadId ? [{ agentId: agent.id, threadId: agent.threadId }] : [])),
+        options,
+      }),
+    );
+    return yield* readerStep(() => {
+      if (!offMain) return this.#reads.listStates(memberId, agents, options);
+      return Object.fromEntries(
+        agents.map((agent) => [
+          agent.id,
+          offMain[agent.id] ?? this.#reads.readStateForThread(memberId, agent.threadId, options),
+        ]),
+      );
+    });
+  });
 
   search(query: string, agentId?: string, cursor?: string, limit = 100): ConversationSearchPage {
     return this.#store.database.searchConversationMessages(query, agentId, cursor, limit);

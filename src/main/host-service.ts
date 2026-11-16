@@ -1116,15 +1116,17 @@ export class HostService extends EventEmitter<HostEvents> {
   }
 
   searchAgentConversationMessages(query: string, agentId?: string, cursor?: string, limit = 100) {
-    return this.#options.agents.searchConversationMessages(query, agentId, cursor, limit);
+    return this.#options.agents.searchConversationMessagesOffMain(query, agentId, cursor, limit);
   }
 
   searchAgentConversationFiles(query: string, cursor?: string, limit = 50) {
-    return this.#options.agents.searchConversationFiles(query, cursor, limit);
+    return this.#options.agents.searchConversationFilesOffMain(query, cursor, limit);
   }
 
   listAgentConversationReads() {
-    return this.#options.agents.listConversationReads(this.#currentAgentReaderId());
+    return remoteDecode(() => this.#currentAgentReaderId()).pipe(
+      Effect.flatMap((readerId) => this.#options.agents.listConversationReadsOffMain(readerId)),
+    );
   }
 
   markAgentConversationRead(input: MarkConversationReadInput) {

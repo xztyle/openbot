@@ -10,6 +10,7 @@
 // Run: node --import tsx scripts/server-load-perf.ts --db=<copy of openbot.db> [--agents=12]
 //      [--seconds=60] [--crash-at=30] [--transcript-mb=40] [--profile=<file.cpuprofile>] [--label=x]
 //      [--stall-stacks=<ms>]   (the JavaScript stack of each main-thread task of at least that long)
+//      [--read-workers=2]      (0: every read on the main thread, as before the database read workers)
 // The database file is copied again into a temporary folder (`--tmp`) for each run. The run fails when a
 // completed turn has no stored answer. Writes .openbot-build/server-load-perf/<label>.json. A profile of
 // a run through tsx names the functions; bundle the script with esbuild first for exact line numbers.
@@ -47,6 +48,8 @@ const LABEL = argument("label") ?? "run";
 const OPEN_CHATS = 3;
 /** `--reads=0` leaves out the unread-state read that the app makes after each conversation event. */
 const readStates = argument("reads") !== "0";
+/** `--read-workers=0` keeps every read on the main thread, as before the database read workers. */
+const READ_WORKERS = Number(argument("read-workers") ?? 2);
 const STALL_MS = 150;
 const CLAUDE_MODEL = defaultProviderModel("claude");
 
@@ -264,6 +267,7 @@ const { ClaudeAgentClient } = await import("../src/backend/claude-client");
 const { runCauseEffect } = await import("../src/backend/effect-boundary");
 const { MailboxStore } = await import("../src/backend/mailbox-store");
 const { OpenBotDatabase } = await import("../src/backend/openbot-database");
+const { spawnSourceDatabaseReadWorker } = await import("../src/backend/database/database-read-worker-source");
 
 interface ClientEvents {
   notification: [notification: AppServerNotification];
@@ -368,22 +372,25 @@ const ticker = setInterval(() => {
 }, 10);
 
 const timed = new Map<string, { count: number; totalMs: number; maxMs: number }>();
+function record(name: string, ms: number): void {
+  const entry = timed.get(name) ?? { count: 0, totalMs: 0, maxMs: 0 };
+  entry.count += 1;
+  entry.totalMs += ms;
+  entry.maxMs = Math.max(entry.maxMs, ms);
+  timed.set(name, entry);
+}
 function time<T>(name: string, run: () => T): T {
   const start = performance.now();
   try {
     return run();
   } finally {
-    const ms = performance.now() - start;
-    const entry = timed.get(name) ?? { count: 0, totalMs: 0, maxMs: 0 };
-    entry.count += 1;
-    entry.totalMs += ms;
-    entry.maxMs = Math.max(entry.maxMs, ms);
-    timed.set(name, entry);
+    record(name, performance.now() - start);
   }
 }
 
 const initStart = performance.now();
 const database = new OpenBotDatabase(userData);
+if (READ_WORKERS > 0) database.useReadWorkers(spawnSourceDatabaseReadWorker, { workers: READ_WORKERS });
 const store = new AgentStore(userData, home, database);
 const mailbox = new MailboxStore(userData, store.sharedRoot, store.database);
 const service = new AgentService({
@@ -420,8 +427,16 @@ service.on("event", (event) => {
         : event;
   eventBytes += time("client: event JSON", () => JSON.stringify(sent).length);
   // The app reads the unread state of every chat after each conversation invalidation.
-  if (event.type === "conversation" && readStates)
-    time("client: conversation reads", () => JSON.stringify(service.listConversationReads(memberId)).length);
+  // As the Team API route: a read worker computes the states when one runs.
+  if (event.type === "conversation" && readStates) {
+    const start = performance.now();
+    void runCauseEffect(service.listConversationReadsOffMain(memberId))
+      .then((reads) => {
+        JSON.stringify(reads);
+        record("client: conversation reads", performance.now() - start);
+      })
+      .catch(() => {});
+  }
   if (event.type === "queue-changed") {
     const delivery = pending.get(event.snapshot.agentId);
     if (delivery && !event.snapshot.deliveries.some((item) => item.id === delivery && isActive(item.status)))
@@ -646,6 +661,7 @@ const result = {
   agents: busy.length,
   seconds: SECONDS,
   crashAt: CRASH_AT,
+  readWorkers: READ_WORKERS,
   initMs: Math.round(initMs),
   messagesSent: sent,
   completedTurns,

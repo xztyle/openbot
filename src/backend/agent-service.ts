@@ -4319,6 +4319,55 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return this.#reader.listReads(memberId, options);
   }
 
+  /**
+   * `listConversationReads`, with the read states computed by a database read worker when one runs, so
+   * a client's read does not hold the main thread. The synchronous form stays for callers that cannot
+   * wait, such as the live activity view.
+   */
+  listConversationReadsOffMain(
+    memberId: string,
+    options?: ConversationMarkerExclusions,
+  ): Effect.Effect<Record<string, ConversationReadState>, AgentLifecycleFailed> {
+    return this.#reader
+      .listReadsOffMain(memberId, options)
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "listConversationReads", cause: failure.cause }),
+        ),
+      );
+  }
+
+  /** `searchConversationMessages`, read by a database read worker when one runs. */
+  searchConversationMessagesOffMain(
+    query: string,
+    agentId?: string,
+    cursor?: string,
+    limit?: number,
+  ): Effect.Effect<ConversationSearchPage, AgentLifecycleFailed> {
+    return this.#reader
+      .searchOffMain(query, agentId, cursor, limit)
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "searchConversationMessages", cause: failure.cause }),
+        ),
+      );
+  }
+
+  /** `searchConversationFiles`, read by a database read worker when one runs. */
+  searchConversationFilesOffMain(
+    query: string,
+    cursor?: string,
+    limit?: number,
+  ): Effect.Effect<ConversationFileSearchPage, AgentLifecycleFailed> {
+    return this.#reader
+      .searchFilesOffMain(query, cursor, limit)
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "searchConversationFiles", cause: failure.cause }),
+        ),
+      );
+  }
+
   adoptConversationReads(sourceMemberId: string, targetMemberId: string): void {
     this.#reader.adoptReads(sourceMemberId, targetMemberId);
   }

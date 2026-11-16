@@ -323,6 +323,7 @@ const fakeAgents: TeamApiAgents = {
   listModels: unused("listModels"),
   sidebarChatIds: unused("sidebarChatIds"),
   listConversationReads: unused("listConversationReads"),
+  listConversationReadsOffMain: unused("listConversationReadsOffMain"),
   generateProfile: unused("generateProfile"),
   askSideQuestion: (input) => {
     record("askSideQuestion", input);
@@ -372,6 +373,8 @@ const fakeAgents: TeamApiAgents = {
   readConversationPageFor: unused("readConversationPageFor"),
   searchConversationMessages: unused("searchConversationMessages"),
   searchConversationFiles: unused("searchConversationFiles"),
+  searchConversationMessagesOffMain: unused("searchConversationMessagesOffMain"),
+  searchConversationFilesOffMain: unused("searchConversationFilesOffMain"),
   markConversationRead: unused("markConversationRead"),
   markConversationUnread: unused("markConversationUnread"),
   listWorkspaceDirectory: unused("listWorkspaceDirectory"),

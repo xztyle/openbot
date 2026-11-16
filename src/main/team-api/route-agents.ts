@@ -160,13 +160,15 @@ export async function routeAgents(
     }
     return json(
       200,
-      agents.searchConversationMessages(
-        query,
-        // A query parameter is part of the released URL, and the versioned adapters translate JSON
-        // bodies only. `botId` is what every shipped client sends and what every shipped host reads.
-        url.searchParams.get("botId") ?? undefined,
-        url.searchParams.get("cursor") ?? undefined,
-        pageLimit(url),
+      await runCauseEffect(
+        agents.searchConversationMessagesOffMain(
+          query,
+          // A query parameter is part of the released URL, and the versioned adapters translate JSON
+          // bodies only. `botId` is what every shipped client sends and what every shipped host reads.
+          url.searchParams.get("botId") ?? undefined,
+          url.searchParams.get("cursor") ?? undefined,
+          pageLimit(url),
+        ),
       ),
     );
   }
@@ -202,7 +204,12 @@ export async function routeAgents(
     return json(200, agents.listAgents());
   }
   if (method === "GET" && url.pathname === TEAM_API_ROUTES.agents.conversationReads) {
-    return json(200, agents.listConversationReads(member.id, markerExclusionsForCapabilities(capabilities)));
+    return json(
+      200,
+      await runCauseEffect(
+        agents.listConversationReadsOffMain(member.id, markerExclusionsForCapabilities(capabilities)),
+      ),
+    );
   }
   if (method === "POST" && url.pathname === TEAM_API_ROUTES.agents.all) {
     requireCompatibleDefault();

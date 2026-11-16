@@ -743,7 +743,9 @@ export function agentIpcHandlers({
       }),
       searchConversationMessages: scopedHandler(parseSearchConversationMessages, {
         local: (parsed) =>
-          host.searchAgentConversationMessages(parsed.query, parsed.agentId, parsed.cursor, parsed.limit),
+          runCauseEffect(
+            host.searchAgentConversationMessages(parsed.query, parsed.agentId, parsed.cursor, parsed.limit),
+          ),
         remote: (parsed, serverId) =>
           runCauseEffect(
             remoteServers.searchAgentConversationMessages(
@@ -756,10 +758,10 @@ export function agentIpcHandlers({
           ),
       }),
       searchConversationFiles: payloadHandler(parseSearchConversationFiles, (parsed) =>
-        host.searchAgentConversationFiles(parsed.query, parsed.cursor, parsed.limit),
+        runCauseEffect(host.searchAgentConversationFiles(parsed.query, parsed.cursor, parsed.limit)),
       ),
       listConversationReads: scopedQueryHandler({
-        local: () => host.listAgentConversationReads(),
+        local: () => runCauseEffect(host.listAgentConversationReads()),
         remote: (serverId) => runCauseEffect(remoteServers.listAgentConversationReads(serverId)),
       }),
       markConversationRead: scopedHandler(parseMarkConversationRead, {

@@ -5,6 +5,7 @@ import {
   CONVERSATION_FILE_SEARCH_ROUTES,
 } from "@openbot/contracts/team-protocol/conversation-file-search-v1";
 import { sourceText } from "@openbot/i18n/source";
+import { runCauseEffect } from "../../backend/effect-boundary";
 import type { TeamApiAgents } from "./dependencies";
 import { HttpError } from "./http-error";
 import type { RouteOutcome, TeamApiRequestContext } from "./request-context";
@@ -20,7 +21,7 @@ const DEFAULT_PAGE_SIZE = 50;
  */
 export async function routeConversationFiles(
   context: TeamApiRequestContext,
-  agents: Pick<TeamApiAgents, "searchConversationFiles">,
+  agents: Pick<TeamApiAgents, "searchConversationFilesOffMain">,
 ): Promise<RouteOutcome> {
   const { method, url, capabilities, request, json } = context;
   if (method !== "POST" || url.pathname !== CONVERSATION_FILE_SEARCH_ROUTES.search) return "unmatched";
@@ -33,5 +34,5 @@ export async function routeConversationFiles(
   const limit = isNumber(body.limit)
     ? Math.min(Math.max(body.limit, 1), CONVERSATION_FILE_SEARCH_PAGE_LIMIT)
     : DEFAULT_PAGE_SIZE;
-  return json(200, agents.searchConversationFiles(query, cursor ?? undefined, limit));
+  return json(200, await runCauseEffect(agents.searchConversationFilesOffMain(query, cursor ?? undefined, limit)));
 }

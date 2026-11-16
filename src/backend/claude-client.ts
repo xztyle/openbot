@@ -243,6 +243,16 @@ interface ThreadRuntime {
  */
 const CLAUDE_THREAD_IDLE_RELEASE_MS = 10 * 60_000;
 
+/** The start slot of the last Claude process; each start waits for the one before it, then one macrotask. */
+let lastProcessStart: Promise<void> = Promise.resolve();
+
+/** Resolves in a later turn of the event loop than the start before it. */
+function nextProcessStart(): Promise<void> {
+  const slot = lastProcessStart.then(() => new Promise<void>((resolve) => setImmediate(resolve)));
+  lastProcessStart = slot;
+  return slot;
+}
+
 /**
  * How many idle threads keep their `claude` process before the timeout. A user who runs one turn on
  * each of five agents otherwise holds five processes of about 140 MB each for ten minutes.
@@ -863,6 +873,10 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         : null;
     const plugins = [skillPlugin, homeSkillPlugin].filter((plugin) => plugin !== null);
     const launchPath = yield* cliLaunchPath(this.#cli.executable, this.#cli.source);
+    // Creating the query starts the CLI process on the main thread (10 to 300 ms each on a server).
+    // After a restart or at a routine minute many threads start at once; one start per turn of the
+    // event loop lets the requests and events between them run. The order of the starts stays.
+    yield* Effect.promise(nextProcessStart);
     // `stop()` may have run during the await: a query created now would outlive the client.
     if (!this.#running) return yield* providerFailure(new Error("Claude Agent SDK is not running."));
     if (handoff) this.#reportMcpDrops?.(this.provider, handoff.dropped);

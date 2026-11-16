@@ -58,7 +58,7 @@ import { createQueueStore } from "./stores/queue-store";
 import { createReplyJumpStore } from "./stores/reply-jump-store";
 import { createScrollStore } from "./stores/scroll-store";
 import { createSearchStore } from "./stores/search-store";
-import { createSettingsStore, runtimeSettingsEqual } from "./stores/settings-store";
+import { type AgentPatchResult, createSettingsStore, runtimeSettingsEqual } from "./stores/settings-store";
 import { createSideQuestionStore } from "./stores/side-question-store";
 import { createSkillsStore } from "./stores/skills-store";
 import { createVoiceConversation } from "./stores/voice-conversation-store";
@@ -809,14 +809,15 @@ export function createConversationViewScope(props: ConversationProps) {
   async function saveAgentPatch(
     updates: Omit<UpdateAgentInput, "agentId">,
     targetAgentId = props.agent?.id,
-  ): Promise<boolean> {
+  ): Promise<AgentPatchResult> {
     const agentId = targetAgentId;
-    if (!agentId) return false;
+    if (!agentId) return { saved: false };
     try {
       await props.onUpdateAgent(agentId, updates);
-      return true;
-    } catch {
-      return false;
+      return { saved: true };
+    } catch (error) {
+      // The host's reason, such as a provider change while the agent works, says what to do next.
+      return { saved: false, error };
     }
   }
   // The switch shows the new value while the save runs. The saved agent then holds it.
@@ -831,11 +832,12 @@ export function createConversationViewScope(props: ConversationProps) {
     const draft = { agentId, fastMode: next };
     setFastModeDraft(draft);
     setScopedComposerError(null);
-    const saved = await saveAgentPatch({ fastMode: next }, agentId);
+    const result = await saveAgentPatch({ fastMode: next }, agentId);
     if (fastModeDraft() !== draft) return;
     setFastModeDraft(undefined);
-    if (!saved && props.agent?.id === agentId) {
-      setScopedComposerError(currentText().t("composer.error.changeFastMode"));
+    if (!result.saved && props.agent?.id === agentId) {
+      const { errorMessage, t } = currentText();
+      setScopedComposerError(errorMessage(result.error, t("composer.error.changeFastMode")));
     }
   }
 

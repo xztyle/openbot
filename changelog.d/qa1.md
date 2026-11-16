@@ -7,3 +7,4 @@
 - In the web app, an answer to an agent's question that fails shows why. Before, the question card came back with no message.
 - An MCP connection that a chat uses through "Apps for this chat" now gets the values of the agent that calls it: `{{agent.id}}`, `{{agent.name}}` and the agent's own keys in Secrets. Before, every agent reached the server as the owner of the shared key, and a connection that used a key of one agent only was not offered.
 - The Test and Sign in buttons of an MCP server fill its `{{secret:…}}` values and Secrets links before they connect. Before, they sent the template text, and the server refused it. A key that is missing from Secrets now gets its own message.
+- When a change of model, effort or fast mode fails, the composer and the agent settings show the server's reason, for example that the agent must finish its turn before it changes provider. Before, they said only "Try again", and trying again failed the same way.

@@ -66,6 +66,7 @@ import {
 } from "@openbot/contracts/team-protocol/v8-webrtc-adapter";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
+import { createOpenBotLogger } from "@openbot/logging";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
 import type * as Ws from "ws";
 import type { VerifiedRemoteSessionTicket } from "./central-auth-manager";
@@ -535,6 +536,7 @@ export class TeamWebRtcHostPeer {
     this: TeamWebRtcHostPeer,
     request: Extract<TeamProtocolV2RpcFrame, { type: "request" }>,
   ): Effect.fn.Return<TeamProtocolV2RpcFrame, RemoteWorkflowError, HostPeerTransport> {
+    const startedAt = performance.now();
     return yield* Effect.gen({ self: this }, function* () {
       if (request.operation !== "http.request" || !isHttpRequest(request.payload)) {
         return yield* new RemoteWorkflowError({
@@ -546,9 +548,14 @@ export class TeamWebRtcHostPeer {
         decodeTeamProtocolV2RpcFrame({ version: 2, type: "response", requestId: request.requestId, result }),
       );
     }).pipe(
+      Effect.tap(() => Effect.sync(() => logRpcOutcome(request, startedAt, null))),
       Effect.catch(({ cause: error }) =>
         Effect.gen({ self: this }, function* () {
           const status = error instanceof GatewayError ? error.status : 500;
+          logRpcOutcome(request, startedAt, {
+            status,
+            code: error instanceof GatewayError ? error.code : "host_error",
+          });
           return yield* remoteDecode(() =>
             decodeTeamProtocolV2RpcFrame({
               version: 2,
@@ -1083,6 +1090,42 @@ function isHttpRequest(value: TeamProtocolV2Json): value is TeamProtocolV2Json &
     (value.bodyTransferId === undefined || isString(value.bodyTransferId)) &&
     (value.contentType === undefined || isString(value.contentType))
   );
+}
+
+const logger = createOpenBotLogger("team-webrtc-host");
+/** A request that takes longer than this is logged, so a slow route can be found in the server log. */
+const SLOW_RPC_MS = 3_000;
+
+/**
+ * Logs a request that failed on this host or took long. The Team API logs its own unexpected
+ * errors; a failure before it, such as a local fetch that did not connect, had no log at all. The
+ * route keeps only fixed words: an ID, a name or a query never reaches the log.
+ */
+function logRpcOutcome(
+  request: Extract<TeamProtocolV2RpcFrame, { type: "request" }>,
+  startedAt: number,
+  failure: { status: number; code: string } | null,
+): void {
+  const durationMs = Math.round(performance.now() - startedAt);
+  if ((failure === null || failure.status < 500) && durationMs < SLOW_RPC_MS) return;
+  const payload = isHttpRequest(request.payload) ? request.payload : null;
+  const details = {
+    method: payload?.method ?? request.operation,
+    route: payload ? logRoute(payload.path) : "",
+    durationMs,
+    ...(failure
+      ? { status: failure.status, code: /^[a-z0-9_]{1,40}$/u.test(failure.code) ? failure.code : "other" }
+      : {}),
+  };
+  if (failure && failure.status >= 500) logger.warn("A Team API request over WebRTC failed.", details);
+  else logger.info("A Team API request over WebRTC was slow.", details);
+}
+
+function logRoute(path: string): string {
+  return (path.split("?")[0] ?? "")
+    .split("/")
+    .map((part) => (part === "" || /^(?:v\d{1,2}|[a-z][a-z_-]{0,39})$/u.test(part) ? part : ":id"))
+    .join("/");
 }
 
 /**

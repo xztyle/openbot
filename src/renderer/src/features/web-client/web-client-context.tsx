@@ -1580,13 +1580,15 @@ export function createWebWorkspace(
       }
       await refresh();
     } catch (error) {
-      if (current === generation) report(error);
+      // Only a focus or a return to the page reads again, so a lost connection is the status's to show.
+      if (current === generation) reportBackground(error);
     }
   }
   /**
    * The page comes back after a while in the background. The connection can look online and be dead: the
-   * phone slept, or the network changed. The peer renews its path first, then one small request tells whether
-   * the host answers. A host that does not answer starts a new connection; one that does is read again.
+   * phone slept, or the network changed. One small request tells whether the host answers, and the peer
+   * judges its path while it waits. A host that does not answer gets a renewed path and a new connection;
+   * one that does is read again.
    */
   async function returnFromBackground() {
     const current = generation;

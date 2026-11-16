@@ -766,10 +766,7 @@ export function createWebWorkspace(
    * and the next focus reads again. Any other failure is shown.
    */
   function reportBackground(error: unknown) {
-    if (webNetworkFailureMessage(error) !== null) return;
-    if (error instanceof Error && webNetworkFailureMessage(error.cause) !== null) return;
-    if (error instanceof WebHostRequestError && error.transport) return;
-    report(error);
+    if (!transientFailure(error)) report(error);
   }
   async function run(action: () => Promise<void>) {
     if (running) return;
@@ -1375,7 +1372,9 @@ export function createWebWorkspace(
           const item = draft.conversations[id];
           if (item) {
             item.loading = false;
-            item.error = currentText().t("webClient.error.requestFailed");
+            // The notice with Retry covers the chat, so it is only for a chat that has nothing to show.
+            // A chat that shows its messages keeps them; the caller says why the read failed.
+            if (!item.page) item.error = currentText().t("webClient.error.requestFailed");
           }
         });
       throw error;
@@ -1698,6 +1697,9 @@ export function createWebWorkspace(
   }
   // Coalesce event bursts; an event during a read schedules one further authoritative read.
   let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The one later read after a background read of the open chat failed for a moment. */
+  let refreshRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  let refreshRetried = false;
   let eventRefreshAt = 0;
   /**
    * Reads the open chat again for a host event. A busy turn sends a conversation event for each step,
@@ -1727,8 +1729,19 @@ export function createWebWorkspace(
           const current = generation;
           try {
             await load(id);
+            refreshRetried = false;
           } catch (error) {
-            if (current === generation) report(error);
+            if (current !== generation) continue;
+            // Nobody asked for this read. A late answer or a dropped connection shows no error: the
+            // read goes once more a little later, and the next event or focus reads again after that.
+            if (!transientFailure(error)) report(error);
+            else if (!refreshRetried && refreshRetryTimer === undefined) {
+              refreshRetried = true;
+              refreshRetryTimer = setTimeout(() => {
+                refreshRetryTimer = undefined;
+                void refresh();
+              }, REFRESH_RETRY_MS);
+            }
           }
         }
       }
@@ -1908,6 +1921,7 @@ export function createWebWorkspace(
       generation += 1;
       clearTimeout(readsTimer);
       clearTimeout(eventRefreshTimer);
+      clearTimeout(refreshRetryTimer);
       stopRestartRetry();
       recovery.dispose();
       hostLifecycle.dispose();
@@ -2329,6 +2343,18 @@ export function createWebWorkspace(
 const FOCUS_RESYNC_MS = 30_000;
 /** The shortest time between two reads of the open chat that host events start. */
 const EVENT_REFRESH_SPACING_MS = 500;
+/** The wait before a background read of the open chat that failed for a moment goes once more. */
+const REFRESH_RETRY_MS = 3_000;
+
+/**
+ * A failure that the connection status and its recovery own: a lost network, a late answer or a
+ * dropped connection. A read that nobody asked for does not show it.
+ */
+function transientFailure(error: unknown): boolean {
+  if (webNetworkFailureMessage(error) !== null) return true;
+  if (error instanceof Error && webNetworkFailureMessage(error.cause) !== null) return true;
+  return error instanceof WebHostRequestError && error.transport;
+}
 /** Queue reads in flight at once when many agents need theirs. */
 const QUEUE_READS_AT_ONCE = 4;
 

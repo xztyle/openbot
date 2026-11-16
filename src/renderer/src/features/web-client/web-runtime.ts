@@ -611,24 +611,27 @@ export function createWebWorkspaceRuntime(
   /**
    * A request that the connection lost is sent again after the connection comes back: a request that
    * never left at all, or a read, which the host can answer twice. A write that the host can have done
-   * is not sent again, and an upload keeps its own retry. All attempts share one wait.
+   * is not sent again, and an upload keeps its own retry. All attempts share one wait. A read that got
+   * no answer in time goes once more at once: one lost or late answer is not a failure that the reader
+   * must see.
    */
   async function request(method: string, path: string, body: TeamProtocolV2Json = {}, upload?: RemoteFileUpload) {
     const requestHostId = lockedHostId;
     const closed = closedConnections;
     const deadline = Date.now() + REQUEST_RECONNECT_WAIT_MS;
+    let timeoutResent = false;
     for (;;) {
       try {
         return await requestOnce(method, path, body, upload);
       } catch (error) {
         // The compatibility read is the probe that tells whether the connection works. It never waits.
-        if (
-          !(error instanceof WebHostRequestError) ||
-          !error.resend ||
-          upload !== undefined ||
-          path === TEAM_API_ROUTES.compatibility
-        )
+        if (!(error instanceof WebHostRequestError) || upload !== undefined || path === TEAM_API_ROUTES.compatibility)
           throw error;
+        if (error.timedOutRead && !timeoutResent) {
+          timeoutResent = true;
+          continue;
+        }
+        if (!error.resend) throw error;
         const waitMs = deadline - Date.now();
         if (waitMs <= 0 || !(await waitForConnection(requestHostId, closed, waitMs))) throw error;
       }
@@ -676,6 +679,8 @@ export function createWebWorkspaceRuntime(
         result.reference ?? null,
         lost && requestHostId !== null,
         failure.kind === "unsent" || failure.kind === "connection" || failure.kind === "timeout",
+        false,
+        read && failure.kind === "timeout",
       );
     if ((result.status ?? 500) >= 400)
       throw new WebHostRequestError(

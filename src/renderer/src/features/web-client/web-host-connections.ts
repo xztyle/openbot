@@ -40,6 +40,8 @@ export class WebHostRequestError extends Error {
     readonly transport = false,
     /** The host answered and refused the request, so it made no change. */
     readonly refused = false,
+    /** A read that got no answer in time. The host can send it twice, so it goes once more. */
+    readonly timedOutRead = false,
   ) {
     super(message);
   }

@@ -465,6 +465,15 @@ export function createRemoteTeamPeer(
       if (!state || !isPeerOnline(state)) return;
       void runPeerEffect(sendEventControl(state, { type: "team-typing", agentId, typing })).catch(() => undefined);
     },
+    /**
+     * Asks the host for its runtime snapshot (pending approvals, prompts and takeovers) on the event
+     * channel. For a client that lost events: the snapshot replaces what those events carried.
+     */
+    requestRuntimeSnapshot() {
+      const state = peer;
+      if (!state || !isPeerOnline(state)) return;
+      void runPeerEffect(sendEventControl(state, { type: "runtime-snapshot-request" })).catch(() => undefined);
+    },
     execute: (command: RemoteTeamCommand) => runPeerEffect(executeCommand(command, actions)),
     dispose: async () => {
       active = false;

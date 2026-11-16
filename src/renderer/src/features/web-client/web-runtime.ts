@@ -243,6 +243,8 @@ export interface WebWorkspaceRuntime {
    * attempt loses the connection: its reads must fail so that the next attempt can start.
    */
   abandonReconnectWaits?(): void;
+  /** Asks the host to send its runtime snapshot again, after events were lost. */
+  requestRuntimeSnapshot?(): void;
   /** Tells a hosted server that this tab has focus. Send it only to a host with `focus-use-v1`. */
   focusUse(): Promise<void>;
   /** Resolves to the conversation message the host stored: the delivery id of the receipt. */
@@ -1157,6 +1159,9 @@ export function createWebWorkspaceRuntime(
     },
     setTyping(agentId, typing) {
       peer.setTyping(agentId, typing);
+    },
+    requestRuntimeSnapshot() {
+      peer.requestRuntimeSnapshot();
     },
     abandonReconnectWaits() {
       closedConnections += 1;

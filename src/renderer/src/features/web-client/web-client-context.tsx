@@ -542,7 +542,7 @@ export function createWebWorkspace(
             if (retry && !update.hostOffline && !disposed && current === generation) recover();
           });
         } else if (restartSince !== null && update.state === "offline") recover();
-        if (update.state === "online" && update.resync && !connectionPromise) recover();
+        if (update.state === "online" && update.resync && !connectionPromise) void readLostEvents();
       },
       event(id, event) {
         if (disposed || id !== hostId) return;
@@ -1554,6 +1554,60 @@ export function createWebWorkspace(
    * queue of the opened chat is read here; the other queues come with their events, or when their chat opens.
    * A read that is already running is shared.
    */
+  /**
+   * The connection stayed online, but the host or the peer says that events were lost (an event reset)
+   * or that reads failed while the path recovered. Everything those events carry is read again: the
+   * runtime snapshot (approvals, prompts, takeovers), the roster, every queue, the unread counts and
+   * the open chat. A reconnect did the same reads with a "connecting" state between them, and on a
+   * healthy peer it did not even ask for the snapshot. Only a failed read falls back to the reconnect.
+   */
+  let lostEventsRead: { again: boolean } | null = null;
+  async function readLostEvents(): Promise<void> {
+    if (lostEventsRead) {
+      lostEventsRead.again = true;
+      return;
+    }
+    const read = { again: true };
+    lostEventsRead = read;
+    try {
+      while (read.again && !disposed) {
+        read.again = false;
+        await readLostEventsOnce();
+      }
+    } finally {
+      lostEventsRead = null;
+    }
+  }
+  async function readLostEventsOnce(): Promise<void> {
+    if (state.status !== "online") {
+      recover();
+      return;
+    }
+    const current = generation;
+    runtime.requestRuntimeSnapshot?.();
+    try {
+      const [agents, agentStatus, models] = await Promise.all([
+        runtime.listAgents(),
+        runtime.status(),
+        runtime.models(),
+      ]);
+      if (disposed || current !== generation) return;
+      reconcileAgents(agents);
+      setState((draft) => {
+        draft.agentStatus = agentStatus;
+        draft.models = models;
+      });
+      syncedAt = Date.now();
+      const agentIds = agents.map((agent) => agent.id);
+      void loadPanels(state.capabilities, agentIds);
+      staleQueues.clear();
+      loadQueues(agentIds);
+      loadReads();
+      await refresh();
+    } catch {
+      if (!disposed && current === generation) recover();
+    }
+  }
   function resync(): Promise<void> {
     if (resyncPromise) return resyncPromise;
     const promise = readAgentsAgain().finally(() => {

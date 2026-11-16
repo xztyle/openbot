@@ -73,6 +73,7 @@ import type { AttachmentGateway } from "./attachment-gateway";
 import type { AttentionRegistry } from "./attention-registry";
 import { loadAvatarFile } from "./avatar-file";
 import type { BrowserUploads } from "./browser-uploads";
+import { handleChannelAdminTool } from "./channel-admin-tools";
 import type { ChatVisualPreviewHost } from "./chat-visual-preview";
 import type { ConversationRuntime } from "./conversation-runtime";
 import { handleDataTool } from "./data-tools";
@@ -201,6 +202,10 @@ export interface OpenBotToolRouterHooks {
   reportRoutineFailure(agentId: string, turnId: string, reason: string): boolean;
   /** Starts a new chat with the agent when its turn ends and its queue is empty. */
   requestNewChat(agentId: string): void;
+  /** The host user of this computer, the owner of the server: the person of a channel that an agent makes. */
+  channelHost(): { id: string; name: string };
+  /** Puts a channel that does not exist yet in a space, and tells the readers of the spaces. */
+  placeChannel(channelId: string, spaceId: string): void;
 }
 
 export interface OpenBotToolRouterOptions {
@@ -948,7 +953,7 @@ export class OpenBotToolRouter {
         contentItems: [
           {
             type: "inputText",
-            text: "This chat has no active channel assignment. Channel tools work only inside a channel task. Use openbot.send_message for direct teammate work, or sidebar section tools (list_sections, create_section, assign_agent_section) to group agents.",
+            text: "This chat has no active channel assignment. The channel_ tools work only inside a channel task. To make, change or post in channels from this chat, use openbot.list_channels, create_channel, update_channel, update_channel_members or post_channel_message. Use openbot.send_message for direct teammate work.",
           },
         ],
       };
@@ -1091,6 +1096,27 @@ export class OpenBotToolRouter {
         return openBotToolFailure("Use this tool only in a routine run.");
       return openBotToolResult({ status: "failed", note: "This run ends as failed. Give your answer as usual." });
     }
+
+    const channelAdminResult = yield* handleChannelAdminTool(
+      params.tool,
+      params.arguments,
+      {
+        agentId: senderAgentId,
+        turnId: params.turnId,
+        callId: params.callId,
+        channelTaskId: this.#channels.store.channelForThread(executionThreadId),
+      },
+      {
+        channels: this.#channels,
+        agents: () => this.#hooks.listAgents(),
+        sameSpace: (agentId, otherAgentId) => this.#store.spaces.sameSpace(agentId, otherAgentId),
+        seesChannel: (agentId, channel) => agentSeesChannel(this.#store.spaces, agentId, channel),
+        agentSpace: (agentId) => this.#store.spaces.agentSpace(agentId),
+        host: () => this.#hooks.channelHost(),
+        placeChannel: (channelId, spaceId) => this.#hooks.placeChannel(channelId, spaceId),
+      },
+    );
+    if (channelAdminResult) return channelAdminResult;
 
     const sidebarResult = yield* handleSidebarTool(
       params.tool,

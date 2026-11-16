@@ -121,6 +121,7 @@ import {
   MODEL_SWITCH_ITEM_TYPES,
   type ModelSwitchReason,
   type QueueSteerFallback,
+  SIGNED_OUT_CHANNEL_MEMBER_ID,
   sameAgentBrowserProfile,
   sameAgentModelChoice,
   WORKFLOWS_USAGE_ID,
@@ -1637,6 +1638,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         requestNewChat: (agentId) => {
           this.#requestedNewChats.add(agentId);
         },
+        // The first person is the host user of this computer; signed out, the signed-out reader.
+        channelHost: () => options.channelPeople?.()[0] ?? { id: SIGNED_OUT_CHANNEL_MEMBER_ID, name: "You" },
+        placeChannel: (channelId, spaceId) => this.spaces.place("channel", channelId, spaceId),
       },
     });
   }

@@ -9,6 +9,7 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { isUiBlockId, UI_BLOCK_LIMITS } from "@openbot/contracts/ui-blocks";
 import { z } from "zod";
 import { interruptAgentToolSchema } from "./agent/agent-interrupt-tool";
+import { CHANNEL_ADMIN_TOOL_DEFINITIONS } from "./agent/channel-admin-tools";
 import { DATA_TOOL_DEFINITIONS } from "./agent/data-tools";
 import { EVENT_CHECK_TOOL_DEFINITIONS } from "./agent/event-check-tools";
 import { HISTORY_TOOL_DEFINITIONS } from "./agent/history-tools";
@@ -318,6 +319,7 @@ export const saveApiKeyToolSchema = z.strictObject({
 /** Shared declarations for Codex, Grok, and Claude. Service handlers enforce execution rules. */
 export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   ...EVENT_CHECK_TOOL_DEFINITIONS,
+  ...CHANNEL_ADMIN_TOOL_DEFINITIONS,
   ...CHANNEL_TOOL_DEFINITIONS,
   ...MESSAGING_TOOL_DEFINITIONS,
   ...HISTORY_TOOL_DEFINITIONS,

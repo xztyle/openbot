@@ -23,6 +23,7 @@ const handoff = {
 
 const PERSON_ONLY =
   "It changes only this channel, and only in a task that a person's message started, not a routine run.";
+const OUTSIDE_TASK = "Outside a channel task, use update_channel_members instead.";
 
 export const CHANNEL_TOOL_DEFINITIONS: readonly { name: string; description: string; shape: z.ZodRawShape }[] = [
   {
@@ -67,17 +68,17 @@ export const CHANNEL_TOOL_DEFINITIONS: readonly { name: string; description: str
   },
   {
     name: "channel_add_member",
-    description: `Add an agent to this channel when a person asks for it. Get its id from openbot.list_agents. ${PERSON_ONLY}`,
+    description: `Add an agent to this channel when a person asks for it. Get its id from openbot.list_agents. ${PERSON_ONLY} ${OUTSIDE_TASK}`,
     shape: { agentId: z.string().min(1).max(INPUT_LIMITS.identifier) },
   },
   {
     name: "channel_remove_member",
-    description: `Remove an agent from this channel when a person asks for it. Its open tasks here stop. You cannot remove yourself. ${PERSON_ONLY}`,
+    description: `Remove an agent from this channel when a person asks for it. Its open tasks here stop. You cannot remove yourself. ${PERSON_ONLY} ${OUTSIDE_TASK}`,
     shape: { agentId: z.string().min(1).max(INPUT_LIMITS.identifier) },
   },
   {
     name: "channel_set_instructions",
-    description: `Replace the instructions of this channel when a person asks for it. Send the whole new text; an empty text removes them. ${PERSON_ONLY}`,
+    description: `Replace the instructions of this channel when a person asks for it. Send the whole new text; an empty text removes them. ${PERSON_ONLY} Outside a channel task, use update_channel instead.`,
     shape: { instructions: z.string().max(INPUT_LIMITS.agentDescription) },
   },
   {

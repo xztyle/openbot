@@ -137,7 +137,16 @@ export function AgentChannelDefaults(props: { agentId: string; api: AgentChannel
     generation += 1;
   });
 
-  async function save(agentId: string, api: AgentChannelDefaultsApi, change: WorkspaceAgentChannelDefaults) {
+  // Each save reads the settings and writes them whole. Two at once, such as the focus that an agent
+  // change commits and a mode picked right after, would each write over the other: they run in turn.
+  let saveTail: Promise<void> = Promise.resolve();
+  function save(agentId: string, api: AgentChannelDefaultsApi, change: WorkspaceAgentChannelDefaults) {
+    const run = saveTail.then(() => saveNow(agentId, api, change));
+    saveTail = run;
+    return run;
+  }
+
+  async function saveNow(agentId: string, api: AgentChannelDefaultsApi, change: WorkspaceAgentChannelDefaults) {
     const current = generation;
     const shown = () => generation === current && shownAgentId === agentId;
     if (shown())

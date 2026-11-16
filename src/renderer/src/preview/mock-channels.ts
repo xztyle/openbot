@@ -487,6 +487,9 @@ export function createMockChannels(
     setWorkspaceSidebar: async (prefs: WorkspaceSidebarPrefs, serverId?: string): Promise<WorkspaceSidebar> => {
       const saved = decodeWorkspaceSidebarPrefs(prefs);
       sidebars.set(serverId ?? "local", saved);
+      // As a host does: every session of the member hears of the change, the one that saved too,
+      // after the answer.
+      setTimeout(() => emit({ type: "workspace-sidebar-changed" }), 0);
       return { sidebar: structuredClone(saved) };
     },
     workspaceActivity: async (input: WorkspaceActivityInput): Promise<WorkspaceActivity> => {

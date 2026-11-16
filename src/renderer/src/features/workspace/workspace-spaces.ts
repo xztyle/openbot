@@ -29,6 +29,8 @@ export interface WorkspaceSpacesOptions {
 
 interface SpacesState {
   data: WorkspaceSpaces | null;
+  /** Channels this client put in a space before it made them, until the host's answer names them. */
+  placed: Record<string, string>;
   /** False until the host answered, and on a host without spaces: then only General shows. */
   available: boolean;
 }
@@ -40,7 +42,7 @@ export type WorkspaceSpacesController = ReturnType<typeof createWorkspaceSpaces>
  * at. The sidebar and the views show only that space. A host without spaces has one, General.
  */
 export function createWorkspaceSpaces(options: WorkspaceSpacesOptions) {
-  const [state, setState] = createStore<SpacesState>({ data: null, available: false });
+  const [state, setState] = createStore<SpacesState>({ data: null, placed: {}, available: false });
   let run = 0;
   let loading = false;
   let again = false;
@@ -62,10 +64,10 @@ export function createWorkspaceSpaces(options: WorkspaceSpacesOptions) {
           draft.available = true;
         });
     } catch {
-      // A host without spaces: everything is in General.
-      if (current === run)
+      // A host without spaces: everything is in General. A host that has them and failed to answer
+      // once, such as during a reconnect, keeps the spaces it gave: the reader stays where they are.
+      if (current === run && state.data === null)
         setState((draft) => {
-          draft.data = null;
           draft.available = false;
         });
     } finally {
@@ -84,6 +86,7 @@ export function createWorkspaceSpaces(options: WorkspaceSpacesOptions) {
         run += 1;
         setState((draft) => {
           draft.data = null;
+          draft.placed = {};
           draft.available = false;
         });
       }
@@ -137,16 +140,24 @@ export function createWorkspaceSpaces(options: WorkspaceSpacesOptions) {
   /** The space that shows. A space that is gone, or a host without spaces, shows General. */
   const current = createMemo(() => (state.available ? known(options.saved()) : GENERAL_SPACE_ID));
   const agentSpace = (agentId: string) => known(agentSpaces().get(agentId));
-  const channelSpace = (channelId: string) => known(channelSpaces().get(channelId));
+  const channelSpace = (channelId: string) => known(channelSpaces().get(channelId) ?? state.placed[channelId]);
 
+  /**
+   * Sends a change and shows its answer. A read that started before the change answers an older
+   * value, so it is dropped, and one more read follows the answer.
+   */
   async function act(action: WorkspaceSpaceAction) {
     const send = options.port().agent.workspaceSpaceAction;
     if (!send) throw new Error(currentText().t("error.team.workspaceUnsupported"));
+    run += 1;
     const result = await send(action);
+    run += 1;
     setState((draft) => {
       draft.data = result;
       draft.available = true;
+      if (action.kind === "place-channel") draft.placed[action.channelId] = action.spaceId;
     });
+    void load();
     return result;
   }
 
@@ -158,6 +169,9 @@ export function createWorkspaceSpaces(options: WorkspaceSpacesOptions) {
     select: (spaceId: string) => options.save(spaceId),
     agentSpace,
     channelSpace,
+    /** Whether the host named the space of the item, so a move to it is not a guess. */
+    knowsAgent: (agentId: string) => agentSpaces().has(agentId),
+    knowsChannel: (channelId: string) => channelSpaces().has(channelId) || channelId in state.placed,
     /** Whether an agent or a channel shows in the space that the reader looks at. */
     agentInCurrent: (agentId: string) => agentSpace(agentId) === current(),
     channelInCurrent: (channelId: string) => channelSpace(channelId) === current(),

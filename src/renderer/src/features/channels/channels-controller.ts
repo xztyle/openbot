@@ -8,7 +8,7 @@ import {
 import type { AppTextKey } from "@openbot/i18n";
 import type { AgentProfile } from "@openbot/ui/data";
 import { currentText } from "@openbot/ui/text";
-import { createEffect, createStore, flush, onSettled, reconcile, untrack } from "solid-js";
+import { createEffect, createSignal, createStore, flush, onSettled, reconcile, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { type DesktopAnalyticsProperties, desktopAnalytics } from "../../analytics";
 import { mergeChannelPage } from "./channel-page-merge";
@@ -104,6 +104,7 @@ function channelAction(input: ChannelCommand, creating: boolean, page: ChannelPa
 }
 
 export function createChannelsController(env: ChannelsEnvironment) {
+  const [opened, setOpened] = createSignal<{ channelId: string } | null>(null);
   const [state, setState] = createStore<ChannelsState>({
     channels: [],
     listed: false,
@@ -273,6 +274,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     // A saved selection, a search result or a notification can name a channel on a server that has
     // no channels.
     if (!supported()) return;
+    setOpened({ channelId });
     env.beforeOpen();
     env.writeSelection(channelId);
     unreadKeptFor = null;
@@ -569,6 +571,11 @@ export function createChannelsController(env: ChannelsEnvironment) {
   }
   return {
     state,
+    /**
+     * The channel that the reader opened last, as a new object at each open. A saved selection that a
+     * start or a server switch restores is not an open of the reader.
+     */
+    opened,
     port: env.port,
     hasUnread: () => state.channels.some((channel) => channel.unreadCount > 0),
     markAllRead,

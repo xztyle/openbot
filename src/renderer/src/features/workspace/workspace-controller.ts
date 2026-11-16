@@ -584,6 +584,27 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     const open = activeConversationId();
     if (open && rowSpace(open) !== spaceId) openView("activity");
   }
+  /**
+   * A conversation of another space that the reader opens, from Jump to, a notification, a link or a
+   * new agent, brings its space along, so the sidebar shows where it is. Only an open that the reader
+   * makes calls this: a choice of space never moves back to the conversation that showed before it,
+   * and the conversation that shows when the workspace starts does not move the saved space. A
+   * conversation whose space the host has not named yet does not move it either.
+   */
+  function followConversation(id: string) {
+    untrack(() => {
+      if (!spaces.available()) return;
+      const known = id.startsWith(AGENT_DM_PREFIX)
+        ? spaces.knowsAgent(id.slice(AGENT_DM_PREFIX.length))
+        : spaces.knowsChannel(id);
+      const spaceId = rowSpace(id);
+      if (known && spaceId !== spaces.current()) spaces.select(spaceId);
+    });
+  } // A channel that the reader opens anywhere in the app (search, a notification, history) follows too.
+  // Only an open after this workspace started: the last open before it was a choice of another time.
+  createEffect(channels.opened, (opened, previous) => {
+    if (opened && previous !== undefined && opened !== previous) followConversation(opened.channelId);
+  });
 
   // ---------------------------------------------------------------- DM eligibility
 
@@ -712,6 +733,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   let sidebarReadRun = 0;
   /** The `sidebarKeyRun` of the write on its way, or -1. */
   let sidebarSendingRun = -1;
+  /**
+   * How many changes the reader made in this window, and how many of them the last write carried. A
+   * read that started before a change, or that lands while a write is on its way, answers an older
+   * value: the host sends its change event to the window that saved too, so every save is followed by
+   * such a read. Applying it would undo the reader's newest choice.
+   */
+  let sidebarEdits = 0;
+  let sidebarSentEdits = 0;
 
   function writeLocalSidebar() {
     try {
@@ -729,6 +758,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     try {
       while (sidebarUnsent && run === sidebarKeyRun) {
         sidebarUnsent = false;
+        sidebarSentEdits = sidebarEdits;
         const { order, muted, closed, space } = state.sidebar;
         try {
           await write(
@@ -761,6 +791,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
     const keyRun = sidebarKeyRun;
     const readRun = ++sidebarReadRun;
+    const editsAtStart = sidebarEdits;
     let hosted: SidebarPrefs | null;
     try {
       hosted = (await read()).sidebar;
@@ -771,16 +802,28 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
     if (keyRun !== sidebarKeyRun || readRun !== sidebarReadRun) return;
     sidebarHome = "host";
-    if (hosted && !sidebarUnsent && sidebarSendingRun !== keyRun) {
-      const value = hosted;
+    const local = untrack(() => state.sidebar);
+    if (hosted) {
+      // The reader changed the sidebar since the read began, or a write is on its way: this window
+      // holds the newer value. It goes to the host unless the last write already carried it.
+      if (sidebarEdits !== editsAtStart || sidebarUnsent || sidebarSendingRun === keyRun) {
+        if (sidebarSentEdits !== sidebarEdits) {
+          sidebarUnsent = true;
+          void sendSidebar();
+        }
+        return;
+      }
+      // The space is this window's own, as the open conversation is: a save of another window or
+      // computer of the reader does not move it. A window that has none yet starts in the host's.
+      const space = local.space ?? hosted.space;
+      const value: SidebarPrefs = { ...hosted, ...(space ? { space } : {}) };
       setState((draft) => {
         draft.sidebar = value;
       });
       writeLocalSidebar();
       return;
     }
-    const { order, muted } = untrack(() => state.sidebar);
-    if (!hosted && !order.channels.length && !order.direct.length && !muted.length) return;
+    if (!local.order.channels.length && !local.order.direct.length && !local.muted.length && !local.space) return;
     sidebarUnsent = true;
     void sendSidebar();
   }
@@ -812,6 +855,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   function saveSidebar() {
+    sidebarEdits += 1;
     writeLocalSidebar();
     sidebarUnsent = true;
     void sendSidebar();
@@ -1056,6 +1100,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       setState((draft) => {
         draft.agentChosen = true;
       });
+    // An agent chat that the shell opens, such as from a notification, brings its space along.
+    if (previous && agentId && agentId !== previous) followConversation(`${AGENT_DM_PREFIX}${agentId}`);
   });
 
   // A panel of another channel closes when the reader leaves it.
@@ -1330,6 +1376,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   function openAgent(agentId: string) {
+    followConversation(`${AGENT_DM_PREFIX}${agentId}`);
     if (!openedAgentIds().has(agentId)) setOpenedAgentIds((current) => new Set(current).add(agentId));
     reopenConversation(`${AGENT_DM_PREFIX}${agentId}`);
     if (dmIsMainChat(agentId)) {

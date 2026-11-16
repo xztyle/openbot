@@ -172,6 +172,26 @@ async function parity(root: string): Promise<void> {
   await runCauseEffect(mailbox.markTerminal(firstDelivery, "completed"));
   check("delivery completed", database, reference);
 
+  // The idempotency keys are one row, which a write stores only when the keys changed.
+  const keyed = deliveryOf(
+    await runCauseEffect(
+      mailbox.enqueue({
+        sender: { kind: "user" },
+        recipientAgentIds: [AGENT],
+        text: "keyed",
+        idempotencyKey: "user-send:a",
+      }),
+    ),
+  );
+  check("message with an idempotency key", database, reference);
+  mailbox.forgetIdempotencyKeys("user-send:", new Date(Date.now() + 60_000));
+  const unkeyed = deliveryOf(await enqueue(mailbox, "after the keys went"));
+  check("idempotency keys forgotten", database, reference);
+  for (const delivery of [keyed, unkeyed]) {
+    await runCauseEffect(mailbox.markStarting(delivery));
+    await runCauseEffect(mailbox.markTerminal(delivery, "completed"));
+  }
+
   const failing = deliveryOf(await enqueue(mailbox, "failing"));
   await runCauseEffect(mailbox.markStarting(failing));
   await runCauseEffect(mailbox.markTerminal(failing, "failed", "provider refused"));

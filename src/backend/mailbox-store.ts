@@ -53,7 +53,7 @@ import { StoredStateFailure, storedIO, storedSync, toStoredStateFailure } from "
 export type { ExportedAttachmentFile, GeneratedAttachmentSource } from "./attachment-files";
 
 import { isEmptyStoredFile, parseStoredJson } from "./atomic-json-file";
-import { mailboxReactionRowKey } from "./database/mailbox-projection";
+import { type MailboxProjectionChanges, mailboxReactionRowKey } from "./database/mailbox-projection";
 import { MailboxDeliveryGate } from "./mailbox-delivery-gate";
 import { OpenBotDatabase } from "./openbot-database";
 import { isRecord } from "./protocol";
@@ -284,6 +284,7 @@ export class MailboxStore {
   set #state(value: StoredState) {
     this.#stateValue = value;
     this.#revision += 1;
+    this.#idempotencyChanged = true;
   }
   /**
    * Moves at each write and each replacement of the state. A reader that keeps something it derived
@@ -308,6 +309,32 @@ export class MailboxStore {
     generatedAttachmentIds: new Set<string>(),
     reactionKeys: new Set<string>(),
   };
+  /**
+   * Whether the idempotency keys changed since the last committed write. Change them only through
+   * `#setIdempotencyKey`, `#deleteIdempotencyKey` and `#replaceIdempotency`, which set this: a write
+   * stores the keys only when it is set. A new state sets it too.
+   */
+  #idempotencyChanged = true;
+
+  #setIdempotencyKey(key: string, messageId: string): void {
+    this.#state.idempotency[key] = messageId;
+    this.#idempotencyChanged = true;
+  }
+
+  #deleteIdempotencyKey(key: string): void {
+    delete this.#state.idempotency[key];
+    this.#idempotencyChanged = true;
+  }
+
+  #replaceIdempotency(keys: Record<string, string>): void {
+    this.#state.idempotency = keys;
+    this.#idempotencyChanged = true;
+  }
+
+  /** The rows that the next write stores. */
+  #pendingChanges(): MailboxProjectionChanges {
+    return { ...this.#changes, idempotency: this.#idempotencyChanged };
+  }
 
   /** The spaces: a message from an agent reaches only agents of its own space. */
   readonly #spaces: Pick<SpaceStore, "sameSpace" | "agentSharedDirectory" | "list" | "sharedDirectory"> | undefined;
@@ -485,12 +512,11 @@ export class MailboxStore {
   forgetIdempotencyKeys(prefix: string, createdBefore: Date): void {
     const createdAt = new Map(this.#state.messages.map((message) => [message.id, Date.parse(message.createdAt)]));
     const cutoff = createdBefore.getTime();
-    this.#state.idempotency = Object.fromEntries(
-      Object.entries(this.#state.idempotency).filter(
-        ([key, messageId]) =>
-          !key.startsWith(prefix) || (createdAt.get(messageId) ?? Number.NEGATIVE_INFINITY) >= cutoff,
-      ),
+    const kept = Object.entries(this.#state.idempotency).filter(
+      ([key, messageId]) => !key.startsWith(prefix) || (createdAt.get(messageId) ?? Number.NEGATIVE_INFINITY) >= cutoff,
     );
+    // Each user message asks this; most often no key is old enough to go.
+    if (kept.length !== Object.keys(this.#state.idempotency).length) this.#replaceIdempotency(Object.fromEntries(kept));
   }
 
   /** The receipt of the message an idempotency key already stored, or null. */
@@ -681,7 +707,7 @@ export class MailboxStore {
       this.#state.messages.push(message);
       recordRestartActivity();
       this.#state.deliveries.push(...deliveries);
-      if (input.idempotencyKey) this.#state.idempotency[input.idempotencyKey] = messageId;
+      if (input.idempotencyKey) this.#setIdempotencyKey(input.idempotencyKey, messageId);
       const usedDrafts = voiceDraft ? [...drafts, voiceDraft] : drafts;
       this.#state.drafts = this.#state.drafts.filter((draft) => !usedDrafts.includes(draft));
       this.#changes.messageIds.add(messageId);
@@ -694,7 +720,7 @@ export class MailboxStore {
         this.#state.messages = this.#state.messages.filter((candidate) => candidate.id !== messageId);
         this.#state.deliveries = this.#state.deliveries.filter((candidate) => !deliveryIds.has(candidate.id));
         if (input.idempotencyKey && this.#state.idempotency[input.idempotencyKey] === messageId) {
-          delete this.#state.idempotency[input.idempotencyKey];
+          this.#deleteIdempotencyKey(input.idempotencyKey);
         }
         for (const draft of usedDrafts) {
           if (!this.#state.drafts.some((candidate) => candidate.id === draft.id)) {
@@ -999,13 +1025,13 @@ export class MailboxStore {
       this.#state.messages = previous.map((candidate) =>
         candidate === message ? { ...message, text, messaging: structuredClone(origin) } : candidate,
       );
-      this.#state.idempotency[idempotencyKey] = message.id;
+      this.#setIdempotencyKey(idempotencyKey, message.id);
       this.#changes.messageIds.add(message.id);
       try {
         this.#persist("mailbox.messaging-joined");
       } catch (error) {
         this.#state.messages = previous;
-        delete this.#state.idempotency[idempotencyKey];
+        this.#deleteIdempotencyKey(idempotencyKey);
         throw error;
       }
       return true;
@@ -1816,8 +1842,10 @@ export class MailboxStore {
       this.#state.reactions = this.#state.reactions.filter(
         (reaction) => reaction.agentId !== agentId && !removedMessageIds.has(reaction.messageId),
       );
-      this.#state.idempotency = Object.fromEntries(
-        Object.entries(this.#state.idempotency).filter(([, messageId]) => !removedMessageIds.has(messageId)),
+      this.#replaceIdempotency(
+        Object.fromEntries(
+          Object.entries(this.#state.idempotency).filter(([, messageId]) => !removedMessageIds.has(messageId)),
+        ),
       );
       this.#state.generatedAttachments = this.#state.generatedAttachments.filter(
         (attachment) => !removedGenerated.includes(attachment),
@@ -1875,8 +1903,10 @@ export class MailboxStore {
       this.#state.messages = this.#state.messages.filter((message) => message.channelId !== channelId);
       this.#state.deliveries = this.#state.deliveries.filter((delivery) => !removedMessageIds.has(delivery.messageId));
       this.#state.reactions = this.#state.reactions.filter((reaction) => !removedMessageIds.has(reaction.messageId));
-      this.#state.idempotency = Object.fromEntries(
-        Object.entries(this.#state.idempotency).filter(([, messageId]) => !removedMessageIds.has(messageId)),
+      this.#replaceIdempotency(
+        Object.fromEntries(
+          Object.entries(this.#state.idempotency).filter(([, messageId]) => !removedMessageIds.has(messageId)),
+        ),
       );
       this.#state.generatedAttachments = this.#state.generatedAttachments.filter(
         (attachment) => !removedGenerated.includes(attachment),
@@ -2759,7 +2789,7 @@ export class MailboxStore {
       eventType,
       detail,
       nextState,
-      this.#changes,
+      this.#pendingChanges(),
       "attachment.generated-batch",
     );
     this.#state = nextState;
@@ -3041,12 +3071,13 @@ export class MailboxStore {
     const ownsTransaction = !this.#database.connection.isTransaction;
     const wrote = replaceAll
       ? this.#database.replaceMailboxState(commandId, this.#state, eventType, fileDeletions, true)
-      : this.#database.applyMailboxChanges(commandId, this.#state, this.#changes, eventType, fileDeletions);
+      : this.#database.applyMailboxChanges(commandId, this.#state, this.#pendingChanges(), eventType, fileDeletions);
     if (wrote && ownsTransaction) this.#clearChanges();
   }
 
   #clearChanges(): void {
     for (const keys of Object.values(this.#changes)) keys.clear();
+    this.#idempotencyChanged = false;
   }
 
   #drainFileDeletionOutboxEffect = Effect.fn("MailboxStore.drainFileDeletionOutbox")(function* (this: MailboxStore) {

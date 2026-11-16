@@ -84,7 +84,15 @@ export class MailboxSync {
     };
   }
 
-  syncMailboxMessages(snapshot: ConversationSnapshot, mailboxMessages?: readonly ConversationMessage[]): void {
+  /**
+   * Merges the agent's mail into `snapshot`. `changed` receives each message object that stays in the
+   * chat and that this changed in place, so a caller can reuse the digests of the others.
+   */
+  syncMailboxMessages(
+    snapshot: ConversationSnapshot,
+    mailboxMessages?: readonly ConversationMessage[],
+    changed?: Set<ConversationMessage>,
+  ): void {
     if (this.#conversation.isExecutionThread(snapshot.threadId)) return;
     const fromCreatedAt = snapshot.messages[0]?.createdAt;
     const incomingMailboxMessages =
@@ -110,8 +118,17 @@ export class MailboxSync {
     }
     const reactions = this.#mailbox.reactionsFor(snapshot.agentId);
     for (const message of snapshot.messages) {
-      message.reactions = reactions.get(message.id) ?? [];
-      message.reaction = message.reactions.find((reaction) => reaction.actor.kind === "user")?.emoji ?? null;
+      const next = reactions.get(message.id) ?? [];
+      const reaction = next.find((item) => item.actor.kind === "user")?.emoji ?? null;
+      if (
+        changed &&
+        (message.reaction !== reaction ||
+          message.reactions === undefined ||
+          JSON.stringify(message.reactions) !== JSON.stringify(next))
+      )
+        changed.add(message);
+      message.reactions = next;
+      message.reaction = reaction;
     }
     sortConversationMessages(snapshot.messages);
   }
@@ -166,13 +183,18 @@ export class MailboxSync {
       messages: page.messages,
     };
     const previousMessageIds = new Set(persisted.messages.map((message) => message.id));
-    const previousSignature = conversationContentSignature(persisted);
+    const previous = digestMessages(persisted.messages);
+    const previousSignature = conversationContentSignature(persisted, previous);
     const oldest = persisted.messages[0]?.createdAt;
+    const changed = new Set<ConversationMessage>();
     this.syncMailboxMessages(
       persisted,
       this.#mailbox.conversationMessages(agent.id, oldest === undefined ? {} : { fromCreatedAt: oldest }),
+      changed,
     );
-    if (conversationContentSignature(persisted) === previousSignature) return;
+    for (const message of changed) previous.delete(message);
+    if (conversationContentSignature(persisted, digestMessages(persisted.messages, previous)) === previousSignature)
+      return;
     // The signature also changes with key order, which the stored rows keep. Write only the
     // messages that store differently, so a read with no real change writes nothing (#2224).
     const changedMessages = this.#database.changedConversationMessages(agent.threadId, persisted.messages);
@@ -237,10 +259,14 @@ export class MailboxSync {
     for (const affectedAgentId of affectedAgents) {
       const snapshot = this.#conversation.snapshotToUpdate(affectedAgentId);
       if (!snapshot) continue;
-      const previousSignature = conversationContentSignature(snapshot);
-      this.syncMailboxMessages(snapshot);
-      // The digests of the merged chat serve the signature and the write and publish after it.
-      const digests = digestMessages(snapshot.messages);
+      const previous = digestMessages(snapshot.messages);
+      const previousSignature = conversationContentSignature(snapshot, previous);
+      const changed = new Set<ConversationMessage>();
+      this.syncMailboxMessages(snapshot, undefined, changed);
+      // Only the mail copies and the messages that the merge changed are serialized again. The digests
+      // of the merged chat serve the signature and the write and publish after it.
+      for (const message of changed) previous.delete(message);
+      const digests = digestMessages(snapshot.messages, previous);
       const signature = conversationContentSignature(snapshot, digests);
       if (signature !== previousSignature) this.#conversation.emitConversation(snapshot, undefined, undefined, digests);
       else if (!this.#conversation.hasPublishedConversation(affectedAgentId))

@@ -3037,7 +3037,9 @@ export class MailboxStore {
     return {
       ...publicDelivery,
       ...(steerFallback && delivery.status === "queued" ? { steerFallback } : {}),
-      sender: structuredClone(message.sender),
+      // Each kind of sender holds only strings, so a spread is a full copy; a queue read makes one for
+      // each delivery of the agent's history, and structuredClone took about 1 µs each.
+      sender: { ...message.sender },
       text: message.text,
       attachments: message.attachments.map(toAttachmentSummary),
       replyToMessageId: message.replyToMessageId,

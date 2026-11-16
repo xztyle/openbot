@@ -7,7 +7,7 @@ import {
   channelVisibility,
   type WorkspaceSteps,
 } from "@openbot/contracts/ipc";
-import { Bell, BellOff, Button, Hash, Info, Lock, LogOut, UsersRound } from "@openbot/ui";
+import { Bell, BellOff, Button, Hash, Info, Lock, LogOut, toast, UsersRound } from "@openbot/ui";
 import { QuestionPromptBubble } from "@openbot/ui/components/QuestionPromptBubble";
 import { ApprovalCard, BrowserTakeoverCard } from "@openbot/ui/features/conversation/ConversationPrompts";
 import { ChannelHeader } from "@openbot/ui/features/workspace/ChannelHeader";
@@ -39,7 +39,7 @@ import {
 
 /** The open channel, DM or group: its header, its messages, who works on an answer, and the composer. */
 export function WorkspaceChannelPane(props: { channelId: string }) {
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const ws = useWorkspace();
   const page = () => {
     const current = ws.channels.state.page;
@@ -146,21 +146,37 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     },
   );
   const typingPeople = createMemo(() => (live()?.humans ?? []).map((id) => memberById(ws.directory(), id)));
-  const prompt = createMemo(() => {
-    const current = page();
-    return current ? waitingChannelPrompt(current) : null;
-  });
-  const approval = createMemo(() => {
-    const current = page();
-    const approvals = ws.env.approvals?.() ?? [];
-    return current ? channelApproval(current, summary()?.threads, approvals) : undefined;
-  });
+  // Each channel update reads the prompt again as a new object. The card stays the same while the
+  // request does, so the reader keeps the answers they picked or typed.
+  const prompt = createMemo(
+    () => {
+      const current = page();
+      return current ? waitingChannelPrompt(current) : null;
+    },
+    {
+      equals: (left, right) => left?.entry.id === right?.entry.id && left?.prompt.requestId === right?.prompt.requestId,
+    },
+  );
+  // A new request gets a new card: the card of an answered approval stays "Sending" until it goes.
+  const approval = createMemo(
+    () => {
+      const current = page();
+      const approvals = ws.env.approvals?.() ?? [];
+      return current ? channelApproval(current, summary()?.threads, approvals) : undefined;
+    },
+    {
+      equals: (left, right) => left?.agentId === right?.agentId && left?.requestId === right?.requestId,
+    },
+  );
   /** A browser takeover of the channel's work: the agent waits for a person in its browser. */
-  const takeover = createMemo(() => {
-    const current = page();
-    const takeovers = ws.env.takeovers?.() ?? [];
-    return current && takeovers.length ? channelBrowserTakeover(current, summary()?.threads, takeovers) : undefined;
-  });
+  const takeover = createMemo(
+    () => {
+      const current = page();
+      const takeovers = ws.env.takeovers?.() ?? [];
+      return current && takeovers.length ? channelBrowserTakeover(current, summary()?.threads, takeovers) : undefined;
+    },
+    { equals: (left, right) => left?.agentId === right?.agentId && left?.requestId === right?.requestId },
+  );
   /** The page the agent waits on, captured again every 4 s while the card shows. */
   const [takeoverPreview, setTakeoverPreview] = createSignal<{
     preview: BrowserPreview | null;
@@ -206,12 +222,13 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
       (member) => (member.answerMode ?? (current.leadAgentId === member.agentId ? "lead" : "mention")) === "mention",
     );
   };
-  const respond = async (action: () => Promise<void>) => {
+  const respond = async (action: () => Promise<void>, failure: string) => {
     try {
       await action();
       void ws.channels.refresh();
       return true;
-    } catch {
+    } catch (error) {
+      toast.error(errorMessage(error, failure));
       return false;
     }
   };
@@ -305,23 +322,27 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
         />
       </Show>
       <div class="ws-channel-bottom">
-        <Show when={approval()}>
+        <Show when={approval()} keyed>
           {(current) => (
             <div class="ws-interaction">
               <ApprovalCard
-                approval={current()}
+                approval={current}
                 requester={{
-                  name: memberById(ws.directory(), current().agentId).name,
-                  agent: ws.env.agents().find((agent) => agent.id === current().agentId),
+                  name: memberById(ws.directory(), current.agentId).name,
+                  agent: ws.env.agents().find((agent) => agent.id === current.agentId),
                 }}
                 onApprove={() =>
-                  respond(() =>
-                    ws.channels.port().agent.respondToApproval({ requestId: current().requestId, decision: "accept" }),
+                  respond(
+                    () =>
+                      ws.channels.port().agent.respondToApproval({ requestId: current.requestId, decision: "accept" }),
+                    t("prompt.approval.answerFailed"),
                   )
                 }
                 onReject={() =>
-                  respond(() =>
-                    ws.channels.port().agent.respondToApproval({ requestId: current().requestId, decision: "decline" }),
+                  respond(
+                    () =>
+                      ws.channels.port().agent.respondToApproval({ requestId: current.requestId, decision: "decline" }),
+                    t("prompt.approval.answerFailed"),
                   )
                 }
               />
@@ -343,17 +364,21 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
                   ws.env.openBrowserTab?.(request.tabId, request.agentId);
                 }}
                 onComplete={() =>
-                  respond(() =>
-                    ws.channels
-                      .port()
-                      .agent.respondToBrowserTakeover({ requestId: request.requestId, decision: "complete" }),
+                  respond(
+                    () =>
+                      ws.channels
+                        .port()
+                        .agent.respondToBrowserTakeover({ requestId: request.requestId, decision: "complete" }),
+                    t("uiBlock.error.answerFailed"),
                   )
                 }
                 onCancel={() =>
-                  respond(() =>
-                    ws.channels
-                      .port()
-                      .agent.respondToBrowserTakeover({ requestId: request.requestId, decision: "cancel" }),
+                  respond(
+                    () =>
+                      ws.channels
+                        .port()
+                        .agent.respondToBrowserTakeover({ requestId: request.requestId, decision: "cancel" }),
+                    t("uiBlock.error.answerFailed"),
                   )
                 }
                 browserSecret={{
@@ -374,8 +399,9 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
               <QuestionPromptBubble
                 questions={waiting.prompt.questions}
                 onSubmit={(answers) =>
-                  respond(() =>
-                    ws.channels.port().agent.respondToPrompt({ requestId: waiting.prompt.requestId, answers }),
+                  respond(
+                    () => ws.channels.port().agent.respondToPrompt({ requestId: waiting.prompt.requestId, answers }),
+                    t("uiBlock.error.answerFailed"),
                   )
                 }
               />

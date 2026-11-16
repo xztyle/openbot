@@ -38,7 +38,9 @@ export type WorkspaceView =
   | "agents"
   | "storage"
   | "routines"
-  | "secrets";
+  | "secrets"
+  /** The agents of the space that shows. */
+  | "space-agents";
 
 export interface SidebarChannel {
   id: string;
@@ -82,6 +84,8 @@ export interface WorkspaceSidebarProps {
   showStorage?: boolean | undefined;
   /** The agent key store, for the owner and the admins. */
   showSecrets?: boolean | undefined;
+  /** Shows the Agents view of the space that shows, on a host with spaces. */
+  showSpaceAgents?: boolean | undefined;
   /** Opens the server's apps (Discord, Slack, Telegram and other connectors), for an owner or an admin. */
   onOpenApps?: (() => void) | undefined;
   channels: readonly SidebarChannel[];
@@ -186,6 +190,15 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
               }
               onSelect={props.onSelectView}
             />
+            <Show when={props.showSpaceAgents}>
+              <QuickRow
+                view="space-agents"
+                icon={<Bot aria-hidden="true" />}
+                label={t("workspace.view.spaceAgents")}
+                active={props.activeView === "space-agents"}
+                onSelect={props.onSelectView}
+              />
+            </Show>
             <QuickRow
               view="artifacts"
               icon={<LayoutDashboard aria-hidden="true" />}

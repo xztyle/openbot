@@ -9,6 +9,7 @@ import { duplicateSection as duplicateSectionWith } from "@openbot/ui/features/s
 import { currentText } from "@openbot/ui/text";
 import { createSignal, onCleanup } from "solid-js";
 import { actionToast } from "../../action-toast";
+import { activeSpace } from "../../active-space";
 import { desktopAnalytics } from "../../analytics";
 import { toAgentProfile, withoutAgent } from "../../app-message-projection";
 import { createStoredProfile } from "../../app-stored-values";
@@ -80,7 +81,12 @@ const AgentActions = createSimpleContext({
     function requestNewAgent(draft: NewAgentDraft) {
       const createModelSupported =
         activeServer()?.kind !== "remote" || activeServerSupportsCapability(TEAM_AGENT_CREATE_MODEL_CAPABILITY);
-      return agentsPort().agent.createAgent(newAgentInput(draft, createModelSupported));
+      const spaceId = activeSpace();
+      // A new agent starts in the space that the workspace shows.
+      return agentsPort().agent.createAgent({
+        ...newAgentInput(draft, createModelSupported),
+        ...(spaceId ? { spaceId } : {}),
+      });
     }
 
     /** Synchronous, so a caller that also selects the agent does both in the same update. */

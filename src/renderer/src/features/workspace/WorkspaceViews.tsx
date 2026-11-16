@@ -12,6 +12,7 @@ import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, Match, Show, Switch } from "solid-js";
 import { WorkspaceAgentTalkView } from "./WorkspaceAgentTalk";
 import { WorkspaceSecretsView } from "./WorkspaceSecrets";
+import { WorkspaceSpaceAgentsView } from "./WorkspaceSpaceAgents";
 import { WorkspaceStorageView } from "./WorkspaceStorageView";
 import { useWorkspace } from "./workspace-context";
 import { conversationName, memberById, previewText } from "./workspace-model";
@@ -44,6 +45,9 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
       <Match when={props.view === "secrets"}>
         <WorkspaceSecretsView />
       </Match>
+      <Match when={props.view === "space-agents"}>
+        <WorkspaceSpaceAgentsView />
+      </Match>
     </Switch>
   );
 }
@@ -56,7 +60,7 @@ function channelName(ws: ReturnType<typeof useWorkspace>, channelId: string): st
 function WorkspaceActivityView() {
   const ws = useWorkspace();
   const items = createMemo((): ActivityItem[] =>
-    (ws.state.activity.data?.items ?? []).map((item) => {
+    ws.spaceActivity().map((item) => {
       const actor: WorkspaceMember =
         item.actor.kind === "external"
           ? { id: item.actor.id, kind: "human", name: item.actor.name, external: true }
@@ -97,7 +101,7 @@ function WorkspaceActivityView() {
 function WorkspaceThreadsView() {
   const ws = useWorkspace();
   const threads = createMemo((): ThreadListItem[] =>
-    (ws.state.activity.data?.threads ?? []).map((thread) => {
+    ws.spaceThreads().map((thread) => {
       const channel = ws.summary(thread.channelId);
       return {
         id: `${thread.channelId}/${thread.rootId}`,
@@ -128,7 +132,7 @@ function WorkspaceFleetView() {
   const ws = useWorkspace();
   return (
     <FleetView
-      agents={ws.fleet.agents()}
+      agents={ws.fleet.agents().filter((agent) => ws.spaces.agentInCurrent(agent.member.id))}
       onMessage={(agentId) => ws.openAgent(agentId)}
       onAssign={(agentId) => ws.openAgent(agentId)}
       onSettings={(agentId) => ws.env.openAgentSettings(agentId)}
@@ -162,7 +166,13 @@ function WorkspaceArtifactsView() {
   );
   return (
     <ArtifactsView
-      artifacts={ws.artifacts.artifacts()}
+      artifacts={ws.artifacts
+        .artifacts()
+        .filter((artifact) =>
+          artifact.channelId
+            ? ws.spaces.channelInCurrent(artifact.channelId)
+            : !artifact.agent || ws.spaces.agentInCurrent(artifact.agent.id),
+        )}
       onOpen={(id) => openArtifact(ws, id)}
       onBack={() => ws.back()}
     />
@@ -192,8 +202,8 @@ function WorkspaceRoutinesView() {
   const { t } = useText();
   const ws = useWorkspace();
   const options = createMemo(() =>
-    ws.env
-      .agents()
+    ws
+      .spaceAgents()
       .filter((agent) => !ws.env.hiddenAgentIds().has(agent.id))
       .map((agent) => ({ value: agent.id, label: agent.name })),
   );

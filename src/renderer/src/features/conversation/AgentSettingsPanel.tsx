@@ -20,6 +20,7 @@ import { agentFilesLinkValue } from "@openbot/ui/features/files/AgentFilesView";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, createStore, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
+import { agentSpaceSetting } from "../../active-space";
 import { createSettingsPanelWidth, saveSettingsPanelWidth } from "../../components/settings-panel-width";
 import { agentSkillCalls, skillsPort } from "../../skills-port";
 import type { BrowserProfileCalls } from "../browser/browser-profiles-port";
@@ -418,6 +419,7 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
     <SharedAgentSettingsPanel
       {...props}
       browserProfiles={browserProfileOptions()}
+      space={agentSpaceSetting(props.agent.id)}
       width={panelWidth()}
       onResize={setPanelWidth}
       onResizeEnd={saveSettingsPanelWidth}

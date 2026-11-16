@@ -48,7 +48,10 @@ export function WorkspaceAgentTalkView() {
         (result) => {
           if (run === listRun)
             setState((draft) => {
-              draft.pairs = result.pairs;
+              // Only the pairs of the space that shows; an agent of another space is not in this list.
+              draft.pairs = result.pairs.filter((pair) =>
+                pair.agentIds.every((agentId) => ws.spaces.agentInCurrent(agentId)),
+              );
             });
         },
         () => {

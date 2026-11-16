@@ -18,6 +18,7 @@ import {
   type ChannelSummary,
   type ChannelTypingEntry,
   channelKind,
+  GENERAL_SPACE_ID,
   isChannelAnswerMode,
   type TeamRealtimeEvent,
   type WorkspaceActivity,
@@ -39,6 +40,7 @@ import { currentText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createSignal, createStore, onCleanup, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
+import { setActiveSpaces } from "../../active-space";
 import type { ChannelsController } from "../channels/channels-controller";
 import type { MessagingApi } from "../connectors/messaging-connector";
 import type { StorageHygieneCalls } from "../storage-hygiene/storage-hygiene-port";
@@ -62,6 +64,7 @@ import {
   type WorkspaceArtifactsSource,
   type WorkspaceFleetSource,
 } from "./workspace-sources";
+import { createWorkspaceSpaces } from "./workspace-spaces";
 
 export type WorkspaceRoute =
   | { kind: "channel"; channelId: string }
@@ -81,7 +84,12 @@ export type WorkspaceDialog =
   | { kind: "switcher" }
   | { kind: "edit-meta"; channelId: string; field: "topic" | "description" }
   | { kind: "invite"; channelId: string }
-  | { kind: "delete-message"; channelId: string; messageId: string; threadRootId: string | null };
+  | { kind: "delete-message"; channelId: string; messageId: string; threadRootId: string | null }
+  /** Makes a space (no id) or changes one. */
+  | { kind: "space-edit"; spaceId: string | null }
+  | { kind: "space-delete"; spaceId: string }
+  /** Moves agents or channels to another space. */
+  | { kind: "space-move"; agentIds: string[]; channelIds: string[] };
 
 /** The one pane a phone shows. */
 export type WorkspacePhonePane = "sidebar" | "main" | "panel";
@@ -205,6 +213,8 @@ export interface WorkspaceEnvironment {
   openStorageRules?: (() => void) | undefined;
   /** Opens the form of a new agent. */
   createAgent?: (() => void) | undefined;
+  /** Deletes an agent, as the shell's own delete does (with its undo, where it has one). */
+  deleteAgent?: ((agentId: string) => Promise<void> | void) | undefined;
   /** Opens the invitation of people to the server. */
   inviteTeammates?: (() => void) | undefined;
   /** Opens the server's apps: Discord, Slack, Telegram and the other connectors. Admins only. */
@@ -260,6 +270,7 @@ function readSidebar(key: string): SidebarPrefs {
       order: { channels: idList(order.channels), direct: idList(order.direct) },
       muted: idList(value.muted),
       ...(Array.isArray(value.closed) ? { closed: idList(value.closed) } : {}),
+      ...(typeof value.space === "string" && value.space ? { space: value.space } : {}),
     };
   } catch {
     return { order: { channels: [], direct: [] }, muted: [] };
@@ -524,6 +535,56 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     return counts;
   });
 
+  // ---------------------------------------------------------------- spaces
+
+  const spaces = createWorkspaceSpaces({
+    port: channels.port,
+    ready: () => channels.supported() && env.connectionReady(),
+    key: env.storageKey,
+    onHostEvent: env.onHostEvent,
+    channelIds: () => summaries().map((channel) => channel.id),
+    agentIds: () => env.agents().map((agent) => agent.id),
+    saved: () => state.sidebar.space,
+    save: (spaceId) => {
+      setState((draft) => {
+        draft.sidebar.space = spaceId;
+      });
+      saveSidebar();
+    },
+  });
+  // New agents from any form of the app start in the space that shows, and agent settings move agents.
+  createEffect(
+    () => spaces.available(),
+    (available) => {
+      setActiveSpaces(
+        available
+          ? {
+              current: spaces.current,
+              options: () => spaces.list().map((space) => ({ value: space.id, label: space.name })),
+              agentSpace: spaces.agentSpace,
+              moveAgent:
+                env.reader().role === "member"
+                  ? undefined
+                  : (agentId, spaceId) =>
+                      void spaces
+                        .act({ kind: "move", spaceId, agentIds: [agentId] })
+                        .catch((error: unknown) => failureToast(error, "workspace.spaces.moveFailed")),
+            }
+          : null,
+      );
+    },
+  );
+  onCleanup(() => setActiveSpaces(null));
+  /** The space of a sidebar row: a channel, or the agent row of the owner's DM. */
+  const rowSpace = (id: string) =>
+    id.startsWith(AGENT_DM_PREFIX) ? spaces.agentSpace(id.slice(AGENT_DM_PREFIX.length)) : spaces.channelSpace(id);
+  /** Opens a space. A conversation of another space that shows closes, so the space shows its activity. */
+  function selectSpace(spaceId: string) {
+    spaces.select(spaceId);
+    const open = activeConversationId();
+    if (open && rowSpace(open) !== spaceId) openView("activity");
+  }
+
   // ---------------------------------------------------------------- DM eligibility
 
   let dmAgentsRun = 0;
@@ -586,7 +647,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
 
   const mutedSet = createMemo(() => new Set(state.sidebar.muted));
   const filterText = () => state.sidebarFilter.trim().toLocaleLowerCase();
-  const allChannelRows = createMemo(() =>
+  /** The channel rows of every space, for the unread marks of the space rail. */
+  const everyChannelRow = createMemo(() =>
     inOrder(
       sidebarChannels(directory(), summaries(), mentionCounts()).map((row) =>
         mutedSet().has(row.id) ? { ...row, muted: true } : row,
@@ -594,7 +656,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       state.sidebar.order.channels,
     ),
   );
-  const allDirectRows = createMemo(() =>
+  const everyDirectRow = createMemo(() =>
     inOrder(
       sidebarDirectMessages({
         directory: directory(),
@@ -608,6 +670,22 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       state.sidebar.order.direct,
     ),
   );
+  /** The rows of the space that the reader looks at. */
+  const allChannelRows = createMemo(() => everyChannelRow().filter((row) => rowSpace(row.id) === spaces.current()));
+  const allDirectRows = createMemo(() => everyDirectRow().filter((row) => rowSpace(row.id) === spaces.current()));
+  /** Unread conversations and mentions of each space, for its mark on the rail. Muted rows count for nothing. */
+  const spaceUnread = createMemo(() => {
+    const totals = new Map<string, { unread: boolean; mentions: number }>();
+    for (const row of [...everyChannelRow(), ...everyDirectRow()]) {
+      if (row.muted) continue;
+      const spaceId = rowSpace(row.id);
+      const total = totals.get(spaceId) ?? { unread: false, mentions: 0 };
+      total.unread ||= row.unread === true;
+      total.mentions += row.mentionCount ?? 0;
+      totals.set(spaceId, total);
+    }
+    return totals;
+  });
   const sidebarChannelRows = createMemo(() => {
     const filter = filterText();
     return filter ? allChannelRows().filter((row) => row.name.toLocaleLowerCase().includes(filter)) : allChannelRows();
@@ -651,13 +729,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     try {
       while (sidebarUnsent && run === sidebarKeyRun) {
         sidebarUnsent = false;
-        const { order, muted, closed } = state.sidebar;
+        const { order, muted, closed, space } = state.sidebar;
         try {
           await write(
             boundedWorkspaceSidebar({
               order: { channels: [...order.channels], direct: [...order.direct] },
               muted: [...muted],
               closed: [...(closed ?? [])],
+              ...(space ? { space } : {}),
             }),
           );
         } catch {
@@ -827,8 +906,15 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     ...sidebarDirectRows().map((row) => row.id),
   ]);
 
-  const activityCount = createMemo(() => (state.activity.data?.items ?? []).filter((item) => item.unread).length);
-  const threadsUnread = createMemo(() => (state.activity.data?.threads ?? []).some((thread) => thread.unreadCount > 0));
+  /** The activity and the threads of the space that shows. */
+  const spaceActivity = createMemo(() =>
+    (state.activity.data?.items ?? []).filter((item) => spaces.channelInCurrent(item.channelId)),
+  );
+  const spaceThreads = createMemo(() =>
+    (state.activity.data?.threads ?? []).filter((thread) => spaces.channelInCurrent(thread.channelId)),
+  );
+  const activityCount = createMemo(() => spaceActivity().filter((item) => item.unread).length);
+  const threadsUnread = createMemo(() => spaceThreads().some((thread) => thread.unreadCount > 0));
 
   const artifactsFallback = createMessageArtifactsSource(directory);
   const hostArtifacts = createHostArtifactsSource({
@@ -1568,6 +1654,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     );
   }
 
+  /** Puts a channel that the reader creates next in the space that shows, before it exists. */
+  async function placeInSpace(channelId: string): Promise<void> {
+    const spaceId = spaces.current();
+    if (!spaces.available() || spaceId === GENERAL_SPACE_ID) return;
+    await spaces.act({ kind: "place-channel", spaceId, channelId });
+  }
+
   async function createChannel(input: {
     name: string;
     description: string;
@@ -1577,6 +1670,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     const agents = new Set(env.agents().map((agent) => agent.id));
     const members = await Promise.all(input.memberIds.filter((id) => agents.has(id)).map(newMember));
     const channelId = crypto.randomUUID();
+    await placeInSpace(channelId);
     await command({
       type: "create",
       operationId: crypto.randomUUID(),
@@ -1607,10 +1701,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       return;
     }
     try {
+      const channelId = crypto.randomUUID();
+      // A DM with one agent follows that agent; a group or a DM of people is in the space that shows.
+      if (people.length > 0 || agentIds.length !== 1) await placeInSpace(channelId);
       const channel = await command({
         type: "open-dm",
         operationId: crypto.randomUUID(),
-        channelId: crypto.randomUUID(),
+        channelId,
         memberIds: people,
         agentIds,
       });
@@ -1823,11 +1920,27 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     return channel.createdBy?.kind === "member" && env.isReader(channel.createdBy.id);
   }
 
+  /** Moves agents or channels to a space; the sidebar reads the spaces again from the answer. */
+  async function moveToSpace(input: { agentIds?: string[]; channelIds?: string[] }, spaceId: string) {
+    await spaces.act({ kind: "move", spaceId, ...input });
+  }
+
   return {
     env,
     state,
     channels,
     directory,
+    spaces,
+    selectSpace,
+    spaceUnread,
+    rowSpace,
+    spaceActivity,
+    spaceThreads,
+    moveToSpace,
+    /** Shows why a move to another space failed. */
+    spaceFailure: (error: unknown) => failureToast(error, "workspace.spaces.moveFailed"),
+    /** The agents of the space that shows, for pickers and views. */
+    spaceAgents: () => env.agents().filter((agent) => spaces.agentInCurrent(agent.id)),
     route,
     activeConversationId,
     summary,

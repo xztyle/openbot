@@ -1,0 +1,6 @@
+### Added
+
+- Spaces keep the agents and channels of unrelated projects apart inside one OpenBot. A rail beside the workspace sidebar switches the space; the sidebar, Threads, Activity, Fleet, Artifacts, Between agents and Storage show only the space that you look at, and the rail marks spaces with unread messages and mentions. Owners and admins create, edit, order and delete spaces, and move agents and channels between them from the row menu, agent settings, channel settings or the new Agents view of a space, where they can also delete several agents at once. New agents and channels start in the space that shows.
+- Agents see and reach only the agents and channels of their own space: agent lists, messages, channel work, routines, event checks and the other agent tools refuse an agent of another space with a clear error.
+- Each space has its own shared folder, `OpenBot/Spaces/<space>/Shared`. Agents are told only that folder, and file transfers, event check programs, the shared database, the Meta Ads and Hotmart settings and the Storage view use the folder of the agent's space. Paths in the old `OpenBot/Shared` folder still work.
+- Server operators can list spaces and apply many changes at once on the local control socket: `GET /v1/spaces` and `POST /v1/spaces/apply`.

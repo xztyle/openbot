@@ -1839,6 +1839,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       setSettingsRequest({ agentId, nonce: Date.now() });
     },
     createAgent: () => startCreate(),
+    deleteAgent: (agentId) => workspace.deleteAgent(agentId),
     inviteTeammates: canAdministerServer(workspace.state.host?.role)
       ? () => {
           const id = server()?.id;

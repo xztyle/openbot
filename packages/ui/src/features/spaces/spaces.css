@@ -1,0 +1,300 @@
+/* Spaces: the rail of space marks beside the workspace sidebar, the space dialogs and the Agents view. */
+
+.ws-spaces-layout {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.ws-spaces-layout .ws-sidebar {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.space-rail {
+  display: flex;
+  width: 56px;
+  flex: 0 0 56px;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border-right: 1px solid var(--openbot-border);
+  padding: var(--openbot-space-2) 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.space-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.space-rail-list {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.space-rail-item {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+}
+
+.ui-button.space-rail-button {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.space-rail-bar {
+  position: absolute;
+  top: 50%;
+  left: -6px;
+  width: 3px;
+  height: 0;
+  border-radius: 0 var(--openbot-radius-xs) var(--openbot-radius-xs) 0;
+  background: var(--openbot-text-primary);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    height var(--openbot-duration-hover) var(--openbot-ease-out),
+    opacity var(--openbot-duration-hover) var(--openbot-ease-out);
+}
+
+.space-rail-button[aria-pressed="true"] .space-rail-bar {
+  height: 24px;
+  opacity: 1;
+}
+
+.space-rail-button[aria-pressed="false"]:hover .space-rail-bar {
+  height: 10px;
+  opacity: 1;
+}
+
+.space-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-bold);
+  line-height: 1;
+  transition: border-radius var(--openbot-duration-hover) var(--openbot-ease-out);
+}
+
+.space-mark[data-hue] {
+  border-color: transparent;
+  background: var(--space-hue);
+  color: var(--openbot-text-on-status);
+}
+
+.space-mark-emoji {
+  font-size: var(--openbot-text-xl);
+}
+
+.space-rail-button[aria-pressed="true"] .space-mark {
+  border-color: var(--openbot-border-focus);
+  border-radius: var(--openbot-radius-md);
+}
+
+.space-mark-add {
+  border-style: dashed;
+  background: transparent;
+  color: var(--openbot-accent-text);
+}
+
+.space-mark-add svg {
+  width: 18px;
+  height: 18px;
+}
+
+.space-mark-large {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  font-size: var(--openbot-text-lg);
+}
+
+.space-mark-large.space-mark-emoji {
+  font-size: var(--openbot-text-3xl);
+}
+
+.space-rail-dot {
+  position: absolute;
+  right: 2px;
+  bottom: 4px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--openbot-bg-sidebar);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-text-primary);
+}
+
+.space-rail-count {
+  position: absolute;
+  right: -2px;
+  bottom: 0;
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 2px solid var(--openbot-bg-sidebar);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-danger);
+  padding: 0 var(--openbot-space-1);
+  color: var(--openbot-text-on-status);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-bold);
+  line-height: 1;
+}
+
+.space-dialog-identity {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--openbot-space-3);
+}
+
+.space-dialog-name {
+  flex: 1 1 auto;
+}
+
+.space-dialog-row {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.space-dialog-label {
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.space-dialog-colors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.space-dialog-colors > legend {
+  width: 100%;
+  margin-bottom: var(--openbot-space-1);
+}
+
+.ui-button.space-dialog-color {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+}
+
+.space-dialog-swatch {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--openbot-radius-pill);
+}
+
+.space-dialog-swatch-none {
+  border: 1px dashed var(--openbot-border-strong);
+}
+
+.space-dialog-color-selected .space-dialog-swatch {
+  outline: 2px solid var(--openbot-text-primary);
+  outline-offset: 2px;
+}
+
+.space-dialog-note {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.space-agents-selection {
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
+.space-agents-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 var(--openbot-space-3);
+  list-style: none;
+}
+
+.space-agents-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-3);
+  border-bottom: 1px solid var(--openbot-border);
+  padding: var(--openbot-space-2) var(--openbot-space-1);
+}
+
+.space-agents-row[data-selected] {
+  background: var(--openbot-bg-control-active);
+}
+
+.space-agents-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.space-agents-name {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.space-agents-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.space-agents-activity {
+  flex: 0 0 auto;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.space-agents-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--openbot-space-0-5);
+}
+
+.space-agents-delete-list {
+  max-height: 160px;
+  margin: 0;
+  padding-left: var(--openbot-space-4);
+  overflow-y: auto;
+  color: var(--openbot-text-secondary);
+}

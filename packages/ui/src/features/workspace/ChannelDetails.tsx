@@ -6,6 +6,7 @@ import { Input } from "../../form";
 import {
   Archive,
   Crown,
+  FolderInput,
   Hash,
   Lock,
   LogOut,
@@ -112,6 +113,15 @@ export interface ChannelDetailsProps {
   onCoordinatorRoutingChange?: ((enabled: boolean) => void) | undefined;
   /** Picks the lead agent of coordinator routing. */
   onLeadChange?: ((agentId: string) => void) | undefined;
+  /** The space of the channel and the spaces it can move to. Absent on a host without spaces. */
+  space?:
+    | {
+        value: string;
+        options: readonly { value: string; label: string }[];
+        /** Absent: the reader may not move it, or it is a DM that follows its agent. */
+        onChange?: ((spaceId: string) => void) | undefined;
+      }
+    | undefined;
   onArchive?: (() => void) | undefined;
   onLeave?: (() => void) | undefined;
   /**
@@ -272,6 +282,23 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
 
         <Tabs.Content class="ws-details-content" value="settings">
           <div class="ws-details-card">
+            <Show when={props.space}>
+              {(space) => (
+                <SettingRow
+                  icon={<FolderInput aria-hidden="true" />}
+                  label={t("workspace.spaces.space")}
+                  description={t("workspace.spaces.spaceHint")}
+                >
+                  <WorkspaceSelect
+                    label={t("workspace.spaces.space")}
+                    value={space().value}
+                    options={space().options}
+                    disabled={!space().onChange}
+                    onChange={(spaceId) => space().onChange?.(spaceId)}
+                  />
+                </SettingRow>
+              )}
+            </Show>
             <SettingRow
               icon={<Lock aria-hidden="true" />}
               label={t("workspace.details.private")}

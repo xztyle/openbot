@@ -153,6 +153,7 @@ import type { BrowserViewRuntime } from "@openbot/ui/features/browser/BrowserLiv
 import { currentText } from "@openbot/ui/text";
 import { referenceFrom } from "@openbot/user-errors";
 import { Effect } from "effect";
+import { activeSpace } from "../../active-space";
 import type { ServerAdminPort } from "../servers/servers-port";
 import {
   createWebHostConnections,
@@ -1244,7 +1245,8 @@ export function createWebWorkspaceRuntime(
       return value;
     },
     async createAgent(input) {
-      const { spaceId, ...agent } = input;
+      // A new agent starts in the space that the workspace shows, unless the caller names one.
+      const { spaceId = activeSpace(), ...agent } = input;
       // A host with spaces makes the agent in its space before the first turn. Another one has only General.
       if (spaceId !== undefined && capabilities.includes(WORKSPACE_SPACES_CAPABILITY)) {
         const { agentId } = decodeCreatedSpaceAgent(

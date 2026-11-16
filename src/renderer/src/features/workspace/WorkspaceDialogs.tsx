@@ -9,6 +9,7 @@ import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-t
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js";
+import { WorkspaceSpaceDialogs } from "./WorkspaceSpaceDialogs";
 import { useWorkspace } from "./workspace-context";
 import {
   AGENT_DM_PREFIX,
@@ -31,13 +32,15 @@ export function WorkspaceDialogs() {
       .people()
       .filter((person) => !ws.env.isReader(person.id))
       .map(personMember),
-    ...ws.env
-      .agents()
+    // Only the agents of the space that shows: a channel or a DM is in one space.
+    ...ws
+      .spaceAgents()
       .filter((agent) => !ws.env.hiddenAgentIds().has(agent.id) && ws.canMessageAgent(agent.id))
       .map((agent) => agentMember(agent)),
   ]);
   return (
     <>
+      <WorkspaceSpaceDialogs />
       <CreateChannelDialog
         open={dialog()?.kind === "create-channel"}
         onOpenChange={(open) => {
@@ -143,6 +146,7 @@ function ChannelBrowser(props: { onClose: () => void }) {
         (channel) =>
           !channel.archived &&
           channelKind(channel) === "channel" &&
+          ws.spaces.channelInCurrent(channel.id) &&
           (channelVisibility(channel) === "public" || readerJoined(ws.directory(), channel)) &&
           (!text ||
             channel.name.toLocaleLowerCase().includes(text) ||
@@ -246,7 +250,8 @@ function QuickSwitcher(props: { onClose: () => void }) {
   const entries = createMemo((): SwitcherEntry[] => {
     const list: SwitcherEntry[] = [];
     for (const channel of ws.channels.state.channels) {
-      if (channel.archived || !readerJoined(ws.directory(), channel)) continue;
+      if (channel.archived || !readerJoined(ws.directory(), channel) || !ws.spaces.channelInCurrent(channel.id))
+        continue;
       const kind = channelKind(channel);
       list.push({
         id: channel.id,
@@ -260,7 +265,7 @@ function QuickSwitcher(props: { onClose: () => void }) {
         unread: channel.unreadCount > 0,
       });
     }
-    for (const agent of ws.env.agents()) {
+    for (const agent of ws.spaceAgents()) {
       if (ws.env.hiddenAgentIds().has(agent.id) || !ws.canMessageAgent(agent.id)) continue;
       list.push({
         id: `${AGENT_DM_PREFIX}${agent.id}`,

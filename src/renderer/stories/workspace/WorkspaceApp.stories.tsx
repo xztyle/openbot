@@ -20,3 +20,22 @@ export const Workspace: Story = {
 export const EmptyWorkspace: Story = {
   render: () => <OpenBotPlayground options={{ channels: [] }} />,
 };
+
+/** A server with spaces: Trading holds Research and #cakemaker; the rail switches between them. */
+export const Spaces: Story = {
+  render: () => (
+    <OpenBotPlayground
+      options={{
+        channels: seeds(),
+        spaces: [
+          {
+            space: { id: "trading", name: "Trading", icon: "📈", hue: 215 },
+            agentIds: ["research"],
+            channelIds: ["cakemaker"],
+          },
+          { space: { id: "piks", name: "Piks", icon: null, hue: 150 } },
+        ],
+      }}
+    />
+  ),
+};

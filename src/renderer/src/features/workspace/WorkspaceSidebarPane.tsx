@@ -5,6 +5,7 @@ import {
   Bell,
   BellOff,
   Button,
+  FolderInput,
   Hash,
   Info,
   Input,
@@ -20,7 +21,8 @@ import {
 import { type SidebarGroupId, WorkspaceSidebar } from "@openbot/ui/features/workspace/WorkspaceSidebar";
 import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
-import { createMemo } from "solid-js";
+import { createMemo, Show } from "solid-js";
+import { WorkspaceSpaceRail } from "./WorkspaceSpaceRail";
 import { useWorkspace } from "./workspace-context";
 import { AGENT_DM_PREFIX } from "./workspace-model";
 
@@ -122,6 +124,22 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         icon: <ArrowDown aria-hidden="true" />,
         onSelect: () => ws.moveSidebarRow(group, id, 1),
       },
+      // Only the owner and the admins change spaces. A DM with one agent follows that agent.
+      ...(ws.isAdmin() && ws.spaces.available() && (agentId || (channel && !ws.soleAgent(channel)))
+        ? [
+            {
+              id: "move-space",
+              label: t("workspace.spaces.moveToSpace"),
+              icon: <FolderInput aria-hidden="true" />,
+              onSelect: () =>
+                ws.openDialog({
+                  kind: "space-move",
+                  agentIds: agentId ? [agentId] : [],
+                  channelIds: agentId ? [] : [id],
+                }),
+            },
+          ]
+        : []),
       ...(group === "direct"
         ? [
             {
@@ -152,53 +170,63 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
     return route.kind === "view" ? route.view : undefined;
   };
   return (
-    <WorkspaceSidebar
-      workspaceName={ws.env.serverName()}
-      workspaceMenu={menu()}
-      onNewMessage={() => ws.openDialog({ kind: "new-message" })}
-      search={
-        <>
-          <Button variant="ghost" class="ws-jump" onClick={() => ws.openDialog({ kind: "switcher" })}>
-            <Search aria-hidden="true" />
-            <span class="ws-jump-label">{t("workspace.app.switcher.jump")}</span>
-            <kbd class="ws-jump-key">{props.searchShortcut}</kbd>
-          </Button>
-          <Input
-            type="search"
-            size="sm"
-            class="ws-sidebar-filter"
-            value={ws.state.sidebarFilter}
-            placeholder={t("workspace.sidebar.filter")}
-            aria-label={t("workspace.sidebar.filter")}
-            onValueChange={(text: string) => ws.setSidebarFilter(text)}
-            onKeyDown={(event: KeyboardEvent) => {
-              if (event.key === "Escape" && ws.state.sidebarFilter) {
-                event.preventDefault();
-                event.stopPropagation();
-                ws.setSidebarFilter("");
-              }
-            }}
-          />
-        </>
-      }
-      filtering={ws.state.sidebarFilter.trim().length > 0}
-      onReorder={(group, ids) => ws.reorderSidebar(group, ids)}
-      rowMenu={rowMenu}
-      activeView={view()}
-      activeConversationId={ws.activeConversationId()}
-      onSelectView={(next) => ws.openView(next)}
-      onSelectConversation={(id) => ws.openConversation(id)}
-      activityCount={ws.activityCount()}
-      threadsUnread={ws.threadsUnread()}
-      workingAgentCount={ws.fleet.agents().filter((agent) => agent.status.state === "working").length}
-      showStorage={Boolean(ws.env.storageHygiene?.())}
-      showSecrets={ws.env.secrets?.() === true && Boolean(ws.channels.port().agent.workspaceSecrets)}
-      onOpenApps={ws.env.openApps}
-      channels={ws.sidebarChannels()}
-      directMessages={ws.sidebarDirectMessages()}
-      onAddChannel={() => ws.openDialog({ kind: "browse" })}
-      onAddAgent={ws.env.createAgent}
-      onAddTeammate={ws.env.inviteTeammates}
-    />
+    <div class="ws-spaces-layout">
+      <Show when={ws.spaces.available()}>
+        <WorkspaceSpaceRail />
+      </Show>
+      <WorkspaceSidebar
+        workspaceName={ws.env.serverName()}
+        workspaceMenu={menu()}
+        onNewMessage={() => ws.openDialog({ kind: "new-message" })}
+        search={
+          <>
+            <Button variant="ghost" class="ws-jump" onClick={() => ws.openDialog({ kind: "switcher" })}>
+              <Search aria-hidden="true" />
+              <span class="ws-jump-label">{t("workspace.app.switcher.jump")}</span>
+              <kbd class="ws-jump-key">{props.searchShortcut}</kbd>
+            </Button>
+            <Input
+              type="search"
+              size="sm"
+              class="ws-sidebar-filter"
+              value={ws.state.sidebarFilter}
+              placeholder={t("workspace.sidebar.filter")}
+              aria-label={t("workspace.sidebar.filter")}
+              onValueChange={(text: string) => ws.setSidebarFilter(text)}
+              onKeyDown={(event: KeyboardEvent) => {
+                if (event.key === "Escape" && ws.state.sidebarFilter) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  ws.setSidebarFilter("");
+                }
+              }}
+            />
+          </>
+        }
+        filtering={ws.state.sidebarFilter.trim().length > 0}
+        onReorder={(group, ids) => ws.reorderSidebar(group, ids)}
+        rowMenu={rowMenu}
+        activeView={view()}
+        activeConversationId={ws.activeConversationId()}
+        onSelectView={(next) => ws.openView(next)}
+        onSelectConversation={(id) => ws.openConversation(id)}
+        activityCount={ws.activityCount()}
+        threadsUnread={ws.threadsUnread()}
+        workingAgentCount={
+          ws.fleet
+            .agents()
+            .filter((agent) => agent.status.state === "working" && ws.spaces.agentInCurrent(agent.member.id)).length
+        }
+        showSpaceAgents={ws.spaces.available()}
+        showStorage={Boolean(ws.env.storageHygiene?.())}
+        showSecrets={ws.env.secrets?.() === true && Boolean(ws.channels.port().agent.workspaceSecrets)}
+        onOpenApps={ws.env.openApps}
+        channels={ws.sidebarChannels()}
+        directMessages={ws.sidebarDirectMessages()}
+        onAddChannel={() => ws.openDialog({ kind: "browse" })}
+        onAddAgent={ws.env.createAgent}
+        onAddTeammate={ws.env.inviteTeammates}
+      />
+    </div>
   );
 }

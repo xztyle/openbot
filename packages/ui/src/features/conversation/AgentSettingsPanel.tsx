@@ -77,6 +77,7 @@ import type { AgentProfile } from "@openbot/ui/data";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import { InstructionsLimit, instructionsTooLong } from "@openbot/ui/features/agents/InstructionsLimit";
 import { type BrowserProfileChoice, BrowserProfileSelect } from "@openbot/ui/features/browser/BrowserProfileSelect";
+import { WorkspaceSelect } from "@openbot/ui/features/workspace/WorkspaceSelect";
 import { errorReference } from "@openbot/user-errors";
 import type { JSX } from "@solidjs/web";
 import {
@@ -159,6 +160,15 @@ export interface AgentSettingsPanelProps {
   onResizeEnd: (width: number) => void;
   /** Application-owned navigation and detail surfaces, in the existing panel layout. */
   links?: JSX.Element;
+  /** The space of the agent and the spaces it can move to. Absent on a host without spaces. */
+  space?:
+    | {
+        value: string;
+        options: readonly { value: string; label: string }[];
+        /** Absent when the reader may not move agents. */
+        onChange?: ((spaceId: string) => void) | undefined;
+      }
+    | undefined;
   detailOpen?: boolean;
   children?: JSX.Element;
   onUpdateAgent: (agentId: string, updates: Omit<UpdateAgentInput, "agentId">) => Promise<void>;
@@ -1312,6 +1322,19 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
                 />
               </SettingsField>
               <SaveError field="title" />
+              <Show when={props.space}>
+                {(space) => (
+                  <SettingsField label={t("workspace.spaces.space")}>
+                    <WorkspaceSelect
+                      label={t("workspace.spaces.space")}
+                      value={space().value}
+                      options={space().options}
+                      disabled={!space().onChange}
+                      onChange={(spaceId) => space().onChange?.(spaceId)}
+                    />
+                  </SettingsField>
+                )}
+              </Show>
               {/* Before the long instructions field, so that a phone shows them without a long scroll. */}
               {props.links}
               <SettingsField label={t("agentSettings.instructions")}>

@@ -69,7 +69,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
   const scope = useServerScope();
   const { activeServer, activeServerId, activeServerSupportsCapability } = useServers();
   const { agentList, activeAgent, userHiddenAgentIds, openAgentSetup } = useAgents();
-  const { editAgent } = useAgentActions();
+  const { editAgent, deleteAgent } = useAgentActions();
   const { selectAgent, setGlobalSearchVisibility } = useNavigation();
   const { openServerSettings } = useServerSettings();
   const { setSkillsMarketplaceOpen } = useSettings();
@@ -191,6 +191,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
       channels.close();
       openAgentSetup();
     },
+    deleteAgent: (agentId) => deleteAgent(agentId),
     inviteTeammates: serverRoleCanAdminister(activeServer())
       ? () => {
           const server = activeServer();

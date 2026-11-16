@@ -190,6 +190,20 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
                 ? (agentId) => void ws.setRouting(props.channelId, channelRouting(live()), agentId)
                 : undefined
             }
+            space={
+              ws.spaces.available()
+                ? {
+                    value: ws.spaces.channelSpace(props.channelId),
+                    options: ws.spaces.list().map((space) => ({ value: space.id, label: space.name })),
+                    // A DM with one agent follows that agent.
+                    onChange:
+                      ws.isAdmin() && !ws.soleAgent(live())
+                        ? (spaceId) =>
+                            void ws.moveToSpace({ channelIds: [props.channelId] }, spaceId).catch(ws.spaceFailure)
+                        : undefined,
+                  }
+                : undefined
+            }
             onArchive={
               manage() && kind === "channel" && !live().archived ? () => void ws.archive(props.channelId) : undefined
             }

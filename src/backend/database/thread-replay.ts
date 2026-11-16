@@ -235,10 +235,14 @@ export class ThreadReplay {
         messages.push(message);
         messagesByTurn.set(message.turnId, messages);
       }
+      // A turn id can name messages in two threads, as when a history import stored a task's turn in
+      // the agent's chat too. Its row belongs to the thread that ran it, as a live write keeps it, and a
+      // replay of the other thread leaves that row as it is rather than fail on it.
       const turnInsert = db.prepare(`
         INSERT INTO projection_turns (
           turn_id, thread_id, provider_session_id, status, started_at, completed_at, last_event_sequence
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(turn_id) DO NOTHING
       `);
       for (const [turnId, messages] of messagesByTurn) {
         const running = latest.activeTurnId === turnId;

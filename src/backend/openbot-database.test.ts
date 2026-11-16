@@ -1354,6 +1354,30 @@ describe("OpenBotDatabase", () => {
     database.close();
   });
 
+  it("replays a thread whose messages share a turn id with another thread", async () => {
+    const database = await createDatabase();
+    const owner = testAgent();
+    const other = { ...testAgent(), id: "helper", threadId: "openbot-thread-helper" };
+    database.replaceAgents("agents-import", [owner, other], "agents.imported");
+    if (!owner.threadId || !other.threadId) throw new Error("The test agents have no thread.");
+    const running = conversationSnapshot(owner, "Working");
+    running.activeTurnId = "shared-turn";
+    running.messages = running.messages.map((message) => ({ ...message, turnId: "shared-turn" }));
+    database.persistConversation(running, "turn.started");
+    // A history import stored the same turn in the other agent's chat.
+    const copy = conversationSnapshot(other, "Working");
+    copy.messages = copy.messages.map((message) => ({ ...message, id: `copy-${message.id}`, turnId: "shared-turn" }));
+    database.persistConversation(copy, "provider-history.imported");
+
+    const rebuilt = database.rebuildThreadProjection(other.threadId);
+
+    expect(rebuilt.messages.map((message) => message.id)).toEqual(copy.messages.map((message) => message.id));
+    expect(
+      database.connection.prepare("SELECT thread_id, status FROM projection_turns WHERE turn_id = 'shared-turn'").get(),
+    ).toEqual({ thread_id: owner.threadId, status: "running" });
+    database.close();
+  });
+
   it("rebuilds provider turn links, summaries, and attachment projections from compact history", async () => {
     const database = await createDatabase();
     const agent = testAgent();

@@ -2126,8 +2126,13 @@ export function createWebWorkspace(
       const wasSelected = selectedId === agentId;
       try {
         await runtime.deleteAgent(agentId);
-        preferences.removePinnedSidebarItemEverywhere({ kind: "agent", id: agentId });
-        if (disposed || current !== generation) return;
+      } catch (error) {
+        if (current === generation) report(error);
+        throw error;
+      }
+      preferences.removePinnedSidebarItemEverywhere({ kind: "agent", id: agentId });
+      if (disposed || current !== generation) return;
+      try {
         const agents = await runtime.listAgents();
         const sidebarLayout = await readSidebarLayout(
           state.capabilities,
@@ -2146,8 +2151,11 @@ export function createWebWorkspace(
           if (first) await select(first);
         }
       } catch (error) {
-        if (current === generation) report(error);
-        throw error;
+        // The agent is gone on the host. A failed read after it must not say that the delete failed:
+        // the row goes now, and the next read or event brings the rest.
+        if (current !== generation) return;
+        reconcileAgents(state.agents.filter((agent) => agent.id !== agentId));
+        reportBackground(error);
       }
     },
     async answer(input: RespondToPromptInput) {

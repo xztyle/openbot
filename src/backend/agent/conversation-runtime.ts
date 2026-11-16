@@ -481,7 +481,10 @@ export class ConversationRuntime {
       return execution;
     }
     const cached = this.#snapshots.get(agentId);
-    if (cached && (!threadId || cached.threadId === threadId)) return cached;
+    // A provider names the chat by its own session id, which `publicId` maps to the chat's id. Compared
+    // with the session id, the live snapshot never matched: each provider item read the page from the
+    // database again and replaced the live snapshot that other code still changes.
+    if (cached && (!threadId || cached.threadId === publicId)) return cached;
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
     const publicThreadId = agent?.threadId ?? threadId;
     const page = this.#store.database.readConversationPage(agentId, publicThreadId, { type: "latest" }, 100);

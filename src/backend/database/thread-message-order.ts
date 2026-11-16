@@ -6,15 +6,18 @@ import { databaseRow, optionalStringColumn, requiredNumberColumn, requiredString
  * `turn_rank` on each row of `projection_thread_messages`. Pages, cursors and read state sort by them
  * through an index, so a read does not sort the whole thread (#2226).
  *
- * A thread's messages go in the order `sortConversationMessages` shows them. A group is a turn, or a
- * message alone, and starts at its earliest message. A message queued while a turn ran then stays
- * after that turn's answer, which an ACP agent sends only when the turn ends (#1540).
+ * A thread's messages go in the order `sortConversationMessages` shows them. A group is a part of a
+ * turn, or a message alone, and starts at its earliest message. A message queued while a turn ran then
+ * stays after that turn's answer, which an ACP agent sends only when the turn ends (#1540).
  *
- * Inside a turn, `turn_rank` puts the user's and teammates' input first, then commentary and the plan,
- * then the answer. From a steer on, the turn's second input, every row has rank 4 and goes by time.
- * One window runs over each turn in time order, so it counts the inputs up to each row and starts at
- * the turn's first row. Two groups that start at the same time go by the ordinal of their first row,
- * as the shared order keeps the earlier of two equal groups.
+ * Each input of a turn after its first, a steer, starts a new part of the turn. The first part puts the
+ * user's and teammates' input first (`turn_rank`), then commentary and the plan, then the answer. A
+ * later part starts at its steer, and every row in it has rank 4 and goes by time. So a steer that
+ * comes long after the turn started does not move up to the turn's start, above the messages that came
+ * between. One window runs over each turn in time order and counts the inputs up to each row; the
+ * count names the part, and the rows before the first input are in the first part. Two groups that
+ * start at the same time go by the ordinal of their first row, as the shared order keeps the earlier of
+ * two equal groups. All parts of a turn keep the turn's `group_id`.
  *
  * The keys of a row depend only on the rows of its turn, so a write refreshes the turns it touched.
  * Every write to the table calls one of these functions in its own transaction. A change to this
@@ -33,16 +36,18 @@ function refreshOrderSql(filter: string): string {
   return `WITH ranked AS (
   SELECT message_id, created_at, ordinal, NULLIF(turn_id, '') AS turn, ${ROLE_RANK_SQL} AS role_rank
   FROM projection_thread_messages WHERE thread_id = ?1 ${filter}
+), counted AS (
+  SELECT message_id, created_at, ordinal, turn, role_rank,
+    MAX(SUM(role_rank = 0) OVER (PARTITION BY turn ORDER BY created_at, ordinal), 1) AS part
+  FROM ranked
 ), keyed AS (
   SELECT message_id,
-    CASE WHEN turn IS NULL THEN created_at ELSE MIN(created_at) OVER turn_by_time END AS group_start,
-    CASE WHEN turn IS NULL THEN ordinal ELSE FIRST_VALUE(ordinal) OVER turn_by_time END AS group_first,
+    CASE WHEN turn IS NULL THEN created_at ELSE MIN(created_at) OVER part_by_time END AS group_start,
+    CASE WHEN turn IS NULL THEN ordinal ELSE FIRST_VALUE(ordinal) OVER part_by_time END AS group_first,
     CASE WHEN turn IS NULL THEN 'message:' || message_id ELSE 'turn:' || turn END AS group_id,
-    CASE WHEN turn IS NULL THEN 0
-      WHEN SUM(role_rank = 0) OVER turn_by_time >= 2 THEN 4
-      ELSE role_rank END AS turn_rank
-  FROM ranked
-  WINDOW turn_by_time AS (PARTITION BY turn ORDER BY created_at, ordinal)
+    CASE WHEN turn IS NULL THEN 0 WHEN part >= 2 THEN 4 ELSE role_rank END AS turn_rank
+  FROM counted
+  WINDOW part_by_time AS (PARTITION BY turn, part ORDER BY created_at, ordinal)
 )
 UPDATE projection_thread_messages AS message
 SET group_start = keyed.group_start, group_first = keyed.group_first,

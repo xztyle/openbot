@@ -10,43 +10,46 @@ import type { ConversationMessage } from "./ipc-conversation-messages";
  * inside one turn the user's message comes first, then commentary and the plan, then the answer. A message with
  * no valid `createdAt` goes last.
  *
- * A turn can take a second message from the user, a steer. From the steer on, the turn goes by time, so
- * the steer comes after the commentary the agent sent before it, and Grok's answers to the first message
- * and to the steer stay in the order they came (#1540).
+ * A turn can take more messages from the user or from teammates, steers. Each steer starts a new part
+ * of the turn, which goes by the time of the steer, and inside it every message goes by time. So the
+ * steer comes after the commentary the agent sent before it, Grok's answers to the first message and
+ * to the steer stay in the order they came (#1540), and a steer that comes long after the turn started
+ * stays below the messages that came in between, such as a routine run or another turn.
+ *
+ * `database/thread-message-order.ts` stores this order for pages. A change here needs the same change
+ * there, and a migration.
  */
 export function sortConversationMessages(messages: ConversationMessage[]): ConversationMessage[] {
   const originalIndexes = new Map(messages.map((message, index) => [message, index]));
+  const parts = turnParts(messages);
   const groupKeys = new Map<ConversationMessage, string>();
   const groups = new Map<string, { startedAt: number; firstIndex: number }>();
 
-  for (const [index, message] of messages.entries()) {
-    const groupKey = message.turnId ? `turn:${message.turnId}` : `message:${index}`;
-    const createdAt = messageTime(message);
-    const group = groups.get(groupKey);
+  // In time order, so the first message of a group names its start, as the stored order does.
+  const byTime = [...messages].sort(
+    (left, right) =>
+      messageTime(left) - messageTime(right) || (originalIndexes.get(left) ?? 0) - (originalIndexes.get(right) ?? 0),
+  );
+  for (const message of byTime) {
+    const index = originalIndexes.get(message) ?? 0;
+    const groupKey = message.turnId ? `turn:${message.turnId}:${parts.get(message) ?? 1}` : `message:${index}`;
     groupKeys.set(message, groupKey);
-    if (group) {
-      group.startedAt = Math.min(group.startedAt, createdAt);
-      group.firstIndex = Math.min(group.firstIndex, index);
-    } else {
-      groups.set(groupKey, { startedAt: createdAt, firstIndex: index });
-    }
+    if (!groups.has(groupKey)) groups.set(groupKey, { startedAt: messageTime(message), firstIndex: index });
   }
-  const steeredAt = turnSteerTimes(messages);
 
   messages.sort((left, right) => {
-    const leftGroup = groups.get(groupKeys.get(left) ?? "");
-    const rightGroup = groups.get(groupKeys.get(right) ?? "");
+    const leftKey = groupKeys.get(left) ?? "";
+    const rightKey = groupKeys.get(right) ?? "";
+    const leftGroup = groups.get(leftKey);
+    const rightGroup = groups.get(rightKey);
     if (leftGroup && rightGroup && leftGroup !== rightGroup) {
       if (leftGroup.startedAt !== rightGroup.startedAt) return leftGroup.startedAt - rightGroup.startedAt;
       if (leftGroup.firstIndex !== rightGroup.firstIndex) return leftGroup.firstIndex - rightGroup.firstIndex;
     }
 
-    if (left.turnId && left.turnId === right.turnId) {
-      const steerAt = steeredAt.get(left.turnId);
-      const leftSteered = steerAt !== undefined && messageTime(left) >= steerAt;
-      const rightSteered = steerAt !== undefined && messageTime(right) >= steerAt;
-      if (leftSteered !== rightSteered) return leftSteered ? 1 : -1;
-      const rankDifference = leftSteered ? 0 : turnMessageRank(left) - turnMessageRank(right);
+    // The first part of a turn goes by role; a later part, from a steer on, goes by time.
+    if (leftKey === rightKey && left.turnId && (parts.get(left) ?? 1) === 1) {
+      const rankDifference = turnMessageRank(left) - turnMessageRank(right);
       if (rankDifference !== 0) return rankDifference;
     }
     const timeDifference = messageTime(left) - messageTime(right);
@@ -56,21 +59,28 @@ export function sortConversationMessages(messages: ConversationMessage[]): Conve
   return messages;
 }
 
-/** When each steered turn took its second message from the user. */
-function turnSteerTimes(messages: readonly ConversationMessage[]): Map<string, number> {
-  const userTimes = new Map<string, number[]>();
-  for (const message of messages) {
-    if (!message.turnId || turnMessageRank(message) !== 0) continue;
-    const times = userTimes.get(message.turnId) ?? [];
-    times.push(messageTime(message));
-    userTimes.set(message.turnId, times);
+/**
+ * The part of its turn that each message of a turn is in: the count of the turn's inputs up to it, in
+ * time order, and at least 1. A turn's second input, a steer, starts part 2.
+ */
+function turnParts(messages: readonly ConversationMessage[]): Map<ConversationMessage, number> {
+  const turns = new Map<string, { message: ConversationMessage; index: number }[]>();
+  for (const [index, message] of messages.entries()) {
+    if (!message.turnId) continue;
+    const turn = turns.get(message.turnId) ?? [];
+    turn.push({ message, index });
+    turns.set(message.turnId, turn);
   }
-  const steeredAt = new Map<string, number>();
-  for (const [turnId, times] of userTimes) {
-    const second = times.sort((left, right) => left - right)[1];
-    if (second !== undefined) steeredAt.set(turnId, second);
+  const parts = new Map<ConversationMessage, number>();
+  for (const turn of turns.values()) {
+    turn.sort((left, right) => messageTime(left.message) - messageTime(right.message) || left.index - right.index);
+    let inputs = 0;
+    for (const { message } of turn) {
+      if (turnMessageRank(message) === 0) inputs += 1;
+      parts.set(message, Math.max(inputs, 1));
+    }
   }
-  return steeredAt;
+  return parts;
 }
 
 function messageTime(message: ConversationMessage): number {

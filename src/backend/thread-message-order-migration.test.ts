@@ -2,6 +2,7 @@
 import { DatabaseSync, type SQLOutputValue } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { ORDER_KEY_COLUMNS, ORDER_KEY_DESC, ORDERED_THREAD_MESSAGES } from "./database/conversation-queries";
+import { refreshThreadOrder } from "./database/thread-message-order";
 import { migrateOpenBotDatabase } from "./openbot-database-schema";
 
 // Failure modes: an upgrade loses or changes a message; a stored key differs from the order that pages
@@ -22,6 +23,14 @@ function databaseAt(version: number): DatabaseSync {
   expect(() => migrateOpenBotDatabase(db)).toThrow(`migration to version ${version + 1} failed`);
   db.exec("DROP TRIGGER stop_at_version");
   return db;
+}
+
+/** Runs the migrations up to `version`, and none after it. */
+function migrateThrough(db: DatabaseSync, version: number): void {
+  db.exec(`CREATE TEMP TRIGGER stop_after_version BEFORE INSERT ON schema_migrations WHEN new.version > ${version}
+    BEGIN SELECT RAISE(ABORT, 'fixture stop'); END;`);
+  expect(() => migrateOpenBotDatabase(db)).toThrow(`migration to version ${version + 1} failed`);
+  db.exec("DROP TRIGGER stop_after_version");
 }
 
 const THREAD = "openbot-thread-agent-chief";
@@ -73,7 +82,7 @@ const SHOWN_ORDER = [
   "same-time-a",
 ];
 
-function seedMessages(db: DatabaseSync): void {
+function seedMessages(db: DatabaseSync, messages: readonly Seed[] = MESSAGES): void {
   for (const [thread, agent] of [
     [THREAD, "agent-chief"],
     [OTHER_THREAD, "agent-helper"],
@@ -88,7 +97,7 @@ function seedMessages(db: DatabaseSync): void {
        (thread_id, message_id, turn_id, author, status, item_type, created_at, ordinal, message_json, last_event_sequence)
      VALUES (?, ?, ?, ?, 'completed', ?, ?, ?, ?, 2)`,
   );
-  for (const [thread, id, turn, author, itemType, createdAt, ordinal, direction] of MESSAGES) {
+  for (const [thread, id, turn, author, itemType, createdAt, ordinal, direction] of messages) {
     const message = {
       id,
       author,
@@ -159,8 +168,8 @@ function orderIndexes(db: DatabaseSync) {
     .map((row) => row.name);
 }
 
-function expectHealthy(db: DatabaseSync): void {
-  expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 47 });
+function expectHealthy(db: DatabaseSync, version = 48): void {
+  expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version });
   expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
   expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
   expect(db.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
@@ -182,14 +191,14 @@ describe("thread message order migration", () => {
         ORDER BY ${ORDER_KEY_DESC} LIMIT 3`;
       const releasedPage = db.prepare(`${RELEASED_ORDER} ${pageBefore}`).all(THREAD, ...cursorKeys);
 
-      migrateOpenBotDatabase(db);
+      migrateThrough(db, 47);
 
       expect(releasedRows(db)).toEqual(before);
       expect([THREAD, OTHER_THREAD].map((thread) => orderKeys(db, ORDERED_THREAD_MESSAGES, thread))).toEqual(released);
       expect(orderKeys(db, ORDERED_THREAD_MESSAGES, THREAD).map((row) => row.message_id)).toEqual(SHOWN_ORDER);
       expect(db.prepare(`${ORDERED_THREAD_MESSAGES} ${pageBefore}`).all(THREAD, ...cursorKeys)).toEqual(releasedPage);
       expect(orderIndexes(db)).toEqual(["thread_messages_shown_order", "thread_messages_turn"]);
-      expectHealthy(db);
+      expectHealthy(db, 47);
     },
   );
 
@@ -208,10 +217,10 @@ describe("thread message order migration", () => {
     expect(db.prepare("SELECT version FROM schema_migrations WHERE version = 40").all()).toEqual([]);
     expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
     db.exec("DROP TRIGGER fail_marker");
-    migrateOpenBotDatabase(db);
+    migrateThrough(db, 47);
     expect(releasedRows(db)).toEqual(before);
     expect(orderKeys(db, ORDERED_THREAD_MESSAGES, THREAD)).toEqual(released);
-    expectHealthy(db);
+    expectHealthy(db, 47);
   });
 
   it("repairs the keys of a development build that added the columns before the marker", () => {
@@ -224,9 +233,9 @@ describe("thread message order migration", () => {
       ALTER TABLE projection_thread_messages ADD COLUMN turn_rank INTEGER;
       UPDATE projection_thread_messages SET group_start = created_at, group_first = 0, group_id = 'stale', turn_rank = 9
         WHERE message_id IN ('ask', 'request');`);
-    migrateOpenBotDatabase(db);
+    migrateThrough(db, 47);
     expect(orderKeys(db, ORDERED_THREAD_MESSAGES, THREAD)).toEqual(released);
-    expectHealthy(db);
+    expectHealthy(db, 47);
   });
 
   it("rejects newer and incomplete migration histories before it changes a message", () => {
@@ -234,11 +243,94 @@ describe("thread message order migration", () => {
     seedMessages(db);
     const before = releasedRows(db);
     const columns = columnNames(db);
-    db.exec("INSERT INTO schema_migrations VALUES(48, 'now')");
+    db.exec("INSERT INTO schema_migrations VALUES(49, 'now')");
     expect(() => migrateOpenBotDatabase(db)).toThrow("newer than this application supports");
-    db.exec("DELETE FROM schema_migrations WHERE version = 48; DELETE FROM schema_migrations WHERE version = 38");
+    db.exec("DELETE FROM schema_migrations WHERE version = 49; DELETE FROM schema_migrations WHERE version = 38");
     expect(() => migrateOpenBotDatabase(db)).toThrow("missing version 38");
     expect(releasedRows(db)).toEqual(before);
     expect(columnNames(db)).toEqual(columns);
+  });
+});
+
+// A turn that ran for a long time and took steers from a teammate and from the user, with routine
+// markers between them. Before migration 48 the whole turn showed at its start, so the steers showed
+// above the markers that came before them.
+const STEERED_MESSAGES: readonly Seed[] = [
+  ...MESSAGES,
+  [THREAD, "long-request", "turn-3", "agent", "agent-exchange", "2026-10-01T10:10:00.000Z", 11, "incoming"],
+  [THREAD, "long-thought", "turn-3", "assistant", "commentary", "2026-10-01T10:10:30.000Z", 12],
+  [THREAD, "marker-a", null, "system", "routine-event:updated:r", "2026-10-01T10:11:00.000Z", 13],
+  [THREAD, "long-steer", "turn-3", "agent", "agent-exchange", "2026-10-01T10:20:00.000Z", 14, "incoming"],
+  [THREAD, "marker-b", null, "system", "routine-event:updated:r", "2026-10-01T10:21:00.000Z", 15],
+  [THREAD, "long-user", "turn-3", "user", null, "2026-10-01T10:25:00.000Z", 16],
+  [THREAD, "long-reply", "turn-3", "assistant", "agentMessage", "2026-10-01T10:26:00.000Z", 17],
+];
+
+const STEERED_SHOWN_ORDER = [
+  "ask",
+  "thinking",
+  // The steer of turn 1 starts a part that goes after the queued message, which came before it.
+  "queued",
+  "steer",
+  "answer",
+  "request",
+  "plan",
+  "reply",
+  "notice",
+  "same-time-b",
+  "same-time-a",
+  "long-request",
+  "long-thought",
+  "marker-a",
+  "long-steer",
+  "marker-b",
+  "long-user",
+  "long-reply",
+];
+
+/** The rows of the turns that took a steer, the only rows whose keys migration 48 changes. */
+const STEERED_ROWS = new Set(["steer", "answer", "long-steer", "long-user", "long-reply"]);
+
+describe("thread message steer order migration", () => {
+  function steeredDatabaseAt47(): DatabaseSync {
+    const db = databaseAt(39);
+    seedMessages(db, STEERED_MESSAGES);
+    migrateThrough(db, 47);
+    return db;
+  }
+
+  it("shows each steer at its own time and keeps every other key", () => {
+    const db = steeredDatabaseAt47();
+    const before = releasedRows(db);
+    const keysAt47 = [THREAD, OTHER_THREAD].map((thread) => orderKeys(db, ORDERED_THREAD_MESSAGES, thread));
+
+    migrateOpenBotDatabase(db);
+
+    expect(releasedRows(db)).toEqual(before);
+    expect(orderKeys(db, ORDERED_THREAD_MESSAGES, THREAD).map((row) => row.message_id)).toEqual(STEERED_SHOWN_ORDER);
+    const unchanged = (rows: readonly TableRow[]) =>
+      rows
+        .filter((row) => !STEERED_ROWS.has(String(row.message_id)))
+        .toSorted((left, right) => String(left.message_id).localeCompare(String(right.message_id)));
+    const keysAt48 = [THREAD, OTHER_THREAD].map((thread) => orderKeys(db, ORDERED_THREAD_MESSAGES, thread));
+    expect(keysAt48.map(unchanged)).toEqual(keysAt47.map(unchanged));
+    // The keys that a later write computes are the keys that the migration stored.
+    for (const thread of [THREAD, OTHER_THREAD]) refreshThreadOrder(db, thread);
+    expect([THREAD, OTHER_THREAD].map((thread) => orderKeys(db, ORDERED_THREAD_MESSAGES, thread))).toEqual(keysAt48);
+    expectHealthy(db);
+  });
+
+  it("rolls back the keys and the marker after a late failure, then retries", () => {
+    const db = steeredDatabaseAt47();
+    const keysAt47 = orderKeys(db, ORDERED_THREAD_MESSAGES, THREAD);
+    db.exec(`CREATE TEMP TRIGGER fail_marker BEFORE INSERT ON schema_migrations WHEN new.version = 48
+      BEGIN SELECT RAISE(ABORT, 'late failure'); END;`);
+    expect(() => migrateOpenBotDatabase(db)).toThrow("migration to version 48 failed");
+    expect(orderKeys(db, ORDERED_THREAD_MESSAGES, THREAD)).toEqual(keysAt47);
+    expect(db.prepare("SELECT version FROM schema_migrations WHERE version = 48").all()).toEqual([]);
+    db.exec("DROP TRIGGER fail_marker");
+    migrateOpenBotDatabase(db);
+    expect(orderKeys(db, ORDERED_THREAD_MESSAGES, THREAD).map((row) => row.message_id)).toEqual(STEERED_SHOWN_ORDER);
+    expectHealthy(db);
   });
 });

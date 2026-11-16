@@ -465,6 +465,40 @@ WHERE message.thread_id = keyed.thread_id AND message.message_id = keyed.message
   AND (message.group_start, message.group_first, message.group_id, message.turn_rank)
     IS NOT (keyed.group_start, keyed.group_first, keyed.group_id, keyed.turn_rank)`;
 
+// Migration 48 refreshes the shown-order keys of each turn that took a steer. A steer starts a new part
+// of its turn, which goes by the steer's time, so a steer that came long after the turn started no longer
+// shows above the messages that came in between. A message with no turn keeps its keys, and of the rows of
+// turns only those of a steered turn get new keys. Frozen with the migration; `database/thread-message-order.ts` computes the same keys for later writes.
+const V48_THREAD_MESSAGE_STEER_ORDER_SQL = `WITH ranked AS (
+  SELECT thread_id, message_id, created_at, ordinal, NULLIF(turn_id, '') AS turn,
+    CASE
+      WHEN author = 'user' THEN 0
+      WHEN author = 'assistant' THEN CASE WHEN item_type IN ('commentary', 'plan') THEN 1 ELSE 3 END
+      WHEN json_extract(message_json, '$.exchange.direction') = 'incoming' THEN 0
+      ELSE 2
+    END AS role_rank
+  FROM projection_thread_messages WHERE NULLIF(turn_id, '') IS NOT NULL
+), counted AS (
+  SELECT thread_id, message_id, created_at, ordinal, turn, role_rank,
+    MAX(SUM(role_rank = 0) OVER (PARTITION BY thread_id, turn ORDER BY created_at, ordinal), 1) AS part
+  FROM ranked
+), keyed AS (
+  SELECT thread_id, message_id,
+    CASE WHEN turn IS NULL THEN created_at ELSE MIN(created_at) OVER part_by_time END AS group_start,
+    CASE WHEN turn IS NULL THEN ordinal ELSE FIRST_VALUE(ordinal) OVER part_by_time END AS group_first,
+    CASE WHEN turn IS NULL THEN 'message:' || message_id ELSE 'turn:' || turn END AS group_id,
+    CASE WHEN turn IS NULL THEN 0 WHEN part >= 2 THEN 4 ELSE role_rank END AS turn_rank
+  FROM counted
+  WINDOW part_by_time AS (PARTITION BY thread_id, turn, part ORDER BY created_at, ordinal)
+)
+UPDATE projection_thread_messages AS message
+SET group_start = keyed.group_start, group_first = keyed.group_first,
+  group_id = keyed.group_id, turn_rank = keyed.turn_rank
+FROM keyed
+WHERE message.thread_id = keyed.thread_id AND message.message_id = keyed.message_id
+  AND (message.group_start, message.group_first, message.group_id, message.turn_rank)
+    IS NOT (keyed.group_start, keyed.group_first, keyed.group_id, keyed.turn_rank)`;
+
 // Migration 41 indexes attachments by owner. Each conversation write deletes the attachments of each
 // changed message by owner, which without it is a scan of every attachment (#2241). Frozen with the migration.
 const V41_ATTACHMENT_OWNER_INDEX_SQL = `
@@ -881,6 +915,12 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
     // no vacuum. A database that came from the fork's 31 or 32 already has these tables and their rows,
     // and every statement is IF NOT EXISTS, so for it this only records the marker.
     up: (db) => db.exec(EVENT_CHECK_SCHEMA_SQL),
+  },
+  {
+    version: 48,
+    // Only updates the order keys of the rows of steered turns, so no foreign-key pause and no vacuum.
+    // A cursor that a client holds on such a row moves with the new order, as a page read again does.
+    up: (db) => db.exec(V48_THREAD_MESSAGE_STEER_ORDER_SQL),
   },
 ];
 

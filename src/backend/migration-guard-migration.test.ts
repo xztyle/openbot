@@ -65,36 +65,41 @@ function range(from: number, to: number): number[] {
 }
 
 describe("migration guards", () => {
-  // Migration 28 turns foreign keys off for its rebuild, and migrations 43 to 47 do not.
-  it.each([28, 43, 44, 45, 46, 47])("rolls back migration %i when the database has a broken foreign key", (version) => {
-    const db = databaseAt(version - 1);
-    seedOrphans(db);
-    const before = contents(db);
-    const schemaBefore = db.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all();
+  // Migration 28 turns foreign keys off for its rebuild, and migrations 43 to 48 do not.
+  it.each([28, 43, 44, 45, 46, 47, 48])(
+    "rolls back migration %i when the database has a broken foreign key",
+    (version) => {
+      const db = databaseAt(version - 1);
+      seedOrphans(db);
+      const before = contents(db);
+      const schemaBefore = db.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all();
 
-    expect(() => migrateOpenBotDatabase(db)).toThrow(
-      expect.objectContaining({
-        message: `OpenBot database migration to version ${version} failed.`,
-        cause: expect.objectContaining({ message: "OpenBot database migration produced 2 foreign-key violation(s)." }),
-      }),
-    );
-    expect(versions(db)).toEqual(range(8, version - 1));
-    expect(db.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all()).toEqual(schemaBefore);
-    expect(contents(db)).toEqual(before);
-    expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
+      expect(() => migrateOpenBotDatabase(db)).toThrow(
+        expect.objectContaining({
+          message: `OpenBot database migration to version ${version} failed.`,
+          cause: expect.objectContaining({
+            message: "OpenBot database migration produced 2 foreign-key violation(s).",
+          }),
+        }),
+      );
+      expect(versions(db)).toEqual(range(8, version - 1));
+      expect(db.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all()).toEqual(schemaBefore);
+      expect(contents(db)).toEqual(before);
+      expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
 
-    // The next start meets the same rows and stops again. It deletes nothing to get past them.
-    expect(() => migrateOpenBotDatabase(db)).toThrow(`migration to version ${version} failed`);
-    expect(contents(db)).toEqual(before);
+      // The next start meets the same rows and stops again. It deletes nothing to get past them.
+      expect(() => migrateOpenBotDatabase(db)).toThrow(`migration to version ${version} failed`);
+      expect(contents(db)).toEqual(before);
 
-    db.exec("DELETE FROM projection_thread_messages; DELETE FROM projection_turns");
-    migrateOpenBotDatabase(db);
-    expect(versions(db)).toEqual(range(8, 47));
-    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-    expect(db.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
-  });
+      db.exec("DELETE FROM projection_thread_messages; DELETE FROM projection_turns");
+      migrateOpenBotDatabase(db);
+      expect(versions(db)).toEqual(range(8, 48));
+      expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+      expect(db.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
+    },
+  );
 
-  it.each(range(8, 46))("rejects a history that is missing version %i and changes nothing", (missing) => {
+  it.each(range(8, 47))("rejects a history that is missing version %i and changes nothing", (missing) => {
     const db = latestDatabase();
     db.prepare("DELETE FROM schema_migrations WHERE version = ?").run(missing);
     const schemaBefore = db.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all();
@@ -102,7 +107,7 @@ describe("migration guards", () => {
     expect(() => migrateOpenBotDatabase(db)).toThrow(
       `OpenBot database migration history is missing version ${missing}.`,
     );
-    expect(versions(db)).toEqual(range(8, 47).filter((version) => version !== missing));
+    expect(versions(db)).toEqual(range(8, 48).filter((version) => version !== missing));
     expect(db.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all()).toEqual(schemaBefore);
   });
 });

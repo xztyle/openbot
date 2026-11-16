@@ -828,6 +828,16 @@ export class ChannelStore {
     );
   }
 
+  /** The member agent a channel context thread belongs to. */
+  agentForThread(threadId: string): string | null {
+    const row = databaseRow(
+      this.database.connection
+        .prepare("SELECT agent_id FROM projection_channel_contexts WHERE thread_id = ?")
+        .get(threadId),
+    );
+    return row ? requiredStringColumn(row, "agent_id") : null;
+  }
+
   channelForThread(threadId: string): string | null {
     const row = databaseRow(
       this.database.connection

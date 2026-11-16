@@ -2190,8 +2190,17 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   /** The agent a thread belongs to, as an MCP row names it. */
   mcpAgentForThread(threadId: string | undefined): McpAgent | null {
-    const agentId = threadId ? this.#conversation.agentForThread(threadId) : undefined;
-    const agent = agentId ? this.listAgents().find((item) => item.id === agentId) : undefined;
+    if (!threadId) return null;
+    // Provider sessions and chat apps name a thread by its public id; the conversation runtime keys
+    // its own map by the provider's id, so each is tried, then the agent's main and channel threads.
+    const agents = this.listAgents();
+    const agentId =
+      agents.find((item) => item.threadId === threadId)?.id ??
+      this.#conversation.agentForPublicThread(threadId) ??
+      this.#conversation.agentForThread(threadId) ??
+      this.channels.store.agentForThread(threadId) ??
+      undefined;
+    const agent = agentId ? agents.find((item) => item.id === agentId) : undefined;
     return agent ? { id: agent.id, name: agent.name } : null;
   }
 

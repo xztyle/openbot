@@ -638,6 +638,13 @@ export class ConversationRuntime {
     return this.#threadToAgent.get(externalThreadId);
   }
 
+  /** The agent of a loaded thread by its public id, which provider sessions and chat apps are keyed by. */
+  agentForPublicThread(publicThreadId: string): string | undefined {
+    for (const [external, publicId] of this.#publicThreads)
+      if (publicId === publicThreadId) return this.#threadToAgent.get(external);
+    return undefined;
+  }
+
   /** Model retrieval must never fall back to the agent's personal conversation. */
   historyScope(externalThreadId: string, client: AgentClient) {
     const agentId = this.#threadToAgent.get(externalThreadId);

@@ -220,7 +220,7 @@ export function EventCheckEnvironmentSettings(props: {
                 <NativeSelect
                   size="sm"
                   aria-label={t("agentSettings.eventCheck.useSecret")}
-                  value={linking() ?? ""}
+                  value={linking() ?? (typed() || removing() ? "" : (variable().linkedSecret ?? ""))}
                   disabled={off() || removing()}
                   onChange={(event) =>
                     props.onValue(
@@ -231,6 +231,10 @@ export function EventCheckEnvironmentSettings(props: {
                 >
                   <option value="">{t("agentSettings.eventCheck.useSecret")}</option>
                   <For each={state.secrets}>{(secret) => <option value={secret}>{secret}</option>}</For>
+                  {/* A link to a key that Secrets no longer holds still shows, so the select reads true. */}
+                  <Show when={variable().linkedSecret && !state.secrets.includes(variable().linkedSecret ?? "")}>
+                    <option value={variable().linkedSecret}>{variable().linkedSecret}</option>
+                  </Show>
                 </NativeSelect>
               </Show>
               <Show when={!typed() && !removing() && variable().linkedSecret}>
@@ -254,7 +258,7 @@ export function EventCheckEnvironmentSettings(props: {
                   variant="ghost"
                   type="button"
                   size="sm"
-                  disabled={off() || (!removing() && !variable().configured)}
+                  disabled={off() || (!removing() && !variable().configured && !variable().linkedSecret)}
                   onClick={() => props.onRemove(variable().name, !removing())}
                 >
                   {removing()

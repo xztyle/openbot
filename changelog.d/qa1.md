@@ -12,3 +12,4 @@
 - A channel task whose agent was deleted stops and asks you to reassign it. Before, in a channel outside the General space, it waited for the deleted agent for ever, and Continue hid it with no sign.
 - Continue on a stopped channel task whose agent is hidden or in another space says so, and the task stays in the list to reassign.
 - The reasons of stopped channel tasks show in your language, also for tasks that stopped before this version.
+- In the web app, the Permissions level of an open agent updates when someone changes it on another computer or window. Before, it kept the old level until you opened another agent.

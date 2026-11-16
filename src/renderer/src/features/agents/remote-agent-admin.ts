@@ -185,20 +185,30 @@ export function createRemoteAgentAdmin(
     });
   }
 
-  // A new agent never shows the values of the previous one while its own are read.
-  createEffect(key, (requestKey) => {
-    setState((draft) => {
-      draft.key = null;
-      draft.settings = null;
-    });
-    const current = untrack(target);
-    if (!requestKey || !current) return;
-    calls()
-      .getAgentAdminSettings(current.agentId, current.server.id)
-      .then((settings) => accept(requestKey, settings))
-      // A failed read keeps the controls hidden, as for a member. The host checks the role on every write anyway.
-      .catch(() => undefined);
-  });
+  let adminReadGeneration = 0;
+  // A new agent never shows the values of the previous one while its own are read. A change of
+  // Permissions on another client updates the agent's timestamp, so the same agent reads again.
+  createEffect(
+    () => JSON.stringify([key(), target()?.updatedAt]),
+    () => {
+      const requestKey = untrack(key);
+      const generation = ++adminReadGeneration;
+      if (untrack(() => state.key) !== requestKey)
+        setState((draft) => {
+          draft.key = null;
+          draft.settings = null;
+        });
+      const current = untrack(target);
+      if (!requestKey || !current) return;
+      calls()
+        .getAgentAdminSettings(current.agentId, current.server.id)
+        .then((settings) => {
+          if (generation === adminReadGeneration) accept(requestKey, settings);
+        })
+        // A failed read keeps the controls hidden, as for a member. The host checks the role on every write anyway.
+        .catch(() => undefined);
+    },
+  );
 
   return {
     automation: (): boolean | undefined =>
@@ -253,6 +263,8 @@ export function createRemoteAgentAdmin(
       if (!serverCanAdministerAgents(server) || server.kind !== "remote")
         throw new Error(currentText().t("agent.error.adminOnly"));
       const settings = await calls().updateAgentAdminSettings(input, server.id);
+      // A read that started before this write answers with the old values.
+      if (key() === JSON.stringify([server.id, input.agentId])) adminReadGeneration += 1;
       accept(JSON.stringify([server.id, input.agentId]), settings);
     },
   };

@@ -383,7 +383,8 @@ export function createWebConversationRuntime(
             type: "error",
             serverId,
             requestId,
-            message: error instanceof Error ? error.message : currentText().t("webClient.error.fileTransfer"),
+            // The host's English text, translated, or a translated fallback for a technical error.
+            message: currentText().errorMessage(error, currentText().t("webClient.error.fileTransfer")),
           });
         } finally {
           importing = undefined;

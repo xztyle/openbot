@@ -2334,8 +2334,8 @@ export class MailboxStore {
               this.#state.drafts = this.#state.drafts.filter((draft) => !draftIds.has(draft.id));
               if (editId) {
                 // A durable composer backup retained for this edit is no longer owned by it:
-                // a save discards the backup, a cancel restores it, and in both cases the
-                // remaining drafts return to normal lifetime instead of staying edit-owned.
+                // the client puts the backup back in the composer after a save or a cancel, and
+                // its drafts return to normal lifetime instead of staying edit-owned.
                 releasedOwned = this.#state.drafts.filter((draft) => draft.ownerEditId === editId);
                 for (const draft of releasedOwned) delete draft.ownerEditId;
               }

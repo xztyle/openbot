@@ -618,19 +618,35 @@ export function createComposerActions(deps: ComposerActionsDeps) {
     }
     if (!saved) return false;
     const savedTarget = { agentId, serverId };
+    const savedKey = composerDraftKey(savedTarget);
     deps.clearConversationError(savedTarget);
     if (submittedSnapshot) deps.clearSubmittedDraft(savedTarget, submittedSnapshot);
-    else deps.setDrafts((current) => ({ ...current, [composerDraftKey(savedTarget)]: EMPTY_DRAFT }));
+    else deps.setDrafts((current) => ({ ...current, [savedKey]: EMPTY_DRAFT }));
     if (
       deps.editingAgentId() === agentId &&
       deps.editingServerId() === serverId &&
       deps.editingDeliveryId() === deliveryId
     ) {
-      // Save consumes the edited draft and abandons its composer backup. Explicitly
-      // discard those files: a backup restored by an earlier Cancel survives restart.
-      for (const attachment of deps.editingDraftBackup()?.attachments ?? []) {
-        void conversationRuntime(deps.props).agent.discardDraftAttachment(attachment.id, serverId);
-      }
+      // Save consumes the edited text. What the person wrote before Edit comes back, as after Cancel,
+      // ahead of anything left in the composer. The host gave the files of that draft back to the
+      // normal draft lifetime when it saved.
+      const backup = deps.editingDraftBackup();
+      if (backup && (backup.text || backup.attachments.length || backup.replyToMessageId))
+        deps.setDrafts((current) => {
+          const left = current[savedKey] ?? EMPTY_DRAFT;
+          const backupIds = new Set(backup.attachments.map((attachment) => attachment.id));
+          return {
+            ...current,
+            [savedKey]: {
+              text: [backup.text, left.text].filter((part) => part.trim()).join("\n\n"),
+              attachments: [
+                ...backup.attachments,
+                ...left.attachments.filter((attachment) => !backupIds.has(attachment.id)),
+              ],
+              replyToMessageId: left.replyToMessageId ?? backup.replyToMessageId,
+            },
+          };
+        });
       deps.setEditingAgentId(null);
       deps.setEditingServerId(null);
       deps.setEditingDeliveryId(null);

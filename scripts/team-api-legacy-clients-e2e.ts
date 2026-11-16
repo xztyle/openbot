@@ -288,6 +288,8 @@ class LoopbackBridge extends TeamWebRtcBridge {
     Effect.sync(() => {
       if (typeof data === "string") this.sent.push({ peerId, channel, data });
       for (const wake of this.#waiters) wake();
+      // Nothing waits in a loopback channel.
+      return { queuedBytes: 0, connectionQueuedBytes: 0 };
     });
 
   /** As the WebRTC worker does, a closed peer connection reports `peer-disconnected` to the host. */

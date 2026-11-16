@@ -11,6 +11,12 @@ import { RemoteWorkflowError, remoteCall, remoteDecode } from "./remote-service-
 
 export type TeamWebRtcChannel = "rpc" | "events" | "files" | "desktop";
 
+/** The bytes that waited to leave before a sent payload: in its channel, and in all channels of the connection. */
+export interface TeamWebRtcSendQueue {
+  queuedBytes: number;
+  connectionQueuedBytes: number;
+}
+
 interface TeamWebRtcBridgeEvents {
   accountProfileChanged: [peerId: string];
   accountServersChanged: [peerId: string];
@@ -84,6 +90,8 @@ const bridgeMessageSchema = z
     localFingerprint: z.string().min(1).max(256).optional(),
     remoteFingerprint: z.string().min(1).max(256).optional(),
     iceServers: z.array(iceServerSchema).optional(),
+    queuedBytes: z.number().int().nonnegative().optional(),
+    connectionQueuedBytes: z.number().int().nonnegative().optional(),
   })
   .loose();
 type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
@@ -108,7 +116,7 @@ const SEND_COMMAND_TIMEOUT_MS = 75_000;
 
 export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
   readonly #options: TeamWebRtcBridgeOptions;
-  readonly #pending = new Map<string, Deferred.Deferred<void, RemoteWorkflowError>>();
+  readonly #pending = new Map<string, Deferred.Deferred<TeamWebRtcSendQueue | null, RemoteWorkflowError>>();
   #window: BrowserWindow | null = null;
   #port: MessagePortMain | null = null;
   #ready: Fiber.Fiber<void, RemoteWorkflowError> | null = null;
@@ -180,6 +188,7 @@ export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
     if (this.#port) yield* this.#command({ type: "disconnect-peer", peerId });
   }).bind(this);
 
+  /** Resolves when the page queued every frame. Null when the page did not say what waited before them. */
   readonly send = Effect.fn("TeamWebRtcBridge.send")(function* (
     this: TeamWebRtcBridge,
     peerId: string,
@@ -187,7 +196,7 @@ export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
     data: string | ArrayBuffer,
   ) {
     yield* this.start();
-    yield* this.#command({ type: "send", peerId, channel, data });
+    return yield* this.#command({ type: "send", peerId, channel, data });
   }).bind(this);
 
   readonly restartIce = Effect.fn("TeamWebRtcBridge.restartIce")(function* (this: TeamWebRtcBridge, peerId: string) {
@@ -283,16 +292,16 @@ export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
     const port = this.#port;
     if (!port) return yield* new RemoteWorkflowError({ cause: new Error(sourceText("error.remote.bridgeNotReady")) });
     const commandId = crypto.randomUUID();
-    yield* Effect.acquireUseRelease(
+    return yield* Effect.acquireUseRelease(
       Effect.sync(() => {
-        const pending = Deferred.makeUnsafe<void, RemoteWorkflowError>();
+        const pending = Deferred.makeUnsafe<TeamWebRtcSendQueue | null, RemoteWorkflowError>();
         this.#pending.set(commandId, pending);
         return pending;
       }),
       (pending) =>
         Effect.gen(function* () {
           yield* remoteDecode(() => port.postMessage({ ...command, commandId }));
-          yield* Deferred.await(pending).pipe(
+          return yield* Deferred.await(pending).pipe(
             Effect.timeoutOrElse({
               duration: command.type === "send" ? SEND_COMMAND_TIMEOUT_MS : COMMAND_TIMEOUT_MS,
               orElse: () =>
@@ -319,7 +328,11 @@ export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
       Deferred.doneUnsafe(
         pending,
         message.type === "command-complete"
-          ? Effect.void
+          ? Effect.succeed(
+              message.queuedBytes === undefined || message.connectionQueuedBytes === undefined
+                ? null
+                : { queuedBytes: message.queuedBytes, connectionQueuedBytes: message.connectionQueuedBytes },
+            )
           : Effect.fail(
               new RemoteWorkflowError({
                 cause: new Error(message.message ?? sourceText("error.remote.bridgeCommandFailed")),

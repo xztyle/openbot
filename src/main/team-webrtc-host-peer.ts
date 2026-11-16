@@ -80,7 +80,7 @@ import {
 } from "./remote-desktop-signal";
 import { RemoteWorkflowError, remoteCall, remoteDecode } from "./remote-service-effects";
 import type { TeamStore } from "./team-store";
-import type { TeamWebRtcBridge } from "./team-webrtc-bridge";
+import type { TeamWebRtcBridge, TeamWebRtcSendQueue } from "./team-webrtc-bridge";
 import { type ReceivedWebRtcFile, TeamWebRtcFileTransfer } from "./team-webrtc-file-transfer";
 import { rawDataBytes, sendableCloseCode } from "./ws-raw-data";
 
@@ -117,7 +117,7 @@ export interface IncomingConnection {
 class HostPeerTransport extends Context.Service<
   HostPeerTransport,
   {
-    send(...args: Parameters<TeamWebRtcBridge["send"]>): Effect.Effect<void, RemoteWorkflowError>;
+    send(...args: Parameters<TeamWebRtcBridge["send"]>): Effect.Effect<TeamWebRtcSendQueue | null, RemoteWorkflowError>;
     fetch(input: URL, init: RequestInit): Effect.Effect<Response, RemoteWorkflowError>;
   }
 >()("openbot/main/HostPeerTransport") {}
@@ -506,7 +506,7 @@ export class TeamWebRtcHostPeer {
     });
     const cached = this.#responses.get(request.requestId);
     if (cached) {
-      yield* HostPeerTransport.use((transport) => transport.send(peerId, "rpc", cached));
+      yield* this.#sendRpcResponse(peerId, request, cached);
       return;
     }
     const sessionId = this.#localSessionId;
@@ -547,7 +547,19 @@ export class TeamWebRtcHostPeer {
     }
     const response = yield* Fiber.join(responseOperation);
     if (this.#peerId !== peerId || this.#localSessionId !== sessionId) return;
-    yield* HostPeerTransport.use((transport) => transport.send(peerId, "rpc", response));
+    yield* this.#sendRpcResponse(peerId, request, response);
+  });
+
+  /** Sends an answer, and logs one that waited to leave: the client counts that wait against its deadline. */
+  readonly #sendRpcResponse = Effect.fn("TeamHostPeer.sendRpcResponse")(function* (
+    this: TeamWebRtcHostPeer,
+    peerId: string,
+    request: Extract<TeamProtocolV2RpcFrame, { type: "request" }>,
+    response: string,
+  ): Effect.fn.Return<void, RemoteWorkflowError, HostPeerTransport> {
+    const startedAt = performance.now();
+    const queue = yield* HostPeerTransport.use((transport) => transport.send(peerId, "rpc", response));
+    logRpcSend(request, response, startedAt, queue);
   });
 
   readonly #createRpcResponse = Effect.fn("TeamHostPeer.createRpcResponse")(function* (
@@ -1139,6 +1151,37 @@ function logRpcOutcome(
   };
   if (failure && failure.status >= 500) logger.warn("A Team API request over WebRTC failed.", details);
   else logger.info("A Team API request over WebRTC was slow.", details);
+}
+
+/** A send that waited this long, or found this much data ahead of it, delays the answer on the client. */
+const SLOW_RPC_SEND_MS = 1_000;
+const QUEUED_AHEAD_LOG_BYTES = 1024 * 1024;
+
+/**
+ * Logs an answer that waited to leave: the page waits while a channel holds more than 4 MB, and the
+ * bytes ahead of it must cross the path first. On a relayed path at 2 MB/s, 1 MB is half a second.
+ */
+function logRpcSend(
+  request: Extract<TeamProtocolV2RpcFrame, { type: "request" }>,
+  response: string,
+  startedAt: number,
+  queue: TeamWebRtcSendQueue | null,
+): void {
+  const sendMs = Math.round(performance.now() - startedAt);
+  if (
+    sendMs < SLOW_RPC_SEND_MS &&
+    (queue?.queuedBytes ?? 0) < QUEUED_AHEAD_LOG_BYTES &&
+    (queue?.connectionQueuedBytes ?? 0) < QUEUED_AHEAD_LOG_BYTES
+  )
+    return;
+  const payload = isHttpRequest(request.payload) ? request.payload : null;
+  logger.info("A Team API answer over WebRTC waited to leave.", {
+    method: payload?.method ?? request.operation,
+    route: payload ? logRoute(payload.path) : "",
+    responseBytes: Buffer.byteLength(response),
+    sendMs,
+    ...(queue ? { rpcQueuedBytes: queue.queuedBytes, connectionQueuedBytes: queue.connectionQueuedBytes } : {}),
+  });
 }
 
 function logRoute(path: string): string {

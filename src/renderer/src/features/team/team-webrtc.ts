@@ -54,6 +54,9 @@ interface MainBridgeMessage {
   localFingerprint?: string;
   remoteFingerprint?: string;
   iceServers?: RTCIceServer[];
+  /** On the `command-complete` of a send: the bytes that waited in its channel before it, and in all channels. */
+  queuedBytes?: number;
+  connectionQueuedBytes?: number;
 }
 
 interface PeerState {
@@ -145,6 +148,7 @@ window.addEventListener("online", () => {
 
 async function handleCommand(command: BridgeCommand): Promise<void> {
   try {
+    let sent: { queuedBytes: number; connectionQueuedBytes: number } | null = null;
     if (command.type === "connect") {
       if (
         !command.signalUrl ||
@@ -200,7 +204,7 @@ async function handleCommand(command: BridgeCommand): Promise<void> {
       const channel = command.channel ? state.channels[command.channel] : null;
       if (channel?.readyState !== "open" || command.data === undefined)
         throw new Error(sourceText("error.remote.channelNotOpen"));
-      await sendChannelPayload(state, channel, command.data);
+      sent = await sendChannelPayload(state, channel, command.data);
     } else if (command.type === "restart-ice") {
       await restartIce(requirePeer(command.peerId));
     } else if (command.type === "set-private-network") {
@@ -211,7 +215,7 @@ async function handleCommand(command: BridgeCommand): Promise<void> {
       for (const peerId of [...preparedSignals.keys()]) dropPreparedSignal(peerId);
       for (const peerId of [...peers.keys()]) disconnect(peerId);
     }
-    post({ type: "command-complete", commandId: command.commandId });
+    post({ type: "command-complete", commandId: command.commandId, ...sent });
   } catch (error) {
     post({
       type: "command-error",
@@ -713,17 +717,26 @@ function sdpFingerprint(sdp: string | undefined): string | undefined {
     .toUpperCase();
 }
 
+/**
+ * Returns the bytes that waited to leave before this payload: in its own channel, and in all the
+ * channels of the connection, which share one SCTP association. Main logs a send that waited long.
+ */
 async function sendChannelPayload(
   state: PeerState,
   channel: RTCDataChannel,
   data: string | ArrayBuffer,
-): Promise<void> {
+): Promise<{ queuedBytes: number; connectionQueuedBytes: number }> {
+  const queued = {
+    queuedBytes: channel.bufferedAmount,
+    connectionQueuedBytes: dataChannelNames.reduce((sum, name) => sum + (state.channels[name]?.bufferedAmount ?? 0), 0),
+  };
   const maximumMessageSize = state.peerConnection?.sctp?.maxMessageSize ?? Number.POSITIVE_INFINITY;
   for (const frame of encodeTeamWebRtcPayload(data, maximumMessageSize)) {
     await waitForWritableChannel(channel);
     if (isString(frame)) channel.send(frame);
     else channel.send(frame);
   }
+  return queued;
 }
 
 function waitForWritableChannel(channel: RTCDataChannel): Promise<void> {

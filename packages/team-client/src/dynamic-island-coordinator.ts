@@ -223,17 +223,21 @@ export class DynamicIslandCoordinator {
         };
         return;
       case "turn-completed":
-        // A quiet routine run posted no message, so the island has no new reply to show.
+        // A quiet routine run posted no message, and an answer to another agent is nothing the person
+        // reads, so the island has no new reply to show.
         if (
           serverId !== activeServerId &&
           event.status === "completed" &&
           !event.quiet &&
+          !event.agentTalk &&
           runtime.activeTurns[event.agentId] === event.turnId
         ) {
           runtime.completedAgents.add(event.agentId);
         }
-        // The answers of a quiet routine run are gone from the chat, so their count goes too.
-        if (event.quiet && serverId !== activeServerId) this.#takeBackTurnReplies(runtime, event.agentId, event.turnId);
+        // The answers of a quiet routine run are gone from the chat, so their count goes too. The answers
+        // of talk between agents stay, folded, and read state does not count them.
+        if ((event.quiet || event.agentTalk) && serverId !== activeServerId)
+          this.#takeBackTurnReplies(runtime, event.agentId, event.turnId);
         runtime.turnReplies.delete(event.agentId);
         runtime.activeTurns[event.agentId] = null;
         // A host sends a phone `queue-invalidated` instead of the queue, and no snapshot after the turn.

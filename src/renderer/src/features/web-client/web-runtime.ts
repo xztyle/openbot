@@ -120,6 +120,7 @@ import {
   type RemoteTeamConnectionUpdate,
 } from "@openbot/team-client/remote-peer";
 import {
+  isRemoteReadRequest,
   type RemoteRequestFailure,
   remoteRequestFailure,
   remoteWorkspaceReadTimeout,
@@ -582,7 +583,7 @@ export function createWebWorkspaceRuntime(
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
     });
     const failure = remoteRequestFailure(result);
-    const read = method === "GET" || method === "HEAD";
+    const read = isRemoteReadRequest(method, path);
     // A reconnect starts a new generation. A request that the connection lost waits for it, so its
     // failure is the connection's, not a host change.
     const lost = failure?.kind === "unsent" || (read && failure?.kind === "connection");

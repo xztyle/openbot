@@ -1,5 +1,7 @@
 import type { ConversationSnapshot } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { EVENT_CHECK_API_ROUTES } from "@openbot/contracts/team-protocol/event-check-api-v1";
+import { EVENT_CHECKS_ROUTES } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { type SourceMessages, sourceText } from "@openbot/i18n/source";
 import { errorReference } from "@openbot/user-errors/reference";
 import { Effect, Result, Schema } from "effect";
@@ -488,8 +490,29 @@ export function remoteRequestFailure(result: {
   return { kind: "other" };
 }
 
+/**
+ * Routes that read with POST, because their input is a body. The host only reads its own database for
+ * them, so they can be sent again, and a lost answer must not keep a panel loading for ten minutes.
+ */
+const POST_READ_ROUTES: ReadonlySet<string> = new Set([
+  EVENT_CHECKS_ROUTES.list,
+  EVENT_CHECKS_ROUTES.history,
+  EVENT_CHECKS_ROUTES.accounts,
+  EVENT_CHECK_API_ROUTES.list,
+  EVENT_CHECK_API_ROUTES.history,
+  EVENT_CHECK_API_ROUTES.accounts,
+]);
+/** A POST read waits longer than a GET of the workspace: a panel opens it, not the first paint. */
+const POST_READ_TIMEOUT_MS = 30_000;
+
+/** Whether the host only reads for this request, so that sending it twice is safe. */
+export function isRemoteReadRequest(method: string, path: string): boolean {
+  return method === "GET" || method === "HEAD" || (method === "POST" && POST_READ_ROUTES.has(path.split("?")[0] ?? ""));
+}
+
 /** Bound the reads that make a workspace usable; file transfers and writes retain their own limits. */
 export function remoteWorkspaceReadTimeout(method: string, path: string): number | undefined {
+  if (method === "POST" && POST_READ_ROUTES.has(path.split("?")[0] ?? "")) return POST_READ_TIMEOUT_MS;
   if (method !== "GET") return undefined;
   const route = path.split("?")[0];
   return route === TEAM_API_ROUTES.compatibility ||

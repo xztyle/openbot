@@ -5,3 +5,4 @@
 - The web client no longer drops its server connection after about ten returns to the browser tab. Each return restarted the connection path, and the server replaces a connection after ten restarts. The web client now checks the path first and renews it only when the check fails.
 - A window focus no longer shows an error toast when the account service or the server connection fails for a moment during the background refresh. The connection status still shows a lost connection.
 - The event checks panel no longer stays on "Loading event checks…" when the connection loses the answer. The list read has a 30-second limit, is read again after a reconnect, and otherwise shows Retry.
+- A request no longer fails with "The selected server changed." when the web client checks or renews the connection to the same server while the request runs. A message or setting that the server saved no longer reads as failed.

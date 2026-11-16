@@ -474,6 +474,18 @@ export function createWebWorkspaceRuntime(
   let connecting: Promise<unknown> | null = null;
   let disposed = false;
   let generation = 0;
+  /**
+   * Changes only when the requests go to another host, or to none. A reconnect to the same host, such
+   * as the check of a healthy peer after an event reset, keeps it: an answer of that host is still its
+   * answer, and a write that it did must not read as failed.
+   */
+  let hostGeneration = 0;
+  let generationHostId: string | null = null;
+  function noteRequestHost(hostId: string | null): void {
+    if (hostId === generationHostId) return;
+    generationHostId = hostId;
+    hostGeneration += 1;
+  }
   let uploadGeneration = 0;
   let capabilities: string[] = [];
   let connectedHost: RemoteTeamHost | null = null;
@@ -597,7 +609,7 @@ export function createWebWorkspaceRuntime(
   }
   async function requestOnce(method: string, path: string, body: TeamProtocolV2Json, upload?: RemoteFileUpload) {
     if (disposed) throw new Error(currentText().t("webClient.error.connectionClosed"));
-    const current = generation;
+    const current = hostGeneration;
     const requestHostId = lockedHostId;
     const timeoutMs =
       method === "GET" && path === TEAM_API_ROUTES.me ? 15_000 : remoteWorkspaceReadTimeout(method, path);
@@ -612,15 +624,16 @@ export function createWebWorkspaceRuntime(
     });
     const failure = remoteRequestFailure(result);
     const read = isRemoteReadRequest(method, path);
-    // A reconnect starts a new generation. A request that the connection lost waits for it, so its
-    // failure is the connection's, not a host change.
+    // A request that the connection lost waits for the reconnect, so its failure is the connection's,
+    // not a host change.
     const lost = failure?.kind === "unsent" || (read && failure?.kind === "connection");
-    if (!lost && (disposed || generation !== current)) throw new Error(currentText().t("webClient.error.hostChanged"));
+    if (!lost && (disposed || hostGeneration !== current))
+      throw new Error(currentText().t("webClient.error.hostChanged"));
     const membershipRead = method === "GET" && path === TEAM_API_ROUTES.me;
     // An action can be forbidden while membership remains valid. Confirm access before clearing drafts.
     if (result.status === 403 && !membershipRead) {
       await request("GET", TEAM_API_ROUTES.me);
-      if (disposed || generation !== current) throw new Error(currentText().t("webClient.error.hostChanged"));
+      if (disposed || hostGeneration !== current) throw new Error(currentText().t("webClient.error.hostChanged"));
     }
     if (result.status === 401 || (result.status === 403 && membershipRead)) {
       const error = new WebHostConnectionError(
@@ -779,6 +792,7 @@ export function createWebWorkspaceRuntime(
         hosts?.holdSelected(host.hostId, true);
       }
       const current = ++generation;
+      noteRequestHost(host.hostId);
       connectedHost = host;
       pinWebHostKey(accountId, host);
       const result = await peer.execute({
@@ -1006,6 +1020,7 @@ export function createWebWorkspaceRuntime(
         await peer.cancelUpload().catch(() => undefined);
         await discardCompletedDrafts(hostForCleanup);
         generation += 1;
+        noteRequestHost(null);
         await releaseLiveView();
         browserView.disconnect();
         await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });

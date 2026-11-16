@@ -2584,13 +2584,13 @@ export class ChannelService {
     // holds every message of the whole conversation. A read of the task table and two scans of the
     // channel history for each of them made one capture cost the square of the transcript.
     const tasks = new Map(this.store.tasks(channelId).map((task) => [task.id, task] as const));
-    // A delta reads the few messages of its turn by id. A whole snapshot reads the history once.
-    const history =
-      turnId === undefined
-        ? new Map(this.store.messages(channelId).map((message) => [message.id, message] as const))
-        : new Map<string, ChannelMessage | null>();
+    // Each message is read by its id, once. Reading the whole channel history for a whole snapshot
+    // parsed it all (2,462 messages, 3 MB, 16-25 ms on this host) for each execution thread: ten times
+    // in a row at startup for one channel, and again for each whole-snapshot event of its turns. The
+    // lookups a snapshot needs are two per message of an assignment, about 8 us each.
+    const history = new Map<string, ChannelMessage | null>();
     const existing = (id: string): ChannelMessage | undefined => {
-      if (turnId !== undefined && !history.has(id)) history.set(id, this.store.message(channelId, id));
+      if (!history.has(id)) history.set(id, this.store.message(channelId, id));
       return history.get(id) ?? undefined;
     };
     const messages: ChannelMessage[] = [];

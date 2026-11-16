@@ -1527,7 +1527,8 @@ button.chat-action-target:active,
   color: var(--openbot-danger-text);
 }
 
-.pending-send-status[data-state="held"] .pending-send-label {
+.pending-send-status[data-state="held"] .pending-send-label,
+.pending-send-status[data-state="waiting"] .pending-send-label {
   color: var(--openbot-text-muted);
 }
 

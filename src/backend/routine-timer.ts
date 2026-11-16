@@ -113,7 +113,12 @@ export class RoutineTimer {
     const now = new Date();
     this.#firing = true;
     yield* Effect.gen({ self: this }, function* () {
+      let first = true;
       for (const source of this.sources()) {
+        // Between two owners the event loop answers the waiting requests; each owner also yields
+        // between its due items.
+        if (!first) yield* Effect.yieldNow;
+        first = false;
         // A suspend or a hold can arrive while an enqueue awaits. The rest stays due and fires later.
         if (this.#paused()) break;
         yield* source

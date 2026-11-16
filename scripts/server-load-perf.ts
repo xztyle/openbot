@@ -14,6 +14,7 @@
 //      [--clients=1]           (connected apps that each read after each event)
 //      [--verify-copies]       (check each kept message digest and shared event copy; a difference fails)
 //      [--encode-pages=main]   (read and encode the open chats' pages on the main thread, as before)
+//      [--routines=N]          (N one-time routines of idle agents come due at one minute of the load)
 // The database file is copied again into a temporary folder (`--tmp`) for each run. The run fails when a
 // completed turn has no stored answer. Writes .openbot-build/server-load-perf/<label>.json. A profile of
 // a run through tsx names the functions; bundle the script with esbuild first for exact line numbers.
@@ -57,6 +58,8 @@ const CLIENTS = Math.max(1, Number(argument("clients") ?? 1));
 const VERIFY_COPIES = process.argv.includes("--verify-copies");
 /** `--encode-pages=main` reads and encodes the open chats' pages on the main thread, as before. */
 const ENCODE_PAGES_OFF_MAIN = argument("encode-pages") !== "main";
+/** `--routines=N`: N one-time routines of idle agents come due at one minute, 20 s into the load phase. */
+const ROUTINES = Number(argument("routines") ?? 0);
 if (VERIFY_COPIES) process.env.OPENBOT_VERIFY_CONVERSATION_COPIES = "1";
 /** `--reads=0` leaves out the unread-state read that the app makes after each conversation event. */
 const readStates = argument("reads") !== "0";
@@ -380,13 +383,18 @@ const browser: AgentBrowserHost = {
 
 // Event-loop stalls: a 10 ms timer that notes each late tick.
 const stalls: number[] = [];
+/** When each stall ended, for the stalls of the routine burst. */
+const stallEnds: { at: number; ms: number }[] = [];
 let lastTick = performance.now();
 let measuring = false;
 const ticker = setInterval(() => {
   const now = performance.now();
   const late = now - lastTick - 10;
   lastTick = now;
-  if (measuring && late >= STALL_MS) stalls.push(Math.round(late));
+  if (measuring && late >= STALL_MS) {
+    stalls.push(Math.round(late));
+    stallEnds.push({ at: Date.now(), ms: Math.round(late) });
+  }
 }, 10);
 
 const timed = new Map<string, { count: number; totalMs: number; maxMs: number }>();
@@ -422,6 +430,31 @@ const service = new AgentService({
 await runCauseEffect(service.initialize());
 const initMs = performance.now() - initStart;
 log(`Service ready in ${initMs.toFixed(0)} ms.`);
+
+// A burst of routines, as at the top of an hour on a server: each starts a turn of an idle agent.
+let routinesDueAt: string | null = null;
+if (ROUTINES > 0) {
+  const idle = store.list().filter((agent) => !busy.some((candidate) => candidate.agentId === agent.id));
+  // A minute boundary at least 15 s after the load starts, so the burst falls inside the load phase.
+  const due = new Date(Math.ceil((Date.now() + 25_000) / 60_000) * 60_000);
+  routinesDueAt = due.toISOString();
+  for (let index = 0; index < ROUTINES && idle.length > 0; index += 1) {
+    const agent = idle[index % idle.length];
+    if (!agent) continue;
+    service.createRoutine({
+      agentId: agent.id,
+      name: `Load routine ${index + 1}`,
+      instruction: "Write the next part of the report.",
+      active: true,
+      timezone: "UTC",
+      schedule: { kind: "once", date: routinesDueAt.slice(0, 10), time: routinesDueAt.slice(11, 16) },
+    });
+  }
+  log(`${ROUTINES} routines come due at ${routinesDueAt}.`);
+  // The load starts 20 s before the routines' minute, so their burst falls 20 s into it.
+  const wait = due.getTime() - 20_000 - Date.now();
+  if (wait > 0) await new Promise((done) => setTimeout(done, wait));
+}
 
 // The simulated client.
 let events = 0;
@@ -700,6 +733,12 @@ const problems: string[] = [];
 }
 if (problems.length > 0) process.exitCode = 1;
 
+/** The stalls from the routines' minute to 15 s after it: the burst of their turns. */
+function routineBurstStalls() {
+  const from = routinesDueAt ? Date.parse(routinesDueAt) : 0;
+  const burst = stallEnds.filter((stall) => stall.at >= from && stall.at <= from + 15_000).map((stall) => stall.ms);
+  return { count: burst.length, totalMs: burst.reduce((sum, ms) => sum + ms, 0), maxMs: Math.max(0, ...burst) };
+}
 const sorted = [...stalls].sort((left, right) => right - left);
 const result = {
   label: LABEL,
@@ -709,6 +748,7 @@ const result = {
   readWorkers: READ_WORKERS,
   clients: CLIENTS,
   encodePages: ENCODE_PAGES_OFF_MAIN ? "worker" : "main",
+  ...(ROUTINES > 0 ? { routines: ROUTINES, routinesDueAt, routineBurst: routineBurstStalls() } : {}),
   ...(VERIFY_COPIES ? { verifiedCopies: { ...keptMessageChecks } } : {}),
   initMs: Math.round(initMs),
   messagesSent: sent,

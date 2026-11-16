@@ -599,7 +599,9 @@ export class EventCheckScheduler implements RoutineDueSource {
     const checks = yield* mcpSync(() =>
       this.options.store.list().filter((check) => check.active && check.nextCheckAt <= now.toISOString()),
     );
-    for (const check of checks) {
+    for (const [index, check] of checks.entries()) {
+      // Between two due checks the event loop answers the waiting requests (see `RoutineScheduler`).
+      if (index > 0) yield* Effect.yieldNow;
       if (!active()) break;
       yield* mcpSync(() => this.options.store.advance(check, now));
       if (this.#running.has(check.id)) continue;

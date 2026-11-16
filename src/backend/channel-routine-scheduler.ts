@@ -263,7 +263,9 @@ export class ChannelRoutineScheduler implements RoutineDueSource {
     const changed = new Set<string>();
     yield* Effect.gen({ self: this }, function* () {
       const pending = yield* channelRoutineStep(() => this.#routines.due(now, this.#excluded()));
-      for (const due of pending) {
+      for (const [index, due] of pending.entries()) {
+        // Between two due routines the event loop answers the waiting requests (see `RoutineScheduler`).
+        if (index > 0) yield* Effect.yieldNow;
         if (!active()) break;
         if (this.#excluded().has(due.routine.channelId)) continue;
         const scheduledFor = yield* channelRoutineStep(() => {

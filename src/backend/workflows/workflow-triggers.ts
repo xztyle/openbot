@@ -66,7 +66,9 @@ export class WorkflowTriggers implements RoutineDueSource {
     active: () => boolean,
   ) {
     const due = yield* Effect.try({ try: () => this.#store.dueTriggers(now), catch: (cause) => ({ cause }) });
-    for (const trigger of due) {
+    for (const [index, trigger] of due.entries()) {
+      // Between two due triggers the event loop answers the waiting requests (see `RoutineScheduler`).
+      if (index > 0) yield* Effect.yieldNow;
       if (!active()) break;
       // A trigger that fails does not hold back the triggers after it.
       yield* this.#fire(trigger, now).pipe(

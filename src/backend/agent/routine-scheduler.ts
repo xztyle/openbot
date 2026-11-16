@@ -925,7 +925,11 @@ export class RoutineScheduler implements RoutineDueSource {
     );
     yield* Effect.gen({ self: this }, function* () {
       const dueRoutines = yield* routineStep(() => this.#routines.due(now, this.#hooks.excludedAgents()));
-      for (const due of dueRoutines) {
+      for (const [index, due] of dueRoutines.entries()) {
+        // Each due item starts its own work (a queued message, a turn, a process). Many come due at
+        // the same minute, and starting them all in one task held the main thread for most of a second
+        // (937 ms, live). Between two items the event loop answers the waiting requests and events.
+        if (index > 0) yield* Effect.yieldNow;
         if (!active()) break;
         if (this.#hooks.excludedAgents().has(due.routine.agentId)) continue;
         const run = yield* routineStep(() => {

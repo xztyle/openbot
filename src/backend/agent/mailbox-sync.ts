@@ -53,6 +53,8 @@ export class MailboxSync {
    * version ten times a second and changes only the text of an agent message, which the merge ignores.
    */
   readonly #reconciled = new Map<string, { key: string; at: number }>();
+  /** What `emitQueue` last saw of each agent's deliveries from other agents (`agentSenderDeliveryKeys`). */
+  readonly #senderDeliveryKeys = new Map<string, Map<string, { senderAgentId: string; key: string }>>();
   readonly #database: OpenBotDatabase;
   readonly #mailbox: MailboxStore;
   readonly #conversation: ConversationRuntime;
@@ -220,7 +222,18 @@ export class MailboxSync {
     }
     this.#hooks.emit({ type: "queue-changed", snapshot: queue });
     if (routinesChanged) this.#routines.stateChanged(agentId);
-    const affectedAgents = new Set([agentId, ...this.#mailbox.senderAgentIdsForRecipient(agentId)]);
+    // A sender's chat shows its deliveries to this agent in outbox copies. Only the senders whose
+    // deliveries changed since the last queue event of this agent need a merge: each merge passes over
+    // the sender's mail (3-4 ms here), and an agent with 13 senders merged all of them at each start
+    // and end of a turn. The first event of an agent in this process merges every sender, as before.
+    const keys = this.#mailbox.agentSenderDeliveryKeys(agentId);
+    const previous = this.#senderDeliveryKeys.get(agentId);
+    this.#senderDeliveryKeys.set(agentId, keys);
+    const affectedAgents = new Set([agentId]);
+    for (const [deliveryId, state] of keys)
+      if (previous?.get(deliveryId)?.key !== state.key) affectedAgents.add(state.senderAgentId);
+    if (previous)
+      for (const [deliveryId, state] of previous) if (!keys.has(deliveryId)) affectedAgents.add(state.senderAgentId);
     for (const affectedAgentId of affectedAgents) {
       const snapshot = this.#conversation.snapshotToUpdate(affectedAgentId);
       if (!snapshot) continue;

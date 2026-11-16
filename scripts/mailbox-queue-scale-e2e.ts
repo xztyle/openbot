@@ -109,6 +109,14 @@ function checkQueue(mailbox: MailboxStore, seeded: Seeded[]): void {
   assert.deepEqual(mailbox.senderAgentIdsForRecipient(OTHER_AGENT), []);
   report.checks.push("senderAgentIdsForRecipient: the agent senders of each recipient");
 
+  // `emitQueue` merges the chat of a sender only when one of its deliveries to the agent changed.
+  const keys = mailbox.agentSenderDeliveryKeys(AGENT);
+  assert.equal(keys.size, seeded.length);
+  assert.deepEqual([...new Set([...keys.values()].map((value) => value.senderAgentId))].sort(), [...SENDERS].sort());
+  for (const item of seeded) assert.equal(keys.get(item.deliveryId)?.senderAgentId, item.sender);
+  assert.equal(mailbox.agentSenderDeliveryKeys(OTHER_AGENT).size, 0);
+  report.checks.push("agentSenderDeliveryKeys: each delivery to the agent with its agent sender");
+
   const byDelivery = new Map(seeded.map((item) => [item.deliveryId, item]));
   const rows = mailbox.conversationMessages(AGENT).filter((row) => row.delivery);
   assert.ok(rows.length > 0);
@@ -195,7 +203,7 @@ function timeQueueChanges(mailbox: MailboxStore): NonNullable<Report["timing"]> 
   const started = performance.now();
   for (let index = 0; index < TIMED_READS; index += 1) {
     mailbox.listQueue(AGENT);
-    mailbox.senderAgentIdsForRecipient(AGENT);
+    mailbox.agentSenderDeliveryKeys(AGENT);
   }
   const totalMs = performance.now() - started;
   return {

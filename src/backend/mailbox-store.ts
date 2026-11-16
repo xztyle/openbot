@@ -1375,6 +1375,37 @@ export class MailboxStore {
     return turnIds;
   }
 
+  /**
+   * What the chat of each agent that wrote to `agentId` shows of its deliveries to it, by delivery
+   * id: the sender and a key of the status, the queue position and the error, the fields of an
+   * outbox copy that a queue change moves.
+   */
+  agentSenderDeliveryKeys(agentId: string): Map<string, { senderAgentId: string; key: string }> {
+    const own = this.#state.deliveries.filter((delivery) => delivery.recipientAgentId === agentId);
+    const messageIds = new Set(own.map((delivery) => delivery.messageId));
+    const senders = new Map<string, string>();
+    for (const message of this.#state.messages)
+      if (messageIds.has(message.id) && message.sender.kind === "agent")
+        senders.set(message.id, message.sender.agentId);
+    // The position as `#queuedPositions` counts it: in the recipient's own queue order.
+    const positions = new Map(
+      own
+        .filter((delivery) => delivery.status === "queued")
+        .sort(compareQueueOrder)
+        .map((delivery, index) => [delivery.id, index + 1] as const),
+    );
+    const keys = new Map<string, { senderAgentId: string; key: string }>();
+    for (const delivery of own) {
+      const senderAgentId = senders.get(delivery.messageId);
+      if (senderAgentId === undefined) continue;
+      keys.set(delivery.id, {
+        senderAgentId,
+        key: `${delivery.status}\u0000${positions.get(delivery.id) ?? ""}\u0000${delivery.error ?? ""}`,
+      });
+    }
+    return keys;
+  }
+
   senderAgentIdsForRecipient(agentId: string): string[] {
     const deliveries = this.#state.deliveries.filter((delivery) => delivery.recipientAgentId === agentId);
     // Each queue change asks this, so only the messages to this agent are indexed.

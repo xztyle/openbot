@@ -40,6 +40,9 @@ const quietRoutineDelivery: DeliveryContext = {
   managedAttachments: [],
 };
 
+const LIVE_ANSWER = "The checklist is written and saved in Motion.";
+const TRANSCRIPT_ONLY_ANSWER = "The background export finished after the turn.";
+
 const FAILED_DELIVERY_ID = "failed-routine-delivery";
 const FAILED_ANSWER = "The server is not reachable.";
 /** A scheduled run whose agent called `routine_report_failure`: its delivery completed with the reason. */
@@ -193,6 +196,40 @@ async function runProviderHistoryReimportCheck(outputPath: string): Promise<Repo
       .readConversation(agentId, threadId)
       .messages.filter((message) => message.turnId === failedTurnId && message.author === "assistant");
 
+    // Claude Code starts a transcript turn at a background task's notification in a live turn. The
+    // live turn showed the answer under its own ID; the import must not store a second copy of it.
+    const liveTurnId = "claude-live-turn";
+    database.persistConversationChanges({
+      agentId,
+      threadId,
+      activeTurnId: null,
+      changedMessages: [
+        {
+          id: `${liveTurnId}:assistant`,
+          turnId: liveTurnId,
+          author: "assistant",
+          text: LIVE_ANSWER,
+          createdAt: new Date(11_500).toISOString(),
+          status: "completed",
+        },
+      ],
+      eventType: "turn.completed",
+    });
+    const claudeNotification = await runImport("claude-notification-session", "claude", [
+      {
+        turnId: "claude-notification-turn",
+        status: "completed",
+        startedAt: 11,
+        itemOffset: 0,
+        complete: true,
+        items: [
+          { type: "agentMessage", id: "notification-copy", text: LIVE_ANSWER, phase: "commentary" },
+          { type: "agentMessage", id: "notification-answer", text: TRANSCRIPT_ONLY_ANSWER, status: "completed" },
+        ],
+      },
+    ]);
+    const notificationTexts = messageTexts();
+
     // A turn that an import did not finish keeps `imported = 0` and is imported at the next start.
     database.connection
       .prepare("UPDATE provider_history_turns SET imported = 0 WHERE session_id = ? AND turn_id = ?")
@@ -215,6 +252,7 @@ async function runProviderHistoryReimportCheck(outputPath: string): Promise<Repo
         splitEdited,
         claudeQuiet,
         claudeFailed,
+        claudeNotification,
         unfinished,
       },
       acceptance: {
@@ -241,6 +279,10 @@ async function runProviderHistoryReimportCheck(outputPath: string): Promise<Repo
           failedAnswers.length === 1 &&
           failedAnswers[0]?.text === FAILED_ANSWER &&
           failedAnswers[0]?.itemType !== ROUTINE_QUIET_ANSWER_ITEM_TYPE,
+        claudeNotificationTurnStoresNoLiveCopy:
+          claudeNotification.turns === 1 &&
+          notificationTexts.filter((text) => text === LIVE_ANSWER).length === 1 &&
+          notificationTexts.includes(TRANSCRIPT_ONLY_ANSWER),
         unfinishedTurnImportsAgain: unfinished.turns === 1,
         importCompleted: database.providerHistoryImport("codex-session")?.state === "complete",
       },

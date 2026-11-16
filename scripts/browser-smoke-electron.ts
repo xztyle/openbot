@@ -22,6 +22,7 @@ import { BrowserHost } from "../src/backend/browser-host";
 import { runCauseEffect } from "../src/backend/effect-boundary";
 import { type DynamicToolResult, getString } from "../src/backend/protocol";
 import { runSecretHandoffScenario } from "./browser-secret-smoke";
+import { runSleepScenario } from "./browser-sleep-smoke";
 import { waitForPresentedFrame } from "./browser-smoke-frames";
 
 let cachedPageVersion = 1;
@@ -435,6 +436,7 @@ const SCENARIOS = [
   "secret-handoff",
   "popups",
   "redirect-navigation",
+  "sleep",
 ];
 
 void main().catch((error) => {
@@ -522,6 +524,11 @@ async function main(): Promise<void> {
           await runToolBoundaryScenario(browser, origin);
         } else if (scenario === "redirect-navigation") {
           await runRedirectNavigationScenario(browser, origin);
+        } else if (scenario === "sleep") {
+          const report = await runSleepScenario(window, temporaryRoot);
+          const reportPath = join(process.cwd(), ".openbot-build", "browser-sleep-report.json");
+          await mkdir(join(process.cwd(), ".openbot-build"), { recursive: true });
+          await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
         } else {
           const { tab, contents } = await openTabWithContents(browser, `${origin}/v2`, "smoke-thread", "smoke-bot");
           try {

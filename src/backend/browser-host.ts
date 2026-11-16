@@ -41,6 +41,7 @@ import {
   type Input,
   Menu,
   type NativeImage,
+  type NavigationEntry,
   type Rectangle,
   type Session,
   session,
@@ -227,14 +228,34 @@ function viewContextMenu(
   };
 }
 /**
- * An agent's tab that nobody used for this long unloads its page, and loads it again on its next use,
- * so a long run does not keep in memory the page of each tab an agent left open. The tab keeps a
- * blank page, as a restored tab does. When memory is low, the tab unloads after
- * `LOW_MEMORY_TAB_SLEEP_MS`.
+ * An agent's tab that nobody used for `idleMs` unloads its page, and loads it again on its next use,
+ * so a long run does not keep the page of each tab an agent left open. A sleeping tab has no renderer
+ * process: each renderer is 15 to 20 threads, and a server's task limit counts each thread. When
+ * memory is low, the tab sleeps after `LOW_MEMORY_TAB_SLEEP_MS`.
+ *
+ * The live agent tabs also have limits: `perOwner` for one agent, and `total` for all agents. Above a
+ * limit, the tabs that nobody used for `limitIdleMs` sleep, the oldest first.
  */
-const IDLE_TAB_SLEEP_MS = 30 * 60_000;
+export interface BrowserTabSleepLimits {
+  idleMs: number;
+  sweepMs: number;
+  perOwner: number;
+  total: number;
+  limitIdleMs: number;
+}
+const TAB_SLEEP_LIMITS: BrowserTabSleepLimits = {
+  idleMs: 30 * 60_000,
+  sweepMs: 60_000,
+  perOwner: 4,
+  total: 24,
+  limitIdleMs: 2 * 60_000,
+};
 const LOW_MEMORY_TAB_SLEEP_MS = 5 * 60_000;
-const IDLE_TAB_SWEEP_MS = 60_000;
+/** The back and forward history that a sleeping tab keeps, with the scroll position and form values of each page. */
+interface SleepingHistory {
+  entries: NavigationEntry[];
+  index: number;
+}
 
 interface BrowserConsoleMessageDetails {
   level: "info" | "warning" | "error" | "debug";
@@ -372,6 +393,13 @@ export class BrowserHost {
   /** Whether the machine is too low on memory for one more tab. Only a server has a reading. */
   readonly #memoryLow: () => boolean;
   readonly #idleTabSweep: NodeJS.Timeout;
+  readonly #sleepLimits: BrowserTabSleepLimits;
+  /**
+   * A view that never navigated is a debugger target that never answers, which stops a CDP client
+   * from attaching to the app. Only a development or test build opens a debugging port; there, a tab
+   * without its page keeps a blank page, which answers.
+   */
+  readonly #blankPageForDebugger = app.commandLine.hasSwitch("remote-debugging-port");
 
   constructor(
     window: BrowserWindow,
@@ -388,9 +416,12 @@ export class BrowserHost {
       profileExists?: (profileId: string) => boolean;
       /** Where `save_secret_from_page` saves. Absent, the tool fails. */
       apiKeys?: AgentApiKeys | null;
+      /** When idle agent tabs sleep. A test sets short times. */
+      tabSleep?: Partial<BrowserTabSleepLimits>;
     } = {},
   ) {
     this.#window = window;
+    this.#sleepLimits = { ...TAB_SLEEP_LIMITS, ...options.tabSleep };
     this.#memoryLow = options.memoryLow ?? (() => false);
     this.#browserProfile = options.browserProfile ?? (() => ({ kind: "shared" }));
     this.#profileExists = options.profileExists ?? (() => false);
@@ -425,7 +456,7 @@ export class BrowserHost {
       void runCauseEffect(this.#sleepIdleTabs()).catch((error) =>
         logger.warn("Unable to sleep browser tabs", { error: toLogValue(error) }),
       );
-    }, IDLE_TAB_SWEEP_MS);
+    }, this.#sleepLimits.sweepMs);
     this.#idleTabSweep.unref();
   }
 
@@ -473,18 +504,22 @@ export class BrowserHost {
     this.#syncAttachedView();
     this.#emitChanged();
 
-    for (const tab of tabs) tab.pendingRestore = () => loadSavedPage(tab);
-    const activeTab = this.#activeTabId ? this.#tabs.get(this.#activeTabId) : undefined;
-    if (activeTab) yield* this.#wake(activeTab);
-    // A view that never navigated is a debugger target that never answers, which stops a CDP client
-    // from attaching to the app. A blank page answers, and costs far less than the saved page.
+    // No tab loads now, not even the active one: a view that never navigated has no renderer process.
+    // The first use loads the page: a tool call, a preview, or the panel that shows the tab.
     for (const tab of tabs) {
-      if (tab.pendingRestore)
-        yield* Effect.forkIn(browserCall(() => tab.contents.loadURL("about:blank")).pipe(Effect.ignore), tab.scope, {
-          startImmediately: true,
-        });
+      tab.pendingRestore = () => loadSavedPage(tab);
+      yield* this.#blankPageForDebuggerOf(tab);
     }
   }).bind(this);
+
+  /** The blank page of a tab without its page, while a debugging port is open. See `#blankPageForDebugger`. */
+  #blankPageForDebuggerOf(tab: BrowserHostTab): Effect.Effect<void> {
+    if (!this.#blankPageForDebugger) return Effect.void;
+    const contents = tab.contents;
+    return Effect.forkIn(browserCall(() => contents.loadURL("about:blank")).pipe(Effect.ignore), tab.scope, {
+      startImmediately: true,
+    }).pipe(Effect.asVoid);
+  }
 
   /**
    * Starts the held-back load of a restored or sleeping tab, once, ahead of anything else queued on
@@ -508,13 +543,49 @@ export class BrowserHost {
 
   readonly #sleepIdleTabs = Effect.fn("BrowserHost.sleepIdleTabs")(function* (this: BrowserHost) {
     const now = Date.now();
-    const idleMs = this.#memoryLow() ? LOW_MEMORY_TAB_SLEEP_MS : IDLE_TAB_SLEEP_MS;
+    const idleMs = this.#memoryLow()
+      ? Math.min(LOW_MEMORY_TAB_SLEEP_MS, this.#sleepLimits.idleMs)
+      : this.#sleepLimits.idleMs;
     for (const tab of this.#tabs.values()) {
       if (tab.pendingRestore || !this.#maySleep(tab)) continue;
       if (this.#tabInUse(tab)) tab.lastUsedAt = now;
       else if (now - tab.lastUsedAt >= idleMs) yield* this.#sleep(tab);
     }
+    for (const tab of this.#tabsAboveLiveLimits(now)) yield* this.#sleep(tab);
   });
+
+  /**
+   * The idle agent tabs to sleep so that each agent, and all agents together, keep no more live tabs
+   * than the limits. The oldest use sleeps first. A tab that cannot sleep, such as a popup, still
+   * counts, because it still has a renderer.
+   */
+  #tabsAboveLiveLimits(now: number): BrowserHostTab[] {
+    const live = [...this.#tabs.values()].filter(
+      (tab) =>
+        (tab.ownerThreadId !== null || tab.ownerAgentId !== null) &&
+        !tab.pendingRestore &&
+        !tab.closing &&
+        !tab.contents.isDestroyed(),
+    );
+    const owner = (tab: BrowserHostTab) => tab.ownerAgentId ?? `thread:${tab.ownerThreadId}`;
+    const perOwner = new Map<string, number>();
+    for (const tab of live) perOwner.set(owner(tab), (perOwner.get(owner(tab)) ?? 0) + 1);
+    let total = live.length;
+    const sleeping: BrowserHostTab[] = [];
+    const candidates = live
+      .filter(
+        (tab) => now - tab.lastUsedAt >= this.#sleepLimits.limitIdleMs && this.#maySleep(tab) && !this.#tabInUse(tab),
+      )
+      .sort((left, right) => left.lastUsedAt - right.lastUsedAt);
+    for (const tab of candidates) {
+      const count = perOwner.get(owner(tab)) ?? 0;
+      if (count <= this.#sleepLimits.perOwner && total <= this.#sleepLimits.total) continue;
+      sleeping.push(tab);
+      perOwner.set(owner(tab), count - 1);
+      total -= 1;
+    }
+    return sleeping;
+  }
 
   /**
    * Only an agent's own tab sleeps. A popup and its opener keep a live link between their pages, and
@@ -550,28 +621,30 @@ export class BrowserHost {
   }
 
   /**
-   * Unloads the page and keeps the tab: its id, owner, URL and settings stay, and the next use loads
-   * the page again through `#wake`. The page's own state, such as its history and unsent form
-   * input, is lost, as when a browser discards a background tab.
+   * Closes the page and keeps the tab: its id, owner, URL, session and settings stay, and the next
+   * use loads the page again through `#wake`. The back and forward history stays too, with the scroll
+   * position and the form values of each page; what runs in the page, such as a live connection, is
+   * lost, as when a browser discards a background tab.
    */
   readonly #sleep = Effect.fn("BrowserHost.sleep")(function* (this: BrowserHost, tab: BrowserHostTab) {
     const saved = savedPreview(tab);
     const capture = saved ? undefined : yield* this.#previewCapture(tab);
     const sleeping: NonNullable<BrowserHostTab["sleeping"]> = { title: tab.contents.getTitle(), preview: null };
     let unloaded = false;
+    let history: SleepingHistory | null = null;
     tab.sleeping = sleeping;
-    tab.pendingRestore = () => (unloaded ? loadSavedPage(tab) : Effect.void);
+    tab.pendingRestore = () => (unloaded ? loadSleptPage(tab, history) : Effect.void);
     yield* Effect.forkIn(
       enqueueTabOperation(
         tab,
         () =>
-          Effect.gen(function* () {
+          Effect.gen({ self: this }, function* () {
             sleeping.preview =
               saved ??
               (capture ? yield* Deferred.await(capture.frame).pipe(Effect.catch(() => Effect.succeed(null))) : null);
             if (tab.sleeping !== sleeping || tab.closing || tab.contents.isDestroyed()) return;
             unloaded = true;
-            yield* browserCall(() => tab.contents.loadURL("about:blank"));
+            history = yield* this.#releaseRenderer(tab);
           }),
         true,
       ).pipe(Effect.ignore),
@@ -579,6 +652,34 @@ export class BrowserHost {
       { startImmediately: true },
     );
     this.#emitChanged();
+  });
+
+  /**
+   * Puts a new view that never loaded a page in the place of the tab's view, and closes the old one
+   * with its renderer process. Answers the history of the old view.
+   */
+  readonly #releaseRenderer = Effect.fn("BrowserHost.releaseRenderer")(function* (
+    this: BrowserHost,
+    tab: BrowserHostTab,
+  ) {
+    const previous = { view: tab.view, contents: tab.contents, engine: tab.engine };
+    const history = sleepingHistory(previous.contents);
+    const window = this.#mountedViews.get(previous.view);
+    const view = this.#createView(undefined, this.#tabSession(tab));
+    this.#unmountView(previous.view);
+    this.#mountView(view, window && !window.isDestroyed() ? window : this.#window);
+    tab.view = view;
+    tab.contents = view.webContents;
+    tab.engine = new BrowserCdpEngine(view.webContents);
+    this.#bindTabEvents(tab);
+    yield* previous.engine.destroy();
+    yield* browserSync(() => {
+      if (!previous.contents.isDestroyed()) previous.contents.close();
+    });
+    // The documents of the old page are gone, as after a navigation.
+    for (const listener of this.#documentListeners) listener(tab.id, new Set());
+    yield* this.#blankPageForDebuggerOf(tab);
+    return history;
   });
 
   onChanged(listener: (...args: BrowserHostEvents["changed"]) => void): () => void {
@@ -2456,10 +2557,13 @@ export class BrowserHost {
     const contents = tab.contents;
     const changed = () => this.#emitChanged();
     contents.on("close", () => {
+      // The view of a tab that went to sleep closes, and the tab stays.
+      if (tab.contents !== contents) return;
       tab.closing = true;
       tab.focusedAtPageClose = contents.isFocused();
     });
     contents.once("destroyed", () => {
+      if (tab.contents !== contents) return;
       // Finish native destruction before removing the view and draining queued work.
       setImmediate(() => {
         void runCauseEffect(this.close(tab.id)).catch((error) =>
@@ -3116,6 +3220,41 @@ const loadSavedPage = Effect.fn("BrowserHost.loadSavedPage")(function* (tab: Bro
   yield* tab.engine.navigate(tab.requestedUrl);
   yield* browserSync(() => tab.contents.navigationHistory.clear());
 });
+
+/**
+ * Loads the page of a tab that slept, with its history, scroll position and form values. Electron
+ * restores a history only into a view that never loaded a page, before the page can take an
+ * environment, so a tab with an environment of its own, or a view that shows a blank page, loads
+ * only its address.
+ */
+const loadSleptPage = Effect.fn("BrowserHost.loadSleptPage")(function* (
+  tab: BrowserHostTab,
+  history: SleepingHistory | null,
+) {
+  // A view that never loaded a page has no address. Its history holds only Chromium's initial entry.
+  if (!history || !hasDefaultEnvironment(tab.environment) || tab.contents.getURL() !== "")
+    return yield* loadSavedPage(tab);
+  yield* browserCall(() => tab.contents.navigationHistory.restore(history));
+});
+
+/** The history of a view, when each page in it is a web page that a tab may load. */
+function sleepingHistory(contents: WebContents): SleepingHistory | null {
+  const entries = contents.navigationHistory.getAllEntries();
+  const index = contents.navigationHistory.getActiveIndex();
+  if (index < 0 || index >= entries.length) return null;
+  if (!entries.every((entry) => isPersistableBrowserUrl(entry.url) && isAllowedMainUrl(entry.url))) return null;
+  return { entries, index };
+}
+
+function hasDefaultEnvironment(environment: BrowserEnvironment): boolean {
+  const { viewport } = environment;
+  return (
+    viewport.mode === "fill" &&
+    viewport.deviceScaleFactor === 1 &&
+    environment.colorScheme === "system" &&
+    !environment.reducedMotion
+  );
+}
 
 /** The saved preview frame, when it still shows the tab's current page. */
 function savedPreview(tab: BrowserHostTab): BrowserPreview | null {

@@ -49,6 +49,7 @@ export const messages = defineMessages("webClient", {
   "webClient.notice.refreshHosts": "Refresh servers",
   "webClient.notice.reloadHint": "If this does not end, reload the app to get the newest version.",
   "webClient.notice.reload": "Reload app",
+  "webClient.location.unavailable": "That link is not available here. It may be gone, or you may not have access.",
   "webClient.agent.modelsFailed": "Could not load the server models.",
   "webClient.agent.refreshFailed":
     "The agent was created, but the workspace could not refresh. Reload before trying again.",

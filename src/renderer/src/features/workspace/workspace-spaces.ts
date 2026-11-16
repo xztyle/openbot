@@ -33,6 +33,8 @@ interface SpacesState {
   placed: Record<string, string>;
   /** False until the host answered, and on a host without spaces: then only General shows. */
   available: boolean;
+  /** The first read for this reader and server ended, or the host has no spaces to read. */
+  settled: boolean;
 }
 
 export type WorkspaceSpacesController = ReturnType<typeof createWorkspaceSpaces>;
@@ -42,14 +44,21 @@ export type WorkspaceSpacesController = ReturnType<typeof createWorkspaceSpaces>
  * at. The sidebar and the views show only that space. A host without spaces has one, General.
  */
 export function createWorkspaceSpaces(options: WorkspaceSpacesOptions) {
-  const [state, setState] = createStore<SpacesState>({ data: null, placed: {}, available: false });
+  const [state, setState] = createStore<SpacesState>({ data: null, placed: {}, available: false, settled: false });
   let run = 0;
   let loading = false;
   let again = false;
 
   async function load(): Promise<void> {
     const read = options.port().agent.workspaceSpaces;
-    if (!read || !options.ready()) return;
+    if (!options.ready()) return;
+    if (!read) {
+      if (!state.settled)
+        setState((draft) => {
+          draft.settled = true;
+        });
+      return;
+    }
     if (loading) {
       again = true;
       return;
@@ -71,6 +80,10 @@ export function createWorkspaceSpaces(options: WorkspaceSpacesOptions) {
           draft.available = false;
         });
     } finally {
+      if (current === run && !state.settled)
+        setState((draft) => {
+          draft.settled = true;
+        });
       loading = false;
       if (again) {
         again = false;
@@ -88,6 +101,7 @@ export function createWorkspaceSpaces(options: WorkspaceSpacesOptions) {
           draft.data = null;
           draft.placed = {};
           draft.available = false;
+          draft.settled = false;
         });
       }
       if (now.ready && (!before?.ready || now.key !== before.key)) void load();
@@ -163,9 +177,14 @@ export function createWorkspaceSpaces(options: WorkspaceSpacesOptions) {
 
   return {
     available: () => state.available,
+    /** The space list is in, or there is none to wait for: a place in a space can open now. */
+    settled: () => state.settled,
     list,
     current,
     space: (spaceId: string) => list().find((space) => space.id === spaceId),
+    /** The space of a slug, else of an id, as an address names it. */
+    find: (slugOrId: string) =>
+      list().find((space) => space.slug === slugOrId) ?? list().find((space) => space.id === slugOrId),
     select: (spaceId: string) => options.save(spaceId),
     agentSpace,
     channelSpace,

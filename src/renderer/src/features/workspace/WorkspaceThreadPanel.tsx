@@ -29,6 +29,11 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
     return messageRows(entries(), { thread: true, membersAnswer: current ? channelMembersAnswer(current) : false });
   });
   const root = () => rows().find((row) => row.entry.id === props.rootId && !row.pending);
+  /** A reply that a link named. */
+  const focusId = () => {
+    const focus = ws.state.focus;
+    return focus?.channelId === props.channelId && focus.messageId !== props.rootId ? focus.messageId : undefined;
+  };
   const replies = () => rows().filter((row) => row !== root());
   const replyCount = () => replies().filter((row) => !row.pending).length;
   const live = createMemo(() => ws.typingIn(props.channelId, props.rootId));
@@ -49,13 +54,22 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
       ...busy.map((id) => ({ member: memberById(ws.directory(), id), state: "working" as const })),
     ];
   });
-  // New replies keep the end in view.
+  /** The linked reply the panel scrolled to, so a new reply does not scroll back to it. */
+  let focused: string | undefined;
+  // New replies keep the end in view; a linked reply shows once, in the middle.
   createEffect(
-    () => entries().length,
-    () => {
+    () => ({ count: entries().length, focus: focusId() }),
+    ({ focus }) => {
       requestAnimationFrame(() => {
         const element = scroller?.querySelector<HTMLElement>(".ws-thread-scroll");
-        if (element) element.scrollTop = element.scrollHeight;
+        if (!element) return;
+        const marked = focus && focus !== focused ? element.querySelector<HTMLElement>("[data-highlighted]") : null;
+        if (marked) {
+          focused = focus;
+          marked.scrollIntoView({ block: "center" });
+          return;
+        }
+        element.scrollTop = element.scrollHeight;
       });
     },
   );
@@ -106,7 +120,15 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
         }
         replies={
           <For each={replies()} keyed={(row) => row.key}>
-            {(row) => <WorkspaceMessage row={row()} channelId={props.channelId} channelName={name()} inThread />}
+            {(row) => (
+              <WorkspaceMessage
+                row={row()}
+                channelId={props.channelId}
+                channelName={name()}
+                highlighted={focusId() === row().entry.id}
+                inThread
+              />
+            )}
           </For>
         }
         typing={<TypingIndicator humans={typingPeople()} agents={typing()} />}

@@ -308,6 +308,7 @@ export const messages = {
   },
   "workspace.app.channel.unreadSince": "Mensajes nuevos desde las {time}",
   "workspace.app.channel.markRead": "Marcar como leído",
+  "workspace.app.channel.copyLink": "Copiar enlace",
   "workspace.app.channel.intro": "Este es el comienzo de #{name}.",
   "workspace.app.channel.dmIntro": "Este es el comienzo de tu conversación con {name}.",
   "workspace.app.channel.agentDmIntro": "Esta es tu conversación privada con {name}. Aquí responde a cada mensaje.",

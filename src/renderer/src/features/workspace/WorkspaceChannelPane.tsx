@@ -7,7 +7,7 @@ import {
   channelVisibility,
   type WorkspaceSteps,
 } from "@openbot/contracts/ipc";
-import { Bell, BellOff, Button, Hash, Info, Lock, LogOut, toast, UsersRound } from "@openbot/ui";
+import { Bell, BellOff, Button, Hash, Info, Link, Lock, LogOut, toast, UsersRound } from "@openbot/ui";
 import { QuestionPromptBubble } from "@openbot/ui/components/QuestionPromptBubble";
 import { ApprovalCard, BrowserTakeoverCard } from "@openbot/ui/features/conversation/ConversationPrompts";
 import { ChannelHeader } from "@openbot/ui/features/workspace/ChannelHeader";
@@ -248,9 +248,15 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
     const current = panel();
     return current?.kind === "thread" ? current.rootId : undefined;
   };
-  /** Right-click on the header: details, members, mute, and leave for a channel. */
+  /** The message that a link named, when it is in this channel's transcript and not in a thread. */
+  const focusId = () => {
+    const focus = ws.state.focus;
+    return focus?.channelId === props.channelId && !threadRoot() ? focus.messageId : undefined;
+  };
+  /** Right-click on the header: details, members, mute, a link, and leave for a channel. */
   const headerMenu = (): WorkspaceMenuItem[] => {
     const muted = ws.isMuted(props.channelId);
+    const link = ws.env.channelLink?.(props.channelId);
     return [
       {
         id: "details",
@@ -270,6 +276,20 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
         icon: muted ? <Bell aria-hidden="true" /> : <BellOff aria-hidden="true" />,
         onSelect: () => ws.setMuted(props.channelId, !muted),
       },
+      ...(link
+        ? [
+            {
+              id: "copy-link",
+              label: t("workspace.app.channel.copyLink"),
+              icon: <Link aria-hidden="true" />,
+              onSelect: () =>
+                void navigator.clipboard?.writeText(link).then(
+                  () => toast.success(t("workspace.app.message.linkCopied")),
+                  () => undefined,
+                ),
+            },
+          ]
+        : []),
       ...(kind() === "channel" && joined() && !archived()
         ? [
             {
@@ -316,7 +336,8 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
           membersAnswer={membersAnswer()}
           hasOlder={Boolean(page()?.olderCursor)}
           onLoadOlder={() => ws.channels.loadOlder()}
-          highlightedId={threadRoot()}
+          highlightedId={focusId() ?? threadRoot()}
+          focusId={focusId()}
           empty={<ChannelIntro channel={channel()} name={name()} />}
           onMarkRead={() => ws.markRead()}
         />

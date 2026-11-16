@@ -1,134 +1,236 @@
-import { type DynamicRecord, isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
+import { type DynamicRecord, isDynamicRecord, isNumber } from "@openbot/contracts/runtime-values";
 import { createEffect, onCleanup, untrack } from "solid-js";
+import { emptyWebLocation, parseWebLocation, sameWebPlace, type WebLocation } from "./web-location";
 
-/** A chat that a browser history entry opens: an agent chat or a channel on one server. */
-export type WebChatHistoryEntry = { hostId: string; kind: "agent" | "channel"; id: string };
-
-/** The key of the chat in `history.state`. The site router keeps its own keys next to it. */
-const CHAT_STATE_KEY = "openbotChat";
 /** The entry index of the site router (`@tanstack/history`). A pop of one step must read as Back or Forward. */
 const ROUTER_INDEX_KEY = "__TSR_index";
-
-function sameEntry(a: WebChatHistoryEntry | null, b: WebChatHistoryEntry | null): boolean {
-  return a !== null && b !== null && a.hostId === b.hostId && a.kind === b.kind && a.id === b.id;
-}
 
 function stateRecord(state: unknown): DynamicRecord {
   return isDynamicRecord(state) ? state : {};
 }
 
-/** `history.state` can hold anything that another page of the site wrote. */
-function entryFromState(state: unknown): WebChatHistoryEntry | null {
-  const value = isDynamicRecord(state) ? state[CHAT_STATE_KEY] : undefined;
-  if (!isDynamicRecord(value)) return null;
-  const { hostId, kind, id } = value;
-  if (!isString(hostId) || !isString(id) || (kind !== "agent" && kind !== "channel")) return null;
-  return { hostId, kind, id };
+/** The place that the address bar names now. A part that it leaves out is null. */
+function addressLocation(): WebLocation {
+  return parseWebLocation(window.location.pathname, window.location.search) ?? emptyWebLocation();
+}
+
+function currentAddress(): string {
+  return `${window.location.pathname}${window.location.search}`;
+}
+
+/** Whether a place that an address names is shown: the parts it leaves out may be anything. */
+export function reachesWebLocation(shown: WebLocation, wanted: WebLocation): boolean {
+  return sameWebPlace(shown, {
+    hostId: wanted.hostId ?? shown.hostId,
+    space: wanted.space ?? shown.space,
+    target: wanted.target ?? shown.target,
+    messageId: null,
+    page: wanted.page,
+  });
 }
 
 /**
- * Browser Back and Forward for the chats of the web app. Each chat that the user opens gets its own
- * history entry at the same address, so Back opens the chat before it, and Back from the first chat
- * leaves the app. A reload opens the chat of its entry again. A chat that opens by itself, after a
- * connect or a deleted agent, only updates the entry on screen.
+ * The address bar and Back and Forward of the web client, as in Slack. The address names the place
+ * on screen (`web-location.ts`). A place that the user opens gets its own history entry, so Back
+ * opens the place before it; a place that opens by itself (a connect, a restore, a deleted agent)
+ * only changes the address of the entry on screen. A reload, a new tab or a shared link opens the
+ * place of its address once the client can show it.
+ *
+ * On a phone the panes own Back (`web-pane-history.ts`): the address only follows the place there.
  */
-export function createWebChatHistory(options: {
-  /** The chat on screen, or null when a page or a form covers it. */
-  current: () => WebChatHistoryEntry | null;
-  /** Opens the chat of an entry that Back or Forward reached. False when the chat cannot open. */
-  open: (entry: WebChatHistoryEntry) => boolean;
+export function createWebLocationHistory(options: {
+  /** The place on screen, or null while the client cannot say yet: no server, a load, a form. */
+  current: () => WebLocation | null;
+  /** The address of a place. */
+  href: (location: WebLocation) => string;
+  /**
+   * Opens a place of the address bar: at the start, or after Back or Forward. A place on another
+   * server connects to it and answers true; the place opens when that server shows. False when it
+   * cannot open here: the client then shows what it can, and the address follows.
+   */
+  open: (location: WebLocation) => boolean;
+  /** A place of another server that did not open after the switch to it. */
+  unavailable: (location: WebLocation) => void;
+  /** False on a phone: the panes own Back there, and a place gets no entry of its own. */
+  ownEntries: () => boolean;
+  /** The place to open at the start, when the address of the page names one. */
+  initial: WebLocation | null;
+  /**
+   * False when the page is not the web client's own (`/app`), such as a story or the site's preview:
+   * the address and the history are then left alone.
+   */
+  enabled: boolean;
 }) {
-  /** The next chat that matches gets a new entry. */
-  let pushNext: ((entry: WebChatHistoryEntry) => boolean) | null = null;
-  /** The chat that Back or Forward opens. The chats on screen before it opens do not change the entry. */
-  let popped: WebChatHistoryEntry | null = null;
-  /** The chat of the entry that a reload or a return to the page starts on. It opens once the workspace shows a chat. */
-  let restored = entryFromState(window.history.state);
+  /** The place of the address that waits until the client can show it. */
+  let pending: WebLocation | null = options.initial;
+  /** The switch to the server of a pending place: the server it left, so a failed switch ends the wait. */
+  let switching: { to: string; from: string | null } | null = null;
+  /** The next place that matches gets a new entry. */
+  let pushMatch: ((location: WebLocation) => boolean) | null = null;
+  /** While a place of the address opens, the places on the way only change the address. */
+  let quiet = false;
+  /** The place that the address shows now. */
+  let shown: WebLocation | null = null;
 
-  function write(entry: WebChatHistoryEntry, push: boolean): void {
+  function write(location: WebLocation, push: boolean): void {
+    shown = location;
+    if (!options.enabled) return;
+    const href = options.href(location);
+    if (!push && href === currentAddress()) return;
     const state = stateRecord(window.history.state);
     if (push) {
       const key = crypto.randomUUID();
       const index = state[ROUTER_INDEX_KEY];
       window.history.pushState(
-        { [ROUTER_INDEX_KEY]: (isNumber(index) ? index : 0) + 1, key, __TSR_key: key, [CHAT_STATE_KEY]: entry },
+        { [ROUTER_INDEX_KEY]: (isNumber(index) ? index : 0) + 1, key, __TSR_key: key },
         "",
-        window.location.href,
+        href,
       );
       return;
     }
-    window.history.replaceState({ ...state, [CHAT_STATE_KEY]: entry }, "", window.location.href);
+    window.history.replaceState(state, "", href);
   }
 
-  /** A chat that was deleted since then does not open. Its entry then takes the chat on screen. */
-  function openEntry(entry: WebChatHistoryEntry): boolean {
-    popped = entry;
-    if (options.open(entry)) return true;
-    popped = null;
-    const current = untrack(options.current);
-    if (current) write(current, false);
-    return false;
+  /**
+   * The next place that `match` accepts gets a new entry. Without `wait`, a move that changes nothing
+   * in this task adds no entry later.
+   */
+  function arm(match: (location: WebLocation) => boolean, wait: boolean): void {
+    pushMatch = match;
+    if (wait) return;
+    setTimeout(() => {
+      if (pushMatch === match) pushMatch = null;
+    }, 0);
+  }
+
+  /**
+   * Opens the waiting place. A place of the address (`user` false) changes only the address of the
+   * entry on screen, also with the steps on its way; a link that the user follows gets an entry.
+   */
+  function openPending(now: WebLocation, user = false): void {
+    const target = pending;
+    if (!target) return;
+    pushMatch = null;
+    if (target.hostId && target.hostId !== now.hostId) {
+      // The switch is still on its way while the client shows the server it left.
+      if (switching?.to === target.hostId && now.hostId === switching.from) return;
+      if (switching?.to === target.hostId) {
+        // The client shows another server than the one of the address.
+        pending = null;
+        switching = null;
+        options.unavailable(target);
+        write(now, false);
+        return;
+      }
+      switching = { to: target.hostId, from: now.hostId };
+      if (user) arm((location) => location.hostId === target.hostId, true);
+      if (options.open(target)) return;
+      pending = null;
+      switching = null;
+      write(now, false);
+      return;
+    }
+    pending = null;
+    switching = null;
+    if (user) arm((location) => !sameWebPlace(location, now), false);
+    else {
+      quiet = true;
+      setTimeout(() => {
+        quiet = false;
+      }, 0);
+    }
+    options.open(target);
+    // A place that opened as it was, or a fallback to the place on screen, changes nothing that the
+    // address follows: the address then takes the place on screen.
+    setTimeout(() => {
+      if (pending) return;
+      const opened = untrack(options.current);
+      if (opened && options.href(opened) !== currentAddress()) write(opened, false);
+    }, 0);
+  }
+
+  function sync(): void {
+    const location = options.current();
+    if (!location) return;
+    if (pending) {
+      openPending(location);
+      // The address keeps the place it names; the place that opens writes it.
+      return;
+    }
+    const previous = shown;
+    const userMove = pushMatch?.(location) === true;
+    if (userMove) pushMatch = null;
+    if (previous && sameWebPlace(previous, location) && previous.messageId === location.messageId) {
+      if (options.href(location) !== currentAddress()) write(location, false);
+      return;
+    }
+    // A page that opens or closes is a step of its own, as a place is.
+    const pageMove = previous !== null && previous.page?.kind !== location.page?.kind;
+    write(location, !quiet && (userMove || pageMove) && untrack(options.ownEntries));
   }
 
   createEffect(
     () => {
-      const entry = options.current();
-      return entry ? `${entry.hostId}:${entry.kind}:${entry.id}` : null;
+      const location = options.current();
+      return location ? options.href(location) : null;
     },
-    () =>
-      untrack(() => {
-        const entry = options.current();
-        if (!entry) return;
-        if (restored) {
-          const start = restored;
-          restored = null;
-          if (!sameEntry(start, entry) && openEntry(start)) return;
-        }
-        if (popped) {
-          if (!sameEntry(popped, entry)) return;
-          popped = null;
-        }
-        const held = entryFromState(window.history.state);
-        const userChat = pushNext?.(entry) === true;
-        if (userChat) pushNext = null;
-        // While the user's chat opens, the chats before it do not take the entry of the chat that was open.
-        else if (pushNext && held !== null) return;
-        if (sameEntry(held, entry)) return;
-        // The first chat of the page takes the entry of the page, so Back from it leaves the app.
-        write(entry, userChat && held !== null);
-      }),
+    () => untrack(sync),
   );
 
-  const onPopState = (event: PopStateEvent) => {
-    const entry = entryFromState(event.state);
-    pushNext = null;
-    restored = null;
-    if (!entry || sameEntry(entry, untrack(options.current))) {
-      popped = null;
+  const onPopState = () => {
+    pushMatch = null;
+    switching = null;
+    // On a phone the step was between the panes; the entry can hold the address of an older place.
+    if (!untrack(options.ownEntries)) {
+      const now = untrack(options.current);
+      if (now) write(now, false);
       return;
     }
-    openEntry(entry);
+    const wanted = addressLocation();
+    const now = untrack(options.current);
+    if (now && reachesWebLocation(now, wanted)) {
+      pending = null;
+      shown = now;
+      return;
+    }
+    pending = wanted;
+    shown = null;
+    if (now) openPending(now);
   };
-  window.addEventListener("popstate", onPopState);
-  onCleanup(() => window.removeEventListener("popstate", onPopState));
+  if (options.enabled) {
+    window.addEventListener("popstate", onPopState);
+    onCleanup(() => window.removeEventListener("popstate", onPopState));
+  }
+
+  /** Gives the place that the user opens now its own entry: the next place that `match` accepts. */
+  function userOpens(match: (location: WebLocation) => boolean, wait = false): void {
+    // A place of the address that opens calls the same actions as the user.
+    if (quiet) return;
+    pending = null;
+    switching = null;
+    const now = untrack(options.current);
+    if (now && match(now)) {
+      pushMatch = null;
+      return;
+    }
+    arm(match, wait);
+  }
 
   return {
-    /** Gives the chat that the user opens now its own entry. */
-    userOpens(entry: WebChatHistoryEntry): void {
-      if (sameEntry(entry, untrack(options.current))) return;
-      pushNext = (next) => sameEntry(next, entry);
-      popped = null;
-      restored = null;
+    userOpens,
+    /** Gives the next place that differs from the one on screen its own entry. */
+    userMoves(wait = false): void {
+      const now = untrack(options.current);
+      userOpens((location) => !now || !sameWebPlace(location, now), wait);
     },
-    /** Opens again the entry that Back or Forward reached, when it matches. A server connect can finish after the first try. */
-    reopen(match: (entry: WebChatHistoryEntry) => boolean): void {
-      if (popped && match(popped)) openEntry(popped);
-    },
-    /** Gives the first chat of the server that the user opens now its own entry. */
-    userOpensServer(hostId: string): void {
-      pushNext = (next) => next.hostId === hostId;
-      popped = null;
-      restored = null;
+    /** Opens a place that a link in the client names, as a step that Back undoes. */
+    go(location: WebLocation): void {
+      if (quiet) return;
+      const now = untrack(options.current);
+      if (!now) return;
+      pending = location;
+      switching = null;
+      openPending(now, true);
     },
   };
 }

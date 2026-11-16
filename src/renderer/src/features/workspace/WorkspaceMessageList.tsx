@@ -27,8 +27,10 @@ export interface WorkspaceMessageListProps {
   membersAnswer?: boolean;
   hasOlder: boolean;
   onLoadOlder: () => Promise<void> | void;
-  /** The root of the open thread. */
+  /** The root of the open thread, or the message that a link named. */
   highlightedId?: string | undefined;
+  /** A message that a link named: the list scrolls to it, and loads older pages until it has it. */
+  focusId?: string | undefined;
   /** Shown when the channel has no messages yet. */
   empty?: JSX.Element;
   /** Reports whether the reader reads the newest messages. */
@@ -141,6 +143,40 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     requestAnimationFrame(updateAtEnd);
   }
 
+  /** The linked message the list scrolled to last, so a new message does not scroll back to it. */
+  let focused: string | undefined;
+  /** Older pages loaded to find a linked message. The search stops after a few. */
+  let focusLoads = 0;
+  const FOCUS_LOAD_LIMIT = 10;
+  createEffect(
+    () => {
+      const id = props.focusId;
+      if (!id) return null;
+      return { id, index: rows().findIndex((row) => row.entry.id === id && !row.pending), older: props.hasOlder };
+    },
+    (focus) => {
+      if (!focus) {
+        focused = undefined;
+        focusLoads = 0;
+        return;
+      }
+      if (focus.id === focused) return;
+      if (focus.index < 0) {
+        if (focus.older && focusLoads < FOCUS_LOAD_LIMIT) {
+          focusLoads += 1;
+          void loadOlder();
+        }
+        return;
+      }
+      focused = focus.id;
+      follow = false;
+      requestAnimationFrame(() => {
+        virtualizer.scrollToIndex(Math.max(0, focus.index - 1));
+        requestAnimationFrame(updateAtEnd);
+      });
+    },
+  );
+
   // The first rows open at the "new" divider, or at the end. Each later change follows the end
   // while the reader is there.
   createEffect(
@@ -151,6 +187,8 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
         measure();
         if (!opened && rows().length > 0) {
           opened = true;
+          // A linked message takes the place of the divider and the end.
+          if (untrack(() => props.focusId)) return;
           const unread = untrack(() => rows().findIndex((row) => row.firstUnread));
           if (unread > 0) {
             virtualizer.scrollToIndex(Math.max(0, unread - 1));

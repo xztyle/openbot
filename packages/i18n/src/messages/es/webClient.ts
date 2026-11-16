@@ -33,6 +33,8 @@ export const messages = {
   "webClient.notice.createServer": "Crear un servidor alojado",
   "webClient.notice.join": "Unirse con una invitación",
   "webClient.notice.refreshHosts": "Actualizar servidores",
+  "webClient.location.unavailable":
+    "Ese enlace no está disponible aquí. Puede que ya no exista o que no tengas acceso.",
   "webClient.agent.modelsFailed": "No se pudieron cargar los modelos del servidor.",
   "webClient.agent.refreshFailed":
     "Se creó el agente, pero no se pudo actualizar el espacio de trabajo. Recarga antes de intentarlo de nuevo.",

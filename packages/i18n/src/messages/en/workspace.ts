@@ -328,6 +328,7 @@ export const messages = defineMessages("workspace", {
   },
   "workspace.app.channel.unreadSince": "New messages since {time}",
   "workspace.app.channel.markRead": "Mark as read",
+  "workspace.app.channel.copyLink": "Copy link",
   "workspace.app.channel.intro": "This is the very beginning of #{name}.",
   "workspace.app.channel.dmIntro": "This is the beginning of your conversation with {name}.",
   "workspace.app.channel.agentDmIntro": "This is your private conversation with {name}. It answers every message here.",

@@ -14,6 +14,7 @@ import {
   decodeAgentBackupModelSettings,
   decodeAgentHostSettings,
   decodeAgentTaskLimitSettings,
+  GENERAL_SPACE_ID,
   isBackgroundAgent,
   type ServerConnectionState,
   type ServerSummary,
@@ -144,6 +145,7 @@ import { createUsageRefreshPoll } from "../account/usage-refresh-poll";
 import { type NewAgentDraft, newAgentInput } from "../agents/agent-create-input";
 import { type CreationPreference, resolveCreationModel } from "../agents/agent-creation-model";
 import { claimErrorToast, readableAgentError } from "../agents/agent-error-text";
+import { AGENT_SELECTION_STORAGE_KEY, webAgentSelectionKey, writeAgentSelection } from "../agents/agent-selection";
 import { withHostAccountUsage, withHostProfileAccount } from "../agents/host-provider-accounts";
 import { createRemoteAgentAdmin, updateRemoteAgent } from "../agents/remote-agent-admin";
 import type { ServerBrowserProfilesOptions } from "../browser/ServerBrowserProfilesPanel";
@@ -215,8 +217,8 @@ import type { SettingsKind, WindowPage } from "../window/window-page-context";
 import { WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspace/WorkspaceView";
 import { WorkspaceProvider } from "../workspace/workspace-context";
-import { createWorkspaceController } from "../workspace/workspace-controller";
-import { workspacePersonName } from "../workspace/workspace-model";
+import { createWorkspaceController, type WorkspaceController } from "../workspace/workspace-controller";
+import { AGENT_DM_PREFIX, workspacePersonName } from "../workspace/workspace-model";
 import { createWorkspaceSupport } from "../workspace/workspace-support";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
@@ -230,13 +232,22 @@ import { createWebBillingCalls, createWebLicenseCalls } from "./web-billing";
 import { webBitwardenConnectorPort } from "./web-bitwarden-connector";
 import { createWebChannelsPort } from "./web-channels-runtime";
 import { createWebChatApps } from "./web-chat-apps";
-import { createWebChatHistory, type WebChatHistoryEntry } from "./web-chat-history";
 import { createWebWorkspace, type WebRuntimeFactory } from "./web-client-context";
 import { createWebConversationRuntime } from "./web-conversation-runtime";
 import { createWebConversationView } from "./web-conversation-view";
 import { createWebFileSaver } from "./web-file-download";
 import { webGitHubConnectorPort } from "./web-github-connector";
 import { createWebHostedServers } from "./web-hosted-server-state";
+import {
+  formatWebLocation,
+  parseLegacyWebMessageHash,
+  parseWebLocation,
+  sameTarget,
+  type WebLocation,
+  type WebLocationPage,
+  type WebLocationTarget,
+} from "./web-location";
+import { createWebLocationHistory } from "./web-location-history";
 import { createWebAgentTemplateCalls, createWebMarketplaceCalls } from "./web-marketplace";
 import { webHostMessaging } from "./web-messaging-connector";
 import { createWebServerNotifications } from "./web-notification-preferences";
@@ -248,6 +259,7 @@ import { createWebProviderSettings, openWebDestination } from "./web-provider-ad
 import { createWebPush, webPushPreferences } from "./web-push";
 import { webRoutineFlowsHost } from "./web-routine-flows";
 import { webScheduleSource } from "./web-schedule";
+import { readWebServerSelection, writeWebServerSelection } from "./web-server-selection";
 import { createWebServerSettings } from "./web-server-settings";
 import { webTasksSource } from "./web-tasks";
 import { createWebUsagePort } from "./web-usage-port";
@@ -317,6 +329,65 @@ type WebWorkspaceProps = {
 
 const WebAccountSettings = lazy(() => import("./WebAccountSettings"));
 
+/** The sections of Server settings that an address may name. */
+const SERVER_SETTINGS_SECTIONS = [
+  "general",
+  "vault",
+  "members",
+  "roles",
+  "workspace",
+  "desktop",
+  "mcp",
+  "storage",
+  "sites",
+  "providers",
+  "updates",
+  "import",
+  "transfer",
+  "routines",
+  "browser-profiles",
+  "connectors",
+] as const satisfies readonly ServerSettingsSection[];
+
+function serverSettingsSectionOf(section: string | null): ServerSettingsSection | null {
+  return SERVER_SETTINGS_SECTIONS.find((item) => item === section) ?? null;
+}
+
+/** The page is the web client's own, `/app`: not a story or the site's preview. */
+function ownsAddress(): boolean {
+  return parseWebLocation(window.location.pathname) !== null;
+}
+
+/**
+ * Makes a server open on the conversation of an address, not on the one it saved: the channel list
+ * and the agent chat restore the saved selection when the server connects.
+ */
+function preselectLocation(accountId: string, hostId: string, location: WebLocation): void {
+  const target = location.target;
+  if (!target) return;
+  writeChannelSelection(accountId, hostId, target.kind === "channel" ? target.channelId : null);
+  if (target.kind === "agent")
+    writeAgentSelection(AGENT_SELECTION_STORAGE_KEY, webAgentSelectionKey(accountId, hostId), target.agentId);
+}
+
+/**
+ * The place that the address of the page names: a reload, a new tab, a shared link, or a message
+ * link of an older web client (`#ws=`). The server and the conversation are saved first, so the
+ * client connects to them and does not show the saved ones before.
+ */
+function takeStartLocation(accountId: string): WebLocation | null {
+  if (!ownsAddress()) return null;
+  const legacy = parseLegacyWebMessageHash(window.location.hash);
+  if (legacy)
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`);
+  const location = legacy ?? parseWebLocation(window.location.pathname, window.location.search);
+  if (!location || (!location.hostId && !location.space && !location.page)) return null;
+  if (location.hostId) writeWebServerSelection(accountId, location.hostId);
+  const hostId = location.hostId ?? readWebServerSelection(accountId);
+  if (hostId) preselectLocation(accountId, hostId, location);
+  return location;
+}
+
 export function WebWorkspace(props: WebWorkspaceProps) {
   return (
     <PlatformProvider appInfo={WEB_APP_INFO}>
@@ -345,6 +416,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     modelsShown = request;
     setModels(list);
   }
+  const startLocation = takeStartLocation(props.accountId);
   const workspace = createWebWorkspace(props, {
     onStatus: (next) => {
       setStatus(next);
@@ -1361,30 +1433,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   createEffect(firstAgent, (first) => {
     if (first && !untrack(channelOpen)) setCreating(true);
   });
-  const chatHistoryEntries = createWebChatHistory({
-    current: () => {
-      const hostId = workspace.state.host?.hostId;
-      if (!hostId || page() !== "agents" || agentFormOpen()) return null;
-      const channelId = channels.state.selectedId;
-      if (channelId) return { hostId, kind: "channel", id: channelId };
-      const agentId = workspace.state.selectedId;
-      return agentId ? { hostId, kind: "agent", id: agentId } : null;
-    },
-    // On a phone the back button moves between the panes (`paneHistory`), so a chat gets no entry of
-    // its own there, and a step back does not open another chat.
-    open: (entry) => !untrack(phone) && openHistoryChat(entry),
-  });
-  const chatHistory = {
-    userOpens(entry: WebChatHistoryEntry): void {
-      if (!untrack(phone)) chatHistoryEntries.userOpens(entry);
-    },
-    userOpensServer(hostId: string): void {
-      if (!untrack(phone)) chatHistoryEntries.userOpensServer(hostId);
-    },
-    reopen: chatHistoryEntries.reopen,
-  };
   /** Gives the chat that the user opens on the connected server its own history entry. */
-  function userOpensChat(kind: WebChatHistoryEntry["kind"], id: string): void {
+  function userOpensChat(kind: "agent" | "channel", id: string): void {
     const hostId = workspace.state.host?.hostId;
     if (hostId) chatHistory.userOpens({ hostId, kind, id });
   }
@@ -1703,33 +1753,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     if (current && current !== id) setPreviousHostId(current);
     await workspace.connect(host);
   }
-  /** Opens the chat of a browser history entry. False when its chat or its server is gone. */
-  function openHistoryChat(entry: WebChatHistoryEntry): boolean {
-    if (entry.hostId !== workspace.state.host?.hostId) {
-      if (!workspace.state.hosts.some((host) => host.hostId === entry.hostId)) return false;
-      setMobilePane("conversation");
-      // The server opens the chat of the entry, not the channel that it saved.
-      writeChannelSelection(props.accountId, entry.hostId, entry.kind === "channel" ? entry.id : null);
-      showAgents();
-      // Only the entry that is still open, after a later Back, Forward or click.
-      void connectServer(entry.hostId).then(() => {
-        const hostId = workspace.state.host?.hostId;
-        chatHistory.reopen((pending) => pending.kind === "agent" && pending.hostId === hostId);
-      });
-      return true;
-    }
-    if (entry.kind === "channel") {
-      if (!channels.state.channels.some((channel) => channel.id === entry.id && !channel.archived)) return false;
-      setMobilePane("conversation");
-      showAgents();
-      void channels.open(entry.id);
-      return true;
-    }
-    if (!workspace.state.agents.some((agent) => agent.id === entry.id)) return false;
-    setMobilePane("conversation");
-    void openAgentChat(entry.id);
-    return true;
-  }
   /** The server the provider step goes back to: the one open before, else any other on the rail. */
   const returnHostId = () => {
     const current = workspace.state.host?.hostId;
@@ -1807,7 +1830,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   );
   const artifactThumbnails = createWebArtifactThumbnails(workspace.runtime, () => workspace.state.host?.hostId ?? "");
   onCleanup(() => artifactThumbnails.dispose());
-  const ws = createWorkspaceController({
+  const workspaceController = createWorkspaceController({
     channels,
     artifactThumbnailUrl: artifactThumbnails.url,
     agents: workspace.profiles,
@@ -1959,49 +1982,301 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       const id = server()?.id;
       if (id) void openServerSettings(id, null, "storage");
     },
-    messageLink: (channelId, messageId, threadRootId) => {
-      const hostId = workspace.state.host?.hostId;
-      return hostId
-        ? `${location.origin}${location.pathname}#ws=${encodeURIComponent(hostId)}/${channelId}/${threadRootId ?? messageId}`
-        : null;
+    messageLink: (channelId, messageId, threadRootId) =>
+      placeLink({ kind: "channel", channelId, threadRootId }, messageId, ws.rowSpace(channelId)),
+    channelLink: (channelId) =>
+      placeLink({ kind: "channel", channelId, threadRootId: null }, null, ws.rowSpace(channelId)),
+    openAddress: (url) => {
+      let address: URL;
+      try {
+        address = new URL(url, window.location.href);
+      } catch {
+        return false;
+      }
+      if (address.origin !== window.location.origin) return false;
+      const target = parseWebLocation(address.pathname, address.search);
+      if (!target || (!target.hostId && !target.space)) return false;
+      locationHistory.go(target);
+      return true;
     },
     storageKey: () => `${props.accountId}:${workspace.state.host?.hostId ?? ""}`,
     phone,
     onPhonePaneChange: (pane) => setMobilePane(pane === "sidebar" ? "workspace" : "conversation"),
   });
+  /**
+   * The workspace actions that the reader takes. Each gives the place it opens its own history
+   * entry, so Back goes to the place before it. An action that waits for the host waits for its place.
+   */
+  const ws: WorkspaceController = {
+    ...workspaceController,
+    openChannel: (channelId) => {
+      locationHistory.userMoves();
+      workspaceController.openChannel(channelId);
+    },
+    openAgent: (agentId) => {
+      userOpensAgent(agentId);
+      workspaceController.openAgent(agentId);
+    },
+    openConversation: (id) => {
+      if (id.startsWith(AGENT_DM_PREFIX)) userOpensAgent(id.slice(AGENT_DM_PREFIX.length));
+      else locationHistory.userMoves();
+      workspaceController.openConversation(id);
+    },
+    openView: (view, pane) => {
+      locationHistory.userMoves();
+      workspaceController.openView(view, pane);
+    },
+    openAgentTalk: (agentId) => {
+      locationHistory.userMoves();
+      workspaceController.openAgentTalk(agentId);
+    },
+    openThread: (channelId, rootId) => {
+      locationHistory.userMoves();
+      workspaceController.openThread(channelId, rootId);
+    },
+    closePanel: () => {
+      locationHistory.userMoves();
+      workspaceController.closePanel();
+    },
+    selectSpace: (spaceId) => {
+      locationHistory.userMoves();
+      workspaceController.selectSpace(spaceId);
+    },
+    moveConversation: (delta) => {
+      locationHistory.userMoves(true);
+      workspaceController.moveConversation(delta);
+    },
+    openLink: (url) => {
+      locationHistory.userMoves();
+      return workspaceController.openLink(url);
+    },
+    messageMember: (memberId) => {
+      locationHistory.userMoves(true);
+      workspaceController.messageMember(memberId);
+    },
+    startDm: (memberIds) => {
+      locationHistory.userMoves(true);
+      return workspaceController.startDm(memberIds);
+    },
+    createChannel: (input) => {
+      locationHistory.userMoves(true);
+      return workspaceController.createChannel(input);
+    },
+  };
   // The browser's Back and the page rail move between the list and the conversation on a phone.
   createEffect(mobilePane, (pane) => {
     if (pane === "workspace") ws.setPhonePane("sidebar");
     else if (untrack(() => ws.state.phonePane) === "sidebar") ws.setPhonePane("main");
   });
-  // A copied message link: `#ws=<host>/<channel>/<message or thread root>` opens it once the host
-  // has its channels.
-  const linkedMessage = (() => {
-    const match = /^#ws=([^/]+)\/([^/]+)\/([^/]+)$/u.exec(location.hash);
-    return match
-      ? { hostId: decodeURIComponent(match[1] ?? ""), channelId: match[2] ?? "", messageId: match[3] ?? "" }
+  /**
+   * The chat with an agent that the user opens: the owner's is the agent chat; a member's is a DM
+   * channel, which the host can make first.
+   */
+  function userOpensAgent(agentId: string): void {
+    const before = untrack(currentLocation)?.target ?? null;
+    locationHistory.userOpens(
+      (location) =>
+        (location.target?.kind === "agent" && location.target.agentId === agentId) ||
+        (location.target?.kind === "channel" && !sameTarget(location.target, before)),
+      true,
+    );
+  }
+  /** The address part of a space: its slug, or its id when it has none. */
+  function spaceSlug(spaceId: string): string {
+    return ws.spaces.space(spaceId)?.slug || spaceId;
+  }
+  /** A link to a place of the open server. It names the server, so it opens for a member of several. */
+  function placeLink(target: WebLocationTarget, messageId: string | null, spaceId: string): string | null {
+    const hostId = workspace.state.host?.hostId;
+    if (!hostId) return null;
+    const location = { hostId, space: spaceSlug(spaceId), target, messageId, page: null };
+    return `${window.location.origin}${formatWebLocation(location, { includeHost: true })}`;
+  }
+  /** Whether a place can show: the host answers, and the lists that name the parts of a place are in. */
+  const locationReady = () =>
+    workspace.state.status === "online" &&
+    workspace.state.workspaceLoaded &&
+    workspace.state.agentsLoaded &&
+    (!channelsSupported() || (channels.state.listed && ws.spaces.settled()));
+  /** The message that the address of a place named. It stays in the address while that place shows. */
+  const [messageAnchor, setMessageAnchor] = createSignal<{ target: WebLocationTarget; messageId: string } | null>(null);
+  const currentPage = (): WebLocationPage | null => {
+    const current = page();
+    return current === "settings" ||
+      current === "server-settings" ||
+      current === "usage" ||
+      current === "schedule" ||
+      current === "tasks"
+      ? { kind: current, section: null }
       : null;
-  })();
-  let linkOpened = false;
-  createEffect(
-    () => workspaceOn() && workspace.state.host?.hostId === linkedMessage?.hostId && channels.state.channels.length > 0,
-    (ready) => {
-      if (!ready || linkOpened || !linkedMessage) return;
-      linkOpened = true;
-      history.replaceState(history.state, "", `${location.pathname}${location.search}`);
-      if (!channels.state.channels.some((channel) => channel.id === linkedMessage.channelId)) return;
-      ws.openChannel(linkedMessage.channelId);
-      ws.openThread(linkedMessage.channelId, linkedMessage.messageId);
+  };
+  /** The place on screen, for the address bar. Null until the server and its lists are in. */
+  const currentLocation = createMemo((): WebLocation | null => {
+    const hostId = workspace.state.host?.hostId;
+    if (!hostId || !locationReady() || agentFormOpen()) return null;
+    let target: WebLocationTarget | null = null;
+    let space: string = GENERAL_SPACE_ID;
+    if (workspaceOn()) {
+      space = spaceSlug(ws.spaces.current());
+      const route = ws.route();
+      const panel = ws.state.panel;
+      if (route.kind === "channel")
+        target = {
+          kind: "channel",
+          channelId: route.channelId,
+          threadRootId: panel?.kind === "thread" && panel.channelId === route.channelId ? panel.rootId : null,
+        };
+      else if (route.kind === "agent") target = { kind: "agent", agentId: route.agentId };
+      else
+        target = {
+          kind: "view",
+          view: route.view,
+          agentId: route.view === "agents" ? ws.state.agentTalkAgentId : null,
+        };
+    } else {
+      const channelId = channels.state.selectedId;
+      const agentId = workspace.state.selectedId;
+      if (channelId) target = { kind: "channel", channelId, threadRootId: null };
+      else if (agentId) target = { kind: "agent", agentId };
+    }
+    const anchor = messageAnchor();
+    return {
+      hostId,
+      space,
+      target,
+      messageId: anchor && sameTarget(anchor.target, target) ? anchor.messageId : null,
+      page: currentPage(),
+    };
+  });
+  function showLocationNotice(): void {
+    toast(t("webClient.location.unavailable"));
+  }
+  /** Opens the page of an address over the place, or closes the page that shows. */
+  function openLocationPage(target: WebLocationPage | null): void {
+    const id = server()?.id;
+    if (!target) {
+      if (page() !== "agents") showAgents();
+      return;
+    }
+    if (!id) return;
+    if (target.kind === "settings") openAccountSettings();
+    else if (target.kind === "server-settings")
+      void openServerSettings(id, null, serverSettingsSectionOf(target.section));
+    else if (target.kind !== "tasks" || tasksSupported()) void openHostPage(id, target.kind, null);
+  }
+  /**
+   * Shows a place of the open server. A conversation, a thread, a view or a space that is gone, or
+   * that this reader may not see, shows the activity of the space instead, with a notice.
+   */
+  function showLocation(location: WebLocation): boolean {
+    const controller = workspaceController;
+    const target = location.target;
+    let shown = true;
+    const channelListed = (channelId: string) => channels.state.channels.some((channel) => channel.id === channelId);
+    const agentListed = (agentId: string) => workspace.state.agents.some((agent) => agent.id === agentId);
+    if (workspaceOn()) {
+      // A conversation shows in its own space, whatever space the address names.
+      const ownSpace =
+        target?.kind === "channel" && controller.spaces.knowsChannel(target.channelId)
+          ? controller.spaces.channelSpace(target.channelId)
+          : target?.kind === "agent" && controller.spaces.knowsAgent(target.agentId)
+            ? controller.spaces.agentSpace(target.agentId)
+            : undefined;
+      const space = ownSpace
+        ? controller.spaces.space(ownSpace)
+        : location.space
+          ? controller.spaces.find(location.space)
+          : undefined;
+      if (location.space && !space) shown = false;
+      if (space && space.id !== controller.spaces.current()) controller.selectSpace(space.id);
+      if (target?.kind === "channel") {
+        if (channelListed(target.channelId)) {
+          setMobilePane("conversation");
+          controller.openChannel(target.channelId);
+          if (target.threadRootId) controller.openThread(target.channelId, target.threadRootId);
+          else if (controller.state.panel?.kind === "thread") controller.closePanel();
+          controller.focusMessage(target.channelId, location.messageId);
+        } else shown = false;
+      } else if (target?.kind === "agent") {
+        if (agentListed(target.agentId) && controller.canMessageAgent(target.agentId)) {
+          setMobilePane("conversation");
+          controller.openAgent(target.agentId);
+          if (location.messageId) void openMessage(target.agentId, location.messageId);
+        } else shown = false;
+      } else if (target?.kind === "view") {
+        if (!controller.viewAvailable(target.view)) shown = false;
+        else if (target.view === "agents") controller.openAgentTalk(target.agentId);
+        else controller.openView(target.view);
+      }
+    } else if (target?.kind === "channel" && channelsSupported() && channelListed(target.channelId)) {
+      setMobilePane("conversation");
+      showAgents();
+      void channels.open(target.channelId);
+    } else if (target?.kind === "agent" && agentListed(target.agentId)) {
+      setMobilePane("conversation");
+      if (location.messageId) void openMessage(target.agentId, location.messageId);
+      else void openAgentChat(target.agentId);
+    } else if (target) shown = false;
+    setMessageAnchor(shown && target && location.messageId ? { target, messageId: location.messageId } : null);
+    if (!shown) {
+      showLocationNotice();
+      if (workspaceOn()) controller.openView("activity");
+    }
+    openLocationPage(location.page);
+    return shown;
+  }
+  /** Opens a place of the address bar. A place of another server connects to it first. */
+  function openLocation(location: WebLocation): boolean {
+    const hostId = location.hostId;
+    if (hostId && hostId !== workspace.state.host?.hostId) {
+      if (!workspace.state.hosts.some((host) => host.hostId === hostId)) {
+        showLocationNotice();
+        return false;
+      }
+      preselectLocation(props.accountId, hostId, location);
+      setMobilePane("conversation");
+      showAgents();
+      void connectServer(hostId);
+      return true;
+    }
+    return showLocation(location);
+  }
+  const locationHistory = createWebLocationHistory({
+    current: currentLocation,
+    href: (location) => formatWebLocation(location, { includeHost: workspace.state.hosts.length > 1 }),
+    open: openLocation,
+    unavailable: showLocationNotice,
+    // On a phone the back button moves between the panes (`paneHistory`), so a place gets no entry of
+    // its own there.
+    ownEntries: () => !phone(),
+    initial: startLocation,
+    enabled: ownsAddress(),
+  });
+  const chatHistory = {
+    /** Gives the chat that the user opens now its own history entry. */
+    userOpens(entry: { hostId: string; kind: "agent" | "channel"; id: string }): void {
+      locationHistory.userOpens(
+        (location) =>
+          location.hostId === entry.hostId &&
+          (entry.kind === "agent"
+            ? location.target?.kind === "agent" && location.target.agentId === entry.id
+            : location.target?.kind === "channel" && location.target.channelId === entry.id),
+        entry.hostId !== workspace.state.host?.hostId,
+      );
     },
-  );
-  // A phone opens the workspace on its list, as Slack does; a link to a message opens the message.
+    /** Gives the first place of the server that the user opens now its own history entry. */
+    userOpensServer(hostId: string): void {
+      locationHistory.userOpens((location) => location.hostId === hostId, true);
+    },
+  };
+  // A phone opens the workspace on its list, as Slack does; an address of a conversation opens it.
   let phoneListShown = false;
   createEffect(
     () => phone() && workspaceOn(),
     (start) => {
       if (!start || phoneListShown) return;
       phoneListShown = true;
-      if (!linkedMessage && !props.chatLink) setMobilePane("workspace");
+      if (!startLocation?.target && !startLocation?.page && !props.chatLink) setMobilePane("workspace");
     },
   );
   /** The settings page on screen, if any. */

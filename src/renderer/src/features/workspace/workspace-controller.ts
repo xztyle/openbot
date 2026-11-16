@@ -118,6 +118,8 @@ interface WorkspaceState {
   phonePane: WorkspacePhonePane;
   dialog: WorkspaceDialog | null;
   thread: ThreadState | null;
+  /** A message that a link named: the list shows it and marks it until the reader leaves its channel. */
+  focus: { channelId: string; messageId: string } | null;
   editing: EditingState | null;
   drafts: Record<string, string>;
   activity: { data: WorkspaceActivity | null; loading: boolean; failed: boolean };
@@ -229,6 +231,13 @@ export interface WorkspaceEnvironment {
   hostId?: (() => string | null) | undefined;
   /** A link to a message that opens it again, where the client has one. */
   messageLink?: ((channelId: string, messageId: string, threadRootId: string | null) => string | null) | undefined;
+  /** A link to a channel, DM or group that opens it again, where the client has one. */
+  channelLink?: ((channelId: string) => string | null) | undefined;
+  /**
+   * Opens a link of the client's own address in place, such as a web client address in a message.
+   * False when the link is not one: the workspace reads it as a message link, or opens it as a page.
+   */
+  openAddress?: ((url: string) => boolean) | undefined;
   /** Per reader and server, for the drafts this computer keeps. */
   storageKey: () => string;
   /** The layout shows one pane at a time. */
@@ -449,6 +458,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     phonePane: "sidebar",
     dialog: null,
     thread: null,
+    focus: null,
     editing: null,
     drafts: untrack(() => readDrafts(env.storageKey())),
     activity: { data: null, loading: false, failed: false },
@@ -1112,10 +1122,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (previous && agentId && agentId !== previous) followConversation(`${AGENT_DM_PREFIX}${agentId}`);
   });
 
-  // A panel of another channel closes when the reader leaves it.
+  // A panel of another channel closes when the reader leaves it, and so does the mark of a linked message.
   createEffect(
     () => channels.state.selectedId,
     (channelId) => {
+      if (untrack(() => state.focus && state.focus.channelId !== channelId))
+        setState((draft) => {
+          draft.focus = null;
+        });
       const panel = untrack(() => state.panel);
       if (panel && panel.channelId !== channelId)
         setState((draft) => {
@@ -1359,6 +1373,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     setState((draft) => {
       draft.view = null;
       draft.editing = null;
+      draft.focus = null;
       if (draft.panel && draft.panel.channelId !== channelId) {
         draft.panel = null;
         draft.thread = null;
@@ -1366,6 +1381,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     });
     setPhonePane("main");
     if (channels.state.selectedId !== channelId) void channels.open(channelId);
+  }
+
+  /** Whether the reader has a view on this server: some need a role or a host feature. */
+  function viewAvailable(view: WorkspaceView): boolean {
+    if (view === "secrets") return env.secrets?.() === true && Boolean(channels.port().agent.workspaceSecrets);
+    if (view === "storage") return Boolean(env.storageHygiene?.());
+    if (view === "routines") return env.routines?.available() === true;
+    return true;
   }
 
   function existingDm(memberIds: readonly string[], agentIds: readonly string[]): ChannelSummary | undefined {
@@ -1410,6 +1433,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
    * host, or to a channel the reader cannot see, is not handled and opens as a plain link.
    */
   function openLink(url: string): boolean {
+    if (env.openAddress?.(url)) return true;
     const link = parseMessageLink(url);
     if (!link || !env.hostId || env.hostId() !== link.hostId || !summary(link.channelId)) return false;
     openChannel(link.channelId);
@@ -1459,9 +1483,17 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (channels.state.selectedId !== channelId) openChannel(channelId);
     setState((draft) => {
       draft.panel = { kind: "thread", channelId, rootId };
+      draft.focus = null;
     });
     setPhonePane("panel");
     void loadThread(channelId, rootId);
+  }
+
+  /** Shows a message of a channel or of one of its threads, and marks it, as a link to it asks. */
+  function focusMessage(channelId: string, messageId: string | null) {
+    setState((draft) => {
+      draft.focus = messageId ? { channelId, messageId } : null;
+    });
   }
 
   function openDetails(channelId: string, tab: ChannelDetailsTab = "about") {
@@ -1491,6 +1523,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     setState((draft) => {
       draft.panel = null;
       draft.thread = null;
+      draft.focus = null;
     });
     if (state.phonePane === "panel") setPhonePane("main");
   }
@@ -2062,6 +2095,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     openAgentTalk,
     moveConversation,
     openThread,
+    focusMessage,
+    viewAvailable,
     reloadThread: () => {
       const thread = state.thread;
       if (thread) void loadThread(thread.channelId, thread.rootId);

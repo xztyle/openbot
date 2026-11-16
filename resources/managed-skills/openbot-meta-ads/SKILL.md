@@ -27,8 +27,9 @@ node "$M" help
 In the examples below `meta-ads` means `node "$M"`. The helper reads the token from the file and never
 prints it. Do not print, copy or pass the token in any other way.
 
-The settings and the audit log are in `meta-ads/` in the OpenBot shared folder (on the server
-`/data/OpenBot/Shared/meta-ads/`). `meta-ads config show` shows the folder. Every agent uses the same files.
+The settings and the audit log are in `meta-ads/` in the shared directory of your space (on the
+server `/data/OpenBot/Spaces/<space>/Shared/meta-ads/`). `meta-ads config show` shows the folder. Every
+agent of your space uses the same files; another space has its own.
 
 Exit codes: 0 done, 1 error (JSON on standard error, with Meta's message and a `hint`), 2 wrong command,
 3 refused by the spend guard, 4 rate limited for longer than `--max-wait` seconds (default 120).

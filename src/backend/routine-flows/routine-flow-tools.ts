@@ -65,20 +65,25 @@ export const handleRoutineFlowTool = Effect.fn("RoutineFlowTools.handle")(functi
       const agentId = input.agentId ?? senderAgentId;
       if (unknownAgent([agentId])) return openBotToolFailure(`Unknown agent: ${agentId}.`);
       const canvas = yield* flows.canvas(agentId);
+      // An old link can still reach an agent that is now in another space; the caller does not see it.
       return openBotToolResult({
-        routines: canvas.routines.map(({ routine }) => ({
-          routineId: routine.id,
-          name: routine.name,
-          agentId: routine.agentId,
-          active: routine.active,
-        })),
-        links: canvas.links.map((link) => ({
-          linkId: link.id,
-          routineId: link.routineId,
-          fromAgentId: link.fromAgentId,
-          toAgentId: link.toAgentId,
-          instruction: link.instruction,
-        })),
+        routines: canvas.routines
+          .filter(({ routine }) => agentIds.has(routine.agentId))
+          .map(({ routine }) => ({
+            routineId: routine.id,
+            name: routine.name,
+            agentId: routine.agentId,
+            active: routine.active,
+          })),
+        links: canvas.links
+          .filter((link) => agentIds.has(link.fromAgentId) && agentIds.has(link.toAgentId))
+          .map((link) => ({
+            linkId: link.id,
+            routineId: link.routineId,
+            fromAgentId: link.fromAgentId,
+            toAgentId: link.toAgentId,
+            instruction: link.instruction,
+          })),
       });
     }
     if (tool === "connect_routine_agents") {

@@ -294,7 +294,8 @@ export interface ProviderHooks {
    */
   onAgentClientLost(agentId: string, client: AgentClient): Effect.Effect<void>;
   /** The shared folder, which every Workspace only agent may write besides its workspace. */
-  sharedRoot(): string;
+  /** The shared folder of the agent's space, which a confined agent may write. */
+  sharedRoot(agentId: string): string;
   /** Runs after a CLI replacement, so deliveries held back during it are delivered. */
   onProviderResumed(provider: AgentProvider): void;
   /**
@@ -2191,7 +2192,9 @@ export class ProviderRuntime implements ProviderPort {
     const account = this.#providerAccounts?.account(provider, agent.providerAccountId) ?? null;
     if (!confined && !account) return null;
     return {
-      ...(confined ? { confinement: { writableRoots: workspaceWritableRoots(agent, this.#hooks.sharedRoot()) } } : {}),
+      ...(confined
+        ? { confinement: { writableRoots: workspaceWritableRoots(agent, this.#hooks.sharedRoot(agent.id)) } }
+        : {}),
       ...(account ? { account } : {}),
     };
   }

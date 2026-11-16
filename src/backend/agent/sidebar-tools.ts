@@ -1,9 +1,11 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { SidebarLayoutAction } from "@openbot/contracts/ipc";
+import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
 import { z } from "zod";
 import type { SidebarLayoutStore } from "../sidebar-layout-store";
-import { openBotToolResult } from "./routine-tools";
+import { layoutForSpace, sectionInSpace } from "../spaces/space-scope";
+import { openBotToolFailure, openBotToolResult } from "./routine-tools";
 import { ToolOperationFailed, toolStep, toToolOperationFailed } from "./tool-operation";
 
 const sectionId = z.string().min(1).max(INPUT_LIMITS.identifier);
@@ -25,6 +27,8 @@ export const handleSidebarTool = Effect.fn("SidebarTools.handle")(function* (
   args: unknown,
   sidebar: AgentSidebar | null,
   agentIds: ReadonlySet<string>,
+  /** Whether an agent or channel id is in the caller's space. The caller reads and changes only those. */
+  visible: (id: string) => boolean = () => true,
 ) {
   let action: SidebarLayoutAction | null;
   switch (tool) {
@@ -47,6 +51,17 @@ export const handleSidebarTool = Effect.fn("SidebarTools.handle")(function* (
       return null;
   }
   if (!sidebar) return yield* new ToolOperationFailed({ cause: new Error("Sidebar sections are unavailable.") });
+  // A section that holds an agent or a channel of another space belongs to that space too.
+  if (
+    (action?.type === "rename" || action?.type === "delete" || (action?.type === "assign" && action.sectionId)) &&
+    !sectionInSpace(
+      sidebar.getSnapshot(),
+      action.type === "assign" ? (action.sectionId ?? "") : action.sectionId,
+      visible,
+    )
+  )
+    return openBotToolFailure(sourceText("error.backend.spaceOtherSection"));
+  // The whole roster, so that the mutation does not take the items of other spaces for deleted ones.
   const layout = action ? yield* sidebar.mutate(action, agentIds).pipe(toToolOperationFailed) : sidebar.getSnapshot();
-  return openBotToolResult(layout);
+  return openBotToolResult(layoutForSpace(layout, visible));
 });

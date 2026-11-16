@@ -46,8 +46,8 @@ const WORKSPACE_OR_SHARED: AttachmentSourceScope = { allowAnyReadablePath: false
 export interface AttachmentGatewayOptions {
   conversation: ConversationRuntime;
   mailbox: MailboxStore;
-  /** `AgentStore.sharedRoot`, passed as a string so this class never opens the store. */
-  sharedRoot: string;
+  /** The shared folder of the agent's space, passed as a function so this class never opens the store. */
+  sharedRoot: (agentId: string) => string;
   hooks: AttachmentGatewayHooks;
 }
 
@@ -66,7 +66,7 @@ export interface AttachmentGatewayOptions {
 export class AttachmentGateway {
   readonly #conversation: ConversationRuntime;
   readonly #mailbox: MailboxStore;
-  readonly #sharedRoot: string;
+  readonly #sharedRoot: (agentId: string) => string;
   readonly #hooks: AttachmentGatewayHooks;
   readonly #inFlight = new Map<string, Deferred.Deferred<OpenBotToolResponse, AttachmentOperationError>>();
 
@@ -237,8 +237,9 @@ export class AttachmentGateway {
   ): Effect.fn.Return<GeneratedAttachmentSource, AttachmentOperationError> {
     const agent = yield* attachmentSync(() => this.#conversation.requireKnownAgent(agentId));
     const value = inputPath.trim();
+    const sharedPath = this.#sharedRoot(agent.id);
     const [workspaceRoot, sharedRoot] = yield* attachmentCall(() =>
-      Promise.all([realpath(agent.workspacePath), realpath(this.#sharedRoot)]),
+      Promise.all([realpath(agent.workspacePath), realpath(sharedPath)]),
     );
     const normalized = value.replaceAll("\\", "/");
     const sharedReference = ["~/OpenBot/Shared/", "OpenBot/Shared/", "Shared/"].some((prefix) =>
@@ -250,8 +251,8 @@ export class AttachmentGateway {
     const candidates = isAbsolute(value)
       ? [value, rebaseLegacyWorkspacePath(agent.workspacePath, agent.id, value)].filter((path) => path !== null)
       : sharedReference
-        ? [sharedPathFromInput(this.#sharedRoot, value)]
-        : [workspacePathFromInput(agent.workspacePath, agent.id, value), sharedPathFromInput(this.#sharedRoot, value)];
+        ? [sharedPathFromInput(sharedPath, value)]
+        : [workspacePathFromInput(agent.workspacePath, agent.id, value), sharedPathFromInput(sharedPath, value)];
 
     for (const candidate of candidates) {
       try {

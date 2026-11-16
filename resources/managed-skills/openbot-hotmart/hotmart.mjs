@@ -17,7 +17,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, userInfo } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // Sources: developers.hotmart.com/docs/en/start/app-auth/ (token), /start/sandbox/ (sandbox base),
@@ -403,9 +403,35 @@ function dateOption(options, name) {
 
 // ---------- settings, credentials and audit ----------
 
+/**
+ * The shared folder of the space of the agent that runs this helper, or null. OpenBot keeps one shared
+ * folder per space; an agent runs its commands in its workspace, `OpenBot/Agents/<agent id>`, and
+ * `OpenBot/Spaces/index.json` names the shared folder of each agent's space.
+ */
+function spaceSharedFolder() {
+  const parts = process.cwd().split(sep);
+  const agents = parts.lastIndexOf("Agents");
+  if (agents > 0 && parts[agents + 1]) {
+    try {
+      const index = JSON.parse(
+        readFileSync(join(parts.slice(0, agents).join(sep) || sep, "Spaces", "index.json"), "utf8"),
+      );
+      const folder = index?.agents?.[parts[agents + 1]] ?? index?.general;
+      if (typeof folder === "string" && folder) return folder;
+    } catch {
+      // No index: an OpenBot before spaces.
+    }
+  }
+  const spaces = parts.lastIndexOf("Spaces");
+  if (spaces > 0 && parts[spaces + 2] === "Shared") return parts.slice(0, spaces + 3).join(sep);
+  return null;
+}
+
 function defaultHome() {
   if (process.env.HOTMART_HOME) return process.env.HOTMART_HOME;
-  // The OpenBot server image keeps the shared folder here. On a computer it is ~/OpenBot/Shared.
+  const space = spaceSharedFolder();
+  if (space) return join(space, "hotmart");
+  // An OpenBot before spaces. The server image keeps the shared folder here; on a computer it is ~/OpenBot/Shared.
   if (existsSync("/data/OpenBot/Shared")) return "/data/OpenBot/Shared/hotmart";
   return join(homedir(), "OpenBot", "Shared", "hotmart");
 }

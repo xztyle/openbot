@@ -119,7 +119,7 @@ async function proveInstallable(templates: EventCheckTemplate[], files: Generate
     await mkdir(programs);
     for (const file of files) await writeFile(join(catalog, file.path), file.content);
     await writeFile(join(catalog, "catalog.json"), JSON.stringify(templates));
-    const host = new EventCheckTemplates(catalog, programs);
+    const host = new EventCheckTemplates(catalog, () => programs);
     for (const template of templates) {
       const input = host.install(
         host.get(template.slug),

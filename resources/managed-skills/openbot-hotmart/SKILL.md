@@ -31,8 +31,9 @@ prints them. Do not print, copy or pass them in any other way. It signs in with 
 keeps the access token (valid about 48 hours) in `.token-cache.json` (mode 600) next to the settings, so most
 commands need no new sign-in. A new credential never reuses the cache. `--no-token-cache` turns the cache off.
 
-The settings and the audit log are in `hotmart/` in the OpenBot shared folder (on the server
-`/data/OpenBot/Shared/hotmart/`). `hotmart config show` shows the folder. Every agent uses the same files.
+The settings and the audit log are in `hotmart/` in the shared directory of your space (on the
+server `/data/OpenBot/Spaces/<space>/Shared/hotmart/`). `hotmart config show` shows the folder. Every
+agent of your space uses the same files; another space has its own.
 
 Exit codes: 0 done, 1 error (JSON on standard error, with Hotmart's `error`, `message` and a `hint`), 2 wrong
 command, 3 refused (the change needs `--approved`), 4 rate limited for longer than `--max-wait` seconds (default 120).

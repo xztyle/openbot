@@ -6,7 +6,7 @@ import { toAgentRemovalFailed } from "../backend/agent/agent-removal";
 import { toHostedSiteOperationFailed } from "../backend/agent/hosted-site-coordinator";
 import { AgentApiKeys } from "../backend/agent-api-keys";
 import { AgentDatabaseSupervisor } from "../backend/agent-data/agent-database-supervisor";
-import { AgentTables } from "../backend/agent-data/agent-tables";
+import { SpaceAgentTables } from "../backend/agent-data/space-agent-tables";
 import { AgentRoutineStore } from "../backend/agent-routine-store";
 import { EventCheckApiReader } from "../backend/event-check-api-reader";
 import { EventCheckEnvironment } from "../backend/event-check-environment";
@@ -1075,7 +1075,7 @@ export async function createApplicationServices({
   );
   const sidebarLayout = new SidebarLayoutStore(join(app.getPath("userData"), SIDEBAR_LAYOUT_FILE));
   await runCauseEffect(sidebarLayout.initialize());
-  const mailbox = new MailboxStore(app.getPath("userData"), store.sharedRoot, store.database);
+  const mailbox = new MailboxStore(app.getPath("userData"), store.sharedRoot, store.database, store.spaces);
   await runCauseEffect(mailbox.initialize());
   configureApplicationProtocol();
   const developmentUrl = process.env.ELECTRON_RENDERER_URL;
@@ -1522,8 +1522,11 @@ export async function createApplicationServices({
   );
   // Read by the resource monitor, which starts after the analytics that needs the services.
   const statementTimings = new StatementTimings();
-  const tables = new AgentTables({
-    sharedRoot: store.sharedRoot,
+  // One shared database per space, in the space's shared folder.
+  const tables = new SpaceAgentTables({
+    sharedDirectory: (agentId) => store.spaces.agentSharedDirectory(agentId),
+    spaces: () =>
+      store.spaces.list().map((space) => ({ spaceId: space.id, sharedDirectory: store.spaces.sharedDirectory(space) })),
     supervisor: new AgentDatabaseSupervisor({
       spawnHost: spawnAgentDatabaseHost,
       onStatementSettled: (durationMs) => statementTimings.record(durationMs),
@@ -1677,7 +1680,8 @@ export async function createApplicationServices({
     app.isPackaged
       ? join(process.resourcesPath, "watcher-catalog")
       : resolve(__dirname, "../../resources/watcher-catalog"),
-    join(store.sharedRoot, "Watchers"),
+    // Each space keeps the programs of its agents' checks in its own shared folder.
+    (agentId) => join(store.spaces.agentSharedDirectory(agentId), "Watchers"),
   );
   // Windows only: there the Antigravity server unpacks about 310 MB at each start, and the process
   // tree stop ends every command it started, so none outlives its folder. Elsewhere the system
@@ -1771,7 +1775,7 @@ export async function createApplicationServices({
           }
         },
       ),
-      join(store.sharedRoot, "Watchers"),
+      (agentId) => join(store.spaces.agentSharedDirectory(agentId), "Watchers"),
       (check) => new EventCheckStore(store.database).current(check.id, check.revision) !== null,
     ),
     eventCheckTemplates,
@@ -2127,6 +2131,8 @@ export async function createApplicationServices({
   await runCauseEffect(storageHygieneSettings.load());
   const storageHygiene = new StorageHygieneService({
     sharedRoot: store.sharedRoot,
+    spaces: () =>
+      store.spaces.list().map((space) => ({ spaceId: space.id, sharedDirectory: store.spaces.sharedDirectory(space) })),
     agents: () => service.listAgents(),
     diskPath: store.sharedRoot,
     stateDirectory: join(userData, "storage-hygiene"),

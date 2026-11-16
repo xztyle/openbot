@@ -601,7 +601,7 @@ export class ChannelBridge implements MessagingChannelBridge, ChannelDiscordBrid
     const live = new Set(this.#options.channels.hooks.agents().map((agent) => agent.id));
     const eligible = channel.members
       .map((member) => member.agentId)
-      .filter((agentId) => live.has(agentId) && !this.#options.channels.hooks.hidden?.(agentId));
+      .filter((agentId) => live.has(agentId) && !this.#options.channels.unavailable(agentId, channel));
     if (channel.leadAgentId && eligible.includes(channel.leadAgentId)) return channel.leadAgentId;
     return eligible.length === 1 ? (eligible[0] ?? null) : null;
   }

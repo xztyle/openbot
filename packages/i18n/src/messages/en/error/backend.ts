@@ -1,7 +1,8 @@
 import { defineMessages } from "../../../message";
 
 export const messages = defineMessages("error.backend", {
-  "error.backend.eventCheckProgram": "Choose an existing .mjs, .js, .py or .sh program inside OpenBot/Shared/Watchers.",
+  "error.backend.eventCheckProgram":
+    "Choose an existing .mjs, .js, .py or .sh program inside the Watchers folder of your space's shared directory.",
   "error.backend.eventCheckMissingVariable":
     "Add the required private variable in this event check’s Private variables (.env) settings before enabling it.",
   "error.backend.eventCheckProgramChanged":
@@ -408,6 +409,10 @@ export const messages = defineMessages("error.backend", {
     "{agent} is in another space. You can see and reach only the agents of your own space.",
   "error.backend.spaceOtherChannel":
     "This channel is in another space. You can see and use only the channels of your own space.",
+  "error.backend.spaceOtherSection":
+    "This sidebar section holds agents or channels of another space. You can change only the sections of your own space.",
+  "error.backend.spaceTableAmbiguous":
+    "Several spaces have a table with this name. Delete it in the desktop app, or ask an agent of that space to remove it.",
   "error.backend.spaceChannelMember":
     "{agent} is in another space than this channel. A channel can have only agents of its own space.",
 });

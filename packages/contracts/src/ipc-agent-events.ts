@@ -68,6 +68,8 @@ export type AgentEvent =
    * client receives the event only for its own member, without it, and reads the sidebar again.
    */
   | { type: "workspace-sidebar-changed"; memberId?: string }
+  /** The spaces, or the space of an agent or a channel, changed. A client reads `workspaceSpaces` again. */
+  | { type: "workspace-spaces-changed" }
   | { type: "status"; status: AgentStatus }
   | { type: "usage-changed"; usage: AccountUsage }
   | { type: "agents-changed"; agents: ClientAgentSummary[] }
@@ -223,6 +225,8 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
       return isWorkspaceFleetChange(value);
     case "workspace-sidebar-changed":
       return value.memberId === undefined || isIdentifier(value.memberId);
+    case "workspace-spaces-changed":
+      return true;
     case "status":
       return isDynamicRecord(value.status);
     case "usage-changed":

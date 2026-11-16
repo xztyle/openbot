@@ -215,7 +215,7 @@ import { WarmGenerations } from "./agent/warm-generations";
 import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
 import type { AgentApiKeys } from "./agent-api-keys";
 import type { AgentProvider } from "./agent-client";
-import type { AgentTables } from "./agent-data/agent-tables";
+import type { SpaceAgentTables } from "./agent-data/space-agent-tables";
 import type { AgentStore } from "./agent-store";
 import { AgentTaskStore } from "./agent-tasks/agent-task-store";
 import { AgentTasks } from "./agent-tasks/agent-tasks";
@@ -256,6 +256,8 @@ import { type RoutineDueSource, RoutineTimer } from "./routine-timer";
 import { LOCAL_USER_ACTOR, type SecurityActor } from "./security-actor";
 import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "./security-audit-log";
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
+import { agentSeesChannel } from "./spaces/space-scope";
+import { SpaceService } from "./spaces/space-service";
 import type { VaultItems } from "./vault-items";
 import type { WorkflowRunEnd } from "./workflows/workflows";
 import { WorkspaceInsights, type WorkspaceInsightsOptions } from "./workspace-insights";
@@ -384,7 +386,7 @@ export interface AgentServiceOptions {
    * The shared database agents keep their tables in. Injected because the host child's packaged
    * path is the main process's knowledge, not this class's.
    */
-  tables?: AgentTables | null;
+  tables?: SpaceAgentTables | null;
   /**
    * Whether a new agent starts on the development default model rather than the built-in one.
    * The main process passes the app variant; only a dev build turns it on.
@@ -434,6 +436,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly workspace: WorkspaceInsights;
   /** The Secrets view: the agent key store, for the owner and the admins. */
   readonly secrets: WorkspaceSecretsService;
+  /** The spaces, and the space of each agent and channel. Agents see and reach only their own space. */
+  readonly spaces: SpaceService;
   readonly messaging: MessagingThreads;
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
@@ -463,7 +467,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #memories: AgentMemories;
   readonly #waits: AgentWaits;
   readonly #tasks: AgentTasks;
-  readonly #tables: AgentTables | null;
+  readonly #tables: SpaceAgentTables | null;
   readonly #routines: RoutineScheduler;
   readonly #routineTimer: RoutineTimer;
   readonly #audit: SecurityAuditSink;
@@ -772,7 +776,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
               ),
             );
           }),
-        sharedRoot: () => this.#store.sharedRoot,
+        sharedRoot: (agentId) => this.#store.spaces.agentSharedDirectory(agentId),
         isStopping: () => this.#stopping,
         isProviderBusy: (provider) => this.#isProviderBusy(provider),
         isAgentBusy: (agentId) => this.#runsTurn(agentId),
@@ -976,7 +980,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#attachments = new AttachmentGateway({
       conversation: this.#conversation,
       mailbox,
-      sharedRoot: store.sharedRoot,
+      sharedRoot: (agentId) => store.spaces.agentSharedDirectory(agentId),
       hooks: {
         emit: (event) => this.#emit(event),
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
@@ -1077,9 +1081,23 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           Effect.forkIn(this.#scope),
         ),
       );
+    this.spaces = new SpaceService({
+      store: store.spaces,
+      agentIds: () => this.listAgents().map((agent) => agent.id),
+      channels: () => this.channels.store.spaceFields(),
+      onChanged: () => {
+        this.emit("event", { type: "workspace-spaces-changed" });
+        Effect.runFork(
+          this.spaces
+            .writeIndex()
+            .pipe(Effect.catch((failure) => Effect.sync(() => this.#emitError("spaces_index_failed", failure.cause)))),
+        );
+      },
+    });
     this.channels = new ChannelService(store.database, mailbox, {
       agents: () => this.listAgents(),
       hidden: (agentId) => this.#store.isHidden(agentId),
+      inChannelSpace: (agentId, channel) => agentSeesChannel(this.#store.spaces, agentId, channel),
       generate: (lead, prompt) =>
         Effect.gen({ self: this }, function* () {
           yield* this.#providers.ensureProvider(lead.provider);
@@ -1712,7 +1730,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       // A hidden agent takes no new messages, so it is not offered as a teammate.
       .filter(
         (agent) =>
-          agent.id !== agentId && agent.hiddenAt === undefined && layout.agentAssignments[agent.id] === section.id,
+          agent.id !== agentId &&
+          agent.hiddenAt === undefined &&
+          layout.agentAssignments[agent.id] === section.id &&
+          this.#store.spaces.sameSpace(agentId, agent.id),
       )
       .sort((a, b) => rank(a.id) - rank(b.id))
       .slice(0, MAX_SECTION_TEAMMATES)
@@ -1882,7 +1903,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         cause: new Error(sourceText("error.backend.sharedDataUnavailable")),
       });
     yield* this.#tables
-      .removeAsUser(input.name)
+      .removeAsUser(input.name, input.spaceId)
       .pipe(Effect.mapError((cause) => new AgentLifecycleFailed({ operation: "delete table", cause })));
   }).bind(this);
 
@@ -1941,11 +1962,21 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   /** Hands a routine run's work on to the next agent of its flow; answers the delivery id. */
   enqueueRoutineHandoff(input: {
     run: Pick<RoutineRun, "id" | "routineId" | "routineName" | "scheduledFor">;
+    /** The agent whose routine flow hands on. Absent for a workflow, which a person set up. */
+    fromAgentId?: string;
     agentId: string;
     text: string;
     idempotencyKey: string;
     report?: true;
   }): Effect.Effect<string, AgentLifecycleFailed> {
+    // A link drawn before the agents moved to different spaces hands nothing on.
+    if (input.fromAgentId !== undefined && !this.#store.spaces.sameSpace(input.fromAgentId, input.agentId))
+      return Effect.fail(
+        new AgentLifecycleFailed({
+          operation: "enqueueRoutineHandoff",
+          cause: new Error(sourceText("error.backend.spaceOtherAgent", { agent: input.agentId })),
+        }),
+      );
     return this.#routines
       .enqueueHandoff(input)
       .pipe(
@@ -2560,6 +2591,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       .pipe(
         Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "create agent", cause: failure.cause })),
       );
+    // Before the first turn, which starts in this space. An agent never makes one in another space.
+    const spaceId = creatorAgentId ? this.#store.spaces.agentSpaceId(creatorAgentId) : input.spaceId;
+    if (spaceId !== undefined) this.spaces.place("agent", agent.id, spaceId);
     const result = yield* Effect.result(
       Effect.gen({ self: this }, function* () {
         yield* this.#prepareAgentWorkspace(agent);
@@ -3522,9 +3556,19 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     inputPath: string,
     options?: { allowDirectory?: boolean },
   ): Effect.Effect<ResolvedSharedFile, AgentLifecycleFailed> {
-    return resolveSharedFile(this.#store.sharedRoot, inputPath, options).pipe(
-      Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "resolveSharedFile", cause: failure.cause })),
-    );
+    // A person opens a shared file of any space, or of the old global shared folder.
+    const roots = [this.#store.sharedRoot, ...this.spaces.directories().map((space) => space.sharedDirectory)];
+    const [first = this.#store.sharedRoot, ...rest] = roots;
+    return rest
+      .reduce(
+        (attempt, root) => attempt.pipe(Effect.catch(() => resolveSharedFile(root, inputPath, options))),
+        resolveSharedFile(first, inputPath, options),
+      )
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "resolveSharedFile", cause: failure.cause }),
+        ),
+      );
   }
 
   /** A file a remote member asks for. It must be inside the agent's workspace. */
@@ -3633,6 +3677,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           (failure) => new AgentLifecycleFailed({ operation: "initialize mailbox", cause: failure.cause }),
         ),
       );
+    // The helper programs of the agents find their space's shared folder in it.
+    yield* this.spaces
+      .writeIndex()
+      .pipe(Effect.catch((failure) => Effect.sync(() => this.#emitError("spaces_index_failed", failure.cause))));
     yield* lifecycleStep("restore channel links", () => {
       this.#mcp.migrateCatalogBridgesToHttp();
       this.#mcp.migrateCatalogSuccessors();

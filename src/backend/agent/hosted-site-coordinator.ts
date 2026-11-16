@@ -320,7 +320,7 @@ export class HostedSiteCoordinator {
       description,
       ...(isBoolean(args.spaFallback) ? { spaFallback: args.spaFallback } : {}),
     };
-    const roots = [agent.workspacePath, this.#store.sharedRoot];
+    const roots = [agent.workspacePath, this.#store.spaces.agentSharedDirectory(agent.id)];
     const siteId =
       context.action === "publish"
         ? undefined

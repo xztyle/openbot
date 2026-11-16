@@ -42,6 +42,8 @@ export interface StorageHygieneScanArea {
   /** The folder name of a project, or the agent id. */
   name: string;
   agentId?: string;
+  /** The space whose shared folder holds a project. */
+  spaceId?: string;
   root: string;
 }
 
@@ -790,6 +792,7 @@ export async function scanStorageHygiene(
       kind: area.kind,
       name: area.name.slice(0, 255),
       ...(area.agentId ? { agentId: area.agentId } : {}),
+      ...(area.spaceId ? { spaceId: area.spaceId } : {}),
       bytes: totalBytes(summary.breakdown),
       files: summary.files,
       breakdown: summary.breakdown,

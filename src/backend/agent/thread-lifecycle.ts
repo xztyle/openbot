@@ -8,6 +8,7 @@ import {
   agentProviderDescriptor,
   agentQuickAcknowledgementEnabled,
   COMPUTER_USE_MCP_SERVER_ID,
+  GENERAL_SPACE_ID,
   type McpServerConfig,
   workspaceAccessEnforced,
 } from "@openbot/contracts/ipc";
@@ -555,7 +556,7 @@ export class ThreadLifecycle {
       model: agent.model,
       effort: agent.reasoningEffort,
       cwd: agent.workspacePath,
-      runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.sharedRoot),
+      runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
       approvalPolicy: "on-request",
       sandbox: codexSandboxMode(agent),
       ...this.#workspaceOnlyParam(agent, client),
@@ -761,7 +762,7 @@ export class ThreadLifecycle {
           ...CODEX_DIRECT_ONLY_NAMESPACES,
           ...codexMcpNamespaces(servers),
         ],
-        ...codexSandboxConfig(agent, this.#store.sharedRoot),
+        ...codexSandboxConfig(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
         ...Object.fromEntries(
           Object.entries(environment).map(([name, value]) => [`shell_environment_policy.set.${name}`, value]),
         ),
@@ -888,6 +889,11 @@ export class ThreadLifecycle {
           ...(Object.keys(environment).length > 0 ? [Object.entries(environment).sort()] : []),
           ...(section ? [section.members.map((member) => member.id).sort()] : []),
           ...(proxy ? [proxy] : []),
+          // A move to another space changes the shared folder that the instructions and the sandbox name.
+          // `general` adds nothing, so the sessions of agents that never moved keep their fingerprint.
+          ...(this.#store.spaces.agentSpaceId(agent.id) === GENERAL_SPACE_ID
+            ? []
+            : [this.#store.spaces.agentSharedDirectory(agent.id)]),
         ]),
       )
       .digest("hex");
@@ -1026,13 +1032,14 @@ export class ThreadLifecycle {
       memoriesInTurns: client.provider === "claude",
       teammatesInTurns: client.provider === "claude",
       sectionTeammates: section,
+      spaceName: this.#store.spaces.get(this.#store.spaces.agentSpaceId(agent.id))?.name,
       homeSkills,
       // A connection named motion is the team's board: every agent that has it follows its rules.
       workBoard: this.#agentMcpServers(agent).some((config) => /^motion(?:_|$)/i.test(config.name)),
     };
     const instructions = developerInstructions(
       agent,
-      this.#store.sharedRoot,
+      this.#store.spaces.agentSharedDirectory(agent.id),
       memories,
       this.#store.automationRoot,
       this.#store.agentDefaults(),
@@ -1083,7 +1090,7 @@ export class ThreadLifecycle {
       model: agent.model,
       effort: agent.reasoningEffort,
       cwd: agent.workspacePath,
-      runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.sharedRoot),
+      runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
       approvalPolicy: "on-request",
       sandbox: codexSandboxMode(agent),
       ...this.#workspaceOnlyParam(agent, client),

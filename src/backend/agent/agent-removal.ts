@@ -192,6 +192,7 @@ export class AgentRemoval {
         this.#logger.warn("Could not stop a deleted agent's provider process.", removalErrorCode(stopped.failure));
       stage = "agent-files-and-record";
       yield* this.#store.deleteAgent(agent.id).pipe(toAgentRemovalFailed);
+      this.#store.spaces.forget("agent", agent.id);
     }).pipe(
       Effect.mapError((failure) => {
         // File-system errors can contain private paths. Log only the failed stage and the error code.

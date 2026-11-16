@@ -14,10 +14,14 @@ export interface SharedTable {
   ownerAgentId: string | null;
   /** `null` when the table held too many rows to count inside the statement deadline. */
   rowCount: number | null;
+  /** The space whose shared database holds the table. Absent from a host before spaces: `general`. */
+  spaceId?: string;
 }
 
 export interface DeleteSharedTableInput {
   name: string;
+  /** The space of the table. Absent: the one space that has a table of this name. */
+  spaceId?: string;
 }
 
 export function isSharedTable(value: unknown): value is SharedTable {
@@ -26,10 +30,16 @@ export function isSharedTable(value: unknown): value is SharedTable {
     isBoundedString(value.name, INPUT_LIMITS.sharedTableName) &&
     value.name.length > 0 &&
     isNullableBoundedString(value.ownerAgentId, INPUT_LIMITS.identifier) &&
-    (value.rowCount === null || isFiniteNumber(value.rowCount))
+    (value.rowCount === null || isFiniteNumber(value.rowCount)) &&
+    (value.spaceId === undefined || isBoundedString(value.spaceId, INPUT_LIMITS.identifier))
   );
 }
 
 export function isDeleteSharedTableInput(value: unknown): value is DeleteSharedTableInput {
-  return isDynamicRecord(value) && isBoundedString(value.name, INPUT_LIMITS.sharedTableName) && value.name.length > 0;
+  return (
+    isDynamicRecord(value) &&
+    isBoundedString(value.name, INPUT_LIMITS.sharedTableName) &&
+    value.name.length > 0 &&
+    (value.spaceId === undefined || isBoundedString(value.spaceId, INPUT_LIMITS.identifier))
+  );
 }

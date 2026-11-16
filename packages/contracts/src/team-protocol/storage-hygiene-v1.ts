@@ -10,7 +10,7 @@
 //   `report` is null or `{ scannedAt, durationMs, entries, incremental, truncated, disk: { totalBytes,
 //   freeBytes } (null or a count each), areas (1000), folders (40), items (3000), itemsTruncated }`.
 //   An area is `{ id, kind: "project" | "agent", name (255), agentId?, bytes, files, breakdown,
-//   complete }`; a folder `{ areaId, path (1024), bytes, breakdown }`; a breakdown `{ real,
+//   complete }`; later also `spaceId?`, the space of a project folder; a folder `{ areaId, path (1024), bytes, breakdown }`; a breakdown `{ real,
 //   regenerable, stale, evidence }`; an item `{ id, areaId, rule, path (1024), scope: "path" |
 //   "files", bytes, files, modifiedAt, nestedIn?, detail? (200), recommended }`, where `rule` is one
 //   of "cargo-target", "node-modules", "godot-cache", "build-output", "repo-copy", "build-export",
@@ -102,7 +102,7 @@ const report = fields({
         breakdown,
         complete: boolean,
       },
-      { agentId: identifier },
+      { agentId: identifier, spaceId: identifier },
     ),
     1_000,
   ),

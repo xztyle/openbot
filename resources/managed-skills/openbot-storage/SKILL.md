@@ -10,7 +10,7 @@ All agents share one disk. Build output, caches, copies and screenshots fill it 
 ## Builds and caches
 
 - Keep build output in the project's own `target/`, `build/`, `dist/` or `node_modules/`. Never move or copy it somewhere else.
-- Rust: share one target folder across clones of the same repository: `export CARGO_TARGET_DIR=<project>/.cache/cargo-target` (for example `~/OpenBot/Shared/piks/.cache/cargo-target`). If `sccache` is installed, also set `RUSTC_WRAPPER=sccache`.
+- Rust: share one target folder across clones of the same repository: `export CARGO_TARGET_DIR=<project>/.cache/cargo-target` (for example `<your space's shared directory>/piks/.cache/cargo-target`). If `sccache` is installed, also set `RUSTC_WRAPPER=sccache`.
 - Prefer one clone and `git worktree add` to a second full clone. Do not clone a repository again when a clone exists in the project.
 
 ## Notes and evidence folders

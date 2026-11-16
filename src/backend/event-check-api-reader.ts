@@ -34,19 +34,20 @@ export class EventCheckApiReader {
 
   constructor(
     readonly environment: EventCheckEnvironment,
-    readonly programsRoot: string,
+    /** The Watchers folder of the agent's space; null for a discovery that has no agent yet. */
+    readonly programsRoot: (agentId: string | null) => string,
     readonly current: (check: EventCheck) => boolean,
     readonly nodeExecutable = "/usr/bin/node",
     /** Tests only. */
     readonly now: () => number = Date.now,
   ) {}
   #program(input: EventCheckInput): { path: string; digest: string } {
-    return this.#programAt(input.source.toolName);
+    return this.#programAt(input.source.toolName, input.agentId);
   }
-  #programAt(name: string): { path: string; digest: string } {
+  #programAt(name: string, agentId: string | null): { path: string; digest: string } {
     if (isAbsolute(name) || ![".mjs", ".js", ".py", ".sh"].includes(extname(name)))
       throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgram"));
-    const root = realpathSync(this.programsRoot),
+    const root = realpathSync(this.programsRoot(agentId)),
       path = realpathSync(join(root, name));
     // The containment, type and size checks run on every call. Only the read and the hash are skipped.
     const before = statSync(path, { bigint: true });
@@ -74,14 +75,14 @@ export class EventCheckApiReader {
   discover(name: string, digest: string, values: Record<string, string>, args: EventCheckArguments) {
     return Effect.gen({ self: this }, function* () {
       const program = yield* mcpSync(() => {
-        const program = this.#programAt(name);
+        const program = this.#programAt(name, null);
         if (program.digest !== digest)
           throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateProgram"));
         return program;
       });
       return yield* runEventCheckProgram(
         program.path,
-        this.programsRoot,
+        this.programsRoot(null),
         values,
         { ...args, discover: true },
         () => true,
@@ -126,7 +127,7 @@ export class EventCheckApiReader {
         call: (_operation, args) =>
           runEventCheckProgram(
             program.path,
-            this.programsRoot,
+            this.programsRoot(check.agentId),
             values,
             { ...Object.fromEntries(source.configuration.map((field) => [field.name, field.value])), ...args },
             valid,

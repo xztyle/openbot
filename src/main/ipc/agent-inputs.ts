@@ -212,6 +212,7 @@ export function parseCreateAgent(value: unknown): CreateAgentInput {
     if (!isReasoningEffort(value.reasoningEffort)) throw new Error("Invalid reasoning effort.");
     result.reasoningEffort = value.reasoningEffort;
   }
+  if (value.spaceId !== undefined) result.spaceId = requireString(value.spaceId, "spaceId", INPUT_LIMITS.identifier);
   return result;
 }
 

@@ -162,14 +162,23 @@ export class SpaceStore {
     return this.agentSpaceId(agentId) === this.agentSpaceId(otherAgentId);
   }
 
+  /**
+   * `OpenBot/Spaces/index.json`: each space with its shared folder, and the shared folder of each agent
+   * that is not in `general`. Helper programs that an agent runs, such as the Meta Ads and Hotmart
+   * skills, read it to find the shared folder of their agent's space.
+   */
+  get indexPath(): string {
+    return join(this.#spacesRoot, "index.json");
+  }
+
   /** The folder that the agents of the space share: `OpenBot/Spaces/<slug>/Shared`. */
   sharedDirectory(space: Pick<WorkspaceSpace, "slug">): string {
     return join(this.#spacesRoot, space.slug, SPACE_SHARED_DIRECTORY);
   }
 
-  /** The shared folder of the agent's space. An agent whose space row is gone uses `general`'s. */
-  agentSharedDirectory(agentId: string): string {
-    const space = this.get(this.agentSpaceId(agentId)) ?? this.get(GENERAL_SPACE_ID);
+  /** The shared folder of the agent's space; null, or an agent whose space row is gone, uses `general`'s. */
+  agentSharedDirectory(agentId: string | null): string {
+    const space = (agentId === null ? undefined : this.get(this.agentSpaceId(agentId))) ?? this.get(GENERAL_SPACE_ID);
     return this.sharedDirectory(space ?? { slug: GENERAL_SPACE_ID });
   }
 

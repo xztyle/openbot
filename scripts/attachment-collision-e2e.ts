@@ -101,7 +101,7 @@ async function run() {
       attachments.slice(0, 4).map((attachment) => attachment.name),
       ["plain.txt", "File.txt", "file-2.txt", "File-3.txt"],
     );
-    const transferRoot = files.transferRoot(transferId);
+    const [transferRoot = ""] = files.transferRoots(transferId);
     const storedNames = attachments.map((attachment) => attachment.name);
     assert.equal(new Set(storedNames).size, sources.length);
     assert.deepEqual((await readdir(transferRoot)).sort(), [".openbot-transfer.json", ...storedNames].sort());

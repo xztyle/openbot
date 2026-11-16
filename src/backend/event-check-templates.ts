@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, readFileSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 import {
   decodeEventCheckTemplateList,
@@ -25,7 +25,11 @@ export class EventCheckTemplates {
   #templates: readonly EventCheckTemplate[] | null = null;
   constructor(
     readonly catalogRoot: string,
-    readonly programsRoot: string,
+    /**
+     * The Watchers folder of the agent's space, where its checks' programs live. Null: no agent yet (a
+     * discovery for an install form), which uses the folder of `general`.
+     */
+    readonly programsRoot: (agentId: string | null) => string,
   ) {}
   list(): readonly EventCheckTemplate[] {
     if (this.#templates) return this.#templates;
@@ -57,9 +61,11 @@ export class EventCheckTemplates {
     return `${template.program.file.slice(0, -extension.length)}@${template.version}${extension}`;
   }
   /** Copies the program once. A file that is already there must be the reviewed one; it is never replaced. */
-  place(template: EventCheckTemplate): string {
+  place(template: EventCheckTemplate, agentId: string | null): string {
     const name = this.programName(template);
-    const target = join(this.programsRoot, name);
+    const directory = this.programsRoot(agentId);
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const target = join(directory, name);
     if (existsSync(target)) {
       if (digestOf(target) !== template.program.digest)
         throw new EventCheckRefusal(sourceText("error.backend.eventCheckTemplateProgram"));
@@ -87,7 +93,7 @@ export class EventCheckTemplates {
   matchedVersion(template: EventCheckTemplate, check: EventCheck): string | null {
     if (check.source.kind !== "api") return null;
     try {
-      const root = realpathSync(this.programsRoot);
+      const root = realpathSync(this.programsRoot(check.agentId));
       const path = realpathSync(join(root, check.source.toolName));
       if (!isPathInside(root, path) || !statSync(path).isFile()) return null;
       const digest = digestOf(path);
@@ -166,7 +172,7 @@ export class EventCheckTemplates {
         connectionId: request.accountLabel,
         variables: template.variables.map((variable) => variable.name),
         configuration,
-        toolName: this.place(template),
+        toolName: this.place(template, request.agentId),
         argumentsJson: template.argumentsJson,
         cursorArgument: template.cursorArgument,
         nextCursorPointer: template.nextCursorPointer,
@@ -205,7 +211,7 @@ export class EventCheckTemplates {
     for (const field of template.configuration)
       if (field.name !== picker.name)
         configuration[field.name] = (input.configuration[field.name] ?? field.value).trim();
-    return { name: this.place(template), digest: template.program.digest, variables, configuration };
+    return { name: this.place(template, null), digest: template.program.digest, variables, configuration };
   }
   /**
    * The template whose picker an installed check can list. The check must be linked, and must run the
@@ -242,7 +248,7 @@ export class EventCheckTemplates {
           ...(previous?.optionLabels ? { optionLabels: previous.optionLabels } : {}),
         };
       }),
-      toolName: this.place(template),
+      toolName: this.place(template, check.agentId),
       argumentsJson: template.argumentsJson,
       cursorArgument: template.cursorArgument,
       nextCursorPointer: template.nextCursorPointer,

@@ -104,7 +104,11 @@ export function channelDraftChange(
   args: DynamicRecord,
   callerAgentId: string,
   agents: readonly AgentSummary[],
-  access: { hidden(agentId: string): boolean; level(agentId: string): AgentAccessLevel },
+  access: {
+    hidden(agentId: string): boolean;
+    inSpace?(agentId: string): boolean;
+    level(agentId: string): AgentAccessLevel;
+  },
   workOwners: ReadonlySet<string>,
 ): { draft: ChannelDraft; note: ChannelChangeNote } {
   const draft: ChannelDraft = {
@@ -133,6 +137,8 @@ export function channelDraftChange(
     if (agentAccessRank(access.level(agentId)) < agentAccessRank("chat"))
       throw new Error(`The person who asked cannot chat with ${name}, so it stays out.`);
     if (access.hidden(agentId)) throw new Error(`${name} is hidden. Ask a person to show it again first.`);
+    if (access.inSpace && !access.inSpace(agentId))
+      throw new Error(sourceText("error.backend.spaceChannelMember", { agent: name }));
     if (channel.members.length >= INPUT_LIMITS.agents)
       throw new Error(`A channel has at most ${INPUT_LIMITS.agents} members.`);
     return {

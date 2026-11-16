@@ -381,6 +381,11 @@ export interface CreateAgentInput {
    * sets it; the IPC and Team API create requests do not carry it.
    */
   background?: boolean;
+  /**
+   * The space the agent starts in. Absent or unknown: `general`. An agent that the `create_agent` tool
+   * makes is always in the space of the agent that made it.
+   */
+  spaceId?: string;
 }
 
 export interface UpdateAgentInput {

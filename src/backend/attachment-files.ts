@@ -102,16 +102,37 @@ export interface GeneratedAttachmentSource {
 export interface AttachmentFilesOptions {
   userDataPath: string;
   sharedRoot: string;
+  /**
+   * The Transfers folder of each space. A transfer goes to the folder of its recipients' space; a
+   * stored path resolves in any of them, and in the old `Shared/Transfers`. Absent: only the old one.
+   */
+  spaceTransfers?: {
+    /** The folder for files that go to these agents, or that these agents make. */
+    rootFor(agentIds: readonly string[]): string;
+    all(): string[];
+  };
 }
 
 /** Owns managed attachment files, verification, sidecars, and cleanup. Never imports MailboxStore or writes mailbox state. */
 export class AttachmentFiles {
   readonly #draftsRoot: string;
   readonly #transfersRoot: string;
+  readonly #spaceTransfers: AttachmentFilesOptions["spaceTransfers"];
 
   constructor(options: AttachmentFilesOptions) {
     this.#draftsRoot = join(options.userDataPath, "attachment-drafts");
     this.#transfersRoot = join(options.sharedRoot, "Transfers");
+    this.#spaceTransfers = options.spaceTransfers;
+  }
+
+  /** Every Transfers folder a stored path can be in: the old global one first. */
+  #transferRoots(): string[] {
+    return [...new Set([this.#transfersRoot, ...(this.#spaceTransfers?.all() ?? [])])];
+  }
+
+  /** Where a new transfer for, or a new file of, these agents goes. */
+  #writeRoot(agentIds: readonly string[]): string {
+    return agentIds.length > 0 && this.#spaceTransfers ? this.#spaceTransfers.rootFor(agentIds) : this.#transfersRoot;
   }
 
   readonly initialize = Effect.fn("AttachmentFiles.initialize")(function* (
@@ -137,16 +158,30 @@ export class AttachmentFiles {
     );
   }).bind(this);
 
-  transferRoot(id: string): string {
-    return join(this.#transfersRoot, id);
+  /** The folder of a transfer in each Transfers folder. Only one of them exists. */
+  transferRoots(id: string): string[] {
+    return this.#transferRoots().map((root) => join(root, id));
+  }
+
+  /** Removes the folder of a transfer, wherever it is. */
+  removeTransfer(id: string): Effect.Effect<void, AttachmentOperationError> {
+    return Effect.forEach(this.transferRoots(id), (path) => this.remove(path), { discard: true });
   }
 
   transferRootForPath(path: string): string | null {
-    return transferRootForPath(this.#transfersRoot, path);
+    for (const root of this.#transferRoots()) {
+      const found = transferRootForPath(root, path);
+      if (found) return found;
+    }
+    return null;
   }
 
   generatedRootForPath(path: string): string | null {
-    return generatedRootForPath(this.#transfersRoot, path);
+    for (const root of this.#transferRoots()) {
+      const found = generatedRootForPath(root, path);
+      if (found) return found;
+    }
+    return null;
   }
 
   /**
@@ -157,10 +192,11 @@ export class AttachmentFiles {
   managedTransferFile(path: string): Effect.Effect<string | null, AttachmentOperationError> {
     return Effect.gen({ self: this }, function* () {
       try {
-        const [root, candidate] = yield* attachmentCall(() =>
-          Promise.all([realpath(this.#transfersRoot), realpath(path)]),
+        const candidate = yield* attachmentCall(() => realpath(path));
+        const roots = yield* attachmentCall(() =>
+          Promise.all(this.#transferRoots().map((root) => realpath(root).catch(() => null))),
         );
-        if (!isWithin(root, candidate)) return null;
+        if (!roots.some((root) => root !== null && isWithin(root, candidate))) return null;
         return (yield* attachmentCall(() => lstat(candidate))).isFile() ? candidate : null;
       } catch {
         return null;
@@ -199,7 +235,13 @@ export class AttachmentFiles {
     return resolveManagedAttachmentEffect(this.#draftsRoot, attachment);
   }
   resolveTransfer(attachment: StoredAttachment) {
-    return resolveManagedAttachmentEffect(this.#transfersRoot, attachment);
+    return Effect.gen({ self: this }, function* () {
+      for (const root of this.#transferRoots()) {
+        const resolved = yield* resolveManagedAttachmentEffect(root, attachment);
+        if (resolved) return resolved;
+      }
+      return null;
+    });
   }
 
   readonly prepareDrafts = Effect.fn("AttachmentFiles.prepareDrafts")(function* (
@@ -320,8 +362,9 @@ export class AttachmentFiles {
   ): Effect.fn.Return<StoredAttachment[], AttachmentOperationError> {
     if (sourcePaths.length === 0) return [];
     const inspected = yield* Effect.forEach(sourcePaths, inspectSourceEffect, { concurrency: "unbounded" });
-    const temporaryRoot = join(this.#transfersRoot, `.tmp-${transferId}`);
-    const finalRoot = join(this.#transfersRoot, transferId);
+    const transfersRoot = this.#writeRoot(recipientAgentIds);
+    const temporaryRoot = join(transfersRoot, `.tmp-${transferId}`);
+    const finalRoot = join(transfersRoot, transferId);
     const usedNames = new Set<string>();
     let completed = false;
     return yield* Effect.gen({ self: this }, function* () {
@@ -424,7 +467,7 @@ export class AttachmentFiles {
     const entries = sources.map((source) => {
       const id = randomUUID();
       const name = uniqueName(sanitizeName(source.path), usedNames);
-      const generatedRoot = join(this.#transfersRoot, "generated", id);
+      const generatedRoot = join(this.#writeRoot(input.ownerAgentId ? [input.ownerAgentId] : []), "generated", id);
       return { id, name, source, generatedRoot, targetPath: join(generatedRoot, name) };
     });
 
@@ -497,7 +540,7 @@ export class AttachmentFiles {
       return yield* attachmentFailure(new Error(sourceText("error.backend.generatedImageTooLarge")));
 
     const name = sanitizeName(input.name ?? (source ? basename(source.path) : "generated-image.png"));
-    const generatedRoot = join(this.#transfersRoot, "generated", id);
+    const generatedRoot = join(this.#writeRoot(input.ownerAgentId ? [input.ownerAgentId] : []), "generated", id);
     const targetPath = join(generatedRoot, name);
     let completed = false;
     return yield* Effect.gen({ self: this }, function* () {

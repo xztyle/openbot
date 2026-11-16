@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, userInfo } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const DEFAULT_API_VERSION = "v27.0";
@@ -247,9 +247,35 @@ export function normalizeAccountId(value) {
 
 // ---------- settings, token and audit ----------
 
+/**
+ * The shared folder of the space of the agent that runs this helper, or null. OpenBot keeps one shared
+ * folder per space; an agent runs its commands in its workspace, `OpenBot/Agents/<agent id>`, and
+ * `OpenBot/Spaces/index.json` names the shared folder of each agent's space.
+ */
+function spaceSharedFolder() {
+  const parts = process.cwd().split(sep);
+  const agents = parts.lastIndexOf("Agents");
+  if (agents > 0 && parts[agents + 1]) {
+    try {
+      const index = JSON.parse(
+        readFileSync(join(parts.slice(0, agents).join(sep) || sep, "Spaces", "index.json"), "utf8"),
+      );
+      const folder = index?.agents?.[parts[agents + 1]] ?? index?.general;
+      if (typeof folder === "string" && folder) return folder;
+    } catch {
+      // No index: an OpenBot before spaces.
+    }
+  }
+  const spaces = parts.lastIndexOf("Spaces");
+  if (spaces > 0 && parts[spaces + 2] === "Shared") return parts.slice(0, spaces + 3).join(sep);
+  return null;
+}
+
 function defaultHome() {
   if (process.env.META_ADS_HOME) return process.env.META_ADS_HOME;
-  // The OpenBot server image keeps the shared folder here. On a computer it is ~/OpenBot/Shared.
+  const space = spaceSharedFolder();
+  if (space) return join(space, "meta-ads");
+  // An OpenBot before spaces. The server image keeps the shared folder here; on a computer it is ~/OpenBot/Shared.
   if (existsSync("/data/OpenBot/Shared")) return "/data/OpenBot/Shared/meta-ads";
   return join(homedir(), "OpenBot", "Shared", "meta-ads");
 }

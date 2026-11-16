@@ -788,9 +788,9 @@ export class DrainScheduler {
                     delivery.sender.kind === "routine"),
                 input: inputForThread(providerThreadId),
                 cwd: agent.workspacePath,
-                runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.sharedRoot),
+                runtimeWorkspaceRoots: workspaceWritableRoots(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
                 approvalPolicy: "on-request",
-                sandboxPolicy: codexSandboxPolicy(agent, this.#store.sharedRoot),
+                sandboxPolicy: codexSandboxPolicy(agent, this.#store.spaces.agentSharedDirectory(agent.id)),
                 ...(client.provider === "codex"
                   ? codexServiceTier(
                       this.#store.list().find((current) => current.id === agent.id) ?? agent,

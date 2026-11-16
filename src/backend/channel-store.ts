@@ -6,6 +6,7 @@ import {
   CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX,
   type Channel,
   type ChannelDraft,
+  type ChannelKind,
   type ChannelMessage,
   type ChannelPage,
   type ChannelSummary,
@@ -165,6 +166,31 @@ export class ChannelStore {
     return databaseRows(
       this.database.connection.prepare("SELECT channel_id FROM projection_channels ORDER BY rowid").all(),
     ).map((row) => requiredStringColumn(row, "channel_id"));
+  }
+
+  /**
+   * What decides the space of each channel, archived ones included: its id, kind and members, in one
+   * query. `list` would read every message of every channel to answer it.
+   */
+  spaceFields(): { id: string; kind?: ChannelKind; members: { agentId: string }[] }[] {
+    return databaseRows(
+      this.database.connection
+        .prepare(
+          `SELECT channel_id, json_extract(channel_json, '$.kind') AS kind,
+             (SELECT json_group_array(json_extract(member.value, '$.agentId'))
+                FROM json_each(channel_json, '$.members') AS member) AS members
+           FROM projection_channels ORDER BY rowid`,
+        )
+        .all(),
+    ).map((row) => {
+      const kind = optionalStringColumn(row, "kind");
+      const members = JSON.parse(requiredStringColumn(row, "members"));
+      return {
+        id: requiredStringColumn(row, "channel_id"),
+        ...(kind === "dm" || kind === "group" || kind === "channel" ? { kind } : {}),
+        members: (Array.isArray(members) ? members : []).filter(isString).map((agentId) => ({ agentId })),
+      };
+    });
   }
 
   /**

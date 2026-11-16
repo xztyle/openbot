@@ -58,6 +58,7 @@ import { MailboxDeliveryGate } from "./mailbox-delivery-gate";
 import { OpenBotDatabase } from "./openbot-database";
 import { isRecord } from "./protocol";
 import { recordRestartActivity } from "./restart-activity";
+import type { SpaceStore } from "./spaces/space-store";
 
 const MAX_ATTACHMENTS = INPUT_LIMITS.attachments;
 /**
@@ -308,9 +309,29 @@ export class MailboxStore {
     reactionKeys: new Set<string>(),
   };
 
-  constructor(userDataPath: string, sharedRoot: string, database = new OpenBotDatabase(userDataPath)) {
+  /** The spaces: a message from an agent reaches only agents of its own space. */
+  readonly #spaces: Pick<SpaceStore, "sameSpace" | "agentSharedDirectory" | "list" | "sharedDirectory"> | undefined;
+
+  constructor(
+    userDataPath: string,
+    sharedRoot: string,
+    database = new OpenBotDatabase(userDataPath),
+    spaces?: Pick<SpaceStore, "sameSpace" | "agentSharedDirectory" | "list" | "sharedDirectory">,
+  ) {
     this.#statePath = join(userDataPath, "mailbox.json");
-    this.#files = new AttachmentFiles({ userDataPath, sharedRoot });
+    this.#spaces = spaces;
+    this.#files = new AttachmentFiles({
+      userDataPath,
+      sharedRoot,
+      ...(spaces
+        ? {
+            spaceTransfers: {
+              rootFor: (agentIds) => join(spaces.agentSharedDirectory(agentIds[0] ?? ""), "Transfers"),
+              all: () => spaces.list().map((space) => join(spaces.sharedDirectory(space), "Transfers")),
+            },
+          }
+        : {}),
+    });
     this.#database = database;
   }
 
@@ -553,6 +574,12 @@ export class MailboxStore {
       if (recipients.some((id) => !id || id.length > INPUT_LIMITS.identifier)) {
         throw new Error("A message recipient is invalid.");
       }
+      // The last check of every route from one agent to another: tools, follow-ups, handoffs, relays.
+      const sender = input.sender;
+      if (sender.kind === "agent" && this.#spaces) {
+        const foreign = recipients.find((id) => !this.#spaces?.sameSpace(sender.agentId, id));
+        if (foreign) throw new Error(sourceText("error.backend.spaceOtherAgent", { agent: foreign }));
+      }
       if (input.idempotencyKey !== undefined && input.idempotencyKey.length > INPUT_LIMITS.identifier) {
         throw new Error("The idempotency key is too long.");
       }
@@ -596,10 +623,7 @@ export class MailboxStore {
         .pipe(Effect.mapError(({ cause }) => new StoredStateFailure({ cause })));
       const voiceTransferId = voiceRecordingTransferId(messageId);
       const removeTransfers = Effect.all(
-        [
-          this.#files.remove(this.#files.transferRoot(messageId)),
-          this.#files.remove(this.#files.transferRoot(voiceTransferId)),
-        ],
+        [this.#files.removeTransfer(messageId), this.#files.removeTransfer(voiceTransferId)],
         { discard: true },
       ).pipe(Effect.mapError(({ cause }) => new StoredStateFailure({ cause })));
       const voiceRecording = voiceDraft
@@ -752,7 +776,7 @@ export class MailboxStore {
       }
       if (refusal !== null) {
         yield* this.#files
-          .remove(this.#files.transferRoot(input.messageId))
+          .removeTransfer(input.messageId)
           .pipe(Effect.mapError(({ cause }) => new StoredStateFailure({ cause })));
         throw refusal;
       }
@@ -780,7 +804,7 @@ export class MailboxStore {
         for (const draft of drafts)
           if (!this.#state.drafts.some((candidate) => candidate.id === draft.id)) this.#state.drafts.push(draft);
         yield* this.#files
-          .remove(this.#files.transferRoot(input.messageId))
+          .removeTransfer(input.messageId)
           .pipe(Effect.mapError(({ cause }) => new StoredStateFailure({ cause })));
         throw error;
       }
@@ -806,7 +830,7 @@ export class MailboxStore {
           this.#state.drafts = before.drafts;
           return yield* new StoredStateFailure({ cause });
         }
-        yield* this.#files.remove(this.#files.transferRoot(input.messageId)).pipe(Effect.ignore);
+        yield* this.#files.removeTransfer(input.messageId).pipe(Effect.ignore);
       }).pipe(Effect.uninterruptible);
       return { text: message.text, attachments: attachments.map(toAttachmentSummary), accept, revert };
     } catch (cause) {
@@ -1752,7 +1776,8 @@ export class MailboxStore {
         }
         return keep;
       });
-      for (const messageId of removedMessageIds) removedTransferRoots.add(this.#files.transferRoot(messageId));
+      for (const messageId of removedMessageIds)
+        for (const root of this.#files.transferRoots(messageId)) removedTransferRoots.add(root);
       this.#state.pausedAgentIds = this.#state.pausedAgentIds.filter((id) => id !== agentId);
       this.#state.reactions = this.#state.reactions.filter(
         (reaction) => reaction.agentId !== agentId && !removedMessageIds.has(reaction.messageId),
@@ -1801,7 +1826,7 @@ export class MailboxStore {
       const removedTransferRoots = new Set<string>();
       for (const message of this.#state.messages) {
         if (!removedMessageIds.has(message.id)) continue;
-        removedTransferRoots.add(this.#files.transferRoot(message.id));
+        for (const root of this.#files.transferRoots(message.id)) removedTransferRoots.add(root);
         for (const attachment of messageFiles(message)) {
           const transferRoot = this.#files.transferRootForPath(attachment.path);
           if (transferRoot) removedTransferRoots.add(transferRoot);

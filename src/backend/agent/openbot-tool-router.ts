@@ -35,7 +35,7 @@ import { z } from "zod";
 import pluginCatalog from "../../../resources/plugin-catalog/catalog.json";
 import { type AgentApiKeys, removeKeySourceFile, SHARED_API_KEY_SCOPE } from "../agent-api-keys";
 import type { AgentClient, AgentProvider } from "../agent-client";
-import type { AgentTables } from "../agent-data/agent-tables";
+import type { SpaceAgentTables } from "../agent-data/space-agent-tables";
 import type { AgentStore } from "../agent-store";
 import type { AgentTasks } from "../agent-tasks/agent-tasks";
 import type { AgentWaits } from "../agent-waits/agent-waits";
@@ -64,6 +64,7 @@ import {
 import { type AppServerRequest, type DynamicToolCallParams, type DynamicToolResult, isRecord } from "../protocol";
 import { handleRoutineFlowTool, type RoutineFlowTools } from "../routine-flows/routine-flow-tools";
 import { auditActor, NO_SECURITY_AUDIT, type SecurityAuditSink } from "../security-audit-log";
+import { agentSeesChannel, crossSpaceRefusal } from "../spaces/space-scope";
 import type { StoredStateFailure } from "../stored-state-effects";
 import { AgentInterruptTool } from "./agent-interrupt-tool";
 import type { AgentMemories } from "./agent-memories";
@@ -224,7 +225,7 @@ export interface OpenBotToolRouterOptions {
   tasks: AgentTasks;
   drain: DrainScheduler;
   followUp: DelegationFollowUp;
-  tables: AgentTables | null;
+  tables: SpaceAgentTables | null;
   sidebarLayout: AgentSidebar | null;
   localSkillTools?: (() => LocalSkillTools) | undefined;
   routineFlowTools?: (() => RoutineFlowTools) | undefined;
@@ -278,7 +279,7 @@ export class OpenBotToolRouter {
   readonly #waits: AgentWaits;
   readonly #tasks: AgentTasks;
   readonly #drain: DrainScheduler;
-  readonly #tables: AgentTables | null;
+  readonly #tables: SpaceAgentTables | null;
   readonly #sidebarLayout: AgentSidebar | null;
   readonly #localSkillTools: (() => LocalSkillTools) | undefined;
   readonly #routineFlowTools: (() => RoutineFlowTools) | undefined;
@@ -744,6 +745,18 @@ export class OpenBotToolRouter {
     );
   }
 
+  /** The agents in the space of `agentId`, itself included. */
+  #spaceAgents(agentId: string): AgentSummary[] {
+    return this.#hooks.listAgents().filter((agent) => this.#store.spaces.sameSpace(agentId, agent.id));
+  }
+
+  /** Whether an agent or a channel id of the sidebar layout is in the space of `agentId`. */
+  #visibleInSpace(agentId: string, id: string): boolean {
+    if (this.#hooks.listAgents().some((agent) => agent.id === id)) return this.#store.spaces.sameSpace(agentId, id);
+    if (!this.#channels.store.exists(id)) return false;
+    return agentSeesChannel(this.#store.spaces, agentId, this.#channels.store.get(id));
+  }
+
   #requireAgent(agentId: string): AgentSummary {
     const agent = this.#hooks.listAgents().find((candidate) => candidate.id === agentId);
     if (!agent) throw new Error(sourceText("error.agent.unknown", { id: agentId }));
@@ -835,6 +848,11 @@ export class OpenBotToolRouter {
   ) {
     const senderAgentId = this.#conversation.agentForThread(params.threadId);
     if (!senderAgentId) throw new Error("The sending OpenBot agent is unknown.");
+    // An agent sees and reaches only the agents of its own space, whatever the tool.
+    const crossSpace = crossSpaceRefusal(this.#store.spaces, senderAgentId, params.arguments, (agentId) =>
+      this.#hooks.listAgents().some((agent) => agent.id === agentId),
+    );
+    if (crossSpace) return openBotToolFailure(crossSpace);
     yield* this.#auditCrossAgent(params, senderAgentId);
 
     if (LOCAL_SKILL_TOOL_DEFINITIONS.some((tool) => tool.name === params.tool)) {
@@ -910,6 +928,9 @@ export class OpenBotToolRouter {
     const channelId = this.#channels.store.channelForThread(executionThreadId);
     if (channelId && (params.tool.startsWith("channel_") || params.tool === "send_message")) {
       if (params.tool === "send_message") throw new Error("Use channel_assign or channel_transfer for channel work.");
+      // A channel that was moved to another space after this turn started.
+      if (!agentSeesChannel(this.#store.spaces, senderAgentId, this.#channels.store.get(channelId)))
+        return openBotToolFailure(sourceText("error.backend.spaceOtherChannel"));
       return openBotToolResult(
         yield* this.#channels.tool(
           channelId,
@@ -970,7 +991,7 @@ export class OpenBotToolRouter {
       // it keeps working for other agents.
       const agents = this.#hooks
         .listAgents()
-        .filter((agent) => agent.hiddenAt === undefined)
+        .filter((agent) => agent.hiddenAt === undefined && this.#store.spaces.sameSpace(senderAgentId, agent.id))
         .map((agent) => {
           const deliveries = this.#mailbox.listQueue(agent.id).deliveries;
           const queuedMessages = deliveries.filter((delivery) => delivery.status === "queued").length;
@@ -1076,6 +1097,7 @@ export class OpenBotToolRouter {
       params.arguments,
       this.#sidebarLayout,
       new Set(this.#hooks.listAgents().map((agent) => agent.id)),
+      (id) => this.#visibleInSpace(senderAgentId, id),
     );
     if (sidebarResult) return sidebarResult;
 
@@ -1096,7 +1118,7 @@ export class OpenBotToolRouter {
       params.arguments,
       senderAgentId,
       this.#routineFlowTools?.() ?? null,
-      new Set(this.#hooks.listAgents().map((agent) => agent.id)),
+      new Set(this.#spaceAgents(senderAgentId).map((agent) => agent.id)),
     );
     if (flowResult) return flowResult;
 
@@ -1115,7 +1137,12 @@ export class OpenBotToolRouter {
     const taskResult = yield* this.#tasks.handleTool(params, caller);
     if (taskResult) return taskResult;
 
-    const tableResult = yield* handleDataTool(params.tool, params.arguments, senderAgentId, this.#tables);
+    const tableResult = yield* handleDataTool(
+      params.tool,
+      params.arguments,
+      senderAgentId,
+      this.#tables?.forAgent(senderAgentId) ?? null,
+    );
     if (tableResult) return tableResult;
 
     if (params.tool === "suggest_marketplace_app") {

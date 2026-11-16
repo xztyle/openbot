@@ -430,7 +430,9 @@ function quote(name: string): string {
   return name.replaceAll('"', '""');
 }
 
-class AgentTablesError extends Schema.TaggedError<AgentTablesError>()("AgentTablesError", { message: Schema.String }) {}
+export class AgentTablesError extends Schema.TaggedError<AgentTablesError>()("AgentTablesError", {
+  message: Schema.String,
+}) {}
 
 function tableIO<A>(operation: () => Promise<A>): Effect.Effect<A, AgentTablesError> {
   return Effect.tryPromise({

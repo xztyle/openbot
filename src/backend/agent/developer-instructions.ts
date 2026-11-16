@@ -24,6 +24,8 @@ export interface VaultContents {
 }
 
 export interface DeveloperInstructionOptions {
+  /** The name of the agent's space. Its shared directory is the `sharedRoot` argument. */
+  spaceName?: string | undefined;
   /** True while the user has a password vault connected. */
   passwordVault?: boolean;
   /** Whether this server has the OpenBot Vault, and what it holds now. */
@@ -209,6 +211,7 @@ export function isTurnContextBlock(text: string): boolean {
 
 export function developerInstructions(
   agent: AgentSummary,
+  /** The shared folder of the agent's space. */
   sharedRoot: string,
   memories: AgentMemory[],
   automationRoot: string,
@@ -276,9 +279,9 @@ export function developerInstructions(
         ? sectionTeammateInstructions(options.sectionTeammates)
         : []),
     `Your own working directory is ${agent.workspacePath}.`,
-    `The shared directory available to every OpenBot agent is ${sharedRoot}.`,
+    `You work in the OpenBot space ${tagSafe(JSON.stringify(options.spaceName ?? "General"))}. You see and reach only the agents and channels of this space. Its shared directory is ${sharedRoot}: use it for files that the other agents of your space need. Do not write files for other spaces.`,
     workspaceAccessEnforced(agent)
-      ? `The user limited you to Workspace only. You can read files anywhere, run local commands, and use the network, but a sandbox lets you write only in your working directory, the shared directory, and the temporary directories. Do not try to get around the sandbox. When a task truly needs a write outside these directories, ${
+      ? `The user limited you to Workspace only. You can read files anywhere, run local commands, and use the network, but a sandbox lets you write only in your working directory, your space's shared directory, and the temporary directories. Do not try to get around the sandbox. When a task truly needs a write outside these directories, ${
           agent.provider === "claude"
             ? "make that one change with a file edit tool, which asks the user, and say why; commands cannot write there; the user decides"
             : agent.provider === "codex"
@@ -292,7 +295,7 @@ export function developerInstructions(
         ]
       : []),
     "Your files, commands, browser, and Computer Use all run on the one computer that runs this OpenBot. The user can chat with you from another computer or a phone that connects to it, but you cannot reach that device, and the chat is the same on every device, so opening it there does not move you. Never tell the user to open the chat on another device. When a task must happen on another computer, say so: the user can ask an agent on that computer's own OpenBot.",
-    "Use your working directory for your own persistent files and the shared directory for files that other OpenBot agents need. You may list, read, create, edit, move, and delete files and run local commands in both directories.",
+    "Use your working directory for your own persistent files and your space's shared directory for files that other agents of your space need. You may list, read, create, edit, move, and delete files and run local commands in both directories.",
     "All agents share one disk, so keep it small. Keep build output in the project's own target or build folder; for Rust, share one target folder across clones of a repository with CARGO_TARGET_DIR=<project>/.cache/cargo-target (or sccache when installed), and prefer a git worktree to another full clone. Never copy repositories, builds, or caches into notes or evidence folders. Save screenshots as WebP at quality 80 or as a downscaled PNG, and keep only the evidence that the report needs. Remove your worktrees and copies when the task is merged. The openbot-storage skill has the details.",
     ...homeSkillInstructions(options.homeSkills ?? []),
     agentComputerUseEnabled(agent)

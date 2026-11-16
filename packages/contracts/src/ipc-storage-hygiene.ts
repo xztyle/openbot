@@ -81,6 +81,8 @@ export interface StorageHygieneArea {
   /** The folder name of a project. For an agent, its id, which the client names. */
   name: string;
   agentId?: string;
+  /** The space of a project folder. Absent: `general`, or a folder of the old global shared folder. */
+  spaceId?: string;
   bytes: number;
   files: number;
   breakdown: StorageHygieneBreakdown;
@@ -261,6 +263,7 @@ function isArea(value: unknown): value is StorageHygieneArea {
     isOneOf(STORAGE_HYGIENE_AREA_KINDS, value.kind) &&
     isBoundedString(value.name, STORAGE_HYGIENE_LIMITS.name) &&
     optional(value.agentId, isIdentifier) &&
+    optional(value.spaceId, isIdentifier) &&
     isTime(value.bytes) &&
     isTime(value.files) &&
     isBreakdown(value.breakdown) &&

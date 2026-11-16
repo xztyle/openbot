@@ -82,6 +82,8 @@ export interface RoutineFlowsDependencies {
   agentName(agentId: string): string;
   sendHandoff(input: {
     run: Pick<RoutineFlowRun, "id" | "routineId" | "routineName" | "scheduledFor">;
+    /** The agent whose routine the flow starts from. A handoff reaches only an agent of its space. */
+    fromAgentId?: string;
     agentId: string;
     text: string;
     idempotencyKey: string;
@@ -281,7 +283,13 @@ class RoutineFlows extends Context.Service<RoutineFlows, RoutineFlowsShape>()("o
          */
         const sendStep = Effect.fn("RoutineFlows.sendStep")(function* (run: RoutineFlowRun, step: RoutineFlowStep) {
           const sent = yield* dependencies
-            .sendHandoff({ run, agentId: step.agentId, text: step.input, idempotencyKey: `routine-flow-${step.id}` })
+            .sendHandoff({
+              run,
+              fromAgentId: run.agentId,
+              agentId: step.agentId,
+              text: step.input,
+              idempotencyKey: `routine-flow-${step.id}`,
+            })
             .pipe(Effect.exit);
           if (Exit.isSuccess(sent)) {
             store.attachDelivery(step.id, sent.value);

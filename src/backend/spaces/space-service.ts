@@ -10,6 +10,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { Effect, Schema, Semaphore } from "effect";
+import { writeJsonFileAtomically } from "../atomic-json-file";
 import { followedAgentId, type SpaceChannel, type SpaceStore } from "./space-store";
 
 export interface SpaceServiceOptions {
@@ -171,6 +172,25 @@ export class SpaceService {
         return report;
       }),
     );
+  }
+
+  /** Writes `OpenBot/Spaces/index.json` again; see `SpaceStore.indexPath`. */
+  writeIndex(): Effect.Effect<void, SpaceFailure> {
+    const store = this.#options.store;
+    return Effect.suspend(() => {
+      const spaces = this.directories();
+      const shared = new Map(spaces.map((space) => [space.spaceId, space.sharedDirectory]));
+      const agents: Record<string, string> = {};
+      for (const agentId of this.#options.agentIds()) {
+        const spaceId = store.agentSpaceId(agentId);
+        agents[agentId] = shared.get(spaceId) ?? shared.get(GENERAL_SPACE_ID) ?? "";
+      }
+      return writeJsonFileAtomically(
+        store.indexPath,
+        { version: 1, spaces, general: shared.get(GENERAL_SPACE_ID) ?? "", agents },
+        { createDirectory: true },
+      );
+    }).pipe(Effect.mapError((cause) => new SpaceFailure({ cause })));
   }
 
   /** Puts a new agent or channel in a space. Unknown spaces put it in `general`. */

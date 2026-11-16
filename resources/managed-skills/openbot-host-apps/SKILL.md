@@ -15,8 +15,8 @@ Deploying, replacing, stopping, and deleting are changes on the user's server. D
 
 ## Build and deploy
 
-1. Put the app in `/data/OpenBot/Shared/apps/<name>/` (or work in your own workspace and pass `--src <folder under /data/OpenBot>`). The folder needs a `Dockerfile` at its top level.
-2. `appctl deploy <name> [--port N] [--health /path] [--memory MB] [--cpus N] [--private]`. It builds, starts, and waits for the app to answer HTTP. A failed new version is rolled back to the previous one automatically. A new app is public at `https://<name>.delynith.com` by default. Add `--private` for an internal tool, a back end, or anything that is not ready for the internet.
+1. Put the app in `apps/<name>/` in the shared directory of your space, `/data/OpenBot/Spaces/<space>/Shared/apps/<name>/`, or work in your own workspace. Always pass that folder as `--src <folder under /data/OpenBot>`: without it, `appctl` looks in the old global folder `/data/OpenBot/Shared/apps/<name>/`. The folder needs a `Dockerfile` at its top level.
+2. `appctl deploy <name> --src <folder> [--port N] [--health /path] [--memory MB] [--cpus N] [--private]`. It builds, starts, and waits for the app to answer HTTP. A failed new version is rolled back to the previous one automatically. A new app is public at `https://<name>.delynith.com` by default. Add `--private` for an internal tool, a back end, or anything that is not ready for the internet.
 3. Check the result: `appctl status <name>`, then `appctl logs <name>`. Keep going until the app answers and its logs are quiet.
 4. Open the app yourself with its `internal_url` (for example `http://app-notes:3000`), from your shell with `curl` or in your browser tool. It works on this server with no DNS and no Cloudflare setup. Tell the user what the app is called and what it does.
 

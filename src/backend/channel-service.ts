@@ -102,6 +102,11 @@ export interface ChannelHooks {
    * no new work until the user restores it. A turn that already runs is not affected.
    */
   hidden?(agentId: string): boolean;
+  /**
+   * Whether the agent is in the space of the channel. An agent of another space keeps its membership,
+   * as a hidden one does, but the channel gives it no work and it reaches nothing through the channel.
+   */
+  inChannelSpace?(agentId: string, channel: Channel): boolean;
   generate: ChannelTextModel;
   schedule(agentId: string): void;
   awaitDrain?(agentId: string): Effect.Effect<void, ChannelOperationError> | undefined;
@@ -566,6 +571,7 @@ export class ChannelService {
       if (yield* channelSync(() => this.store.exists(command.channelId)))
         return yield* channelFailure(new Error(sourceText("error.backend.channelExists")));
       const created = yield* channelSync(() => createdChannel(command, this.#workspaceContext(actor, viewer)));
+      yield* channelSync(() => this.#requireMembersInSpace(created));
       const result = yield* channelSync(() => this.store.update(created, {}, operationId));
       this.publish(created.id);
       return result;
@@ -592,6 +598,7 @@ export class ChannelService {
         ),
       );
       if (!opened.created) return opened.channel;
+      yield* channelSync(() => this.#requireMembersInSpace(opened.channel));
       if (yield* channelSync(() => this.store.exists(command.channelId)))
         return yield* channelFailure(new Error(sourceText("error.backend.channelExists")));
       const result = yield* channelSync(() => this.store.update(opened.channel, {}, operationId));
@@ -617,6 +624,20 @@ export class ChannelService {
       for (const member of command.draft.members)
         if (!members.has(member.agentId) && !known.some((agent) => agent.id === member.agentId))
           return yield* channelFailure(new Error(sourceText("error.backend.channelMemberUnavailable")));
+      // A member the draft adds must be in the channel's space. A new channel is in the space that the
+      // reader chose before they created it, or in `general`.
+      const spaceOf: Channel = existing ?? {
+        ...command.draft,
+        id: command.channelId,
+        archived: false,
+        revision: 0,
+        createdAt: "",
+      };
+      for (const member of command.draft.members)
+        if (!members.has(member.agentId) && !this.inSpace(member.agentId, spaceOf))
+          return yield* channelFailure(
+            new Error(sourceText("error.backend.spaceChannelMember", { agent: this.memberName(member.agentId) })),
+          );
       const channel = existing ?? (yield* channelSync(() => this.store.create(command.channelId, command.draft)));
       const assigned = (yield* channelSync(() => this.store.tasks(channel.id))).filter(
         (task) =>
@@ -1241,6 +1262,8 @@ export class ChannelService {
       if (archived.has(channelId) || this.#deletedChannels.has(channelId)) return false;
       const channel = this.store.get(channelId);
       if (channelKind(channel) !== "channel") return false;
+      // Only a channel of the sender's space; a recipient of another space never gets this far.
+      if (!this.inSpace(senderId, channel)) return false;
       const members = new Set(channel.members.map((member) => member.agentId));
       return members.has(senderId) && recipientIds.some((id) => members.has(id));
     };
@@ -1310,7 +1333,7 @@ export class ChannelService {
       !channel.archived &&
       channel.members.some((member) => member.agentId === ownerAgentId) &&
       this.hooks.agents().some((agent) => agent.id === ownerAgentId) &&
-      !this.hooks.hidden?.(ownerAgentId)
+      !this.unavailable(ownerAgentId, channel)
     );
   }
 
@@ -1434,7 +1457,7 @@ export class ChannelService {
     const live = this.hooks.agents();
     return channel.members
       .map((member) => member.agentId)
-      .filter((agentId) => live.some((agent) => agent.id === agentId) && !this.hooks.hidden?.(agentId));
+      .filter((agentId) => live.some((agent) => agent.id === agentId) && !this.unavailable(agentId, channel));
   }
 
   private memberName(agentId: string): string {
@@ -1503,7 +1526,7 @@ export class ChannelService {
         const lead = this.hooks.agents().find((agent) => agent.id === channel.leadAgentId);
         // A hidden lead routes nothing. The task waits queued until the user restores the lead; the
         // queue event of the restore wakes the channel again.
-        if (lead && this.hooks.hidden?.(lead.id)) {
+        if (lead && this.unavailable(lead.id, channel)) {
           this.#waitingForAgents.add(channelId);
           continue;
         }
@@ -1522,12 +1545,13 @@ export class ChannelService {
             JSON.stringify({
               title: channel.title,
               instructions: channel.instructions,
-              members: channel.members.filter((member) => !this.hooks.hidden?.(member.agentId)),
+              members: channel.members.filter((member) => !this.unavailable(member.agentId, channel)),
               agents: this.hooks
                 .agents()
                 .filter(
                   (agent) =>
-                    channel.members.some((member) => member.agentId === agent.id) && !this.hooks.hidden?.(agent.id),
+                    channel.members.some((member) => member.agentId === agent.id) &&
+                    !this.unavailable(agent.id, channel),
                 )
                 .map(({ id, name, title, description }) => ({ id, name, title, description })),
               task,
@@ -1710,7 +1734,7 @@ export class ChannelService {
       }
       if (!task.ownerAgentId) continue;
       // A hidden owner keeps the task. It waits, as for a busy owner, until the user restores the agent.
-      if (this.hooks.busy(task.ownerAgentId) || this.hooks.hidden?.(task.ownerAgentId)) {
+      if (this.hooks.busy(task.ownerAgentId) || this.unavailable(task.ownerAgentId, channel)) {
         this.#waitingForAgents.add(channelId);
         continue;
       }
@@ -2882,7 +2906,7 @@ export class ChannelService {
     const live = new Map(
       this.hooks
         .agents()
-        .filter((agent) => !this.hooks.hidden?.(agent.id))
+        .filter((agent) => !this.unavailable(agent.id, channel))
         .map((agent) => [agent.id, agent]),
     );
     const tasks = this.store.tasks(channelId);
@@ -3220,6 +3244,7 @@ export class ChannelService {
             this.hooks.agents(),
             {
               hidden: (id) => this.hooks.hidden?.(id) ?? false,
+              inSpace: (id) => this.inSpace(id, current),
               level: (id) => this.hooks.personAgentLevel?.(person.id, id) ?? "manage",
             },
             task ? channelWorkOwners(task, tasks) : new Set([agentId]),
@@ -3658,6 +3683,25 @@ export class ChannelService {
   private requireAvailableMember(channel: Channel, agentId: string): void {
     this.requireMember(channel, agentId);
     if (this.hooks.hidden?.(agentId)) throw new Error(sourceText("error.backend.recipientHidden"));
+    if (!this.inSpace(agentId, channel))
+      throw new Error(sourceText("error.backend.spaceChannelMember", { agent: this.memberName(agentId) }));
+  }
+
+  /** A new channel or group starts with agents of its own space only. */
+  #requireMembersInSpace(channel: Channel): void {
+    const outside = channel.members.find((member) => !this.inSpace(member.agentId, channel));
+    if (outside)
+      throw new Error(sourceText("error.backend.spaceChannelMember", { agent: this.memberName(outside.agentId) }));
+  }
+
+  /** Whether the agent is in the space of the channel. Without the hook, every agent is. */
+  inSpace(agentId: string, channel: Channel): boolean {
+    return this.hooks.inChannelSpace?.(agentId, channel) ?? true;
+  }
+
+  /** A member that the channel gives no new work: hidden, or in another space than the channel. */
+  unavailable(agentId: string, channel: Channel): boolean {
+    return (this.hooks.hidden?.(agentId) ?? false) || !this.inSpace(agentId, channel);
   }
 
   private waitForAssignmentTerminal(

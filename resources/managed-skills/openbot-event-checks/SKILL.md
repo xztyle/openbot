@@ -47,8 +47,8 @@ template fits.
 
 ## Reuse programs, keep accounts separate
 
-Programs live in `OpenBot/Shared/Watchers`, not in one agent's workspace. Before writing a new
-program, look there for a suitable one. Reuse a program for several agents or app workspaces.
+Programs live in `Watchers` in the shared directory of your space, not in one agent's workspace.
+Before writing a new program, look there for a suitable one. Reuse a program for several agents or app workspaces.
 Each saved check is a separate instance with its own account label, configuration, private variables,
 schedule, baseline and ten execution logs. Never copy tokens between instances automatically.
 A shared program edit gives each instance a fresh baseline before delivering more events.
@@ -56,7 +56,7 @@ A shared program edit gives each instance a fresh baseline before delivering mor
 ## Program contract
 
 Use `.mjs`/`.js`, `.py` or `.sh`. The host launches the fixed interpreter without a command shell.
-The working directory is `OpenBot/Shared/Watchers`. Read one JSON object from standard input.
+The working directory is `Watchers` in the shared directory of your space. Read one JSON object from standard input.
 It contains ordinary `configuration` values merged with `argumentsJson`; paging arguments take
 precedence. Read private variables from the process environment. Do not read the private host file.
 No provider or Cloudflare credentials are inherited. Do not depend on extra local environment values.

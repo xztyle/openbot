@@ -44,8 +44,10 @@ export interface StorageHygieneAgent {
 }
 
 export interface StorageHygieneSources {
-  /** `~/OpenBot/Shared`: each folder in it is one project area. */
+  /** `~/OpenBot/Shared`, the old global shared folder: each folder in it is one project area. */
   sharedRoot: string;
+  /** The shared folder of each space: each folder in it is one project area of that space. */
+  spaces?: () => { spaceId: string; sharedDirectory: string }[];
   agents: () => readonly StorageHygieneAgent[];
   /** A path on the disk that holds the data, for the gauge and the automatic rule. */
   diskPath: string;
@@ -224,6 +226,18 @@ export class StorageHygieneService {
 
   async #areas(): Promise<StorageHygieneScanArea[]> {
     const areas: StorageHygieneScanArea[] = [];
+    for (const space of this.#sources.spaces?.() ?? []) {
+      const entries = await readdir(space.sharedDirectory, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries)
+        if (entry.isDirectory())
+          areas.push({
+            kind: "project",
+            name: entry.name,
+            spaceId: space.spaceId,
+            root: join(space.sharedDirectory, entry.name),
+          });
+    }
+    // A link in the old folder points into a space, whose area is counted above.
     const shared = await readdir(this.#sources.sharedRoot, { withFileTypes: true }).catch(() => []);
     for (const entry of shared)
       if (entry.isDirectory())

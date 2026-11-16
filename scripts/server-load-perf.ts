@@ -11,6 +11,7 @@
 //      [--seconds=60] [--crash-at=30] [--transcript-mb=40] [--profile=<file.cpuprofile>] [--label=x]
 //      [--stall-stacks=<ms>]   (the JavaScript stack of each main-thread task of at least that long)
 //      [--read-workers=2]      (0: every read on the main thread, as before the database read workers)
+//      [--clients=1]           (connected apps that each read after each event)
 // The database file is copied again into a temporary folder (`--tmp`) for each run. The run fails when a
 // completed turn has no stored answer. Writes .openbot-build/server-load-perf/<label>.json. A profile of
 // a run through tsx names the functions; bundle the script with esbuild first for exact line numbers.
@@ -46,6 +47,8 @@ const PROFILE = argument("profile");
 const STALL_STACKS_MS = argument("stall-stacks") ? Number(argument("stall-stacks")) : null;
 const LABEL = argument("label") ?? "run";
 const OPEN_CHATS = 3;
+/** `--clients=N`: how many connected apps read after each event, as a desktop, a phone and a browser do. */
+const CLIENTS = Math.max(1, Number(argument("clients") ?? 1));
 /** `--reads=0` leaves out the unread-state read that the app makes after each conversation event. */
 const readStates = argument("reads") !== "0";
 /** `--read-workers=0` keeps every read on the main thread, as before the database read workers. */
@@ -428,21 +431,23 @@ service.on("event", (event) => {
   eventBytes += time("client: event JSON", () => JSON.stringify(sent).length);
   // The app reads the unread state of every chat after each conversation invalidation.
   // As the Team API route: a read worker computes the states when one runs.
-  if (event.type === "conversation" && readStates) {
-    const start = performance.now();
-    void runCauseEffect(service.listConversationReadsOffMain(memberId))
-      .then((reads) => {
-        JSON.stringify(reads);
-        record("client: conversation reads", performance.now() - start);
-      })
-      .catch(() => {});
-  }
+  if (event.type === "conversation" && readStates)
+    for (let client = 0; client < CLIENTS; client += 1) {
+      const start = performance.now();
+      void runCauseEffect(service.listConversationReadsOffMain(memberId))
+        .then((reads) => {
+          JSON.stringify(reads);
+          record("client: conversation reads", performance.now() - start);
+        })
+        .catch(() => {});
+    }
   if (event.type === "queue-changed") {
     const delivery = pending.get(event.snapshot.agentId);
     if (delivery && !event.snapshot.deliveries.some((item) => item.id === delivery && isActive(item.status)))
       settle(event.snapshot.agentId);
     // The web app reads the queue of the agent after each queue invalidation.
-    time("client: queue read", () => JSON.stringify(service.listQueue(event.snapshot.agentId)).length);
+    for (let client = 0; client < CLIENTS; client += 1)
+      time("client: queue read", () => JSON.stringify(service.listQueue(event.snapshot.agentId)).length);
   }
   if (
     event.type === "conversation" &&
@@ -454,24 +459,15 @@ service.on("event", (event) => {
       agentId,
       setTimeout(() => {
         pageDue.delete(agentId);
-        void runCauseEffect(
-          Effect.suspend(() => {
-            const start = performance.now();
-            return service.readConversationPageFor(agentId, memberId, undefined, 60).pipe(
-              Effect.tap((page) =>
-                Effect.sync(() => {
-                  JSON.stringify(page);
-                  const ms = performance.now() - start;
-                  const entry = timed.get("client: open chat page") ?? { count: 0, totalMs: 0, maxMs: 0 };
-                  entry.count += 1;
-                  entry.totalMs += ms;
-                  entry.maxMs = Math.max(entry.maxMs, ms);
-                  timed.set("client: open chat page", entry);
-                }),
-              ),
-            );
-          }),
-        ).catch(() => {});
+        for (let client = 0; client < CLIENTS; client += 1) {
+          const start = performance.now();
+          void runCauseEffect(service.readConversationPageFor(agentId, memberId, undefined, 60))
+            .then((page) => {
+              JSON.stringify(page);
+              record("client: open chat page", performance.now() - start);
+            })
+            .catch(() => {});
+        }
       }, 300),
     );
   }
@@ -662,6 +658,7 @@ const result = {
   seconds: SECONDS,
   crashAt: CRASH_AT,
   readWorkers: READ_WORKERS,
+  clients: CLIENTS,
   initMs: Math.round(initMs),
   messagesSent: sent,
   completedTurns,

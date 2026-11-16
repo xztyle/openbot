@@ -112,6 +112,10 @@ function desktopEventChecks(serverId?: string): MarketplaceEventChecks {
     checks: {
       environment: (input) => checks().environment(input, serverId),
       setEnvironment: (input) => checks().setEnvironment(input, serverId),
+      secrets: async () =>
+        (await window.openbot.agent.workspaceSecrets(serverId)).secrets.map(
+          (secret) => `${secret.scope}/${secret.name}`,
+        ),
       test: (input) => checks().test(input, serverId),
       list: (input) => checks().list(input, serverId),
       save: (input) => checks().save(input, serverId),

@@ -1,12 +1,24 @@
-import type { EventCheck, EventCheckApi, EventCheckEnvironmentStatus } from "@openbot/contracts/event-checks";
-import { Button, Input, Text } from "@openbot/ui";
+import {
+  EVENT_CHECK_SECRET_LINK_PREFIX,
+  type EventCheck,
+  type EventCheckApi,
+  type EventCheckEnvironmentStatus,
+} from "@openbot/contracts/event-checks";
+import { Button, Input, NativeSelect, Text } from "@openbot/ui";
 import { createEffect, createStore, createUniqueId, For, onCleanup, Show } from "solid-js";
 import { useText } from "../../text";
 
 interface EnvironmentState {
   variables: EventCheckEnvironmentStatus[];
+  /** The keys in Secrets that a variable can link, as `scope/NAME`. */
+  secrets: string[];
   busy: boolean;
   error: string;
+}
+
+/** The Secrets key that a typed value links, or null for a value that is pasted. */
+function typedLink(value: string | undefined): string | null {
+  return value?.startsWith(EVENT_CHECK_SECRET_LINK_PREFIX) ? value.slice(EVENT_CHECK_SECRET_LINK_PREFIX.length) : null;
 }
 
 /**
@@ -44,9 +56,24 @@ export function EventCheckEnvironmentSettings(props: {
   const noteId = (index: number) => `${headingId}-note-${index}`;
   const [state, setState] = createStore<EnvironmentState>({
     variables: [],
+    secrets: [],
     busy: false,
     error: "",
   });
+  // The Secrets list, read once for each api. A host without Secrets has no list, and the field stays.
+  createEffect(
+    () => props.api,
+    (api) => {
+      void api
+        .secrets?.()
+        .then((secrets) =>
+          setState((draft) => {
+            draft.secrets = secrets;
+          }),
+        )
+        .catch(() => undefined);
+    },
+  );
   // `identity` ends with the check, the api or this section: an approval that outlives it is dropped.
   // `reads` ends a status read that a newer read has replaced.
   let identity = 0;
@@ -161,6 +188,7 @@ export function EventCheckEnvironmentSettings(props: {
         {(variable, index) => {
           const removing = () => props.removed[variable().name] === true;
           const typed = () => (props.values[variable().name] ?? "") !== "";
+          const linking = () => typedLink(props.values[variable().name]);
           return (
             <div class="event-check-variable">
               <label class="settings-field">
@@ -180,7 +208,7 @@ export function EventCheckEnvironmentSettings(props: {
                 <Input
                   type="password"
                   autocomplete="new-password"
-                  value={props.values[variable().name] ?? ""}
+                  value={linking() ? "" : (props.values[variable().name] ?? "")}
                   maxlength={8192}
                   placeholder={t("agentSettings.eventCheck.variablePlaceholder")}
                   aria-describedby={removing() || typed() ? noteId(index()) : undefined}
@@ -188,11 +216,37 @@ export function EventCheckEnvironmentSettings(props: {
                   onInput={(event) => props.onValue(variable().name, event.currentTarget.value)}
                 />
               </label>
+              <Show when={state.secrets.length > 0}>
+                <NativeSelect
+                  size="sm"
+                  aria-label={t("agentSettings.eventCheck.useSecret")}
+                  value={linking() ?? ""}
+                  disabled={off() || removing()}
+                  onChange={(event) =>
+                    props.onValue(
+                      variable().name,
+                      event.currentTarget.value ? `${EVENT_CHECK_SECRET_LINK_PREFIX}${event.currentTarget.value}` : "",
+                    )
+                  }
+                >
+                  <option value="">{t("agentSettings.eventCheck.useSecret")}</option>
+                  <For each={state.secrets}>{(secret) => <option value={secret}>{secret}</option>}</For>
+                </NativeSelect>
+              </Show>
+              <Show when={!typed() && !removing() && variable().linkedSecret}>
+                {(secret) => (
+                  <Text as="p" variant="caption" tone="muted" class="event-check-help">
+                    {t("agentSettings.eventCheck.linkedSecret", { secret: secret() })}
+                  </Text>
+                )}
+              </Show>
               <Show when={removing() || typed()}>
                 <Text as="p" variant="caption" tone="muted" id={noteId(index())} class="event-check-help">
                   {removing()
                     ? t("agentSettings.eventCheck.variableRemoving", { action: props.saveAction })
-                    : t("agentSettings.eventCheck.variablePending", { action: props.saveAction })}
+                    : linking()
+                      ? t("agentSettings.eventCheck.linkPending", { secret: linking() ?? "", action: props.saveAction })
+                      : t("agentSettings.eventCheck.variablePending", { action: props.saveAction })}
                 </Text>
               </Show>
               <div class="event-check-variable-actions">

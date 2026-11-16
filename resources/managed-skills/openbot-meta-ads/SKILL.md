@@ -13,7 +13,8 @@ clicks, purchases and purchase value. Do not ask for store or analytics access t
 
 On the OpenBot server the helper is `/opt/OpenBot/app/resources/managed-skills/openbot-meta-ads/meta-ads.mjs`.
 Start each command with these lines. The loop also finds the helper in the desktop app.
-`<path>` is the path of the shared key `META_ACCESS_TOKEN` from `openbot.list_api_keys`:
+`<path>` is the path of the shared key `META_ACCESS_TOKEN` from `openbot.list_api_keys`, or of the key that holds the
+token under another name:
 
 ```bash
 for M in /opt/OpenBot/app/resources /Applications/OpenBot.app/Contents/Resources /opt/OpenBot/resources; do
@@ -162,9 +163,11 @@ them with `openbot.install_event_check_template`:
   issues, or the ad account is disabled or under review.
 - `meta-lead-forms`: each new lead from the page's lead forms. Settings: `pageId`, `formIds`.
 
-Each check has its own private variable `META_ACCESS_TOKEN`. The user pastes the same system user token in agent
-settings → Event checks → the check → Private variables (.env). You cannot copy it from the key store. Ask the user
-for the limits; never guess them. Test with `openbot.test_event_check`, and enable only when the user asks.
+Each check has its own private variable `META_ACCESS_TOKEN`. When the token is already in Secrets
+(`openbot.list_api_keys`), link it to each check with `openbot.link_event_check_secret`, with `variable:
+"META_ACCESS_TOKEN"` and `secret` set to the key's name in Secrets (it may be named differently). Otherwise the user
+pastes it or picks a saved secret in agent settings → Event checks → the check → Private variables (.env). Ask the
+user for the limits; never guess them. Test with `openbot.test_event_check`, and enable only when the user asks.
 
 ## Errors and limits
 

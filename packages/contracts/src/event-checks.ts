@@ -81,9 +81,25 @@ export interface EventCheckApiSource extends Omit<EventCheckMcpSource, "kind"> {
   template?: EventCheckTemplateLink;
 }
 export type EventCheckSource = EventCheckMcpSource | EventCheckApiSource;
+/**
+ * A private variable whose value is a link to a key of the agent key store (Secrets), not a copy:
+ * `openbot-secret:shared/NAME` or `openbot-secret:<agentId>/NAME`. The host reads the key each time
+ * the check runs, so a new key value reaches every check that links it.
+ */
+export const EVENT_CHECK_SECRET_LINK_PREFIX = "openbot-secret:";
+const SECRET_LINK = /^openbot-secret:(shared|agent-[A-Za-z0-9_-]{1,120}|[a-f0-9-]{36})\/([A-Z][A-Z0-9_]{0,63})$/;
+
+/** The scope and key name of a linked variable value, or null for a pasted value. */
+export function eventCheckSecretLink(value: string): { scope: string; name: string } | null {
+  const match = SECRET_LINK.exec(value);
+  return match?.[1] && match[2] ? { scope: match[1], name: match[2] } : null;
+}
+
 export interface EventCheckEnvironmentStatus {
   name: string;
   configured: boolean;
+  /** The Secrets key that the value links, as `scope/NAME`, when it is a link. */
+  linkedSecret?: string;
   /**
    * Set when a value is held but not usable, because the program or its destination settings changed
    * after the user approved them. The user approves the check again to use the values.
@@ -193,6 +209,8 @@ export interface EventCheckApi {
   readonly deliverySettings?: boolean;
   environment?(input: { agentId: string; id: string }): Promise<EventCheckEnvironmentStatus[]>;
   setEnvironment?(input: EventCheckEnvironmentInput): Promise<EventCheckEnvironmentStatus[]>;
+  /** The keys in Secrets that a private variable can link, as `scope/NAME`. Absent: the host has no Secrets. */
+  secrets?(): Promise<string[]>;
   test?(input: { agentId: string; id: string }): Promise<EventCheckExecution>;
   list(input: { agentId: string }): Promise<EventCheck[]>;
   save(input: EventCheckInput): Promise<EventCheck>;
@@ -448,6 +466,10 @@ export function decodeEventCheckEnvironmentStatus(value: unknown): EventCheckEnv
     name: environmentName(value.name),
     configured: value.configured,
     ...(value.reapprove === true ? { reapprove: true } : {}),
+    ...(typeof value.linkedSecret === "string" &&
+    eventCheckSecretLink(`${EVENT_CHECK_SECRET_LINK_PREFIX}${value.linkedSecret}`)
+      ? { linkedSecret: value.linkedSecret }
+      : {}),
   };
 }
 export function decodeMcpEventCheckInput(value: unknown): EventCheckInput {

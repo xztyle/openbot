@@ -23,6 +23,9 @@ export const messages = defineMessages("agentSettings", {
   "agentSettings.eventCheck.keepVariable": "Keep value",
   "agentSettings.eventCheck.variablePending": "This value is saved when you press {action}.",
   "agentSettings.eventCheck.variableRemoving": "This value is removed when you press {action}.",
+  "agentSettings.eventCheck.useSecret": "Use a saved secret",
+  "agentSettings.eventCheck.linkedSecret": "Linked to {secret} in Secrets: the check reads it each time it runs.",
+  "agentSettings.eventCheck.linkPending": "Links {secret} from Secrets when you press {action}.",
   "agentSettings.eventCheck.variablesPause":
     "Saving a new or removed private value pauses this check and resets its baseline. Turn the check on again after you save.",
   "agentSettings.eventCheck.variableFailed": "{name} was not saved. {reason}",

@@ -1,6 +1,12 @@
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { EventCheck, EventCheckApiSource, EventCheckEnvironmentStatus } from "@openbot/contracts/event-checks";
+import {
+  EVENT_CHECK_SECRET_LINK_PREFIX,
+  type EventCheck,
+  type EventCheckApiSource,
+  type EventCheckEnvironmentStatus,
+  eventCheckSecretLink,
+} from "@openbot/contracts/event-checks";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { registerSecretValue } from "@openbot/logging";
 import { Effect, Semaphore } from "effect";
@@ -50,7 +56,20 @@ export class EventCheckEnvironment {
     readonly cipher: Cipher,
     /** Whether the check's program is byte for byte the reviewed program of its linked template. */
     readonly reviewed: (check: EventCheck) => boolean = () => false,
+    /** The value of a Secrets key, read when a check runs; null when there is no such key. */
+    readonly secret: (scope: string, name: string) => string | null = () => null,
   ) {}
+
+  /** A stored value, or the current value of the Secrets key that it links. */
+  #resolve(value: string): string | undefined {
+    const link = eventCheckSecretLink(value);
+    if (!link) return value;
+    const resolved = this.secret(link.scope, link.name)?.trim();
+    if (!resolved) return undefined;
+    for (const mask of [resolved, encodeURIComponent(resolved), JSON.stringify(resolved).slice(1, -1)])
+      registerSecretValue(mask, { allowShort: true });
+    return resolved;
+  }
   #path(check: EventCheck): string {
     if (!/^[a-f0-9-]{36}$/.test(check.id)) throw new Error("Invalid check identifier.");
     return join(this.root, check.id, ".env");
@@ -73,6 +92,7 @@ export class EventCheckEnvironment {
     for (const [name, value] of Object.entries(stored.values))
       if (typeof value === "string" && value) {
         values[name] = value;
+        if (eventCheckSecretLink(value)) continue;
         for (const mask of [value, encodeURIComponent(value), JSON.stringify(value).slice(1, -1)])
           registerSecretValue(mask, { allowShort: true });
       }
@@ -102,18 +122,34 @@ export class EventCheckEnvironment {
     const stored = source ? this.#stored(check) : null;
     if (!source || !stored || !this.#matches(stored, check)) return {};
     const values: Record<string, string> = {};
-    for (const name of source.variables) if (stored.values[name] !== undefined) values[name] = stored.values[name];
+    for (const name of source.variables) {
+      const stored_value = stored.values[name];
+      const value = stored_value === undefined ? undefined : this.#resolve(stored_value);
+      if (value !== undefined) values[name] = value;
+    }
     return values;
+  }
+
+  /** The Secrets key each variable links, as `scope/NAME`, for the variables that hold a link. */
+  #links(check: EventCheck): Record<string, string> {
+    const stored = this.#stored(check);
+    const links: Record<string, string> = {};
+    for (const [name, value] of Object.entries(stored?.values ?? {}))
+      if (value.startsWith(EVENT_CHECK_SECRET_LINK_PREFIX))
+        links[name] = value.slice(EVENT_CHECK_SECRET_LINK_PREFIX.length);
+    return links;
   }
   status(check: EventCheck): EventCheckEnvironmentStatus[] {
     const source = apiSource(check);
     if (!source) return [];
     const values = this.values(check);
+    const links = this.#links(check);
     const reapprove = this.state(check) === "changed";
     return source.variables.map((name) => ({
       name,
       configured: values[name] !== undefined,
       ...(reapprove ? { reapprove: true } : {}),
+      ...(links[name] ? { linkedSecret: links[name] } : {}),
     }));
   }
   #encode(check: EventCheck, values: Record<string, string>, approval: EventCheckApproval | undefined) {
@@ -159,7 +195,7 @@ export class EventCheckEnvironment {
           return yield* this.#write(check, values, stored?.approval);
         }
         const kept = stored && this.#matches(stored, check) ? stored.values : {};
-        registerSecretValue(value, { allowShort: true });
+        if (!eventCheckSecretLink(value)) registerSecretValue(value, { allowShort: true });
         yield* this.#write(check, { ...kept, [name]: value }, yield* mcpSync(() => this.#current(check)));
       }),
     );

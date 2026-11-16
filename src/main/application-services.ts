@@ -69,7 +69,7 @@ import { safeStorageCipher } from "./safe-storage-cipher";
  * when - see `teardown-registry.ts` for why shutdown here is not the reverse of construction.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir, hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -1758,6 +1758,17 @@ export async function createApplicationServices({
             safeStorageCipher("error.app.secretStorageUnavailable").decrypt(Buffer.from(value, "base64")),
         },
         (check) => eventCheckTemplates.reviewed(check),
+        // A variable can link a Secrets key; it is read from the key store when the check runs.
+        (scope, name) => {
+          try {
+            return readFileSync(
+              join(app.getPath("userData"), "agent-api-keys", scope === "shared" ? "_shared" : scope, name),
+              "utf8",
+            );
+          } catch {
+            return null;
+          }
+        },
       ),
       join(store.sharedRoot, "Watchers"),
       (check) => new EventCheckStore(store.database).current(check.id, check.revision) !== null,

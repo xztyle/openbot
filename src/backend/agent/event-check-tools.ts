@@ -1,5 +1,5 @@
 import { decodeEventCheckTemplateInstallInput } from "@openbot/contracts/event-check-templates";
-import { decodeEventCheckInput } from "@openbot/contracts/event-checks";
+import { decodeEventCheckInput, EVENT_CHECK_SECRET_LINK_PREFIX } from "@openbot/contracts/event-checks";
 import { type AgentSummary, workspaceAccessEnforced } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
@@ -45,6 +45,21 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
     description:
       "List declared variable names and configured/missing status. Never returns values. Ask the user: Please add NAME to the .env in this watcher’s settings so we can test it.",
     shape: { agentId, id },
+  },
+  {
+    name: "link_event_check_secret",
+    description:
+      "Point a private variable of a template check at a key in Secrets (the agent key store), so the check reads that key each time it runs and nobody pastes the value. You never see the value. `secret` is the key name, such as META_ACCESS_TOKEN; shared true (the default) takes the shared key, false your own. Works only for a check whose program is a reviewed catalog template; for any other check, ask the user to paste or link the value in the check's Private variables. Find the key names with openbot.list_api_keys.",
+    shape: {
+      agentId,
+      id,
+      variable: z.string().min(1).max(64).describe("The check's variable name, from event_check_environment."),
+      secret: z
+        .string()
+        .regex(/^[A-Z][A-Z0-9_]{0,63}$/)
+        .describe("The key name in Secrets."),
+      shared: z.boolean().optional().describe("True (default): the shared key. False: your own key."),
+    },
   },
   {
     name: "test_event_check",
@@ -115,7 +130,7 @@ export const EVENT_CHECK_TOOL_DEFINITIONS = [
   {
     name: "install_event_check_template",
     description:
-      "Install a template as a PAUSED event check for an agent (omit agentId to target yourself). Pass the settings as a list of {name, value} pairs in `configuration`. Fill every required setting from what the user told you, and ask for what you do not know: never guess IDs. Use one accountLabel per account, and install again for another account. Private variables such as tokens and passwords belong to the user alone: never ask for the value in chat, and never put one in any field or file. After the install, call event_check_environment and tell the user which names to add in agent settings, Event checks, this check, Private variables (.env). Then call test_event_check. Enable it only when the user asks.",
+      "Install a template as a PAUSED event check for an agent (omit agentId to target yourself). Pass the settings as a list of {name, value} pairs in `configuration`. Fill every required setting from what the user told you, and ask for what you do not know: never guess IDs. Use one accountLabel per account, and install again for another account. Private variables such as tokens and passwords belong to the user alone: never ask for the value in chat, and never put one in any field or file. After the install, call event_check_environment. When the keys are already in Secrets (openbot.list_api_keys), link each variable with link_event_check_secret; otherwise tell the user which names to add in agent settings, Event checks, this check, Private variables (.env), where they can also pick a saved secret. Then call test_event_check. Enable it only when the user asks.",
     shape: {
       agentId,
       slug: z.string().min(1).max(64),
@@ -217,6 +232,23 @@ export function handleEventCheckTool(
       case "event_check_environment":
         result = yield* checks.environment({ agentId: target, id: identifier });
         break;
+      case "link_event_check_secret": {
+        const variable = typeof args.variable === "string" ? args.variable : "";
+        const secret = typeof args.secret === "string" ? args.secret : "";
+        if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(secret))
+          return openBotToolFailure("Give the Secrets key name, such as META_ACCESS_TOKEN.");
+        const scope = args.shared === false ? senderAgentId : "shared";
+        result = yield* checks.setEnvironment(
+          {
+            agentId: target,
+            id: identifier,
+            name: variable,
+            value: `${EVENT_CHECK_SECRET_LINK_PREFIX}${scope}/${secret}`,
+          },
+          actor,
+        );
+        break;
+      }
       case "test_event_check":
         result = yield* checks.test({ agentId: target, id: identifier });
         break;

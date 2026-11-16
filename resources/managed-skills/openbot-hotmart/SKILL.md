@@ -14,7 +14,8 @@ own numbers are the truth for sales and refunds.
 On the OpenBot server the helper is `/opt/OpenBot/app/resources/managed-skills/openbot-hotmart/hotmart.mjs`.
 Start each command with these lines. The loop also finds the helper in the desktop app.
 The three `<path>` values are the paths of the shared keys `HOTMART_CLIENT_ID`, `HOTMART_CLIENT_SECRET` and
-`HOTMART_BASIC` from `openbot.list_api_keys`:
+`HOTMART_BASIC` from `openbot.list_api_keys`. If a value is saved under another name, such as
+`HOTMART_CLIENT_TOKEN` for the Basic value, use that key's path:
 
 ```bash
 for H in /opt/OpenBot/app/resources /Applications/OpenBot.app/Contents/Resources /opt/OpenBot/resources; do
@@ -174,9 +175,11 @@ them with `openbot.install_event_check_template`:
 - `hotmart-subscriptions`: cancellations of the last `lookbackDays` (7) and late payments (DELAYED, OVERDUE), every
   5 minutes. Settings: `statuses`, `productIds`, `lookbackDays`, `sandbox`.
 
-Each check has its own private variables `HOTMART_CLIENT_ID`, `HOTMART_CLIENT_SECRET` and `HOTMART_BASIC`. The
-user pastes the same three values in agent settings → Event checks → the check → Private variables (.env). You
-cannot copy them from the key store. OpenBot hides email addresses in event messages; read the buyer with
+Each check has its own private variables `HOTMART_CLIENT_ID`, `HOTMART_CLIENT_SECRET` and `HOTMART_BASIC`. When the
+values are already in Secrets (`openbot.list_api_keys`), link each variable with `openbot.link_event_check_secret`.
+The Secrets key name may differ: for example, link `variable: "HOTMART_BASIC"` to `secret: "HOTMART_CLIENT_TOKEN"`.
+Ask the user when you cannot tell which key holds which value. Otherwise the user pastes the values or picks saved
+secrets in agent settings → Event checks → the check → Private variables (.env). OpenBot hides email addresses in event messages; read the buyer with
 `hotmart sale <transaction>`. Test with `openbot.test_event_check`, and enable only when the user asks.
 
 ## Errors and limits

@@ -27,9 +27,14 @@ Render, PostHog, Meta ads and lead forms, Hotmart sales and subscriptions). Call
 1. Call `openbot.install_event_check_template` with the slug, one `accountLabel` per account, and every
    required setting from `configuration`. Ask the user for IDs and names you do not know; never guess.
    The check is saved **paused** and linked to its template. Install again for another account or agent.
-2. Call `openbot.event_check_environment`. Tell the user which private variable names to add in agent
-   settings → Event checks → this check → Private variables (.env). **Never ask for the value in chat,
-   and never put it in any tool field or file.** Only the user fills the masked fields.
+2. Call `openbot.event_check_environment`. For each missing name, check `openbot.list_api_keys` first.
+   If Secrets already holds the value, call `openbot.link_event_check_secret` with the check's
+   `variable` and the Secrets key name in `secret`. The names may differ: for example, link variable
+   `HOTMART_BASIC` to the secret `HOTMART_CLIENT_TOKEN`. Ask the user which key to use when it is not
+   clear. The check then reads the key each run, and you never see the value. Otherwise, tell the user
+   which names to add in agent settings → Event checks → this check → Private variables (.env), where
+   they can paste a value or pick a saved secret. **Never ask for the value in chat, and never put it
+   in any tool field or file.**
 3. When the user says they added them, call `openbot.test_event_check` and read
    `openbot.event_check_history`. Fix setting mistakes with `openbot.save_event_check`.
 4. Enable with `openbot.set_event_check_active` only when the user asks. The first enabled read saves a
@@ -96,8 +101,10 @@ safety overlap. Local state, if needed, must be separate for each instance and c
    For each missing name ask: **“Please add LINEAR_API_TOKEN in this watcher's Private variables
    (.env) settings so we can test it.”** Substitute the declared name. Direct the user to agent
    settings → Event checks → this instance → Private variables (.env).
+   The user can paste a value or pick a saved secret there. Linking with
+   `openbot.link_event_check_secret` works only for template checks, not custom programs.
    Never ask for the value in chat, read a saved secret, extract it from an MCP connection, or
-   put it in an agent/shared file. Only the user fills masked settings fields.
+   put it in an agent/shared file.
 6. When configured, use `openbot.test_event_check`. It performs one program read and records only
    its own execution log. It does not enable the instance or wake an agent. An edited program resets the old baseline before testing.
    Read `openbot.event_check_history`. Fix errors before enabling.

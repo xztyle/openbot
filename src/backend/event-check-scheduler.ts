@@ -15,6 +15,7 @@ import type {
   EventCheckInput,
   EventCheckOrigin,
 } from "@openbot/contracts/event-checks";
+import { eventCheckSecretLink } from "@openbot/contracts/event-checks";
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { sourceText } from "@openbot/i18n/source";
 import { containsCredential, registerSecretValue } from "@openbot/logging";
@@ -291,8 +292,17 @@ export class EventCheckScheduler implements RoutineDueSource {
     actor: SecurityActor,
   ) {
     const check = yield* mcpSync(() => {
-      if (actor.kind === "agent") throw new Error("Agents cannot set private variables.");
       const previous = this.options.store.get(input.agentId, input.id);
+      // An agent never sees or sets a value. It may only link a Secrets key, and only for the reviewed
+      // program of a catalog template, whose destination the review fixed: its own program could send
+      // the key anywhere.
+      if (
+        actor.kind === "agent" &&
+        !(input.value !== null && eventCheckSecretLink(input.value) && this.#apiReader().environment.reviewed(previous))
+      )
+        throw new Error(
+          "Agents cannot set private variables. Link a Secrets key with link_event_check_secret, which works for template checks only, or ask the user.",
+        );
       if (previous.source.kind !== "api" || !previous.source.variables.includes(input.name))
         throw new Error("Undeclared variable.");
       // A value or its approval changes below: no list read before it is served after it.

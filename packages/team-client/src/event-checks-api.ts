@@ -7,9 +7,11 @@ import {
   decodeEventCheckTool,
   type EventCheckApi,
 } from "@openbot/contracts/event-checks";
+import { decodeWorkspaceSecrets } from "@openbot/contracts/ipc";
 import { EVENT_CHECK_API_ROUTES } from "@openbot/contracts/team-protocol/event-check-api-v1";
 import { EVENT_CHECKS_ROUTES } from "@openbot/contracts/team-protocol/event-checks-v1";
 import { decodeTeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
+import { WORKSPACE_FLEET_ROUTES } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
 import type { TeamApiRequest } from "./team-api-requests";
 export function eventChecksApi(
   request: TeamApiRequest,
@@ -35,6 +37,11 @@ export function eventChecksApi(
             )
         : undefined;
     },
+    // The Secrets list answers only an owner or admin, as the check routes do.
+    secrets: async () =>
+      (await request("POST", WORKSPACE_FLEET_ROUTES.secrets, decodeWorkspaceSecrets, {})).secrets.map(
+        (secret) => `${secret.scope}/${secret.name}`,
+      ),
     get setEnvironment() {
       return apiSupported()
         ? (input: import("@openbot/contracts/event-checks").EventCheckEnvironmentInput) =>

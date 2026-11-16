@@ -710,7 +710,7 @@ export function createWebWorkspace(
           });
         // A read loads only the open conversation, so the events of other agents do not start one.
         const changed = changedConversation(event);
-        if (changed !== undefined && changed === selectedId) void refresh();
+        if (changed !== undefined && changed === selectedId) refreshForEvent();
       },
     },
     props.accountFetch,
@@ -1684,6 +1684,25 @@ export function createWebWorkspace(
     await resync();
   }
   // Coalesce event bursts; an event during a read schedules one further authoritative read.
+  let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  let eventRefreshAt = 0;
+  /**
+   * Reads the open chat again for a host event. A busy turn sends a conversation event for each step,
+   * prompt or subagent update, and each read costs the host a page query, a mailbox check and three
+   * JSON passes on its main thread, so the reads start at most every `EVENT_REFRESH_SPACING_MS`. The
+   * read after the last event of a burst still runs; streamed text arrives in its own events meanwhile.
+   */
+  function refreshForEvent(): void {
+    if (eventRefreshTimer !== undefined || disposed) return;
+    eventRefreshTimer = setTimeout(
+      () => {
+        eventRefreshTimer = undefined;
+        eventRefreshAt = Date.now();
+        void refresh();
+      },
+      Math.max(0, eventRefreshAt + EVENT_REFRESH_SPACING_MS - Date.now()),
+    );
+  }
   async function refresh() {
     pendingReload = true;
     if (reloadPromise) return reloadPromise;
@@ -1875,6 +1894,7 @@ export function createWebWorkspace(
       disposed = true;
       generation += 1;
       clearTimeout(readsTimer);
+      clearTimeout(eventRefreshTimer);
       stopRestartRetry();
       recovery.dispose();
       hostLifecycle.dispose();
@@ -2274,6 +2294,8 @@ export function createWebWorkspace(
 
 /** A focus within this time after a full read of an online host does not read it again. */
 const FOCUS_RESYNC_MS = 30_000;
+/** The shortest time between two reads of the open chat that host events start. */
+const EVENT_REFRESH_SPACING_MS = 500;
 /** Queue reads in flight at once when many agents need theirs. */
 const QUEUE_READS_AT_ONCE = 4;
 

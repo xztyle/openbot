@@ -37,6 +37,23 @@ export const CHANNEL_ROUTINGS = ["responders", "coordinator"] as const;
  */
 export type ChannelRouting = (typeof CHANNEL_ROUTINGS)[number];
 
+/** The longest channel name, as in Slack. */
+export const CHANNEL_NAME_MAX = 80;
+
+/**
+ * A channel name as Slack writes it: lower case, words joined with `-`, no spaces or punctuation.
+ * Letters of every script stay, so a name in Japanese or Russian survives.
+ */
+export function slugChannelName(value: string): string {
+  return value
+    .toLocaleLowerCase()
+    .replace(/[\s_]+/gu, "-")
+    .replace(/[^\p{L}\p{N}-]/gu, "")
+    .replace(/-{2,}/gu, "-")
+    .replace(/^-/u, "")
+    .slice(0, CHANNEL_NAME_MAX);
+}
+
 export const CHANNEL_TOPIC_LIMIT = 250;
 export const CHANNEL_DESCRIPTION_LIMIT = INPUT_LIMITS.agentDescription;
 export const CHANNEL_FOCUS_LIMIT = 500;

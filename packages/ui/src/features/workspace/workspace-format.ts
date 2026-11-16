@@ -1,21 +1,6 @@
 import { useText } from "../../text";
 
-/** The longest channel name, as in Slack. */
-export const CHANNEL_NAME_MAX = 80;
-
-/**
- * A channel name as Slack writes it: lower case, words joined with `-`, no spaces or punctuation.
- * Letters of every script stay, so a name in Japanese or Russian survives.
- */
-export function slugChannelName(value: string): string {
-  return value
-    .toLocaleLowerCase()
-    .replace(/[\s_]+/gu, "-")
-    .replace(/[^\p{L}\p{N}-]/gu, "")
-    .replace(/-{2,}/gu, "-")
-    .replace(/^-/u, "")
-    .slice(0, CHANNEL_NAME_MAX);
-}
+export { CHANNEL_NAME_MAX, slugChannelName } from "@openbot/contracts/ipc";
 
 /** Durations of agent work: "42s", "3m 12s", "2h 5m". */
 export function useWorkspaceDuration(): (ms: number) => string {

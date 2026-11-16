@@ -970,6 +970,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     this: ClaudeAgentClient,
     threadId: string,
     params: unknown,
+    reopened = false,
   ): Effect.fn.Return<TurnResponse, ProviderClientOperationError> {
     yield* this.#threads.wake(threadId).pipe(toProviderClientOperationError);
     const runtime = yield* providerSync(() => this.#requireThread(threadId));
@@ -999,6 +1000,12 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     const requestedTurnId = getString(params, "clientTurnId") ?? clientId;
     const turnId = requestedTurnId && isUuid(requestedTurnId) ? requestedTurnId : randomUUID();
     const text = readInputText(params);
+    // The process can end while the model or effort changes above. Its thread then opens again, once,
+    // rather than taking a turn that no process would answer.
+    if (this.#threads.get(threadId) !== runtime) {
+      if (reopened) return yield* providerFailure(new Error("The Claude process of this thread ended."));
+      return yield* this.#openTurn(threadId, params, true);
+    }
     // The CLI can start a turn of its own while the model or effort changes above.
     if (runtime.activeTurn) return yield* providerFailure(this.#turnActiveError(runtime.activeTurn));
     // Only now: a model or effort change that fails above leaves the idle timer armed, so the
@@ -1131,20 +1138,36 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         ),
       );
       if (this.#running && this.#threads.get(runtime.id) === runtime) {
-        this.#fail(new Error("Claude session stream ended unexpectedly."));
+        const error = new Error("Claude session stream ended unexpectedly.");
+        if (runtime.activeTurn) yield* this.#completeTurn(runtime, "failed", error);
+        this.#loseThread(runtime, error);
       }
     } catch (error) {
       if (!this.#running || this.#threads.get(runtime.id) !== runtime) return;
       const activeTurn = runtime.activeTurn;
       if (activeTurn) yield* this.#completeTurn(runtime, "failed", error);
-      this.#fail(error instanceof Error ? error : new Error(String(error)));
+      this.#loseThread(runtime, error instanceof Error ? error : new Error(String(error)));
     }
   });
 
-  #fail(error: Error): void {
-    if (!this.#running) return;
-    this.#running = false;
-    this.emit("exit", error);
+  /**
+   * One thread's process ended by itself, such as with a crash. Each thread has its own process, so
+   * the others go on: an exit of the whole client would stop every agent's turn on this provider.
+   * The thread's next turn opens it again from its session.
+   */
+  #loseThread(runtime: ThreadRuntime, error: Error): void {
+    this.#threads.lose(runtime, runtime.config.persistSession);
+    runtime.input.close();
+    try {
+      runtime.query.close();
+    } catch {
+      // The process is already gone.
+    }
+    for (const change of stopClaudeSubagents(runtime.subagents, new Date().toISOString()))
+      this.#emitSubagents(runtime, change);
+    queryLogger.warn("A Claude process ended by itself. Its thread opens again at its next turn.", {
+      message: error.message,
+    });
   }
 
   readonly #handleMessage = Effect.fn("ClaudeAgentClient.handleMessage")(function* (

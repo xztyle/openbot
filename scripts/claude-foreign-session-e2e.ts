@@ -9,6 +9,8 @@
 //    provider that made its ID.
 // 3. An active Claude row whose process ended before it wrote a transcript, as after a crash at
 //    the start: the next turn starts a new Claude session, and no `claude --resume` of it runs.
+// 4. One agent's Claude process crashes while another agent's turn runs: only the crashed turn
+//    fails, the other turn completes, and the crashed agent's next message completes.
 // `bun run test:claude-foreign-session`. Writes .openbot-build/claude-foreign-session-e2e/report.json.
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -106,10 +108,14 @@ process.stdin.on("data", (chunk) => {
     const message = JSON.parse(line);
     if (message.type === "control_request")
       write({ type: "control_response", response: { subtype: "success", request_id: message.request_id, response: {} } });
-    else if (message.type === "user")
-      write({ type: "result", subtype: "success", is_error: false, result: "Done.", session_id: sessionId, uuid: randomUUID(),
+    else if (message.type === "user") {
+      // A message that asks for it ends this process as a crash does, or answers late.
+      const raw = JSON.stringify(message);
+      if (raw.includes("e2e-crash-now")) process.kill(process.pid, "SIGABRT");
+      setTimeout(() => write({ type: "result", subtype: "success", is_error: false, result: "Done.", session_id: sessionId, uuid: randomUUID(),
         duration_ms: 1, duration_api_ms: 1, num_turns: 1, total_cost_usd: 0, usage: { input_tokens: 0, output_tokens: 0 },
-        permission_denials: [] });
+        permission_denials: [] }), raw.includes("e2e-slow-turn") ? 3000 : 0);
+    }
   }
 });
 process.stdin.on("end", () => process.exit(0));
@@ -501,6 +507,26 @@ try {
     { rows: crashRows },
   );
   check("3. the message after the crash completes", afterCrash.status === "completed", afterCrash);
+
+  // 4. A crash of one agent's process while another agent's turn runs.
+  const steady = await createClaudeAgent("Long turn");
+  const crashing = await createClaudeAgent("Crash in a turn");
+  const slowReceipt = await runCauseEffect(agents.sendMessage({ agentId: steady.id, text: "e2e-slow-turn" }));
+  const slowId = slowReceipt.deliveries[0]?.id;
+  if (!slowId) throw new Error("The slow message has no delivery.");
+  await waitFor("the slow turn to run", () => mailbox.getDelivery(slowId)?.delivery.status === "running");
+  const crash = await send(crashing.id, "e2e-crash-now");
+  const slowStatus = await settle("the slow turn to end", () => {
+    const current = mailbox.getDelivery(slowId)?.delivery.status;
+    return current === "completed" || current === "failed" || current === "interrupted" ? current : null;
+  });
+  check("4. the crashed turn fails", crash.status === "failed", crash);
+  check("4. the other agent's turn completes", slowStatus === "completed", {
+    status: slowStatus,
+    error: mailbox.getDelivery(slowId)?.delivery.error ?? null,
+  });
+  const afterProcessCrash = await send(crashing.id, "A message after the process crash.");
+  check("4. the crashed agent's next message completes", afterProcessCrash.status === "completed", afterProcessCrash);
 
   report.passed = checks.every((entry) => entry.passed);
 } catch (error) {

@@ -84,6 +84,16 @@ export class IdleThreadPool<Thread extends IdleThread, Released> {
     this.#disarm(thread);
   }
 
+  /**
+   * Drops a thread whose process ended by itself. With `reopen`, its next turn opens it again from
+   * its session, as after an idle release. The caller frees what the process left.
+   */
+  lose(thread: Thread, reopen: boolean): void {
+    if (this.#threads.get(thread.id) !== thread) return;
+    if (reopen) this.#released.set(thread.id, this.#options.snapshot(thread));
+    this.detach(thread);
+  }
+
   /** Stops holding the thread and ends it. No snapshot is kept. */
 
   readonly close = Effect.fn("IdleThreadPool.close")(function* (

@@ -4,5 +4,6 @@
   reply by default. Another member answers when your reply names it, asks about its work, or needs
   what only it knows, and an @mention always picks who answers. This works with coordinator routing
   and with answer modes.
-- Agents keep their channel and thread replies to people short: one to three sentences or a short
-  list, with details on request or in a linked page.
+- Agents write to people the way a person talks in chat: plain, direct and usually short, with as
+  many list items as the answer needs. A long answer, such as a report or an analysis, goes in a
+  Motion page (or a file) that the reply links with a one-sentence summary.

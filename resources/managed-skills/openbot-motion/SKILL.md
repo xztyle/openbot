@@ -20,7 +20,7 @@ history, assignees, and comments show who did what. People see the same board at
    unblocks it.
 3. **Results go in comments.** Put outcomes, evidence (files, links, numbers with sources), and decisions in
    comments on the issue (`comments_create` on the issue's page). The chat message to your orchestrator or the
-   user is short and names the issue key.
+   user is short and names the issue key; for a person, link the issue with its `url`.
 4. **Delegate through issues.** To hand work to a teammate, create the issue (or sub-issue with a parent epic),
    assign it to that teammate by name, and send the key with `openbot.send_message`. The teammate cannot see
    your chat: the issue body must stand alone. When work reaches you without a key, find or create the issue
@@ -31,8 +31,9 @@ history, assignees, and comments show who did what. People see the same board at
 6. **Documentation only when it earns its place.** Write a page (`pages_create` with Markdown) for knowledge
    someone will reuse: a spec, a process (for example a sales pipeline), a decision and its reasons, a runbook,
    reference data. Update the existing page rather than writing a new one (`search`, then
-   `pages_replace_content` or `pages_append_content`). Never write status reports, chat summaries, meeting
-   minutes nobody asked for, or text the issue already holds. Short and exact beats long.
+   `pages_replace_content` or `pages_append_content`). A long answer that a person needs (a report, an analysis,
+   sources, a long list) also goes in a page, linked from your short chat reply. Never write status reports,
+   chat summaries, meeting minutes nobody asked for, or text the issue already holds. Short and exact beats long.
 7. **No side trackers.** Do not keep plans, task lists, or trackers in files, memories, or chat. Motion holds
    them. Your native todo tool is fine for the steps of the turn you are in.
 8. **Mistakes.** `history_list` with `via: ["mcp"]` shows your changes; `history_undo` puts them back.
@@ -57,4 +58,8 @@ Each team works in one Motion project: a space for its pages and a project datab
 - Read before you write: `pages_get` with `format: "markdown"`, `issues_search`, `search`.
 - Small, frequent updates beat one big one at the end.
 - Link instead of copying: mention the issue key or the page in comments and pages.
+- **Linking for a person.** Pages, rows, issues, and search results come back with a `url`: the absolute web
+  link. Put it in your message as one line with a one-sentence takeaway, for example
+  `Pricing review: we are 12% above the market median. [Read it](https://…/w/…/p/…)`. Use the `url` exactly as
+  returned; never build a link from ids. When a result has no `url`, call `pages_get` for the page.
 - Write in the language the user uses with the team.

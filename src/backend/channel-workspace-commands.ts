@@ -42,6 +42,8 @@ export interface WorkspaceCommandContext {
   actor: { id: string; name: string };
   /** The person who sent the command. Absent for a command of this computer's own services. */
   viewer?: ChannelViewer | undefined;
+  /** Who a `create` names as the creator. Absent: the actor. An agent that makes a channel from its own chat. */
+  creator?: ChannelActorRef | undefined;
 }
 
 type Create = Extract<WorkspaceChannelCommand, { type: "create" }>;
@@ -128,7 +130,7 @@ export function createdChannel(command: Create, context: WorkspaceCommandContext
     ...(command.topic ? { topic: command.topic } : {}),
     ...(command.description ? { description: command.description } : {}),
     humanMemberIds: humans,
-    createdBy: { kind: "member", id: context.actor.id },
+    createdBy: context.creator ?? { kind: "member", id: context.actor.id },
   };
 }
 

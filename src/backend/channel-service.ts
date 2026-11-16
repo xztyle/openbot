@@ -41,6 +41,7 @@ import {
   type WorkspaceActivity,
   type WorkspaceActivityInput,
   type WorkspaceAgentChannelDefaults,
+  type WorkspaceChannelCommand,
   withoutChannelGateDecisions,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
@@ -538,6 +539,138 @@ export class ChannelService {
       }),
     ),
   );
+
+  /**
+   * Makes the channel that an agent asked for from its own chat: the `create` of a person, with the
+   * host user `host` as its person, the agent as its creator, and the change note `note` from the
+   * agent. The caller has put the new id in the agent's space; the members must be in that space.
+   */
+  readonly createForAgent = Effect.fn("ChannelService.createForAgent")(function* (
+    this: ChannelService,
+    command: Extract<WorkspaceChannelCommand, { type: "create" }>,
+    host: { id: string; name: string },
+    agent: { id: string; name: string },
+    note: string,
+  ) {
+    return yield* this.#serialize(
+      command.channelId,
+      Effect.gen({ self: this }, function* () {
+        const operationId = `${agent.id}:${command.operationId}`;
+        const receipt = yield* channelSync(() => this.store.database.commandResult(`channels:${operationId}`));
+        if (receipt !== undefined) return yield* channelSync(() => this.store.get(command.channelId));
+        if (yield* channelSync(() => this.store.exists(command.channelId)))
+          return yield* channelFailure(new Error(sourceText("error.backend.channelExists")));
+        const created = yield* channelSync(() =>
+          createdChannel(command, {
+            ...this.#workspaceContext(host, undefined),
+            creator: { kind: "agent", id: agent.id },
+          }),
+        );
+        yield* channelSync(() => this.#requireMembersInSpace(created));
+        const result = yield* channelSync(() =>
+          this.store.update(created, { messages: [this.#agentChangeNote(created.id, agent, note)] }, operationId),
+        );
+        this.publish(created.id);
+        return result;
+      }),
+    );
+  });
+
+  /** Leaves a change note from an agent that changed a channel outside a channel task. An archived channel gets none. */
+  readonly noteAgentChange = Effect.fn("ChannelService.noteAgentChange")(function* (
+    this: ChannelService,
+    channelId: string,
+    agent: { id: string; name: string },
+    text: string,
+  ) {
+    yield* this.#serialize(
+      channelId,
+      Effect.gen({ self: this }, function* () {
+        if (this.#deletedChannels.has(channelId) || !(yield* channelSync(() => this.store.exists(channelId)))) return;
+        const channel = yield* channelSync(() => this.store.get(channelId));
+        if (channel.archived) return;
+        yield* channelSync(() =>
+          this.store.update(channel, { messages: [this.#agentChangeNote(channelId, agent, text)] }),
+        );
+        this.publish(channelId);
+      }),
+    );
+  });
+
+  /**
+   * Posts a message of an agent outside a channel task, such as an orchestrator that starts work in a
+   * channel it made. Each of `recipientAgentIds` gets a task for it, as for a person's message to that
+   * member; with none, the message starts no work. The request is an agent's, not a person's, so
+   * the member tools that only a person's request may start refuse it.
+   */
+  readonly postForAgent = Effect.fn("ChannelService.postForAgent")(function* (
+    this: ChannelService,
+    input: {
+      channelId: string;
+      agent: { id: string; name: string };
+      text: string;
+      recipientAgentIds: readonly string[];
+      threadRootId: string | null;
+      operationId: string;
+    },
+  ) {
+    const posted: { messageId: string | null; taskIds: string[] } = { messageId: null, taskIds: [] };
+    yield* this.#serialize(
+      input.channelId,
+      Effect.gen({ self: this }, function* () {
+        const operationId = `${input.agent.id}:${input.operationId}`;
+        const receipt = yield* channelSync(() => this.store.database.commandResult(`channels:${operationId}`));
+        if (receipt !== undefined) return;
+        const channel = yield* channelSync(() => this.store.get(input.channelId));
+        if (channel.archived) return yield* channelFailure(new Error(sourceText("error.backend.channelArchived")));
+        for (const agentId of input.recipientAgentIds)
+          yield* channelSync(() => this.requireAvailableMember(channel, agentId));
+        const root = input.threadRootId ? this.store.message(channel.id, input.threadRootId) : null;
+        if (input.threadRootId && (!root || root.threadRootId !== undefined || root.deletedAt))
+          return yield* channelFailure(new Error(sourceText("error.backend.channelThreadNotFound")));
+        const id = randomUUID();
+        const tasks = [...new Set(input.recipientAgentIds)].map((agentId) =>
+          this.newTask(channel.id, id, input.text, agentId),
+        );
+        const mentions = channelMentions(input.text);
+        const message: ChannelMessage = {
+          id,
+          channelId: channel.id,
+          taskId: tasks[0]?.id ?? null,
+          author: { kind: "agent", id: input.agent.id, name: input.agent.name },
+          sequence: 0,
+          superseded: false,
+          ...(root ? { threadRootId: root.id } : {}),
+          ...(mentions.length ? { mentions } : {}),
+          message: {
+            id,
+            text: input.text,
+            author: "assistant",
+            createdAt: new Date().toISOString(),
+            status: "completed",
+          },
+        };
+        yield* channelSync(() => this.store.update(channel, { messages: [message], tasks }, operationId));
+        posted.messageId = id;
+        posted.taskIds = tasks.map((task) => task.id);
+        this.publish(channel.id);
+        yield* this.wake(channel.id);
+      }),
+    );
+    return posted;
+  });
+
+  #agentChangeNote(channelId: string, agent: { id: string; name: string }, text: string): ChannelMessage {
+    const message = this.message(
+      channelId,
+      null,
+      { kind: "agent", ...agent },
+      text,
+      undefined,
+      CHANNEL_CHANGE_ITEM_TYPE,
+    );
+    return { ...message, message: { ...message.message, source: "system" } };
+  }
 
   private readonly apply = Effect.fn("ChannelService.apply")(function* (
     this: ChannelService,

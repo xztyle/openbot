@@ -19,6 +19,13 @@ export const messages = defineMessages("status.agent", {
   "status.agent.channelRoutineCreated": "{agent} created the routine {routine}. {person} asked for it.",
   "status.agent.channelRoutineUpdated": "{agent} changed the routine {routine}. {person} asked for it.",
   "status.agent.channelRoutineDeleted": "{agent} deleted the routine {routine}. {person} asked for it.",
+  "status.agent.channelCreatedByAgent": "{agent} created this channel.",
+  "status.agent.channelSettingsChangedByAgent": "{agent} changed the channel settings.",
+  "status.agent.channelArchivedByAgent": "{agent} archived this channel.",
+  "status.agent.channelRestoredByAgent": "{agent} restored this channel.",
+  "status.agent.channelMembersAddedByAgent": "{agent} added {members} to the channel.",
+  "status.agent.channelMembersRemovedByAgent": "{agent} removed {members} from the channel.",
+  "status.agent.channelMembersChangedByAgent": "{agent} changed how {members} answer in the channel.",
   "status.agent.screenCaptureScreen": "Capture the main screen and send the image to the agent's model.",
   "status.agent.screenCaptureChannel":
     "The image shows in the channel {channel}, and each member of this server who reads the channel can see it.",

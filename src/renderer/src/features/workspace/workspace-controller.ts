@@ -242,6 +242,11 @@ export interface WorkspaceEnvironment {
   storageKey: () => string;
   /** The layout shows one pane at a time. */
   phone: () => boolean;
+  /**
+   * Keeps the view and the open thread on this computer, per reader and server, and shows them
+   * again when the workspace starts. The web client keeps them in its address instead.
+   */
+  rememberPlace?: boolean | undefined;
   /** Called when the workspace moves to another pane on a phone. */
   onPhonePaneChange?: ((pane: WorkspacePhonePane) => void) | undefined;
 }
@@ -252,6 +257,52 @@ const DRAFTS_KEY = "openbot.workspace.drafts.v1";
 const HINTS_KEY = "openbot.workspace.hints.v1";
 
 const SIDEBAR_KEY = "openbot.workspace.sidebar.v1";
+const PLACE_KEY = "openbot.workspace.place.v1";
+
+/** The view or the thread that showed last, kept on this computer. */
+interface SavedPlace {
+  view?: WorkspaceView;
+  agentId?: string | null;
+  thread?: { channelId: string; rootId: string };
+}
+
+const SAVED_VIEWS: readonly WorkspaceView[] = [
+  "threads",
+  "activity",
+  "fleet",
+  "artifacts",
+  "agents",
+  "storage",
+  "routines",
+  "secrets",
+  "space-agents",
+];
+
+function readPlace(key: string): SavedPlace {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(`${PLACE_KEY}:${key}`) ?? "{}");
+    if (!isDynamicRecord(value)) return {};
+    const view = SAVED_VIEWS.find((item) => item === value.view);
+    const thread = isDynamicRecord(value.thread) ? value.thread : null;
+    return {
+      ...(view ? { view, agentId: typeof value.agentId === "string" ? value.agentId : null } : {}),
+      ...(thread && typeof thread.channelId === "string" && typeof thread.rootId === "string"
+        ? { thread: { channelId: thread.channelId, rootId: thread.rootId } }
+        : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function writePlace(key: string, place: SavedPlace): void {
+  try {
+    window.localStorage.setItem(`${PLACE_KEY}:${key}`, JSON.stringify(place));
+  } catch {
+    // A private window or a full disk keeps no place.
+  }
+}
+
 const EMOJI_KEY = "openbot.workspace.emoji.v1";
 const RECENT_EMOJI_LIMIT = 24;
 
@@ -1365,6 +1416,46 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
     return { humans, agents };
   }
+
+  // ---------------------------------------------------------------- the place of the last session
+
+  // The view or the thread that showed last comes back when the workspace starts, once per server.
+  // Until then the place is not written, so the start does not replace it with the first screen.
+  let placeShownFor: string | null = null;
+  createEffect(
+    () =>
+      env.rememberPlace && channels.supported() && env.connectionReady() && channels.state.listed && spaces.settled()
+        ? env.storageKey()
+        : null,
+    (key) => {
+      if (!key || key === placeShownFor) return;
+      placeShownFor = key;
+      const place = readPlace(key);
+      if (place.view && !channels.state.selectedId && viewAvailable(place.view)) {
+        if (place.view === "agents") openAgentTalk(place.agentId ?? null);
+        else openView(place.view);
+      } else if (place.thread && channels.state.selectedId === place.thread.channelId)
+        openThread(place.thread.channelId, place.thread.rootId);
+    },
+  );
+  createEffect(
+    () => {
+      if (!env.rememberPlace || placeShownFor !== env.storageKey()) return null;
+      const current = route();
+      const panel = state.panel;
+      const place: SavedPlace =
+        // Only a view that the reader opened: the activity that shows when nothing is open is no choice.
+        current.kind === "view" && state.view !== null
+          ? { view: current.view, agentId: current.view === "agents" ? state.agentTalkAgentId : null }
+          : current.kind === "channel" && panel?.kind === "thread" && panel.channelId === current.channelId
+            ? { thread: { channelId: panel.channelId, rootId: panel.rootId } }
+            : {};
+      return { key: env.storageKey(), place };
+    },
+    (saved) => {
+      if (saved) writePlace(saved.key, saved.place);
+    },
+  );
 
   // ---------------------------------------------------------------- navigation
 

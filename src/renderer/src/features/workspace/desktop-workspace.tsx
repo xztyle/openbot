@@ -243,6 +243,8 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
     },
     storageKey: () => `${accountId() ?? "local"}:${activeServerId()}`,
     phone: () => false,
+    // The desktop has no address bar: the view and the thread of the last session come back.
+    rememberPlace: true,
     routines: {
       // The canvas says itself when a server does not serve routine flows.
       available: () => true,

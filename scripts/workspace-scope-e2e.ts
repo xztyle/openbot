@@ -9,6 +9,10 @@
 // - Private channels: a person who is not in one does not see it, an admin does, and an agent that is
 //   not a member cannot be addressed in it.
 // - DMs: an agent answers each message of its DM without a mention.
+// - Thread partner: in a thread reply, the agent that answered last in the thread (or started it)
+//   answers by default, in an answer-mode channel through the gate and in a coordinator channel
+//   through the lead's routing; a member that the reply names steps in, an @mention always wins,
+//   and a routing receipt in the thread is no answer.
 //
 // `bun scripts/workspace-scope-e2e.ts`. Writes .openbot-build/workspace-scope-e2e/report.json.
 import assert from "node:assert/strict";
@@ -18,7 +22,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { AGENT_PROVIDERS, type ChannelMessage } from "@openbot/contracts/ipc";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import type { AgentBrowserHost } from "../src/backend/agent/turn-lifecycle";
 import type { ChannelGateModel } from "../src/backend/channel-gate";
 
@@ -42,6 +46,14 @@ const { OpenBotDatabase } = await import("../src/backend/openbot-database");
 const { channelViewer } = await import("../src/backend/channel-visibility");
 
 const PERSON = { id: "local", name: "Alex" };
+
+/** The data part of the lead's routing prompt that the fake routing model reads. */
+const RoutingPrompt = Schema.Struct({
+  task: Schema.Struct({ instruction: Schema.String }),
+  agents: Schema.Array(Schema.Struct({ id: Schema.String, name: Schema.String })),
+  thread: Schema.optional(Schema.Struct({ partnerAgentId: Schema.NullOr(Schema.String) })),
+});
+const decodeRoutingPrompt = Schema.decodeUnknownSync(Schema.fromJsonString(RoutingPrompt));
 
 /** A Codex app-server with the methods that the service calls. Every turn answers "Done.". */
 const FAKE_CODEX = `#!/usr/bin/env node
@@ -126,8 +138,13 @@ process.stdin.on("data", (chunk) => {
 });
 `;
 
-const report: { checks: { name: string; passed: boolean }[]; gateQuestions: number; passed: boolean; error?: string } =
-  { checks: [], gateQuestions: 0, passed: false };
+const report: {
+  checks: { name: string; passed: boolean }[];
+  gateQuestions: number;
+  routingPrompts: number;
+  passed: boolean;
+  error?: string;
+} = { checks: [], gateQuestions: 0, routingPrompts: 0, passed: false };
 
 const unused = () => Effect.die(new Error("Not used by this check."));
 const browser: AgentBrowserHost = {
@@ -187,18 +204,36 @@ const channels = () => agents.channels;
 
 /** The fake cheap model: each agent wants to answer only messages about its own topic. */
 const topics = new Map<string, { word: string; priority: number }>();
+/** Every gate prompt, by the id of the agent it asks about. */
+const gatePrompts: { agentId: string; prompt: string }[] = [];
+/** The agent names that the fake gate looks for in a thread reply. */
+const names: string[] = [];
+const PARTNER_RULE = "the person talks\nwith this agent there";
 const gateModel: ChannelGateModel = {
   label: "fake/gate",
   timeoutMs: 5_000,
   generate: (agentId, prompt) =>
     Effect.sync(() => {
+      // The gate model also writes channel summaries; those are not gate questions.
+      if (!prompt.startsWith("You decide if the AI agent")) return "Summary.";
       report.gateQuestions += 1;
+      gatePrompts.push({ agentId, prompt });
       const topic = topics.get(agentId);
       // Only the newest message counts: the prompt also has the agent's profile and older messages.
-      const newest = prompt.split("The newest message, which you decide about:\n")[1]?.split("\n")[0] ?? "";
-      const answer = Boolean(topic && newest.toLowerCase().includes(topic.word));
+      const newest = (
+        prompt.split("The newest message, which you decide about:\n")[1]?.split("\n")[0] ?? ""
+      ).toLowerCase();
+      // In a thread, as the rule asks: the partner answers unless the reply names another member,
+      // and another member answers when the reply names it.
+      const own = prompt.match(/^The agent: (\S+)/mu)?.[1]?.toLowerCase() ?? "";
+      const named = (name: string) => newest.split(":").slice(1).join(":").includes(name.toLowerCase());
+      const partner = prompt.includes(PARTNER_RULE);
+      const answer =
+        Boolean(topic && newest.includes(topic.word)) ||
+        (prompt.includes("This rule comes before the rules above") &&
+          (named(own) || (partner && !names.some((name) => name.toLowerCase() !== own && named(name)))));
       const priority = topic?.priority ?? 0.5;
-      return JSON.stringify({ answer, reason: answer ? `About ${topic?.word}.` : "Not about my work.", priority });
+      return JSON.stringify({ answer, reason: answer ? "Mine." : "Not about my work.", priority });
     }),
 };
 // The test's model in place of the provider generation; the rest of the hooks stay real.
@@ -216,7 +251,12 @@ const idle = (channelId: string) =>
       .store.tasks(channelId)
       .every((task) => !["queued", "running", "waiting"].includes(task.state)),
   );
-async function say(channelId: string, text: string, recipientAgentId: string | null = null): Promise<ChannelMessage> {
+async function say(
+  channelId: string,
+  text: string,
+  recipientAgentId: string | null = null,
+  threadRootId: string | null = null,
+): Promise<ChannelMessage> {
   const before = new Set(
     channels()
       .store.messages(channelId)
@@ -230,6 +270,7 @@ async function say(channelId: string, text: string, recipientAgentId: string | n
     recipientAgentId,
     replyToMessageId: null,
     attachmentDraftIds: [],
+    ...(threadRootId ? { threadRootId } : {}),
   });
   return waitFor("the person's message", () =>
     channels()
@@ -479,6 +520,180 @@ try {
     channels()
       .decisions(team)
       .some((entry) => entry.author.id === tester.id && entry.message.text.includes("Why: It is free")),
+  );
+
+  // --- Thread partner ---
+  names.push(baker.name, tester.name, writer.name, outsider.name);
+  topics.clear();
+  const ownersOf = (channelId: string, messageId: string) =>
+    channels()
+      .store.tasks(channelId)
+      .filter((task) => task.requestMessageId === messageId && task.ownerAgentId)
+      .map((task) => task.ownerAgentId);
+  const answered = (channelId: string, messageId: string, agentId: string) =>
+    waitFor(`the answer of ${agentId} to ${messageId}`, () =>
+      channels()
+        .store.messages(channelId)
+        .find(
+          (entry) =>
+            entry.author.id === agentId &&
+            entry.message.text === "Done." &&
+            channels()
+              .store.tasks(channelId)
+              .some((task) => task.id === entry.taskId && task.requestMessageId === messageId),
+        ),
+    );
+  const gated = async (channelId: string, messageId: string) => {
+    await waitFor("the gate to settle", () => {
+      const stored = channels().store.message(channelId, messageId);
+      return stored && !stored.gatePending?.length && !stored.gateFollowUp;
+    });
+    await idle(channelId);
+    return ownersOf(channelId, messageId);
+  };
+  const promptsOf = (text: string) => gatePrompts.filter((entry) => entry.prompt.includes(`: ${text}`));
+  const mention = (agent: { id: string; name: string }) => `@[${agent.name}](agent:${agent.id})`;
+
+  // Answer modes: the gate weighs the thread partner against the other members.
+  const studio = randomUUID();
+  await command({
+    type: "create",
+    operationId: randomUUID(),
+    channelId: studio,
+    kind: "channel",
+    visibility: "public",
+    name: "studio",
+    humanMemberIds: [PERSON.id],
+    members: [
+      { agentId: baker.id, answerMode: "always" },
+      { agentId: writer.id, answerMode: "mention" },
+      { agentId: outsider.id, answerMode: "mention" },
+    ],
+  });
+  const opener = await say(studio, `${mention(baker)} start the menu`);
+  const root = await answered(studio, opener.id, baker.id);
+  await idle(studio);
+  const plainReply = await say(studio, "and what about the dessert?", null, root.id);
+  const plainOwners = await gated(studio, plainReply.id);
+  pass("Gate: the thread partner answers a plain thread reply", plainOwners.join() === baker.id, plainOwners.join());
+  pass(
+    "Gate: the partner is asked with the partner rule, the others with the partner's name",
+    promptsOf("and what about the dessert?").some(
+      (entry) => entry.agentId === baker.id && entry.prompt.includes(PARTNER_RULE),
+    ) &&
+      promptsOf("and what about the dessert?").some(
+        (entry) => entry.agentId === writer.id && entry.prompt.includes(`with "${baker.name}" there`),
+      ),
+  );
+  const namedReply = await say(studio, `${writer.name}, can you check the wording?`, null, root.id);
+  const namedOwners = await gated(studio, namedReply.id);
+  pass(
+    "Gate: a thread reply that names another member goes to that member",
+    namedOwners.join() === writer.id,
+    namedOwners.join(),
+  );
+  const nextReply = await say(studio, "and the font size?", null, root.id);
+  const nextOwners = await gated(studio, nextReply.id);
+  pass(
+    "Gate: the agent that answered last in the thread is the partner now",
+    nextOwners.join() === writer.id &&
+      promptsOf("and the font size?").some(
+        (entry) => entry.agentId === writer.id && entry.prompt.includes(PARTNER_RULE),
+      ),
+    nextOwners.join(),
+  );
+  const mentionReply = await say(studio, `${mention(outsider)} take a look`, null, root.id);
+  await answered(studio, mentionReply.id, outsider.id);
+  const mentionOwners = await gated(studio, mentionReply.id);
+  pass(
+    "Gate: an @mention in a thread reply wins over the partner",
+    mentionOwners.join() === outsider.id &&
+      !promptsOf("take a look").some((entry) => entry.prompt.includes("This rule comes before the rules above")),
+    mentionOwners.join(),
+  );
+  const topLevel = await say(studio, "Is anyone free today?");
+  const topOwners = await gated(studio, topLevel.id);
+  pass(
+    "Gate: a message outside a thread keeps the answer modes",
+    topOwners.length === 0 &&
+      promptsOf("Is anyone free today?")
+        .map((entry) => entry.agentId)
+        .join() === baker.id,
+    JSON.stringify(promptsOf("Is anyone free today?").map((entry) => entry.agentId)),
+  );
+
+  // Coordinator routing: the lead's routing prompt carries the thread partner and the rule.
+  const routing: { prompt: string; json: typeof RoutingPrompt.Type }[] = [];
+  const realGenerate = channels().hooks.generate;
+  Object.assign(channels().hooks, {
+    generate: (lead: Parameters<typeof realGenerate>[0], prompt: string) => {
+      if (!prompt.startsWith("Select one responsible channel member.")) return realGenerate(lead, prompt);
+      report.routingPrompts += 1;
+      const json = decodeRoutingPrompt(prompt.split("\n").at(-1) ?? "{}");
+      routing.push({ prompt, json });
+      // As the rule asks: a member that the request names, else the partner, else the writer.
+      const text = json.task.instruction.toLowerCase();
+      const named = json.agents.find(
+        (agent) => agent.id !== json.thread?.partnerAgentId && text.includes(agent.name.toLowerCase()),
+      );
+      const agentId = named?.id ?? json.thread?.partnerAgentId ?? writer.id;
+      return Effect.succeed(JSON.stringify({ agentId }));
+    },
+  });
+  const kitchen = randomUUID();
+  await command({
+    type: "create",
+    operationId: randomUUID(),
+    channelId: kitchen,
+    kind: "channel",
+    visibility: "public",
+    name: "kitchen",
+    humanMemberIds: [PERSON.id],
+    members: [{ agentId: baker.id }, { agentId: writer.id }, { agentId: outsider.id }],
+  });
+  await command({
+    type: "set-routing",
+    operationId: randomUUID(),
+    channelId: kitchen,
+    routing: "coordinator",
+    leadAgentId: baker.id,
+  });
+  const routed = (text: string) => routing.find((entry) => entry.json.task.instruction === text);
+  const ask = async (text: string, rootId: string | null) => {
+    const message = await say(kitchen, text, null, rootId);
+    await waitFor("the task's owner", () => ownersOf(kitchen, message.id).length > 0);
+    await idle(kitchen);
+    return { message, owners: ownersOf(kitchen, message.id) };
+  };
+  const first = await ask("Plan the menu", null);
+  pass(
+    "Coordinator: a message outside a thread is routed without a thread",
+    first.owners.join() === writer.id &&
+      routed("Plan the menu")?.json.thread === undefined &&
+      !routed("Plan the menu")?.prompt.includes("thread.partnerAgentId"),
+  );
+  const kitchenRoot = await answered(kitchen, first.message.id, writer.id);
+  const followUp = await ask("and what about the dessert?", kitchenRoot.id);
+  const followPrompt = routed("and what about the dessert?");
+  pass(
+    "Coordinator: the routing prompt names the thread partner and the rule",
+    followPrompt?.json.thread?.partnerAgentId === writer.id &&
+      followPrompt?.prompt.includes("Strongly prefer that member") === true,
+  );
+  pass("Coordinator: a plain thread reply goes to the partner", followUp.owners.join() === writer.id);
+  const other = await ask(`${outsider.name}, what is your status?`, kitchenRoot.id);
+  pass("Coordinator: a thread reply that names another member goes to it", other.owners.join() === outsider.id);
+  const after = await ask("ok, and next?", kitchenRoot.id);
+  pass(
+    "Coordinator: the last agent answer, not the lead's routing receipt, makes the partner",
+    routed("ok, and next?")?.json.thread?.partnerAgentId === outsider.id && after.owners.join() === outsider.id,
+    JSON.stringify(routed("ok, and next?")?.json.thread),
+  );
+  const prompts = report.routingPrompts;
+  const pinned = await ask(`${mention(baker)} check this`, kitchenRoot.id);
+  pass(
+    "Coordinator: an @mention in a thread reply wins without a routing turn",
+    pinned.owners.join() === baker.id && report.routingPrompts === prompts,
   );
 
   report.passed = true;

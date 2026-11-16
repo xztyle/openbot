@@ -21,14 +21,22 @@ export interface ChannelResponderInput {
   threadRoot?: ChannelMessage | null;
   /** An agent the sender chose for this message. It answers alone, as before the workspace. */
   recipientAgentId?: string | null;
+  /**
+   * In a thread reply, the member the person talks with: the agent that answered last in the
+   * thread, or the agent that started it when no agent answered yet (`ChannelService` finds it).
+   */
+  threadPartnerAgentId?: string | null;
 }
 
 /**
  * Which member agents answer one message of a person.
  *
- * - `agentIds` answer now: mentioned, replied to, taking part in the thread, or `always-no-gate`.
+ * - `agentIds` answer now: mentioned, replied to, or `always-no-gate`.
  * - `gated` are the `always` members that are not addressed, and on `@channel`, `@here` or
- *   `@everyone` the `mention` members too. `ChannelResponders.gate` decides for each of them after
+ *   `@everyone` the `mention` members too. In a thread reply with a thread partner and no mention of
+ *   an agent, every member that is not addressed is gated, the partner first among equals: the
+ *   partner answers unless the message is clearly for someone else, and any other member can step
+ *   in when the message is clearly its own. `ChannelResponders.gate` decides for each of them after
  *   the message is stored, so the person sees it at once.
  * - `lead` is true when the channel routes the message with its lead as before the workspace: a
  *   member with no answer mode, or with `lead`, and no other member selected.
@@ -85,7 +93,10 @@ export class ChannelResponders {
     const decisions = model
       ? this.#gate.decide(request, model, scope)
       : Effect.succeed(request.agents.map((agent) => gateFallback(agent.agentId, "error")));
-    return decisions.pipe(Effect.map(request.answers ? gateSecondRound : gateFirstRound));
+    const partnerId = request.threadPartner?.agentId;
+    return decisions.pipe(
+      Effect.map((items) => (request.answers ? gateSecondRound(items, partnerId) : gateFirstRound(items, partnerId))),
+    );
   }
 
   select(channel: Channel, input: ChannelResponderInput): ChannelResponderSelection {
@@ -95,13 +106,22 @@ export class ChannelResponders {
     const addressed = new Set<string>();
     for (const mention of input.message.mentions ?? [])
       if (mention.kind === "agent" && mention.id && eligible.has(mention.id)) addressed.add(mention.id);
+    // An @mention of an agent picks who answers: the thread then adds no one.
+    const mentioned = addressed.size > 0;
     const broadcast = (input.message.mentions ?? []).some(
       (mention) => mention.kind === "channel" || mention.kind === "here",
     );
     const repliedAgent = input.replyTo?.author.kind === "agent" ? input.replyTo.author.id : null;
     if (repliedAgent && eligible.has(repliedAgent)) addressed.add(repliedAgent);
     const thread = input.threadRoot;
-    if (thread?.author.kind === "agent" && eligible.has(thread.author.id)) addressed.add(thread.author.id);
+    const partner =
+      thread && !mentioned && input.threadPartnerAgentId && eligible.has(input.threadPartnerAgentId)
+        ? input.threadPartnerAgentId
+        : null;
+    // A thread without a partner keeps the earlier rule: its agent author and the members that
+    // took part in it answer.
+    if (thread && !mentioned && !partner && thread.author.kind === "agent" && eligible.has(thread.author.id))
+      addressed.add(thread.author.id);
     const agentIds: string[] = [];
     const gated: string[] = [];
     let leadMembers = 0;
@@ -109,8 +129,11 @@ export class ChannelResponders {
       if (!eligible.has(member.agentId)) continue;
       const mode = member.answerMode ?? "lead";
       const inThread = thread?.threadSummary?.participantIds.includes(member.agentId) ?? false;
-      if (addressed.has(member.agentId) || (mode !== "lead" && inThread)) agentIds.push(member.agentId);
+      if (addressed.has(member.agentId)) agentIds.push(member.agentId);
       else if (mode === "always-no-gate") agentIds.push(member.agentId);
+      // The gate weighs the partner against every other member, so the one the message is for answers.
+      else if (partner) gated.push(member.agentId);
+      else if (!mentioned && mode !== "lead" && inThread) agentIds.push(member.agentId);
       // A broadcast addresses every member, so the gate also asks the ones that answer only when
       // mentioned: without it, each of them would answer the same message.
       else if (mode === "always" || (mode === "mention" && broadcast)) gated.push(member.agentId);

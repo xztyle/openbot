@@ -15,6 +15,11 @@ const GATE_MESSAGE_CHARACTERS = 600;
 const GATE_RECENT_CHARACTERS = 8_000;
 const GATE_NEW_MESSAGE_CHARACTERS = 4_000;
 const GATE_PROFILE_CHARACTERS = 600;
+/**
+ * How much more the thread partner's priority counts when several members want to answer: another
+ * member still goes first when it is clearly better placed, by more than this.
+ */
+const THREAD_PARTNER_PRIORITY_BONUS = 0.2;
 
 /** One `always` member that the gate asks about. */
 export interface ChannelGateAgent {
@@ -44,6 +49,12 @@ export interface ChannelGateRequest {
   threadRoot: ChannelMessage | null;
   /** The messages before it in the channel, or in the thread, oldest first. */
   recent: readonly ChannelMessage[];
+  /**
+   * In a thread reply, the member the person talks with: the agent that answered last in the
+   * thread, or the agent that started it when no agent answered yet. It answers unless the message
+   * is clearly for someone else; the others answer only when the message is clearly theirs.
+   */
+  threadPartner?: { agentId: string; name: string };
   /** The gated members, in channel order. */
   agents: readonly ChannelGateAgent[];
   /** Every member agent of the channel, the gated ones included. */
@@ -134,12 +145,17 @@ export function gateFallback(agentId: string, fallback: ChannelGateFallback, mod
   return { agentId, answer: false, reason: "", priority: 0, model, ms, fallback };
 }
 
-/** The decisions that wanted to answer, the highest priority first, and on a tie the earlier member. */
-function wanted(decisions: readonly ChannelGateDecision[]): string[] {
+/**
+ * The decisions that wanted to answer, the highest priority first, and on a tie the earlier member.
+ * The thread partner's priority counts `THREAD_PARTNER_PRIORITY_BONUS` more.
+ */
+function wanted(decisions: readonly ChannelGateDecision[], partnerId?: string): string[] {
+  const rank = (decision: ChannelGateDecision) =>
+    decision.priority + (decision.agentId === partnerId ? THREAD_PARTNER_PRIORITY_BONUS : 0);
   return decisions
     .map((decision, order) => ({ decision, order }))
     .filter(({ decision }) => decision.answer && decision.fallback === undefined)
-    .sort((left, right) => right.decision.priority - left.decision.priority || left.order - right.order)
+    .sort((left, right) => rank(right.decision) - rank(left.decision) || left.order - right.order)
     .map(({ decision }) => decision.agentId);
 }
 
@@ -147,13 +163,21 @@ function wanted(decisions: readonly ChannelGateDecision[]): string[] {
  * The first round: only the agent with the highest priority answers now. Each other agent that
  * wanted to answer gets `limited` and waits in `followUp`: the gate asks it again after that answer,
  * with the answer in the prompt (`gateSecondRound`).
+ *
+ * The thread partner answers when the gate could not ask about it and no other member wants to
+ * answer: a reply in its thread must not go unanswered because the cheap model failed.
  */
-export function gateFirstRound(decisions: readonly ChannelGateDecision[]): {
+export function gateFirstRound(
+  decisions: readonly ChannelGateDecision[],
+  partnerId?: string,
+): {
   agentIds: string[];
   decisions: ChannelGateDecision[];
   followUp: string[];
 } {
-  const [first, ...rest] = wanted(decisions);
+  const [chosen, ...rest] = wanted(decisions, partnerId);
+  const first =
+    chosen ?? decisions.find((decision) => decision.agentId === partnerId && decision.fallback !== undefined)?.agentId;
   return {
     agentIds: first ? [first] : [],
     decisions: decisions.map((decision) =>
@@ -169,11 +193,14 @@ export function gateFirstRound(decisions: readonly ChannelGateDecision[]): {
  * The second round: the agents that still add something answer, at most as many as the answer limit
  * leaves after the first answer.
  */
-export function gateSecondRound(decisions: readonly ChannelGateDecision[]): {
+export function gateSecondRound(
+  decisions: readonly ChannelGateDecision[],
+  partnerId?: string,
+): {
   agentIds: string[];
   decisions: ChannelGateDecision[];
 } {
-  return gateWinners(decisions, CHANNEL_GATE_ANSWER_LIMIT - 1);
+  return gateWinners(decisions, CHANNEL_GATE_ANSWER_LIMIT - 1, partnerId);
 }
 
 /** The decoded answer of the model, or null when it is not exactly the requested object. */
@@ -201,11 +228,12 @@ export function parseGateAnswer(text: string): { answer: boolean; reason: string
 export function gateWinners(
   decisions: readonly ChannelGateDecision[],
   limit: number = CHANNEL_GATE_ANSWER_LIMIT,
+  partnerId?: string,
 ): {
   agentIds: string[];
   decisions: ChannelGateDecision[];
 } {
-  const chosen = new Set(wanted(decisions).slice(0, Math.max(0, limit)));
+  const chosen = new Set(wanted(decisions, partnerId).slice(0, Math.max(0, limit)));
   return {
     agentIds: decisions.filter((decision) => chosen.has(decision.agentId)).map((decision) => decision.agentId),
     decisions: decisions.map((decision) =>
@@ -242,6 +270,23 @@ function transcript(messages: readonly ChannelMessage[]): string[] {
   return lines;
 }
 
+/** The rule of a thread reply, which comes before the general rules: the thread partner answers by default. */
+function threadPartnerRule(partner: { agentId: string; name: string }, agent: ChannelGateAgent): string[] {
+  return partner.agentId === agent.agentId
+    ? [
+        "This rule comes before the rules above: the message is a reply in a thread, and the person talks",
+        "with this agent there (it answered last in the thread, or it started the thread). Answer true unless",
+        "the message is clearly for someone else: it names or asks about another member, or it is clearly",
+        "another member's work. An acknowledgement, thanks or greeting alone is still no reason to answer.",
+      ]
+    : [
+        "This rule comes before the rules above: the message is a reply in a thread, and the person talks",
+        `with "${partner.name}" there, so that agent answers by default. Answer true only when the message is`,
+        "clearly for this agent (it names or asks about this agent or its work), or when this agent is clearly",
+        "needed: its remit, its current work, or knowledge that the other agent does not have.",
+      ];
+}
+
 export function gatePrompt(request: ChannelGateRequest, agent: ChannelGateAgent): string {
   const others = request.members.filter((member) => member.agentId !== agent.agentId);
   const recent = transcript(request.recent);
@@ -260,6 +305,7 @@ export function gatePrompt(request: ChannelGateRequest, agent: ChannelGateAgent)
     "- The message is aimed at another person or another agent.",
     "- The message is only an acknowledgement, thanks, a greeting or a reaction.",
     "- Another member clearly owns the subject.",
+    ...(request.threadPartner ? ["", ...threadPartnerRule(request.threadPartner, agent)] : []),
     "",
     "Reply with one JSON object only, no other text:",
     '{"answer": true or false, "reason": "why, at most 120 characters", "priority": number from 0 to 1}',

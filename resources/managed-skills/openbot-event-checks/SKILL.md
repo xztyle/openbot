@@ -22,7 +22,7 @@ Existing MCP checks remain supported. Replace one only when the user asks.
 ## Templates first
 
 Reviewed templates ship with the host (Linear, GitHub, any git server, Slack, Discord, Gmail, Proton Mail,
-Render, PostHog, Meta ads and lead forms). Call `openbot.list_event_check_templates` first. When one fits the request:
+Render, PostHog, Meta ads and lead forms, Hotmart sales and subscriptions). Call `openbot.list_event_check_templates` first. When one fits the request:
 
 1. Call `openbot.install_event_check_template` with the slug, one `accountLabel` per account, and every
    required setting from `configuration`. Ask the user for IDs and names you do not know; never guess.

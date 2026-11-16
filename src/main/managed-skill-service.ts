@@ -19,6 +19,8 @@ export const BENCH_SKILL_SLUG = "openbot-bench";
 export const STORAGE_SKILL_SLUG = "openbot-storage";
 /** Ships `meta-ads.mjs`, the Meta Marketing API helper, next to its SKILL.md in the app resources. */
 export const META_ADS_SKILL_SLUG = "openbot-meta-ads";
+/** Ships `hotmart.mjs`, the Hotmart Developers API helper, next to its SKILL.md in the app resources. */
+export const HOTMART_SKILL_SLUG = "openbot-hotmart";
 /** The skills OpenBot writes into every agent workspace. Add a new managed skill here too. */
 export const MANAGED_SKILL_SLUGS: ReadonlySet<string> = new Set([
   MANAGED_SKILL_SLUG,
@@ -29,6 +31,7 @@ export const MANAGED_SKILL_SLUGS: ReadonlySet<string> = new Set([
   BENCH_SKILL_SLUG,
   STORAGE_SKILL_SLUG,
   META_ADS_SKILL_SLUG,
+  HOTMART_SKILL_SLUG,
 ]);
 export const OWNERSHIP_MARKER = ".openbot-managed.json";
 /** The workspace skill folders OpenBot writes. Each provider reads at least one of them. */

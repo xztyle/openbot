@@ -8,3 +8,4 @@
 - The server no longer reads all tasks of a channel twice for each task that the channel ever had when it looks for queued work.
 - Each change to a message queue no longer writes all message idempotency keys to the database again. On a server that ran for weeks, these keys are several hundred KB.
 - Queue changes and chat reads no longer scan every stored message and delivery of the mailbox several times.
+- A change to one agent no longer marks every chat as changed. The server then had to count the unread messages of all chats again each time a client asked.

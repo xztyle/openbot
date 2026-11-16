@@ -137,25 +137,58 @@ export class AgentRoster {
         },
       ],
       (db, sequences) => {
-        db.exec("DELETE FROM projection_agents");
-        const insert = db.prepare(`
+        const sequence = sequences[0] ?? 0;
+        // Only the rows that differ are written. Each send and each turn end writes the roster, and
+        // rewriting every agent and its thread row moved the version of every chat: the unread state
+        // and the runtime snapshot caches, keyed by that version, missed for all chats after each one.
+        const stored = new Map(
+          databaseRows(
+            db
+              .prepare("SELECT agent_id, thread_id, model, updated_at, sort_order, agent_json FROM projection_agents")
+              .all(),
+          ).map((row) => [requiredStringColumn(row, "agent_id"), row]),
+        );
+        const kept = new Set(agents.map((agent) => agent.id));
+        const remove = db.prepare("DELETE FROM projection_agents WHERE agent_id = ?");
+        for (const agentId of stored.keys()) if (!kept.has(agentId)) remove.run(agentId);
+        const upsert = db.prepare(`
           INSERT INTO projection_agents
             (agent_id, thread_id, model, updated_at, sort_order, agent_json, last_event_sequence)
           VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(agent_id) DO UPDATE SET
+            thread_id = excluded.thread_id,
+            model = excluded.model,
+            updated_at = excluded.updated_at,
+            sort_order = excluded.sort_order,
+            agent_json = excluded.agent_json,
+            last_event_sequence = excluded.last_event_sequence
+        `);
+        // An unchanged agent keeps its thread row as it is, but gets one again if it is gone.
+        const threadIfMissing = db.prepare(`
+          INSERT INTO projection_threads
+            (thread_id, agent_id, title, active_turn_id, created_at, updated_at, last_event_sequence)
+          VALUES (?, ?, ?, NULL, ?, ?, ?)
+          ON CONFLICT(thread_id) DO NOTHING
         `);
         agents.forEach((agent, index) => {
-          insert.run(
-            agent.id,
-            agent.threadId,
-            agent.model,
-            agent.updatedAt,
-            index,
-            JSON.stringify(agent),
-            sequences[0] ?? 0,
-          );
-          if (agent.threadId) this.ensureThreadProjection(db, agent, sequences[0] ?? 0);
+          const json = JSON.stringify(agent);
+          const row = stored.get(agent.id);
+          const unchanged =
+            row !== undefined &&
+            row.thread_id === (agent.threadId ?? null) &&
+            row.model === agent.model &&
+            row.updated_at === (agent.updatedAt ?? null) &&
+            Number(row.sort_order) === index &&
+            row.agent_json === json;
+          if (!unchanged) {
+            upsert.run(agent.id, agent.threadId, agent.model, agent.updatedAt, index, json, sequence);
+            if (agent.threadId) this.ensureThreadProjection(db, agent, sequence);
+          } else if (agent.threadId) {
+            const at = agent.updatedAt ?? new Date().toISOString();
+            threadIfMissing.run(agent.threadId, agent.id, agent.name, at, at, sequence);
+          }
         });
-        pruneRosterEvents(db, sequences[0] ?? 0);
+        pruneRosterEvents(db, sequence);
         return null;
       },
     );

@@ -41,6 +41,8 @@ const TRANSCRIPT_MB = Number(argument("transcript-mb") ?? 40);
 const PROFILE = argument("profile");
 const LABEL = argument("label") ?? "run";
 const OPEN_CHATS = 3;
+/** `--reads=0` leaves out the unread-state read that the app makes after each conversation event. */
+const readStates = argument("reads") !== "0";
 const STALL_MS = 150;
 const CLAUDE_MODEL = defaultProviderModel("claude");
 
@@ -414,6 +416,9 @@ service.on("event", (event) => {
         ? { type: "queue-invalidated", agentId: event.snapshot.agentId }
         : event;
   eventBytes += time("client: event JSON", () => JSON.stringify(sent).length);
+  // The app reads the unread state of every chat after each conversation invalidation.
+  if (event.type === "conversation" && readStates)
+    time("client: conversation reads", () => JSON.stringify(service.listConversationReads(memberId)).length);
   if (event.type === "queue-changed") {
     const delivery = pending.get(event.snapshot.agentId);
     if (delivery && !event.snapshot.deliveries.some((item) => item.id === delivery && isActive(item.status)))

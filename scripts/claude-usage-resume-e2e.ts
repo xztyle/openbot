@@ -41,6 +41,8 @@ const REQUEST_COST = 0.01;
 
 // Before the service modules load: the stores and the CLI search read these.
 process.env.HOME = home;
+// The Claude transcripts that a resume needs. Bun's `homedir()` does not follow a later change of HOME.
+process.env.CLAUDE_CONFIG_DIR = join(home, ".claude");
 process.env.OPENBOT_CLAUDE_PATH = claudeExecutable;
 mkdirSync(home, { recursive: true });
 mkdirSync(sessionsDir, { recursive: true });
@@ -71,6 +73,10 @@ const option = (name) => {
 };
 const resume = option("--resume");
 const sessionId = resume ?? option("--session-id") ?? randomUUID();
+// Like the real CLI, a session leaves its transcript, which a resume needs.
+const transcriptDirectory = require("node:path").join(process.env.CLAUDE_CONFIG_DIR ?? require("node:path").join(require("node:os").homedir(), ".claude"), "projects", process.cwd().replace(/[^a-zA-Z0-9]/g, "-"));
+fs.mkdirSync(transcriptDirectory, { recursive: true });
+fs.appendFileSync(require("node:path").join(transcriptDirectory, sessionId + ".jsonl"), "");
 fs.appendFileSync(${JSON.stringify(spawnLog)}, JSON.stringify({ pid: process.pid, resume, sessionId }) + "\\n");
 const file = join(${JSON.stringify(sessionsDir)}, sessionId + ".json");
 const empty = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0 };

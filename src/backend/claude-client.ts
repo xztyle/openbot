@@ -63,7 +63,12 @@ import {
   RequestTimeoutError,
 } from "./agent-client";
 import { claudeContextCategories } from "./claude-context-categories";
-import { type ClaudeHistoryOptions, claudeHistoryFromMessages, claudeHistoryReader } from "./claude-history";
+import {
+  type ClaudeHistoryOptions,
+  claudeHistoryFromMessages,
+  claudeHistoryReader,
+  claudeTranscriptExists,
+} from "./claude-history";
 import {
   CLAUDE_WORKSPACE_MANAGED_SETTINGS,
   claudeHomeSkillPlugin,
@@ -784,6 +789,15 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     config: ThreadConfig,
     resume: boolean,
   ): Effect.fn.Return<void, ProviderClientOperationError> {
+    // A process that ended before its first record, such as one that crashed at once, left no
+    // transcript, and every `--resume` of it would fail. The caller opens a new session instead and
+    // hands it the chat's history.
+    if (resume && config.persistSession) {
+      const found = yield* Effect.promise(() =>
+        claudeTranscriptExists(threadId, config.cwd, this.#agentEnvironment?.()).catch(() => true),
+      );
+      if (!found) return yield* providerFailure(new MissingClaudeSessionError(threadId));
+    }
     const input = new AsyncMessageQueue();
     const appliedEffort = this.#resolveEffort(config.model, config.effort);
     const canUseTool: CanUseTool = (toolName, toolInput, options) =>

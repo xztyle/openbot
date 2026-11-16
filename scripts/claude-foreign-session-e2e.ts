@@ -7,6 +7,8 @@
 //    session, and no `claude --resume ses_...` runs.
 // 2. Claude -> OpenCode -> Claude with a message after each switch: each session row has the
 //    provider that made its ID.
+// 3. An active Claude row whose process ended before it wrote a transcript, as after a crash at
+//    the start: the next turn starts a new Claude session, and no `claude --resume` of it runs.
 // `bun run test:claude-foreign-session`. Writes .openbot-build/claude-foreign-session-e2e/report.json.
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -43,6 +45,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Before the service modules load: the stores and the CLI search read these.
 process.env.HOME = home;
+// The Claude transcripts that a resume needs. Bun's `homedir()` does not follow a later change of HOME.
+process.env.CLAUDE_CONFIG_DIR = join(home, ".claude");
 process.env.OPENBOT_CLAUDE_PATH = claudeExecutable;
 process.env.OPENBOT_OPENCODE_PATH = opencodeExecutable;
 mkdirSync(home, { recursive: true });
@@ -78,6 +82,16 @@ if (resume !== null && !UUID.test(resume)) {
   process.exit(1);
 }
 const sessionId = resume ?? option("--session-id") ?? randomUUID();
+// Like the real CLI, a session leaves its transcript, which a resume needs.
+const transcriptDirectory = require("node:path").join(process.env.CLAUDE_CONFIG_DIR ?? require("node:path").join(require("node:os").homedir(), ".claude"), "projects", process.cwd().replace(/[^a-zA-Z0-9]/g, "-"));
+fs.mkdirSync(transcriptDirectory, { recursive: true });
+const transcript = require("node:path").join(transcriptDirectory, sessionId + ".jsonl");
+// Like the real CLI, a resume of a session that left no transcript fails.
+if (resume !== null && !fs.existsSync(transcript)) {
+  process.stderr.write("No conversation found with session ID: " + resume + "\\n");
+  process.exit(1);
+}
+fs.appendFileSync(transcript, "");
 const write = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
 let buffer = "";
 process.stdin.setEncoding("utf8");
@@ -457,6 +471,36 @@ try {
       ),
     { spawns: backSpawns },
   );
+
+  // 3. A Claude session with no transcript: its process ended before its first record.
+  const crashed = await createClaudeAgent("Crash at start");
+  const crashedThread = agentNow(crashed.id).threadId;
+  if (!crashedThread) throw new Error("The agent has no thread.");
+  const lostSession = randomUUID();
+  store.database.bindProviderSession({
+    threadId: crashedThread,
+    provider: "claude",
+    externalSessionId: lostSession,
+    model: CLAUDE_MODEL,
+    effort: agentNow(crashed.id).reasoningEffort,
+  });
+  const crashSpawnsBefore = claudeSpawns().length;
+  const afterCrash = await send(crashed.id, "A message after the crash.");
+  const crashSpawns = claudeSpawns().slice(crashSpawnsBefore);
+  const crashRows = sessionSummary(crashed.id);
+  check(
+    "3. no Claude CLI resumes the session without a transcript",
+    crashSpawns.length > 0 && crashSpawns.every((spawn) => spawn.resume !== lostSession),
+    { spawns: crashSpawns },
+  );
+  check(
+    "3. a new Claude session is active",
+    crashRows.some(
+      (row) => row.state === "active" && row.provider === "claude" && row.externalSessionId !== lostSession,
+    ),
+    { rows: crashRows },
+  );
+  check("3. the message after the crash completes", afterCrash.status === "completed", afterCrash);
 
   report.passed = checks.every((entry) => entry.passed);
 } catch (error) {

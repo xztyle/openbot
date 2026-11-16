@@ -915,6 +915,21 @@ function historyFragments(messages: readonly ClaudeSessionMessage[], includeItem
   return fragments.reverse();
 }
 
+/**
+ * Whether the Claude CLI has a transcript of this session on disk. `--resume` of a session without
+ * one fails every turn with "No conversation found", as for a process that ended before its first
+ * record.
+ */
+export function claudeTranscriptExists(
+  threadId: string,
+  cwd: string | undefined,
+  environment: Partial<Record<"CLAUDE_CONFIG_DIR" | "CLAUDE_CODE_PROJECT_DIR_NAME", string>> | undefined,
+): Promise<boolean> {
+  return findTranscript(threadId, cwd, environment?.CLAUDE_CONFIG_DIR, environment?.CLAUDE_CODE_PROJECT_DIR_NAME).then(
+    (path) => path !== null,
+  );
+}
+
 async function findTranscript(
   threadId: string,
   cwd: string | undefined,

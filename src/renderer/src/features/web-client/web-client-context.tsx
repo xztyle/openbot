@@ -586,19 +586,27 @@ export function createWebWorkspace(
           });
         } else if (event.type === "prompt") {
           setState((draft) => {
-            draft.prompts = [...draft.prompts.filter((item) => item.requestId !== event.requestId), event];
+            draft.prompts = [
+              ...draft.prompts.filter((item) => item.agentId !== event.agentId || item.requestId !== event.requestId),
+              event,
+            ];
           });
         } else if (event.type === "approval") {
           setState((draft) => {
             draft.approvals = [
-              ...draft.approvals.filter((item) => item.requestId !== event.approval.requestId),
+              ...draft.approvals.filter(
+                (item) => item.agentId !== event.approval.agentId || item.requestId !== event.approval.requestId,
+              ),
               event.approval,
             ];
           });
         } else if (event.type === "agent-input-resolved") {
+          // Two provider processes can use the same request id, so the agent names the request too.
+          const other = (item: { requestId: string | number; agentId: string }) =>
+            item.agentId !== event.agentId || String(item.requestId) !== String(event.requestId);
           setState((draft) => {
-            draft.approvals = draft.approvals.filter((item) => String(item.requestId) !== String(event.requestId));
-            draft.prompts = draft.prompts.filter((item) => String(item.requestId) !== String(event.requestId));
+            draft.approvals = draft.approvals.filter(other);
+            draft.prompts = draft.prompts.filter(other);
           });
         } else if (event.type === "turn-progress") {
           setState((draft) => {
@@ -641,13 +649,17 @@ export function createWebWorkspace(
         if (event.type === "browser-takeover-requested")
           setState((draft) => {
             draft.takeovers = [
-              ...draft.takeovers.filter((item) => item.requestId !== event.request.requestId),
+              ...draft.takeovers.filter(
+                (item) => item.agentId !== event.request.agentId || item.requestId !== event.request.requestId,
+              ),
               event.request,
             ];
           });
         if (event.type === "browser-takeover-resolved")
           setState((draft) => {
-            draft.takeovers = draft.takeovers.filter((item) => String(item.requestId) !== String(event.requestId));
+            draft.takeovers = draft.takeovers.filter(
+              (item) => item.agentId !== event.agentId || String(item.requestId) !== String(event.requestId),
+            );
           });
         // The frozen tab event has no field for a person's control or the history state;
         // `browser-user-control-changed` and `browser-page-state-changed` send them, and a tab keeps

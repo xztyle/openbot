@@ -141,6 +141,13 @@ export type AgentEvent =
        * protocol 6 beside the frozen projection, like `quiet`.
        */
       moreWork?: true;
+      /**
+       * A turn of the agent's talk with another agent: another agent's request started it, or its answer
+       * went on to an agent, and no person wrote in it. The chat folds it and does not count it as
+       * unread, so it shows no "Finished" notification. The turn in which an agent reports a teammate's
+       * answer back to the person who asked is not one. The Team API carries it under `fork-host-v1`.
+       */
+      agentTalk?: true;
     }
   | {
       type: "prompt";
@@ -330,7 +337,8 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
         isString(value.turnId) &&
         (value.origin === undefined || isAgentTurnOrigin(value.origin)) &&
         (value.quiet === undefined || value.quiet === true) &&
-        (value.moreWork === undefined || value.moreWork === true)
+        (value.moreWork === undefined || value.moreWork === true) &&
+        (value.agentTalk === undefined || value.agentTalk === true)
       );
     case "prompt":
       return (

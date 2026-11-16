@@ -1157,6 +1157,8 @@ export class TeamApiServer {
         uiBlocks: capabilities.has(TEAM_UI_BLOCKS_CAPABILITY),
         subagents: capabilities.has(TEAM_SUBAGENTS_CAPABILITY),
         promptMultiSelect: capabilities.has(TEAM_PROMPT_MULTI_SELECT_CAPABILITY),
+        // Only the V7 and V8 encoders read it. See `agent-talk-turn-v1.ts`.
+        agentTalk: capabilities.has(FORK_HOST_CAPABILITY),
       });
     return encodeTeamProtocolV1CurrentEvent(visible, options);
   }

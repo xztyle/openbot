@@ -250,6 +250,8 @@ function notificationSubject(
   if (event.type !== "turn-completed" || event.quiet) return null;
   // The agent goes on with queued work or waits for a teammate, so this turn is not the end.
   if (event.moreWork && event.status === "completed") return null;
+  // The agent answered another agent: the chat folds the turn and counts nothing unread.
+  if (event.agentTalk && event.status === "completed") return null;
   const { agentId, threadId } = event;
   if (event.status === "completed") {
     // Redact before the cut and the Markdown change the shape of a secret.

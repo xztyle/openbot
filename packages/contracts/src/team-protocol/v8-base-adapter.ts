@@ -4,6 +4,7 @@ import { type AgentEvent, isAgentEvent } from "../ipc-agent-events";
 import { isTeamRealtimeEvent, type TeamRealtimeEvent } from "../ipc-team-host";
 import { isBoolean, isDynamicRecord, isNumber, isString } from "../runtime-values";
 import { withAgentBackground } from "./agent-background-v1";
+import { withAgentTalkTurn } from "./agent-talk-turn-v1";
 import { restoreBrowserSecretMetadata } from "./browser-secret-v1";
 import { restoreBrowserTakeoverReason } from "./browser-sign-in-v1";
 import { eventConversationKey, withConversationPlans } from "./conversation-plan-v4";
@@ -58,7 +59,7 @@ export function decodeTeamProtocolV8BaseCurrentEvent(value: unknown): TeamProtoc
     );
     // `moreWork` and `background` ride beside the frozen projection. See `more-work-turn-v6.ts` and
     // `agent-background-v1.ts`.
-    current = withMoreWorkTurn(JSON.parse(JSON.stringify(current)), value);
+    current = withAgentTalkTurn(withMoreWorkTurn(JSON.parse(JSON.stringify(current)), value), value);
     if (decoded.event.type === "bots-changed")
       current = withAgentBackground(JSON.parse(JSON.stringify(current)), value);
   } catch {
@@ -78,6 +79,7 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
     uiBlocks?: boolean;
     subagents?: boolean;
     promptMultiSelect?: boolean;
+    agentTalk?: boolean;
   } = {},
 ): string | null {
   // `turn-progress` bypasses the frozen codec, so it needs the vocabulary swap applied by hand.
@@ -114,7 +116,9 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
     options.subagents ? currentValue : null,
   );
   const withPrompts = promptMultiSelect ? withEventPromptMultiSelect(withPlans, currentValue) : withPlans;
-  const output = moreWork ? withMoreWorkTurn(withPrompts, wireValue) : withPrompts;
+  const withMoreWork = moreWork ? withMoreWorkTurn(withPrompts, wireValue) : withPrompts;
+  // A peer with `fork-host-v1` reads the agent talk marker. See `agent-talk-turn-v1.ts`.
+  const output = moreWork && options.agentTalk ? withAgentTalkTurn(withMoreWork, wireValue) : withMoreWork;
   const withSecrets = options.preserveBrowserSecrets ? restoreBrowserSecretMetadata(output, wireValue) : output;
   return JSON.stringify(options.browserSignIn ? restoreBrowserTakeoverReason(withSecrets, wireValue) : withSecrets);
 }

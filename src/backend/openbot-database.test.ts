@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import type { AgentProviderId, AgentSummary, ConversationMessage, ConversationSnapshot } from "@openbot/contracts/ipc";
 import {
+  AGENT_EXCHANGE_ITEM_TYPE,
   hostedSiteConversationEventItemType,
   hostedSiteConversationEventText,
   ROUTINE_QUIET_ANSWER_ITEM_TYPE,
@@ -20,7 +21,7 @@ import { afterEach, assert, describe, expect, it } from "vitest";
 import { AgentRoutineStore } from "./agent-routine-store";
 import { ChannelRoutineStore } from "./channel-routine-store";
 import { ChannelStore } from "./channel-store";
-import { ConversationReadStore } from "./conversation-read-store";
+import { ConversationReadStore, isAgentTalkTurn } from "./conversation-read-store";
 import { runCauseEffect } from "./effect-boundary";
 import { OpenBotDatabase } from "./openbot-database";
 
@@ -1351,6 +1352,83 @@ describe("OpenBotDatabase", () => {
     expect(database.readConversation(agent.id, agent.threadId).messages.map((message) => message.id)).toEqual([
       "assistant-1",
     ]);
+    database.close();
+  });
+
+  it("names the turns of talk between agents by the rule of read state", async () => {
+    const database = await createDatabase();
+    const agent = testAgent();
+    database.replaceAgents("agents-import", [agent], "agents.imported");
+    if (!agent.threadId) throw new Error("The test agent has no thread.");
+    const at = (minute: number) => new Date(Date.UTC(2026, 10, 16, 10, minute)).toISOString();
+    const exchange = (
+      id: string,
+      turnId: string,
+      direction: "incoming" | "outgoing",
+      minute: number,
+      fields: { expectsReply?: false; replyToMessageId?: string } = {},
+    ): ConversationMessage => ({
+      id,
+      turnId,
+      author: direction === "incoming" ? "agent" : "system",
+      itemType: AGENT_EXCHANGE_ITEM_TYPE,
+      text: id,
+      createdAt: at(minute),
+      status: "completed",
+      exchange: {
+        direction,
+        messageId: `exchange-${id}`,
+        senderAgentId: direction === "incoming" ? "helper" : agent.id,
+        recipientAgentIds: [direction === "incoming" ? agent.id : "helper"],
+        replyToMessageId: fields.replyToMessageId ?? null,
+        deliveries: [],
+        ...(fields.expectsReply === false ? { expectsReply: false as const } : {}),
+      },
+    });
+    const answer = (turnId: string, minute: number): ConversationMessage => ({
+      id: `${turnId}:assistant`,
+      turnId,
+      author: "assistant",
+      text: `Answer of ${turnId}`,
+      createdAt: at(minute),
+      status: "completed",
+    });
+    database.persistConversation(
+      {
+        agentId: agent.id,
+        threadId: agent.threadId,
+        activeTurnId: null,
+        revision: 0,
+        messages: [
+          // A teammate asked: talk between agents.
+          exchange("request", "asked-by-agent", "incoming", 1),
+          answer("asked-by-agent", 2),
+          // A person asked, the agent asked a teammate, and the teammate reported back: for the person.
+          {
+            id: "person",
+            turnId: "person-turn",
+            author: "user",
+            text: "Find it",
+            createdAt: at(3),
+            status: "completed",
+          },
+          exchange("delegate", "person-turn", "outgoing", 4),
+          answer("person-turn", 5),
+          exchange("report", "report-turn", "incoming", 6, {
+            expectsReply: false,
+            replyToMessageId: "exchange-delegate",
+          }),
+          answer("report-turn", 7),
+          // A report that answers no request of a person: talk between agents.
+          exchange("fyi", "fyi-turn", "incoming", 8, { expectsReply: false }),
+          answer("fyi-turn", 9),
+        ],
+      },
+      "conversation.test",
+    );
+
+    const talk = (turnId: string) => (agent.threadId ? isAgentTalkTurn(database, agent.threadId, turnId) : null);
+    expect(["asked-by-agent", "person-turn", "report-turn", "fyi-turn"].map(talk)).toEqual([true, false, false, true]);
     database.close();
   });
 

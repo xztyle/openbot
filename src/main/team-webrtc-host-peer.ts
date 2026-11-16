@@ -16,6 +16,7 @@ import {
   TEAM_SUBAGENTS_CAPABILITY,
   TEAM_UI_BLOCKS_CAPABILITY,
 } from "@openbot/contracts/team-protocol/current";
+import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import { optionalTeamEvent } from "@openbot/contracts/team-protocol/optional-events";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import { encodeTeamProtocolV1ClientEvent } from "@openbot/contracts/team-protocol/v1";
@@ -819,6 +820,8 @@ export class TeamWebRtcHostPeer {
                 uiBlocks: this.#peerCapabilities.has(TEAM_UI_BLOCKS_CAPABILITY),
                 subagents: this.#peerCapabilities.has(TEAM_SUBAGENTS_CAPABILITY),
                 promptMultiSelect: this.#peerCapabilities.has(TEAM_PROMPT_MULTI_SELECT_CAPABILITY),
+                // Only the V7 and V8 events read it. See `agent-talk-turn-v1.ts`.
+                agentTalk: this.#peerCapabilities.has(FORK_HOST_CAPABILITY),
               }),
         );
       } catch {

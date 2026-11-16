@@ -31,6 +31,7 @@ import type { AgentClient } from "../agent-client";
 import type { AgentStore } from "../agent-store";
 import type { BrowserOperationError } from "../browser-effects";
 import type { BrowserDynamicToolHooks } from "../browser-tool-actions";
+import { isAgentTalkTurn } from "../conversation-read-store";
 import { newAssistantMessage, normalizeCompletionStatus } from "../conversation-snapshots";
 import { causeHelpers, reportOriginalFailure } from "../effect-boundary";
 import type { DeliveryContext, MailboxStore, UsageLimitContinuation } from "../mailbox-store";
@@ -1156,6 +1157,14 @@ export class TurnLifecycle {
         ...(quiet ? { quiet: true as const } : {}),
         // After the deliveries ended and the result reached the requester, so a relayed answer counts.
         ...(outcome === "completed" && this.#mailbox.hasFollowUpWork(agentId) ? { moreWork: true as const } : {}),
+        // A person's message or a routine run is never talk between agents, so only another start is read.
+        ...(outcome === "completed" &&
+        deliveries[0]?.delivery.sender.kind !== "user" &&
+        deliveries[0]?.delivery.sender.kind !== "routine" &&
+        snapshot.threadId &&
+        isAgentTalkTurn(this.#store.database, snapshot.threadId, turnId)
+          ? { agentTalk: true as const }
+          : {}),
       });
       if (shouldCompact) yield* this.#compaction.request(agentId, threadId);
       else this.#hooks.scheduleDrain(agentId);

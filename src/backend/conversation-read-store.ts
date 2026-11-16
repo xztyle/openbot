@@ -470,6 +470,27 @@ const AGENT_TALK_TURNS = `SELECT 1 FROM ordered exchange
     ))
   )`;
 
+/**
+ * Whether a turn of the thread is the agent's talk with another agent, by the rule that read state
+ * uses (`AGENT_TALK_TURNS`): no person wrote in it, and its answer is not for the person. A turn
+ * that completes with this shows no "Finished" notification, as it adds nothing unread.
+ */
+export function isAgentTalkTurn(
+  database: Pick<OpenBotDatabase, "connection">,
+  threadId: string,
+  turnId: string,
+): boolean {
+  return (
+    database.connection
+      .prepare(
+        `${ORDERED_THREAD_MESSAGES}
+         SELECT 1 WHERE EXISTS (${AGENT_TALK_TURNS} AND exchange.turn_id = ?2)
+           AND NOT EXISTS (SELECT 1 FROM ordered WHERE author = 'user' AND turn_id = ?2)`,
+      )
+      .get(threadId, turnId) !== undefined
+  );
+}
+
 function agentOnlyTurns(messages: ConversationSnapshot["messages"]): Set<string> {
   const talk = new Set<string>();
   const reports = new Map<string, string | null>();

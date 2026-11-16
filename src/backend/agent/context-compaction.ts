@@ -3,6 +3,7 @@ import type { AgentContextCategoryUsage, AgentContextState } from "@openbot/cont
 import { Effect, Schema } from "effect";
 import type { AgentClient } from "../agent-client";
 import type { AgentStore } from "../agent-store";
+import { activeSessionKey } from "../database/provider-sessions";
 import { causeHelpers } from "../effect-boundary";
 import { decodeRecordResponse, getRecord } from "../protocol";
 import { finiteNumberOrNull } from "./account-usage";
@@ -107,10 +108,12 @@ export class ContextCompaction {
 
   /** Only personal sessions appear in the desktop snapshot; execution threads remain separate. */
   snapshot(): AgentContextState[] {
+    // Nothing to show before a provider reported a context: no session needs reading.
+    if (this.#display.size === 0) return [];
+    // One read of the active sessions for every agent, not one for each agent.
+    const sessions = this.#store.database.activeProviderSessions();
     return this.#store.list().flatMap((agent) => {
-      const session = agent.threadId
-        ? this.#store.database.activeProviderSession(agent.threadId, agent.provider)
-        : null;
+      const session = agent.threadId ? sessions.get(activeSessionKey(agent.threadId, agent.provider)) : undefined;
       const display = session ? this.#display.get(session.externalSessionId) : null;
       return display && agent.threadId ? [{ agentId: agent.id, threadId: agent.threadId, ...display }] : [];
     });

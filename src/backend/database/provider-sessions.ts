@@ -30,6 +30,11 @@ interface SessionRow {
   resume_cursor: string | null;
 }
 
+/** The key of `ProviderSessions.activeProviderSessions`. */
+export function activeSessionKey(threadId: string, provider: AgentProviderId): string {
+  return `${threadId}\u0000${provider}`;
+}
+
 export interface ProviderSessionsOptions {
   core: DatabaseCore;
 }
@@ -63,6 +68,33 @@ export class ProviderSessions {
         .get(threadId, provider),
     );
     return row ? toProviderSession(row) : null;
+  }
+
+  /**
+   * `activeProviderSession` of every thread and provider in one read, keyed by `activeSessionKey`. A
+   * view of every agent asked once for each agent: about 100 queries for each runtime snapshot.
+   */
+  activeProviderSessions(): Map<string, ProviderSession> {
+    const sessions = new Map<string, ProviderSession>();
+    for (const row of databaseRows(
+      this.#core.connection
+        .prepare(
+          `SELECT id, thread_id, provider, external_session_id, model, effort, state,
+                  created_at, updated_at, resume_cursor
+           FROM projection_provider_sessions
+           WHERE state = 'active'
+           ORDER BY created_at DESC, last_event_sequence DESC`,
+        )
+        .all(),
+    )) {
+      const decoded = decodeSessionRow(row);
+      if (!decoded) continue;
+      const session = toProviderSession(decoded);
+      const key = activeSessionKey(session.threadId, session.provider);
+      // The first row of a key is the one `activeProviderSession` takes (the same order, LIMIT 1).
+      if (!sessions.has(key)) sessions.set(key, session);
+    }
+    return sessions;
   }
 
   listProviderSessions(threadId: string): ProviderSession[] {

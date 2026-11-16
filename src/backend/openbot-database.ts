@@ -478,6 +478,11 @@ export class OpenBotDatabase {
     return this.#sessions.publicThreadForSession(agentId, provider, externalSessionId);
   }
 
+  /** Each thread's active session of each provider, keyed by `activeSessionKey(threadId, provider)`. */
+  activeProviderSessions(): Map<string, ProviderSession> {
+    return this.#sessions.activeProviderSessions();
+  }
+
   activeProviderSessionThreads(agentId: string): string[] {
     return this.#sessions.activeProviderSessionThreads(agentId);
   }

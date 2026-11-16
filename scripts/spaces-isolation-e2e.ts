@@ -36,6 +36,7 @@ const { runCauseEffect } = await import("../src/backend/effect-boundary");
 const { MailboxStore } = await import("../src/backend/mailbox-store");
 const { OpenBotDatabase } = await import("../src/backend/openbot-database");
 const { SidebarLayoutStore } = await import("../src/backend/sidebar-layout-store");
+const { applyControlSpaces, listControlSpaces } = await import("../src/main/server-mode-spaces");
 
 const CALL_MARK = "SPACE-CALL";
 let requests = 0;
@@ -566,6 +567,39 @@ try {
   );
   const again = await runCauseEffect(agents.spaces.applyBulk([{ name: "Trading", agentIds: [beta.id] }]));
   pass("A second bulk apply changes nothing", again.movedAgents === 0 && again.spaces[0]?.created === false);
+  // The control socket routes, as the operator's migration script calls them.
+  const control = {
+    spaces: agents.spaces,
+    agents: () => agents.listAgents(),
+    channels: () =>
+      channels()
+        .store.ids()
+        .map((id) => channels().store.get(id)),
+    legacySharedRoot: store.sharedRoot,
+  };
+  const applied = await Effect.runPromise(
+    applyControlSpaces(control, JSON.stringify({ spaces: [{ name: "Ops", icon: "🛠️", agentIds: [gamma.id] }] })),
+  );
+  const appliedBody = JSON.parse(applied.body);
+  pass(
+    "POST /v1/spaces/apply makes the space, moves the agent and answers its shared folder",
+    applied.status === 200 &&
+      appliedBody.report.movedAgents === 1 &&
+      appliedBody.report.spaces[0].sharedDirectory === join(home, "OpenBot", "Spaces", "ops", "Shared") &&
+      store.spaces.agentSpaceId(gamma.id) === appliedBody.report.spaces[0].id,
+  );
+  const listedControl = JSON.parse(listControlSpaces(control).body);
+  pass(
+    "GET /v1/spaces lists each space with its shared folder, agents and the managed folders",
+    listedControl.legacySharedRoot === store.sharedRoot &&
+      listedControl.managedFolders.some((entry: { folder: string }) => entry.folder === "Watchers") &&
+      listedControl.spaces.some(
+        (space: { name: string; agents: { name: string }[] }) =>
+          space.name === "Ops" && space.agents.some((agent) => agent.name === "Gamma"),
+      ),
+  );
+  const invalid = await Effect.runPromise(applyControlSpaces(control, JSON.stringify({ spaces: [{ name: "" }] })));
+  pass("POST /v1/spaces/apply refuses a space without a name", invalid.status === 400);
   const moved = await runCauseEffect(
     agents.spaces.apply({ kind: "delete", spaceId: tradingId, moveTo: GENERAL_SPACE_ID }),
   );

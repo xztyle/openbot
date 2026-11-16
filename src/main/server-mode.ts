@@ -37,6 +37,12 @@ import { createHostedMobileConnect } from "./mobile-connect-host";
 import { RemoteWorkflowError, remoteCall, toRemoteWorkflowError } from "./remote-service-effects";
 import type { ServerHealth } from "./server-health";
 import type { ServerMemory } from "./server-memory";
+import {
+  applyControlSpaces,
+  type ControlSpacesOptions,
+  listControlSpaces,
+  MAX_SPACES_BODY_BYTES,
+} from "./server-mode-spaces";
 
 const CONTROL_SOCKET_FILE = "control.sock";
 /** Large enough for an operator message of the longest text that the app accepts. */
@@ -104,6 +110,8 @@ export interface ServerModeOptions {
   agentOperations?: {
     route(method: string | undefined, path: string, rawBody: string): Promise<Answer | null>;
   };
+  /** The spaces routes; see `server-mode-spaces.ts`. */
+  spaces?: ControlSpacesOptions;
   /** Tests only. */
   uid?: number;
 }
@@ -231,13 +239,16 @@ export class ServerMode {
   async #handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     let answer: Answer;
     try {
-      const raw = await readBody(request);
+      // The spaces routes read a larger JSON body of their own.
+      const spaces = await this.#spacesRoute(request);
+      const raw = spaces ? null : await readBody(request);
       const path = request.url?.split("?")[0] ?? "";
       answer =
-        raw === null
+        spaces ??
+        (raw === null
           ? failure(413, "too_large")
           : ((await this.#options.agentOperations?.route(request.method, path, raw)) ??
-            (await this.#route(request.method, request.url, new URLSearchParams(raw))));
+            (await this.#route(request.method, request.url, new URLSearchParams(raw)))));
     } catch (error) {
       this.#options.onError("A server control request failed.", error);
       // The messages of the account and host services are the ones the app shows. They name no secret.
@@ -249,6 +260,20 @@ export class ServerMode {
         "cache-control": "no-store",
       })
       .end(answer.body ?? formatLines(answer.lines));
+  }
+
+  /** The spaces routes, which take and answer JSON; null for any other route. */
+  async #spacesRoute(request: IncomingMessage): Promise<Answer | null> {
+    const route = `${request.method ?? ""} ${request.url?.split("?")[0] ?? ""}`;
+    if (route !== "GET /v1/spaces" && route !== "POST /v1/spaces/apply") return null;
+    const spaces = this.#options.spaces;
+    if (!spaces) return failure(404, "not_found");
+    if (route === "GET /v1/spaces") return { status: 200, lines: {}, body: listControlSpaces(spaces).body };
+    const body = await readBodyWithin(request, MAX_SPACES_BODY_BYTES);
+    if (body === null) return failure(413, "too_large");
+    const answer = await runCauseEffect(applyControlSpaces(spaces, body.toString("utf8")));
+    this.#options.log?.("Spaces were applied from the control socket.");
+    return { status: answer.status, lines: {}, body: answer.body };
   }
 
   async #route(method: string | undefined, url: string | undefined, body: URLSearchParams): Promise<Answer> {

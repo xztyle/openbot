@@ -3147,6 +3147,12 @@ export async function createApplicationServices({
           markerFile: join(app.getPath("userData"), "openbot-restart-resumes-v1.json"),
           log: (message) => logger.info(message),
         }),
+        spaces: {
+          spaces: service.spaces,
+          agents: () => service.listAgents(),
+          channels: () => service.channels.store.ids().map((id) => service.channels.store.get(id)),
+          legacySharedRoot: store.sharedRoot,
+        },
         ...createServerOperations({
           startedAt: Date.now() - process.uptime() * 1000,
           agentInitialization,

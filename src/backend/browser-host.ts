@@ -321,6 +321,9 @@ export interface BrowserMainPage {
   zoomFactor: number;
 }
 
+/** How long shutdown waits for the operation that a tab runs before it closes the tab anyway. */
+const DESTROY_QUEUE_WAIT_MS = 2_000;
+
 export class BrowserHost {
   static readonly CONTROL_IDLE_GRACE_MS = BrowserControlSessions.IDLE_GRACE_MS;
   readonly #window: BrowserWindow;
@@ -2172,7 +2175,11 @@ export class BrowserHost {
           this.#unmountView(tab.view);
           drains.push(
             Effect.gen(function* () {
-              yield* Deferred.await(tab.queue);
+              // An agent's navigation or wait can hold the queue for 30 s. Shutdown does not wait for its
+              // answer: the teardown gives the browser 10 s, and every restart waited all of them.
+              yield* Deferred.await(tab.queue).pipe(
+                Effect.timeoutOrElse({ duration: DESTROY_QUEUE_WAIT_MS, orElse: () => Effect.void }),
+              );
               yield* tab.engine.destroy();
               yield* Scope.close(tab.scope, Exit.void);
               if (!tab.contents.isDestroyed()) tab.contents.close();

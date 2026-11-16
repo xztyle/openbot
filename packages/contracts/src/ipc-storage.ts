@@ -55,7 +55,7 @@ export type StorageScope = (typeof STORAGE_SCOPES)[number];
 export const STORAGE_LIMITS = {
   files: 2_000,
   conversations: 200,
-  agents: 500,
+  agents: 1_000,
   title: 255,
 } as const;
 

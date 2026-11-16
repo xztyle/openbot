@@ -94,7 +94,7 @@ export const INPUT_LIMITS = {
   attachmentName: 255,
   mimeType: 255,
   path: 4_096,
-  agents: 100,
+  agents: 1_000,
   sidebarSections: 100,
   sidebarSectionName: 40,
   browserTabs: 25,

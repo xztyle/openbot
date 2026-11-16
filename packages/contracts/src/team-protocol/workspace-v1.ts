@@ -384,8 +384,8 @@ const typingEntry = fields(
   { threadRootId: identifier },
 );
 const dmAgents = fields(
-  { agentIds: uniqueIdentifiers(100) },
-  { mainChatAgentIds: uniqueIdentifiers(100), recentAgentIds: uniqueIdentifiers(100) },
+  { agentIds: uniqueIdentifiers(1_000) },
+  { mainChatAgentIds: uniqueIdentifiers(1_000), recentAgentIds: uniqueIdentifiers(1_000) },
 );
 
 export const WORKSPACE_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([

@@ -114,7 +114,7 @@ const usage: Decoder = (value) =>
     scannedAt: string(64),
     freeBytes: nullable(count),
     breakdown: list(breakdown, 8),
-    agents: list(agent, 500),
+    agents: list(agent, 1_000),
     conversations: list(conversation, 200),
     files: list(file, 2_000),
     truncated: boolean,

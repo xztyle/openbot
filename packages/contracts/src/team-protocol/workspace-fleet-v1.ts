@@ -249,7 +249,10 @@ const secretKey = fields({ scope: identifier, name: string(64) });
 export const WORKSPACE_FLEET_CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   [
     WORKSPACE_FLEET_ROUTES.fleet,
-    adminRoute(fields({}, { timeZone: string(64) }), fields({ agents: list(agent, 500), revision: count, at: count })),
+    adminRoute(
+      fields({}, { timeZone: string(64) }),
+      fields({ agents: list(agent, 1_000), revision: count, at: count }),
+    ),
   ],
   [
     WORKSPACE_FLEET_ROUTES.steps,

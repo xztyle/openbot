@@ -25,7 +25,8 @@ function parsedAction(value: unknown): WorkspaceSpaceAction {
 /**
  * The spaces routes of this fork (`workspace-spaces-v1.ts`, under `fork-host-v1`). Every member reads
  * the spaces and the space of each agent and channel they can see. Only an owner or an admin changes
- * them. A member who may create an agent may create it in any space.
+ * them; a member may place a channel that they create next. A member who may create an agent may
+ * create it in any space.
  */
 export async function routeWorkspaceSpaces(
   context: TeamApiRequestContext,
@@ -56,9 +57,11 @@ export async function routeWorkspaceSpaces(
     const agent = await runCauseEffect(agents.createAgent(input, undefined, undefined, memberSender(member)));
     return json(201, { agentId: agent.id });
   }
-  requireAdmin(member);
+  const action = parsedAction(body);
+  // Any member may put a channel that they create next in a space; every other change is for owners and admins.
+  if (action.kind !== "place-channel") requireAdmin(member);
   try {
-    return json(200, await runCauseEffect(spaces.service.apply(parsedAction(body), viewer)));
+    return json(200, await runCauseEffect(spaces.service.apply(action, viewer)));
   } catch (error) {
     const rejection = spaceRejection(error);
     if (rejection !== null) throw new HttpError(409, rejection);

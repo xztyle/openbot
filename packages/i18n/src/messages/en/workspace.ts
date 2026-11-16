@@ -466,7 +466,7 @@ export const messages = defineMessages("workspace", {
   "workspace.emoji.tone.dark": "Dark",
   "workspace.emoji.previewHint": "Point to an emoji to see its name.",
 
-  "workspace.view.spaceAgents": "Agents",
+  "workspace.view.spaceAgents": "Space agents",
   "workspace.spaces.label": "Spaces",
   "workspace.spaces.general": "General",
   "workspace.spaces.menu": "{name} space menu",

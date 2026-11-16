@@ -12,8 +12,8 @@
 //   name?, icon?, hue? }`, `{ kind: "delete", spaceId, moveTo? }` (never `general`; without
 //   `moveTo`, only an empty space), `{ kind: "reorder", spaceIds }` (every space once), `{ kind:
 //   "move", spaceId, agentIds?, channelIds? }`, or `{ kind: "place-channel", spaceId, channelId }`
-//   (a channel that the client creates next). Only an owner or an admin sends one; a refused action
-//   answers 409 with the reason.
+//   (a channel that the client creates next). Only an owner or an admin sends one, except
+//   `place-channel`, which any member may send; a refused action answers 409 with the reason.
 // - `POST /v1/workspace/spaces/create-agent` `{ spaceId, agent }`, where `agent` is the body of
 //   `POST /v1/agents`, creates the agent in that space before its first turn and answers
 //   `{ agentId }`. The member needs what `POST /v1/agents` needs. A client then reads the agents again.

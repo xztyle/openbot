@@ -1,10 +1,13 @@
 import { DeleteSpaceDialog, MoveToSpaceDialog, SpaceDialog } from "@openbot/ui/features/spaces/SpaceDialogs";
 import { useText } from "@openbot/ui/text";
-import { createMemo, Match, Switch } from "solid-js";
+import { createMemo, Match, Switch, untrack } from "solid-js";
 import { useWorkspace } from "./workspace-context";
 import { conversationName } from "./workspace-model";
 
-/** The dialogs that make, change, delete and fill spaces. */
+/**
+ * The dialogs that make, change, delete and fill spaces. Each reads its match once: a dialog still
+ * reads its props while it closes, after the match is gone.
+ */
 export function WorkspaceSpaceDialogs() {
   const { t } = useText();
   const ws = useWorkspace();
@@ -20,18 +23,16 @@ export function WorkspaceSpaceDialogs() {
         })()}
       >
         {(current) => {
-          const space = () => (current().spaceId ? ws.spaces.space(current().spaceId ?? "") : undefined);
+          const spaceId = untrack(() => current().spaceId);
+          const space = untrack(() => (spaceId ? ws.spaces.space(spaceId) : undefined));
           return (
             <SpaceDialog
               open
-              initial={
-                space() ? { name: space()?.name ?? "", icon: space()?.icon ?? null, hue: space()?.hue ?? null } : null
-              }
+              initial={space ? { name: space.name, icon: space.icon, hue: space.hue } : null}
               onOpenChange={(open) => {
                 if (!open) close();
               }}
               onSave={async (draft) => {
-                const spaceId = current().spaceId;
                 if (spaceId) {
                   await ws.spaces.act({ kind: "update", spaceId, ...draft });
                   return;
@@ -50,25 +51,24 @@ export function WorkspaceSpaceDialogs() {
         })()}
       >
         {(current) => {
-          const spaceId = () => current().spaceId;
-          const agentCount = () =>
-            ws.env.agents().filter((agent) => ws.spaces.agentSpace(agent.id) === spaceId()).length;
+          const deleted = untrack(() => current().spaceId);
+          const name = untrack(() => ws.spaces.space(deleted)?.name ?? "");
+          const agentCount = () => ws.env.agents().filter((agent) => ws.spaces.agentSpace(agent.id) === deleted).length;
           const channelCount = () =>
             ws.channels.state.channels.filter(
-              (channel) => !ws.soleAgent(channel) && ws.spaces.channelSpace(channel.id) === spaceId(),
+              (channel) => !ws.soleAgent(channel) && ws.spaces.channelSpace(channel.id) === deleted,
             ).length;
           return (
             <DeleteSpaceDialog
               open
-              name={ws.spaces.space(spaceId())?.name ?? ""}
+              name={name}
               agentCount={agentCount()}
               channelCount={channelCount()}
-              spaces={options().filter((space) => space.id !== spaceId())}
+              spaces={options().filter((space) => space.id !== deleted)}
               onOpenChange={(open) => {
                 if (!open) close();
               }}
               onDelete={async (moveTo) => {
-                const deleted = spaceId();
                 await ws.spaces.act({ kind: "delete", spaceId: deleted, ...(moveTo ? { moveTo } : {}) });
                 if (ws.spaces.current() === deleted) ws.selectSpace(moveTo ?? options()[0]?.id ?? "");
               }}
@@ -83,35 +83,32 @@ export function WorkspaceSpaceDialogs() {
         })()}
       >
         {(current) => {
-          const subject = () => {
-            const { agentIds, channelIds } = current();
+          const agentIds = untrack(() => [...current().agentIds]);
+          const channelIds = untrack(() => [...current().channelIds]);
+          const subject = untrack(() => {
             if (agentIds.length + channelIds.length !== 1)
               return t("workspace.spaces.agentCount", { count: agentIds.length + channelIds.length });
             const agentId = agentIds[0];
             if (agentId) return ws.env.agents().find((agent) => agent.id === agentId)?.name ?? agentId;
             const channel = ws.summary(channelIds[0] ?? "");
             return channel ? conversationName(ws.directory(), channel) : (channelIds[0] ?? "");
-          };
-          const from = () => {
-            const { agentIds, channelIds } = current();
+          });
+          const from = untrack(() => {
             const agentId = agentIds[0];
             return agentId ? ws.spaces.agentSpace(agentId) : ws.spaces.channelSpace(channelIds[0] ?? "");
-          };
+          });
           return (
             <MoveToSpaceDialog
               open
-              subject={subject()}
-              currentId={from()}
+              subject={subject}
+              currentId={from}
               spaces={options()}
               onOpenChange={(open) => {
                 if (!open) close();
               }}
               onMove={(spaceId) =>
                 ws.moveToSpace(
-                  {
-                    ...(current().agentIds.length ? { agentIds: [...current().agentIds] } : {}),
-                    ...(current().channelIds.length ? { channelIds: [...current().channelIds] } : {}),
-                  },
+                  { ...(agentIds.length ? { agentIds } : {}), ...(channelIds.length ? { channelIds } : {}) },
                   spaceId,
                 )
               }

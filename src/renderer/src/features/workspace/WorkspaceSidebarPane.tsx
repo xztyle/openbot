@@ -175,7 +175,11 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         <WorkspaceSpaceRail />
       </Show>
       <WorkspaceSidebar
-        workspaceName={ws.env.serverName()}
+        workspaceName={
+          ws.spaces.available()
+            ? (ws.spaces.space(ws.spaces.current())?.name ?? ws.env.serverName())
+            : ws.env.serverName()
+        }
         workspaceMenu={menu()}
         onNewMessage={() => ws.openDialog({ kind: "new-message" })}
         search={

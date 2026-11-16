@@ -1,8 +1,8 @@
 import type { WorkspaceAgentExchangeMessage, WorkspaceAgentPair } from "@openbot/contracts/ipc";
 import { type AgentTalkPair, AgentTalkView } from "@openbot/ui/features/workspace/AgentTalkView";
-import { createEffect, createMemo, createStore } from "solid-js";
+import { createEffect, createMemo, createStore, onCleanup } from "solid-js";
 import { useWorkspace } from "./workspace-context";
-import { memberById } from "./workspace-model";
+import { memberById, mergeLatestExchange } from "./workspace-model";
 
 interface AgentTalkState {
   /** Null while the list loads. */
@@ -15,6 +15,9 @@ interface AgentTalkState {
 }
 
 const pairKey = (pair: WorkspaceAgentPair) => pair.agentIds.join("|");
+
+/** How long the view waits after the agents change before it reads the pairs and the messages again. */
+const REFRESH_DELAY_MS = 750;
 
 /** The Between agents view: the pairs of agents that talked, and the messages of one pair. */
 export function WorkspaceAgentTalkView() {
@@ -84,6 +87,49 @@ export function WorkspaceAgentTalkView() {
           draft.loading = false;
         });
     }
+  }
+
+  /*
+   * The view reads the pairs and the messages once, so a message between two agents that came while it
+   * was open did not show. A message changes the preview and time of the agent it reaches, so the view
+   * reads both again, after a short wait, when an agent changes.
+   */
+  const agentActivity = createMemo(() =>
+    ws
+      .directory()
+      .agents.map((agent) => `${agent.id}:${agent.updatedAt ?? ""}:${agent.preview}`)
+      .join("\n"),
+  );
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(refreshTimer));
+  createEffect(agentActivity, (_activity, previous) => {
+    if (previous === undefined) return;
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => void refresh(), REFRESH_DELAY_MS);
+  });
+
+  async function refresh() {
+    const port = ws.channels.port().agent;
+    const agentId = ws.state.agentTalkAgentId;
+    const run = listRun;
+    if (port.workspaceAgentPairs) {
+      const result = await port.workspaceAgentPairs(agentId ? { agentId } : {}).catch(() => null);
+      if (result && run === listRun)
+        setState((draft) => {
+          draft.pairs = result.pairs;
+        });
+    }
+    const pair = state.pairs?.find((item) => pairKey(item) === state.selected);
+    if (!pair || !state.messages || !port.workspaceAgentExchange) return;
+    const read = readRun;
+    const selected = state.selected;
+    const result = await port
+      .workspaceAgentExchange({ agentIds: [pair.agentIds[0], pair.agentIds[1]] })
+      .catch(() => null);
+    if (!result || read !== readRun || selected !== state.selected) return;
+    setState((draft) => {
+      draft.messages = mergeLatestExchange(draft.messages ?? [], result.messages);
+    });
   }
 
   const member = (id: string) => memberById(ws.directory(), id);

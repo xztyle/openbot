@@ -15,6 +15,7 @@ import {
   channelVisibility,
   isChannelThreadReply,
   isRestatedChannelResult,
+  type WorkspaceAgentExchangeMessage,
 } from "@openbot/contracts/ipc";
 import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import type { AgentProfile } from "@openbot/ui/data";
@@ -741,4 +742,19 @@ export function plainMessageSegments(directory: WorkspaceDirectory, entry: Chann
   }
   push(text.slice(cursor));
   return segments;
+}
+
+/**
+ * The latest page of a pair joined to the messages that show. The page replaces the messages from its
+ * first one on; older messages that the reader loaded stay before it.
+ */
+export function mergeLatestExchange(
+  loaded: readonly WorkspaceAgentExchangeMessage[],
+  page: readonly WorkspaceAgentExchangeMessage[],
+): WorkspaceAgentExchangeMessage[] {
+  const first = page[0];
+  if (!first) return [...loaded];
+  const pageIds = new Set(page.map((message) => message.id));
+  const older = loaded.filter((message) => !pageIds.has(message.id) && message.createdAt < first.createdAt);
+  return [...older, ...page];
 }

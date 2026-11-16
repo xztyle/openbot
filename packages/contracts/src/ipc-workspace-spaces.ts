@@ -46,7 +46,12 @@ export type WorkspaceSpaceAction =
   | { kind: "delete"; spaceId: string; moveTo?: string }
   /** Every space id once, in the new order. */
   | { kind: "reorder"; spaceIds: string[] }
-  | { kind: "move"; spaceId: string; agentIds?: string[]; channelIds?: string[] };
+  | { kind: "move"; spaceId: string; agentIds?: string[]; channelIds?: string[] }
+  /**
+   * Puts a channel that the client creates next in a space, so its first members are checked against
+   * that space. The client makes the id. A channel that exists already is moved with `move`.
+   */
+  | { kind: "place-channel"; spaceId: string; channelId: string };
 
 /** The spaces after the action. `createdSpaceId` names the space that a `create` added. */
 export interface WorkspaceSpaceActionResult extends WorkspaceSpaces {
@@ -159,6 +164,9 @@ export function parseWorkspaceSpaceAction(value: unknown): WorkspaceSpaceAction 
         ...(channelIds ? { channelIds } : {}),
       };
     }
+    case "place-channel":
+      if (!isIdentifier(value.spaceId) || !isIdentifier(value.channelId)) throw new Error("Invalid space action.");
+      return { kind: "place-channel", spaceId: value.spaceId, channelId: value.channelId };
     default:
       throw new Error("Invalid space action.");
   }

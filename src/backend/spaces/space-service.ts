@@ -232,6 +232,12 @@ export class SpaceService {
       case "delete":
         this.#delete(action.spaceId, action.moveTo);
         return null;
+      case "place-channel":
+        this.#requireSpace(action.spaceId);
+        if (this.#options.channels().some((channel) => channel.id === action.channelId))
+          throw new SpaceRejectedError(sourceText("error.backend.channelExists"));
+        store.assign("channel", [action.channelId], action.spaceId);
+        return null;
     }
   }
 

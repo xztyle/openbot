@@ -66,6 +66,8 @@ export const messages = {
   "webClient.error.hostChanged": "Il server selezionato è cambiato.",
   "webClient.error.requestIncomplete":
     "Il server non ha potuto completare questa richiesta. Aggiorna prima di riprovare.",
+  "webClient.error.connectionInterrupted":
+    "La connessione al server si è interrotta. OpenBot si sta riconnettendo. Riprova tra un momento.",
   "webClient.error.viewEnded": "La vista del browser è terminata.",
   "webClient.error.viewChanged": "La vista del browser è cambiata.",
   "webClient.error.connectionChanging": "La connessione al server sta cambiando.",

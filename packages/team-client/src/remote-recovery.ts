@@ -447,6 +447,47 @@ export const resyncRemoteConversations = Effect.fn("RemoteRecovery.resyncConvers
   }
 });
 
+/**
+ * Why a request command of the peer failed.
+ * - `unsent`: the connection was not open, so the host did not get the request. It can go again.
+ * - `connection`: the connection ended or the page went to the background while the request waited.
+ *   The host can have done it.
+ * - `timeout`: the host did not answer in time. The host can have done it.
+ * - `host`: the host answered with an error. `status` is its HTTP status.
+ * - `other`: any other failure, such as a body that this client could not encode.
+ */
+export type RemoteRequestFailure =
+  | { kind: "unsent" | "connection" | "timeout" | "other" }
+  | { kind: "host"; status: number | null };
+
+/** Fixed peer messages, so the comparison never reads text from a host. */
+const UNSENT_REQUEST_ERRORS = new Set([
+  sourceText("error.remote.selectedServerOffline"),
+  sourceText("error.remote.channelNotOpen"),
+]);
+const LOST_REQUEST_ERRORS = new Set([
+  sourceText("error.remote.serverDisconnected"),
+  sourceText("error.remote.appInBackground"),
+  sourceText("error.remote.serverConnectionReplaced"),
+]);
+
+/** The failure of a request command result, or null when it succeeded. */
+export function remoteRequestFailure(result: {
+  ok: boolean;
+  error?: string | undefined;
+  reference?: string | undefined;
+}): RemoteRequestFailure | null {
+  if (result.ok) return null;
+  // The peer names a host error frame `host/<status>/<code>`, and only a host error frame.
+  const host = result.reference?.match(/^host(?:\/(\d{3}))?(?:\/|$)/u);
+  if (host) return { kind: "host", status: host[1] === undefined ? null : Number(host[1]) };
+  const error = result.error ?? "";
+  if (UNSENT_REQUEST_ERRORS.has(error)) return { kind: "unsent" };
+  if (LOST_REQUEST_ERRORS.has(error)) return { kind: "connection" };
+  if (error === sourceText("error.remote.desktopRequestTimeout")) return { kind: "timeout" };
+  return { kind: "other" };
+}
+
 /** Bound the reads that make a workspace usable; file transfers and writes retain their own limits. */
 export function remoteWorkspaceReadTimeout(method: string, path: string): number | undefined {
   if (method !== "GET") return undefined;

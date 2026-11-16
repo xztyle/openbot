@@ -62,6 +62,8 @@ export const messages = {
   "webClient.error.connectionClosed": "Tarayıcı bağlantısı kapalı.",
   "webClient.error.hostChanged": "Seçilen sunucu değişti.",
   "webClient.error.requestIncomplete": "Sunucu bu isteği tamamlayamadı. Tekrar denemeden önce sayfayı yenileyin.",
+  "webClient.error.connectionInterrupted":
+    "Sunucu bağlantısı koptu. OpenBot yeniden bağlanıyor. Biraz sonra tekrar deneyin.",
   "webClient.error.viewEnded": "Tarayıcı görünümü sona erdi.",
   "webClient.error.viewChanged": "Tarayıcı görünümü değişti.",
   "webClient.error.connectionChanging": "Sunucu bağlantısı değişiyor.",

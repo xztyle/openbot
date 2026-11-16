@@ -81,6 +81,8 @@ export const messages = defineMessages("webClient", {
   "webClient.error.connectionClosed": "The browser connection is closed.",
   "webClient.error.hostChanged": "The selected server changed.",
   "webClient.error.requestIncomplete": "The server could not complete this request. Refresh before trying again.",
+  "webClient.error.connectionInterrupted":
+    "The connection to the server dropped. OpenBot is reconnecting. Try again in a moment.",
   "webClient.error.viewEnded": "The browser view ended.",
   "webClient.error.viewChanged": "The browser view changed.",
   "webClient.error.connectionChanging": "The server connection is changing.",

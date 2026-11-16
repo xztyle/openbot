@@ -27,11 +27,15 @@ const RELEASED_HOST_REST_MS = 30_000;
 
 type Peer = ReturnType<typeof createRemoteTeamPeer>;
 
-/** A host request that failed. `reference` names the status or the transport failure. */
+/**
+ * A host request that failed. `reference` names the status or the transport failure. `resend` is true
+ * when the connection lost the request and sending it again after a reconnect is safe.
+ */
 export class WebHostRequestError extends Error {
   constructor(
     message: string,
     readonly reference: string | null,
+    readonly resend = false,
   ) {
     super(message);
   }

@@ -119,7 +119,11 @@ import {
   type RemoteFileUpload,
   type RemoteTeamConnectionUpdate,
 } from "@openbot/team-client/remote-peer";
-import { remoteWorkspaceReadTimeout } from "@openbot/team-client/remote-recovery";
+import {
+  type RemoteRequestFailure,
+  remoteRequestFailure,
+  remoteWorkspaceReadTimeout,
+} from "@openbot/team-client/remote-recovery";
 import { listHiddenAgents, setAgentHidden, setAgentProviderAccount } from "@openbot/team-client/team-admin-requests";
 import {
   cancelQueuedMessage,
@@ -158,6 +162,12 @@ import {
   type WebHostState,
   type WebHostTabMessage,
 } from "./web-host-lock";
+
+/**
+ * How long a request that the connection lost waits for the connection to come back before it fails.
+ * A host restart, such as for an update, takes about ten seconds; a lost network path recovers in less.
+ */
+const REQUEST_RECONNECT_WAIT_MS = 25_000;
 
 /**
  * The host controls of the connected host. The host answers the Team API routes, and the account
@@ -403,6 +413,8 @@ export function createWebWorkspaceRuntime(
           // A `connecting` update without `hostOffline`, such as a `rate_limited` reply, does not end the hold.
           if (update.hostOffline) waitingHostId = update.hostId;
           else if (update.state !== "connecting") waitingHostId = null;
+          peerOnline = update.state === "online";
+          wakeConnectionWaiters();
           if (update.state !== "online") {
             browserView.disconnect(update.message ?? undefined);
             const releaseGeneration = liveViewGeneration + 1;
@@ -505,7 +517,56 @@ export function createWebWorkspaceRuntime(
     }
     if (!completedDraftIdsByHost.has(hostId)) draftCleanupRetryHosts.delete(hostId);
   }
+  /** Whether the peer of the locked host reported `online` last. */
+  let peerOnline = false;
+  /** Counts explicit disconnects. A request that waits for a reconnect stops waiting at one. */
+  let closedConnections = 0;
+  /** Requests that wait for the connection to come back. Each one returns true when it is done waiting. */
+  const connectionWaiters = new Set<() => boolean>();
+  function wakeConnectionWaiters(): void {
+    for (const waiter of [...connectionWaiters]) if (waiter()) connectionWaiters.delete(waiter);
+  }
+  /**
+   * Waits until the connection to `hostId` is online again. False when the page closes, the person
+   * disconnects or opens another host, or the wait ends first. Between two recovery attempts no host
+   * is locked; that is not a change of host. The recovery owner reconnects; this only waits for it.
+   */
+  function waitForConnection(hostId: string | null, closed: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const check = (): boolean => {
+        if (disposed || !hostId || closed !== closedConnections || (lockedHostId !== null && lockedHostId !== hostId))
+          resolve(false);
+        else if (peerOnline && lockedHostId === hostId) resolve(true);
+        else return false;
+        clearTimeout(timer);
+        return true;
+      };
+      if (check()) return;
+      connectionWaiters.add(check);
+      timer = setTimeout(() => {
+        connectionWaiters.delete(check);
+        resolve(false);
+      }, REQUEST_RECONNECT_WAIT_MS);
+    });
+  }
+  /**
+   * A request that the connection lost is sent once more after the connection comes back: a request
+   * that never left at all, or a read, which the host can answer twice. A write that the host can have
+   * done is not sent again, and an upload keeps its own retry.
+   */
   async function request(method: string, path: string, body: TeamProtocolV2Json = {}, upload?: RemoteFileUpload) {
+    const requestHostId = lockedHostId;
+    const closed = closedConnections;
+    try {
+      return await requestOnce(method, path, body, upload);
+    } catch (error) {
+      if (!(error instanceof WebHostRequestError) || !error.resend || upload !== undefined) throw error;
+      if (!(await waitForConnection(requestHostId, closed))) throw error;
+      return await requestOnce(method, path, body, upload);
+    }
+  }
+  async function requestOnce(method: string, path: string, body: TeamProtocolV2Json, upload?: RemoteFileUpload) {
     if (disposed) throw new Error(currentText().t("webClient.error.connectionClosed"));
     const current = generation;
     const requestHostId = lockedHostId;
@@ -520,7 +581,12 @@ export function createWebWorkspaceRuntime(
       ...(upload === undefined ? {} : { upload }),
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
     });
-    if (disposed || generation !== current) throw new Error(currentText().t("webClient.error.hostChanged"));
+    const failure = remoteRequestFailure(result);
+    const read = method === "GET" || method === "HEAD";
+    // A reconnect starts a new generation. A request that the connection lost waits for it, so its
+    // failure is the connection's, not a host change.
+    const lost = failure?.kind === "unsent" || (read && failure?.kind === "connection");
+    if (!lost && (disposed || generation !== current)) throw new Error(currentText().t("webClient.error.hostChanged"));
     const membershipRead = method === "GET" && path === TEAM_API_ROUTES.me;
     // An action can be forbidden while membership remains valid. Confirm access before clearing drafts.
     if (result.status === 403 && !membershipRead) {
@@ -535,7 +601,13 @@ export function createWebWorkspaceRuntime(
       if (requestHostId) events.accessDenied?.(requestHostId, error);
       throw error;
     }
-    if (!result.ok || (result.status ?? 500) >= 400)
+    if (failure)
+      throw new WebHostRequestError(
+        requestFailureText(failure, read, result.error),
+        result.reference ?? null,
+        lost && requestHostId !== null,
+      );
+    if ((result.status ?? 500) >= 400)
       throw new WebHostRequestError(
         hostRefusal(result.status, result.body) ?? currentText().t("webClient.error.requestIncomplete"),
         result.status === undefined ? (result.reference ?? null) : referenceFrom("http", result.status),
@@ -656,6 +728,7 @@ export function createWebWorkspaceRuntime(
       browserView.disconnect();
       if (switchingHost) {
         await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });
+        peerOnline = false;
         releaseHostLock?.();
         releaseHostLock = null;
         lockedHostId = null;
@@ -703,6 +776,7 @@ export function createWebWorkspaceRuntime(
       connectedHost = null;
       try {
         await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });
+        peerOnline = false;
       } finally {
         releaseHostLock?.();
         releaseHostLock = null;
@@ -879,6 +953,7 @@ export function createWebWorkspaceRuntime(
       if (connecting && waitingHostId !== null && waitingHostId !== host.hostId) {
         const previous = connecting;
         await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });
+        peerOnline = false;
         await previous.catch(() => undefined);
       }
       if (connecting || disposed) throw new Error(currentText().t("webClient.error.connectionChanging"));
@@ -895,6 +970,8 @@ export function createWebWorkspaceRuntime(
     },
     async disconnect() {
       const hostForCleanup = lockedHostId;
+      closedConnections += 1;
+      wakeConnectionWaiters();
       try {
         await peer.cancelUpload().catch(() => undefined);
         await discardCompletedDrafts(hostForCleanup);
@@ -902,6 +979,7 @@ export function createWebWorkspaceRuntime(
         await releaseLiveView();
         browserView.disconnect();
         await peer.execute({ id: crypto.randomUUID(), type: "disconnect" });
+        peerOnline = false;
       } finally {
         releaseHostLock?.();
         releaseHostLock = null;
@@ -1171,6 +1249,7 @@ export function createWebWorkspaceRuntime(
       browserView.disconnect();
       viewListeners.clear();
       disposed = true;
+      wakeConnectionWaiters();
       generation += 1;
       connectedHost = null;
       duplicateOperationIds.clear();
@@ -1208,6 +1287,24 @@ function decodeFileTicket(value: unknown): FileTicket {
   if (typeof size !== "number" || typeof expiresAt !== "number")
     throw new Error("The host returned an invalid download link.");
   return { url, name: requiredString(value, "name"), size, expiresAt };
+}
+
+/**
+ * The words for a request that failed on the way to the host or on the host. A refusal keeps the
+ * host's reason. A request that the host did not get, or a read, says that the connection dropped,
+ * so a short reconnect does not tell the reader to refresh. Only a write whose result is unknown, or
+ * a host failure, keeps the advice to refresh before trying again.
+ */
+function requestFailureText(failure: RemoteRequestFailure, read: boolean, error: string | undefined): string {
+  const { t } = currentText();
+  if (failure.kind === "host")
+    return failure.status !== null && failure.status < 500
+      ? (hostRefusal(failure.status, { error }) ?? t("webClient.error.requestIncomplete"))
+      : t("webClient.error.requestIncomplete");
+  if (failure.kind === "unsent" || (read && failure.kind === "connection"))
+    return t("webClient.error.connectionInterrupted");
+  if (read && failure.kind === "timeout") return t("webClient.error.timeout");
+  return t("webClient.error.requestIncomplete");
 }
 
 /** The host's own reason for a refusal. It redacts it; a server failure keeps the generic text. */

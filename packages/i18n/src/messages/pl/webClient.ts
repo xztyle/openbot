@@ -65,6 +65,8 @@ export const messages = {
   "webClient.error.connectionClosed": "Połączenie przeglądarki jest zamknięte.",
   "webClient.error.hostChanged": "Wybrany serwer się zmienił.",
   "webClient.error.requestIncomplete": "Serwer nie mógł ukończyć tego żądania. Odśwież, zanim spróbujesz ponownie.",
+  "webClient.error.connectionInterrupted":
+    "Połączenie z serwerem zostało przerwane. OpenBot łączy się ponownie. Spróbuj ponownie za chwilę.",
   "webClient.error.viewEnded": "Widok przeglądarki się zakończył.",
   "webClient.error.viewChanged": "Widok przeglądarki się zmienił.",
   "webClient.error.connectionChanging": "Połączenie z serwerem się zmienia.",

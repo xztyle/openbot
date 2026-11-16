@@ -65,6 +65,8 @@ export const messages = {
   "webClient.error.hostChanged": "選択したサーバーが変わりました。",
   "webClient.error.requestIncomplete":
     "サーバーはこのリクエストを完了できませんでした。再試行する前に更新してください。",
+  "webClient.error.connectionInterrupted":
+    "サーバーとの接続が切れました。OpenBot が再接続しています。少ししてからもう一度お試しください。",
   "webClient.error.viewEnded": "ブラウザーのビューが終了しました。",
   "webClient.error.viewChanged": "ブラウザーのビューが変わりました。",
   "webClient.error.connectionChanging": "サーバーへの接続が切り替わっています。",

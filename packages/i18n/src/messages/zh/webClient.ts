@@ -60,6 +60,7 @@ export const messages = {
   "webClient.error.connectionClosed": "浏览器连接已关闭。",
   "webClient.error.hostChanged": "所选服务器已更改。",
   "webClient.error.requestIncomplete": "服务器无法完成该请求，请刷新后重试。",
+  "webClient.error.connectionInterrupted": "与服务器的连接已断开。OpenBot 正在重新连接，请稍后重试。",
   "webClient.error.viewEnded": "浏览器视图已结束。",
   "webClient.error.viewChanged": "浏览器视图已更改。",
   "webClient.error.connectionChanging": "服务器连接正在切换。",

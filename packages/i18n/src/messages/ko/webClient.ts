@@ -62,6 +62,8 @@ export const messages = {
   "webClient.error.connectionClosed": "브라우저 연결이 닫혔어요.",
   "webClient.error.hostChanged": "선택한 서버가 바뀌었어요.",
   "webClient.error.requestIncomplete": "서버가 이 요청을 완료하지 못했어요. 다시 시도하기 전에 새로 고쳐 주세요.",
+  "webClient.error.connectionInterrupted":
+    "서버 연결이 끊어졌어요. OpenBot이 다시 연결하는 중이에요. 잠시 후 다시 시도해 주세요.",
   "webClient.error.viewEnded": "브라우저 보기가 종료되었어요.",
   "webClient.error.viewChanged": "브라우저 보기가 바뀌었어요.",
   "webClient.error.connectionChanging": "서버 연결이 변경되고 있어요.",

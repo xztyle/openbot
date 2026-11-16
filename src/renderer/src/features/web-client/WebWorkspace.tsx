@@ -458,21 +458,31 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       const hostChanged = resetHostId !== undefined && resetHostId !== null && host !== resetHostId;
       resetRevocation = revocation;
       resetHostId = host;
+      // A reconnect to the same host keeps the errors: they say what still failed there.
+      if (!revoked && !hostChanged) return;
       controller.setComposerErrors({});
       controller.setConversationErrors({});
-      if (!revoked && !hostChanged) return;
       controller.setChannelDrafts({});
-      // A queue edit holds its message on its host until Save or Cancel. Keep the edit and its draft
-      // after a reload or a host change, so the user can release the hold on that host.
-      const editAgentId = untrack(controller.editingAgentId);
-      const editServerId = untrack(controller.editingServerId);
-      if (!revoked && editAgentId && editServerId) {
-        const key = composerDraftKey({ agentId: editAgentId, serverId: editServerId });
-        controller.setDrafts((drafts) => (drafts[key] ? { [key]: drafts[key] } : {}));
-        return;
+      if (!revoked) {
+        // Drafts are kept per host, so the text waits for the person's return. The files do not:
+        // the runtime discards the uploads of the host it leaves. A queue edit holds its message on
+        // its host until Save or Cancel, so its draft stays whole, to release the hold on that host.
+        const editAgentId = untrack(controller.editingAgentId);
+        const editServerId = untrack(controller.editingServerId);
+        const editKey =
+          editAgentId && editServerId ? composerDraftKey({ agentId: editAgentId, serverId: editServerId }) : null;
+        controller.setDrafts((drafts) =>
+          Object.fromEntries(
+            Object.entries(drafts).flatMap(([key, draft]) => {
+              if (key === editKey) return [[key, draft]];
+              return draft.text.trim() ? [[key, { ...draft, attachments: [] }]] : [];
+            }),
+          ),
+        );
+        if (editKey) return;
       }
       clearStoredQueueEdit();
-      controller.setDrafts({});
+      if (revoked) controller.setDrafts({});
       controller.setEditingDraftBackup(null);
       controller.setEditingOriginalAttachmentIds([]);
       controller.setEditingPendingSave(null);

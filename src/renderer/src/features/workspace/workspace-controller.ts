@@ -1087,6 +1087,12 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   // The shell can open an agent chat from elsewhere, such as a notification or the search. A view
   // the reader had open then gives way, so the chat shows.
   createEffect(env.activeAgentId, (agentId, previous) => {
+    // When the open agent was deleted or hidden, the shell picks another one by itself: that is not
+    // the reader's choice, so the view and the space that show stay.
+    const replaced =
+      Boolean(previous) &&
+      untrack(() => !env.agents().some((agent) => agent.id === previous) || env.hiddenAgentIds().has(previous ?? ""));
+    if (replaced) return;
     if (
       previous !== undefined &&
       agentId !== previous &&

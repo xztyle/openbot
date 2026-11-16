@@ -7,7 +7,9 @@ import {
   type RespondToApprovalInput,
   type RespondToPromptInput,
 } from "@openbot/contracts/ipc";
+import { toast } from "@openbot/ui";
 import type { AgentMessage, AgentProfile } from "@openbot/ui/data";
+import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo, createProjection, createSignal, mapArray } from "solid-js";
 import { toAgentMessage, toAgentMessages } from "../../app-message-projection";
 import type { createRemoteAgentAdmin } from "../agents/remote-agent-admin";
@@ -159,8 +161,12 @@ export function createWebConversationView(options: {
       await workspace.answer({ requestId: question.requestId, answers });
     } catch (error) {
       setAnsweredPrompt(undefined);
-      if (!options?.onError) throw error;
-      options.onError(error);
+      // The question card shows no failure of its own, so the reader learns here that the answer did not go.
+      if (options?.onError) options.onError(error);
+      else {
+        const { errorMessage, t } = currentText();
+        toast.error(errorMessage(error, t("uiBlock.error.answerFailed")));
+      }
       return false;
     }
     return true;

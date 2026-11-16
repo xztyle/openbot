@@ -58,7 +58,8 @@ export interface BootRecoveryOptions {
  *   that ran it is gone: the previous OpenBot run, or a provider CLI that
  *   exited. Any other unsettled delivery is a live turn of this run.
  * - `backfillProviderHistory` merges provider-side turns that happened while
- *   OpenBot was down into the persisted conversation.
+ *   OpenBot was down into the persisted conversation. It skips a thread with a
+ *   running turn.
  *
  * Reads the store/mailbox/provider and writes the database plus in-memory
  * snapshots; delivery to the renderer goes through `mailboxSync` and
@@ -349,6 +350,10 @@ export class BootRecovery {
     for (const agent of yield* recoveryStep(() => this.threads())) {
       const publicThreadId = agent.threadId;
       if (!publicThreadId) continue;
+      // Readiness also follows a provider restart, while other agents work. A running turn shows
+      // its messages live, and its transcript already holds some of them: an import would store a
+      // second copy under the transcript's IDs. Its history is read at the next readiness.
+      if (this.#store.database.readActiveTurnId(agent.id, publicThreadId)) continue;
       // Inactive sessions still own history after an upgrade or provider switch. A session that
       // was retired before its last complete import has no new turns, so it is not read again.
       const active = this.#store.database.activeProviderSession(publicThreadId, agent.provider);

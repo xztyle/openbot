@@ -44,6 +44,8 @@ export interface ClaudeSessionMessage {
   parent_tool_use_id: string | null;
   parent_agent_id: string | null;
   timestamp?: string;
+  /** Claude Code's own text in the user role, such as a skill's instructions. No one sent it. */
+  isMeta?: boolean;
 }
 
 interface ParsedRecord {
@@ -261,6 +263,7 @@ async function buildIndex(
         const text = messageText(parsed.message);
         const visibleUser =
           parsed.type === "user" &&
+          parsed.isMeta !== true &&
           text.length > 0 &&
           !isClaudeInterruptMarker(text) &&
           !isClaudeCompactionSummary(text) &&
@@ -521,11 +524,11 @@ async function populateTurnMetadata(
 ): Promise<void> {
   const turnRows = database.prepare(
     `SELECT e.seq, e.uuid, e.timestamp FROM entries e JOIN selected s ON s.seq = e.seq
-     WHERE e.type = 'user' AND e.visible_user = 1 ORDER BY e.seq`,
+     WHERE e.type = 'user' AND e.visible_user = 1 AND e.is_meta = 0 ORDER BY e.seq`,
   );
   const nextTurn = database.prepare(
     `SELECT MIN(e.seq) AS seq FROM entries e JOIN selected s ON s.seq = e.seq
-     WHERE e.type = 'user' AND e.visible_user = 1 AND e.seq > ?`,
+     WHERE e.type = 'user' AND e.visible_user = 1 AND e.is_meta = 0 AND e.seq > ?`,
   );
   const insert = database.prepare(
     "INSERT OR REPLACE INTO turn_metadata (turn_id, start_seq, end_seq, timestamp, final_answer_uuid) VALUES (?, ?, ?, ?, ?)",
@@ -571,7 +574,7 @@ async function findFinalAnswer(
     if (signal.aborted) throw signal.reason;
     const row = decodeTranscriptRow(raw);
     const message = await readMessage(file, row);
-    if (message?.type !== "assistant") continue;
+    if (message?.type !== "assistant" || isSyntheticMessage(message.message)) continue;
     const text = messageText(message.message);
     const thinking = messageThinking(message.message);
     const endsStep = messageToolCalls(message.message).length > 0;
@@ -719,7 +722,7 @@ async function emitTurnFragments(
           break;
         continue;
       }
-      if (message.type !== "assistant") continue;
+      if (message.type !== "assistant" || isSyntheticMessage(message.message)) continue;
       const thinking = messageThinking(message.message);
       const endsStep = messageToolCalls(message.message).length > 0;
       if (!thinking && !text && !endsStep) continue;
@@ -820,6 +823,7 @@ async function readMessage(
     parent_tool_use_id: stringOrNull(parsed.parentToolUseId ?? parsed.parent_tool_use_id),
     parent_agent_id: stringOrNull(parsed.parentAgentId ?? parsed.parent_agent_id),
     ...(parsed.timestamp ? { timestamp: String(parsed.timestamp) } : {}),
+    ...(parsed.isMeta === true ? { isMeta: true } : {}),
   };
 }
 
@@ -832,7 +836,7 @@ function historyFragments(messages: readonly ClaudeSessionMessage[], includeItem
   for (const [messageIndex, message] of messages.entries()) {
     const text = messageText(message.message);
     if (message.type === "user") {
-      if (!text || isClaudeInterruptMarker(text)) continue;
+      if (!text || message.isMeta === true || isClaudeInterruptMarker(text)) continue;
       if (isClaudeCompactionSummary(text)) {
         skippingCompaction = true;
         current = null;
@@ -860,7 +864,7 @@ function historyFragments(messages: readonly ClaudeSessionMessage[], includeItem
         });
       continue;
     }
-    if (message.type !== "assistant" || skippingCompaction) continue;
+    if (message.type !== "assistant" || skippingCompaction || isSyntheticMessage(message.message)) continue;
     const thinking = messageThinking(message.message);
     const endsStep = messageToolCalls(message.message).length > 0;
     if (!thinking && !text && !endsStep) continue;
@@ -991,6 +995,14 @@ function messageText(message: unknown): string {
     )
     .map((block) => String(block.text))
     .join("\n");
+}
+
+/**
+ * A message that Claude Code wrote itself in the assistant role, such as "No response requested." for
+ * a prompt it did not send to the model. A live turn never shows one, so history does not either.
+ */
+function isSyntheticMessage(message: unknown): boolean {
+  return isRecord(message) && message.model === "<synthetic>";
 }
 
 function textBeforeThinking(message: unknown): string {

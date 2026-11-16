@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { CHAT_VISUAL_ITEM_TYPE_PREFIX } from "@openbot/contracts/chat-visual";
 import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import {
@@ -48,6 +49,8 @@ export class ConversationReadStore {
    * client reads after each chat change of an agent it does not show.
    */
   readonly #cache = new Map<string, CachedReadState>();
+  /** By connection: a database that is opened again has a new one, and a statement belongs to one. */
+  readonly #statements = new WeakMap<DatabaseSync, Map<string, StatementSync>>();
 
   constructor(readonly database: OpenBotDatabase) {}
 
@@ -90,6 +93,25 @@ export class ConversationReadStore {
       return result;
     }
     return this.#withSupportedCursor(threadId, state, options);
+  }
+
+  /**
+   * The unread query, compiled once for each connection: it is long, and compiling it took about as
+   * long as running it, once for each agent of a list.
+   */
+  #prepared(sql: string): StatementSync {
+    const connection = this.database.connection;
+    let statements = this.#statements.get(connection);
+    if (!statements) {
+      statements = new Map();
+      this.#statements.set(connection, statements);
+    }
+    let statement = statements.get(sql);
+    if (!statement) {
+      statement = connection.prepare(sql);
+      statements.set(sql, statement);
+    }
+    return statement;
   }
 
   /**
@@ -323,18 +345,16 @@ export class ConversationReadStore {
       AND COALESCE(item_type, '') != '${CONTEXT_RESET_ITEM_TYPE}'
       AND NOT (
         author = 'assistant' AND turn_id IS NOT NULL
-        AND turn_id IN (${AGENT_TALK_TURNS})
-        AND turn_id NOT IN (SELECT turn_id FROM ordered WHERE author = 'user' AND turn_id IS NOT NULL)
+        AND EXISTS (${AGENT_TALK_TURNS} AND exchange.turn_id = ordered.turn_id)
+        AND NOT EXISTS (SELECT 1 FROM ordered asker WHERE asker.turn_id = ordered.turn_id AND asker.author = 'user')
       )`;
     // One pass over the ordered thread: the first unread row carries the count of all of them.
-    const firstRow = this.database.connection
-      .prepare(
-        `${ORDERED_THREAD_MESSAGES}
+    const firstRow = this.#prepared(
+      `${ORDERED_THREAD_MESSAGES}
          SELECT message_id, COUNT(*) OVER () AS unread_count FROM ordered
          WHERE 1 = 1 ${afterBoundary} AND ${unreadFilter}
          ORDER BY ${ORDER_KEY_COLUMNS} LIMIT 1`,
-      )
-      .get(...parameters);
+    ).get(...parameters);
     if (firstRow === undefined) return { unreadCount: 0, firstUnreadMessageId: null, throughMessageId };
     if (!isDynamicRecord(firstRow) || !isString(firstRow.message_id) || !isNumber(firstRow.unread_count)) {
       throw new Error("The conversation unread count is malformed.");
@@ -421,8 +441,12 @@ export class ConversationReadStore {
  * request started them, a teammate's report started them that does not answer a request sent in a
  * turn a person's own message (not a routine run) started, or OpenBot sent the answer on to an agent (an outgoing
  * exchange with the answer's text). A message stored before the exchange summary counts as a request.
+ *
+ * The caller adds the turn to test (`AND exchange.turn_id = ...`), so the test reads the rows of that
+ * turn through the turn index. As an `IN` list it read and parsed every exchange of the thread for each
+ * unread count, also for a count with only the last few messages after the cursor.
  */
-const AGENT_TALK_TURNS = `SELECT exchange.turn_id FROM ordered exchange
+const AGENT_TALK_TURNS = `SELECT 1 FROM ordered exchange
   JOIN projection_thread_messages stored ON stored.thread_id = exchange.thread_id AND stored.message_id = exchange.message_id
   WHERE exchange.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND exchange.turn_id IS NOT NULL AND (
     (exchange.author = 'agent' AND COALESCE(json_extract(stored.message_json, '$.exchange.expectsReply'), 1) != 0)

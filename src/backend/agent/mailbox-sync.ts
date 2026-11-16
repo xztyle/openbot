@@ -7,6 +7,7 @@ import type {
   QueueHold,
   QueueSnapshot,
 } from "@openbot/contracts/ipc";
+import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { Effect, type Scope } from "effect";
 import { isMailboxMessageCopy } from "../conversation-snapshots";
 import type { MailboxStore } from "../mailbox-store";
@@ -40,7 +41,18 @@ export interface MailboxSyncOptions {
  * directly, and later extractions (drain, turn lifecycle) take it as a dep
  * instead of reaching into the mailbox themselves.
  */
+/** A page read reconciles again after this long even with no change seen, for a change in memory only. */
+const RECONCILE_MAX_AGE_MS = 5_000;
+
 export class MailboxSync {
+  /**
+   * What each agent's last reconcile saw: the thread's rows, the mailbox revision and the live
+   * snapshot. A page read with the same three changes nothing, and it ran a 100-message read, a
+   * content signature and a pass over the mailbox (3-7 ms on this host) for every read of the open chat.
+   * The rows count by number and last ordinal, not by the thread's version: a streaming flush moves the
+   * version ten times a second and changes only the text of an agent message, which the merge ignores.
+   */
+  readonly #reconciled = new Map<string, { key: string; at: number }>();
   readonly #database: OpenBotDatabase;
   readonly #mailbox: MailboxStore;
   readonly #conversation: ConversationRuntime;
@@ -103,6 +115,45 @@ export class MailboxSync {
   }
 
   reconcilePersistedMailboxMessages(agent: AgentSummary): void {
+    if (!agent.threadId) return;
+    const before = this.#reconcileKey(agent);
+    const known = this.#reconciled.get(agent.id);
+    if (before !== null && known?.key === before && Date.now() - known.at < RECONCILE_MAX_AGE_MS) return;
+    this.#reconcile(agent);
+    // A reconcile that wrote moved the thread's version; the key after it is the one the next read meets.
+    const after = this.#reconcileKey(agent);
+    if (after === null) this.#reconciled.delete(agent.id);
+    else this.#reconciled.set(agent.id, { key: after, at: Date.now() });
+  }
+
+  /** Null inside a transaction: a rollback can undo what the key would claim. */
+  #reconcileKey(agent: AgentSummary): string | null {
+    const connection = this.#database.connection;
+    if (connection.isTransaction || !agent.threadId) return null;
+    const row = connection
+      .prepare("SELECT COUNT(*) AS count, MAX(ordinal) AS last FROM projection_thread_messages WHERE thread_id = ?")
+      .get(agent.threadId);
+    if (!isDynamicRecord(row)) return null;
+    // The live snapshot by identity, message count and turn, not by revision: a streaming flush moves
+    // the revision ten times a second and changes only the text of one message, which the mailbox
+    // merge does not touch.
+    const live = this.#conversation.snapshot(agent.id);
+    const liveKey = live ? `${this.#snapshotId(live)}:${live.messages.length}:${live.activeTurnId ?? "-"}` : "-";
+    return `${String(row.count)}:${String(row.last)}:${this.#mailbox.revision}:${liveKey}`;
+  }
+
+  readonly #snapshotIds = new WeakMap<object, number>();
+  #nextSnapshotId = 0;
+  #snapshotId(snapshot: object): number {
+    let id = this.#snapshotIds.get(snapshot);
+    if (id === undefined) {
+      id = ++this.#nextSnapshotId;
+      this.#snapshotIds.set(snapshot, id);
+    }
+    return id;
+  }
+
+  #reconcile(agent: AgentSummary): void {
     if (!agent.threadId) return;
     const page = this.#database.readConversationPage(agent.id, agent.threadId, { type: "latest" }, 100);
     const persisted: ConversationSnapshot = {

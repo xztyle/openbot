@@ -274,7 +274,24 @@ export class MailboxStore {
   readonly #queueUpdates = new Set<string>();
   readonly #deliveryGate = new MailboxDeliveryGate();
   readonly #stagedGeneratedAttachments = new Map<string, StoredGeneratedAttachment>();
-  #state: StoredState = structuredClone(EMPTY_STATE);
+  #stateValue: StoredState = structuredClone(EMPTY_STATE);
+  #revision = 0;
+  /** Every replacement of the state moves the revision, a load and a rollback included. */
+  get #state(): StoredState {
+    return this.#stateValue;
+  }
+  set #state(value: StoredState) {
+    this.#stateValue = value;
+    this.#revision += 1;
+  }
+  /**
+   * Moves at each write and each replacement of the state. A reader that keeps something it derived
+   * from the mailbox compares it: an unchanged revision means no committed change since. A change in
+   * memory that is not written yet does not move it, so such a reader also keeps a short age limit.
+   */
+  get revision(): number {
+    return this.#revision;
+  }
   /** Told of each new message from an agent to other agents, outside channel work, once it is saved. */
   onAgentMessage: ((message: MailboxAgentMessage) => void) | null = null;
   /**
@@ -2961,6 +2978,7 @@ export class MailboxStore {
     fileDeletions: string[] = [],
     replaceAll = false,
   ): void {
+    this.#revision += 1;
     const ownsTransaction = !this.#database.connection.isTransaction;
     const wrote = replaceAll
       ? this.#database.replaceMailboxState(commandId, this.#state, eventType, fileDeletions, true)

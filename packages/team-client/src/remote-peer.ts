@@ -339,6 +339,10 @@ interface PeerState {
   signalReady: boolean;
   /** The host answered a request on this peer, so its channels worked after authentication. */
   answeredRequest: boolean;
+  /** The ICE restarts that this peer offered on its connection. The host drops it after 10. */
+  iceRestarts: number;
+  /** A quiet replacement of this peer is waiting or running. */
+  replacing: boolean;
   /** The close code of the last Signal socket, so a connection timeout can name it. */
   lastSignalClose: number | null;
   hostProtocol?: number;
@@ -354,6 +358,16 @@ const SIGNAL_RENEW_DELAY_MS = 8_000;
 /** A socket that waits for the host is renewed with its resume token, so a dead socket does not wait forever. */
 const HOST_WAIT_RENEW_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 10 * 60_000 + 30_000;
+/**
+ * The host drops a connection at its 11th ICE restart (`maximumIceRestarts` in the host's WebRTC page),
+ * because Chromium keeps the sockets of every ICE generation. A healthy path that would restart more
+ * often than this is replaced quietly instead: a relayed path restarts at each TURN refresh, so a
+ * connection reached the limit after about 7.5 hours and then dropped. Two restarts stay for a lost path.
+ */
+const ICE_RESTART_BUDGET = 8;
+/** A quiet replacement waits this long at most for the writes in flight. */
+const REPLACE_WAIT_FOR_WRITES_MS = 10 * 60_000;
+const REPLACE_RECHECK_MS = 5_000;
 /**
  * The host gets no answer to its ICE consent checks while the phone is suspended, and stops using a
  * path that did not answer for 30 s (RFC 7675). A longer absence needs an ICE restart.
@@ -427,6 +441,8 @@ export function createRemoteTeamPeer(
   let signalRetryAt = 0;
   let generation = 0;
   const pendingRequests = new Map<string, PendingRequest>();
+  /** Requests other than reads that have not ended, uploads included. A quiet replacement waits for them. */
+  let writesInFlight = 0;
   const files = createRemoteFileSender(
     (data) =>
       Effect.suspend(() => {
@@ -774,11 +790,12 @@ export function createRemoteTeamPeer(
     })();
   }
 
-  function connectPeerEffect(hostId: string, hostPublicKey: string, actions: ActionsRef) {
+  /** `quiet` replaces a working connection: the consumer gets no `connecting` update for it. */
+  function connectPeerEffect(hostId: string, hostPublicKey: string, actions: ActionsRef, quiet = false) {
     return Effect.fn("RemotePeer.connectPeer")(function* () {
       if (!active) return yield* new RemotePeerError({ message: sourceText("error.remote.appInBackground") });
       const currentGeneration = ++generation;
-      yield* RemotePeerIO.use((io) => io.connectionUpdate({ hostId, state: "connecting", message: null }));
+      if (!quiet) yield* RemotePeerIO.use((io) => io.connectionUpdate({ hostId, state: "connecting", message: null }));
       const identity = yield* createEd25519Identity((size) => crypto.getRandomValues(new Uint8Array(size)));
       // The account API reuses an active logical session. A same-host bootstrap
       // must not race its revocation, even when failPeer already cleared `peer`.
@@ -841,6 +858,8 @@ export function createRemoteTeamPeer(
         hostWaitTimer: null,
         signalReady: false,
         answeredRequest: false,
+        iceRestarts: 0,
+        replacing: false,
         lastSignalClose: null,
       };
       peer = state;
@@ -1028,8 +1047,15 @@ export function createRemoteTeamPeer(
         // refresh only a relayed path restarts ICE to use the new credentials; any other path takes
         // them at its next gathering.
         const relayed = turnRefresh && online && state.connection ? yield* usesRelay(state.connection) : false;
-        const restartsIce = state.restartIceOnReady || !online || relayed;
+        // A restart of a working path past the budget would make the host drop the connection soon:
+        // the path stays as it is, and a new connection replaces it.
+        const replaces =
+          (state.restartIceOnReady || relayed) &&
+          online &&
+          (state.replacing || state.iceRestarts >= ICE_RESTART_BUDGET);
+        const restartsIce = !replaces && (state.restartIceOnReady || !online || relayed);
         state.restartIceOnReady = false;
+        if (replaces) replaceQuietly(state, actions);
         state.resumeToken = message.resumeToken;
         // Null on the `ready` that answers a TURN refresh: the credentials are new, the connection is
         // the one already open.
@@ -1420,6 +1446,8 @@ export function createRemoteTeamPeer(
         if (state && (method === "GET" || method === "HEAD")) state.needsResync = true;
         return yield* new RemotePeerError({ message: sourceText("error.remote.selectedServerOffline") });
       }
+      const write = method !== "GET" && method !== "HEAD";
+      if (write) writesInFlight += 1;
       const delivery = upload && onUploadProgress ? trackUploadDelivery(state, onUploadProgress) : null;
       return yield* Effect.gen(function* () {
         const bodyTransferId = upload ? yield* files.upload(upload, delivery?.queued) : null;
@@ -1539,7 +1567,14 @@ export function createRemoteTeamPeer(
         // A response confirms that the host has every uploaded byte.
         delivery?.complete();
         return response;
-      }).pipe(Effect.ensuring(Effect.sync(() => delivery?.stop())));
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            delivery?.stop();
+            if (write) writesInFlight -= 1;
+          }),
+        ),
+      );
     })();
   }
 
@@ -1665,6 +1700,7 @@ export function createRemoteTeamPeer(
       if (!connection || !state.connectionId) return;
       const connectionId = state.connectionId;
       yield* peerDecode(() => connection.restartIce());
+      state.iceRestarts += 1;
       const offer = yield* peerCall(() => connection.createOffer({ iceRestart: true }));
       yield* peerCall(() => connection.setLocalDescription(offer));
       yield* peerDecode(() =>
@@ -1677,6 +1713,55 @@ export function createRemoteTeamPeer(
         }),
       );
     })();
+  }
+
+  /**
+   * Replaces a working peer with a new connection on the same session, before the host drops it for
+   * too many ICE restarts. It waits for the writes in flight, so their result is not lost; a read in
+   * flight fails and the consumer sends it again. The consumer gets no `connecting` update, and an
+   * `online` update with `resync` at the end, because events between the two connections are lost.
+   * A replacement that fails ends as any failed connection does: with an `offline` update.
+   */
+  function replaceQuietly(state: PeerState, actions: ActionsRef): void {
+    if (state.replacing) return;
+    state.replacing = true;
+    const deadline = Date.now() + REPLACE_WAIT_FOR_WRITES_MS;
+    const attempt = () => {
+      if (state.closed || peer !== state) return;
+      // The next `ready` after the return to the foreground asks again.
+      if (!active) {
+        state.replacing = false;
+        return;
+      }
+      if (writesInFlight > 0 && Date.now() < deadline) {
+        setTimeout(attempt, REPLACE_RECHECK_MS);
+        return;
+      }
+      diagnose(state, "ice-recovery", `replace after ${state.iceRestarts} ICE restarts`);
+      void runPeerEffect(
+        Effect.gen(function* () {
+          yield* closePeer(actions.current.endSession, true);
+          yield* connectPeerEffect(state.hostId, state.hostPublicKey, actions, true);
+          yield* RemotePeerIO.use((io) =>
+            io.connectionUpdate({ hostId: state.hostId, state: "online", message: null, resync: true }),
+          );
+        }),
+      ).catch((error) => {
+        // A peer that another connect made has its own updates. Only a replacement that left none fails here.
+        // A disconnect or a connect that took over during the replacement is not its failure.
+        if (peer !== null) return;
+        const message = failureMessage(error);
+        if (
+          message === sourceText("error.remote.connectionReplaced") ||
+          message === sourceText("error.remote.appInBackground")
+        )
+          return;
+        const failure = referenced(message, failureReference(error));
+        void runPeerEffect(connectionOffline(state, failure, actions)).catch(() => undefined);
+      });
+    };
+    // The `ready` that asked for this finishes first, on the connection it has.
+    setTimeout(attempt, 0);
   }
 
   function canSignal(state: PeerState): boolean {

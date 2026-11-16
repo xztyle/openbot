@@ -1,5 +1,5 @@
 import type { QueueDeliveryStatus } from "@openbot/contracts/ipc";
-import type { AppFormat, AppTextKey, AppTranslate } from "@openbot/i18n";
+import type { AppTextKey, AppTranslate } from "@openbot/i18n";
 import {
   Button,
   CalendarClock,
@@ -33,7 +33,7 @@ import type {
 import { useText } from "../../text";
 import { prefersReducedMotion } from "../../utils";
 import { AgentAvatar } from "../agents/AgentAvatar";
-import { formatChatTimestamp } from "./chat-timestamp";
+import { formatMarkerTime, formatMarkerTimeRange, formatRangeEnd } from "./marker-time";
 
 interface ChatActionMarkerProps {
   marker: ChatActionMarkerModel;
@@ -335,7 +335,7 @@ function AgentMessageGroupMarker(
             <span>{agentsLabel()}</span>
           </Button>
           <time class="chat-action-marker-time" datetime={props.group.timestamp}>
-            {formatMarkerTime(props.group.timestamp, t, format)}
+            {formatMarkerTimeRange(props.group.messages[0]?.marker.timestamp, props.group.timestamp, t, format)}
           </time>
         </>
       )}
@@ -1090,29 +1090,4 @@ function statusIcon(status: ChatActionMarkerStatus) {
   if (status === "in-progress") return LoaderCircle;
   if (status === "queued") return Clock3;
   return MessageCircle;
-}
-
-function formatMarkerTime(value: string, t: AppTranslate, format: AppFormat): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return t("chat.marker.unknownTime");
-  return formatChatTimestamp(date, format);
-}
-
-/** The end of a time range names only the time when it is on the same day as the start. */
-function formatRangeEnd(start: string, end: string, t: AppTranslate, format: AppFormat): string {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || !sameDay(startDate, endDate))
-    return formatMarkerTime(end, t, format);
-  // A time today already shows without a date, in the same form as the start.
-  if (sameDay(endDate, new Date())) return formatChatTimestamp(endDate, format);
-  return format.date(endDate, { timeStyle: "short" });
-}
-
-function sameDay(first: Date, second: Date): boolean {
-  return (
-    first.getFullYear() === second.getFullYear() &&
-    first.getMonth() === second.getMonth() &&
-    first.getDate() === second.getDate()
-  );
 }

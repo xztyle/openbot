@@ -102,6 +102,7 @@ function foldedRows(agentId: string, rows: readonly AgentMessage[], options: Age
   const activeTurnId = options.activeTurnId;
   const working = rows.some((row) => row.streaming === true || (activeTurnId != null && row.turnId === activeTurnId));
   const timestamp = rows.findLast((row) => row.createdAt !== undefined)?.createdAt;
+  const startTimestamp = rows.find((row) => row.createdAt !== undefined)?.createdAt;
   const fold: AgentMessage = {
     id: agentTurnFoldId(key),
     ...(first.turnId === undefined ? {} : { turnId: first.turnId }),
@@ -117,6 +118,7 @@ function foldedRows(agentId: string, rows: readonly AgentMessage[], options: Age
       messageIds: rows.map((row) => row.id),
       count: count > 0 ? count : rows.length,
       timestamp,
+      startTimestamp,
       working,
       expanded,
     },

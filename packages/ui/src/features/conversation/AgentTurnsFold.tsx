@@ -3,7 +3,7 @@ import { Show } from "solid-js";
 import type { AgentProfile, AgentTurnsFold } from "../../data";
 import { useText } from "../../text";
 import { AgentAvatar } from "../agents/AgentAvatar";
-import { formatChatTimestamp } from "./chat-timestamp";
+import { formatMarkerTimeRange } from "./marker-time";
 
 export interface AgentTurnsFoldMarkerProps {
   fold: AgentTurnsFold;
@@ -24,7 +24,9 @@ export function AgentTurnsFoldMarker(props: AgentTurnsFoldMarkerProps) {
   const time = () => {
     const timestamp = props.fold.timestamp;
     const date = timestamp === undefined ? undefined : new Date(timestamp);
-    return date && !Number.isNaN(date.getTime()) ? { timestamp, text: formatChatTimestamp(date, format) } : undefined;
+    return timestamp !== undefined && date && !Number.isNaN(date.getTime())
+      ? { timestamp, text: formatMarkerTimeRange(props.fold.startTimestamp, timestamp, t, format) }
+      : undefined;
   };
   return (
     <Marker

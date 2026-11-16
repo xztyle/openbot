@@ -59,6 +59,8 @@ export interface AgentTurnsFold {
   count: number;
   /** The time of the newest message in the row. */
   timestamp: string | undefined;
+  /** The time of the first message in the row, where the row sorts. */
+  startTimestamp?: string | undefined;
   /** A turn of the row still runs. */
   working: boolean;
   expanded: boolean;

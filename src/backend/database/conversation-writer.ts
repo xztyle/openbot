@@ -36,9 +36,21 @@ export interface ConversationWriterOptions {
  * much as the thread is long, so a caller on a hot path that changed one message must use
  * `persistStreamingMessage` instead.
  */
+/** How many streaming messages keep their last flush event in memory. The oldest goes first. */
+const STREAMED_EVENT_MEMORY = 2_000;
+
 export class ConversationWriter {
   readonly #core: DatabaseCore;
   readonly #roster: AgentRoster;
+  /**
+   * The event that the last flush of each streaming message wrote, by thread, message and event type.
+   * The next flush deletes that row by its sequence. Finding it with the payload scan cost one
+   * `json_extract` per retained flush event of the thread (one per message ever streamed there),
+   * on every flush: about 3 ms for a thread with 600 of them, ten times a second per streaming
+   * message, which is what stalled main with many turns at once. The scan still runs for the first
+   * flush of a message in this process, which also removes the events of a run before a restart.
+   */
+  readonly #streamedEvents = new Map<string, { sequence: number; commandId: string }>();
 
   constructor(options: ConversationWriterOptions) {
     this.#core = options.core;
@@ -224,8 +236,12 @@ export class ConversationWriter {
     // so there is nothing to keep. A whole-snapshot write is not a fallback: the snapshot in memory
     // holds only the latest messages, and that write deletes every row it does not hold.
     if (!threadId || !message) return snapshot.revision;
-    return this.#core.dispatch(
-      input.commandId ?? `conversation:${input.eventType}:${randomUUID()}`,
+    const commandId = input.commandId ?? `conversation:${input.eventType}:${randomUUID()}`;
+    const streamedKey = `${threadId}\u0000${messageId}\u0000${input.eventType}`;
+    const previous = this.#streamedEvents.get(streamedKey);
+    let written: number | null = null;
+    const revision = this.#core.dispatch(
+      commandId,
       [
         {
           aggregateType: "thread",
@@ -243,7 +259,10 @@ export class ConversationWriter {
         const agent = this.#roster.getAgent(snapshot.agentId);
         if (!agent) throw new Error(`Unknown agent for conversation: ${snapshot.agentId}`);
         this.#roster.ensureThreadProjection(db, agent, sequence);
-        supersedeStreamedMessageEvents(db, threadId, messageId, input.eventType, sequence);
+        if (previous && previous.sequence < sequence)
+          supersedeStreamedEvent(db, threadId, input.eventType, previous.sequence, previous.commandId);
+        else supersedeStreamedMessageEvents(db, threadId, messageId, input.eventType, sequence);
+        written = sequences[0] ?? null;
         const orderBefore = readOrderInputs(db, threadId, [message.id]);
         // The index of the message in the snapshot is not its ordinal: the snapshot in memory holds
         // only the latest messages. A row keeps its ordinal, and a new one goes after the last.
@@ -297,6 +316,16 @@ export class ConversationWriter {
         return { revision: sequence };
       },
     ).revision;
+    // Only after the transaction committed: a rolled-back flush wrote no event to delete next time.
+    if (written !== null) {
+      this.#streamedEvents.delete(streamedKey);
+      this.#streamedEvents.set(streamedKey, { sequence: written, commandId });
+      if (this.#streamedEvents.size > STREAMED_EVENT_MEMORY) {
+        const oldest = this.#streamedEvents.keys().next();
+        if (!oldest.done) this.#streamedEvents.delete(oldest.value);
+      }
+    }
+    return revision;
   }
 
   appendConversationMessage(input: {
@@ -863,6 +892,21 @@ function conversationRecoveryState(
  * deleted by key: this runs on the flush path, and a scan of the whole receipts table is the cost
  * this write path exists to remove.
  */
+/** Deletes the one flush event that the last flush of a streaming message wrote, by its sequence. */
+function supersedeStreamedEvent(
+  db: DatabaseSync,
+  threadId: string,
+  eventType: string,
+  sequence: number,
+  commandId: string,
+): void {
+  db.prepare(
+    `DELETE FROM orchestration_events
+     WHERE sequence = ? AND aggregate_type = 'thread' AND aggregate_id = ? AND event_type = ?`,
+  ).run(sequence, threadId, eventType);
+  deleteReceiptsOf(db, [commandId]);
+}
+
 function supersedeStreamedMessageEvents(
   db: DatabaseSync,
   threadId: string,

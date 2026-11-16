@@ -219,6 +219,7 @@
     "test:hotmart": "bun scripts/hotmart-e2e.ts",
     "test:codex:login-path": "bun scripts/codex-login-path-e2e.ts",
     "test:claude-foreign-session": "bun scripts/claude-foreign-session-e2e.ts",
+    "test:chat-mcp-agent-values": "bun scripts/chat-mcp-agent-values-e2e.ts",
     "test:mcp-catalog": "bun scripts/mcp-catalog-smoke.ts",
     "test:mcp-oauth": "bun scripts/mcp-oauth-e2e.ts",
     "test:mcp-oauth-store": "bun scripts/mcp-oauth-store-e2e.ts",

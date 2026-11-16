@@ -25,6 +25,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as DotwellKnownAppleAppSiteAssociationRouteImport } from './routes/[.]well-known/apple-app-site-association'
 import { Route as DotwellKnownJwksDotjsonRouteImport } from './routes/[.]well-known/jwks[.]json'
 import { Route as AgentsTemplateIdRouteImport } from './routes/agents/$templateId'
+import { Route as AppSplatRouteImport } from './routes/app.$'
 import { Route as BillingReturnRouteImport } from './routes/billing/return'
 import { Route as BrandIndexRouteImport } from './routes/brand/index'
 import { Route as BrandFileRouteImport } from './routes/brand/$file'
@@ -247,6 +248,11 @@ const AgentsTemplateIdRoute = AgentsTemplateIdRouteImport.update({
   id: '/agents/$templateId',
   path: '/agents/$templateId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppSplatRoute = AppSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => AppRoute,
 } as any)
 const BillingReturnRoute = BillingReturnRouteImport.update({
   id: '/billing/return',
@@ -1010,7 +1016,7 @@ const V2RemoteHostsHostIdMembersMembershipIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/app': typeof AppRoute
+  '/app': typeof AppRouteWithChildren
   '/app-preview': typeof AppPreviewRoute
   '/changelog': typeof ChangelogRoute
   '/contact': typeof ContactRoute
@@ -1025,6 +1031,7 @@ export interface FileRoutesByFullPath {
   '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
   '/.well-known/jwks.json': typeof DotwellKnownJwksDotjsonRoute
   '/agents/$templateId': typeof AgentsTemplateIdRoute
+  '/app/$': typeof AppSplatRoute
   '/billing/return': typeof BillingReturnRoute
   '/brand/$file': typeof BrandFileRoute
   '/compare/$slug': typeof CompareSlugRoute
@@ -1169,7 +1176,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/app': typeof AppRoute
+  '/app': typeof AppRouteWithChildren
   '/app-preview': typeof AppPreviewRoute
   '/changelog': typeof ChangelogRoute
   '/contact': typeof ContactRoute
@@ -1184,6 +1191,7 @@ export interface FileRoutesByTo {
   '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
   '/.well-known/jwks.json': typeof DotwellKnownJwksDotjsonRoute
   '/agents/$templateId': typeof AgentsTemplateIdRoute
+  '/app/$': typeof AppSplatRoute
   '/billing/return': typeof BillingReturnRoute
   '/brand/$file': typeof BrandFileRoute
   '/compare/$slug': typeof CompareSlugRoute
@@ -1329,7 +1337,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/app': typeof AppRoute
+  '/app': typeof AppRouteWithChildren
   '/app-preview': typeof AppPreviewRoute
   '/changelog': typeof ChangelogRoute
   '/contact': typeof ContactRoute
@@ -1344,6 +1352,7 @@ export interface FileRoutesById {
   '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
   '/.well-known/jwks.json': typeof DotwellKnownJwksDotjsonRoute
   '/agents/$templateId': typeof AgentsTemplateIdRoute
+  '/app/$': typeof AppSplatRoute
   '/billing/return': typeof BillingReturnRoute
   '/brand/$file': typeof BrandFileRoute
   '/compare/$slug': typeof CompareSlugRoute
@@ -1505,6 +1514,7 @@ export interface FileRouteTypes {
     | '/.well-known/apple-app-site-association'
     | '/.well-known/jwks.json'
     | '/agents/$templateId'
+    | '/app/$'
     | '/billing/return'
     | '/brand/$file'
     | '/compare/$slug'
@@ -1664,6 +1674,7 @@ export interface FileRouteTypes {
     | '/.well-known/apple-app-site-association'
     | '/.well-known/jwks.json'
     | '/agents/$templateId'
+    | '/app/$'
     | '/billing/return'
     | '/brand/$file'
     | '/compare/$slug'
@@ -1823,6 +1834,7 @@ export interface FileRouteTypes {
     | '/.well-known/apple-app-site-association'
     | '/.well-known/jwks.json'
     | '/agents/$templateId'
+    | '/app/$'
     | '/billing/return'
     | '/brand/$file'
     | '/compare/$slug'
@@ -1968,7 +1980,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AppRoute: typeof AppRoute
+  AppRoute: typeof AppRouteWithChildren
   AppPreviewRoute: typeof AppPreviewRoute
   ChangelogRoute: typeof ChangelogRoute
   ContactRoute: typeof ContactRoute
@@ -2219,6 +2231,13 @@ declare module '@tanstack/solid-router' {
       fullPath: '/agents/$templateId'
       preLoaderRoute: typeof AgentsTemplateIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/app/$': {
+      id: '/app/$'
+      path: '/$'
+      fullPath: '/app/$'
+      preLoaderRoute: typeof AppSplatRouteImport
+      parentRoute: typeof AppRoute
     }
     '/billing/return': {
       id: '/billing/return'
@@ -3210,6 +3229,16 @@ declare module '@tanstack/solid-router' {
   }
 }
 
+interface AppRouteChildren {
+  AppSplatRoute: typeof AppSplatRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppSplatRoute: AppSplatRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 interface V1MeRouteChildren {
   V1MeAvatarRoute: typeof V1MeAvatarRoute
   V1MeProfileRoute: typeof V1MeProfileRoute
@@ -3346,7 +3375,7 @@ const V1MarketplaceAgentsAdminSubmissionsRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AppRoute: AppRoute,
+  AppRoute: AppRouteWithChildren,
   AppPreviewRoute: AppPreviewRoute,
   ChangelogRoute: ChangelogRoute,
   ContactRoute: ContactRoute,

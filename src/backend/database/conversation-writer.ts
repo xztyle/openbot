@@ -219,15 +219,11 @@ export class ConversationWriter {
   }): number {
     const { snapshot, messageId } = input;
     const threadId = snapshot.threadId;
-    // A thread is required to address a projection row, and the message has to be in the snapshot
-    // for its ordinal to be known. Neither holds for a flush that races a thread reset, so fall
-    // back to the whole-snapshot write rather than drop the text.
-    const ordinal = threadId ? snapshot.messages.findIndex((message) => message.id === messageId) : -1;
-    if (!threadId || ordinal < 0) {
-      return this.persistConversation(snapshot, input.eventType, input.detail ?? {}, input.commandId).revision;
-    }
-    const message = snapshot.messages[ordinal];
-    if (!message) throw new Error(`Streamed message is missing from the snapshot: ${messageId}`);
+    const message = snapshot.messages.find((candidate) => candidate.id === messageId);
+    // A flush that races a thread reset has no thread or no message to write: the text is in neither,
+    // so there is nothing to keep. A whole-snapshot write is not a fallback: the snapshot in memory
+    // holds only the latest messages, and that write deletes every row it does not hold.
+    if (!threadId || !message) return snapshot.revision;
     return this.#core.dispatch(
       input.commandId ?? `conversation:${input.eventType}:${randomUUID()}`,
       [
@@ -249,6 +245,21 @@ export class ConversationWriter {
         this.#roster.ensureThreadProjection(db, agent, sequence);
         supersedeStreamedMessageEvents(db, threadId, messageId, input.eventType, sequence);
         const orderBefore = readOrderInputs(db, threadId, [message.id]);
+        // The index of the message in the snapshot is not its ordinal: the snapshot in memory holds
+        // only the latest messages. A row keeps its ordinal, and a new one goes after the last.
+        const ordinal = requiredNumberColumn(
+          databaseRow(
+            db
+              .prepare(
+                `SELECT COALESCE(
+                   (SELECT ordinal FROM projection_thread_messages WHERE thread_id = ?1 AND message_id = ?2),
+                   (SELECT COALESCE(MAX(ordinal), -1) + 1 FROM projection_thread_messages WHERE thread_id = ?1)
+                 ) AS ordinal`,
+              )
+              .get(threadId, message.id),
+          ) ?? { ordinal: 0 },
+          "ordinal",
+        );
         db.prepare(`
           INSERT INTO projection_thread_messages (
             thread_id, message_id, turn_id, author, status, item_type, created_at,

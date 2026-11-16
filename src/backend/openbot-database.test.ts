@@ -1195,25 +1195,58 @@ describe("OpenBotDatabase", () => {
     database.close();
   });
 
-  it("falls back to a whole snapshot when the streamed message left the thread", async () => {
+  it("keeps every stored message when a flush names a message that the snapshot does not hold", async () => {
     const database = await createDatabase();
     const agent = testAgent();
     database.replaceAgents("agents-import", [agent], "agents.imported");
     if (!agent.threadId) throw new Error("The test agent has no thread.");
-    const snapshot = streamingSnapshot(agent, 2);
+    const snapshot = streamingSnapshot(agent, 5);
     database.persistConversation(snapshot, "turn.started", { turnId: "turn-1" });
-    // A thread reset between the buffer and its flush leaves the message unknown to the snapshot.
-    snapshot.messages = snapshot.messages.slice(0, 1);
+    const stored = database.readConversation(agent.id, agent.threadId).messages.map((message) => message.id);
+    // The snapshot in memory holds only the latest messages, and a thread reset between the buffer
+    // and its flush leaves the message unknown to it. A whole-snapshot write of it deleted every
+    // older row of the thread.
+    const bounded = { ...snapshot, messages: snapshot.messages.slice(-2, -1) };
 
     const revision = database.persistStreamingMessage({
-      snapshot,
-      messageId: "assistant-live",
+      snapshot: bounded,
+      messageId: "unknown-live",
       eventType: "response.delta-flushed",
     });
 
-    const conversation = database.readConversation(agent.id, agent.threadId);
-    expect(conversation.revision).toBe(revision);
-    expect(conversation.messages.map((message) => message.id)).toEqual(["settled-0"]);
+    expect(revision).toBe(bounded.revision);
+    expect(database.readConversation(agent.id, agent.threadId).messages.map((message) => message.id)).toEqual(stored);
+    database.close();
+  });
+
+  it("gives a streamed message of a bounded snapshot an ordinal after the stored ones", async () => {
+    const database = await createDatabase();
+    const agent = testAgent();
+    database.replaceAgents("agents-import", [agent], "agents.imported");
+    if (!agent.threadId) throw new Error("The test agent has no thread.");
+    const snapshot = streamingSnapshot(agent, 6);
+    const live = snapshot.messages.pop();
+    if (!live) throw new Error("The streaming message is missing.");
+    database.persistConversation(snapshot, "turn.completed", { turnId: "turn-0" });
+    // The snapshot in memory holds only the latest messages, so the index of a message in it is
+    // not its place in the thread.
+    const bounded = { ...snapshot, messages: [...snapshot.messages.slice(-2), live] };
+    const ordinals = () =>
+      Object.fromEntries(
+        database.connection
+          .prepare("SELECT message_id, ordinal FROM projection_thread_messages WHERE thread_id = ?")
+          .all(agent.threadId)
+          .map((row) => [row.message_id, row.ordinal]),
+      );
+
+    live.text = "first";
+    database.persistStreamingMessage({ snapshot: bounded, messageId: live.id, eventType: "response.delta-flushed" });
+    const first = ordinals();
+    live.text = "first and second";
+    database.persistStreamingMessage({ snapshot: bounded, messageId: live.id, eventType: "response.delta-flushed" });
+
+    expect(first[live.id]).toBe(6);
+    expect(ordinals()).toEqual(first);
     database.close();
   });
 

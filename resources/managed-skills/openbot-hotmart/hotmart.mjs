@@ -404,7 +404,7 @@ function dateOption(options, name) {
 // ---------- settings, credentials and audit ----------
 
 /**
- * The shared folder of the space of the agent that runs this helper, or null. OpenBot keeps one shared
+ * The shared folder of the space of the agent that runs this helper, and whether it is General's, or null. OpenBot keeps one shared
  * folder per space; an agent runs its commands in its workspace, `OpenBot/Agents/<agent id>`, and
  * `OpenBot/Spaces/index.json` names the shared folder of each agent's space.
  */
@@ -417,23 +417,28 @@ function spaceSharedFolder() {
         readFileSync(join(parts.slice(0, agents).join(sep) || sep, "Spaces", "index.json"), "utf8"),
       );
       const folder = index?.agents?.[parts[agents + 1]] ?? index?.general;
-      if (typeof folder === "string" && folder) return folder;
+      if (typeof folder === "string" && folder) return { folder, general: folder === index?.general };
     } catch {
       // No index: an OpenBot before spaces.
     }
   }
   const spaces = parts.lastIndexOf("Spaces");
-  if (spaces > 0 && parts[spaces + 2] === "Shared") return parts.slice(0, spaces + 3).join(sep);
+  if (spaces > 0 && parts[spaces + 2] === "Shared")
+    return { folder: parts.slice(0, spaces + 3).join(sep), general: parts[spaces + 1] === "general" };
   return null;
 }
 
 function defaultHome() {
   if (process.env.HOTMART_HOME) return process.env.HOTMART_HOME;
+  // The old global shared folder: the server image keeps it here; on a computer it is ~/OpenBot/Shared.
+  const legacy = existsSync("/data/OpenBot/Shared")
+    ? "/data/OpenBot/Shared/hotmart"
+    : join(homedir(), "OpenBot", "Shared", "hotmart");
   const space = spaceSharedFolder();
-  if (space) return join(space, "hotmart");
-  // An OpenBot before spaces. The server image keeps the shared folder here; on a computer it is ~/OpenBot/Shared.
-  if (existsSync("/data/OpenBot/Shared")) return "/data/OpenBot/Shared/hotmart";
-  return join(homedir(), "OpenBot", "Shared", "hotmart");
+  if (!space) return legacy;
+  const own = join(space.folder, "hotmart");
+  // An agent of General keeps the settings of the old folder until they are moved into General's.
+  return space.general && !existsSync(own) && existsSync(legacy) ? legacy : own;
 }
 
 const DEFAULT_SETTINGS = { sandbox: false, timezone: "" };

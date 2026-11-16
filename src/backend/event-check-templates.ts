@@ -29,7 +29,7 @@ export class EventCheckTemplates {
      * The Watchers folder of the agent's space, where its checks' programs live. Null: no agent yet (a
      * discovery for an install form), which uses the folder of `general`.
      */
-    readonly programsRoot: (agentId: string | null) => string,
+    readonly programsRoot: (agentId: string | null, program?: string) => string,
   ) {}
   list(): readonly EventCheckTemplate[] {
     if (this.#templates) return this.#templates;
@@ -93,7 +93,7 @@ export class EventCheckTemplates {
   matchedVersion(template: EventCheckTemplate, check: EventCheck): string | null {
     if (check.source.kind !== "api") return null;
     try {
-      const root = realpathSync(this.programsRoot(check.agentId));
+      const root = realpathSync(this.programsRoot(check.agentId, check.source.toolName));
       const path = realpathSync(join(root, check.source.toolName));
       if (!isPathInside(root, path) || !statSync(path).isFile()) return null;
       const digest = digestOf(path);

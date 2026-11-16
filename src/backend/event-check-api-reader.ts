@@ -34,20 +34,23 @@ export class EventCheckApiReader {
 
   constructor(
     readonly environment: EventCheckEnvironment,
-    /** The Watchers folder of the agent's space; null for a discovery that has no agent yet. */
-    readonly programsRoot: (agentId: string | null) => string,
+    /**
+     * The Watchers folder of the agent's space; null for a discovery that has no agent yet. With the
+     * program's name, it may answer the old global folder for a program that is only there.
+     */
+    readonly programsRoot: (agentId: string | null, program?: string) => string,
     readonly current: (check: EventCheck) => boolean,
     readonly nodeExecutable = "/usr/bin/node",
     /** Tests only. */
     readonly now: () => number = Date.now,
   ) {}
-  #program(input: EventCheckInput): { path: string; digest: string } {
+  #program(input: EventCheckInput): { path: string; digest: string; root: string } {
     return this.#programAt(input.source.toolName, input.agentId);
   }
-  #programAt(name: string, agentId: string | null): { path: string; digest: string } {
+  #programAt(name: string, agentId: string | null): { path: string; digest: string; root: string } {
     if (isAbsolute(name) || ![".mjs", ".js", ".py", ".sh"].includes(extname(name)))
       throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgram"));
-    const root = realpathSync(this.programsRoot(agentId)),
+    const root = realpathSync(this.programsRoot(agentId, name)),
       path = realpathSync(join(root, name));
     // The containment, type and size checks run on every call. Only the read and the hash are skipped.
     const before = statSync(path, { bigint: true });
@@ -55,7 +58,7 @@ export class EventCheckApiReader {
       throw new EventCheckRefusal(sourceText("error.backend.eventCheckProgram"));
     const state = fingerprint(before);
     const known = this.#hashed.get(path);
-    if (known?.fingerprint === state) return { path, digest: known.digest };
+    if (known?.fingerprint === state) return { path, digest: known.digest, root };
     const digest = createHash("sha256").update(readFileSync(path)).digest("hex");
     // Kept only when the file did not move during the read and has not changed lately.
     const quiet =
@@ -63,7 +66,7 @@ export class EventCheckApiReader {
       this.now() - Number(before.ctimeNs / 1_000_000n) >= RECENTLY_CHANGED_MS;
     if (quiet) this.#hashed.set(path, { fingerprint: state, digest });
     else this.#hashed.delete(path);
-    return { path, digest };
+    return { path, digest, root };
   }
   /**
    * Runs one program of the shared folder once, with `discover: true`, for a person who is filling a
@@ -82,7 +85,7 @@ export class EventCheckApiReader {
       });
       return yield* runEventCheckProgram(
         program.path,
-        this.programsRoot(null),
+        program.root,
         values,
         { ...args, discover: true },
         () => true,
@@ -127,7 +130,7 @@ export class EventCheckApiReader {
         call: (_operation, args) =>
           runEventCheckProgram(
             program.path,
-            this.programsRoot(check.agentId),
+            program.root,
             values,
             { ...Object.fromEntries(source.configuration.map((field) => [field.name, field.value])), ...args },
             valid,

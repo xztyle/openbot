@@ -13,6 +13,11 @@ export interface SpaceAgentTablesOptions {
   sharedDirectory: (agentId: string) => string;
   /** Every space with its shared folder. */
   spaces: () => { spaceId: string; sharedDirectory: string }[];
+  /**
+   * The old global shared folder. Until a database is in the shared folder of `general`, `general`
+   * keeps using the old global one, so the tables of an existing install stay where its agents are.
+   */
+  legacySharedRoot?: string | undefined;
 }
 
 /**
@@ -29,7 +34,7 @@ export class SpaceAgentTables {
   }
 
   forAgent(agentId: string): AgentTables {
-    return this.#at(this.#options.sharedDirectory(agentId));
+    return this.#at(this.#databaseRoot(this.#options.sharedDirectory(agentId)));
   }
 
   /**
@@ -39,7 +44,8 @@ export class SpaceAgentTables {
   listShared(): Effect.Effect<SharedTable[], AgentTablesError> {
     const spaces = this.#options
       .spaces()
-      .filter((space) => existsSync(join(space.sharedDirectory, "Data", "agent-data.db")));
+      .map((space) => ({ ...space, sharedDirectory: this.#databaseRoot(space.sharedDirectory, space.spaceId) }))
+      .filter((space) => existsSync(databaseFile(space.sharedDirectory)));
     return Effect.forEach(spaces, (space) =>
       this.#at(space.sharedDirectory)
         .listShared()
@@ -57,20 +63,32 @@ export class SpaceAgentTables {
       if (spaceId !== undefined) {
         const space = spaces.find((entry) => entry.spaceId === spaceId);
         if (!space) return yield* new AgentTablesError({ message: sourceText("error.backend.spaceNotFound") });
-        return yield* this.#at(space.sharedDirectory).removeAsUser(name);
+        return yield* this.#at(this.#databaseRoot(space.sharedDirectory, space.spaceId)).removeAsUser(name);
       }
       const owners = (yield* this.listShared()).filter((table) => table.name === name);
       if (owners.length > 1)
         return yield* new AgentTablesError({ message: sourceText("error.backend.spaceTableAmbiguous") });
       const owner = spaces.find((entry) => entry.spaceId === (owners[0]?.spaceId ?? GENERAL_SPACE_ID));
       if (!owner) return yield* new AgentTablesError({ message: sourceText("error.backend.spaceNotFound") });
-      return yield* this.#at(owner.sharedDirectory).removeAsUser(name);
+      return yield* this.#at(this.#databaseRoot(owner.sharedDirectory, owner.spaceId)).removeAsUser(name);
     });
   }
 
   dispose(): void {
     this.#byDirectory.clear();
     this.#options.supervisor.dispose();
+  }
+
+  /** The folder whose `Data` holds the database of a space; see `legacySharedRoot`. */
+  #databaseRoot(sharedDirectory: string, spaceId?: string): string {
+    const legacy = this.#options.legacySharedRoot;
+    const general =
+      spaceId === undefined
+        ? this.#options.spaces().find((space) => space.spaceId === GENERAL_SPACE_ID)?.sharedDirectory ===
+          sharedDirectory
+        : spaceId === GENERAL_SPACE_ID;
+    if (!general || !legacy || existsSync(databaseFile(sharedDirectory))) return sharedDirectory;
+    return existsSync(databaseFile(legacy)) ? legacy : sharedDirectory;
   }
 
   #at(sharedDirectory: string): AgentTables {
@@ -80,4 +98,8 @@ export class SpaceAgentTables {
     this.#byDirectory.set(sharedDirectory, tables);
     return tables;
   }
+}
+
+function databaseFile(sharedDirectory: string): string {
+  return join(sharedDirectory, "Data", "agent-data.db");
 }

@@ -1524,6 +1524,7 @@ export async function createApplicationServices({
   const statementTimings = new StatementTimings();
   // One shared database per space, in the space's shared folder.
   const tables = new SpaceAgentTables({
+    legacySharedRoot: store.sharedRoot,
     sharedDirectory: (agentId) => store.spaces.agentSharedDirectory(agentId),
     spaces: () =>
       store.spaces.list().map((space) => ({ spaceId: space.id, sharedDirectory: store.spaces.sharedDirectory(space) })),
@@ -1680,8 +1681,13 @@ export async function createApplicationServices({
     app.isPackaged
       ? join(process.resourcesPath, "watcher-catalog")
       : resolve(__dirname, "../../resources/watcher-catalog"),
-    // Each space keeps the programs of its agents' checks in its own shared folder.
-    (agentId) => join(store.spaces.agentSharedDirectory(agentId), "Watchers"),
+    // Each space keeps the programs of its agents' checks in its own shared folder. A program that is
+    // only in the old global folder is read from there, until it is moved.
+    (agentId, program) => {
+      const own = join(store.spaces.agentSharedDirectory(agentId), "Watchers");
+      const legacy = join(store.sharedRoot, "Watchers");
+      return program && !existsSync(join(own, program)) && existsSync(join(legacy, program)) ? legacy : own;
+    },
   );
   // Windows only: there the Antigravity server unpacks about 310 MB at each start, and the process
   // tree stop ends every command it started, so none outlives its folder. Elsewhere the system
@@ -1775,7 +1781,12 @@ export async function createApplicationServices({
           }
         },
       ),
-      (agentId) => join(store.spaces.agentSharedDirectory(agentId), "Watchers"),
+      // A program that is only in the old global folder still runs from there, until it is moved.
+      (agentId, program) => {
+        const own = join(store.spaces.agentSharedDirectory(agentId), "Watchers");
+        const legacy = join(store.sharedRoot, "Watchers");
+        return program && !existsSync(join(own, program)) && existsSync(join(legacy, program)) ? legacy : own;
+      },
       (check) => new EventCheckStore(store.database).current(check.id, check.revision) !== null,
     ),
     eventCheckTemplates,

@@ -18,6 +18,7 @@ import {
   type ChannelSummary,
   type ChannelTypingEntry,
   channelKind,
+  type DraftAttachment,
   GENERAL_SPACE_ID,
   isChannelAnswerMode,
   type TeamRealtimeEvent,
@@ -1525,6 +1526,31 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     return state.drafts[key] ?? "";
   }
 
+  // The files of each draft. They are uploads on the host, so they stay in memory only, but a change
+  // of conversation or thread, which makes a new composer, must not drop them.
+  const [draftFileStore, setDraftFileStore] = createStore<Record<string, DraftAttachment[]>>({});
+  function draftFiles(key: string): readonly DraftAttachment[] {
+    return draftFileStore[key] ?? [];
+  }
+  function setDraftFiles(key: string, files: readonly DraftAttachment[]) {
+    setDraftFileStore((current) => {
+      if (files.length) current[key] = [...files];
+      else delete current[key];
+    });
+  }
+  /**
+   * The operation id of a send whose answer did not come, by draft key. The same message sent again
+   * reuses it, so a host that stored the first one answers with its receipt and stores no copy.
+   */
+  const unansweredSends = new Map<string, { fingerprint: string; operationId: string }>();
+  function sendOperationId(key: string, fingerprint: string): string {
+    const unanswered = unansweredSends.get(key);
+    if (unanswered?.fingerprint === fingerprint) return unanswered.operationId;
+    const operationId = crypto.randomUUID();
+    unansweredSends.set(key, { fingerprint, operationId });
+    return operationId;
+  }
+
   function setDraft(key: string, text: string) {
     setState((draft) => {
       if (text) draft.drafts[key] = text;
@@ -1615,9 +1641,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     const mention = chatTagReferences(input.text).find(
       (reference) => reference.kind === "agent" && !input.text.slice(0, reference.start).trim(),
     );
+    const key = draftKey(input.channelId, input.threadRootId);
+    const operationId = sendOperationId(
+      key,
+      JSON.stringify([input.text, input.attachmentDraftIds, input.alsoToChannel === true]),
+    );
     await channels.send({
       type: "send",
-      operationId: crypto.randomUUID(),
+      operationId,
       channelId: input.channelId,
       text: input.text,
       recipientAgentId: input.threadRootId ? null : (mention?.id ?? null),
@@ -1626,6 +1657,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       ...(input.threadRootId ? { threadRootId: input.threadRootId } : {}),
       ...(input.threadRootId && input.alsoToChannel ? { alsoToChannel: true } : {}),
     });
+    if (unansweredSends.get(key)?.operationId === operationId) unansweredSends.delete(key);
     if (input.threadRootId && state.thread?.rootId === input.threadRootId)
       void loadThread(input.channelId, input.threadRootId, true);
     scheduleActivity(3_000);
@@ -2043,6 +2075,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     markRead,
     draft,
     setDraft,
+    draftFiles,
+    setDraftFiles,
     noteTyping,
     typingIn,
     refreshActivity,

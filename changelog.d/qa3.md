@@ -7,3 +7,5 @@
 - In the web app, a change to another server keeps the text that you wrote to each agent. Only the files go, because they were uploaded to the server that you left. Before, all draft text was deleted. A reconnect to the same server no longer hides the composer errors.
 - In the web app, the files of a queued message that you edit, and of the draft that the edit put aside, stay when you change to another server and come back. Before, the change deleted them, and Save or Cancel then failed or lost the files.
 - In the web app, a failed file upload shows its reason in your language. Before, it showed the technical English text of the error.
+- In a channel, the files that you attached stay with the message you write when you open another channel or thread and come back. Before, they were lost. A file that you choose arrives in the channel where you chose it.
+- In a channel, a message that you send again after its answer did not come is not stored twice.

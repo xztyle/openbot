@@ -39,7 +39,12 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const ws = useWorkspace();
   const id = Symbol("composer");
   const key = () => draftKey(props.channelId, props.threadRootId);
-  const [attachments, setAttachments] = createSignal<DraftAttachment[]>([]);
+  // The files belong to the draft of the conversation or thread, so a switch away and back keeps them.
+  const attachments = () => ws.draftFiles(key());
+  const setAttachments = (
+    next: readonly DraftAttachment[] | ((current: readonly DraftAttachment[]) => readonly DraftAttachment[]),
+    target = key(),
+  ) => ws.setDraftFiles(target, typeof next === "function" ? next(ws.draftFiles(target)) : next);
   const [sending, setSending] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
   const [alsoSend, setAlsoSend] = createSignal(false);
@@ -118,18 +123,23 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     return summary ? channelKind(summary) !== "dm" : true;
   };
 
-  function addFiles(files: readonly DraftAttachment[]) {
+  /** `target` is the draft that asked for the files: a picker can close after the reader moved on. */
+  function addFiles(files: readonly DraftAttachment[], target = key()) {
     if (!files.length) return;
-    setAttachments((current) => [...current, ...files.filter((file) => !current.some((item) => item.id === file.id))]);
+    setAttachments(
+      (current) => [...current, ...files.filter((file) => !current.some((item) => item.id === file.id))],
+      target,
+    );
   }
 
   async function attach() {
     lastComposer = id;
     setError(null);
+    const target = key();
     try {
-      addFiles(await ws.channels.port().agent.chooseAttachments({ filter: "all" }));
+      addFiles(await ws.channels.port().agent.chooseAttachments({ filter: "all" }), target);
     } catch (cause) {
-      if (cause instanceof PartialAttachmentImportError) addFiles(cause.attachments);
+      if (cause instanceof PartialAttachmentImportError) addFiles(cause.attachments, target);
       setError(errorMessage(cause, t("workspace.app.composer.attachFailed")));
     }
   }
@@ -159,10 +169,11 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     const importer = ws.channels.port().importAttachments;
     if (!importer) return undefined;
     return (files: File[]) => {
+      const target = key();
       void importer(files)
-        .then(addFiles)
+        .then((imported) => addFiles(imported, target))
         .catch((cause: unknown) => {
-          if (cause instanceof PartialAttachmentImportError) addFiles(cause.attachments);
+          if (cause instanceof PartialAttachmentImportError) addFiles(cause.attachments, target);
           setError(errorMessage(cause, t("workspace.app.composer.attachFailed")));
         });
       return undefined;
@@ -197,10 +208,12 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     const text = value();
     const files = attachments();
     const body = text.trim();
+    // The answer can come after the reader opened another conversation; the draft is this one's.
+    const sentKey = key();
     setSending(true);
-    ws.setDraft(key(), "");
+    ws.setDraft(sentKey, "");
     ws.noteTyping(props.channelId, props.threadRootId ?? null, false, true);
-    setAttachments([]);
+    setAttachments([], sentKey);
     try {
       await ws.send({
         channelId: props.channelId,
@@ -212,8 +225,8 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
       setAlsoSend(false);
     } catch (cause) {
       // The message stays in the box, so nothing the reader wrote is lost.
-      if (!ws.draft(key())) ws.setDraft(key(), text);
-      setAttachments((current) => (current.length ? current : files));
+      if (!ws.draft(sentKey)) ws.setDraft(sentKey, text);
+      setAttachments((current) => (current.length ? current : files), sentKey);
       setError(errorMessage(cause, t("workspace.app.composer.sendFailed")));
     } finally {
       setSending(false);
@@ -311,7 +324,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
               members={people()}
               broadcasts={isChannel()}
               channels={channelLinks()}
-              attachments={attachments()}
+              attachments={[...attachments()]}
               value={value()}
               placeholder={props.placeholder}
               ariaLabel={props.label}

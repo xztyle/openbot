@@ -290,6 +290,7 @@ import { RoutineFeedServer } from "./routine-feed-server";
 import { clearRoutineHold, ROUTINE_HOLD_FILE, takeRoutineHold, writeRoutineHold } from "./routine-hold-file";
 import { RunMarker } from "./run-marker";
 import { ScreenCapturer } from "./screen-capture";
+import { createServerAgentOperations } from "./server-agent-operations";
 import { agentProcessEnvironment, ServerMemory } from "./server-memory";
 import { ServerMode, type ServerModeEnvironment } from "./server-mode";
 import { createServerOperations } from "./server-operations";
@@ -3130,6 +3131,16 @@ export async function createApplicationServices({
         memory: hostMemory,
         onError: (message, error) => logger.warn(message, toLogValue(error)),
         log: (message) => logger.info(message),
+        agentOperations: createServerAgentOperations({
+          restartInterrupted: () => service.restartInterruptedDeliveryIds(),
+          database: () => store.database.connection,
+          agentIds: () => service.listAgents().map((agent) => agent.id),
+          // As the owner types it in the app on this computer: the same sender, queue and steer rules.
+          send: (input) =>
+            service.sendMessage(input, host.conversationSender()).pipe(Effect.mapError((error) => ({ cause: error }))),
+          markerFile: join(app.getPath("userData"), "openbot-restart-resumes-v1.json"),
+          log: (message) => logger.info(message),
+        }),
         ...createServerOperations({
           startedAt: Date.now() - process.uptime() * 1000,
           agentInitialization,

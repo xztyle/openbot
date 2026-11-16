@@ -509,6 +509,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #stoppedTurns = new Map<string, string>();
   /** The agents that asked for a new chat with `start_new_chat`. A restart forgets the request. */
   readonly #requestedNewChats = new Set<string>();
+  /**
+   * The deliveries that boot recovery ended as interrupted in this process: the work that the last
+   * restart, or a provider process that exited, cut off. The operator's resume route reads it.
+   */
+  readonly #restartInterruptedDeliveryIds = new Set<string>();
   #initialized = false;
   #stopping = false;
 
@@ -1056,7 +1061,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         executionThreads: () => [...this.channels.store.executionThreads(), ...this.messaging.store.executionThreads()],
         taskThreads: () => this.#tasks.executionThreads(),
         deliveryThreadId: (deliveryId) => this.#deliveryThreadId(deliveryId),
-        deliverySettled: (deliveryId, terminal) => this.messaging.deliverySettled(deliveryId, terminal),
+        deliverySettled: (deliveryId, terminal) => {
+          if (terminal === "interrupted") this.#restartInterruptedDeliveryIds.add(deliveryId);
+          this.messaging.deliverySettled(deliveryId, terminal);
+        },
       },
     });
     // The team channel shows one short line for each message between agents outside channel work.
@@ -4573,6 +4581,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
    * key is a hash, so it fits the identifier bound whatever the ids are, and has no `:`-separated
    * turn id for the mailbox to read.
    */
+  /** See `#restartInterruptedDeliveryIds`. */
+  restartInterruptedDeliveryIds(): ReadonlySet<string> {
+    return this.#restartInterruptedDeliveryIds;
+  }
+
   readonly sendMessage = Effect.fn("AgentService.sendMessage")(function* (
     this: AgentService,
     input: SendMessageInput,

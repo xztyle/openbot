@@ -39,7 +39,8 @@ import type { ServerHealth } from "./server-health";
 import type { ServerMemory } from "./server-memory";
 
 const CONTROL_SOCKET_FILE = "control.sock";
-const MAX_BODY_BYTES = 4096;
+/** Large enough for an operator message of the longest text that the app accepts. */
+const MAX_BODY_BYTES = 256 * 1024;
 const MAX_EMAIL_LENGTH = 254;
 /** The name of a server whose owner signed in without one. The same default as a mobile connect. */
 const DEFAULT_SERVER_NAME = "OpenBot";
@@ -99,11 +100,15 @@ export interface ServerModeOptions {
   /** The sanitized diagnostics report, as JSON text. */
   diagnostics?: () => Effect.Effect<string, { readonly cause: unknown }>;
   analytics?: ServerModeAnalytics;
+  /** The routes that reach agents (`server-agent-operations.ts`). They read the raw body. */
+  agentOperations?: {
+    route(method: string | undefined, path: string, rawBody: string): Promise<Answer | null>;
+  };
   /** Tests only. */
   uid?: number;
 }
 
-interface Answer {
+export interface Answer {
   status: number;
   lines: Record<string, string | number | null>;
   /** A whole body instead of lines, for the report. */
@@ -226,8 +231,13 @@ export class ServerMode {
   async #handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     let answer: Answer;
     try {
-      const body = await readBody(request);
-      answer = body === null ? failure(413, "too_large") : await this.#route(request.method, request.url, body);
+      const raw = await readBody(request);
+      const path = request.url?.split("?")[0] ?? "";
+      answer =
+        raw === null
+          ? failure(413, "too_large")
+          : ((await this.#options.agentOperations?.route(request.method, path, raw)) ??
+            (await this.#route(request.method, request.url, new URLSearchParams(raw))));
     } catch (error) {
       this.#options.onError("A server control request failed.", error);
       // The messages of the account and host services are the ones the app shows. They name no secret.
@@ -504,9 +514,9 @@ const ANALYTICS_SWITCH: Record<string, boolean | undefined> = {
 };
 
 /** The form body, or null when it is larger than a control request can be. */
-async function readBody(request: IncomingMessage): Promise<URLSearchParams | null> {
+async function readBody(request: IncomingMessage): Promise<string | null> {
   const body = await readBodyWithin(request, MAX_BODY_BYTES);
-  return body === null ? null : new URLSearchParams(body.toString("utf8"));
+  return body === null ? null : body.toString("utf8");
 }
 
 function failure(status: number, error: string, message: string | null = null): Answer {

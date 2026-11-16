@@ -398,10 +398,37 @@ let eventBytes = 0;
 const eventTypes = new Map<string, number>();
 const openChats = busy.slice(0, OPEN_CHATS).map((agent) => agent.agentId);
 const pageDue = new Map<string, NodeJS.Timeout>();
+const queueDue = new Map<string, NodeJS.Timeout>();
+/** The message that each busy agent works on now, by agent. */
+const pending = new Map<string, string>();
+const isActive = (status: string) => status === "queued" || status === "starting" || status === "running";
 service.on("event", (event) => {
   events += 1;
   eventTypes.set(event.type, (eventTypes.get(event.type) ?? 0) + 1);
-  eventBytes += time("client: event JSON", () => JSON.stringify(event).length);
+  // A current client gets a conversation or queue change as an invalidation and reads what it shows;
+  // the Team API encodes other events whole.
+  const sent =
+    event.type === "conversation"
+      ? { type: "conversation-invalidated", agentId: event.snapshot.agentId, revision: event.snapshot.revision }
+      : event.type === "queue-changed"
+        ? { type: "queue-invalidated", agentId: event.snapshot.agentId }
+        : event;
+  eventBytes += time("client: event JSON", () => JSON.stringify(sent).length);
+  if (event.type === "queue-changed") {
+    const delivery = pending.get(event.snapshot.agentId);
+    if (delivery && !event.snapshot.deliveries.some((item) => item.id === delivery && isActive(item.status)))
+      settle(event.snapshot.agentId);
+    if (openChats.includes(event.snapshot.agentId) && !queueDue.has(event.snapshot.agentId)) {
+      const agentId = event.snapshot.agentId;
+      queueDue.set(
+        agentId,
+        setTimeout(() => {
+          queueDue.delete(agentId);
+          time("client: open chat queue", () => JSON.stringify(service.listQueue(agentId)).length);
+        }, 300),
+      );
+    }
+  }
   if (
     event.type === "conversation" &&
     openChats.includes(event.snapshot.agentId) &&
@@ -441,7 +468,6 @@ const snapshots = setInterval(() => {
 // Load: each busy agent gets a new message when its last one ends.
 let sent = 0;
 let stopping = false;
-const pending = new Map<string, string>();
 async function sendNext(agentId: string): Promise<void> {
   if (stopping) return;
   const receipt = await runCauseEffect(
@@ -454,15 +480,18 @@ async function sendNext(agentId: string): Promise<void> {
   if (deliveryId) pending.set(agentId, deliveryId);
   sent += 1;
 }
+/** The agent's last message ended: it gets the next one. */
+function settle(agentId: string): void {
+  if (!pending.delete(agentId)) return;
+  void sendNext(agentId);
+}
+// The queue event of the end normally settles a message; this catches one that ended without it.
 const watcher = setInterval(() => {
   for (const [agentId, deliveryId] of pending) {
     const status = mailbox.getDelivery(deliveryId)?.delivery.status;
-    if (status === "completed" || status === "failed" || status === "interrupted") {
-      pending.delete(agentId);
-      void sendNext(agentId);
-    }
+    if (status === "completed" || status === "failed" || status === "interrupted") settle(agentId);
   }
-}, 250);
+}, 2_000);
 
 let session: Session | null = null;
 if (PROFILE) {
@@ -515,7 +544,7 @@ if (session) {
 clearInterval(watcher);
 clearInterval(snapshots);
 clearInterval(ticker);
-for (const timer of pageDue.values()) clearTimeout(timer);
+for (const timer of [...pageDue.values(), ...queueDue.values()]) clearTimeout(timer);
 
 const reconciled = (() => {
   const check = new DatabaseSync(join(userData, "openbot.db"), { readOnly: true });

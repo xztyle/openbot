@@ -368,4 +368,24 @@ export const messages = {
     "Este agente tiene {count} tareas abiertas. Cierra una tarea y después inicia o abre otra.",
   "error.backend.taskRemoteUnsupported": "Las tareas solo están disponibles para los agentes de este equipo.",
   "error.backend.taskStartFailed": "OpenBot no pudo iniciar la tarea. Haz el trabajo en este turno.",
+  "error.backend.spaceNotFound": "Este espacio ya no existe.",
+  "error.backend.spaceNameTaken": "Ya existe un espacio con este nombre.",
+  "error.backend.spaceLimit": "OpenBot puede tener como máximo {limit} espacios.",
+  "error.backend.spaceNotEmpty": "Mueve los agentes y canales de este espacio a otro espacio antes de eliminarlo.",
+  "error.backend.spaceGeneralKept":
+    "El espacio General no se puede eliminar. Contiene todos los agentes y canales que no están en otro espacio.",
+  "error.backend.spaceOrderInvalid": "Nombra cada espacio una vez para cambiar su orden.",
+  "error.backend.spaceDmFollowsAgent":
+    "Un mensaje directo con un agente está en el espacio de ese agente. Mueve el agente.",
+  "error.backend.spaceUnknownItem": "OpenBot no tiene ningún agente ni canal con el id {id}.",
+  "error.backend.spaceOtherAgent":
+    "{agent} está en otro espacio. Solo puedes ver y contactar a los agentes de tu propio espacio.",
+  "error.backend.spaceOtherChannel":
+    "Este canal está en otro espacio. Solo puedes ver y usar los canales de tu propio espacio.",
+  "error.backend.spaceOtherSection":
+    "Esta sección de la barra lateral contiene agentes o canales de otro espacio. Solo puedes cambiar las secciones de tu propio espacio.",
+  "error.backend.spaceTableAmbiguous":
+    "Varios espacios tienen una tabla con este nombre. Elimínala en la app de escritorio o pide a un agente de ese espacio que la quite.",
+  "error.backend.spaceChannelMember":
+    "{agent} está en un espacio distinto al de este canal. Un canal solo puede tener agentes de su propio espacio.",
 } as const satisfies PartialTranslation<typeof source>;

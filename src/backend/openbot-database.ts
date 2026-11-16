@@ -473,6 +473,7 @@ export class OpenBotDatabase {
     sessionId: string;
     fragment: import("./provider-history").ProviderHistoryFragment;
     cursor?: unknown;
+    exact?: boolean;
   }): ProviderHistoryStageResult {
     return this.#providerHistory.stageProviderHistoryFragment(input);
   }

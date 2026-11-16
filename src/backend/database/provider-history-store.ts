@@ -107,11 +107,16 @@ export class ProviderHistoryStore {
    * request. Items are keyed by their provider id where available, with a stable index fallback for
    * providers that omit item ids. A changed item clears its imported marker so it can be replayed.
    * An unchanged item is not written again.
+   *
+   * `exact`: the fragment holds every item from its offset to the end of its items, and to the end of
+   * the turn when it is complete. A staged item in that range that the fragment does not hold is gone
+   * from the provider's history, so it leaves the staging and the turn imports again without it.
    */
   stageProviderHistoryFragment(input: {
     sessionId: string;
     fragment: ProviderHistoryFragment;
     cursor?: unknown;
+    exact?: boolean;
   }): ProviderHistoryStageResult {
     const now = new Date().toISOString();
     return this.#transaction((db) => {
@@ -178,6 +183,7 @@ export class ProviderHistoryStore {
         `SELECT item_index, item_json FROM provider_history_staging
          WHERE session_id = ? AND turn_id = ? AND item_key = ?`,
       );
+      const fragmentKeys: string[] = [];
       for (const [itemIndex, item] of input.fragment.items.entries()) {
         const provisionalIndex = itemOffset + itemIndex;
         const provisionalKey = item.id ?? `${item.type}:${provisionalIndex}`;
@@ -191,6 +197,7 @@ export class ProviderHistoryStore {
         const absoluteIndex =
           previous && item.id && input.fragment.itemOffset === undefined ? previous.itemIndex : provisionalIndex;
         const itemKey = item.id ?? `${item.type}:${absoluteIndex}`;
+        fragmentKeys.push(itemKey);
         const storedItem =
           previous && item.id && input.fragment.itemOffset === undefined
             ? mergeHistoryItem(previous.itemJson, item)
@@ -199,6 +206,19 @@ export class ProviderHistoryStore {
         if (previous && previous.itemIndex === absoluteIndex && previous.itemJson === itemJson) continue;
         changed = true;
         writeItem.run(input.sessionId, input.fragment.turnId, itemKey, absoluteIndex, itemJson, now);
+      }
+      if (input.exact && input.fragment.itemOffset !== undefined) {
+        const end = input.fragment.complete
+          ? Number.MAX_SAFE_INTEGER
+          : input.fragment.itemOffset + input.fragment.items.length;
+        const removed = db
+          .prepare(
+            `DELETE FROM provider_history_staging
+             WHERE session_id = ? AND turn_id = ? AND item_index >= ? AND item_index < ?
+               AND item_key NOT IN (SELECT value FROM json_each(?))`,
+          )
+          .run(input.sessionId, input.fragment.turnId, input.fragment.itemOffset, end, JSON.stringify(fragmentKeys));
+        if (Number(removed.changes) > 0) changed = true;
       }
       if (changed) {
         db.prepare(

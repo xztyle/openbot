@@ -24,7 +24,7 @@ interface ProviderHistoryImportDatabase {
     provider: AgentProviderId;
     externalSessionId: string;
   }): unknown;
-  stageProviderHistoryFragment(input: { sessionId: string; fragment: ProviderHistoryFragment }): {
+  stageProviderHistoryFragment(input: { sessionId: string; fragment: ProviderHistoryFragment; exact?: boolean }): {
     turnImported: boolean;
   };
   stagedProviderHistoryItems(input: {
@@ -108,7 +108,13 @@ export function importProviderHistory(
     const consume: ProviderHistoryConsumer = (fragment) =>
       Effect.gen(function* () {
         const staged = yield* providerSync(() =>
-          input.database.stageProviderHistoryFragment({ sessionId: input.sessionId, fragment }),
+          // A Claude fragment holds every item of its range, so an item that the reader no longer gives,
+          // such as a synthetic reply, leaves the staging and is not imported again.
+          input.database.stageProviderHistoryFragment({
+            sessionId: input.sessionId,
+            fragment,
+            exact: input.provider === "claude",
+          }),
         );
         if (!fragment.complete) return true;
         providerCovered = true;

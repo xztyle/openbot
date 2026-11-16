@@ -1082,9 +1082,15 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
   },
   {
     version: 51,
-    // Changes a few dozen channel messages and appends one event for each channel, so no foreign-key pause
-    // and no vacuum.
-    up: deleteImportedChannelCopies,
+    // Removes a few thread rows and changes a few dozen channel messages, and appends one event for each
+    // thread and channel, so no foreign-key pause and no vacuum.
+    up: (db, appliedAt) => {
+      // Imports after migration 49 brought some "No response requested." rows back: the staging kept an
+      // item that the reader no longer gave. The rule of migration 49 removes them again; the staging
+      // now drops such an item, so they stay removed.
+      removeImportedLiveCopies(db, appliedAt);
+      deleteImportedChannelCopies(db, appliedAt);
+    },
   },
 ];
 

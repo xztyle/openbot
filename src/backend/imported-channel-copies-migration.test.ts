@@ -96,6 +96,29 @@ function seed(db: DatabaseSync): void {
       );
   }
   db.prepare("INSERT INTO projection_channel_summaries VALUES (?, ?, ?, ?)").run(CHANNEL, 1, 5, "A summary");
+  // A synthetic reply that an import brought back after migration 49.
+  db.prepare(
+    `INSERT INTO projection_threads (thread_id, agent_id, title, active_turn_id, created_at, updated_at, last_event_sequence)
+     VALUES ('openbot-thread-agent', 'agent', 'Chat', NULL, '2026-11-16T09:00:00.000Z', '2026-11-16T09:00:00.000Z', 1)`,
+  ).run();
+  const reply = {
+    id: "back-again",
+    turnId: "turn",
+    author: "assistant",
+    text: "No response requested.",
+    createdAt: "2026-11-16T10:00:00.000Z",
+    status: "completed",
+  };
+  db.prepare(
+    `INSERT INTO projection_thread_messages
+       (thread_id, message_id, turn_id, author, status, item_type, created_at, ordinal, message_json, last_event_sequence,
+        group_start, group_first, group_id, turn_rank)
+     VALUES ('openbot-thread-agent', 'back-again', 'turn', 'assistant', 'completed', NULL, ?, 0, ?, 2, ?, 0, 'turn:turn', 3)`,
+  ).run(reply.createdAt, JSON.stringify(reply), reply.createdAt);
+  db.prepare(
+    `INSERT INTO orchestration_events (event_id, command_id, aggregate_type, aggregate_id, event_type, occurred_at, payload_json)
+     VALUES ('event-back-again', 'command-back-again', 'thread', 'openbot-thread-agent', 'provider-history.message-imported', ?, ?)`,
+  ).run(reply.createdAt, JSON.stringify({ detail: { provider: "claude" }, importedMessage: reply }));
 }
 
 function deletedIds(db: DatabaseSync): string[] {
@@ -117,6 +140,7 @@ describe("imported channel copies migration 51", () => {
 
     expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 51 });
     expect(deletedIds(db)).toEqual(["imported-copy", "synthetic"]);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM projection_thread_messages").get()).toEqual({ count: 0 });
     const copy = JSON.parse(
       String(
         db.prepare("SELECT message_json FROM projection_channel_messages WHERE message_id = 'imported-copy'").get()

@@ -250,6 +250,37 @@ async function runProviderHistoryReimportCheck(outputPath: string): Promise<Repo
     ]);
     const notificationAgainTexts = messageTexts();
 
+    // An item that the reader no longer gives, such as a synthetic reply, leaves the staging: when the
+    // turn imports again, a row that a cleanup removed does not come back.
+    const syntheticTurn = (answer: string, synthetic: boolean): ProviderHistoryFragment => ({
+      turnId: "claude-synthetic-turn",
+      status: "completed",
+      startedAt: 12,
+      itemOffset: 0,
+      complete: true,
+      items: [
+        { type: "agentMessage", id: "synthetic-answer", text: answer, status: "completed" },
+        ...(synthetic
+          ? [
+              {
+                type: "agentMessage" as const,
+                id: "synthetic-reply",
+                text: "No response requested.",
+                status: "completed",
+              },
+            ]
+          : []),
+      ],
+    });
+    await runImport("claude-synthetic-session", "claude", [syntheticTurn("An answer of the turn.", true)]);
+    database.connection
+      .prepare("DELETE FROM projection_thread_messages WHERE thread_id = ? AND message_id = 'synthetic-reply'")
+      .run(threadId);
+    const syntheticAgain = await runImport("claude-synthetic-session", "claude", [
+      syntheticTurn("An answer of the turn, read again.", false),
+    ]);
+    const syntheticTexts = messageTexts();
+
     // A turn that an import did not finish keeps `imported = 0` and is imported at the next start.
     database.connection
       .prepare("UPDATE provider_history_turns SET imported = 0 WHERE session_id = ? AND turn_id = ?")
@@ -274,6 +305,7 @@ async function runProviderHistoryReimportCheck(outputPath: string): Promise<Repo
         claudeFailed,
         claudeNotification,
         claudeNotificationAgain,
+        syntheticAgain,
         unfinished,
       },
       acceptance: {
@@ -308,6 +340,10 @@ async function runProviderHistoryReimportCheck(outputPath: string): Promise<Repo
           claudeNotificationAgain.turns === 1 &&
           notificationAgainTexts.filter((text) => text === LIVE_ANSWER).length === 1 &&
           notificationAgainTexts.includes(`${TRANSCRIPT_ONLY_ANSWER} Again.`),
+        removedItemStaysRemoved:
+          syntheticAgain.turns === 1 &&
+          syntheticTexts.includes("An answer of the turn, read again.") &&
+          !syntheticTexts.includes("No response requested."),
         unfinishedTurnImportsAgain: unfinished.turns === 1,
         importCompleted: database.providerHistoryImport("codex-session")?.state === "complete",
       },

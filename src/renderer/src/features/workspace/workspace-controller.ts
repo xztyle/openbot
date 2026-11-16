@@ -582,11 +582,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   function selectSpace(spaceId: string) {
     spaces.select(spaceId);
     const open = activeConversationId();
-    if (open && rowSpace(open) !== spaceId) {
-      openView("activity");
-      // A phone shows one pane: the reader picked the space on the sidebar and wants to see its list.
-      if (env.phone()) setPhonePane("sidebar");
-    }
+    // A phone shows one pane: the reader picked the space on the sidebar and wants to see its list.
+    if (open && rowSpace(open) !== spaceId) openView("activity", env.phone() ? "sidebar" : "main");
   }
   /**
    * A conversation of another space that the reader opens, from Jump to, a notification, a link or a
@@ -1425,7 +1422,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     else openChannel(id);
   }
 
-  function openView(view: WorkspaceView) {
+  /** Shows a view. `pane` is the pane that a phone shows after it; a store read in this batch is stale. */
+  function openView(view: WorkspaceView, pane: WorkspacePhonePane = "main") {
     channels.close();
     setState((draft) => {
       draft.view = view;
@@ -1433,7 +1431,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       draft.thread = null;
       draft.editing = null;
     });
-    setPhonePane("main");
+    setPhonePane(pane);
     if (view === "activity" || view === "threads") void refreshActivity();
     if (view === "fleet") fleet.refresh?.();
     if (view === "artifacts") artifacts.refresh?.();

@@ -52,6 +52,26 @@ const slackRuntime: WebRuntimeFactory = (_accountId, events) =>
 
 export const SlackWorkspace: Story = { args: { createRuntime: slackRuntime } };
 
+/** The workspace with spaces: Trading holds Research and #cakemaker. Check it at phone width too. */
+const spacesRuntime: WebRuntimeFactory = (_accountId, events) =>
+  mockWebRuntimeFor(
+    createMockOpenBot({
+      channels: seeds(WEB_PREVIEW_MEMBER_ID),
+      channelMemberId: WEB_PREVIEW_MEMBER_ID,
+      spaces: [
+        {
+          space: { id: "trading", name: "Trading", icon: "📈", hue: 215 },
+          agentIds: ["research"],
+          channelIds: ["cakemaker"],
+        },
+        { space: { id: "piks", name: "Piks", icon: null, hue: 150 } },
+      ],
+    }),
+    events,
+  );
+
+export const SpacesWorkspace: Story = { args: { createRuntime: spacesRuntime } };
+
 /** A long conversation. `bun run perf:web` streams replies into it and counts the host requests. */
 export const LongConversation: Story = {
   args: { createRuntime: createBenchWebRuntime },

@@ -5,3 +5,4 @@
 ### Fixed
 
 - The server stalls less while agents stream answers. Each change to a chat serialized and hashed the whole chat about five times; it now does this once.
+- The server no longer reads all tasks of a channel twice for each task that the channel ever had when it looks for queued work.

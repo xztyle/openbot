@@ -1502,7 +1502,12 @@ export class ChannelService {
     this: ChannelService,
     channelId: string,
   ): Effect.fn.Return<void, ChannelOperationError> {
-    for (const candidate of yield* channelSync(() => this.store.tasks(channelId))) {
+    // A pass looks at the tasks that are queued when it starts. Each read of the channel's tasks parses
+    // all of them, and a pass read them twice for every task the channel ever had: a busy channel spent
+    // seconds a minute here. A task that becomes queued during the pass wakes the channel, which runs
+    // the next pass after this one (`#wakeAgain`).
+    const queued = (yield* channelSync(() => this.store.tasks(channelId))).filter((task) => task.state === "queued");
+    for (const candidate of queued) {
       if (this.#stopped || this.#deletedChannels.has(channelId)) return;
       let channel = yield* channelSync(() => this.store.get(channelId));
       if (channel.archived) return;

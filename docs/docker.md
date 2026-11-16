@@ -49,7 +49,7 @@ The options in both examples are necessary:
 | --- | --- |
 | `seccomp=seccomp.json` | The Electron sandbox makes user namespaces. The default seccomp profile of Docker refuses them, and the container stops with a message. See [Security](#security). |
 | `--cap-drop ALL --cap-add SYS_CHROOT` | The image needs no capability except `chroot`, which the Electron sandbox uses in its user namespace. See [Security](#security). |
-| `--pids-limit 8192` | Counts threads too. A fork bomb of an agent cannot use all process slots of the host. Raise it only if a large build reaches it. |
+| `--pids-limit 8192` | Counts threads too. A fork bomb of an agent cannot use all process slots of the host. Do not set less than about 4096: each agent browser tab is a Chromium process of about 20 threads, and each running Claude agent uses 20 to 40 threads for its CLI and its MCP servers. At the limit, the Claude CLI aborts (SIGABRT) and the turn fails with "reached its limit of … processes and threads". `resources.ndjson` records `tasks` (current, limit, refused) each minute. Raise it if a large build reaches it. |
 | `--shm-size 1g` | Chromium uses shared memory. The Docker default of 64 MB is too small. When `/dev/shm` is smaller than 1 GiB, Chromium uses `/tmp`, which is slower. |
 | `--stop-timeout 60` | OpenBot stops its agents and closes its database before it exits. |
 | `-v openbot-data:/data` | All data is in `/data`. Without a volume, it goes away with the container. |

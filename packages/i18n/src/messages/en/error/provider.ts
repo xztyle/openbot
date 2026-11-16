@@ -204,6 +204,8 @@ export const messages = defineMessages("error.provider", {
   "error.provider.chatgptPageFailed": "OpenBot could not open the ChatGPT connection page.",
   "error.provider.noneReady": "No agent provider is ready.",
   "error.provider.claudeTurnActive": "Wait for the active Claude turn before refreshing its context.",
+  "error.provider.claudeProcessLimit":
+    "The Claude process stopped because the server reached its limit of {limit} processes and threads. Raise the limit, such as the container's pids_limit, or run fewer agents at once.",
   "error.provider.codexLoginRequired": "Codex requires a ChatGPT subscription login. Run `codex login`.",
   "error.provider.cliUpdateFailed": "OpenBot could not update the {provider} CLI. {reason}",
   "error.provider.tryAgain": "Try again.",

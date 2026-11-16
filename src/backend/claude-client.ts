@@ -103,6 +103,7 @@ import {
   usableMcpServers,
 } from "./mcp-provider-shapes";
 import { PendingServerRequests } from "./pending-server-requests";
+import { readTaskLimit, type TaskLimitState, taskLimitReachedSince } from "./process-limit";
 import {
   type AccountRateLimitsReadResult,
   type AccountRateLimitWindowResult,
@@ -231,6 +232,8 @@ interface ThreadRuntime {
   subagents: ClaudeSubagentState;
   /** Background subagents and commands that outlive their turn. Stopping the process ends them (#1870). */
   backgroundTasks: number;
+  /** The cgroup task limit when the process started, to tell whether a crash came from that limit. */
+  taskLimit: TaskLimitState | null;
 }
 
 /**
@@ -865,6 +868,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     if (handoff) this.#reportMcpDrops?.(this.provider, handoff.dropped);
     const mcpServers = handoff ? { ...handoff.servers, ...this.#createOpenBotServers(threadId) } : {};
     const nodeOptions = this.#agentEnvironment?.().NODE_OPTIONS;
+    const taskLimit = readTaskLimit();
     const claudeQuery = yield* providerSync(() =>
       this.#createQuery({
         prompt: input,
@@ -951,6 +955,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       plan: newClaudePlanState(),
       subagents: newClaudeSubagentState(),
       backgroundTasks: 0,
+      taskLimit,
     };
     runtime.consume = yield* Effect.forkIn(this.#consume(runtime), this.#scope, { startImmediately: true });
     this.#threads.add(runtime);
@@ -1008,6 +1013,8 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     }
     // The CLI can start a turn of its own while the model or effort changes above.
     if (runtime.activeTurn) return yield* providerFailure(this.#turnActiveError(runtime.activeTurn));
+    // A crash is compared with the task limit at the start of its turn, not at a start hours ago.
+    runtime.taskLimit = readTaskLimit();
     // Only now: a model or effort change that fails above leaves the idle timer armed, so the
     // pool can still release the thread.
     this.#beginTurn(runtime, turnId, false);
@@ -1144,9 +1151,11 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
       }
     } catch (error) {
       if (!this.#running || this.#threads.get(runtime.id) !== runtime) return;
+      const cause = error instanceof Error ? error : new Error(String(error));
+      const failure = processLimitFailure(runtime.taskLimit, cause) ?? cause;
       const activeTurn = runtime.activeTurn;
-      if (activeTurn) yield* this.#completeTurn(runtime, "failed", error);
-      this.#loseThread(runtime, error instanceof Error ? error : new Error(String(error)));
+      if (activeTurn) yield* this.#completeTurn(runtime, "failed", failure);
+      this.#loseThread(runtime, cause);
     }
   });
 
@@ -1165,8 +1174,10 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     }
     for (const change of stopClaudeSubagents(runtime.subagents, new Date().toISOString()))
       this.#emitSubagents(runtime, change);
+    const taskLimit = readTaskLimit();
     queryLogger.warn("A Claude process ended by itself. Its thread opens again at its next turn.", {
       message: error.message,
+      ...(taskLimit ? { tasks: taskLimit.current, taskLimit: taskLimit.max, tasksRefused: taskLimit.refused } : {}),
     });
   }
 
@@ -1965,6 +1976,21 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
   #sdkModel(model: string): string {
     return this.#modelSdkValues.get(model) ?? normalizeClaudeModel(model);
   }
+}
+
+/**
+ * The error of a Claude process that a signal ended after the kernel refused a new task: the CLI
+ * aborts with no message when it cannot start a thread, and the plain "terminated by signal
+ * SIGABRT" says nothing about the cause or the fix. Production on 2026-11-16: eight crashes, each
+ * at a "fork rejected by pids controller" of the container's `pids_limit: 1024`.
+ */
+function processLimitFailure(before: TaskLimitState | null, cause: Error): Error | null {
+  if (!/terminated by signal/i.test(cause.message)) return null;
+  const after = readTaskLimit();
+  if (!taskLimitReachedSince(before, after)) return null;
+  return new Error(sourceText("error.provider.claudeProcessLimit", { limit: after?.max ?? after?.current ?? 0 }), {
+    cause,
+  });
 }
 
 type ClaudeSdkLaunch = Pick<Options, "pathToClaudeCodeExecutable" | "spawnClaudeCodeProcess">;

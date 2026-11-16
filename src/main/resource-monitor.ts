@@ -13,6 +13,7 @@ import {
   type RenderProcessGoneDetails,
   type WebContents,
 } from "electron";
+import { readTaskLimit, type TaskLimitState } from "../backend/process-limit";
 import { providerProcessIds } from "../backend/provider-processes";
 import type { AnalyticsResourceSource } from "./analytics";
 import { AnalyticsOperationFailure, toAnalyticsOperationFailure } from "./analytics-effects";
@@ -81,6 +82,11 @@ interface ResourceSample {
   activeTurns: number;
   browserTabs: number;
   providerTreeSupported: boolean;
+  /**
+   * The tasks (processes and threads) of the cgroup and its limit, such as a container's
+   * `pids_limit`. A program that cannot start a thread at the limit often aborts with no message.
+   */
+  tasks?: TaskLimitState;
 }
 
 /**
@@ -381,6 +387,7 @@ export class ResourceMonitor implements AnalyticsResourceSource {
     day.samples += 1;
     if (!providerTreeSupported) day.providerTreeSupported = false;
 
+    const tasks = process.platform === "linux" ? readTaskLimit() : null;
     const sample: ResourceSample = {
       at: now.toISOString(),
       rssMb: { ...roundedEntries(rss), total: Math.round(totalRss) },
@@ -400,6 +407,7 @@ export class ResourceMonitor implements AnalyticsResourceSource {
       activeTurns: this.#activeTurns.size,
       browserTabs: tabPids.size,
       providerTreeSupported,
+      ...(tasks ? { tasks } : {}),
     };
     this.#lastSample = sample;
     yield* this.#writes

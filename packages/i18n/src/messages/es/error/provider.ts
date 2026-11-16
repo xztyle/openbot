@@ -215,6 +215,8 @@ export const messages = {
   "error.provider.chatgptPageFailed": "OpenBot no pudo abrir la página de conexión de ChatGPT.",
   "error.provider.noneReady": "Ningún proveedor de agentes está listo.",
   "error.provider.claudeTurnActive": "Espera a que termine el turno activo de Claude antes de actualizar su contexto.",
+  "error.provider.claudeProcessLimit":
+    "El proceso de Claude se detuvo porque el servidor llegó a su límite de {limit} procesos e hilos. Sube el límite, como el pids_limit del contenedor, o ejecuta menos agentes a la vez.",
   "error.provider.codexLoginRequired":
     "Codex requiere iniciar sesión con una suscripción de ChatGPT. Ejecuta `codex login`.",
   "error.provider.cliUpdateFailed": "OpenBot no pudo actualizar la CLI de {provider}. {reason}",

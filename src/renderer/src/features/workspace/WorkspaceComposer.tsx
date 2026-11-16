@@ -108,6 +108,13 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
       .filter((person) => !ws.env.isReader(person.id))
       .map((person) => ({ id: person.id, name: person.name, avatarUrl: person.avatarUrl })),
   );
+  /** A mention reaches only members, so the picker offers only the agents of this conversation. */
+  const mentionAgents = createMemo(() => {
+    const summary = ws.summary(props.channelId);
+    if (!summary) return ws.env.agents();
+    const members = new Set(summary.members.map((member) => member.agentId));
+    return ws.env.agents().filter((agent) => members.has(agent.id));
+  });
   const channelLinks = createMemo((): ComposerChannel[] =>
     ws.channels.state.channels
       .filter(
@@ -320,7 +327,7 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
           <div class="ws-composer-editor-anchor" data-picker-anchor="">
             <ComposerEditor
               agentId={key()}
-              agents={ws.env.agents()}
+              agents={mentionAgents()}
               members={people()}
               broadcasts={isChannel()}
               channels={channelLinks()}

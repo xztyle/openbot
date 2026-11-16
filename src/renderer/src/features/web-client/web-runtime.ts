@@ -1117,8 +1117,19 @@ export function createWebWorkspaceRuntime(
     stop: (id, turnId) =>
       Effect.runPromise(interruptAgentTurn(teamApi, id, turnId).pipe(Effect.mapError((error) => error.cause))),
     queue: (id) => teamApi("GET", TEAM_API_ROUTES.agent.queue(id), (value) => queueSnapshot(id, value)),
-    editQueue: ({ agentId, ...edit }) =>
-      teamApi("POST", TEAM_API_ROUTES.agent.queueEdit(agentId), (value) => queueSnapshot(agentId, value), edit),
+    async editQueue({ agentId, ...edit }) {
+      const snapshot = await teamApi(
+        "POST",
+        TEAM_API_ROUTES.agent.queueEdit(agentId),
+        (value) => queueSnapshot(agentId, value),
+        edit,
+      );
+      // The edit owns these drafts now: a retained composer backup waits for Cancel or Save, and a
+      // saved message holds its new files. A change of host must not discard them as leftover uploads.
+      if ((edit.action === "retain-attachments" || edit.action === "save") && edit.attachmentDraftIds)
+        removeCompletedDrafts(edit.attachmentDraftIds);
+      return snapshot;
+    },
     cancelQueued: (input) =>
       Effect.runPromise(cancelQueuedMessage(teamApi, input).pipe(Effect.mapError((error) => error.cause))),
     steerQueued: (input) =>

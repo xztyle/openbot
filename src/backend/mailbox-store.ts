@@ -450,6 +450,9 @@ export class MailboxStore {
     try {
       const index = this.#state.drafts.findIndex((draft) => draft.id === id);
       if (index < 0) return;
+      // A queue edit holds this composer backup until its Save or Cancel, which return it to the
+      // normal lifetime. A client's cleanup of leftover uploads must not take it before then.
+      if (this.#state.drafts[index]?.ownerEditId) return;
       const [draft] = this.#state.drafts.splice(index, 1);
       if (!draft) return;
       this.#changes.draftIds.add(draft.id);

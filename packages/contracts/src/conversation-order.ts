@@ -21,7 +21,11 @@ import type { ConversationMessage } from "./ipc-conversation-messages";
  */
 export function sortConversationMessages(messages: ConversationMessage[]): ConversationMessage[] {
   const originalIndexes = new Map(messages.map((message, index) => [message, index]));
-  const parts = turnParts(messages);
+  // Each time is parsed once: the comparisons below parsed both dates of each pair, a few thousand
+  // times for each sort of a chat of 100 messages.
+  const times = new Map(messages.map((message) => [message, parsedTime(message)]));
+  const messageTime = (message: ConversationMessage) => times.get(message) ?? parsedTime(message);
+  const parts = turnParts(messages, messageTime);
   const groupKeys = new Map<ConversationMessage, string>();
   const groups = new Map<string, { startedAt: number; firstIndex: number }>();
 
@@ -63,7 +67,10 @@ export function sortConversationMessages(messages: ConversationMessage[]): Conve
  * The part of its turn that each message of a turn is in: the count of the turn's inputs up to it, in
  * time order, and at least 1. A turn's second input, a steer, starts part 2.
  */
-function turnParts(messages: readonly ConversationMessage[]): Map<ConversationMessage, number> {
+function turnParts(
+  messages: readonly ConversationMessage[],
+  messageTime: (message: ConversationMessage) => number,
+): Map<ConversationMessage, number> {
   const turns = new Map<string, { message: ConversationMessage; index: number }[]>();
   for (const [index, message] of messages.entries()) {
     if (!message.turnId) continue;
@@ -83,7 +90,7 @@ function turnParts(messages: readonly ConversationMessage[]): Map<ConversationMe
   return parts;
 }
 
-function messageTime(message: ConversationMessage): number {
+function parsedTime(message: ConversationMessage): number {
   const timestamp = Date.parse(message.createdAt);
   return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
 }

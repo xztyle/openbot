@@ -15,3 +15,4 @@
 - In the web app, the Permissions level of an open agent updates when someone changes it on another computer or window. Before, it kept the old level until you opened another agent.
 - A second answer to a browser step that someone already finished, for example from another window, says that the step is no longer active. Before, the server logged an error and the app showed a general failure.
 - A Claude agent whose process ended before it saved its first record, for example a crash right after the agent was made, answers the next message in a new session that has the chat's history. Before, every later message failed with "No conversation found with session ID".
+- In the desktop app, the private variables of an event check in agent settings can link to a key in Secrets, as in the web app and in the Marketplace. Before, the desktop agent settings did not offer the saved keys.

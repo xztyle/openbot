@@ -198,12 +198,18 @@ export default function AgentSettingsPanel(props: AgentSettingsPanelProps) {
       props.routines,
     ),
   );
-  const checksApi = () =>
-    props.remoteClient
-      ? props.adminCalls?.eventChecks
-      : props.eventChecksAvailable !== false
-        ? window.openbot.eventChecks
-        : undefined;
+  // This computer's checks also list the keys in Secrets, so a private variable can link to one,
+  // as on the web and in the Marketplace.
+  const localChecksApi = createMemo(() =>
+    props.remoteClient || props.eventChecksAvailable === false
+      ? undefined
+      : {
+          ...window.openbot.eventChecks,
+          secrets: async () =>
+            (await window.openbot.agent.workspaceSecrets()).secrets.map((secret) => `${secret.scope}/${secret.name}`),
+        },
+  );
+  const checksApi = () => (props.remoteClient ? props.adminCalls?.eventChecks : localChecksApi());
   /** The templates of the host, so a setting that a template declares as a picker can be filled from a list. */
   const pickerSource = () =>
     props.remoteClient

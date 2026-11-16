@@ -3,6 +3,7 @@
 // temporary profile. The owner sets roles; a member signs in as a current desktop client does. The
 // host must hide a `none` agent, refuse a write that the level does not permit, refuse a stale
 // revision, tell the member's event socket about each change, and keep the roles after a restart.
+// The approvals that the runtime snapshot leaves out reach the member's socket only for agents they see.
 // The agent service is not initialized, so no provider CLI starts.
 // Run: `bun scripts/agent-access-e2e.ts`.
 // Writes .openbot-build/agent-access-e2e/report.json.
@@ -421,6 +422,71 @@ try {
     assert.deepEqual(mine, { revision: 1, mine: { [legal]: "chat", [ops]: "view", [general]: "manage" } });
     assert.deepEqual(await listedIds(setup.memberToken), [legal, ops, general].sort());
     return mine;
+  });
+
+  await step("overflow: approvals left out of the snapshot reach the member only for agents they see", async () => {
+    // The snapshot holds a few requests only. The host sends the others after it, through the same
+    // role filter as every agent event.
+    const service = current().agents;
+    const realSnapshot = service.getRuntimeSnapshot.bind(service);
+    const realOverflow = service.attentionOverflowEvents.bind(service);
+    const approval = (agentId: string, requestId: string) => ({
+      type: "approval" as const,
+      approval: {
+        requestId,
+        agentId,
+        threadId: `thread-${requestId}`,
+        turnId: `turn-${requestId}`,
+        kind: "command" as const,
+        command: "echo overflow",
+        cwd: null,
+        reason: null,
+        grantRoot: null,
+        permissions: null,
+      },
+    });
+    service.getRuntimeSnapshot = () => ({ ...realSnapshot(), attentionComplete: false });
+    service.attentionOverflowEvents = () => [
+      approval(finance, "e2e-overflow-finance"),
+      approval(ops, "e2e-overflow-ops"),
+    ];
+    try {
+      const overflowSocket = new WebSocket(`ws://127.0.0.1:${current().port}${TEAM_API_ROUTES.events}`, [
+        TEAM_PROTOCOL_V1_WEBSOCKET,
+        `openbot-token.${setup.memberToken}`,
+      ]);
+      sockets.push(overflowSocket);
+      const received: string[] = [];
+      overflowSocket.addEventListener("message", (event) => received.push(String(event.data)));
+      await new Promise<void>((resolveOpen, reject) => {
+        overflowSocket.addEventListener("open", () => resolveOpen(), { once: true });
+        overflowSocket.addEventListener("error", () => reject(new Error("The event socket did not open.")), {
+          once: true,
+        });
+      });
+      const visible = nextMessage(overflowSocket, (value) =>
+        isRecord(value) && value.type === "approval" && JSON.stringify(value).includes("e2e-overflow-ops")
+          ? value
+          : null,
+      );
+      overflowSocket.send(
+        JSON.stringify({
+          type: "agent-event-scope",
+          includeConversations: false,
+          capabilities: ["agent-runtime-snapshots", AGENT_ACCESS_CAPABILITY],
+        }),
+      );
+      await visible;
+      overflowSocket.close();
+      assert.ok(
+        !received.some((data) => data.includes("e2e-overflow-finance")),
+        "The member got an approval of an agent they cannot see.",
+      );
+      return { messages: received.length };
+    } finally {
+      service.getRuntimeSnapshot = realSnapshot;
+      service.attentionOverflowEvents = realOverflow;
+    }
   });
 
   await step("none: the closed agent's conversation answers 404", async () => {

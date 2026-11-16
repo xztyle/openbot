@@ -1756,6 +1756,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return ids;
   }
 
+  /** The approvals and takeovers that the runtime snapshot's attention limit leaves out. */
+  attentionOverflowEvents(): AgentEvent[] {
+    return this.#attention.attentionOverflowEvents();
+  }
+
   getRuntimeSnapshot(): AgentRuntimeSnapshot {
     return buildRuntimeSnapshot({
       contextStates: this.#compaction.snapshot(),

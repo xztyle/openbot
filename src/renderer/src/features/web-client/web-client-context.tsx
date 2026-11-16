@@ -496,10 +496,9 @@ export function createWebWorkspace(
               reference,
             };
           if (update.state !== "online") {
-            // The approvals and prompts stay: the host's snapshot replaces them when it is back, so a
-            // short loss does not make a pending request disappear and come again.
+            // The approvals, prompts and browser takeovers stay: the host's snapshot replaces them when
+            // it is back, so a short loss does not make a pending request disappear and come again.
             draft.progress = {};
-            draft.takeovers = [];
             draft.browserControlState = { sessions: [] };
             draft.duplicatingAgentIds = [];
           }
@@ -1098,6 +1097,7 @@ export function createWebWorkspace(
         draft.hostRestart = null;
         draft.approvals = [];
         draft.prompts = [];
+        draft.takeovers = [];
         draft.inputEscalations = [];
       }
       draft.status = "connecting";
@@ -1115,8 +1115,8 @@ export function createWebWorkspace(
         draft.failedTurns = {};
         draft.hiddenIds = [];
       }
-      // The approvals and prompts of the same host stay until its snapshot replaces them.
-      draft.takeovers = [];
+      // The approvals, prompts and browser takeovers of the same host stay until its snapshot
+      // replaces them.
       draft.browserControlState = { sessions: [] };
       if (!keepWorkspace) {
         draft.progress = {};

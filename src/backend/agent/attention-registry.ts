@@ -610,6 +610,28 @@ export class AttentionRegistry {
   }
 
   /**
+   * The approvals and browser takeovers that the snapshot's attention limit left out, whole, as the
+   * events that announced them. A Team client that connects after they were asked learns them only
+   * from the snapshot, so without these it showed the agent as waiting with no card to answer.
+   * Questions are not here: a client reads them from the agent's page.
+   */
+  attentionOverflowEvents(): AgentEvent[] {
+    if (this.#prompts.size + this.#approvals.size + this.#takeovers.size <= AGENT_RUNTIME_ATTENTION_LIMIT) return [];
+    let remaining = Math.max(0, AGENT_RUNTIME_ATTENTION_LIMIT - this.#prompts.size);
+    const approvals = [...this.#approvals.values()];
+    const approvalEvents = approvals
+      .slice(remaining)
+      .map((pending): AgentEvent => ({ type: "approval", approval: structuredClone(pending.approval) }));
+    remaining = Math.max(0, remaining - approvals.length);
+    const takeoverEvents = [...this.#takeovers.values()]
+      .slice(remaining)
+      .map(
+        (pending): AgentEvent => ({ type: "browser-takeover-requested", request: structuredClone(pending.request) }),
+      );
+    return [...approvalEvents, ...takeoverEvents];
+  }
+
+  /**
    * For each agent that waits for a person: why, and the request text (a question, a command or the
    * reason of an approval). The first request of each agent wins. Unlike `runtimeAttention`, no
    * agent is left out by the snapshot's attention limit.

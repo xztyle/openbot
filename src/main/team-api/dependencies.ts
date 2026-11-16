@@ -88,6 +88,7 @@ type TeamApiAgentMethods = Pick<
   | "newAgentProvider"
   | "getStatus"
   | "getRuntimeSnapshot"
+  | "attentionOverflowEvents"
   | "getUsage"
   | "getAnalytics"
   | "getHostAnalytics"

@@ -649,6 +649,29 @@ export class TeamApiServer {
     );
   }
 
+  /**
+   * The approvals and takeovers that did not fit in the snapshot, after it, as the events that
+   * announced them. A client that connects later has no other way to learn them, and showed their
+   * agents as waiting with nothing to answer.
+   */
+  #sendAttentionOverflow(client: Ws.WebSocket, connection: EventClientState, snapshot: AgentRuntimeSnapshot): void {
+    if (snapshot.attentionComplete || client.readyState !== webSockets.WebSocket.OPEN) return;
+    const blocked = this.#blockedAgentIds(this.#connectionMember(connection));
+    for (const pending of this.#options.agents.attentionOverflowEvents()) {
+      const event = this.#eventFor(connection, pending);
+      const required = eventCapability(event);
+      if (required && !connection.capabilities.has(required)) continue;
+      let payload: string | null;
+      try {
+        payload = this.#encodeProviderEvent(event, connection.capabilities, {}, blocked);
+      } catch (error) {
+        (this.#options.logger ?? logger).warn("Team API event could not be encoded:", toLogValue(error));
+        continue;
+      }
+      if (payload) client.send(payload);
+    }
+  }
+
   #sendBrowserUserControl(client: Ws.WebSocket, connection: EventClientState): void {
     const tabIds = this.#options.browser
       .listTabs()
@@ -1668,7 +1691,10 @@ export class TeamApiServer {
       }
       client.send(payload, (error) => {
         connection.snapshotResponsePending = false;
-        if (!error) this.#sendInputEscalations(client, connection, snapshot);
+        if (!error) {
+          this.#sendInputEscalations(client, connection, snapshot);
+          this.#sendAttentionOverflow(client, connection, snapshot);
+        }
         if (error && client.readyState === webSockets.WebSocket.OPEN) {
           client.close(1011, "Runtime snapshot could not be sent");
           return;

@@ -85,6 +85,7 @@ import {
   preferredBrowserLanguageCodes,
 } from "./browser-policy";
 import { BrowserRecorder } from "./browser-recorder";
+import { BrowserSessionCookies } from "./browser-session-cookies";
 import {
   type BrowserContextMenuItem,
   browserContextMenuItems,
@@ -242,6 +243,8 @@ interface BrowserConsoleMessageDetails {
 }
 
 const logger = createOpenBotLogger("browser-host");
+/** The partition of the shared agent browser session. */
+const SHARED_PARTITION = "openbot-browser";
 const BROWSER_WEB_PREFERENCES = {
   sandbox: true,
   contextIsolation: true,
@@ -329,6 +332,8 @@ export class BrowserHost {
   readonly #apiKeys: AgentApiKeys | null;
   readonly #downloadsRoot: string;
   readonly #statePath: string;
+  /** Keeps the session-only cookies (many sign-ins) of each persistent partition across restarts. */
+  readonly #sessionCookies: BrowserSessionCookies;
   readonly #tabs = new Map<string, BrowserHostTab>();
   readonly #closingTabDrains = new Map<string, Fiber.Fiber<void, BrowserOperationError>>();
   readonly #listeners = new Set<(...args: BrowserHostEvents["changed"]) => void>();
@@ -389,7 +394,7 @@ export class BrowserHost {
     this.#apiKeys = options.apiKeys ?? null;
     this.#downloadsRoot = downloadsRoot;
     this.#statePath = statePath;
-    this.#session = session.fromPartition("persist:openbot-browser", { cache: true });
+    this.#session = session.fromPartition(`persist:${SHARED_PARTITION}`, { cache: true });
     this.#recorder = new BrowserRecorder(
       downloadsRoot,
       (tabId, recording) => {
@@ -411,6 +416,8 @@ export class BrowserHost {
     // Service workers read the process fallback instead of the session, so it changes too.
     app.userAgentFallback = sessionBrowserUserAgent(app.userAgentFallback);
     this.#configureSession(this.#session);
+    this.#sessionCookies = new BrowserSessionCookies(join(app.getPath("userData"), "browser-session-cookies"));
+    void this.#sessionCookies.track(this.#session, SHARED_PARTITION);
     this.#idleTabSweep = setInterval(() => {
       void runCauseEffect(this.#sleepIdleTabs()).catch((error) =>
         logger.warn("Unable to sleep browser tabs", { error: toLogValue(error) }),
@@ -424,6 +431,13 @@ export class BrowserHost {
     agents: readonly BrowserTabOwner[] = [],
   ): Effect.fn.Return<void, BrowserOperationError> {
     const state = yield* readBrowserState(this.#statePath);
+    // The sign-ins come back before any tab loads, so a restored tab opens signed in.
+    const sessions = state.tabs.flatMap((saved) => {
+      const tabSession = storedTabSession(saved);
+      if (!tabSession || (tabSession.kind === "profile" && !this.#profileExists(tabSession.profileId))) return [];
+      return [this.#sessionCookies.track(this.#persistentTabSession(tabSession), browserTabPartition(tabSession))];
+    });
+    yield* browserCall(() => Promise.all([this.#sessionCookies.track(this.#session, SHARED_PARTITION), ...sessions]));
     if (state.tabs.length === 0) return;
 
     const tabs: BrowserHostTab[] = [];
@@ -2174,7 +2188,12 @@ export class BrowserHost {
         this.#siteVisitListeners.clear();
         const results = yield* Effect.all(
           [
-            browserCall(() => Promise.all(this.#persistentSessions().map((target) => target.cookies.flushStore()))),
+            browserCall(() =>
+              Promise.all([
+                this.#sessionCookies.flush(),
+                ...this.#persistentSessions().map((target) => target.cookies.flushStore()),
+              ]),
+            ),
             Fiber.join(persistence),
             Effect.all(drains.map(Effect.exit), { concurrency: "unbounded" }).pipe(
               Effect.flatMap((results) =>
@@ -2286,6 +2305,7 @@ export class BrowserHost {
     const target = session.fromPartition(`persist:${partition}`, { cache: true });
     this.#configureSession(target);
     this.#tabSessions.set(partition, target);
+    void this.#sessionCookies.track(target, partition);
     return target;
   }
 

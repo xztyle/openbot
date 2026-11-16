@@ -9,3 +9,6 @@
 - The Test and Sign in buttons of an MCP server fill its `{{secret:…}}` values and Secrets links before they connect. Before, they sent the template text, and the server refused it. A key that is missing from Secrets now gets its own message.
 - When a change of model, effort or fast mode fails, the composer and the agent settings show the server's reason, for example that the agent must finish its turn before it changes provider. Before, they said only "Try again", and trying again failed the same way.
 - An approval or a question that waits for you keeps its whole text when the server sends a status update. Before, an update cut a long command or question to its start, and could reset the card while you answered it. When only the start is known, as after a reload of the web app, the approval says so.
+- A channel task whose agent was deleted stops and asks you to reassign it. Before, in a channel outside the General space, it waited for the deleted agent for ever, and Continue hid it with no sign.
+- Continue on a stopped channel task whose agent is hidden or in another space says so, and the task stays in the list to reassign.
+- The reasons of stopped channel tasks show in your language, also for tasks that stopped before this version.

@@ -674,7 +674,7 @@ export class ChannelService {
                   ...task,
                   state: "paused",
                   revision: task.revision + 1,
-                  error: "The assigned member was removed.",
+                  error: sourceText("error.backend.channelTaskMemberRemoved"),
                 }),
               ),
               ...waitingForLead.map(
@@ -954,7 +954,7 @@ export class ChannelService {
               ...item,
               revision: item.revision + 1,
               state: "paused",
-              error: "The parent request changed.",
+              error: sourceText("error.backend.channelParentChanged"),
             }),
           );
         const result = yield* channelSync(() =>
@@ -1029,6 +1029,10 @@ export class ChannelService {
       const recipientAgentId = command.recipientAgentId;
       yield* channelSync(() => this.requireAvailableMember(channel, recipientAgentId));
     }
+    // A stopped task whose owner cannot take it would leave the stopped list and wait with no sign.
+    // The refusal keeps it there, where the reader can reassign it.
+    const owner = selected.ownerAgentId;
+    if (command.type === "resume" && owner) yield* channelSync(() => this.requireAvailableMember(channel, owner));
     // `stop` and `resume` hold the whole run below the selected task. `reassign` gives one task
     // another owner, but it must start the rest of the stopped run with it: a parent waits for each
     // task it delegated, so a root that started alone would wait for a stopped child for ever. A
@@ -1634,7 +1638,7 @@ export class ChannelService {
                             ...item,
                             state: "paused",
                             revision: item.revision + 1,
-                            error: "The parent request changed.",
+                            error: sourceText("error.backend.channelParentChanged"),
                           }),
                         ),
                       { ...task, state: "cancelled" },
@@ -1733,21 +1737,24 @@ export class ChannelService {
         continue;
       }
       if (!task.ownerAgentId) continue;
-      // A hidden owner keeps the task. It waits, as for a busy owner, until the user restores the agent.
-      if (this.hooks.busy(task.ownerAgentId) || this.unavailable(task.ownerAgentId, channel)) {
-        this.#waitingForAgents.add(channelId);
-        continue;
-      }
+      // An owner that was deleted or left the channel never comes back, so its task stops for a
+      // reassignment. This goes first: a deleted agent reads as outside the channel's space, and the
+      // task would otherwise wait for it for ever.
       if (
         !channel.members.some((member) => member.agentId === task.ownerAgentId) ||
         !this.hooks.agents().some((agent) => agent.id === task.ownerAgentId)
       ) {
         yield* channelSync(() =>
           this.store.update(channel, {
-            tasks: [{ ...task, state: "paused", error: "The assigned member is unavailable. Reassign this task." }],
+            tasks: [{ ...task, state: "paused", error: sourceText("error.backend.channelTaskMemberUnavailable") }],
           }),
         );
         this.publish(channelId);
+        continue;
+      }
+      // A hidden owner keeps the task. It waits, as for a busy owner, until the user restores the agent.
+      if (this.hooks.busy(task.ownerAgentId) || this.unavailable(task.ownerAgentId, channel)) {
+        this.#waitingForAgents.add(channelId);
         continue;
       }
       const { tasks: allTasks, assignments: allAssignments } = yield* channelSync(() => this.#scheduling());
@@ -1942,7 +1949,7 @@ export class ChannelService {
                     ...latest,
                     ...consumed,
                     state: "failed",
-                    error: "Could not queue this assignment. Resume to try again.",
+                    error: sourceText("error.backend.channelQueueFailed"),
                   },
                 ]
               : latest && context
@@ -2254,7 +2261,7 @@ export class ChannelService {
           {
             ...task,
             state: "paused",
-            error: "The provider has not confirmed this turn. Work will not be repeated while its outcome is unknown.",
+            error: sourceText("error.backend.channelTurnUnconfirmed"),
           },
         ],
       });
@@ -2348,7 +2355,7 @@ export class ChannelService {
                       {
                         ...task,
                         state: "paused",
-                        error: "The previous turn has no confirmed result. Check its work before you resume.",
+                        error: sourceText("error.backend.channelPreviousTurnUnconfirmed"),
                       },
                     ]
                   : [],
@@ -3412,7 +3419,7 @@ export class ChannelService {
               ...item,
               state: "paused",
               revision: item.revision + 1,
-              error: "The automatic assignment limit was reached. Continue or reassign this task.",
+              error: sourceText("error.backend.channelAssignmentLimit"),
             })),
           },
           operationId,
@@ -3566,7 +3573,7 @@ export class ChannelService {
             {
               ...task,
               state: "paused",
-              error: "The provider has not confirmed the correction. Check its outcome before resuming.",
+              error: sourceText("error.backend.channelCorrectionUnconfirmed"),
             },
           ],
         }),

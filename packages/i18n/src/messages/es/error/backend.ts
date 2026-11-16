@@ -63,6 +63,19 @@ export const messages = {
     "El canal tiene un inicio de tarea sin confirmar. Comprueba el resultado antes de eliminarlo.",
   "error.backend.channelNotFound": "No se encontró el canal.",
   "error.backend.channelMemberUnavailable": "Un miembro del canal no está disponible.",
+  "error.backend.channelTaskMemberRemoved": "Se quitó al miembro asignado.",
+  "error.backend.channelParentChanged": "La solicitud principal cambió.",
+  "error.backend.channelTaskMemberUnavailable": "El miembro asignado no está disponible. Reasigna esta tarea.",
+  "error.backend.channelQueueFailed": "No se pudo poner en cola esta asignación. Reanuda para volver a intentarlo.",
+  "error.backend.channelTurnUnconfirmed":
+    "El proveedor no ha confirmado este turno. El trabajo no se repetirá mientras no se sepa su resultado.",
+  "error.backend.channelPreviousTurnUnconfirmed":
+    "El turno anterior no tiene un resultado confirmado. Revisa su trabajo antes de reanudar.",
+  "error.backend.channelAssignmentLimit":
+    "Se alcanzó el límite de asignaciones automáticas. Continúa o reasigna esta tarea.",
+  "error.backend.channelCorrectionUnconfirmed":
+    "El proveedor no ha confirmado la corrección. Revisa su resultado antes de reanudar.",
+  "error.backend.channelStartFailed": "El proveedor no pudo iniciar esta asignación. Reanuda para volver a intentarlo.",
   "error.backend.channelArchived": "Restaura este canal antes de enviar mensajes o cambiar tareas.",
   "error.backend.channelReferenceUnavailable": "El mensaje del canal al que se hace referencia no está disponible.",
   "error.backend.channelTaskNotFound": "No se encontró la tarea del canal.",

@@ -67,6 +67,19 @@ export const messages = {
     "O canal tem uma tarefa atribuída cujo início não foi confirmado. Verifique o resultado antes de excluí-lo.",
   "error.backend.channelNotFound": "Canal não encontrado.",
   "error.backend.channelMemberUnavailable": "Um membro do canal está indisponível.",
+  "error.backend.channelTaskMemberRemoved": "O membro atribuído foi removido.",
+  "error.backend.channelParentChanged": "O pedido principal mudou.",
+  "error.backend.channelTaskMemberUnavailable": "O membro atribuído está indisponível. Reatribua esta tarefa.",
+  "error.backend.channelQueueFailed": "Não foi possível pôr esta atribuição na fila. Retome para tentar de novo.",
+  "error.backend.channelTurnUnconfirmed":
+    "O provedor não confirmou este turno. O trabalho não será repetido enquanto o resultado for desconhecido.",
+  "error.backend.channelPreviousTurnUnconfirmed":
+    "O turno anterior não tem resultado confirmado. Verifique o trabalho antes de retomar.",
+  "error.backend.channelAssignmentLimit":
+    "O limite de atribuições automáticas foi atingido. Continue ou reatribua esta tarefa.",
+  "error.backend.channelCorrectionUnconfirmed":
+    "O provedor não confirmou a correção. Verifique o resultado antes de retomar.",
+  "error.backend.channelStartFailed": "O provedor não conseguiu iniciar esta atribuição. Retome para tentar de novo.",
   "error.backend.channelArchived": "Restaure este canal antes de enviar mensagens ou alterar tarefas.",
   "error.backend.channelReferenceUnavailable": "A mensagem do canal usada como referência está indisponível.",
   "error.backend.channelTaskNotFound": "Tarefa do canal não encontrada.",

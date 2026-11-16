@@ -64,6 +64,22 @@ export const messages = {
     "Im Kanal gibt es einen unbestätigten Auftragsstart. Prüfe das Ergebnis, bevor du den Kanal löschst.",
   "error.backend.channelNotFound": "Kanal nicht gefunden.",
   "error.backend.channelMemberUnavailable": "Ein Kanalmitglied ist nicht verfügbar.",
+  "error.backend.channelTaskMemberRemoved": "Das zugewiesene Mitglied wurde entfernt.",
+  "error.backend.channelParentChanged": "Die übergeordnete Anfrage hat sich geändert.",
+  "error.backend.channelTaskMemberUnavailable":
+    "Das zugewiesene Mitglied ist nicht verfügbar. Weise diese Aufgabe neu zu.",
+  "error.backend.channelQueueFailed":
+    "Diese Zuweisung konnte nicht eingereiht werden. Setze fort, um es erneut zu versuchen.",
+  "error.backend.channelTurnUnconfirmed":
+    "Der Anbieter hat diesen Durchgang nicht bestätigt. Die Arbeit wird nicht wiederholt, solange ihr Ergebnis unbekannt ist.",
+  "error.backend.channelPreviousTurnUnconfirmed":
+    "Der vorherige Durchgang hat kein bestätigtes Ergebnis. Prüfe seine Arbeit, bevor du fortsetzt.",
+  "error.backend.channelAssignmentLimit":
+    "Das Limit für automatische Zuweisungen ist erreicht. Setze diese Aufgabe fort oder weise sie neu zu.",
+  "error.backend.channelCorrectionUnconfirmed":
+    "Der Anbieter hat die Korrektur nicht bestätigt. Prüfe ihr Ergebnis, bevor du fortsetzt.",
+  "error.backend.channelStartFailed":
+    "Der Anbieter konnte diese Zuweisung nicht starten. Setze fort, um es erneut zu versuchen.",
   "error.backend.channelArchived":
     "Stelle diesen Kanal wieder her, bevor du Nachrichten sendest oder Aufgaben änderst.",
   "error.backend.channelReferenceUnavailable": "Die referenzierte Kanalnachricht ist nicht verfügbar.",

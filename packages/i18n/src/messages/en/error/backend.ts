@@ -112,6 +112,18 @@ export const messages = defineMessages("error.backend", {
     "The channel has an unconfirmed assignment start. Check its outcome before deleting it.",
   "error.backend.channelNotFound": "Channel not found.",
   "error.backend.channelMemberUnavailable": "A channel member is unavailable.",
+  "error.backend.channelTaskMemberRemoved": "The assigned member was removed.",
+  "error.backend.channelParentChanged": "The parent request changed.",
+  "error.backend.channelTaskMemberUnavailable": "The assigned member is unavailable. Reassign this task.",
+  "error.backend.channelQueueFailed": "Could not queue this assignment. Resume to try again.",
+  "error.backend.channelTurnUnconfirmed":
+    "The provider has not confirmed this turn. Work will not be repeated while its outcome is unknown.",
+  "error.backend.channelPreviousTurnUnconfirmed":
+    "The previous turn has no confirmed result. Check its work before you resume.",
+  "error.backend.channelAssignmentLimit": "The automatic assignment limit was reached. Continue or reassign this task.",
+  "error.backend.channelCorrectionUnconfirmed":
+    "The provider has not confirmed the correction. Check its outcome before resuming.",
+  "error.backend.channelStartFailed": "The provider could not start this assignment. Resume to try again.",
   "error.backend.channelArchived": "Restore this channel before sending messages or changing tasks.",
   "error.backend.channelReferenceUnavailable": "The referenced channel message is unavailable.",
   "error.backend.channelTaskNotFound": "Channel task not found.",

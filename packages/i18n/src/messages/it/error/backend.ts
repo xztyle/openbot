@@ -62,6 +62,19 @@ export const messages = {
     "Il canale ha un avvio di assegnazione non confermato. Controlla il risultato prima di eliminarlo.",
   "error.backend.channelNotFound": "Canale non trovato.",
   "error.backend.channelMemberUnavailable": "Un membro del canale non è disponibile.",
+  "error.backend.channelTaskMemberRemoved": "Il membro assegnato è stato rimosso.",
+  "error.backend.channelParentChanged": "La richiesta principale è cambiata.",
+  "error.backend.channelTaskMemberUnavailable": "Il membro assegnato non è disponibile. Riassegna questa attività.",
+  "error.backend.channelQueueFailed": "Impossibile mettere in coda questa assegnazione. Riprendi per riprovare.",
+  "error.backend.channelTurnUnconfirmed":
+    "Il provider non ha confermato questo turno. Il lavoro non verrà ripetuto finché il risultato è sconosciuto.",
+  "error.backend.channelPreviousTurnUnconfirmed":
+    "Il turno precedente non ha un risultato confermato. Controlla il suo lavoro prima di riprendere.",
+  "error.backend.channelAssignmentLimit":
+    "È stato raggiunto il limite di assegnazioni automatiche. Continua o riassegna questa attività.",
+  "error.backend.channelCorrectionUnconfirmed":
+    "Il provider non ha confermato la correzione. Controlla il risultato prima di riprendere.",
+  "error.backend.channelStartFailed": "Il provider non ha potuto avviare questa assegnazione. Riprendi per riprovare.",
   "error.backend.channelArchived": "Ripristina questo canale prima di inviare messaggi o modificare le attività.",
   "error.backend.channelReferenceUnavailable": "Il messaggio del canale a cui si fa riferimento non è disponibile.",
   "error.backend.channelTaskNotFound": "Attività del canale non trovata.",

@@ -43,7 +43,7 @@ import { codexSandboxPolicy, workspaceWritableRoots } from "./workspace-sandbox"
 export const REMOVED_ENDPOINT_MESSAGE = sourceText("error.agent.endpointRemoved");
 
 const logger = createOpenBotLogger("drain-scheduler");
-const CHANNEL_START_FAILED = "The provider could not start this assignment. Resume to try again.";
+const CHANNEL_START_FAILED = sourceText("error.backend.channelStartFailed");
 /** How long messages wait for their turn after the provider did not confirm `turn/start` in time. */
 const TURN_START_GRACE_MS = 5 * 60_000;
 

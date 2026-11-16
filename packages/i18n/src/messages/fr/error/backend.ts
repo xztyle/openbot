@@ -64,6 +64,19 @@ export const messages = {
     "Le canal a un démarrage de tâche non confirmé. Vérifiez son résultat avant de le supprimer.",
   "error.backend.channelNotFound": "Canal introuvable.",
   "error.backend.channelMemberUnavailable": "Un membre du canal est indisponible.",
+  "error.backend.channelTaskMemberRemoved": "Le membre assigné a été retiré.",
+  "error.backend.channelParentChanged": "La demande parente a changé.",
+  "error.backend.channelTaskMemberUnavailable": "Le membre assigné est indisponible. Réassignez cette tâche.",
+  "error.backend.channelQueueFailed": "Impossible de mettre cette affectation en file. Reprenez pour réessayer.",
+  "error.backend.channelTurnUnconfirmed":
+    "Le fournisseur n’a pas confirmé ce tour. Le travail ne sera pas répété tant que son résultat est inconnu.",
+  "error.backend.channelPreviousTurnUnconfirmed":
+    "Le tour précédent n’a pas de résultat confirmé. Vérifiez son travail avant de reprendre.",
+  "error.backend.channelAssignmentLimit":
+    "La limite d’affectations automatiques est atteinte. Continuez ou réassignez cette tâche.",
+  "error.backend.channelCorrectionUnconfirmed":
+    "Le fournisseur n’a pas confirmé la correction. Vérifiez son résultat avant de reprendre.",
+  "error.backend.channelStartFailed": "Le fournisseur n’a pas pu démarrer cette affectation. Reprenez pour réessayer.",
   "error.backend.channelArchived": "Restaurez ce canal avant d’envoyer des messages ou de modifier des tâches.",
   "error.backend.channelReferenceUnavailable": "Le message de canal référencé est indisponible.",
   "error.backend.channelTaskNotFound": "Tâche de canal introuvable.",

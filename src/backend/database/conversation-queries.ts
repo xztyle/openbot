@@ -158,11 +158,61 @@ export class ConversationQueries {
     return row ? requiredNumberColumn(row, "last_event_sequence") : 0;
   }
 
+  /**
+   * The last answers read, by thread and agent, with the thread row's version. The runtime snapshot
+   * reads every agent, and the newest-first scan for the last answer runs `json_extract` over each
+   * message it passes: about 7 ms for 72 agents on this host, for each snapshot. Every write to a
+   * thread's rows moves its version, so a read with the same version gives the same answer.
+   */
+  readonly #runtimeReads = new Map<
+    string,
+    { version: string; activeTurnId: string | null; latestMessage: ConversationMessage | null }
+  >();
+
   readConversationRuntime(
     agentId: string,
     threadId: string | null,
   ): { activeTurnId: string | null; latestMessage: ConversationMessage | null } {
     if (!threadId) return { activeTurnId: null, latestMessage: null };
+    const key = `${threadId}\u0000${agentId}`;
+    // Not inside a transaction: a rollback can take back a version that the cache would keep.
+    const versionRow = this.#core.connection.isTransaction
+      ? undefined
+      : databaseRow(
+          this.#core.connection
+            .prepare(
+              "SELECT last_event_sequence, updated_at FROM projection_threads WHERE thread_id = ? AND agent_id = ?",
+            )
+            .get(threadId, agentId),
+        );
+    const version = versionRow
+      ? `${String(versionRow.last_event_sequence)}\u0000${String(versionRow.updated_at)}`
+      : null;
+    const cached = version === null ? undefined : this.#runtimeReads.get(key);
+    if (cached && cached.version === version)
+      return {
+        activeTurnId: cached.activeTurnId,
+        latestMessage: cached.latestMessage ? structuredClone(cached.latestMessage) : null,
+      };
+    const result = this.#readConversationRuntime(agentId, threadId);
+    if (version !== null) {
+      this.#runtimeReads.set(key, {
+        version,
+        activeTurnId: result.activeTurnId,
+        latestMessage: result.latestMessage ? structuredClone(result.latestMessage) : null,
+      });
+      if (this.#runtimeReads.size > RUNTIME_READ_CACHE_LIMIT) {
+        const oldest = this.#runtimeReads.keys().next();
+        if (!oldest.done) this.#runtimeReads.delete(oldest.value);
+      }
+    }
+    return result;
+  }
+
+  #readConversationRuntime(
+    agentId: string,
+    threadId: string,
+  ): { activeTurnId: string | null; latestMessage: ConversationMessage | null } {
     const row = databaseRow(
       this.#core.connection
         .prepare(
@@ -821,3 +871,6 @@ function asciiPrefilterRun(term: string): string {
   for (const run of term.split(/[^\x20-\x7e]|[ik]/giu)) if (run.length > longest.length) longest = run;
   return longest;
 }
+
+/** Threads whose last answer the runtime read keeps. More agents than this read again. */
+const RUNTIME_READ_CACHE_LIMIT = 2_000;

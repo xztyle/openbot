@@ -142,6 +142,7 @@ import { encodeTeamProtocolV7BaseCurrentEvent } from "@openbot/contracts/team-pr
 import { TEAM_OPEN_PROVIDERS_CAPABILITY, TEAM_PROTOCOL_V8 } from "@openbot/contracts/team-protocol/v8";
 import { encodeTeamProtocolV8BaseCurrentEvent } from "@openbot/contracts/team-protocol/v8-base-adapter";
 import { WORKSPACE_SIDEBAR_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-sidebar-v1";
+import { WORKSPACE_SPACES_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-spaces-v1";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { isFixedSourceText, sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
@@ -248,6 +249,7 @@ import { routeWorkspace } from "./team-api/route-workspace";
 import { routeWorkspaceDirectory } from "./team-api/route-workspace-directory";
 import { routeWorkspaceFleet } from "./team-api/route-workspace-fleet";
 import { routeWorkspaceSidebar } from "./team-api/route-workspace-sidebar";
+import { routeWorkspaceSpaces } from "./team-api/route-workspace-spaces";
 import { TeamStoreError } from "./team-store";
 
 const EVENT_PAYLOAD_LIMIT = 256 * 1_024;
@@ -893,6 +895,8 @@ export class TeamApiServer {
         return;
       if ((await routeWorkspaceFleet(context, this.#options.agents, hidden)) === "handled") return;
       if ((await routeWorkspaceSidebar(context, this.#options.workspaceSidebar)) === "handled") return;
+      if ((await routeWorkspaceSpaces(context, this.#options.spaces, this.#options.agents, hidden)) === "handled")
+        return;
       if (
         (await routeMcpServers(context, this.#options.mcpServers, this.#options.mcpToolRuntimePreparation)) ===
         "handled"
@@ -2275,6 +2279,7 @@ function eventCapability(event: AgentEvent): TeamCurrentCapability | null {
   if (event.type === "channel-typing") return WORKSPACE_CAPABILITY;
   if (event.type === "workspace-fleet-changed") return WORKSPACE_CAPABILITY;
   if (event.type === "workspace-sidebar-changed") return WORKSPACE_SIDEBAR_CAPABILITY;
+  if (event.type === "workspace-spaces-changed") return WORKSPACE_SPACES_CAPABILITY;
   if (event.type === "sidebar-layout-changed") return "sidebar-layout";
   if (event.type === "browser-changed" || event.type === "browser-control-changed") return "browser-control";
   if (event.type === "conversation-page") return "conversation-pagination";

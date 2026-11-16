@@ -2,6 +2,7 @@ import type { Effect } from "effect";
 import type { ChannelService } from "../../backend/channel-service";
 import type { EventCheckScheduler } from "../../backend/event-check-scheduler";
 import type { SecurityAuditLog } from "../../backend/security-audit-log";
+import type { SpaceService } from "../../backend/spaces/space-service";
 import type { AcpRegistry } from "../acp-registry";
 import type { AgentAccessStore } from "../agent-access-store";
 import type { AgentAdminSettingsService } from "../agent-admin-settings";
@@ -37,6 +38,7 @@ import type { WorkspaceSettingsStore } from "../workspace-settings-store";
 import type {
   AgentEvent,
   CentralAuthUser,
+  Channel,
   DirectMessageRealtimeEvent,
   DirectTypingRealtimeEvent,
   RoutineResultConnectionOption,
@@ -408,6 +410,11 @@ interface TeamApiProviders {
 }
 
 export type TeamApiMailbox = Pick<MailboxStore, "resolveAttachment">;
+/** `workspace-spaces-v1` (`fork-host-v1`): the spaces, and a channel by id for the reader's view. */
+export interface TeamApiSpaces {
+  service: Pick<SpaceService, "snapshot" | "apply">;
+  channel: (channelId: string) => Channel | null;
+}
 /** `workspace-sidebar-v1` (`fork-host-v1`): the sidebar order and mutes of each member. */
 export type TeamApiWorkspaceSidebar = Pick<WorkspaceSidebarStore, "get" | "set">;
 export type TeamApiSidebarLayout = Pick<
@@ -526,6 +533,7 @@ export interface TeamApiOptions {
   skills?: Pick<SkillMarketplaceService, "listInstalledForChatTags"> | undefined;
   sidebarLayout?: TeamApiSidebarLayout | undefined;
   workspaceSidebar?: TeamApiWorkspaceSidebar | undefined;
+  spaces?: TeamApiSpaces | undefined;
   mailbox: TeamApiMailbox;
   browser: TeamApiBrowser;
   browserView?: TeamApiBrowserView | undefined;

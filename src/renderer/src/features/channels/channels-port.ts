@@ -45,6 +45,8 @@ export interface ChannelsPort {
         | "workspaceDecisions"
         | "workspaceSidebar"
         | "setWorkspaceSidebar"
+        | "workspaceSpaces"
+        | "workspaceSpaceAction"
       >
     >;
   eventRoutines?: EventRoutinesApi | undefined;

@@ -177,3 +177,9 @@ export function spaceLookup(items: readonly WorkspaceSpaceItem[]): (id: string) 
   const map = new Map(items.map((item) => [item.id, item.spaceId]));
   return (id) => map.get(id) ?? GENERAL_SPACE_ID;
 }
+
+/** The answer of `workspace-spaces-v1` `create-agent`: the id of the new agent. */
+export function decodeCreatedSpaceAgent(value: unknown): { agentId: string } {
+  if (!isDynamicRecord(value) || !isIdentifier(value.agentId)) throw new Error("Invalid created agent.");
+  return { agentId: value.agentId };
+}

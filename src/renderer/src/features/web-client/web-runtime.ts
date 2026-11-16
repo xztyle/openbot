@@ -49,6 +49,7 @@ import type {
 } from "@openbot/contracts/ipc";
 import {
   canAdministerServer,
+  decodeCreatedSpaceAgent,
   decodeWorkspaceDirectory,
   isAccountUsage,
   isAgentStatus,
@@ -101,6 +102,10 @@ import {
   WORKSPACE_DIRECTORY_ROUTES,
 } from "@openbot/contracts/team-protocol/workspace-directory-v1";
 import { workspaceArtifactThumbnailRoute } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
+import {
+  WORKSPACE_SPACES_CAPABILITY,
+  WORKSPACE_SPACES_ROUTES,
+} from "@openbot/contracts/team-protocol/workspace-spaces-v1";
 import { WORKSPACE_CAPABILITY } from "@openbot/contracts/team-protocol/workspace-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import { bytesToBase64 } from "@openbot/team-client/base64";
@@ -1239,7 +1244,21 @@ export function createWebWorkspaceRuntime(
       return value;
     },
     async createAgent(input) {
-      const value = await request("POST", TEAM_API_ROUTES.agents.all, { ...input });
+      const { spaceId, ...agent } = input;
+      // A host with spaces makes the agent in its space before the first turn. Another one has only General.
+      if (spaceId !== undefined && capabilities.includes(WORKSPACE_SPACES_CAPABILITY)) {
+        const { agentId } = decodeCreatedSpaceAgent(
+          await request("POST", WORKSPACE_SPACES_ROUTES.createAgent, { spaceId, agent: { ...agent } }),
+        );
+        const agents = guardedListDecoder(
+          isClientAgentSummary,
+          "agents",
+        )(await request("GET", TEAM_API_ROUTES.agents.all));
+        const created = agents.find((candidate) => candidate.id === agentId);
+        if (!created) throw new Error(currentText().t("error.remote.invalidData"));
+        return created;
+      }
+      const value = await request("POST", TEAM_API_ROUTES.agents.all, { ...agent });
       if (!isClientAgentSummary(value)) throw new Error(currentText().t("error.remote.invalidData"));
       return value;
     },

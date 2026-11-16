@@ -197,6 +197,7 @@ import { mockRoutineFlows } from "./mock-routine-flows";
 import { type MockRoutineResultsOptions, mockRoutineResults } from "./mock-routine-results";
 import { applySidebarLayoutAction } from "./mock-sidebar-layout";
 import { createMockSkills, type MockSkillsOptions } from "./mock-skills";
+import { createMockSpaces, type MockSpaceSeed } from "./mock-spaces";
 import { createMockStorage } from "./mock-storage";
 import { createMockStorageHygiene } from "./mock-storage-hygiene";
 import { clone, type Listener, type MockRuntime, matchesQuery } from "./mock-support";
@@ -252,6 +253,8 @@ export interface MockOpenBotOptions
   storyForeignAgent?: boolean;
   /** The channels, and their history, when the preview starts. */
   channels?: MockChannelSeed[];
+  /** The spaces besides General when the preview starts, with their agents and channels. */
+  spaces?: MockSpaceSeed[];
   /** The member id the preview writes channel messages as. The browser preview names its own. */
   channelMemberId?: string;
   /** The sidebar sections and assignments when the preview starts. */
@@ -955,6 +958,12 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     options.channels,
     options.channelMemberId,
     () => agents.filter((entry) => entry.hiddenAt === undefined && entry.background !== true).map((entry) => entry.id),
+  );
+  const mockSpaces = createMockSpaces(
+    emitAgentEvent,
+    () => agents.map((entry) => entry.id),
+    () => mockChannels.channelIds(),
+    options.spaces,
   );
   const mockProviderRuntimes = createMockProviderRuntimes(options, runtime);
   const mockVoice = createMockVoice(options, runtime);
@@ -1755,6 +1764,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       },
       listInstalledSkills: async (agentId) => clone(readInstalledSkills(agentId)),
       ...mockChannels,
+      workspaceSpaces: mockSpaces.workspaceSpaces,
+      workspaceSpaceAction: mockSpaces.workspaceSpaceAction,
       // The workspace fleet, step trails and artifacts of the preview: fixed shapes over the preview
       // agents and channels, so a story shows each status, step kind and artifact kind.
       workspaceFleet: async () => {
@@ -2208,6 +2219,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
           ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
         });
         agents = [...agents, agent];
+        mockSpaces.place(agent.id, input.spaceId);
         queues.set(agent.id, emptyQueue(agent.id));
         emitAgentEvent({ type: "agents-changed", agents });
         try {

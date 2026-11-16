@@ -18,6 +18,8 @@ export interface WorkspaceSidebarPrefs {
    * message comes in a DM channel. Absent from an older client or host.
    */
   closed?: string[];
+  /** The space that the reader looked at last. Absent from an older client or host: `general`. */
+  space?: string;
 }
 
 /** The value of the member on the host. Null: the host has none for them yet. */
@@ -37,6 +39,11 @@ function idList(value: unknown, label: string): string[] {
   return [...new Set(value)];
 }
 
+function spaceId(value: unknown): string {
+  if (!isSidebarId(value)) throw new Error("Invalid workspace sidebar space.");
+  return value;
+}
+
 /** A sidebar value. A repeated id keeps its first place; a list that is too long or not ids throws. */
 export function decodeWorkspaceSidebarPrefs(value: unknown): WorkspaceSidebarPrefs {
   if (!isDynamicRecord(value) || !isDynamicRecord(value.order)) throw new Error("Invalid workspace sidebar.");
@@ -44,6 +51,7 @@ export function decodeWorkspaceSidebarPrefs(value: unknown): WorkspaceSidebarPre
     order: { channels: idList(value.order.channels, "order"), direct: idList(value.order.direct, "order") },
     muted: idList(value.muted, "mutes"),
     ...(value.closed === undefined ? {} : { closed: idList(value.closed, "closed conversations") }),
+    ...(value.space === undefined ? {} : { space: spaceId(value.space) }),
   };
 }
 
@@ -62,5 +70,6 @@ export function boundedWorkspaceSidebar(prefs: WorkspaceSidebarPrefs): Workspace
     order: { channels: bounded(prefs.order.channels), direct: bounded(prefs.order.direct) },
     muted: bounded(prefs.muted),
     ...(prefs.closed === undefined ? {} : { closed: bounded(prefs.closed) }),
+    ...(prefs.space === undefined || !isSidebarId(prefs.space) ? {} : { space: prefs.space }),
   };
 }

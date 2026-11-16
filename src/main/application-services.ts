@@ -2423,6 +2423,10 @@ export async function createApplicationServices({
     sidebarLayout,
     // workspace-sidebar-v1 under `fork-host-v1`. Each member reads and writes only their own value.
     workspaceSidebar,
+    spaces: {
+      service: service.spaces,
+      channel: (channelId) => (service.channels.store.exists(channelId) ? service.channels.store.get(channelId) : null),
+    },
     mailbox,
     browser,
     chat: teamChatStore,

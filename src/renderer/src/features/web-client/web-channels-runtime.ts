@@ -100,6 +100,8 @@ export function createWebChannelsPort(
       workspaceDecisions: channels?.workspaceDecisions,
       workspaceSidebar: channels?.workspaceSidebar,
       setWorkspaceSidebar: channels?.setWorkspaceSidebar,
+      workspaceSpaces: channels?.workspaceSpaces,
+      workspaceSpaceAction: channels?.workspaceSpaceAction,
       listChannelMemories: channels?.listChannelMemories ?? unavailable,
       createChannelMemory: channels?.createChannelMemory ?? unavailable,
       updateChannelMemory: channels?.updateChannelMemory ?? unavailable,

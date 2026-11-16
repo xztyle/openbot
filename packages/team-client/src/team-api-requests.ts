@@ -39,6 +39,7 @@ import {
   decodeWorkspaceSecrets,
   decodeWorkspaceSecretValue,
   decodeWorkspaceSidebar,
+  decodeWorkspaceSpaces,
   decodeWorkspaceSteps,
   type InstalledSkill,
   isAgentMemory,
@@ -83,6 +84,7 @@ import { ROUTINE_FLOWS_ROUTES } from "@openbot/contracts/team-protocol/routine-f
 import { decodeTeamProtocolV2Json, type TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { WORKSPACE_FLEET_ROUTES } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
 import { WORKSPACE_SIDEBAR_ROUTES } from "@openbot/contracts/team-protocol/workspace-sidebar-v1";
+import { WORKSPACE_SPACES_ROUTES } from "@openbot/contracts/team-protocol/workspace-spaces-v1";
 import { WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
 import type { RemoteFileUpload } from "./file-upload";
@@ -330,6 +332,8 @@ export type TeamChannelsApi = Pick<
   | "workspaceDecisions"
   | "workspaceSidebar"
   | "setWorkspaceSidebar"
+  | "workspaceSpaces"
+  | "workspaceSpaceAction"
   | "listChannelMemories"
   | "createChannelMemory"
   | "updateChannelMemory"
@@ -399,6 +403,9 @@ export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOp
     // A fork host built before workspace-sidebar-v1 answers 404; the caller then keeps the value locally.
     workspaceSidebar: () => workspacePost(WORKSPACE_SIDEBAR_ROUTES.read, decodeWorkspaceSidebar, {}),
     setWorkspaceSidebar: (prefs) => workspacePost(WORKSPACE_SIDEBAR_ROUTES.save, decodeWorkspaceSidebar, prefs),
+    // A fork host built before workspace-spaces-v1 answers 404; the caller then shows only General.
+    workspaceSpaces: () => workspacePost(WORKSPACE_SPACES_ROUTES.read, decodeWorkspaceSpaces, {}),
+    workspaceSpaceAction: (action) => workspacePost(WORKSPACE_SPACES_ROUTES.action, decodeWorkspaceSpaces, action),
     listChannelMemories: (channelId) => post(CHANNEL_ROUTES.memories, decodeChannelMemories, { channelId }),
     createChannelMemory: (input) => post(CHANNEL_ROUTES.memoryCreate, decodeChannelMemory, input),
     updateChannelMemory: (input) => post(CHANNEL_ROUTES.memoryUpdate, decodeChannelMemory, input),

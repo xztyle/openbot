@@ -121,6 +121,7 @@
     "./team-protocol/workspace-v1": "./src/team-protocol/workspace-v1.ts",
     "./team-protocol/workspace-fleet-v1": "./src/team-protocol/workspace-fleet-v1.ts",
     "./team-protocol/workspace-sidebar-v1": "./src/team-protocol/workspace-sidebar-v1.ts",
+    "./team-protocol/workspace-spaces-v1": "./src/team-protocol/workspace-spaces-v1.ts",
     "./team-protocol/storage-hygiene-v1": "./src/team-protocol/storage-hygiene-v1.ts",
     "./team-protocol/discord-access-v1": "./src/team-protocol/discord-access-v1.ts",
     "./team-protocol/discord-channels-v1": "./src/team-protocol/discord-channels-v1.ts",

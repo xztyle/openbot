@@ -20,6 +20,7 @@ import {
   decodeChannel,
   decodeChannelPage,
   decodeChannelSummaries,
+  decodeCreatedSpaceAgent,
   decodeSaveAgentProfileResult,
   decodeWorkspaceActivity,
   decodeWorkspaceAgentExchange,
@@ -32,6 +33,7 @@ import {
   decodeWorkspaceSecretValue,
   decodeWorkspaceSidebar,
   decodeWorkspaceSidebarPrefs,
+  decodeWorkspaceSpaces,
   decodeWorkspaceSteps,
   hostAnalyticsQuery,
   isAgentModelOption,
@@ -56,6 +58,7 @@ import {
   parseWorkspaceFleetInput,
   parseWorkspaceSecretInput,
   parseWorkspaceSecretSaveInput,
+  parseWorkspaceSpaceAction,
   parseWorkspaceStepsInput,
   remoteBrowserSecretResponse,
   type WorkspaceDmAgents,
@@ -84,6 +87,10 @@ import {
   WORKSPACE_SIDEBAR_CAPABILITY,
   WORKSPACE_SIDEBAR_ROUTES,
 } from "@openbot/contracts/team-protocol/workspace-sidebar-v1";
+import {
+  WORKSPACE_SPACES_CAPABILITY,
+  WORKSPACE_SPACES_ROUTES,
+} from "@openbot/contracts/team-protocol/workspace-spaces-v1";
 import { WORKSPACE_CAPABILITY, WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
@@ -224,6 +231,12 @@ export function agentIpcHandlers({
     if (!remoteServers.supportsCapability(serverId, WORKSPACE_SIDEBAR_CAPABILITY))
       throw new Error(sourceText("error.team.workspaceUnsupported"));
     return runCauseEffect(remoteServers.request(serverId, path, decodeWorkspaceSidebar, { method: "POST", body }));
+  };
+  // A joined server without workspace-spaces-v1 fails; the window then shows only General.
+  const remoteSpaces = <T>(serverId: string, path: string, body: object, decoder: ResponseDecoder<T>) => {
+    if (!remoteServers.supportsCapability(serverId, WORKSPACE_SPACES_CAPABILITY))
+      throw new Error(sourceText("error.team.workspaceUnsupported"));
+    return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
   };
   return {
     agent: {
@@ -526,6 +539,15 @@ export function agentIpcHandlers({
         }),
         remote: (prefs, serverId) => remoteSidebar(serverId, WORKSPACE_SIDEBAR_ROUTES.save, prefs),
       }),
+      workspaceSpaces: scopedQueryHandler({
+        local: () => service.spaces.snapshot(),
+        remote: (serverId) => remoteSpaces(serverId, WORKSPACE_SPACES_ROUTES.read, {}, decodeWorkspaceSpaces),
+      }),
+      workspaceSpaceAction: scopedHandler(parseWorkspaceSpaceAction, {
+        local: (action) => runCauseEffect(service.spaces.apply(action)),
+        remote: (action, serverId) =>
+          remoteSpaces(serverId, WORKSPACE_SPACES_ROUTES.action, action, decodeWorkspaceSpaces),
+      }),
       getSidebarLayout: scopedQueryHandler({
         local: () => sidebarLayout.getSnapshot(),
         remote: (serverId) =>
@@ -585,13 +607,30 @@ export function agentIpcHandlers({
       }),
       createAgent: scopedHandler(parseCreateAgent, {
         local: (parsed) => runCauseEffect(service.createAgent(parsed, undefined, undefined, host.conversationSender())),
-        remote: (parsed, serverId) =>
-          runCauseEffect(
-            remoteServers.request(serverId, TEAM_API_ROUTES.agents.all, decodeAgentSummary, {
-              method: "POST",
-              body: parsed,
-            }),
-          ),
+        remote: async (parsed, serverId) => {
+          const { spaceId, ...agent } = parsed;
+          // A host with spaces makes the agent in its space before the first turn. Another one makes it
+          // in General, the only space it has.
+          if (spaceId === undefined || !remoteServers.supportsCapability(serverId, WORKSPACE_SPACES_CAPABILITY))
+            return runCauseEffect(
+              remoteServers.request(serverId, TEAM_API_ROUTES.agents.all, decodeAgentSummary, {
+                method: "POST",
+                body: agent,
+              }),
+            );
+          const { agentId } = await remoteSpaces(
+            serverId,
+            WORKSPACE_SPACES_ROUTES.createAgent,
+            { spaceId, agent },
+            decodeCreatedSpaceAgent,
+          );
+          const agents = await runCauseEffect(
+            remoteServers.request(serverId, TEAM_API_ROUTES.agents.all, decodeAgentSummaries),
+          );
+          const created = agents.find((candidate) => candidate.id === agentId);
+          if (!created) throw new Error(sourceText("error.team.agentNotFound"));
+          return created;
+        },
       }),
       duplicateAgent: scopedHandler(parseAgentId, {
         local: (agentId) =>

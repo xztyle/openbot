@@ -566,6 +566,7 @@ import type {
   WorkspaceStepsInput,
 } from "./ipc-workspace-fleet";
 import type { WorkspaceSidebar, WorkspaceSidebarPrefs } from "./ipc-workspace-sidebar";
+import type { WorkspaceSpaceAction, WorkspaceSpaceActionResult, WorkspaceSpaces } from "./ipc-workspace-spaces";
 import type { LicenseCheckoutRequest, LicenseRenewalRequest, LicenseState, LicenseUsersRequest } from "./license";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
 
@@ -1385,6 +1386,12 @@ export const IPC_ENDPOINTS = {
     // value on this computer.
     workspaceSidebar: scopedQuery<WorkspaceSidebar>()("agent:workspace:sidebar"),
     setWorkspaceSidebar: scopedRequest<WorkspaceSidebarPrefs, WorkspaceSidebar>()("agent:workspace:sidebar:set"),
+    // The spaces and the space of each agent and channel the reader sees. A joined server answers
+    // through workspace-spaces-v1 (`fork-host-v1`); one without it fails, and the window shows General.
+    workspaceSpaces: scopedQuery<WorkspaceSpaces>()("agent:workspace:spaces"),
+    workspaceSpaceAction: scopedRequest<WorkspaceSpaceAction, WorkspaceSpaceActionResult>()(
+      "agent:workspace:space-action",
+    ),
     getSidebarLayout: scopedQuery<SidebarLayoutSnapshot>()("agent:get-sidebar-layout"),
     mutateSidebarLayout: scopedRequest<SidebarLayoutAction, SidebarLayoutSnapshot>()("agent:mutate-sidebar-layout"),
     // A joined server answers through `agent-hidden-v1`. A server without it has no hidden agents.

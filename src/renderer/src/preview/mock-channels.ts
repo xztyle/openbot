@@ -476,6 +476,8 @@ export function createMockChannels(
     // The preview has no other person, so nobody else types; its own signal changes nothing.
     channelTyping: async (_input: ChannelTypingInput): Promise<void> => undefined,
     workspaceDmAgents: async (): Promise<WorkspaceDmAgents> => ({ agentIds: [...agentIds()] }),
+    /** Every channel id, for the spaces of the preview. */
+    channelIds: (): string[] => [...channels.keys()],
     // The preview's own person has one sidebar per server, as a host keeps one per member. None
     // until the first save, so the window uploads what this computer had.
     workspaceSidebar: async (serverId?: string): Promise<WorkspaceSidebar> => {

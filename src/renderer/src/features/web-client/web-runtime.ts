@@ -606,6 +606,7 @@ export function createWebWorkspaceRuntime(
         requestFailureText(failure, read, result.error),
         result.reference ?? null,
         lost && requestHostId !== null,
+        failure.kind === "unsent" || failure.kind === "connection" || failure.kind === "timeout",
       );
     if ((result.status ?? 500) >= 400)
       throw new WebHostRequestError(

@@ -50,6 +50,12 @@ function loadWorkspace(): Promise<typeof WebWorkspace> {
 class SignInIssueShown extends Error {}
 
 /**
+ * The account service did not answer, answered late, or failed (5xx, or a page that is not JSON, such
+ * as a gateway error). The session can still be valid: only a 401 ends it.
+ */
+class AccountServiceUnavailable extends Error {}
+
+/**
  * The shared agent a `/app?agent=<id>` link names. The query is removed after it is read, so a reload
  * does not open the preview again.
  */
@@ -221,9 +227,23 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     } catch (error) {
       // The browser's own words ("Load failed") say nothing to a reader.
       const message = webNetworkFailureMessage(error);
-      throw message ? new Error(message, { cause: error }) : error;
+      throw message ? new AccountServiceUnavailable(message, { cause: error }) : error;
     }
-    const value = await response.json();
+    let value: unknown;
+    try {
+      value = await response.json();
+    } catch (error) {
+      throw new AccountServiceUnavailable(webNetworkFailureMessage(error) ?? text.t("webClient.login.requestFailed"), {
+        cause: error,
+      });
+    }
+    // A sign-in step shows the service's refusal in the form, below, as before.
+    if (response.status >= 500 && path !== "email/start" && path !== "email/verify")
+      throw new AccountServiceUnavailable(
+        isDynamicRecord(value) && isDynamicRecord(value.error) && isString(value.error.message)
+          ? value.error.message
+          : text.t("webClient.login.requestFailed"),
+      );
     if (!response.ok) {
       if (path === "email/start" || path === "email/verify") {
         const retryAfterSeconds = Number.parseInt(response.headers.get("Retry-After") ?? "", 10);
@@ -290,6 +310,9 @@ export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {
     } catch (error) {
       if (!disposed && generation === sessionGeneration) {
         // Signed in, the workspace stays usable. Signed out, the login screen offers a retry, as on desktop.
+        // A check on a window focus runs often. A service that is down for a moment is not news: the
+        // session stays, and the next check asks again.
+        if (state.account && error instanceof AccountServiceUnavailable) return;
         if (state.account)
           toast.error(
             text.sourceText(error instanceof Error ? error.message : text.t("webClient.login.sessionFailed")),

@@ -57,7 +57,7 @@ import { followsServerUpdate } from "../servers/server-update-flow";
 import { createSidebarPreferences } from "../sidebar/sidebar-preferences";
 import { defaultSidebarLayout } from "../sidebar/sidebar-sections";
 import { createHostRestartToasts, type HostRestartView } from "../updates/host-restart-toast";
-import type { WebHostNotice } from "./web-host-connections";
+import { type WebHostNotice, WebHostRequestError } from "./web-host-connections";
 import { createWebHostLifecycle } from "./web-host-lifecycle";
 import type { WebHostState } from "./web-host-lock";
 import { webNetworkFailureMessage } from "./web-network-error";
@@ -744,6 +744,17 @@ export function createWebWorkspace(
       setState((draft) => {
         draft.error = webErrorDetails(error, currentText().t("webClient.error.requestFailed"));
       });
+  }
+  /**
+   * `report` for a refresh that nobody asked for, such as on a window focus. A lost network, a late
+   * answer or a dropped connection is not shown: the connection status and its recovery own those,
+   * and the next focus reads again. Any other failure is shown.
+   */
+  function reportBackground(error: unknown) {
+    if (webNetworkFailureMessage(error) !== null) return;
+    if (error instanceof Error && webNetworkFailureMessage(error.cause) !== null) return;
+    if (error instanceof WebHostRequestError && error.transport) return;
+    report(error);
   }
   async function run(action: () => Promise<void>) {
     if (running) return;
@@ -1734,7 +1745,7 @@ export function createWebWorkspace(
   // The update dialog explains the restart of the update that it follows.
   createHostRestartToasts(() => hostViews().filter((host) => !followsServerUpdate(host.id)));
   onSettled(() => {
-    void refreshHosts().catch(report);
+    void refreshHosts().catch(reportBackground);
     const pageFocus = () => setPageFocused(!document.hidden && document.hasFocus());
     const focus = () => {
       pageFocus();
@@ -1753,7 +1764,7 @@ export function createWebWorkspace(
           if (state.status === "online") return Date.now() - syncedAt < FOCUS_RESYNC_MS ? undefined : resync();
           if (state.recovery?.phase !== "suspended") recover();
         })
-        .catch(report);
+        .catch(reportBackground);
     };
     const visibility = () => {
       pageFocus();

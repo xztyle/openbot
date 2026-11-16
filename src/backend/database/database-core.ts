@@ -7,6 +7,7 @@ import { Effect, Result } from "effect";
 import { migrateOpenBotDatabase } from "../openbot-database-schema";
 import { storedIO, storedSync } from "../stored-state-effects";
 import { databaseRow, errorCode, requiredNumberColumn, requiredStringColumn } from "./database-rows";
+import { registerSqlFunctions } from "./sql-functions";
 
 export interface OrchestrationEventInput {
   aggregateType: string;
@@ -21,17 +22,7 @@ interface ReceiptRow {
   result_json: string;
 }
 
-/**
- * A SQL function that turns each run of whitespace into one space. Search uses it so that a query
- * with a space finds a message that a line break splits.
- */
-export const COLLAPSE_WHITESPACE_FUNCTION = "openbot_collapse_whitespace";
-
-/**
- * A SQL function that lowercases text with the full Unicode rules. SQLite `LOWER` changes only
- * ASCII letters, so "État" would not match the query "état".
- */
-export const LOWERCASE_FUNCTION = "openbot_lowercase";
+export { COLLAPSE_WHITESPACE_FUNCTION, LOWERCASE_FUNCTION } from "./sql-functions";
 
 export interface DatabaseCoreOptions {
   userDataPath: string;
@@ -72,12 +63,7 @@ export class DatabaseCore {
           db.exec("PRAGMA foreign_keys = ON");
           db.exec("PRAGMA busy_timeout = 5000");
           db.exec("PRAGMA synchronous = NORMAL");
-          db.function(COLLAPSE_WHITESPACE_FUNCTION, { deterministic: true }, (value) =>
-            typeof value === "string" ? value.replace(/\s+/gu, " ") : value,
-          );
-          db.function(LOWERCASE_FUNCTION, { deterministic: true }, (value) =>
-            typeof value === "string" ? value.toLocaleLowerCase() : value,
-          );
+          registerSqlFunctions(db);
           this.#db = db;
           this.#migrate(closedCleanly);
         });

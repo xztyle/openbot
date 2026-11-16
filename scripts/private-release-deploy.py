@@ -191,8 +191,30 @@ def main():
     report = dict(revision=REVISION, image=IMAGE, worker=worker, before=before, after=after,
                   phases_seconds=TIMES, deploy_seconds=round(time.monotonic() - started, 3), compiled_during_deployment=False)
     (RELEASE / "deployment.json").write_text(json.dumps(report, indent=2))
+    resumed = resume_interrupted() if interrupt else None
     print(json.dumps(dict(image=IMAGE, worker=worker, schema=after["schema"],
-                          deploy_seconds=report["deploy_seconds"], saved_data_verified=True)))
+                          deploy_seconds=report["deploy_seconds"], saved_data_verified=True, resumed=resumed)))
+
+
+def resume_interrupted():
+    """Tells each agent whose turn the restart cut off to continue (the host's resume-interrupted route).
+    The deliveries recorded before the restart are passed, so a second restart in a row loses none."""
+    recorded = json.loads((RELEASE / "interrupted-agents.json").read_text())
+    ids = [row[0] for row in recorded.get("pending_deliveries", []) if row[3] == "running"]
+    body = json.dumps({"deliveryIds": ids} if ids else {})
+    for _ in range(12):
+        try:
+            answer = docker("exec", "openbot", "curl", "-s", "--max-time", "60", "--unix-socket", "/run/openbot/control.sock",
+                            "-X", "POST", "-H", "content-type: application/json", "-d", body,
+                            "http://openbot/v1/resume-interrupted", name="resume-interrupted")
+            (RELEASE / "resumed-agents.json").write_text(answer)
+            parsed = json.loads(answer)
+            if isinstance(parsed, dict) and not parsed.get("error"):
+                return parsed
+        except (RuntimeError, ValueError):
+            pass
+        time.sleep(10)
+    return "failed: see resume-interrupted.log"
 
 
 REVISION = (RELEASE / "revision.txt").read_text().strip()

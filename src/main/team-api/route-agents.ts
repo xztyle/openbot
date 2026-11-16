@@ -85,7 +85,8 @@ export async function routeAgents(
    */
   function requireVisibleProvider(input: Pick<CreateAgentInput, "provider" | "model"> = {}): void {
     if (input.provider !== undefined) {
-      if (isPeerHiddenProvider(input.provider, context.protocol)) throw new HttpError(400, "provider is invalid.");
+      if (isPeerHiddenProvider(input.provider, context.protocol))
+        throw new HttpError(400, sourceText("error.team.agentModelInvalid"));
       return;
     }
     const provider = agents.newAgentProvider(input);

@@ -6,3 +6,5 @@
 - An event check variable that links to a key you deleted from Secrets can be removed, and its select shows the key it links. Before, the Remove button was off and the select showed nothing.
 - A routine run that failed, needs attention or stopped shows why under its row in the chat, such as "Connect Claude to continue." The run history in the routine settings now also says why a run stopped.
 - In the web app, a change of schedule on a routine card in the chat is saved. Before, it always failed, because the card used calls that only the desktop app has.
+- When the server refuses an agent's name, instructions, first message, model or face, the message says what to change, in your language. Before, it was a technical English text such as "description is invalid."
+- The event check settings of an agent are in Spanish.

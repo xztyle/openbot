@@ -146,4 +146,12 @@ export const messages = defineMessages("error.team", {
   "error.team.signInRelayUsed": "This sign-in was already sent.",
   "error.team.signInRelayMismatch": "This address is not from this sign-in.",
   "error.team.signInRelayLinkUnknown": "No agent on this server showed this sign-in link.",
+  "error.team.agentNameInvalid": "Give the agent a name of at most {limit} characters.",
+  "error.team.agentTitleInvalid": "The agent's title can have at most {limit} characters.",
+  "error.team.agentInstructionsInvalid": "The agent's instructions can have at most {limit} characters.",
+  "error.team.agentFirstMessageInvalid": "Write a first message of at most {limit} characters.",
+  "error.team.agentModelInvalid":
+    "This server does not know the provider, model or effort that was picked. Pick another one, or update OpenBot on the server.",
+  "error.team.agentAvatarInvalid": "The face or color of the agent is not valid. Pick another one.",
+  "error.team.agentSettingInvalid": "A setting of the agent is not valid. Reload and try again.",
 });

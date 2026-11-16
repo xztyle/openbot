@@ -139,4 +139,12 @@ export const messages = {
   "error.team.signInRelayUsed": "Questo accesso è già stato inviato.",
   "error.team.signInRelayMismatch": "Questo indirizzo non appartiene a questo accesso.",
   "error.team.signInRelayLinkUnknown": "Nessun agente su questo server ha mostrato questo link di accesso.",
+  "error.team.agentNameInvalid": "Dai all’agente un nome di massimo {limit} caratteri.",
+  "error.team.agentTitleInvalid": "Il titolo dell’agente può avere al massimo {limit} caratteri.",
+  "error.team.agentInstructionsInvalid": "Le istruzioni dell’agente possono avere al massimo {limit} caratteri.",
+  "error.team.agentFirstMessageInvalid": "Scrivi un primo messaggio di massimo {limit} caratteri.",
+  "error.team.agentModelInvalid":
+    "Questo server non conosce il provider, il modello o lo sforzo scelto. Scegline un altro o aggiorna OpenBot sul server.",
+  "error.team.agentAvatarInvalid": "Il volto o il colore dell’agente non è valido. Scegline un altro.",
+  "error.team.agentSettingInvalid": "Un’impostazione dell’agente non è valida. Ricarica e riprova.",
 } as const satisfies PartialTranslation<typeof source>;

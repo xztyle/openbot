@@ -376,7 +376,7 @@ export function browserTakeoverDecision(value: unknown): RespondToBrowserTakeove
 }
 
 export function agentUpdate(value: DynamicRecord, agentId: string): UpdateAgentInput {
-  if (value.role !== undefined) throw new HttpError(400, "role is invalid.");
+  if (value.role !== undefined) throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
   const result: UpdateAgentInput = { agentId };
   const textFields = {
     name: INPUT_LIMITS.agentName,
@@ -387,7 +387,7 @@ export function agentUpdate(value: DynamicRecord, agentId: string): UpdateAgentI
     const item = value[field];
     if (item === undefined) continue;
     if (!isString(item) || item.length > maxLength) {
-      throw new HttpError(400, `${field} is invalid.`);
+      throw new HttpError(400, agentTextInvalid(field, maxLength));
     }
     if (field === "name") result.name = item;
     else if (field === "title") result.title = item;
@@ -395,39 +395,39 @@ export function agentUpdate(value: DynamicRecord, agentId: string): UpdateAgentI
   }
   if (value.notifications !== undefined) {
     if (!isBoolean(value.notifications)) {
-      throw new HttpError(400, "notifications is invalid.");
+      throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
     }
     result.notifications = value.notifications;
   }
   if (value.background !== undefined) {
     if (!isBoolean(value.background)) {
-      throw new HttpError(400, "background is invalid.");
+      throw new HttpError(400, sourceText("error.team.agentSettingInvalid"));
     }
     result.background = value.background;
   }
   if (value.provider !== undefined) {
     if (!isAgentProvider(value.provider)) {
-      throw new HttpError(400, "provider is invalid.");
+      throw new HttpError(400, sourceText("error.team.agentModelInvalid"));
     }
     result.provider = value.provider;
   }
   if (value.model !== undefined) {
-    if (!isAgentModel(value.model)) throw new HttpError(400, "model is invalid.");
+    if (!isAgentModel(value.model)) throw new HttpError(400, sourceText("error.team.agentModelInvalid"));
     result.model = value.model;
   }
   if (value.reasoningEffort !== undefined) {
     if (!isReasoningEffort(value.reasoningEffort)) {
-      throw new HttpError(400, "reasoningEffort is invalid.");
+      throw new HttpError(400, sourceText("error.team.agentModelInvalid"));
     }
     result.reasoningEffort = value.reasoningEffort;
   }
   if (value.avatarSeed !== undefined) {
-    if (!isAvatarSeed(value.avatarSeed)) throw new HttpError(400, "avatarSeed is invalid.");
+    if (!isAvatarSeed(value.avatarSeed)) throw new HttpError(400, sourceText("error.team.agentAvatarInvalid"));
     result.avatarSeed = value.avatarSeed;
   }
   if (value.avatarHue !== undefined) {
     if (value.avatarHue !== null && !isAvatarHue(value.avatarHue)) {
-      throw new HttpError(400, "avatarHue is invalid.");
+      throw new HttpError(400, sourceText("error.team.agentAvatarInvalid"));
     }
     result.avatarHue = value.avatarHue;
   }
@@ -436,19 +436,20 @@ export function agentUpdate(value: DynamicRecord, agentId: string): UpdateAgentI
 
 export function agentCreate(value: DynamicRecord): CreateAgentInput {
   const avatarHue = value.avatarHue;
-  if (!isAvatarSeed(value.avatarSeed)) throw new HttpError(400, "avatarSeed is invalid.");
-  if (avatarHue !== null && !isAvatarHue(avatarHue)) throw new HttpError(400, "avatarHue is invalid.");
+  if (!isAvatarSeed(value.avatarSeed)) throw new HttpError(400, sourceText("error.team.agentAvatarInvalid"));
+  if (avatarHue !== null && !isAvatarHue(avatarHue))
+    throw new HttpError(400, sourceText("error.team.agentAvatarInvalid"));
   if (!isString(value.description) || value.description.length > INPUT_LIMITS.agentDescription) {
-    throw new HttpError(400, "description is invalid.");
+    throw new HttpError(400, agentTextInvalid("description", INPUT_LIMITS.agentDescription));
   }
   if (value.provider !== undefined && !isAgentProvider(value.provider)) {
-    throw new HttpError(400, "provider is invalid.");
+    throw new HttpError(400, sourceText("error.team.agentModelInvalid"));
   }
   if (value.model !== undefined && !isAgentModel(value.model)) {
-    throw new HttpError(400, "model is invalid.");
+    throw new HttpError(400, sourceText("error.team.agentModelInvalid"));
   }
   if (value.reasoningEffort !== undefined && !isReasoningEffort(value.reasoningEffort)) {
-    throw new HttpError(400, "reasoningEffort is invalid.");
+    throw new HttpError(400, sourceText("error.team.agentModelInvalid"));
   }
   return {
     name: requiredCreateText(value.name, "name", INPUT_LIMITS.agentName),
@@ -464,9 +465,18 @@ export function agentCreate(value: DynamicRecord): CreateAgentInput {
 
 function requiredCreateText(value: unknown, field: string, maximum: number): string {
   if (!isString(value) || !value.trim() || value.length > maximum) {
-    throw new HttpError(400, `${field} is invalid.`);
+    throw new HttpError(400, agentTextInvalid(field, maximum));
   }
   return value;
+}
+
+/** The refusal of an agent's text field, in words that a person can act on. */
+function agentTextInvalid(field: string, limit: number): string {
+  if (field === "name") return sourceText("error.team.agentNameInvalid", { limit });
+  if (field === "title") return sourceText("error.team.agentTitleInvalid", { limit });
+  if (field === "description") return sourceText("error.team.agentInstructionsInvalid", { limit });
+  if (field === "initialMessage") return sourceText("error.team.agentFirstMessageInvalid", { limit });
+  return sourceText("error.team.agentSettingInvalid");
 }
 
 /**

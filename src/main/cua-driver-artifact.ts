@@ -83,6 +83,14 @@ export const CUA_DRIVER_VENDOR_CALLS_OFF: Readonly<Record<string, string>> = {
   CUA_DRIVER_RS_UPDATE_CHECK: "0",
 };
 
+/**
+ * The worker threads of the driver's async runtime. Its default is one worker for each CPU core: 13
+ * threads in each `cua-driver mcp` proxy on a 12-core server, one proxy for each running agent with
+ * Computer Use, and a server's task limit counts each thread. With two workers a proxy has 5
+ * threads and the daemon 7. Set for the daemon, the MCP proxy and the permission probe.
+ */
+export const CUA_DRIVER_THREADS: Readonly<Record<string, string>> = { TOKIO_WORKER_THREADS: "2" };
+
 /** The file name, which carries an extension only where the operating system needs one. */
 function executableName(platform: NodeJS.Platform): "cua-driver" | "cua-driver.exe" {
   return platform === "win32" ? "cua-driver.exe" : "cua-driver";

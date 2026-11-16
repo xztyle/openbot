@@ -21,7 +21,7 @@ import { sourceText } from "@openbot/i18n/source";
 import { Deferred, Effect, Exit, Result } from "effect";
 import { agentDisplayEnvironment } from "./agent-display";
 import { CuaDriverActionTap, type ObservedAction, type ObservedPointer } from "./cua-driver-action-tap";
-import { CUA_DRIVER_VENDOR_CALLS_OFF } from "./cua-driver-artifact";
+import { CUA_DRIVER_THREADS, CUA_DRIVER_VENDOR_CALLS_OFF } from "./cua-driver-artifact";
 import { CuaDriverFailure, cuaIO, cuaSync, toCuaDriverFailure } from "./cua-driver-effects";
 import { LifecycleGate } from "./lifecycle-gate";
 import { forwardDiagnosticLines, stopRemoteProcess } from "./remote-diagnostics";
@@ -384,7 +384,10 @@ export class CuaDriverRuntime {
       args: ["mcp", "--socket", this.tapAddress()],
       env: [
         { key: EMBEDDED_ENV, value: "1" },
-        ...Object.entries(CUA_DRIVER_VENDOR_CALLS_OFF).map(([key, value]) => ({ key, value })),
+        ...Object.entries({ ...CUA_DRIVER_VENDOR_CALLS_OFF, ...CUA_DRIVER_THREADS }).map(([key, value]) => ({
+          key,
+          value,
+        })),
       ],
       envPassthrough: [...environmentPassthrough(this.#options.platform)],
       workingDirectory: "",
@@ -566,6 +569,7 @@ export class CuaDriverRuntime {
           [EMBEDDED_ENV]: "1",
           [PARENT_LIVENESS_ENV]: "1",
           ...CUA_DRIVER_VENDOR_CALLS_OFF,
+          ...CUA_DRIVER_THREADS,
           [HOST_BUNDLE_ID_ENV]: this.#options.hostBundleId,
           ...waylandEnvironment(this.#options.platform),
         },
@@ -899,7 +903,12 @@ const readPermissionsOverMcpEffect = Effect.fn("CuaDriver.permissions")(
         transport: new StdioClientTransport({
           command: config.command,
           args: config.args,
-          env: { ...getDefaultEnvironment(), [EMBEDDED_ENV]: "1", ...CUA_DRIVER_VENDOR_CALLS_OFF },
+          env: {
+            ...getDefaultEnvironment(),
+            [EMBEDDED_ENV]: "1",
+            ...CUA_DRIVER_VENDOR_CALLS_OFF,
+            ...CUA_DRIVER_THREADS,
+          },
           stderr: "ignore",
         }),
         timer: new AbortController(),

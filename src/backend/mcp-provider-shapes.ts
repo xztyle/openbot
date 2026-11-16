@@ -729,6 +729,7 @@ export function codexMcpServers(
 export function mcpFingerprintValues(configs: readonly McpServerConfig[]): string[] {
   return configs
     .filter((config) => config.enabled && !isReservedMcpServerName(config.name))
+    .map((config) => ({ ...config, env: config.env.filter((pair) => !THREAD_COUNT_ENV.has(pair.key)) }))
     .map((config) =>
       [
         config.name,
@@ -745,6 +746,13 @@ export function mcpFingerprintValues(configs: readonly McpServerConfig[]): strin
     )
     .sort();
 }
+
+/**
+ * The variables that set only how many threads a server's runtime starts. They change the cost of
+ * the process, not the tools it gives, so a change does not replace a Codex session and lose its
+ * history: a resumed session keeps the old count until its next new session.
+ */
+const THREAD_COUNT_ENV: ReadonlySet<string> = new Set(["TOKIO_WORKER_THREADS"]);
 
 /** The values reduced to one digest, so a changed credential is visible without being readable. */
 function secretDigest(config: McpServerConfig): string {

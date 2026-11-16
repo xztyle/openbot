@@ -582,7 +582,11 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   function selectSpace(spaceId: string) {
     spaces.select(spaceId);
     const open = activeConversationId();
-    if (open && rowSpace(open) !== spaceId) openView("activity");
+    if (open && rowSpace(open) !== spaceId) {
+      openView("activity");
+      // A phone shows one pane: the reader picked the space on the sidebar and wants to see its list.
+      if (env.phone()) setPhonePane("sidebar");
+    }
   }
   /**
    * A conversation of another space that the reader opens, from Jump to, a notification, a link or a

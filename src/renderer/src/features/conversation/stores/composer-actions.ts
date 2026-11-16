@@ -338,8 +338,14 @@ export function createComposerActions(deps: ComposerActionsDeps) {
     const agentId = deps.props.agent?.id;
     const serverId = deps.props.server?.id ?? "local";
     if (!agentId || delivery.status !== "queued" || deps.submitting()) return;
-    // A pending Save owns the outcome: keep it for retry instead of replacing it.
-    if (deps.editingPendingSave()) return;
+    // A pending Save owns the outcome: keep it for retry instead of replacing it, and say why Edit did nothing.
+    if (deps.editingPendingSave()) {
+      deps.setComposerError(t("composer.error.saveUnconfirmed"), {
+        agentId: deps.editingAgentId() ?? agentId,
+        serverId: deps.editingServerId() ?? serverId,
+      });
+      return;
+    }
     if (deps.editingDeliveryId() && !(await cancelQueuedMessageEdit())) return;
     if (deps.props.agent?.id !== agentId || (deps.props.server?.id ?? "local") !== serverId) return;
     const backup = copyComposerDraft(deps.currentDraft());
@@ -525,6 +531,13 @@ export function createComposerActions(deps: ComposerActionsDeps) {
         .filter((attachment) => !originalAttachmentIds.has(attachment.id))
         .map((attachment) => attachment.id);
       if (!text.trim() && keepAttachmentIds.length === 0 && attachmentDraftIds.length === 0) return false;
+      if (text.length > INPUT_LIMITS.messageText) {
+        deps.setComposerError(t("composer.error.messageTooLong", { limit: INPUT_LIMITS.messageText }), {
+          agentId,
+          serverId,
+        });
+        return false;
+      }
     }
 
     stopTeamTyping();
@@ -695,6 +708,11 @@ export function createComposerActions(deps: ComposerActionsDeps) {
     const draft = copyComposerDraft(draftOverride ?? deps.currentDraft());
     const text = expandComposerMentions(draft.text);
     if (!agentId || !target || deps.submitting() || (!text.trim() && draft.attachments.length === 0)) return false;
+    // The editor counts the names of mentions; each one is longer once expanded for the host.
+    if (text.length > INPUT_LIMITS.messageText) {
+      deps.setComposerError(t("composer.error.messageTooLong", { limit: INPUT_LIMITS.messageText }), target);
+      return false;
+    }
     const provider =
       deps.props.agent?.id === agentId
         ? deps.props.agent.provider

@@ -9,3 +9,4 @@
 - In the web app, a failed file upload shows its reason in your language. Before, it showed the technical English text of the error.
 - In a channel, the files that you attached stay with the message you write when you open another channel or thread and come back. Before, they were lost. A file that you choose arrives in the channel where you chose it.
 - In a channel, a message that you send again after its answer did not come is not stored twice.
+- A message near the length limit whose mentions make it too long says so in the composer before it is sent. Edit on a queued message while a Save is not confirmed says to retry Save. Before, Edit did nothing.

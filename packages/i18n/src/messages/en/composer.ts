@@ -121,6 +121,8 @@ export const messages = defineMessages("composer", {
   "composer.error.editEnded": "The queue edit has ended.",
   "composer.error.keepAttachments": "Could not keep these attachments with the edit.",
   "composer.error.attachmentLimit": "You can attach at most {limit} files.",
+  "composer.error.messageTooLong":
+    "With its mentions, the message is longer than {limit} characters. Shorten it to send it.",
   "composer.error.queuedUnavailable": "This queued message is no longer available.",
   "composer.error.holdQueued": "Could not hold the queued message for editing.",
   "composer.error.cancelEdit": "Could not cancel the queue edit. Try again.",

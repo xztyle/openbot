@@ -125,6 +125,8 @@ export const messages = {
   "composer.error.editEnded": "La edición de la cola ha terminado.",
   "composer.error.keepAttachments": "No se pudieron conservar estos archivos adjuntos con la edición.",
   "composer.error.attachmentLimit": "Puedes adjuntar como máximo {limit} archivos.",
+  "composer.error.messageTooLong":
+    "Con sus menciones, el mensaje tiene más de {limit} caracteres. Acórtalo para enviarlo.",
   "composer.error.queuedUnavailable": "Este mensaje en cola ya no está disponible.",
   "composer.error.holdQueued": "No se pudo retener el mensaje en cola para editarlo.",
   "composer.error.cancelEdit": "No se pudo cancelar la edición de la cola. Vuelve a intentarlo.",

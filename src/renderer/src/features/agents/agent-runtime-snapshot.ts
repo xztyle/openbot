@@ -34,8 +34,14 @@ export function reconcileAttentionPrompts(
   for (const prompt of snapshot.pendingPrompts) {
     // A prompt whose answer is already on its way to main would otherwise come
     // back the moment a snapshot crosses the answer in flight.
-    if (promptRequestKey(prompt.turnId, prompt.requestId) !== submittedRequests[prompt.agentId]) {
-      next[prompt.agentId] = { type: "prompt", ...prompt };
+    const key = promptRequestKey(prompt.turnId, prompt.requestId);
+    if (key !== submittedRequests[prompt.agentId]) {
+      // The prompt event that the renderer holds has the whole text; the snapshot shortens it.
+      const held = current[prompt.agentId];
+      next[prompt.agentId] =
+        held?.type === "prompt" && promptRequestKey(held.turnId, held.requestId) === key
+          ? held
+          : { type: "prompt", ...prompt };
     }
   }
   for (const request of snapshot.pendingBrowserTakeovers) {

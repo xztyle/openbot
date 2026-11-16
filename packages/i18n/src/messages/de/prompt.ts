@@ -26,6 +26,8 @@ export const messages = {
   "prompt.choice.customLabel": "Eigene Antwort",
   "prompt.approval.answerFailed": "Diese Genehmigungsanfrage konnte nicht beantwortet werden. Versuche es erneut.",
   "prompt.approval.grantFailed": "Die dauerhafte Genehmigung konnte nicht gespeichert werden. Versuche es erneut.",
+  "prompt.approval.truncated":
+    "Hier steht nur der Anfang dieser Anfrage. Erlaube sie nur, wenn dir das für die Entscheidung reicht.",
   "prompt.approval.label": "Agentengenehmigung",
   "prompt.teammate.question": "{name} braucht deine Antwort",
   "prompt.teammate.approval": "{name} braucht deine Freigabe",

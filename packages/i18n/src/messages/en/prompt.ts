@@ -25,6 +25,8 @@ export const messages = defineMessages("prompt", {
   "prompt.choice.customLabel": "Custom answer",
   "prompt.approval.answerFailed": "Could not answer this approval. Try again.",
   "prompt.approval.grantFailed": "Could not save the standing approval. Try again.",
+  "prompt.approval.truncated":
+    "Only the start of this request shows here. Allow it only if that is enough for you to decide.",
   "prompt.approval.label": "Agent approval",
   "prompt.approval.labelFrom": "Approval for {name}",
   // A teammate's request, shown in the chat of the agent that gave it the work.

@@ -26,6 +26,8 @@ export const messages = {
   "prompt.choice.customLabel": "Respuesta personalizada",
   "prompt.approval.answerFailed": "No se pudo responder a esta solicitud de aprobación. Vuelve a intentarlo.",
   "prompt.approval.grantFailed": "No se pudo guardar la aprobación permanente. Vuelve a intentarlo.",
+  "prompt.approval.truncated":
+    "Aquí solo se ve el principio de esta solicitud. Permítela solo si eso te basta para decidir.",
   "prompt.approval.label": "Aprobación del agente",
   "prompt.teammate.question": "{name} necesita tu respuesta",
   "prompt.teammate.approval": "{name} necesita tu aprobación",

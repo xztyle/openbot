@@ -285,6 +285,10 @@ export function ApprovalCard(props: {
         <Show when={props.approval.kind === "permissions"}>
           <PermissionDetails permissions={props.approval.permissions} />
         </Show>
+        {/* A copy from a runtime snapshot is cut to fit; the reader decides on what shows. */}
+        <Show when={"truncated" in props.approval && props.approval.truncated === true}>
+          <p class="approval-reason">{t("prompt.approval.truncated")}</p>
+        </Show>
       </div>
       <footer class="approval-card-footer">
         <Button

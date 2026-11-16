@@ -16,6 +16,7 @@ import { seededAttentionPrompts } from "./features/agents/agent-runtime-snapshot
 import { useAgents } from "./features/agents/agents-context";
 import { agentConversationKey, promptRequestKey } from "./features/conversation/conversation-keys";
 import type { PromptAnswerOptions } from "./features/conversation/conversation-types";
+import { isSteerTurnChanged } from "./features/conversation/steer-refusal";
 import type { TurnStepLines } from "./features/conversation/turn-step-lines";
 import { useDynamicIsland } from "./features/dynamic-island/dynamic-island-context";
 import { useServers } from "./features/servers/servers-context";
@@ -378,7 +379,7 @@ const Turns = createSimpleContext({
         .catch((error) => {
           analytics.track("queue_action", { action: "steer", result: "failed", failure_code: "steer_failed" });
           // After the turn ended, the message runs as the next turn. The refusal is old news (#3206).
-          if (activeTurns()[agent.id] !== turnId) return;
+          if (activeTurns()[agent.id] !== turnId || isSteerTurnChanged(error)) return;
           appendUiError(agent.id, error, currentText().t("app.errorStatus.steer"), serverId);
         });
     }

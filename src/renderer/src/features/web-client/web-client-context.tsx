@@ -52,6 +52,7 @@ import {
   writeAgentSelection,
 } from "../agents/agent-selection";
 import { mergeConversationPage, missingReplyOriginals } from "../conversation/conversation-merge";
+import { isSteerTurnChanged } from "../conversation/steer-refusal";
 import { appendTurnStepLine, type TurnStepLines } from "../conversation/turn-step-lines";
 import { followsServerUpdate } from "../servers/server-update-flow";
 import { createSidebarPreferences } from "../sidebar/sidebar-preferences";
@@ -1964,7 +1965,19 @@ export function createWebWorkspace(
       changeQueue((agentId) => runtime.cancelQueued({ agentId, deliveryId })),
     steerQueued(deliveryId: string) {
       const expectedTurnId = conversation()?.page?.activeTurnId;
-      if (expectedTurnId) void changeQueue((agentId) => runtime.steerQueued({ agentId, deliveryId, expectedTurnId }));
+      if (!expectedTurnId) return;
+      void changeQueue((agentId) =>
+        runtime.steerQueued({ agentId, deliveryId, expectedTurnId }).catch((error: unknown) => {
+          // After the turn ended, the message runs as the next turn. The refusal is old news, as on desktop (#3206).
+          // The page can learn of the end of the turn after the refusal comes, so the refusal's own text counts too.
+          if (
+            isSteerTurnChanged(error) ||
+            (selectedId === agentId && conversation()?.page?.activeTurnId !== expectedTurnId)
+          )
+            return;
+          throw error;
+        }),
+      );
     },
     reorderQueue: (deliveryIds: string[]) => changeQueue((agentId) => runtime.reorderQueue({ agentId, deliveryIds })),
     async updateQueued(

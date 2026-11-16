@@ -2757,11 +2757,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     sourceAgentId: string,
     operationId: string = randomUUID(),
   ): Effect.Effect<AgentSummary, AgentLifecycleFailed> {
-    return this.#duplication
-      .duplicate(sourceAgentId, operationId)
-      .pipe(
-        Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "duplicateAgent", cause: failure.cause })),
-      );
+    return this.#duplication.duplicate(sourceAgentId, operationId).pipe(
+      // The copy starts in the space of its source.
+      Effect.tap((agent) =>
+        Effect.sync(() => this.spaces.place("agent", agent.id, this.#store.spaces.agentSpaceId(sourceAgentId))),
+      ),
+      Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "duplicateAgent", cause: failure.cause })),
+    );
   }
 
   commitAgentDuplication(

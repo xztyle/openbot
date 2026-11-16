@@ -21,11 +21,13 @@ export interface NewMessageTally {
   count: number;
   /** The last id the reader has accounted for. `undefined` before the first page arrives. */
   anchorId: string | undefined;
+  /** Every id the reader has accounted for. A row with another id arrived since. */
+  seen?: ReadonlySet<string>;
 }
 
 /** The reader has seen everything: no count, and the newest row becomes the anchor. */
 export function anchorNewMessages(rows: readonly TimelineRow[]): NewMessageTally {
-  return { count: 0, anchorId: rows.at(-1)?.id };
+  return { count: 0, anchorId: rows.at(-1)?.id, seen: new Set(rows.map((row) => row.id)) };
 }
 
 /**
@@ -35,6 +37,10 @@ export function anchorNewMessages(rows: readonly TimelineRow[]): NewMessageTally
  * prompt and scrolled up has nothing countable behind them, and an anchor drawn from countable
  * rows alone would be missing: the first reply would then read as the first page of a thread and
  * count nothing.
+ *
+ * A new row does not always come last. The answer of a turn goes with its turn, above a marker that
+ * came while the turn ran, so a row counts when its id is new and it comes after the first row the
+ * reader had. An older page only puts rows before that one.
  *
  * `following` is whether the view still sticks to the newest message. It has to be read at the
  * moment the messages change, not after the frame that scrolls the view: by then every arrival
@@ -49,19 +55,22 @@ export function tallyNewMessages(
   const latest = rows[rows.length - 1];
   if (!latest) return { count: 0, anchorId: undefined };
   const latestId = latest.id;
-  const anchorIndex = previous.anchorId === undefined ? -1 : rows.findIndex((row) => row.id === previous.anchorId);
+  const seen = previous.seen ?? new Set(previous.anchorId === undefined ? [] : [previous.anchorId]);
+  const firstKnown = rows.findIndex((row) => seen.has(row.id));
+  const accounted = new Set(rows.map((row) => row.id));
   /*
-   * Nothing here says what arrived, so the count stands: the anchor is missing because a message
-   * was deleted, because a page scrolled out of the window, or because this is the first page of
-   * a thread the reader just opened, and none of those is news.
+   * Nothing here says what arrived, so the count stands: no known row is left because the
+   * messages were deleted, because a page scrolled out of the window, or because this is the first
+   * page of a thread the reader just opened, and none of those is news.
    */
-  if (anchorIndex < 0) return { count: previous.count, anchorId: latestId };
+  if (firstKnown < 0) return { count: previous.count, anchorId: latestId, seen: accounted };
   let arrived = 0;
   // A body that grows while it streams, and an older page that only prepends, both add nothing.
-  for (let index = anchorIndex + 1; index < rows.length; index += 1) {
-    if (rows[index]?.countable) arrived += 1;
+  for (let index = firstKnown + 1; index < rows.length; index += 1) {
+    const row = rows[index];
+    if (row?.countable && !seen.has(row.id)) arrived += 1;
   }
-  return { count: previous.count + arrived, anchorId: latestId };
+  return { count: previous.count + arrived, anchorId: latestId, seen: accounted };
 }
 
 /** Rows the reader would call a new message. */

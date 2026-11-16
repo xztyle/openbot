@@ -86,6 +86,9 @@ import { rawDataBytes, sendableCloseCode } from "./ws-raw-data";
 const requireModule = createRequire(import.meta.url);
 const webSockets: typeof Ws = requireModule(join(dirname(requireModule.resolve("ws/package.json")), "index.js"));
 const MAXIMUM_BUFFERED_EVENTS = 2_000;
+const MAXIMUM_CACHED_RESPONSES = 1_000;
+/** About 16 MB of UTF-16 text. */
+const MAXIMUM_CACHED_RESPONSE_CHARS = 8 * 1024 * 1024;
 /** A Moonlight session and a few browser views, which is more than a member watches at once. */
 const MAXIMUM_DESKTOP_STREAMS = 6;
 
@@ -133,6 +136,8 @@ export class TeamWebRtcHostPeer {
     | null;
   /** Encoded response frames, so a retry sends the same bytes and an oversized result is not kept. */
   readonly #responses = new Map<string, string>();
+  /** The UTF-16 length of the frames in `#responses`. */
+  #responseChars = 0;
   readonly #responsesInFlight = new Map<string, Fiber.Fiber<string, RemoteWorkflowError>>();
   readonly #events = new Map<number, string>();
   #peerCapabilities = new Set<string>();
@@ -291,6 +296,7 @@ export class TeamWebRtcHostPeer {
     // incoming already cleared the prior session; retain the active authentication gate.
     this.#events.clear();
     this.#responses.clear();
+    this.#responseChars = 0;
     this.#nextEventSequence = 1;
     this.#eventsSentThrough = 0;
     this.#eventResetPending = false;
@@ -513,7 +519,18 @@ export class TeamWebRtcHostPeer {
             Effect.sync(() => {
               if (this.#localSessionId === sessionId) {
                 this.#responses.set(request.requestId, response);
-                while (this.#responses.size > 1_000) deleteOldest(this.#responses);
+                this.#responseChars += response.length;
+                // A client sends a request again only right after a reconnect, so the newest answers
+                // are enough. Conversation pages are 100 KB and more; 1,000 of them stayed in main.
+                while (
+                  this.#responses.size > MAXIMUM_CACHED_RESPONSES ||
+                  (this.#responseChars > MAXIMUM_CACHED_RESPONSE_CHARS && this.#responses.size > 1)
+                ) {
+                  const oldest = this.#responses.entries().next();
+                  if (oldest.done) break;
+                  this.#responses.delete(oldest.value[0]);
+                  this.#responseChars -= oldest.value[1].length;
+                }
               }
             }),
           ),
@@ -1148,11 +1165,6 @@ function encodeRpcResponse(response: TeamProtocolV2RpcFrame): string {
       },
     });
   }
-}
-
-function deleteOldest<Key, Value>(values: Map<Key, Value>): void {
-  const oldest = values.keys().next();
-  if (!oldest.done) values.delete(oldest.value);
 }
 
 function authenticationFrame(data: string): TeamProtocolV2AuthFrame | null {

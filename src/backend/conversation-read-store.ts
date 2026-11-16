@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { CHAT_VISUAL_ITEM_TYPE_PREFIX } from "@openbot/contracts/chat-visual";
 import { EVENT_CHECK_ITEM_TYPE_PREFIX } from "@openbot/contracts/event-checks";
 import {
@@ -19,40 +18,31 @@ import {
   ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX,
   SKILL_EVENT_ITEM_TYPE_PREFIX,
 } from "@openbot/contracts/ipc";
-import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
+import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
-import {
-  type ConversationMarkerExclusions,
-  ORDER_KEY_COLUMNS,
-  ORDER_KEY_DESC,
-  ORDERED_THREAD_MESSAGES,
-} from "./database/conversation-queries";
+import type { ConversationMarkerExclusions } from "./database/conversation-queries";
+import { type ReadLookups, ThreadReadStates } from "./database/thread-read-states";
 import type { OpenBotDatabase } from "./openbot-database";
 
 export type { ConversationMarkerExclusions } from "./database/conversation-queries";
+export { isAgentTalkTurn } from "./database/thread-read-states";
 
-/** How many computed read states the store keeps. Each is a few strings; the oldest goes first. */
-const READ_STATE_CACHE_LIMIT = 2_000;
-
-interface CachedReadState {
-  /** The thread row's `last_event_sequence` and `updated_at` when the state was read. */
-  version: string;
-  state: ConversationReadState;
-}
-
+/**
+ * Each member's read cursor of each thread and the state it gives: the unread count and the first
+ * unread message. The reads and their cache are `ThreadReadStates`; this store owns the cursor writes,
+ * which only the main connection makes.
+ */
 export class ConversationReadStore {
-  /**
-   * Read states by thread, cursor and marker exclusions. A state depends only on the thread's rows
-   * and the cursor, and every write to the rows of a thread moves the thread row's version, so an
-   * entry with the current version is still right. Computing one runs the unread query over the
-   * whole thread: a few milliseconds each, and about 100 ms for the list of every agent, which each
-   * client reads after each chat change of an agent it does not show.
-   */
-  readonly #cache = new Map<string, CachedReadState>();
-  /** By connection: a database that is opened again has a new one, and a statement belongs to one. */
-  readonly #statements = new WeakMap<DatabaseSync, Map<string, StatementSync>>();
+  /** The reads and the cache of computed states; this store adds the cursor writes. */
+  readonly states: ThreadReadStates;
 
-  constructor(readonly database: OpenBotDatabase) {}
+  constructor(readonly database: OpenBotDatabase) {
+    this.states = new ThreadReadStates({
+      core: database,
+      conversations: database,
+      versionsAreFinal: () => !database.connection.isTransaction,
+    });
+  }
 
   listStates(
     memberId: string,
@@ -61,37 +51,10 @@ export class ConversationReadStore {
   ): Record<string, ConversationReadState> {
     // The member's cursors and the thread versions, each in one query: the app reads every chat's
     // state after each change in a chat, and two queries for each chat took most of a read.
-    const lookups = this.#lookups(memberId);
+    const lookups = this.states.lookups(memberId);
     return Object.fromEntries(
       agents.map((agent) => [agent.id, this.readStateForThread(memberId, agent.threadId, options, lookups)]),
     );
-  }
-
-  #lookups(memberId: string): ReadLookups {
-    const cursors = new Map<string, string | null>();
-    for (const row of this.database.connection
-      .prepare("SELECT thread_id, through_message_id FROM projection_thread_reads WHERE member_id = ?")
-      .all(memberId)) {
-      if (!isDynamicRecord(row) || !isString(row.thread_id))
-        throw new Error("The stored conversation read state is malformed.");
-      const cursor = row.through_message_id;
-      if (cursor !== null && !isString(cursor)) throw new Error("The stored conversation read cursor is malformed.");
-      cursors.set(row.thread_id, cursor);
-    }
-    if (this.database.connection.isTransaction) return { cursors, versions: null };
-    const versions = new Map<string, string>();
-    for (const row of this.database.connection
-      .prepare("SELECT thread_id, last_event_sequence, updated_at FROM projection_threads")
-      .all()) {
-      if (
-        isDynamicRecord(row) &&
-        isString(row.thread_id) &&
-        isNumber(row.last_event_sequence) &&
-        isString(row.updated_at)
-      )
-        versions.set(row.thread_id, `${row.last_event_sequence}\u0000${row.updated_at}`);
-    }
-    return { cursors, versions };
   }
 
   readStateForThread(
@@ -101,71 +64,18 @@ export class ConversationReadStore {
     lookups?: ReadLookups,
   ): ConversationReadState {
     if (!threadId) return emptyReadState();
-    const stored = lookups ? lookups.cursors.get(threadId) : this.#storedCursor(threadId, memberId);
-    // Only a stored cursor that the thread still holds goes in the cache, so a hit needs no other check.
-    const cacheKey = stored === undefined ? null : readStateCacheKey(threadId, stored, options);
-    const version =
-      cacheKey === null ? null : lookups ? (lookups.versions?.get(threadId) ?? null) : this.#threadVersion(threadId);
-    const cached = cacheKey === null ? undefined : this.#cache.get(cacheKey);
-    if (cached && version !== null && cached.version === version) return { ...cached.state };
-    let state: ConversationReadState;
+    const known = this.states.knownState(memberId, threadId, options, lookups);
+    if (known) return known;
+    // The cursor must be written first: none is stored yet, or the thread no longer holds its message.
+    const stored = lookups ? lookups.cursors.get(threadId) : this.states.storedCursor(threadId, memberId);
+    let cursor: string | null;
     if (stored === undefined) {
-      const baseline = this.#migrationCursor(threadId);
-      const initialCursor =
-        baseline && !this.#messageExists(threadId, baseline) ? this.#latestMessageId(threadId) : baseline;
-      this.#saveCursor(threadId, memberId, initialCursor, "initialized");
-      state = this.#stateFromDatabase(threadId, initialCursor);
-    } else if (stored !== null && !this.#messageExists(threadId, stored)) {
-      const latestMessageId = this.#latestMessageId(threadId);
-      this.#saveCursor(threadId, memberId, latestMessageId, "initialized");
-      state = this.#stateFromDatabase(threadId, latestMessageId);
-    } else {
-      const result = this.#withSupportedCursor(threadId, this.#stateFromDatabase(threadId, stored), options);
-      if (cacheKey !== null && version !== null) this.#remember(cacheKey, version, result);
-      return result;
-    }
-    return this.#withSupportedCursor(threadId, state, options);
-  }
-
-  /**
-   * The unread query, compiled once for each connection: it is long, and compiling it took about as
-   * long as running it, once for each agent of a list.
-   */
-  #prepared(sql: string): StatementSync {
-    const connection = this.database.connection;
-    let statements = this.#statements.get(connection);
-    if (!statements) {
-      statements = new Map();
-      this.#statements.set(connection, statements);
-    }
-    let statement = statements.get(sql);
-    if (!statement) {
-      statement = connection.prepare(sql);
-      statements.set(sql, statement);
-    }
-    return statement;
-  }
-
-  /**
-   * What changes with every write to the rows of a thread. Null inside a transaction: a ROLLBACK can
-   * remove rows it already shows, and the next write can then take the same sequence number.
-   */
-  #threadVersion(threadId: string): string | null {
-    if (this.database.connection.isTransaction) return null;
-    const row = this.database.connection
-      .prepare("SELECT last_event_sequence, updated_at FROM projection_threads WHERE thread_id = ?")
-      .get(threadId);
-    if (!isDynamicRecord(row) || !isNumber(row.last_event_sequence) || !isString(row.updated_at)) return null;
-    return `${row.last_event_sequence}\u0000${row.updated_at}`;
-  }
-
-  #remember(key: string, version: string, state: ConversationReadState): void {
-    this.#cache.delete(key);
-    this.#cache.set(key, { version, state: { ...state } });
-    if (this.#cache.size > READ_STATE_CACHE_LIMIT) {
-      const oldest = this.#cache.keys().next().value;
-      if (oldest !== undefined) this.#cache.delete(oldest);
-    }
+      const baseline = this.states.migrationCursor(threadId);
+      cursor =
+        baseline && !this.states.messageExists(threadId, baseline) ? this.states.latestMessageId(threadId) : baseline;
+    } else cursor = this.states.latestMessageId(threadId);
+    this.#saveCursor(threadId, memberId, cursor, "initialized");
+    return this.states.withSupportedCursor(threadId, this.states.stateFromDatabase(threadId, cursor), options);
   }
 
   adoptMemberState(sourceMemberId: string, targetMemberId: string): void {
@@ -185,7 +95,7 @@ export class ConversationReadStore {
       if (cursor !== null && !isString(cursor)) {
         throw new Error("The conversation read cursor is malformed.");
       }
-      if (this.#storedCursor(value.thread_id, targetMemberId) === undefined) {
+      if (this.states.storedCursor(value.thread_id, targetMemberId) === undefined) {
         this.#saveCursor(value.thread_id, targetMemberId, cursor, "initialized");
       }
     }
@@ -193,9 +103,9 @@ export class ConversationReadStore {
 
   readState(memberId: string, snapshot: ConversationSnapshot): ConversationReadState {
     if (!snapshot.threadId) return emptyReadState();
-    const stored = this.#storedCursor(snapshot.threadId, memberId);
+    const stored = this.states.storedCursor(snapshot.threadId, memberId);
     if (stored === undefined) {
-      const baseline = this.#migrationCursor(snapshot.threadId);
+      const baseline = this.states.migrationCursor(snapshot.threadId);
       const initialCursor =
         baseline && !snapshot.messages.some((message) => message.id === baseline)
           ? (snapshot.messages.at(-1)?.id ?? null)
@@ -221,11 +131,15 @@ export class ConversationReadStore {
     if (throughMessageId && requestedIndex < 0) {
       throw new Error(sourceText("error.backend.readBoundaryUnavailable"));
     }
-    const stored = this.#storedCursor(snapshot.threadId, memberId);
+    const stored = this.states.storedCursor(snapshot.threadId, memberId);
     const storedIndex = stored ? snapshot.messages.findIndex((message) => message.id === stored) : -1;
     const nextThroughMessageId = storedIndex > requestedIndex ? (stored ?? null) : (throughMessageId ?? null);
     this.#saveCursor(snapshot.threadId, memberId, nextThroughMessageId, "marked");
-    return this.#withSupportedCursor(snapshot.threadId, stateFromSnapshot(snapshot, nextThroughMessageId), options);
+    return this.states.withSupportedCursor(
+      snapshot.threadId,
+      stateFromSnapshot(snapshot, nextThroughMessageId),
+      options,
+    );
   }
 
   /**
@@ -240,17 +154,21 @@ export class ConversationReadStore {
     options: ConversationMarkerExclusions = {},
   ): ConversationReadState {
     if (!threadId) return emptyReadState();
-    const requestedKey = throughMessageId ? this.#messageOrderKey(threadId, throughMessageId) : undefined;
+    const requestedKey = throughMessageId ? this.states.messageOrderKey(threadId, throughMessageId) : undefined;
     // A device can name a message the thread does not hold: a queued message that is not saved yet,
     // or one that was cancelled or removed. The cursor stays, and the next mark moves it.
     if (throughMessageId && !requestedKey) return this.readStateForThread(memberId, threadId, options);
-    const stored = this.#storedCursor(threadId, memberId);
+    const stored = this.states.storedCursor(threadId, memberId);
     let nextThroughMessageId = throughMessageId;
-    if (stored && (!throughMessageId || this.#isAfter(threadId, stored, requestedKey))) {
+    if (stored && (!throughMessageId || this.states.isAfter(threadId, stored, requestedKey))) {
       nextThroughMessageId = stored;
     }
     this.#saveCursor(threadId, memberId, nextThroughMessageId, "marked");
-    return this.#withSupportedCursor(threadId, this.#stateFromDatabase(threadId, nextThroughMessageId), options);
+    return this.states.withSupportedCursor(
+      threadId,
+      this.states.stateFromDatabase(threadId, nextThroughMessageId),
+      options,
+    );
   }
 
   markUnread(memberId: string, snapshot: ConversationSnapshot): ConversationReadState {
@@ -264,154 +182,7 @@ export class ConversationReadStore {
   markUnreadForThread(memberId: string, threadId: string | null): ConversationReadState {
     if (!threadId) return emptyReadState();
     this.#saveCursor(threadId, memberId, null, "marked");
-    return this.#stateFromDatabase(threadId, null);
-  }
-
-  #withSupportedCursor(
-    threadId: string,
-    state: ConversationReadState,
-    options: ConversationMarkerExclusions,
-  ): ConversationReadState {
-    return {
-      ...state,
-      throughMessageId: this.database.supportedConversationCursor(threadId, state.throughMessageId, options),
-    };
-  }
-
-  #storedCursor(threadId: string, memberId: string): string | null | undefined {
-    const row = this.database.connection
-      .prepare(
-        `SELECT through_message_id FROM projection_thread_reads
-         WHERE thread_id = ? AND member_id = ?`,
-      )
-      .get(threadId, memberId);
-    if (row === undefined) return undefined;
-    if (!isDynamicRecord(row)) {
-      throw new Error("The stored conversation read state is malformed.");
-    }
-    const value = row.through_message_id;
-    if (value === null || isString(value)) return value;
-    throw new Error("The stored conversation read cursor is malformed.");
-  }
-
-  #messageExists(threadId: string, messageId: string): boolean {
-    return Boolean(
-      this.database.connection
-        .prepare(
-          `SELECT 1 FROM projection_thread_messages
-           WHERE thread_id = ? AND message_id = ? LIMIT 1`,
-        )
-        .get(threadId, messageId),
-    );
-  }
-
-  /** Where a message is in the shown order, which pages use too: a cursor is read through what was shown. */
-  #messageOrderKey(threadId: string, messageId: string): MessageOrderKey | undefined {
-    const row = this.database.connection
-      .prepare(
-        `${ORDERED_THREAD_MESSAGES}
-         SELECT ${ORDER_KEY_COLUMNS} FROM ordered WHERE message_id = ?`,
-      )
-      .get(threadId, messageId);
-    if (row === undefined) return undefined;
-    if (
-      !isDynamicRecord(row) ||
-      !isString(row.group_start) ||
-      !isNumber(row.group_first) ||
-      !isString(row.group_id) ||
-      !isNumber(row.turn_rank) ||
-      !isString(row.created_at) ||
-      !isNumber(row.ordinal) ||
-      !isString(row.message_id)
-    ) {
-      throw new Error("The conversation message order is malformed.");
-    }
-    return [row.group_start, row.group_first, row.group_id, row.turn_rank, row.created_at, row.ordinal, row.message_id];
-  }
-
-  #isAfter(threadId: string, candidateMessageId: string, boundary: MessageOrderKey | undefined): boolean {
-    if (!boundary) return false;
-    return Boolean(
-      this.database.connection
-        .prepare(
-          `${ORDERED_THREAD_MESSAGES}
-           SELECT 1 FROM ordered
-           WHERE message_id = ? AND (${ORDER_KEY_COLUMNS}) > (?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .get(threadId, candidateMessageId, ...boundary),
-    );
-  }
-
-  #latestMessageId(threadId: string): string | null {
-    const row = this.database.connection
-      .prepare(
-        `${ORDERED_THREAD_MESSAGES}
-         SELECT message_id FROM ordered ORDER BY ${ORDER_KEY_DESC} LIMIT 1`,
-      )
-      .get(threadId);
-    if (row === undefined) return null;
-    if (!isDynamicRecord(row) || !isString(row.message_id)) {
-      throw new Error("The latest conversation message is malformed.");
-    }
-    return row.message_id;
-  }
-
-  #stateFromDatabase(threadId: string, throughMessageId: string | null): ConversationReadState {
-    const boundaryKey = throughMessageId ? this.#messageOrderKey(threadId, throughMessageId) : undefined;
-    const afterBoundary = boundaryKey ? `AND (${ORDER_KEY_COLUMNS}) > (?, ?, ?, ?, ?, ?, ?)` : "";
-    const parameters = boundaryKey ? [threadId, ...boundaryKey] : [threadId];
-    const unreadFilter = `author != 'user'
-      AND COALESCE(item_type, '') != 'commentary'
-      AND COALESCE(item_type, '') != 'plan'
-      AND COALESCE(item_type, '') != 'subagents'
-      AND COALESCE(item_type, '') != '${CONVERSATION_MEMORY_CHANGES_ITEM_TYPE}'
-      AND COALESCE(item_type, '') != '${ROUTINE_QUIET_ANSWER_ITEM_TYPE}'
-      AND COALESCE(item_type, '') != 'agent_attachment'
-      AND COALESCE(item_type, '') NOT LIKE '${CHAT_VISUAL_ITEM_TYPE_PREFIX}%'
-      AND COALESCE(item_type, '') != '${AGENT_EXCHANGE_ITEM_TYPE}'
-      AND COALESCE(item_type, '') NOT LIKE '${SKILL_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_EVENT_ITEM_TYPE_PREFIX}%'
-      AND COALESCE(item_type, '') NOT LIKE '${ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX}%' AND COALESCE(item_type, '') NOT LIKE '${EVENT_CHECK_ITEM_TYPE_PREFIX}%'
-      AND COALESCE(item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'
-      AND COALESCE(item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'
-      AND COALESCE(item_type, '') NOT LIKE '${MODEL_SWITCH_ITEM_TYPE_PREFIX}%'
-      AND COALESCE(item_type, '') != '${CONTEXT_RESET_ITEM_TYPE}'
-      AND NOT (
-        author = 'assistant' AND turn_id IS NOT NULL
-        AND EXISTS (${AGENT_TALK_TURNS} AND exchange.turn_id = ordered.turn_id)
-        AND NOT EXISTS (SELECT 1 FROM ordered asker WHERE asker.turn_id = ordered.turn_id AND asker.author = 'user')
-      )`;
-    // One pass over the ordered thread: the first unread row carries the count of all of them.
-    const firstRow = this.#prepared(
-      `${ORDERED_THREAD_MESSAGES}
-         SELECT message_id, COUNT(*) OVER () AS unread_count FROM ordered
-         WHERE 1 = 1 ${afterBoundary} AND ${unreadFilter}
-         ORDER BY ${ORDER_KEY_COLUMNS} LIMIT 1`,
-    ).get(...parameters);
-    if (firstRow === undefined) return { unreadCount: 0, firstUnreadMessageId: null, throughMessageId };
-    if (!isDynamicRecord(firstRow) || !isString(firstRow.message_id) || !isNumber(firstRow.unread_count)) {
-      throw new Error("The conversation unread count is malformed.");
-    }
-    return {
-      unreadCount: firstRow.unread_count,
-      firstUnreadMessageId: firstRow.message_id,
-      throughMessageId,
-    };
-  }
-
-  #migrationCursor(threadId: string): string | null {
-    const row = this.database.connection
-      .prepare(
-        `SELECT through_message_id FROM projection_thread_read_baselines
-         WHERE thread_id = ?`,
-      )
-      .get(threadId);
-    if (row === undefined) return null;
-    if (!isDynamicRecord(row)) {
-      throw new Error("The conversation read baseline is malformed.");
-    }
-    const value = row.through_message_id;
-    if (value === null || isString(value)) return value;
-    throw new Error("The conversation read baseline cursor is malformed.");
+    return this.states.stateFromDatabase(threadId, null);
   }
 
   #initialize(
@@ -430,7 +201,7 @@ export class ConversationReadStore {
     throughMessageId: string | null,
     event: "initialized" | "marked",
   ): void {
-    if (this.#storedCursor(threadId, memberId) === throughMessageId) return;
+    if (this.states.storedCursor(threadId, memberId) === throughMessageId) return;
     const updatedAt = new Date().toISOString();
     this.database.dispatch(
       // A cursor can be visited again after an explicit mark-unread. Do not reuse
@@ -458,69 +229,6 @@ export class ConversationReadStore {
       },
     );
   }
-}
-
-/**
- * The turns of the agent's talk with another agent: no person wrote in them, and their answer is not
- * for the person who reads the chat, because another agent's request started the turn, OpenBot sent
- * the answer on to an agent, or a teammate's report started it that does not answer a request the
- * agent sent while it worked on a person's own message (not a routine run). A report that does answer
- * such a request, and whose answer goes nowhere else, is the agent telling the person, so it counts.
- * The same rule as `AGENT_TALK_TURNS` and the renderer's `agentOnlyTurns`.
- */
-/**
- * The turns, of the thread that `ordered` reads, whose answer is not for the person: an agent's
- * request started them, a teammate's report started them that does not answer a request sent in a
- * turn a person's own message (not a routine run) started, or OpenBot sent the answer on to an agent (an outgoing
- * exchange with the answer's text). A message stored before the exchange summary counts as a request.
- *
- * The caller adds the turn to test (`AND exchange.turn_id = ...`), so the test reads the rows of that
- * turn through the turn index. As an `IN` list it read and parsed every exchange of the thread for each
- * unread count, also for a count with only the last few messages after the cursor.
- */
-const AGENT_TALK_TURNS = `SELECT 1 FROM ordered exchange
-  JOIN projection_thread_messages stored ON stored.thread_id = exchange.thread_id AND stored.message_id = exchange.message_id
-  WHERE exchange.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND exchange.turn_id IS NOT NULL AND (
-    (exchange.author = 'agent' AND COALESCE(json_extract(stored.message_json, '$.exchange.expectsReply'), 1) != 0)
-    OR (exchange.author = 'agent' AND NOT EXISTS (
-      SELECT 1 FROM ordered request
-      JOIN projection_thread_messages sent ON sent.thread_id = request.thread_id AND sent.message_id = request.message_id
-      WHERE request.item_type = '${AGENT_EXCHANGE_ITEM_TYPE}' AND request.author != 'agent' AND request.turn_id IS NOT NULL
-        AND json_extract(sent.message_json, '$.exchange.messageId') = json_extract(stored.message_json, '$.exchange.replyToMessageId')
-        AND request.turn_id IN (
-          SELECT asked.turn_id FROM ordered asked
-          JOIN projection_thread_messages person ON person.thread_id = asked.thread_id AND person.message_id = asked.message_id
-          WHERE asked.author = 'user' AND asked.turn_id IS NOT NULL
-            AND COALESCE(json_extract(person.message_json, '$.source'), 'user') != 'routine'
-        )
-    ))
-    OR (exchange.author != 'agent' AND EXISTS (
-      SELECT 1 FROM ordered answer
-      JOIN projection_thread_messages said ON said.thread_id = answer.thread_id AND said.message_id = answer.message_id
-      WHERE answer.turn_id = exchange.turn_id AND answer.author = 'assistant' AND COALESCE(answer.item_type, 'agentMessage') = 'agentMessage'
-        AND trim(json_extract(said.message_json, '$.text')) = trim(json_extract(stored.message_json, '$.text'))
-    ))
-  )`;
-
-/**
- * Whether a turn of the thread is the agent's talk with another agent, by the rule that read state
- * uses (`AGENT_TALK_TURNS`): no person wrote in it, and its answer is not for the person. A turn
- * that completes with this shows no "Finished" notification, as it adds nothing unread.
- */
-export function isAgentTalkTurn(
-  database: Pick<OpenBotDatabase, "connection">,
-  threadId: string,
-  turnId: string,
-): boolean {
-  return (
-    database.connection
-      .prepare(
-        `${ORDERED_THREAD_MESSAGES}
-         SELECT 1 WHERE EXISTS (${AGENT_TALK_TURNS} AND exchange.turn_id = ?2)
-           AND NOT EXISTS (SELECT 1 FROM ordered WHERE author = 'user' AND turn_id = ?2)`,
-      )
-      .get(threadId, turnId) !== undefined
-  );
 }
 
 function agentOnlyTurns(messages: ConversationSnapshot["messages"]): Set<string> {
@@ -596,39 +304,6 @@ function stateFromSnapshot(snapshot: ConversationSnapshot, throughMessageId: str
   };
 }
 
-/** The shown-order key of a message: its group's start, first ordinal and id, its rank in the turn, then its own time, ordinal and id. */
-type MessageOrderKey = [
-  groupStart: string,
-  groupFirst: number,
-  groupId: string,
-  turnRank: number,
-  createdAt: string,
-  ordinal: number,
-  messageId: string,
-];
-
 function emptyReadState(): ConversationReadState {
   return { unreadCount: 0, firstUnreadMessageId: null, throughMessageId: null };
-}
-
-/**
- * One member's stored cursors and every thread's version, read once for a list of chats. `versions` is
- * null inside a transaction, as `#threadVersion` is.
- */
-interface ReadLookups {
-  cursors: ReadonlyMap<string, string | null>;
-  versions: ReadonlyMap<string, string> | null;
-}
-
-function readStateCacheKey(threadId: string, cursor: string | null, options: ConversationMarkerExclusions): string {
-  const exclusions = [
-    options.excludeRoutineEvents,
-    options.excludeRoutineRunEvents,
-    options.excludeHostedSiteEvents,
-    options.excludeRoutineQuietAnswers,
-    options.excludeEventCheckEvents,
-  ]
-    .map((value) => (value ? "1" : "0"))
-    .join("");
-  return `${threadId}\u0000${cursor ?? ""}\u0000${cursor === null ? "none" : "cursor"}\u0000${exclusions}`;
 }

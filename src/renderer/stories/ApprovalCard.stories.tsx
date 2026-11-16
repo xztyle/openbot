@@ -1,4 +1,4 @@
-import type { AgentApproval } from "@openbot/contracts/ipc";
+import type { AgentApproval, AgentRuntimeApproval } from "@openbot/contracts/ipc";
 import { ApprovalCard } from "@openbot/ui/features/conversation/ConversationPrompts";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
@@ -73,6 +73,17 @@ export const LongContent: Story = {
       reason: "Run the conversation interaction checks before sharing the updated project with the team.",
     },
   },
+};
+/** A copy from a runtime snapshot, as the web app holds after a reload: the host cut the command. */
+const truncatedApproval: AgentRuntimeApproval = {
+  ...approval,
+  command: "cat <<'EOF' > deploy.sh\nset -euo pipefail\nrsync -a ./dist/ server:/srv/app/",
+  truncated: true,
+};
+export const Truncated: Story = {
+  render: () => (
+    <ApprovalCard approval={truncatedApproval} onApprove={fn(async () => false)} onReject={fn(async () => false)} />
+  ),
 };
 export const Narrow: Story = {
   ...Permissions,

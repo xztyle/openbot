@@ -239,6 +239,8 @@ interface SwitcherEntry {
   private?: boolean;
   member?: WorkspaceMember;
   unread?: boolean;
+  /** The name of the space of a conversation of another space. Opening it shows that space. */
+  space?: string;
 }
 
 /** ⌘K: jump to a channel, a DM or an agent by name. */
@@ -249,11 +251,14 @@ function QuickSwitcher(props: { onClose: () => void }) {
   const [active, setActive] = createSignal(0);
   const entries = createMemo((): SwitcherEntry[] => {
     const list: SwitcherEntry[] = [];
+    // Every space: a conversation of another space says which one, and opening it shows that space.
+    const elsewhere = (spaceId: string) =>
+      ws.spaces.available() && spaceId !== ws.spaces.current() ? { space: ws.spaces.space(spaceId)?.name } : {};
     for (const channel of ws.channels.state.channels) {
-      if (channel.archived || !readerJoined(ws.directory(), channel) || !ws.spaces.channelInCurrent(channel.id))
-        continue;
+      if (channel.archived || !readerJoined(ws.directory(), channel)) continue;
       const kind = channelKind(channel);
       list.push({
+        ...elsewhere(ws.spaces.channelSpace(channel.id)),
         id: channel.id,
         label: conversationName(ws.directory(), channel),
         kind: kind === "channel" ? "channel" : "dm",
@@ -265,9 +270,10 @@ function QuickSwitcher(props: { onClose: () => void }) {
         unread: channel.unreadCount > 0,
       });
     }
-    for (const agent of ws.spaceAgents()) {
+    for (const agent of ws.env.agents()) {
       if (ws.env.hiddenAgentIds().has(agent.id) || !ws.canMessageAgent(agent.id)) continue;
       list.push({
+        ...elsewhere(ws.spaces.agentSpace(agent.id)),
         id: `${AGENT_DM_PREFIX}${agent.id}`,
         label: agent.name,
         kind: "agent",
@@ -278,6 +284,8 @@ function QuickSwitcher(props: { onClose: () => void }) {
       if (ws.env.isReader(person.id)) continue;
       list.push({ id: `person:${person.id}`, label: person.name, kind: "dm", member: personMember(person) });
     }
+    // The space that shows comes first.
+    list.sort((left, right) => Number(left.space !== undefined) - Number(right.space !== undefined));
     const text = query().trim().toLocaleLowerCase();
     if (!text) return list.filter((entry) => entry.kind !== "dm" || !entry.id.startsWith("person:")).slice(0, 30);
     return list
@@ -361,6 +369,7 @@ function QuickSwitcher(props: { onClose: () => void }) {
                 <Show when={entry.kind === "agent"}>
                   <AiBadge />
                 </Show>
+                <Show when={entry.space}>{(space) => <span class="ws-switcher-space">{space()}</span>}</Show>
               </Button>
             </li>
           )}

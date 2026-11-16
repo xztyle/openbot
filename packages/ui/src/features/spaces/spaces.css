@@ -298,3 +298,9 @@
   overflow-y: auto;
   color: var(--openbot-text-secondary);
 }
+
+.ws-switcher-space {
+  margin-left: auto;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}

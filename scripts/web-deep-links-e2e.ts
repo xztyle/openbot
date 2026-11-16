@@ -1,0 +1,327 @@
+// Checks the addresses of the web client: reload, Back and Forward, a shared link, a link to something
+// that is gone, and a phone. It serves the web client on a mock host (the "Spaces workspace" story,
+// `src/renderer/stories/web-client-harness.tsx`) at every address under `/app`, as the site does, and
+// drives it in Chromium. No account service, host or provider is needed.
+//
+// `bun scripts/web-deep-links-e2e.ts [--browser-executable=<path>] [--headed]`
+// Writes .openbot-build/web-deep-links-e2e/report.json and screenshots.
+import assert from "node:assert/strict";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { translateFor } from "@openbot/i18n";
+import { createOpenBotLogger } from "@openbot/logging";
+import solidPlugin from "@solidjs/vite-plugin";
+import tailwindcss from "@tailwindcss/vite";
+import { type Browser, chromium, type Page } from "playwright-core";
+import { createServer, type Plugin } from "vite";
+
+const logger = createOpenBotLogger("web-deep-links-e2e");
+const ROOT = resolve(import.meta.dirname, "..");
+const OUT = resolve(ROOT, ".openbot-build/web-deep-links-e2e");
+const UI_WAIT_MS = 60_000;
+const english = translateFor("en");
+// The client writes its address before the page's load event; a wait for "load" can then read the
+// navigation as cut off. Each step waits for what it checks instead.
+const COMMIT = { waitUntil: "commit" } as const;
+
+function option(name: string): string | undefined {
+  return process.argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3);
+}
+
+const HARNESS = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenBot web</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/renderer/stories/web-client-harness.tsx"></script>
+  </body>
+</html>`;
+
+/** Serves the harness page at `/app` and every address under it, as the site's `/app/$` route does. */
+function webClientPages(): Plugin {
+  return {
+    name: "openbot-web-deep-links-harness",
+    configureServer(server) {
+      server.middlewares.use(async (request, response, next) => {
+        const url = request.url ?? "";
+        if (!/^\/app(?:[/?]|$)/u.test(url)) return next();
+        const html = await server.transformIndexHtml(url, HARNESS);
+        response.setHeader("Content-Type", "text/html; charset=utf-8");
+        response.end(html);
+      });
+    },
+  };
+}
+
+interface Step {
+  name: string;
+  url: string;
+  passed: boolean;
+  detail?: string;
+}
+
+const report: {
+  steps: Step[];
+  pageErrors: string[];
+  consoleErrors: string[];
+  screenshots: string[];
+  passed: boolean;
+} = {
+  steps: [],
+  pageErrors: [],
+  consoleErrors: [],
+  screenshots: [],
+  passed: false,
+};
+
+const path = (page: Page) => {
+  const url = new URL(page.url());
+  return `${url.pathname}${url.search}`;
+};
+
+async function waitForPath(page: Page, expected: string): Promise<void> {
+  await page.waitForFunction((value) => `${location.pathname}${location.search}` === value, expected, {
+    timeout: UI_WAIT_MS,
+  });
+}
+
+/** The pane of the open channel, DM or group. */
+const channelHeading = (page: Page, name: string) => page.getByRole("region", { name, exact: true }).first();
+
+async function step(page: Page, name: string, check: () => Promise<void>): Promise<void> {
+  try {
+    await check();
+    report.steps.push({ name, url: path(page), passed: true });
+  } catch (error) {
+    const shown = await page
+      .evaluate(() => (document.querySelector("main, .web-app")?.textContent ?? "").replace(/\s+/gu, " ").slice(0, 300))
+      .catch((reason: unknown) => String(reason));
+    report.steps.push({
+      name,
+      url: path(page),
+      passed: false,
+      detail: `${String(error).slice(0, 500)}\nPage: ${shown}`,
+    });
+    const shot = resolve(OUT, `${report.steps.length}-failed.png`);
+    await page.screenshot({ path: shot }).catch(() => undefined);
+    report.screenshots.push(shot);
+    throw error;
+  }
+}
+
+async function shot(page: Page, label: string): Promise<void> {
+  const file = resolve(OUT, `${label}.png`);
+  await page.screenshot({ path: file });
+  report.screenshots.push(file);
+}
+
+rmSync(OUT, { recursive: true, force: true });
+mkdirSync(OUT, { recursive: true });
+const server = await createServer({
+  root: ROOT,
+  configFile: false,
+  appType: "custom",
+  logLevel: "error",
+  plugins: [webClientPages(), tailwindcss({ optimize: false }), solidPlugin()],
+  resolve: { dedupe: ["solid-js", "@solidjs/web", "@solidjs/signals"] },
+  // Vite scans the harness at the start. A dependency that it finds later reloads the page during a step.
+  optimizeDeps: { entries: ["src/renderer/stories/web-client-harness.tsx"], include: ["@norbert_bodziony/bloub"] },
+  // A worktree can link its packages to another checkout's node_modules.
+  // No hot reload: a dropped socket would reload the page during a step.
+  server: { host: "127.0.0.1", port: 0, strictPort: false, fs: { strict: false }, hmr: false },
+});
+await server.listen();
+const address = server.httpServer?.address();
+assert.ok(address && typeof address === "object", "The harness server has no port.");
+const origin = `http://127.0.0.1:${address.port}`;
+let browser: Browser | null = null;
+
+try {
+  const executablePath = option("browser-executable");
+  browser = await chromium.launch({
+    headless: !process.argv.includes("--headed"),
+    ...(executablePath ? { executablePath } : {}),
+  });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+  const page = await context.newPage();
+  page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
+  page.on("console", (message) => {
+    // The harness has no favicon or fonts route; a missing file is not a failure of the client.
+    if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
+      report.consoleErrors.push(message.text().slice(0, 1_000));
+  });
+
+  // 1. A shared link to a channel of another space opens that space and the channel.
+  await step(page, "link to a channel of another space", async () => {
+    await page.goto(`${origin}/app/market-trading/c/cakemaker`, COMMIT);
+    await channelHeading(page, "cakemaker").waitFor({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/market-trading/c/cakemaker");
+  });
+  await shot(page, "1-channel");
+
+  // 2. A reload stays there.
+  await step(page, "reload keeps the channel", async () => {
+    await page.reload(COMMIT);
+    await channelHeading(page, "cakemaker").waitFor({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/market-trading/c/cakemaker");
+  });
+
+  // 3. A thread, with Back and Forward.
+  await step(page, "thread link opens the channel and its thread", async () => {
+    await page.goto(`${origin}/app/general/c/general/t/general-root`, COMMIT);
+    await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
+    await page.getByText("Started: I compare the plans of both rivals.").waitFor({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/general/c/general/t/general-root");
+  });
+  await shot(page, "3-thread");
+  await step(page, "a view that the user opens gets its own entry", async () => {
+    const before = await page.evaluate(() => history.length);
+    await page
+      .getByRole("button", { name: english("workspace.view.activity") })
+      .first()
+      .click();
+    await waitForPath(page, "/app/general/activity");
+    assert.equal(await page.evaluate(() => history.length), before + 1);
+  });
+  await step(page, "Back opens the thread again", async () => {
+    await page.goBack(COMMIT);
+    await waitForPath(page, "/app/general/c/general/t/general-root");
+    await page.getByText("Started: I compare the plans of both rivals.").waitFor({ timeout: UI_WAIT_MS });
+  });
+  await step(page, "Forward opens the view again", async () => {
+    await page.goForward(COMMIT);
+    await waitForPath(page, "/app/general/activity");
+  });
+
+  // 4. Copy link of a message gives an address that names the server; it opens and marks the message.
+  let messageLink = "";
+  await step(page, "Copy link of a message", async () => {
+    await page.goto(`${origin}/app/general/c/general`, COMMIT);
+    await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
+    const row = page.getByRole("article").filter({ hasText: "Thanks all, the site looks great" }).first();
+    await row.hover();
+    await row.getByRole("button", { name: english("workspace.message.more") }).click();
+    await page.getByRole("menuitem", { name: english("workspace.app.message.copyLink") }).click();
+    messageLink = await page.evaluate(() => navigator.clipboard.readText());
+    assert.match(messageLink, /^http:\/\/127\.0\.0\.1:\d+\/app\/s\/preview-host\/general\/c\/general\/m\/[\w-]+$/u);
+  });
+  await step(page, "message link marks the message", async () => {
+    await page.goto(messageLink, COMMIT);
+    await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
+    await page
+      .locator("[data-highlighted]")
+      .filter({ hasText: "Thanks all, the site looks great" })
+      .waitFor({ timeout: UI_WAIT_MS });
+    // One server: the address leaves it out.
+    await waitForPath(page, new URL(messageLink).pathname.replace("/s/preview-host", ""));
+  });
+  await shot(page, "4-message");
+
+  // 5. A space that the user picks on the rail is a step; Back returns to the place before it.
+  await step(page, "a space picked on the rail gets its own entry", async () => {
+    await page.goto(`${origin}/app/general/c/general`, COMMIT);
+    await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
+    // The rail lists Trading once the host named its spaces; a click before that is a click on the start.
+    const trading = page.getByRole("button", { name: /^Trading/u }).first();
+    await trading.waitFor({ timeout: UI_WAIT_MS });
+    await trading.click();
+    await waitForPath(page, "/app/market-trading/activity");
+    await page.goBack(COMMIT);
+    await waitForPath(page, "/app/general/c/general");
+    await channelHeading(page, "general").waitFor({ timeout: UI_WAIT_MS });
+  });
+
+  // 6. A reply link opens its thread and marks the reply there.
+  await step(page, "reply link marks the reply in its thread", async () => {
+    await page.goto(`${origin}/app/general/c/general/t/general-root`, COMMIT);
+    const reply = page.getByText("Great, add the yearly prices too.");
+    await reply.waitFor({ timeout: UI_WAIT_MS });
+    const row = page.getByRole("article").filter({ hasText: "Great, add the yearly prices too." }).last();
+    await row.hover();
+    await row.getByRole("button", { name: english("workspace.message.more") }).click();
+    await page.getByRole("menuitem", { name: english("workspace.app.message.copyLink") }).click();
+    const link = await page.evaluate(() => navigator.clipboard.readText());
+    assert.match(link, /\/app\/s\/preview-host\/general\/c\/general\/t\/general-root\/m\/[\w-]+$/u);
+    await page.goto(`${origin}/app/general/activity`, COMMIT);
+    await page.goto(link, COMMIT);
+    await page
+      .locator("[data-highlighted]")
+      .filter({ hasText: "Great, add the yearly prices too." })
+      .waitFor({ timeout: UI_WAIT_MS });
+  });
+  await shot(page, "6-reply");
+
+  // 7. The owner's chat with an agent.
+  await step(page, "agent chat link", async () => {
+    await page.goto(`${origin}/app/general/dm/chief`, COMMIT);
+    await waitForPath(page, "/app/general/dm/chief");
+    await page.reload(COMMIT);
+    await waitForPath(page, "/app/general/dm/chief");
+  });
+  await shot(page, "7-agent");
+
+  // 8. A link to something gone shows the space's activity with a notice.
+  await step(page, "a gone channel falls back with a notice", async () => {
+    await page.goto(`${origin}/app/general/c/no-such-channel`, COMMIT);
+    await page.getByText(english("webClient.location.unavailable")).waitFor({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/general/activity");
+  });
+  await shot(page, "8-gone");
+
+  // 9. A settings page over a place: Back closes it.
+  await step(page, "a settings page is a step of its own", async () => {
+    await page.goto(`${origin}/app/general/c/random?page=settings`, COMMIT);
+    await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
+    await page.keyboard.press("Escape");
+    await waitForPath(page, "/app/general/c/random");
+    await page.goBack(COMMIT);
+    await waitForPath(page, "/app/general/c/random?page=settings");
+    await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
+  });
+
+  // 10. Copy link of a channel header; a link that names the wrong space opens the channel's own.
+  await step(page, "Copy link of a channel", async () => {
+    await page.goto(`${origin}/app/general/c/cakemaker`, COMMIT);
+    await channelHeading(page, "cakemaker").waitFor({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/market-trading/c/cakemaker");
+    await channelHeading(page, "cakemaker").locator("header").first().click({ button: "right" });
+    await page.getByRole("menuitem", { name: english("workspace.app.channel.copyLink") }).click();
+    const link = await page.evaluate(() => navigator.clipboard.readText());
+    assert.equal(new URL(link).pathname, "/app/s/preview-host/market-trading/c/cakemaker");
+  });
+
+  // 11. A phone opens the conversation of the address, and Back goes to the list, not to another place.
+  await step(page, "phone opens the linked conversation", async () => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto(`${origin}/app/market-trading/c/cakemaker`, COMMIT);
+    await channelHeading(page, "cakemaker").waitFor({ timeout: UI_WAIT_MS });
+    await waitForPath(page, "/app/market-trading/c/cakemaker");
+  });
+  await shot(page, "11-phone");
+  await step(page, "phone Back shows the list and keeps the address", async () => {
+    // The step stays in the page and on its address, so the browser may report no navigation for it.
+    await page.evaluate(() => history.back());
+    await page
+      .getByRole("button", { name: english("workspace.view.activity") })
+      .first()
+      .waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await channelHeading(page, "cakemaker").isVisible(), false);
+    await waitForPath(page, "/app/market-trading/c/cakemaker");
+  });
+  await shot(page, "11-phone-list");
+
+  report.passed = report.pageErrors.length === 0 && report.consoleErrors.length === 0;
+} finally {
+  writeFileSync(resolve(OUT, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  await browser?.close();
+  await server.close();
+}
+logger.info(
+  `${report.passed ? "Passed" : "Failed"}: ${report.steps.filter((item) => item.passed).length} of ${report.steps.length} steps. Report: ${resolve(OUT, "report.json")}`,
+);
+process.exit(report.passed ? 0 : 1);

@@ -279,6 +279,7 @@
     "test:automation-cli": "bun scripts/automation-cli-e2e.ts",
     "test:team-api-routes": "bun --preload ./scripts/team-api-routes-e2e-electron.mjs scripts/team-api-routes-e2e.ts",
     "test:team-legacy-clients": "bun scripts/team-api-legacy-clients-e2e.ts",
+    "test:remote-read-deadline": "bun scripts/remote-read-deadline-e2e.ts",
     "test:team-session-revoke": "bun scripts/team-session-revoke-e2e.ts",
     "test:server-mute": "bun scripts/server-mute-e2e.ts",
     "test:desktop-notifications": "bun scripts/desktop-notifications-e2e.ts",

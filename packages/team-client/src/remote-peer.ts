@@ -248,6 +248,7 @@ export interface RemoteTeamDiagnostic {
     | "ice-recovery"
     | "channels-open"
     | "authenticated"
+    | "request-timeout"
     | "failed";
   detail?: string;
 }
@@ -290,7 +291,9 @@ interface PendingRequest {
   path: string;
   resolve: (value: { status: number; body: TeamProtocolV2Json }) => void;
   reject: (error: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
+  timer: ReturnType<typeof setTimeout> | undefined;
+  /** The answer arrived; only its file can still be on the way. No deadline of this request runs. */
+  answered?: true;
 }
 
 interface PeerState {
@@ -345,6 +348,9 @@ interface PeerState {
   replacing: boolean;
   /** The close code of the last Signal socket, so a connection timeout can name it. */
   lastSignalClose: number | null;
+  /** When the last frame arrived on the rpc channel, and the frames that arrived and wait to be read. */
+  rpcFrameAt: number;
+  rpcFramesWaiting: number;
   hostProtocol?: number;
 }
 
@@ -358,6 +364,17 @@ const SIGNAL_RENEW_DELAY_MS = 8_000;
 /** A socket that waits for the host is renewed with its resume token, so a dead socket does not wait forever. */
 const HOST_WAIT_RENEW_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 10 * 60_000 + 30_000;
+/**
+ * A request whose deadline passes while answers still arrive waits on: frames on the rpc channel, or
+ * data on the path, show that the host answers and that this answer can be behind others. Each check
+ * after the deadline needs new progress. A request never waits longer than this after its send.
+ */
+const ANSWER_PROGRESS_LIMIT_MS = 60_000;
+const ANSWER_PROGRESS_RECHECK_MS = 1_000;
+/** An rpc frame this recent is progress. A TURN path can hold a frame for seconds while SCTP sends it again. */
+const RPC_PROGRESS_MS = 5_000;
+/** Path data in one check that is more than ICE consent checks and SCTP heartbeats. */
+const PATH_PROGRESS_BYTES = 2_048;
 /**
  * The host drops a connection at its 11th ICE restart (`maximumIceRestarts` in the host's WebRTC page),
  * because Chromium keeps the sockets of every ICE generation. A healthy path that would restart more
@@ -861,6 +878,8 @@ export function createRemoteTeamPeer(
         iceRestarts: 0,
         replacing: false,
         lastSignalClose: null,
+        rpcFrameAt: 0,
+        rpcFramesWaiting: 0,
       };
       peer = state;
       const connected = Deferred.makeUnsafe<void, RemotePeerError>();
@@ -1201,6 +1220,11 @@ export function createRemoteTeamPeer(
     };
     channel.onmessage = (event) => {
       const data = event.data;
+      // A read whose deadline passes while frames arrive or wait here is not lost: it waits on.
+      if (kind === "rpc") {
+        state.rpcFrameAt = Date.now();
+        state.rpcFramesWaiting += 1;
+      }
       handled = handled
         .then(() =>
           runPeerEffect(
@@ -1218,7 +1242,10 @@ export function createRemoteTeamPeer(
             }),
           ),
         )
-        .catch((error) => failPeer(state, error, actions));
+        .catch((error) => failPeer(state, error, actions))
+        .finally(() => {
+          if (kind === "rpc") state.rpcFramesWaiting -= 1;
+        });
     };
     channel.onerror = () =>
       failPeer(
@@ -1305,6 +1332,7 @@ export function createRemoteTeamPeer(
         } else if (isDynamicRecord(frame.result.file) && isString(frame.result.file.transferId)) {
           // The RPC response arrived; the file receiver now owns the inactivity
           // deadline. A download failure rejects this request, not the peer.
+          pending.answered = true;
           clearTimeout(pending.timer);
           const transferId = frame.result.file.transferId;
           const file = yield* downloads.take(transferId).pipe(Effect.result);
@@ -1499,16 +1527,27 @@ export function createRemoteTeamPeer(
           limitMs: timeoutMs,
         };
         const answer = Deferred.makeUnsafe<{ status: number; body: TeamProtocolV2Json }, RemotePeerError>();
+        /** Starts the wait for the answer. The compatibility probe keeps its own path checks. */
+        let answerDeadline = () => {};
         const response = yield* Effect.acquireUseRelease(
           // Registered before the send, so a fast response finds its request.
           Effect.sync(() => {
             const reject = (error: Error) => Deferred.doneUnsafe(answer, Effect.fail(peerError(error)));
+            let sentAt: number | null = null;
             const expire = () => {
-              if (pendingRequests.get(requestId) !== pending) return;
+              if (pendingRequests.get(requestId) !== pending || pending.answered) return;
               pendingRequests.delete(requestId);
               const error = new Error(sourceText("error.remote.desktopRequestTimeout"));
               reject(error);
               if (checksConnection) failPeer(state, error, actions);
+              else
+                diagnose(
+                  state,
+                  "request-timeout",
+                  sentAt === null
+                    ? `${method} not sent after ${timeoutMs} ms`
+                    : `${method} after ${Date.now() - sentAt} ms, rpc frames ${state.rpcFramesWaiting} waiting, last ${state.rpcFrameAt > sentAt ? `${Date.now() - state.rpcFrameAt} ms ago` : "before the send"}`,
+                );
             };
             const samples: ProbeSample[] = [];
             const checkPath = () => {
@@ -1527,6 +1566,59 @@ export function createRemoteTeamPeer(
                 expire();
               }, expire);
             };
+            // The data that the path received at the last check, so each check needs new data.
+            let pathReceived: number | null = null;
+            const samplePath = () =>
+              connection ? runPeerEffect(sentOnPath(connection)).then((now) => now?.bytesReceived ?? null) : null;
+            /**
+             * The deadline passed. An answer that is still on its way, or behind other answers, is not
+             * lost: frames that arrive on the rpc channel, or data that the path receives, extend the wait
+             * one check at a time, until `ANSWER_PROGRESS_LIMIT_MS` after the send.
+             */
+            const waiting = () => pendingRequests.get(requestId) === pending && !pending.answered;
+            const checkAnswer = () => {
+              if (!waiting() || sentAt === null) return;
+              const now = Date.now();
+              if (now - sentAt >= Math.max(timeoutMs, ANSWER_PROGRESS_LIMIT_MS)) return expire();
+              const recheck = () => {
+                if (waiting()) pending.timer = setTimeout(checkAnswer, ANSWER_PROGRESS_RECHECK_MS);
+              };
+              if (state.rpcFramesWaiting > 0 || (state.rpcFrameAt > sentAt && now - state.rpcFrameAt < RPC_PROGRESS_MS))
+                return recheck();
+              const before = pathReceived;
+              const sampled = samplePath();
+              if (!sampled) return expire();
+              void sampled.then((received) => {
+                if (!waiting()) return;
+                pathReceived = received;
+                if (received !== null && before !== null && received - before >= PATH_PROGRESS_BYTES) recheck();
+                else expire();
+              }, expire);
+            };
+            // Until the frame leaves, a channel that sends what is queued ahead of it is progress too.
+            const registeredAt = Date.now();
+            let channelBuffered = state.channels.rpc?.bufferedAmount ?? 0;
+            const checkSend = () => {
+              if (!waiting() || sentAt !== null) return;
+              const buffered = state.channels.rpc?.bufferedAmount ?? 0;
+              const draining = buffered < channelBuffered;
+              channelBuffered = buffered;
+              if (draining && Date.now() - registeredAt < Math.max(timeoutMs, ANSWER_PROGRESS_LIMIT_MS))
+                pending.timer = setTimeout(checkSend, ANSWER_PROGRESS_RECHECK_MS);
+              else expire();
+            };
+            answerDeadline = () => {
+              if (!waiting()) return;
+              sentAt = Date.now();
+              clearTimeout(pending.timer);
+              pending.timer = setTimeout(checkAnswer, timeoutMs);
+              void samplePath()?.then(
+                (received) => {
+                  pathReceived ??= received;
+                },
+                () => undefined,
+              );
+            };
             const resolve = (value: { status: number; body: TeamProtocolV2Json }) =>
               Deferred.doneUnsafe(answer, Effect.succeed(value));
             const pending: PendingRequest = {
@@ -1534,8 +1626,10 @@ export function createRemoteTeamPeer(
               path,
               resolve,
               reject,
+              // The wait for the answer starts at the send, so time behind other frames in this
+              // channel does not count against it. Until then the deadline bounds the wait for the channel.
               timer: setTimeout(
-                checksConnection ? checkPath : expire,
+                checksConnection ? checkPath : checkSend,
                 checksConnection
                   ? Math.min(arm ? PATH_CHECK_INTERVAL_MS : unmeasuredProbeMs(!state.answeredRequest), timeoutMs)
                   : timeoutMs,
@@ -1548,6 +1642,11 @@ export function createRemoteTeamPeer(
             // The frame is sent in the work scope: a request that stops waiting does not cut a frame.
             Effect.forkIn(
               sendPayload(state, "rpc", payload).pipe(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    if (!checksConnection) answerDeadline();
+                  }),
+                ),
                 Effect.catch((error) =>
                   Effect.sync(() => {
                     const pending = pendingRequests.get(requestId);

@@ -317,6 +317,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: bun run test:team-session-revoke
 
+      - name: Run the remote read deadline E2E test
+        if: ${{ !cancelled() }}
+        run: bun run test:remote-read-deadline
+
       - name: Run the sign-in relay paste E2E test
         if: ${{ !cancelled() }}
         run: bun run test:sign-in-relay-paste
@@ -484,6 +488,7 @@ jobs:
           name: reverse-actions-e2e
           path: |
             .openbot-build/team-api-legacy-clients-e2e/
+            .openbot-build/remote-read-deadline-e2e/
             .openbot-build/team-session-revoke-e2e/
             .openbot-build/sign-in-relay-paste-e2e/
             .openbot-build/server-mute-e2e/

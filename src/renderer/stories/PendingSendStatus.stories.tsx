@@ -35,3 +35,6 @@ export const Unconfirmed: Story = { args: { retrySafe: false, error: null } };
 
 /** The composer shows the update notice, so the row keeps only Edit and Dismiss. */
 export const UpdateRequired: Story = { args: { updateRequired: true } };
+
+/** A later message waits behind the failed one above it, so it does not look sent. */
+export const WaitingBehindFailure: Story = { args: { state: "waiting", waitingBehindFailure: true, error: null } };

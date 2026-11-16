@@ -390,6 +390,7 @@ export const messages = defineMessages("chat", {
   "chat.send.held": "Sending in a few seconds",
   "chat.send.undo": "Undo",
   "chat.send.failed": "Not sent",
+  "chat.send.waitingBehindFailed": "Waiting. Retry or dismiss the message above.",
   "chat.send.unconfirmed": "Not confirmed. Check the chat before you send it again.",
   "chat.send.edit": "Edit",
   "chat.send.editBlocked": "Finish or cancel the queued message edit first.",

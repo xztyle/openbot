@@ -34,6 +34,11 @@ export interface PendingSend {
   retrySafe: boolean;
   /** What the user said, for a voice message: a local draft that Retry sends again and Dismiss discards. */
   voiceRecordingDraftId: string | null;
+  /**
+   * Set on the drawn copy only: the send waits behind an earlier send of the chat that failed, and
+   * goes only after the person retries or dismisses that one.
+   */
+  waitingBehindFailure?: boolean;
 }
 
 export type DeliverPendingSend = (send: PendingSend) => Promise<SendMessageResult>;
@@ -64,7 +69,12 @@ export function createPendingSendStore() {
   const deliverers = new Map<string, DeliverPendingSend>();
 
   function publish(key: string): void {
-    const queue = (queues.get(key) ?? []).map((send) => ({ ...send }));
+    let failedBefore = false;
+    const queue = (queues.get(key) ?? []).map((send) => {
+      const copy = { ...send, waitingBehindFailure: send.state === "waiting" && failedBefore };
+      if (send.state === "failed") failedBefore = true;
+      return copy;
+    });
     setSends((current) => {
       current[key] = queue;
     });

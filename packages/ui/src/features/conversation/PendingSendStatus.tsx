@@ -11,6 +11,8 @@ export interface PendingSendStatusProps {
   state: "held" | "waiting" | "sending" | "failed";
   /** Why the send failed, when the host or the connection said. */
   error?: string | null;
+  /** A waiting send stands behind an earlier send that failed, and goes only after that one is retried or dismissed. */
+  waitingBehindFailure?: boolean;
   /** The composer shows the update notice; keep recovery actions without a second error. */
   updateRequired?: boolean;
   /** The host drops a repeated send of this message, so Retry cannot store it twice. */
@@ -31,7 +33,8 @@ export interface PendingSendStatusProps {
 
 /**
  * The delivery status beside the time of a message the host has not stored yet. A send in flight
- * shows nothing; only a held message (with Undo and Edit) and a failure show. The status text is a polite live region that stays while the
+ * shows nothing; only a held message (with Undo and Edit), a failure, and a send that waits behind a
+ * failure show. The status text is a polite live region that stays while the
  * send runs, so a reader hears the failure without moving focus. A message whose repeat the host
  * cannot detect offers no Retry: the first send may have arrived.
  */
@@ -45,6 +48,7 @@ export function PendingSendStatus(props: PendingSendStatusProps): JSX.Element {
     <div class="pending-send-status" data-state={props.state}>
       <span role="status" class="pending-send-label">
         <Show when={held()}>{t("chat.send.held")}</Show>
+        <Show when={props.state === "waiting" && props.waitingBehindFailure}>{t("chat.send.waitingBehindFailed")}</Show>
         <Show when={failed() && !props.updateRequired}>
           <TriangleAlert aria-hidden="true" />
           {props.retrySafe ? t("chat.send.failed") : t("chat.send.unconfirmed")}

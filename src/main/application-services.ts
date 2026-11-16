@@ -31,6 +31,7 @@ import { agentDisplayEnvironment, hasSeparateAgentDisplay } from "./agent-displa
 import { type AgentHostSettingsService, createAgentHostSettings } from "./agent-host-settings";
 import { type BrowserProfileService, createBrowserProfileService } from "./browser-profile-service";
 import { createChatMcp } from "./create-chat-mcp";
+import { spawnDatabaseReadWorker } from "./database-read-worker-process";
 import { HostReleaseService, readInstallationMode } from "./host-release-service";
 import {
   CONTAINER_UPDATE_PATHS,
@@ -1036,9 +1037,11 @@ export async function createApplicationServices({
     join(app.getPath("userData"), AGENT_DEFAULTS_PREFERENCE_FILE),
   );
   await runCauseEffect(agentDefaults.load());
-  const store = new AgentStore(app.getPath("userData"), homedir(), new OpenBotDatabase(app.getPath("userData")), () =>
-    agentDefaults.get(),
-  );
+  const database = new OpenBotDatabase(app.getPath("userData"));
+  // Worker threads answer the heavy reads (chat pages, unread states, search), so the main thread's
+  // event loop runs on while SQLite reads. They start at the first such read.
+  database.useReadWorkers(spawnDatabaseReadWorker);
+  const store = new AgentStore(app.getPath("userData"), homedir(), database, () => agentDefaults.get());
   // Phase marks for `dev:bench`, so a slow start shows which group of awaits it waited on. They
   // change nothing.
   performance.mark("openbot:services.pre-store");

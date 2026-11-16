@@ -35,6 +35,9 @@ export default defineConfig({
           // The storage hygiene host scans and cleans the agents' projects at a low priority. It
           // imports only node:* and its scan and cleanup modules.
           "storage-hygiene-host": resolve("src/backend/storage-hygiene-host.ts"),
+          // The database read worker is a worker thread of the main process. It imports only node:*
+          // and the read modules of the database, which import only the contracts.
+          "database-read-worker": resolve("src/backend/database/database-read-worker.ts"),
         },
       },
     },

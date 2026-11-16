@@ -11,12 +11,15 @@ import type {
   ConversationSnapshot,
   HostedSiteConversationEventStatus,
 } from "@openbot/contracts/ipc";
+import { Effect } from "effect";
 import { AgentHistoryQueries, type AgentHistorySelection } from "./database/agent-history-queries";
 import { type AgentModelChange, AgentRoster } from "./database/agent-roster";
 import { AgentUsage } from "./database/agent-usage";
 import { type ConversationMarkerExclusions, ConversationQueries } from "./database/conversation-queries";
 import { ConversationWriter } from "./database/conversation-writer";
 import { DatabaseCore, type OrchestrationEventInput } from "./database/database-core";
+import type { DatabaseReadWorkerData } from "./database/database-read-protocol";
+import { DatabaseReader, type DatabaseReaderOptions, type DatabaseReadWorkerHandle } from "./database/database-reader";
 import {
   type ActiveHostedSiteConversationEvent,
   HostedSiteEventLog,
@@ -83,6 +86,7 @@ export class OpenBotDatabase {
   readonly #agentHistory: AgentHistoryQueries;
   readonly #providerHistory: ProviderHistoryStore;
   readonly #summaries: ThreadSummaries;
+  #reader: DatabaseReader | null = null;
 
   constructor(readonly userDataPath: string) {
     this.#core = new DatabaseCore({ userDataPath });
@@ -109,7 +113,39 @@ export class OpenBotDatabase {
   }
 
   close(): void {
+    // The workers' connections close first: the last connection to close removes the write-ahead log.
+    this.#reader?.close();
+    this.#reader = null;
     this.#core.close();
+  }
+
+  /**
+   * Lets worker threads answer the heavy reads (`readOffMain`). The app starts its bundled worker; a
+   * test or script starts the source. Without this, every read runs on the main connection.
+   */
+  useReadWorkers(
+    spawn: (data: DatabaseReadWorkerData) => DatabaseReadWorkerHandle,
+    options: Omit<DatabaseReaderOptions, "spawn"> = {},
+  ): void {
+    this.#reader?.close();
+    this.#reader = new DatabaseReader({ ...options, spawn: () => spawn({ databasePath: this.path }) });
+  }
+
+  /**
+   * One read answered by a read worker, so the main thread's event loop runs on while SQLite reads.
+   * Succeeds with null when the read must run on the main connection: no worker runs, the main
+   * connection is inside a transaction whose rows a worker cannot see, or the worker failed. The
+   * caller then makes the same read here, so the answer does not depend on where it ran.
+   */
+  /** How many reads the read workers answered since `useReadWorkers`. */
+  get readsOffMain(): number {
+    return this.#reader?.answered ?? 0;
+  }
+
+  readOffMain<T>(read: (reader: DatabaseReader) => Promise<T>): Effect.Effect<T | null> {
+    const reader = this.#reader;
+    if (!reader?.available || !this.#core.open || this.#core.connection.isTransaction) return Effect.succeed(null);
+    return Effect.promise(() => read(reader).catch(() => null));
   }
 
   get connection(): DatabaseSync {

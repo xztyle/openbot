@@ -169,6 +169,8 @@ import {
  * A host restart, such as for an update, takes about ten seconds; a lost network path recovers in less.
  */
 const REQUEST_RECONNECT_WAIT_MS = 25_000;
+/** The pause before a lost request is sent again while the peer still says it is online. */
+const RESEND_PAUSE_MS = 1_000;
 
 /**
  * The host controls of the connected host. The host answers the Team API routes, and the account
@@ -236,6 +238,11 @@ export interface WebWorkspaceRuntime {
    * connection that waits to retry tries again now. Nothing is resent.
    */
   networkRestored?(): void;
+  /**
+   * Fails the requests that wait for a reconnect. The recovery owner calls it when its own connect
+   * attempt loses the connection: its reads must fail so that the next attempt can start.
+   */
+  abandonReconnectWaits?(): void;
   /** Tells a hosted server that this tab has focus. Send it only to a host with `focus-use-v1`. */
   focusUse(): Promise<void>;
   /** Resolves to the conversation message the host stored: the delivery id of the receipt. */
@@ -520,7 +527,7 @@ export function createWebWorkspaceRuntime(
   }
   /** Whether the peer of the locked host reported `online` last. */
   let peerOnline = false;
-  /** Counts explicit disconnects. A request that waits for a reconnect stops waiting at one. */
+  /** Counts disconnects and abandoned waits. A request that waits for a reconnect stops waiting at one. */
   let closedConnections = 0;
   /** Requests that wait for the connection to come back. Each one returns true when it is done waiting. */
   const connectionWaiters = new Set<() => boolean>();
@@ -532,15 +539,26 @@ export function createWebWorkspaceRuntime(
    * disconnects or opens another host, or the wait ends first. Between two recovery attempts no host
    * is locked; that is not a change of host. The recovery owner reconnects; this only waits for it.
    */
-  function waitForConnection(hostId: string | null, closed: number): Promise<boolean> {
+  function waitForConnection(hostId: string | null, closed: number, waitMs: number): Promise<boolean> {
+    const settled = (): boolean | null =>
+      disposed || !hostId || closed !== closedConnections || (lockedHostId !== null && lockedHostId !== hostId)
+        ? false
+        : peerOnline && lockedHostId === hostId
+          ? true
+          : null;
+    // The peer still says online while it restarts its ICE path, and sends no update for it. A short
+    // pause gives the path time; the caller asks again while its wait lasts.
+    if (settled() === true)
+      return new Promise((resolve) =>
+        setTimeout(() => resolve(settled() !== false), Math.min(waitMs, RESEND_PAUSE_MS)),
+      );
     return new Promise((resolve) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const check = (): boolean => {
-        if (disposed || !hostId || closed !== closedConnections || (lockedHostId !== null && lockedHostId !== hostId))
-          resolve(false);
-        else if (peerOnline && lockedHostId === hostId) resolve(true);
-        else return false;
+        const value = settled();
+        if (value === null) return false;
         clearTimeout(timer);
+        resolve(value);
         return true;
       };
       if (check()) return;
@@ -548,23 +566,33 @@ export function createWebWorkspaceRuntime(
       timer = setTimeout(() => {
         connectionWaiters.delete(check);
         resolve(false);
-      }, REQUEST_RECONNECT_WAIT_MS);
+      }, waitMs);
     });
   }
   /**
-   * A request that the connection lost is sent once more after the connection comes back: a request
-   * that never left at all, or a read, which the host can answer twice. A write that the host can have
-   * done is not sent again, and an upload keeps its own retry.
+   * A request that the connection lost is sent again after the connection comes back: a request that
+   * never left at all, or a read, which the host can answer twice. A write that the host can have done
+   * is not sent again, and an upload keeps its own retry. All attempts share one wait.
    */
   async function request(method: string, path: string, body: TeamProtocolV2Json = {}, upload?: RemoteFileUpload) {
     const requestHostId = lockedHostId;
     const closed = closedConnections;
-    try {
-      return await requestOnce(method, path, body, upload);
-    } catch (error) {
-      if (!(error instanceof WebHostRequestError) || !error.resend || upload !== undefined) throw error;
-      if (!(await waitForConnection(requestHostId, closed))) throw error;
-      return await requestOnce(method, path, body, upload);
+    const deadline = Date.now() + REQUEST_RECONNECT_WAIT_MS;
+    for (;;) {
+      try {
+        return await requestOnce(method, path, body, upload);
+      } catch (error) {
+        // The compatibility read is the probe that tells whether the connection works. It never waits.
+        if (
+          !(error instanceof WebHostRequestError) ||
+          !error.resend ||
+          upload !== undefined ||
+          path === TEAM_API_ROUTES.compatibility
+        )
+          throw error;
+        const waitMs = deadline - Date.now();
+        if (waitMs <= 0 || !(await waitForConnection(requestHostId, closed, waitMs))) throw error;
+      }
     }
   }
   async function requestOnce(method: string, path: string, body: TeamProtocolV2Json, upload?: RemoteFileUpload) {
@@ -1114,6 +1142,10 @@ export function createWebWorkspaceRuntime(
     },
     setTyping(agentId, typing) {
       peer.setTyping(agentId, typing);
+    },
+    abandonReconnectWaits() {
+      closedConnections += 1;
+      wakeConnectionWaiters();
     },
     networkRestored() {
       peer.networkRestored();

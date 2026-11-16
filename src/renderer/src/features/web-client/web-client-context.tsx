@@ -505,6 +505,9 @@ export function createWebWorkspace(
           }
         });
         if (update.state === "offline") generation += 1;
+        // A connect attempt that lost its connection fails. Its reads must not wait for a reconnect that
+        // only the next attempt can make.
+        if (update.state === "offline" && connectionPromise) runtime.abandonReconnectWaits?.();
         if (update.code) {
           hostLifecycle.endSleep();
           recoveryBlocked = true;

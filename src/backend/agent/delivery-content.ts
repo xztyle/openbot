@@ -1,8 +1,15 @@
-import { createHash } from "node:crypto";
+import { createHash, hash } from "node:crypto";
 import { join } from "node:path";
 import { expandAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
-import type { AgentSummary, AgentWait, ConversationSnapshot, QueueDelivery, RoutineRun } from "@openbot/contracts/ipc";
+import type {
+  AgentSummary,
+  AgentWait,
+  ConversationMessage,
+  ConversationSnapshot,
+  QueueDelivery,
+  RoutineRun,
+} from "@openbot/contracts/ipc";
 import { redactText } from "@openbot/logging";
 import { wokenWaitsPromptText } from "../agent-waits/agent-waits";
 import { homeSkillRoot, homeSkillTagSlug } from "../home-skills";
@@ -31,15 +38,43 @@ export function visualReplyFileName(title: string): string {
   );
 }
 
-/** A digest, because each thread keeps its signature: the JSON itself would be a second copy of the history. */
-export function conversationContentSignature(snapshot: ConversationSnapshot): string {
-  const content = JSON.stringify({
-    agentId: snapshot.agentId,
-    threadId: snapshot.threadId,
-    activeTurnId: snapshot.activeTurnId,
-    messages: snapshot.messages,
-  });
-  return createHash("sha256").update(content).digest("base64");
+/** One message's JSON, serialized and hashed once: its signature and its size in bytes. */
+export interface MessageDigest {
+  signature: string;
+  bytes: number;
+}
+
+/** SHA-1 detects a change here: nothing compares a signature with one an attacker made, and it is faster. */
+export function messageDigest(message: ConversationMessage): MessageDigest {
+  const json = JSON.stringify(message);
+  return { signature: hash("sha1", json, "base64"), bytes: Buffer.byteLength(json, "utf8") };
+}
+
+/**
+ * The digests of messages that one synchronous pass computes and then reads again, by message object.
+ * Valid only while nothing changes the messages: a pass that stores or publishes them passes this on
+ * instead of serializing every message again.
+ */
+export type MessageDigests = Map<ConversationMessage, MessageDigest>;
+
+export function digestMessages(messages: readonly ConversationMessage[], known?: MessageDigests): MessageDigests {
+  const digests: MessageDigests = new Map();
+  for (const message of messages) digests.set(message, known?.get(message) ?? messageDigest(message));
+  return digests;
+}
+
+/**
+ * A digest, because each thread keeps its signature: the JSON itself would be a second copy of the
+ * history. It hashes the message signatures, so a caller that has them does not serialize the chat
+ * again. Signatures are compared only in this process.
+ */
+export function conversationContentSignature(snapshot: ConversationSnapshot, digests?: MessageDigests): string {
+  const content = createHash("sha256").update(
+    JSON.stringify({ agentId: snapshot.agentId, threadId: snapshot.threadId, activeTurnId: snapshot.activeTurnId }),
+  );
+  for (const message of snapshot.messages)
+    content.update(`\n${(digests?.get(message) ?? messageDigest(message)).signature}`);
+  return content.digest("base64");
 }
 
 /**

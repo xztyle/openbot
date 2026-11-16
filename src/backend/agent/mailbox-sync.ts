@@ -13,7 +13,7 @@ import { isMailboxMessageCopy } from "../conversation-snapshots";
 import type { MailboxStore } from "../mailbox-store";
 import type { OpenBotDatabase } from "../openbot-database";
 import type { ConversationRuntime } from "./conversation-runtime";
-import { conversationContentSignature } from "./delivery-content";
+import { conversationContentSignature, digestMessages } from "./delivery-content";
 import type { RoutineScheduler } from "./routine-scheduler";
 
 export interface MailboxSyncHooks {
@@ -239,9 +239,12 @@ export class MailboxSync {
       if (!snapshot) continue;
       const previousSignature = conversationContentSignature(snapshot);
       this.syncMailboxMessages(snapshot);
-      if (conversationContentSignature(snapshot) !== previousSignature) this.#conversation.emitConversation(snapshot);
+      // The digests of the merged chat serve the signature and the write and publish after it.
+      const digests = digestMessages(snapshot.messages);
+      const signature = conversationContentSignature(snapshot, digests);
+      if (signature !== previousSignature) this.#conversation.emitConversation(snapshot, undefined, undefined, digests);
       else if (!this.#conversation.hasPublishedConversation(affectedAgentId))
-        this.#conversation.publishConversation(snapshot);
+        this.#conversation.publishConversation(snapshot, signature);
     }
   }
 

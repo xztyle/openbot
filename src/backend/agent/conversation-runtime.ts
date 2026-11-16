@@ -2,7 +2,6 @@ import { withDatabaseTransaction } from "../database-transaction";
 
 export { withDatabaseTransaction } from "../database-transaction";
 
-import { createHash } from "node:crypto";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import {
   type AgentEvent,
@@ -14,7 +13,7 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import type { AgentClient } from "../agent-client";
 import type { AgentStore } from "../agent-store";
-import { conversationContentSignature } from "./delivery-content";
+import { conversationContentSignature, digestMessages, type MessageDigests } from "./delivery-content";
 
 /**
  * The chats that main keeps in memory only because something read them. A chat of 2,000 messages
@@ -179,10 +178,10 @@ export class ConversationRuntime {
     }
   }
 
-  #keepSnapshot(agentId: string, snapshot: ConversationSnapshot): void {
+  #keepSnapshot(agentId: string, snapshot: ConversationSnapshot, digests?: MessageDigests): void {
     this.#evictedSnapshots.delete(agentId);
     this.#dropCachedSnapshot(agentId);
-    const cached = boundedConversationSnapshot(snapshot);
+    const cached = boundedConversationSnapshot(snapshot, digests);
     const current = this.#snapshots.get(agentId);
     const retained = current === snapshot ? copySnapshotContents(snapshot, cached.snapshot) : cached.snapshot;
     this.#snapshots.set(agentId, retained);
@@ -202,9 +201,9 @@ export class ConversationRuntime {
     this.#evictionTimer.unref?.();
   }
 
-  #setExecutionSnapshot(threadId: string, snapshot: ConversationSnapshot): void {
+  #setExecutionSnapshot(threadId: string, snapshot: ConversationSnapshot, digests?: MessageDigests): void {
     this.#dropCachedExecutionSnapshot(threadId);
-    const cached = boundedConversationSnapshot(snapshot);
+    const cached = boundedConversationSnapshot(snapshot, digests);
     const current = this.#executionSnapshots.get(threadId);
     const retained = current === snapshot ? copySnapshotContents(snapshot, cached.snapshot) : cached.snapshot;
     this.#executionSnapshots.set(threadId, retained);
@@ -523,8 +522,9 @@ export class ConversationRuntime {
       activeTurnId: snapshot.activeTurnId,
       messageCount: snapshot.messages.length,
     },
+    digests?: MessageDigests,
   ): void {
-    this.#emitConversation(snapshot, eventType, detail);
+    this.#emitConversation(snapshot, eventType, detail, undefined, digests);
   }
 
   /**
@@ -542,17 +542,22 @@ export class ConversationRuntime {
     eventType: string,
     detail: unknown,
     replacedMessageId?: string,
+    known?: MessageDigests,
   ): void {
     if (snapshot.threadId && this.#forgottenExecutionThreads.has(snapshot.threadId)) return;
     sortConversationMessages(snapshot.messages);
-    const signature = conversationContentSignature(snapshot);
+    // Each message is serialized and hashed once here. The comparison with the stored chat, the
+    // signature and the bounded cache below all read these digests: each of them serialized the whole
+    // chat again before, five times for each streamed change of a chat of 100 messages.
+    const digests = digestMessages(snapshot.messages, known);
+    const signature = conversationContentSignature(snapshot, digests);
     if (this.#conversationSignatures.get(snapshot.threadId ?? snapshot.agentId) === signature) {
-      this.#retainPublishedSnapshot(snapshot);
+      this.#retainPublishedSnapshot(snapshot, digests);
       return;
     }
     if (snapshot.threadId) {
       const cached = this.#cachedSnapshot(snapshot);
-      const changedMessages = this.#changedMessages(snapshot);
+      const changedMessages = this.#changedMessages(snapshot, digests);
       const removedMessageIds = this.#removedMessageIds(snapshot);
       if (
         cached &&
@@ -587,13 +592,15 @@ export class ConversationRuntime {
       }
     }
     this.publishConversation(snapshot, signature);
-    this.#retainPublishedSnapshot(snapshot);
+    // The digests of the stored messages: a listener of the event that changes a message after this
+    // leaves the cache with the stored signature, so the next change writes that message too.
+    this.#retainPublishedSnapshot(snapshot, digests);
   }
 
-  #retainPublishedSnapshot(snapshot: ConversationSnapshot): void {
+  #retainPublishedSnapshot(snapshot: ConversationSnapshot, digests?: MessageDigests): void {
     if (snapshot.threadId && this.#executionSnapshots.has(snapshot.threadId))
-      this.#setExecutionSnapshot(snapshot.threadId, snapshot);
-    else this.#keepSnapshot(snapshot.agentId, snapshot);
+      this.#setExecutionSnapshot(snapshot.threadId, snapshot, digests);
+    else this.#keepSnapshot(snapshot.agentId, snapshot, digests);
   }
 
   #cachedSnapshot(snapshot: ConversationSnapshot): CachedSnapshot | undefined {
@@ -606,11 +613,11 @@ export class ConversationRuntime {
     return undefined;
   }
 
-  #changedMessages(snapshot: ConversationSnapshot): ConversationMessage[] {
+  #changedMessages(snapshot: ConversationSnapshot, digests: MessageDigests): ConversationMessage[] {
     const cached = this.#cachedSnapshot(snapshot);
     if (!cached) return structuredClone(snapshot.messages);
     return snapshot.messages.filter(
-      (message) => cached.messageSignatures.get(message.id) !== messageSignature(message),
+      (message) => cached.messageSignatures.get(message.id) !== digests.get(message)?.signature,
     );
   }
 
@@ -831,16 +838,21 @@ export class ConversationRuntime {
   }
 }
 
-function boundedConversationSnapshot(snapshot: ConversationSnapshot): CachedSnapshot {
+/**
+ * The cache entry of a snapshot. `known` holds digests that the caller computed for these message
+ * objects in the same synchronous pass; each other message is serialized once here.
+ */
+function boundedConversationSnapshot(snapshot: ConversationSnapshot, known?: MessageDigests): CachedSnapshot {
+  const digests = digestMessages(snapshot.messages, known);
   const activeMessages = snapshot.activeTurnId
     ? snapshot.messages.filter((message) => isActiveMessage(message, snapshot.activeTurnId))
     : [];
-  const allCompletedMessages = snapshot.messages.filter((message) => !activeMessages.includes(message));
+  const active = new Set(activeMessages);
+  const allCompletedMessages = snapshot.messages.filter((message) => !active.has(message));
   const completedMessages = allCompletedMessages.slice(-CONVERSATION_SNAPSHOT_MESSAGE_LIMIT);
-  const completedSnapshot = { ...snapshot, messages: completedMessages };
-  let completedBytes = conversationSnapshotBytes(completedSnapshot);
+  let completedBytes = snapshotBytes(snapshot, completedMessages, digests);
   if (completedBytes > CONVERSATION_CACHE_BYTES_LIMIT) {
-    const removed = oldestMessagesToRemove(completedMessages, completedBytes - CONVERSATION_CACHE_BYTES_LIMIT);
+    const removed = oldestMessagesToRemove(completedMessages, completedBytes - CONVERSATION_CACHE_BYTES_LIMIT, digests);
     completedMessages.splice(0, removed.count);
     completedBytes -= removed.bytes;
   }
@@ -862,9 +874,9 @@ function boundedConversationSnapshot(snapshot: ConversationSnapshot): CachedSnap
     // only, so one large streamed response cannot evict every idle conversation.
     bytes: completedBytes,
     usedAt: Date.now(),
-    signature: conversationContentSignature(bounded),
+    signature: conversationContentSignature(bounded, digests),
     activeTurnId: bounded.activeTurnId,
-    messageSignatures: new Map(messages.map((message) => [message.id, messageSignature(message)])),
+    messageSignatures: new Map(messages.map((message) => [message.id, digests.get(message)?.signature ?? ""] as const)),
     omittedMessageIds: new Set(
       snapshot.messages.flatMap((message) => (retainedIds.has(message.id) ? [] : [message.id])),
     ),
@@ -911,6 +923,21 @@ function conversationSnapshotBytes(snapshot: ConversationSnapshot): number {
 }
 
 /**
+ * `conversationSnapshotBytes` of the snapshot with only `messages`, from the digests: the JSON of an
+ * array is its elements joined by commas, so only the fields around the messages are serialized.
+ */
+function snapshotBytes(
+  snapshot: ConversationSnapshot,
+  messages: readonly ConversationMessage[],
+  digests: MessageDigests,
+): number {
+  let bytes =
+    Buffer.byteLength(JSON.stringify({ ...snapshot, messages: [] }), "utf8") + Math.max(0, messages.length - 1);
+  for (const message of messages) bytes += digests.get(message)?.bytes ?? Buffer.byteLength(JSON.stringify(message));
+  return bytes;
+}
+
+/**
  * The fewest oldest messages whose removal makes the serialized array at least `excessBytes`
  * shorter, and that byte count. An array serializes as its elements joined by commas, so removing
  * an element removes its own bytes and one comma while another element remains. Only the removed
@@ -919,17 +946,16 @@ function conversationSnapshotBytes(snapshot: ConversationSnapshot): number {
 function oldestMessagesToRemove(
   messages: readonly ConversationMessage[],
   excessBytes: number,
+  digests?: MessageDigests,
 ): { count: number; bytes: number } {
   let count = 0;
   let bytes = 0;
   for (const message of messages) {
     if (bytes >= excessBytes) break;
-    bytes += Buffer.byteLength(JSON.stringify(message), "utf8") + (count < messages.length - 1 ? 1 : 0);
+    bytes +=
+      (digests?.get(message)?.bytes ?? Buffer.byteLength(JSON.stringify(message), "utf8")) +
+      (count < messages.length - 1 ? 1 : 0);
     count += 1;
   }
   return { count, bytes };
-}
-
-function messageSignature(message: ConversationMessage): string {
-  return createHash("sha256").update(JSON.stringify(message)).digest("hex");
 }

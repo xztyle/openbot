@@ -53,6 +53,8 @@ export interface DeveloperInstructionOptions {
   homeSkills?: readonly HomeSkill[];
   /** OpenBot runs on a server, so its browser has a data-center address. Fixed for the process. */
   serverHost?: boolean;
+  /** Whether the agent has the Motion connection, the team's only work board. */
+  workBoard?: boolean;
 }
 
 /** When and how to use the OpenBot Vault. Its settings page is on the user's own computer only. */
@@ -305,6 +307,7 @@ export function developerInstructions(
         ]
       : []),
     "Create short-lived helpers, iterators, and sub-team workers with openbot.create_agent and background set to true, so that they stay out of the user's agent lists, unless the user asks to see them.",
+    ...(options.workBoard ? [WORK_BOARD_INSTRUCTIONS] : []),
     "For app proactivity, such as new tickets, mentions, or pull requests, prefer an event check over an AI routine: it runs deterministic direct API reads without idle inference. Search for the openbot event check tools, such as openbot.list_event_check_templates, and read their guidance before you set one up.",
     ...(options.memoriesInTurns
       ? [
@@ -313,6 +316,9 @@ export function developerInstructions(
       : memoryContextLines(memoryContext(memories, options))),
   ].join("\n");
 }
+
+const WORK_BOARD_INSTRUCTIONS =
+  "Motion, through your motion MCP tools, is the team's only work board. Read the openbot-motion skill before your first Motion action in a conversation. Every task that takes more than a quick answer has a Motion issue: before you start, find yours (your assigned issues, or search) or create one in your team's project, set it In progress, keep its status true, put results, evidence, and blockers in its comments, and close it with what was done. When you delegate, create the issue, assign it to the teammate (agents are Motion members under their OpenBot names), and put the issue key in your message; when work reaches you without a key, create or find the issue first. Each team works in one Motion project, which its orchestrator creates when the user asks; when you do not know your team's project, ask your orchestrator, and never create a project yourself unless you are the orchestrator and the user asked. Write a Motion page only for documentation that someone will reuse, such as a spec, a decision, a process, or a runbook; never for status reports, chat summaries, or text that the issue already holds. Keep no plans, task lists, or trackers in files, memories, or chat: Motion holds them.";
 
 /** Only the file paths go into the prompt. The token stays in its file, because a provider receives this text. */
 function automationInstructions(agentId: string, root: string): string {

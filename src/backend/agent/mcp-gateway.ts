@@ -77,6 +77,11 @@ export interface McpGatewayOptions {
   /** The agent service logger, so a drop report keeps the `agent-service` prefix it always had. */
   logger: Logger;
   hooks: McpGatewayHooks;
+  /**
+   * Fills a row that names a key in Secrets or the agent (`mcp-agent-values.ts`) for the agent of a
+   * thread, or for no agent. A row whose key is missing is left out. Without it rows leave as stored.
+   */
+  personalize?: (threadId: string | undefined, configs: readonly McpServerConfig[]) => McpServerConfig[];
 }
 
 /**
@@ -121,6 +126,7 @@ export class McpGateway {
   readonly #proxyRouteTokens = new Map<string, string>();
   readonly #logger: Logger;
   readonly #hooks: McpGatewayHooks;
+  readonly #personalize: NonNullable<McpGatewayOptions["personalize"]>;
 
   constructor(options: McpGatewayOptions) {
     const { credentials } = options;
@@ -132,6 +138,7 @@ export class McpGateway {
     this.#oauth = credentials.mcpOAuth ?? null;
     this.#logger = options.logger;
     this.#hooks = options.hooks;
+    this.#personalize = options.personalize ?? ((_threadId, configs) => [...configs]);
     this.#proxy = new McpOAuthProxy({
       settings: credentials.mcpOAuthProxySettings ?? null,
       target: (route) => this.#proxyTarget(route),
@@ -544,7 +551,9 @@ export class McpGateway {
     const github = this.#githubConnector?.mcpServer() ?? null;
     if (github && !configured.some((config) => config.name === github.name)) builtIn.push(github);
     const configs = [...configured, ...builtIn];
-    return this.#handoff.record(threadId && this.#scope ? this.#scope(threadId, configs) : configs);
+    // Filled after the scope: a chat-app entry is a loopback URL, and the proxy fills its upstream.
+    const scoped = threadId && this.#scope ? this.#scope(threadId, configs) : configs;
+    return this.#handoff.record(this.#personalize(threadId, scoped));
   }
 
   /**

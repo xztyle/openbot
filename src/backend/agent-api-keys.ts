@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
@@ -148,6 +149,23 @@ export class AgentApiKeys {
       }
     }
   });
+
+  /**
+   * One value now, for a connection that names a key: the agent's own key, the shared one, or (any)
+   * the agent's own when it has one, else the shared one. Null when there is none.
+   */
+  readNow(scope: "agent" | "shared" | "any", agentId: string | null, name: string): string | null {
+    if (!API_KEY_NAME_PATTERN.test(name)) return null;
+    const read = (folder: string) => {
+      try {
+        return readFileSync(join(this.#root, folder, name), "utf8") || null;
+      } catch {
+        return null;
+      }
+    };
+    const own = scope !== "shared" && agentId && AGENT_ID_PATTERN.test(agentId) ? read(agentId) : null;
+    return own ?? (scope === "agent" ? null : read(SHARED_FOLDER));
+  }
 
   #agentFolder(agentId: string): Effect.Effect<string, AgentApiKeyFailed> {
     return AGENT_ID_PATTERN.test(agentId) ? Effect.succeed(join(this.#root, agentId)) : Effect.fail(failed());

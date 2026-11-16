@@ -31,6 +31,15 @@ export const createChatMcp = Effect.fn("ChatMcp.create")(function* (options: Opt
     chatKey: (threadId) => chatKey(options.service(), threadId),
     endpoint: options.endpoint,
     runtimes: options.runtimes,
+    agent: (threadId) => options.service().mcpAgentForThread(threadId),
+    agentById: (agentId) => {
+      const agent = options
+        .service()
+        .listAgents()
+        .find((item) => item.id === agentId);
+      return agent ? { id: agent.id, name: agent.name } : null;
+    },
+    personalize: (config, agent) => options.service().personalMcpServer(config, agent),
   });
   yield* proxy.start();
   const api = new ChatMcpService({

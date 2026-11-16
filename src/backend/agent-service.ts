@@ -238,6 +238,7 @@ import type { EventCheckScheduler } from "./event-check-scheduler";
 import type { EventCheckTemplates } from "./event-check-templates";
 import type { HostMemory } from "./host-memory";
 import type { MailboxStore } from "./mailbox-store";
+import { type McpAgent, personalizeMcpConfig } from "./mcp-agent-values";
 import { type McpOperationError, toMcpOperationError } from "./mcp-effects";
 import type { McpSignInOpener } from "./mcp-oauth-provider";
 import type { McpEndpoint, McpEndpointRefusal } from "./mcp-provider-shapes";
@@ -471,6 +472,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly routineRecords: RoutineRecords;
   readonly eventChecks: EventCheckScheduler;
   readonly #mcp: McpGateway;
+  readonly #agentApiKeys: AgentApiKeys | null;
   readonly #providers: ProviderRuntime;
   readonly #providerUseChanges = Semaphore.makeUnsafe(1);
   readonly #endpoints: CustomEndpoints;
@@ -541,12 +543,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#store = store;
     // First of the sub-objects, because `#emitError` reads it to redact and every one of them is
     // given that callback.
+    this.#agentApiKeys = options.agentApiKeys ?? null;
     this.#mcp = new McpGateway({
       servers: new McpServerStore(store.database),
       credentials,
       computerUseMcpServer,
       githubConnector,
       logger,
+      // Read late: the conversation runtime is built further down this constructor.
+      personalize: (threadId, configs) => this.#personalMcp(threadId, configs),
       hooks: {
         emitError: (code, error) => this.#emitError(code, error),
         // Read late: the threads are built further down this constructor.
@@ -2181,6 +2186,24 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   enabledMcpServers(threadId?: string): McpServerConfig[] {
     return this.#mcp.enabled(threadId);
+  }
+
+  /** The agent a thread belongs to, as an MCP row names it. */
+  mcpAgentForThread(threadId: string | undefined): McpAgent | null {
+    const agentId = threadId ? this.#conversation.agentForThread(threadId) : undefined;
+    const agent = agentId ? this.listAgents().find((item) => item.id === agentId) : undefined;
+    return agent ? { id: agent.id, name: agent.name } : null;
+  }
+
+  /** One row filled for an agent, or null when it names a key that is not saved. */
+  personalMcpServer(config: McpServerConfig, agent: McpAgent | null): McpServerConfig | null {
+    const keys = this.#agentApiKeys;
+    return personalizeMcpConfig(config, agent, (scope, agentId, name) => keys?.readNow(scope, agentId, name) ?? null);
+  }
+
+  #personalMcp(threadId: string | undefined, configs: readonly McpServerConfig[]): McpServerConfig[] {
+    const agent = this.mcpAgentForThread(threadId);
+    return configs.flatMap((config) => this.personalMcpServer(config, agent) ?? []);
   }
 
   /**

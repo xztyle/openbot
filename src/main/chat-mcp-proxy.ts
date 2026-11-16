@@ -12,6 +12,7 @@ import { Effect } from "effect";
 import { runCauseEffect } from "../backend/effect-boundary";
 import type { EventCheckArguments, EventCheckReadSession } from "../backend/event-check-reader";
 import { readJsonBody } from "../backend/local-mcp-bridge";
+import type { McpAgent } from "../backend/mcp-agent-values";
 import { isSlackApp, mayCallChatTool } from "../backend/mcp-chat-policy";
 import { McpOperationError, mcpCall, mcpFailure, mcpSync } from "../backend/mcp-effects";
 import { type McpEndpointSource, type McpToolRuntimeSource, usableMcpServer } from "../backend/mcp-provider-shapes";
@@ -27,6 +28,11 @@ interface Options {
   chatKey: (threadId: string) => string | null;
   endpoint: McpEndpointSource;
   runtimes: McpToolRuntimeSource;
+  /** The agent of a thread, for a row that names it or one of its keys (`mcp-agent-values.ts`). */
+  agent?: (threadId: string) => McpAgent | null;
+  agentById?: (agentId: string) => McpAgent | null;
+  /** One row filled for an agent, or null when a key it names is missing. */
+  personalize?: (config: McpServerConfig, agent: McpAgent | null) => McpServerConfig | null;
 }
 interface Upstream {
   client: Client;
@@ -92,6 +98,10 @@ export class ChatMcpProxy {
     const grants = this.options.policies.get(key).grants;
     const revision = createHash("sha256").update(JSON.stringify(grants)).digest("hex").slice(0, 16);
     const apps = configs.filter((config) => grants.some((grant) => grant.connectionId === config.id));
+    // A channel is one chat for several agents, so the URL also names the agent: each one then
+    // reaches a row that names the agent as itself.
+    const agent = this.options.agent?.(threadId)?.id ?? "";
+    const agentPath = agent ? `/${Buffer.from(agent).toString("base64url")}` : "";
     return [
       ...builtIn,
       ...apps.map((config) => ({
@@ -104,8 +114,8 @@ export class ChatMcpProxy {
         env: [],
         envPassthrough: [],
         workingDirectory: "",
-        url: `http://127.0.0.1:${this.#port}/chat-mcp/${Buffer.from(key).toString("base64url")}/${config.id}?revision=${revision}`,
-        headers: [{ key: "Authorization", value: `Bearer ${this.#token(key, config.id)}` }],
+        url: `http://127.0.0.1:${this.#port}/chat-mcp/${Buffer.from(key).toString("base64url")}/${config.id}${agentPath}?revision=${revision}`,
+        headers: [{ key: "Authorization", value: `Bearer ${this.#token(key, config.id, agent)}` }],
       })),
     ];
   }
@@ -138,7 +148,7 @@ export class ChatMcpProxy {
       }),
       (access) =>
         Effect.acquireUseRelease(
-          this.#upstream(access.config),
+          this.#upstream(access.config, this.options.agent?.(threadId) ?? null),
           (upstream) => this.#readSession(threadId, access, upstream).pipe(Effect.flatMap(use)),
           (upstream) => this.#releaseUpstream(upstream),
         ),
@@ -216,8 +226,8 @@ export class ChatMcpProxy {
   #redactJson(value: unknown, secrets: string[]): string {
     return JSON.stringify(redactMcpResult(value, secrets));
   }
-  #token(key: string, connection: string): string {
-    const id = `${key}\0${connection}`;
+  #token(key: string, connection: string, agent: string): string {
+    const id = `${key}\0${connection}\0${agent}`;
     const held = this.#tokens.get(id);
     if (held) return held;
     const token = randomBytes(32).toString("hex");
@@ -226,18 +236,21 @@ export class ChatMcpProxy {
   }
   #access(request: IncomingMessage) {
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
-    const match = /^\/chat-mcp\/([a-zA-Z0-9_-]{1,256})\/([a-zA-Z0-9_-]{1,128})$/.exec(path);
+    const match = /^\/chat-mcp\/([a-zA-Z0-9_-]{1,256})\/([a-zA-Z0-9_-]{1,128})(?:\/([a-zA-Z0-9_-]{1,256}))?$/.exec(
+      path,
+    );
     if (!match?.[1] || !match[2]) return null;
     const key = Buffer.from(match[1], "base64url").toString("utf8");
+    const agent = match[3] ? Buffer.from(match[3], "base64url").toString("utf8") : "";
     const config = this.options.configs().find((item) => item.id === match[2] && item.enabled);
     // A pair that never got a URL has no token, and asking must not make one.
-    const token = this.#tokens.get(`${key}\0${match[2]}`);
+    const token = this.#tokens.get(`${key}\0${match[2]}\0${agent}`);
     if (!config || !token) return null;
     const received = Buffer.from(request.headers.authorization ?? "");
     const expected = Buffer.from(`Bearer ${token}`);
     if (received.length !== expected.length || !timingSafeEqual(received, expected)) return null;
     if (!this.#mode(key, config.id)) return null;
-    return { key, config };
+    return { key, config, agent };
   }
   #mode(key: string, id: string) {
     return this.options.policies.get(key).grants.find((grant) => grant.connectionId === id)?.mode;
@@ -258,7 +271,7 @@ export class ChatMcpProxy {
       response.end();
       return;
     }
-    const result = this.#serve(access.key, access.config, request, response).pipe(
+    const result = this.#serve(access.key, access.config, access.agent, request, response).pipe(
       Effect.catch(() =>
         Effect.sync(() => {
           if (!response.headersSent) {
@@ -274,10 +287,11 @@ export class ChatMcpProxy {
     this: ChatMcpProxy,
     key: string,
     config: McpServerConfig,
+    agent: string,
     request: IncomingMessage,
     response: ServerResponse,
   ) {
-    const upstream = yield* this.#upstream(config);
+    const upstream = yield* this.#upstream(config, agent ? (this.options.agentById?.(agent) ?? null) : null);
     const mcp = this.#serverFor(key, config, upstream);
     const transport = new StreamableHTTPServerTransport({});
     yield* Effect.acquireUseRelease(
@@ -321,7 +335,14 @@ export class ChatMcpProxy {
     });
     return mcp;
   }
-  readonly #upstream = Effect.fn("ChatMcpProxy.upstream")(function* (this: ChatMcpProxy, config: McpServerConfig) {
+  readonly #upstream = Effect.fn("ChatMcpProxy.upstream")(function* (
+    this: ChatMcpProxy,
+    stored: McpServerConfig,
+    agent: McpAgent | null,
+  ) {
+    // Each agent that a row names gets its own upstream: the identity below hashes the filled row.
+    const config = this.options.personalize ? this.options.personalize(stored, agent) : stored;
+    if (!config) throw new Error("Unavailable app transport.");
     const launched = yield* this.#launchConfig(config);
     const resolved = yield* usableMcpServer(launched, this.options.runtimes(), this.options.endpoint);
     if (resolved.error !== undefined) throw new Error("Unavailable app transport.");

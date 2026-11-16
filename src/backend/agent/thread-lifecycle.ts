@@ -1027,6 +1027,8 @@ export class ThreadLifecycle {
       teammatesInTurns: client.provider === "claude",
       sectionTeammates: section,
       homeSkills,
+      // A connection named motion is the team's board: every agent that has it follows its rules.
+      workBoard: this.#agentMcpServers(agent).some((config) => /^motion(?:_|$)/i.test(config.name)),
     };
     const instructions = developerInstructions(
       agent,

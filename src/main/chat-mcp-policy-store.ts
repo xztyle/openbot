@@ -6,6 +6,8 @@ import { Effect, Semaphore } from "effect";
 import { writeJsonFileAtomically } from "../backend/atomic-json-file";
 import { mcpCall, mcpSync } from "../backend/mcp-effects";
 
+const ALL_CHATS = "*";
+
 /**
  * Owns durable per-chat grants. An unreadable file fails startup closed and is never overwritten.
  *
@@ -43,8 +45,16 @@ export class ChatMcpPolicyStore {
     );
     this.#chats = chats;
   }
+  /**
+   * A chat's grants, with the grants for every chat (key `*`) added for a connection the chat does
+   * not name itself. `*` is set by the server owner in the file, for a connection every agent works
+   * in, such as the team's board.
+   */
   get(key: string): McpChatPolicy {
-    return this.#chats[key] ?? { grants: [] };
+    const own = this.#chats[key] ?? { grants: [] };
+    const all = key === ALL_CHATS ? [] : (this.#chats[ALL_CHATS]?.grants ?? []);
+    const added = all.filter((grant) => !own.grants.some((item) => item.connectionId === grant.connectionId));
+    return added.length === 0 ? own : { ...own, grants: [...own.grants, ...added] };
   }
   save(key: string, policy: McpChatPolicy) {
     return this.#queue.withPermit(

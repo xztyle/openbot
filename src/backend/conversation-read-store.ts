@@ -30,7 +30,25 @@ import type { OpenBotDatabase } from "./openbot-database";
 
 export type { ConversationMarkerExclusions } from "./database/conversation-queries";
 
+/** How many computed read states the store keeps. Each is a few strings; the oldest goes first. */
+const READ_STATE_CACHE_LIMIT = 2_000;
+
+interface CachedReadState {
+  /** The thread row's `last_event_sequence` and `updated_at` when the state was read. */
+  version: string;
+  state: ConversationReadState;
+}
+
 export class ConversationReadStore {
+  /**
+   * Read states by thread, cursor and marker exclusions. A state depends only on the thread's rows
+   * and the cursor, and every write to the rows of a thread moves the thread row's version, so an
+   * entry with the current version is still right. Computing one runs the unread query over the
+   * whole thread: a few milliseconds each, and about 100 ms for the list of every agent, which each
+   * client reads after each chat change of an agent it does not show.
+   */
+  readonly #cache = new Map<string, CachedReadState>();
+
   constructor(readonly database: OpenBotDatabase) {}
 
   listStates(
@@ -50,6 +68,11 @@ export class ConversationReadStore {
   ): ConversationReadState {
     if (!threadId) return emptyReadState();
     const stored = this.#storedCursor(threadId, memberId);
+    // Only a stored cursor that the thread still holds goes in the cache, so a hit needs no other check.
+    const cacheKey = stored === undefined ? null : readStateCacheKey(threadId, stored, options);
+    const version = cacheKey === null ? null : this.#threadVersion(threadId);
+    const cached = cacheKey === null ? undefined : this.#cache.get(cacheKey);
+    if (cached && version !== null && cached.version === version) return { ...cached.state };
     let state: ConversationReadState;
     if (stored === undefined) {
       const baseline = this.#migrationCursor(threadId);
@@ -62,9 +85,33 @@ export class ConversationReadStore {
       this.#saveCursor(threadId, memberId, latestMessageId, "initialized");
       state = this.#stateFromDatabase(threadId, latestMessageId);
     } else {
-      state = this.#stateFromDatabase(threadId, stored);
+      const result = this.#withSupportedCursor(threadId, this.#stateFromDatabase(threadId, stored), options);
+      if (cacheKey !== null && version !== null) this.#remember(cacheKey, version, result);
+      return result;
     }
     return this.#withSupportedCursor(threadId, state, options);
+  }
+
+  /**
+   * What changes with every write to the rows of a thread. Null inside a transaction: a ROLLBACK can
+   * remove rows it already shows, and the next write can then take the same sequence number.
+   */
+  #threadVersion(threadId: string): string | null {
+    if (this.database.connection.isTransaction) return null;
+    const row = this.database.connection
+      .prepare("SELECT last_event_sequence, updated_at FROM projection_threads WHERE thread_id = ?")
+      .get(threadId);
+    if (!isDynamicRecord(row) || !isNumber(row.last_event_sequence) || !isString(row.updated_at)) return null;
+    return `${row.last_event_sequence}\u0000${row.updated_at}`;
+  }
+
+  #remember(key: string, version: string, state: ConversationReadState): void {
+    this.#cache.delete(key);
+    this.#cache.set(key, { version, state: { ...state } });
+    if (this.#cache.size > READ_STATE_CACHE_LIMIT) {
+      const oldest = this.#cache.keys().next().value;
+      if (oldest !== undefined) this.#cache.delete(oldest);
+    }
   }
 
   adoptMemberState(sourceMemberId: string, targetMemberId: string): void {
@@ -485,4 +532,17 @@ type MessageOrderKey = [
 
 function emptyReadState(): ConversationReadState {
   return { unreadCount: 0, firstUnreadMessageId: null, throughMessageId: null };
+}
+
+function readStateCacheKey(threadId: string, cursor: string | null, options: ConversationMarkerExclusions): string {
+  const exclusions = [
+    options.excludeRoutineEvents,
+    options.excludeRoutineRunEvents,
+    options.excludeHostedSiteEvents,
+    options.excludeRoutineQuietAnswers,
+    options.excludeEventCheckEvents,
+  ]
+    .map((value) => (value ? "1" : "0"))
+    .join("");
+  return `${threadId}\u0000${cursor ?? ""}\u0000${cursor === null ? "none" : "cursor"}\u0000${exclusions}`;
 }

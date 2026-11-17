@@ -327,6 +327,12 @@ export function createWebWorkspace(
   let hostAway = false;
   /** The time the page was hidden, or null while it is visible. */
   let hiddenAt: number | null = null;
+  /** When the last event of the open host arrived, and how many arrived. A silent running turn is checked. */
+  let hostEventAt = Date.now();
+  let hostEvents = 0;
+  /** The silence after which the running turn is checked next. It grows while the host confirms the silence. */
+  let turnSilenceMs = TURN_SILENCE_MS;
+  let turnCheck: Promise<void> | null = null;
   /** The read of the host's state after a return from the background, or after a window focus. */
   let resyncPromise: Promise<void> | null = null;
   /** The agents whose queue was not read at the last resync. Selecting one of them reads it. */
@@ -542,10 +548,14 @@ export function createWebWorkspace(
             if (retry && !update.hostOffline && !disposed && current === generation) recover();
           });
         } else if (restartSince !== null && update.state === "offline") recover();
+        if (update.state === "online") hostEventAt = Date.now();
         if (update.state === "online" && update.resync && !connectionPromise) void readLostEvents();
       },
       event(id, event) {
         if (disposed || id !== hostId) return;
+        hostEventAt = Date.now();
+        hostEvents += 1;
+        turnSilenceMs = TURN_SILENCE_MS;
         for (const listener of hostEventListeners) listener(event);
         if (event.type === "team-presence")
           setState((draft) => {
@@ -1262,14 +1272,25 @@ export function createWebWorkspace(
       throw error;
     }
   }
-  async function loadPanels(capabilities = state.capabilities, agentIds = state.agents.map((agent) => agent.id)) {
+  /**
+   * `retry`: a read that the connection lost goes once more after `PANELS_RETRY_MS`. The peer checks its
+   * path after a late read and replaces a dead one, so the second read goes over the new connection.
+   * Before, the notice stayed until the reader pressed Retry, also after the connection came back.
+   */
+  async function loadPanels(
+    capabilities = state.capabilities,
+    agentIds = state.agents.map((agent) => agent.id),
+    retry = true,
+  ) {
     const current = generation;
     const isCurrent = () => !disposed && current === generation;
     setState((draft) => {
       draft.panelsFailed = false;
       draft.panelsLoading = true;
     });
-    const failed = () => {
+    let lost = false;
+    const failed = (error: unknown) => {
+      if (transientFailure(error)) lost = true;
       if (isCurrent())
         setState((draft) => {
           draft.panelsFailed = true;
@@ -1308,6 +1329,11 @@ export function createWebWorkspace(
       setState((draft) => {
         draft.panelsLoading = false;
       });
+    if (lost && retry && isCurrent())
+      setTimeout(() => {
+        // A reconnect in between reads the panels itself.
+        if (isCurrent() && state.status === "online") void loadPanels(undefined, undefined, false);
+      }, PANELS_RETRY_MS);
   }
 
   async function load(id: string, older = false) {
@@ -1695,6 +1721,49 @@ export function createWebWorkspace(
     if (disposed || current !== generation) return;
     await resync();
   }
+  /**
+   * A running turn of the open chat that sent no event for a while. The silence can be the provider's,
+   * or events that the connection lost while reads still work: a path that stopped delivering events
+   * only, or a host event stream that ended. One read of the chat tells which. When the host's chat is
+   * newer than the one here (a new revision, or the turn ended) and still no event came, the events
+   * were lost: the read shows the host's state, and the connection is replaced quietly, so that the
+   * host starts a new event stream and the workspace is read again. A read that fails makes the peer
+   * check its path. A wait for the user's answer is not checked: it is silent by design.
+   */
+  function checkSilentTurn(): void {
+    const id = selectedId;
+    const page = id ? state.conversations[id]?.page : undefined;
+    if (!id || !page?.activeTurnId || turnCheck || connectionPromise || document.hidden) return;
+    if (state.status !== "online" || Date.now() - hostEventAt < turnSilenceMs) return;
+    const waitsForUser = (item: { agentId: string }) => item.agentId === id;
+    if (state.approvals.some(waitsForUser) || state.prompts.some(waitsForUser) || state.takeovers.some(waitsForUser))
+      return;
+    const current = generation;
+    const events = hostEvents;
+    const before = { threadId: page.threadId, revision: page.revision, turnId: page.activeTurnId };
+    turnSilenceMs = Math.min(TURN_SILENCE_MAX_MS, turnSilenceMs * 2);
+    turnCheck = load(id)
+      .then(
+        () => {
+          if (disposed || current !== generation || hostEvents !== events || selectedId !== id) return;
+          const after = state.conversations[id]?.page;
+          if (!after) return;
+          if (
+            after.threadId !== before.threadId ||
+            after.revision > before.revision ||
+            after.activeTurnId !== before.turnId
+          ) {
+            turnSilenceMs = TURN_SILENCE_MS;
+            runtime.replaceConnection?.("event-stall");
+          }
+        },
+        // The peer checks its path after a late read, and the connection status shows a dead one.
+        () => undefined,
+      )
+      .finally(() => {
+        turnCheck = null;
+      });
+  }
   // Coalesce event bursts; an event during a read schedules one further authoritative read.
   let eventRefreshTimer: ReturnType<typeof setTimeout> | undefined;
   /** The one later read after a background read of the open chat failed for a moment. */
@@ -1912,6 +1981,7 @@ export function createWebWorkspace(
       runtime.networkRestored?.();
       recovery.networkRestored();
     };
+    const turnSilenceTimer = setInterval(checkSilentTurn, TURN_SILENCE_CHECK_MS);
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("online", network);
     window.addEventListener("focus", focus);
@@ -1922,6 +1992,7 @@ export function createWebWorkspace(
       clearTimeout(readsTimer);
       clearTimeout(eventRefreshTimer);
       clearTimeout(refreshRetryTimer);
+      clearInterval(turnSilenceTimer);
       stopRestartRetry();
       recovery.dispose();
       hostLifecycle.dispose();
@@ -2345,6 +2416,16 @@ const FOCUS_RESYNC_MS = 30_000;
 const EVENT_REFRESH_SPACING_MS = 500;
 /** The wait before a background read of the open chat that failed for a moment goes once more. */
 const REFRESH_RETRY_MS = 3_000;
+/** The wait before the panel reads that the connection lost go once more. */
+const PANELS_RETRY_MS = 10_000;
+/**
+ * A running turn of the open chat that sent no event for this long is checked with one read of the
+ * chat, before the composer says that the provider sent nothing (after a minute). Each check that
+ * finds the turn still silent on the host doubles the wait, up to `TURN_SILENCE_MAX_MS`.
+ */
+const TURN_SILENCE_MS = 45_000;
+const TURN_SILENCE_MAX_MS = 5 * 60_000;
+const TURN_SILENCE_CHECK_MS = 5_000;
 
 /**
  * A failure that the connection status and its recovery own: a lost network, a late answer or a

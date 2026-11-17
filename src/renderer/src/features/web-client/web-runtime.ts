@@ -251,6 +251,11 @@ export interface WebWorkspaceRuntime {
   abandonReconnectWaits?(): void;
   /** Asks the host to send its runtime snapshot again, after events were lost. */
   requestRuntimeSnapshot?(): void;
+  /**
+   * Replaces a connection whose events stopped while the host still worked. The workspace stays
+   * online, and the connection update with `resync` follows.
+   */
+  replaceConnection?(reason: "event-stall"): void;
   /** Tells a hosted server that this tab has focus. Send it only to a host with `focus-use-v1`. */
   focusUse(): Promise<void>;
   /** Resolves to the conversation message the host stored: the delivery id of the receipt. */
@@ -1212,6 +1217,9 @@ export function createWebWorkspaceRuntime(
     },
     setTyping(agentId, typing) {
       peer.setTyping(agentId, typing);
+    },
+    replaceConnection(reason) {
+      peer.replace(reason);
     },
     requestRuntimeSnapshot() {
       peer.requestRuntimeSnapshot();

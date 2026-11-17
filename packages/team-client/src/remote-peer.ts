@@ -23,6 +23,12 @@ import {
   teamCapabilitiesForProtocol,
   teamProtocolV2AuthenticationTranscript,
 } from "@openbot/contracts/team-protocol";
+import {
+  CONNECTION_REPORT_OPERATION,
+  type ConnectionReportReason,
+  connectionReportReason,
+} from "@openbot/contracts/team-protocol/connection-report-v1";
+import { FORK_HOST_CAPABILITY } from "@openbot/contracts/team-protocol/fork-host-v1";
 import { optionalTeamEvent, optionalTeamEventToCurrent } from "@openbot/contracts/team-protocol/optional-events";
 import { teamSideRouteCodec } from "@openbot/contracts/team-protocol/side-routes";
 import {
@@ -249,6 +255,8 @@ export interface RemoteTeamDiagnostic {
     | "channels-open"
     | "authenticated"
     | "request-timeout"
+    | "probe"
+    | "replace"
     | "failed";
   detail?: string;
 }
@@ -351,6 +359,15 @@ interface PeerState {
   /** When the last frame arrived on the rpc channel, and the frames that arrived and wait to be read. */
   rpcFrameAt: number;
   rpcFramesWaiting: number;
+  /** When the last frame arrived on any channel. The heartbeat probes a peer that heard nothing for a while. */
+  inboundAt: number;
+  heartbeatTimer: ReturnType<typeof setTimeout> | null;
+  /** The check whose probe runs now, or null. One probe runs at a time. */
+  probing: "heartbeat" | "read-timeout" | null;
+  /** Why this peer failed, when a check of this client found it. A failure reference names the rest. */
+  failureReason: ConnectionReportReason | null;
+  /** The candidate types of the selected pair, for the connection report. */
+  route: string | null;
   hostProtocol?: number;
 }
 
@@ -396,6 +413,21 @@ const ICE_CONSENT_TIMEOUT_MS = 30_000;
  * resumed. The margin covers the seconds before iOS suspends the app.
  */
 export const REMOTE_PEER_LOST_AFTER_MS = 160_000;
+/**
+ * A connected peer that received nothing on any channel for this long sends the compatibility probe.
+ * A path can stop delivering while both ends still read it as connected: the host then only queues
+ * its events, and without this check the page waits for them until a read fails or the tab returns.
+ * During a turn the events keep the peer busy, so an idle peer sends about one small read in this time.
+ */
+const HEARTBEAT_IDLE_MS = 30_000;
+/** The heartbeat looks at the silence this often, so a dead path is found within the idle time and this. */
+const HEARTBEAT_CHECK_MS = 5_000;
+/**
+ * The limit of a probe of the heartbeat or of a late read. `judgePath` fails it in seconds on a path
+ * that brings nothing from the host, and waits up to this long only while the host still sends data,
+ * so a host whose main process is busy does not lose its connections.
+ */
+const PROBE_TIMEOUT_MS = 60_000;
 
 class RemotePeerIO extends Context.Service<
   RemotePeerIO,
@@ -435,8 +467,10 @@ class RemotePeerIO extends Context.Service<
  */
 export function createRemoteTeamPeer(
   actions: ActionsRef,
-  options: { downloadLimitBytes?: number; waitForHost?: boolean } = {},
+  options: { downloadLimitBytes?: number; waitForHost?: boolean; heartbeatIdleMs?: number } = {},
 ) {
+  const heartbeatIdleMs = options.heartbeatIdleMs ?? HEARTBEAT_IDLE_MS;
+  const heartbeatCheckMs = Math.min(HEARTBEAT_CHECK_MS, Math.max(100, Math.floor(heartbeatIdleMs / 3)));
   const runtime = ManagedRuntime.make(RemotePeerIO.layer(actions));
   const workScope = Scope.makeUnsafe();
   const running = new Set<Promise<unknown>>();
@@ -484,6 +518,12 @@ export function createRemoteTeamPeer(
   // A failed attempt keeps its session for the next attempt on the same host. Ending it each time
   // made every recovery attempt a create, a ticket and an end on the account Worker.
   let retainedSession: { hostId: string; sessionId: string } | null = null;
+  /** The capabilities of the host that answered the last compatibility read. */
+  let hostSupport: { hostId: string; capabilities: readonly string[] } | null = null;
+  /** The recoveries of this peer by reason, and the last one, which the next connection reports to its host. */
+  const recoveries = new Map<string, number>();
+  let recoveryTotal = 0;
+  let pendingReport: { hostId: string; reason: string; failedAt: number; route: string | null } | null = null;
 
   return {
     async sendHostStreamData(data: string | ArrayBuffer) {
@@ -506,6 +546,18 @@ export function createRemoteTeamPeer(
       const state = peer;
       if (!state || !isPeerOnline(state)) return;
       void runPeerEffect(sendEventControl(state, { type: "runtime-snapshot-request" })).catch(() => undefined);
+    },
+    /**
+     * The consumer found that events stopped while the host still worked, such as a turn that the host
+     * finished with no event here. The rpc channel can still work, so no probe finds it. The peer is
+     * replaced quietly, as before the ICE restart limit: the host starts a new event stream, and the
+     * consumer gets an `online` update with `resync` at the end.
+     */
+    replace(reason: Extract<ConnectionReportReason, "event-stall">) {
+      const state = peer;
+      if (!active || !state || state.replacing || !isPeerOnline(state)) return;
+      noteRecovery(state, reason);
+      replaceQuietly(state, actions, reason);
     },
     execute: (command: RemoteTeamCommand) => runPeerEffect(executeCommand(command, actions)),
     dispose: async () => {
@@ -537,6 +589,7 @@ export function createRemoteTeamPeer(
         state.iceRecoveryTimer = null;
         state.reconnectTimer = null;
         state.turnRefreshTimer = null;
+        stopHeartbeat(state);
         // The host can commit a sent write while the app is inactive. Keep its
         // response registered so the caller does not offer to send it again.
         state.needsResync ||= [...pendingRequests.values()].some(
@@ -564,6 +617,9 @@ export function createRemoteTeamPeer(
           // The recovery owner reloads workspace reads on every foreground return.
           // Do not request a second reload for reads canceled on background entry.
           state.needsResync = false;
+          // The time away is not silence of the path.
+          state.inboundAt = now;
+          armHeartbeat(state);
         }
       }
     },
@@ -598,10 +654,9 @@ export function createRemoteTeamPeer(
   function reportRoute(state: PeerState, connection: RTCPeerConnection) {
     return Effect.fn("RemotePeer.reportRoute")(function* () {
       const pair = selectedCandidates(yield* peerCall(() => connection.getStats()));
-      if (pair)
-        yield* notify(
-          diagnosticCall(state, "route", `${candidateRoute(pair.local)} -> ${candidateRoute(pair.remote)}`),
-        );
+      if (!pair) return;
+      state.route = `${candidateRoute(pair.local)} -> ${candidateRoute(pair.remote)}`;
+      yield* notify(diagnosticCall(state, "route", state.route));
     })();
   }
 
@@ -880,6 +935,11 @@ export function createRemoteTeamPeer(
         lastSignalClose: null,
         rpcFrameAt: 0,
         rpcFramesWaiting: 0,
+        inboundAt: 0,
+        heartbeatTimer: null,
+        probing: null,
+        failureReason: null,
+        route: null,
       };
       peer = state;
       const connected = Deferred.makeUnsafe<void, RemotePeerError>();
@@ -1195,6 +1255,7 @@ export function createRemoteTeamPeer(
         if (active && state.turnRefreshTimer === null) resumeTurnRefresh(state);
         settleConnected(state);
         resyncIfNeeded(state, actions);
+        armHeartbeat(state);
       }
       if (connectionState === "failed" || connectionState === "closed") {
         failPeer(state, iceFailure(connectionState), actions);
@@ -1220,6 +1281,7 @@ export function createRemoteTeamPeer(
     };
     channel.onmessage = (event) => {
       const data = event.data;
+      state.inboundAt = Date.now();
       // A read whose deadline passes while frames arrive or wait here is not lost: it waits on.
       if (kind === "rpc") {
         state.rpcFrameAt = Date.now();
@@ -1343,7 +1405,10 @@ export function createRemoteTeamPeer(
           const status = frame.result.status;
           const body = frame.result.body;
           if (pending.method === "GET" && pending.path === TEAM_API_ROUTES.compatibility && status === 200) {
-            state.hostProtocol = (yield* peerDecode(() => decodeTeamProtocolSupportV7Base(body))).protocol.maximum;
+            const support = yield* peerDecode(() => decodeTeamProtocolSupportV7Base(body));
+            state.hostProtocol = support.protocol.maximum;
+            hostSupport = { hostId: state.hostId, capabilities: support.capabilities };
+            yield* sendConnectionReport(state);
           }
           pending.resolve({
             status: frame.result.status,
@@ -1453,9 +1518,14 @@ export function createRemoteTeamPeer(
         return yield* new RemotePeerError({ message: "The desktop returned an invalid authentication confirmation." });
       }
       state.authenticated = true;
+      state.inboundAt = Date.now();
       yield* notify(diagnosticCall(state, "authenticated"));
       settleConnected(state);
+      armHeartbeat(state);
       yield* sendEventAckEffect(state);
+      // A host that answered a compatibility read before gets the report of the last recovery now: a
+      // quiet replacement reads no compatibility again.
+      yield* sendConnectionReport(state);
       yield* RemotePeerIO.use((io) => io.connectionUpdate({ hostId: state.hostId, state: "online", message: null }));
     })();
   }
@@ -1539,15 +1609,22 @@ export function createRemoteTeamPeer(
               pendingRequests.delete(requestId);
               const error = new Error(sourceText("error.remote.desktopRequestTimeout"));
               reject(error);
-              if (checksConnection) failPeer(state, error, actions);
-              else
-                diagnose(
-                  state,
-                  "request-timeout",
-                  sentAt === null
-                    ? `${method} not sent after ${timeoutMs} ms`
-                    : `${method} after ${Date.now() - sentAt} ms, rpc frames ${state.rpcFramesWaiting} waiting, last ${state.rpcFrameAt > sentAt ? `${Date.now() - state.rpcFrameAt} ms ago` : "before the send"}`,
-                );
+              if (checksConnection) {
+                // The heartbeat or a late read asked for this probe; any other probe is the consumer's.
+                if (state.authenticated) state.failureReason ??= probeFailure(state.probing);
+                failPeer(state, error, actions);
+                return;
+              }
+              diagnose(
+                state,
+                "request-timeout",
+                sentAt === null
+                  ? `${method} not sent after ${timeoutMs} ms`
+                  : `${method} after ${Date.now() - sentAt} ms, rpc frames ${state.rpcFramesWaiting} waiting, last ${state.rpcFrameAt > sentAt ? `${Date.now() - state.rpcFrameAt} ms ago` : "before the send"}`,
+              );
+              // A late answer can be a busy host or a dead path. The probe tells which, and replaces a
+              // dead peer at once: before, only a return to the tab or a lost path found it.
+              probe(state, "read-timeout");
             };
             const samples: ProbeSample[] = [];
             const checkPath = () => {
@@ -1821,7 +1898,7 @@ export function createRemoteTeamPeer(
    * `online` update with `resync` at the end, because events between the two connections are lost.
    * A replacement that fails ends as any failed connection does: with an `offline` update.
    */
-  function replaceQuietly(state: PeerState, actions: ActionsRef): void {
+  function replaceQuietly(state: PeerState, actions: ActionsRef, reason?: "event-stall"): void {
     if (state.replacing) return;
     state.replacing = true;
     const deadline = Date.now() + REPLACE_WAIT_FOR_WRITES_MS;
@@ -1836,7 +1913,8 @@ export function createRemoteTeamPeer(
         setTimeout(attempt, REPLACE_RECHECK_MS);
         return;
       }
-      diagnose(state, "ice-recovery", `replace after ${state.iceRestarts} ICE restarts`);
+      if (reason) diagnose(state, "replace", reason);
+      else diagnose(state, "ice-recovery", `replace after ${state.iceRestarts} ICE restarts`);
       void runPeerEffect(
         Effect.gen(function* () {
           yield* closePeer(actions.current.endSession, true);
@@ -1927,6 +2005,98 @@ export function createRemoteTeamPeer(
     }, delay);
   }
 
+  /**
+   * Checks the silence of a connected peer. A peer that heard nothing for `heartbeatIdleMs` sends the
+   * compatibility probe; a probe that gets no answer fails the peer, and the consumer connects again.
+   */
+  function armHeartbeat(state: PeerState): void {
+    if (heartbeatIdleMs <= 0 || !active || state.closed || peer !== state || state.heartbeatTimer !== null) return;
+    state.heartbeatTimer = setTimeout(() => {
+      state.heartbeatTimer = null;
+      if (!active || state.closed || peer !== state) return;
+      // A path that ICE recovers, or a replacement that waits, has its own deadline.
+      if (isPeerOnline(state) && !state.replacing && Date.now() - state.inboundAt >= heartbeatIdleMs)
+        probe(state, "heartbeat");
+      armHeartbeat(state);
+    }, heartbeatCheckMs);
+  }
+
+  function stopHeartbeat(state: PeerState): void {
+    if (state.heartbeatTimer !== null) clearTimeout(state.heartbeatTimer);
+    state.heartbeatTimer = null;
+  }
+
+  /** Sends the compatibility probe of a check. Its path judgment fails a dead peer in seconds. */
+  function probe(state: PeerState, reason: NonNullable<PeerState["probing"]>): void {
+    if (state.probing !== null || !active || state.closed || peer !== state || !isPeerOnline(state)) return;
+    state.probing = reason;
+    diagnose(state, "probe", reason);
+    void runPeerEffect(requestEffect("GET", TEAM_API_ROUTES.compatibility, {}, undefined, undefined, PROBE_TIMEOUT_MS))
+      .catch(() => undefined)
+      .finally(() => {
+        if (state.probing === reason) state.probing = null;
+      });
+  }
+
+  function probeFailure(probing: PeerState["probing"]): ConnectionReportReason {
+    if (probing === "heartbeat") return "heartbeat-timeout";
+    if (probing === "read-timeout") return "read-timeout";
+    return "probe-timeout";
+  }
+
+  /** Counts the end of an authenticated peer, so the next connection to its host can report it. */
+  function noteFailure(state: PeerState, failure: RemotePeerError): void {
+    if (!state.authenticated) return;
+    noteRecovery(state, state.failureReason ?? connectionReportReason(failure.reference));
+  }
+
+  function noteRecovery(state: PeerState, reason: string): void {
+    const count = (recoveries.get(reason) ?? 0) + 1;
+    recoveries.set(reason, count);
+    recoveryTotal += 1;
+    pendingReport = { hostId: state.hostId, reason, failedAt: Date.now(), route: state.route };
+  }
+
+  /**
+   * Tells the host why the last connection to it ended, so its log shows a recovery that only this
+   * client saw. Only a fork host reads it; an older one answers with an error, which nothing waits for.
+   */
+  function sendConnectionReport(state: PeerState) {
+    return Effect.suspend(() => {
+      const report = pendingReport;
+      if (
+        !report ||
+        report.hostId !== state.hostId ||
+        !state.authenticated ||
+        hostSupport?.hostId !== state.hostId ||
+        !hostSupport.capabilities.includes(FORK_HOST_CAPABILITY)
+      )
+        return Effect.void;
+      pendingReport = null;
+      const payload = {
+        reason: report.reason,
+        count: recoveries.get(report.reason) ?? 1,
+        total: recoveryTotal,
+        offlineMs: Math.max(0, Date.now() - report.failedAt),
+        route: report.route,
+      };
+      return notify(
+        Effect.gen(function* () {
+          const frame = yield* peerDecode(() =>
+            encodeTeamProtocolV2Frame({
+              version: 2,
+              type: "request",
+              requestId: createTeamRequestId((size) => crypto.getRandomValues(new Uint8Array(size))),
+              operation: CONNECTION_REPORT_OPERATION,
+              payload,
+            }),
+          );
+          yield* sendPayload(state, "rpc", frame);
+        }),
+      );
+    });
+  }
+
   function failPeer(
     state: PeerState,
     error: unknown,
@@ -1936,6 +2106,7 @@ export function createRemoteTeamPeer(
     if (state.closed || peer !== state) return;
     const failure = referenced(failureMessage(error), failureReference(error));
     const message = failure.message;
+    noteFailure(state, failure);
     diagnose(state, "failed", code ? `${code}: ${message}` : message);
     rejectConnection(state, failure);
     void runPeerEffect(connectionOffline(state, failure, actions, code));
@@ -1954,6 +2125,7 @@ export function createRemoteTeamPeer(
       if (state.closed || peer !== state) return;
       const failure = referenced(failureMessage(error), failureReference(error));
       const message = failure.message;
+      noteFailure(state, failure);
       yield* notify(diagnosticCall(state, "failed", code ? `${code}: ${message}` : message));
       rejectConnection(state, failure);
       yield* notify(connectionOffline(state, failure, actions, code));
@@ -2048,6 +2220,7 @@ export function createRemoteTeamPeer(
       if (state.disconnectedTimer !== null) clearTimeout(state.disconnectedTimer);
       if (state.iceRecoveryTimer !== null) clearTimeout(state.iceRecoveryTimer);
       if (state.hostWaitTimer !== null) clearTimeout(state.hostWaitTimer);
+      stopHeartbeat(state);
       state.socket?.close();
       state.connection?.close();
       for (const decoder of Object.values(state.decoders)) decoder?.reset();

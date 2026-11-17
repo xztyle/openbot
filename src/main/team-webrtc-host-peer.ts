@@ -6,6 +6,10 @@ import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { browserViewStreamSessionId } from "@openbot/contracts/team-protocol/browser-view-v1";
 import {
+  CONNECTION_REPORT_OPERATION,
+  decodeConnectionReport,
+} from "@openbot/contracts/team-protocol/connection-report-v1";
+import {
   BROWSER_SIGN_IN_CAPABILITY,
   supportsTeamSemanticTags,
   TEAM_AGENT_CREATE_MODEL_CAPABILITY,
@@ -568,6 +572,17 @@ export class TeamWebRtcHostPeer {
   ): Effect.fn.Return<TeamProtocolV2RpcFrame, RemoteWorkflowError, HostPeerTransport> {
     const startedAt = performance.now();
     return yield* Effect.gen({ self: this }, function* () {
+      if (request.operation === CONNECTION_REPORT_OPERATION) {
+        logConnectionReport(request.payload);
+        return yield* remoteDecode(() =>
+          decodeTeamProtocolV2RpcFrame({
+            version: 2,
+            type: "response",
+            requestId: request.requestId,
+            result: { status: 204, body: {} },
+          }),
+        );
+      }
       if (request.operation !== "http.request" || !isHttpRequest(request.payload)) {
         return yield* new RemoteWorkflowError({
           cause: new GatewayError(400, "unsupported_operation", "The Team API operation is not supported."),
@@ -1181,6 +1196,28 @@ function logRpcSend(
     responseBytes: Buffer.byteLength(response),
     sendMs,
     ...(queue ? { rpcQueuedBytes: queue.queuedBytes, connectionQueuedBytes: queue.connectionQueuedBytes } : {}),
+  });
+}
+
+/** One report per this time from all clients. A member cannot fill the log with them. */
+const CONNECTION_REPORT_INTERVAL_MS = 1_000;
+let lastConnectionReportAt = 0;
+
+/**
+ * Logs why a client's last connection ended, as the client found it, such as a path that delivered
+ * nothing while both ends read it as connected. The report holds only fixed words and numbers.
+ */
+function logConnectionReport(payload: TeamProtocolV2Json): void {
+  const report = decodeConnectionReport(payload);
+  const now = performance.now();
+  if (!report || now - lastConnectionReportAt < CONNECTION_REPORT_INTERVAL_MS) return;
+  lastConnectionReportAt = now;
+  logger.info(`A client connected again after its connection failed: ${report.reason}.`, {
+    reason: report.reason,
+    count: report.count,
+    total: report.total,
+    offlineMs: report.offlineMs,
+    ...(report.route ? { route: report.route } : {}),
   });
 }
 

@@ -57,6 +57,10 @@ interface MainBridgeMessage {
   /** On the `command-complete` of a send: the bytes that waited in its channel before it, and in all channels. */
   queuedBytes?: number;
   connectionQueuedBytes?: number;
+  /** On `path-state`: the connection state of a device's connection to this host. */
+  connectionState?: RTCPeerConnectionState;
+  /** On `path-state`: the candidate types of the selected pair, such as `relay(tls) -> srflx/udp`. Never an address. */
+  route?: string;
 }
 
 interface PeerState {
@@ -605,6 +609,7 @@ function createPeerConnection(state: PeerState, iceServers: RTCIceServer[]): RTC
   });
   state.peerConnection = connection;
   state.iceRestarts = 0;
+  if (state.signalHost) watchDevicePath(state, connection);
   connection.onicecandidate = (event) => {
     // An empty candidate marks the end of gathering. Signal v1 accepts only candidates.
     if (!event.candidate?.candidate || !state.connectionId) return;
@@ -868,6 +873,72 @@ function clearPathRecovery(state: PeerState): void {
 function requiredDescriptionSdp(description: RTCSessionDescriptionInit): string {
   if (!isString(description.sdp)) throw new Error("WebRTC did not create a session description.");
   return description.sdp;
+}
+
+/**
+ * The server log shows the path of each device's connection to this host: its state changes, the
+ * candidate types of each selected pair (after each ICE restart too), and each TURN allocation that
+ * the TURN server refused. A path that stops while both ends read it as connected leaves no other
+ * trace on the host.
+ */
+function watchDevicePath(state: PeerState, connection: RTCPeerConnection): void {
+  const report = () => {
+    if (state.peerConnection !== connection) return;
+    void devicePathRoute(connection).then(
+      (route) =>
+        post({
+          type: "path-state",
+          peerId: state.id,
+          connectionState: connection.connectionState,
+          ...(route ? { route } : {}),
+        }),
+      () => undefined,
+    );
+  };
+  connection.addEventListener("connectionstatechange", report);
+  // The selected pair changes without a state change after an ICE restart. The transport exists once
+  // the data channels negotiated SCTP.
+  let watched: RTCIceTransport | null = null;
+  const watchTransport = () => {
+    const transport = connection.sctp?.transport.iceTransport ?? null;
+    if (!transport || transport === watched) return;
+    watched = transport;
+    transport.addEventListener("selectedcandidatepairchange", report);
+  };
+  connection.addEventListener("connectionstatechange", watchTransport);
+  connection.addEventListener("icecandidateerror", (event) => {
+    // 300-699 is an error answer of the TURN server, such as 486 (allocation quota) or 401 (credentials).
+    // Codes from 700 are local: a server that is not reachable from one of several interfaces.
+    if (state.peerConnection !== connection || event.errorCode < 300 || event.errorCode >= 700) return;
+    post({
+      type: "path-error",
+      peerId: state.id,
+      code: String(event.errorCode),
+      route: turnTransport(event.url),
+    });
+  });
+}
+
+/** `udp`, `tcp` or `tls` for a TURN URL. The URL names no credential, but only the transport leaves. */
+function turnTransport(url: string): "tls" | "tcp" | "stun" | "udp" {
+  if (url.startsWith("turns:")) return "tls";
+  return /[?&]transport=tcp/u.test(url) ? "tcp" : url.startsWith("stun:") ? "stun" : "udp";
+}
+
+/** The selected pair as `local -> remote`; a local relay names the transport to the TURN server, such as `relay(tls)`. */
+async function devicePathRoute(connection: RTCPeerConnection): Promise<string | null> {
+  const stats = await connection.getStats();
+  const transport = [...stats.values()].find((report) => report.type === "transport" && report.selectedCandidatePairId);
+  const pair = transport ? stats.get(transport.selectedCandidatePairId) : null;
+  if (!pair) return null;
+  const local = stats.get(pair.localCandidateId);
+  const remote = stats.get(pair.remoteCandidateId);
+  const name = (candidate: { candidateType?: unknown; protocol?: unknown; relayProtocol?: unknown } | undefined) => {
+    const type = isString(candidate?.candidateType) ? candidate.candidateType : "unknown";
+    const relay = isString(candidate?.relayProtocol) ? `(${candidate.relayProtocol})` : "";
+    return `${type}${relay}/${isString(candidate?.protocol) ? candidate.protocol : "unknown"}`;
+  };
+  return `${name(local)} -> ${name(remote)}`;
 }
 
 async function reportSelectedPath(state: PeerState, connection: RTCPeerConnection): Promise<void> {

@@ -4,12 +4,26 @@ import type { RemoteDesktopIceServer } from "@openbot/contracts/ipc";
 import type { IceServer } from "@openbot/contracts/signal-protocol/messages";
 import type { RemoteMemberRole } from "@openbot/contracts/signal-protocol/ticket";
 import { sourceText } from "@openbot/i18n/source";
+import { createOpenBotLogger } from "@openbot/logging";
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
 import { BrowserWindow, MessageChannelMain, type MessagePortMain } from "electron";
 import { z } from "zod";
 import { RemoteWorkflowError, remoteCall, remoteDecode } from "./remote-service-effects";
 
 export type TeamWebRtcChannel = "rpc" | "events" | "files" | "desktop";
+
+const logger = createOpenBotLogger("team-webrtc-host");
+
+/**
+ * Logs the path of a device's connection to this host: a lost or failed path as a warning, the others,
+ * with the selected pair after each change, as information. A client that finds a dead path reports it
+ * when it connects again, so the two lines together show whether ICE on the host saw the loss.
+ */
+function logDevicePath(state: NonNullable<BridgeMessage["connectionState"]>, route: string | undefined): void {
+  const details = route ? { state, route } : { state };
+  if (state === "disconnected" || state === "failed") logger.warn("A device connection lost its path.", details);
+  else logger.info("A device connection path changed.", details);
+}
 
 /** The bytes that waited to leave before a sent payload: in its channel, and in all channels of the connection. */
 export interface TeamWebRtcSendQueue {
@@ -92,6 +106,12 @@ const bridgeMessageSchema = z
     iceServers: z.array(iceServerSchema).optional(),
     queuedBytes: z.number().int().nonnegative().optional(),
     connectionQueuedBytes: z.number().int().nonnegative().optional(),
+    connectionState: z.enum(["new", "connecting", "connected", "disconnected", "failed", "closed"]).optional(),
+    // Candidate types and transports only, such as `relay(tls)/udp -> srflx/udp`: never an address.
+    route: z
+      .string()
+      .regex(/^[a-z()/ ->]{1,80}$/u)
+      .optional(),
   })
   .loose();
 type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
@@ -374,6 +394,13 @@ export class TeamWebRtcBridge extends EventEmitter<TeamWebRtcBridgeEvents> {
       });
     else if (message.type === "peer-disconnected") this.emit("disconnected", message.peerId);
     else if (message.type === "ice-path" && message.path) this.emit("path", message.peerId, message.path);
+    else if (message.type === "path-state" && message.connectionState)
+      logDevicePath(message.connectionState, message.route);
+    else if (message.type === "path-error" && message.code && /^[3-6]\d\d$/u.test(message.code))
+      logger.warn("The TURN server refused an allocation for a device connection.", {
+        code: Number(message.code),
+        ...(message.route ? { transport: message.route } : {}),
+      });
     else if (message.type === "ice-servers" && message.iceServers) {
       this.#iceServers.set(message.peerId, message.iceServers);
       this.emit("iceServers", message.peerId, structuredClone(message.iceServers));

@@ -8,6 +8,7 @@ export * from "./confirm-dialog";
 export * from "./dynamic-island";
 export * from "./dynamic-island-identity";
 export * from "./error-reference";
+export * from "./field-list-press";
 export * from "./form";
 export * from "./icons";
 export * from "./image-remove-button";

@@ -66,11 +66,26 @@ function createKeyboardOpen() {
         window.scrollTo(0, 0);
       } else root.removeProperty(VISIBLE_HEIGHT_PROPERTY);
     };
+    /*
+     * Focus can leave a field for a moment, such as when a press in its list or menu moves it and
+     * the field takes it back. Giving the page its full height back at once moved the composer and
+     * its list under the finger before the tap ended, so a focus change is measured a frame later.
+     * A keyboard that really closes also resizes the viewport.
+     */
+    let focusFrame: number | undefined;
+    const focusChanged = () => {
+      if (focusFrame !== undefined) cancelAnimationFrame(focusFrame);
+      focusFrame = requestAnimationFrame(() => {
+        focusFrame = undefined;
+        measure();
+      });
+    };
     viewport.addEventListener("resize", measure);
-    document.addEventListener("focusout", measure);
+    document.addEventListener("focusout", focusChanged);
     return () => {
+      if (focusFrame !== undefined) cancelAnimationFrame(focusFrame);
       viewport.removeEventListener("resize", measure);
-      document.removeEventListener("focusout", measure);
+      document.removeEventListener("focusout", focusChanged);
       document.documentElement.style.removeProperty(VISIBLE_HEIGHT_PROPERTY);
     };
   });

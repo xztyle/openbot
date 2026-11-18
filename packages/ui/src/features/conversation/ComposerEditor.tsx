@@ -3,7 +3,7 @@ import { attachmentReferenceIds } from "@openbot/contracts/attachment-references
 import { serializeChatTagReference } from "@openbot/contracts/chat-tag-references";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { DraftAttachment } from "@openbot/contracts/ipc";
-import { AtSign, Badge, Blocks, Hash, Listbox, Lock, Puzzle } from "@openbot/ui";
+import { AtSign, Badge, Blocks, createFieldListPress, Hash, Listbox, Lock, Puzzle } from "@openbot/ui";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import { Dynamic, Portal } from "@solidjs/web";
 import {
@@ -326,6 +326,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
     },
   );
   const pickerOptionElements = new Map<string, HTMLElement>();
+  const pickerPress = createFieldListPress();
   const pickerFades = createScrollFades();
   onCleanup(pickerFades.stop);
   // The list has no scrollbar, so the fade is the only sign that more options wait below it.
@@ -594,8 +595,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
         if (props.formatRequest !== undefined || props.formatShortcuts)
           savedSelection = serializedEditorSelection(editor);
       }
-      // A dismissed picker stays closed until the user types or clicks again.
-      if (mention()) updateMention();
+      // A dismissed picker stays closed until the user types or clicks again. A press in the picker
+      // can move the selection on a phone before the tap ends; the option it picks closes it.
+      if (mention() && !pickerPress.pressing()) updateMention();
     };
     document.addEventListener("selectionchange", selectionChanged);
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleCaretScroll);
@@ -1147,6 +1149,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
           isComposing = false;
           // A menu can return the focus to the editor within this delay; keep the picker it opened.
           window.setTimeout(() => {
+            if (pickerPress.pressing()) return;
             const ownerDocument = editor?.ownerDocument;
             if (!ownerDocument?.hasFocus() || ownerDocument.activeElement !== editor) setMention(null);
           }, 100);
@@ -1196,6 +1199,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
         <Portal mount={pickerFrame().mount ?? document.body}>
           <div
             class="mention-picker"
+            {...pickerPress.rootProps}
             style={{
               "--mention-picker-bottom": `${pickerFrame().bottom}px`,
               "--mention-picker-rows": pickerStatus() === null ? matchingOptions().length : 1,
@@ -1255,11 +1259,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                           "mention-picker-option-active": activeOption() === optionIndex(),
                         },
                       ]}
-                      onPointerDown={(event) => {
-                        event.preventDefault();
-                        // The composer focuses its editor on any pointerdown that is not a control.
-                        event.stopPropagation();
-                      }}
+                      {...pickerPress.optionProps(() => insertOption(option))}
                       onMouseEnter={() => setActiveOption(optionIndex())}
                     >
                       {option.type === "agent" ? (

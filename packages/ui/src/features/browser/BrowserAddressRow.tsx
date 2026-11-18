@@ -1,5 +1,16 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import { Button, CircleDot, Clock3, Globe2, Input, Listbox, Search, TriangleAlert, UserRound } from "@openbot/ui";
+import {
+  Button,
+  CircleDot,
+  Clock3,
+  createFieldListPress,
+  Globe2,
+  Input,
+  Listbox,
+  Search,
+  TriangleAlert,
+  UserRound,
+} from "@openbot/ui";
 import { AgentAvatar } from "@openbot/ui/features/agents/AgentAvatar";
 import {
   BrowserBackIcon,
@@ -73,6 +84,7 @@ export function BrowserAddressRow(props: {
   const [address, setAddress] = createStore<AddressState>({ ...CLOSED_ADDRESS });
   let input: HTMLInputElement | undefined;
   let selectOnPointerUp = false;
+  const suggestionPress = createFieldListPress();
 
   const tab = () => props.view.activeTab;
   const profile = () => {
@@ -289,7 +301,10 @@ export function BrowserAddressRow(props: {
             if (selectOnPointerUp) event.preventDefault();
             selectOnPointerUp = false;
           }}
-          onBlur={() => setAddress(() => ({ ...CLOSED_ADDRESS }))}
+          onBlur={() => {
+            // A tap on a suggestion keeps the field; the suggestion it picks closes the list.
+            if (!suggestionPress.pressing()) setAddress(() => ({ ...CLOSED_ADDRESS }));
+          }}
         />
         <Show when={listOpen()}>
           <Listbox.Root<BrowserSuggestion>
@@ -297,6 +312,7 @@ export function BrowserAddressRow(props: {
             id={listId}
             aria-label={t("browser.address.suggestions")}
             class="ui-popover-menu-surface browser-full-suggest"
+            {...suggestionPress.rootProps}
             options={rows()}
             optionValue={(row) => row.id}
             optionTextValue={(row) => row.title}
@@ -320,7 +336,7 @@ export function BrowserAddressRow(props: {
                   item={item}
                   id={`${listId}-${index()}`}
                   class="browser-full-suggest-row"
-                  onPointerDown={(event: PointerEvent) => event.preventDefault()}
+                  {...suggestionPress.optionProps(() => choose(row))}
                 >
                   <SuggestionIcon view={props.view} row={row} />
                   <span class="browser-full-suggest-title">{row.title}</span>

@@ -818,9 +818,26 @@
   height: 20px;
 }
 
-.mention-picker-option:hover,
 .mention-picker-option-active {
   background: var(--openbot-hover);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mention-picker-option:hover {
+    background: var(--openbot-hover);
+  }
+}
+
+/* A finger needs a 44px row. Fewer rows show, so the panel leaves the thread above it in view. */
+@media (pointer: coarse) {
+  .mention-picker {
+    --mention-picker-row-height: 44px;
+    --mention-picker-visible-rows: 5;
+  }
+
+  .mention-picker-list {
+    touch-action: pan-y;
+  }
 }
 
 .mention-picker-option .agent-avatar {

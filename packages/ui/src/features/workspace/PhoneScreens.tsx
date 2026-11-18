@@ -7,6 +7,7 @@ import { useText } from "../../text";
 import { cx } from "../../utils";
 import { SpaceMark, type SpaceRailItem } from "../spaces/SpaceRail";
 import { AiBadge, AvatarStack, MemberAvatar } from "./WorkspaceAvatar";
+import { WorkspaceContextMenu } from "./WorkspaceContextMenu";
 import type { SidebarDirectMessage } from "./WorkspaceSidebar";
 import { useRecentTime } from "./workspace-format";
 import type { WorkspaceMember, WorkspaceMenuItem } from "./workspace-types";
@@ -332,6 +333,8 @@ export interface PhoneDirectMessagesProps {
   activeId?: string | undefined;
   onSelect: (id: string) => void;
   onCompose?: (() => void) | undefined;
+  /** The actions of a row, such as mute: a long press opens them in a sheet. */
+  rowMenu?: ((id: string) => readonly WorkspaceMenuItem[]) | undefined;
 }
 
 function directName(row: SidebarDirectMessage): string {
@@ -372,56 +375,61 @@ export function PhoneDirectMessages(props: PhoneDirectMessagesProps): JSX.Elemen
                 const first = () => row().members[0];
                 return (
                   <li>
-                    <Button
-                      variant="ghost"
-                      class="ws-phone-dm"
-                      data-unread={unread() ? "" : undefined}
-                      data-muted={row().muted ? "" : undefined}
-                      data-active={props.activeId === row().id ? "" : undefined}
-                      aria-label={[
-                        directName(row()),
-                        count() > 0
-                          ? t("workspace.sidebar.mentions", { count: count() })
-                          : unread()
-                            ? t("workspace.sidebar.unread")
-                            : "",
-                        row().muted ? t("workspace.sidebar.muted") : "",
-                        row().preview ?? "",
-                      ]
-                        .filter(Boolean)
-                        .join(", ")}
-                      onClick={() => props.onSelect(row().id)}
+                    <WorkspaceContextMenu
+                      items={() => props.rowMenu?.(row().id) ?? []}
+                      label={t("workspace.sidebar.rowMenu", { name: directName(row()) })}
                     >
-                      <span class="ws-phone-dm-face" aria-hidden="true">
-                        <Show
-                          when={row().kind === "group"}
-                          fallback={
-                            <Show when={first()} fallback={<UsersRound />}>
-                              {(member) => <MemberAvatar member={member()} size="lg" showStatus animate />}
+                      <Button
+                        variant="ghost"
+                        class="ws-phone-dm"
+                        data-unread={unread() ? "" : undefined}
+                        data-muted={row().muted ? "" : undefined}
+                        data-active={props.activeId === row().id ? "" : undefined}
+                        aria-label={[
+                          directName(row()),
+                          count() > 0
+                            ? t("workspace.sidebar.mentions", { count: count() })
+                            : unread()
+                              ? t("workspace.sidebar.unread")
+                              : "",
+                          row().muted ? t("workspace.sidebar.muted") : "",
+                          row().preview ?? "",
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}
+                        onClick={() => props.onSelect(row().id)}
+                      >
+                        <span class="ws-phone-dm-face" aria-hidden="true">
+                          <Show
+                            when={row().kind === "group"}
+                            fallback={
+                              <Show when={first()} fallback={<UsersRound />}>
+                                {(member) => <MemberAvatar member={member()} size="lg" showStatus animate />}
+                              </Show>
+                            }
+                          >
+                            <AvatarStack members={row().members} max={2} size="md" />
+                          </Show>
+                        </span>
+                        <span class="ws-phone-dm-copy" aria-hidden="true">
+                          <span class="ws-phone-dm-top">
+                            <span class="ws-phone-dm-name ws-truncate">{directName(row())}</span>
+                            <Show when={row().kind === "dm" && first()?.kind === "agent"}>
+                              <AiBadge />
                             </Show>
-                          }
-                        >
-                          <AvatarStack members={row().members} max={2} size="md" />
-                        </Show>
-                      </span>
-                      <span class="ws-phone-dm-copy" aria-hidden="true">
-                        <span class="ws-phone-dm-top">
-                          <span class="ws-phone-dm-name ws-truncate">{directName(row())}</span>
-                          <Show when={row().kind === "dm" && first()?.kind === "agent"}>
-                            <AiBadge />
-                          </Show>
-                          <Show when={row().at}>
-                            {(at) => <span class="ws-phone-dm-time">{recentTime(at())}</span>}
-                          </Show>
+                            <Show when={row().at}>
+                              {(at) => <span class="ws-phone-dm-time">{recentTime(at())}</span>}
+                            </Show>
+                          </span>
+                          <span class="ws-phone-dm-bottom">
+                            <span class="ws-phone-dm-preview ws-truncate">{row().preview ?? ""}</span>
+                            <Show when={count() > 0 && !row().muted}>
+                              <span class="ws-mention-badge">{countText(count())}</span>
+                            </Show>
+                          </span>
                         </span>
-                        <span class="ws-phone-dm-bottom">
-                          <span class="ws-phone-dm-preview ws-truncate">{row().preview ?? ""}</span>
-                          <Show when={count() > 0 && !row().muted}>
-                            <span class="ws-mention-badge">{countText(count())}</span>
-                          </Show>
-                        </span>
-                      </span>
-                    </Button>
+                      </Button>
+                    </WorkspaceContextMenu>
                   </li>
                 );
               }}

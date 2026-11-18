@@ -246,6 +246,22 @@ try {
     assert.equal(await tab(page, "workspace.phone.dms").getAttribute("aria-current"), "page");
   });
 
+  await step(page, "a long press on a DM opens its actions in a sheet", async () => {
+    const row = page.getByRole("button", { name: /Ana.*Lunch at 12\?/u });
+    const box = await row.boundingBox();
+    assert.ok(box, "The DM row has no box.");
+    const cdp = await context.newCDPSession(page);
+    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2, id: 1 };
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+    const sheet = page.getByRole("dialog");
+    await sheet.getByRole("button", { name: english("workspace.sidebar.mute") }).waitFor({ timeout: UI_WAIT_MS });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await cdp.detach();
+    await shot(page, "04b-dm-actions");
+    await page.keyboard.press("Escape");
+    await sheet.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+  });
+
   // 6. Activity: an item opens its conversation; Back returns to Activity.
   await step(page, "the Activity tab opens an item and Back returns to it", async () => {
     await tab(page, "workspace.phone.activity").tap();

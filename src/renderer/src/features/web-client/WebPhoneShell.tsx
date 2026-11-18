@@ -4,6 +4,7 @@ import {
   Activity,
   ArrowLeftRight,
   Bell,
+  BellOff,
   Blocks,
   Bot,
   Ellipsis,
@@ -11,11 +12,14 @@ import {
   House,
   KeyRound,
   LayoutDashboard,
+  MessageSquare,
   MessageSquareText,
   MessagesSquare,
   Pencil,
   Plus,
+  Settings,
   Workflow,
+  X,
 } from "@openbot/ui";
 import {
   type PhoneChip,
@@ -30,13 +34,14 @@ import {
 } from "@openbot/ui/features/workspace/PhoneScreens";
 import { type PhoneTab, PhoneTabBar } from "@openbot/ui/features/workspace/PhoneTabBar";
 import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSidebar";
+import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, Match, Switch } from "solid-js";
 import { useWorkspaceMenu, WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceMentions } from "../workspace/WorkspaceView";
 import { WorkspaceViewPane } from "../workspace/WorkspaceViews";
 import { useWorkspace } from "../workspace/workspace-context";
-import { previewText } from "../workspace/workspace-model";
+import { AGENT_DM_PREFIX, previewText } from "../workspace/workspace-model";
 
 /** The tabs of the phone workspace, as Slack's bottom bar: Home, DMs, Activity and More. */
 export type WebPhoneTab = "home" | "dms" | "activity" | "more";
@@ -173,6 +178,41 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
       };
     }),
   );
+  /** A long press on a DM: open it, its agent's settings, mute it, or close it. */
+  function directMenu(id: string): WorkspaceMenuItem[] {
+    const muted = ws.isMuted(id);
+    const agentId = id.startsWith(AGENT_DM_PREFIX) ? id.slice(AGENT_DM_PREFIX.length) : null;
+    return [
+      {
+        id: "open",
+        label: t("common.open"),
+        icon: <MessageSquare aria-hidden="true" />,
+        onSelect: () => ws.openConversation(id),
+      },
+      ...(agentId
+        ? [
+            {
+              id: "agent-settings",
+              label: t("workspace.profile.settings"),
+              icon: <Settings aria-hidden="true" />,
+              onSelect: () => ws.env.openAgentSettings(agentId),
+            },
+          ]
+        : []),
+      {
+        id: "mute",
+        label: t(muted ? "workspace.sidebar.unmute" : "workspace.sidebar.mute"),
+        icon: muted ? <Bell aria-hidden="true" /> : <BellOff aria-hidden="true" />,
+        onSelect: () => ws.setMuted(id, !muted),
+      },
+      {
+        id: "close",
+        label: t("workspace.sidebar.close"),
+        icon: <X aria-hidden="true" />,
+        onSelect: () => ws.closeConversation(id),
+      },
+    ];
+  }
   /** Slack's DMs badge counts conversations, not messages. */
   const unreadDms = () =>
     ws.sidebarDirectMessages().filter((row) => !row.muted && (row.unread || (row.mentionCount ?? 0) > 0)).length;
@@ -270,6 +310,7 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
           <Match when={props.tab === "dms"}>
             <PhoneDirectMessages
               rows={directRows()}
+              rowMenu={directMenu}
               activeId={ws.activeConversationId()}
               onSelect={(id) => ws.openConversation(id)}
               onCompose={() => ws.openDialog({ kind: "new-message" })}

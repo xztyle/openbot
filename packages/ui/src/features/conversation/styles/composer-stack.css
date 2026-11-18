@@ -34,6 +34,19 @@
   padding-bottom: var(--composer-stack-overlap);
 }
 
+/*
+ * Saved replies sit between the stack and the input. The stack does not tuck then: its lower edge
+ * would cover the chips.
+ */
+.composer-stack:has(+ .saved-replies):has(
+  > :not(.agent-queue-slot),
+  > .agent-queue-slot > .agent-queue-slot-inner > *
+) {
+  --composer-stack-overlap: 0px;
+
+  margin-bottom: var(--openbot-space-1);
+}
+
 .composer-stack :is(.awaiting-replies, .agent-queue-panel, .composer-notice, .composer-reply-preview) {
   z-index: auto;
   margin: -1px 0 0;

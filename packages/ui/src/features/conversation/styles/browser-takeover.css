@@ -805,3 +805,10 @@
     transition-duration: 0.01ms;
   }
 }
+
+.browser-takeover-copy p.browser-takeover-unavailable {
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-warning-soft);
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+  color: var(--openbot-warning-text);
+}

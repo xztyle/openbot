@@ -237,6 +237,8 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
    * start yet. The card carries the page preview instead, and pressing that preview is what opens
    * the page -- the same gesture as a preview card in the browser sidebar.
    */
+  /** Whether this client can show the tab of the takeover. A web client without the browser view cannot. */
+  const canOpenBrowserTakeoverTab = () => Boolean(browserTakeoverTab()) && deps.props.browserEnabled !== false;
   function openBrowserTakeoverTab() {
     const tab = browserTakeoverTab();
     if (!tab) return;
@@ -643,6 +645,7 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     browserTakeoverResolution,
     respondToBrowserTakeover,
     openBrowserTakeoverTab,
+    canOpenBrowserTakeoverTab,
     localSignIn: {
       state: localSignIn,
       canStart: canSignInLocally,

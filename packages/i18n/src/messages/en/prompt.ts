@@ -68,6 +68,8 @@ export const messages = defineMessages("prompt", {
   "prompt.browser.returning": "Returning…",
   "prompt.browser.done": "I’m done",
   "prompt.browser.takeOver": "Take over",
+  "prompt.browser.openUnavailable":
+    "This page cannot open here. Open the chat of {name} in the OpenBot app on a computer that is connected to this server, finish the step there, then press I’m done.",
   "prompt.browser.cancelling": "Cancelling…",
   "prompt.browser.pageFallback": "Browser page",
   "prompt.browser.hostFallback": "the browser",

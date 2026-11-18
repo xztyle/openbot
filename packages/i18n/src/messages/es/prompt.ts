@@ -67,6 +67,8 @@ export const messages = {
   "prompt.browser.returning": "Volviendo…",
   "prompt.browser.done": "He terminado",
   "prompt.browser.takeOver": "Tomar el control",
+  "prompt.browser.openUnavailable":
+    "Esta página no se puede abrir aquí. Abre el chat de {name} en la app de OpenBot en un ordenador conectado a este servidor, completa el paso allí y pulsa He terminado.",
   "prompt.browser.cancelling": "Cancelando…",
   "prompt.browser.pageFallback": "Página del navegador",
   "prompt.browser.hostFallback": "el navegador",

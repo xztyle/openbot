@@ -174,6 +174,7 @@ export function ConversationTimeline() {
     openExternalMessageUrl,
     openReactionMessageId,
     openBrowserTakeoverTab,
+    canOpenBrowserTakeoverTab,
     localSignIn,
     openRoutineSettings,
     openSkillSettings,
@@ -1742,7 +1743,14 @@ export function ConversationTimeline() {
                   tab={browserTakeoverTab()}
                   preview={browserTakeoverPreview().preview}
                   previewStatus={browserTakeoverPreview().status}
-                  onOpen={openBrowserTakeoverTab}
+                  onOpen={canOpenBrowserTakeoverTab() ? openBrowserTakeoverTab : undefined}
+                  openUnavailable={
+                    canOpenBrowserTakeoverTab()
+                      ? undefined
+                      : t("prompt.browser.openUnavailable", {
+                          name: interactionAgentName() ?? t("chat.message.agentFallback"),
+                        })
+                  }
                   onComplete={() => respondToBrowserTakeover("complete")}
                   onCancel={() => respondToBrowserTakeover("cancel")}
                   onSignInLocally={localSignIn.canStartForTakeover() ? localSignIn.startForTakeover : undefined}

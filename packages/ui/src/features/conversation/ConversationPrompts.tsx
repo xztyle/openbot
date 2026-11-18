@@ -344,6 +344,11 @@ interface BrowserTakeoverCardProps {
   previewStatus: "idle" | "loading" | "ready" | "failed";
   decision?: "complete" | "cancel" | null;
   onOpen?: () => void;
+  /**
+   * Why this client cannot show the page, and what to do instead. It shows when there is no
+   * `onOpen`, as on a web client whose host gives no browser view.
+   */
+  openUnavailable?: string | undefined;
   onComplete: () => Promise<boolean>;
   onCancel: () => Promise<boolean>;
   /** A sign-in on this computer for the tab, when the page refuses a sign-in from the server. */
@@ -477,6 +482,9 @@ function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
       </Show>
       <div class="browser-takeover-copy">
         <p>{body()}</p>
+        <Show when={!props.onOpen && !props.decision && props.openUnavailable}>
+          {(note) => <p class="browser-takeover-unavailable">{note()}</p>}
+        </Show>
       </div>
 
       <figure class="browser-takeover-preview">

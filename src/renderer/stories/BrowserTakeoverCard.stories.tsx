@@ -50,6 +50,15 @@ export const Loading: Story = {
   args: { preview: null, previewStatus: "loading" },
 };
 
+/** A web client whose host gives no browser view: the card says where to finish the step. */
+export const CannotOpenHere: Story = {
+  args: {
+    onOpen: undefined,
+    openUnavailable:
+      "This page cannot open here. Open the chat of Chief in the OpenBot app on a computer that is connected to this server, finish the step there, then press I’m done.",
+  },
+};
+
 export const PreviewUnavailable: Story = {
   args: { preview: null, previewStatus: "failed" },
 };

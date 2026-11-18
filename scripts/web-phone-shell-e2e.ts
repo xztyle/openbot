@@ -297,6 +297,29 @@ try {
   });
   await shot(page, "09-trading-home");
 
+  // 9. The app on the Home Screen: a swipe from the left edge goes back one screen.
+  const app = await context.newPage();
+  app.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
+  // Safari tells a Home Screen app by `navigator.standalone`.
+  await app.addInitScript(() => Object.defineProperty(Navigator.prototype, "standalone", { get: () => true }));
+  const cdp = await context.newCDPSession(app);
+  await step(app, "an edge swipe goes back in the Home Screen app", async () => {
+    await app.goto(`${origin}/app/general/c/general`, COMMIT);
+    await channelPane(app, "general").waitFor({ timeout: UI_WAIT_MS });
+    const y = 400;
+    const touch = (type: "touchStart" | "touchMove" | "touchEnd", x: number) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type,
+        touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 1 }],
+      });
+    await touch("touchStart", 4);
+    for (const x of [20, 60, 120, 180, 240, 300]) await touch("touchMove", x);
+    await touch("touchEnd", 300);
+    await tab(app, "workspace.phone.home").waitFor({ timeout: UI_WAIT_MS });
+    assert.equal(await channelPane(app, "general").isVisible(), false);
+  });
+  await app.close();
+
   report.passed =
     report.steps.every((item) => item.passed) && report.pageErrors.length === 0 && report.consoleErrors.length === 0;
 } finally {

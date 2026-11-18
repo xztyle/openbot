@@ -280,6 +280,7 @@ import { webRoutineFlowsHost } from "./web-routine-flows";
 import { webScheduleSource } from "./web-schedule";
 import { readWebServerSelection, writeWebServerSelection } from "./web-server-selection";
 import { createWebServerSettings } from "./web-server-settings";
+import { createWebSwipeBack } from "./web-swipe-back";
 import { webTasksSource } from "./web-tasks";
 import { createWebTitleBadge } from "./web-title-badge";
 import { createWebUsagePort } from "./web-usage-port";
@@ -2162,6 +2163,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     else paneHistory.stop();
   });
   createEffect(phoneLevel, (level) => paneHistory.sync(level));
+  // The app on the Home Screen has no Safari edge swipe: the left edge swipe goes back one screen.
+  createWebSwipeBack({
+    enabled: () => phone() && mobilePane() === "conversation",
+    surface: () => document.querySelector<HTMLElement>(".web-app-frame > .app-frame-panes"),
+    onBack: () => window.history.back(),
+  });
   /** The workspace on a phone: Slack's tabs over the list, and one screen at a time. */
   const phoneShell = () => phone() && workspaceOn() && !noHost();
   const [phoneTab, setPhoneTab] = createSignal<WebPhoneTab>("home");

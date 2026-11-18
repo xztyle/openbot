@@ -10,11 +10,16 @@ body {
   overscroll-behavior: none;
 }
 
+/*
+ * The page covers the whole screen of a phone (`viewport-fit=cover`), so the app keeps clear of the
+ * notch and the rounded corners itself. The bottom inset belongs to the tab bar and the composer.
+ */
 .web-app {
   min-width: 0;
   height: 100dvh;
   color: var(--openbot-text-primary);
   background: var(--openbot-bg-canvas);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -298,7 +303,6 @@ body {
     min-height: 0;
     flex: 1 1 auto;
     flex-direction: column;
-    padding-top: env(safe-area-inset-top, 0px);
   }
 
   .web-app-frame:has(.web-mobile-navigation[data-keyboard-open]) .ws-phone-tabs {

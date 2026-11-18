@@ -10,9 +10,7 @@
   justify-content: center;
   border-top: 1px solid var(--openbot-border);
   background: color-mix(in srgb, var(--openbot-bg-sidebar) 94%, transparent);
-  padding: var(--openbot-space-1) max(var(--openbot-space-2), env(safe-area-inset-right, 0px))
-    max(var(--openbot-space-1), env(safe-area-inset-bottom, 0px))
-    max(var(--openbot-space-2), env(safe-area-inset-left, 0px));
+  padding: var(--openbot-space-1) var(--openbot-space-2) max(var(--openbot-space-1), env(safe-area-inset-bottom, 0px));
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
 }
@@ -101,7 +99,7 @@
   flex-direction: column;
   gap: var(--openbot-space-2);
   border-bottom: 1px solid var(--openbot-border);
-  padding: max(var(--openbot-space-2), env(safe-area-inset-top, 0px)) 0 var(--openbot-space-2);
+  padding: var(--openbot-space-2) 0;
 }
 
 .ws-phone-home-bar {
@@ -264,7 +262,7 @@
   align-items: center;
   gap: var(--openbot-space-2);
   border-bottom: 1px solid var(--openbot-border);
-  padding: env(safe-area-inset-top, 0px) var(--openbot-space-2) 0 var(--openbot-space-4);
+  padding: 0 var(--openbot-space-2) 0 var(--openbot-space-4);
 }
 
 .ws-phone-screen-title {

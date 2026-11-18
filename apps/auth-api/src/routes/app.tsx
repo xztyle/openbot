@@ -7,7 +7,12 @@ export const Route = createFileRoute("/app")({
       { title: "OpenBot web" },
       { name: "robots", content: "noindex, nofollow" },
       // The keyboard shrinks the layout on Android, so the composer stays above it instead of under it.
-      { name: "viewport", content: "width=device-width, initial-scale=1, interactive-widget=resizes-content" },
+      // The page takes the full screen of a phone; the tab bar and the composer keep clear of the home
+      // indicator and the notch with the safe-area insets.
+      {
+        name: "viewport",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
+      },
       // The app can be added to the home screen. Safari reads these, and not the manifest, for its own mode.
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },

@@ -9,7 +9,13 @@ import {
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { type ChannelStore, restatedResultSql } from "./channel-store";
-import { ACTIVITY_ITEM_TYPES, CHOICE_SQL, READ_FORWARD_SQL } from "./channel-thread-projection";
+import {
+  ACTIVITY_ITEM_TYPES,
+  CHANNEL_POSITION_SQL,
+  CHOICE_SQL,
+  READ_FORWARD_SQL,
+  THREAD_POSITION_SQL,
+} from "./channel-thread-projection";
 import type { ChannelViewer } from "./channel-visibility";
 import {
   databaseRow,
@@ -117,6 +123,38 @@ export class ChannelReadState {
       ],
       (db) => {
         db.prepare(CHOICE_SQL).run(channelId, rootId, memberId, followed ? 1 : 0);
+        return null;
+      },
+    );
+  }
+
+  /**
+   * Mark unread: sets the channel position of these ids of one person exactly, also back, or the
+   * position in the thread `rootId`. `ChannelService` checks the message first.
+   */
+  setPosition(
+    channelId: string,
+    rootId: string | null,
+    memberIds: readonly string[],
+    throughSequence: number,
+    operationId: string,
+  ): void {
+    const [first] = memberIds;
+    if (first === undefined) return;
+    this.store.database.dispatch(
+      `channel-unread:${first}:${operationId}`,
+      [
+        {
+          aggregateType: "channel",
+          aggregateId: channelId,
+          eventType: rootId === null ? "channel.unread" : "channel.thread-unread",
+          payload: rootId === null ? { memberIds, throughSequence } : { memberIds, rootId, throughSequence },
+        },
+      ],
+      (db) => {
+        for (const memberId of memberIds)
+          if (rootId === null) db.prepare(CHANNEL_POSITION_SQL).run(channelId, memberId, throughSequence);
+          else db.prepare(THREAD_POSITION_SQL).run(channelId, rootId, memberId, throughSequence);
         return null;
       },
     );

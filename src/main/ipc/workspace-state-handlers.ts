@@ -1,11 +1,14 @@
-// The reader's own workspace state on a server: the read position and follow of each thread. The
+// The reader's own workspace state on a server: the read position and follow of each thread, and
+// mark unread. The
 // local host answers from the channel service as the host user of this computer; a joined server
 // answers through workspace-read-state-v1 (`fork-host-v1`), and one without it fails.
 
 import {
+  decodeWorkspaceReadPosition,
   decodeWorkspaceThreadState,
   decodeWorkspaceThreadStates,
   parseWorkspaceFollowThreadInput,
+  parseWorkspaceMarkUnreadInput,
   parseWorkspaceReadThreadInput,
   parseWorkspaceThreadStatesInput,
 } from "@openbot/contracts/ipc";
@@ -49,6 +52,12 @@ export function workspaceStateHandlers({ service, host, remoteServers }: Workspa
       local: (input) => service.channels.followThread(input, host.channelActor(), host.channelViewer()),
       remote: (input, serverId) =>
         remote(serverId, WORKSPACE_READ_STATE_ROUTES.followThread, input, decodeWorkspaceThreadState),
+    }),
+    workspaceMarkUnread: scopedHandler(parseWorkspaceMarkUnreadInput, {
+      // The reader here is the host user of this computer, as in `listChannels`.
+      local: (input) => service.channels.markUnread(input, host.channelActor(), host.channelViewer(), true),
+      remote: (input, serverId) =>
+        remote(serverId, WORKSPACE_READ_STATE_ROUTES.markUnread, input, decodeWorkspaceReadPosition),
     }),
   };
 }

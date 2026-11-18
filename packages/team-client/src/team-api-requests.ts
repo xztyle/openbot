@@ -36,6 +36,7 @@ import {
   decodeWorkspaceDecisions,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
+  decodeWorkspaceReadPosition,
   decodeWorkspaceSecrets,
   decodeWorkspaceSecretValue,
   decodeWorkspaceSidebar,
@@ -324,6 +325,7 @@ export type TeamChannelsApi = Pick<
   | "workspaceThreadStates"
   | "workspaceReadThread"
   | "workspaceFollowThread"
+  | "workspaceMarkUnread"
   | "channelTyping"
   | "workspaceDmAgents"
   | "workspaceFleet"
@@ -392,6 +394,8 @@ export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOp
       workspacePost(WORKSPACE_READ_STATE_ROUTES.readThread, decodeWorkspaceThreadState, input),
     workspaceFollowThread: (input) =>
       workspacePost(WORKSPACE_READ_STATE_ROUTES.followThread, decodeWorkspaceThreadState, input),
+    workspaceMarkUnread: (input) =>
+      workspacePost(WORKSPACE_READ_STATE_ROUTES.markUnread, decodeWorkspaceReadPosition, input),
     // A host without the workspace shows no typing: the signal is dropped there.
     channelTyping: async (input) => {
       if (options.supportsWorkspace?.() === false) return;

@@ -14,6 +14,14 @@ export const FOLLOW_SQL = `INSERT OR IGNORE INTO projection_channel_thread_follo
 export const READ_FORWARD_SQL = `INSERT INTO projection_channel_thread_reads (channel_id, root_id, member_id, through_sequence)
   VALUES (?, ?, ?, ?)
   ON CONFLICT(channel_id, root_id, member_id) DO UPDATE SET through_sequence = MAX(through_sequence, excluded.through_sequence)`;
+/** Sets a channel position exactly, also back: a person marked a message unread. */
+export const CHANNEL_POSITION_SQL = `INSERT INTO projection_channel_reads (channel_id, member_id, through_sequence)
+  VALUES (?, ?, ?)
+  ON CONFLICT(channel_id, member_id) DO UPDATE SET through_sequence = excluded.through_sequence`;
+/** Sets a thread position exactly, also back. */
+export const THREAD_POSITION_SQL = `INSERT INTO projection_channel_thread_reads (channel_id, root_id, member_id, through_sequence)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT(channel_id, root_id, member_id) DO UPDATE SET through_sequence = excluded.through_sequence`;
 export const CHOICE_SQL = `INSERT INTO projection_channel_thread_follows (channel_id, root_id, member_id, followed, explicit)
   VALUES (?, ?, ?, ?, 1)
   ON CONFLICT(channel_id, root_id, member_id) DO UPDATE SET followed = excluded.followed, explicit = 1`;
@@ -66,10 +74,11 @@ export function projectThreadState(db: DatabaseSync, channelId: string, message:
 }
 
 /**
- * Applies one stored thread state event of a channel during a rebuild (`ChannelStore.rebuild`).
+ * Applies one stored read state event of a channel during a rebuild (`ChannelStore.rebuild`): a thread
+ * read, a follow, an unread mark or the import of migration 52.
  * Answers false for an event that is not one of them.
  */
-export function replayThreadStateEvent(db: DatabaseSync, channelId: string, type: unknown, value: unknown): boolean {
+export function replayReadStateEvent(db: DatabaseSync, channelId: string, type: unknown, value: unknown): boolean {
   if (!isDynamicRecord(value)) return false;
   switch (type) {
     case "channel.thread-read":
@@ -82,6 +91,22 @@ export function replayThreadStateEvent(db: DatabaseSync, channelId: string, type
         throw new Error("Invalid thread follow event.");
       db.prepare(CHOICE_SQL).run(channelId, value.rootId, value.memberId, value.followed ? 1 : 0);
       return true;
+    case "channel.unread":
+    case "channel.thread-unread": {
+      const memberIds = Array.isArray(value.memberIds) ? value.memberIds : [];
+      if (!memberIds.length || !memberIds.every(isString) || typeof value.throughSequence !== "number")
+        throw new Error("Invalid unread event.");
+      const rootId = value.rootId;
+      if (type === "channel.unread") {
+        for (const memberId of memberIds)
+          db.prepare(CHANNEL_POSITION_SQL).run(channelId, memberId, value.throughSequence);
+        return true;
+      }
+      if (!isString(rootId)) throw new Error("Invalid unread event.");
+      for (const memberId of memberIds)
+        db.prepare(THREAD_POSITION_SQL).run(channelId, rootId, memberId, value.throughSequence);
+      return true;
+    }
     case "channel.thread-state-imported": {
       const reads = Array.isArray(value.reads) ? value.reads : [];
       const follows = Array.isArray(value.follows) ? value.follows : [];

@@ -140,3 +140,59 @@ export function decodeWorkspaceThreadStates(value: unknown): WorkspaceThreadStat
     throw new Error("Invalid thread states.");
   return { channelId: value.channelId, threads: value.threads.map(decodeWorkspaceThreadState) };
 }
+
+/**
+ * Mark unread: the reader's position in the channel, or in the thread `threadRootId`, moves to just
+ * before `messageId`, also back, so that message and the ones after it are unread again. Without
+ * `threadRootId` the message must show in the channel; with it, it must be the root or a reply of
+ * that thread.
+ */
+export interface WorkspaceMarkUnreadInput {
+  operationId: string;
+  channelId: string;
+  messageId: string;
+  threadRootId?: string;
+}
+
+/** The reader's position in a channel, or in one thread of it, and what is unread after it. */
+export interface WorkspaceReadPosition {
+  channelId: string;
+  threadRootId?: string;
+  throughSequence: number;
+  /** In a channel: as `ChannelSummary.unreadCount`. In a thread: as `WorkspaceThreadState.unreadCount`. */
+  unreadCount: number;
+}
+
+export function parseWorkspaceMarkUnreadInput(value: unknown): WorkspaceMarkUnreadInput {
+  if (
+    !isDynamicRecord(value) ||
+    !isIdentifier(value.operationId) ||
+    !isIdentifier(value.channelId) ||
+    !isIdentifier(value.messageId) ||
+    !(value.threadRootId === undefined || isIdentifier(value.threadRootId))
+  )
+    throw new Error("Provide a valid message to mark unread.");
+  return {
+    operationId: value.operationId,
+    channelId: value.channelId,
+    messageId: value.messageId,
+    ...(value.threadRootId === undefined ? {} : { threadRootId: value.threadRootId }),
+  };
+}
+
+export function decodeWorkspaceReadPosition(value: unknown): WorkspaceReadPosition {
+  if (
+    !isDynamicRecord(value) ||
+    !isIdentifier(value.channelId) ||
+    !(value.threadRootId === undefined || isIdentifier(value.threadRootId)) ||
+    !sequence(value.throughSequence) ||
+    !sequence(value.unreadCount)
+  )
+    throw new Error("Invalid read position.");
+  return {
+    channelId: value.channelId,
+    ...(value.threadRootId === undefined ? {} : { threadRootId: value.threadRootId }),
+    throughSequence: value.throughSequence,
+    unreadCount: value.unreadCount,
+  };
+}

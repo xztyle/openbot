@@ -44,6 +44,8 @@ import {
   type WorkspaceAgentChannelDefaults,
   type WorkspaceChannelCommand,
   type WorkspaceFollowThreadInput,
+  type WorkspaceMarkUnreadInput,
+  type WorkspaceReadPosition,
   type WorkspaceReadThreadInput,
   type WorkspaceThreadState,
   type WorkspaceThreadStates,
@@ -526,6 +528,49 @@ export class ChannelService {
     this.readState.setFollowed(channel.id, input.threadRootId, actor.id, input.followed, input.operationId);
     this.hooks.readStateChanged?.(actor.id, channel.id, input.threadRootId);
     return this.readState.state(channel, input.threadRootId, viewer);
+  }
+
+  /**
+   * Mark unread: the person's position in the channel, or in one thread of it, moves to just before a
+   * message, also back. Every id that names the person moves, so no alias keeps the message read.
+   * @param signedOutMessagesAreTheirs as for `ChannelStore.list`, for the unread count of the answer.
+   */
+  markUnread(
+    input: WorkspaceMarkUnreadInput,
+    actor: { id: string },
+    viewer: ChannelViewer,
+    signedOutMessagesAreTheirs = false,
+  ): WorkspaceReadPosition {
+    const channel = this.#visibleChannel(input.channelId, viewer);
+    const message = this.store.message(channel.id, input.messageId);
+    if (!message || message.deletedAt !== undefined)
+      throw new Error(sourceText("error.backend.channelMessageNotFound"));
+    const throughSequence = Math.max(0, message.sequence - 1);
+    const memberIds = [actor.id, ...[...viewer.ids].filter((id) => id !== actor.id)];
+    const rootId = input.threadRootId;
+    if (rootId === undefined) {
+      if (message.threadRootId !== undefined && message.alsoInChannel !== true)
+        throw new Error(sourceText("error.backend.channelMessageNotFound"));
+      this.readState.setPosition(channel.id, null, memberIds, throughSequence, input.operationId);
+      this.publish(channel.id);
+      this.hooks.readStateChanged?.(actor.id, channel.id);
+      return {
+        channelId: channel.id,
+        throughSequence,
+        unreadCount: this.store.unreadCount(channel.id, actor.id, signedOutMessagesAreTheirs),
+      };
+    }
+    this.readState.requireRoot(channel.id, rootId);
+    if (message.id !== rootId && message.threadRootId !== rootId)
+      throw new Error(sourceText("error.backend.channelMessageNotFound"));
+    this.readState.setPosition(channel.id, rootId, memberIds, throughSequence, input.operationId);
+    this.hooks.readStateChanged?.(actor.id, channel.id, rootId);
+    return {
+      channelId: channel.id,
+      threadRootId: rootId,
+      throughSequence,
+      unreadCount: this.readState.unreadReplies(channel, rootId, throughSequence, viewer),
+    };
   }
 
   /**

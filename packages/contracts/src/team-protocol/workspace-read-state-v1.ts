@@ -15,6 +15,12 @@
 //   person follow the thread or stop following it, and answers the thread state. A person follows a
 //   thread by themselves when they write its root or a reply, or a reply mentions them, and every
 //   thread of a DM or a group; a choice to stop wins over a later mention, not over their own reply.
+// - `POST /v1/workspace/channels/mark-unread` `{ operationId, channelId, messageId, threadRootId? }`
+//   moves the person's position in the channel, or in the thread, to just before the message, also
+//   back, and answers `{ channelId, threadRootId?, throughSequence, unreadCount }`. Without
+//   `threadRootId` the message must show in the channel; with it, it must be the root or a reply of
+//   that thread. A message the person cannot see answers 404. The channel `read` command of
+//   channels-v1 still moves the channel position forward only.
 // - The event `workspace-read-state-changed` (`{ channelId, threadRootId? }` beside its type): a read
 //   position or a follow of the member of the session changed. Only that member's sessions get it.
 //   A client reads the thread states or the activity again. An older client ignores it.
@@ -35,6 +41,7 @@ export const WORKSPACE_READ_STATE_ROUTES = {
   threadStates: "/v1/workspace/threads/states",
   readThread: "/v1/workspace/threads/read",
   followThread: "/v1/workspace/threads/follow",
+  markUnread: "/v1/workspace/channels/mark-unread",
 } as const;
 
 const threadState = fields({
@@ -58,6 +65,13 @@ export const WORKSPACE_READ_STATE_CODECS: ReadonlyMap<string, OptionalRouteCodec
     adminRoute(
       fields({ operationId: identifier, channelId: identifier, threadRootId: identifier, throughSequence: count }),
       threadState,
+    ),
+  ],
+  [
+    WORKSPACE_READ_STATE_ROUTES.markUnread,
+    adminRoute(
+      fields({ operationId: identifier, channelId: identifier, messageId: identifier }, { threadRootId: identifier }),
+      fields({ channelId: identifier, throughSequence: count, unreadCount: count }, { threadRootId: identifier }),
     ),
   ],
   [

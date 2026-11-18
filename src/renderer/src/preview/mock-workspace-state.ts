@@ -5,6 +5,8 @@ import type {
   ChannelReadInput,
   ChannelSummary,
   WorkspaceFollowThreadInput,
+  WorkspaceMarkUnreadInput,
+  WorkspaceReadPosition,
   WorkspaceReadThreadInput,
   WorkspaceThreadState,
   WorkspaceThreadStates,
@@ -94,6 +96,32 @@ export function createMockWorkspaceState(
       const after = await requireState(input.channelId, input.threadRootId);
       emit({ type: "workspace-read-state-changed", channelId: input.channelId, threadRootId: input.threadRootId });
       return after;
+    },
+    workspaceMarkUnread: async (input: WorkspaceMarkUnreadInput): Promise<WorkspaceReadPosition> => {
+      const page = await channels.readChannel({
+        channelId: input.channelId,
+        ...(input.threadRootId ? { threadRootId: input.threadRootId } : {}),
+      });
+      const message = page.messages.find((item) => item.id === input.messageId);
+      if (!message) throw new Error("This message is unavailable.");
+      const throughSequence = Math.max(0, message.sequence - 1);
+      if (input.threadRootId) {
+        positions.set(key(input.channelId, input.threadRootId), throughSequence);
+        const after = await requireState(input.channelId, input.threadRootId);
+        emit({ type: "workspace-read-state-changed", channelId: input.channelId, threadRootId: input.threadRootId });
+        return {
+          channelId: input.channelId,
+          threadRootId: input.threadRootId,
+          throughSequence,
+          unreadCount: after.unreadCount,
+        };
+      }
+      emit({ type: "workspace-read-state-changed", channelId: input.channelId });
+      return {
+        channelId: input.channelId,
+        throughSequence,
+        unreadCount: page.messages.filter((item) => item.sequence > throughSequence && !own(item)).length,
+      };
     },
   };
 }

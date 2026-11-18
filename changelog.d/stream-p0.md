@@ -8,3 +8,5 @@
 - Follow threads as in Slack. You follow a thread that you started, replied to or were mentioned in,
   and every thread of a DM or a group. You can stop following a thread; a later mention does not
   follow it again, your own reply does. The Threads view lists the threads that you follow.
+- Mark a message unread. Your read position in the channel, or in the thread, moves to just before
+  the message, so it and the messages after it are unread again.

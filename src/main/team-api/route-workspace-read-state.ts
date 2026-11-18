@@ -1,5 +1,6 @@
 import {
   parseWorkspaceFollowThreadInput,
+  parseWorkspaceMarkUnreadInput,
   parseWorkspaceReadThreadInput,
   parseWorkspaceThreadStatesInput,
 } from "@openbot/contracts/ipc";
@@ -41,7 +42,7 @@ export function found<T>(read: () => T): T {
 
 /**
  * The read state routes of this fork (`workspace-read-state-v1.ts`, under `fork-host-v1`): the thread
- * states of the member of the session, and their reads and follows. The member reads and changes
+ * states of the member of the session, their reads and follows, and mark unread. The member reads and changes
  * only their own state, in channels they can see; the id comes from the session, never the body.
  */
 export async function routeWorkspaceReadState(
@@ -71,6 +72,13 @@ export async function routeWorkspaceReadState(
       return json(
         200,
         found(() => channels.readThread(input, actor, viewer)),
+      );
+    }
+    case WORKSPACE_READ_STATE_ROUTES.markUnread: {
+      const input = parsed(parseWorkspaceMarkUnreadInput, body);
+      return json(
+        200,
+        found(() => channels.markUnread(input, actor, viewer)),
       );
     }
     default: {

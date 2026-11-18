@@ -569,6 +569,8 @@ import type { WorkspaceSidebar, WorkspaceSidebarPrefs } from "./ipc-workspace-si
 import type { WorkspaceSpaceAction, WorkspaceSpaceActionResult, WorkspaceSpaces } from "./ipc-workspace-spaces";
 import type {
   WorkspaceFollowThreadInput,
+  WorkspaceMarkUnreadInput,
+  WorkspaceReadPosition,
   WorkspaceReadThreadInput,
   WorkspaceThreadState,
   WorkspaceThreadStates,
@@ -1372,6 +1374,10 @@ export const IPC_ENDPOINTS = {
     workspaceReadThread: scopedRequest<WorkspaceReadThreadInput, WorkspaceThreadState>()("agent:workspace:read-thread"),
     workspaceFollowThread: scopedRequest<WorkspaceFollowThreadInput, WorkspaceThreadState>()(
       "agent:workspace:follow-thread",
+    ),
+    // Mark unread: the reader's position in a channel or a thread moves to just before a message.
+    workspaceMarkUnread: scopedRequest<WorkspaceMarkUnreadInput, WorkspaceReadPosition>()(
+      "agent:workspace:mark-unread",
     ),
     // The person types in a channel, or stopped (`ChannelTypingInput`). `scopedEvent` carries
     // `channel-typing` with the people who type and the agents that think or work there. A joined

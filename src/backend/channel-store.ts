@@ -22,7 +22,7 @@ import {
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
-import { ACTIVITY_ITEM_TYPES, projectThreadState, replayThreadStateEvent } from "./channel-thread-projection";
+import { ACTIVITY_ITEM_TYPES, projectThreadState, replayReadStateEvent } from "./channel-thread-projection";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
 import { deleteAggregateHistory, deleteThreadAttachments } from "./database/database-core";
 import {
@@ -98,6 +98,25 @@ interface ChannelChange {
   tasks: ChannelTask[];
   assignments: ChannelAssignment[];
 }
+
+/**
+ * The SQL condition of a message row `m` of the channel `c` that is unread for a member: after their
+ * channel position, not written by them (the two parameters after the member), shown in the channel,
+ * and not a step, a note or a routing event (the last parameter is the routing event prefix).
+ */
+const CHANNEL_UNREAD_SQL = `m.sequence > COALESCE(
+                  (SELECT r.through_sequence FROM projection_channel_reads AS r
+                    WHERE r.channel_id = c.channel_id AND r.member_id = ?), 0)
+                AND json_extract(m.message_json, '$.author.id') IS NOT ?
+                AND json_extract(m.message_json, '$.author.id') IS NOT ?
+                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'plan'
+                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'subagents'
+                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'channel-change'
+                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'commentary'
+                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') NOT LIKE ?
+                AND json_extract(m.message_json, '$.deletedAt') IS NULL
+                AND (json_extract(m.message_json, '$.threadRootId') IS NULL
+                  OR json_extract(m.message_json, '$.alsoInChannel') = 1)`;
 
 /** The SQL condition of a message row that the channel transcript shows: no thread reply, no deleted message. */
 const TOP_LEVEL_MESSAGE = `(json_extract(message_json, '$.threadRootId') IS NULL
@@ -248,20 +267,7 @@ export class ChannelStore {
                   OR json_extract(m.message_json, '$.alsoInChannel') = 1)
               ORDER BY m.sequence DESC, m.message_id DESC LIMIT 1) AS latest_json,
             (SELECT COUNT(*) FROM projection_channel_messages AS m
-              WHERE m.channel_id = c.channel_id
-                AND m.sequence > COALESCE(
-                  (SELECT r.through_sequence FROM projection_channel_reads AS r
-                    WHERE r.channel_id = c.channel_id AND r.member_id = ?), 0)
-                AND json_extract(m.message_json, '$.author.id') IS NOT ?
-                AND json_extract(m.message_json, '$.author.id') IS NOT ?
-                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'plan'
-                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'subagents'
-                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'channel-change'
-                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') != 'commentary'
-                AND COALESCE(json_extract(m.message_json, '$.message.itemType'), '') NOT LIKE ?
-                AND json_extract(m.message_json, '$.deletedAt') IS NULL
-                AND (json_extract(m.message_json, '$.threadRootId') IS NULL
-                  OR json_extract(m.message_json, '$.alsoInChannel') = 1)) AS unread,
+              WHERE m.channel_id = c.channel_id AND ${CHANNEL_UNREAD_SQL}) AS unread,
             (SELECT COUNT(*) FROM projection_channel_tasks AS t
               WHERE t.channel_id = c.channel_id
                 AND json_extract(t.task_json, '$.state') = 'running') AS running,
@@ -320,6 +326,31 @@ export class ChannelStore {
         ),
       };
     });
+  }
+
+  /** The unread count of one channel for a member, as `list` gives it. */
+  unreadCount(channelId: string, memberId: string, signedOutMessagesAreTheirs = false): number {
+    const excludedId = signedOutMessagesAreTheirs ? SIGNED_OUT_CHANNEL_MEMBER_ID : memberId;
+    const row = databaseRow(
+      this.database.connection
+        .prepare(
+          `SELECT COUNT(*) AS unread FROM projection_channels AS c
+             JOIN projection_channel_messages AS m ON m.channel_id = c.channel_id
+            WHERE c.channel_id = ? AND ${CHANNEL_UNREAD_SQL}`,
+        )
+        .get(channelId, memberId, memberId, excludedId, `${CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX}%`),
+    );
+    return row ? requiredNumberColumn(row, "unread") : 0;
+  }
+
+  /** The channel position of a member: 0 when they never read the channel. */
+  readPosition(channelId: string, memberId: string): number {
+    const row = databaseRow(
+      this.database.connection
+        .prepare("SELECT through_sequence FROM projection_channel_reads WHERE channel_id = ? AND member_id = ?")
+        .get(channelId, memberId),
+    );
+    return row ? requiredNumberColumn(row, "through_sequence") : 0;
   }
 
   create(channelId: string, draft: ChannelDraft): Channel {
@@ -1116,7 +1147,7 @@ export class ChannelStore {
             break;
           }
           default:
-            if (!replayThreadStateEvent(db, channelId, event.event_type, value))
+            if (!replayReadStateEvent(db, channelId, event.event_type, value))
               throw new Error("Unknown channel event.");
         }
       }

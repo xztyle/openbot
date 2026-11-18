@@ -5,6 +5,8 @@
 // - A person follows a thread they started, replied to or were mentioned in; a choice to stop wins
 //   over a later mention, and their own reply follows it again. The Threads view of the activity lists
 //   the followed threads with the unread count of the thread position.
+// - Mark unread moves the channel or the thread position to just before a message, also back; the
+//   channel `read` command still moves it forward only.
 // - Each change reaches only the person's own sessions (`workspace-read-state-changed`).
 // - A channel the person cannot see answers 404; a client without `fork-host-v1` gets 400.
 // - The state survives a rebuild of the channel from its events and a host restart, and the thread
@@ -89,6 +91,20 @@ async function follow(person: Person, channelId: string, rootId: string, followe
   });
   assert.equal(response.status, 200, `Follow returned ${response.status}: ${JSON.stringify(response.body)}`);
   return threadState(response.body);
+}
+
+async function markUnread(
+  person: Person,
+  channelId: string,
+  messageId: string,
+  threadRootId?: string,
+): Promise<{ status: number; body: unknown }> {
+  return readState(WORKSPACE_READ_STATE_ROUTES.markUnread, person, {
+    operationId: randomUUID(),
+    channelId,
+    messageId,
+    ...(threadRootId ? { threadRootId } : {}),
+  });
 }
 
 /** Sends a message and answers it as the channel page has it. */
@@ -262,6 +278,108 @@ try {
     return list;
   });
 
+  await step("mark unread moves the channel position back to just before a message", async () => {
+    const first = await send(member, channelId, "Status: design done.");
+    const second = await send(member, channelId, "Status: build started.");
+    const page = await e2e.page(owner.token, channelId);
+    await e2e.releasedCommand(owner.token, {
+      type: "read",
+      operationId: randomUUID(),
+      channelId,
+      throughSequence: Number(page.throughSequence),
+    });
+    const memberBefore = (await e2e.channels(member.token)).find((entry) => entry.id === channelId)?.unreadCount;
+    const heard = e2e.nextMessage(ownerSocket, readStateEvent(channelId));
+    const quiet = e2e.noMessage(memberSocket, (value) => {
+      const event = workspaceReadStateEvent(value);
+      return event !== null && event.threadRootId === undefined;
+    });
+    const marked = await markUnread(owner, channelId, String(first.id));
+    assert.equal(marked.status, 200, `Mark unread returned ${marked.status}: ${JSON.stringify(marked.body)}`);
+    const position = record(marked.body, "read position");
+    assert.equal(position.throughSequence, Number(first.sequence) - 1);
+    assert.equal(position.unreadCount, 2, "The marked message and the one after it are not unread.");
+    await heard;
+    await quiet;
+    const summary = (await e2e.channels(owner.token)).find((entry) => entry.id === channelId);
+    assert.equal(summary?.unreadCount, 2, "The sidebar count does not follow the mark.");
+    const memberSummary = (await e2e.channels(member.token)).find((entry) => entry.id === channelId);
+    assert.equal(memberSummary?.unreadCount, memberBefore, "Another person's mark changed the member's count.");
+    // The released `read` command moves forward only, as before.
+    await e2e.releasedCommand(owner.token, {
+      type: "read",
+      operationId: randomUUID(),
+      channelId,
+      throughSequence: 0,
+    });
+    assert.equal((await e2e.channels(owner.token)).find((entry) => entry.id === channelId)?.unreadCount, 2);
+    await e2e.releasedCommand(owner.token, {
+      type: "read",
+      operationId: randomUUID(),
+      channelId,
+      throughSequence: Number(second.sequence),
+    });
+    assert.equal((await e2e.channels(owner.token)).find((entry) => entry.id === channelId)?.unreadCount, 0);
+    return position;
+  });
+
+  await step("mark unread in a thread moves the thread position, and not the channel's", async () => {
+    const thread1 = await e2e.page(owner.token, channelId, thread.rootId);
+    assert.ok(Array.isArray(thread1.messages));
+    const memberReply = record(thread1.messages[1], "member reply");
+    const channelBefore = (await e2e.channels(owner.token)).find((entry) => entry.id === channelId)?.unreadCount;
+    const heard = e2e.nextMessage(ownerSocket, readStateEvent(channelId, thread.rootId));
+    const marked = await markUnread(owner, channelId, String(memberReply.id), thread.rootId);
+    assert.equal(marked.status, 200, `Mark unread returned ${marked.status}: ${JSON.stringify(marked.body)}`);
+    const position = record(marked.body, "thread position");
+    assert.equal(position.threadRootId, thread.rootId);
+    assert.equal(position.throughSequence, Number(memberReply.sequence) - 1);
+    assert.equal(position.unreadCount, 1, "Only the member's reply is unread: the owner wrote the later one.");
+    await heard;
+    const state = await stateOf(owner, channelId, thread.rootId);
+    assert.equal(state.throughSequence, Number(memberReply.sequence) - 1);
+    assert.equal(state.unreadCount, 1);
+    assert.equal(
+      (await e2e.channels(owner.token)).find((entry) => entry.id === channelId)?.unreadCount,
+      channelBefore,
+      "A thread mark changed the channel count.",
+    );
+    const fromRoot = await markUnread(owner, channelId, thread.rootId, thread.rootId);
+    assert.equal(fromRoot.status, 200);
+    const root = record(thread1.messages[0], "root");
+    assert.equal(record(fromRoot.body, "root position").throughSequence, Number(root.sequence) - 1);
+    // Read forward again, so the later steps see the thread read.
+    await readThread(owner, channelId, thread.rootId, Number(record(thread1.messages.at(-1), "last reply").sequence));
+    return position;
+  });
+
+  await step(
+    "mark unread refuses a reply outside its thread, a deleted message and a message of a hidden channel",
+    async () => {
+      const thread1 = await e2e.page(owner.token, channelId, thread.rootId);
+      assert.ok(Array.isArray(thread1.messages));
+      const reply = record(thread1.messages[1], "reply");
+      const asChannel = await markUnread(owner, channelId, String(reply.id));
+      assert.equal(asChannel.status, 404, `A thread reply marked in the channel answered ${asChannel.status}.`);
+      const otherThread = await markUnread(owner, channelId, String(reply.id), mentioned.rootId);
+      assert.equal(otherThread.status, 404, `A reply of another thread answered ${otherThread.status}.`);
+      const gone = await send(owner, channelId, "A note to delete.");
+      await e2e.command(owner.token, {
+        type: "delete",
+        operationId: randomUUID(),
+        channelId,
+        messageId: String(gone.id),
+      });
+      const deleted = await markUnread(owner, channelId, String(gone.id));
+      assert.equal(deleted.status, 404, `A deleted message answered ${deleted.status}.`);
+      const hidden = await createChannel(owner, "finance", "private");
+      const secret = await send(owner, hidden, "Budget");
+      const refused = await markUnread(member, hidden, String(secret.id));
+      assert.equal(refused.status, 404, `A hidden channel answered ${refused.status}.`);
+      return { asChannel: 404, otherThread: 404, deleted: 404, hidden: 404 };
+    },
+  );
+
   await step("a channel the person cannot see answers 404; a root that is a reply answers 404", async () => {
     const hidden = await createChannel(owner, "board", "private");
     const root = await send(owner, hidden, "Board notes");
@@ -323,16 +441,26 @@ try {
   const before = await step("a rebuild of the channel from its events keeps every thread state", async () => {
     const ownerBefore = await states(owner, channelId, [thread.rootId, mentioned.rootId]);
     const memberBefore = await states(member, channelId, [thread.rootId, mentioned.rootId]);
+    // A mark that moved the channel position back, then a read forward: the replay keeps the order.
+    const unread = async () => (await e2e.channels(owner.token)).find((entry) => entry.id === channelId)?.unreadCount;
+    const page = await e2e.page(owner.token, channelId);
+    assert.ok(Array.isArray(page.messages));
+    const last = record(page.messages.at(-1), "last message");
+    assert.equal((await markUnread(owner, channelId, String(last.id))).status, 200);
+    const countBefore = await unread();
     e2e.host().agents.channels.store.rebuild(channelId);
+    assert.equal(await unread(), countBefore, "A rebuild changed the channel count.");
     assert.deepEqual(await states(owner, channelId, [thread.rootId, mentioned.rootId]), ownerBefore);
     assert.deepEqual(await states(member, channelId, [thread.rootId, mentioned.rootId]), memberBefore);
-    return { ownerBefore, memberBefore };
+    return { ownerBefore, memberBefore, countBefore };
   });
 
   await step("a restart of the host keeps every thread state", async () => {
     await e2e.restart();
     assert.deepEqual(await states(owner, channelId, [thread.rootId, mentioned.rootId]), before.ownerBefore);
     assert.deepEqual(await states(member, channelId, [thread.rootId, mentioned.rootId]), before.memberBefore);
+    const count = (await e2e.channels(owner.token)).find((entry) => entry.id === channelId)?.unreadCount;
+    assert.equal(count, before.countBefore, "A restart changed the channel count.");
     return { kept: true };
   });
 

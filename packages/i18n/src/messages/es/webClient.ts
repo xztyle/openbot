@@ -43,6 +43,8 @@ export const messages = {
   "webClient.error.usageOffline": "Conéctate a tu servidor para ver el uso.",
   "webClient.error.desktopOnly": "Esta acción está disponible en la aplicación de escritorio.",
   "webClient.settings.preferences.title": "Preferencias",
+  "webClient.title.attention": "({count}) {title}",
+  "webClient.title.place": "{place} - {workspace} - OpenBot",
   "webClient.settings.preferences.description": "Elige el idioma y los sonidos de OpenBot en este navegador.",
   "webClient.error.checkConversation": "Comprueba la conversación antes de volver a enviar.",
   "webClient.error.hostReported": "El servidor notificó un error. Comprueba la conversación y el estado del servidor.",

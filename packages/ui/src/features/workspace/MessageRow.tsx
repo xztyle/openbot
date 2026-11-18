@@ -46,6 +46,11 @@ export interface MessageRowProps {
   pinnedBy?: string | undefined;
   /** The reader saved the message for later: "Saved for later" over it. */
   saved?: boolean | undefined;
+  /**
+   * A thread reply that was also sent to the channel, as Slack's "replied to a thread": the start of
+   * the root's text (null when it is not loaded), and the action that opens the thread.
+   */
+  repliedTo?: { text: string | null; onOpen: () => void } | undefined;
   reactions?: readonly WorkspaceReaction[] | undefined;
   onToggleReaction?: ((emoji: string) => void) | undefined;
   /** Opens the full emoji picker. The quick row of the react button does not need it. */
@@ -161,6 +166,18 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
                 {time(props.sentAt)}
               </time>
             </div>
+          </Show>
+          <Show when={!props.deleted && props.repliedTo}>
+            {(replied) => (
+              <Button variant="link" size="xs" class="ws-message-replied" onClick={() => replied().onOpen()}>
+                <MessageSquareReply aria-hidden="true" />
+                <span class="ws-truncate">
+                  {replied().text
+                    ? t("workspace.message.repliedTo", { text: replied().text ?? "" })
+                    : t("workspace.message.repliedToThread")}
+                </span>
+              </Button>
+            )}
           </Show>
           <Show when={props.editor}>
             <div class="ws-message-editor">{props.editor}</div>

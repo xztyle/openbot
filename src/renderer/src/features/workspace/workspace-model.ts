@@ -347,6 +347,11 @@ export interface WorkspaceMessageRowModel {
   /** The first unread message: the "new" divider stands above the row. */
   firstUnread: boolean;
   steps: WorkspaceStepTrailView | null;
+  /**
+   * A thread reply also sent to the channel, as Slack's "replied to a thread": the root it answers,
+   * with the start of its text when the root is loaded. Null for every other row.
+   */
+  broadcast?: { rootId: string; rootText: string | null } | null;
 }
 
 function stepLabel(entry: ChannelMessage): string {
@@ -412,6 +417,8 @@ function sameRow(left: WorkspaceMessageRowModel, right: WorkspaceMessageRowModel
     left.grouped === right.grouped &&
     left.dayStart === right.dayStart &&
     left.firstUnread === right.firstUnread &&
+    left.broadcast?.rootId === right.broadcast?.rootId &&
+    left.broadcast?.rootText === right.broadcast?.rootText &&
     sameSteps(left.steps, right.steps)
   );
 }
@@ -479,15 +486,23 @@ export function messageRows(
   const answered = new Set<string>();
   const rows: WorkspaceMessageRowModel[] = [];
   let previous: { authorKey: string; at: number; day: number } | null = null;
+  const byId = options.thread ? null : new Map(entries.map((entry) => [entry.id, entry]));
   const push = (entry: ChannelMessage, pending: boolean, steps: WorkspaceStepTrailView | null) => {
     const { at, day } = sendTime(entry.message.createdAt);
     const authorKey = `${entry.author.kind}:${entry.externalAuthor?.id ?? entry.author.id}`;
     const firstUnread = !pending && options.firstUnreadId === entry.id;
     const dayStart = previous?.day === day ? null : at;
+    // A thread reply in the channel says which thread it answers, and starts a group of its own.
+    const rootId = !options.thread && entry.threadRootId && entry.alsoInChannel ? entry.threadRootId : null;
+    const root = rootId ? byId?.get(rootId) : undefined;
+    const broadcast = rootId
+      ? { rootId, rootText: root && !root.deletedAt ? previewText(root.message.text, 120) || null : null }
+      : null;
     const grouped =
       previous !== null &&
       dayStart === null &&
       !firstUnread &&
+      broadcast === null &&
       previous.authorKey === authorKey &&
       at - previous.at < GROUP_GAP_MS;
     rows.push({
@@ -498,6 +513,7 @@ export function messageRows(
       dayStart,
       firstUnread,
       steps,
+      broadcast,
     });
     previous = { authorKey, at, day };
   };

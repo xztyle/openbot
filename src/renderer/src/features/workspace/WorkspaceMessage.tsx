@@ -277,6 +277,20 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
             ? undefined
             : () => ws.openThread(props.channelId, entry().id)
         }
+        repliedTo={
+          props.row.broadcast
+            ? {
+                text: props.row.broadcast.rootText,
+                onOpen: () => {
+                  const rootId = props.row.broadcast?.rootId;
+                  if (!rootId) return;
+                  // As Slack's "replied to a thread": the thread opens with this reply lit.
+                  ws.openThread(props.channelId, rootId);
+                  ws.focusMessage(props.channelId, entry().id);
+                },
+              }
+            : undefined
+        }
         menuItems={menuItems()}
         profile={() => <MemberProfile member={author()} />}
         editor={

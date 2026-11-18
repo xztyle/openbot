@@ -265,6 +265,18 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     },
   );
 
+  // ⌘J (Ctrl+J), as Slack's: the oldest unread message of the conversation, at the "New" line.
+  onSettled(() => {
+    const jumpKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey) return;
+      if (event.key?.toLocaleLowerCase() !== "j" || document.querySelector('[aria-modal="true"]')) return;
+      event.preventDefault();
+      jumpToUnread();
+    };
+    window.addEventListener("keydown", jumpKey, true);
+    return () => window.removeEventListener("keydown", jumpKey, true);
+  });
+
   onSettled(() => {
     const observer = new ResizeObserver(() => {
       measure();

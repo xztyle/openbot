@@ -22,6 +22,7 @@ export const messages = defineMessages("webClient", {
     other: "{count} agents need you or have new replies",
   },
   "webClient.title.attention": "({count}) {title}",
+  "webClient.title.place": "{place} - {workspace} - OpenBot",
   "webClient.push.title": "Push notifications",
   "webClient.push.description":
     "Get a notification on this device when an agent of {host} finishes, needs your input or approval, or a scheduled run fails. It also works when OpenBot is closed. The computer sends it to the push service of your browser (Google, Apple, Mozilla or Microsoft), encrypted. It holds the name of the agent and the kind of event, not the text of a message. OpenBot accounts do not see it.",

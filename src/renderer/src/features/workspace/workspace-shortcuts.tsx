@@ -68,6 +68,7 @@ export function workspaceShortcutGroups(t: ReturnType<typeof useText>["t"], mac:
     {
       title: t("workspace.shortcuts.reading"),
       items: [
+        { label: t("workspace.shortcuts.firstUnread"), keys: keys(["mod"], "J") },
         { label: t("workspace.shortcuts.markRead"), keys: ["Esc"] },
         { label: t("workspace.shortcuts.markAllRead"), keys: keys(["shift"], "Esc") },
         { label: t("workspace.shortcuts.closePanel"), keys: ["Esc"] },

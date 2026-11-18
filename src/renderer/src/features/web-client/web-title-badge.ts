@@ -82,7 +82,15 @@ async function drawIcon(badge: WebTitleBadge): Promise<string | null> {
  * that the count leaves out give the icon a dot only. The same numbers show on the space rail and the
  * sidebar rows, so the tab, the rail and the rows agree.
  */
-export function createWebTitleBadge(options: { badge: () => WebTitleBadge; t: TextValue["t"] }): void {
+export function createWebTitleBadge(options: {
+  badge: () => WebTitleBadge;
+  t: TextValue["t"];
+  /**
+   * The place on screen and its space or server, for Slack's tab title: "#general - Market - OpenBot".
+   * Null keeps the page's own title.
+   */
+  place?: (() => { place: string; workspace: string } | null) | undefined;
+}): void {
   const baseTitle = document.title;
   /** The icon link that this module added, or the page's own that it changed, with its address before. */
   let icon: { link: HTMLLinkElement; added: boolean; href: string } | null = null;
@@ -112,12 +120,22 @@ export function createWebTitleBadge(options: { badge: () => WebTitleBadge; t: Te
 
   createEffect(
     () => {
+      const place = options.place?.() ?? null;
+      const title = place ? options.t("webClient.title.place", place) : baseTitle;
+      const count = options.badge().count;
+      return count > 0 ? options.t("webClient.title.attention", { count, title }) : title;
+    },
+    (title) => {
+      document.title = title;
+    },
+  );
+  // A change of place keeps the icon; only a change of the badge draws it again.
+  createEffect(
+    () => {
       const { count, unread } = options.badge();
       return { count, unread };
     },
     (badge) => {
-      document.title =
-        badge.count > 0 ? options.t("webClient.title.attention", { count: badge.count, title: baseTitle }) : baseTitle;
       const current = ++drawing;
       if (badge.count === 0 && !badge.unread) {
         restoreIcon();

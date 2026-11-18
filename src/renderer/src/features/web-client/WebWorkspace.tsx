@@ -11,6 +11,7 @@ import {
   type ChannelSummary,
   type ClientAgentModelOption,
   canAdministerServer,
+  channelKind,
   decodeAgentBackupModelSettings,
   decodeAgentHostSettings,
   decodeAgentTaskLimitSettings,
@@ -237,8 +238,9 @@ import { WorkspaceAgentFrame, WorkspaceChrome, WorkspaceMain } from "../workspac
 import { workspaceAttention } from "../workspace/workspace-attention";
 import { WorkspaceProvider } from "../workspace/workspace-context";
 import { createWorkspaceController, type WorkspaceController } from "../workspace/workspace-controller";
-import { AGENT_DM_PREFIX, workspacePersonName } from "../workspace/workspace-model";
+import { AGENT_DM_PREFIX, conversationName, memberById, workspacePersonName } from "../workspace/workspace-model";
 import { createWorkspaceSupport } from "../workspace/workspace-support";
+import { workspaceViewLabel } from "../workspace/workspace-view-labels";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
 import { WebMobileNavigation, type WebMobilePane } from "./WebMobileNavigation";
@@ -2084,8 +2086,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       workspaceController.openConversation(id);
     },
     openView: (view, pane) => {
-      locationHistory.userMoves();
-      workspaceController.openView(view, pane);
       // A phone has DMs and Activity as tabs of its bottom bar, as Slack's app: Jump to opens the tab,
       // not a second DMs or Activity screen over the tab that shows.
       if (phoneShell() && (view === "dms" || view === "activity")) {
@@ -2094,6 +2094,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         setMobilePane("workspace");
         return;
       }
+      locationHistory.userMoves();
+      workspaceController.openView(view, pane);
     },
     openAgentTalk: (agentId) => {
       locationHistory.userMoves();
@@ -2141,6 +2143,22 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     badge: () => {
       if (!workspaceOn()) return { count: attentionCount(), unread: false };
       return workspaceAttention(ws);
+    },
+    // Slack's tab title names the place: "#general - Market - OpenBot", "Ana - …", "Activity - …".
+    place: () => {
+      if (!workspaceOn() || !workspace.state.workspaceLoaded) return null;
+      const workspaceName = ws.spaces.available()
+        ? (ws.spaces.space(ws.spaces.current())?.name ?? ws.env.serverName())
+        : ws.env.serverName();
+      const route = ws.route();
+      let place: string | undefined;
+      if (route.kind === "channel") {
+        const channel = ws.summary(route.channelId);
+        if (channel)
+          place = channelKind(channel) === "channel" ? `#${channel.name}` : conversationName(ws.directory(), channel);
+      } else if (route.kind === "agent") place = memberById(ws.directory(), route.agentId, "").name || undefined;
+      else place = workspaceViewLabel(route.view, t);
+      return place ? { place, workspace: workspaceName } : null;
     },
   });
   // The browser's Back and the page rail move between the list and the conversation on a phone.

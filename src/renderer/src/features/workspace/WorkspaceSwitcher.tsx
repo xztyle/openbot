@@ -22,6 +22,7 @@ import {
   personMember,
   readerJoined,
 } from "./workspace-model";
+import { workspaceViewLabel } from "./workspace-view-labels";
 
 export interface JumpEntry {
   /** A conversation id, `agent:<id>`, `person:<id>`, `view:<view>` or `create:<name>`. */
@@ -87,21 +88,23 @@ export function jumpMatch(name: string, typed: string): number {
 export function useJumpEntries() {
   const ws = useWorkspace();
   const { t } = useText();
-  const VIEWS: readonly { view: WorkspaceView; label: () => string }[] = [
-    { view: "unreads", label: () => t("workspace.view.unreads") },
-    { view: "threads", label: () => t("workspace.view.threads") },
-    { view: "activity", label: () => t("workspace.view.activity") },
-    { view: "dms", label: () => t("workspace.view.dms") },
-    { view: "later", label: () => t("workspace.view.later") },
-    { view: "drafts", label: () => t("workspace.view.drafts") },
-    { view: "fleet", label: () => t("workspace.view.fleet") },
-    { view: "artifacts", label: () => t("workspace.view.artifacts") },
-    { view: "agents", label: () => t("workspace.view.agents") },
-    { view: "space-agents", label: () => t("workspace.view.spaceAgents") },
-    { view: "storage", label: () => t("storageHygiene.title") },
-    { view: "secrets", label: () => t("workspace.view.secrets") },
-    { view: "routines", label: () => t("workspace.app.menu.routines") },
-  ];
+  const VIEWS: readonly { view: WorkspaceView; label: () => string }[] = (
+    [
+      "unreads",
+      "threads",
+      "activity",
+      "dms",
+      "later",
+      "drafts",
+      "fleet",
+      "artifacts",
+      "agents",
+      "space-agents",
+      "storage",
+      "secrets",
+      "routines",
+    ] as const
+  ).map((view) => ({ view, label: () => workspaceViewLabel(view, t) }));
 
   const conversations = createMemo((): JumpEntry[] => {
     const list: JumpEntry[] = [];

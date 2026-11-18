@@ -375,6 +375,7 @@ const {
   getHostService: () => services?.host ?? null,
   getHostAnalytics: () => services?.analytics ?? null,
   getRemoteServerManager: () => services?.remoteServers ?? null,
+  getWorkspaceSidebar: () => services?.workspaceSidebar ?? null,
   showMainWindow,
   // An agent event cannot arrive before the services that raise it, so the fallback stands only so
   // that this module-level value needs no null check on the notification path.

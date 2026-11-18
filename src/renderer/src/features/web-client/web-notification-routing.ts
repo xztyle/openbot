@@ -1,4 +1,10 @@
-import type { AgentEvent, ChannelSummary, ClientAgentSummary, ServerNotificationLevel } from "@openbot/contracts/ipc";
+import type {
+  AgentEvent,
+  ChannelSummary,
+  ClientAgentSummary,
+  ServerNotificationLevel,
+  WorkspaceNotifyLevel,
+} from "@openbot/contracts/ipc";
 import {
   type AgentNotificationChannel,
   agentEventRequestThread,
@@ -62,14 +68,23 @@ export function createWebNotificationRouting(options: {
         channelId ? options.onOpenChannel(hostId, channelId) : options.onOpen(hostId, agentId),
     });
   }
-  /** The replies that a new channel list of the open host shows. The first list is the baseline. */
-  function notifyChannelReplies(hostId: string, previous: ChannelSummary[] | null, next: ChannelSummary[]): void {
+  /**
+   * The replies that a new channel list of the open host shows. The first list is the baseline.
+   * `conversationLevel` is the level the reader set on a conversation's bell, which wins over the host's.
+   */
+  function notifyChannelReplies(
+    hostId: string,
+    previous: ChannelSummary[] | null,
+    next: ChannelSummary[],
+    conversationLevel?: (channelId: string) => WorkspaceNotifyLevel | null,
+  ): void {
     const { muted, level } = untrack(() => notifications.state(hostId));
     if (muted) return;
     const replies = channelReplyNotifications(previous, next, {
       agents: untrack(() => workspace.state.agents),
       translate: options.t,
       level,
+      conversationLevel,
       // As for an agent reply, the web client shows no preview.
       redact: null,
     });

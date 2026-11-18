@@ -20,6 +20,7 @@ import {
   type BrowserDisplayState,
   type ChannelSummary,
   decodeChannelSummaries,
+  decodeWorkspaceSidebar,
   IPC_ENDPOINTS,
   LOCAL_SERVER_ID,
   latestTurnAnswer,
@@ -27,10 +28,17 @@ import {
   type SpeechModelStatus,
   type VoiceModelStatus,
   type VoiceStreamTranscript,
+  type WorkspaceNotifyLevel,
+  type WorkspaceSidebarPrefs,
+  workspaceNotifyLevel,
 } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
 import { TEAM_CHANNEL_ATTENTION_CAPABILITY } from "@openbot/contracts/team-protocol/current";
+import {
+  WORKSPACE_SIDEBAR_CAPABILITY,
+  WORKSPACE_SIDEBAR_ROUTES,
+} from "@openbot/contracts/team-protocol/workspace-sidebar-v1";
 import type { AppFormat, AppTranslate } from "@openbot/i18n";
 import { redactText } from "@openbot/logging";
 import {
@@ -64,6 +72,7 @@ import { withLocalHostSummary } from "./ipc/team-handlers";
 import { decodeAgentSummaries } from "./remote-agent-decoding";
 import type { RemoteServerManager } from "./remote-server-manager";
 import { sendToRenderer } from "./renderer-ipc";
+import type { WorkspaceSidebarStore } from "./workspace-sidebar-store";
 
 export interface RendererForwarderDependencies {
   getMainWindow: () => BrowserWindow | null;
@@ -82,6 +91,8 @@ export interface RendererForwarderDependencies {
   desktopNotificationsEnabled: () => boolean;
   /** The Settings switch that lets a notification show the agent's words. */
   notificationPreviewEnabled: () => boolean;
+  /** The workspace sidebars of this host's members, for the level of each conversation's bell. */
+  getWorkspaceSidebar?: () => Pick<WorkspaceSidebarStore, "get"> | null;
 }
 
 /** The newest messages that a finished turn's answer is looked for in. */
@@ -105,6 +116,7 @@ export function createRendererForwarders({
   getFormat,
   desktopNotificationsEnabled,
   notificationPreviewEnabled,
+  getWorkspaceSidebar,
 }: RendererForwarderDependencies) {
   // The user looks at the app when the main window or one of its chat windows has focus.
   /** The main window and each chat window (#2964). A chat window does not outlive the main window. */
@@ -212,6 +224,38 @@ export function createRendererForwarders({
     return runCauseEffect(remoteManager.request(serverId, CHANNEL_ROUTES.list, decodeChannelSummaries));
   }
 
+  /**
+   * The level the user set on each conversation's bell on a server, from their workspace sidebar:
+   * this host's own value, or a joined server's over the Team API. Null when there is none to read.
+   */
+  async function conversationLevels(
+    serverId: string,
+  ): Promise<((channelId: string) => WorkspaceNotifyLevel | null) | null> {
+    let prefs: WorkspaceSidebarPrefs | null = null;
+    if (serverId === LOCAL_SERVER_ID) {
+      const memberId = getHostService()?.channelActor().id;
+      prefs = memberId ? (getWorkspaceSidebar?.()?.get(memberId) ?? null) : null;
+    } else {
+      const remoteManager = getRemoteServerManager();
+      const server = remoteManager?.list().find((candidate) => candidate.id === serverId);
+      if (!remoteManager || !server?.compatibility?.capabilities.includes(WORKSPACE_SIDEBAR_CAPABILITY)) return null;
+      try {
+        prefs = (
+          await runCauseEffect(
+            remoteManager.request(serverId, WORKSPACE_SIDEBAR_ROUTES.read, decodeWorkspaceSidebar, {
+              method: "POST",
+              body: {},
+            }),
+          )
+        ).sidebar;
+      } catch {
+        return null;
+      }
+    }
+    const current = prefs;
+    return current ? (channelId) => workspaceNotifyLevel(current, channelId) : null;
+  }
+
   async function notifyChannelReplies(serverId: string, next: ChannelSummary[]): Promise<void> {
     const previous = channelLists.get(serverId) ?? null;
     channelLists.set(serverId, next);
@@ -221,9 +265,12 @@ export function createRendererForwarders({
       if (!window || window.isDestroyed() || appFocused(window)) return null;
       return replyLevel(serverId);
     };
-    // Only "all" notifies a reply. The agent lookup is skipped at the other levels, and while a
-    // reply streams, when no reply is new.
-    if (level() !== "all" || newChannelReplies(previous, next).length === 0) return;
+    // Only "all" notifies a reply: the server's level, or the level the user set on the conversation.
+    // The lookups are skipped while a reply streams, when no reply is new.
+    const fresh = newChannelReplies(previous, next);
+    if (!level() || fresh.length === 0) return;
+    const conversationLevel = await conversationLevels(serverId);
+    if (!fresh.some(({ channel }) => (conversationLevel?.(channel.id) ?? level()) === "all")) return;
     const remoteManager = getRemoteServerManager();
     const agents =
       serverId === LOCAL_SERVER_ID
@@ -238,6 +285,7 @@ export function createRendererForwarders({
       agents,
       translate: getTranslate(),
       level: current,
+      ...(conversationLevel ? { conversationLevel } : {}),
       redact: notificationPreviewEnabled() ? redactText : null,
     });
     for (const reply of replies) {

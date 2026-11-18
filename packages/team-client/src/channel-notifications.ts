@@ -3,6 +3,7 @@ import type {
   ChannelSummary,
   ClientAgentSummary,
   ServerNotificationLevel,
+  WorkspaceNotifyLevel,
 } from "@openbot/contracts/ipc";
 import type { AppTranslate } from "@openbot/i18n";
 import { type AgentNotificationChannel, plainPreview } from "./agent-notifications";
@@ -20,6 +21,11 @@ export interface ChannelNotificationOptions {
   level: ServerNotificationLevel;
   /** Hides the secrets in the preview. Null when the user keeps the agent's words out of notifications. */
   redact: ((text: string) => string) | null;
+  /**
+   * The level the reader chose for one conversation (`workspaceNotifyLevel`), or null for the
+   * server's `level`. A reply is no mention, so only "all" lets it notify.
+   */
+  conversationLevel?: ((channelId: string) => WorkspaceNotifyLevel | null) | undefined;
 }
 
 type SettledReply = ChannelPreview & { author: { kind: "agent"; id: string } };
@@ -71,8 +77,10 @@ export function channelReplyNotifications(
   next: readonly ChannelSummary[],
   options: ChannelNotificationOptions,
 ): ChannelNotificationContent[] {
-  if (options.level !== "all") return [];
+  // A level set on one conversation wins over the server's, both ways.
+  if (!options.conversationLevel && options.level !== "all") return [];
   return newChannelReplies(previous, next).flatMap(({ channel, reply }) => {
+    if ((options.conversationLevel?.(channel.id) ?? options.level) !== "all") return [];
     const agentId = reply.author.id;
     const agent = options.agents.find((candidate) => candidate.id === agentId);
     if (!agent?.notifications) return [];

@@ -1,13 +1,15 @@
 import type { JSX } from "@solidjs/web";
-import { For, Match, Show, Switch } from "solid-js";
+import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { Button, IconButton } from "../../button";
 import { CheckCheck, ChevronDown, ChevronRight, Hash, Inbox, Lock, RefreshCw } from "../../icons";
+import { SlidingTabs } from "../../sliding-tabs";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { MessageText } from "./MessageRow";
 import { AvatarStack, MemberAvatar, MemberName } from "./WorkspaceAvatar";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
+import { WorkspaceSelect } from "./WorkspaceSelect";
 import { useRecentTime } from "./workspace-format";
 import type { ChannelVisibility, MessageSegment, WorkspaceMember } from "./workspace-types";
 
@@ -33,6 +35,11 @@ export interface UnreadGroup {
   read: boolean;
   collapsed: boolean;
 }
+
+/** Which conversations the list shows: all, channels, or DMs and groups. */
+export type UnreadsFilter = "all" | "channels" | "direct";
+/** The order of the groups: the sidebar's, or by their newest or oldest unread message. */
+export type UnreadsSort = "sidebar" | "newest" | "oldest";
 
 export interface UnreadsViewProps {
   groups: readonly UnreadGroup[];
@@ -62,6 +69,20 @@ export function UnreadsView(props: UnreadsViewProps): JSX.Element {
   const { t } = useText();
   const recent = useRecentTime();
   let list: HTMLDivElement | undefined;
+  const [filter, setFilter] = createSignal<UnreadsFilter>("all");
+  const [sort, setSort] = createSignal<UnreadsSort>("sidebar");
+  const latest = (group: UnreadGroup) => Math.max(0, ...group.messages.map((message) => message.at));
+  const earliest = (group: UnreadGroup) =>
+    Math.min(Number.MAX_SAFE_INTEGER, ...group.messages.map((message) => message.at));
+  /** The groups that the filter keeps, in the chosen order. */
+  const shown = () => {
+    const kept = props.groups.filter(
+      (group) => filter() === "all" || (filter() === "channels") === (group.kind === "channel"),
+    );
+    if (sort() === "newest") return [...kept].sort((left, right) => latest(right) - latest(left));
+    if (sort() === "oldest") return [...kept].sort((left, right) => earliest(left) - earliest(right));
+    return kept;
+  };
   const open = () => props.groups.filter((group) => !group.read);
 
   /** The rows that the arrows move through: each group's header and its messages. */
@@ -120,11 +141,51 @@ export function UnreadsView(props: UnreadsViewProps): JSX.Element {
           </>
         }
       />
+      <Show when={props.groups.length > 0}>
+        <div class="ws-view-toolbar">
+          <SlidingTabs.Root
+            value={filter()}
+            onChange={(value) => {
+              if (value === "all" || value === "channels" || value === "direct") setFilter(value);
+            }}
+          >
+            <SlidingTabs.List aria-label={t("workspace.unreads.filter")}>
+              <SlidingTabs.Trigger value="all">{t("workspace.activity.all")}</SlidingTabs.Trigger>
+              <SlidingTabs.Trigger value="channels">{t("workspace.sidebar.channels")}</SlidingTabs.Trigger>
+              <SlidingTabs.Trigger value="direct">{t("workspace.activity.dms")}</SlidingTabs.Trigger>
+            </SlidingTabs.List>
+          </SlidingTabs.Root>
+          <WorkspaceSelect<UnreadsSort>
+            value={sort()}
+            onChange={setSort}
+            label={t("workspace.unreads.sort")}
+            prefix={t("workspace.unreads.sortPrefix")}
+            options={[
+              { value: "sidebar", label: t("workspace.unreads.sortSidebar") },
+              { value: "newest", label: t("workspace.unreads.sortNewest") },
+              { value: "oldest", label: t("workspace.unreads.sortOldest") },
+            ]}
+          />
+        </div>
+      </Show>
       <div class="ws-view-scroll" ref={(element) => (list = element)}>
         <Show
-          when={props.groups.length > 0}
+          when={shown().length > 0}
           fallback={
             <Switch>
+              <Match when={props.groups.length > 0}>
+                <EmptyState
+                  size="compact"
+                  icon={<Inbox />}
+                  title={t("workspace.view.noMatch")}
+                  description={t("workspace.view.noMatchHint")}
+                  action={
+                    <Button variant="secondary" size="sm" onClick={() => setFilter("all")}>
+                      {t("workspace.view.clearFilters")}
+                    </Button>
+                  }
+                />
+              </Match>
               <Match when={props.failed}>
                 <ErrorState title={t("workspace.unreads.loadFailed")} onRetry={props.onRetry} />
               </Match>
@@ -149,7 +210,7 @@ export function UnreadsView(props: UnreadsViewProps): JSX.Element {
           }
         >
           <ul class="ws-unreads-groups">
-            <For each={props.groups} keyed={(group) => group.id}>
+            <For each={shown()} keyed={(group) => group.id}>
               {(group) => (
                 <li class="ws-unreads-group" data-unreads-group={group().id} data-read={group().read ? "" : undefined}>
                   <header class="ws-unreads-group-header">

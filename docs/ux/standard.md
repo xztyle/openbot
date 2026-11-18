@@ -84,9 +84,12 @@ Source: `packages/ui/src/features/workspace/WorkspacePaneHeader.tsx`, `.ws-view*
   one primary action in the `default` variant, size `sm`, with a `Plus` icon and the label
   "New <thing>". Other header actions are `ghost`. On a phone the header has Back.
 - **Toolbar** (optional): tabs, then filters, then search at the end. It wraps on a phone.
-- **Row:** a whole-row button when the row opens one thing (Threads, Activity, Between agents). A row
-  with several actions shows them as icon buttons on hover on a computer and in a row menu (`…`, or a
-  long press) on a phone. Icon-only buttons are `IconButton` with a label.
+- **Row:** `WorkspaceList` and `WorkspaceListRow` (`features/workspace/WorkspaceList.tsx`): leading
+  avatar, title with a time or badge at its end, lines under it, trailing dot or count. A row that
+  opens one thing is a button over its whole width (Threads, Activity, Between agents). A row with
+  several actions (Space agents, Secrets) keeps them at its end: on hover and focus on a computer,
+  always on a touch screen. Icon-only buttons are `IconButton` with a label. Fleet and Artifacts are
+  card grids, not lists.
 - **Unread:** bold name plus a count badge for mentions, as in the sidebar (Slack).
 - **Selection:** checkboxes only where a bulk action exists (Space agents, Storage).
 
@@ -167,6 +170,6 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 6 | Activity: exact message, badge without reactions, Mark all as read of Activity only | Done |
 | 7 | Confirm Leave private channel, Delete channel (details) and Remove member; agent delete is a confirm only, on desktop and web | Done |
 | 8 | Settings page: visible close/Back, rows stack on a phone, one `SettingsSaveBar`, unsaved guard on section change and on Close/Back/Escape | Done; a switch of server while a draft is open still drops it |
-| 9 | Move template install, custom provider, vault, join server, OpenCode key, chat apps, saved replies to `FormDialog` (profile done) | Open |
+| 9 | Move template install, custom provider, vault, OpenCode key, chat apps, saved replies, more providers to `FormDialog`; join server button order; close buttons | Done; Publish agent and Join/Add server keep their own frames |
 | 10 | Spanish wording: Quitar vs Eliminar for remove; one "Leave" verb; one "Deleting…" and one "Undo" key | Open |
-| 11 | One row component for workspace lists (`ws-feed-row`, `space-agents-row`, `ws-secret`, `ws-agent-talk-pair`) | Open |
+| 11 | One row component for workspace lists (`WorkspaceListRow` in Threads, Activity, Between agents, Space agents, Secrets) | Done |

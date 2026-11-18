@@ -7,6 +7,7 @@ import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { MessageRow } from "./MessageRow";
 import { MemberAvatar } from "./WorkspaceAvatar";
+import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import type { WorkspaceMember } from "./workspace-types";
 
@@ -145,34 +146,28 @@ export function AgentTalkView(props: AgentTalkViewProps): JSX.Element {
                 </Switch>
               }
             >
-              <ul class="ws-agent-talk-list">
+              <WorkspaceList>
                 <For each={props.pairs ?? []} keyed={(pair) => pair.id}>
                   {(pair) => (
-                    <li>
-                      <Button variant="ghost" class="ws-agent-talk-pair" onClick={() => props.onSelect(pair().id)}>
+                    <WorkspaceListRow
+                      onOpen={() => props.onSelect(pair().id)}
+                      leading={
                         <span class="ws-agent-talk-faces" aria-hidden="true">
                           <MemberAvatar member={pair().members[0]} size="sm" />
                           <MemberAvatar member={pair().members[1]} size="sm" />
                         </span>
-                        <span class="ws-agent-talk-copy">
-                          <span class="ws-agent-talk-head">
-                            <strong class="ws-truncate">{pairName(pair())}</strong>
-                            <span class="ws-muted">
-                              {format.date(pair().lastAt, { dateStyle: "medium", timeStyle: "short" })}
-                            </span>
-                          </span>
-                          <span class="ws-agent-talk-preview ws-truncate">
-                            {pair().lastSenderName}: {pair().lastText}
-                          </span>
-                        </span>
-                        <span class="ws-agent-talk-count">
-                          {t("workspace.agentTalk.count", { count: pair().count })}
-                        </span>
-                      </Button>
-                    </li>
+                      }
+                      title={pairName(pair())}
+                      titleEnd={format.date(pair().lastAt, { dateStyle: "medium", timeStyle: "short" })}
+                      trailing={t("workspace.agentTalk.count", { count: pair().count })}
+                    >
+                      <span class="ws-agent-talk-preview ws-truncate">
+                        {pair().lastSenderName}: {pair().lastText}
+                      </span>
+                    </WorkspaceListRow>
                   )}
                 </For>
-              </ul>
+              </WorkspaceList>
             </Show>
           }
         >

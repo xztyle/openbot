@@ -1,12 +1,12 @@
 import type { JSX } from "@solidjs/web";
 import { For, Match, Show, Switch } from "solid-js";
-import { Button } from "../../button";
 import { Hash, Lock, MessageSquareText } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { messagePlainText } from "./MessageRow";
 import { AvatarStack, MemberAvatar, MemberName } from "./WorkspaceAvatar";
+import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useRecentTime } from "./workspace-format";
 import type { ChannelVisibility, MessageSegment, WorkspaceMember } from "./workspace-types";
@@ -69,52 +69,49 @@ export function ThreadsView(props: ThreadsViewProps): JSX.Element {
             </Switch>
           }
         >
-          <ul class="ws-feed">
+          <WorkspaceList>
             <For each={props.threads} keyed={(thread) => thread.id}>
               {(thread) => (
-                <li>
-                  <Button
-                    variant="ghost"
-                    class="ws-feed-row ws-thread-row"
-                    data-unread={(thread().unreadCount ?? 0) > 0 ? "" : undefined}
-                    onClick={() => props.onOpen(thread().id)}
-                  >
-                    <span class="ws-feed-copy">
-                      <span class="ws-feed-heading">
-                        <span class="ws-feed-channel">
-                          <Show when={thread().visibility === "private"} fallback={<Hash aria-hidden="true" />}>
-                            <Lock aria-hidden="true" />
-                          </Show>
-                          {thread().channelName}
-                        </span>
-                        <Show when={(thread().unreadCount ?? 0) > 0}>
-                          <span class="ws-mention-badge">
-                            {t("workspace.threads.new", { count: thread().unreadCount ?? 0 })}
-                          </span>
-                        </Show>
+                <WorkspaceListRow
+                  class="ws-thread-row"
+                  unread={(thread().unreadCount ?? 0) > 0}
+                  onOpen={() => props.onOpen(thread().id)}
+                  title={
+                    <>
+                      <Show when={thread().visibility === "private"} fallback={<Hash aria-hidden="true" />}>
+                        <Lock aria-hidden="true" />
+                      </Show>
+                      {thread().channelName}
+                    </>
+                  }
+                  titleEnd={
+                    <Show when={(thread().unreadCount ?? 0) > 0}>
+                      <span class="ws-mention-badge">
+                        {t("workspace.threads.new", { count: thread().unreadCount ?? 0 })}
                       </span>
-                      <span class="ws-thread-row-root">
-                        <MemberAvatar member={thread().author} size="md" />
-                        <span class="ws-thread-row-text">
-                          <MemberName member={thread().author} />
-                          <span class="ws-feed-preview">{messagePlainText(thread().text)}</span>
-                        </span>
-                      </span>
-                      <span class="ws-thread-row-summary">
-                        <AvatarStack members={thread().participants} max={4} size="xs" />
-                        <span class="ws-thread-summary-count">
-                          {t("workspace.thread.replies", { count: thread().replyCount })}
-                        </span>
-                        <span class="ws-feed-time">
-                          {t("workspace.thread.lastReply", { time: recent(thread().lastReplyAt) })}
-                        </span>
-                      </span>
+                    </Show>
+                  }
+                >
+                  <span class="ws-thread-row-root">
+                    <MemberAvatar member={thread().author} size="md" />
+                    <span class="ws-thread-row-text">
+                      <MemberName member={thread().author} />
+                      <span class="ws-feed-preview">{messagePlainText(thread().text)}</span>
                     </span>
-                  </Button>
-                </li>
+                  </span>
+                  <span class="ws-thread-row-summary">
+                    <AvatarStack members={thread().participants} max={4} size="xs" />
+                    <span class="ws-thread-summary-count">
+                      {t("workspace.thread.replies", { count: thread().replyCount })}
+                    </span>
+                    <span class="ws-row-title-end">
+                      {t("workspace.thread.lastReply", { time: recent(thread().lastReplyAt) })}
+                    </span>
+                  </span>
+                </WorkspaceListRow>
               )}
             </For>
-          </ul>
+          </WorkspaceList>
         </Show>
       </div>
     </section>

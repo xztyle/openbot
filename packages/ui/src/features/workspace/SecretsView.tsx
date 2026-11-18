@@ -8,6 +8,7 @@ import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { MemberAvatar } from "./WorkspaceAvatar";
+import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { PaneHeaderAction, WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { WorkspaceSelect, type WorkspaceSelectOption } from "./WorkspaceSelect";
 import type { WorkspaceMember } from "./workspace-types";
@@ -195,7 +196,7 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
                     )}
                   </Show>
                 </h3>
-                <ul class="ws-secrets-list">
+                <WorkspaceList>
                   <For each={group().secrets} keyed={(secret) => secret.name}>
                     {(secret) => (
                       <SecretRow
@@ -209,7 +210,7 @@ export function SecretsView(props: SecretsViewProps): JSX.Element {
                       />
                     )}
                   </For>
-                </ul>
+                </WorkspaceList>
               </section>
             )}
           </For>
@@ -287,13 +288,10 @@ function SecretRow(props: {
   }
 
   return (
-    <li class="ws-secret">
-      <div class="ws-secret-head">
-        <span class="ws-secret-copy">
-          <code class="ws-secret-name">{props.name}</code>
-          <span class="ws-muted">{t("workspace.secrets.updated", { time: props.updated })}</span>
-        </span>
-        <span class="ws-secret-actions">
+    <WorkspaceListRow
+      title={<code class="ws-secret-name">{props.name}</code>}
+      actions={
+        <>
           <IconButton
             variant="ghost"
             size="icon-xs"
@@ -328,8 +326,10 @@ function SecretRow(props: {
           >
             <Trash2 />
           </IconButton>
-        </span>
-      </div>
+        </>
+      }
+    >
+      <span class="ws-muted">{t("workspace.secrets.updated", { time: props.updated })}</span>
       <Show when={value()}>{(shown) => <code class="ws-secret-value">{shown()}</code>}</Show>
       <Show when={replacing()}>
         <form
@@ -360,6 +360,6 @@ function SecretRow(props: {
           )}
         </Show>
       </Show>
-    </li>
+    </WorkspaceListRow>
   );
 }

@@ -15,3 +15,5 @@
 - Server settings ask before they lose an unsaved change: another section, Close, Back and Escape now
   all ask, not only leaving the Workspace section. The save bars of General, Workspace and app
   connections are one component.
+- Threads, Activity, Between agents, Space agents and Secrets use one row: the same spacing, line
+  between rows, unread tint and title. On a computer, row buttons show on hover; on a phone, always.

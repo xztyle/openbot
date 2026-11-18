@@ -9,6 +9,7 @@ import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState } from "../../view-state";
 import { AiBadge, MemberAvatar } from "../workspace/WorkspaceAvatar";
+import { WorkspaceList, WorkspaceListRow } from "../workspace/WorkspaceList";
 import { PaneHeaderAction, WorkspacePaneHeader } from "../workspace/WorkspacePaneHeader";
 import { useRecentTime } from "../workspace/workspace-format";
 import type { WorkspaceMember } from "../workspace/workspace-types";
@@ -160,71 +161,79 @@ export function SpaceAgentsView(props: SpaceAgentsViewProps): JSX.Element {
             </Show>
           }
         >
-          <ul class="space-agents-list">
+          <WorkspaceList>
             <For each={shown()} keyed={(agent) => agent.member.id}>
               {(agent) => (
-                <li class="space-agents-row" data-selected={selected().has(agent().member.id) ? "" : undefined}>
-                  <Show when={props.onDelete || props.onMove}>
-                    <Checkbox
-                      aria-label={t("workspace.spaces.selectAgent", { name: agent().member.name })}
-                      checked={selected().has(agent().member.id)}
-                      onChange={(event) => toggle(agent().member.id, event.currentTarget.checked)}
-                    />
-                  </Show>
-                  <MemberAvatar member={agent().member} size="md" />
-                  <span class="space-agents-copy">
-                    <span class="space-agents-name">
+                <WorkspaceListRow
+                  selected={selected().has(agent().member.id)}
+                  leading={
+                    <>
+                      <Show when={props.onDelete || props.onMove}>
+                        <Checkbox
+                          aria-label={t("workspace.spaces.selectAgent", { name: agent().member.name })}
+                          checked={selected().has(agent().member.id)}
+                          onChange={(event) => toggle(agent().member.id, event.currentTarget.checked)}
+                        />
+                      </Show>
+                      <MemberAvatar member={agent().member} size="md" />
+                    </>
+                  }
+                  title={
+                    <>
                       {agent().member.name}
                       <AiBadge />
-                    </span>
-                    <span class="space-agents-meta">
-                      <Show when={agent().title}>
-                        <span>{agent().title}</span>
-                      </Show>
-                      <span>{agent().model}</span>
-                    </span>
-                  </span>
-                  <span class="space-agents-activity">
-                    {agent().lastActivityAt === null
+                    </>
+                  }
+                  titleEnd={
+                    agent().lastActivityAt === null
                       ? t("workspace.spaces.noActivity")
-                      : recent(agent().lastActivityAt ?? 0)}
-                  </span>
-                  <span class="space-agents-actions">
-                    <IconButton
-                      variant="ghost"
-                      size="icon-xs"
-                      label={t("workspace.spaces.openChat", { name: agent().member.name })}
-                      onClick={() => props.onOpenChat(agent().member.id)}
-                    >
-                      <MessageSquare />
-                    </IconButton>
-                    <Show when={props.onMove}>
-                      {(move) => (
-                        <IconButton
-                          variant="ghost"
-                          size="icon-xs"
-                          label={t("workspace.spaces.moveAgent", { name: agent().member.name })}
-                          onClick={() => move()([agent().member.id])}
-                        >
-                          <ArrowLeftRight />
-                        </IconButton>
-                      )}
-                    </Show>
-                    <Show when={props.onDelete}>
+                      : recent(agent().lastActivityAt ?? 0)
+                  }
+                  actions={
+                    <>
                       <IconButton
                         variant="ghost"
                         size="icon-xs"
-                        label={t("workspace.spaces.deleteAgent", { name: agent().member.name })}
-                        onClick={() => setDeleting([agent().member.id])}
+                        label={t("workspace.spaces.openChat", { name: agent().member.name })}
+                        onClick={() => props.onOpenChat(agent().member.id)}
                       >
-                        <Trash2 />
+                        <MessageSquare />
                       </IconButton>
+                      <Show when={props.onMove}>
+                        {(move) => (
+                          <IconButton
+                            variant="ghost"
+                            size="icon-xs"
+                            label={t("workspace.spaces.moveAgent", { name: agent().member.name })}
+                            onClick={() => move()([agent().member.id])}
+                          >
+                            <ArrowLeftRight />
+                          </IconButton>
+                        )}
+                      </Show>
+                      <Show when={props.onDelete}>
+                        <IconButton
+                          variant="ghost"
+                          size="icon-xs"
+                          label={t("workspace.spaces.deleteAgent", { name: agent().member.name })}
+                          onClick={() => setDeleting([agent().member.id])}
+                        >
+                          <Trash2 />
+                        </IconButton>
+                      </Show>
+                    </>
+                  }
+                >
+                  <span class="space-agents-meta">
+                    <Show when={agent().title}>
+                      <span>{agent().title}</span>
                     </Show>
+                    <span>{agent().model}</span>
                   </span>
-                </li>
+                </WorkspaceListRow>
               )}
             </For>
-          </ul>
+          </WorkspaceList>
         </Show>
       </div>
       <ConfirmDialog

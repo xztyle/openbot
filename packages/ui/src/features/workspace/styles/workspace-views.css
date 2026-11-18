@@ -262,9 +262,9 @@
   margin: 0;
 }
 
-/* Activity and Threads feeds ------------------------------------------------------------------- */
+/* Lists of the workspace views: one row (WorkspaceList.tsx) ------------------------------------ */
 
-.ws-feed {
+.ws-list {
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -272,11 +272,13 @@
   list-style: none;
 }
 
-.ws-feed > li + li {
+.ws-list-item + .ws-list-item {
   border-top: 1px solid var(--ws-line);
 }
 
-.ws-feed-row.ui-button {
+.ws-row,
+.ws-row.ui-button {
+  display: flex;
   width: 100%;
   height: auto;
   align-items: flex-start;
@@ -287,12 +289,98 @@
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-md);
   font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-leading-md);
   text-align: left;
   white-space: normal;
 }
 
-.ws-feed-row[data-unread] {
+.ws-row[data-unread] {
   background: color-mix(in srgb, var(--openbot-accent) 6%, transparent);
+}
+
+.ws-row[data-selected] {
+  background: var(--openbot-accent-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  div.ws-row:hover {
+    background: var(--ws-hover);
+  }
+}
+
+.ws-row-leading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.ws-row-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+}
+
+.ws-row-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--openbot-space-2);
+}
+
+.ws-row-title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  overflow: hidden;
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-row[data-unread] .ws-row-title {
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-row-title > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-row-title-end {
+  flex: 0 0 auto;
+  color: var(--openbot-text-dim);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-row-trailing {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: center;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+/* Row buttons show on hover and focus with a mouse; a touch screen has no hover, so they always show. */
+.ws-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: center;
+  gap: var(--openbot-space-0-5);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ws-row:not(:hover, :focus-within) .ws-row-actions {
+    opacity: 0;
+  }
 }
 
 .ws-feed-avatar {
@@ -323,46 +411,6 @@
   height: 10px;
 }
 
-.ws-feed-copy {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-direction: column;
-  gap: var(--openbot-space-0-5);
-}
-
-.ws-feed-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--openbot-space-2);
-}
-
-.ws-feed-what,
-.ws-feed-channel {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--openbot-space-1);
-  color: var(--openbot-text-primary);
-  font-weight: var(--openbot-weight-semibold);
-}
-
-.ws-feed-channel > svg {
-  width: var(--openbot-icon-sm);
-  height: var(--openbot-icon-sm);
-}
-
-.ws-feed-row[data-unread] .ws-feed-what {
-  font-weight: var(--openbot-weight-bold);
-}
-
-.ws-feed-time {
-  flex: 0 0 auto;
-  color: var(--openbot-text-dim);
-  font-size: var(--openbot-text-sm);
-}
-
 .ws-feed-where {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
@@ -381,10 +429,6 @@
   margin-right: var(--openbot-space-1);
   color: var(--openbot-text-primary);
   font-weight: var(--openbot-weight-semibold);
-}
-
-.ws-feed-row .ws-unread-dot {
-  align-self: center;
 }
 
 .ws-thread-row-root {
@@ -421,26 +465,6 @@
 
 /* Between agents ------------------------------------------------------------------------------- */
 
-.ws-agent-talk-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--openbot-space-1);
-  margin: 0;
-  padding: var(--openbot-space-2) var(--openbot-space-3);
-  list-style: none;
-}
-
-.ws-agent-talk-pair {
-  display: flex;
-  width: 100%;
-  height: auto;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--openbot-space-3);
-  padding: var(--openbot-space-2) var(--openbot-space-3);
-  text-align: start;
-}
-
 .ws-agent-talk-faces {
   display: flex;
   flex: 0 0 auto;
@@ -450,29 +474,9 @@
   margin-inline-start: calc(-1 * var(--openbot-space-2));
 }
 
-.ws-agent-talk-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--openbot-space-0-5);
-}
-
-.ws-agent-talk-head {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: var(--openbot-space-2);
-}
-
-.ws-agent-talk-preview,
-.ws-agent-talk-count {
+.ws-agent-talk-preview {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-}
-
-.ws-agent-talk-count {
-  flex: 0 0 auto;
 }
 
 .ws-agent-talk-filter {
@@ -552,49 +556,6 @@
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-}
-
-.ws-secrets-list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  border: 1px solid var(--openbot-border);
-  border-radius: var(--openbot-radius-lg);
-  padding: 0;
-  list-style: none;
-}
-
-.ws-secret {
-  display: flex;
-  flex-direction: column;
-  gap: var(--openbot-space-2);
-  padding: var(--openbot-space-2) var(--openbot-space-3);
-}
-
-.ws-secret + .ws-secret {
-  border-top: 1px solid var(--openbot-border);
-}
-
-.ws-secret-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--openbot-space-2);
-}
-
-.ws-secret-copy {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--openbot-space-1) var(--openbot-space-3);
-  font-size: var(--openbot-text-sm);
-}
-
-.ws-secret-actions {
-  display: inline-flex;
-  flex: none;
-  gap: var(--openbot-space-0-5);
 }
 
 .ws-secret-value {

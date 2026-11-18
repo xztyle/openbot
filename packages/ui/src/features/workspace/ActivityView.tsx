@@ -8,6 +8,7 @@ import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
 import { MemberAvatar, MemberName } from "./WorkspaceAvatar";
+import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useRecentTime } from "./workspace-format";
 import type { WorkspaceMember } from "./workspace-types";
@@ -148,44 +149,38 @@ export function ActivityView(props: ActivityViewProps): JSX.Element {
             </Switch>
           }
         >
-          <ul class="ws-feed">
+          <WorkspaceList>
             <For each={shown()} keyed={(item) => item.id}>
               {(item) => (
-                <li>
-                  <Button
-                    variant="ghost"
-                    class="ws-feed-row"
-                    data-unread={item().unread ? "" : undefined}
-                    onClick={() => props.onOpen(item().id)}
-                  >
+                <WorkspaceListRow
+                  unread={item().unread}
+                  onOpen={() => props.onOpen(item().id)}
+                  leading={
                     <span class="ws-feed-avatar">
                       <MemberAvatar member={item().actor} size="lg" />
                       <span class="ws-feed-kind" data-kind={item().kind} aria-hidden="true">
                         <Dynamic component={KIND_ICON[item().kind]} />
                       </span>
                     </span>
-                    <span class="ws-feed-copy">
-                      <span class="ws-feed-heading">
-                        <span class="ws-feed-what">
-                          {t(KIND_TEXT[item().kind], { name: item().actor.name, emoji: item().emoji ?? "" })}
-                        </span>
-                        <span class="ws-feed-time">{recent(item().at)}</span>
-                      </span>
-                      <span class="ws-feed-where">{where(item())}</span>
-                      <span class="ws-feed-preview">
-                        <MemberName member={item().actor} class="ws-feed-preview-author" />
-                        {item().preview}
-                      </span>
-                    </span>
+                  }
+                  title={t(KIND_TEXT[item().kind], { name: item().actor.name, emoji: item().emoji ?? "" })}
+                  titleEnd={recent(item().at)}
+                  trailing={
                     <Show when={item().unread}>
                       <span class="ws-unread-dot" aria-hidden="true" />
                       <span class="sr-only">{t("workspace.sidebar.unread")}</span>
                     </Show>
-                  </Button>
-                </li>
+                  }
+                >
+                  <span class="ws-feed-where">{where(item())}</span>
+                  <span class="ws-feed-preview">
+                    <MemberName member={item().actor} class="ws-feed-preview-author" />
+                    {item().preview}
+                  </span>
+                </WorkspaceListRow>
               )}
             </For>
-          </ul>
+          </WorkspaceList>
         </Show>
       </div>
     </section>

@@ -234,42 +234,6 @@
   font-size: var(--openbot-text-sm);
 }
 
-.space-agents-list {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: 0 var(--openbot-space-3);
-  list-style: none;
-}
-
-.space-agents-row {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--openbot-space-3);
-  border-bottom: 1px solid var(--openbot-border);
-  padding: var(--openbot-space-2) var(--openbot-space-1);
-}
-
-.space-agents-row[data-selected] {
-  background: var(--openbot-bg-control-active);
-}
-
-.space-agents-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-}
-
-.space-agents-name {
-  display: flex;
-  align-items: center;
-  gap: var(--openbot-space-1);
-  color: var(--openbot-text-primary);
-  font-weight: var(--openbot-weight-semibold);
-}
-
 .space-agents-meta {
   display: flex;
   min-width: 0;
@@ -277,18 +241,6 @@
   gap: var(--openbot-space-2);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-}
-
-.space-agents-activity {
-  flex: 0 0 auto;
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-}
-
-.space-agents-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: var(--openbot-space-0-5);
 }
 
 .space-agents-delete-list {

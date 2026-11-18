@@ -415,6 +415,7 @@
     "./features/channels/channel-activity.css": "./src/features/channels/channel-activity.css",
     "./features/tasks/tasks.css": "./src/features/tasks/tasks.css",
     "./features/workspace/ActivityView": "./src/features/workspace/ActivityView.tsx",
+    "./features/workspace/WorkspaceList": "./src/features/workspace/WorkspaceList.tsx",
     "./features/workspace/ArtifactCard": "./src/features/workspace/ArtifactCard.tsx",
     "./features/workspace/ArtifactsView": "./src/features/workspace/ArtifactsView.tsx",
     "./features/workspace/ChannelDetails": "./src/features/workspace/ChannelDetails.tsx",

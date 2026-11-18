@@ -15,6 +15,7 @@ import { type SkillsEvent, skillsEvent } from "./skills-events-v1";
 import { type WorkflowsEvent, workflowsEvent } from "./workflows-v1";
 import { type WorkspaceFleetChangedEvent, workspaceFleetEvent } from "./workspace-fleet-v1";
 import { type WorkspaceReadStateChangedEvent, workspaceReadStateEvent } from "./workspace-read-state-v1";
+import { type WorkspaceSavedChangedEvent, workspaceSavedEvent } from "./workspace-saved-v1";
 import { type WorkspaceSidebarChangedEvent, workspaceSidebarEvent } from "./workspace-sidebar-v1";
 import { type WorkspaceSpacesChangedEvent, workspaceSpacesEvent } from "./workspace-spaces-v1";
 import { type WorkspaceChannelEvent, workspaceChannelEvent } from "./workspace-v1";
@@ -36,6 +37,7 @@ export type OptionalTeamEvent =
   | WorkspaceChannelEvent
   | WorkspaceFleetChangedEvent
   | WorkspaceReadStateChangedEvent
+  | WorkspaceSavedChangedEvent
   | WorkspaceSidebarChangedEvent
   | WorkspaceSpacesChangedEvent;
 
@@ -58,6 +60,7 @@ export function optionalTeamEvent(value: unknown): OptionalTeamEvent | null {
     workspaceChannelEvent(value) ??
     workspaceFleetEvent(value) ??
     workspaceReadStateEvent(value) ??
+    workspaceSavedEvent(value) ??
     workspaceSidebarEvent(value) ??
     workspaceSpacesEvent(value)
   );

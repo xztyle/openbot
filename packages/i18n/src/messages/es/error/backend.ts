@@ -98,6 +98,7 @@ export const messages = {
   "error.backend.channelMemberRequired": "Selecciona un miembro disponible de este canal.",
   "error.backend.channelExists": "Ya existe un canal con este id.",
   "error.backend.channelThreadNotFound": "Este hilo no está disponible.",
+  "error.backend.channelPinLimit": "Este canal tiene 100 mensajes fijados. Desfija uno primero.",
   "error.backend.channelDiscordAdmin": "Solo los propietarios y administradores pueden conectar un canal con Discord.",
   "error.backend.channelDiscordKind": "Solo un canal se puede conectar con Discord, no un mensaje directo ni un grupo.",
   "error.backend.channelDiscordUnavailable":

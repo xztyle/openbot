@@ -127,3 +127,25 @@ export function replayReadStateEvent(db: DatabaseSync, channelId: string, type: 
       return false;
   }
 }
+
+export const SAVE_SQL = `INSERT INTO projection_channel_saved (member_id, channel_id, message_id, state, saved_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(member_id, channel_id, message_id) DO UPDATE SET state = excluded.state`;
+export const UNSAVE_SQL =
+  "DELETE FROM projection_channel_saved WHERE member_id = ? AND channel_id = ? AND message_id = ?";
+
+/** Applies one stored `channel.saved` event during a rebuild. Answers false for any other event. */
+export function replaySavedEvent(db: DatabaseSync, channelId: string, type: unknown, value: unknown): boolean {
+  if (type !== "channel.saved") return false;
+  if (
+    !isDynamicRecord(value) ||
+    !isString(value.memberId) ||
+    !isString(value.messageId) ||
+    !isString(value.at) ||
+    !(value.state === null || value.state === "saved" || value.state === "done")
+  )
+    throw new Error("Invalid saved item event.");
+  if (value.state === null) db.prepare(UNSAVE_SQL).run(value.memberId, channelId, value.messageId);
+  else db.prepare(SAVE_SQL).run(value.memberId, channelId, value.messageId, value.state, value.at);
+  return true;
+}

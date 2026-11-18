@@ -39,14 +39,21 @@ import {
   parseChannelRoutingConversationEventItemType,
   type QueueHold,
   type UpdateChannelMemoryInput,
+  WORKSPACE_PIN_LIMIT,
   type WorkspaceActivity,
   type WorkspaceActivityInput,
   type WorkspaceAgentChannelDefaults,
   type WorkspaceChannelCommand,
   type WorkspaceFollowThreadInput,
   type WorkspaceMarkUnreadInput,
+  type WorkspacePins,
   type WorkspaceReadPosition,
   type WorkspaceReadThreadInput,
+  type WorkspaceSavedInput,
+  type WorkspaceSavedPage,
+  type WorkspaceSetPinnedInput,
+  type WorkspaceSetSavedInput,
+  type WorkspaceSetSavedResult,
   type WorkspaceThreadState,
   type WorkspaceThreadStates,
   type WorkspaceThreadStatesInput,
@@ -79,6 +86,7 @@ import {
 import { ChannelMemoryStore } from "./channel-memory-store";
 import { ChannelReadState } from "./channel-read-state";
 import { type ChannelGateOutcome, ChannelResponders, memberAnswerMode, usesAnswerModes } from "./channel-responders";
+import { ChannelSaved } from "./channel-saved";
 import { ChannelSearch } from "./channel-search";
 import { type ChannelAssignment, type ChannelContext, type ChannelMessageChange, ChannelStore } from "./channel-store";
 import { ChannelTyping } from "./channel-typing";
@@ -193,6 +201,8 @@ export interface ChannelHooks {
    * that person's own sessions hear of it (`workspace-read-state-changed`).
    */
   readStateChanged?(memberId: string, channelId: string, threadRootId?: string): void;
+  /** A person's saved items changed. Only that person's own sessions hear of it (`workspace-saved-changed`). */
+  savedChanged?(memberId: string): void;
   /** The space of a channel, for the message search. Omitted, the host has no spaces. */
   channelSpaceId?(channel: Channel): string;
   error(error: unknown): void;
@@ -262,6 +272,8 @@ export class ChannelService {
   readonly readState: ChannelReadState;
   /** The message search over the channels, groups and DMs of a reader. */
   readonly search: ChannelSearch;
+  /** The saved items of each person and the pins of each channel. */
+  readonly saved: ChannelSaved;
   /** Which member agents answer a person's message, the answer gate included. */
   readonly responders = new ChannelResponders();
   /** The channel bridge with Discord, while messaging runs. Without it, `link-discord` fails. */
@@ -320,6 +332,7 @@ export class ChannelService {
   ) {
     this.store = new ChannelStore(database);
     this.readState = new ChannelReadState(this.store);
+    this.saved = new ChannelSaved(this.store);
     const spaceOf = hooks.channelSpaceId;
     this.search = new ChannelSearch({
       store: this.store,
@@ -582,6 +595,64 @@ export class ChannelService {
       unreadCount: this.readState.unreadReplies(channel, rootId, throughSequence, viewer),
     };
   }
+
+  /** A person's saved items, in the channels they can still see (`ipc-workspace-saved.ts`). */
+  savedItems(input: WorkspaceSavedInput, actor: { id: string }, viewer: ChannelViewer): WorkspaceSavedPage {
+    if (input.channelId) this.#visibleChannel(input.channelId, viewer);
+    return this.saved.list(input, actor.id, viewer);
+  }
+
+  /** A person saves a message for later, marks it done, or removes it. A deleted message cannot be saved. */
+  setSaved(input: WorkspaceSetSavedInput, actor: { id: string }, viewer: ChannelViewer): WorkspaceSetSavedResult {
+    const channel = this.#visibleChannel(input.channelId, viewer);
+    const message = this.store.message(channel.id, input.messageId);
+    if (!message || (input.state !== null && message.deletedAt !== undefined))
+      throw new Error(sourceText("error.backend.channelMessageNotFound"));
+    this.saved.set(channel.id, message.id, actor.id, input.state, input.operationId);
+    this.hooks.savedChanged?.(actor.id);
+    return { item: this.saved.item(channel.id, message.id, actor.id) };
+  }
+
+  /** The pins of a channel the person can see. */
+  pins(channelId: string, viewer: ChannelViewer): WorkspacePins {
+    return this.saved.pins(this.#visibleChannel(channelId, viewer));
+  }
+
+  /**
+   * A person pins a message to its channel, or unpins it. The pin is a quiet change of the message:
+   * every client that shows the channel gets the message again (`channel-message`). A channel holds at
+   * most `WORKSPACE_PIN_LIMIT` pins, and an archived one takes none.
+   */
+  readonly setPinned = Effect.fn("ChannelService.setPinned")(function* (
+    this: ChannelService,
+    input: WorkspaceSetPinnedInput,
+    actor: { id: string },
+    viewer: ChannelViewer,
+  ) {
+    yield* this.#serialize(
+      input.channelId,
+      Effect.gen({ self: this }, function* () {
+        const channel = yield* channelSync(() => this.#visibleChannel(input.channelId, viewer));
+        if (channel.archived) return yield* channelFailure(new Error(sourceText("error.backend.channelArchived")));
+        const message = yield* channelSync(() => this.store.message(channel.id, input.messageId));
+        if (!message || message.deletedAt !== undefined)
+          return yield* channelFailure(new Error(sourceText("error.backend.channelMessageNotFound")));
+        if (input.pinned === (message.pinned !== undefined)) return channel;
+        if (input.pinned && (yield* channelSync(() => this.saved.pinCount(channel.id))) >= WORKSPACE_PIN_LIMIT)
+          return yield* channelFailure(new Error(sourceText("error.backend.channelPinLimit")));
+        const { pinned: _previous, ...unpinned } = message;
+        const next: ChannelMessage = input.pinned
+          ? { ...message, pinned: { by: { kind: "member", id: actor.id }, at: new Date().toISOString() } }
+          : unpinned;
+        const result = yield* channelSync(() =>
+          this.store.update(channel, { quietMessages: [next] }, input.operationId),
+        );
+        this.publish(channel.id);
+        return result;
+      }),
+    );
+    return yield* channelSync(() => this.saved.pins(this.#visibleChannel(input.channelId, viewer)));
+  });
 
   /**
    * A person types in a channel they can see, or stopped. It changes only the typing list in memory;

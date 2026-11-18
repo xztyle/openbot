@@ -22,7 +22,12 @@ import {
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
-import { ACTIVITY_ITEM_TYPES, projectThreadState, replayReadStateEvent } from "./channel-thread-projection";
+import {
+  ACTIVITY_ITEM_TYPES,
+  projectThreadState,
+  replayReadStateEvent,
+  replaySavedEvent,
+} from "./channel-thread-projection";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
 import { deleteAggregateHistory, deleteThreadAttachments } from "./database/database-core";
 import {
@@ -867,6 +872,7 @@ export class ChannelStore {
           "projection_channel_reads",
           "projection_channel_thread_reads",
           "projection_channel_thread_follows",
+          "projection_channel_saved",
           "projection_channel_assignments",
           "projection_channel_tasks",
           "projection_channel_messages",
@@ -1062,6 +1068,7 @@ export class ChannelStore {
         "tasks",
         "thread_reads",
         "thread_follows",
+        "saved",
         "messages",
         "summaries",
         "reads",
@@ -1147,7 +1154,10 @@ export class ChannelStore {
             break;
           }
           default:
-            if (!replayReadStateEvent(db, channelId, event.event_type, value))
+            if (
+              !replayReadStateEvent(db, channelId, event.event_type, value) &&
+              !replaySavedEvent(db, channelId, event.event_type, value)
+            )
               throw new Error("Unknown channel event.");
         }
       }

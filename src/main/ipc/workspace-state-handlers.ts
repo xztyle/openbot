@@ -4,20 +4,31 @@
 // answers through workspace-read-state-v1 (`fork-host-v1`), and one without it fails.
 
 import {
+  decodeWorkspacePins,
   decodeWorkspaceReadPosition,
+  decodeWorkspaceSavedPage,
   decodeWorkspaceSearchPage,
+  decodeWorkspaceSetSavedResult,
   decodeWorkspaceThreadState,
   decodeWorkspaceThreadStates,
   parseWorkspaceFollowThreadInput,
   parseWorkspaceMarkUnreadInput,
+  parseWorkspacePinsInput,
   parseWorkspaceReadThreadInput,
+  parseWorkspaceSavedInput,
   parseWorkspaceSearchInput,
+  parseWorkspaceSetPinnedInput,
+  parseWorkspaceSetSavedInput,
   parseWorkspaceThreadStatesInput,
 } from "@openbot/contracts/ipc";
 import {
   WORKSPACE_READ_STATE_CAPABILITY,
   WORKSPACE_READ_STATE_ROUTES,
 } from "@openbot/contracts/team-protocol/workspace-read-state-v1";
+import {
+  WORKSPACE_SAVED_CAPABILITY,
+  WORKSPACE_SAVED_ROUTES,
+} from "@openbot/contracts/team-protocol/workspace-saved-v1";
 import {
   WORKSPACE_SEARCH_CAPABILITY,
   WORKSPACE_SEARCH_ROUTES,
@@ -40,6 +51,11 @@ export interface WorkspaceStateIpcDependencies {
 export function workspaceStateHandlers({ service, host, remoteServers }: WorkspaceStateIpcDependencies) {
   const remote = <Body, T>(serverId: string, path: string, body: Body, decoder: ResponseDecoder<T>) => {
     if (!remoteServers.supportsCapability(serverId, WORKSPACE_READ_STATE_CAPABILITY))
+      throw new Error(sourceText("error.team.workspaceUnsupported"));
+    return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
+  };
+  const saved = <Body, T>(serverId: string, path: string, body: Body, decoder: ResponseDecoder<T>) => {
+    if (!remoteServers.supportsCapability(serverId, WORKSPACE_SAVED_CAPABILITY))
       throw new Error(sourceText("error.team.workspaceUnsupported"));
     return runCauseEffect(remoteServers.request(serverId, path, decoder, { method: "POST", body }));
   };
@@ -71,6 +87,23 @@ export function workspaceStateHandlers({ service, host, remoteServers }: Workspa
           }),
         );
       },
+    }),
+    workspaceSaved: scopedHandler(parseWorkspaceSavedInput, {
+      local: (input) => service.channels.savedItems(input, host.channelActor(), host.channelViewer()),
+      remote: (input, serverId) => saved(serverId, WORKSPACE_SAVED_ROUTES.saved, input, decodeWorkspaceSavedPage),
+    }),
+    workspaceSetSaved: scopedHandler(parseWorkspaceSetSavedInput, {
+      local: (input) => service.channels.setSaved(input, host.channelActor(), host.channelViewer()),
+      remote: (input, serverId) =>
+        saved(serverId, WORKSPACE_SAVED_ROUTES.setSaved, input, decodeWorkspaceSetSavedResult),
+    }),
+    workspacePins: scopedHandler(parseWorkspacePinsInput, {
+      local: (input) => service.channels.pins(input.channelId, host.channelViewer()),
+      remote: (input, serverId) => saved(serverId, WORKSPACE_SAVED_ROUTES.pins, input, decodeWorkspacePins),
+    }),
+    workspaceSetPinned: scopedHandler(parseWorkspaceSetPinnedInput, {
+      local: (input) => runCauseEffect(service.channels.setPinned(input, host.channelActor(), host.channelViewer())),
+      remote: (input, serverId) => saved(serverId, WORKSPACE_SAVED_ROUTES.setPinned, input, decodeWorkspacePins),
     }),
     workspaceMarkUnread: scopedHandler(parseWorkspaceMarkUnreadInput, {
       // The reader here is the host user of this computer, as in `listChannels`.

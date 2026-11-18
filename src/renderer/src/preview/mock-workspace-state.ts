@@ -6,18 +6,28 @@ import type {
   ChannelSummary,
   WorkspaceFollowThreadInput,
   WorkspaceMarkUnreadInput,
+  WorkspaceMessageAuthor,
+  WorkspacePins,
   WorkspaceReadPosition,
   WorkspaceReadThreadInput,
+  WorkspaceSavedInput,
+  WorkspaceSavedItem,
+  WorkspaceSavedPage,
   WorkspaceSearchHit,
   WorkspaceSearchInput,
   WorkspaceSearchPage,
+  WorkspaceSetPinnedInput,
+  WorkspaceSetSavedInput,
+  WorkspaceSetSavedResult,
   WorkspaceThreadState,
   WorkspaceThreadStates,
   WorkspaceThreadStatesInput,
 } from "@openbot/contracts/ipc";
 import {
   WORKSPACE_FOLLOWED_THREADS_LIMIT,
+  WORKSPACE_SAVED_PREVIEW_LIMIT,
   WORKSPACE_SEARCH_SNIPPET_LIMIT,
+  workspaceSavedLimit,
   workspaceSearchLimit,
 } from "@openbot/contracts/ipc";
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
@@ -31,6 +41,7 @@ function fold(text: string): string {
 export interface MockWorkspaceStateChannels {
   listChannels(): Promise<ChannelSummary[]>;
   readChannel(input: ChannelReadInput): Promise<ChannelPage>;
+  setMessagePinned(channelId: string, messageId: string, pinned: boolean): void;
 }
 
 /**
@@ -44,9 +55,70 @@ export function createMockWorkspaceState(
   memberId: string,
 ) {
   const positions = new Map<string, number>();
+  const saved = new Map<string, { channelId: string; messageId: string; state: "saved" | "done"; savedAt: string }>();
   const choices = new Map<string, boolean>();
   const key = (channelId: string, rootId: string) => `${channelId}\n${rootId}`;
   const own = (message: ChannelMessage) => message.author.kind === "member" && message.author.id === memberId;
+
+  /** A message of a channel or of one of its threads, or null. */
+  async function findMessage(channelId: string, messageId: string): Promise<ChannelMessage | null> {
+    const page = await channels.readChannel({ channelId });
+    const top = page.messages.find((message) => message.id === messageId);
+    if (top) return top;
+    for (const root of page.messages.filter((message) => (message.threadSummary?.replyCount ?? 0) > 0)) {
+      const thread = await channels.readChannel({ channelId, threadRootId: root.id });
+      const reply = thread.messages.find((message) => message.id === messageId);
+      if (reply) return reply;
+    }
+    return null;
+  }
+
+  function authorOf(message: ChannelMessage): WorkspaceMessageAuthor {
+    return message.externalAuthor
+      ? { kind: "external", id: message.externalAuthor.id, name: message.externalAuthor.name }
+      : { kind: message.author.kind, id: message.author.id, name: message.author.name };
+  }
+
+  function savedItem(message: ChannelMessage, state: "saved" | "done", savedAt: string): WorkspaceSavedItem {
+    return {
+      channelId: message.channelId,
+      messageId: message.id,
+      ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+      state,
+      savedAt,
+      author: authorOf(message),
+      at: message.message.createdAt,
+      preview: message.deletedAt
+        ? ""
+        : markdownPreviewText(message.message.text).slice(0, WORKSPACE_SAVED_PREVIEW_LIMIT),
+      deleted: message.deletedAt !== undefined,
+    };
+  }
+
+  async function pins(channelId: string): Promise<WorkspacePins> {
+    const page = await channels.readChannel({ channelId });
+    return {
+      channelId,
+      pins: page.messages
+        .filter((message) => message.pinned && !message.deletedAt)
+        .sort((left, right) => (right.pinned?.at ?? "").localeCompare(left.pinned?.at ?? ""))
+        .flatMap((message) =>
+          message.pinned
+            ? [
+                {
+                  messageId: message.id,
+                  ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+                  author: authorOf(message),
+                  at: message.message.createdAt,
+                  preview: markdownPreviewText(message.message.text).slice(0, WORKSPACE_SAVED_PREVIEW_LIMIT),
+                  pinnedBy: message.pinned.by,
+                  pinnedAt: message.pinned.at,
+                },
+              ]
+            : [],
+        ),
+    };
+  }
 
   async function state(channelId: string, rootId: string): Promise<WorkspaceThreadState | null> {
     const list = await channels.listChannels();
@@ -158,6 +230,44 @@ export function createMockWorkspaceState(
         total: hits.length,
         nextCursor: next < hits.length ? String(next) : null,
       };
+    },
+    workspaceSaved: async (input: WorkspaceSavedInput): Promise<WorkspaceSavedPage> => {
+      const items: WorkspaceSavedItem[] = [];
+      for (const entry of [...saved.values()].sort((left, right) => right.savedAt.localeCompare(left.savedAt))) {
+        if (input.state && entry.state !== input.state) continue;
+        if (input.channelId && entry.channelId !== input.channelId) continue;
+        const message = await findMessage(entry.channelId, entry.messageId);
+        if (message) items.push(savedItem(message, entry.state, entry.savedAt));
+      }
+      const offset = input.cursor ? Number(input.cursor) : 0;
+      const page = items.slice(offset, offset + workspaceSavedLimit(input));
+      const next = offset + page.length;
+      return {
+        items: page,
+        total: items.length,
+        nextCursor: page.length > 0 && next < items.length ? String(next) : null,
+      };
+    },
+    workspaceSetSaved: async (input: WorkspaceSetSavedInput): Promise<WorkspaceSetSavedResult> => {
+      const message = await findMessage(input.channelId, input.messageId);
+      if (!message) throw new Error("This message is unavailable.");
+      const id = key(input.channelId, input.messageId);
+      if (input.state === null) saved.delete(id);
+      else
+        saved.set(id, {
+          channelId: input.channelId,
+          messageId: input.messageId,
+          state: input.state,
+          savedAt: saved.get(id)?.savedAt ?? new Date().toISOString(),
+        });
+      emit({ type: "workspace-saved-changed" });
+      const entry = saved.get(id);
+      return { item: entry ? savedItem(message, entry.state, entry.savedAt) : null };
+    },
+    workspacePins: async ({ channelId }: { channelId: string }): Promise<WorkspacePins> => pins(channelId),
+    workspaceSetPinned: async (input: WorkspaceSetPinnedInput): Promise<WorkspacePins> => {
+      channels.setMessagePinned(input.channelId, input.messageId, input.pinned);
+      return pins(input.channelId);
     },
     workspaceMarkUnread: async (input: WorkspaceMarkUnreadInput): Promise<WorkspaceReadPosition> => {
       const page = await channels.readChannel({

@@ -199,3 +199,22 @@ export const V53_CHANNEL_SEARCH_BACKFILL_SQL = `
   SELECT message.rowid, ${searchText("message")} FROM projection_channel_messages message
    WHERE ${searchable("message")} ORDER BY message.rowid;
 `;
+
+// Shared by migration v54 and the separate new-database schema. The messages that each person saved
+// for later (`saved`) or marked done (`done`), and an index of the pinned messages of each channel. A
+// pin lives on the message (`pinned` in its JSON), so it has no table of its own.
+export const CHANNEL_SAVED_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS projection_channel_saved (
+    member_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL REFERENCES projection_channels(channel_id),
+    message_id TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('saved', 'done')),
+    saved_at TEXT NOT NULL,
+    PRIMARY KEY(member_id, channel_id, message_id)
+  );
+  CREATE INDEX IF NOT EXISTS channel_saved_member ON projection_channel_saved(member_id, saved_at DESC);
+  CREATE INDEX IF NOT EXISTS channel_saved_channel ON projection_channel_saved(channel_id);
+  CREATE INDEX IF NOT EXISTS channel_messages_pinned
+    ON projection_channel_messages(channel_id, json_extract(message_json, '$.pinned.at'))
+    WHERE json_extract(message_json, '$.pinned') IS NOT NULL;
+`;

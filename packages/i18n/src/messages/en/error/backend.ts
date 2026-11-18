@@ -144,6 +144,7 @@ export const messages = defineMessages("error.backend", {
   "error.backend.channelMemberRequired": "Select an available member of this channel.",
   "error.backend.channelExists": "A channel with this id already exists.",
   "error.backend.channelThreadNotFound": "This thread is unavailable.",
+  "error.backend.channelPinLimit": "This channel has 100 pins. Unpin a message first.",
   "error.backend.channelDiscordAdmin": "Only owners and admins can bridge a channel with Discord.",
   "error.backend.channelDiscordKind": "Only a channel can be bridged with Discord, not a DM or a group.",
   "error.backend.channelDiscordUnavailable":

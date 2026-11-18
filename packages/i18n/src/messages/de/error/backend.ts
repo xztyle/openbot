@@ -103,6 +103,7 @@ export const messages = {
   "error.backend.channelMemberRequired": "Wähle ein verfügbares Mitglied dieses Kanals.",
   "error.backend.channelExists": "Ein Kanal mit dieser ID existiert bereits.",
   "error.backend.channelThreadNotFound": "Dieser Thread ist nicht verfügbar.",
+  "error.backend.channelPinLimit": "Dieser Kanal hat 100 angeheftete Nachrichten. Löse zuerst eine.",
   "error.backend.channelDiscordAdmin": "Nur Besitzer und Admins können einen Kanal mit Discord verbinden.",
   "error.backend.channelDiscordKind":
     "Nur ein Kanal kann mit Discord verbunden werden, keine Direktnachricht und keine Gruppe.",

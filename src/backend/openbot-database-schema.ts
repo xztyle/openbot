@@ -12,6 +12,7 @@ import { AGENT_TASK_SCHEMA_SQL } from "./agent-tasks/agent-task-schema";
 import { AGENT_WAIT_SCHEMA_SQL } from "./agent-waits/agent-wait-schema";
 import { BROWSER_PROFILE_SCHEMA_SQL } from "./browser-profiles/browser-profile-schema";
 import {
+  CHANNEL_SAVED_SCHEMA_SQL,
   CHANNEL_SCHEMA_SQL,
   CHANNEL_SEARCH_SCHEMA_SQL,
   CHANNEL_SETTINGS_SCHEMA_SQL,
@@ -795,7 +796,8 @@ const LATEST_SCHEMA_SQL =
   EVENT_CHECK_SCHEMA_SQL +
   SPACE_SCHEMA_SQL +
   CHANNEL_THREAD_STATE_SCHEMA_SQL +
-  CHANNEL_SEARCH_SCHEMA_SQL;
+  CHANNEL_SEARCH_SCHEMA_SQL +
+  CHANNEL_SAVED_SCHEMA_SQL;
 
 /** The end of the thread message table with the migration 40 columns before its PRIMARY KEY constraint. */
 function withThreadMessageOrderColumns(tableEnd: string): string {
@@ -1116,6 +1118,12 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
       db.exec(CHANNEL_SEARCH_SCHEMA_SQL);
       db.exec(V53_CHANNEL_SEARCH_BACKFILL_SQL);
     },
+  },
+  {
+    version: 54,
+    // Only creates a table and indexes, so no foreign-key pause and no vacuum. No message is saved or
+    // pinned yet, so the indexes start empty.
+    up: (db) => db.exec(CHANNEL_SAVED_SCHEMA_SQL),
   },
 ];
 

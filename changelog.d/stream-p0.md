@@ -13,3 +13,6 @@
 - Search the messages of channels, groups and DMs, thread replies too. A word finds the words that
   start with it, also without accents; `"two words"` finds a phrase and `-word` leaves messages out.
   Results show only what you can see, with the matched words marked, by relevance or newest first.
+- Save messages for later. Only you see your saved messages; mark one done when you handled it.
+- Pin messages to a channel, up to 100. Everyone who can see the channel sees the pin and the list
+  of pins.

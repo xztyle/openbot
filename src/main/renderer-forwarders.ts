@@ -134,7 +134,9 @@ export function createRendererForwarders({
     // The sidebar of another member of this host is not this computer's.
     if (
       serverId === LOCAL_SERVER_ID &&
-      (event.type === "workspace-sidebar-changed" || event.type === "workspace-read-state-changed") &&
+      (event.type === "workspace-sidebar-changed" ||
+        event.type === "workspace-read-state-changed" ||
+        event.type === "workspace-saved-changed") &&
       event.memberId !== getHostService()?.channelActor().id
     )
       return;

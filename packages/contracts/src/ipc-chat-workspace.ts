@@ -211,6 +211,14 @@ export interface ChannelMessageWorkspaceFields {
   gateFollowUp?: ChannelGateFollowUp;
   /** Set on a message that a bridge brought from another platform, such as Discord. */
   externalAuthor?: ChannelExternalAuthor;
+  /** The message is pinned to its channel: who pinned it, and when. */
+  pinned?: ChannelPin;
+}
+
+/** A pin on a channel message. */
+export interface ChannelPin {
+  by: ChannelActorRef;
+  at: string;
 }
 
 /** The workspace fields of one member agent. */
@@ -447,8 +455,13 @@ export function hasValidChannelMessageWorkspaceFields(value: DynamicRecord): boo
         value.gateDecisions.length <= CHANNEL_GATE_DECISION_LIMIT &&
         value.gateDecisions.every(isChannelGateDecision))) &&
     (value.gateFollowUp === undefined || isChannelGateFollowUp(value.gateFollowUp)) &&
-    (value.externalAuthor === undefined || isChannelExternalAuthor(value.externalAuthor))
+    (value.externalAuthor === undefined || isChannelExternalAuthor(value.externalAuthor)) &&
+    (value.pinned === undefined || isChannelPin(value.pinned))
   );
+}
+
+export function isChannelPin(value: unknown): value is ChannelPin {
+  return isDynamicRecord(value) && isChannelActorRef(value.by) && timestamp(value.at);
 }
 
 const BROADCAST_MENTION = /(^|[^\w@])@(channel|here|everyone)\b/giu;

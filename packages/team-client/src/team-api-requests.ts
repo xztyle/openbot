@@ -36,10 +36,13 @@ import {
   decodeWorkspaceDecisions,
   decodeWorkspaceDmAgents,
   decodeWorkspaceFleet,
+  decodeWorkspacePins,
   decodeWorkspaceReadPosition,
+  decodeWorkspaceSavedPage,
   decodeWorkspaceSearchPage,
   decodeWorkspaceSecrets,
   decodeWorkspaceSecretValue,
+  decodeWorkspaceSetSavedResult,
   decodeWorkspaceSidebar,
   decodeWorkspaceSpaces,
   decodeWorkspaceSteps,
@@ -88,6 +91,7 @@ import { ROUTINE_FLOWS_ROUTES } from "@openbot/contracts/team-protocol/routine-f
 import { decodeTeamProtocolV2Json, type TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { WORKSPACE_FLEET_ROUTES } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
 import { WORKSPACE_READ_STATE_ROUTES } from "@openbot/contracts/team-protocol/workspace-read-state-v1";
+import { WORKSPACE_SAVED_ROUTES } from "@openbot/contracts/team-protocol/workspace-saved-v1";
 import { WORKSPACE_SEARCH_ROUTES } from "@openbot/contracts/team-protocol/workspace-search-v1";
 import { WORKSPACE_SIDEBAR_ROUTES } from "@openbot/contracts/team-protocol/workspace-sidebar-v1";
 import { WORKSPACE_SPACES_ROUTES } from "@openbot/contracts/team-protocol/workspace-spaces-v1";
@@ -329,6 +333,10 @@ export type TeamChannelsApi = Pick<
   | "workspaceFollowThread"
   | "workspaceMarkUnread"
   | "workspaceSearch"
+  | "workspaceSaved"
+  | "workspaceSetSaved"
+  | "workspacePins"
+  | "workspaceSetPinned"
   | "channelTyping"
   | "workspaceDmAgents"
   | "workspaceFleet"
@@ -401,6 +409,11 @@ export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOp
       workspacePost(WORKSPACE_READ_STATE_ROUTES.markUnread, decodeWorkspaceReadPosition, input),
     // A fork host built before workspace-search-v1 answers 404; the caller then searches channel names only.
     workspaceSearch: (input) => workspacePost(WORKSPACE_SEARCH_ROUTES.search, decodeWorkspaceSearchPage, input),
+    // A fork host built before workspace-saved-v1 answers 404; the caller then offers no saved items or pins.
+    workspaceSaved: (input) => workspacePost(WORKSPACE_SAVED_ROUTES.saved, decodeWorkspaceSavedPage, input),
+    workspaceSetSaved: (input) => workspacePost(WORKSPACE_SAVED_ROUTES.setSaved, decodeWorkspaceSetSavedResult, input),
+    workspacePins: (input) => workspacePost(WORKSPACE_SAVED_ROUTES.pins, decodeWorkspacePins, input),
+    workspaceSetPinned: (input) => workspacePost(WORKSPACE_SAVED_ROUTES.setPinned, decodeWorkspacePins, input),
     // A host without the workspace shows no typing: the signal is dropped there.
     channelTyping: async (input) => {
       if (options.supportsWorkspace?.() === false) return;

@@ -478,6 +478,14 @@ export function createMockChannels(
     workspaceDmAgents: async (): Promise<WorkspaceDmAgents> => ({ agentIds: [...agentIds()] }),
     /** Every channel id, for the spaces of the preview. */
     channelIds: (): string[] => [...channels.keys()],
+    /** Pins a message of the preview, or unpins it, and shows the change as the host does. */
+    setMessagePinned: (channelId: string, messageId: string, pinned: boolean): void => {
+      const channel = requireChannel(channelId);
+      const message = findMessage(channelId, messageId);
+      if (pinned) message.pinned = { by: { kind: "member", id: PREVIEW_MEMBER_ID }, at: new Date().toISOString() };
+      else delete message.pinned;
+      messageChanged(channel, message);
+    },
     // The preview's own person has one sidebar per server, as a host keeps one per member. None
     // until the first save, so the window uploads what this computer had.
     workspaceSidebar: async (serverId?: string): Promise<WorkspaceSidebar> => {

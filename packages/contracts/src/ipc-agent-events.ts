@@ -74,6 +74,8 @@ export type AgentEvent =
    * only for its own member, without it, and reads the thread states or the activity again.
    */
   | { type: "workspace-read-state-changed"; memberId?: string; channelId: string; threadRootId?: string }
+  /** A member's saved items changed. `memberId` stays on the host, as for the sidebar. */
+  | { type: "workspace-saved-changed"; memberId?: string }
   /** The spaces, or the space of an agent or a channel, changed. A client reads `workspaceSpaces` again. */
   | { type: "workspace-spaces-changed" }
   | { type: "status"; status: AgentStatus }
@@ -237,6 +239,8 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
     case "workspace-fleet-changed":
       return isWorkspaceFleetChange(value);
     case "workspace-sidebar-changed":
+      return value.memberId === undefined || isIdentifier(value.memberId);
+    case "workspace-saved-changed":
       return value.memberId === undefined || isIdentifier(value.memberId);
     case "workspace-read-state-changed":
       return (

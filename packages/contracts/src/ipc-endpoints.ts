@@ -565,6 +565,14 @@ import type {
   WorkspaceSteps,
   WorkspaceStepsInput,
 } from "./ipc-workspace-fleet";
+import type {
+  WorkspacePins,
+  WorkspaceSavedInput,
+  WorkspaceSavedPage,
+  WorkspaceSetPinnedInput,
+  WorkspaceSetSavedInput,
+  WorkspaceSetSavedResult,
+} from "./ipc-workspace-saved";
 import type { WorkspaceSearchInput, WorkspaceSearchPage } from "./ipc-workspace-search";
 import type { WorkspaceSidebar, WorkspaceSidebarPrefs } from "./ipc-workspace-sidebar";
 import type { WorkspaceSpaceAction, WorkspaceSpaceActionResult, WorkspaceSpaces } from "./ipc-workspace-spaces";
@@ -1383,6 +1391,13 @@ export const IPC_ENDPOINTS = {
     // The messages of the channels, groups and DMs the reader can see, by their words. A joined server
     // answers through workspace-search-v1 (`fork-host-v1`); one without it fails.
     workspaceSearch: scopedRequest<WorkspaceSearchInput, WorkspaceSearchPage>()("agent:workspace:search"),
+    // The reader's saved items ("Later") and the pins of a channel. A joined server answers through
+    // workspace-saved-v1 (`fork-host-v1`); one without it fails. `scopedEvent` carries
+    // `workspace-saved-changed` for the reader's own sessions; a pin arrives as `channel-message`.
+    workspaceSaved: scopedRequest<WorkspaceSavedInput, WorkspaceSavedPage>()("agent:workspace:saved"),
+    workspaceSetSaved: scopedRequest<WorkspaceSetSavedInput, WorkspaceSetSavedResult>()("agent:workspace:saved:set"),
+    workspacePins: scopedRequest<{ channelId: string }, WorkspacePins>()("agent:workspace:pins"),
+    workspaceSetPinned: scopedRequest<WorkspaceSetPinnedInput, WorkspacePins>()("agent:workspace:pins:set"),
     // The person types in a channel, or stopped (`ChannelTypingInput`). `scopedEvent` carries
     // `channel-typing` with the people who type and the agents that think or work there. A joined
     // server answers through `workspace-v1` (`fork-host-v1`).

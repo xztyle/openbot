@@ -29,14 +29,18 @@ const NOT_FOUND = [
   "error.backend.channelMessageNotFound",
 ] as const;
 
-/** A channel, a thread or a message that this member cannot see is not found, as on the channel routes. */
+/** Throws the 404 of a channel, a thread or a message that this member cannot see, else the error. */
+export function rethrowNotFound(error: unknown): never {
+  const message = error instanceof Error ? error.message : "";
+  if (NOT_FOUND.some((key) => message === sourceText(key))) throw new HttpError(404, message);
+  throw error;
+}
+
 export function found<T>(read: () => T): T {
   try {
     return read();
   } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (NOT_FOUND.some((key) => message === sourceText(key))) throw new HttpError(404, message);
-    throw error;
+    return rethrowNotFound(error);
   }
 }
 

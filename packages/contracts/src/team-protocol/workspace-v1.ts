@@ -48,6 +48,8 @@
 //   each gate decision `round?: 2`.
 // - Final phase: on each channel `routing` (`responders` | `coordinator`), and the command
 //   `set-routing` (`{ routing: "responders" | "coordinator", leadAgentId? }`, owner and admin only).
+// - Later (workspace-saved-v1): on each message `pinned` (`{ by: { kind: "member" | "agent", id },
+//   at (80) }`), set while the message is pinned to its channel.
 // - `POST /v1/workspace/channels/typing`: `{ channelId, threadRootId?, typing }` answers `{}`. The
 //   person of the session types in the channel, or stopped. A client sends it at most every 3
 //   seconds while the person types; the host ends the typing 6 seconds after the last one.
@@ -182,6 +184,7 @@ const MESSAGE_FIELDS: Record<string, Decoder> = {
     { kind: oneOf("external"), platform: oneOf("discord"), id: identifier, name: string(120) },
     { avatarUrl: string(500) },
   ),
+  pinned: fields({ by: actor, at: string(80) }),
 };
 
 function present(source: unknown, decoders: Record<string, Decoder>): JsonObject {

@@ -1221,6 +1221,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       },
       activity: (agentId) => this.#gateActivity(agentId),
       typingChanged: (channelId, typing) => this.#emit({ type: "channel-typing", channelId, typing }),
+      savedChanged: (memberId) => this.#emit({ type: "workspace-saved-changed", memberId }),
       readStateChanged: (memberId, channelId, threadRootId) =>
         this.#emit({
           type: "workspace-read-state-changed",

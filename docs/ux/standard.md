@@ -185,6 +185,26 @@ steps, routine runs, the side panel, the queue and steer stay its own. It looks 
 - A message that a link, a search or a notification opens is scrolled to the middle and flashes.
 - Without the context (the chat outside the workspace, a channel in the chat view) nothing changes.
 
+## 7c. Needs you
+
+Anything that waits for the reader is impossible to miss (stream/needsyou). The host's list
+(`agent-attention-changed`) names every question, form, API key form, approval, browser takeover,
+sign-in and browser secret of every agent. Each surface reads that one list:
+
+- The agent's DM row shows at once, also for an agent that nobody wrote to, with the amber Needs you
+  mark (a hand in an amber bubble, an amber bar at the start of the row). It sorts first under
+  Priority and stays in a collapsed section and under Unreads only.
+- The agent that gave the work shows the request too: its row in the sidebar is marked, its
+  "Waiting for replies" row says what to do and where ("Sign in on accounts.google.com") with the
+  action (Take over, Answer, Review), and the teammate's card stands in its chat.
+- "Needs you": a button with the count in the top bar of a computer (it shows only while something
+  waits) opens the list; Activity starts with the same list; a phone's Home has the chip. A row says
+  who asks, what to do, the safe summary, where and when, and opens the chat that answers it.
+- The Activity badges, the space rail, the tab title and the Dock count it. A takeover and a browser
+  secret send a web push, as a question and an approval do.
+- A new card in the open chat brings the chat to its end. A takeover card that this client cannot
+  open (a web client without the browser view) says where to finish the step.
+
 ## 8. Copy
 
 All text comes from `@openbot/i18n`. Write English and Spanish together; the other languages may
@@ -222,3 +242,4 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 12 | Unreads, Later, DMs, message search (top bar), Jump to frecency, Browse filters, shortcuts sheet (slack-parity P2, P4) | Done on `stream/p24`; E2E `scripts/workspace-inbox-e2e.ts` |
 | 13 | QA pass of the merged streams (`stream/qa-ui`): one DMs list on a computer and a phone (the phone's DMs tab is the DMs view; Jump to DMs or Activity opens the tab), Mark as read and "Conversation details" in row menus, the bell as a sheet on a phone, Back alone on a phone pane, field text size in dialogs and the sidebar filter, toasts clear of the safe areas | Done; E2E `scripts/workspace-seams-e2e.ts` |
 | 14 | The owner's DM with an agent as a workspace conversation (§ 7b); the side panel E2E opens the DM; Storybook draws stories with args; phone search filters in two columns | Done on `stream/agentdm`; E2E `scripts/agent-dm-e2e.ts`, `scripts/web-side-panel-e2e.ts` |
+| 15 | Needs you (§ 7c): the host's list of what waits for the user on every surface | Done on `stream/needsyou`; E2E `scripts/needs-you-host-e2e.ts`, `scripts/needs-you-ui-e2e.ts` |

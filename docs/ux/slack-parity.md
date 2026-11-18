@@ -403,6 +403,15 @@ and sort (sidebar, newest, oldest) for C8 Unreads are done; E2E `scripts/workspa
 history stays open on the desktop: the web client already gets Back and Forward for views from the address
 (stream/deeplinks), and the desktop history (`src/renderer/src/navigation.tsx`) records chats only.
 
+Status after `stream/needsyou` (2026-11-18): R3 and I1's "needs you" part (backlog 17) are done, host-side.
+The host keeps one list of every request that waits for the user (`agent-attention-changed`,
+`attention-items-v1`). An agent in the list gets its DM row at once with an amber Needs you mark, also
+when nobody wrote to it; Activity starts with a "Needs you" list; the top bar has "Needs you (N)" with
+the list; the phone's Home has a Needs you chip; the Activity badges, the tab title and the Dock count
+it. The delegator's "Waiting for replies" row says what to do and where, with Take over. A takeover and a
+browser secret send a web push. E2E `scripts/needs-you-host-e2e.ts` (real host) and
+`scripts/needs-you-ui-e2e.ts` (computer and iPhone).
+
 Below the line (do later or on request): D2 floating date pill, C2/C3 divider details, E3 delete preview, F2-F4 reaction details, G3 code-fence Enter, G4 quote and code block, G11 drop overlay, L3-L6, O1 away, P3 edge swipe, P5 Catch up cards, A2 view history, A3 space keys, D14 jumbo emoji, J3 rename group DM, R6 suggested prompts, G8 draft sync, G10 schedule, N5 push hold.
 
 ---

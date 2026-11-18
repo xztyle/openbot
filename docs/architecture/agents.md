@@ -487,6 +487,23 @@ that still waits in the queue covers the next request of the same teammate. The 
 list under `fork-host-v1` (`input-escalations-v1.ts`), after each runtime snapshot and at each
 change, without the agents that the peer cannot see.
 
+The attention registry also keeps the host's one list of what waits for the user, for every agent
+(`AttentionRegistry.attentionItems`): each question, `ask_ui` form, `request_api_key` form, approval,
+browser takeover, sign-in takeover and browser secret, with its agent, thread, kind, the time the
+host first listed it, a summary that is safe to show (a question that is not private, a key name, the
+tab title; never an approval command) and the site of a takeover. A takeover counts once its card
+shows. The runtime snapshot holds only four requests, so the agent service sends the whole list as
+`agent-attention-changed` after each attention event, turn end and snapshot when it changed, and in
+the local snapshot. The Team API sends it under `fork-host-v1` (`attention-items-v1.ts`) after each
+runtime snapshot and at each change, without the agents that the peer cannot see. Clients mark each
+listed agent as waiting (its DM row shows at once, with the Needs you mark), list the requests in
+"Needs you" (top bar, Activity, the phone's Home) and count them in the badges.
+
+A takeover card waits for the tab handover (`BrowserHost.beginTakeover`), whose end of a recording
+waits for the tab's operation queue. When the handover takes more than five seconds, the card shows
+anyway and the handover ends in the background; a later failure closes the card. A takeover or a
+browser secret sends a web push of kind `needs-takeover`.
+
 This policy lives in `src/backend/agent/developer-instructions.ts` and is supplied on both thread
 start and resume. Codex receives `developerInstructions`; Claude and Pi append them to the system
 prompt; Grok and the other ACP agents receive them as a tagged instruction block in normal turn

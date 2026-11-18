@@ -81,9 +81,7 @@ import {
   CalendarClock,
   ChartArea,
   CheckCheck,
-  ChevronLeft,
   hasVisibleToasts,
-  IconButton,
   ListChecks,
   MessageCircle,
   MessageCircleQuestionMark,
@@ -838,9 +836,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onOpen: (hostId, agentId) => void openNotified(hostId, agentId),
     pushes: push.pushes,
     onOpenChannel: (hostId, channelId) => void openNotifiedChannel(hostId, channelId),
-    // The sidebar mutes are the open host's; another host's are not loaded.
-    conversationMuted: (hostId, conversationId) =>
-      workspaceOn() && hostId === workspace.state.host?.hostId && workspaceController.isMuted(conversationId),
+    // The bell's levels and the mutes are the open host's; another host's are not loaded.
+    conversationQuiet: (hostId, conversationId) =>
+      workspaceOn() &&
+      hostId === workspace.state.host?.hostId &&
+      workspaceController.notifyLevel(conversationId) !== null,
     // Only the open host has a channel list. A prompt of another host names the agent only.
     channelForThread: (hostId, threadId) =>
       hostId === workspace.state.host?.hostId
@@ -2137,6 +2137,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
         count += space.mentions;
         unread ||= space.unread;
       }
+      // The rail leaves out a muted conversation, or one set to Nothing; its mentions still count, as
+      // Slack's badge counts them. "Just mentions" is in the rail's count already.
+      for (const item of ws.state.activity.data?.items ?? [])
+        if (item.unread && item.kind === "mention" && ws.notifyLevel(item.channelId) === "nothing") count += 1;
       return { count, unread };
     },
   });
@@ -2834,26 +2838,13 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     {(kind) => (
                       <SettingsPageFrame
                         heading={
-                          <div class="web-settings-heading">
-                            {/* A phone has no rail: Back goes to the screen that opened the page. */}
-                            <Show when={phone()}>
-                              <IconButton
-                                variant="ghost"
-                                class="web-settings-back"
-                                label={t("workspace.layout.back")}
-                                onClick={() => window.history.back()}
-                              >
-                                <ChevronLeft />
-                              </IconButton>
-                            </Show>
-                            {kind === "personal" ? (
-                              <h1 class="settings-page-title" tabindex={-1}>
-                                {t("app.settingsPage.title")}
-                              </h1>
-                            ) : (
-                              <Show when={server()}>{(target) => <ServerSettingsPageTitle server={target()} />}</Show>
-                            )}
-                          </div>
+                          kind === "personal" ? (
+                            <h1 class="settings-page-title" tabindex={-1}>
+                              {t("app.settingsPage.title")}
+                            </h1>
+                          ) : (
+                            <Show when={server()}>{(target) => <ServerSettingsPageTitle server={target()} />}</Show>
+                          )
                         }
                         onMounts={setSettingsMounts}
                         onEscape={showAgents}

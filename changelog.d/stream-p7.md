@@ -1,7 +1,7 @@
 ### Changed
 
 - On a phone, the web workspace works like Slack's app: a bottom tab bar with Home, DMs, Activity and More. Home shows the space's channels and DMs under a row of shortcuts (Threads, Fleet, Space agents, Artifacts) instead of the long list of views; the space mark at the top opens a switcher of spaces and servers. DMs lists your direct messages with the last message and its time. More holds your profile, the views that the desktop keeps under More, the server's pages and help.
-- On a phone, a conversation and a thread open as screens of their own over the tab. Back (the button, the Android key or the iOS swipe) goes back one screen: from a thread to its channel, then to the tab you came from. In the app on the Home Screen, a swipe from the left edge goes back too.
-- The browser tab title and icon now count your mentions, DM messages and agents that wait for you, in every space, the same numbers as the space rail and the sidebar. The icon shows a dot when only other unread messages wait.
+- On a phone, a conversation and a thread open as screens of their own over the tab. Back (the button, the Android key or the iOS swipe) goes back one screen: from a thread to its channel, then to the tab you came from; a settings page opened from More goes back to More. In the app on the Home Screen, a swipe from the left edge goes back too.
+- The browser tab title and icon now count your mentions, DM messages and agents that wait for you, in every space, the same numbers as the space rail and the sidebar. A conversation set to Just mentions, Nothing or muted counts its mentions only. The icon shows a dot when only other unread messages wait.
 - A tap on a push notification about a question or approval in a channel opens that channel.
-- A muted channel or DM no longer shows a browser notification or plays a sound for a new reply. Questions and approvals still notify.
+- In the web client, a reply of an agent in its DM set to Just mentions, Nothing or muted no longer shows a browser notification or plays a sound. Questions and approvals still notify.

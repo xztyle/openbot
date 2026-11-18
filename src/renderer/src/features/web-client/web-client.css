@@ -400,19 +400,6 @@ body {
   }
 }
 
-.web-settings-heading {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--openbot-space-1);
-}
-
-.web-settings-heading .web-settings-back.ui-button {
-  width: var(--openbot-touch-target);
-  height: var(--openbot-touch-target);
-  flex: none;
-}
-
 /* Takes the conversation-panel grid cell, so it follows the same desktop and mobile placement. */
 .web-connect.conversation-panel {
   display: grid;

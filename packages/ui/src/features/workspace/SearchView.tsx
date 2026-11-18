@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createMemo, For, Match, Show, Switch } from "solid-js";
+import { createMemo, For, Match, onSettled, Show, Switch } from "solid-js";
 import { Button, IconButton } from "../../button";
 import { Input } from "../../form";
 import { Hash, History, Lock, MessageSquareText, Search, UserRound, X } from "../../icons";
@@ -117,6 +117,11 @@ export function SearchView(props: SearchViewProps): JSX.Element {
   const { t } = useText();
   const recent = useRecentTime();
   let field: HTMLInputElement | undefined;
+  // A phone opens the search without words: the field takes the focus, so the keyboard can rise, as in
+  // Slack's app. The field shows only on a phone (the top bar has the computer's).
+  onSettled(() => {
+    if (!props.query && field && field.getClientRects().length > 0) field.focus();
+  });
   const hasQuery = () => props.query.trim().length > 0;
   const missing = createMemo(() => [...(props.unknown ?? []), ...(props.invalid ?? [])]);
   return (

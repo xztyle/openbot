@@ -7,6 +7,8 @@ import type { ComposerChannel, ComposerMember } from "@openbot/ui/features/conve
 import { MessageComposer } from "@openbot/ui/features/workspace/MessageComposer";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
+import { usePlatform } from "../../platform";
+import { deviceSendShortcut } from "../../send-shortcut-preference";
 import { PartialAttachmentImportError } from "../channels/channels-port";
 import { useWorkspace } from "./workspace-context";
 import { draftKey } from "./workspace-controller";
@@ -37,6 +39,7 @@ export interface WorkspaceComposerProps {
 export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const { t, errorMessage } = useText();
   const ws = useWorkspace();
+  const platform = usePlatform();
   const id = Symbol("composer");
   const key = () => draftKey(props.channelId, props.threadRootId);
   // The files belong to the draft of the conversation or thread, so a switch away and back keeps them.
@@ -340,6 +343,8 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
               formatRequest={format()}
               textRequest={textRequest()}
               formatShortcuts
+              // The user's send key on a desktop. On a phone Return adds a line and only Send sends.
+              sendShortcut={deviceSendShortcut(platform.appInfo()?.platform)}
               onValueChange={setValue}
               onSubmit={() => void submit()}
               onPasteFiles={pasteFiles()}

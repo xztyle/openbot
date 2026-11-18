@@ -1,5 +1,6 @@
 // Checks that the composer's @ mention picker takes a tap on a phone, a click and the keys, in a
-// running Storybook that renders the real web workspace. Pass the URL that `bun run storybook`
+// running Storybook that renders the real web workspace, and that Return adds a line on a phone
+// while Enter sends on a desktop. Pass the URL that `bun run storybook`
 // reports: `bun scripts/mention-picker-touch-e2e.ts --storybook=http://localhost:6006`.
 // `--browser-executable=<path>` picks a Chromium build; Playwright's own is the default.
 // Writes .openbot-build/mention-picker-touch-e2e/report.json and a screenshot of the phone thread.
@@ -39,6 +40,9 @@ interface Report {
   phoneFilteredTap?: CaseResult;
   desktopClick?: CaseResult;
   desktopKeyboard?: CaseResult;
+  /** On a phone Return adds a line and the draft stays; on a desktop Enter sends it. */
+  phoneReturn?: { text: string; sent: boolean };
+  desktopEnter?: { text: string; sent: boolean };
   passed: boolean;
 }
 
@@ -48,6 +52,8 @@ async function openStory(browser: Browser, options: BrowserContextOptions): Prom
   const context = await browser.newContext(options);
   const page = await context.newPage();
   await page.goto(`${storybook}/iframe.html?id=${STORY}&viewMode=story`, { waitUntil: "load", timeout: 180_000 });
+  // A cold Storybook bundles its dependencies on the first load.
+  await page.getByText("general", { exact: true }).first().waitFor({ timeout: 120_000 });
   return page;
 }
 
@@ -153,6 +159,14 @@ try {
   assert.equal(report.phoneFilteredTap.editorBlurs, 0);
   await phone.screenshot({ path: resolve(OUT, "phone-thread.png") });
 
+  await phone.keyboard.type("hi");
+  await phone.keyboard.press("Enter");
+  await phone.keyboard.type("there");
+  const phoneText = await phoneEditor.innerText();
+  report.phoneReturn = { text: phoneText, sent: phoneText.trim() === "" };
+  assert.equal(report.phoneReturn.sent, false, "Return on a phone must not send.");
+  assert.match(phoneText, /hi\s*\nthere/u, "Return on a phone must add a line.");
+
   const desktop = await openStory(browser, { viewport: { width: 1280, height: 800 } });
   const desktopEditor = await openThreadEditor(desktop, false);
   await desktop.keyboard.type("@");
@@ -169,6 +183,13 @@ try {
   report.desktopKeyboard = await result(desktop, desktopEditor);
   assert.deepEqual(report.desktopKeyboard.mentions, ["Research", "Chief"]);
   assert.equal(report.desktopKeyboard.pickerClosed, true);
+
+  await desktop.keyboard.type("hello");
+  await desktop.keyboard.press("Enter");
+  await desktop.waitForFunction((element) => element?.textContent?.trim() === "", await desktopEditor.elementHandle(), {
+    timeout: 10_000,
+  });
+  report.desktopEnter = { text: await desktopEditor.innerText(), sent: true };
 
   report.passed = true;
 } finally {

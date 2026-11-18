@@ -8,6 +8,7 @@ import {
   Bookmark,
   Bot,
   Ellipsis,
+  Hand,
   HardDrive,
   Hash,
   House,
@@ -104,7 +105,20 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
     const working = ws.fleet
       .agents()
       .filter((agent) => agent.status.state === "working" && ws.spaces.agentInCurrent(agent.member.id)).length;
+    const needsYou = ws.needsYou().length;
     return [
+      ...(needsYou > 0
+        ? [
+            {
+              id: "needs-you",
+              label: t("workspace.needsYou.title"),
+              icon: <Hand />,
+              detail: String(needsYou),
+              urgent: true,
+              onSelect: () => openView("activity"),
+            },
+          ]
+        : []),
       {
         id: "unreads",
         label: t("workspace.view.unreads"),
@@ -273,8 +287,9 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
       id: "activity",
       label: t("workspace.phone.activity"),
       icon: <Bell />,
-      count: ws.activityCount(),
-      badgeLabel: t("workspace.phone.newActivity", { count: ws.activityCount() }),
+      // What waits for the reader is at the top of Activity, so it counts there too.
+      count: ws.activityCount() + ws.needsYou().length,
+      badgeLabel: t("workspace.phone.newActivity", { count: ws.activityCount() + ws.needsYou().length }),
     },
     { id: "more", label: t("workspace.phone.more"), icon: <Ellipsis /> },
   ]);

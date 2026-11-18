@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Ellipsis,
   FolderPlus,
+  Hand,
   HardDrive,
   Hash,
   Inbox,
@@ -75,6 +76,8 @@ export interface SidebarChannel {
   draft?: boolean | undefined;
   /** The time of the newest message, in milliseconds, for the Recent activity sort. */
   activityAt?: number | undefined;
+  /** A request of its work waits for the reader: the row shows "Needs you". */
+  needsYou?: boolean | undefined;
 }
 
 export interface SidebarDirectMessage {
@@ -87,6 +90,8 @@ export interface SidebarDirectMessage {
   muted?: boolean | undefined;
   draft?: boolean | undefined;
   activityAt?: number | undefined;
+  /** The agent waits for the reader: the row shows "Needs you", also when it was never opened. */
+  needsYou?: boolean | undefined;
 }
 
 /** How a sidebar section sorts its rows, as Slack's "Sort". `custom` is the reader's own order. */
@@ -214,9 +219,9 @@ const SHOWS = [
   { show: "mentions", label: "workspace.sidebar.show.mentions" },
 ] as const satisfies readonly { show: SidebarShow; label: string }[];
 
-/** A row that a collapsed section keeps: unread and not muted, mentioned, or open. */
+/** A row that a collapsed section keeps: unread and not muted, mentioned, waiting for the reader, or open. */
 function rowNeedsReader(row: SidebarChannel | SidebarDirectMessage): boolean {
-  return (row.unread === true && !row.muted) || (row.mentionCount ?? 0) > 0;
+  return (row.unread === true && !row.muted) || (row.mentionCount ?? 0) > 0 || row.needsYou === true;
 }
 
 /** The name of a row, as it shows. */
@@ -967,6 +972,7 @@ function SidebarItemRow(props: {
       mentionCount={props.item.row.mentionCount}
       muted={props.item.row.muted}
       draft={props.item.row.draft}
+      needsYou={props.item.row.needsYou}
       dragHandle={props.dragHandle}
       order={props.order}
       onReorder={props.onReorder}
@@ -1021,6 +1027,7 @@ function SidebarRow(props: {
   mentionCount?: number | undefined;
   muted?: boolean | undefined;
   draft?: boolean | undefined;
+  needsYou?: boolean | undefined;
   dragHandle?: ((id: string) => JSX.Element) | undefined;
   section: SidebarSection;
   /** The ids of the section, in the order it shows. */
@@ -1112,9 +1119,11 @@ function SidebarRow(props: {
           data-active={props.active ? "" : undefined}
           data-unread={(props.unread || mentions() > 0) && !props.muted ? "" : undefined}
           data-muted={props.muted ? "" : undefined}
+          data-needs-you={props.needsYou ? "" : undefined}
           aria-current={props.active ? "page" : undefined}
           aria-label={[
             props.accessibleLabel,
+            props.needsYou ? t("workspace.needsYou.title") : "",
             mentions() > 0
               ? t("workspace.sidebar.mentions", { count: mentions() })
               : props.unread && !props.muted
@@ -1130,12 +1139,22 @@ function SidebarRow(props: {
           <span class="ws-sidebar-row-icon">{props.icon}</span>
           <span class="ws-sidebar-row-label">{props.label}</span>
           {props.badge}
-          <Show when={(props.draft && !props.active) || mentions() > 0}>
+          <Show when={(props.draft && !props.active) || mentions() > 0 || props.needsYou}>
             <span class="ws-sidebar-row-end">
               <Show when={props.draft && !props.active}>
                 <Pencil class="ws-sidebar-row-draft" aria-hidden="true" />
               </Show>
-              <Show when={mentions() > 0}>
+              <Show when={props.needsYou}>
+                <span
+                  class="ws-needs-you-pill"
+                  data-compact=""
+                  title={t("workspace.needsYou.title")}
+                  aria-hidden="true"
+                >
+                  <Hand />
+                </span>
+              </Show>
+              <Show when={mentions() > 0 && !props.needsYou}>
                 <span class="ws-mention-badge" aria-hidden="true">
                   {Math.min(mentions(), 99)}
                 </span>

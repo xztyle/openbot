@@ -14,6 +14,7 @@ import { useAgentActions } from "../agents/agent-actions";
 import { agentThreadAttention } from "../agents/agent-thread-attention";
 import { useAgents } from "../agents/agents-context";
 import { agentsPort } from "../agents/agents-port";
+import { needsYouItems, withAttentionItems } from "../agents/needs-you";
 import { useBrowserTabs } from "../browser/browser-context";
 import { useChannels } from "../channels/channels-context";
 import { hostMessagingApi } from "../connectors/host-messaging-port";
@@ -77,7 +78,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
   const { teamPresence, currentTeamMember } = usePresence();
   const { centralAuth } = useAuth();
   const { unreadReplies, recentReplies, markAllAgentMessagesRead } = useConversation();
-  const { activeTurns, queues, failedTurns, usageLimits, pendingPrompts, approvals } = useTurns();
+  const { activeTurns, queues, failedTurns, usageLimits, pendingPrompts, approvals, attentionItems } = useTurns();
   const accountId = () => {
     const state = centralAuth();
     return state.status === "signed_in" ? state.user.id : null;
@@ -107,6 +108,15 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
       role: local() ? ("owner" as const) : (server?.role ?? "member"),
     };
   });
+  /** Every request that waits for the reader on this server: the host's list, and the ones this window holds. */
+  const needsYou = createMemo(() =>
+    needsYouItems({
+      items: attentionItems(),
+      prompts: Object.values(pendingPrompts()).flatMap((event) => (event?.type === "prompt" ? [event] : [])),
+      approvals: approvals(),
+      takeovers: takeovers(),
+    }),
+  );
   const agentStates = createMemo(() =>
     computeSidebarAgentStates({
       agentIds: agentList().map((agent) => agent.id),
@@ -114,7 +124,13 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
       queues: queues(),
       unreadReplies: unreadReplies(),
       recentReplies: recentReplies(),
-      ...agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
+      // A request that only the host's list names (the snapshot holds four) marks its agent too.
+      ...withAttentionItems(
+        agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
+        needsYou(),
+        agentList(),
+        t,
+      ),
       failedTurns: failedTurns(),
       usageLimits: usageLimits(),
     }),
@@ -231,6 +247,7 @@ export function DesktopWorkspaceProvider(props: ParentProps) {
       return serverId ? desktopMessageLink(serverId, channelId, threadRootId ?? messageId) : null;
     },
     takeovers,
+    needsYou,
     localHost: local,
     openBrowserTab: (tabId) => activateBrowserTab(tabId),
     secrets: () => local() || serverRoleCanAdminister(activeServer()),

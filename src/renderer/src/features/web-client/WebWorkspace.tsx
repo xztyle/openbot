@@ -166,6 +166,7 @@ import { type CreationPreference, resolveCreationModel } from "../agents/agent-c
 import { claimErrorToast, readableAgentError } from "../agents/agent-error-text";
 import { AGENT_SELECTION_STORAGE_KEY, webAgentSelectionKey, writeAgentSelection } from "../agents/agent-selection";
 import { withHostAccountUsage, withHostProfileAccount } from "../agents/host-provider-accounts";
+import { needsYouItems, withAttentionItems } from "../agents/needs-you";
 import { createRemoteAgentAdmin, updateRemoteAgent } from "../agents/remote-agent-admin";
 import type { ServerBrowserProfilesOptions } from "../browser/ServerBrowserProfilesPanel";
 import { createBrowserProfilesStore } from "../browser/stores/browser-profiles-store";
@@ -1622,6 +1623,17 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           },
         }),
   );
+  /** Every request that waits for the user on the host: its list, and the requests this tab holds. */
+  const needsYouList = createMemo(() =>
+    workspace.state.status !== "online"
+      ? []
+      : needsYouItems({
+          items: workspace.state.attentionItems,
+          prompts: workspace.state.prompts,
+          approvals: workspace.state.approvals,
+          takeovers: workspace.state.takeovers,
+        }),
+  );
   const sidebarActivity = createMemo(() => {
     // The agent conversation shows only the waits of the agent's own thread. A wait in a channel
     // thread stays out of "Needs you", because selecting the row cannot answer it.
@@ -1641,20 +1653,26 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       recentReplies: { ...workspace.state.recentReplies },
       failedTurns: { ...workspace.state.failedTurns },
       // A teammate's request waits in the chat of the agent that gave it the work too, so that agent
-      // goes to "Needs you": the user seldom opens the teammate's chat.
+      // goes to "Needs you": the user seldom opens the teammate's chat. A request that only the host's
+      // list names (the snapshot holds four) marks its agent too.
       ...withTeammateAttention(
-        {
-          // One wait per agent: a question replaces a browser takeover for the same agent.
-          pendingPrompts: Object.fromEntries([
-            ...workspace.state.takeovers
-              .filter(inAgentThread)
-              .map((request) => [request.agentId, { type: "browser-takeover-requested", request } as const] as const),
-            ...workspace.state.prompts.filter(inAgentThread).map((prompt) => [prompt.agentId, prompt] as const),
-          ]),
-          pendingApprovals: Object.fromEntries(
-            workspace.state.approvals.filter(inAgentThread).map((approval) => [approval.agentId, approval]),
-          ),
-        },
+        withAttentionItems(
+          {
+            // One wait per agent: a question replaces a browser takeover for the same agent.
+            pendingPrompts: Object.fromEntries([
+              ...workspace.state.takeovers
+                .filter(inAgentThread)
+                .map((request) => [request.agentId, { type: "browser-takeover-requested", request } as const] as const),
+              ...workspace.state.prompts.filter(inAgentThread).map((prompt) => [prompt.agentId, prompt] as const),
+            ]),
+            pendingApprovals: Object.fromEntries(
+              workspace.state.approvals.filter(inAgentThread).map((approval) => [approval.agentId, approval]),
+            ),
+          },
+          needsYouList(),
+          workspace.state.agents,
+          t,
+        ),
         teammateRequestInput(),
       ),
     };
@@ -2029,6 +2047,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onHostEvent: workspace.onHostEvent,
     approvals: () => workspace.state.approvals,
     takeovers: () => workspace.state.takeovers,
+    needsYou: needsYouList,
     secrets: () => canAdministerServer(workspace.state.host?.role),
     openBrowserTab: (tabId, agentId) => {
       workspace.activateBrowserTab(tabId);

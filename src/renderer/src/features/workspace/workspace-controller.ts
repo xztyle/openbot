@@ -7,6 +7,7 @@
 import { chatTagReferences } from "@openbot/contracts/chat-tag-references";
 import {
   type AgentApproval,
+  type AgentAttentionItem,
   type AgentEvent,
   type BrowserTakeoverRequest,
   boundedWorkspaceSidebar,
@@ -214,6 +215,11 @@ export interface WorkspaceEnvironment {
   approvals?: (() => readonly AgentApproval[]) | undefined;
   /** Every browser takeover that waits on the host. A channel shows the ones of its own work. */
   takeovers?: (() => readonly BrowserTakeoverRequest[]) | undefined;
+  /**
+   * Every request of every agent that waits for the reader (`needsYouItems`): the "Needs you" list of
+   * the top bar, Activity and the phone's Home.
+   */
+  needsYou?: (() => readonly AgentAttentionItem[]) | undefined;
   /** Whether the host is this computer: a browser secret can then be saved to the Vault. */
   localHost?: (() => boolean) | undefined;
   /** Opens the browser tab of a takeover, where the shell has the browser. */
@@ -2458,6 +2464,32 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         scheduleActivity(300);
     }),
   );
+  /** The channel whose work a thread is, by the threads that the channel list names. */
+  const channelOfThread = createMemo(() => {
+    const byThread = new Map<string, string>();
+    for (const channel of channels.state.channels)
+      for (const thread of channel.threads ?? []) byThread.set(`${thread.agentId}\n${thread.threadId}`, channel.id);
+    return byThread;
+  });
+  /** Where a request is answered: the channel of its work, else the agent's chat. */
+  function needsYouPlace(item: AgentAttentionItem): { channelId: string } | { agentId: string } {
+    const channelId = channelOfThread().get(`${item.agentId}\n${item.threadId}`);
+    return channelId ? { channelId } : { agentId: item.agentId };
+  }
+  /** The requests that wait for the reader in the space that shows, oldest first. */
+  const needsYou = createMemo(() =>
+    (env.needsYou?.() ?? []).filter((item) => {
+      const place = needsYouPlace(item);
+      return "channelId" in place ? spaces.channelInCurrent(place.channelId) : spaces.agentInCurrent(item.agentId);
+    }),
+  );
+  /** Opens the chat that answers a request: the card waits at its end. */
+  function openNeedsYou(item: AgentAttentionItem) {
+    const place = needsYouPlace(item);
+    if ("channelId" in place) openChannel(place.channelId);
+    else openAgent(place.agentId);
+  }
+
   /** Runs a message search and shows its results. */
   function openSearch(query?: string) {
     if (query?.trim()) search.submit(query);
@@ -2514,6 +2546,9 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     reactionPicker,
     activityCount,
     threadsUnread,
+    needsYou,
+    needsYouPlace,
+    openNeedsYou,
     fleet,
     artifacts,
     artifactRecord: hostArtifacts.record,

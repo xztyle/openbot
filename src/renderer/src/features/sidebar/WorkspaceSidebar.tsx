@@ -22,6 +22,7 @@ import { useTurns } from "../../turns";
 import { useAgentActions } from "../agents/agent-actions";
 import { agentThreadAttention } from "../agents/agent-thread-attention";
 import { useAgents } from "../agents/agents-context";
+import { withAttentionItems } from "../agents/needs-you";
 import { useChannels } from "../channels/channels-context";
 import { useConversation } from "../conversation/conversation-context";
 import { useDirectMessages } from "../conversation/direct-messages-context";
@@ -103,6 +104,7 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
     pendingApprovals,
     approvals,
     inputEscalations,
+    attentionItems,
   } = useTurns();
   const { unreadReplies, recentReplies, markAllAgentMessagesRead, markAgentMessagesUnread } = useConversation();
   const { directPeople } = usePresence();
@@ -169,7 +171,12 @@ export function WorkspaceSidebar(props: { peopleEnabled: boolean }) {
       // A teammate's request waits in the chat of the agent that gave it the work too, so that agent
       // goes to "Needs you": the user seldom opens the teammate's chat.
       ...withTeammateAttention(
-        agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
+        withAttentionItems(
+          agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
+          attentionItems() ?? [],
+          agentList(),
+          t,
+        ),
         {
           escalations: inputEscalations(),
           agents: agentList(),

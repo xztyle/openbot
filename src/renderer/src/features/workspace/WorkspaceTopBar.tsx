@@ -1,6 +1,7 @@
 /*
  * The top bar of the workspace on a computer, as Slack's: the search field of the space in the
- * middle and the keyboard shortcuts at the end. A phone has no top bar; its search is a view.
+ * middle and the keyboard shortcuts at the end, then "Needs you" while a request waits for the
+ * reader. A phone has no top bar; its search is a view, and its Home has the "Needs you" chip.
  */
 
 import {
@@ -11,6 +12,7 @@ import {
 import { useText } from "@openbot/ui/text";
 import { onCleanup, Show } from "solid-js";
 import { currentDevicePlatform } from "../../send-shortcut-preference";
+import { WorkspaceNeedsYouButton } from "./WorkspaceNeedsYou";
 import { useJumpEntries } from "./WorkspaceSwitcher";
 import { useWorkspace } from "./workspace-context";
 import { shortcutKeys } from "./workspace-shortcuts";
@@ -41,28 +43,31 @@ export function WorkspaceTopBar() {
         member: entry.member,
       }));
   return (
-    <Show when={!ws.env.phone() && ws.search.supported()}>
+    <Show when={!ws.env.phone() && (ws.search.supported() || ws.needsYou().length > 0)}>
       <div class="ws-topbar" ref={(div) => (element = div)}>
-        <WorkspaceSearchBar
-          ref={(next) => (api = next)}
-          placeholder={t("workspace.search.placeholderIn", { name: scope() })}
-          shortcut={shortcutKeys(["mod"], "G", currentDevicePlatform() === "darwin").join(
-            currentDevicePlatform() === "darwin" ? "" : "+",
-          )}
-          query={(() => {
-            const route = ws.route();
-            return route.kind === "view" && route.view === "search" ? ws.search.state.query : "";
-          })()}
-          recent={ws.search.state.recent}
-          suggestions={suggestions}
-          onSubmit={(query) => ws.openSearch(query)}
-          onOpenSuggestion={(id) => {
-            if (id.startsWith("person:")) ws.messageMember(id.slice("person:".length));
-            else ws.openConversation(id);
-          }}
-          onShortcuts={() => ws.openDialog({ kind: "shortcuts" })}
-          shortcutsLabel={t("workspace.shortcuts.title")}
-        />
+        <Show when={ws.search.supported()}>
+          <WorkspaceSearchBar
+            ref={(next) => (api = next)}
+            placeholder={t("workspace.search.placeholderIn", { name: scope() })}
+            shortcut={shortcutKeys(["mod"], "G", currentDevicePlatform() === "darwin").join(
+              currentDevicePlatform() === "darwin" ? "" : "+",
+            )}
+            query={(() => {
+              const route = ws.route();
+              return route.kind === "view" && route.view === "search" ? ws.search.state.query : "";
+            })()}
+            recent={ws.search.state.recent}
+            suggestions={suggestions}
+            onSubmit={(query) => ws.openSearch(query)}
+            onOpenSuggestion={(id) => {
+              if (id.startsWith("person:")) ws.messageMember(id.slice("person:".length));
+              else ws.openConversation(id);
+            }}
+            onShortcuts={() => ws.openDialog({ kind: "shortcuts" })}
+            shortcutsLabel={t("workspace.shortcuts.title")}
+          />
+        </Show>
+        <WorkspaceNeedsYouButton />
       </div>
     </Show>
   );

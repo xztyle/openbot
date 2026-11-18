@@ -2,7 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { Button } from "../../button";
 import { Input } from "../../form";
-import { MessagesSquare, Search } from "../../icons";
+import { Hand, MessagesSquare, Search } from "../../icons";
 import { Switch as Toggle } from "../../switch";
 import { useText } from "../../text";
 import { cx } from "../../utils";
@@ -33,6 +33,8 @@ export interface DirectMessageItem {
   /** Unread messages; a DM counts every one, as in Slack. */
   count: number;
   muted?: boolean | undefined;
+  /** The agent waits for the reader: the row shows "Needs you" and stays first. */
+  needsYou?: boolean | undefined;
 }
 
 export interface DirectMessagesViewProps {
@@ -187,8 +189,18 @@ export function DirectMessagesView(props: DirectMessagesViewProps): JSX.Element 
                   }
                   titleEnd={item().at ? recent(item().at ?? 0) : undefined}
                   trailing={
-                    <Show when={item().count > 0 && !item().muted}>
-                      <span class="ws-mention-badge">{item().count}</span>
+                    <Show
+                      when={item().needsYou}
+                      fallback={
+                        <Show when={item().count > 0 && !item().muted}>
+                          <span class="ws-mention-badge">{item().count}</span>
+                        </Show>
+                      }
+                    >
+                      <span class="ws-needs-you-pill">
+                        <Hand aria-hidden="true" />
+                        <span class="ws-needs-you-pill-text">{t("workspace.needsYou.pill")}</span>
+                      </span>
                     </Show>
                   }
                 >

@@ -1,10 +1,13 @@
 import type { ChannelSummary, QueueSnapshot } from "@openbot/contracts/ipc";
 import type { SidebarAgentState, SidebarChannelWait, SidebarRoutinePhase } from "./sidebar-types";
 
-/** A question or a browser takeover that an agent is blocked on. */
+/**
+ * A question or a browser takeover that an agent is blocked on. `detail` of a takeover says what the
+ * user does, such as "Sign in on accounts.google.com".
+ */
 export type SidebarAttention =
   | { type: "prompt"; turnId: string; questions?: readonly { question: string }[] }
-  | { type: "browser-takeover-requested"; request: { turnId: string } };
+  | { type: "browser-takeover-requested"; request: { turnId: string }; detail?: string | undefined };
 
 /** An approval that an agent is blocked on. The command or the reason is the tooltip detail. */
 export interface SidebarApproval {
@@ -140,7 +143,8 @@ function waitingState(
   approval: SidebarApproval | undefined,
 ): SidebarAgentWait | undefined {
   if (prompt?.type === "prompt") return questionWait(prompt.questions);
-  if (prompt?.type === "browser-takeover-requested") return TAKEOVER_WAIT;
+  if (prompt?.type === "browser-takeover-requested")
+    return prompt.detail ? { ...TAKEOVER_WAIT, detail: prompt.detail } : TAKEOVER_WAIT;
   if (approval) return approvalWait(approval);
   return undefined;
 }
@@ -164,7 +168,7 @@ interface SidebarThreadRequest {
 interface SidebarChannelWaitsInput {
   channels: readonly Pick<ChannelSummary, "id" | "archived" | "threads">[];
   prompts: readonly (SidebarThreadRequest & { questions?: readonly { question: string }[] })[];
-  takeovers: readonly SidebarThreadRequest[];
+  takeovers: readonly (SidebarThreadRequest & { detail?: string | undefined })[];
   approvals: readonly (SidebarThreadRequest & Pick<SidebarApproval, "command" | "reason">)[];
 }
 
@@ -190,7 +194,8 @@ export function sidebarChannelWaits(input: SidebarChannelWaitsInput): Record<str
     if (channelId && !waits[channelId]) waits[channelId] = wait();
   };
   for (const prompt of input.prompts) mark(prompt, () => questionWait(prompt.questions));
-  for (const takeover of input.takeovers) mark(takeover, () => TAKEOVER_WAIT);
+  for (const takeover of input.takeovers)
+    mark(takeover, () => (takeover.detail ? { ...TAKEOVER_WAIT, detail: takeover.detail } : TAKEOVER_WAIT));
   for (const approval of input.approvals) mark(approval, () => approvalWait(approval));
   return waits;
 }

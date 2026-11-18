@@ -361,7 +361,8 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         activeConversationId={ws.activeConversationId()}
         onSelectView={(next) => ws.openView(next)}
         onSelectConversation={(id) => ws.openConversation(id)}
-        activityCount={ws.activityCount()}
+        // What waits for the reader is at the top of Activity, so it counts there too.
+        activityCount={ws.activityCount() + ws.needsYou().length}
         threadsUnread={ws.threadsUnread()}
         unreadsUnread={ws.unreads.hasUnread()}
         showLater={ws.later.supported()}

@@ -19,6 +19,7 @@ import {
   WorkspaceSearchView,
   WorkspaceUnreadsView,
 } from "./WorkspaceInboxViews";
+import { WorkspaceNeedsYouSection } from "./WorkspaceNeedsYou";
 import { WorkspaceSecretsView } from "./WorkspaceSecrets";
 import { WorkspaceSpaceAgentsView } from "./WorkspaceSpaceAgents";
 import { WorkspaceStorageView } from "./WorkspaceStorageView";
@@ -127,6 +128,7 @@ function WorkspaceActivityView() {
         void ws.channels.markAllRead(channelIds).then(() => ws.refreshActivity());
       }}
       onBack={() => ws.back()}
+      needsYou={<WorkspaceNeedsYouSection />}
     />
   );
 }

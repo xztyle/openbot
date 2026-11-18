@@ -1,5 +1,5 @@
 import type { AvatarMood } from "@openbot/brand/bloub-avatar-motion";
-import type { AgentApproval, QueueSnapshot } from "@openbot/contracts/ipc";
+import type { QueueSnapshot } from "@openbot/contracts/ipc";
 import { isAgentWorking } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 
 export interface AgentAvatarMoodsInput {
@@ -8,7 +8,8 @@ export interface AgentAvatarMoodsInput {
   queues: Record<string, QueueSnapshot>;
   failedTurns: Record<string, string | undefined>;
   pendingPrompts: Record<string, unknown | undefined>;
-  pendingApprovals: Record<string, AgentApproval | undefined>;
+  /** Only whether an agent has one counts. */
+  pendingApprovals: Record<string, { turnId: string } | undefined>;
   recentReplies: Record<string, boolean>;
 }
 

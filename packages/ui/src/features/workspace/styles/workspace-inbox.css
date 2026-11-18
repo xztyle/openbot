@@ -15,7 +15,9 @@
   z-index: var(--openbot-layer-dropdown);
   display: flex;
   flex: 0 0 auto;
+  align-items: center;
   justify-content: center;
+  gap: var(--openbot-space-2);
   border-bottom: 1px solid var(--ws-line, var(--openbot-border));
   background: var(--openbot-bg-frame);
   padding: var(--openbot-space-1-5) var(--openbot-space-4);

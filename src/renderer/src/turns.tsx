@@ -1,5 +1,6 @@
 import type {
   AgentApproval,
+  AgentAttentionItem,
   AgentContextState,
   AgentEvent,
   AgentInputEscalation,
@@ -114,6 +115,8 @@ const Turns = createSimpleContext({
     );
     // The requests of teammates that work for other agents, with the agents whose chats show them.
     const [inputEscalations, setInputEscalations] = createSignal<AgentInputEscalation[]>([]);
+    // The host's whole list of requests that wait for the user, or null where the host sends none.
+    const [attentionItems, setAttentionItems] = createSignal<AgentAttentionItem[] | null>(null);
     // Every waiting approval: the agent's chat and each of its tasks has its own thread.
     const [approvals, setApprovals] = createSignal<AgentApproval[]>(
       Object.values(seed?.pendingApprovals ?? {}).filter((approval) => approval !== undefined),
@@ -503,6 +506,8 @@ const Turns = createSimpleContext({
       setApprovals,
       inputEscalations,
       setInputEscalations,
+      attentionItems,
+      setAttentionItems,
       pendingApprovals,
       approvalOfThread,
       forgetApproval,

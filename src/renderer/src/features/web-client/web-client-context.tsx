@@ -1,6 +1,7 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentApproval,
+  AgentAttentionItem,
   AgentEvent,
   AgentInputEscalation,
   AgentRuntimeApproval,
@@ -125,6 +126,8 @@ interface WebWorkspaceState {
   prompts: Array<Extract<AgentEvent, { type: "prompt" }>>;
   /** The requests of teammates that work for other agents, with the agents whose chats show them. */
   inputEscalations: AgentInputEscalation[];
+  /** The host's whole list of requests that wait for the user, or null when the host sends none. */
+  attentionItems: AgentAttentionItem[] | null;
   /** The latest progress detail of each agent's running turn. */
   progress: Record<string, { turnId: string; detail: string }>;
   /** The unread messages of each agent chat, from the host's read cursors. A missing agent has none. */
@@ -245,6 +248,7 @@ export function createWebWorkspace(
     approvals: [],
     prompts: [],
     inputEscalations: [],
+    attentionItems: null,
     progress: {},
     unreadCounts: {},
     recentReplies: {},
@@ -595,6 +599,10 @@ export function createWebWorkspace(
           setState((draft) => {
             draft.inputEscalations = event.escalations;
           });
+        } else if (event.type === "agent-attention-changed") {
+          setState((draft) => {
+            draft.attentionItems = event.items;
+          });
         } else if (event.type === "prompt") {
           setState((draft) => {
             draft.prompts = [
@@ -881,6 +889,7 @@ export function createWebWorkspace(
             draft.approvals = [];
             draft.prompts = [];
             draft.inputEscalations = [];
+            draft.attentionItems = null;
             draft.progress = {};
             draft.unreadCounts = {};
             draft.recentReplies = {};
@@ -1001,6 +1010,7 @@ export function createWebWorkspace(
       draft.approvals = [];
       draft.prompts = [];
       draft.inputEscalations = [];
+      draft.attentionItems = null;
       draft.progress = {};
       draft.unreadCounts = {};
       draft.recentReplies = {};
@@ -1119,6 +1129,7 @@ export function createWebWorkspace(
         draft.prompts = [];
         draft.takeovers = [];
         draft.inputEscalations = [];
+        draft.attentionItems = null;
       }
       draft.status = "connecting";
       draft.memberId = sameHost ? draft.memberId : null;

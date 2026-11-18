@@ -37,6 +37,7 @@ import { agentThreadAttention } from "../agents/agent-thread-attention";
 import { useAgents } from "../agents/agents-context";
 import { agentsPort } from "../agents/agents-port";
 import { withHostAccountUsage } from "../agents/host-provider-accounts";
+import { withAttentionItems } from "../agents/needs-you";
 import { createRemoteAgentAdmin, updateRemoteAgent } from "../agents/remote-agent-admin";
 import { useBrowserTabs } from "../browser/browser-context";
 import { useConnectors } from "../connectors/connectors-context";
@@ -155,6 +156,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
     waitedUsageLimits,
     setWaitedUsageLimits,
     queues,
+    attentionItems,
   } = useTurns();
   const {
     activeMessages,
@@ -206,7 +208,13 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
   const agentWaits = createMemo(() =>
     sidebarAgentWaits({
       agentIds: agentList().map((agent) => agent.id),
-      ...agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
+      // A request that only the host's list names (the snapshot holds four) counts too.
+      ...withAttentionItems(
+        agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
+        attentionItems() ?? [],
+        agentList(),
+        currentText().t,
+      ),
       usageLimits: usageLimits(),
     }),
   );

@@ -247,10 +247,15 @@ export function WorkspaceDmsView(props: { tab?: boolean }) {
         unread: Boolean(row.unread),
         count: row.mentionCount ?? 0,
         muted: row.muted,
+        needsYou: row.needsYou,
       } satisfies DirectMessageItem;
     });
-    // Newest first, as Slack's DMs; a row with no message keeps the sidebar's order after them.
-    return rows.sort((left, right) => (right.at ?? 0) - (left.at ?? 0));
+    // What waits for the reader first; then newest first, as Slack's DMs; a row with no message keeps
+    // the sidebar's order after them.
+    return rows.sort(
+      (left, right) =>
+        Number(Boolean(right.needsYou)) - Number(Boolean(left.needsYou)) || (right.at ?? 0) - (left.at ?? 0),
+    );
   });
   return (
     <DirectMessagesView

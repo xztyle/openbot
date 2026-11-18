@@ -303,6 +303,7 @@ export function sidebarDirectMessages(input: DirectMessagesInput): SidebarDirect
         members: [agentMember(agent, state?.kind === "working")],
         unread: unread > 0 || state?.kind === "responded",
         mentionCount: input.agentDmIsMainChat(agent.id) ? unread : 0,
+        ...(state?.kind === "waiting" ? { needsYou: true } : {}),
       };
     });
   return [...rows.map((entry) => entry.row), ...agentRows];

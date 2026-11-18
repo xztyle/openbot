@@ -25,6 +25,8 @@ export interface PhoneChip {
   unread?: boolean | undefined;
   /** A short note after the label, such as "2 working". */
   detail?: string | undefined;
+  /** Something waits for the reader here: the chip stands out ("Needs you"). */
+  urgent?: boolean | undefined;
   onSelect: () => void;
 }
 
@@ -144,6 +146,7 @@ export function PhoneHomeHeader(props: PhoneHomeHeaderProps): JSX.Element {
                   variant="secondary"
                   class="ws-phone-chip"
                   data-unread={chip().unread ? "" : undefined}
+                  data-urgent={chip().urgent ? "" : undefined}
                   aria-label={[chip().label, chip().detail ?? "", chip().unread ? t("workspace.sidebar.unread") : ""]
                     .filter(Boolean)
                     .join(", ")}

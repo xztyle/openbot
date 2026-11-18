@@ -456,3 +456,14 @@
     scroll-behavior: auto;
   }
 }
+
+.ui-button.ws-phone-chip[data-urgent] {
+  background: var(--openbot-warning-soft);
+  color: var(--openbot-warning-text);
+}
+
+.ui-button.ws-phone-chip[data-urgent] .ws-phone-chip-icon,
+.ui-button.ws-phone-chip[data-urgent] .ws-phone-chip-detail {
+  color: var(--openbot-warning-text);
+  font-weight: var(--openbot-weight-bold);
+}

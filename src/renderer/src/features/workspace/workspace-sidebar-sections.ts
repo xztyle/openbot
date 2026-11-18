@@ -48,7 +48,7 @@ export function sectionOptions(
 }
 
 function needsReader(row: SidebarChannel | SidebarDirectMessage): boolean {
-  return (row.unread === true && !row.muted) || (row.mentionCount ?? 0) > 0;
+  return (row.unread === true && !row.muted) || (row.mentionCount ?? 0) > 0 || row.needsYou === true;
 }
 
 function sorted(items: SidebarItem[], sort: SidebarSort): SidebarItem[] {
@@ -59,9 +59,9 @@ function sorted(items: SidebarItem[], sort: SidebarSort): SidebarItem[] {
   const byRecent = (left: SidebarItem, right: SidebarItem) => at(right) - at(left) || byName(left, right);
   if (sort === "alpha") return [...items].sort(byName);
   if (sort === "recent") return [...items].sort(byRecent);
-  // Priority: mentions first, then unread conversations, then the newest.
+  // Priority: what waits for the reader first, then mentions, then unread conversations, then the newest.
   const rank = (item: SidebarItem) =>
-    (item.row.mentionCount ?? 0) > 0 ? 0 : item.row.unread === true && !item.row.muted ? 1 : 2;
+    item.row.needsYou ? 0 : (item.row.mentionCount ?? 0) > 0 ? 1 : item.row.unread === true && !item.row.muted ? 2 : 3;
   return [...items].sort((left, right) => rank(left) - rank(right) || byRecent(left, right));
 }
 
@@ -69,7 +69,9 @@ function shown(items: SidebarItem[], show: SidebarShow, activeId: string | undef
   if (show === "all") return items;
   return items.filter(
     (item) =>
-      item.row.id === activeId || (show === "mentions" ? (item.row.mentionCount ?? 0) > 0 : needsReader(item.row)),
+      item.row.id === activeId ||
+      item.row.needsYou === true ||
+      (show === "mentions" ? (item.row.mentionCount ?? 0) > 0 : needsReader(item.row)),
   );
 }
 

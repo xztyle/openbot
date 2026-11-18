@@ -55,6 +55,8 @@ export interface ActivityViewProps {
   onOpen: (itemId: string) => void;
   onMarkAllRead?: (() => void) | undefined;
   onBack?: (() => void) | undefined;
+  /** The requests that wait for the reader, above the feed (`NeedsYouSection`). */
+  needsYou?: JSX.Element;
   class?: string;
 }
 
@@ -109,6 +111,7 @@ export function ActivityView(props: ActivityViewProps): JSX.Element {
         </span>
       </div>
       <div class="ws-view-scroll">
+        {props.needsYou}
         <Show
           when={shown().length > 0}
           fallback={

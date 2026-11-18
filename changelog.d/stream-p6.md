@@ -13,3 +13,5 @@
 - Open a channel where you left it when you come back to it. A channel with new messages opens at
   the first new one, as before. The bar at the top counts the new messages: "12 new messages since
   10:15".
+- Mute or unmute a conversation from a bell in its header. The bell shows when the conversation is
+  muted.

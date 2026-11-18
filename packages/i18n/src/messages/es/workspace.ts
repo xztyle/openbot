@@ -535,4 +535,6 @@ export const messages = {
     one: "{count} mensaje nuevo desde las {time}",
     other: "{count} mensajes nuevos desde las {time}",
   },
+  "workspace.header.mute": "Silenciar conversación",
+  "workspace.header.unmute": "Dejar de silenciar la conversación",
 } as const satisfies PartialTranslation<typeof source>;

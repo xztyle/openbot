@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import { Button, IconButton } from "../../button";
-import { ChevronLeft, Hash, Info, LayoutDashboard, Lock, MessageSquareText } from "../../icons";
+import { Bell, BellOff, ChevronLeft, Hash, Info, LayoutDashboard, Lock, MessageSquareText } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { AiBadge, AvatarStack, MemberAvatar } from "./WorkspaceAvatar";
@@ -28,6 +28,12 @@ export interface ChannelHeaderProps {
   onShowThreads?: (() => void) | undefined;
   onShowArtifacts?: (() => void) | undefined;
   activePanel?: ChannelHeaderPanel | null | undefined;
+  /**
+   * The reader muted the conversation: the bell shows it and turns it back on. Slack's bell also
+   * offers "Just mentions"; the host keeps only mute for each conversation, so the bell is a toggle.
+   */
+  muted?: boolean | undefined;
+  onToggleMute?: (() => void) | undefined;
   /** A search field, at the right. */
   search?: JSX.Element;
   /** The narrow layout's back button. */
@@ -111,6 +117,21 @@ export function ChannelHeader(props: ChannelHeaderProps): JSX.Element {
             <AvatarStack members={props.members.slice(0, 3)} max={3} size="xs" />
             <span class="ws-face-pile-count">{props.memberCount}</span>
           </Button>
+        </Show>
+        <Show when={props.onToggleMute}>
+          {(toggle) => (
+            <IconButton
+              variant="ghost"
+              class="ws-channel-header-bell"
+              data-muted={props.muted ? "" : undefined}
+              label={t(props.muted ? "workspace.header.unmute" : "workspace.header.mute")}
+              onClick={() => toggle()()}
+            >
+              <Show when={props.muted} fallback={<Bell />}>
+                <BellOff />
+              </Show>
+            </IconButton>
+          )}
         </Show>
         <Show when={props.onShowThreads}>
           {(open) => (

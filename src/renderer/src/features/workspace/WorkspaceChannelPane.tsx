@@ -262,6 +262,8 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
           onShowDetails={() => ws.openDetails(props.channelId, "about")}
           onShowArtifacts={() => ws.openArtifactsPanel(props.channelId)}
           activePanel={panel()?.kind === "details" ? "details" : panel()?.kind === "artifacts" ? "artifacts" : null}
+          muted={ws.isMuted(props.channelId)}
+          onToggleMute={() => ws.setMuted(props.channelId, !ws.isMuted(props.channelId))}
           onBack={() => ws.back()}
         />
       </WorkspaceContextMenu>

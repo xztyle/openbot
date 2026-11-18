@@ -719,3 +719,7 @@
     transform: translate(-50%, -50%);
   }
 }
+
+.ws-channel-header-bell[data-muted] {
+  color: var(--openbot-text-muted);
+}

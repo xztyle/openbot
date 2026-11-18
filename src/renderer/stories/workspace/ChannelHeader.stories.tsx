@@ -18,6 +18,8 @@ function Headers() {
         onShowMembers={fn()}
         onShowDetails={fn()}
         activePanel="details"
+        muted
+        onToggleMute={fn()}
       />
       <ChannelHeader
         kind="dm"
@@ -27,6 +29,7 @@ function Headers() {
         memberCount={2}
         onShowDetails={fn()}
         onShowArtifacts={fn()}
+        onToggleMute={fn()}
       />
       <ChannelHeader
         kind="group"

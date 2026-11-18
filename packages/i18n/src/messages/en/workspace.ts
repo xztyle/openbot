@@ -553,4 +553,6 @@ export const messages = defineMessages("workspace", {
     one: "{count} new message since {time}",
     other: "{count} new messages since {time}",
   },
+  "workspace.header.mute": "Mute conversation",
+  "workspace.header.unmute": "Unmute conversation",
 });

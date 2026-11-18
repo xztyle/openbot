@@ -382,6 +382,28 @@ body {
     top: var(--left-header-height, 38px);
   }
 
+  /*
+   * The owner's DM with an agent: the chat's controls are in the DM header, above the chat. The tab
+   * row starts at the top of the chat, and the pane under it.
+   */
+  .web-app-frame[data-web-mobile-pane="conversation"]
+    .ws-agent-dm
+    .side-panel-docked:not(.side-panel-maximized)
+    > .side-panel-header,
+  .web-app-frame[data-web-mobile-pane="conversation"]
+    .ws-agent-dm
+    .side-panel-docked:has(> .side-panel-empty)
+    > .side-panel-empty {
+    top: 0;
+  }
+
+  .web-app-frame[data-web-mobile-pane="conversation"]
+    .ws-agent-dm
+    .side-panel-docked:not(.side-panel-maximized)
+    > :is(.browser-panel, .settings-panel) {
+    top: var(--left-header-height, 38px);
+  }
+
   .web-app .join-server-backdrop {
     padding: var(--openbot-space-3);
   }

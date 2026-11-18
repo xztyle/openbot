@@ -3,8 +3,9 @@
 // Storybook side by side at common desktop widths: default state, the pane list, the Agent settings
 // tab and pane, Maximize and Restore, a resize, and Delete on a tab. Both stories open on the
 // workspace, so each step first opens the owner's DM with an agent, which is the agent's chat. At a
-// phone width the web client alone is checked: an open pane takes the full width under the chat header, which keeps its panel
-// button, and the tab row does not cover it.
+// phone width the web client alone is checked: an open pane takes the full width under the DM
+// header, which holds the chat's controls and keeps its panel button, and the tab row does not
+// cover it.
 //
 // `bun scripts/web-side-panel-e2e.ts --storybook=<url> [--browser-executable=<path>]`
 // Writes .openbot-build/web-side-panel-e2e/report.json and a screenshot of each client, width and
@@ -26,6 +27,7 @@ const RESIZE_BY = 100;
  * The chat and the composer are left out: the height of the composer follows its content.
  */
 const PARTS = [
+  ".ws-agent-dm-header",
   ".conversation-header",
   ".side-panel-header",
   ".side-panel-tab",
@@ -59,7 +61,8 @@ async function measure(page: Page): Promise<Record<string, Part>> {
   return page.evaluate((selectors) => {
     const parts: Record<string, Part> = {};
     for (const selector of selectors) {
-      const element = document.querySelector(`.conversation-panel ${selector}`);
+      // The owner's DM with an agent: its header holds the chat's controls, outside the chat panel.
+      const element = document.querySelector(`.ws-agent-dm ${selector}`);
       if (!element) continue;
       const box = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -88,12 +91,21 @@ function differences(web: Record<string, Part>, desktop: Record<string, Part>) {
   return found;
 }
 
-/** Waits until the animations of the panel and of the chat beside it end. */
+/**
+ * Waits until the fonts load and the animations of the panel, of the chat beside it and of the DM
+ * header end. The model's name in the header swaps in with an animation.
+ */
 async function settled(page: Page): Promise<void> {
   await page.evaluate(async () => {
+    await document.fonts.ready;
     const panel = document.querySelector(".conversation-panel");
     if (!panel) return;
-    const running = [panel, ...panel.querySelectorAll(":scope > *")].flatMap((element) =>
+    const header = document.querySelector(".ws-agent-dm-header");
+    const running = [
+      panel,
+      ...panel.querySelectorAll(":scope > *"),
+      ...(header ? [header, ...header.querySelectorAll("*")] : []),
+    ].flatMap((element) =>
       element
         .getAnimations()
         .filter((animation) => animation.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY),
@@ -137,6 +149,7 @@ async function desktopStates(browser: Browser, client: Client, width: number) {
       expanded: await toggle.getAttribute("aria-expanded"),
       header: await page.locator(".side-panel-header").count(),
     };
+    await settled(page);
     states.closed = await measure(page);
 
     await toggle.click();
@@ -246,11 +259,14 @@ try {
         result.launcher.includes("Open Agent settings"),
         result.launcher,
       );
+      // The DM header, with the chat's controls, stays over a maximized pane.
+      const dmHeader = result.states.maximized?.[".ws-agent-dm-header"];
       check(
-        `${client} ${width}: a maximized pane covers the chat`,
+        `${client} ${width}: a maximized pane covers the chat under the DM header`,
         result.states.maximized?.[".settings-panel"]?.width === result.panelWidth &&
           result.states.maximized?.[".side-panel-header"]?.width === result.panelWidth &&
-          result.states.maximized[".conversation-header"] === undefined,
+          dmHeader !== undefined &&
+          result.states.maximized?.[".side-panel-header"]?.y === dmHeader.y + dmHeader.height,
         result.states.maximized,
       );
       check(
@@ -272,7 +288,8 @@ try {
 
   const result = await phone(browser);
   const full = (part: Part | undefined) => part?.x === 0 && part.width === PHONE_WIDTH;
-  const header = result.settings[".conversation-header"];
+  // The DM's header names the agent and holds the chat's controls, the panel button among them.
+  const header = result.settings[".ws-agent-dm-header"];
   const tabs = result.settings[".side-panel-header"];
   check(
     `web ${PHONE_WIDTH}: the panel button stays reachable over the pane list`,
@@ -280,12 +297,12 @@ try {
     result.launcher,
   );
   check(
-    `web ${PHONE_WIDTH}: the chat header keeps the full width over an open pane`,
+    `web ${PHONE_WIDTH}: the DM header keeps the full width over an open pane`,
     full(header) && result.settingsToggleReachable,
     header,
   );
   check(
-    `web ${PHONE_WIDTH}: the tab row is a full row under the chat header`,
+    `web ${PHONE_WIDTH}: the tab row is a full row under the DM header`,
     full(tabs) && header !== undefined && tabs?.y === header.y + header.height,
     tabs,
   );
@@ -296,11 +313,15 @@ try {
       result.settings[".settings-panel"]?.y === tabs.y + tabs.height,
     result.settings[".settings-panel"],
   );
+  // The DM header stays over a maximized pane: it has Back and the panel button. The pane covers
+  // the messages and the message box under it.
+  const maximizedHeader = result.maximized[".ws-agent-dm-header"];
   check(
-    `web ${PHONE_WIDTH}: a maximized pane covers the chat header`,
+    `web ${PHONE_WIDTH}: a maximized pane covers the chat under the DM header`,
     full(result.maximized[".side-panel-header"]) &&
-      result.maximized[".side-panel-header"]?.y === 0 &&
-      result.maximized[".conversation-header"] === undefined,
+      maximizedHeader !== undefined &&
+      result.maximized[".side-panel-header"]?.y === maximizedHeader.y + maximizedHeader.height &&
+      full(result.maximized[".settings-panel"]),
     result.maximized,
   );
   report.passed = checks.every((entry) => entry.passed);

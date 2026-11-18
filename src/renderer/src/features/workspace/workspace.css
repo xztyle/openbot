@@ -612,33 +612,42 @@
   padding-bottom: var(--openbot-space-4);
 }
 
-/* The DM header names the agent, so the chat header keeps only its controls. */
-.ws-agent-dm-body .conversation-header .conversation-heading-group {
-  visibility: hidden;
+/*
+ * One header row, as a channel's: the DM header names the agent, and the chat's controls (the
+ * model, search, the side panel) stand in it, left of the details button. The chat's own header
+ * keeps only those controls there.
+ */
+.ws-agent-dm-header {
+  height: 50px;
+}
+
+.ws-agent-dm-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.ws-agent-dm-controls > .conversation-header {
+  width: auto;
+  min-width: 0;
+  height: auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.ws-agent-dm-controls .conversation-heading-group {
+  display: none;
 }
 
 /*
- * On a wide screen the controls sit in the DM header's row, left of its details button, as in a
- * Slack header. A row of their own left an empty band over the messages that seemed to cut them.
+ * A phone shows the model as its provider's mark, so one row holds Back, the agent, the controls and
+ * details. The picker names the model when it opens.
  */
-@media (min-width: 721px) {
-  .ws-agent-dm-header {
-    height: 50px;
-  }
-
-  .ws-agent-dm .ws-agent-dm-body .conversation-panel > .conversation-header {
-    position: absolute;
-    z-index: 12;
-    top: -50px;
-    right: 48px;
-    width: auto;
-    max-width: calc(100% - 48px - 200px);
-    height: 49px;
-    padding: 0 0 0 var(--openbot-space-6);
-    background: linear-gradient(to right, transparent, var(--openbot-bg-canvas) var(--openbot-space-6));
-  }
-
-  .ws-agent-dm .ws-agent-dm-body .conversation-header .conversation-heading-group {
+@media (max-width: 720px) {
+  .ws-agent-dm-header .ws-channel-header-topic,
+  .ws-agent-dm-controls .provider-model-trigger-name,
+  .ws-agent-dm-controls .provider-model-trigger-effort {
     display: none;
   }
 }

@@ -34,6 +34,7 @@ const layout: ConversationWorkspaceLayout = {
   profile: () => null,
   quickReactions: () => ["✅", "👀", "🙌"],
   emojiPicker: { recent: ["🎉", "🚀"], skinTone: 0, onSkinToneChange: () => undefined },
+  headerSlot: () => undefined,
   composer: {
     toolbarShown: () => true,
     setToolbarShown: () => undefined,

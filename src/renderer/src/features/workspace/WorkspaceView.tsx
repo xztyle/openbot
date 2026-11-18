@@ -4,7 +4,7 @@ import { WorkspaceContextMenu } from "@openbot/ui/features/workspace/WorkspaceCo
 import { WorkspaceLayout } from "@openbot/ui/features/workspace/WorkspaceLayout";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
-import { createMemo, Match, type ParentProps, Show, Switch } from "solid-js";
+import { createMemo, createSignal, Match, type ParentProps, Show, Switch } from "solid-js";
 import {
   type ConversationWorkspaceLayout,
   ConversationWorkspaceLayoutContext,
@@ -120,6 +120,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
   const workspaceMenu = useWorkspaceMenu();
   const agent = () => ws.env.agents().find((candidate) => candidate.id === props.agentId);
   const toolbar = composerToolbar("main");
+  const [headerSlot, setHeaderSlot] = createSignal<HTMLElement>();
   const rows: ConversationWorkspaceLayout = {
     reader: () => {
       const reader = ws.env.reader();
@@ -137,6 +138,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
     profile: (member) => <MemberProfile member={member} />,
     quickReactions: () => ws.quickReactions(),
     emojiPicker: ws.reactionPicker,
+    headerSlot,
     composer: {
       toolbarShown: () => toolbar.shown(),
       setToolbarShown: (shown) => toolbar.setShown(shown),
@@ -164,6 +166,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
                 memberCount={1}
                 onShowDetails={() => ws.env.openAgentSettings(current().id)}
                 onBack={() => ws.back()}
+                search={<div class="ws-agent-dm-controls" ref={setHeaderSlot} />}
               />
             )}
           </Show>

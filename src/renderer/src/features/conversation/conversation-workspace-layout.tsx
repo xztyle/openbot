@@ -21,6 +21,11 @@ export interface ConversationWorkspaceLayout {
   quickReactions: () => readonly string[];
   /** The full emoji picker behind the action bar's react button and the box's emoji button. */
   emojiPicker: ReactionEmojiPicker;
+  /**
+   * Where the chat's controls (the model, search, the side panel) go: the workspace's header of the
+   * DM. One header row then names the agent and holds its controls, as a channel's header does.
+   */
+  headerSlot: () => HTMLElement | undefined;
   /** The message box of the workspace. */
   composer: {
     /** Whether the formatting toolbar shows: one choice for every message box, as Slack's "Aa". */

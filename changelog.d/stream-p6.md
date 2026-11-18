@@ -10,3 +10,6 @@
   where you left it, and your own reply always goes to the end.
 - Show the same working line in a thread as in its channel: what the agent does now, its steps, and
   Stop.
+- Open a channel where you left it when you come back to it. A channel with new messages opens at
+  the first new one, as before. The bar at the top counts the new messages: "12 new messages since
+  10:15".

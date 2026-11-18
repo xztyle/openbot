@@ -11,6 +11,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show
 import { WorkspaceMessage } from "./WorkspaceMessage";
 import { useWorkspace } from "./workspace-context";
 import { keepUnchangedRows, messageRows, type WorkspaceMessageRowModel } from "./workspace-model";
+import { savedScrollPlace, saveScrollPlace } from "./workspace-scroll-places";
 
 /** How close to the end still counts as reading the newest messages. */
 const FOLLOW_DISTANCE = 80;
@@ -68,6 +69,25 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
   );
   const indexByKey = createMemo(() => new Map(rows().map((row, index) => [row.key, index])));
   const unreadIndex = createMemo(() => rows().findIndex((row) => row.firstUnread));
+  /** The messages of others from the "new" divider on, for "12 new messages since 10:15". */
+  const unreadCount = createMemo(() => {
+    const from = unreadIndex();
+    if (from < 0) return 0;
+    return rows()
+      .slice(from)
+      .filter((row) => !row.pending && !(row.entry.author.kind === "member" && ws.env.isReader(row.entry.author.id)))
+      .length;
+  });
+  /** "12 new messages since 10:15", or only the time when every message after the divider is the reader's. */
+  const unreadLabel = () => {
+    const time = format.date(Date.parse(rows()[unreadIndex()]?.entry.message.createdAt ?? ""), { timeStyle: "short" });
+    const count = unreadCount();
+    return count > 0
+      ? t("workspace.app.channel.unreadCountSince", { count, time })
+      : t("workspace.app.channel.unreadSince", { time });
+  };
+  /** Where the reader left this conversation, for their next visit while the app runs. */
+  const placeId = `${ws.env.storageKey()}:channel:${props.channelId}`;
   /** The last row when the reader left the end: the rows after it are new to them. */
   const [awayKey, setAwayKey] = createSignal<string | null>(null);
   const newSinceAway = createMemo(() => {
@@ -120,10 +140,46 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
     scroller.scrollTop = scroller.scrollHeight;
   }
 
+  /** The row at the top of the view and its distance from the top, read on the next frame. */
+  let placeQueued = false;
+  function notePlace() {
+    if (placeQueued) return;
+    placeQueued = true;
+    requestAnimationFrame(() => {
+      placeQueued = false;
+      if (!scroller || !virtualRoot || !opened) return;
+      if (follow) {
+        saveScrollPlace(placeId, null);
+        return;
+      }
+      const top = scroller.getBoundingClientRect().top;
+      for (const element of virtualRoot.children) {
+        const box = element.getBoundingClientRect();
+        if (box.bottom <= top) continue;
+        const key = untrack(rows)[Number(element.getAttribute("data-index"))]?.key;
+        if (key) saveScrollPlace(placeId, { key, offset: box.top - top });
+        return;
+      }
+    });
+  }
+
+  /** Opens the list where the reader left it: that row, as far from the top as it was. */
+  function restorePlace(index: number, offset: number) {
+    follow = false;
+    virtualizer.scrollToIndex(index);
+    requestAnimationFrame(() => {
+      const element = virtualRoot?.querySelector(`[data-index="${index}"]`);
+      if (scroller && element)
+        scroller.scrollTop += element.getBoundingClientRect().top - scroller.getBoundingClientRect().top - offset;
+      requestAnimationFrame(updateAtEnd);
+    });
+  }
+
   function updateAtEnd() {
     if (!scroller) return;
     const remaining = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     follow = remaining <= FOLLOW_DISTANCE;
+    notePlace();
     if (follow !== atEnd()) {
       setAtEnd(follow);
       setAwayKey(follow ? null : (untrack(rows).at(-1)?.key ?? null));
@@ -193,6 +249,13 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
           if (unread > 0) {
             virtualizer.scrollToIndex(Math.max(0, unread - 1));
             requestAnimationFrame(updateAtEnd);
+            return;
+          }
+          // With nothing new, the reader comes back to the place they left, as in Slack.
+          const place = savedScrollPlace(placeId);
+          const index = place?.key === undefined ? undefined : untrack(indexByKey).get(place.key);
+          if (place && index !== undefined) {
+            restorePlace(index, place.offset);
             return;
           }
         }
@@ -285,11 +348,7 @@ export function WorkspaceMessageList(props: WorkspaceMessageListProps) {
         <div class="ws-unread-banner" role="status">
           <Button variant="ghost" size="xs" class="ws-unread-banner-jump" onClick={jumpToUnread}>
             <ArrowUp aria-hidden="true" />
-            {t("workspace.app.channel.unreadSince", {
-              time: format.date(Date.parse(rows()[unreadIndex()]?.entry.message.createdAt ?? ""), {
-                timeStyle: "short",
-              }),
-            })}
+            {unreadLabel()}
           </Button>
           <Show when={props.onMarkRead}>
             {(markRead) => (

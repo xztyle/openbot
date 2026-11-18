@@ -531,4 +531,8 @@ export const messages = {
   "workspace.thread.newReplies": { one: "{count} respuesta nueva", other: "{count} respuestas nuevas" },
   "workspace.thread.follow": "Recibir avisos de respuestas nuevas",
   "workspace.thread.unfollow": "Desactivar avisos de respuestas",
+  "workspace.app.channel.unreadCountSince": {
+    one: "{count} mensaje nuevo desde las {time}",
+    other: "{count} mensajes nuevos desde las {time}",
+  },
 } as const satisfies PartialTranslation<typeof source>;

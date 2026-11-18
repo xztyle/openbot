@@ -549,4 +549,8 @@ export const messages = defineMessages("workspace", {
   "workspace.thread.newReplies": { one: "{count} new reply", other: "{count} new replies" },
   "workspace.thread.follow": "Get notified about new replies",
   "workspace.thread.unfollow": "Turn off notifications for replies",
+  "workspace.app.channel.unreadCountSince": {
+    one: "{count} new message since {time}",
+    other: "{count} new messages since {time}",
+  },
 });

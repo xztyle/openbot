@@ -30,7 +30,8 @@ export interface WorkspaceSearchInput {
    * The words to find, at most `WORKSPACE_SEARCH_QUERY_LIMIT` characters. A word finds the words that
    * start with it, also without accents ("cafe" finds "Café"); `"two words"` finds the phrase; `-word`
    * leaves out the messages that have it. A client turns modifiers such as `in:` and `from:` into the
-   * fields below.
+   * fields below. With no words and with `authorIds`, the search lists every message of those
+   * authors that it can find, newest first: the reader's sent messages.
    */
   query: string;
   /** Only these channels (`in:`). */

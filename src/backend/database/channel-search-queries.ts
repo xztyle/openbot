@@ -20,7 +20,11 @@ export interface ChannelSearchPlan {
 
 /** One search over the channels that the caller already checked the reader may see. */
 export interface ChannelSearchRequest {
-  plan: ChannelSearchPlan;
+  /**
+   * The words to find. Null lists every message that a search can find, by the other filters only:
+   * the reader's sent messages are a search with no words and the reader as the author.
+   */
+  plan: ChannelSearchPlan | null;
   /** The channels to search: never empty, every one of them visible to the reader. */
   channelIds: string[];
   authorIds?: string[];
@@ -139,7 +143,10 @@ export class ChannelSearchQueries {
   search(request: ChannelSearchRequest): ChannelSearchResult {
     if (!request.channelIds.length) return { rows: [], total: 0 };
     const filters: string[] = ["message.channel_id IN (SELECT value FROM json_each(?))"];
-    const parameters: (string | number)[] = [request.plan.match, JSON.stringify(request.channelIds)];
+    const parameters: (string | number)[] = [
+      ...(request.plan ? [request.plan.match] : []),
+      JSON.stringify(request.channelIds),
+    ];
     if (request.authorIds?.length) {
       filters.push(`(json_extract(message.message_json, '$.author.id') IN (SELECT value FROM json_each(?))
         OR json_extract(message.message_json, '$.externalAuthor.id') IN (SELECT value FROM json_each(?)))`);
@@ -161,14 +168,23 @@ export class ChannelSearchQueries {
     if (request.threadsOnly)
       filters.push(`(json_extract(message.message_json, '$.threadRootId') IS NOT NULL
         OR COALESCE(json_extract(message.message_json, '$.threadSummary.replyCount'), 0) > 0)`);
-    const order = request.sort === "recent" ? "at DESC, sequence DESC, id DESC" : "score, at DESC, id DESC";
-    // The index finds the matches; only the page's rows read their message.
-    const matches = `WITH matches AS MATERIALIZED (
+    const order =
+      request.sort === "recent" || !request.plan ? "at DESC, sequence DESC, id DESC" : "score, at DESC, id DESC";
+    // The index finds the matches; only the page's rows read their message. With no words, the
+    // messages in the index are the ones a search can find, newest first.
+    const matches = request.plan
+      ? `WITH matches AS MATERIALIZED (
         SELECT message.rowid AS id, message.sequence AS sequence, bm25(channel_message_search) AS score,
                json_extract(message.message_json, '$.message.createdAt') AS at
           FROM channel_message_search
           JOIN projection_channel_messages message ON message.rowid = channel_message_search.rowid
          WHERE channel_message_search MATCH ? AND ${filters.join(" AND ")}
+      )`
+      : `WITH matches AS MATERIALIZED (
+        SELECT message.rowid AS id, message.sequence AS sequence, 0 AS score,
+               json_extract(message.message_json, '$.message.createdAt') AS at
+          FROM projection_channel_messages message
+         WHERE message.rowid IN (SELECT rowid FROM channel_message_search) AND ${filters.join(" AND ")}
       )`;
     const rows = databaseRows(
       this.#core.connection
@@ -195,7 +211,7 @@ export class ChannelSearchQueries {
       rows: rows.flatMap((row) => {
         const message = JSON.parse(requiredStringColumn(row, "message_json"));
         if (!isChannelMessage(message)) return [];
-        return [{ message, ...searchSnippet(message, request.plan.terms) }];
+        return [{ message, ...searchSnippet(message, request.plan?.terms ?? []) }];
       }),
     };
   }

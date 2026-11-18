@@ -188,7 +188,9 @@ export function createMockWorkspaceState(
         .split(/\s+/u)
         .filter((word) => word.length > 0 && !word.startsWith("-"))
         .map((word) => word.replaceAll('"', ""));
-      if (!words.length) return { hits: [], total: 0, nextCursor: null };
+      // No words and authors: the authors' messages, newest first (the Sent list), as on the host.
+      const listing = !input.query.trim() && Boolean(input.authorIds?.length);
+      if (!words.length && !listing) return { hits: [], total: 0, nextCursor: null };
       const hits: WorkspaceSearchHit[] = [];
       for (const channel of await channels.listChannels()) {
         if (input.channelIds && !input.channelIds.includes(channel.id)) continue;
@@ -205,6 +207,7 @@ export function createMockWorkspaceState(
           const tokens = folded.split(/[^\p{L}\p{N}]+/u);
           const starts = (word: string) => tokens.some((token) => token.startsWith(word));
           if (message.deletedAt || !words.every(starts)) continue;
+          if (listing && (message.message.itemType === "commentary" || !text.trim())) continue;
           if (input.authorIds && !input.authorIds.includes(message.author.id)) continue;
           if (input.threadsOnly && !message.threadRootId && !(message.threadSummary?.replyCount ?? 0)) continue;
           const at = folded.indexOf(words[0] ?? "");

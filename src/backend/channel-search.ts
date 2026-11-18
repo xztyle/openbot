@@ -45,7 +45,10 @@ export class ChannelSearch {
   ): Effect.Effect<WorkspaceSearchPage, ChannelOperationError> {
     return Effect.gen({ self: this }, function* () {
       const plan = channelSearchPlan(input.query);
-      if (!plan) return { hits: [], total: 0, nextCursor: null };
+      // A search with no words lists the messages of the authors it names, newest first, as Slack's
+      // Sent list does. Without words or authors there is nothing to find.
+      const listing = !plan && !input.query.trim() && Boolean(input.authorIds?.length);
+      if (!plan && !listing) return { hits: [], total: 0, nextCursor: null };
       const spaces = new Map<string, string>();
       const named = input.channelIds ? new Set(input.channelIds) : null;
       const channels = yield* channelSync(() =>

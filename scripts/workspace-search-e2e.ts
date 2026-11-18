@@ -192,6 +192,30 @@ try {
     return { space: space.total };
   });
 
+  await step("no words and an author list the author's messages, newest first (Sent)", async () => {
+    const sent = await search(member, { query: "", authorIds: [member.id], sort: "recent" });
+    assert.deepEqual(
+      ids(sent),
+      sorted([messages.reply, messages.pricing, messages.call]),
+      "The Sent list is not the member's messages.",
+    );
+    const times = sent.hits.map((hit) => hit.at);
+    assert.deepEqual(times, [...times].sort().reverse(), "The Sent list is not newest first.");
+    assert.ok(
+      sent.hits.every((hit) => hit.authorId === member.id && hit.highlights.length === 0 && hit.snippet),
+      "A Sent hit has another author, a highlight or no text.",
+    );
+    // Another person's own list never names a channel this member cannot see, and no author finds nothing.
+    const ownerSent = await search(owner, { query: "", authorIds: [owner.id] });
+    assert.ok(ids(ownerSent).includes(messages.secret), "The owner's Sent list misses their private channel.");
+    assert.ok(!ids(await search(member, { query: "", authorIds: [owner.id] })).includes(messages.secret));
+    assert.equal((await search(member, { query: "" })).total, 0, "An empty search without authors found messages.");
+    assert.deepEqual(ids(await search(owner, { query: "", authorIds: [owner.id], spaceId: setup.spaceId })), [
+      messages.quote,
+    ]);
+    return { sent: sent.total };
+  });
+
   await step("pages cover every match once, in both sorts", async () => {
     for (let index = 0; index < 25; index += 1) await send(member, channels.launch, `Batch item ${index} for zebra`);
     for (const sort of ["recent", "relevance"]) {
@@ -305,7 +329,16 @@ try {
       .map((row) => String(row.detail));
     assert.ok(plan.join("\n").includes("VIRTUAL TABLE INDEX"), plan.join("\n"));
     assert.ok(Math.max(...timings) < 1_000, `A search took ${Math.max(...timings)} ms.`);
-    return { timingsMs: timings, plan };
+    // The Sent list of an author with every one of the 20,000 messages, and of one with a few.
+    const sentTimings: number[] = [];
+    for (const authorId of ["worker", member.id]) {
+      const started = performance.now();
+      const page = await search(member, { query: "", authorIds: [authorId], sort: "recent", limit: 30 });
+      sentTimings.push(Math.round(performance.now() - started));
+      assert.ok(page.total > 0, `The Sent list of ${authorId} is empty.`);
+    }
+    assert.ok(Math.max(...sentTimings) < 1_000, `A Sent list took ${Math.max(...sentTimings)} ms.`);
+    return { timingsMs: timings, sentTimingsMs: sentTimings, plan };
   });
 
   await step("a client without fork-host-v1 gets 400; a malformed body gets 400", async () => {

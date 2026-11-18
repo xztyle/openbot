@@ -13,6 +13,9 @@
 //   `{ start, length }` in `snippet`), spaceId? }`. `nextCursor` is null after the last page.
 //   A message of an agent hidden from the peer is not found. Deleted messages, the frames of a
 //   streaming answer, steps, notes and routing events are not found either.
+// - Later: a request whose `query` has no words and that names `authorIds` lists every message of
+//   those authors that a search can find, newest first, with a snippet from the start of the text:
+//   the reader's Sent list. A host that predates it answers no hits for such a request, as before.
 //
 // A fork host built before this route answers 404; a client then searches the channel names only, as
 // before. A present malformed value fails closed. The bounds are written out: this file must not move

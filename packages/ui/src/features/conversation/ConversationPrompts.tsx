@@ -16,6 +16,7 @@ import {
   LogIn,
   Maximize2,
   Monitor,
+  MousePointer2,
   RadioGroup,
   toast,
   X,
@@ -547,7 +548,7 @@ function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
                     )}
                   </Show>
                   <Button
-                    variant="default"
+                    variant={props.onOpen ? "secondary" : "default"}
                     size="sm"
                     type="button"
                     class="approval-button"
@@ -558,6 +559,22 @@ function BrowserManualTakeoverCard(props: BrowserTakeoverCardProps) {
                   >
                     {t("prompt.browser.done")}
                   </Button>
+                  {/* The page is where the person does the step, so opening it is the card's first action. */}
+                  <Show when={props.onOpen}>
+                    {(open) => (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        type="button"
+                        class="approval-button"
+                        disabled={Boolean(submitting())}
+                        onClick={() => open()()}
+                      >
+                        <MousePointer2 data-icon="inline-start" aria-hidden="true" />
+                        {t("prompt.browser.takeOver")}
+                      </Button>
+                    )}
+                  </Show>
                 </>
               }
             >

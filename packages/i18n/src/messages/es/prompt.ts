@@ -66,6 +66,7 @@ export const messages = {
   "prompt.browser.openPage": "Abrir {title}",
   "prompt.browser.returning": "Volviendo…",
   "prompt.browser.done": "He terminado",
+  "prompt.browser.takeOver": "Tomar el control",
   "prompt.browser.cancelling": "Cancelando…",
   "prompt.browser.pageFallback": "Página del navegador",
   "prompt.browser.hostFallback": "el navegador",

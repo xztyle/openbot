@@ -67,6 +67,7 @@ export const messages = defineMessages("prompt", {
   "prompt.browser.openPage": "Open {title}",
   "prompt.browser.returning": "Returning…",
   "prompt.browser.done": "I’m done",
+  "prompt.browser.takeOver": "Take over",
   "prompt.browser.cancelling": "Cancelling…",
   "prompt.browser.pageFallback": "Browser page",
   "prompt.browser.hostFallback": "the browser",

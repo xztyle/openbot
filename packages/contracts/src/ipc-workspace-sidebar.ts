@@ -77,5 +77,6 @@ export function boundedWorkspaceSidebar(prefs: WorkspaceSidebarPrefs): Workspace
     muted: bounded(prefs.muted),
     ...(prefs.closed === undefined ? {} : { closed: bounded(prefs.closed) }),
     ...(prefs.space === undefined || !isSidebarId(prefs.space) ? {} : { space: prefs.space }),
+    ...(prefs.collapsed === undefined ? {} : { collapsed: bounded(prefs.collapsed) }),
   };
 }

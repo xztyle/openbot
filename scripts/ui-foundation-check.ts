@@ -232,6 +232,17 @@ export function checkUiFoundation(
       matches(legacyStyles, /border-radius:(?!\s*(?:var\(|0(?:\s|;)|inherit\b))\s*[^;]+/gu),
       0,
     ],
+    // Every portaled surface takes `--openbot-layer-overlay` and stacks by open order. A step above
+    // it (`+ 1`) covers the menus and dialogs that later open from that surface, which is how a
+    // select in a dialog once opened under it. The dropdown layer of in-page surfaces may step.
+    [
+      "z-index arithmetic on the overlay layer",
+      matches(
+        legacyStyles,
+        /z-index:\s*calc\(\s*var\(--openbot-layer-(?:overlay|dialog|dialog-host|popover|toast|tooltip)\)/gu,
+      ),
+      0,
+    ],
     [
       "untokenized transition durations",
       matches(legacyStyles, /transition(?:-duration)?:(?![^;]*var\()(?!\s*(?:none|0\.01ms))[^;]*\b\d+m?s\b[^;]*/gu),

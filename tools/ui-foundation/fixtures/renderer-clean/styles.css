@@ -1,7 +1,13 @@
 /* A stylesheet in the widened scan's reach that spends none of the budget. */
 .panel {
+  /* A portaled surface takes the overlay layer as it is; an in-page one may step off dropdown. */
+  z-index: var(--openbot-layer-overlay);
   color: var(--openbot-text);
   font-size: var(--openbot-text-sm);
   border-radius: 0;
   transition: none;
+}
+
+.panel:focus-within {
+  z-index: calc(var(--openbot-layer-dropdown) - 1);
 }

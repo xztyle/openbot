@@ -17,6 +17,7 @@
 }
 
 .legacy-scrim {
+  z-index: calc(var(--openbot-layer-dialog) + 1);
   background: rgba(0, 0, 0, 0.5);
   border-color: hsla(0, 100%, 50%, 0.5);
 }

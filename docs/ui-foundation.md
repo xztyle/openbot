@@ -15,13 +15,44 @@ Features — the `src/renderer/src/features/<domain>/` directories — import pr
 - `Input`, `Textarea`, `NativeSelect` — native controls in a uniform anatomy. Wrap them in `Field` to wire up label, description, error, `required` and `aria-describedby` automatically.
 - `Switch` — an immediate change to a binary setting. For a decision that needs the form submitted, use a checkbox or RadioGroup.
 - `Card`, `Separator`, `Spinner`, `Skeleton`, `Kbd` — surface, structure and feedback elements.
-- `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`, `Tabs`, `RadioGroup`, `Select`, `Combobox` and `Listbox` — the exported Kobalte adapters for complex interactions.
+- `Dialog`, `AlertDialog`, `DropdownMenu`, `Popover`, `Tooltip`, `Tabs`, `RadioGroup`, `Select`, `Combobox` and `Listbox` — the exported Kobalte adapters for complex interactions. `ActionSheet` is the phone form of a menu. See [Overlays](#overlays).
 
 ## Implementation rules
 
 Colours must come from the semantic `--openbot-*` variables. Text sizes, radii and animation durations use tokens. Hover applies only inside `@media (hover: hover) and (pointer: fine)`, pressable controls use `scale(0.97)`, and animations stay below 300 ms and respect `prefers-reduced-motion`.
 
 `bun run check:ui` blocks native buttons and switches, hand-rolled dialogs/menus/tabs/listboxes, direct Kobalte/Lucide imports outside the UI layer, and colour literals along with untokenized text sizes, radii and transition durations. The check covers every renderer stylesheet as well as inline declarations in TSX; the only place a colour literal is allowed is the shared palette `packages/brand/src/tokens.css`. It also checks that the complex namespaces have not gone back to direct Kobalte aliases. Every migration budget is zero, including the `data-testid` budget.
+
+## Overlays
+
+Every surface that floats over the page follows one stack. `Foundations/Overlay stack` shows it, and
+`scripts/overlay-stack-e2e.ts` and `scripts/mention-picker-touch-e2e.ts` check it with a mouse and with taps.
+
+- **One layer, open order.** A surface that portals to the body - `Dialog`, `AlertDialog`,
+  `ConfirmDialog`, `ActionSheet`, `DropdownMenu`, `ContextMenu`, `Select`, `Combobox`, `Popover` - takes
+  `--openbot-layer-overlay`. The surface opened last is the last child of the body, so it is on top and
+  takes the press: a menu or a select in a dialog, a dialog from a menu, a dialog from a dialog. Never
+  write `calc(var(--openbot-layer-…) + 1)`; `check:ui` counts it. In-page floating parts (drag previews,
+  unportaled pickers) take `--openbot-layer-dropdown`. Toasts take `--openbot-layer-toast` and stay
+  pressable over a dialog; tooltips take `--openbot-layer-tooltip`.
+- **Nesting.** The adapters in `complex.tsx` mark anchored surfaces with Kobalte's top-layer attribute, so
+  a modal dialog neither hides them from screen readers nor closes when they take a press. Open a dialog
+  from a menu item with `onSelectAfterClose`, so focus returns to a connected element first; a plain
+  `onSelect` also stacks correctly.
+- **Hand-made surfaces.** Prefer the adapters. A surface that must portal by hand mounts with
+  `overlayMount(anchor)`, which puts it inside the dialog that holds its anchor: a modal dialog sets
+  `pointer-events: none` on the body, so a surface beside it shows but takes no press.
+- **Focus.** A dialog traps Tab and returns focus to its opener or trigger. A list that belongs to a text
+  field (the mention picker, address suggestions) uses `createFieldListPress`: the field keeps focus and
+  the on-screen keyboard, a tap selects at touchend and cancels the click, and a drag scrolls.
+- **Escape.** The top surface takes Escape. A hand-made full-screen view listens in the capture phase and
+  stops the key, so the dialog under it stays open.
+- **Scroll lock.** Kobalte's lock covers modal dialogs and menus and lets their own lists scroll on iOS.
+- **Phones.** A touch layout (`usesTouchLayout()`) has no hover: no control may appear only on hover.
+  A menu of row actions becomes an `ActionSheet` opened by a long press (`createLongPress`, innermost
+  element wins); `ContextMenu` gives a touch long press to the innermost trigger only. Rows and buttons
+  in sheets and pickers are at least `--openbot-touch-target` (44px) high, and sheets keep clear of the
+  safe-area insets.
 
 ## Verification
 

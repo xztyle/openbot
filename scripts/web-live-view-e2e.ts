@@ -30,7 +30,10 @@ declare global {
       stop(): Promise<void>;
       input(input: BrowserLiveViewInput): Promise<void>;
     };
-    liveViewBridge?: { frame(tabId: string, sequence: number, width: number, height: number, base64: string): void };
+    liveViewBridge?: {
+      frame(tabId: string, sequence: number, width: number, height: number, base64: string): void;
+      connection(state: "online" | "offline"): void;
+    };
     takeoverResponses?: { requestId: string | number; decision: string }[];
   }
 }
@@ -169,6 +172,7 @@ class TabHost {
   #sizes = new Map<number, { width: number; height: number }>();
   #button: "left" | "middle" | "right" | null = null;
   starts = 0;
+  stops = 0;
 
   constructor(
     readonly tab: Page,
@@ -212,6 +216,7 @@ class TabHost {
 
   async stop(): Promise<void> {
     const cdp = this.#cdp;
+    if (cdp) this.stops += 1;
     this.#cdp = null;
     if (!cdp) return;
     await cdp.send("Page.stopScreencast").catch(() => undefined);
@@ -330,6 +335,15 @@ const nextClicks = () => document.getElementById("next")?.dataset.clicks ?? "0";
 const clicksAre = (expected: string) => (document.getElementById("next")?.dataset.clicks ?? "0") === expected;
 const scrollTop = () => window.scrollY;
 const scrolledPast = (expected: string) => window.scrollY > Number(expected);
+
+/** Waits for a condition of this script's own state, such as what the fake host saw. */
+async function waitUntil(condition: () => boolean, what: string): Promise<void> {
+  const deadline = Date.now() + UI_WAIT_MS;
+  while (!condition()) {
+    if (Date.now() > deadline) assert.fail(what);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
 
 /** The view shows the page: a frame is drawn and the host has a stream for it. */
 async function viewing(page: Page, host: TabHost): Promise<void> {
@@ -523,6 +537,24 @@ async function desktop(browser: Browser, origin: string): Promise<void> {
     await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
     await page.mouse.wheel(0, 600);
     await waitForTab(tab, scrolledPast, scrollTop, "100", "The wheel scrolls the page");
+  });
+
+  await step(page, viewport, "the view starts again when the connection comes back", async () => {
+    const starts = host.starts;
+    const stops = host.stops;
+    // The client reconnects by itself after a drop, as it does after a WebRTC restart.
+    await page.evaluate(() => window.liveViewBridge?.connection("offline"));
+    await waitUntil(
+      () => host.stops > stops && host.starts > starts,
+      "The view stops with the connection and starts again",
+    );
+    await viewing(page, host);
+    // The page scrolled in the step before; its top is where the button is.
+    await tab.evaluate(() => window.scrollTo(0, 0));
+    await waitUntil(() => host.inputs.some((input) => input.type === "ack"), "The view draws frames again");
+    const next = await onScreen(page, tab, "#next");
+    await page.mouse.click(next.x, next.y);
+    await waitForTab(tab, clicksAre, nextClicks, "2", "A click after the reconnect reaches the page");
   });
 
   await step(page, viewport, "Expand opens the full view, and the card's view gives it the stream", async () => {

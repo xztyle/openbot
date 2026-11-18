@@ -154,6 +154,7 @@ export default function BrowserFullViewAdapter() {
       }
       liveViewRuntime={props.browserRuntime ?? conversationPort().browser}
       liveViewClipboard={serverSupportsCapability(props.server, "browser-view-clipboard")}
+      liveViewOnline={props.server?.state === "online"}
       onBack={() => setActiveRightPanel("browser")}
       onEnterPip={props.runtime ? () => undefined : showBrowserPip}
       onSignInLocally={localSignIn.canStart(activeBrowserTab()) ? localSignIn.start : undefined}

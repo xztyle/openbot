@@ -1754,13 +1754,14 @@ export function ConversationTimeline() {
                   }
                   liveView={
                     // A host's tab is drawn from its live view. A tab on this computer is a native view.
-                    canOpenBrowserTakeoverTab() &&
+                    // The view stays while the host is away, and says that it reconnects.
+                    browserTakeoverTab() &&
                     props.server?.kind === "remote" &&
                     serverSupportsCapability(props.server, "browser-view")
                       ? {
                           runtime: props.browserRuntime ?? conversationPort().browser,
                           clipboard: serverSupportsCapability(props.server, "browser-view-clipboard"),
-                          online: !props.browserVisibilitySuspended,
+                          online: props.server.state === "online" && props.browserEnabled !== false,
                         }
                       : undefined
                   }

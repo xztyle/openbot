@@ -55,6 +55,8 @@ interface HarnessWindow {
     resolve(): void;
     /** The host closes the tab. */
     closeTab(): Promise<void>;
+    /** The connection to the host drops or comes back, as WebRTC reports it. */
+    connection(state: "online" | "offline"): void;
   };
   takeoverResponses?: { requestId: string | number; decision: string }[];
 }
@@ -84,6 +86,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     resolve: () =>
       mock.emitAgentEvent({ type: "browser-takeover-resolved", requestId: REQUEST.requestId, agentId: "chief" }),
     closeTab: () => mock.api.browser.close(TAB.id),
+    connection: (state) => events.connection({ hostId: "preview-host", state, message: null }),
   };
   const web = mockWebRuntimeFor(mock, events);
   return {

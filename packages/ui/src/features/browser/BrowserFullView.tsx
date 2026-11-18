@@ -283,6 +283,7 @@ export default function BrowserFullView(props: BrowserFullViewProps) {
                   tabId={tabId()}
                   active={props.open}
                   clipboard={props.liveViewClipboard}
+                  online={props.liveViewOnline}
                   onFrameSize={setFrameSize}
                 />
               )}

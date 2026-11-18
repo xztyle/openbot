@@ -41,6 +41,8 @@ export interface BrowserFullViewProps {
   liveViewRuntime: BrowserViewRuntime;
   /** Whether the host pastes and copies for the live view. */
   liveViewClipboard: boolean;
+  /** False while the connection to the host is down: the live view waits and starts again. */
+  liveViewOnline?: boolean | undefined;
   canCloseTabs?: boolean;
   /** False where the page cannot leave the window, such as the web app. */
   canEnterPip?: boolean;

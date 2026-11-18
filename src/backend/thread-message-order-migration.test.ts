@@ -168,7 +168,7 @@ function orderIndexes(db: DatabaseSync) {
     .map((row) => row.name);
 }
 
-function expectHealthy(db: DatabaseSync, version = 51): void {
+function expectHealthy(db: DatabaseSync, version = 52): void {
   expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version });
   expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
   expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
@@ -243,9 +243,9 @@ describe("thread message order migration", () => {
     seedMessages(db);
     const before = releasedRows(db);
     const columns = columnNames(db);
-    db.exec("INSERT INTO schema_migrations VALUES(52, 'now')");
+    db.exec("INSERT INTO schema_migrations VALUES(53, 'now')");
     expect(() => migrateOpenBotDatabase(db)).toThrow("newer than this application supports");
-    db.exec("DELETE FROM schema_migrations WHERE version = 52; DELETE FROM schema_migrations WHERE version = 38");
+    db.exec("DELETE FROM schema_migrations WHERE version = 53; DELETE FROM schema_migrations WHERE version = 38");
     expect(() => migrateOpenBotDatabase(db)).toThrow("missing version 38");
     expect(releasedRows(db)).toEqual(before);
     expect(columnNames(db)).toEqual(columns);

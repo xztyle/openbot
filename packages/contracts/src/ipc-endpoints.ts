@@ -567,6 +567,13 @@ import type {
 } from "./ipc-workspace-fleet";
 import type { WorkspaceSidebar, WorkspaceSidebarPrefs } from "./ipc-workspace-sidebar";
 import type { WorkspaceSpaceAction, WorkspaceSpaceActionResult, WorkspaceSpaces } from "./ipc-workspace-spaces";
+import type {
+  WorkspaceFollowThreadInput,
+  WorkspaceReadThreadInput,
+  WorkspaceThreadState,
+  WorkspaceThreadStates,
+  WorkspaceThreadStatesInput,
+} from "./ipc-workspace-threads";
 import type { LicenseCheckoutRequest, LicenseRenewalRequest, LicenseState, LicenseUsersRequest } from "./license";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
 
@@ -1356,6 +1363,16 @@ export const IPC_ENDPOINTS = {
     // The mentions, thread replies, DMs, reactions and threads of the reader, over every channel.
     // A joined server answers through `workspace-v1` (`fork-host-v1`).
     workspaceActivity: scopedRequest<WorkspaceActivityInput, WorkspaceActivity>()("agent:workspace:activity"),
+    // The reader's read position and follow of each thread, apart from the channel. A joined server
+    // answers through workspace-read-state-v1 (`fork-host-v1`); one without it fails. `scopedEvent`
+    // carries `workspace-read-state-changed` for the reader's own sessions.
+    workspaceThreadStates: scopedRequest<WorkspaceThreadStatesInput, WorkspaceThreadStates>()(
+      "agent:workspace:thread-states",
+    ),
+    workspaceReadThread: scopedRequest<WorkspaceReadThreadInput, WorkspaceThreadState>()("agent:workspace:read-thread"),
+    workspaceFollowThread: scopedRequest<WorkspaceFollowThreadInput, WorkspaceThreadState>()(
+      "agent:workspace:follow-thread",
+    ),
     // The person types in a channel, or stopped (`ChannelTypingInput`). `scopedEvent` carries
     // `channel-typing` with the people who type and the agents that think or work there. A joined
     // server answers through `workspace-v1` (`fork-host-v1`).

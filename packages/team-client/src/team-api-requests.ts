@@ -41,6 +41,8 @@ import {
   decodeWorkspaceSidebar,
   decodeWorkspaceSpaces,
   decodeWorkspaceSteps,
+  decodeWorkspaceThreadState,
+  decodeWorkspaceThreadStates,
   type InstalledSkill,
   isAgentMemory,
   isAgentMemorySelectionState,
@@ -83,6 +85,7 @@ import { CONTEXT_RESET_ROUTES } from "@openbot/contracts/team-protocol/context-r
 import { ROUTINE_FLOWS_ROUTES } from "@openbot/contracts/team-protocol/routine-flows-v1";
 import { decodeTeamProtocolV2Json, type TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import { WORKSPACE_FLEET_ROUTES } from "@openbot/contracts/team-protocol/workspace-fleet-v1";
+import { WORKSPACE_READ_STATE_ROUTES } from "@openbot/contracts/team-protocol/workspace-read-state-v1";
 import { WORKSPACE_SIDEBAR_ROUTES } from "@openbot/contracts/team-protocol/workspace-sidebar-v1";
 import { WORKSPACE_SPACES_ROUTES } from "@openbot/contracts/team-protocol/workspace-spaces-v1";
 import { WORKSPACE_ROUTES } from "@openbot/contracts/team-protocol/workspace-v1";
@@ -318,6 +321,9 @@ export type TeamChannelsApi = Pick<
   | "readChannel"
   | "channelCommand"
   | "workspaceActivity"
+  | "workspaceThreadStates"
+  | "workspaceReadThread"
+  | "workspaceFollowThread"
   | "channelTyping"
   | "workspaceDmAgents"
   | "workspaceFleet"
@@ -379,6 +385,13 @@ export function teamChannelsApi(request: TeamApiRequest, options: TeamChannelsOp
         ? workspacePost(WORKSPACE_ROUTES.command, decodeChannel, command)
         : post(CHANNEL_ROUTES.command, decodeChannel, command),
     workspaceActivity: (input) => workspacePost(WORKSPACE_ROUTES.activity, decodeWorkspaceActivity, input),
+    // A fork host built before workspace-read-state-v1 answers 404; the caller then keeps the channel position.
+    workspaceThreadStates: (input) =>
+      workspacePost(WORKSPACE_READ_STATE_ROUTES.threadStates, decodeWorkspaceThreadStates, input),
+    workspaceReadThread: (input) =>
+      workspacePost(WORKSPACE_READ_STATE_ROUTES.readThread, decodeWorkspaceThreadState, input),
+    workspaceFollowThread: (input) =>
+      workspacePost(WORKSPACE_READ_STATE_ROUTES.followThread, decodeWorkspaceThreadState, input),
     // A host without the workspace shows no typing: the signal is dropped there.
     channelTyping: async (input) => {
       if (options.supportsWorkspace?.() === false) return;

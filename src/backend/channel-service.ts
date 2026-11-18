@@ -43,6 +43,11 @@ import {
   type WorkspaceActivityInput,
   type WorkspaceAgentChannelDefaults,
   type WorkspaceChannelCommand,
+  type WorkspaceFollowThreadInput,
+  type WorkspaceReadThreadInput,
+  type WorkspaceThreadState,
+  type WorkspaceThreadStates,
+  type WorkspaceThreadStatesInput,
   withoutChannelGateDecisions,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
@@ -70,6 +75,7 @@ import {
   PERSON_REQUEST_REQUIRED,
 } from "./channel-management";
 import { ChannelMemoryStore } from "./channel-memory-store";
+import { ChannelReadState } from "./channel-read-state";
 import { type ChannelGateOutcome, ChannelResponders, memberAnswerMode, usesAnswerModes } from "./channel-responders";
 import { type ChannelAssignment, type ChannelContext, type ChannelMessageChange, ChannelStore } from "./channel-store";
 import { ChannelTyping } from "./channel-typing";
@@ -179,6 +185,11 @@ export interface ChannelHooks {
   people?(): { id: string; name: string }[];
   /** The people that type, and the agents that think or work, in a channel: the whole new list. */
   typingChanged?(channelId: string, typing: ChannelTypingEntry[]): void;
+  /**
+   * The read position or the follows of one person changed in a channel, or in one thread of it. Only
+   * that person's own sessions hear of it (`workspace-read-state-changed`).
+   */
+  readStateChanged?(memberId: string, channelId: string, threadRootId?: string): void;
   error(error: unknown): void;
 }
 
@@ -242,6 +253,8 @@ const SUMMARY_GATE_TIMEOUT_MS = 45_000;
 export class ChannelService {
   readonly store: ChannelStore;
   readonly memories: ChannelMemoryStore;
+  /** The read positions and follows of each person in each thread. */
+  readonly readState: ChannelReadState;
   /** Which member agents answer a person's message, the answer gate included. */
   readonly responders = new ChannelResponders();
   /** The channel bridge with Discord, while messaging runs. Without it, `link-discord` fails. */
@@ -299,7 +312,8 @@ export class ChannelService {
     readonly hooks: ChannelHooks,
   ) {
     this.store = new ChannelStore(database);
-    this.#activity = new ChannelActivity(this.store);
+    this.readState = new ChannelReadState(this.store);
+    this.#activity = new ChannelActivity(this.store, this.readState);
     this.#typing = new ChannelTyping({
       emit: (channelId, typing) => hooks.typingChanged?.(channelId, typing),
       working: (channelId) =>
@@ -479,6 +493,39 @@ export class ChannelService {
   workspaceActivity(input: WorkspaceActivityInput, viewer: ChannelViewer): WorkspaceActivity {
     const agents = new Map(this.hooks.agents().map((agent) => [agent.id, agent.name]));
     return this.#activity.read(input, viewer, (agentId) => agents.get(agentId));
+  }
+
+  /** A channel that the viewer can see, or the error of one that does not exist. */
+  #visibleChannel(channelId: string, viewer?: ChannelViewer): Channel {
+    if (!this.store.exists(channelId)) throw new Error(sourceText("error.backend.channelNotFound"));
+    const channel = this.store.get(channelId);
+    if (viewer && !canSeeChannel(channel, viewer)) throw new Error(sourceText("error.backend.channelNotFound"));
+    return channel;
+  }
+
+  /** The read state of a person in threads of a channel they can see (`ipc-workspace-threads.ts`). */
+  threadStates(input: WorkspaceThreadStatesInput, viewer: ChannelViewer): WorkspaceThreadStates {
+    const channel = this.#visibleChannel(input.channelId, viewer);
+    return { channelId: channel.id, threads: this.readState.states(channel, viewer, input.rootIds) };
+  }
+
+  /** A person read a thread through a reply. The position only moves forward. */
+  readThread(input: WorkspaceReadThreadInput, actor: { id: string }, viewer: ChannelViewer): WorkspaceThreadState {
+    const channel = this.#visibleChannel(input.channelId, viewer);
+    const before = this.readState.state(channel, input.threadRootId, viewer);
+    this.readState.markRead(channel.id, input.threadRootId, actor.id, input.throughSequence, input.operationId);
+    const after = this.readState.state(channel, input.threadRootId, viewer);
+    if (after.throughSequence !== before.throughSequence || after.unreadCount !== before.unreadCount)
+      this.hooks.readStateChanged?.(actor.id, channel.id, input.threadRootId);
+    return after;
+  }
+
+  /** A person follows a thread, or stops following it. */
+  followThread(input: WorkspaceFollowThreadInput, actor: { id: string }, viewer: ChannelViewer): WorkspaceThreadState {
+    const channel = this.#visibleChannel(input.channelId, viewer);
+    this.readState.setFollowed(channel.id, input.threadRootId, actor.id, input.followed, input.operationId);
+    this.hooks.readStateChanged?.(actor.id, channel.id, input.threadRootId);
+    return this.readState.state(channel, input.threadRootId, viewer);
   }
 
   /**

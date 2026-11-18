@@ -30,6 +30,8 @@ const NEW_TABLES = {
   projection_event_checks: [],
   space_assignments: [],
   spaces: [{ space_id: "general", name: "General", slug: "general", icon: null, hue: null, position: 0 }],
+  projection_channel_thread_follows: [],
+  projection_channel_thread_reads: [],
 };
 
 function databaseAt(version: number): DatabaseSync {
@@ -102,7 +104,7 @@ function profileTables(db: DatabaseSync) {
 }
 
 function expectHealthy(db: DatabaseSync): void {
-  expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 51 });
+  expect(db.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 52 });
   expect(db.prepare("PRAGMA foreign_keys").get()).toEqual({ foreign_keys: 1 });
   expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
   expect(db.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
@@ -161,9 +163,9 @@ describe("browser profile migration", () => {
     const db = databaseAt(44);
     seed(db, 44);
     const before = contents(db);
-    db.exec("INSERT INTO schema_migrations VALUES(52,'now')");
+    db.exec("INSERT INTO schema_migrations VALUES(53,'now')");
     expect(() => migrateOpenBotDatabase(db)).toThrow("newer than this application supports");
-    db.exec("DELETE FROM schema_migrations WHERE version = 52; DELETE FROM schema_migrations WHERE version=20");
+    db.exec("DELETE FROM schema_migrations WHERE version = 53; DELETE FROM schema_migrations WHERE version=20");
     expect(() => migrateOpenBotDatabase(db)).toThrow("missing version 20");
     expect(contents(db)).toEqual(before);
     expect(profileTables(db)).toEqual([]);

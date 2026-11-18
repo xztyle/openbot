@@ -1220,6 +1220,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       },
       activity: (agentId) => this.#gateActivity(agentId),
       typingChanged: (channelId, typing) => this.#emit({ type: "channel-typing", channelId, typing }),
+      readStateChanged: (memberId, channelId, threadRootId) =>
+        this.#emit({
+          type: "workspace-read-state-changed",
+          memberId,
+          channelId,
+          ...(threadRootId === undefined ? {} : { threadRootId }),
+        }),
       // Sent before `channels-changed`, so a client that appends the message has it when the list moves.
       messagesChanged: (channelId, changes, revision) => {
         for (const change of changes)

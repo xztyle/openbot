@@ -179,7 +179,7 @@ import { createMockAuth, type MockAuthOptions } from "./mock-auth";
 import { createMockBilling, previewBillingServers } from "./mock-billing";
 import { createMockBitwardenConnector } from "./mock-bitwarden-connector";
 import { createMockBrowser, type MockBrowserOptions } from "./mock-browser";
-import { createMockChannels, type MockChannelSeed } from "./mock-channels";
+import { createMockChannels, type MockChannelSeed, PREVIEW_CHANNEL_MEMBER_ID } from "./mock-channels";
 import { createMockEventCheckTemplates } from "./mock-event-check-templates";
 import { createMockEventChecks } from "./mock-event-checks";
 import { createMockEvents } from "./mock-events";
@@ -205,6 +205,7 @@ import { createMockTeam, type MockTeamOptions } from "./mock-team";
 import { createMockVault } from "./mock-vault";
 import { createMockVoice, type MockVoiceOptions } from "./mock-voice";
 import { type MockWorkflowSeed, mockWorkflows } from "./mock-workflows";
+import { createMockWorkspaceState } from "./mock-workspace-state";
 
 /** The agent key store of the preview: `scope/NAME` to its value. */
 const mockSecrets = new Map<string, { value: string; updatedAt: number }>([
@@ -958,6 +959,11 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     options.channels,
     options.channelMemberId,
     () => agents.filter((entry) => entry.hiddenAt === undefined && entry.background !== true).map((entry) => entry.id),
+  );
+  const mockWorkspaceState = createMockWorkspaceState(
+    emitAgentEvent,
+    mockChannels,
+    options.channelMemberId ?? PREVIEW_CHANNEL_MEMBER_ID,
   );
   const mockSpaces = createMockSpaces(
     emitAgentEvent,
@@ -1764,6 +1770,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       },
       listInstalledSkills: async (agentId) => clone(readInstalledSkills(agentId)),
       ...mockChannels,
+      ...mockWorkspaceState,
       workspaceSpaces: mockSpaces.workspaceSpaces,
       workspaceSpaceAction: mockSpaces.workspaceSpaceAction,
       // The workspace fleet, step trails and artifacts of the preview: fixed shapes over the preview

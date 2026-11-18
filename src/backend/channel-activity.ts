@@ -6,7 +6,6 @@ import {
   type ChannelReaction,
   type ChannelThreadSummary,
   channelKind,
-  channelMembersAnswer,
   decodeChannel,
   isChannelMention,
   isChannelMessage,
@@ -22,7 +21,8 @@ import {
   workspaceActivityLimit,
 } from "@openbot/contracts/ipc";
 import type { DynamicRecord } from "@openbot/contracts/runtime-values";
-import { ACTIVITY_ITEM_TYPES, type ChannelStore, channelPreviewText, restatedResultSql } from "./channel-store";
+import { type ChannelReadState, threadKey } from "./channel-read-state";
+import { ACTIVITY_ITEM_TYPES, type ChannelStore, channelPreviewText } from "./channel-store";
 import { type ChannelViewer, canSeeChannel, isChannelPerson } from "./channel-visibility";
 import {
   databaseRow,
@@ -82,20 +82,16 @@ interface ItemCandidate {
   time: number;
 }
 
-interface ThreadCandidate {
-  channelId: string;
-  root: ActivityRow;
-  summary: ChannelThreadSummary;
-  through: number;
-}
-
 /**
  * Owns the cross-channel read of the workspace for one reader: the mentions, thread replies, direct
  * messages and reactions of the Activity view, and the threads of the Threads view. It only reads.
  * It holds the store and reads `.connection` at each use; it never imports the database facade.
  */
 export class ChannelActivity {
-  constructor(readonly store: ChannelStore) {}
+  constructor(
+    readonly store: ChannelStore,
+    readonly readState: ChannelReadState,
+  ) {}
 
   /**
    * A reaction carries no name of its actor: an agent takes its name from `agentName`, a person the
@@ -109,12 +105,20 @@ export class ChannelActivity {
     const limit = workspaceActivityLimit(input);
     const since = Date.now() - ACTIVITY_WINDOW_MS;
     const reads = this.#readPositions(viewer);
+    const threadReads = this.readState.positions(viewer);
+    const channels = this.#visibleChannels(viewer);
+    const followed = this.readState.followedSet(channels, viewer);
     const own = (row: ActivityRow) => row.author.kind === "member" && !row.external && viewer.ids.has(row.author.id);
     const memberNames = new Map<string, string>();
     const candidates: ItemCandidate[] = [];
-    const threads: ThreadCandidate[] = [];
-    for (const channel of this.#visibleChannels(viewer)) {
+    for (const channel of channels) {
       const through = reads.get(channel.id) ?? 0;
+      // A thread reply is read in its thread; one that was also sent to the channel, in both.
+      const unread = (row: ActivityRow) =>
+        row.threadRootId === null
+          ? row.sequence > through
+          : row.sequence > (threadReads.get(threadKey(channel.id, row.threadRootId)) ?? 0) &&
+            (!row.alsoInChannel || row.sequence > through);
       const rows = this.#rows(channel.id).filter((row) => row.time >= since);
       const byId = new Map(rows.map((row) => [row.id, row]));
       const roots = new Map<string, ActivityRow | null>();
@@ -124,14 +128,18 @@ export class ChannelActivity {
       };
       const person = isChannelPerson(channel, viewer);
       const direct = channelKind(channel) !== "channel";
-      /** The threads in which the reader wrote the root or a reply so far, oldest message first. */
-      const joined = new Set<string>();
+      /**
+       * The first reply of the reader in each thread, in the read messages. A reader who follows a
+       * thread only because they replied there gets the replies after their own, not the ones before.
+       */
+      const firstOwnReply = new Map<string, number>();
+      for (const row of rows)
+        if (row.threadRootId && own(row) && !firstOwnReply.has(row.threadRootId))
+          firstOwnReply.set(row.threadRootId, row.sequence);
       for (const row of rows) {
         if (row.author.kind === "member" && !row.external) memberNames.set(row.author.id, row.author.name);
         if (row.noise || row.deleted) continue;
         if (own(row)) {
-          const rootId = row.threadRootId ?? ((row.threadSummary?.replyCount ?? 0) > 0 ? row.id : null);
-          if (rootId) joined.add(rootId);
           for (const reaction of row.reactions)
             for (const actor of reaction.actors) {
               if (actor.kind === "member" && viewer.ids.has(actor.id)) continue;
@@ -145,7 +153,7 @@ export class ChannelActivity {
                   actor: { kind: actor.kind, id: actor.id, name: "" },
                   emoji: reaction.emoji,
                   at: row.createdAt,
-                  unread: row.sequence > through,
+                  unread: unread(row),
                 },
                 sequence: row.sequence,
                 time: row.time,
@@ -159,8 +167,11 @@ export class ChannelActivity {
             : (mention.kind === "channel" || mention.kind === "here") && person,
         );
         const threadRoot = row.threadRootId ? root(row.threadRootId) : null;
+        const firstOwn = row.threadRootId ? firstOwnReply.get(row.threadRootId) : undefined;
         const reply =
-          row.threadRootId !== null && (joined.has(row.threadRootId) || (threadRoot !== null && own(threadRoot)));
+          row.threadRootId !== null &&
+          followed(channel.id, row.threadRootId) &&
+          ((threadRoot !== null && own(threadRoot)) || firstOwn === undefined || row.sequence > firstOwn);
         const shown = row.threadRootId === null || row.alsoInChannel;
         const kind = mentioned ? "mention" : reply ? "reply" : direct && shown ? "dm" : null;
         if (!kind) continue;
@@ -173,17 +184,11 @@ export class ChannelActivity {
             ...(row.threadRootId ? { threadRootId: row.threadRootId } : {}),
             actor: activityActor(row),
             at: row.createdAt,
-            unread: row.sequence > through,
+            unread: unread(row),
           },
           sequence: row.sequence,
           time: row.time,
         });
-      }
-      for (const rootId of joined) {
-        const threadRoot = root(rootId);
-        const summary = threadRoot?.threadSummary;
-        if (!threadRoot || threadRoot.noise || !summary || summary.replyCount === 0) continue;
-        threads.push({ channelId: channel.id, root: threadRoot, summary, through });
       }
     }
     const newest = (left: ItemCandidate, right: ItemCandidate) =>
@@ -204,23 +209,28 @@ export class ChannelActivity {
         actor: { ...item.actor, name: actorName(item.actor) },
         preview: preview(item.channelId, item.messageId),
       }));
-    const threadItems: WorkspaceThreadActivity[] = threads
-      .sort(
-        (left, right) =>
-          Date.parse(right.summary.lastReplyAt) - Date.parse(left.summary.lastReplyAt) ||
-          right.root.sequence - left.root.sequence,
-      )
-      .slice(0, WORKSPACE_ACTIVITY_THREAD_LIMIT)
-      .map(({ channelId, root, summary, through }) => ({
-        channelId,
-        rootId: root.id,
-        rootAuthor: { kind: root.author.kind, id: root.author.id, name: root.external?.name ?? root.author.name },
-        rootText: root.deleted ? "" : preview(channelId, root.id),
-        replyCount: summary.replyCount,
-        lastReplyAt: summary.lastReplyAt,
-        participantIds: summary.participantIds,
-        unreadCount: this.#unreadReplies(channelId, root.id, through, viewer),
-      }));
+    const byChannel = new Map(channels.map((channel) => [channel.id, channel]));
+    const threadItems: WorkspaceThreadActivity[] = this.readState
+      .followedThreads(channels, viewer, WORKSPACE_ACTIVITY_THREAD_LIMIT)
+      .flatMap(({ channelId, rootId }) => {
+        const channel = byChannel.get(channelId);
+        const root = this.#row(channelId, rootId);
+        const summary = root?.threadSummary;
+        if (!channel || !root || root.noise || !summary || summary.replyCount === 0) return [];
+        const through = threadReads.get(threadKey(channelId, rootId)) ?? 0;
+        return [
+          {
+            channelId,
+            rootId: root.id,
+            rootAuthor: { kind: root.author.kind, id: root.author.id, name: root.external?.name ?? root.author.name },
+            rootText: root.deleted ? "" : preview(channelId, root.id),
+            replyCount: summary.replyCount,
+            lastReplyAt: summary.lastReplyAt,
+            participantIds: summary.participantIds,
+            unreadCount: this.readState.unreadReplies(channel, root.id, through, viewer),
+          },
+        ];
+      });
     return { items, threads: threadItems };
   }
 
@@ -283,30 +293,6 @@ export class ChannelActivity {
     const message = JSON.parse(requiredStringColumn(row, "message_json"));
     if (!isChannelMessage(message) || message.deletedAt !== undefined) return "";
     return channelPreviewText(message).replace(/\s+/gu, " ").trim().slice(0, WORKSPACE_ACTIVITY_PREVIEW_LIMIT);
-  }
-
-  /** The replies of a thread after the read position that the reader did not write. */
-  #unreadReplies(channelId: string, rootId: string, through: number, viewer: ChannelViewer): number {
-    const ids = [...viewer.ids];
-    // A result note that restates an answer is not a reply.
-    const restated = channelMembersAnswer(this.store.get(channelId)) ? `AND NOT ${restatedResultSql("reply")}` : "";
-    const row = databaseRow(
-      this.store.database.connection
-        .prepare(
-          `SELECT COUNT(*) AS unread FROM projection_channel_messages reply
-            WHERE reply.channel_id = ? AND reply.sequence > ? AND json_extract(reply.message_json, '$.threadRootId') = ?
-              AND json_extract(reply.message_json, '$.deletedAt') IS NULL
-              AND COALESCE(json_extract(reply.message_json, '$.message.status'), '') != 'streaming'
-              AND COALESCE(json_extract(reply.message_json, '$.message.itemType'), '') NOT IN (${placeholders(ACTIVITY_ITEM_TYPES)})
-              AND COALESCE(json_extract(reply.message_json, '$.message.itemType'), '') NOT LIKE ?
-              ${restated}
-              AND NOT (json_extract(reply.message_json, '$.author.kind') = 'member'
-                AND json_extract(reply.message_json, '$.externalAuthor') IS NULL
-                AND json_extract(reply.message_json, '$.author.id') IN (${placeholders(ids)}))`,
-        )
-        .get(channelId, through, rootId, ...ACTIVITY_ITEM_TYPES, `${CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX}%`, ...ids),
-    );
-    return row ? requiredNumberColumn(row, "unread") : 0;
   }
 }
 

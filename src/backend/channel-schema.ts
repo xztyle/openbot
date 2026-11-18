@@ -123,3 +123,32 @@ export const CHANNEL_SETTINGS_SCHEMA_SQL = `
   CREATE UNIQUE INDEX IF NOT EXISTS channel_routine_runs_request
     ON projection_channel_routine_runs(request_message_id) WHERE request_message_id IS NOT NULL;
 `;
+
+// Shared by migration v52 and the separate new-database schema. The read position of each person in
+// each thread, apart from the channel position, so reading a channel does not read its threads; and
+// the threads that each person follows. `followed` is 0 for a thread that the person stopped
+// following; `explicit` is 1 when the person chose it, which an automatic follow does not change.
+// The partial index finds the replies of one thread without a scan of the channel.
+export const CHANNEL_THREAD_STATE_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS projection_channel_thread_reads (
+    channel_id TEXT NOT NULL REFERENCES projection_channels(channel_id),
+    root_id TEXT NOT NULL,
+    member_id TEXT NOT NULL,
+    through_sequence INTEGER NOT NULL CHECK(through_sequence >= 0),
+    PRIMARY KEY(channel_id, root_id, member_id)
+  );
+  CREATE INDEX IF NOT EXISTS channel_thread_reads_member ON projection_channel_thread_reads(member_id);
+  CREATE TABLE IF NOT EXISTS projection_channel_thread_follows (
+    channel_id TEXT NOT NULL REFERENCES projection_channels(channel_id),
+    root_id TEXT NOT NULL,
+    member_id TEXT NOT NULL,
+    followed INTEGER NOT NULL CHECK(followed IN (0, 1)),
+    explicit INTEGER NOT NULL DEFAULT 0 CHECK(explicit IN (0, 1)),
+    PRIMARY KEY(channel_id, root_id, member_id)
+  );
+  CREATE INDEX IF NOT EXISTS channel_thread_follows_member
+    ON projection_channel_thread_follows(member_id, followed);
+  CREATE INDEX IF NOT EXISTS channel_messages_thread
+    ON projection_channel_messages(channel_id, json_extract(message_json, '$.threadRootId'), sequence)
+    WHERE json_extract(message_json, '$.threadRootId') IS NOT NULL;
+`;

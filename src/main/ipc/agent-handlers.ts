@@ -156,6 +156,7 @@ import {
 } from "./agent-inputs";
 import { type IpcGroupHandlers, payloadHandler } from "./define-ipc-group";
 import { scopedHandler, scopedQueryHandler } from "./scoped-handler";
+import { workspaceStateHandlers } from "./workspace-state-handlers";
 
 /** Its lines also go to the provider log. See `PROVIDER_LOG_PREFIXES`. */
 const modelLogger = createOpenBotLogger("provider-models");
@@ -240,6 +241,7 @@ export function agentIpcHandlers({
   };
   return {
     agent: {
+      ...workspaceStateHandlers({ service, host, remoteServers }),
       getStatus: scopedQueryHandler({
         local: () => service.getStatus(),
         remote: (serverId) =>

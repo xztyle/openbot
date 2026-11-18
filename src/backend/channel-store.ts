@@ -22,6 +22,7 @@ import {
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
+import { ACTIVITY_ITEM_TYPES, projectThreadState, replayThreadStateEvent } from "./channel-thread-projection";
 import { type ChannelViewer, canSeeChannel } from "./channel-visibility";
 import { deleteAggregateHistory, deleteThreadAttachments } from "./database/database-core";
 import {
@@ -104,8 +105,7 @@ const TOP_LEVEL_MESSAGE = `(json_extract(message_json, '$.threadRootId') IS NULL
   AND (json_extract(message_json, '$.deletedAt') IS NULL
     OR COALESCE(json_extract(message_json, '$.threadSummary.replyCount'), 0) > 0)`;
 
-/** Item types that are activity, not a message a reader counts. */
-export const ACTIVITY_ITEM_TYPES = ["plan", "subagents", "channel-change", "commentary"];
+export { ACTIVITY_ITEM_TYPES };
 
 /**
  * The SQL condition of a `channel_result` row named `alias` that restates an answer of its turn, as
@@ -670,6 +670,7 @@ export class ChannelStore {
         "INSERT INTO projection_channel_messages VALUES (?, ?, ?, ?) ON CONFLICT(channel_id, message_id) DO UPDATE SET message_json = excluded.message_json",
       ).run(change.channel.id, message.id, assigned, JSON.stringify({ ...message, sequence: assigned }));
       written?.push({ ...message, sequence: assigned });
+      projectThreadState(db, change.channel.id, { ...message, sequence: assigned }, !existing);
       if (existing) {
         // A streaming message changes on each part of its text; a packet already leaves it unread.
         if (existing.status !== "streaming")
@@ -833,6 +834,8 @@ export class ChannelStore {
           "projection_channel_contexts",
           "projection_channel_summaries",
           "projection_channel_reads",
+          "projection_channel_thread_reads",
+          "projection_channel_thread_follows",
           "projection_channel_assignments",
           "projection_channel_tasks",
           "projection_channel_messages",
@@ -1023,7 +1026,17 @@ export class ChannelStore {
           )
           .all(channelId),
       );
-      for (const table of ["assignments", "tasks", "messages", "summaries", "reads", "contexts", "memories"])
+      for (const table of [
+        "assignments",
+        "tasks",
+        "thread_reads",
+        "thread_follows",
+        "messages",
+        "summaries",
+        "reads",
+        "contexts",
+        "memories",
+      ])
         db.prepare(`DELETE FROM projection_channel_${table} WHERE channel_id = ?`).run(channelId);
       db.prepare("DELETE FROM projection_channels WHERE channel_id = ?").run(channelId);
       for (const event of events) {
@@ -1103,7 +1116,8 @@ export class ChannelStore {
             break;
           }
           default:
-            throw new Error("Unknown channel event.");
+            if (!replayThreadStateEvent(db, channelId, event.event_type, value))
+              throw new Error("Unknown channel event.");
         }
       }
       db.exec("COMMIT");

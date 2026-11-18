@@ -33,7 +33,7 @@ describe("Event check migration 47", () => {
       const before = captureRows(database);
       migrateOpenBotDatabase(database, { appliedAt });
       expectCapturedRows(database, before);
-      expect(database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 51 });
+      expect(database.prepare("SELECT MAX(version) AS version FROM schema_migrations").get()).toEqual({ version: 52 });
       expectHealthy(database);
       expect(database.prepare("PRAGMA foreign_key_list(projection_event_checks)").all()).toEqual([]);
     },
@@ -62,7 +62,7 @@ describe("Event check migration 47", () => {
     for (const invalid of ["newer", "missing"] as const) {
       const database = sourceDatabase(46);
       seedExistingData(database, 46);
-      if (invalid === "newer") database.prepare("INSERT INTO schema_migrations VALUES(52, ?)").run(appliedAt);
+      if (invalid === "newer") database.prepare("INSERT INTO schema_migrations VALUES(53, ?)").run(appliedAt);
       else database.exec("DELETE FROM schema_migrations WHERE version = 29");
       const before = captureRows(database);
       expect(() => migrateOpenBotDatabase(database, { appliedAt })).toThrow(

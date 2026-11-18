@@ -11,7 +11,8 @@ import { AGENT_MEMORY_SELECTION_SCHEMA_SQL, migrateAgentMemorySelection } from "
 import { AGENT_TASK_SCHEMA_SQL } from "./agent-tasks/agent-task-schema";
 import { AGENT_WAIT_SCHEMA_SQL } from "./agent-waits/agent-wait-schema";
 import { BROWSER_PROFILE_SCHEMA_SQL } from "./browser-profiles/browser-profile-schema";
-import { CHANNEL_SCHEMA_SQL, CHANNEL_SETTINGS_SCHEMA_SQL } from "./channel-schema";
+import { CHANNEL_SCHEMA_SQL, CHANNEL_SETTINGS_SCHEMA_SQL, CHANNEL_THREAD_STATE_SCHEMA_SQL } from "./channel-schema";
+import { migrateChannelThreadState } from "./channel-thread-state-migration";
 import { PROVIDER_HISTORY_SCHEMA_SQL } from "./database/provider-history-schema";
 import { EVENT_CHECK_SCHEMA_SQL } from "./event-check-schema";
 import { MCP_SERVERS_SCHEMA_SQL } from "./mcp-schema";
@@ -786,7 +787,8 @@ const LATEST_SCHEMA_SQL =
   BROWSER_PROFILE_SCHEMA_SQL +
   WORKFLOW_SCHEMA_SQL +
   EVENT_CHECK_SCHEMA_SQL +
-  SPACE_SCHEMA_SQL;
+  SPACE_SCHEMA_SQL +
+  CHANNEL_THREAD_STATE_SCHEMA_SQL;
 
 /** The end of the thread message table with the migration 40 columns before its PRIMARY KEY constraint. */
 function withThreadMessageOrderColumns(tableEnd: string): string {
@@ -1091,6 +1093,13 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
       removeImportedLiveCopies(db, appliedAt);
       deleteImportedChannelCopies(db, appliedAt);
     },
+  },
+  {
+    version: 52,
+    // Creates the thread read and follow tables and an index of thread replies, fills them from the
+    // stored channel messages and read positions, and appends one event for each channel that got rows.
+    // It changes no row of another table, so no foreign-key pause and no vacuum.
+    up: migrateChannelThreadState,
   },
 ];
 

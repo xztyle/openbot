@@ -1,5 +1,12 @@
 import type { McpServerConfig } from "@openbot/contracts/ipc";
-import { isSecretName, type LogValue, redactText, registerSecretValue, toLogValue } from "@openbot/logging";
+import {
+  isSecretName,
+  type LogValue,
+  redactSecrets,
+  redactSecretValues,
+  redactText,
+  registerSecretValue,
+} from "@openbot/logging";
 import { mcpEnvironment } from "./mcp-provider-shapes";
 
 const MASK = "•••";
@@ -29,7 +36,16 @@ export function redactMcpValues(text: string, values: Iterable<string>): string 
 }
 
 /**
- * The same for a record that a provider sends, such as a notification or a history item.
+ * The same for the text of an agent that its owner reads in the chat: credentials go, and email
+ * addresses stay, as `redactSecrets` says.
+ */
+export function redactMcpOutput(text: string, values: Iterable<string>): string {
+  return redactSecrets(maskValues(text, values));
+}
+
+/**
+ * The same for a record that a provider sends, such as a notification or a history item. Its text
+ * is what the owner reads in the chat, so it keeps email addresses, as `redactMcpOutput` does.
  *
  * The shared rules run first, so a key such as `refresh_token` is redacted before a known value can
  * change its name. Then each string, key and number is masked on its own. Masking the serialized
@@ -47,7 +63,7 @@ export function redactMcpRecord(record: unknown, values: Iterable<string>): LogV
     if (value === null || typeof value !== "object") return value;
     return Object.fromEntries(Object.entries(value).map(([key, entry]) => [maskValues(key, known), mask(entry)]));
   };
-  return mask(toLogValue(record));
+  return mask(redactSecretValues(record));
 }
 
 function maskValues(text: string, values: Iterable<string>): string {

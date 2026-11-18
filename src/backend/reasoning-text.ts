@@ -1,4 +1,4 @@
-import { redactText } from "@openbot/logging";
+import { redactSecrets } from "@openbot/logging";
 
 /**
  * The most reasoning text one thinking item keeps, in characters. A model can think for pages, and
@@ -15,12 +15,14 @@ const CUT_MARK = "\n\n[…]";
  *
  * A model quotes what it read, so its reasoning can hold a key or a token from a file or a command.
  * The conversation reaches the web client, the phone and other members of a joined server, so the
- * text is redacted once, here, before it is stored. The redaction runs before the cut, so a token
+ * credentials are redacted once, here, before it is stored. Email addresses stay: this is the
+ * owner's view of the agent's work, as its answer is, and an address the agent read or made is part
+ * of that work. The log rules that also remove them are for logs. The redaction runs before the cut, so a token
  * that straddles the limit is masked and not left as a stub. Streamed pieces arrive before the
  * item completes and are not redacted one by one: a secret can split across two pieces. The
  * completed item replaces them with this text.
  */
 export function boundedReasoningText(text: string): string {
-  const redacted = redactText(text);
+  const redacted = redactSecrets(text);
   return redacted.length > REASONING_TEXT_LIMIT ? `${redacted.slice(0, REASONING_TEXT_LIMIT)}${CUT_MARK}` : redacted;
 }

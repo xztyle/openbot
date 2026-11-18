@@ -26,7 +26,7 @@ import {
   type McpToolRuntimeSource,
   usableMcpServers,
 } from "./mcp-provider-shapes";
-import { mcpSecretValues, redactMcpValues } from "./mcp-redaction";
+import { mcpSecretValues, redactMcpOutput, redactMcpValues } from "./mcp-redaction";
 import {
   MuseApproval,
   MuseItem,
@@ -439,6 +439,11 @@ export class MuseAgentClient extends EventEmitter<ClientEvents> implements Agent
   #redact(value: string): string {
     return redactMcpValues(redactText(value), this.#redactionValues());
   }
+
+  /** `#redact` for the text of an item that the owner reads in the chat: email addresses stay. */
+  #redactOutput(value: string): string {
+    return redactMcpOutput(value, this.#redactionValues());
+  }
   #fail(_error: unknown): void {
     if (!this.#running) return;
     this.#running = false;
@@ -666,13 +671,13 @@ export class MuseAgentClient extends EventEmitter<ClientEvents> implements Agent
   /** Only provider text is redacted. IDs, status, revisions, and numeric usage stay intact. */
   #publicItem(item: MuseItem, turn?: MuseTurn): ThreadItem {
     const redact = (text: string, field: string): string => {
-      if (!turn || item.status !== "inProgress") return this.#redact(text);
+      if (!turn || item.status !== "inProgress") return this.#redactOutput(text);
       turn.deltaPending.delete(`${item.itemId}:${field}`);
       return this.#streamDelta(turn, item.itemId, field, text);
     };
     return museThreadItem({
       ...item,
-      tool: this.#redact(item.tool ?? item.kind),
+      tool: this.#redactOutput(item.tool ?? item.kind),
       ...(item.text !== undefined ? { text: redact(item.text, "text") } : {}),
       ...(item.summary !== undefined
         ? { summary: item.summary.map((text, index) => redact(text, `summary.${index}`)) }
@@ -686,7 +691,7 @@ export class MuseAgentClient extends EventEmitter<ClientEvents> implements Agent
 
   #streamDelta(turn: MuseTurn, itemId: string, field: string, delta: string): string {
     const key = `${itemId}:${field}`;
-    const text = this.#redact((turn.deltaPending.get(key) ?? "") + delta);
+    const text = this.#redactOutput((turn.deltaPending.get(key) ?? "") + delta);
     let held = 0;
     for (const secret of this.#redactionValues()) {
       for (let length = Math.min(secret.length - 1, text.length); length > held; length--) {

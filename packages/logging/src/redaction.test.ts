@@ -5,6 +5,8 @@ import {
   containsCredential,
   createOpenBotLogger,
   type LogValue,
+  redactSecrets,
+  redactSecretValues,
   redactText,
   redactValue,
   registerSecretValue,
@@ -470,5 +472,47 @@ describe("containsCredential", () => {
     expect(containsCredential('{"pageToken": "", "cursor": null}')).toBe(false);
     expect(containsCredential("Check the risk-register and the task_runner nightly")).toBe(false);
     expect(containsCredential("")).toBe(false);
+  });
+});
+
+// The text of a conversation that its owner reads keeps email addresses: the agent's own address is
+// part of its work. Every credential rule still applies.
+describe("redactSecrets", () => {
+  it("keeps email addresses and still removes credentials", () => {
+    const narration = "`gta6pulsefeed` was available, so the address is `gta6pulsefeed@gmail.com`.";
+    expect(redactSecrets(narration)).toBe(narration);
+    expect(redactText(narration)).toBe("`gta6pulsefeed` was available, so the address is `[redacted-email]`.");
+    expect(redactSecrets("mail jan@example.com with Bearer abcdef123456")).toBe("mail jan@example.com with [redacted]");
+    expect(redactSecrets("client_secret=zq9zq9zq9 for jan@example.com")).toBe(
+      "client_secret=[redacted] for jan@example.com",
+    );
+    expect(redactSecrets(`key sk-ant-${run64(24)} for jan@example.com`)).toBe("key [redacted] for jan@example.com");
+  });
+
+  it("keeps email addresses in embedded and whole JSON and still removes secret keys", () => {
+    expect(redactSecrets('sent {"to":"jan@example.com","apiKey":"abc"} ok')).toBe(
+      'sent {"to":"jan@example.com","apiKey":"[redacted]"} ok',
+    );
+    expect(redactSecrets('{"to":"jan@example.com","headers":{"X-Tenant":"t-1"}}')).toBe(
+      '{"to":"jan@example.com","headers":{"X-Tenant":"[redacted]"}}',
+    );
+  });
+
+  it("masks a registered secret but not an address", () => {
+    registerSecretValue("owner-saved-value-42");
+    expect(redactSecrets("jan@example.com used owner-saved-value-42")).toBe("jan@example.com used [redacted]");
+  });
+
+  it("converts a provider record with the same rules", () => {
+    expect(
+      redactSecretValues({
+        item: { text: "address jan@example.com", token: "abc" },
+        error: new Error("for jan@example.com"),
+      }),
+    ).toEqual({
+      item: { text: "address jan@example.com", token: "[redacted]" },
+      error: { name: "Error", message: "for jan@example.com", stack: expect.any(String) },
+    });
+    expect(toLogValue({ text: "address jan@example.com" })).toEqual({ text: "address [redacted-email]" });
   });
 });

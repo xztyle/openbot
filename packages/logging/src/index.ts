@@ -189,9 +189,39 @@ export function isSecretName(name: string): boolean {
   return SECRET_KEY.test(name);
 }
 
+/**
+ * What a redaction removes. A log line, an export or a report also loses email addresses, which
+ * name a person. Text that OpenBot shows to the owner of the agent keeps them: an address the agent
+ * read or made is part of its work, and the owner already has it.
+ */
+interface RedactionRules {
+  emails: boolean;
+}
+
+const LOG_RULES: RedactionRules = { emails: true };
+const SECRET_RULES: RedactionRules = { emails: false };
+
 export function redactText(value: string): string {
+  return redactWith(value, LOG_RULES);
+}
+
+/**
+ * `redactText` for the text of a conversation that its owner reads: the steps and narration of an
+ * agent, the labels of its tool steps, its trace. Credentials go as in a log; email addresses stay.
+ * A log line, a push payload, telemetry and a send to someone else use `redactText`.
+ */
+export function redactSecrets(value: string): string {
+  return redactWith(value, SECRET_RULES);
+}
+
+/** `toLogValue` with the rules of `redactSecrets`, for a record of a conversation that its owner reads. */
+export function redactSecretValues(value: unknown): LogValue {
+  return convertSafely(value, SECRET_RULES);
+}
+
+function redactWith(value: string, rules: RedactionRules): string {
   const marked = markRegisteredSecrets(value);
-  const redacted = redactSerializedJson(marked) ?? applyTextRules(redactEmbeddedJson(marked));
+  const redacted = redactSerializedJson(marked, rules) ?? applyTextRules(redactEmbeddedJson(marked, rules), rules);
   return marked === value ? redacted : redacted.replace(MARKERS, "[redacted]");
 }
 
@@ -224,22 +254,20 @@ function markRegisteredSecrets(value: string): string {
   return result + value.slice(copied);
 }
 
-function applyTextRules(value: string): string {
-  return (
-    value
-      .replace(PEM_PRIVATE_KEY, "[redacted]")
-      .replace(COOKIE_HEADER, "$1[redacted]")
-      .replace(AUTH_HEADER_SECRET, "$1[redacted]")
-      .replace(BEARER_SECRET, "[redacted]")
-      .replace(CREDENTIAL_ASSIGNMENT, redactAssignedValue)
-      .replace(JSON_BARE_KEY, redactAssignedValue)
-      // After the assignment rule: its value runs over `&`, and a query value redacted first would
-      // leave a `]` behind it.
-      .replace(QUERY_SECRET, "$1[redacted]")
-      .replace(KNOWN_SECRET_PREFIXES, "[redacted]")
-      .replace(JSON_WEB_TOKEN, "[redacted]")
-      .replace(EMAIL, "[redacted-email]")
-  );
+function applyTextRules(value: string, rules: RedactionRules): string {
+  const redacted = value
+    .replace(PEM_PRIVATE_KEY, "[redacted]")
+    .replace(COOKIE_HEADER, "$1[redacted]")
+    .replace(AUTH_HEADER_SECRET, "$1[redacted]")
+    .replace(BEARER_SECRET, "[redacted]")
+    .replace(CREDENTIAL_ASSIGNMENT, redactAssignedValue)
+    .replace(JSON_BARE_KEY, redactAssignedValue)
+    // After the assignment rule: its value runs over `&`, and a query value redacted first would
+    // leave a `]` behind it.
+    .replace(QUERY_SECRET, "$1[redacted]")
+    .replace(KNOWN_SECRET_PREFIXES, "[redacted]")
+    .replace(JSON_WEB_TOKEN, "[redacted]");
+  return rules.emails ? redacted.replace(EMAIL, "[redacted-email]") : redacted;
 }
 
 /**
@@ -263,7 +291,7 @@ const UNSCANNED = "[redacted-unscanned]";
  * `[…]` run that does parse is replaced by its redacted form, which gives an embedded payload the
  * same treatment as a structured param: `headers` values go, secret-named keys go, prose stays.
  */
-function redactEmbeddedJson(value: string): string {
+function redactEmbeddedJson(value: string, rules: RedactionRules): string {
   let result = "";
   let index = 0;
   let scans = 0;
@@ -284,7 +312,7 @@ function redactEmbeddedJson(value: string): string {
       // credential with no closing brace to parse, so the run is dropped rather than passed on.
       return `${result + value.slice(index, start)}${UNSCANNED}`;
     }
-    const parsed = end < 0 ? null : parseRedacted(value.slice(start, end));
+    const parsed = end < 0 ? null : parseRedacted(value.slice(start, end), rules);
     if (parsed === null) {
       if (end >= 0 && startsLikeJson(value, start)) {
         // A run a serializer wrote that does not parse: a trailing comma, a value cut short. Going on
@@ -304,9 +332,9 @@ function redactEmbeddedJson(value: string): string {
   return result + value.slice(index);
 }
 
-function parseRedacted(candidate: string): string | null {
+function parseRedacted(candidate: string, rules: RedactionRules): string | null {
   try {
-    return JSON.stringify(convertValue(JSON.parse(candidate), new Set<object>())) ?? null;
+    return JSON.stringify(convertValue(JSON.parse(candidate), new Set<object>(), 0, rules)) ?? null;
   } catch {
     return null;
   }
@@ -370,14 +398,14 @@ function redactAssignedValue(_match: string, label: string, value: string): stri
 // an echoed response body, a spawn argument list, a serialized request. Once
 // it parses, the key rules apply to it exactly as they would to a structured
 // param, so `{"apiKey":"…"}` cannot pass as prose.
-function redactSerializedJson(value: string): string | null {
+function redactSerializedJson(value: string, rules: RedactionRules): string | null {
   const trimmed = value.trim();
   // No size cap: a long payload is exactly where a secret hides, and the
   // truncation that follows keeps only the first characters - which would be
   // the unredacted ones.
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return null;
   try {
-    return JSON.stringify(convertValue(JSON.parse(trimmed), new Set<object>())) ?? null;
+    return JSON.stringify(convertValue(JSON.parse(trimmed), new Set<object>(), 0, rules)) ?? null;
   } catch {
     // Neither a parse failure nor a conversion failure may become the failure
     // the caller was trying to report: fall back to the regex rules, which
@@ -391,7 +419,7 @@ function redactSerializedJson(value: string): string | null {
 // becomes "[circular]" instead of overflowing, so logging a rejection value can
 // never hide the failure it reports.
 export function redactValue(value: LogValue): LogValue {
-  return convertSafely(value);
+  return convertSafely(value, LOG_RULES);
 }
 
 // Converts anything a catch block or an external boundary hands over into a
@@ -399,15 +427,15 @@ export function redactValue(value: LogValue): LogValue {
 // their `n` suffix because JSON cannot carry them; anything else falls back
 // to its string form rather than leaking through unredacted.
 export function toLogValue(value: unknown): LogValue {
-  return convertSafely(value);
+  return convertSafely(value, LOG_RULES);
 }
 
 // The last line of defence for both public entry points: whatever a caller
 // hands over, converting it must never become the exception that hides the one
 // being logged.
-function convertSafely<T>(value: T): LogValue {
+function convertSafely<T>(value: T, rules: RedactionRules): LogValue {
   try {
-    return convertValue(value, new Set<object>());
+    return convertValue(value, new Set<object>(), 0, rules);
   } catch {
     return UNSERIALIZABLE;
   }
@@ -419,8 +447,8 @@ function convertSafely<T>(value: T): LogValue {
 // shape worth reading in a log line.
 const MAX_CONVERSION_DEPTH = 32;
 
-function convertValue<T>(value: T, seen: Set<object>, depth = 0): LogValue {
-  if (typeof value === "string") return redactText(value);
+function convertValue<T>(value: T, seen: Set<object>, depth: number, rules: RedactionRules): LogValue {
+  if (typeof value === "string") return redactWith(value, rules);
   if (value === null) return null;
   if (value === undefined) return undefined;
   if (typeof value === "number" || typeof value === "boolean") return value;
@@ -430,17 +458,17 @@ function convertValue<T>(value: T, seen: Set<object>, depth = 0): LogValue {
     // or a class named after the header it failed on - so it is no safer than
     // the message.
     const converted: { [key: string]: LogValue } = {
-      name: redactText(value.name),
-      message: redactText(value.message),
+      name: redactWith(value.name, rules),
+      message: redactWith(value.message, rules),
     };
-    if (typeof value.stack === "string") converted.stack = redactText(value.stack);
+    if (typeof value.stack === "string") converted.stack = redactWith(value.stack, rules);
     return converted;
   }
   if (Array.isArray(value)) {
     if (seen.has(value)) return "[circular]";
     if (depth >= MAX_CONVERSION_DEPTH) return "[too deep]";
     seen.add(value);
-    return value.map((entry: LogValue) => convertValue(entry, seen, depth + 1));
+    return value.map((entry: LogValue) => convertValue(entry, seen, depth + 1, rules));
   }
   if (typeof value === "object") {
     if (seen.has(value)) return "[circular]";
@@ -460,8 +488,8 @@ function convertValue<T>(value: T, seen: Set<object>, depth = 0): LogValue {
         // A key is as caller-controlled as a value: a payload keyed by an
         // email address, or by the header that failed, leaks through a rule
         // that only looks at values.
-        redactText(key),
-        convertEntry(key, entry, seen, depth),
+        redactWith(key, rules),
+        convertEntry(key, entry, seen, depth, rules),
       ]),
     );
   }
@@ -470,15 +498,15 @@ function convertValue<T>(value: T, seen: Set<object>, depth = 0): LogValue {
   // and `String()` itself can throw for a null-prototype object or a
   // throwing `toString`.
   try {
-    return redactText(String(value));
+    return redactWith(String(value), rules);
   } catch {
     return UNSERIALIZABLE;
   }
 }
 
-function convertEntry(key: string, entry: unknown, seen: Set<object>, depth: number): LogValue {
+function convertEntry(key: string, entry: unknown, seen: Set<object>, depth: number, rules: RedactionRules): LogValue {
   if (SECRET_KEY.test(key)) return "[redacted]";
-  const converted = convertValue(entry, seen, depth + 1);
+  const converted = convertValue(entry, seen, depth + 1, rules);
   if (!HEADER_KEY.test(key) || entry === null || typeof entry !== "object") return converted;
   return redactHeaderStrings(converted);
 }

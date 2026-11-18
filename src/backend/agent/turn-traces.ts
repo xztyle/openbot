@@ -11,7 +11,7 @@ import {
   type ConversationTraceToolCategory,
   type ConversationTurnTrace,
 } from "@openbot/contracts/ipc";
-import { redactText } from "@openbot/logging";
+import { redactSecrets } from "@openbot/logging";
 
 interface RunningTrace {
   startedAt: string;
@@ -64,10 +64,11 @@ export class TurnTraces {
     if (step.kind !== "tool") step.kind = kind;
     if (kind === "tool" && step.text === undefined && event.text)
       step.text = event.text.slice(0, CONVERSATION_TRACE_TEXT_LIMIT);
-    // The trace stays on this computer, but a command can hold a token, as a log line can.
+    // The trace stays on this computer, but a command can hold a token, as a log line can. The owner
+    // reads the trace, so an email address in the command stays.
     const command = event.command?.trim();
     if (kind === "tool" && step.command === undefined && command)
-      step.command = redactText(command).slice(0, CONVERSATION_TRACE_TEXT_LIMIT);
+      step.command = redactSecrets(command).slice(0, CONVERSATION_TRACE_TEXT_LIMIT);
     if (kind === "tool" && step.recipientAgentIds === undefined && event.recipientAgentIds?.length)
       step.recipientAgentIds = [...event.recipientAgentIds];
     if (kind === "tool" && event.category && (step.category === undefined || step.category === "tool"))

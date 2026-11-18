@@ -22,7 +22,7 @@ import {
   type McpToolRuntimeSource,
   usableMcpServers,
 } from "./mcp-provider-shapes";
-import { mcpSecretValues, redactMcpRecord, redactMcpValues } from "./mcp-redaction";
+import { mcpSecretValues, redactMcpOutput, redactMcpRecord, redactMcpValues } from "./mcp-redaction";
 import { PendingServerRequests } from "./pending-server-requests";
 import { createPiKeyExtension } from "./pi-key-providers";
 import { createPiMcpExtension, type PiMcpExtension } from "./pi-mcp";
@@ -649,7 +649,12 @@ export class PiAgentClient extends EventEmitter<ClientEvents> implements AgentCl
 
   #addUserMessage(turn: PiTurn, message: string): void {
     const id = `${turn.id}:user:${randomUUID()}`;
-    turn.items.set(id, { id, type: "userMessage", content: [{ type: "text", text: this.#redact(message) }] });
+    // The person's own text: their chat shows it, so an email address in it stays.
+    turn.items.set(id, {
+      id,
+      type: "userMessage",
+      content: [{ type: "text", text: redactMcpOutput(message, this.#secretValues()) }],
+    });
   }
 
   #notify(method: string, thread: PiThread, params: DynamicRecord): void {

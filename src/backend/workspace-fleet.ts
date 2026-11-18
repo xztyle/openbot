@@ -11,7 +11,7 @@ import {
   type WorkspaceFleetStatus,
   type WorkspaceStepKind,
 } from "@openbot/contracts/ipc";
-import { redactText } from "@openbot/logging";
+import { redactSecrets } from "@openbot/logging";
 import type { AttentionRegistry } from "./agent/attention-registry";
 import type { MailboxStore } from "./mailbox-store";
 import type { OpenBotDatabase } from "./openbot-database";
@@ -56,7 +56,7 @@ function line(text: string): string {
       .split(/\r?\n/u)
       .map((part) => part.trim())
       .find(Boolean) ?? "";
-  const clean = redactText(first).replace(/\s+/gu, " ");
+  const clean = redactSecrets(first).replace(/\s+/gu, " ");
   return clean.length > WORKSPACE_FLEET_TEXT_LIMIT
     ? `${clean.slice(0, WORKSPACE_FLEET_TEXT_LIMIT - 1).trimEnd()}…`
     : clean;

@@ -8,7 +8,7 @@ import {
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
-import { redactText } from "@openbot/logging";
+import { redactSecrets, redactText } from "@openbot/logging";
 import { type AgentProvider, MissingClaudeSessionError, RequestTimeoutError } from "../agent-client";
 import { AppServerError } from "../app-server-client";
 import {
@@ -321,7 +321,7 @@ export function toolTraceDetail(item: ThreadItem): { command: string | null; rec
 const TOOL_STEP_LABEL_LIMIT = 160;
 
 function stepLabel(value: string | null | undefined): string | null {
-  const line = value ? redactText(value).replace(/\s+/gu, " ").trim() : "";
+  const line = value ? redactSecrets(value).replace(/\s+/gu, " ").trim() : "";
   if (!line) return null;
   return line.length > TOOL_STEP_LABEL_LIMIT ? `${line.slice(0, TOOL_STEP_LABEL_LIMIT - 1).trimEnd()}…` : line;
 }

@@ -507,10 +507,12 @@ conversation JSON as every other message, so no migration and no new wire field 
 Team API already carries the messages to the web client and the phone, with no member filter other
 than the agent list. A provider can give a summary, the whole text or nothing: OpenBot sets no
 reasoning option on any provider, so what the user sees is what the provider sent by default.
-`boundedReasoningText` (`src/backend/reasoning-text.ts`) redacts the text and cuts it at 40,000
-characters when an item completes, and when a turn is read back from a provider. Streamed pieces are
+`boundedReasoningText` (`src/backend/reasoning-text.ts`) removes credentials with `redactSecrets`
+(`@openbot/logging`) and cuts the text at 40,000 characters when an item completes, and when a turn is read back from a provider. Streamed pieces are
 not redacted one by one, because a secret can split across two pieces; the completed item replaces
-them. The renderer joins the commentary of one turn into one `thinking` message. While the turn runs,
+them. Email addresses stay, as in the answer: the owner reads this text, and `redactText`, which also
+removes them, is for logs, reports and event check results. The labels of tool steps and the trace
+use the same rule. The renderer joins the commentary of one turn into one `thinking` message. While the turn runs,
 the activity line opens it. After the turn, a "Thinking" row above the answer opens it. The switch
 "Show agent reasoning" (on by default) collapses it and hides nothing: with the switch off, a run of
 Thinking rows is one closed row with no preview line, and it still opens. It is a view choice of the

@@ -153,6 +153,14 @@ export function Toaster(props: ToasterProps): JSX.Element {
         class={cx("ui-toaster", (props.closeButton ?? true) && "ui-toaster-closeable", props.class)}
         theme={props.theme ?? documentColorScheme()}
         position={props.position ?? "top-right"}
+        // On a phone the toasts stay clear of the status bar and the home indicator: the app on the
+        // Home Screen draws under them (viewport-fit=cover). The insets are 0 elsewhere.
+        mobileOffset={
+          props.mobileOffset ?? {
+            top: "calc(env(safe-area-inset-top, 0px) + var(--openbot-space-4))",
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + var(--openbot-space-4))",
+          }
+        }
         // A toast past the visible count stays hidden even when hover expands the stack, so an update
         // offer would wait behind another. Six providers can offer an update at once.
         visibleToasts={props.visibleToasts ?? 6}

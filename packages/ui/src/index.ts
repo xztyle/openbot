@@ -13,6 +13,7 @@ export * from "./form";
 export * from "./icons";
 export * from "./image-remove-button";
 export * from "./item";
+export * from "./long-press";
 export * from "./marker";
 export * from "./message";
 export * from "./motion-tooltip";

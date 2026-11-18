@@ -12,6 +12,7 @@ import * as TabsPrimitive from "@kobalte/core/tabs";
 import * as TooltipPrimitive from "@kobalte/core/tooltip";
 import type { ValidComponent } from "@solidjs/web";
 import { createContext, createEffect, merge, onCleanup, untrack, useContext } from "solid-js";
+import { claimLongPress, longPressClaimed } from "./long-press";
 import { useMenuMotion } from "./menu-motion";
 import { createPressedPopupCue } from "./utils";
 
@@ -364,7 +365,36 @@ export const ContextMenu: ContextMenuApi = {
     );
   },
   Portal: (props) => <ContextMenuPrimitive.Portal {...props} />,
-  Trigger: (props) => <ContextMenuPrimitive.Trigger {...props} />,
+  Trigger: (props) => {
+    /*
+     * A touch long press reaches every context-menu trigger around the finger, and each one opened
+     * its menu: a message menu and the pane's menu stacked over each other. The innermost trigger
+     * claims the pointerdown; an outer one reads `disabled` as true while Kobalte handles that
+     * event, so it starts no timer. `disabled` is read live, in the same call.
+     */
+    let declined = false;
+    return (
+      <ContextMenuPrimitive.Trigger
+        {...props}
+        disabled={props.disabled === true || isDeclined()}
+        onPointerDown={(event) => {
+          const upstream = props.onPointerDown;
+          if (typeof upstream === "function") upstream(event);
+          else if (Array.isArray(upstream)) upstream[0](upstream[1], event);
+          if (event.pointerType === "mouse") return;
+          if (longPressClaimed(event)) {
+            declined = true;
+            queueMicrotask(() => {
+              declined = false;
+            });
+          } else claimLongPress(event);
+        }}
+      />
+    );
+    function isDeclined() {
+      return declined;
+    }
+  },
   Content: (props) => {
     const motion = useMenuMotion();
     const focus = useContext(MenuFocusContext);

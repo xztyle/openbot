@@ -1,7 +1,8 @@
 /*
  * The web client on a mock host with unread messages, for `scripts/workspace-inbox-e2e.ts`: the
  * harness of `web-client-harness.tsx` with the `unread` seeds, so Unreads, Threads, Activity and the
- * sidebar have something unread. Trading (slug `market-trading`) holds Research and #cakemaker.
+ * sidebar have something unread, and Later has saved messages. Trading (slug `market-trading`) holds
+ * Research and #cakemaker.
  */
 import { Toaster } from "@openbot/ui";
 import { render } from "@solidjs/web";
@@ -14,22 +15,30 @@ import { seeds } from "./workspace/workspace-app-seeds";
 import "../src/styles.css";
 import "../src/features/web-client/web-client.css";
 
-const runtime: WebRuntimeFactory = (_accountId, events) =>
-  mockWebRuntimeFor(
-    createMockOpenBot({
-      channels: seeds(WEB_PREVIEW_MEMBER_ID, { unread: true }),
-      channelMemberId: WEB_PREVIEW_MEMBER_ID,
-      spaces: [
-        {
-          space: { id: "trading", name: "Trading", slug: "market-trading", icon: null, hue: 215 },
-          agentIds: ["research"],
-          channelIds: ["cakemaker"],
-        },
-        { space: { id: "piks", name: "Piks", icon: null, hue: 150 } },
-      ],
-    }),
-    events,
-  );
+/** Two messages saved for later and one completed, so Later has rows in both tabs. */
+const SAVED = [
+  { messageId: "general-root", state: "saved" },
+  { messageId: "general-m8", state: "saved" },
+  { messageId: "general-m5", state: "done" },
+] as const;
+
+const runtime: WebRuntimeFactory = (_accountId, events) => {
+  const mock = createMockOpenBot({
+    channels: seeds(WEB_PREVIEW_MEMBER_ID, { unread: true }),
+    channelMemberId: WEB_PREVIEW_MEMBER_ID,
+    spaces: [
+      {
+        space: { id: "trading", name: "Trading", slug: "market-trading", icon: null, hue: 215 },
+        agentIds: ["research"],
+        channelIds: ["cakemaker"],
+      },
+      { space: { id: "piks", name: "Piks", icon: null, hue: 150 } },
+    ],
+  });
+  for (const item of SAVED)
+    void mock.api.agent.workspaceSetSaved?.({ operationId: crypto.randomUUID(), channelId: "general", ...item });
+  return mockWebRuntimeFor(mock, events);
+};
 
 const root = document.getElementById("root");
 if (root)

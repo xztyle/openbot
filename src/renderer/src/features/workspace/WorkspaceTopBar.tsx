@@ -21,11 +21,12 @@ export function WorkspaceTopBar() {
   const jump = useJumpEntries();
   let element: HTMLDivElement | undefined;
   let api: WorkspaceSearchBarApi | undefined;
-  ws.search.attachBar({
-    focus: (text) => api?.focus(text),
-    visible: () => Boolean(element?.isConnected && element.offsetParent !== null),
-  });
-  onCleanup(() => ws.search.attachBar(null));
+  onCleanup(
+    ws.search.attachBar({
+      focus: (text) => api?.focus(text),
+      visible: () => Boolean(element?.isConnected && element.offsetParent !== null),
+    }),
+  );
   const scope = () =>
     ws.spaces.available() ? (ws.spaces.space(ws.spaces.current())?.name ?? ws.env.serverName()) : ws.env.serverName();
   const suggestions = (text: string): SearchSuggestion[] =>

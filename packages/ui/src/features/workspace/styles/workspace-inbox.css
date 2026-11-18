@@ -455,6 +455,7 @@
   justify-content: flex-start;
   gap: var(--openbot-space-3);
   padding: var(--openbot-space-1);
+  color: var(--openbot-text-primary);
   font-weight: var(--openbot-weight-regular);
   text-align: left;
   white-space: normal;

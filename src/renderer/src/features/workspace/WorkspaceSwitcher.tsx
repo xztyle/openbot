@@ -46,7 +46,8 @@ const SEPARATORS = /[\s\-_.,#@]+/u;
 /**
  * How well a name matches typed text, as Slack's switcher reads it: the whole name, its start, the
  * start of a word, the initials ("dh" finds Duretti Hirpa), the name without separators ("devweb"
- * finds #devel-webapp), a part of it, then the letters in order at word starts. -1: no match.
+ * finds #devel-webapp), a part of it, the letters in order at word starts, then the letters in order
+ * anywhere. -1: no match.
  */
 export function jumpMatch(name: string, typed: string): number {
   const text = fold(typed).replace(/^[#@]/u, "").trim();
@@ -72,6 +73,12 @@ export function jumpMatch(name: string, typed: string): number {
       at += 1;
     }
     if (index === compactText.length) return 200;
+  }
+  // The letters in order anywhere ("gnrl" → "general"), the weakest match.
+  if (compactText.length > 2) {
+    let at = 0;
+    for (const char of compact) if (char === compactText[at]) at += 1;
+    if (at === compactText.length) return 100;
   }
   return -1;
 }

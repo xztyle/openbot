@@ -6,7 +6,7 @@
  */
 
 import { channelKind, channelVisibility } from "@openbot/contracts/ipc";
-import { Button, FormDialog, Hash, Input, Lock, Search, Switch } from "@openbot/ui";
+import { Button, FormDialog, Hash, Input, Lock, Plus, Search, Switch } from "@openbot/ui";
 import { WorkspaceSelect } from "@openbot/ui/features/workspace/WorkspaceSelect";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Show } from "solid-js";
@@ -71,18 +71,6 @@ export function ChannelBrowser(props: { onClose: () => void }) {
         if (!open) props.onClose();
       }}
       title={t("workspace.app.browse.title")}
-      footerStart={
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            props.onClose();
-            ws.openDialog({ kind: "create-channel" });
-          }}
-        >
-          {t("workspace.app.browse.create")}
-        </Button>
-      }
     >
       <div class="ws-switcher-field">
         <Search aria-hidden="true" />
@@ -130,6 +118,17 @@ export function ChannelBrowser(props: { onClose: () => void }) {
             onChange={(checked: boolean) => setHideMine(checked)}
           />
         </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            props.onClose();
+            ws.openDialog({ kind: "create-channel", name: query().trim() || undefined });
+          }}
+        >
+          <Plus aria-hidden="true" />
+          {t("workspace.app.browse.create")}
+        </Button>
       </div>
       <ul class="ws-browse-list" aria-label={t("workspace.app.browse.title")}>
         <For each={channels()} fallback={<li class="ws-details-empty">{t("workspace.app.browse.empty")}</li>}>

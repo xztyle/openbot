@@ -275,9 +275,15 @@ export function createWorkspaceSearch(deps: WorkspaceSearchDeps) {
     state,
     supported,
     submit,
-    /** The top bar's field registers here while it shows; it gets the focus of ⌘G and /. */
-    attachBar(next: { focus: (text?: string) => void; visible: () => boolean } | null) {
+    /**
+     * The top bar's field registers here while it shows; it gets the focus of ⌘G and /. The answer
+     * takes it out again, unless another field registered since.
+     */
+    attachBar(next: { focus: (text?: string) => void; visible: () => boolean }): () => void {
       bar = next;
+      return () => {
+        if (bar === next) bar = null;
+      };
     },
     /** Puts the focus in the top bar's field. False when no field shows, such as on a phone. */
     focusBar(text?: string): boolean {

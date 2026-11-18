@@ -306,7 +306,6 @@ export const messages = {
   "workspace.app.browse.search": "搜索频道",
   "workspace.app.browse.empty": "没有匹配的频道。",
   "workspace.app.browse.members": { one: "{count} 位成员", other: "{count} 位成员" },
-  "workspace.app.browse.open": "打开",
   "workspace.app.browse.create": "创建频道",
   "workspace.app.channel.loading": "正在加载消息…",
   "workspace.app.channel.loadingOlder": "正在加载更早的消息…",

@@ -50,6 +50,8 @@ import { setActiveSpaces } from "../../active-space";
 import type { ChannelsController } from "../channels/channels-controller";
 import type { MessagingApi } from "../connectors/messaging-connector";
 import type { StorageHygieneCalls } from "../storage-hygiene/storage-hygiene-port";
+import { createWorkspaceFrecency } from "./workspace-frecency";
+import { createWorkspaceLater } from "./workspace-later";
 import { createWorkspaceMarks } from "./workspace-marks";
 import {
   AGENT_DM_PREFIX,
@@ -62,6 +64,7 @@ import {
   type WorkspaceDirectory,
   type WorkspacePerson,
 } from "./workspace-model";
+import { createWorkspaceSearch } from "./workspace-search";
 import { localSectionPrefs, sidebarSections, withSectionOrder } from "./workspace-sidebar-sections";
 import {
   type ArtifactThumbnailUrl,
@@ -73,6 +76,7 @@ import {
   type WorkspaceFleetSource,
 } from "./workspace-sources";
 import { createWorkspaceSpaces } from "./workspace-spaces";
+import { createWorkspaceUnreads } from "./workspace-unreads";
 
 export type WorkspaceRoute =
   | { kind: "channel"; channelId: string }
@@ -86,10 +90,15 @@ export type WorkspacePanel =
   | { kind: "artifacts"; channelId: string };
 
 export type WorkspaceDialog =
-  | { kind: "create-channel" }
+  /** `name` fills the name field, as Jump to's "Create #name" does. */
+  | { kind: "create-channel"; name?: string }
   | { kind: "new-message" }
   | { kind: "browse" }
   | { kind: "switcher" }
+  /** The keyboard shortcuts sheet (⌘/). */
+  | { kind: "shortcuts" }
+  /** Confirms Shift+Escape: every conversation of the space read. */
+  | { kind: "mark-all-read" }
   | { kind: "edit-meta"; channelId: string; field: "topic" | "description" }
   | { kind: "invite"; channelId: string }
   | { kind: "delete-message"; channelId: string; messageId: string; threadRootId: string | null }
@@ -280,6 +289,9 @@ interface SavedPlace {
 }
 
 const SAVED_VIEWS: readonly WorkspaceView[] = [
+  "unreads",
+  "later",
+  "dms",
   "threads",
   "activity",
   "fleet",
@@ -1678,6 +1690,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (view === "secrets") return env.secrets?.() === true && Boolean(channels.port().agent.workspaceSecrets);
     if (view === "storage") return Boolean(env.storageHygiene?.());
     if (view === "routines") return env.routines?.available() === true;
+    if (view === "later") return later.supported();
+    if (view === "search") return search.supported();
     return true;
   }
 
@@ -1748,6 +1762,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     });
     setPhonePane(pane);
     if (view === "activity" || view === "threads") void refreshActivity();
+    if (view === "unreads") void unreads.load();
+    if (view === "later") later.refresh();
     if (view === "fleet") fleet.refresh?.();
     if (view === "artifacts") artifacts.refresh?.();
   }
@@ -2405,10 +2421,56 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     await spaces.act({ kind: "move", spaceId, ...input });
   }
 
+  // ---------------------------------------------------------------- Jump to, search, Unreads, Later
+
+  const frecency = createWorkspaceFrecency({ storageKey: env.storageKey, active: activeConversationId });
+  const search = createWorkspaceSearch({
+    channels,
+    directory,
+    storageKey: env.storageKey,
+    connectionReady: env.connectionReady,
+    currentSpace: () => (spaces.available() ? spaces.current() : null),
+  });
+  const later = createWorkspaceLater({
+    channels,
+    ready: () => channels.supported() && env.connectionReady(),
+    storageKey: env.storageKey,
+    isReader: env.isReader,
+    onHostEvent: env.onHostEvent,
+  });
+  const unreads = createWorkspaceUnreads({
+    channels,
+    isReader: env.isReader,
+    include: (channel) =>
+      !channel.archived &&
+      readerJoined(directory(), channel) &&
+      !mutedSet().has(channel.id) &&
+      spaces.channelInCurrent(channel.id),
+    order: conversationOrder,
+    connectionReady: env.connectionReady,
+  });
+  // Threads and Activity read again when a read position or a follow of the reader moves.
+  onCleanup(
+    env.onHostEvent((event) => {
+      if (event.type === "workspace-read-state-changed" && (!event.memberId || env.isReader(event.memberId)))
+        scheduleActivity(300);
+    }),
+  );
+  /** Runs a message search and shows its results. */
+  function openSearch(query?: string) {
+    if (query?.trim()) search.submit(query);
+    openView("search");
+  }
+
   return {
     env,
     state,
     channels,
+    frecency,
+    search,
+    later,
+    unreads,
+    openSearch,
     directory,
     spaces,
     selectSpace,

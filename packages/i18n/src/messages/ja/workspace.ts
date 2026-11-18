@@ -311,7 +311,6 @@ export const messages = {
   "workspace.app.browse.search": "チャンネルを検索",
   "workspace.app.browse.empty": "一致するチャンネルはありません。",
   "workspace.app.browse.members": { other: "メンバー {count} 人" },
-  "workspace.app.browse.open": "開く",
   "workspace.app.browse.create": "チャンネルを作成",
   "workspace.app.channel.loading": "メッセージを読み込み中…",
   "workspace.app.channel.loadingOlder": "以前のメッセージを読み込み中…",

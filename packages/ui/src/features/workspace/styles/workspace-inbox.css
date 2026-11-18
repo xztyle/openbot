@@ -1,0 +1,548 @@
+/* The top bar and its search, Unreads, Later, DMs, the search results and the shortcuts sheet. */
+
+.ws-main-frame {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* Top bar --------------------------------------------------------------------------------------- */
+
+.ws-topbar {
+  position: relative;
+  z-index: var(--openbot-layer-dropdown);
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  border-bottom: 1px solid var(--ws-line, var(--openbot-border));
+  background: var(--openbot-bg-frame);
+  padding: var(--openbot-space-1-5) var(--openbot-space-4);
+}
+
+.ws-searchbar {
+  position: relative;
+  display: flex;
+  width: min(640px, 100%);
+  align-items: center;
+  gap: var(--openbot-space-1);
+}
+
+.ws-searchbar-field {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+}
+
+.ws-searchbar-field > svg {
+  position: absolute;
+  left: var(--openbot-space-2);
+  z-index: 1;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  color: var(--openbot-text-muted);
+  pointer-events: none;
+}
+
+.ws-searchbar-field > .ui-input {
+  width: 100%;
+  height: var(--openbot-control-md);
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-bg-control);
+  padding-left: calc(var(--openbot-space-2) + var(--openbot-icon-sm) + var(--openbot-space-2));
+  padding-right: var(--openbot-space-8);
+  font-size: var(--openbot-text-md);
+}
+
+.ws-searchbar-key {
+  position: absolute;
+  right: var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  pointer-events: none;
+}
+
+.ws-searchbar-list {
+  position: absolute;
+  top: calc(100% + var(--openbot-space-1));
+  right: 0;
+  left: 0;
+  z-index: var(--openbot-layer-dropdown);
+  display: flex;
+  max-height: min(420px, 60vh);
+  flex-direction: column;
+  overflow-y: auto;
+  padding: var(--openbot-space-1);
+}
+
+.ws-searchbar-row {
+  display: flex;
+  min-height: var(--openbot-control-md);
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border-radius: var(--openbot-radius-sm);
+  padding: 0 var(--openbot-space-2);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  cursor: default;
+}
+
+.ws-searchbar-row[data-highlighted] {
+  background: var(--openbot-hover);
+}
+
+.ws-searchbar-glyph {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--openbot-text-muted);
+}
+
+.ws-searchbar-glyph > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+.ws-searchbar-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Rows with their own actions ------------------------------------------------------------------- */
+
+.ws-later-item,
+.ws-search-recent-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+}
+
+.ws-later-item > .ws-feed-row,
+.ws-search-recent-item > .ws-search-recent-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.ws-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  gap: var(--openbot-space-0-5);
+  opacity: 0;
+}
+
+.ws-later-item:focus-within .ws-row-actions,
+.ws-search-recent-item:focus-within .ws-row-actions {
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ws-later-item:hover .ws-row-actions,
+  .ws-search-recent-item:hover .ws-row-actions {
+    opacity: 1;
+  }
+}
+
+/* A touch screen has no hover: the actions show on every row. */
+@media (hover: none) {
+  .ws-row-actions {
+    opacity: 1;
+  }
+}
+
+.ws-later-item[data-done] .ws-feed-preview {
+  color: var(--openbot-text-muted);
+}
+
+.ws-view-more {
+  display: flex;
+  justify-content: center;
+  padding: var(--openbot-space-3) 0;
+}
+
+.ws-sidebar-later-count {
+  margin-left: auto;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+/* Unreads --------------------------------------------------------------------------------------- */
+
+.ws-unreads-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ws-unreads-group {
+  border: 1px solid var(--ws-line);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+}
+
+.ws-unreads-group[data-read] {
+  opacity: 0.7;
+}
+
+.ws-unreads-group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  padding: var(--openbot-space-1) var(--openbot-space-2);
+}
+
+.ws-unreads-name.ui-button {
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  gap: var(--openbot-space-1-5);
+  padding: 0 var(--openbot-space-1-5);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-unreads-name > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  color: var(--openbot-text-muted);
+}
+
+.ws-unreads-count {
+  color: var(--openbot-accent-text);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ws-unreads-done {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-unreads-messages {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-top: 1px solid var(--ws-line);
+  padding: var(--openbot-space-1);
+  list-style: none;
+}
+
+.ws-unreads-message.ui-button {
+  width: 100%;
+  height: auto;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--openbot-space-3);
+  border-radius: var(--openbot-radius-md);
+  padding: var(--openbot-space-2);
+  font-weight: var(--openbot-weight-regular);
+  text-align: left;
+  white-space: normal;
+}
+
+.ws-unreads-message-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+}
+
+.ws-unreads-message-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--openbot-space-2);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-unreads-message-text {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+}
+
+.ws-unreads-footer {
+  display: flex;
+  justify-content: center;
+  padding: var(--openbot-space-4) 0;
+}
+
+/* DMs ------------------------------------------------------------------------------------------- */
+
+.ws-dms-search {
+  flex: 1 1 240px;
+  margin-left: 0;
+}
+
+.ws-dm-row[data-muted] {
+  opacity: 0.6;
+}
+
+.ws-dm-row[aria-current="page"] {
+  background: var(--openbot-hover);
+}
+
+.ws-dm-name {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+}
+
+.ws-dm-preview {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.ws-dm-preview > .ws-feed-preview {
+  flex: 1 1 auto;
+  -webkit-line-clamp: 1;
+}
+
+.ws-dm-row[data-unread] .ws-dm-name,
+.ws-dm-row[data-unread] .ws-feed-preview {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-bold);
+}
+
+/* Search results -------------------------------------------------------------------------------- */
+
+.ws-search-view-field {
+  position: relative;
+  align-items: center;
+  margin: var(--openbot-space-2) var(--openbot-space-4) 0;
+}
+
+.ws-search-view-field > svg {
+  position: absolute;
+  left: var(--openbot-space-2);
+  z-index: 1;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  color: var(--openbot-text-muted);
+  pointer-events: none;
+}
+
+.ws-search-view-field > .ui-input {
+  width: 100%;
+  height: var(--openbot-touch-target);
+  padding-left: calc(var(--openbot-space-2) + var(--openbot-icon-sm) + var(--openbot-space-2));
+  font-size: var(--openbot-text-lg);
+}
+
+.ws-search-recent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--openbot-space-3) var(--openbot-space-1) var(--openbot-space-1);
+}
+
+.ws-search-recent-header > h3 {
+  margin: 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ws-search-recent-row.ui-button {
+  justify-content: flex-start;
+  gap: var(--openbot-space-2);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.ws-search-recent-row > svg {
+  color: var(--openbot-text-muted);
+}
+
+.ws-search-tips {
+  margin: var(--openbot-space-4) var(--openbot-space-1) 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-md);
+}
+
+.ws-search-tabs {
+  padding-bottom: 0;
+}
+
+.ws-search-filters {
+  gap: var(--openbot-space-2);
+}
+
+.ws-search-threads {
+  margin-left: 0;
+}
+
+.ws-search-glyph {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--openbot-radius-md);
+  background: var(--openbot-hover);
+  color: var(--openbot-text-muted);
+}
+
+.ws-search-glyph > svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+}
+
+.ws-search-tag {
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-hover);
+  padding: 0 var(--openbot-space-1-5);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ws-search-snippet {
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-md);
+  line-height: var(--openbot-leading-md);
+  overflow-wrap: anywhere;
+}
+
+.ws-search-mark {
+  border-radius: var(--openbot-radius-xs);
+  background: var(--ws-mention-tint);
+  box-shadow: inset 0 -2px 0 var(--ws-mention-edge);
+  color: inherit;
+  font-weight: var(--openbot-weight-bold);
+}
+
+/* Jump to, Browse ------------------------------------------------------------------------------- */
+
+.ws-switcher-hint {
+  margin: var(--openbot-space-2) 0 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-browse-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  margin-top: var(--openbot-space-2);
+}
+
+.ws-browse-open.ui-button {
+  min-width: 0;
+  height: auto;
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  gap: var(--openbot-space-3);
+  padding: var(--openbot-space-1);
+  font-weight: var(--openbot-weight-regular);
+  text-align: left;
+  white-space: normal;
+}
+
+.ws-browse-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-1-5);
+}
+
+/* Keyboard shortcuts ---------------------------------------------------------------------------- */
+
+.ws-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--openbot-space-4);
+}
+
+.ws-shortcuts-title {
+  margin: 0 0 var(--openbot-space-2);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ws-shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+}
+
+.ws-shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--openbot-space-3);
+  font-size: var(--openbot-text-md);
+}
+
+.ws-shortcuts-row > dd {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: var(--openbot-space-1);
+  margin: 0;
+}
+
+/* A phone: rows and buttons are at least the touch target. */
+@container ws-layout (max-width: 720px) {
+  .ws-search-view-field {
+    display: flex;
+  }
+
+  /* The filters scroll sideways in one row, so the results start high on the screen. */
+  .ws-search-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .ws-search-filters > * {
+    flex: 0 0 auto;
+  }
+
+  /* The phone header keeps its title: the count and Mark all read are in the list. */
+  .ws-unreads .ws-pane-header-subtitle,
+  .ws-unreads-header-action.ui-button {
+    display: none;
+  }
+
+  .ws-unreads-name.ui-button,
+  .ws-unreads-message.ui-button,
+  .ws-search-recent-row.ui-button,
+  .ws-row-actions .ui-button,
+  .ws-unreads-group-header .ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+
+  .ws-view-toolbar .ws-select-trigger {
+    min-height: var(--openbot-touch-target);
+  }
+}
+
+@media (max-width: 720px) {
+  .ws-browse-open.ui-button,
+  .ws-browse-item .ui-button,
+  .ws-switcher-item.ui-button {
+    min-height: var(--openbot-touch-target);
+  }
+}

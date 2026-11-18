@@ -310,7 +310,6 @@ export const messages = {
   "workspace.app.browse.search": "채널 검색",
   "workspace.app.browse.empty": "일치하는 채널이 없어요.",
   "workspace.app.browse.members": { other: "멤버 {count}명" },
-  "workspace.app.browse.open": "열기",
   "workspace.app.browse.create": "채널 만들기",
   "workspace.app.channel.loading": "메시지 불러오는 중…",
   "workspace.app.channel.loadingOlder": "이전 메시지 불러오는 중…",

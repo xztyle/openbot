@@ -294,7 +294,6 @@ export const messages = {
   "workspace.app.browse.search": "Kanäle suchen",
   "workspace.app.browse.empty": "Keine passenden Kanäle.",
   "workspace.app.browse.members": { one: "{count} Mitglied", other: "{count} Mitglieder" },
-  "workspace.app.browse.open": "Öffnen",
   "workspace.app.browse.create": "Kanal erstellen",
   "workspace.app.channel.loading": "Nachrichten werden geladen…",
   "workspace.app.channel.loadingOlder": "Ältere Nachrichten werden geladen…",

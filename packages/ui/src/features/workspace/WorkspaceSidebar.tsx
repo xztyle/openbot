@@ -9,6 +9,7 @@ import {
   ArrowLeftRight,
   AtSign,
   Blocks,
+  Bookmark,
   Bot,
   Check,
   ChevronDown,
@@ -17,11 +18,13 @@ import {
   FolderPlus,
   HardDrive,
   Hash,
+  Inbox,
   KeyRound,
   LayoutDashboard,
   ListFilter,
   Lock,
   MessageSquareText,
+  MessagesSquare,
   Pencil,
   Plus,
   SquarePen,
@@ -49,7 +52,15 @@ export type WorkspaceView =
   /** The agents of the space that shows. */
   | "space-agents"
   /** Slack's Drafts & sent: the unsent drafts of each conversation, and the reader's sent messages. */
-  | "drafts";
+  | "drafts"
+  /** Slack's All unreads: the unread messages of each conversation. */
+  | "unreads"
+  /** Slack's Later: the saved messages, in progress and completed. */
+  | "later"
+  /** Every DM and group DM, newest first, with the last message. */
+  | "dms"
+  /** The results of a message search. */
+  | "search";
 
 export interface SidebarChannel {
   id: string;
@@ -122,6 +133,12 @@ export interface WorkspaceSidebarProps {
   /** Unread activity: mentions, replies and DMs. */
   activityCount?: number | undefined;
   threadsUnread?: boolean | undefined;
+  /** A conversation has unread messages: the Unreads row is bold. */
+  unreadsUnread?: boolean | undefined;
+  /** Shows Later, for a host that keeps saved messages. */
+  showLater?: boolean | undefined;
+  /** Saved messages that are not completed. */
+  laterCount?: number | undefined;
   /** Agents that work now. */
   workingAgentCount?: number | undefined;
   /** Shows the Drafts & sent row, with the number of drafts. Absent: no row. */
@@ -173,6 +190,7 @@ export interface WorkspaceSidebarProps {
 
 /** The views under More: the admin and agent views that Slack keeps out of the top rows. */
 const MORE_VIEWS = [
+  "dms",
   "space-agents",
   "artifacts",
   "agents",
@@ -207,7 +225,8 @@ export function sidebarItemLabel(item: SidebarItem): string {
 }
 
 /**
- * The Slack sidebar: workspace header, the fixed rows (Threads, Activity, Fleet) and More for the
+ * The Slack sidebar: workspace header, the fixed rows (Unreads, Threads, Activity, Drafts & sent,
+ * Later, Fleet) and More for the
  * other views, then the sections: Starred, the reader's own, Channels and Direct messages. A
  * collapsed section still shows its unread rows and the open conversation. Up and Down move between
  * rows; Left and Right collapse and open a section; a letter moves to the next row with that letter.
@@ -242,6 +261,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
           ? Boolean(props.showSecrets)
           : true;
   const MORE_ICON: Record<MoreView, () => JSX.Element> = {
+    dms: () => <MessagesSquare aria-hidden="true" />,
     "space-agents": () => <Bot aria-hidden="true" />,
     artifacts: () => <LayoutDashboard aria-hidden="true" />,
     agents: () => <ArrowLeftRight aria-hidden="true" />,
@@ -249,15 +269,17 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
     secrets: () => <KeyRound aria-hidden="true" />,
   };
   const moreLabel = (view: MoreView) =>
-    view === "space-agents"
-      ? t("workspace.view.spaceAgents")
-      : view === "artifacts"
-        ? t("workspace.view.artifacts")
-        : view === "agents"
-          ? t("workspace.view.agents")
-          : view === "storage"
-            ? t("storageHygiene.title")
-            : t("workspace.view.secrets");
+    view === "dms"
+      ? t("workspace.view.dms")
+      : view === "space-agents"
+        ? t("workspace.view.spaceAgents")
+        : view === "artifacts"
+          ? t("workspace.view.artifacts")
+          : view === "agents"
+            ? t("workspace.view.agents")
+            : view === "storage"
+              ? t("storageHygiene.title")
+              : t("workspace.view.secrets");
   /** The view under More that shows now: it gets a row of its own above More while it shows. */
   const activeMore = () => MORE_VIEWS.find((view) => view === props.activeView && moreAvailable(view));
   const moreItems = (): WorkspaceMenuItem[] => [
@@ -330,6 +352,14 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
         <div class="ws-sidebar-scroll">
           <div class="ws-sidebar-quick">
             <QuickRow
+              view="unreads"
+              icon={<Inbox aria-hidden="true" />}
+              label={t("workspace.view.unreads")}
+              active={props.activeView === "unreads"}
+              unread={props.unreadsUnread}
+              onSelect={props.onSelectView}
+            />
+            <QuickRow
               view="threads"
               icon={<MessageSquareText aria-hidden="true" />}
               label={t("workspace.view.threads")}
@@ -359,6 +389,20 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                         <span class="sr-only">{t("workspace.drafts.count", { count: count() })}</span>
                       </span>
                     )}
+                  </Show>
+                }
+                onSelect={props.onSelectView}
+              />
+            </Show>
+            <Show when={props.showLater}>
+              <QuickRow
+                view="later"
+                icon={<Bookmark aria-hidden="true" />}
+                label={t("workspace.view.later")}
+                active={props.activeView === "later"}
+                trailing={
+                  <Show when={props.laterCount}>
+                    {(count) => <span class="ws-sidebar-later-count">{count()}</span>}
                   </Show>
                 }
                 onSelect={props.onSelectView}

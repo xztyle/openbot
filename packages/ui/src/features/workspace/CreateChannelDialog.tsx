@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createStore, Show } from "solid-js";
+import { createEffect, createStore, Show } from "solid-js";
 import { Field, Input, Textarea } from "../../form";
 import { FormDialog } from "../../form-dialog";
 import { Hash, Lock } from "../../icons";
@@ -23,6 +23,8 @@ export interface CreateChannelDialogProps {
   candidates: readonly WorkspaceMember[];
   /** Names that are taken, so the dialog can say so before it sends. */
   existingNames?: readonly string[] | undefined;
+  /** The name the field starts with, such as the text of Jump to's "Create #name". */
+  initialName?: string | undefined;
   /** Creates the channel and opens it. A rejected promise shows its message in the dialog. */
   onCreate: (input: CreateChannelInput) => Promise<void> | void;
 }
@@ -54,6 +56,16 @@ export function CreateChannelDialog(props: CreateChannelDialogProps): JSX.Elemen
   const taken = () => props.existingNames?.includes(state.name) ?? false;
   const nameError = () => (taken() ? t("workspace.create.nameTaken", { name: state.name }) : null);
   const canContinue = () => state.name.length > 0 && !taken();
+  // A dialog that opens with a name starts from it.
+  createEffect(
+    () => (props.open ? (props.initialName ?? "") : null),
+    (name) => {
+      if (name)
+        setState((draft) => {
+          if (!draft.name) draft.name = slugChannelName(name);
+        });
+    },
+  );
 
   function close(open: boolean): void {
     if (!open) setState(() => ({ ...INITIAL }));

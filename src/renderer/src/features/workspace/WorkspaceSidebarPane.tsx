@@ -329,6 +329,9 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         onSelectConversation={(id) => ws.openConversation(id)}
         activityCount={ws.activityCount()}
         threadsUnread={ws.threadsUnread()}
+        unreadsUnread={ws.unreads.hasUnread()}
+        showLater={ws.later.supported()}
+        laterCount={ws.later.count()}
         workingAgentCount={
           ws.fleet
             .agents()

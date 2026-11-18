@@ -408,7 +408,6 @@ export const messages = {
     many: "{count} członków",
     other: "{count} członka",
   },
-  "workspace.app.browse.open": "Otwórz",
   "workspace.app.browse.create": "Utwórz kanał",
   "workspace.app.channel.loading": "Wczytywanie wiadomości…",
   "workspace.app.channel.loadingOlder": "Wczytywanie starszych wiadomości…",

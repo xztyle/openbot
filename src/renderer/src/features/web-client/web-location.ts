@@ -10,7 +10,8 @@ import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSide
  * /app[/s/<server>]/<space>/dm/<agent>               the chat with an agent
  * /app[/s/<server>]/<space>/<view>[/<agent>]         a view: activity, threads, fleet, artifacts,
  *                                                    between-agents (of one agent), storage,
- *                                                    routines, secrets, agents (of the space)
+ *                                                    routines, secrets, agents (of the space),
+ *                                                    unreads, later, dms, search
  * …/m/<message>                                      a message to show, after a channel, thread or DM
  * …?page=<page>[&section=<section>]                  a page over the place: settings,
  *                                                    server-settings, usage, schedule, tasks
@@ -68,6 +69,10 @@ const VIEW_SEGMENTS = {
   secrets: "secrets",
   "space-agents": "agents",
   drafts: "drafts",
+  unreads: "unreads",
+  later: "later",
+  dms: "dms",
+  search: "search",
 } as const satisfies Record<WorkspaceView, string>;
 
 const VIEWS: readonly WorkspaceView[] = [
@@ -81,6 +86,10 @@ const VIEWS: readonly WorkspaceView[] = [
   "secrets",
   "space-agents",
   "drafts",
+  "unreads",
+  "later",
+  "dms",
+  "search",
 ];
 
 function viewOfSegment(segment: string): WorkspaceView | undefined {

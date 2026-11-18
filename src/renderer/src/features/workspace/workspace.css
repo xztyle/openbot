@@ -575,12 +575,6 @@
   white-space: nowrap;
 }
 
-.ws-browse-footer {
-  display: flex;
-  justify-content: flex-start;
-  margin-top: var(--openbot-space-2);
-}
-
 /* The owner's DM with an agent -------------------------------------------------------------------- */
 
 .ws-agent-dm {

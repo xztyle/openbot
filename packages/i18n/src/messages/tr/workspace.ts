@@ -313,7 +313,6 @@ export const messages = {
   "workspace.app.browse.search": "Kanal ara",
   "workspace.app.browse.empty": "Eşleşen kanal yok.",
   "workspace.app.browse.members": { one: "{count} üye", other: "{count} üye" },
-  "workspace.app.browse.open": "Aç",
   "workspace.app.browse.create": "Kanal oluştur",
   "workspace.app.channel.loading": "Mesajlar yükleniyor…",
   "workspace.app.channel.loadingOlder": "Önceki mesajlar yükleniyor…",

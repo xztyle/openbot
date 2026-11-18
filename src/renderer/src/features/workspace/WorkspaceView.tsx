@@ -4,67 +4,18 @@ import { WorkspaceContextMenu } from "@openbot/ui/features/workspace/WorkspaceCo
 import { WorkspaceLayout } from "@openbot/ui/features/workspace/WorkspaceLayout";
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
-import { createMemo, Match, onSettled, type ParentProps, Show, Switch } from "solid-js";
+import { createMemo, Match, type ParentProps, Show, Switch } from "solid-js";
 import { WorkspaceChannelPane } from "./WorkspaceChannelPane";
 import { WorkspaceDetailsPanel } from "./WorkspaceDetailsPanel";
 import { WorkspaceDialogs } from "./WorkspaceDialogs";
 import { useWorkspaceMenu } from "./WorkspaceSidebarPane";
 import { WorkspaceThreadPanel } from "./WorkspaceThreadPanel";
+import { WorkspaceTopBar } from "./WorkspaceTopBar";
 import { WorkspaceChannelArtifacts, WorkspaceViewPane } from "./WorkspaceViews";
 import { WorkspaceWelcome } from "./WorkspaceWelcome";
 import { useWorkspace } from "./workspace-context";
 import { agentMember, agentWorking } from "./workspace-model";
-
-/** Whether a key press comes from a field the reader types in. */
-function typing(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable || target.tagName === "INPUT" || target.tagName === "TEXTAREA")
-  );
-}
-
-/**
- * The workspace shortcuts: ⌘K or Ctrl+K opens the quick switcher, Alt+↑ and Alt+↓ go to the
- * previous and the next conversation, and Escape closes the right panel or marks the channel read.
- */
-function WorkspaceKeyboard() {
-  const ws = useWorkspace();
-  onSettled(() => {
-    const capture = (event: KeyboardEvent) => {
-      const mod = event.metaKey || event.ctrlKey;
-      if (mod && !event.shiftKey && !event.altKey && event.key.toLocaleLowerCase() === "k") {
-        // The switcher takes ⌘K from the message search, which stays in the workspace menu.
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        ws.openDialog(ws.state.dialog?.kind === "switcher" ? null : { kind: "switcher" });
-        return;
-      }
-      if (event.altKey && !mod && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        ws.moveConversation(event.key === "ArrowUp" ? -1 : 1);
-      }
-    };
-    const bubble = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || ws.state.dialog) return;
-      // A dialog or a menu of the app takes its own Escape.
-      if (document.querySelector('[aria-modal="true"]')) return;
-      if (ws.state.panel) {
-        event.preventDefault();
-        ws.closePanel();
-        return;
-      }
-      if (!typing(event.target) || ws.channels.state.unread) ws.markRead();
-    };
-    window.addEventListener("keydown", capture, true);
-    window.addEventListener("keydown", bubble);
-    return () => {
-      window.removeEventListener("keydown", capture, true);
-      window.removeEventListener("keydown", bubble);
-    };
-  });
-  return null;
-}
+import { WorkspaceKeyboard } from "./workspace-shortcuts";
 
 /** Highlights mentions of the reader and opens `#channel` links in every message of the workspace. */
 export function WorkspaceMentions(props: ParentProps) {
@@ -98,43 +49,46 @@ export function WorkspaceMain() {
         items={workspaceMenu}
         label={t("workspace.sidebar.workspaceMenu", { name: ws.env.serverName() })}
       >
-        <WorkspaceLayout
-          class="ws-main-layout"
-          sidebar={null}
-          sidebarCollapsed
-          phonePane={ws.state.phonePane === "panel" ? "panel" : "main"}
-          main={
-            <Switch>
-              <Match
-                when={(() => {
-                  const route = ws.route();
-                  return route.kind === "channel" ? route.channelId : undefined;
-                })()}
-                keyed
-              >
-                {(channelId) => <WorkspaceChannelPane channelId={channelId} />}
-              </Match>
-              <Match
-                when={(() => {
-                  const route = ws.route();
-                  return route.kind === "view" ? route.view : undefined;
-                })()}
-                keyed
-              >
-                {(view) => (
-                  // A new workspace opens on its welcome until it has a channel or the reader picks a view.
-                  <Show
-                    when={ws.workspaceEmpty() && ws.state.view === null}
-                    fallback={<WorkspaceViewPane view={view} />}
-                  >
-                    <WorkspaceWelcome />
-                  </Show>
-                )}
-              </Match>
-            </Switch>
-          }
-          panel={panel()}
-        />
+        <div class="ws-main-frame">
+          <WorkspaceTopBar />
+          <WorkspaceLayout
+            class="ws-main-layout"
+            sidebar={null}
+            sidebarCollapsed
+            phonePane={ws.state.phonePane === "panel" ? "panel" : "main"}
+            main={
+              <Switch>
+                <Match
+                  when={(() => {
+                    const route = ws.route();
+                    return route.kind === "channel" ? route.channelId : undefined;
+                  })()}
+                  keyed
+                >
+                  {(channelId) => <WorkspaceChannelPane channelId={channelId} />}
+                </Match>
+                <Match
+                  when={(() => {
+                    const route = ws.route();
+                    return route.kind === "view" ? route.view : undefined;
+                  })()}
+                  keyed
+                >
+                  {(view) => (
+                    // A new workspace opens on its welcome until it has a channel or the reader picks a view.
+                    <Show
+                      when={ws.workspaceEmpty() && ws.state.view === null}
+                      fallback={<WorkspaceViewPane view={view} />}
+                    >
+                      <WorkspaceWelcome />
+                    </Show>
+                  )}
+                </Match>
+              </Switch>
+            }
+            panel={panel()}
+          />
+        </div>
       </WorkspaceContextMenu>
     </WorkspaceMentions>
   );
@@ -165,6 +119,7 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
       label={t("workspace.sidebar.workspaceMenu", { name: ws.env.serverName() })}
     >
       <section class="ws-agent-dm">
+        <WorkspaceTopBar />
         <Show when={agent()}>
           {(current) => (
             <ChannelHeader

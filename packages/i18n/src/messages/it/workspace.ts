@@ -289,7 +289,6 @@ export const messages = {
   "workspace.app.browse.search": "Cerca canali",
   "workspace.app.browse.empty": "Nessun canale corrisponde.",
   "workspace.app.browse.members": { one: "{count} membro", other: "{count} membri" },
-  "workspace.app.browse.open": "Apri",
   "workspace.app.browse.create": "Crea un canale",
   "workspace.app.channel.loading": "Caricamento messaggi…",
   "workspace.app.channel.loadingOlder": "Caricamento messaggi precedenti…",

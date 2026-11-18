@@ -12,13 +12,20 @@ import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, Match, Show, Switch } from "solid-js";
 import { WorkspaceAgentTalkView } from "./WorkspaceAgentTalk";
 import { WorkspaceDraftsView } from "./WorkspaceDrafts";
+import {
+  markThreadsRead,
+  WorkspaceDmsView,
+  WorkspaceLaterView,
+  WorkspaceSearchView,
+  WorkspaceUnreadsView,
+} from "./WorkspaceInboxViews";
 import { WorkspaceSecretsView } from "./WorkspaceSecrets";
 import { WorkspaceSpaceAgentsView } from "./WorkspaceSpaceAgents";
 import { WorkspaceStorageView } from "./WorkspaceStorageView";
 import { useWorkspace } from "./workspace-context";
 import { conversationName, memberById, previewText } from "./workspace-model";
 
-/** The views above the channels: Threads, Activity, Fleet, Artifacts and Storage. */
+/** The views of the workspace: Unreads, Threads, Activity, Later, DMs, search, Fleet and the views under More. */
 export function WorkspaceViewPane(props: { view: WorkspaceView }) {
   return (
     <Switch>
@@ -51,6 +58,18 @@ export function WorkspaceViewPane(props: { view: WorkspaceView }) {
       </Match>
       <Match when={props.view === "drafts"}>
         <WorkspaceDraftsView />
+      </Match>
+      <Match when={props.view === "unreads"}>
+        <WorkspaceUnreadsView />
+      </Match>
+      <Match when={props.view === "later"}>
+        <WorkspaceLaterView />
+      </Match>
+      <Match when={props.view === "dms"}>
+        <WorkspaceDmsView />
+      </Match>
+      <Match when={props.view === "search"}>
+        <WorkspaceSearchView />
       </Match>
     </Switch>
   );
@@ -108,20 +127,23 @@ function WorkspaceActivityView() {
 function WorkspaceThreadsView() {
   const ws = useWorkspace();
   const threads = createMemo((): ThreadListItem[] =>
-    ws.spaceThreads().map((thread) => {
-      const channel = ws.summary(thread.channelId);
-      return {
-        id: `${thread.channelId}/${thread.rootId}`,
-        channelName: channelName(ws, thread.channelId) ?? "",
-        visibility: channel ? channelVisibility(channel) : "public",
-        author: memberById(ws.directory(), thread.rootAuthor.id, thread.rootAuthor.name),
-        text: [{ kind: "text", text: previewText(thread.rootText) }],
-        replyCount: thread.replyCount,
-        lastReplyAt: Date.parse(thread.lastReplyAt),
-        participants: thread.participantIds.map((id) => memberById(ws.directory(), id)),
-        unreadCount: thread.unreadCount,
-      };
-    }),
+    // Unread threads first, as Slack's; each part newest reply first.
+    [...ws.spaceThreads()]
+      .sort((left, right) => Number(right.unreadCount > 0) - Number(left.unreadCount > 0))
+      .map((thread) => {
+        const channel = ws.summary(thread.channelId);
+        return {
+          id: `${thread.channelId}/${thread.rootId}`,
+          channelName: channelName(ws, thread.channelId) ?? "",
+          visibility: channel ? channelVisibility(channel) : "public",
+          author: memberById(ws.directory(), thread.rootAuthor.id, thread.rootAuthor.name),
+          text: [{ kind: "text", text: previewText(thread.rootText) }],
+          replyCount: thread.replyCount,
+          lastReplyAt: Date.parse(thread.lastReplyAt),
+          participants: thread.participantIds.map((id) => memberById(ws.directory(), id)),
+          unreadCount: thread.unreadCount,
+        };
+      }),
   );
   return (
     <ThreadsView
@@ -131,8 +153,18 @@ function WorkspaceThreadsView() {
       onRetry={() => void ws.refreshActivity()}
       onOpen={(id) => {
         const [channelId, rootId] = id.split("/");
-        if (channelId && rootId) ws.openThread(channelId, rootId);
+        if (!channelId || !rootId) return;
+        ws.openThread(channelId, rootId);
+        // Viewing a thread reads it, as in Slack.
+        const thread = ws.spaceThreads().find((item) => item.channelId === channelId && item.rootId === rootId);
+        if (thread && thread.unreadCount > 0) void markThreadsRead(ws, [thread]);
       }}
+      onMarkAllRead={() =>
+        void markThreadsRead(
+          ws,
+          ws.spaceThreads().filter((thread) => thread.unreadCount > 0),
+        )
+      }
       onBack={() => ws.back()}
     />
   );

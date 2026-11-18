@@ -1,6 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { For, Match, Show, Switch } from "solid-js";
-import { Hash, Lock, MessageSquareText } from "../../icons";
+import { Button } from "../../button";
+import { CheckCheck, Hash, Lock, MessageSquareText } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
@@ -33,11 +34,13 @@ export interface ThreadsViewProps {
   failed?: boolean | undefined;
   onRetry?: (() => void) | undefined;
   onOpen: (threadId: string) => void;
+  /** Reads every unread thread. The button shows while one is unread. */
+  onMarkAllRead?: (() => void) | undefined;
   onBack?: (() => void) | undefined;
   class?: string;
 }
 
-/** The threads that the reader follows, with the newest reply first. */
+/** The threads that the reader follows: unread ones first, then the newest reply first. */
 export function ThreadsView(props: ThreadsViewProps): JSX.Element {
   const { t } = useText();
   const recent = useRecentTime();
@@ -47,6 +50,14 @@ export function ThreadsView(props: ThreadsViewProps): JSX.Element {
         icon={<MessageSquareText aria-hidden="true" />}
         title={t("workspace.view.threads")}
         onBack={props.onBack}
+        actions={
+          <Show when={props.onMarkAllRead && props.threads.some((thread) => (thread.unreadCount ?? 0) > 0)}>
+            <Button variant="ghost" size="xs" onClick={() => props.onMarkAllRead?.()}>
+              <CheckCheck aria-hidden="true" />
+              {t("workspace.activity.markAllRead")}
+            </Button>
+          </Show>
+        }
       />
       <div class="ws-view-scroll">
         <Show

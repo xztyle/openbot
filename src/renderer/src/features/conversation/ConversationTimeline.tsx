@@ -203,6 +203,7 @@ export function ConversationTimeline() {
     setExpandedEmojiMessageId,
     setOpenReactionMessageId,
     setRequiredInteractionElement,
+    setConversationLiveElement,
     showScrollToLatest,
     unreadDividerVisible,
     updateScrollFade,
@@ -1624,7 +1625,7 @@ export function ConversationTimeline() {
               }}
             </For>
           </div>
-          <div class="conversation-live">
+          <div class="conversation-live" ref={setConversationLiveElement}>
             <Show when={!compactionBefore()}>
               <CompactionMarker />
             </Show>

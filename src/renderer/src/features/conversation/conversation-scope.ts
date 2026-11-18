@@ -772,6 +772,8 @@ export function createConversationViewScope(props: ConversationProps) {
   let virtualRoot: HTMLDivElement | undefined;
   let agentActivitySlot: HTMLDivElement | undefined;
   let requiredInteractionElement: HTMLElement | undefined;
+  /** The cards after the last message. A card that comes or grows there moves a following chat down. */
+  let conversationLiveElement: HTMLElement | undefined;
   let scrollResizeObserver: ResizeObserver | undefined;
   let unreadMessagesDivider: HTMLDivElement | undefined;
   let latestScrollFrame: number | undefined;
@@ -996,6 +998,7 @@ export function createConversationViewScope(props: ConversationProps) {
     if (virtualRoot) scrollResizeObserver.observe(virtualRoot);
     if (agentActivitySlot) scrollResizeObserver.observe(agentActivitySlot);
     if (requiredInteractionElement) scrollResizeObserver.observe(requiredInteractionElement);
+    if (conversationLiveElement) scrollResizeObserver.observe(conversationLiveElement);
     requestAnimationFrame(() => {
       if (!scrollElement) return;
       updateVirtualScrollMargin();
@@ -1023,6 +1026,34 @@ export function createConversationViewScope(props: ConversationProps) {
       keyboardWindow.removeEventListener("pointercancel", endReaderDrag);
     };
   });
+
+  /**
+   * A card that waits for the reader (a question, an approval, a browser takeover, or a teammate's
+   * request) stands after the last message. When a new one comes, the chat goes to its end, so the
+   * card shows also when the reader was up in the history or the chat had no message yet.
+   */
+  let shownRequiredCards = "";
+  createEffect(
+    () =>
+      [
+        props.agent?.id ?? "",
+        props.prompt ? `prompt:${String(props.prompt.requestId)}` : "",
+        props.approval ? `approval:${String(props.approval.requestId)}` : "",
+        props.browserTakeover ? `browser:${String(props.browserTakeover.requestId)}` : "",
+        ...(props.teammateRequests ?? []).map((request) => `teammate:${request.key}`),
+      ].join("\n"),
+    (cards) => {
+      const [agentId = "", ...current] = cards.split("\n").filter((entry, index) => index === 0 || entry);
+      const [shownAgentId = "", ...shown] = shownRequiredCards.split("\n");
+      shownRequiredCards = cards;
+      const fresh = current.some((card) => agentId !== shownAgentId || !shown.includes(card));
+      if (!fresh) return;
+      setStickToLatest(true);
+      requestAnimationFrame(() => {
+        if (scrollElement) followConversationBottom(scrollElement);
+      });
+    },
+  );
 
   createEffect(
     () => {
@@ -1646,6 +1677,10 @@ export function createConversationViewScope(props: ConversationProps) {
     agentActivitySlot = element;
     scrollResizeObserver?.observe(element);
   };
+  const setConversationLiveElement = (element: HTMLDivElement) => {
+    conversationLiveElement = element;
+    scrollResizeObserver?.observe(element);
+  };
   const setRequiredInteractionElement = (element: HTMLElement | undefined) => {
     if (requiredInteractionElement) scrollResizeObserver?.unobserve(requiredInteractionElement);
     requiredInteractionElement = element;
@@ -1870,6 +1905,7 @@ export function createConversationViewScope(props: ConversationProps) {
     setExpandedEmojiMessageId,
     setOpenReactionMessageId,
     setRequiredInteractionElement,
+    setConversationLiveElement,
     handleRoutineSettingsRequest,
     setSettingsPanelWidth,
     setShowComposerActions,

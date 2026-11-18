@@ -11,7 +11,8 @@
 ### Changed
 
 - On a phone, the DMs tab is the same DMs list as on a computer, with search, Unread only and a
-  long press for the actions of each DM. Jump to "DMs" or "Activity" opens that tab.
+  long press for the actions of each DM. Jump to "DMs" or "Activity", and a link to them, open
+  that tab.
 - On a phone, the bell of a channel opens its choices in a sheet, and a screen with Back has no
   second close button.
 - A DM's menus say "Conversation details"; a DM thread names the DM without a lock; Activity shows
@@ -24,3 +25,4 @@
   larger text than the other fields.
 - On the iPhone app on the Home Screen, toasts no longer show under the status bar.
 - On a phone, Search from More puts the cursor in the search field.
+- In the chat with an agent, "Waiting for replies" no longer covers the saved reply chips.

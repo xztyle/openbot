@@ -793,7 +793,9 @@
   gap: var(--openbot-space-1);
   border: 1px solid var(--ws-line);
   border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-accent-strong);
+  /* The accent is translucent: a solid layer under it keeps the messages behind from showing through. */
+  background:
+    linear-gradient(var(--openbot-accent-strong), var(--openbot-accent-strong)), var(--openbot-bg-surface-raised);
   padding: 0 var(--openbot-space-1);
   box-shadow: var(--openbot-shadow-dialog);
   color: var(--openbot-text-primary);

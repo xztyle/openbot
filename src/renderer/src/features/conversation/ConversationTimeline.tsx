@@ -1,7 +1,7 @@
 import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import type { ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
-import { AudioLines, Button, Copy, Link, MessageSquareReply, Square, toast } from "@openbot/ui";
+import { ArrowUp, AudioLines, Button, ChevronDown, Copy, Link, MessageSquareReply, Square, toast } from "@openbot/ui";
 import type { AgentMessage, ChatActionMarkerModel, RoutineRunMarkerModel } from "@openbot/ui/data";
 import { ChannelActivityIndicator } from "@openbot/ui/features/channels/ChannelActivityIndicator";
 import { AgentActivityIndicator } from "@openbot/ui/features/conversation/AgentActivity";
@@ -650,6 +650,15 @@ export function ConversationTimeline() {
   // A skill of the agent's own: every agent has the managed OpenBot skills.
   const sampleSkillName = () =>
     installedSkills().find((skill) => skill.enabled !== false && skill.origin !== "managed")?.name;
+  /** "3 new messages since 9:40 AM": the first unread message's time, as the channel's pill says. */
+  const unreadSinceLabel = () => {
+    const first = props.firstUnreadMessageId
+      ? timelineMessages()[timelineIndexById().get(props.firstUnreadMessageId) ?? -1]
+      : undefined;
+    const at = first?.createdAt ? Date.parse(first.createdAt) : Number.NaN;
+    const time = Number.isFinite(at) ? format.date(at, { timeStyle: "short" }) : (first?.time ?? "");
+    return t("workspace.app.channel.unreadCountSince", { count: props.unreadCount, time });
+  };
   /** The day above a row: the workspace's pill in the workspace layout, the chat's line elsewhere. */
   const DayMarker = (marker: { label: string; at: string | undefined }) => {
     const at = marker.at ? Date.parse(marker.at) : Number.NaN;
@@ -690,12 +699,25 @@ export function ConversationTimeline() {
       </Show>
 
       <Show when={props.unreadCount > 0 && !unreadDividerVisible()}>
-        <UnreadMessagesBanner
-          count={props.unreadCount}
-          busy={markingRead()}
-          onJumpToUnread={jumpToUnreadMessages}
-          onMarkRead={() => void markUnreadMessages()}
-        />
+        {rowLayout ? (
+          // The workspace's pill, as over a channel: "3 new messages since 9:40 AM" and Mark as read.
+          <div class="ws-unread-banner" role="status">
+            <Button variant="ghost" size="xs" class="ws-unread-banner-jump" onClick={jumpToUnreadMessages}>
+              <ArrowUp aria-hidden="true" />
+              {unreadSinceLabel()}
+            </Button>
+            <Button variant="ghost" size="xs" disabled={markingRead()} onClick={() => void markUnreadMessages()}>
+              {t("workspace.app.channel.markRead")}
+            </Button>
+          </div>
+        ) : (
+          <UnreadMessagesBanner
+            count={props.unreadCount}
+            busy={markingRead()}
+            onJumpToUnread={jumpToUnreadMessages}
+            onMarkRead={() => void markUnreadMessages()}
+          />
+        )}
       </Show>
 
       <div
@@ -717,11 +739,28 @@ export function ConversationTimeline() {
           when={replyJump.returnReplyId()}
           fallback={
             <Show when={showScrollToLatest() || props.discontinuous}>
-              <ScrollToLatestButton
-                onClick={() => void jumpToLatestMessage()}
-                newMessageCount={newMessageCount()}
-                onDismiss={clearNewMessages}
-              />
+              {rowLayout ? (
+                // The workspace's pill, as in a channel: "2 new messages" or "Jump to latest".
+                <div class="ws-jump-latest-dock">
+                  <Button
+                    variant={newMessageCount() > 0 ? "default" : "secondary"}
+                    size="xs"
+                    class="ws-jump-latest"
+                    onClick={() => void jumpToLatestMessage()}
+                  >
+                    <ChevronDown aria-hidden="true" />
+                    {newMessageCount() > 0
+                      ? t("workspace.app.channel.newMessages", { count: newMessageCount() })
+                      : t("workspace.app.channel.jumpToLatest")}
+                  </Button>
+                </div>
+              ) : (
+                <ScrollToLatestButton
+                  onClick={() => void jumpToLatestMessage()}
+                  newMessageCount={newMessageCount()}
+                  onDismiss={clearNewMessages}
+                />
+              )}
             </Show>
           }
         >

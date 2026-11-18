@@ -1277,3 +1277,21 @@ button.ws-profile-trigger.ws-message-author:hover {
 .ws-chat-row-state .pending-send-status {
   justify-content: flex-start;
 }
+
+/* The jump pill rides at the bottom of the chat's scroll area, as the chat's own button did. */
+.ws-jump-latest-dock {
+  position: sticky;
+  z-index: 3;
+  top: calc(100% - var(--openbot-control-md) - var(--openbot-space-3));
+  display: flex;
+  height: var(--openbot-control-md);
+  justify-content: center;
+  margin-bottom: calc(-1 * var(--openbot-control-md));
+  pointer-events: none;
+}
+
+.ws-jump-latest-dock > .ws-jump-latest.ui-button {
+  position: static;
+  pointer-events: auto;
+  transform: none;
+}

@@ -4,8 +4,10 @@
 - The message box of your DM with an agent is the box of a channel: the formatting toolbar on top (Aa shows or hides it), emoji, `:` emoji search, and Send with the paper plane. The agent's "+" menu, the microphone, Stop, the queue and the saved replies stay.
 - Your DM with an agent has one header row, as a channel: the agent's name and the chat's controls (the model, search, the side panel) stand together. On a phone the model shows as its provider's mark, and the side panel opens right under the header.
 - In the web app, a message of your DM with an agent has Copy link, and the link opens the DM at that message. A message that a link or a search opens is marked for a moment, as in Slack, also on the computer.
+- Your DM with an agent shows the channel's pills: "8 new messages since 9:40 AM" with Mark as read at the top while the "New" line is out of view, and "Jump to latest" or "2 new messages" at the bottom when you read older messages.
 
 ### Fixed
 
+- The "new messages since" pill over a channel is solid. Before, the messages behind it showed through its text.
 - In an agent's chat, the Delete key on the last tab of the side panel no longer stops the chat. Before, no button of the chat worked after it until you opened the chat again.
 - On a phone, the search filters stand in two columns, so each one shows. Before, they were in one row that scrolled sideways, and the last filters were past the edge of the screen.

@@ -12,3 +12,6 @@
 - Join server shows Cancel (or "Use another invite") before the primary button, as the other dialogs
   do. The sign-in waits of app connections and the hosted server offer have a close button.
 - A failed add from a shared agent link shows in the dialog, which stays open, instead of a toast.
+- Server settings ask before they lose an unsaved change: another section, Close, Back and Escape now
+  all ask, not only leaving the Workspace section. The save bars of General, Workspace and app
+  connections are one component.

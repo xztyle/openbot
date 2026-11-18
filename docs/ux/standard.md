@@ -106,7 +106,8 @@ Source: `packages/ui/src/features/workspace/WorkspacePaneHeader.tsx`, `.ws-view*
   on the left and its control on the right; on a phone (520 px and less) the control goes under the
   label.
 - **Save model** (decided 2026-10-10): toggles, selects and pickers save at once. A text form saves
-  with an explicit Save bar that shows only when there are changes, with Reset. Leaving with unsaved
+  with an explicit Save bar (`SettingsSaveBar` in a `SaveBarDock`) that shows only when there are
+  changes, with Reset. Leaving with unsaved
   changes (Back, close, another tab, another server, the browser tab) asks first.
 - A destructive area is the last section, `DangerZone`, with a confirm.
 - The page has a visible close (a computer) or Back (a phone). Escape closes it.
@@ -165,7 +166,7 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 5 | Sidebar to Slack (§ 7): More row, collapsed groups keep unread rows, saved collapse | Done |
 | 6 | Activity: exact message, badge without reactions, Mark all as read of Activity only | Done |
 | 7 | Confirm Leave private channel, Delete channel (details) and Remove member; agent delete is a confirm only, on desktop and web | Done |
-| 8 | Settings page: visible close/Back and server rows stack on a phone (done); one `SettingsSaveBar`; unsaved guard on close | Partly done |
+| 8 | Settings page: visible close/Back, rows stack on a phone, one `SettingsSaveBar`, unsaved guard on section change and on Close/Back/Escape | Done; a switch of server while a draft is open still drops it |
 | 9 | Move template install, custom provider, vault, join server, OpenCode key, chat apps, saved replies to `FormDialog` (profile done) | Open |
 | 10 | Spanish wording: Quitar vs Eliminar for remove; one "Leave" verb; one "Deleting…" and one "Undo" key | Open |
 | 11 | One row component for workspace lists (`ws-feed-row`, `space-agents-row`, `ws-secret`, `ws-agent-talk-pair`) | Open |

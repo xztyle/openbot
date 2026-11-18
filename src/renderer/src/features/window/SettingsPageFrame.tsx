@@ -5,6 +5,7 @@ import type { SettingsPagePlacement } from "@openbot/ui/features/settings/Settin
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { onSettled } from "solid-js";
+import { requestSettingsLeave } from "./settings-leave-guard";
 
 /**
  * The frame of a settings page, on desktop and on the web: the heading and the section list at the
@@ -21,6 +22,8 @@ export function SettingsPageFrame(props: {
   onEscape: () => void;
 }) {
   const { t } = useText();
+  /** Close, Back and Escape: unsaved changes of the open form ask first. */
+  const leave = () => requestSettingsLeave(() => props.onEscape());
   let nav!: HTMLDivElement;
   let content!: HTMLDivElement;
   let root!: HTMLDivElement;
@@ -40,7 +43,7 @@ export function SettingsPageFrame(props: {
       if (target?.closest("[role=dialog], [role=alertdialog], [role=menu], [role=listbox]")) return;
       if (target && !root.contains(target) && target.closest("input, textarea, select, [contenteditable]")) return;
       event.preventDefault();
-      props.onEscape();
+      leave();
     };
     document.addEventListener("keydown", closeOnEscape);
     return () => {
@@ -54,21 +57,11 @@ export function SettingsPageFrame(props: {
       <div class="settings-page-nav">
         {/* A visible way out: Close on a computer, Back on a phone (docs/ux/standard.md § 5). Escape too. */}
         <div class="settings-page-heading">
-          <IconButton
-            variant="ghost"
-            class="settings-page-back"
-            label={t("common.back")}
-            onClick={() => props.onEscape()}
-          >
+          <IconButton variant="ghost" class="settings-page-back" label={t("common.back")} onClick={leave}>
             <ChevronLeft />
           </IconButton>
           {props.heading}
-          <IconButton
-            variant="ghost"
-            class="settings-page-close"
-            label={t("common.close")}
-            onClick={() => props.onEscape()}
-          >
+          <IconButton variant="ghost" class="settings-page-close" label={t("common.close")} onClick={leave}>
             <X />
           </IconButton>
         </div>

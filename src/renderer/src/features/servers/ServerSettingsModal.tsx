@@ -36,7 +36,6 @@ import {
   ShieldCheck,
   Sparkles,
   Tabs,
-  Text,
   UsersRound,
 } from "@openbot/ui";
 import type { LicenseCalls } from "@openbot/ui/features/billing/license-store";
@@ -45,12 +44,14 @@ import {
   SaveBarDock,
   SettingsDialogShell,
   type SettingsPagePlacement,
+  SettingsSaveBar,
 } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { SettingsHostedSitesTab } from "@openbot/ui/features/settings/SettingsHostedSitesTab";
 import {
   createSettingsHostedSitesStore,
   type HostedSiteDeleteResult,
 } from "@openbot/ui/features/settings/stores/hosted-sites-store";
+import { createUnsavedGuard, DiscardChangesDialog } from "@openbot/ui/features/settings/unsaved-changes";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createSignal, onCleanup, Show, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
@@ -61,6 +62,7 @@ import { type ServerStorageOptions, ServerStoragePanel } from "../files/ServerSt
 import { type HostProviderSettings, HostProviderSettingsPanel } from "../settings/ProviderSettingsSection";
 import type { HostPromptCacheTtlOptions, ProviderPromptCacheSource } from "../settings/provider-prompt-cache";
 import { type ServerVaultOptions, ServerVaultPanel } from "../vault/ServerVaultPanel";
+import { registerSettingsLeaveGuard } from "../window/settings-leave-guard";
 import type { McpServerConfig, McpTestResult } from "./mcp-servers";
 import { ServerDesktopPanel } from "./ServerDesktopPanel";
 import { createServerGeneralSection } from "./ServerGeneralSection";
@@ -452,6 +454,26 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
   }
   // Both save bars dock in the same place, so the toast has to lift for either one. It is
   // `position: absolute` over the footer: without this it covers the bar and swallows its clicks.
+  /**
+   * One question for every way out of the page that loses a draft: another section, Close, Back,
+   * Escape. The Workspace section asks with its own guard; General's name and logo and the MCP form
+   * ask with this one.
+   */
+  const pageGuard = createUnsavedGuard({
+    dirty: () => general.identityDirty() || Boolean(mcpDetail()?.saveBar()),
+    onDiscard: () => {
+      general.resetIdentity();
+      mcpDetail()?.reset();
+    },
+  });
+  const requestLeave = (leave: () => void) => workspaceSection.requestLeave(() => pageGuard.request(leave));
+  createEffect(
+    () => props.open,
+    (open) => {
+      if (open) return registerSettingsLeaveGuard(requestLeave);
+    },
+  );
+
   const saveBarDocked = () =>
     (section() === "general" && general.identityDirty()) ||
     (section() === "mcp" && Boolean(mcpDetail()?.saveBar())) ||
@@ -554,9 +576,8 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
         value === "browser-profiles" ||
         value === "connectors"
       ) {
-        // Changes of the Workspace section that are not saved ask first; the other sections keep their drafts.
-        if (section() === "workspace") workspaceSection.requestLeave(() => setSection(value));
-        else setSection(value);
+        // Changes that are not saved ask first (docs/ux/standard.md § 5).
+        requestLeave(() => setSection(value));
       }
     },
   };
@@ -624,108 +645,44 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
               {(detail) => (
                 <SaveBarDock value={detail().saveBar()}>
                   {(bar) => (
-                    <section class="settings-modal-save-bar" aria-label={t("server.settings.unsavedMcpChanges")}>
-                      <Show
-                        when={bar().failed}
-                        fallback={
-                          <Text variant="caption" tone="muted">
-                            {bar().message}
-                          </Text>
-                        }
-                      >
-                        <Text variant="caption" tone="danger" role="alert">
-                          {bar().message}
-                        </Text>
-                      </Show>
-                      <div class="settings-modal-save-actions">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={bar().resetDisabled}
-                          onClick={detail().reset}
-                        >
-                          {t("server.settings.reset")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="default"
-                          loading={bar().saving}
-                          loadingLabel={t("common.saving")}
-                          disabled={bar().saveDisabled}
-                          onClick={detail().save}
-                        >
-                          {t("common.save")}
-                        </Button>
-                      </div>
-                    </section>
+                    <SettingsSaveBar
+                      label={t("server.settings.unsavedMcpChanges")}
+                      message={bar().message}
+                      failed={bar().failed}
+                      saving={bar().saving}
+                      saveDisabled={bar().saveDisabled}
+                      resetDisabled={bar().resetDisabled}
+                      onReset={detail().reset}
+                      onSave={detail().save}
+                    />
                   )}
                 </SaveBarDock>
               )}
             </Show>
             <SaveBarDock value={section() === "workspace" && workspaceSection.dirty() ? true : null}>
               {() => (
-                <section class="settings-modal-save-bar" aria-label={t("server.settings.unsavedWorkspaceChanges")}>
-                  <Text variant="caption" tone="muted">
-                    {t("server.settings.changesNotSaved")}
-                  </Text>
-                  <div class="settings-modal-save-actions">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={Boolean(busy())}
-                      onClick={workspaceSection.reset}
-                    >
-                      {t("server.settings.reset")}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="default"
-                      loading={workspaceSection.saving()}
-                      loadingLabel={t("common.saving")}
-                      disabled={Boolean(busy())}
-                      onClick={() => void workspaceSection.save()}
-                    >
-                      {t("common.save")}
-                    </Button>
-                  </div>
-                </section>
+                <SettingsSaveBar
+                  label={t("server.settings.unsavedWorkspaceChanges")}
+                  saving={workspaceSection.saving()}
+                  saveDisabled={Boolean(busy())}
+                  resetDisabled={Boolean(busy())}
+                  onReset={workspaceSection.reset}
+                  onSave={() => void workspaceSection.save()}
+                />
               )}
             </SaveBarDock>
             {/* `true` while the identity form is dirty: the dock only needs to know that there is
                 something to show, so the bar's own markup stays as it was. */}
             <SaveBarDock value={section() === "general" && general.identityDirty() ? true : null}>
               {() => (
-                <section class="settings-modal-save-bar" aria-label={t("server.settings.unsavedChanges")}>
-                  <Text variant="caption" tone="muted">
-                    {t("server.settings.changesNotSaved")}
-                  </Text>
-                  <div class="settings-modal-save-actions">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={Boolean(busy())}
-                      onClick={general.resetIdentity}
-                    >
-                      {t("server.settings.reset")}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="default"
-                      loading={busy() === "identity"}
-                      loadingLabel={t("common.saving")}
-                      disabled={Boolean(busy())}
-                      onClick={() => void general.saveIdentity()}
-                    >
-                      {t("common.save")}
-                    </Button>
-                  </div>
-                </section>
+                <SettingsSaveBar
+                  label={t("server.settings.unsavedChanges")}
+                  saving={busy() === "identity"}
+                  saveDisabled={Boolean(busy())}
+                  resetDisabled={Boolean(busy())}
+                  onReset={general.resetIdentity}
+                  onSave={() => void general.saveIdentity()}
+                />
               )}
             </SaveBarDock>
           </>
@@ -1019,6 +976,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
       <general.LeaveDialog />
       <general.RotateKeyDialog />
       <workspaceSection.DiscardDialog />
+      <DiscardChangesDialog guard={pageGuard} />
     </Tabs.Root>
   );
 }

@@ -1,6 +1,9 @@
+import { Button } from "@openbot/ui/button";
+import { Text } from "@openbot/ui/typography";
 import { cx, prefersReducedMotion } from "@openbot/ui/utils";
 import { type JSX, Portal } from "@solidjs/web";
 import { createEffect, createSignal, createUniqueId, onCleanup, Show, untrack } from "solid-js";
+import { useText } from "../../text";
 
 /** Where a settings page puts its parts, when the settings show as a page of the window. */
 export interface SettingsPagePlacement {
@@ -66,7 +69,7 @@ interface SaveBarDockProps<T> {
  * ```tsx
  * footer={
  *   <SaveBarDock value={dirty() ? true : null}>
- *     {() => <section class="settings-modal-save-bar" aria-label="Unsaved changes">…</section>}
+ *     {() => <SettingsSaveBar label={…} onReset={…} onSave={…} />}
  *   </SaveBarDock>
  * }
  * ```
@@ -107,6 +110,60 @@ export function SaveBarDock<T>(props: SaveBarDockProps<T>) {
         </div>
       )}
     </Show>
+  );
+}
+
+export interface SettingsSaveBarProps {
+  /** The accessible name of the bar, such as "Unsaved workspace changes". */
+  label: string;
+  /** The line beside the buttons. "Changes not saved" when absent. */
+  message?: string | undefined;
+  /** The message is a failure: it shows in the danger color and is announced. */
+  failed?: boolean | undefined;
+  saving?: boolean | undefined;
+  saveDisabled?: boolean | undefined;
+  resetDisabled?: boolean | undefined;
+  onReset: () => void;
+  onSave: () => void;
+}
+
+/**
+ * The one save bar of a settings page (docs/ux/standard.md § 5): what is not saved, then Reset and
+ * Save. Put it in a `SaveBarDock`, which shows it only while the form holds a change.
+ */
+export function SettingsSaveBar(props: SettingsSaveBarProps): JSX.Element {
+  const { t } = useText();
+  return (
+    <section class="settings-modal-save-bar" aria-label={props.label}>
+      <Show
+        when={props.failed}
+        fallback={
+          <Text variant="caption" tone="muted">
+            {props.message ?? t("server.settings.changesNotSaved")}
+          </Text>
+        }
+      >
+        <Text variant="caption" tone="danger" role="alert">
+          {props.message}
+        </Text>
+      </Show>
+      <div class="settings-modal-save-actions">
+        <Button type="button" size="sm" variant="ghost" disabled={props.resetDisabled} onClick={() => props.onReset()}>
+          {t("server.settings.reset")}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="default"
+          loading={props.saving}
+          loadingLabel={t("common.saving")}
+          disabled={props.saveDisabled}
+          onClick={() => props.onSave()}
+        >
+          {t("common.save")}
+        </Button>
+      </div>
+    </section>
   );
 }
 

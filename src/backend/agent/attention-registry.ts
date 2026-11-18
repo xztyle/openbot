@@ -35,7 +35,7 @@ import {
 } from "@openbot/contracts/ui-blocks";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, redactText, toLogValue } from "@openbot/logging";
-import { Deferred, Effect, Result, Schema } from "effect";
+import { Deferred, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { type AgentApiKeys, SHARED_API_KEY_SCOPE } from "../agent-api-keys";
 import type { AgentClient } from "../agent-client";
 import { type BrowserOperationError, browserFailure } from "../browser-effects";
@@ -86,6 +86,8 @@ import { compactRuntimeApproval, compactRuntimeQuestion } from "./runtime-snapsh
 import { isDynamicToolCall } from "./thread-items";
 
 const logger = createOpenBotLogger("attention-registry");
+/** How long a takeover card waits for the tab's queue before it shows anyway. See `#handOver`. */
+const TAKEOVER_HANDOVER_WAIT_MS = 5_000;
 
 interface PendingPrompt {
   client: AgentClient;
@@ -1132,7 +1134,7 @@ export class AttentionRegistry {
           }
           pending.secret = secret;
           pending.request.secret = secret.request;
-        } else yield* this.#browser.beginTakeover(takeover.tabId).pipe(toAttentionOperationFailed);
+        } else yield* this.#handOver(requestId, pending);
       });
       const prepared = yield* Effect.result(prepare);
       if (Result.isSuccess(prepared)) {
@@ -1776,6 +1778,41 @@ export class AttentionRegistry {
       approvalReply(request.method, request.params, "decline", "OpenBot could not identify this approval."),
     );
   }
+
+  /**
+   * Hands the tab of a takeover to the user before its card shows. The tab is the user's from the
+   * first step of `beginTakeover`: the agent's references are void and its browser tools refused. The
+   * rest, the end of a recording, waits for the tab's queue, and an earlier operation can hold that
+   * queue with no end. The card then never showed, and the agent waited for an answer that nobody
+   * could give. So after `TAKEOVER_HANDOVER_WAIT_MS` the card shows and the handover ends in the
+   * background; a handover that fails later closes the card, as a failure before the card does.
+   */
+  readonly #handOver = Effect.fn("AttentionRegistry.handOver")(function* (
+    this: AttentionRegistry,
+    requestId: RequestId,
+    pending: PendingBrowserTakeover,
+  ) {
+    const handover = yield* Effect.forkDetach(this.#browser.beginTakeover(pending.request.tabId));
+    const handed = yield* Fiber.join(handover).pipe(
+      Effect.timeoutOption(TAKEOVER_HANDOVER_WAIT_MS),
+      toAttentionOperationFailed,
+    );
+    if (Option.isSome(handed)) return;
+    logger.warn("The browser tab is still busy. The takeover card shows before the handover ends.", {
+      agentId: pending.request.agentId,
+    });
+    yield* Effect.forkDetach(
+      Fiber.await(handover).pipe(
+        Effect.flatMap((exit) =>
+          Effect.sync(() => {
+            if (Exit.isSuccess(exit) || this.#takeovers.get(requestId) !== pending) return;
+            logger.warn("Unable to hand a browser tab to the user", { error: toLogValue(exit.cause) });
+            this.#resolveBrowserTakeover(requestId, pending, "cancel");
+          }),
+        ),
+      ),
+    );
+  }).bind(this);
 
   /**
    * Fills a password or authenticator request from the shared vault, without a card. True when the

@@ -611,10 +611,10 @@
   margin-inline-start: var(--ws-agent-dm-indent);
 }
 
-/* The message box stands as under a channel: 16px from the edges of the pane. */
+/* The message box stands as under a channel: the channel's bottom area and its box each pad 16px. */
 .ws-agent-dm .conversation-panel > .composer-wrap {
-  padding-inline: var(--openbot-space-4);
-  padding-bottom: var(--openbot-space-4);
+  padding-inline: calc(2 * var(--openbot-space-4));
+  padding-bottom: calc(var(--openbot-space-3) + var(--openbot-space-4));
 }
 
 /*

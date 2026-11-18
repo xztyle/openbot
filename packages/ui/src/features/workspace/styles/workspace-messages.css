@@ -474,7 +474,9 @@ button.ws-profile-trigger.ws-message-author:hover {
   z-index: 3;
   display: flex;
   justify-content: center;
-  margin: var(--openbot-space-2) 0;
+  /* Stuck at the top while its day scrolls by, the band hides the text under it, not only the pill. */
+  background: var(--openbot-bg-canvas);
+  padding: var(--openbot-space-2) 0;
 }
 
 .ws-day-divider::before {

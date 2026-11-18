@@ -583,6 +583,30 @@
   padding-bottom: var(--openbot-space-3);
 }
 
+/* The title with Close (a computer) or Back (a phone) beside it. */
+.settings-page-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  margin-bottom: var(--openbot-space-3);
+}
+
+.settings-page-heading > .settings-page-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.settings-page-close.ui-button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.settings-page-back.ui-button {
+  display: none;
+}
+
 .settings-page-title {
   margin: 0 0 var(--openbot-space-3);
   padding: 0 var(--openbot-space-2);
@@ -757,8 +781,18 @@
     padding: var(--openbot-space-3) var(--openbot-space-3) 0;
   }
 
-  .settings-page-title {
+  .settings-page-title,
+  .settings-page-heading {
     margin-bottom: var(--openbot-space-2);
+  }
+
+  .settings-page-back.ui-button {
+    display: inline-flex;
+    flex: 0 0 auto;
+  }
+
+  .settings-page-close.ui-button {
+    display: none;
   }
 
   .settings-page-sections,

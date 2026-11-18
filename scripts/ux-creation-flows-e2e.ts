@@ -303,7 +303,19 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       await again.click();
     });
 
-  // 6. New space from the rail: the new space opens.
+  // 6. A settings page has a visible way out: Close on a computer, Back on a phone.
+  await step(page, viewport, "Settings closes with its own button", async () => {
+    await page.goto(`${origin}/app/general/activity?page=settings`, COMMIT);
+    const heading = page.getByRole("heading", { name: english("app.settingsPage.title") });
+    await heading.waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, `${viewport}-settings`);
+    const label = viewport === "phone" ? english("common.back") : english("common.close");
+    await page.locator(".settings-page").getByRole("button", { name: label, exact: true }).click();
+    await heading.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await waitForPath(page, (path) => path === "/app/general/activity", "settings closed");
+  });
+
+  // 7. New space from the rail: the new space opens.
   await step(page, viewport, "New space creates the space and shows it", async () => {
     await showSidebar(page, viewport);
     await page.getByRole("button", { name: english("workspace.spaces.create"), exact: true }).click();

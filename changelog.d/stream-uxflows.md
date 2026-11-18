@@ -28,3 +28,6 @@
 - Storage: a failed read during a scan no longer leaves the progress bar and a disabled Scan again on
   screen.
 - Fleet: the Assign button, which did the same as Message, is gone.
+- Settings pages have a Close button on a computer and a Back button on a phone. Before, only Escape
+  or the browser's Back closed them.
+- On a phone, server settings rows put the control under the label, as app settings rows do.

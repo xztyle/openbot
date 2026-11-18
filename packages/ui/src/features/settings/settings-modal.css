@@ -783,13 +783,14 @@
     justify-content: flex-end;
   }
 
-  .app-settings-modal-shell .settings-modal-row.ui-item {
+  /* Every settings page (app, server, web account): on a phone the control goes under its label. */
+  .settings-modal-row.ui-item {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .app-settings-modal-shell .settings-modal-row .ui-item-actions,
-  .app-settings-modal-shell :is(.settings-modal-select, .settings-modal-update-track-select) {
+  .settings-modal-row .ui-item-actions,
+  :is(.settings-modal-select, .settings-modal-update-track-select) {
     width: 100%;
   }
 

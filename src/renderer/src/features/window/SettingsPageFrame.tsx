@@ -1,6 +1,8 @@
 import type { ServerSummary } from "@openbot/contracts/ipc";
+import { ChevronLeft, IconButton, X } from "@openbot/ui";
 import { ServerMark } from "@openbot/ui/features/servers/ServerRail";
 import type { SettingsPagePlacement } from "@openbot/ui/features/settings/SettingsDialogShell";
+import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { onSettled } from "solid-js";
 
@@ -15,9 +17,10 @@ export function SettingsPageFrame(props: {
   children?: JSX.Element;
   sectionsHidden?: boolean;
   onMounts: (mounts: SettingsPagePlacement | undefined) => void;
-  /** Escape outside a popup or a text field of the window. */
+  /** Escape outside a popup or a text field of the window, and the Close or Back button. */
   onEscape: () => void;
 }) {
+  const { t } = useText();
   let nav!: HTMLDivElement;
   let content!: HTMLDivElement;
   let root!: HTMLDivElement;
@@ -49,7 +52,26 @@ export function SettingsPageFrame(props: {
   return (
     <div class="settings-page" ref={root}>
       <div class="settings-page-nav">
-        {props.heading}
+        {/* A visible way out: Close on a computer, Back on a phone (docs/ux/standard.md § 5). Escape too. */}
+        <div class="settings-page-heading">
+          <IconButton
+            variant="ghost"
+            class="settings-page-back"
+            label={t("common.back")}
+            onClick={() => props.onEscape()}
+          >
+            <ChevronLeft />
+          </IconButton>
+          {props.heading}
+          <IconButton
+            variant="ghost"
+            class="settings-page-close"
+            label={t("common.close")}
+            onClick={() => props.onEscape()}
+          >
+            <X />
+          </IconButton>
+        </div>
         {props.children}
         <div class="settings-page-sections" ref={nav} hidden={props.sectionsHidden} />
       </div>

@@ -247,6 +247,7 @@
     "test:codex-missing-rollout": "bun scripts/codex-missing-rollout-e2e.ts",
     "test:codex-usage-metering": "bun scripts/codex-usage-metering-e2e.ts",
     "test:codex-usage-reset": "bun scripts/codex-usage-reset-e2e.ts",
+    "test:agent-chat-notice": "bun scripts/agent-chat-notice-e2e.ts",
     "test:routine-fresh-session": "bun scripts/routine-fresh-session-e2e.ts",
     "test:routine-report-failure": "bun scripts/routine-report-failure-e2e.ts",
     "test:agent-webhook-routine": "bun scripts/agent-webhook-routine-e2e.ts",

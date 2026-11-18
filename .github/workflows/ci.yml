@@ -397,6 +397,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: bun run test:codex-usage-reset
 
+      - name: Run the agent chat notice E2E test
+        if: ${{ !cancelled() }}
+        run: bun run test:agent-chat-notice
+
       - name: Run the routine session E2E test
         if: ${{ !cancelled() }}
         run: bun run test:routine-fresh-session
@@ -508,6 +512,7 @@ jobs:
             .openbot-build/codex-missing-rollout-e2e/
             .openbot-build/codex-usage-metering-e2e/
             .openbot-build/codex-usage-reset-e2e/
+            .openbot-build/agent-chat-notice-e2e/
             .openbot-build/routine-fresh-session-e2e/
             .openbot-build/routine-report-failure-e2e/
             .openbot-build/agent-webhook-routine-e2e/

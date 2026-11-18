@@ -74,7 +74,23 @@ import {
 } from "@openbot/team-client/team-admin-requests";
 import { clearAgentContext, type TeamApiRequest } from "@openbot/team-client/team-api-requests";
 import { classifyFailure } from "@openbot/telemetry";
-import { Bot, Button, CheckCheck, hasVisibleToasts, Search, Settings, Store, toast } from "@openbot/ui";
+import {
+  BookOpen,
+  Bot,
+  Button,
+  CalendarClock,
+  ChartArea,
+  CheckCheck,
+  hasVisibleToasts,
+  ListChecks,
+  MessageCircle,
+  MessageCircleQuestionMark,
+  Search,
+  Settings,
+  Sparkles,
+  Store,
+  toast,
+} from "@openbot/ui";
 import { accountUsageProviderRows } from "@openbot/ui/features/account/account-usage-view";
 import { computeAgentAvatarMoods } from "@openbot/ui/features/agents/agent-avatar-mood";
 import { createFirstAgentDraft, type FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
@@ -106,6 +122,7 @@ import {
 } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import type { SidebarView } from "@openbot/ui/features/sidebar/sidebar-types";
 import { PageRail, type PageRailPage } from "@openbot/ui/features/window/PageRail";
+import type { PhoneMoreRow, PhoneMoreSection } from "@openbot/ui/features/workspace/PhoneScreens";
 import { useText } from "@openbot/ui/text";
 import { Effect } from "effect";
 import {
@@ -224,6 +241,7 @@ import { createWorkspaceSupport } from "../workspace/workspace-support";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
 import { WebMobileNavigation, type WebMobilePane } from "./WebMobileNavigation";
+import { WebPhoneShell, type WebPhoneTab } from "./WebPhoneShell";
 import { createWebAccountCalls } from "./web-account";
 import { createWebAccountUsage } from "./web-account-usage";
 import { createWebAgentImportCalls } from "./web-agent-import";
@@ -255,7 +273,7 @@ import { createWebServerNotifications } from "./web-notification-preferences";
 import { createWebNotificationRouting } from "./web-notification-routing";
 import { requestWebNotificationPermission } from "./web-notifications";
 import { webOnePasswordConnectorPort } from "./web-onepassword-connector";
-import { createWebPaneHistory } from "./web-pane-history";
+import { createWebPaneHistory, type WebPhoneLevel } from "./web-pane-history";
 import { createWebProviderSettings, openWebDestination } from "./web-provider-admin";
 import { createWebPush, webPushPreferences } from "./web-push";
 import { webRoutineFlowsHost } from "./web-routine-flows";
@@ -681,18 +699,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     return () => phoneQuery?.removeEventListener("change", update);
   });
   const compact = () => !phone() && layout.leftPanelCompact();
-  // On a phone the back button goes from a chat to the list of agents, as in a native app. It also closes
-  // a dialog, the settings or a host page that covers the pane, before it leaves the pane.
+  // On a phone the back button goes from a thread to its conversation and from a conversation to the
+  // list, as in a native app. It also closes a dialog, the settings or a host page that covers the pane,
+  // before it leaves the pane. It starts once the workspace controller exists (`phoneLevel`).
   const paneHistory = createWebPaneHistory({
-    pane: mobilePane,
-    setPane: setMobilePane,
+    pane: () => phoneLevel(),
+    setPane: (level) => setPhoneLevel(level),
     closeOverlay: closeOverlays,
   });
-  createEffect(phone, (onPhone) => {
-    if (onPhone) paneHistory.start();
-    else paneHistory.stop();
-  });
-  createEffect(mobilePane, (pane) => paneHistory.sync(pane));
   onCleanup(paneHistory.stop);
   /** The Usage, Schedule or Tasks page of the connected host. As on desktop, it follows a host switch. */
   const [hostPage, setHostPage] = createSignal<{ view: HostPageView; trigger: HTMLElement | null } | null>(null);
@@ -2099,6 +2113,126 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     if (pane === "workspace") ws.setPhonePane("sidebar");
     else if (untrack(() => ws.state.phonePane) === "sidebar") ws.setPhonePane("main");
   });
+  /** The screen that a phone shows: the list (a tab), the conversation, or the thread or details over it. */
+  function phoneLevel(): WebPhoneLevel {
+    if (mobilePane() === "workspace") return "workspace";
+    return workspaceOn() && ws.state.phonePane === "panel" ? "panel" : "conversation";
+  }
+  /** Shows the screen of a history entry. A thread that the history leaves closes; one it returns to stays closed. */
+  function setPhoneLevel(level: WebPhoneLevel): void {
+    if (level === "workspace") {
+      setMobilePane("workspace");
+      return;
+    }
+    setMobilePane("conversation");
+    if (level === "conversation" && workspaceOn() && untrack(() => ws.state.phonePane) === "panel")
+      workspaceController.closePanel();
+  }
+  createEffect(phone, (onPhone) => {
+    if (onPhone) paneHistory.start();
+    else paneHistory.stop();
+  });
+  createEffect(phoneLevel, (level) => paneHistory.sync(level));
+  /** The workspace on a phone: Slack's tabs over the list, and one screen at a time. */
+  const phoneShell = () => phone() && workspaceOn() && !noHost();
+  const [phoneTab, setPhoneTab] = createSignal<WebPhoneTab>("home");
+  /**
+   * A page that the More tab opened (settings, usage, schedule) shows over the conversation pane. When
+   * it closes with nothing else opened, the phone goes back to the More tab, as Slack's back button does.
+   */
+  let pageFromPhoneList: string | null = null;
+  const phonePlaceKey = () => JSON.stringify([ws.route(), workspace.state.selectedId ?? null]);
+  function openFromPhoneList(open: () => void): void {
+    pageFromPhoneList = untrack(phonePlaceKey);
+    open();
+  }
+  /** The More tab's rows after the workspace views: the server's pages, then help, as the page rail has them. */
+  const phoneMoreSections = createMemo((): PhoneMoreSection[] => {
+    const current = server();
+    const id = current?.id;
+    const online = workspace.state.status === "online";
+    const serverRows: PhoneMoreRow[] = id
+      ? [
+          ...(tasksSupported()
+            ? [
+                {
+                  id: "tasks",
+                  label: t("app.rail.tasks"),
+                  icon: <ListChecks />,
+                  onSelect: () => openFromPhoneList(() => void openHostPage(id, "tasks", null)),
+                },
+              ]
+            : []),
+          {
+            id: "schedule",
+            label: t("app.rail.schedule"),
+            icon: <CalendarClock />,
+            onSelect: () => openFromPhoneList(() => void openHostPage(id, "schedule", null)),
+          },
+          {
+            id: "usage",
+            label: t("app.rail.usage"),
+            icon: <ChartArea />,
+            onSelect: () => openFromPhoneList(() => void openHostPage(id, "usage", null)),
+          },
+          ...(online
+            ? [
+                {
+                  id: "marketplace",
+                  label: t("app.rail.marketplace"),
+                  icon: <Store />,
+                  onSelect: () => setMarketplaceOpen(true),
+                },
+              ]
+            : []),
+          {
+            id: "server-settings",
+            label: t("workspace.app.menu.serverSettings"),
+            icon: <Settings />,
+            onSelect: () => openFromPhoneList(() => void openServerSettings(id, null)),
+          },
+        ]
+      : [];
+    return [
+      { id: "server", title: current?.name ?? t("workspace.phone.server"), rows: serverRows },
+      {
+        id: "help",
+        title: t("workspace.phone.help"),
+        rows: [
+          {
+            id: "whats-new",
+            label: t("app.help.whatsNew"),
+            icon: <Sparkles />,
+            onSelect: () => void openWebDestination("changelog"),
+          },
+          {
+            id: "guides",
+            label: t("app.help.guides"),
+            icon: <BookOpen />,
+            onSelect: () => void openWebDestination("guides"),
+          },
+          {
+            id: "discord",
+            label: t("app.help.discord"),
+            icon: <MessageCircle />,
+            onSelect: () => void openWebDestination("discord"),
+          },
+          {
+            id: "feedback",
+            label: t("account.menu.sendFeedback"),
+            icon: <MessageCircleQuestionMark />,
+            onSelect: () => void openWebDestination("feedback"),
+          },
+        ],
+      },
+    ];
+  });
+  createEffect(page, (current) => {
+    if (current !== "agents" || pageFromPhoneList === null) return;
+    const before = pageFromPhoneList;
+    pageFromPhoneList = null;
+    if (phoneShell() && untrack(phonePlaceKey) === before) setMobilePane("workspace");
+  });
   /**
    * The chat with an agent that the user opens: the owner's is the agent chat; a member's is a DM
    * channel, which the host can make first.
@@ -2571,6 +2705,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           <WorkspaceFrame
             class="web-app-frame"
             data-web-mobile-pane={mobilePane()}
+            data-web-phone-shell={phoneShell() ? "" : undefined}
             compact={compact()}
             blockedServer={blockedServer()}
             initialLoading={hostOffline()}
@@ -2714,7 +2849,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
             }
             left={
               <>
-                <Show when={layout.serverRailVisible()}>
+                <Show when={layout.serverRailVisible() && !phoneShell()}>
                   <ServerRail
                     servers={servers()}
                     onSelect={selectServer}
@@ -2870,9 +3005,39 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   }
                 >
                   <WorkspaceProvider controller={ws}>
-                    <div class="sidebar ws-frame-sidebar">
-                      <WorkspaceSidebarPane searchShortcut={globalSearchShortcutLabel(currentDevicePlatform())} />
-                    </div>
+                    <Show
+                      when={phoneShell()}
+                      fallback={
+                        <div class="sidebar ws-frame-sidebar">
+                          <WorkspaceSidebarPane searchShortcut={globalSearchShortcutLabel(currentDevicePlatform())} />
+                        </div>
+                      }
+                    >
+                      <div class="sidebar ws-frame-sidebar ws-phone-shell">
+                        <WebPhoneShell
+                          tab={phoneTab()}
+                          onTab={setPhoneTab}
+                          searchShortcut={globalSearchShortcutLabel(currentDevicePlatform())}
+                          account={{
+                            name: workspacePersonName({
+                              name: props.accountName,
+                              email: props.accountEmail,
+                            }),
+                            email: props.accountEmail ?? "",
+                            avatarUrl: props.accountAvatarUrl ?? null,
+                          }}
+                          onOpenAccount={() => openFromPhoneList(openAccountSettings)}
+                          servers={servers().map((item) => ({
+                            id: item.id,
+                            name: item.name,
+                            active: item.active,
+                            unavailable: item.state !== "online",
+                          }))}
+                          onSelectServer={selectServer}
+                          moreSections={phoneMoreSections()}
+                        />
+                      </div>
+                    </Show>
                   </WorkspaceProvider>
                 </Show>
                 <WebMobileNavigation

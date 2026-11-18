@@ -433,6 +433,8 @@
     "./features/workspace/MessageRow": "./src/features/workspace/MessageRow.tsx",
     "./features/workspace/NewMessageDialog": "./src/features/workspace/NewMessageDialog.tsx",
     "./features/workspace/StepTrail": "./src/features/workspace/StepTrail.tsx",
+    "./features/workspace/PhoneScreens": "./src/features/workspace/PhoneScreens.tsx",
+    "./features/workspace/PhoneTabBar": "./src/features/workspace/PhoneTabBar.tsx",
     "./features/workspace/ThreadPanel": "./src/features/workspace/ThreadPanel.tsx",
     "./features/workspace/ThreadsView": "./src/features/workspace/ThreadsView.tsx",
     "./features/workspace/TypingIndicator": "./src/features/workspace/TypingIndicator.tsx",

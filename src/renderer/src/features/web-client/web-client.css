@@ -219,7 +219,7 @@ body {
   }
 
   /* The workspace has its own back buttons: the pane switch is hidden and gives its room back. */
-  .web-app-frame:has(.web-mobile-navigation[hidden]) {
+  .web-app-frame:has(.web-mobile-navigation[hidden]):not(:has(.web-mobile-navigation[data-keyboard-open])) {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
@@ -228,6 +228,80 @@ body {
   }
 
   .web-mobile-navigation[hidden] {
+    display: none;
+  }
+
+  /*
+   * The phone workspace, as Slack's app: the tab bar and Home's switcher replace the page rail, the
+   * server rail and the space rail. The tab bar keeps clear of the home indicator itself.
+   */
+  .web-app-window:has(> .web-app-frame[data-web-phone-shell]) > .window-rail,
+  .web-app-frame[data-web-phone-shell] > .server-rail {
+    display: none;
+  }
+
+  .web-app-frame[data-web-phone-shell][data-web-mobile-pane="workspace"] {
+    grid-template-columns: minmax(0, 1fr);
+    padding-bottom: 0;
+  }
+
+  .web-app-frame[data-web-phone-shell][data-web-mobile-pane="workspace"] > .sidebar.ws-phone-shell {
+    grid-column: 1;
+  }
+
+  .ws-phone-shell-body {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .ws-phone-shell-screen {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  /* Home lists the space's channels and DMs: its header and shortcuts take the sidebar's top rows. */
+  .ws-phone-home-list {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  .ws-phone-home-list > .ws-spaces-layout {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .ws-phone-home-list :is(.space-rail, .ws-sidebar-header, .ws-sidebar-search, .ws-sidebar-quick) {
+    display: none;
+  }
+
+  /* Rows a finger hits. The list has no selected row: the conversation is a screen of its own. */
+  .ws-phone-shell.ws-frame-sidebar {
+    --ws-row-height: var(--openbot-touch-target);
+  }
+
+  .ws-phone-home-list .ws-sidebar-row.ui-button[data-active] {
+    background: transparent;
+  }
+
+  .ws-phone-home-list .ws-sidebar-scroll {
+    padding-top: var(--openbot-space-2);
+  }
+
+  .ws-phone-activity {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .web-app-frame:has(.web-mobile-navigation[data-keyboard-open]) .ws-phone-tabs {
     display: none;
   }
 

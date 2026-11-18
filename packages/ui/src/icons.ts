@@ -74,6 +74,7 @@ export { default as HardDrive } from "lucide-solid/icons/hard-drive";
 export { default as Hash } from "lucide-solid/icons/hash";
 export { default as Highlighter } from "lucide-solid/icons/highlighter";
 export { default as History } from "lucide-solid/icons/history";
+export { default as House } from "lucide-solid/icons/house";
 export { default as Image } from "lucide-solid/icons/image";
 export { default as Info } from "lucide-solid/icons/info";
 export { default as Italic } from "lucide-solid/icons/italic";
@@ -103,6 +104,7 @@ export { default as MessageCircleQuestionMark } from "lucide-solid/icons/message
 export { default as MessageSquare } from "lucide-solid/icons/message-square";
 export { default as MessageSquareReply } from "lucide-solid/icons/message-square-reply";
 export { default as MessageSquareText } from "lucide-solid/icons/message-square-text";
+export { default as MessagesSquare } from "lucide-solid/icons/messages-square";
 export { default as Mic } from "lucide-solid/icons/mic";
 export { default as MicOff } from "lucide-solid/icons/mic-off";
 export { default as Minimize2 } from "lucide-solid/icons/minimize-2";

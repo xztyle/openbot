@@ -87,6 +87,12 @@ const spacesRuntime: WebRuntimeFactory = (_accountId, events) =>
 
 export const SpacesWorkspace: Story = { args: { createRuntime: spacesRuntime } };
 
+/** The spaces workspace on a phone, as Slack's app: bottom tabs, Home with shortcuts, DMs, Activity and More. */
+export const PhoneShell: Story = {
+  args: { createRuntime: spacesRuntime },
+  globals: { viewport: { value: "mobile2", isRotated: false } },
+};
+
 /** A long conversation. `bun run perf:web` streams replies into it and counts the host requests. */
 export const LongConversation: Story = {
   args: { createRuntime: createBenchWebRuntime },

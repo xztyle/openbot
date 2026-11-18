@@ -19,6 +19,8 @@ const runtime: WebRuntimeFactory = (_accountId, events) =>
     createMockOpenBot({
       channels: seeds(WEB_PREVIEW_MEMBER_ID),
       channelMemberId: WEB_PREVIEW_MEMBER_ID,
+      // Chief has replies the reader has not read: the DMs tab, the tab title and its icon count them.
+      conversationReads: { chief: { unreadCount: 0, firstUnreadMessageId: null, throughMessageId: null } },
       spaces: [
         {
           space: { id: "trading", name: "Trading", slug: "market-trading", icon: null, hue: 215 },

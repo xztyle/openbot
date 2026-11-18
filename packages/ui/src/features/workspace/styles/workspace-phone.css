@@ -1,0 +1,545 @@
+/* The phone shell of the workspace, as Slack's mobile app: a bottom tab bar, a Home with a row of
+   shortcuts, the DMs list, the More tab and the switcher of spaces. Rows and buttons a finger hits
+   are at least --openbot-touch-target high, and the bars keep clear of the safe-area insets. */
+
+/* Tab bar ---------------------------------------------------------------------------------------- */
+
+.ws-phone-tabs {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  border-top: 1px solid var(--openbot-border);
+  background: color-mix(in srgb, var(--openbot-bg-sidebar) 94%, transparent);
+  padding: var(--openbot-space-1) max(var(--openbot-space-2), env(safe-area-inset-right, 0px))
+    max(var(--openbot-space-1), env(safe-area-inset-bottom, 0px))
+    max(var(--openbot-space-2), env(safe-area-inset-left, 0px));
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.ws-phone-tabs[hidden] {
+  display: none;
+}
+
+.ws-phone-tabs-list {
+  display: grid;
+  width: min(100%, 480px);
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: var(--openbot-space-1);
+}
+
+.ui-button.ws-phone-tab {
+  display: flex;
+  height: auto;
+  min-height: var(--openbot-touch-target);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--openbot-space-0-5);
+  border-radius: var(--openbot-radius-lg);
+  padding: var(--openbot-space-1) 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ui-button.ws-phone-tab[data-active] {
+  color: var(--openbot-text-primary);
+}
+
+.ws-phone-tab-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.ws-phone-tab-icon > svg {
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
+  stroke-width: var(--openbot-icon-stroke);
+}
+
+.ui-button.ws-phone-tab[data-active] .ws-phone-tab-icon > svg {
+  stroke-width: calc(var(--openbot-icon-stroke) + 0.5);
+}
+
+.ws-phone-tab-count {
+  position: absolute;
+  top: calc(-1 * var(--openbot-space-1));
+  left: calc(100% - var(--openbot-space-2));
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 2px solid var(--openbot-bg-sidebar);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-danger);
+  padding: 0 var(--openbot-space-1);
+  color: var(--openbot-text-on-status);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-bold);
+  line-height: 1;
+}
+
+.ws-phone-tab-dot {
+  position: absolute;
+  top: calc(-1 * var(--openbot-space-0-5));
+  right: calc(-1 * var(--openbot-space-1));
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--openbot-bg-sidebar);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-danger);
+}
+
+/* Home header ------------------------------------------------------------------------------------ */
+
+.ws-phone-home-header {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  border-bottom: 1px solid var(--openbot-border);
+  padding: max(var(--openbot-space-2), env(safe-area-inset-top, 0px)) 0 var(--openbot-space-2);
+}
+
+.ws-phone-home-bar {
+  display: flex;
+  min-height: var(--openbot-touch-target);
+  align-items: center;
+  gap: var(--openbot-space-1);
+  padding: 0 var(--openbot-space-2) 0 var(--openbot-space-3);
+}
+
+.ui-button.ws-phone-mark-button {
+  position: relative;
+  width: var(--openbot-touch-target);
+  height: var(--openbot-touch-target);
+  flex: none;
+  padding: 0;
+}
+
+.ws-phone-mark.space-mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: var(--openbot-radius-md);
+}
+
+.ws-phone-mark-count {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 2px solid var(--openbot-bg-sidebar);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-danger);
+  padding: 0 var(--openbot-space-1);
+  color: var(--openbot-text-on-status);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-bold);
+  line-height: 1;
+}
+
+.ws-phone-mark-dot {
+  position: absolute;
+  top: var(--openbot-space-1);
+  right: var(--openbot-space-1);
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--openbot-bg-sidebar);
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-text-primary);
+}
+
+.ws-phone-home-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-2xl);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ui-button.ws-phone-home-title-button {
+  height: var(--openbot-touch-target);
+  justify-content: flex-start;
+  gap: var(--openbot-space-1);
+  padding: 0 var(--openbot-space-1);
+}
+
+.ws-phone-home-title-button > svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+  flex: none;
+  color: var(--openbot-text-muted);
+}
+
+.ws-phone-home-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--openbot-space-1);
+}
+
+.ws-phone-home-actions .ui-button,
+.ws-phone-screen-header .ui-button.ws-phone-compose {
+  width: var(--openbot-touch-target);
+  height: var(--openbot-touch-target);
+}
+
+.ws-phone-home-actions .ui-button > svg,
+.ws-phone-screen-header .ui-button > svg {
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
+}
+
+/* Shortcuts row ---------------------------------------------------------------------------------- */
+
+.ws-phone-chips {
+  display: flex;
+  margin: 0;
+  gap: var(--openbot-space-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 0 var(--openbot-space-3);
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.ws-phone-chips::-webkit-scrollbar {
+  display: none;
+}
+
+.ws-phone-chips > li {
+  flex: none;
+}
+
+.ui-button.ws-phone-chip {
+  min-height: var(--openbot-touch-target);
+  gap: var(--openbot-space-2);
+  border-radius: var(--openbot-radius-lg);
+  padding: 0 var(--openbot-space-3);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-phone-chip-icon {
+  display: grid;
+  place-items: center;
+  color: var(--openbot-text-muted);
+}
+
+.ws-phone-chip-icon > svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+}
+
+.ui-button.ws-phone-chip[data-unread] .ws-phone-chip-icon {
+  color: var(--openbot-text-primary);
+}
+
+.ws-phone-chip-detail {
+  color: var(--openbot-text-muted);
+  font-weight: var(--openbot-weight-regular);
+}
+
+/* Screens: DMs and More -------------------------------------------------------------------------- */
+
+.ws-phone-screen {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.ws-phone-screen-header {
+  display: flex;
+  min-height: calc(var(--openbot-touch-target) + var(--openbot-space-4));
+  flex: none;
+  align-items: center;
+  gap: var(--openbot-space-2);
+  border-bottom: 1px solid var(--openbot-border);
+  padding: env(safe-area-inset-top, 0px) var(--openbot-space-2) 0 var(--openbot-space-4);
+}
+
+.ws-phone-screen-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-2xl);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-phone-screen-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: var(--openbot-space-4);
+}
+
+.ws-phone-empty {
+  margin: 0;
+  padding: var(--openbot-space-8) var(--openbot-space-4);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+  text-align: center;
+}
+
+.ws-phone-list,
+.ws-phone-more-list,
+.ws-phone-switcher-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ui-button.ws-phone-dm {
+  display: flex;
+  width: 100%;
+  height: auto;
+  min-height: calc(var(--openbot-touch-target) + var(--openbot-space-4));
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--openbot-space-3);
+  border-radius: 0;
+  padding: var(--openbot-space-2) var(--openbot-space-4);
+  color: var(--openbot-text-secondary);
+  font-weight: var(--openbot-weight-regular);
+  text-align: start;
+}
+
+.ui-button.ws-phone-dm[data-active] {
+  background: var(--openbot-bg-control);
+}
+
+.ws-phone-dm-face {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+}
+
+.ws-phone-dm-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+}
+
+.ws-phone-dm-top,
+.ws-phone-dm-bottom {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--openbot-space-2);
+}
+
+.ws-phone-dm-name {
+  min-width: 0;
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-medium);
+}
+
+.ui-button.ws-phone-dm[data-unread] .ws-phone-dm-name {
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ui-button.ws-phone-dm[data-muted] .ws-phone-dm-name {
+  color: var(--openbot-text-muted);
+}
+
+.ws-phone-dm-time {
+  flex: none;
+  margin-left: auto;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-phone-dm-preview {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+}
+
+.ui-button.ws-phone-dm[data-unread] .ws-phone-dm-preview {
+  color: var(--openbot-text-secondary);
+}
+
+.ui-button.ws-phone-profile {
+  display: flex;
+  width: calc(100% - 2 * var(--openbot-space-3));
+  height: auto;
+  min-height: 72px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--openbot-space-3);
+  margin: var(--openbot-space-3);
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-lg);
+  background: var(--openbot-bg-surface);
+  padding: var(--openbot-space-3);
+  text-align: start;
+}
+
+.ws-phone-profile-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--openbot-space-0-5);
+}
+
+.ws-phone-profile-name {
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-phone-profile-email {
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.ws-phone-profile > svg,
+.ws-phone-more-chevron {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+  flex: none;
+  color: var(--openbot-text-muted);
+}
+
+.ws-phone-more-section {
+  padding: var(--openbot-space-2) 0;
+}
+
+.ws-phone-more-heading,
+.ws-phone-switcher-heading {
+  margin: 0;
+  padding: var(--openbot-space-2) var(--openbot-space-4) var(--openbot-space-1);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ui-button.ws-phone-more-row {
+  display: flex;
+  width: 100%;
+  min-height: var(--openbot-touch-target);
+  justify-content: flex-start;
+  gap: var(--openbot-space-3);
+  border-radius: 0;
+  padding: 0 var(--openbot-space-4);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-lg);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.ws-phone-more-row-danger {
+  color: var(--openbot-danger);
+}
+
+.ws-phone-more-icon {
+  display: grid;
+  width: var(--openbot-icon-lg);
+  flex: none;
+  place-items: center;
+  color: var(--openbot-text-muted);
+}
+
+.ws-phone-more-icon > svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+}
+
+.ws-phone-more-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: start;
+}
+
+.ws-phone-more-detail {
+  max-width: 40%;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-md);
+}
+
+/* Switcher sheet --------------------------------------------------------------------------------- */
+
+.ws-phone-switcher .ui-sheet-header {
+  display: block;
+  padding: 0;
+}
+
+.ws-phone-switcher-section + .ws-phone-switcher-section {
+  border-top: 1px solid var(--openbot-border);
+}
+
+.ws-phone-switcher-heading {
+  padding-inline: var(--openbot-space-3);
+}
+
+.ui-sheet-header .ui-button.ws-phone-switcher-row {
+  display: flex;
+  width: 100%;
+  min-height: calc(var(--openbot-touch-target) + var(--openbot-space-2));
+  justify-content: flex-start;
+  gap: var(--openbot-space-3);
+  padding: 0 var(--openbot-space-3);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-xl);
+  font-weight: var(--openbot-weight-regular);
+}
+
+.ui-button.ws-phone-switcher-row[data-active] {
+  background: var(--openbot-bg-control);
+  color: var(--openbot-text-primary);
+}
+
+.ui-button.ws-phone-switcher-row[data-unavailable] {
+  color: var(--openbot-text-muted);
+}
+
+.ws-phone-switcher-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: start;
+}
+
+.ws-phone-switcher-name[data-unread] {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-bold);
+}
+
+.ws-phone-switcher-server-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--openbot-border);
+  border-radius: var(--openbot-radius-md);
+  color: var(--openbot-text-muted);
+}
+
+.ws-phone-switcher-server-icon > svg {
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-phone-chips {
+    scroll-behavior: auto;
+  }
+}

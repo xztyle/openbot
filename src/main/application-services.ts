@@ -347,6 +347,7 @@ import { spawnVoiceTranscriptionHost } from "./voice-transcription-host-process"
 import { VoiceTranscriptionService } from "./voice-transcription-service";
 import { WebPushService } from "./web-push";
 import { WebPushStore } from "./web-push-store";
+import { webPushWorkspace } from "./web-push-workspace";
 import { WebhookRelay } from "./webhook-relay";
 import { createWorkspaceSettingsStore, type WorkspaceSettingsStore } from "./workspace-settings-store";
 import { WorkspaceSidebarStore } from "./workspace-sidebar-store";
@@ -2334,6 +2335,8 @@ export async function createApplicationServices({
     () => serverTimezone.effective(),
     join(app.getPath("userData"), "agent-import-uploads"),
   );
+  // The host service is made below; a push before it reads members without the host user's other ids.
+  let pushHost: HostService | null = null;
   const webPush = new WebPushService({
     agents: service,
     store: new WebPushStore(join(app.getPath("userData"), WEB_PUSH_FILE)),
@@ -2343,6 +2346,17 @@ export async function createApplicationServices({
       return member !== null && !member.disabled;
     },
     hiddenAgentIds: (protocol) => hiddenProviderAgentIds(service.listAgents(), protocol),
+    // Mentions, DMs and followed threads, the bell of each conversation, and the address of the place.
+    workspace: webPushWorkspace({
+      channels: service.channels,
+      spaces: service.spaces,
+      sidebar: workspaceSidebar,
+      memberRole: (memberId) => {
+        const member = teamStore.getMember(memberId);
+        return member && !member.disabled ? member.role : null;
+      },
+      hostViewer: () => pushHost?.channelViewer() ?? null,
+    }),
     logger,
   });
   teardown.push(TEARDOWN_ORDER.webPush, "the web push service", () => webPush.dispose());
@@ -2648,6 +2662,7 @@ export async function createApplicationServices({
         catch: (cause) => new RemoteWorkflowError({ cause }),
       }),
   });
+  pushHost = host;
   teardown.push(TEARDOWN_ORDER.host, "the local host", () => runCauseEffect(host.shutdown()));
   const signedInState = centralAuth.getState();
   if (signedInState.status === "signed_in") {

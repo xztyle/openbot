@@ -200,10 +200,23 @@ export interface WorkspaceE2e {
 }
 
 /** Starts the host on a new profile with an owner and a member, and gives the shared helpers. */
+/** The parts of a running host that a script's own server options can use. */
+export interface WorkspaceHostParts {
+  agents: AgentService;
+  agentStore: AgentStore;
+  team: InstanceType<typeof TeamStore>;
+  userData: string;
+}
+
+/** More options of the Team API server, such as `workspaceSidebar` or `webPush`, made at each start. */
+export type WorkspaceServerOptions = (
+  parts: WorkspaceHostParts,
+) => Promise<Partial<ConstructorParameters<typeof TeamApiServer>[0]>>;
+
 export async function startWorkspaceE2e(
   name: string,
   unverified: string[],
-  options: { readWorkers?: boolean } = {},
+  options: { readWorkers?: boolean; server?: WorkspaceServerOptions } = {},
 ): Promise<WorkspaceE2e> {
   const out = resolve(import.meta.dirname, `../.openbot-build/${name}`);
   const root = await mkdtemp(join(tmpdir(), `openbot-${name}-`));
@@ -229,6 +242,7 @@ export async function startWorkspaceE2e(
     if (options.readWorkers) database.useReadWorkers(spawnSourceDatabaseReadWorker);
     if (!team.getIdentity()) await runCauseEffect(team.configure("E2E Host", OWNER.username, OWNER.password));
     const agents = new AgentService({ store: agentStore, mailbox, browser: agentBrowser, sidebarLayout: sidebar });
+    const extra = (await options.server?.({ agents, agentStore, team, userData })) ?? {};
     const server = new TeamApiServer({
       store: team,
       agents,
@@ -243,6 +257,7 @@ export async function startWorkspaceE2e(
         service: agents.spaces,
         channel: (channelId) => (agents.channels.store.exists(channelId) ? agents.channels.store.get(channelId) : null),
       },
+      ...extra,
     });
     const port = await Effect.runPromise(server.start());
     return { database, agents, server, team, port };

@@ -15,6 +15,11 @@ export const messages = {
   "notification.channelTitle": "{channel} kanalında {agent}",
   "notification.teammateTitle": "{agent}: {teammate} sizi bekliyor",
   "notification.channelMessage": "Bir mesaj gönderdi.",
+  "notification.conversationTitle": "{conversation} içinde {author}",
+  "notification.mentionedYou": "Sizden bahsetti.",
+  "notification.directMessage": "Size bir mesaj gönderdi.",
+  "notification.threadReply": "Takip ettiğiniz bir konuda yanıt verdi.",
+  "notification.newMessages": { other: "{count} yeni mesaj." },
   "notification.usageLimit.title": "{provider} hesabı sınırına ulaştı",
   "notification.usageLimit.body": {
     one: "{count} ajan bekliyor. OpenBot daha sonra tekrar deneyecek.",

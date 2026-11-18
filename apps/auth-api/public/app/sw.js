@@ -3,8 +3,9 @@
 // user taps it. It has no fetch handler and keeps no cache, so it never sees or stores a request
 // to /api/browser/*, and the app always loads from the network.
 //
-// The message was encrypted by the host for this browser. It holds the agent's name, a fixed phrase
-// for the kind of event, and ids. It never holds the text of a chat.
+// The message was encrypted by the host for this browser. It holds the name of the agent or the author,
+// the name of the conversation, a fixed phrase for the kind of event, ids, and the address of the place.
+// It never holds the text of a chat.
 //
 // Each push shows a notification. WebKit (iPhone and iPad) takes back the push permission of a site that
 // receives a push and shows nothing. So a push that arrives while the user looks at the app shows its
@@ -52,14 +53,17 @@ async function showNotification(event) {
   // A page that the user looks at shows the event itself, with its own sound.
   const watched = windows.some((client) => client.visibilityState === "visible" && client.focused);
   const agentId = text(message.agentId, 128);
-  const tag = agentId ? `agent:${agentId}` : "openbot";
+  // One notification for each conversation, as the host names it: a newer event of the same conversation
+  // replaces the older one. A host from before conversation tags names the agent only.
+  const tag = text(message.tag, 256) || (agentId ? `agent:${agentId}` : "openbot");
+  // The host counts the messages of a burst in one more notice, which replaces the first one quietly.
+  const update = message.update === true;
   await self.registration.showNotification(text(message.title, 120) || "OpenBot", {
     body: text(message.body, 200),
     icon: "/icon-192x192.png",
-    // One notification for each agent: a newer event of the same agent replaces the older one.
     tag,
-    renotify: !watched,
-    silent: watched,
+    renotify: !watched && !update,
+    silent: watched || update,
     data: {
       hostId: text(message.hostId, 128),
       agentId,

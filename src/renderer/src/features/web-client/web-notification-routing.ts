@@ -90,7 +90,8 @@ export function createWebNotificationRouting(options: {
     conversationLevel?: (channelId: string) => WorkspaceNotifyLevel | null,
   ): void {
     const { muted, level } = untrack(() => notifications.state(hostId));
-    if (muted) return;
+    // The host's push message tells a channel reply with the same levels, as it tells an agent event.
+    if (muted || options.pushes?.(hostId)) return;
     const replies = channelReplyNotifications(previous, next, {
       agents: untrack(() => workspace.state.agents),
       translate: options.t,

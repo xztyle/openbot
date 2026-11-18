@@ -24,6 +24,14 @@ export const messages = defineMessages("notification", {
   "notification.teammateTitle": "{agent}: {teammate} needs you",
   // The body of a channel reply notification when the preview of agent words is off.
   "notification.channelMessage": "Sent a message.",
+  // Web push about a message of a channel, DM or group. The title names the author and the
+  // conversation; the body says what the message is to the reader. No text of the message shows.
+  "notification.conversationTitle": "{author} in {conversation}",
+  "notification.mentionedYou": "Mentioned you.",
+  "notification.directMessage": "Sent you a message.",
+  "notification.threadReply": "Replied in a thread you follow.",
+  // One notice for several messages of one conversation that came within a short time.
+  "notification.newMessages": { one: "{count} new message.", other: "{count} new messages." },
   "notification.usageLimit.title": "{provider} account reached its limit",
   "notification.usageLimit.body": {
     one: "{count} agent waits. OpenBot will try again later.",

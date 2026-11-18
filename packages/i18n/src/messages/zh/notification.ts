@@ -19,6 +19,11 @@ export const messages = {
   "notification.teammateTitle": "{agent}：{teammate} 需要你",
   // The body of a channel reply notification when the preview of agent words is off.
   "notification.channelMessage": "发来一条消息。",
+  "notification.conversationTitle": "{author}（{conversation}）",
+  "notification.mentionedYou": "提到了你。",
+  "notification.directMessage": "给你发送了一条消息。",
+  "notification.threadReply": "在你关注的话题中回复了。",
+  "notification.newMessages": { other: "{count} 条新消息。" },
   "notification.usageLimit.title": "{provider} 账号已达上限",
   "notification.usageLimit.body": {
     one: "{count} 个助手在等待，OpenBot 稍后会重试。",

@@ -1317,12 +1317,15 @@ push service), in `openbot-web-push-v1.json` in its profile, with mode 0600. The
 database or in an export. The computer forgets a subscription when you turn the switch off, when the
 push service refuses it, when you leave the computer, or when you have more than 10 browsers.
 
-When an agent finishes work, needs your input or approval, or a scheduled run fails, and the level and
-the mute that you chose allow it, the computer sends one message straight to the push service from
-its own network address, signed with its key and encrypted for your browser (RFC 8291 and RFC 8292).
-The message holds the agent's name, a fixed phrase for the kind of event (for example "Finished
-working."), and the ids that open the chat. It never holds the text of a message, a question, a
-command or a file. The text of an agent's question or an approval does not go in it, also when
+When an agent finishes work, needs your input or approval, or a scheduled run fails, or someone
+mentions you, writes to you in a DM or a group, or replies in a thread that you follow, and the level,
+the mute and the bell of the conversation that you chose allow it, the computer sends one message
+straight to the push service from its own network address, signed with its key and encrypted for your
+browser (RFC 8291 and RFC 8292). Several messages of one conversation within a short time become one
+more message that counts them. The message holds the name of the agent or of the person who wrote, the
+name of the channel, DM or group, a fixed phrase for the kind of event (for example "Finished working."
+or "Mentioned you."), and the ids and the web app address that open the place. It never holds the
+text of a message, a question, a command or a file. The text of an agent's question or an approval does not go in it, also when
 "Show text in notifications" is on. The computer sends only to the push services above, and it does
 not follow a redirect. The push service receives the address of the computer, the time, the size of
 the message and the subscription; it cannot read the message. It can keep delivery logs under its own

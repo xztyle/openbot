@@ -10,6 +10,13 @@
 // (Google, Apple, Mozilla or Microsoft) sees the host's address, the time and the size, not the
 // content. The account service sees nothing. The route names no capability of its own: it shares
 // `fork-host-v1`. Widening any of it needs a second capability string.
+//
+// The routes above are frozen. The push message itself goes from the host to the service worker that
+// the same fork serves (`/app/sw.js`), and grows only by optional fields: `path` (the web client
+// address of the place, `/app/...`), `tag` (the conversation, so a newer notice replaces an older one)
+// and `update` (a notice that counts a burst of one conversation and replaces the first quietly). The
+// host also tells a mention, a DM or a group message, and a reply in a followed thread, by the bell of
+// each conversation: the author's and the conversation's names and a fixed phrase, never chat text.
 import {
   type AdminDecoder,
   adminRoute,

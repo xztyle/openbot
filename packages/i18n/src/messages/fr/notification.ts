@@ -17,6 +17,11 @@ export const messages = {
   "notification.channelTitle": "{agent} dans {channel}",
   "notification.teammateTitle": "{agent} : {teammate} a besoin de vous",
   "notification.channelMessage": "A envoyé un message.",
+  "notification.conversationTitle": "{author} dans {conversation}",
+  "notification.mentionedYou": "Vous a mentionné.",
+  "notification.directMessage": "Vous a envoyé un message.",
+  "notification.threadReply": "A répondu dans un fil que vous suivez.",
+  "notification.newMessages": { one: "{count} nouveau message.", other: "{count} nouveaux messages." },
   "notification.usageLimit.title": "Le compte {provider} a atteint sa limite",
   "notification.usageLimit.body": {
     one: "{count} agent attend. OpenBot réessaiera plus tard.",

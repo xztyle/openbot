@@ -421,7 +421,7 @@ export interface TeamApiSpaces {
   channel: (channelId: string) => Channel | null;
 }
 /** `workspace-sidebar-v1` (`fork-host-v1`): the sidebar order and mutes of each member. */
-export type TeamApiWorkspaceSidebar = Pick<WorkspaceSidebarStore, "get" | "set">;
+export type TeamApiWorkspaceSidebar = Pick<WorkspaceSidebarStore, "get" | "set" | "revision">;
 export type TeamApiSidebarLayout = Pick<
   SidebarLayoutStore,
   "getSnapshot" | "mutate" | "removeAgent" | "placeDuplicateAfter" | "withProfileAssignment"

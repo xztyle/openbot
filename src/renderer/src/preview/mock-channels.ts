@@ -93,6 +93,7 @@ export function createMockChannels(
   const routines = new Map<string, ChannelRoutine[]>();
   const routineRuns = new Map<string, ChannelRoutineRun[]>();
   const sidebars = new Map<string, WorkspaceSidebarPrefs>();
+  const sidebarRevisions = new Map<string, number>();
   const changed = (channelId: string, revision: number) => emit({ type: "channels-changed", channelId, revision });
   const messageChanged = (channel: Channel, message: ChannelMessage) =>
     emit({
@@ -600,15 +601,19 @@ export function createMockChannels(
     // until the first save, so the window uploads what this computer had.
     workspaceSidebar: async (serverId?: string): Promise<WorkspaceSidebar> => {
       const saved = sidebars.get(serverId ?? "local");
-      return { sidebar: saved ? structuredClone(saved) : null, notifyLevels: true };
+      const revision = sidebarRevisions.get(serverId ?? "local") ?? 0;
+      return { sidebar: saved ? structuredClone(saved) : null, notifyLevels: true, revision };
     },
     setWorkspaceSidebar: async (prefs: WorkspaceSidebarPrefs, serverId?: string): Promise<WorkspaceSidebar> => {
-      const saved = decodeWorkspaceSidebarPrefs(prefs);
+      // The preview has one session, so a save never has another session's changes to keep.
+      const { baseRevision: _base, ...saved } = decodeWorkspaceSidebarPrefs(prefs);
+      const revision = (sidebarRevisions.get(serverId ?? "local") ?? 0) + 1;
       sidebars.set(serverId ?? "local", saved);
+      sidebarRevisions.set(serverId ?? "local", revision);
       // As a host does: every session of the member hears of the change, the one that saved too,
       // after the answer.
       setTimeout(() => emit({ type: "workspace-sidebar-changed" }), 0);
-      return { sidebar: structuredClone(saved), notifyLevels: true };
+      return { sidebar: structuredClone(saved), notifyLevels: true, revision };
     },
     workspaceActivity: async (input: WorkspaceActivityInput): Promise<WorkspaceActivity> => {
       const items: WorkspaceActivityItem[] = [];

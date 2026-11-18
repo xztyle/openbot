@@ -27,6 +27,7 @@ import {
   type WorkspaceChannelCommand,
   type WorkspaceNotifyLevel,
   type WorkspaceSettings,
+  type WorkspaceSidebar,
   type WorkspaceSidebarPrefs,
   type WorkspaceSteps,
   withWorkspaceNotifyLevel,
@@ -860,6 +861,12 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
    */
   let sidebarEdits = 0;
   let sidebarSentEdits = 0;
+  /**
+   * The host revision of the value this window shows, from the last read or write answer it applied.
+   * A write names it, so the host keeps what other sessions of the reader saved since; an answer with
+   * a smaller one is older than the value shown. Undefined: none yet, or an older host.
+   */
+  let sidebarRevision: number | undefined;
 
   function writeLocalSidebar() {
     try {
@@ -879,8 +886,9 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         sidebarUnsent = false;
         sidebarSentEdits = sidebarEdits;
         const { order, muted, closed, space, notifyMentions, notifyNothing } = state.sidebar;
+        let answer: WorkspaceSidebar;
         try {
-          await write(
+          answer = await write(
             boundedWorkspaceSidebar({
               order: { channels: [...order.channels], direct: [...order.direct] },
               muted: [...muted],
@@ -888,6 +896,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
               ...(space ? { space } : {}),
               ...(notifyMentions ? { notifyMentions: [...notifyMentions] } : {}),
               ...(notifyNothing ? { notifyNothing: [...notifyNothing] } : {}),
+              ...(sidebarRevision === undefined ? {} : { baseRevision: sidebarRevision }),
             }),
           );
         } catch {
@@ -895,10 +904,38 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
           if (run === sidebarKeyRun) sidebarUnsent = true;
           return;
         }
+        // The host kept this value with the changes of the reader's other sessions since the base. It
+        // shows unless the reader changed the sidebar again meanwhile; that change goes next, from the
+        // same base.
+        if (run === sidebarKeyRun && sidebarEdits === sidebarSentEdits && answer.sidebar)
+          applyHostSidebar(answer.sidebar, answer.revision);
       }
     } finally {
       if (sidebarSendingRun === run) sidebarSendingRun = -1;
     }
+  }
+  /** Shows the host value in this window and keeps it on this computer, with its revision. */
+  function applyHostSidebar(hosted: SidebarPrefs, revision: number | undefined) {
+    const local = untrack(() => state.sidebar);
+    // The space is this window's own, as the open conversation is: a save of another window or
+    // computer of the reader does not move it. A window that has none yet starts in the host's.
+    const space = local.space ?? hosted.space;
+    // A host that predates `collapsed` drops it: the reader's choice on this computer stays.
+    const collapsed = hosted.collapsed ?? local.collapsed;
+    const { baseRevision: _base, ...kept } = hosted;
+    const value: SidebarPrefs = {
+      ...kept,
+      ...(space ? { space } : {}),
+      ...(collapsed ? { collapsed } : {}),
+      // A host that predates the levels drops them: the reader's choices on this computer stay.
+      notifyMentions: hosted.notifyMentions ?? local.notifyMentions ?? [],
+      notifyNothing: hosted.notifyNothing ?? local.notifyNothing ?? [],
+    };
+    sidebarRevision = revision;
+    setState((draft) => {
+      draft.sidebar = value;
+    });
+    writeLocalSidebar();
   }
   /**
    * Reads the host value. It replaces the copy of this computer, unless the reader changed the
@@ -914,9 +951,11 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     const readRun = ++sidebarReadRun;
     const editsAtStart = sidebarEdits;
     let hosted: SidebarPrefs | null;
+    let revision: number | undefined;
     try {
       const answer = await read();
       hosted = answer.sidebar;
+      revision = answer.revision;
       setNotifyLevels(answer.notifyLevels === true);
     } catch {
       // A host without the route, or one that cannot answer now: this computer keeps the sidebar.
@@ -926,6 +965,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (keyRun !== sidebarKeyRun || readRun !== sidebarReadRun) return;
     sidebarHome = "host";
     const local = untrack(() => state.sidebar);
+    // An answer older than the value that a write of this window got back: the host has a newer one.
+    if (revision !== undefined && sidebarRevision !== undefined && revision < sidebarRevision) return;
     if (hosted) {
       // The reader changed the sidebar since the read began, or a write is on its way: this window
       // holds the newer value. It goes to the host unless the last write already carried it.
@@ -936,23 +977,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         }
         return;
       }
-      // The space is this window's own, as the open conversation is: a save of another window or
-      // computer of the reader does not move it. A window that has none yet starts in the host's.
-      const space = local.space ?? hosted.space;
-      // A host that predates `collapsed` drops it: the reader's choice on this computer stays.
-      const collapsed = hosted.collapsed ?? local.collapsed;
-      const value: SidebarPrefs = {
-        ...hosted,
-        ...(space ? { space } : {}),
-        ...(collapsed ? { collapsed } : {}),
-        // A host that predates the levels drops them: the reader's choices on this computer stay.
-        notifyMentions: hosted.notifyMentions ?? local.notifyMentions ?? [],
-        notifyNothing: hosted.notifyNothing ?? local.notifyNothing ?? [],
-      };
-      setState((draft) => {
-        draft.sidebar = value;
-      });
-      writeLocalSidebar();
+      applyHostSidebar(hosted, revision);
       return;
     }
     if (!local.order.channels.length && !local.order.direct.length && !local.muted.length && !local.space) return;
@@ -966,6 +991,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         sidebarKeyRun += 1;
         sidebarUnsent = false;
         sidebarHome = "pending";
+        sidebarRevision = undefined;
       }
       // A reconnect reads again: another computer of the reader may have changed it.
       if (current.ready && (!previous?.ready || current.key !== previous.key)) void loadHostSidebar();

@@ -199,7 +199,7 @@ function logRejectedModels<T>(models: T, source: "local" | "remote"): T {
 export interface AgentIpcDependencies {
   service: AgentService;
   sidebarLayout: SidebarLayoutStore;
-  workspaceSidebar: Pick<WorkspaceSidebarStore, "get" | "set">;
+  workspaceSidebar: Pick<WorkspaceSidebarStore, "get" | "set" | "revision">;
   host: HostService;
   remoteServers: RemoteServerManager;
   skills: SkillMarketplaceService;
@@ -532,12 +532,19 @@ export function agentIpcHandlers({
       }),
       // The host user of this computer is a member under the id their channel messages carry.
       workspaceSidebar: scopedQueryHandler({
-        local: () => ({ sidebar: workspaceSidebar.get(host.channelActor().id), notifyLevels: true }),
+        local: () => {
+          const memberId = host.channelActor().id;
+          return {
+            sidebar: workspaceSidebar.get(memberId),
+            notifyLevels: true,
+            revision: workspaceSidebar.revision(memberId),
+          };
+        },
         remote: (serverId) => remoteSidebar(serverId, WORKSPACE_SIDEBAR_ROUTES.read, {}),
       }),
       setWorkspaceSidebar: scopedHandler(decodeWorkspaceSidebarPrefs, {
         local: async (prefs) => ({
-          sidebar: await runCauseEffect(workspaceSidebar.set(host.channelActor().id, prefs)),
+          ...(await runCauseEffect(workspaceSidebar.set(host.channelActor().id, prefs))),
           notifyLevels: true,
         }),
         remote: (prefs, serverId) => remoteSidebar(serverId, WORKSPACE_SIDEBAR_ROUTES.save, prefs),

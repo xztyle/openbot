@@ -1,5 +1,6 @@
 // The reader's own workspace sidebar: the order they dragged the channel and DM rows into, the
-// conversations they muted, and the groups they collapsed. The host keeps one value per member, so it follows the account to each
+// conversations they muted, and the groups they collapsed. Each save gets a revision, so a session
+// that saves from an older value keeps the changes of the others. The host keeps one value per member, so it follows the account to each
 // computer and browser. A host that has none for the member answers null.
 
 import { isBoundedString } from "./ipc-bounded-values";
@@ -32,6 +33,13 @@ export interface WorkspaceSidebarPrefs {
    */
   notifyMentions?: string[];
   notifyNothing?: string[];
+  /**
+   * Only on a save: the `revision` of the host value that this value was made from. When another
+   * session of the member saved since, the host keeps that session's changes and applies only the
+   * changes of this one (`rebaseWorkspaceSidebar`). The host never stores it. Absent from an older
+   * client: the save replaces the value.
+   */
+  baseRevision?: number;
 }
 
 /** The value of the member on the host. Null: the host has none for them yet. */
@@ -39,6 +47,12 @@ export interface WorkspaceSidebar {
   sidebar: WorkspaceSidebarPrefs | null;
   /** The host keeps `notifyMentions` and `notifyNothing`. An older host drops them and sends no flag. */
   notifyLevels?: boolean;
+  /**
+   * The count of the member's saves on the host; each save makes it larger. A client keeps the
+   * revision of the value it shows, sends it as `baseRevision`, and leaves out an answer with a smaller
+   * one: that answer is older than a value it already has. Absent from an older host.
+   */
+  revision?: number;
 }
 
 /** The notification level of one conversation, as Slack's bell offers it. */
@@ -86,6 +100,12 @@ function idList(value: unknown, label: string): string[] {
   return [...new Set(value)];
 }
 
+function revision(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
+    throw new Error(`Invalid workspace sidebar ${label}.`);
+  return value;
+}
+
 function spaceId(value: unknown): string {
   if (!isSidebarId(value)) throw new Error("Invalid workspace sidebar space.");
   return value;
@@ -104,6 +124,7 @@ export function decodeWorkspaceSidebarPrefs(value: unknown): WorkspaceSidebarPre
       ? {}
       : { notifyMentions: idList(value.notifyMentions, "notification levels") }),
     ...(value.notifyNothing === undefined ? {} : { notifyNothing: idList(value.notifyNothing, "notification levels") }),
+    ...(value.baseRevision === undefined ? {} : { baseRevision: revision(value.baseRevision, "revision") }),
   };
 }
 
@@ -112,6 +133,51 @@ export function decodeWorkspaceSidebar(value: unknown): WorkspaceSidebar {
   return {
     sidebar: value.sidebar === null ? null : decodeWorkspaceSidebarPrefs(value.sidebar),
     ...(value.notifyLevels === true ? { notifyLevels: true } : {}),
+    ...(value.revision === undefined ? {} : { revision: revision(value.revision, "revision") }),
+  };
+}
+
+/**
+ * The value that keeps the changes of another session (`theirs`, the host value now) and adds the
+ * changes that this session made to `base`, the host value it started from (`mine`). A list of ids
+ * loses the ids that `mine` took out of `base` and gets the ids that `mine` added; an order and the
+ * space are those of `mine` when it changed them, else those of `theirs`. A list that `mine` leaves
+ * out, as an older client does, is not a change.
+ */
+export function rebaseWorkspaceSidebar(
+  base: WorkspaceSidebarPrefs,
+  mine: WorkspaceSidebarPrefs,
+  theirs: WorkspaceSidebarPrefs,
+): WorkspaceSidebarPrefs {
+  const set = (
+    baseIds: readonly string[] | undefined,
+    mineIds: readonly string[] | undefined,
+    theirIds: readonly string[] | undefined,
+  ): string[] | undefined => {
+    if (mineIds === undefined) return theirIds === undefined ? undefined : [...theirIds];
+    const before = new Set(baseIds ?? []);
+    const after = new Set(mineIds);
+    const kept = (theirIds ?? []).filter((id) => !(before.has(id) && !after.has(id)));
+    const added = mineIds.filter((id) => !before.has(id) && !kept.includes(id));
+    return [...kept, ...added];
+  };
+  const same = (left: readonly string[], right: readonly string[]) =>
+    left.length === right.length && left.every((id, index) => right[index] === id);
+  const order = (group: "channels" | "direct") =>
+    same(mine.order[group], base.order[group]) ? [...theirs.order[group]] : [...mine.order[group]];
+  const space = mine.space !== base.space ? mine.space : theirs.space;
+  const optional = (key: "closed" | "collapsed" | "notifyMentions" | "notifyNothing") => {
+    const ids = set(base[key], mine[key], theirs[key]);
+    return ids === undefined ? {} : { [key]: ids };
+  };
+  return {
+    order: { channels: order("channels"), direct: order("direct") },
+    muted: set(base.muted, mine.muted, theirs.muted) ?? [],
+    ...optional("closed"),
+    ...(space === undefined ? {} : { space }),
+    ...optional("collapsed"),
+    ...optional("notifyMentions"),
+    ...optional("notifyNothing"),
   };
 }
 
@@ -129,5 +195,6 @@ export function boundedWorkspaceSidebar(prefs: WorkspaceSidebarPrefs): Workspace
     ...(prefs.collapsed === undefined ? {} : { collapsed: bounded(prefs.collapsed) }),
     ...(prefs.notifyMentions === undefined ? {} : { notifyMentions: bounded(prefs.notifyMentions) }),
     ...(prefs.notifyNothing === undefined ? {} : { notifyNothing: bounded(prefs.notifyNothing) }),
+    ...(prefs.baseRevision === undefined ? {} : { baseRevision: prefs.baseRevision }),
   };
 }

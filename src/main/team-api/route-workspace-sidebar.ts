@@ -34,8 +34,9 @@ export async function routeWorkspaceSidebar(
   // `readJson` has already run the body through the workspace-sidebar wire codec.
   const body = await readJson(request);
   // `notifyLevels`: this host keeps the level of each conversation, so a client may offer it.
+  // `revision`: a client leaves out an answer older than the value it has, and saves from it.
   if (url.pathname === WORKSPACE_SIDEBAR_ROUTES.read)
-    return json(200, { sidebar: sidebar.get(member.id), notifyLevels: true });
+    return json(200, { sidebar: sidebar.get(member.id), notifyLevels: true, revision: sidebar.revision(member.id) });
   const saved = await runCauseEffect(sidebar.set(member.id, parsedSidebar(body)));
-  return json(200, { sidebar: saved, notifyLevels: true });
+  return json(200, { sidebar: saved.sidebar, notifyLevels: true, revision: saved.revision });
 }

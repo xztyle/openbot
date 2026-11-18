@@ -8,7 +8,7 @@
 .agent-message-dialog-backdrop {
   position: fixed;
   inset: 0;
-  z-index: calc(var(--openbot-layer-dialog) + 1);
+  z-index: var(--openbot-layer-overlay);
   display: grid;
   place-items: center;
   padding: var(--openbot-space-6);

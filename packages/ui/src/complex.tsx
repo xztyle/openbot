@@ -17,6 +17,15 @@ import { createPressedPopupCue } from "./utils";
 
 type OpenChangeHandler = (open: boolean) => void;
 
+/*
+ * A menu, select, combobox or popover portals to the body, outside the dialog that may hold its
+ * trigger. A modal dialog marks every new child of the body `aria-hidden`, which hid these surfaces
+ * from screen readers, and treats a press in them as a press outside. The top-layer mark, which the
+ * dialog's hide-outside step and `Dialog.Content` both read, keeps the surface visible and the dialog
+ * open. It also names the element for the overlay scroll lock.
+ */
+const NESTED_LAYER = { "data-kb-top-layer": "" } as const;
+
 function withBaseClass(baseClass: string, className: string | undefined): string {
   return className ? `${baseClass} ${className}` : baseClass;
 }
@@ -296,6 +305,7 @@ export const DropdownMenu: DropdownMenuApi = {
     onCleanup(() => focus?.releaseContent(content));
     return (
       <DropdownMenuPrimitive.Content
+        {...NESTED_LAYER}
         {...props}
         ref={[
           props.ref,
@@ -321,7 +331,7 @@ export const DropdownMenu: DropdownMenuApi = {
   SubTrigger: DropdownMenuPrimitive.SubTrigger,
   SubContent: (props) => {
     const motion = useMenuMotion();
-    return <DropdownMenuPrimitive.SubContent {...props} ref={[props.ref, motion]} />;
+    return <DropdownMenuPrimitive.SubContent {...NESTED_LAYER} {...props} ref={[props.ref, motion]} />;
   },
   Item: MenuItemAfterClose,
   CheckboxItem: (props) => <DropdownMenuPrimitive.CheckboxItem data-cuelume-toggle="" {...props} />,
@@ -362,6 +372,7 @@ export const ContextMenu: ContextMenuApi = {
     onCleanup(() => focus?.releaseContent(content));
     return (
       <ContextMenuPrimitive.Content
+        {...NESTED_LAYER}
         {...props}
         ref={[
           props.ref,
@@ -387,7 +398,7 @@ export const ContextMenu: ContextMenuApi = {
   SubTrigger: ContextMenuPrimitive.SubTrigger,
   SubContent: (props) => {
     const motion = useMenuMotion();
-    return <ContextMenuPrimitive.SubContent {...props} ref={[props.ref, motion]} />;
+    return <ContextMenuPrimitive.SubContent {...NESTED_LAYER} {...props} ref={[props.ref, motion]} />;
   },
   Item: MenuItemAfterClose,
   RadioGroup: (props) => <ContextMenuPrimitive.RadioGroup {...props} />,
@@ -419,7 +430,7 @@ export const Popover: PopoverApi = {
       />
     );
   },
-  Content: (props) => <PopoverPrimitive.Content {...props} />,
+  Content: (props) => <PopoverPrimitive.Content {...NESTED_LAYER} {...props} />,
   Title: (props) => <PopoverPrimitive.Title {...props} />,
   Description: (props) => <PopoverPrimitive.Description {...props} />,
   CloseButton: (props) => (
@@ -518,7 +529,7 @@ export const SelectPrimitive: SelectPrimitiveApi = {
   Value: (props) => <KobalteSelect.Value {...props} />,
   HiddenSelect: (props) => <KobalteSelect.HiddenSelect {...props} />,
   Portal: (props) => <KobalteSelect.Portal {...props} />,
-  Content: (props) => <KobalteSelect.Content {...props} />,
+  Content: (props) => <KobalteSelect.Content {...NESTED_LAYER} {...props} />,
   Listbox: (props) => <KobalteSelect.Listbox {...props} />,
   Item: (props) => <KobalteSelect.Item data-cuelume-select="" {...props} />,
   ItemLabel: (props) => <KobalteSelect.ItemLabel {...props} />,
@@ -563,7 +574,7 @@ export const Combobox: ComboboxApi = {
   },
   HiddenSelect: (props) => <ComboboxPrimitive.HiddenSelect {...props} />,
   Portal: (props) => <ComboboxPrimitive.Portal {...props} />,
-  Content: (props) => <ComboboxPrimitive.Content {...props} />,
+  Content: (props) => <ComboboxPrimitive.Content {...NESTED_LAYER} {...props} />,
   Listbox: (props) => <ComboboxPrimitive.Listbox {...props} />,
   Item: (props) => <ComboboxPrimitive.Item data-cuelume-select="" {...props} />,
   ItemLabel: (props) => <ComboboxPrimitive.ItemLabel {...props} />,

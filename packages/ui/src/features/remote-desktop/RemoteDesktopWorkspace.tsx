@@ -204,7 +204,7 @@ export function RemoteDesktopWorkspace(props: RemoteDesktopWorkspaceProps) {
                       {(state) => state.selectedOption()?.label ?? t("remoteDesktop.selectDisplay")}
                     </SelectValue>
                   </SelectTrigger>
-                  <SelectContent class="remote-desktop-display-select-content" />
+                  <SelectContent />
                 </Select>
               </div>
             </Show>

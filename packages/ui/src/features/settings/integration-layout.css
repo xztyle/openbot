@@ -189,14 +189,14 @@
 
 /* Above the settings window the flow opens from. */
 .integration-dialog-backdrop {
-  z-index: calc(var(--openbot-layer-dialog) + 1);
+  z-index: var(--openbot-layer-overlay);
 }
 
 .integration-wizard-dialog {
   position: fixed;
   top: 50%;
   left: 50%;
-  z-index: calc(var(--openbot-layer-dialog) + 1);
+  z-index: var(--openbot-layer-overlay);
   width: min(440px, calc(100vw - var(--openbot-space-6) * 2));
   max-height: calc(100dvh - var(--openbot-space-6) * 2);
   overflow-y: auto;
@@ -206,7 +206,7 @@
 
 /* A select inside a wizard dialog opens its list above the dialog, not behind it. */
 .integration-select-content {
-  z-index: calc(var(--openbot-layer-dialog) + 2);
+  z-index: var(--openbot-layer-overlay);
 }
 
 .integration-wizard-dialog h2 {

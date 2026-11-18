@@ -93,7 +93,7 @@
 
 .global-search-dialog {
   position: fixed;
-  z-index: calc(var(--openbot-layer-dialog) + 1);
+  z-index: var(--openbot-layer-overlay);
   /* A fixed top keeps the input and filters still when the result list changes height, and clears toasts. */
   top: 112px;
   left: 50%;

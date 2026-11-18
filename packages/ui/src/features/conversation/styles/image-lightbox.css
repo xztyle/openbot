@@ -76,7 +76,7 @@
 
 .ui-dialog-content.image-lightbox {
   position: fixed;
-  z-index: calc(var(--openbot-layer-dialog) + 1);
+  z-index: var(--openbot-layer-overlay);
   inset: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;

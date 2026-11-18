@@ -8,7 +8,7 @@
  */
 
 .opencode-key-backdrop {
-  z-index: calc(var(--openbot-layer-dialog) + 1);
+  z-index: var(--openbot-layer-overlay);
 }
 
 .opencode-key-dialog {

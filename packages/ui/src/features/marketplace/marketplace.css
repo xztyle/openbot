@@ -5,7 +5,7 @@
 .skills-marketplace-backdrop {
   /* The space between the window and the screen. It is smaller on a phone. */
   --marketplace-gutter: var(--openbot-space-4);
-  z-index: var(--openbot-layer-dialog-host);
+  z-index: var(--openbot-layer-overlay);
   padding: var(--marketplace-gutter);
 }
 
@@ -48,11 +48,7 @@
 
 /* Menus and the connect and confirm dialogs open over the window. */
 .marketplace-menu {
-  z-index: calc(var(--openbot-layer-dialog-host) + 1);
-}
-
-body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wizard-dialog) {
-  z-index: calc(var(--openbot-layer-dialog-host) + 1);
+  z-index: var(--openbot-layer-overlay);
 }
 
 .skills-marketplace-topbar {
@@ -750,11 +746,11 @@ body:has(.skills-marketplace) :is(.integration-dialog-backdrop, .integration-wiz
   flex-wrap: wrap;
 }
 
-/* The install dialog opens over the Marketplace window, so it takes the nested step of its layer. */
+/* The install dialog opens over the Marketplace window: it opens last, so the overlay layer puts it on top. */
 .marketplace-install-backdrop {
   position: fixed;
   inset: 0;
-  z-index: calc(var(--openbot-layer-dialog-host) + 2);
+  z-index: var(--openbot-layer-overlay);
   display: grid;
   place-items: center;
   padding: var(--openbot-space-6);

@@ -380,14 +380,19 @@
   --openbot-shadow-card: 0 0 0 transparent;
   --openbot-shadow-overlay: 0 12px 32px rgba(0, 0, 0, 0.48);
   --openbot-focus-ring: 0 0 0 1px var(--openbot-border-focus);
+  /* The overlay stack. A surface that floats in the page and is not portaled, such as a drag
+     preview or an inline picker, takes the dropdown layer. Every surface that a person opens and
+     that portals to the body - dialog, sheet, menu, select, combobox, popover, picker - takes the
+     one overlay layer and nothing else: the surface opened last is the last child of the body, so
+     it paints on top and takes the press. A menu or a select in a dialog, a dialog from a menu and a
+     dialog from a dialog all stack by that order. Do not add or subtract from the overlay layer: a
+     surface one step above it covers the menus and dialogs that later open from it.
+     `scripts/overlay-stack-e2e.ts` checks the order. */
   --openbot-layer-dropdown: 40;
-  --openbot-layer-popover: 60;
-  --openbot-layer-dialog: 100;
-  /* A dialog that opens other surfaces over itself, such as the marketplace. Its own menus take
-     one above it, and a dialog it opens takes two, so the order is stated once here instead of
-     being re-derived by arithmetic at each surface - where a tie is decided by insertion order,
-     and the surface opened last wins only by accident. */
-  --openbot-layer-dialog-host: calc(var(--openbot-layer-dialog) + var(--openbot-layer-popover));
+  --openbot-layer-overlay: 100;
+  --openbot-layer-popover: var(--openbot-layer-overlay);
+  --openbot-layer-dialog: var(--openbot-layer-overlay);
+  /* A toast stays readable and pressable over an open dialog. */
   --openbot-layer-toast: 120;
   /* A tooltip names the control under the pointer. It shows above every other layer, also above
      a dialog or a menu that holds the control. */

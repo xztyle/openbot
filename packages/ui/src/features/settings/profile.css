@@ -297,7 +297,7 @@
    does not cut it. In a dialog it mounts in the dialog, above the overlay. */
 .profile-heat-tooltip {
   position: fixed;
-  z-index: var(--openbot-layer-toast);
+  z-index: var(--openbot-layer-tooltip);
   transform: translate(-50%, calc(-100% - var(--openbot-space-2)));
   pointer-events: none;
   white-space: nowrap;

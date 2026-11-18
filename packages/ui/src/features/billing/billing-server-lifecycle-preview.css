@@ -128,7 +128,7 @@
 }
 
 .billing-lifecycle-menu.ui-action-menu {
-  z-index: var(--openbot-layer-dialog-host);
+  z-index: var(--openbot-layer-overlay);
 }
 
 .billing-lifecycle-list {

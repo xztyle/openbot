@@ -2,9 +2,11 @@
   padding-right: var(--browser-panel-width, 380px);
 }
 
+/* It stays mounted, so its portal is an early child of the body: a dialog or a menu that opens
+   from it later stacks above it on the same overlay layer. */
 .remote-desktop-workspace {
   position: fixed;
-  z-index: var(--openbot-layer-toast);
+  z-index: var(--openbot-layer-overlay);
   inset: 0;
   display: flex;
   min-width: 0;
@@ -105,10 +107,6 @@
   min-width: 112px;
   flex: 0 1 168px;
   font-size: var(--openbot-text-sm);
-}
-
-.remote-desktop-display-select-content {
-  z-index: calc(var(--openbot-layer-toast) + 1);
 }
 
 .remote-desktop-overlay {

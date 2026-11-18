@@ -1,8 +1,6 @@
 /*
- * The connect dialog. It opens over the marketplace modal and over the menus the marketplace opens,
- * so it takes the nested step of `--openbot-layer-dialog-host` rather than the shared dialog layer:
- * both portals are children of `body`, and insertion order alone would break the first time it is
- * opened from somewhere else.
+ * The connect dialog. It opens over the marketplace modal and over the menus the marketplace opens.
+ * Like every portaled surface it takes the one overlay layer: it opens last, so it is on top.
  *
  * The shape is a centred column: the two ends of the connection, the name, one card of facts, and
  * one button. A connection is a single decision, so the dialog is a single line of reading down the
@@ -10,7 +8,7 @@
  */
 
 .mcp-connect-backdrop {
-  z-index: calc(var(--openbot-layer-dialog-host) + 2);
+  z-index: var(--openbot-layer-overlay);
 }
 
 .mcp-connect-dialog {

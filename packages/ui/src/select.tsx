@@ -86,6 +86,8 @@ export function SelectContent(props: SelectContentProps): JSX.Element {
         }}
         class={cx("ui-select-content", props.class)}
         data-slot="select-content"
+        // See `NESTED_LAYER` in complex.tsx: a select in a dialog stays visible to screen readers.
+        data-kb-top-layer=""
         {...others}
       >
         <SelectPrimitive.Listbox class="ui-select-listbox" scrollRef={() => contentElement} />

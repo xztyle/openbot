@@ -2,7 +2,7 @@ import type { JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
 import { Button, buttonVariants, IconButton } from "../../button";
 import { Popover } from "../../complex";
-import { ChevronRight, Ellipsis, MessageSquareReply, SmilePlus } from "../../icons";
+import { Bookmark, ChevronRight, Ellipsis, MessageSquareReply, Pin, SmilePlus } from "../../icons";
 import { useText } from "../../text";
 import { LabelTooltip, LabelTooltipTrigger } from "../../tooltip";
 import { cx, usesTouchLayout } from "../../utils";
@@ -42,6 +42,10 @@ export interface MessageRowProps {
   highlighted?: boolean | undefined;
   /** The reader is mentioned: the row gets the mention tint. */
   mentionsReader?: boolean | undefined;
+  /** The message is pinned to its channel: "Pinned by <name>" over it, and a light tint. */
+  pinnedBy?: string | undefined;
+  /** The reader saved the message for later: "Saved for later" over it. */
+  saved?: boolean | undefined;
   reactions?: readonly WorkspaceReaction[] | undefined;
   onToggleReaction?: ((emoji: string) => void) | undefined;
   /** Opens the full emoji picker. The quick row of the react button does not need it. */
@@ -100,6 +104,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
         data-grouped={props.grouped ? "" : undefined}
         data-highlighted={props.highlighted ? "" : undefined}
         data-mention={props.mentionsReader ? "" : undefined}
+        data-pinned={props.pinnedBy !== undefined && !props.deleted ? "" : undefined}
         data-menu-open={menuOpen() ? "" : undefined}
         aria-label={t("workspace.message.label", { name: props.author.name, time: time(props.sentAt) })}
         onPointerEnter={arm}
@@ -120,6 +125,24 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
           </Show>
         </div>
         <div class="ws-message-body">
+          <Show when={!props.deleted && (props.pinnedBy !== undefined || props.saved)}>
+            <p class="ws-message-marks">
+              <Show when={props.saved}>
+                <span class="ws-message-mark" data-mark="saved">
+                  <Bookmark aria-hidden="true" />
+                  {t("workspace.message.savedMark")}
+                </span>
+              </Show>
+              <Show when={props.pinnedBy}>
+                {(name) => (
+                  <span class="ws-message-mark" data-mark="pinned">
+                    <Pin aria-hidden="true" />
+                    {t("workspace.message.pinnedBy", { name: name() })}
+                  </span>
+                )}
+              </Show>
+            </p>
+          </Show>
           <Show when={!props.grouped}>
             <div class="ws-message-meta">
               <MemberProfilePopover

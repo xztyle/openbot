@@ -1,5 +1,5 @@
 // Checks that the workspace keeps the reader's place as Slack does, with a mouse on a desktop and
-// with touch on an iPhone: the thread panel follows new replies only at the end, shows "N new
+// with touch on an iPhone: the thread panel opens at its first unread reply, follows new replies only at the end, shows "N new
 // replies" above it and jumps down on a press, comes back to the same place when it opens again,
 // and goes to the end when the reader sends a reply; a channel opens at the place the reader left
 // when they come back to it. It runs against a running Storybook that renders the real web
@@ -33,7 +33,9 @@ interface Place {
 }
 
 interface SurfaceResult {
-  /** The thread opened at its newest reply. */
+  /** The thread had unread replies: it opened with the "New" divider in view, as a channel does. */
+  openedAtNew: boolean;
+  /** At the end after the reader went down. */
   openedAtEnd: Place;
   /** A new reply came while the reader was at the end: the panel followed it. */
   followedAtEnd: Place;
@@ -124,6 +126,13 @@ async function run(browser: Browser, options: BrowserContextOptions, touch: bool
   await page.locator("section.ws-channel-pane").waitFor({ timeout: 30_000 });
   await openThread(page, touch);
 
+  const openedAtNew = await threadScroll(page).evaluate((element) => {
+    const divider = element.querySelector(".ws-new-divider");
+    if (!divider) return false;
+    const top = divider.getBoundingClientRect().top - element.getBoundingClientRect().top;
+    return top >= -4 && top < element.clientHeight;
+  });
+  await scrollThreadTo(page, 1_000_000);
   const openedAtEnd = await place(page);
   await nextReply(page, openedAtEnd.replies);
   const followedAtEnd = await place(page);
@@ -161,6 +170,7 @@ async function run(browser: Browser, options: BrowserContextOptions, touch: bool
   await page.screenshot({ path: resolve(OUT, `${name}-thread-reopened.png`) });
 
   const result: SurfaceResult = {
+    openedAtNew,
     openedAtEnd,
     followedAtEnd,
     keptPlace: { before, after, pill: pillText },
@@ -214,7 +224,8 @@ async function run(browser: Browser, options: BrowserContextOptions, touch: bool
 }
 
 function check(result: SurfaceResult) {
-  assert.ok(result.openedAtEnd.fromEnd <= FOLLOW_DISTANCE, "The thread must open at its newest reply.");
+  assert.equal(result.openedAtNew, true, "A thread with unread replies must open at the first one.");
+  assert.ok(result.openedAtEnd.fromEnd <= FOLLOW_DISTANCE, "The reader must reach the newest reply.");
   assert.ok(result.followedAtEnd.fromEnd <= FOLLOW_DISTANCE, "At the end, the panel must follow a new reply.");
   assert.ok(result.keptPlace.after.replies > result.keptPlace.before.replies, "A reply must arrive while reading up.");
   assert.ok(

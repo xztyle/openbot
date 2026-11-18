@@ -1169,3 +1169,37 @@ button.ws-profile-trigger.ws-message-author:hover {
   max-height: 32vh;
   overflow-y: auto;
 }
+
+/* "Pinned by Ana" and "Saved for later" over a message, as in Slack. ----------------------------- */
+
+.ws-message[data-pinned]:not([data-mention], [data-highlighted]) {
+  background: color-mix(in srgb, var(--openbot-warning) 6%, transparent);
+}
+
+.ws-message-marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--openbot-space-1) var(--openbot-space-3);
+  margin: 0 0 var(--openbot-space-0-5);
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-message-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+}
+
+.ws-message-mark > svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+}
+
+.ws-message-mark[data-mark="pinned"] {
+  color: var(--openbot-warning-text);
+}
+
+.ws-message-mark[data-mark="saved"] {
+  color: var(--openbot-accent-text);
+}

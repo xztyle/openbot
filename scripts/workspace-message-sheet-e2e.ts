@@ -1,5 +1,5 @@
 // Checks the message actions of the web workspace in a running Storybook. On a phone a long press
-// opens one sheet (quick reactions, then Reply in thread, Copy text, Copy link, Edit, Delete) and no
+// opens one sheet (quick reactions, then Reply in thread, Mark unread, Save, Copy, Pin, Delete) and no
 // action bar shows under the messages; on a desktop the right-click menu and the hover bar stay.
 // Pass the URL that `bun run storybook` reports:
 // `bun scripts/workspace-message-sheet-e2e.ts --storybook=http://localhost:6006`.
@@ -99,7 +99,9 @@ try {
 
   assert.equal(inlineActionBars, 0, "A phone must not draw an action bar under each message.");
   assert.equal(openMenus, 0, "A long press must open only the sheet, not a menu as well.");
-  assert.deepEqual(sheetItems.slice(0, 3), ["Reply in thread", "Copy text", "Copy link"]);
+  assert.equal(sheetItems[0], "Reply in thread");
+  for (const item of ["Mark unread", "Save for later", "Copy text", "Copy link"])
+    assert.ok(sheetItems.includes(item), `The sheet must offer "${item}".`);
   assert.equal(sheetItems.at(-1), "Delete message", "Delete must be the last action.");
   assert.equal(emojiListShown, true, "More emoji must show every emoji in the sheet.");
   assert.equal(reactionAdded, true, "A quick reaction in the sheet must react to the message.");
@@ -114,7 +116,9 @@ try {
   await menu.waitFor({ timeout: 5_000 });
   report.desktop = { menuItems: await menu.getByRole("menuitem").allInnerTexts(), hoverBar };
   assert.equal(hoverBar, true, "A desktop keeps the hover action bar.");
-  assert.deepEqual(report.desktop.menuItems.slice(0, 3), ["Reply in thread", "Copy text", "Copy link"]);
+  assert.equal(report.desktop.menuItems[0], "Reply in thread");
+  for (const item of ["Mark unread", "Save for later", "Copy text", "Copy link"])
+    assert.ok(report.desktop.menuItems.includes(item), `The menu must offer "${item}".`);
 
   report.passed = true;
 } finally {

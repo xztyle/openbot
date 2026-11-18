@@ -11,6 +11,7 @@ import {
   Lock,
   LogOut,
   Pencil,
+  Pin,
   ShieldCheck,
   Trash2,
   UserRoundPlus,
@@ -27,11 +28,12 @@ import { WorkspaceSelect } from "./WorkspaceSelect";
 import { useRecentTime } from "./workspace-format";
 import type { AgentAnswerMode, ChannelVisibility, WorkspaceMember } from "./workspace-types";
 
-export type ChannelDetailsTab = "about" | "members" | "integrations" | "decisions" | "settings";
+export type ChannelDetailsTab = "about" | "members" | "pins" | "integrations" | "decisions" | "settings";
 
 const TABS: readonly string[] = [
   "about",
   "members",
+  "pins",
   "integrations",
   "decisions",
   "settings",
@@ -39,6 +41,19 @@ const TABS: readonly string[] = [
 
 function isChannelDetailsTab(value: string): value is ChannelDetailsTab {
   return TABS.includes(value);
+}
+
+/** A message pinned to the channel, as the Pins tab lists it. */
+export interface ChannelPinItem {
+  /** The id of the pinned message. */
+  id: string;
+  author: WorkspaceMember;
+  /** One plain line of the message. */
+  text: string;
+  /** The time of the message, in milliseconds since the epoch. */
+  at: number;
+  /** The name of the person or agent who pinned it. */
+  pinnedBy: string;
 }
 
 /** A decision that an agent made without a person in a hands-off channel. */
@@ -131,6 +146,10 @@ export interface ChannelDetailsProps {
   decisions?: readonly ChannelDecisionItem[] | null | undefined;
   /** Opens the message of a decision. */
   onOpenDecision?: ((id: string) => void) | undefined;
+  /** The pinned messages, newest pin first; null while they load. Absent, the panel has no Pins tab. */
+  pins?: readonly ChannelPinItem[] | null | undefined;
+  /** Shows a pinned message in the conversation. */
+  onOpenPin?: ((id: string) => void) | undefined;
   /** Whether the channel is in hands-off mode. */
   handsOff?: boolean | undefined;
   /** Turns hands-off mode on or off. Absent, the setting is hidden: only owners and admins change it. */
@@ -138,7 +157,7 @@ export interface ChannelDetailsProps {
   class?: string;
 }
 
-/** The channel details panel: About, Members (with per-agent answer modes), Integrations, Decisions, Settings. */
+/** The channel details panel: About, Members (with per-agent answer modes), Pins, Integrations, Decisions, Settings. */
 export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
   const { t } = useText();
   const [tab, setTab] = createSignal<ChannelDetailsTab>(props.defaultTab ?? "about");
@@ -173,6 +192,11 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
           <Tabs.Trigger class="ws-tab" value="members">
             {t("workspace.details.membersTab", { count: props.members.length })}
           </Tabs.Trigger>
+          <Show when={props.pins !== undefined}>
+            <Tabs.Trigger class="ws-tab" value="pins">
+              {t("workspace.details.pins")}
+            </Tabs.Trigger>
+          </Show>
           <Tabs.Trigger class="ws-tab" value="integrations">
             {t("workspace.details.integrations")}
           </Tabs.Trigger>
@@ -264,6 +288,12 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
             </For>
           </ul>
         </Tabs.Content>
+
+        <Show when={props.pins !== undefined}>
+          <Tabs.Content class="ws-details-content" value="pins">
+            <PinList pins={props.pins ?? null} onOpen={props.onOpenPin} />
+          </Tabs.Content>
+        </Show>
 
         <Tabs.Content class="ws-details-content" value="integrations">
           <Show
@@ -384,6 +414,62 @@ export function ChannelDetails(props: ChannelDetailsProps): JSX.Element {
 }
 
 /** The decisions of a hands-off channel, newest first. Each one opens its message. */
+function PinList(props: {
+  pins: readonly ChannelPinItem[] | null;
+  onOpen?: ((id: string) => void) | undefined;
+}): JSX.Element {
+  const { t, format } = useText();
+  const recent = useRecentTime();
+  return (
+    <Show when={props.pins} fallback={<p class="ws-details-empty">{t("workspace.details.pinsLoading")}</p>}>
+      {(pins) => (
+        <Show when={pins().length > 0} fallback={<p class="ws-details-empty">{t("workspace.details.pinsEmpty")}</p>}>
+          <ul class="ws-feed">
+            <For each={pins()} keyed={(item) => item.id}>
+              {(item) => (
+                <li>
+                  <Button
+                    variant="ghost"
+                    class="ws-feed-row"
+                    disabled={!props.onOpen}
+                    onClick={() => props.onOpen?.(item().id)}
+                  >
+                    <span class="ws-feed-avatar">
+                      <MemberAvatar member={item().author} size="md" />
+                    </span>
+                    <span class="ws-feed-copy">
+                      <span class="ws-feed-heading">
+                        <span class="ws-feed-what">
+                          {item().author.name}
+                          <Show when={item().author.kind === "agent"}>
+                            <AiBadge />
+                          </Show>
+                        </span>
+                        <time
+                          class="ws-feed-time"
+                          datetime={new Date(item().at).toISOString()}
+                          title={format.date(item().at, { dateStyle: "medium", timeStyle: "short" })}
+                        >
+                          {recent(item().at)}
+                        </time>
+                      </span>
+                      <span class="ws-decision-text">{item().text}</span>
+                      <span class="ws-pin-by">
+                        <Pin aria-hidden="true" />
+                        {t("workspace.details.pinnedBy", { name: item().pinnedBy })}
+                      </span>
+                    </span>
+                  </Button>
+                </li>
+              )}
+            </For>
+          </ul>
+        </Show>
+      )}
+    </Show>
+  );
+}
+
 function DecisionList(props: {
   decisions: readonly ChannelDecisionItem[] | null;
   onOpen?: ((id: string) => void) | undefined;

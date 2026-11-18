@@ -1,7 +1,8 @@
 import type { JSX } from "@solidjs/web";
-import { Show } from "solid-js";
-import { Button, IconButton } from "../../button";
-import { Bell, BellOff, ChevronLeft, Hash, Info, LayoutDashboard, Lock, MessageSquareText } from "../../icons";
+import { For, Show } from "solid-js";
+import { Button, buttonVariants, IconButton } from "../../button";
+import { DropdownMenu } from "../../complex";
+import { Bell, BellOff, Check, ChevronLeft, Hash, Info, LayoutDashboard, Lock, MessageSquareText } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { AiBadge, AvatarStack, MemberAvatar } from "./WorkspaceAvatar";
@@ -9,6 +10,20 @@ import type { ChannelVisibility, ConversationKind, WorkspaceMember } from "./wor
 
 /** The right panel that a header button opens, to show its pressed state. */
 export type ChannelHeaderPanel = "details" | "threads" | "artifacts";
+
+/** The bell's choice for one conversation. `default`: the reader's level for the server applies. */
+export type ChannelNotifyChoice = "default" | "all" | "mentions" | "nothing";
+
+const NOTIFY_CHOICES = [
+  { value: "default", label: "workspace.header.notifyDefault" },
+  { value: "all", label: "workspace.header.notifyAll" },
+  { value: "mentions", label: "workspace.header.notifyMentions" },
+  { value: "nothing", label: "workspace.header.notifyNothing" },
+] as const satisfies readonly { value: ChannelNotifyChoice; label: string }[];
+
+function isNotifyChoice(value: string): value is ChannelNotifyChoice {
+  return NOTIFY_CHOICES.some((choice) => choice.value === value);
+}
 
 export interface ChannelHeaderProps {
   kind: ConversationKind;
@@ -28,12 +43,13 @@ export interface ChannelHeaderProps {
   onShowThreads?: (() => void) | undefined;
   onShowArtifacts?: (() => void) | undefined;
   activePanel?: ChannelHeaderPanel | null | undefined;
-  /**
-   * The reader muted the conversation: the bell shows it and turns it back on. Slack's bell also
-   * offers "Just mentions"; the host keeps only mute for each conversation, so the bell is a toggle.
-   */
+  /** The reader muted the conversation: the bell shows it and turns it back on. */
   muted?: boolean | undefined;
   onToggleMute?: (() => void) | undefined;
+  /** The reader's notification level here. With `onNotifyChange` the bell opens Slack's menu. */
+  notify?: ChannelNotifyChoice | undefined;
+  /** Absent on a host that keeps no level for each conversation: the bell only mutes. */
+  onNotifyChange?: ((choice: ChannelNotifyChoice) => void) | undefined;
   /** A search field, at the right. */
   search?: JSX.Element;
   /** The narrow layout's back button. */
@@ -120,17 +136,32 @@ export function ChannelHeader(props: ChannelHeaderProps): JSX.Element {
         </Show>
         <Show when={props.onToggleMute}>
           {(toggle) => (
-            <IconButton
-              variant="ghost"
-              class="ws-channel-header-bell"
-              data-muted={props.muted ? "" : undefined}
-              label={t(props.muted ? "workspace.header.unmute" : "workspace.header.mute")}
-              onClick={() => toggle()()}
+            <Show
+              when={props.onNotifyChange}
+              fallback={
+                <IconButton
+                  variant="ghost"
+                  class="ws-channel-header-bell"
+                  data-muted={props.muted ? "" : undefined}
+                  label={t(props.muted ? "workspace.header.unmute" : "workspace.header.mute")}
+                  onClick={() => toggle()()}
+                >
+                  <Show when={props.muted} fallback={<Bell />}>
+                    <BellOff />
+                  </Show>
+                </IconButton>
+              }
             >
-              <Show when={props.muted} fallback={<Bell />}>
-                <BellOff />
-              </Show>
-            </IconButton>
+              {(change) => (
+                <NotifyMenu
+                  name={props.name}
+                  muted={props.muted}
+                  notify={props.notify}
+                  onToggleMute={toggle()}
+                  onNotifyChange={change()}
+                />
+              )}
+            </Show>
           )}
         </Show>
         <Show when={props.onShowThreads}>
@@ -171,5 +202,59 @@ export function ChannelHeader(props: ChannelHeaderProps): JSX.Element {
         </Show>
       </div>
     </header>
+  );
+}
+
+/** Slack's bell: the level of the conversation, then Mute. */
+function NotifyMenu(props: {
+  name: string;
+  muted?: boolean | undefined;
+  notify?: ChannelNotifyChoice | undefined;
+  onToggleMute: () => void;
+  onNotifyChange: (choice: ChannelNotifyChoice) => void;
+}): JSX.Element {
+  const { t } = useText();
+  const choice = () => props.notify ?? "default";
+  const quiet = () => props.muted || choice() === "nothing";
+  return (
+    <DropdownMenu.Root placement="bottom-end" gutter={4}>
+      <DropdownMenu.Trigger
+        class={cx(buttonVariants({ variant: "ghost", size: "icon-sm" }), "ws-channel-header-bell")}
+        data-muted={quiet() ? "" : undefined}
+        aria-label={t("workspace.header.notifications", { name: props.name })}
+      >
+        <Show when={quiet()} fallback={<Bell aria-hidden="true" />}>
+          <BellOff aria-hidden="true" />
+        </Show>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content class="ws-notify-menu">
+          <DropdownMenu.RadioGroup
+            value={choice()}
+            onChange={(value) => {
+              if (isNotifyChoice(value)) props.onNotifyChange(value);
+            }}
+          >
+            <For each={NOTIFY_CHOICES}>
+              {(item) => (
+                <DropdownMenu.RadioItem value={item.value} closeOnSelect class="ws-notify-option">
+                  <span>{t(item.label)}</span>
+                  <Show when={choice() === item.value}>
+                    <Check aria-hidden="true" class="ws-notify-check" />
+                  </Show>
+                </DropdownMenu.RadioItem>
+              )}
+            </For>
+          </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item onSelect={() => props.onToggleMute()}>
+            <Show when={props.muted} fallback={<BellOff aria-hidden="true" />}>
+              <Bell aria-hidden="true" />
+            </Show>
+            <span>{t(props.muted ? "workspace.header.unmute" : "workspace.header.mute")}</span>
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

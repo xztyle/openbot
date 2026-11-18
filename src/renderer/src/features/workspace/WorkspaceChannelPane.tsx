@@ -76,8 +76,32 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
   const firstUnreadId = createMemo(() => {
     const held = ws.channels.state.unread;
     if (!held || held.channelId !== props.channelId) return null;
+    // "Mark unread" names its message; the divider goes right there.
+    if (held.messageId && entries().some((entry) => entry.id === held.messageId)) return held.messageId;
     return firstUnreadChannelMessageId(entries(), held.count, ws.env.isReader);
   });
+  // The reader's saved messages here, and their state in each thread of the page, for the marks on
+  // the messages and the unread dot of each thread summary.
+  void ws.marks.loadSaved(props.channelId);
+  createEffect(
+    () =>
+      entries()
+        .filter((entry) => (entry.threadSummary?.replyCount ?? 0) > 0 && !entry.threadRootId)
+        .map((entry) => `${entry.id}@${entry.threadSummary?.lastReplyAt ?? ""}`)
+        .join(" "),
+    (key) => {
+      if (!key) return;
+      const timer = setTimeout(
+        () =>
+          void ws.marks.loadThreads(
+            props.channelId,
+            key.split(" ").map((item) => item.split("@")[0] ?? ""),
+          ),
+        300,
+      );
+      return () => clearTimeout(timer);
+    },
+  );
   /** Who works, thinks and types here, with Stop for a working agent. */
   const work = createAgentWork({
     channelId: props.channelId,
@@ -264,6 +288,12 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
           activePanel={panel()?.kind === "details" ? "details" : panel()?.kind === "artifacts" ? "artifacts" : null}
           muted={ws.isMuted(props.channelId)}
           onToggleMute={() => ws.setMuted(props.channelId, !ws.isMuted(props.channelId))}
+          notify={ws.chosenNotifyLevel(props.channelId) ?? "default"}
+          onNotifyChange={
+            ws.notifyLevels()
+              ? (choice) => ws.setNotifyLevel(props.channelId, choice === "default" ? null : choice)
+              : undefined
+          }
           onBack={() => ws.back()}
         />
       </WorkspaceContextMenu>

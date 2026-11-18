@@ -39,6 +39,8 @@ export interface HeldUnread {
   count: number;
   /** The newest sequence of that first page. Messages after it arrived while the reader was here. */
   throughSequence: number;
+  /** Set by "Mark unread": the message where the "new" divider goes. */
+  messageId?: string;
 }
 
 interface ChannelsState {
@@ -132,6 +134,11 @@ export function createChannelsController(env: ChannelsEnvironment) {
   const liveRevisions = new Map<string, number>();
   /** The channel whose unread part was kept for this opening, so a refresh does not keep it again. */
   let unreadKeptFor: string | null = null;
+  /**
+   * The channel that the reader marked unread while they look at it. As in Slack it stays unread
+   * until they leave it or mark it read: nothing reads it meanwhile.
+   */
+  let markedUnread: string | null = null;
 
   const supported = env.supported;
   /**
@@ -246,7 +253,13 @@ export function createChannelsController(env: ChannelsEnvironment) {
         if (!failedCommand) state.error = null;
       });
       if (selected && !selectedExists) env.writeSelection(null);
-      if (selected && page && env.canMarkRead() && page.throughSequence > (readThrough.get(selected) ?? 0)) {
+      if (
+        selected &&
+        page &&
+        markedUnread !== selected &&
+        env.canMarkRead() &&
+        page.throughSequence > (readThrough.get(selected) ?? 0)
+      ) {
         readThrough.set(selected, page.throughSequence);
         try {
           await env.port().agent.channelCommand({
@@ -278,6 +291,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     env.beforeOpen();
     env.writeSelection(channelId);
     unreadKeptFor = null;
+    markedUnread = null;
     flush(() =>
       setState((state) => {
         Object.assign(state, { selectedId: channelId, page: null, unread: null, editing: null, loading: true });
@@ -482,7 +496,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
   });
   /** Marks the open channel read through a message that arrived while the reader looks at it. */
   function readLive(channelId: string, sequence: number) {
-    if (!env.canMarkRead() || sequence <= (readThrough.get(channelId) ?? 0)) return;
+    if (markedUnread === channelId || !env.canMarkRead() || sequence <= (readThrough.get(channelId) ?? 0)) return;
     readThrough.set(channelId, sequence);
     void env
       .port()
@@ -634,15 +648,32 @@ export function createChannelsController(env: ChannelsEnvironment) {
     close: () => {
       env.writeSelection(null);
       unreadKeptFor = null;
+      markedUnread = null;
       setState((state) => {
         Object.assign(state, { selectedId: null, page: null, unread: null, editing: null });
       });
     },
     /** The reader jumped to the latest message or marked the channel read: the divider has done its job. */
-    releaseUnread: () =>
+    releaseUnread: () => {
+      markedUnread = null;
+      readThrough.delete(state.selectedId ?? "");
       setState((state) => {
         state.unread = null;
-      }),
+      });
+    },
+    /**
+     * The reader marked a message of the open channel unread: the host moved their position back.
+     * The divider moves to the message, and the channel stays unread until the reader leaves it.
+     */
+    holdUnread: (channelId: string, messageId: string, count: number, throughSequence: number) => {
+      if (state.selectedId !== channelId) return;
+      markedUnread = channelId;
+      unreadKeptFor = channelId;
+      readThrough.delete(channelId);
+      setState((state) => {
+        state.unread = { channelId, count, throughSequence, messageId };
+      });
+    },
     edit: () =>
       setState((state) => {
         if (!state.page?.channel.archived) Object.assign(state, { editing: "settings" });

@@ -689,6 +689,31 @@
   overflow-wrap: anywhere;
 }
 
+/* Pins tab: who pinned each message. */
+.ws-pin-by {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  color: var(--openbot-warning-text);
+  font-size: var(--openbot-text-sm);
+}
+
+.ws-pin-by > svg {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+}
+
+/* The bell's menu: a check marks the level of the conversation. */
+.ws-notify-option {
+  justify-content: space-between;
+}
+
+.ws-notify-check {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  margin-left: auto;
+}
+
 /* Agent work: Stop on the line over the composer ------------------------------------------------ */
 
 /* Small, so the line keeps its height while an agent works. */

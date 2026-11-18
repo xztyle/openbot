@@ -16,6 +16,8 @@ export { default as Blocks } from "lucide-solid/icons/blocks";
 export { default as Bold } from "lucide-solid/icons/bold";
 export { default as BookMarked } from "lucide-solid/icons/book-marked";
 export { default as BookOpen } from "lucide-solid/icons/book-open";
+export { default as Bookmark } from "lucide-solid/icons/bookmark";
+export { default as BookmarkMinus } from "lucide-solid/icons/bookmark-minus";
 export { default as Bot } from "lucide-solid/icons/bot";
 export { default as Brain } from "lucide-solid/icons/brain";
 export { default as BringToFront } from "lucide-solid/icons/bring-to-front";

@@ -1,5 +1,19 @@
-import type { AttachmentSummary, ChannelMessage } from "@openbot/contracts/ipc";
-import { Copy, Link, MessageSquareReply, Pencil, Trash2, toast } from "@openbot/ui";
+import { type AttachmentSummary, type ChannelMessage, channelKind } from "@openbot/contracts/ipc";
+import {
+  Bell,
+  BellOff,
+  Bookmark,
+  BookmarkMinus,
+  CircleDot,
+  Copy,
+  Link,
+  MessageSquareReply,
+  Pencil,
+  Pin,
+  PinOff,
+  Trash2,
+  toast,
+} from "@openbot/ui";
 import type { AgentMessage } from "@openbot/ui/data";
 import { MessageBody } from "@openbot/ui/features/conversation/MessageRendering";
 import { ArtifactCard } from "@openbot/ui/features/workspace/ArtifactCard";
@@ -13,6 +27,7 @@ import { toAgentMessage } from "../../app-message-projection";
 import { MemberProfile } from "./WorkspaceProfile";
 import { useWorkspace } from "./workspace-context";
 import {
+  memberById,
   mentionsReader,
   messageArtifacts,
   messageAuthor,
@@ -69,7 +84,7 @@ export interface WorkspaceMessageProps {
 
 /** One message of the workspace, as a Slack row with its steps, artifacts, reactions and thread. */
 export function WorkspaceMessage(props: WorkspaceMessageProps) {
-  const { t } = useText();
+  const { t, errorMessage } = useText();
   const ws = useWorkspace();
   const entry = () => props.row.entry;
   const author = createMemo(() => messageAuthor(ws.directory(), entry()));
@@ -103,6 +118,23 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
   /** A plain line takes the light row; Markdown, files and questions take the chat's renderer. */
   const plain = createMemo(() => (props.row.pending ? null : plainMessageSegments(ws.directory(), entry())));
   const threadRootId = () => (props.inThread ? (entry().threadRootId ?? null) : null);
+  /** The thread that "Mark unread" moves in: in the thread panel the root's thread too. */
+  const readThread = () => (props.inThread ? (entry().threadRootId ?? entry().id) : null);
+  /** The reader's state in the thread that this message starts, in the channel transcript. */
+  const ownThread = () =>
+    props.inThread || entry().threadRootId ? undefined : ws.marks.thread(props.channelId, entry().id);
+  const savedForLater = () => ws.marks.saved(props.channelId, entry().id) === "saved";
+  const pinnedBy = () => {
+    const pin = entry().pinned;
+    return pin ? memberById(ws.directory(), pin.by.id).name : undefined;
+  };
+  const inChannel = () => {
+    const current = ws.summary(props.channelId);
+    return current ? channelKind(current) === "channel" : true;
+  };
+  /** Runs a mark change; a failure shows why. */
+  const act = (action: () => Promise<void>) =>
+    void action().catch((error: unknown) => toast.error(errorMessage(error, t("workspace.message.actionFailed"))));
   const copy = (text: string, done: string) =>
     void navigator.clipboard?.writeText(text).then(
       () => toast.success(done),
@@ -118,6 +150,30 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         icon: <MessageSquareReply aria-hidden="true" />,
         onSelect: () => ws.openThread(props.channelId, entry().id),
       });
+    // Slack's order: follow, mark unread, save, copy, pin, then the changes to the reader's own
+    // message, delete last.
+    const thread = ownThread();
+    if (thread && ws.marks.supports.follow())
+      items.push({
+        id: "follow",
+        label: t(thread.followed ? "workspace.thread.unfollow" : "workspace.thread.follow"),
+        icon: thread.followed ? <BellOff aria-hidden="true" /> : <Bell aria-hidden="true" />,
+        onSelect: () => act(() => ws.marks.setFollowed(props.channelId, entry().id, !thread.followed)),
+      });
+    if (ws.marks.supports.markUnread())
+      items.push({
+        id: "mark-unread",
+        label: t("workspace.message.markUnread"),
+        icon: <CircleDot aria-hidden="true" />,
+        onSelect: () => act(() => ws.marks.markUnread(props.channelId, entry().id, readThread())),
+      });
+    if (ws.marks.supports.saved())
+      items.push({
+        id: "save",
+        label: t(savedForLater() ? "workspace.message.unsave" : "workspace.message.save"),
+        icon: savedForLater() ? <BookmarkMinus aria-hidden="true" /> : <Bookmark aria-hidden="true" />,
+        onSelect: () => act(() => ws.marks.setSaved(props.channelId, entry().id, !savedForLater())),
+      });
     items.push({
       id: "copy-text",
       label: t("workspace.app.message.copyText"),
@@ -132,7 +188,22 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         icon: <Link aria-hidden="true" />,
         onSelect: () => copy(link, t("workspace.app.message.linkCopied")),
       });
-    // Slack's order: reply, copy, then the changes to the reader's own message, delete last.
+    const pinned = Boolean(entry().pinned);
+    if (ws.marks.supports.pins() && !ws.summary(props.channelId)?.archived)
+      items.push({
+        id: "pin",
+        label: t(
+          pinned
+            ? inChannel()
+              ? "workspace.message.unpinChannel"
+              : "workspace.message.unpinConversation"
+            : inChannel()
+              ? "workspace.message.pinChannel"
+              : "workspace.message.pinConversation",
+        ),
+        icon: pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />,
+        onSelect: () => act(() => ws.marks.setPinned(props.channelId, entry().id, !pinned)),
+      });
     if (own() && (entry().message.text.trim() || entry().message.attachments?.length))
       items.push({
         id: "edit",
@@ -171,6 +242,8 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         deleted={deleted()}
         highlighted={props.highlighted}
         mentionsReader={!props.row.pending && mentionsReader(ws.directory(), entry())}
+        pinnedBy={props.row.pending ? undefined : pinnedBy()}
+        saved={!props.row.pending && savedForLater()}
         reactions={reactionViews(ws.directory(), entry().reactions)}
         quickReactions={ws.quickReactions()}
         emojiPicker={ws.reactionPicker}
@@ -179,7 +252,14 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
             ? undefined
             : (emoji) => void ws.toggleReaction(props.channelId, entry().id, emoji)
         }
-        thread={props.inThread ? undefined : threadSummaryView(ws.directory(), entry())}
+        thread={
+          props.inThread
+            ? undefined
+            : (() => {
+                const summary = threadSummaryView(ws.directory(), entry());
+                return summary ? { ...summary, unread: (ownThread()?.unreadCount ?? 0) > 0 } : undefined;
+              })()
+        }
         onOpenThread={
           props.inThread || props.row.pending || entry().threadRootId
             ? undefined

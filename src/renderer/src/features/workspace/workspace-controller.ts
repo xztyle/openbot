@@ -25,9 +25,12 @@ import {
   type TeamRealtimeEvent,
   type WorkspaceActivity,
   type WorkspaceChannelCommand,
+  type WorkspaceNotifyLevel,
   type WorkspaceSettings,
   type WorkspaceSidebarPrefs,
   type WorkspaceSteps,
+  withWorkspaceNotifyLevel,
+  workspaceNotifyLevel,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import type { AppTextKey } from "@openbot/i18n";
@@ -40,12 +43,13 @@ import { slugChannelName } from "@openbot/ui/features/workspace/workspace-format
 import type { AgentAnswerMode, WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { currentText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
-import { createEffect, createMemo, createSignal, createStore, onCleanup, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, createStore, flush, onCleanup, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
 import { setActiveSpaces } from "../../active-space";
 import type { ChannelsController } from "../channels/channels-controller";
 import type { MessagingApi } from "../connectors/messaging-connector";
 import type { StorageHygieneCalls } from "../storage-hygiene/storage-hygiene-port";
+import { createWorkspaceMarks } from "./workspace-marks";
 import {
   AGENT_DM_PREFIX,
   humanIds,
@@ -332,7 +336,8 @@ function idList(value: unknown): string[] {
 function readSidebar(key: string): SidebarPrefs {
   try {
     const value = JSON.parse(window.localStorage.getItem(`${SIDEBAR_KEY}:${key}`) ?? "{}");
-    if (!isDynamicRecord(value)) return { order: { channels: [], direct: [] }, muted: [] };
+    if (!isDynamicRecord(value))
+      return { order: { channels: [], direct: [] }, muted: [], notifyMentions: [], notifyNothing: [] };
     const order = isDynamicRecord(value.order) ? value.order : {};
     return {
       order: { channels: idList(order.channels), direct: idList(order.direct) },
@@ -340,9 +345,12 @@ function readSidebar(key: string): SidebarPrefs {
       ...(Array.isArray(value.closed) ? { closed: idList(value.closed) } : {}),
       ...(typeof value.space === "string" && value.space ? { space: value.space } : {}),
       ...(Array.isArray(value.collapsed) ? { collapsed: idList(value.collapsed) } : {}),
+      // Always present, so a view that reads a level before the first choice hears the change.
+      notifyMentions: idList(value.notifyMentions),
+      notifyNothing: idList(value.notifyNothing),
     };
   } catch {
-    return { order: { channels: [], direct: [] }, muted: [] };
+    return { order: { channels: [], direct: [] }, muted: [], notifyMentions: [], notifyNothing: [] };
   }
 }
 
@@ -744,6 +752,33 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   const canMessageAgent = (agentId: string) => dmAgentSet()?.has(agentId) ?? true;
 
   const mutedSet = createMemo(() => new Set(state.sidebar.muted));
+  /** The host keeps a notification level for each conversation (Slack's bell). */
+  const [notifyLevels, setNotifyLevels] = createSignal(false);
+  /** The reader's level for a conversation, or null for the server's. Mute reads as "nothing". */
+  const notifyLevel = (id: string): WorkspaceNotifyLevel | null => workspaceNotifyLevel(state.sidebar, id);
+  /** The level the reader set on the bell, without mute: mute keeps its own badge rules. */
+  const chosenLevel = (id: string): WorkspaceNotifyLevel | null =>
+    workspaceNotifyLevel(
+      { muted: [], notifyMentions: state.sidebar.notifyMentions, notifyNothing: state.sidebar.notifyNothing },
+      id,
+    );
+  function setNotifyLevel(id: string, level: WorkspaceNotifyLevel | null) {
+    setState((draft) => {
+      const next = withWorkspaceNotifyLevel(draft.sidebar, id, level);
+      draft.sidebar.notifyMentions = next.notifyMentions;
+      draft.sidebar.notifyNothing = next.notifyNothing;
+      // "All" or "Mentions" is no mute: a muted conversation the reader turns on again unmutes.
+      if (level !== "nothing") draft.sidebar.muted = draft.sidebar.muted.filter((item) => item !== id);
+    });
+    saveSidebar();
+  }
+  /** Unread mentions only, for a conversation whose level lets nothing else count. */
+  const onlyMentions = createMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of state.activity.data?.items ?? [])
+      if (item.unread && item.kind === "mention") counts[item.channelId] = (counts[item.channelId] ?? 0) + 1;
+    return counts;
+  });
   const filterText = () => state.sidebarFilter.trim().toLocaleLowerCase();
   /** The channel rows of every space, for the unread marks of the space rail. */
   const everyChannelRow = createMemo(() =>
@@ -764,7 +799,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         dmAgentIds: dmAgentSet(),
         closed: closedSet(),
         showAgentRow,
-      }).map((row) => (mutedSet().has(row.id) ? { ...row, muted: true } : row)),
+      })
+        .map((row) => (mutedSet().has(row.id) ? { ...row, muted: true } : row))
+        // A DM set to "Just mentions" or "Nothing" counts only its mentions, as a muted one does.
+        .map((row) =>
+          chosenLevel(row.id) && !row.id.startsWith(AGENT_DM_PREFIX)
+            ? { ...row, mentionCount: onlyMentions()[row.id] ?? 0 }
+            : row,
+        ),
       state.sidebar.order.direct,
     ),
   );
@@ -836,7 +878,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       while (sidebarUnsent && run === sidebarKeyRun) {
         sidebarUnsent = false;
         sidebarSentEdits = sidebarEdits;
-        const { order, muted, closed, space } = state.sidebar;
+        const { order, muted, closed, space, notifyMentions, notifyNothing } = state.sidebar;
         try {
           await write(
             boundedWorkspaceSidebar({
@@ -844,6 +886,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
               muted: [...muted],
               closed: [...(closed ?? [])],
               ...(space ? { space } : {}),
+              ...(notifyMentions ? { notifyMentions: [...notifyMentions] } : {}),
+              ...(notifyNothing ? { notifyNothing: [...notifyNothing] } : {}),
             }),
           );
         } catch {
@@ -871,7 +915,9 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     const editsAtStart = sidebarEdits;
     let hosted: SidebarPrefs | null;
     try {
-      hosted = (await read()).sidebar;
+      const answer = await read();
+      hosted = answer.sidebar;
+      setNotifyLevels(answer.notifyLevels === true);
     } catch {
       // A host without the route, or one that cannot answer now: this computer keeps the sidebar.
       if (keyRun === sidebarKeyRun && readRun === sidebarReadRun) sidebarHome = "local";
@@ -895,7 +941,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       const space = local.space ?? hosted.space;
       // A host that predates `collapsed` drops it: the reader's choice on this computer stays.
       const collapsed = hosted.collapsed ?? local.collapsed;
-      const value: SidebarPrefs = { ...hosted, ...(space ? { space } : {}), ...(collapsed ? { collapsed } : {}) };
+      const value: SidebarPrefs = {
+        ...hosted,
+        ...(space ? { space } : {}),
+        ...(collapsed ? { collapsed } : {}),
+        // A host that predates the levels drops them: the reader's choices on this computer stay.
+        notifyMentions: hosted.notifyMentions ?? local.notifyMentions ?? [],
+        notifyNothing: hosted.notifyNothing ?? local.notifyNothing ?? [],
+      };
       setState((draft) => {
         draft.sidebar = value;
       });
@@ -934,6 +987,9 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   function saveSidebar() {
+    // A store write shows only after the flush: without it the copy and the host get the old value,
+    // and the host's answer then takes the change back.
+    flush();
     sidebarEdits += 1;
     writeLocalSidebar();
     sidebarUnsent = true;
@@ -1045,8 +1101,12 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     (state.activity.data?.threads ?? []).filter((thread) => spaces.channelInCurrent(thread.channelId)),
   );
   /** The Activity badge: unread mentions, replies and DMs. Reactions never count (Slack). */
+  // A conversation set to "Just mentions" or "Nothing" adds only its mentions.
   const activityCount = createMemo(
-    () => spaceActivity().filter((item) => item.unread && item.kind !== "reaction").length,
+    () =>
+      spaceActivity().filter(
+        (item) => item.unread && item.kind !== "reaction" && (item.kind === "mention" || !chosenLevel(item.channelId)),
+      ).length,
   );
   const threadsUnread = createMemo(() => spaceThreads().some((thread) => thread.unreadCount > 0));
 
@@ -1074,6 +1134,15 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
         readerName: () => env.reader().name,
       }),
     });
+
+  /** The reader's thread positions and follows, saved messages, pins and "Mark unread". */
+  const marks = createWorkspaceMarks({
+    port: channels.port,
+    onHostEvent: env.onHostEvent,
+    isReader: env.isReader,
+    onChannelMarkedUnread: (messageId, position) =>
+      channels.holdUnread(position.channelId, messageId, position.unreadCount, position.throughSequence),
+  });
 
   // ---------------------------------------------------------------- step trails
 
@@ -2222,6 +2291,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     setGroupCollapsed,
     closeConversation,
     isMuted: (id: string) => mutedSet().has(id),
+    notifyLevels,
+    /** The level that notifications use: the bell's choice, "nothing" when muted, else null for the server's. */
+    notifyLevel,
+    /** The bell's choice, without mute. */
+    chosenNotifyLevel: chosenLevel,
+    setNotifyLevel,
+    marks,
     setSidebarFilter,
     noteEmoji,
     setSkinTone,

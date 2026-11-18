@@ -18,6 +18,7 @@ import {
   isBackgroundAgent,
   type ServerConnectionState,
   type ServerSummary,
+  type WorkspaceNotifyLevel,
 } from "@openbot/contracts/ipc";
 import { AGENT_BACKUP_MODELS_ROUTES } from "@openbot/contracts/team-protocol/agent-backup-models-v1";
 import { AGENT_HOST_SETTINGS_ROUTES } from "@openbot/contracts/team-protocol/agent-host-settings-v1";
@@ -1348,6 +1349,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   const canMarkRead = () => document.hasFocus() && mobilePane() === "conversation" && !pageCovered() && !routinesView();
   /** The channel list before the newest one, for the reader it was read for. A reply notifies once. */
   let channelBaseline: { scope: string; channels: ChannelSummary[] } | null = null;
+  /** The level the reader set on a conversation's bell; the workspace sets it once it exists. */
+  let conversationLevel: ((channelId: string) => WorkspaceNotifyLevel | null) | undefined;
   const channels = createChannelsController({
     port: () => channelsPort,
     agents: workspace.profiles,
@@ -1373,7 +1376,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       const hostId = workspace.state.host?.hostId;
       const previous = channelBaseline?.scope === scope ? channelBaseline.channels : null;
       channelBaseline = { scope, channels: list };
-      if (hostId) notifyChannelReplies(hostId, previous, list);
+      if (hostId) notifyChannelReplies(hostId, previous, list, conversationLevel);
     },
   });
   onCleanup(
@@ -2019,6 +2022,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     phone,
     onPhonePaneChange: (pane) => setMobilePane(pane === "sidebar" ? "workspace" : "conversation"),
   });
+  conversationLevel = workspaceController.notifyLevel;
   /**
    * The workspace actions that the reader takes. Each gives the place it opens its own history
    * entry, so Back goes to the place before it. An action that waits for the host waits for its place.

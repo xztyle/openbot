@@ -6,12 +6,14 @@ import {
   channelRouting,
   channelVisibility,
   type WorkspaceDecision,
+  type WorkspacePin,
 } from "@openbot/contracts/ipc";
 import { Button, Plug } from "@openbot/ui";
 import {
   type ChannelDecisionItem,
   ChannelDetails,
   type ChannelDetailsMember,
+  type ChannelPinItem,
 } from "@openbot/ui/features/workspace/ChannelDetails";
 import { MemberAvatar } from "@openbot/ui/features/workspace/WorkspaceAvatar";
 import { WorkspaceSelect } from "@openbot/ui/features/workspace/WorkspaceSelect";
@@ -75,7 +77,48 @@ function useChannelDecisions(channelId: string, open: () => boolean) {
   };
 }
 
-/** The right panel of a channel: About, Members with each agent's answer mode, Integrations, Decisions, Settings. */
+/**
+ * The pins of a channel for the Pins tab. They load when the tab opens, and again when a message
+ * of the channel changes, since a pin rides on its message. Undefined when the host has no pins.
+ */
+function useChannelPins(channelId: string, open: () => boolean) {
+  const ws = useWorkspace();
+  createEffect(
+    () => open(),
+    (shown) => {
+      if (shown) void ws.marks.loadPins(channelId);
+    },
+  );
+  const author = (pin: WorkspacePin) =>
+    pin.author.kind === "member" || pin.author.kind === "agent"
+      ? memberById(ws.directory(), pin.author.id)
+      : { id: pin.author.id, kind: "human" as const, name: pin.author.name };
+  return {
+    items: (): ChannelPinItem[] | null | undefined => {
+      if (!ws.marks.supports.pins()) return undefined;
+      return (
+        ws.marks.pins(channelId)?.map((pin) => ({
+          id: pin.messageId,
+          author: author(pin),
+          text: pin.preview,
+          at: Date.parse(pin.at),
+          pinnedBy: memberById(ws.directory(), pin.pinnedBy.id).name,
+        })) ?? null
+      );
+    },
+    /** Shows a pinned message: a reply in its thread, a channel message in the transcript. */
+    open: (messageId: string) => {
+      const pin = ws.marks.pins(channelId)?.find((item) => item.messageId === messageId);
+      if (!pin) return;
+      if (pin.threadRootId) ws.openThread(channelId, pin.threadRootId);
+      // On a phone the panel covers the conversation, so the conversation comes back first.
+      else if (ws.state.phonePane === "panel") ws.closePanel();
+      ws.focusMessage(channelId, messageId);
+    },
+  };
+}
+
+/** The right panel of a channel: About, Members with each agent's answer mode, Pins, Integrations, Decisions, Settings. */
 export function WorkspaceDetailsPanel(props: { channelId: string }) {
   const ws = useWorkspace();
   const channel = () => {
@@ -108,6 +151,7 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
         });
         const live = () => channel() ?? current;
         const decisions = useChannelDecisions(current.id, () => tab() === "decisions");
+        const pins = useChannelPins(current.id, () => tab() === "pins");
         // The hands-off list is in the workspace settings, which only owners and admins read.
         if (ws.isAdmin()) void ws.workspaceSettings();
         const handsOff = () => ws.state.settings?.handsOffChannelIds?.includes(current.id) ?? false;
@@ -215,6 +259,8 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
                 : undefined
             }
             decisions={kind === "channel" ? decisions.items() : undefined}
+            pins={pins.items()}
+            onOpenPin={(id) => pins.open(id)}
             onOpenDecision={(id) => {
               // A thread reply opens its thread; a channel message opens as the root of its own
               // thread, as a message link does.

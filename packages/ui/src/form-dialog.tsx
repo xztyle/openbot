@@ -1,5 +1,5 @@
 import type { JSX } from "@solidjs/web";
-import { createUniqueId, Show } from "solid-js";
+import { createSignal, createUniqueId, onCleanup, Show } from "solid-js";
 import { Alert, AlertContent, AlertDescription, AlertIcon } from "./alert";
 import { Button, IconButton } from "./button";
 import { Dialog } from "./complex";
@@ -49,17 +49,33 @@ export interface FormDialogProps {
   children: JSX.Element;
 }
 
+/** The width under which a form dialog is a sheet: the phone layout of the workspace. */
+const PHONE_QUERY = "(max-width: 720px)";
+
+/** Whether the window is phone width now. The sheet follows a rotation or a resize. */
+function createPhoneWidth(): () => boolean {
+  const query = typeof window === "undefined" ? undefined : window.matchMedia?.(PHONE_QUERY);
+  const [phone, setPhone] = createSignal(query?.matches ?? false);
+  if (query) {
+    const change = (event: MediaQueryListEvent) => setPhone(event.matches);
+    query.addEventListener("change", change);
+    onCleanup(() => query.removeEventListener("change", change));
+  }
+  return phone;
+}
+
 const FIELD_SELECTOR =
   "input:not([type=hidden]):not([type=file]):not([disabled]), textarea:not([disabled]), select:not([disabled])";
 
 /**
  * The one frame of a flow that makes or changes something: a title, a short description, the
- * fields, an inline error, and Cancel with the primary action. A dialog on a computer and a full
- * screen sheet on a phone. See `docs/ux/standard.md`.
+ * fields, an inline error, and Cancel with the primary action. A dialog on a computer and, on a phone,
+ * the sheet of `ActionSheet` at full height. See `docs/ux/standard.md`.
  */
 export function FormDialog(props: FormDialogProps): JSX.Element {
   const { t } = useText();
   const formId = createUniqueId();
+  const phone = createPhoneWidth();
   let body: HTMLDivElement | undefined;
   const close = () => {
     if (!props.busy) props.onOpenChange(false);
@@ -77,7 +93,8 @@ export function FormDialog(props: FormDialogProps): JSX.Element {
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay class="ui-form-dialog-overlay">
+        {/* On a phone, the overlay sheet of `ActionSheet`: it rises from the bottom edge, under the status bar. */}
+        <Dialog.Overlay class={cx("ui-form-dialog-overlay", phone() && "ui-sheet-overlay")}>
           <Dialog.Content
             as="section"
             class={cx("ui-form-dialog", props.class)}
@@ -90,6 +107,9 @@ export function FormDialog(props: FormDialogProps): JSX.Element {
               requestAnimationFrame(() => target?.focus({ preventScroll: true }));
             }}
           >
+            <Show when={phone()}>
+              <span class="ui-sheet-handle" aria-hidden="true" />
+            </Show>
             <header class="ui-form-dialog-header">
               <div class="ui-form-dialog-heading">
                 <Dialog.Title as="h2" class="ui-form-dialog-title">

@@ -1,6 +1,6 @@
 // Walks the create flows of the workspace on a computer and on an iPhone: New agent, New channel with
 // its people, Add members, New message and New space, and the Slack sidebar (More, collapsed groups). Each one must open the shared FormDialog (a
-// dialog on a computer, a full screen sheet on a phone), keep a failure inside it, close on Cancel
+// dialog on a computer, a sheet on a phone), keep a failure inside it, close on Cancel
 // and Escape, and open what it made. It serves the web client on a mock host (the "Spaces workspace"
 // story, `src/renderer/stories/web-client-harness.tsx`) and drives it in Chromium. No account
 // service, host or provider is needed.
@@ -73,7 +73,7 @@ interface Step {
 
 const report: {
   steps: Step[];
-  dialogs: { viewport: ViewportName; flow: string; width: number; height: number; fullScreen: boolean }[];
+  dialogs: { viewport: ViewportName; flow: string; width: number; height: number; sheet: boolean }[];
   pageErrors: string[];
   consoleErrors: string[];
   screenshots: string[];
@@ -99,16 +99,19 @@ async function shot(page: Page, label: string): Promise<void> {
   report.screenshots.push(file);
 }
 
-/** The open form dialog: a phone shows it full screen, a computer as a centred dialog. */
+/** The open form dialog: a phone shows it as a sheet, a computer as a centred dialog. */
 async function checkFrame(page: Page, viewport: ViewportName, flow: string, dialog: Locator): Promise<void> {
   await dialog.waitFor({ timeout: UI_WAIT_MS });
+  // The sheet rises from the bottom edge: measure it where it stops.
+  await dialog.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   const box = await dialog.boundingBox();
   assert.ok(box, `${flow}: the dialog has no box`);
   const size = page.viewportSize();
   assert.ok(size);
-  const fullScreen = box.width >= size.width - 1 && box.height >= size.height - 1;
-  report.dialogs.push({ viewport, flow, width: Math.round(box.width), height: Math.round(box.height), fullScreen });
-  assert.equal(fullScreen, viewport === "phone", `${flow}: full screen should be ${viewport === "phone"}`);
+  // A phone shows the sheet: the full width, down to the bottom edge, and nearly the full height.
+  const sheet = box.width >= size.width - 1 && box.y + box.height >= size.height - 1 && box.height >= size.height * 0.9;
+  report.dialogs.push({ viewport, flow, width: Math.round(box.width), height: Math.round(box.height), sheet });
+  assert.equal(sheet, viewport === "phone", `${flow}: a sheet should show ${viewport === "phone"}`);
   // One frame: a close button in the header, the primary action in the footer.
   await dialog.getByRole("button", { name: english("common.close"), exact: true }).waitFor();
   await shot(page, `${viewport}-${flow}`);

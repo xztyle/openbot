@@ -11,7 +11,7 @@ A new screen uses these parts. A change to an old screen moves it to these parts
 
 | Job | Container | Component |
 |---|---|---|
-| Make one thing, or change a few fields of one thing | Dialog; full screen on a phone | `FormDialog` (`@openbot/ui`) |
+| Make one thing, or change a few fields of one thing | Dialog; a full-height sheet on a phone | `FormDialog` (`@openbot/ui`) |
 | Pick one item from a long list (switcher, browse) | The same dialog without a footer | `FormDialog` with no `submitLabel` |
 | Confirm a change that loses data or reaches other people | Alert dialog | `ConfirmDialog` |
 | Details and settings of the open conversation or agent | Right panel; full screen pane on a phone | `WorkspacePaneHeader` + tabs |
@@ -42,8 +42,9 @@ Stories: Workspace/Dialogs, Agents/New agent dialog, Workspace/Spaces. E2E:
    (Cancel; Back in a later step), then the primary action. One primary action only.
 
 Sizes: `sm` 440 px (one or two fields), `md` 520 px (default), `lg` 640 px (pickers with previews,
-New agent). On a screen 720 px wide or less, every size is a full screen sheet: no rounded frame,
-header under the status bar, footer above the home indicator, 44 px buttons.
+New agent). On a screen 720 px wide or less, every size is the sheet of `ActionSheet` at full height:
+it rises from the bottom edge, stops under the status bar, has the grab handle and rounded top
+corners, keeps the footer above the home indicator, and has 44 px buttons.
 
 ### 2.2 Behavior
 

@@ -1261,6 +1261,13 @@
   opacity: 1;
 }
 
+/* No hover on a touch screen: the skill menu shows on every row. */
+@media (hover: none), (pointer: coarse) {
+  .agent-skill-more {
+    opacity: 1;
+  }
+}
+
 .agent-skill-menu {
   z-index: var(--openbot-layer-overlay);
 }

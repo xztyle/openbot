@@ -223,6 +223,13 @@
   opacity: 1;
 }
 
+/* No hover on a touch screen: Remove shows on every row. */
+@media (hover: none), (pointer: coarse) {
+  .ws-details-remove {
+    opacity: 1;
+  }
+}
+
 .ws-details-agent-settings {
   display: flex;
   grid-column: 2 / -1;

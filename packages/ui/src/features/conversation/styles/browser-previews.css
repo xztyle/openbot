@@ -165,6 +165,13 @@
   opacity: 1;
 }
 
+/* No hover on a touch screen: Close shows on every card. */
+@media (hover: none), (pointer: coarse) {
+  .browser-preview-close {
+    opacity: 1;
+  }
+}
+
 /* The code or the password the agent asks for: the site, the value and Submit. The inner parts are glass
    in both variants; the timeline card keeps its frame, and the island has a denser glass of its own, so that
    the page under it does not show through as dark shapes behind the code. */

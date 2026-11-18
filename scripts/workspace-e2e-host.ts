@@ -216,7 +216,15 @@ export type WorkspaceServerOptions = (
 export async function startWorkspaceE2e(
   name: string,
   unverified: string[],
-  options: { readWorkers?: boolean; server?: WorkspaceServerOptions } = {},
+  options: {
+    readWorkers?: boolean;
+    server?: WorkspaceServerOptions;
+    /**
+     * More options of the agent service, such as a provider `clientFactory` and a `browser`. With
+     * them the service starts (`initialize`), so its agents can run turns.
+     */
+    agents?: Partial<ConstructorParameters<typeof AgentService>[0]>;
+  } = {},
 ): Promise<WorkspaceE2e> {
   const out = resolve(import.meta.dirname, `../.openbot-build/${name}`);
   const root = await mkdtemp(join(tmpdir(), `openbot-${name}-`));
@@ -241,7 +249,14 @@ export async function startWorkspaceE2e(
     // After the stores opened the database: a worker opens it only once it is migrated, as the app does.
     if (options.readWorkers) database.useReadWorkers(spawnSourceDatabaseReadWorker);
     if (!team.getIdentity()) await runCauseEffect(team.configure("E2E Host", OWNER.username, OWNER.password));
-    const agents = new AgentService({ store: agentStore, mailbox, browser: agentBrowser, sidebarLayout: sidebar });
+    const agents = new AgentService({
+      store: agentStore,
+      mailbox,
+      browser: agentBrowser,
+      sidebarLayout: sidebar,
+      ...options.agents,
+    });
+    if (options.agents) await runCauseEffect(agents.initialize());
     const extra = (await options.server?.({ agents, agentStore, team, userData })) ?? {};
     const server = new TeamApiServer({
       store: team,

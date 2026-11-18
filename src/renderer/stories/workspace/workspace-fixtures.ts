@@ -67,7 +67,8 @@ export const CHANNELS: readonly SidebarChannel[] = [
 export const DIRECT_MESSAGES: readonly SidebarDirectMessage[] = [
   { id: "dm-fonikad", kind: "dm", members: [fonikad], unread: true, mentionCount: 1 },
   { id: "dm-orchestrator", kind: "dm", members: [orchestrator] },
-  { id: "dm-qa", kind: "dm", members: [qa] },
+  // QA waits for the reader: the row shows the Needs you mark.
+  { id: "dm-qa", kind: "dm", members: [qa], unread: true, mentionCount: 1, needsYou: true },
   { id: "dm-game-designer", kind: "dm", members: [gameDesigner] },
   { id: "group-art", kind: "group", members: [fonikad, artProducer, gameDesigner] },
 ];

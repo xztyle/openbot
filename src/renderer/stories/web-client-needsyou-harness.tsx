@@ -1,10 +1,11 @@
 /*
- * The web client on a mock host for `scripts/needs-you-e2e.ts`. Chief asked Sales Outbound for work;
- * the reader wrote only to Chief lately, so Sales Outbound has no DM row. `window.needsYouHarness`
- * lets the script act as the host: `request()` makes Sales Outbound ask the reader to sign in on
- * accounts.google.com in a browser tab (the takeover event, the escalation to Chief and the host's
- * attention list), and `resolve()` ends it as the host does after an answer anywhere. `answered`
- * holds the takeover answers that the page sent.
+ * The web client on a mock host for `scripts/needs-you-ui-e2e.ts`. Chief asked Sales Outbound for
+ * work; the reader wrote only to Chief lately, so Sales Outbound has no DM row. The script acts as the
+ * host with `needs-you-harness` window events: `detail` "request" makes Sales Outbound ask the reader
+ * to sign in on accounts.google.com in a browser tab (the takeover event, the escalation to Chief and
+ * the host's attention list), and "resolve" ends it as the host does after an answer anywhere. The
+ * page sets `data-needs-you-ready` on the root element once it takes events, and writes the number of
+ * takeover answers it sent to `data-needs-you-answered`.
  */
 import type { AgentAttentionItem, AgentEvent, BrowserTab, RespondToBrowserTakeoverInput } from "@openbot/contracts/ipc";
 import { Toaster } from "@openbot/ui";
@@ -47,18 +48,6 @@ const ITEM: AgentAttentionItem = {
   origin: "accounts.google.com",
 };
 
-interface NeedsYouHarness {
-  request(): void;
-  resolve(): void;
-  answered: RespondToBrowserTakeoverInput[];
-}
-
-declare global {
-  interface Window {
-    needsYouHarness?: NeedsYouHarness;
-  }
-}
-
 const runtime: WebRuntimeFactory = (_accountId, events) => {
   const mock = createMockOpenBot({
     channels: seeds(WEB_PREVIEW_MEMBER_ID),
@@ -73,19 +62,21 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     emit({ type: "browser-takeover-resolved", requestId: REQUEST.requestId, agentId: REQUEST.agentId });
     emit({ type: "agent-attention-changed", items: [] });
   };
-  window.needsYouHarness = {
-    answered,
-    request: () => {
-      // As the host: the escalation first, so the request finds its delegator, then the request.
-      emit({
-        type: "agent-input-escalations-changed",
-        escalations: [{ kind: "browser-takeover", ...REQUEST, delegatorAgentIds: ["chief"] }],
-      });
-      emit({ type: "browser-takeover-requested", request: { ...REQUEST } });
-      emit({ type: "agent-attention-changed", items: [ITEM] });
-    },
-    resolve,
+  const request = () => {
+    // As the host: the escalation first, so the request finds its delegator, then the request.
+    emit({
+      type: "agent-input-escalations-changed",
+      escalations: [{ kind: "browser-takeover", ...REQUEST, delegatorAgentIds: ["chief"] }],
+    });
+    emit({ type: "browser-takeover-requested", request: { ...REQUEST } });
+    emit({ type: "agent-attention-changed", items: [ITEM] });
   };
+  window.addEventListener("needs-you-harness", (event) => {
+    const detail = event instanceof CustomEvent ? event.detail : null;
+    if (detail === "request") request();
+    if (detail === "resolve") resolve();
+  });
+  document.documentElement.dataset.needsYouReady = "";
   // The reader wrote to Chief only: the other agents have no DM row until one needs them.
   mock.api.agent.workspaceDmAgents = async () => ({
     agentIds: ["chief", "research", "sales"],
@@ -95,6 +86,7 @@ const runtime: WebRuntimeFactory = (_accountId, events) => {
     ...web,
     respondToTakeover: async (input) => {
       answered.push(input);
+      document.documentElement.dataset.needsYouAnswered = String(answered.length);
       resolve();
     },
     connect: async (...args: Parameters<typeof web.connect>) => {

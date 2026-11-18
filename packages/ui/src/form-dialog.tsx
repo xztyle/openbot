@@ -49,7 +49,8 @@ export interface FormDialogProps {
   children: JSX.Element;
 }
 
-const FIELD_SELECTOR = "input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])";
+const FIELD_SELECTOR =
+  "input:not([type=hidden]):not([type=file]):not([disabled]), textarea:not([disabled]), select:not([disabled])";
 
 /**
  * The one frame of a flow that makes or changes something: a title, a short description, the

@@ -368,16 +368,6 @@
   background: var(--openbot-bg-surface);
 }
 
-.profile-edit {
-  width: min(440px, 100%);
-}
-
-.profile-edit-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--openbot-space-4);
-}
-
 .profile-edit-photo {
   display: flex;
   flex-direction: column;

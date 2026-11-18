@@ -1,5 +1,5 @@
 import type { AvatarImageInput, CentralAuthUser } from "@openbot/contracts/ipc";
-import { Button, Dialog, Field, IconButton, ImageRemoveButton, Input, Pencil, Text, UserAvatar, X } from "@openbot/ui";
+import { Button, Field, FormDialog, ImageRemoveButton, Input, Pencil, UserAvatar } from "@openbot/ui";
 import { createSignal, Show } from "solid-js";
 import { useText } from "../../text";
 import { blobDataUrl } from "./ProfileShareDialog";
@@ -21,25 +21,12 @@ export function ProfileEditDialog(props: {
   store: SettingsProfileStore;
   account: CentralAuthUser;
 }) {
-  return (
-    <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay class="ui-confirm-dialog-overlay">
-          <Dialog.Content as="section" class="ui-dialog-content profile-dialog profile-edit">
-            <ProfileEditForm store={props.store} account={props.account} onClose={() => props.onOpenChange(false)} />
-          </Dialog.Content>
-        </Dialog.Overlay>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-function ProfileEditForm(props: { store: SettingsProfileStore; account: CentralAuthUser; onClose: () => void }) {
   const { t, errorMessage } = useText();
   const [photo, setPhoto] = createSignal<PhotoDraft | undefined>();
   const [photoBusy, setPhotoBusy] = createSignal(false);
   const [photoError, setPhotoError] = createSignal<string | null>(null);
   let photoInput: HTMLInputElement | undefined;
+  const close = () => props.onOpenChange(false);
 
   const preview = () => {
     const draft = photo();
@@ -62,8 +49,7 @@ function ProfileEditForm(props: { store: SettingsProfileStore; account: CentralA
     }
   }
 
-  async function save(event: SubmitEvent) {
-    event.preventDefault();
+  async function save() {
     if (busy()) return;
     // The name saves first: a new photo refreshes the account, and the refresh resets the name draft.
     await props.store.saveName();
@@ -74,19 +60,27 @@ function ProfileEditForm(props: { store: SettingsProfileStore; account: CentralA
       if (props.store.state.avatar.error) return;
       setPhoto(undefined);
     }
-    props.onClose();
+    close();
   }
 
   return (
-    <form class="profile-edit-form" onSubmit={(event) => void save(event)} novalidate>
-      <header class="profile-dialog-header">
-        <Dialog.Title as="h2" class="profile-dialog-title">
-          {t("settings.profile.edit.title")}
-        </Dialog.Title>
-        <IconButton label={t("common.close")} variant="ghost" onClick={props.onClose}>
-          <X />
-        </IconButton>
-      </header>
+    <FormDialog
+      open={props.open}
+      size="sm"
+      onOpenChange={(open) => {
+        if (!open) {
+          // Each open starts again from the saved profile.
+          setPhoto(undefined);
+          setPhotoError(null);
+        }
+        props.onOpenChange(open);
+      }}
+      title={t("settings.profile.edit.title")}
+      error={photoError() ?? props.store.state.avatar.error}
+      busy={busy()}
+      submitLabel={t("common.save")}
+      onSubmit={() => void save()}
+    >
       <div class="profile-edit-photo">
         <div class="settings-identity-image-picker ui-removable-image">
           <Button
@@ -110,13 +104,6 @@ function ProfileEditForm(props: { store: SettingsProfileStore; account: CentralA
             />
           </Show>
         </div>
-        <Show when={photoError() ?? props.store.state.avatar.error}>
-          {(message) => (
-            <Text role="alert" class="settings-modal-error">
-              {message()}
-            </Text>
-          )}
-        </Show>
         <Input
           ref={(element) => {
             photoInput = element;
@@ -141,14 +128,6 @@ function ProfileEditForm(props: { store: SettingsProfileStore; account: CentralA
           onBlur={props.store.markTouchedIfDirty}
         />
       </Field>
-      <footer class="profile-dialog-footer">
-        <Button type="button" variant="ghost" onClick={props.onClose}>
-          {t("common.cancel")}
-        </Button>
-        <Button type="submit" disabled={busy()}>
-          {busy() ? t("common.saving") : t("common.save")}
-        </Button>
-      </footer>
-    </form>
+    </FormDialog>
   );
 }

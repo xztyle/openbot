@@ -517,6 +517,7 @@ export const messages = {
   "workspace.spaces.openChat": "Abrir el chat de {name}",
   "workspace.spaces.moveAgent": "Mover {name} a otro espacio",
   "workspace.spaces.deleteAgent": "Eliminar {name}",
+  "workspace.spaces.deleteAgentTitle": "¿Eliminar a {name}?",
   "workspace.spaces.deleteAgentsTitle": { one: "¿Eliminar {count} agente?", other: "¿Eliminar {count} agentes?" },
   "workspace.spaces.deleteAgentsDescription":
     "OpenBot elimina estos agentes con sus chats, memorias, rutinas y archivos del espacio de trabajo. No se puede deshacer.",

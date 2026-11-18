@@ -229,7 +229,11 @@ export function SpaceAgentsView(props: SpaceAgentsViewProps): JSX.Element {
       </div>
       <ConfirmDialog
         open={deleting() !== null}
-        title={t("workspace.spaces.deleteAgentsTitle", { count: deleting()?.length ?? 0 })}
+        title={
+          deleting()?.length === 1
+            ? t("workspace.spaces.deleteAgentTitle", { name: names(deleting() ?? [])[0] ?? "" })
+            : t("workspace.spaces.deleteAgentsTitle", { count: deleting()?.length ?? 0 })
+        }
         description={t("workspace.spaces.deleteAgentsDescription")}
         confirmLabel={t("workspace.spaces.deleteAgentsButton", { count: deleting()?.length ?? 0 })}
         error={error() ?? undefined}

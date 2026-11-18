@@ -93,8 +93,8 @@ app settings. The save-bar markup is copied three times in `R/servers/ServerSett
 Gaps:
 
 - No confirm: Leave channel (details, header, sidebar), Archive channel, remove a channel member, remove the OpenCode key.
-- Agent delete on desktop: confirm ("cannot be undone") **and** an undo toast. Web: confirm, no undo.
-- Bulk delete in a space says "You cannot undo this." but makes undo toasts on desktop.
+- Agent delete on desktop: confirm ("cannot be undone") **and** an undo toast. Web: confirm, no undo. *Fixed in round 2: a confirm only on both.*
+- Bulk delete in a space says "You cannot undo this." but makes undo toasts on desktop. *Fixed in round 2.*
 - Errors: about half the destructive confirms pass no `error`; Secrets swallows it.
 - The trash icon shows on Leave, Revoke, Disconnect, Discard and Regenerate.
 - Three wordings of "cannot be undone".

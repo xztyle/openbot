@@ -3,7 +3,6 @@ import { TEAM_AGENT_CREATE_MODEL_CAPABILITY } from "@openbot/contracts/team-prot
 import { classifyFailure } from "@openbot/telemetry";
 import { toast } from "@openbot/ui";
 import type { AgentProfile } from "@openbot/ui/data";
-import { AgentDeleteUndoToast, startUndoCountdown } from "@openbot/ui/features/agents/AgentDeleteUndoToast";
 import type { FirstAgentDraft } from "@openbot/ui/features/agents/FirstAgentSetup";
 import { duplicateSection as duplicateSectionWith } from "@openbot/ui/features/sidebar/duplicate-section";
 import { currentText } from "@openbot/ui/text";
@@ -240,22 +239,17 @@ const AgentActions = createSimpleContext({
       }
     }
 
-    /**
-     * Deletes that wait for the undo time to end, by agent. A server switch ends this scope, and with it
-     * the time to undo: each delete then runs at once, against the server it was made on.
-     */
-    const pendingDeletes = new Map<string, () => void>();
-    onCleanup(() => {
-      for (const commit of [...pendingDeletes.values()]) commit();
-    });
+    /** Agents whose delete runs, so a second request for one does nothing. */
+    const deleting = new Set<string>();
 
     /**
-     * The agent leaves the roster at once, and a toast offers Undo. Main deletes the agent only when the
-     * time is over, so an undo has nothing to restore. If the app quits before then, the agent stays.
+     * Deletes an agent at once, after the caller's confirmation (docs/ux/standard.md § 6: a confirm
+     * or an undo, never both). The agent leaves the roster while the delete runs. A failure puts it
+     * back and rejects, so the confirmation shows the reason and stays open.
      */
-    async function deleteAgent(agentId: string) {
+    async function deleteAgent(agentId: string): Promise<void> {
       if (agentSetupOpen() && creatingAgent()) return;
-      if (pendingDeletes.has(agentId)) return;
+      if (deleting.has(agentId)) return;
       const agent = agentList().find((candidate) => candidate.id === agentId);
       if (!agent) return;
       const serverId = activeServerId();
@@ -269,30 +263,11 @@ const AgentActions = createSimpleContext({
       // The next chat is one of the space that shows, so a delete does not open a chat of another space.
       const nextAgentId =
         (firstAgentOfActiveSpace(others.filter((candidate) => !userHidden.has(candidate.id))) ?? others[0])?.id ?? "";
-      const hidden = hideAgent(agentId);
-      if (!hidden) return;
-      const showAgent: () => void = hidden;
+      const showAgent = hideAgent(agentId);
+      if (!showAgent) return;
+      deleting.add(agentId);
       if (wasActive) setActiveAgentId(nextAgentId);
       setSettingsRequest((current) => (current?.agentId === agentId ? null : current));
-
-      const toastId = `agent-delete-${serverId}-${agentId}`;
-      let settled = false;
-      /** Undo and delete each end the same wait, so only the first of them runs. */
-      function settle(): boolean {
-        if (settled) return false;
-        settled = true;
-        countdown.stop();
-        pendingDeletes.delete(agentId);
-        // A scope cleanup can call this, and a write to the Toaster from there stops the reactive system.
-        queueMicrotask(() => toast.dismiss(toastId));
-        return true;
-      }
-
-      function undo(): void {
-        if (!settle() || !scopeIsCurrent()) return;
-        showAgent();
-        if (wasActive) setActiveAgentId(agentId);
-      }
 
       function forgetDeletedAgent(): void {
         analytics.track("agent_action", { action: "delete", result: "succeeded", ...(properties ?? {}) });
@@ -309,60 +284,47 @@ const AgentActions = createSimpleContext({
         setPendingPrompts((current) => withoutAgent(current, agentId));
       }
 
-      async function commit(): Promise<void> {
-        if (!settle()) return;
-        // Before the wait: a server switch reads the stored pins when the next scope starts. If the delete
-        // fails, the agent comes back without its pin.
-        removePinnedSidebarItemEverywhere({ kind: "agent", id: agentId });
-        try {
-          await agentsPort().agent.deleteAgent(agentId, serverId);
+      // Before the delete: a server switch reads the stored pins when the next scope starts. If the
+      // delete fails, the agent comes back without its pin.
+      removePinnedSidebarItemEverywhere({ kind: "agent", id: agentId });
+      try {
+        await agentsPort().agent.deleteAgent(agentId, serverId);
+        forgetDeletedAgent();
+      } catch (error) {
+        // A step after the delete can fail, such as the sidebar write. Main then no longer has the
+        // agent, and putting it back would show an agent that comes back only until a restart.
+        const stillListed = await agentsPort()
+          .agent.listAgents(serverId)
+          .then(
+            (agents) => agents.some((candidate) => candidate.id === agentId),
+            () => true,
+          );
+        if (!stillListed) {
           forgetDeletedAgent();
-        } catch (error) {
-          // A step after the delete can fail, such as the sidebar write. Main then no longer has the
-          // agent, and putting it back would show an agent that comes back only until a restart.
-          const stillListed = await agentsPort()
-            .agent.listAgents(serverId)
-            .then(
-              (agents) => agents.some((candidate) => candidate.id === agentId),
-              () => true,
-            );
-          if (!stillListed) {
-            forgetDeletedAgent();
-            return;
-          }
-          analytics.track("agent_action", {
-            action: "delete",
+          return;
+        }
+        analytics.track("agent_action", {
+          action: "delete",
+          result: "failed",
+          failure_code: "delete_failed",
+          ...(properties ?? {}),
+        });
+        if (marketplaceAgent) {
+          analytics.track("marketplace_action", {
+            entity: "agent",
+            action: "uninstall",
             result: "failed",
-            failure_code: "delete_failed",
-            ...(properties ?? {}),
-          });
-          if (marketplaceAgent) {
-            analytics.track("marketplace_action", {
-              entity: "agent",
-              action: "uninstall",
-              result: "failed",
-              failure_code: "uninstall_failed",
-            });
-          }
-          if (scopeIsCurrent()) showAgent();
-          const { t, errorMessage } = currentText();
-          actionToast.error(t("agent.error.deleteFailed"), {
-            description: errorMessage(error, t("sidebar.delete.failed")),
-            report: { operation: "agent", source: "action", cause_code: classifyFailure(error) },
+            failure_code: "uninstall_failed",
           });
         }
+        if (scopeIsCurrent()) {
+          showAgent();
+          if (wasActive) setActiveAgentId(agentId);
+        }
+        throw error;
+      } finally {
+        deleting.delete(agentId);
       }
-
-      const countdown = startUndoCountdown(() => void commit());
-      pendingDeletes.set(agentId, () => void commit());
-      toast(() => <AgentDeleteUndoToast agent={agent} countdown={countdown} onUndo={undo} />, {
-        id: toastId,
-        duration: Number.POSITIVE_INFINITY,
-        unstyled: true,
-        closeButton: false,
-        class: "agent-delete-undo-toast-host",
-        onDismiss: () => void commit(),
-      });
     }
 
     /** The Undo toasts of hides on this server. A server switch removes them with this scope. */

@@ -115,8 +115,8 @@ Source: `packages/ui/src/features/workspace/WorkspacePaneHeader.tsx`, `.ws-view*
 - `ConfirmDialog` for an action that loses data that cannot come back, or that reaches other people.
   Title is the question ("Delete #launch?"), description is the consequence, confirm label is the verb
   and object ("Delete channel").
-- **Undo instead of confirm** for an action that can be undone in a few seconds (hide, delete with
-  undo). Never both.
+- **Undo instead of confirm** for an action that can be undone in a few seconds (hide an agent, delete
+  a memory or a workflow). Never both. Deleting an agent is a confirm only, as in Slack.
 - `tone="destructive"` (red, trash icon) only when data is lost. Leave, Revoke, Disconnect use the
   default tone.
 - Leaving a private channel confirms (Slack); leaving a public one does not. Removing someone from a
@@ -163,7 +163,7 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 4 | View states in Activity, Threads, Fleet, Space agents, Secrets, Between agents; Artifacts and Storage keep their own | Done |
 | 5 | Sidebar to Slack (§ 7): More row, collapsed groups keep unread rows, saved collapse | Done |
 | 6 | Activity: exact message, badge without reactions, Mark all as read of Activity only | Done |
-| 7 | Confirm Leave private channel, Delete channel (details) and Remove member | Done; agent delete (confirm and undo) is open |
+| 7 | Confirm Leave private channel, Delete channel (details) and Remove member; agent delete is a confirm only, on desktop and web | Done |
 | 8 | Settings page: visible close/Back and server rows stack on a phone (done); one `SettingsSaveBar`; unsaved guard on close | Partly done |
 | 9 | Move template install, custom provider, vault, join server, OpenCode key, chat apps, saved replies to `FormDialog` (profile done) | Open |
 | 10 | Spanish wording: Quitar vs Eliminar for remove; one "Leave" verb; one "Deleting…" and one "Undo" key | Open |

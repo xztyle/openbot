@@ -535,6 +535,7 @@ export const messages = defineMessages("workspace", {
   "workspace.spaces.openChat": "Open the chat of {name}",
   "workspace.spaces.moveAgent": "Move {name} to another space",
   "workspace.spaces.deleteAgent": "Delete {name}",
+  "workspace.spaces.deleteAgentTitle": "Delete {name}?",
   "workspace.spaces.deleteAgentsTitle": { one: "Delete {count} agent?", other: "Delete {count} agents?" },
   "workspace.spaces.deleteAgentsDescription":
     "OpenBot deletes these agents with their chats, memories, routines and workspace files. You cannot undo this.",

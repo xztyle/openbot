@@ -104,6 +104,16 @@ export const AllStates: Story = {
           onSelectAgent={onSelectAgent}
         />
         <ChatActionMarker marker={{ kind: "context-reset", timestamp }} agents={agents} onSelectAgent={onSelectAgent} />
+        <ChatActionMarker
+          marker={{ kind: "system-notice", notice: "restart-resume", agentId: agents[0]?.id ?? null, timestamp }}
+          agents={agents}
+          onSelectAgent={onSelectAgent}
+        />
+        <ChatActionMarker
+          marker={{ kind: "system-notice", notice: "operator-note", agentId: agents[0]?.id ?? null, timestamp }}
+          agents={agents}
+          onSelectAgent={onSelectAgent}
+        />
       </section>
     </main>
   ),

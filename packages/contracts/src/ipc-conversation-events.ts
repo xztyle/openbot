@@ -362,6 +362,40 @@ export function isVaultChangeMarker(message: ConversationMessage): boolean {
  */
 export const AGENT_EXCHANGE_ITEM_TYPE = "agent-exchange";
 
+/**
+ * The item types of a note that OpenBot itself sends to an agent, not a person: the agent reads the
+ * text as an instruction, and the chat shows a small marker in place of a message from the owner.
+ * `restart-resume` tells an agent that a restart cut off its turn; `operator-note` is a note that an
+ * operator of a server sent as OpenBot. The text is a readable sentence, so a client that does not
+ * know these item types still shows what happened.
+ */
+export const SYSTEM_NOTICE_ITEM_TYPE_PREFIX = "system-notice:";
+export const SYSTEM_NOTICE_KINDS = ["restart-resume", "operator-note"] as const;
+export type SystemNoticeKind = (typeof SYSTEM_NOTICE_KINDS)[number];
+
+export function systemNoticeItemType(kind: SystemNoticeKind): string {
+  return `${SYSTEM_NOTICE_ITEM_TYPE_PREFIX}${kind}`;
+}
+
+export function isSystemNoticeKind(value: unknown): value is SystemNoticeKind {
+  return SYSTEM_NOTICE_KINDS.some((kind) => kind === value);
+}
+
+/** The fields that make a delivered message a system notice in the chat. Nothing for another message. */
+export function systemNoticeFields(
+  kind: SystemNoticeKind | undefined,
+): Pick<ConversationMessage, "author" | "source" | "itemType"> | Record<string, never> {
+  return kind ? { author: "system", source: "system", itemType: systemNoticeItemType(kind) } : {};
+}
+
+/** The kind of a system notice message, or null for any other message. */
+export function systemNoticeKind(message: ConversationMessage): SystemNoticeKind | null {
+  if (message.author !== "system" || message.source !== "system") return null;
+  if (!message.itemType?.startsWith(SYSTEM_NOTICE_ITEM_TYPE_PREFIX)) return null;
+  const kind = message.itemType.slice(SYSTEM_NOTICE_ITEM_TYPE_PREFIX.length);
+  return isSystemNoticeKind(kind) ? kind : null;
+}
+
 export function isContextResetMarker(message: ConversationMessage): boolean {
   return (
     message.author === "system" &&

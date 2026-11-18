@@ -430,7 +430,7 @@ function SingleChatActionMarker(
   props: Omit<ChatActionMarkerProps, "marker"> & { marker: SingleChatActionMarkerModel },
 ) {
   const { t, format, sourceText } = useText();
-  const label = () => markerLabel(props.marker, t, sourceText);
+  const label = () => markerLabel(props.marker, props.agents, t, sourceText);
   const [historyExpanded, setHistoryExpanded] = createSignal(false);
   /* The list leaves with an animation of its own, so it stays mounted until that
      animation ends. Without motion there is nothing to wait for. */
@@ -942,10 +942,17 @@ const SKILL_ACTION_LABELS = {
 
 function markerLabel(
   marker: SingleChatActionMarkerModel,
+  agents: AgentProfile[],
   t: AppTranslate,
   sourceText: (text: string) => string,
 ): string {
   if (marker.kind === "unavailable") return marker.label;
+  if (marker.kind === "system-notice") {
+    const agent = agents.find((candidate) => candidate.id === marker.agentId)?.name;
+    if (marker.notice === "restart-resume")
+      return agent ? t("chat.marker.notice.restartResume", { agent }) : t("chat.marker.notice.restartResumeUnnamed");
+    return agent ? t("chat.marker.notice.operatorNote", { agent }) : t("chat.marker.notice.operatorNoteUnnamed");
+  }
   if (marker.kind === "model-switch" || marker.kind === "channel-change" || marker.kind === "vault-change")
     return sourceText(marker.text);
   if (marker.kind === "context-reset") return t("chat.marker.contextReset");
@@ -1016,10 +1023,11 @@ function markerAccessibleLabel(
   t: AppTranslate,
   sourceText: (text: string) => string,
 ): string {
-  const label = markerLabel(marker, t, sourceText);
+  const label = markerLabel(marker, agents, t, sourceText);
   if (
     marker.kind === "unavailable" ||
     marker.kind === "context-reset" ||
+    marker.kind === "system-notice" ||
     marker.kind === "marketplace-suggestion" ||
     marker.kind === "mcp-sign-in" ||
     marker.kind === "model-switch" ||

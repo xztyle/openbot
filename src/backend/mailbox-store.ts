@@ -22,6 +22,7 @@ import type {
   QueuedMessageReceipt,
   QueueSnapshot,
   QueueSteerFallback,
+  SystemNoticeKind,
 } from "@openbot/contracts/ipc";
 import {
   AGENT_EXCHANGE_ITEM_TYPE,
@@ -30,7 +31,9 @@ import {
   AGENT_RUNTIME_WORKING_ITEMS_LIMIT,
   isConversationMessageSender,
   isMessageReaction,
+  isSystemNoticeKind,
   QUEUE_STEER_FALLBACKS,
+  systemNoticeFields,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isNumber, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { QueueEditRejectedError } from "@openbot/contracts/team-protocol/queue-edit-v1";
@@ -76,6 +79,11 @@ export interface MessagingOrigin {
 
 interface StoredMessage {
   eventCheck?: EventCheckOrigin;
+  /**
+   * Set on a note that OpenBot sends, not a person: the agent reads the text, and the chat shows a
+   * marker of this kind instead of a message from the owner. A notice has no `senderMember`.
+   */
+  notice?: SystemNoticeKind;
   channelId?: string | undefined;
   messaging?: MessagingOrigin;
   /**
@@ -177,6 +185,7 @@ interface StoredReaction {
 
 interface EnqueueInput {
   eventCheck?: EventCheckOrigin;
+  notice?: SystemNoticeKind;
   validateBeforeCommit?: () => void;
   channelId?: string;
   messaging?: MessagingOrigin;
@@ -240,6 +249,7 @@ export interface MailboxStoredFile {
 
 export interface DeliveryContext {
   eventCheck?: EventCheckOrigin;
+  notice?: SystemNoticeKind;
   delivery: QueueDelivery;
   managedAttachments: Array<AttachmentSummary & { path: string }>;
   resumeAfterUsageLimit?: UsageLimitContinuation;
@@ -775,7 +785,10 @@ export class MailboxStore {
         id: messageId,
         sender: input.sender,
         ...(input.eventCheck ? { eventCheck: input.eventCheck } : {}),
-        ...(input.sender.kind === "user" && input.senderMember ? { senderMember: input.senderMember } : {}),
+        ...(input.sender.kind === "user" && input.notice ? { notice: input.notice } : {}),
+        ...(input.sender.kind === "user" && input.senderMember && !input.notice
+          ? { senderMember: input.senderMember }
+          : {}),
         text: rewriteAttachmentReferences(text, (reference) => {
           const attachment = committedByDraftId.get(reference.attachmentId);
           return attachment ? { attachmentId: attachment.id, name: attachment.name } : null;
@@ -1398,6 +1411,7 @@ export class MailboxStore {
                 ? "routine"
                 : undefined,
           ...eventCheckMarker(message.eventCheck),
+          ...systemNoticeFields(message.notice),
         });
       }
     }
@@ -3005,6 +3019,7 @@ export class MailboxStore {
       ...(delivery.resumeAfterUsageLimit ? { resumeAfterUsageLimit: delivery.resumeAfterUsageLimit } : {}),
       ...(message.channelId ? { channelId: message.channelId } : {}),
       ...(message.eventCheck ? { eventCheck: message.eventCheck } : {}),
+      ...(message.notice ? { notice: message.notice } : {}),
       managedAttachments: message.attachments.map((attachment) => ({
         ...toAttachmentSummary(attachment),
         path: attachment.path,
@@ -3388,6 +3403,7 @@ function isStoredMessage(value: unknown): value is StoredMessage {
   return (
     isRecord(value) &&
     (value.eventCheck === undefined || isEventCheckOrigin(value.eventCheck)) &&
+    (value.notice === undefined || isSystemNoticeKind(value.notice)) &&
     (value.channelId === undefined || isString(value.channelId)) &&
     (value.messaging === undefined || isMessagingOrigin(value.messaging)) &&
     (value.messagingReturn === undefined || isMessagingOrigin(value.messagingReturn)) &&

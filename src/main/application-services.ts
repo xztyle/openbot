@@ -3181,8 +3181,11 @@ export async function createApplicationServices({
           database: () => store.database.connection,
           agentIds: () => service.listAgents().map((agent) => agent.id),
           // As the owner types it in the app on this computer: the same sender, queue and steer rules.
-          send: (input) =>
-            service.sendMessage(input, host.conversationSender()).pipe(Effect.mapError((error) => ({ cause: error }))),
+          // A notice goes with no sender: it is OpenBot's own note, and the chat shows a marker.
+          send: (input, notice) =>
+            service
+              .sendMessage(input, notice ? undefined : host.conversationSender(), undefined, notice)
+              .pipe(Effect.mapError((error) => ({ cause: error }))),
           markerFile: join(app.getPath("userData"), "openbot-restart-resumes-v1.json"),
           log: (message) => logger.info(message),
         }),

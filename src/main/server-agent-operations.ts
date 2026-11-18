@@ -2,8 +2,10 @@
  * Operator routes of the control socket that reach agents, for a server without a person at the UI:
  *
  * - `POST /v1/agents/<agentId>/message` sends `text` to the agent's own chat as the signed-in owner,
- *   through the same `sendMessage` as the app: the same queue, turn start and steer rules.
- * - `POST /v1/resume-interrupted` tells each agent whose last delivery a restart cut off to continue.
+ *   through the same `sendMessage` as the app: the same queue, turn start and steer rules. With
+ *   `system` set, the text goes as a note from OpenBot: the chat shows a marker, not the owner's message.
+ * - `POST /v1/resume-interrupted` tells each agent whose last delivery a restart cut off to continue,
+ *   as a note from OpenBot.
  *
  * A body is JSON or form fields. Every action is logged without the text. The resume route keeps the
  * deliveries it handled in a small file, so a second call, or a call after another restart, does not
@@ -13,7 +15,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import type { DatabaseSync } from "node:sqlite";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
-import type { QueuedMessageReceipt, SendMessageInput } from "@openbot/contracts/ipc";
+import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { Effect, Result } from "effect";
 
@@ -38,8 +40,14 @@ export interface ServerAgentOperationsDependencies {
   database: () => DatabaseSync;
   /** The agents of this server. */
   agentIds: () => readonly string[];
-  /** `AgentService.sendMessage` with the signed-in owner as the sender. */
-  send: (input: SendMessageInput) => Effect.Effect<QueuedMessageReceipt, { readonly cause: unknown }>;
+  /**
+   * `AgentService.sendMessage` with the signed-in owner as the sender, or with `notice`, as a note
+   * from OpenBot that the chat shows as a marker.
+   */
+  send: (
+    input: SendMessageInput,
+    notice?: SystemNoticeKind,
+  ) => Effect.Effect<QueuedMessageReceipt, { readonly cause: unknown }>;
   /** The JSON file of handled deliveries. */
   markerFile: string;
   log: (message: string) => void;
@@ -92,7 +100,12 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     if (!dependencies.agentIds().includes(agentId)) return failure(404, "unknown_agent");
     const clientMessageId = fields.clientMessageId;
     const receipt = await Effect.runPromise(
-      dependencies.send({ agentId, text, ...(clientMessageId ? { clientMessageId } : {}) }).pipe(Effect.result),
+      dependencies
+        .send(
+          { agentId, text, ...(clientMessageId ? { clientMessageId } : {}) },
+          fields.system ? "operator-note" : undefined,
+        )
+        .pipe(Effect.result),
     );
     if (Result.isFailure(receipt)) {
       dependencies.log(`Operator message to ${agentId} failed.`);
@@ -100,7 +113,7 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
     }
     const delivery = receipt.success.deliveries.find((candidate) => candidate.recipientAgentId === agentId);
     dependencies.log(
-      `Operator message sent to ${agentId}: delivery ${delivery?.id ?? "none"}, ${delivery?.status ?? "unknown"}.`,
+      `Operator ${fields.system ? "note" : "message"} sent to ${agentId}: delivery ${delivery?.id ?? "none"}, ${delivery?.status ?? "unknown"}.`,
     );
     return {
       status: 200,
@@ -143,7 +156,10 @@ export function createServerAgentOperations(dependencies: ServerAgentOperationsD
       if (outcome === "would_resume" && !fields.dryRun) {
         const sent = await Effect.runPromise(
           dependencies
-            .send({ agentId: delivery.agentId, text, clientMessageId: `restart-resume:${delivery.deliveryId}` })
+            .send(
+              { agentId: delivery.agentId, text, clientMessageId: `restart-resume:${delivery.deliveryId}` },
+              "restart-resume",
+            )
             .pipe(Effect.result),
         );
         if (Result.isFailure(sent)) outcome = "failed";
@@ -236,6 +252,8 @@ interface Fields {
   clientMessageId: string | undefined;
   deliveryIds: string[];
   dryRun: boolean;
+  /** The operator message goes as a note from OpenBot, not as the owner. */
+  system: boolean;
 }
 
 /** A JSON object, or form fields (`delivery` may repeat). */
@@ -255,6 +273,7 @@ function readFields(rawBody: string): Fields {
       clientMessageId: isString(record.clientMessageId) ? record.clientMessageId : undefined,
       deliveryIds: ids,
       dryRun: record.dryRun === true,
+      system: record.system === true,
     };
   }
   const form = new URLSearchParams(trimmed);
@@ -268,6 +287,7 @@ function readFields(rawBody: string): Fields {
         .filter(Boolean),
     ),
     dryRun: form.get("dry_run") === "1" || form.get("dry_run") === "yes",
+    system: form.get("system") === "1" || form.get("system") === "yes" || form.get("system") === "true",
   };
 }
 

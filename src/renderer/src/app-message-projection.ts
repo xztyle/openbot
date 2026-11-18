@@ -16,6 +16,7 @@ import {
   routineConversationEvent,
   routineRunConversationEvent,
   skillConversationEvent,
+  systemNoticeKind,
 } from "@openbot/contracts/ipc";
 import { markdownPreviewText } from "@openbot/contracts/markdown-preview-text";
 import { cleanAgentMessageText } from "@openbot/team-client/agent-message-text";
@@ -732,6 +733,8 @@ function chatActionMarker(
     };
   }
   if (isContextResetMarker(message)) return { kind: "context-reset", timestamp: message.createdAt };
+  const notice = systemNoticeKind(message);
+  if (notice) return { kind: "system-notice", notice, agentId: ownerAgentId ?? null, timestamp: message.createdAt };
   const switchReason = modelSwitchReason(message);
   if (switchReason)
     return { kind: "model-switch", reason: switchReason, text: message.text, timestamp: message.createdAt };

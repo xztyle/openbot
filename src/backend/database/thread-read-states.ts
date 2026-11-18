@@ -13,6 +13,7 @@ import {
   ROUTINE_QUIET_ANSWER_ITEM_TYPE,
   ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX,
   SKILL_EVENT_ITEM_TYPE_PREFIX,
+  SYSTEM_NOTICE_ITEM_TYPE_PREFIX,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isNumber, isString } from "@openbot/contracts/runtime-values";
 import {
@@ -307,6 +308,7 @@ export class ThreadReadStates {
       AND COALESCE(item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'
       AND COALESCE(item_type, '') NOT LIKE '${MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX}%'
       AND COALESCE(item_type, '') NOT LIKE '${MODEL_SWITCH_ITEM_TYPE_PREFIX}%'
+      AND COALESCE(item_type, '') NOT LIKE '${SYSTEM_NOTICE_ITEM_TYPE_PREFIX}%'
       AND COALESCE(item_type, '') != '${CONTEXT_RESET_ITEM_TYPE}'
       AND NOT (
         author = 'assistant' AND turn_id IS NOT NULL

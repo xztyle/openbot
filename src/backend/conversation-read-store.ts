@@ -17,6 +17,7 @@ import {
   ROUTINE_QUIET_ANSWER_ITEM_TYPE,
   ROUTINE_RUN_EVENT_ITEM_TYPE_PREFIX,
   SKILL_EVENT_ITEM_TYPE_PREFIX,
+  SYSTEM_NOTICE_ITEM_TYPE_PREFIX,
 } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
@@ -295,6 +296,7 @@ function stateFromSnapshot(snapshot: ConversationSnapshot, throughMessageId: str
         !message.itemType?.startsWith(HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX) &&
         !message.itemType?.startsWith(MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX) &&
         !message.itemType?.startsWith(MODEL_SWITCH_ITEM_TYPE_PREFIX) &&
+        !message.itemType?.startsWith(SYSTEM_NOTICE_ITEM_TYPE_PREFIX) &&
         message.itemType !== CONTEXT_RESET_ITEM_TYPE,
     );
   return {

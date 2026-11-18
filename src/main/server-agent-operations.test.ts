@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { QueuedMessageReceipt, SendMessageInput } from "@openbot/contracts/ipc";
+import type { QueuedMessageReceipt, SendMessageInput, SystemNoticeKind } from "@openbot/contracts/ipc";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { createServerAgentOperations, RESTART_INTERRUPTION_REASON, RESUME_NOTE } from "./server-agent-operations";
@@ -56,16 +56,16 @@ function database() {
 }
 
 function operations(db: DatabaseSync, restarted: readonly string[] = [], agents = ["agent-a", "agent-b", "agent-c"]) {
-  const sent: SendMessageInput[] = [];
+  const sent: Array<SendMessageInput & { notice?: SystemNoticeKind }> = [];
   const logs: string[] = [];
   const markerFile = join(mkdtempSync(join(tmpdir(), "openbot-resume-")), "resumes.json");
   const route = createServerAgentOperations({
     restartInterrupted: () => new Set(restarted),
     database: () => db,
     agentIds: () => agents,
-    send: (input) =>
+    send: (input, notice) =>
       Effect.sync((): QueuedMessageReceipt => {
-        sent.push(input);
+        sent.push(notice ? { ...input, notice } : input);
         return {
           messageId: `m-${sent.length}`,
           deliveries: [{ id: `d-${sent.length}`, recipientAgentId: input.agentId, status: "running", position: null }],
@@ -85,6 +85,19 @@ describe("operator message", () => {
     expect(answer?.status).toBe(200);
     expect(answer?.lines).toMatchObject({ agent: "agent-a", delivery_id: "d-1", delivery_status: "running" });
     expect(sent).toEqual([{ agentId: "agent-a", text: "hello" }]);
+  });
+
+  it("sends the text as a note from OpenBot only when the caller asks for it", async () => {
+    const { db } = database();
+    const { route, sent } = operations(db);
+    await route("POST", "/v1/agents/agent-a/message", JSON.stringify({ text: "check", system: true }));
+    await route("POST", "/v1/agents/agent-b/message", "text=check&system=1");
+    await route("POST", "/v1/agents/agent-c/message", JSON.stringify({ text: "check", system: "yes" }));
+    expect(sent).toEqual([
+      { agentId: "agent-a", text: "check", notice: "operator-note" },
+      { agentId: "agent-b", text: "check", notice: "operator-note" },
+      { agentId: "agent-c", text: "check" },
+    ]);
   });
 
   it("takes form fields and refuses an empty text, a long one and an unknown agent", async () => {
@@ -146,7 +159,9 @@ describe("resume after a restart", () => {
 
     const first = await route("POST", "/v1/resume-interrupted", "");
     expect(first?.lines).toMatchObject({ found: 3, resumed: 1, newer_work: 1, turn_not_interrupted: 1 });
-    expect(sent).toEqual([{ agentId: "agent-a", text: RESUME_NOTE, clientMessageId: "restart-resume:a-new" }]);
+    expect(sent).toEqual([
+      { agentId: "agent-a", text: RESUME_NOTE, clientMessageId: "restart-resume:a-new", notice: "restart-resume" },
+    ]);
     expect(JSON.parse(readFileSync(markerFile, "utf8"))).toEqual({ resumed: ["a-new"] });
     expect(logs.some((line) => line.includes("a-new: resumed"))).toBe(true);
 
@@ -200,6 +215,8 @@ describe("resume after a restart", () => {
     expect(sent).toHaveLength(0);
     const real = await route("POST", "/v1/resume-interrupted", "delivery=recorded&text=Go+on");
     expect(real?.lines).toMatchObject({ resumed: 1 });
-    expect(sent).toEqual([{ agentId: "agent-a", text: "Go on", clientMessageId: "restart-resume:recorded" }]);
+    expect(sent).toEqual([
+      { agentId: "agent-a", text: "Go on", clientMessageId: "restart-resume:recorded", notice: "restart-resume" },
+    ]);
   });
 });

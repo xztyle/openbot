@@ -1,6 +1,10 @@
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
 import type { AgentProviderId, ConversationMessage, ConversationSnapshot } from "@openbot/contracts/ipc";
-import { isImageGenerationAspectRatio, ROUTINE_QUIET_ANSWER_ITEM_TYPE } from "@openbot/contracts/ipc";
+import {
+  isImageGenerationAspectRatio,
+  ROUTINE_QUIET_ANSWER_ITEM_TYPE,
+  systemNoticeFields,
+} from "@openbot/contracts/ipc";
 import { isString } from "@openbot/contracts/runtime-values";
 import { displayMessageReferences, type TeammatePrompt, teammatePrompts } from "./agent/delivery-content";
 import { imageGenerationFailure, isImageGenerationItem } from "./agent/image-generation";
@@ -157,6 +161,7 @@ function promptMessage(
     createdAt: delivery?.createdAt ?? row.createdAt,
     status: "completed",
     ...eventCheckMarker(context?.eventCheck),
+    ...systemNoticeFields(context?.notice),
   };
 }
 

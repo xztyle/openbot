@@ -895,7 +895,8 @@ button.chat-action-target:active,
 .chat-action-marker-unavailable .chat-action-marker-label,
 .chat-action-marker-context-reset .chat-action-marker-label,
 .chat-action-marker-model-switch .chat-action-marker-label,
-.chat-action-marker-channel-change .chat-action-marker-label {
+.chat-action-marker-channel-change .chat-action-marker-label,
+.chat-action-marker-system-notice .chat-action-marker-label {
   padding-inline-end: var(--openbot-space-1-5);
 }
 

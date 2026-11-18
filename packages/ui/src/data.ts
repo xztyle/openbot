@@ -25,6 +25,7 @@ import type {
   RoutineConversationEvent,
   RoutineRunConversationEvent,
   SkillConversationEvent,
+  SystemNoticeKind,
 } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
 
@@ -173,6 +174,11 @@ export type ChatActionMarkerModel =
   | { kind: "mcp-sign-in"; mcpServerId: string; timestamp: string }
   /** The user started a new chat: the agent does not see the messages above this marker. */
   | { kind: "context-reset"; timestamp: string }
+  /**
+   * OpenBot itself, not a person, sent the agent a note: after a restart cut off its turn, or from an
+   * operator of the server. `agentId` is the agent of the chat.
+   */
+  | { kind: "system-notice"; notice: SystemNoticeKind; agentId: string | null; timestamp: string }
   /** The agent left its model for a usage limit, or went back to it. `text` is the host's note. */
   | { kind: "model-switch"; reason: ModelSwitchReason; text: string; timestamp: string }
   /** A member agent changed the channel at a person's request. `text` is the host's note. */

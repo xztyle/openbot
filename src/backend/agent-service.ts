@@ -92,6 +92,7 @@ import type {
   SignOutMcpServerInput,
   StartAgentTaskInput,
   SteerQueuedMessageInput,
+  SystemNoticeKind,
   TestChannelRoutineInput,
   TestMcpServerInput,
   TestRoutineInput,
@@ -4744,10 +4745,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     input: SendMessageInput,
     sender?: ConversationMessageSender,
     timezone?: string,
+    /** Sends the text as a note from OpenBot itself, not the person: the chat shows a marker. */
+    notice?: SystemNoticeKind,
   ): Effect.fn.Return<QueuedMessageReceipt, AgentLifecycleFailed> {
-    if (!input.clientMessageId) return yield* this.#sendUserMessage(input, sender, timezone);
+    // A notice has no person behind it.
+    const person = notice ? undefined : sender;
+    if (!input.clientMessageId)
+      return yield* this.#sendUserMessage(input, person, timezone, undefined, undefined, notice);
     const idempotencyKey = `user-send:${createHash("sha256")
-      .update(JSON.stringify([sender?.id ?? null, input.agentId, input.clientMessageId]))
+      .update(JSON.stringify([person?.id ?? null, input.agentId, input.clientMessageId]))
       .digest("hex")}`;
     // Every user message adds a key, and the map is persisted whole, so keys older than the window go.
     this.#mailbox.forgetIdempotencyKeys("user-send:", new Date(Date.now() - USER_SEND_RETRY_WINDOW_MS));
@@ -4757,7 +4763,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     if (pending) return yield* Deferred.await(pending);
     const send = Deferred.makeUnsafe<QueuedMessageReceipt, AgentLifecycleFailed>();
     this.#pendingUserSends.set(idempotencyKey, send);
-    return yield* this.#sendUserMessage(input, sender, timezone, idempotencyKey).pipe(
+    return yield* this.#sendUserMessage(input, person, timezone, idempotencyKey, undefined, notice).pipe(
       Effect.onExit((exit) => Deferred.done(send, exit)),
       Effect.ensuring(Effect.sync(() => this.#pendingUserSends.delete(idempotencyKey))),
     );
@@ -4770,6 +4776,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     timezone: string | undefined,
     idempotencyKey?: string,
     fromAgentId?: string,
+    notice?: SystemNoticeKind,
   ) {
     const validateRecipient = yield* lifecycleStep("prepare message delivery", () =>
       this.#mailbox.prepareDelivery([input.agentId]),
@@ -4809,6 +4816,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         // An agent that creates this one sends the first task as a teammate request.
         sender: fromAgentId ? { kind: "agent", agentId: fromAgentId } : { kind: "user" },
         ...(sender && !fromAgentId ? { senderMember: sender } : {}),
+        ...(notice && !fromAgentId ? { notice } : {}),
         ...(task ? { taskId: task.taskId } : {}),
         recipientAgentIds: [agent.id],
         text: input.text,
@@ -4840,7 +4848,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     const snapshot = this.#conversation.ensureSnapshot(agent.id, task?.threadId ?? agent.threadId);
     // A task message shows in the task's row until its turn starts, not in the agent's own chat.
     if (!task) this.#mailboxSync.syncMailboxMessages(snapshot);
-    if (!task)
+    // A notice is not a message of the chat, so the preview keeps the last one.
+    if (!task && !notice)
       yield* this.#store
         .updatePreview(
           agent.id,

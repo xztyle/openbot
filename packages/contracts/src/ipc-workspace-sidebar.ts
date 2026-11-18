@@ -137,48 +137,47 @@ export function decodeWorkspaceSidebar(value: unknown): WorkspaceSidebar {
   };
 }
 
+/** The id lists that a rebase merges by id; every other field is one choice. */
+const WORKSPACE_SIDEBAR_ID_SETS = new Set(["muted", "closed", "collapsed", "notifyMentions", "notifyNothing"]);
+
+function idsOf(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every((id) => typeof id === "string") ? value : undefined;
+}
+
 /**
  * The value that keeps the changes of another session (`theirs`, the host value now) and adds the
  * changes that this session made to `base`, the host value it started from (`mine`). A list of ids
- * loses the ids that `mine` took out of `base` and gets the ids that `mine` added; an order and the
- * space are those of `mine` when it changed them, else those of `theirs`. A list that `mine` leaves
- * out, as an older client does, is not a change.
+ * (mutes, closed DMs, collapsed groups, bells) loses the ids that `mine` took out of `base` and gets the
+ * ids that `mine` added. Each order, and every other field (the space, and any later field), is that
+ * of `mine` when it changed it, else that of `theirs`. A field that `mine` leaves out, as an older
+ * client does, is not a change.
  */
 export function rebaseWorkspaceSidebar(
   base: WorkspaceSidebarPrefs,
   mine: WorkspaceSidebarPrefs,
   theirs: WorkspaceSidebarPrefs,
 ): WorkspaceSidebarPrefs {
-  const set = (
-    baseIds: readonly string[] | undefined,
-    mineIds: readonly string[] | undefined,
-    theirIds: readonly string[] | undefined,
-  ): string[] | undefined => {
-    if (mineIds === undefined) return theirIds === undefined ? undefined : [...theirIds];
-    const before = new Set(baseIds ?? []);
-    const after = new Set(mineIds);
-    const kept = (theirIds ?? []).filter((id) => !(before.has(id) && !after.has(id)));
-    const added = mineIds.filter((id) => !before.has(id) && !kept.includes(id));
-    return [...kept, ...added];
-  };
-  const same = (left: readonly string[], right: readonly string[]) =>
-    left.length === right.length && left.every((id, index) => right[index] === id);
+  const before = new Map<string, unknown>(Object.entries(base));
+  const after = new Map<string, unknown>(Object.entries(mine));
+  const now = new Map<string, unknown>(Object.entries(theirs));
+  const changed = (left: unknown, right: unknown) => JSON.stringify(left) !== JSON.stringify(right);
   const order = (group: "channels" | "direct") =>
-    same(mine.order[group], base.order[group]) ? [...theirs.order[group]] : [...mine.order[group]];
-  const space = mine.space !== base.space ? mine.space : theirs.space;
-  const optional = (key: "closed" | "collapsed" | "notifyMentions" | "notifyNothing") => {
-    const ids = set(base[key], mine[key], theirs[key]);
-    return ids === undefined ? {} : { [key]: ids };
-  };
-  return {
-    order: { channels: order("channels"), direct: order("direct") },
-    muted: set(base.muted, mine.muted, theirs.muted) ?? [],
-    ...optional("closed"),
-    ...(space === undefined ? {} : { space }),
-    ...optional("collapsed"),
-    ...optional("notifyMentions"),
-    ...optional("notifyNothing"),
-  };
+    changed(mine.order[group], base.order[group]) ? mine.order[group] : theirs.order[group];
+  const merged = new Map<string, unknown>();
+  for (const key of new Set([...now.keys(), ...after.keys()])) {
+    if (key === "baseRevision") continue;
+    if (key === "order") merged.set(key, { channels: order("channels"), direct: order("direct") });
+    else if (WORKSPACE_SIDEBAR_ID_SETS.has(key) && after.has(key)) {
+      const removed = new Set(idsOf(before.get(key)) ?? []);
+      const added = idsOf(after.get(key)) ?? [];
+      for (const id of added) removed.delete(id);
+      const known = new Set(idsOf(before.get(key)) ?? []);
+      const kept = (idsOf(now.get(key)) ?? []).filter((id) => !removed.has(id));
+      merged.set(key, [...kept, ...added.filter((id) => !known.has(id) && !kept.includes(id))]);
+    } else if (after.has(key) && changed(after.get(key), before.get(key))) merged.set(key, after.get(key));
+    else if (now.has(key)) merged.set(key, now.get(key));
+  }
+  return decodeWorkspaceSidebarPrefs(Object.fromEntries(merged));
 }
 
 /** The value that a client may send: each list without repeats and cut to the limit, ids that fit. */

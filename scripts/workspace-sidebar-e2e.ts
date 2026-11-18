@@ -65,6 +65,7 @@ interface Value {
   closed?: string[];
   notifyMentions?: string[];
   notifyNothing?: string[];
+  space?: string;
   baseRevision?: number;
 }
 
@@ -75,6 +76,7 @@ async function save(person: Person, value: Value): Promise<Answer> {
     closed: value.closed ?? [],
     notifyMentions: value.notifyMentions ?? [],
     notifyNothing: value.notifyNothing ?? [],
+    ...(value.space === undefined ? {} : { space: value.space }),
     ...(value.baseRevision === undefined ? {} : { baseRevision: value.baseRevision }),
   });
   assert.equal(response.status, 200, `The save returned ${response.status}.`);
@@ -136,6 +138,7 @@ try {
     const phone = await save(member, {
       muted: ["channel-x", "channel-y", "channel-z"],
       notifyNothing: ["channel-n"],
+      space: "space-p",
       baseRevision: 2,
     });
     assert.equal(phone.revision, 3);
@@ -154,6 +157,8 @@ try {
     assert.deepEqual(list(desktop.sidebar, "notifyMentions"), ["channel-m"]);
     assert.deepEqual(list(desktop.sidebar, "closed"), ["agent:a1"]);
     assert.deepEqual(record(desktop.sidebar?.order, "order").channels, ["channel-b", "channel-a"]);
+    // The desktop did not change the space, so the phone's stays.
+    assert.equal(desktop.sidebar?.space, "space-p");
     const after = await read(member);
     assert.deepEqual(after, desktop);
     return after;

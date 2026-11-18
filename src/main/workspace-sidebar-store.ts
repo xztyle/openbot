@@ -167,13 +167,10 @@ export class WorkspaceSidebarStore {
 
 /** A copy of a value without the fields of the file. */
 function copy(stored: WorkspaceSidebarPrefs): WorkspaceSidebarPrefs {
-  return {
-    order: { channels: [...stored.order.channels], direct: [...stored.order.direct] },
-    muted: [...stored.muted],
-    ...(stored.closed === undefined ? {} : { closed: [...stored.closed] }),
-    ...(stored.space === undefined ? {} : { space: stored.space }),
-    ...(stored.collapsed === undefined ? {} : { collapsed: [...stored.collapsed] }),
-    ...(stored.notifyMentions === undefined ? {} : { notifyMentions: [...stored.notifyMentions] }),
-    ...(stored.notifyNothing === undefined ? {} : { notifyNothing: [...stored.notifyNothing] }),
-  };
+  const {
+    updatedAt: _updatedAt,
+    revision: _revision,
+    ...prefs
+  }: Partial<StoredSidebar> & WorkspaceSidebarPrefs = stored;
+  return structuredClone(prefs);
 }

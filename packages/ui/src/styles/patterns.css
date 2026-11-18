@@ -21,6 +21,13 @@
   animation: ui-form-dialog-in var(--openbot-duration-slow) var(--openbot-ease-out);
 }
 
+/* A dialog portals to the body, whose text is 16 px, and the base reset gives a field its parent's font.
+ * The fields of a form dialog keep the scale's field size, as in the panes. A touch screen keeps its
+ * larger text, so iOS does not zoom into the field. */
+.ui-form-dialog :where(.ui-input, .ui-textarea, .ui-native-select) {
+  font-size: var(--openbot-text-md);
+}
+
 .ui-form-dialog[data-size="sm"] {
   width: min(440px, 100%);
 }

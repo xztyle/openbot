@@ -144,7 +144,7 @@ const BROWSER_TOOL_DEFINITIONS = [
         .min(1)
         .max(12)
         .describe(
-          "Only the active step: one password/whole-code field, or all single-digit fields in entry order. Use fresh snapshot refs; exclude username fields.",
+          "Only the active step: one password/whole-code field, or all single-digit fields in entry order. On a sign-up form, pass the password field and its confirm field (Confirm, Repeat); the same password goes into both, and a confirm field of the named password field is filled when you pass only the password. Use fresh snapshot refs; exclude username fields.",
         ),
       digits: z
         .number()

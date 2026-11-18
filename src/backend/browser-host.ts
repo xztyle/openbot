@@ -1240,8 +1240,10 @@ export class BrowserHost {
     if (args.method !== "password" && args.digits < 4)
       return yield* browserFailure(new Error(sourceText("error.backend.authDigitsRange")));
     if (
-      (args.method === "password" && args.targets.length !== 1) ||
-      (args.targets.length !== 1 && args.targets.length !== args.digits) ||
+      // A password has one field, or two on a sign-up form: the password and its confirm field.
+      (args.method === "password"
+        ? args.targets.length > 2
+        : args.targets.length !== 1 && args.targets.length !== args.digits) ||
       (args.submission === "click") !== Boolean(args.submitTarget)
     )
       return yield* browserFailure(new Error("Invalid authentication targets."));
@@ -1258,7 +1260,13 @@ export class BrowserHost {
             tab.diagnostics.clearDiagnostics();
             return yield* boundEngineOperation(
               tab,
-              tab.engine.prepareSecret(args.targets, url.origin, args.submission, args.submitTarget),
+              tab.engine.prepareSecret(
+                args.targets,
+                url.origin,
+                args.submission,
+                args.submitTarget,
+                args.method === "password",
+              ),
               10_000,
               "Authentication target resolution timed out.",
               keepQueueBlocked,

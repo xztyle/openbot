@@ -226,6 +226,25 @@ const PAGE_SECRET_TEXT_FUNCTION = `function() {
   return this.innerText ?? this.textContent ?? '';
 }`;
 
+/**
+ * The confirm field of a sign-up form, for the password field the agent named: the one other
+ * password field of its form (or of its document, with no form) that a label, a name or the
+ * autocomplete of both says is the same new password typed again. Google's form has "Password" and
+ * "Confirm"; other sites say "Repeat", "Again", "Re-enter" or "Verify". Null when there is none, or
+ * when it is not clear which field it is.
+ */
+const CONFIRM_PASSWORD_SCRIPT = `function() {
+  const scope = this.form ?? this.getRootNode();
+  const others = [...scope.querySelectorAll('input[type="password"]')].filter((field) => field !== this && !field.disabled && !field.readOnly && field.getClientRects().length > 0);
+  if (others.length !== 1) return null;
+  const other = others[0];
+  const words = /confirm|repeat|again|re-?type|re-?enter|verif|retype|confirmar|repetir|repita|vuelve|wiederhol|bestätig|confirmer|ripeti|conferma|повтор|確認|확인|确认|tekrar|powtórz/i;
+  const text = (field) => [field.name, field.id, field.placeholder, field.getAttribute('aria-label'), field.getAttribute('autocomplete'), ...[...(field.labels ?? [])].map((label) => label.textContent), ...(field.getAttribute('aria-labelledby') ?? '').split(/\\s+/).map((id) => id && field.ownerDocument.getElementById(id)?.textContent)].filter(Boolean).join(' ');
+  const newPassword = (field) => (field.getAttribute('autocomplete') ?? '').toLowerCase().split(/\\s+/).includes('new-password');
+  if (words.test(text(other)) || words.test(text(this)) || (newPassword(this) && newPassword(other))) return other;
+  return null;
+}`;
+
 /** Ctrl or Meta: either one is the command modifier, whichever system the client runs. */
 const COMMAND_MODIFIERS = 2 | 4;
 
@@ -250,6 +269,12 @@ export class BrowserCdpEngine {
     origin: string,
     submission: "on_input" | "enter" | "click",
     submitTarget?: BrowserTarget,
+    /**
+     * A password goes whole into every field: the password and its confirm field on a sign-up form.
+     * With one field named, the confirm field of its form is added. Without this, several fields
+     * take one digit each.
+     */
+    password = false,
   ): Effect.fn.Return<
     {
       enter: (secret: string) => Effect.Effect<void, BrowserOperationError>;
@@ -273,6 +298,11 @@ export class BrowserCdpEngine {
       Effect.gen({ self: this }, function* () {
         const inputs = [];
         for (const target of targets) inputs.push(yield* this.#resolveElementEffect(send, target, Date.now() + 10_000));
+        const named = inputs[0];
+        if (password && inputs.length === 1 && named && !named.sessionId) {
+          const confirm = yield* this.#confirmPasswordField(send, named.backendNodeId);
+          if (confirm !== null) inputs.push({ backendNodeId: confirm });
+        }
         const button = submitTarget
           ? yield* this.#resolveElementEffect(send, submitTarget, Date.now() + 10_000)
           : undefined;
@@ -368,7 +398,9 @@ export class BrowserCdpEngine {
                   return yield* browserFailure(new Error("Authentication page changed."));
                 // Native entry emits trusted input events across shadow roots, as regular browser typing
                 // does. Synthetic value setters can leave component forms unaware of the filled field.
-                yield* send("Input.insertText", { text: nodes.inputs.length === 1 ? secret : secret[index] });
+                yield* send("Input.insertText", {
+                  text: password || nodes.inputs.length === 1 ? secret : secret[index],
+                });
               }
               if (submission === "on_input" || generation !== this.#navigationGeneration) return;
               if (submission === "click" && nodes.button) {
@@ -2516,6 +2548,30 @@ export class BrowserCdpEngine {
         `Target is covered by ${name} (backendNodeId ${blockerId}). Dismiss the covering layer or choose a visible point.`,
       ),
     );
+  });
+
+  /** The confirm field of the password field, by `CONFIRM_PASSWORD_SCRIPT`, or null. */
+  readonly #confirmPasswordField = Effect.fn("BrowserCdp.confirmPasswordField")(function* (
+    this: BrowserCdpEngine,
+    send: SendCommand,
+    backendNodeId: number,
+  ): Effect.fn.Return<number | null, BrowserOperationError> {
+    const executionContextId = yield* automationContextId(send);
+    const resolved = yield* send("DOM.resolveNode", { backendNodeId, executionContextId });
+    const objectId = stringValue(recordValue(resolved.object)?.objectId);
+    if (!objectId) return null;
+    const result = yield* send("Runtime.callFunctionOn", {
+      objectId,
+      functionDeclaration: CONFIRM_PASSWORD_SCRIPT,
+      returnByValue: false,
+    });
+    yield* send("Runtime.releaseObject", { objectId }).pipe(Effect.ignore);
+    const found = stringValue(recordValue(result.result)?.objectId);
+    if (!found) return null;
+    const described = yield* send("DOM.describeNode", { objectId: found, depth: 0 });
+    yield* send("Runtime.releaseObject", { objectId: found }).pipe(Effect.ignore);
+    const confirm = numberValue(recordValue(described.node)?.backendNodeId);
+    return confirm > 0 && confirm !== backendNodeId ? confirm : null;
   });
 
   readonly #callOnNode = Effect.fn("BrowserCdp.callOnNode")(function* (

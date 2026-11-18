@@ -16,6 +16,16 @@ export async function runSecretHandoffScenario(browser: BrowserHost, localOrigin
     if (url.hostname !== "authentication.openbot.test") return new Response("Not found", { status: 404 });
     if (url.pathname === "/bitwarden-password") return bitwardenLoginFixture("password");
     if (url.pathname === "/bitwarden-authenticator") return bitwardenLoginFixture("authenticator");
+    // A sign-up form as Google's: Password and Confirm, and Next works only when both match.
+    if (url.pathname === "/signup" || url.pathname === "/signup-both")
+      return new Response(
+        `<!doctype html><body><form method="post" action="/session">
+      <label>Password<input id="password" name="Passwd" type="password" autocomplete="new-password"></label>
+      <label>Confirm<input id="confirm" name="PasswdAgain" type="password" autocomplete="new-password"></label>
+      <button id="submit" type="button" disabled onclick="const first = document.querySelector('#password').value; if (first && first === document.querySelector('#confirm').value) location.href='/complete'; else document.title = 'Passwords do not match';">Next</button>
+      </form><script>document.addEventListener('input', () => { document.querySelector('#submit').disabled = false; });</script></body>`,
+        { headers: { "Content-Type": "text/html" } },
+      );
     const html =
       url.pathname === "/complete"
         ? "<h1>Signed in</h1>"
@@ -47,6 +57,10 @@ export async function runSecretHandoffScenario(browser: BrowserHost, localOrigin
       ["password", "same-page"],
       ["password", "component"],
       ["password", "native-submit"],
+      // The agent names only the password field: its confirm field takes the same password.
+      ["password", "signup"],
+      // The agent names both fields.
+      ["password", "signup-both"],
     ] as const) {
       const tab = await runCauseEffect(
         browser.open(`https://authentication.openbot.test/${path}`, "secret-thread", "secret-agent"),
@@ -68,7 +82,12 @@ export async function runSecretHandoffScenario(browser: BrowserHost, localOrigin
           targets:
             method === "authenticator"
               ? Array.from({ length: 6 }, (_, index) => ({ kind: "css", selector: `#digit-${index}` }))
-              : [{ kind: "css", selector: method === "password" ? "#password" : "#code" }],
+              : path === "signup-both"
+                ? [
+                    { kind: "css", selector: "#password" },
+                    { kind: "css", selector: "#confirm" },
+                  ]
+                : [{ kind: "css", selector: method === "password" ? "#password" : "#code" }],
           submission: "click",
           submitTarget: { kind: "css", selector: "#submit" },
         },

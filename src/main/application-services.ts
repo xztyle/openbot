@@ -1051,7 +1051,7 @@ export async function createApplicationServices({
   // limit, such as a slow agent stop, still writes, so the close waits a short time for it.
   teardown.push(TEARDOWN_ORDER.database, "the database", () => store.database.close(), { afterAbandonedSteps: true });
   // Every managed skill (`MANAGED_SKILL_SLUGS`): site hosting, skill creator, data, event checks, host apps,
-  // bench, storage, Meta ads and Hotmart.
+  // bench, storage, Meta ads, Hotmart, Render sites and Motion.
   const managedSkills = createApplicationManagedSkills(
     app.isPackaged
       ? join(process.resourcesPath, "managed-skills")

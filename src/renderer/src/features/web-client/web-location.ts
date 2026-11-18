@@ -67,6 +67,7 @@ const VIEW_SEGMENTS = {
   routines: "routines",
   secrets: "secrets",
   "space-agents": "agents",
+  drafts: "drafts",
 } as const satisfies Record<WorkspaceView, string>;
 
 const VIEWS: readonly WorkspaceView[] = [
@@ -79,6 +80,7 @@ const VIEWS: readonly WorkspaceView[] = [
   "routines",
   "secrets",
   "space-agents",
+  "drafts",
 ];
 
 function viewOfSegment(segment: string): WorkspaceView | undefined {

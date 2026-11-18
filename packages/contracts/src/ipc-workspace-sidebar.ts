@@ -1,10 +1,11 @@
 // The reader's own workspace sidebar: the order they dragged the channel and DM rows into, the
-// conversations they muted, and the groups they collapsed. Each save gets a revision, so a session
+// conversations they muted, the groups they collapsed, the Starred section, the sections they made,
+// and the sort and filter of each group. Each save gets a revision, so a session
 // that saves from an older value keeps the changes of the others. The host keeps one value per member, so it follows the account to each
 // computer and browser. A host that has none for the member answers null.
 
 import { isBoundedString } from "./ipc-bounded-values";
-import { isDynamicRecord } from "./runtime-values";
+import { isDynamicRecord, isOneOf } from "./runtime-values";
 
 /** The most ids in each list: the channel order, the DM order and the mutes. */
 export const WORKSPACE_SIDEBAR_ID_LIMIT = 500;
@@ -34,6 +35,23 @@ export interface WorkspaceSidebarPrefs {
   notifyMentions?: string[];
   notifyNothing?: string[];
   /**
+   * The conversations in the Starred section, in the reader's order. A starred conversation shows
+   * there and in no other group. Absent from an older client or host.
+   */
+  starred?: string[];
+  /**
+   * The sections that the reader made, as Slack's custom sections, in the order they show. A
+   * conversation is in one section at most; it shows there and not in its own group. Absent from an
+   * older client or host.
+   */
+  sections?: WorkspaceSidebarSection[];
+  /**
+   * The sort and the filter that the reader chose for a group: `channels`, `direct`, `starred` or the
+   * id of a section. A group with no entry sorts `custom` and shows `all`. Absent from an older client
+   * or host.
+   */
+  groupOptions?: WorkspaceSidebarGroupOptions[];
+  /**
    * Only on a save: the `revision` of the host value that this value was made from. When another
    * session of the member saved since, the host keeps that session's changes and applies only the
    * changes of this one (`rebaseWorkspaceSidebar`). The host never stores it. Absent from an older
@@ -53,6 +71,36 @@ export interface WorkspaceSidebar {
    * one: that answer is older than a value it already has. Absent from an older host.
    */
   revision?: number;
+}
+
+/** The most sections a reader makes, and the longest section name. */
+export const WORKSPACE_SIDEBAR_SECTION_LIMIT = 50;
+export const WORKSPACE_SIDEBAR_SECTION_NAME_LENGTH = 80;
+/** The most groups with options: every section, Starred, Channels and Direct messages. */
+export const WORKSPACE_SIDEBAR_GROUP_OPTIONS_LIMIT = 60;
+
+/** A section that the reader made: its name and its conversations, in the reader's order. */
+export interface WorkspaceSidebarSection {
+  id: string;
+  name: string;
+  ids: string[];
+}
+
+/**
+ * How a group sorts, as Slack's "Sort": `custom` is the order the reader dragged (and the group's own
+ * order for the rest), `alpha` by name, `recent` newest activity first, `priority` mentions, then
+ * unread, then newest.
+ */
+export const WORKSPACE_SIDEBAR_SORTS = ["custom", "alpha", "recent", "priority"] as const;
+export type WorkspaceSidebarSort = (typeof WORKSPACE_SIDEBAR_SORTS)[number];
+/** Which rows a group shows, as Slack's "Show": all, only unread ones, or only those with mentions. */
+export const WORKSPACE_SIDEBAR_SHOWS = ["all", "unreads", "mentions"] as const;
+export type WorkspaceSidebarShow = (typeof WORKSPACE_SIDEBAR_SHOWS)[number];
+
+export interface WorkspaceSidebarGroupOptions {
+  id: string;
+  sort?: WorkspaceSidebarSort;
+  show?: WorkspaceSidebarShow;
 }
 
 /** The notification level of one conversation, as Slack's bell offers it. */
@@ -106,6 +154,50 @@ function revision(value: unknown, label: string): number {
   return value;
 }
 
+function sectionName(value: unknown): string {
+  if (!isBoundedString(value, WORKSPACE_SIDEBAR_SECTION_NAME_LENGTH) || !value.trim())
+    throw new Error("Invalid workspace sidebar section name.");
+  return value;
+}
+
+function sections(value: unknown): WorkspaceSidebarSection[] {
+  if (!Array.isArray(value) || value.length > WORKSPACE_SIDEBAR_SECTION_LIMIT)
+    throw new Error("Invalid workspace sidebar sections.");
+  const seen = new Set<string>();
+  return value.flatMap((section): WorkspaceSidebarSection[] => {
+    if (!isDynamicRecord(section) || !isSidebarId(section.id)) throw new Error("Invalid workspace sidebar section.");
+    const decoded = { id: section.id, name: sectionName(section.name), ids: idList(section.ids, "section") };
+    // A repeated section keeps its first place, as a repeated id does.
+    if (seen.has(decoded.id)) return [];
+    seen.add(decoded.id);
+    return [decoded];
+  });
+}
+
+function groupOptions(value: unknown): WorkspaceSidebarGroupOptions[] {
+  if (!Array.isArray(value) || value.length > WORKSPACE_SIDEBAR_GROUP_OPTIONS_LIMIT)
+    throw new Error("Invalid workspace sidebar group options.");
+  const seen = new Set<string>();
+  return value.flatMap((entry): WorkspaceSidebarGroupOptions[] => {
+    if (
+      !isDynamicRecord(entry) ||
+      !isSidebarId(entry.id) ||
+      !(entry.sort === undefined || isOneOf(WORKSPACE_SIDEBAR_SORTS, entry.sort)) ||
+      !(entry.show === undefined || isOneOf(WORKSPACE_SIDEBAR_SHOWS, entry.show))
+    )
+      throw new Error("Invalid workspace sidebar group options.");
+    if (seen.has(entry.id)) return [];
+    seen.add(entry.id);
+    return [
+      {
+        id: entry.id,
+        ...(isOneOf(WORKSPACE_SIDEBAR_SORTS, entry.sort) ? { sort: entry.sort } : {}),
+        ...(isOneOf(WORKSPACE_SIDEBAR_SHOWS, entry.show) ? { show: entry.show } : {}),
+      },
+    ];
+  });
+}
+
 function spaceId(value: unknown): string {
   if (!isSidebarId(value)) throw new Error("Invalid workspace sidebar space.");
   return value;
@@ -124,6 +216,9 @@ export function decodeWorkspaceSidebarPrefs(value: unknown): WorkspaceSidebarPre
       ? {}
       : { notifyMentions: idList(value.notifyMentions, "notification levels") }),
     ...(value.notifyNothing === undefined ? {} : { notifyNothing: idList(value.notifyNothing, "notification levels") }),
+    ...(value.starred === undefined ? {} : { starred: idList(value.starred, "starred conversations") }),
+    ...(value.sections === undefined ? {} : { sections: sections(value.sections) }),
+    ...(value.groupOptions === undefined ? {} : { groupOptions: groupOptions(value.groupOptions) }),
     ...(value.baseRevision === undefined ? {} : { baseRevision: revision(value.baseRevision, "revision") }),
   };
 }
@@ -137,8 +232,18 @@ export function decodeWorkspaceSidebar(value: unknown): WorkspaceSidebar {
   };
 }
 
-/** The id lists that a rebase merges by id; every other field is one choice. */
-const WORKSPACE_SIDEBAR_ID_SETS = new Set(["muted", "closed", "collapsed", "notifyMentions", "notifyNothing"]);
+/**
+ * The id lists that a rebase merges by id; every other field is one choice. The sections and the group
+ * options merge whole: a section's name and its rows belong together.
+ */
+const WORKSPACE_SIDEBAR_ID_SETS = new Set([
+  "muted",
+  "closed",
+  "collapsed",
+  "notifyMentions",
+  "notifyNothing",
+  "starred",
+]);
 
 function idsOf(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.every((id) => typeof id === "string") ? value : undefined;
@@ -194,6 +299,38 @@ export function boundedWorkspaceSidebar(prefs: WorkspaceSidebarPrefs): Workspace
     ...(prefs.collapsed === undefined ? {} : { collapsed: bounded(prefs.collapsed) }),
     ...(prefs.notifyMentions === undefined ? {} : { notifyMentions: bounded(prefs.notifyMentions) }),
     ...(prefs.notifyNothing === undefined ? {} : { notifyNothing: bounded(prefs.notifyNothing) }),
+    ...(prefs.starred === undefined ? {} : { starred: bounded(prefs.starred) }),
+    ...(prefs.sections === undefined
+      ? {}
+      : {
+          sections: prefs.sections
+            .filter(
+              (section, index, all) =>
+                isSidebarId(section.id) &&
+                section.name.trim().length > 0 &&
+                all.findIndex((other) => other.id === section.id) === index,
+            )
+            .slice(0, WORKSPACE_SIDEBAR_SECTION_LIMIT)
+            .map((section) => ({
+              id: section.id,
+              name: section.name.slice(0, WORKSPACE_SIDEBAR_SECTION_NAME_LENGTH),
+              ids: bounded(section.ids),
+            })),
+        }),
+    ...(prefs.groupOptions === undefined
+      ? {}
+      : {
+          groupOptions: prefs.groupOptions
+            .filter(
+              (entry, index, all) => isSidebarId(entry.id) && all.findIndex((other) => other.id === entry.id) === index,
+            )
+            .slice(0, WORKSPACE_SIDEBAR_GROUP_OPTIONS_LIMIT)
+            .map((entry) => ({
+              id: entry.id,
+              ...(entry.sort ? { sort: entry.sort } : {}),
+              ...(entry.show ? { show: entry.show } : {}),
+            })),
+        }),
     ...(prefs.baseRevision === undefined ? {} : { baseRevision: prefs.baseRevision }),
   };
 }

@@ -447,6 +447,8 @@
     "./features/workspace/WorkspacePaneHeader": "./src/features/workspace/WorkspacePaneHeader.tsx",
     "./features/workspace/WorkspaceSelect": "./src/features/workspace/WorkspaceSelect.tsx",
     "./features/workspace/WorkspaceSidebar": "./src/features/workspace/WorkspaceSidebar.tsx",
+    "./features/workspace/SidebarSectionDialog": "./src/features/workspace/SidebarSectionDialog.tsx",
+    "./features/workspace/DraftsView": "./src/features/workspace/DraftsView.tsx",
     "./features/workspace/workspace-format": "./src/features/workspace/workspace-format.ts",
     "./features/workspace/workspace-types": "./src/features/workspace/workspace-types.ts",
     "./features/workspace/workspace.css": "./src/features/workspace/workspace.css",

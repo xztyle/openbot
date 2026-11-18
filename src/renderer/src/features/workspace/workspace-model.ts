@@ -236,6 +236,7 @@ export function sidebarChannels(
       visibility: channelVisibility(channel),
       unread: channel.unreadCount > 0,
       mentionCount: mentions[channel.id] ?? 0,
+      activityAt: channel.lastMessage ? Date.parse(channel.lastMessage.at) : Date.parse(channel.createdAt),
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -271,6 +272,7 @@ export function sidebarDirectMessages(input: DirectMessagesInput): SidebarDirect
     if (soleAgent && input.agentDmIsMainChat(soleAgent) && !channel.lastMessage) continue;
     if (soleAgent && !input.agentDmIsMainChat(soleAgent)) agentsWithChannel.add(soleAgent);
     const members = otherMembers(directory, channel);
+    const at = channel.lastMessage ? Date.parse(channel.lastMessage.at) : Date.parse(channel.createdAt);
     rows.push({
       row: {
         id: channel.id,
@@ -278,8 +280,9 @@ export function sidebarDirectMessages(input: DirectMessagesInput): SidebarDirect
         members: members.length ? members : [memberById(directory, directory.reader.id ?? "", directory.reader.name)],
         unread: channel.unreadCount > 0,
         mentionCount: channel.unreadCount,
+        activityAt: at,
       },
-      at: channel.lastMessage ? Date.parse(channel.lastMessage.at) : Date.parse(channel.createdAt),
+      at,
     });
   }
   rows.sort((left, right) => right.at - left.at);

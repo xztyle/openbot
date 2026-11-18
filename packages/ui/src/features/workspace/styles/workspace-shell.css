@@ -634,13 +634,73 @@
   height: var(--openbot-icon-sm);
 }
 
-.ws-sidebar-group-add {
+.ws-sidebar-group-add,
+.ws-sidebar-group-options.ui-button {
   opacity: 0;
 }
 
 .ws-sidebar-group-header:hover .ws-sidebar-group-add,
-.ws-sidebar-group-add:focus-visible {
+.ws-sidebar-group-add:focus-visible,
+.ws-sidebar-group-header:hover .ws-sidebar-group-options.ui-button,
+.ws-sidebar-group-header:focus-within .ws-sidebar-group-options.ui-button,
+.ws-sidebar-group-options.ui-button[data-expanded] {
   opacity: 1;
+}
+
+/* A row dragged over a section header goes to the end of that section. */
+.ws-sidebar-group-header[data-drop] {
+  border-radius: var(--openbot-radius-sm);
+  box-shadow: inset 0 0 0 2px var(--openbot-accent);
+}
+
+/* The section shows only unread rows or mentions. */
+.ws-sidebar-group-toggle > svg.ws-sidebar-group-filtered {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  flex: 0 0 auto;
+  opacity: 0.8;
+}
+
+.ws-sidebar-menu-label {
+  padding: var(--openbot-space-1) var(--openbot-space-3) 2px;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-weight-semibold);
+}
+
+.ws-sidebar-menu-check {
+  display: inline-grid;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.ws-sidebar-menu-check > svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+}
+
+/* The end of a row: the draft pencil, as in Slack, and the mention badge. */
+.ws-sidebar-row-end {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--openbot-space-1);
+  margin-left: auto;
+}
+
+.ws-sidebar-row-end > svg.ws-sidebar-row-draft {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  color: var(--openbot-text-muted);
+}
+
+.ws-sidebar-draft-count {
+  margin-left: auto;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .ws-sidebar-group-rows {
@@ -677,7 +737,8 @@
 }
 
 @media (hover: none) {
-  .ws-sidebar-group-add {
+  .ws-sidebar-group-add,
+  .ws-sidebar-group-options.ui-button {
     opacity: 1;
   }
 }
@@ -691,4 +752,30 @@
 .ws-sidebar-group-toggle[data-unread].ui-button {
   color: var(--openbot-text-primary);
   font-weight: var(--openbot-weight-bold);
+}
+
+/* The Sort and Show choices at the top of a section's sheet on a phone. */
+.ws-sidebar-sheet-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-2);
+  width: 100%;
+}
+
+.ws-sidebar-sheet-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.ws-sidebar-sheet-group > .ws-sidebar-menu-label {
+  margin: 0;
+}
+
+.ui-button.ws-sidebar-sheet-choice[aria-pressed="true"] {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-semibold);
 }

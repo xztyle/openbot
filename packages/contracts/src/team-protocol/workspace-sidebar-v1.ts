@@ -17,6 +17,12 @@
 //   larger, and a save may carry `baseRevision?`, the revision of the value it was made from. A host
 //   that has the value of that revision keeps the changes of the member's other sessions since then
 //   and applies the changes of this save to them; else the save replaces the value, as before.
+//   Later still: `starred?`, at most 500 ids, the conversations of the Starred section; `sections?`,
+//   at most 50 sections that the member made, each `{ id, name, ids }` (`name` 1 to 80 characters,
+//   `ids` at most 500); and `groupOptions?`, at most 60 entries `{ id, sort?, show? }`, the sort
+//   (`custom`, `alpha`, `recent`, `priority`) and the filter (`all`, `unreads`, `mentions`) of a group
+//   (`channels`, `direct`, `starred` or a section id). A rebase merges `starred` by id and takes
+//   `sections` and `groupOptions` whole.
 // - `POST /v1/workspace/sidebar/save` with a sidebar replaces the value of the member of the session
 //   and answers `{ sidebar }`, the value the host keeps (a repeated id keeps its first place).
 //
@@ -38,6 +44,7 @@ import {
   list,
   nullable,
   type OptionalRouteCodec,
+  oneOf,
   string,
 } from "./admin-wire";
 import { FORK_HOST_CAPABILITY } from "./fork-host-v1";
@@ -56,12 +63,25 @@ const sidebarId = (value: unknown): TeamProtocolV2Json => {
   return id;
 };
 const ids = list(sidebarId, 500);
+const sectionName = (value: unknown): TeamProtocolV2Json => {
+  const name = string(80)(value);
+  if (typeof name !== "string" || !name.trim()) throw new Error("Invalid workspace sidebar section name.");
+  return name;
+};
+const section = fields({ id: sidebarId, name: sectionName, ids });
+const groupOptions = fields(
+  { id: sidebarId },
+  { sort: oneOf("custom", "alpha", "recent", "priority"), show: oneOf("all", "unreads", "mentions") },
+);
 const sidebarFields = {
   closed: ids,
   space: sidebarId,
   collapsed: ids,
   notifyMentions: ids,
   notifyNothing: ids,
+  starred: ids,
+  sections: list(section, 50),
+  groupOptions: list(groupOptions, 60),
 };
 const sidebar = fields({ order: fields({ channels: ids, direct: ids }), muted: ids }, sidebarFields);
 const save = fields(

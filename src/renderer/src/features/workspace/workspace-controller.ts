@@ -62,6 +62,7 @@ import {
   type WorkspaceDirectory,
   type WorkspacePerson,
 } from "./workspace-model";
+import { localSectionPrefs, sidebarSections, withSectionOrder } from "./workspace-sidebar-sections";
 import {
   type ArtifactThumbnailUrl,
   createHostArtifactsSource,
@@ -288,6 +289,7 @@ const SAVED_VIEWS: readonly WorkspaceView[] = [
   "routines",
   "secrets",
   "space-agents",
+  "drafts",
 ];
 
 function readPlace(key: string): SavedPlace {
@@ -349,6 +351,7 @@ function readSidebar(key: string): SidebarPrefs {
       // Always present, so a view that reads a level before the first choice hears the change.
       notifyMentions: idList(value.notifyMentions),
       notifyNothing: idList(value.notifyNothing),
+      ...localSectionPrefs(value),
     };
   } catch {
     return { order: { channels: [], direct: [] }, muted: [], notifyMentions: [], notifyNothing: [] };
@@ -384,6 +387,31 @@ function readHints(): Record<string, true> {
   }
 }
 const DRAFT_LIMIT = 200;
+/** When the reader last changed each draft, for the Drafts & sent list. A key of its own: older copies have none. */
+const DRAFT_TIMES_KEY = "openbot.workspace.drafts.at.v1";
+
+function readDraftTimes(key: string): Record<string, number> {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(`${DRAFT_TIMES_KEY}:${key}`) ?? "{}");
+    if (!isDynamicRecord(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value).filter(
+        (entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1]),
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeDraftTimes(key: string, drafts: Record<string, string>, times: Record<string, number>): void {
+  try {
+    const kept = Object.entries(times).filter(([draft]) => drafts[draft]?.trim());
+    window.localStorage.setItem(`${DRAFT_TIMES_KEY}:${key}`, JSON.stringify(Object.fromEntries(kept)));
+  } catch {
+    // The times stay for this session.
+  }
+}
 
 function readDrafts(key: string): Record<string, string> {
   try {
@@ -868,9 +896,9 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
    */
   let sidebarRevision: number | undefined;
 
-  function writeLocalSidebar() {
+  function writeLocalSidebar(value: SidebarPrefs = state.sidebar) {
     try {
-      window.localStorage.setItem(`${SIDEBAR_KEY}:${env.storageKey()}`, JSON.stringify(state.sidebar));
+      window.localStorage.setItem(`${SIDEBAR_KEY}:${env.storageKey()}`, JSON.stringify(value));
     } catch {
       // The order and the mutes stay for this session.
     }
@@ -885,17 +913,15 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       while (sidebarUnsent && run === sidebarKeyRun) {
         sidebarUnsent = false;
         sidebarSentEdits = sidebarEdits;
-        const { order, muted, closed, space, notifyMentions, notifyNothing } = state.sidebar;
+        // The whole value goes: a field that this write left out would be lost on the host. A copy,
+        // so the write does not hold the store's proxies.
+        const value: SidebarPrefs = JSON.parse(JSON.stringify(state.sidebar));
         let answer: WorkspaceSidebar;
         try {
           answer = await write(
             boundedWorkspaceSidebar({
-              order: { channels: [...order.channels], direct: [...order.direct] },
-              muted: [...muted],
-              closed: [...(closed ?? [])],
-              ...(space ? { space } : {}),
-              ...(notifyMentions ? { notifyMentions: [...notifyMentions] } : {}),
-              ...(notifyNothing ? { notifyNothing: [...notifyNothing] } : {}),
+              ...value,
+              closed: value.closed ?? [],
               ...(sidebarRevision === undefined ? {} : { baseRevision: sidebarRevision }),
             }),
           );
@@ -923,10 +949,17 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     // A host that predates `collapsed` drops it: the reader's choice on this computer stays.
     const collapsed = hosted.collapsed ?? local.collapsed;
     const { baseRevision: _base, ...kept } = hosted;
+    // A host that predates the sections drops them: the reader's choices on this computer stay.
+    const starred = hosted.starred ?? local.starred;
+    const sections = hosted.sections ?? local.sections;
+    const groupOptions = hosted.groupOptions ?? local.groupOptions;
     const value: SidebarPrefs = {
       ...kept,
       ...(space ? { space } : {}),
       ...(collapsed ? { collapsed } : {}),
+      ...(starred ? { starred } : {}),
+      ...(sections ? { sections } : {}),
+      ...(groupOptions ? { groupOptions } : {}),
       // A host that predates the levels drops them: the reader's choices on this computer stay.
       notifyMentions: hosted.notifyMentions ?? local.notifyMentions ?? [],
       notifyNothing: hosted.notifyNothing ?? local.notifyNothing ?? [],
@@ -935,7 +968,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     setState((draft) => {
       draft.sidebar = value;
     });
-    writeLocalSidebar();
+    // The store shows the value after its flush; this computer keeps it now.
+    writeLocalSidebar(value);
   }
   /**
    * Reads the host value. It replaces the copy of this computer, unless the reader changed the
@@ -980,7 +1014,17 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       applyHostSidebar(hosted, revision);
       return;
     }
-    if (!local.order.channels.length && !local.order.direct.length && !local.muted.length && !local.space) return;
+    if (
+      !local.order.channels.length &&
+      !local.order.direct.length &&
+      !local.muted.length &&
+      !local.space &&
+      !local.collapsed?.length &&
+      !local.starred?.length &&
+      !local.sections?.length &&
+      !local.groupOptions?.length
+    )
+      return;
     sidebarUnsent = true;
     void sendSidebar();
   }
@@ -1021,22 +1065,22 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     sidebarUnsent = true;
     void sendSidebar();
   }
-  /** The reader dragged or moved a row: the group keeps this order for the reader's account. */
-  function reorderSidebar(group: "channels" | "direct", ids: string[]) {
-    setState((draft) => {
-      draft.sidebar.order[group] = ids;
-    });
-    saveSidebar();
+  /**
+   * The reader dragged or moved a row: the section keeps this order for the reader's account, and
+   * sorts in it from now on.
+   */
+  function reorderSidebar(section: string, ids: string[]) {
+    updateSidebarPrefs((prefs) => withSectionOrder(prefs, section, ids));
   }
-  /** Moves a row one place up or down in its group, the keyboard's way to reorder. */
-  function moveSidebarRow(group: "channels" | "direct", id: string, delta: number) {
-    const ids = (group === "channels" ? allChannelRows() : allDirectRows()).map((row) => row.id);
+  /** Moves a row one place up or down in its section, the keyboard's way to reorder. */
+  function moveSidebarRow(section: string, id: string, delta: number) {
+    const ids = (sidebarSectionList().find((entry) => entry.id === section)?.items ?? []).map((item) => item.row.id);
     const from = ids.indexOf(id);
     const to = from + delta;
     if (from < 0 || to < 0 || to >= ids.length) return;
     ids.splice(from, 1);
     ids.splice(to, 0, id);
-    reorderSidebar(group, ids);
+    reorderSidebar(section, ids);
   }
   /** A muted conversation stays in the list but shows no unread mark. It follows the reader's account. */
   /** Takes a DM out of the list until the reader opens it again. */
@@ -1056,8 +1100,19 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     });
     saveSidebar();
   }
-  /** Collapses or opens a sidebar group. It follows the reader's account, as the order does. */
-  function setGroupCollapsed(group: "channels" | "direct", collapsed: boolean) {
+  /**
+   * Applies a change to the reader's sidebar preferences (sections, Starred, sort and filter), and
+   * keeps it on this computer and on the host, as the order and the mutes.
+   */
+  function updateSidebarPrefs(change: (prefs: SidebarPrefs) => SidebarPrefs) {
+    // The draft holds the writes that this task made before, which a read does not show yet.
+    setState((draft) => {
+      draft.sidebar = change(JSON.parse(JSON.stringify(draft.sidebar)));
+    });
+    saveSidebar();
+  }
+  /** Collapses or opens a sidebar section. It follows the reader's account, as the order does. */
+  function setGroupCollapsed(group: string, collapsed: boolean) {
     setState((draft) => {
       const others = (draft.sidebar.collapsed ?? []).filter((item) => item !== group);
       draft.sidebar.collapsed = collapsed ? [...others, group] : others;
@@ -1113,11 +1168,28 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       draft.sidebarFilter = text;
     });
   }
+  /** The conversations with a draft that is not sent, in the conversation or in one of its threads. */
+  const draftConversationIds = createMemo(
+    () =>
+      new Set(
+        Object.keys(state.drafts).flatMap((key) => (state.drafts[key]?.trim() ? [key.split("/")[0] ?? key] : [])),
+      ),
+  );
+  /** The sidebar sections of the space that shows: Starred, the reader's own, Channels, Direct messages. */
+  const sidebarSectionList = createMemo(() =>
+    sidebarSections({
+      channels: sidebarChannelRows(),
+      direct: sidebarDirectRows(),
+      prefs: state.sidebar,
+      activeId: activeConversationId() ?? undefined,
+      draftIds: draftConversationIds(),
+      filtering: filterText().length > 0,
+    }),
+  );
   /** The conversations in sidebar order, for Alt+Up and Alt+Down. */
-  const conversationOrder = createMemo(() => [
-    ...sidebarChannelRows().map((row) => row.id),
-    ...sidebarDirectRows().map((row) => row.id),
-  ]);
+  const conversationOrder = createMemo(() =>
+    sidebarSectionList().flatMap((section) => section.items.map((item) => item.row.id)),
+  );
 
   /** The activity and the threads of the space that shows. */
   const spaceActivity = createMemo(() =>
@@ -1313,9 +1385,13 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     },
   );
 
+  const [draftTimes, setDraftTimes] = createStore<Record<string, number>>(
+    untrack(() => readDraftTimes(env.storageKey())),
+  );
   // Drafts follow the reader and the server.
   createEffect(env.storageKey, (key, previous) => {
     if (previous === undefined || key === previous) return;
+    setDraftTimes(() => readDraftTimes(key));
     setState((draft) => {
       draft.drafts = readDrafts(key);
       draft.sidebar = readSidebar(key);
@@ -1329,6 +1405,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (draftTimer) {
       clearTimeout(draftTimer);
       writeDrafts(env.storageKey(), state.drafts);
+      writeDraftTimes(env.storageKey(), state.drafts, draftTimes);
     }
   });
 
@@ -1798,15 +1875,53 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
   }
 
   function setDraft(key: string, text: string) {
+    const changed = (state.drafts[key] ?? "") !== text;
     setState((draft) => {
       if (text) draft.drafts[key] = text;
       else delete draft.drafts[key];
     });
+    if (changed)
+      setDraftTimes((times) => {
+        if (text.trim()) times[key] = Date.now();
+        else delete times[key];
+      });
     clearTimeout(draftTimer);
     draftTimer = setTimeout(() => {
       draftTimer = undefined;
       writeDrafts(env.storageKey(), state.drafts);
+      writeDraftTimes(env.storageKey(), state.drafts, draftTimes);
     }, 400);
+  }
+
+  /**
+   * The drafts of the space that shows that are not sent, newest change first, for Drafts & sent.
+   * A space is Slack's workspace: its drafts are its own.
+   */
+  const draftEntries = createMemo(() =>
+    Object.entries(state.drafts)
+      .filter(([key, text]) => text.trim() && rowSpace(key.split("/")[0] ?? key) === spaces.current())
+      .map(([key, text]) => {
+        const [channelId = key, threadRootId] = key.split("/");
+        return {
+          key,
+          channelId,
+          threadRootId: threadRootId ?? null,
+          text,
+          at: draftTimes[key],
+          fileCount: draftFileStore[key]?.length ?? 0,
+        };
+      })
+      .sort((left, right) => (right.at ?? 0) - (left.at ?? 0)),
+  );
+  /** Throws a draft away: its text and its files. */
+  function discardDraft(key: string) {
+    for (const file of draftFiles(key))
+      void channels
+        .port()
+        .agent.discardDraftAttachment?.(file.id)
+        ?.catch(() => undefined);
+    setDraftFiles(key, []);
+    setDraft(key, "");
   }
 
   // ---------------------------------------------------------------- commands
@@ -2311,6 +2426,10 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     summary,
     sidebarChannels: sidebarChannelRows,
     sidebarDirectMessages: sidebarDirectRows,
+    sidebarSections: sidebarSectionList,
+    /** The drafts of the space that shows that are not sent, for the Drafts & sent row. */
+    draftCount: () => draftEntries().length,
+    updateSidebarPrefs,
     reorderSidebar,
     moveSidebarRow,
     setMuted,
@@ -2363,6 +2482,8 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     markRead,
     draft,
     setDraft,
+    draftEntries,
+    discardDraft,
     draftFiles,
     setDraftFiles,
     noteTyping,

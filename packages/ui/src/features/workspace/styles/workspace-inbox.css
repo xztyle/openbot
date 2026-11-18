@@ -285,6 +285,13 @@
   font-weight: var(--openbot-weight-bold);
 }
 
+/* What an agent does now, in place of a last message: never bold, it is no message. */
+.ws-row .ws-dm-note,
+.ws-row[data-unread] .ws-dm-note {
+  color: var(--openbot-text-muted);
+  font-weight: var(--openbot-weight-regular);
+}
+
 /* Search results -------------------------------------------------------------------------------- */
 
 .ws-search-view-field {

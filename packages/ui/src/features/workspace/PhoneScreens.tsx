@@ -2,14 +2,11 @@ import type { JSX } from "@solidjs/web";
 import { createSignal, For, Show } from "solid-js";
 import { ActionSheet, type ActionSheetItem } from "../../action-sheet";
 import { Button, IconButton } from "../../button";
-import { ChevronDown, ChevronRight, Search, Server, SquarePen, UsersRound } from "../../icons";
+import { ChevronDown, ChevronRight, Search, Server, SquarePen } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { SpaceMark, type SpaceRailItem } from "../spaces/SpaceRail";
-import { AiBadge, AvatarStack, MemberAvatar } from "./WorkspaceAvatar";
-import { WorkspaceContextMenu } from "./WorkspaceContextMenu";
-import type { SidebarDirectMessage } from "./WorkspaceSidebar";
-import { useRecentTime } from "./workspace-format";
+import { MemberAvatar } from "./WorkspaceAvatar";
 import type { WorkspaceMember, WorkspaceMenuItem } from "./workspace-types";
 
 /** The count on a badge shows up to this number. */
@@ -317,127 +314,6 @@ export function PhoneSwitcherSheet(props: PhoneSwitcherSheetProps): JSX.Element 
       }
       items={props.actions ?? []}
     />
-  );
-}
-
-/** A row of the phone's DMs list: a sidebar DM with the last message, when the host gave it. */
-export interface PhoneDirectRow extends SidebarDirectMessage {
-  /** The last message, as plain text, with its author's name before it when that is not the other member. */
-  preview?: string | undefined;
-  /** When the last message was sent, in milliseconds. */
-  at?: number | undefined;
-}
-
-export interface PhoneDirectMessagesProps {
-  rows: readonly PhoneDirectRow[];
-  activeId?: string | undefined;
-  onSelect: (id: string) => void;
-  onCompose?: (() => void) | undefined;
-  /** The actions of a row, such as mute: a long press opens them in a sheet. */
-  rowMenu?: ((id: string) => readonly WorkspaceMenuItem[]) | undefined;
-}
-
-function directName(row: SidebarDirectMessage): string {
-  return row.members.map((member: WorkspaceMember) => member.name).join(", ");
-}
-
-/**
- * The phone's DMs tab, as Slack's: one row for each DM and group DM of the space, newest first, with
- * the faces, the names, the last message and its time. An unread row is bold and shows its count.
- */
-export function PhoneDirectMessages(props: PhoneDirectMessagesProps): JSX.Element {
-  const { t } = useText();
-  const recentTime = useRecentTime();
-  return (
-    <section class="ws-phone-screen" aria-label={t("workspace.sidebar.directMessages")}>
-      <header class="ws-phone-screen-header">
-        <h1 class="ws-phone-screen-title">{t("workspace.phone.dms")}</h1>
-        <Show when={props.onCompose}>
-          {(compose) => (
-            <IconButton
-              variant="secondary"
-              class="ws-phone-compose"
-              label={t("workspace.sidebar.newMessage")}
-              onClick={() => compose()()}
-            >
-              <SquarePen />
-            </IconButton>
-          )}
-        </Show>
-      </header>
-      <div class="ws-phone-screen-scroll">
-        <Show when={props.rows.length > 0} fallback={<p class="ws-phone-empty">{t("workspace.phone.noDms")}</p>}>
-          <ul class="ws-phone-list">
-            <For each={props.rows} keyed={(row) => row.id}>
-              {(row) => {
-                const count = () => row().mentionCount ?? 0;
-                const unread = () => (row().unread || count() > 0) && !row().muted;
-                const first = () => row().members[0];
-                return (
-                  <li>
-                    <WorkspaceContextMenu
-                      items={() => props.rowMenu?.(row().id) ?? []}
-                      label={t("workspace.sidebar.rowMenu", { name: directName(row()) })}
-                    >
-                      <Button
-                        variant="ghost"
-                        class="ws-phone-dm"
-                        data-unread={unread() ? "" : undefined}
-                        data-muted={row().muted ? "" : undefined}
-                        data-active={props.activeId === row().id ? "" : undefined}
-                        aria-label={[
-                          directName(row()),
-                          count() > 0
-                            ? t("workspace.sidebar.mentions", { count: count() })
-                            : unread()
-                              ? t("workspace.sidebar.unread")
-                              : "",
-                          row().muted ? t("workspace.sidebar.muted") : "",
-                          row().preview ?? "",
-                        ]
-                          .filter(Boolean)
-                          .join(", ")}
-                        onClick={() => props.onSelect(row().id)}
-                      >
-                        <span class="ws-phone-dm-face" aria-hidden="true">
-                          <Show
-                            when={row().kind === "group"}
-                            fallback={
-                              <Show when={first()} fallback={<UsersRound />}>
-                                {(member) => <MemberAvatar member={member()} size="lg" showStatus animate />}
-                              </Show>
-                            }
-                          >
-                            <AvatarStack members={row().members} max={2} size="md" />
-                          </Show>
-                        </span>
-                        <span class="ws-phone-dm-copy" aria-hidden="true">
-                          <span class="ws-phone-dm-top">
-                            <span class="ws-phone-dm-name ws-truncate">{directName(row())}</span>
-                            <Show when={row().kind === "dm" && first()?.kind === "agent"}>
-                              <AiBadge />
-                            </Show>
-                            <Show when={row().at}>
-                              {(at) => <span class="ws-phone-dm-time">{recentTime(at())}</span>}
-                            </Show>
-                          </span>
-                          <span class="ws-phone-dm-bottom">
-                            <span class="ws-phone-dm-preview ws-truncate">{row().preview ?? ""}</span>
-                            <Show when={count() > 0 && !row().muted}>
-                              <span class="ws-mention-badge">{countText(count())}</span>
-                            </Show>
-                          </span>
-                        </span>
-                      </Button>
-                    </WorkspaceContextMenu>
-                  </li>
-                );
-              }}
-            </For>
-          </ul>
-        </Show>
-      </div>
-    </section>
   );
 }
 

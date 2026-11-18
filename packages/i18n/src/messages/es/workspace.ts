@@ -572,7 +572,6 @@ export const messages = {
   "workspace.phone.spaces": "Espacios",
   "workspace.phone.servers": "Servidores",
   "workspace.phone.shortcuts": "Accesos directos",
-  "workspace.phone.noDms": "Aún no hay mensajes directos. Empieza uno con Nuevo mensaje.",
   "workspace.phone.views": "Espacio de trabajo",
   "workspace.phone.server": "Servidor",
   "workspace.phone.help": "Ayuda",

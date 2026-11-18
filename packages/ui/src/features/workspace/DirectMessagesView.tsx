@@ -11,7 +11,7 @@ import { AiBadge, AvatarStack, MemberAvatar } from "./WorkspaceAvatar";
 import { WorkspaceList, WorkspaceListRow } from "./WorkspaceList";
 import { PaneHeaderAction, WorkspacePaneHeader } from "./WorkspacePaneHeader";
 import { useRecentTime } from "./workspace-format";
-import type { WorkspaceMember } from "./workspace-types";
+import type { WorkspaceMember, WorkspaceMenuItem } from "./workspace-types";
 
 export interface DirectMessageItem {
   /** The conversation id, or the sidebar id of an agent's chat. */
@@ -22,6 +22,8 @@ export interface DirectMessageItem {
   name: string;
   /** The start of the last message. */
   preview?: string | undefined;
+  /** A line for a conversation with no message to show, such as what its agent does now. */
+  note?: string | undefined;
   /** The reader wrote the last message: the preview starts with "You:". */
   fromReader?: boolean | undefined;
   /** The author of the last message in a group, when it is not the reader. */
@@ -39,6 +41,9 @@ export interface DirectMessagesViewProps {
   loading?: boolean | undefined;
   onOpen: (id: string) => void;
   onNewMessage?: (() => void) | undefined;
+  /** The actions of a conversation: a right-click, or a long press on a touch screen, opens them. */
+  rowMenu?: ((id: string) => readonly WorkspaceMenuItem[]) | undefined;
+  /** Without it the view has no Back, as the phone's DMs tab. */
   onBack?: (() => void) | undefined;
   class?: string;
 }
@@ -154,6 +159,14 @@ export function DirectMessagesView(props: DirectMessagesViewProps): JSX.Element 
                   unread={item().unread && !item().muted}
                   selected={props.activeId === item().id}
                   onOpen={() => props.onOpen(item().id)}
+                  menu={
+                    props.rowMenu
+                      ? {
+                          items: () => props.rowMenu?.(item().id) ?? [],
+                          label: t("workspace.sidebar.rowMenu", { name: item().name }),
+                        }
+                      : undefined
+                  }
                   leading={
                     <Show
                       when={item().members.length > 1}
@@ -179,7 +192,14 @@ export function DirectMessagesView(props: DirectMessagesViewProps): JSX.Element 
                     </Show>
                   }
                 >
-                  <Show when={item().preview}>
+                  <Show
+                    when={item().preview}
+                    fallback={
+                      <Show when={item().note}>
+                        {(note) => <span class="ws-feed-preview ws-dm-preview ws-dm-note">{note()}</span>}
+                      </Show>
+                    }
+                  >
                     <span class="ws-feed-preview ws-dm-preview">{preview(item())}</span>
                   </Show>
                 </WorkspaceListRow>

@@ -5,6 +5,7 @@ import {
   Bell,
   BellOff,
   Button,
+  CheckCheck,
   FolderInput,
   FolderPlus,
   Hash,
@@ -98,6 +99,99 @@ export function useWorkspaceMenu(): () => WorkspaceMenuItem[] {
   ]);
 }
 
+/**
+ * The actions of one conversation, wherever its row shows (the sidebar, the DMs list): open, its
+ * details or its agent's settings, Mark as read while it has unread messages, mute, then `extra`,
+ * then close (a DM) or leave (a channel), as Slack's row menu.
+ */
+export function useConversationMenu(): (id: string, extra?: readonly WorkspaceMenuItem[]) => WorkspaceMenuItem[] {
+  const { t } = useText();
+  const ws = useWorkspace();
+  return (id, extra = []) => {
+    const muted = ws.isMuted(id);
+    const direct = id.startsWith(AGENT_DM_PREFIX) || ws.sidebarDirectMessages().some((row) => row.id === id);
+    const agentId = id.startsWith(AGENT_DM_PREFIX) ? id.slice(AGENT_DM_PREFIX.length) : null;
+    const channel = agentId ? undefined : ws.summary(id);
+    return [
+      {
+        id: "open",
+        label: t("common.open"),
+        icon: <MessageSquare aria-hidden="true" />,
+        onSelect: () => ws.openConversation(id),
+      },
+      ...(agentId
+        ? [
+            {
+              id: "agent-settings",
+              label: t("workspace.profile.settings"),
+              icon: <Settings aria-hidden="true" />,
+              onSelect: () => ws.env.openAgentSettings(agentId),
+            },
+            {
+              id: "agent-talk",
+              label: t("workspace.agentTalk.open"),
+              icon: <ArrowLeftRight aria-hidden="true" />,
+              onSelect: () => ws.openAgentTalk(agentId),
+            },
+          ]
+        : [
+            {
+              id: "details",
+              label: t("workspace.details.title"),
+              icon: <Info aria-hidden="true" />,
+              onSelect: () => {
+                ws.openConversation(id);
+                ws.openDetails(id, "about");
+              },
+            },
+          ]),
+      // A channel's read position is on the host. The owner's chat with an agent is read when it opens.
+      ...(channel && channel.unreadCount > 0
+        ? [
+            {
+              id: "mark-read",
+              label: t("workspace.app.channel.markRead"),
+              icon: <CheckCheck aria-hidden="true" />,
+              onSelect: () =>
+                void ws.channels
+                  .markAllRead([id])
+                  .then(() => ws.refreshActivity())
+                  .catch(() => actionToast.error(t("workspace.unreads.markFailed"))),
+            },
+          ]
+        : []),
+      {
+        id: "mute",
+        label: t(muted ? "workspace.sidebar.unmute" : "workspace.sidebar.mute"),
+        icon: muted ? <Bell aria-hidden="true" /> : <BellOff aria-hidden="true" />,
+        onSelect: () => ws.setMuted(id, !muted),
+      },
+      ...extra,
+      ...(direct
+        ? [
+            {
+              id: "close",
+              label: t("workspace.sidebar.close"),
+              icon: <X aria-hidden="true" />,
+              onSelect: () => ws.closeConversation(id),
+            },
+          ]
+        : []),
+      ...(!direct && channel && !channel.archived
+        ? [
+            {
+              id: "leave",
+              label: t("workspace.details.leave"),
+              icon: <LogOut aria-hidden="true" />,
+              danger: true,
+              onSelect: () => ws.requestLeave(id),
+            },
+          ]
+        : []),
+    ];
+  };
+}
+
 /** The workspace sidebar: the server's name and menu, the jump field, the views, channels and DMs. */
 export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
   const { t } = useText();
@@ -143,51 +237,12 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
         : []),
     ];
   };
-  /** Open, details or settings, mute, the keyboard's way to move a row (dragging moves it too), leave. */
+  const conversationMenu = useConversationMenu();
+  /** The conversation's actions, with the reader's sections and the keyboard's way to move a row. */
   const rowMenu = (id: string, section: string): WorkspaceMenuItem[] => {
-    const muted = ws.isMuted(id);
-    const direct = id.startsWith(AGENT_DM_PREFIX) || ws.sidebarDirectMessages().some((row) => row.id === id);
     const agentId = id.startsWith(AGENT_DM_PREFIX) ? id.slice(AGENT_DM_PREFIX.length) : null;
     const channel = agentId ? undefined : ws.summary(id);
-    return [
-      {
-        id: "open",
-        label: t("common.open"),
-        icon: <MessageSquare aria-hidden="true" />,
-        onSelect: () => ws.openConversation(id),
-      },
-      ...(agentId
-        ? [
-            {
-              id: "agent-settings",
-              label: t("workspace.profile.settings"),
-              icon: <Settings aria-hidden="true" />,
-              onSelect: () => ws.env.openAgentSettings(agentId),
-            },
-            {
-              id: "agent-talk",
-              label: t("workspace.agentTalk.open"),
-              icon: <ArrowLeftRight aria-hidden="true" />,
-              onSelect: () => ws.openAgentTalk(agentId),
-            },
-          ]
-        : [
-            {
-              id: "details",
-              label: t("workspace.details.title"),
-              icon: <Info aria-hidden="true" />,
-              onSelect: () => {
-                ws.openConversation(id);
-                ws.openDetails(id, "about");
-              },
-            },
-          ]),
-      {
-        id: "mute",
-        label: t(muted ? "workspace.sidebar.unmute" : "workspace.sidebar.mute"),
-        icon: muted ? <Bell aria-hidden="true" /> : <BellOff aria-hidden="true" />,
-        onSelect: () => ws.setMuted(id, !muted),
-      },
+    return conversationMenu(id, [
       ...sectionItems(id, section),
       {
         id: "move-up",
@@ -217,28 +272,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
             },
           ]
         : []),
-      ...(direct
-        ? [
-            {
-              id: "close",
-              label: t("workspace.sidebar.close"),
-              icon: <X aria-hidden="true" />,
-              onSelect: () => ws.closeConversation(id),
-            },
-          ]
-        : []),
-      ...(!direct && channel && !channel.archived
-        ? [
-            {
-              id: "leave",
-              label: t("workspace.details.leave"),
-              icon: <LogOut aria-hidden="true" />,
-              danger: true,
-              onSelect: () => ws.requestLeave(id),
-            },
-          ]
-        : []),
-    ];
+    ]);
   };
   /** Deletes a section at once; its conversations go back to their groups, and Undo puts it back. */
   const deleteSection = (sectionId: string) => {

@@ -590,7 +590,6 @@ export const messages = defineMessages("workspace", {
   "workspace.phone.spaces": "Spaces",
   "workspace.phone.servers": "Servers",
   "workspace.phone.shortcuts": "Shortcuts",
-  "workspace.phone.noDms": "No direct messages yet. Start one with New message.",
   "workspace.phone.views": "Workspace",
   "workspace.phone.server": "Server",
   "workspace.phone.help": "Help",

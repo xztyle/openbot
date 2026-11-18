@@ -2086,6 +2086,14 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     openView: (view, pane) => {
       locationHistory.userMoves();
       workspaceController.openView(view, pane);
+      // A phone has DMs and Activity as tabs of its bottom bar, as Slack's app: Jump to opens the tab,
+      // not a second DMs or Activity screen over the tab that shows.
+      if (phoneShell() && (view === "dms" || view === "activity")) {
+        if (view === "activity") void workspaceController.refreshActivity();
+        setPhoneTab(view);
+        setMobilePane("workspace");
+        return;
+      }
     },
     openAgentTalk: (agentId) => {
       locationHistory.userMoves();

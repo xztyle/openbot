@@ -246,7 +246,7 @@
   font-weight: var(--openbot-weight-regular);
 }
 
-/* Screens: DMs and More -------------------------------------------------------------------------- */
+/* Screens: More -------------------------------------------------------------------------- */
 
 .ws-phone-screen {
   display: flex;
@@ -282,96 +282,11 @@
   padding-bottom: var(--openbot-space-4);
 }
 
-.ws-phone-empty {
-  margin: 0;
-  padding: var(--openbot-space-8) var(--openbot-space-4);
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-md);
-  text-align: center;
-}
-
-.ws-phone-list,
 .ws-phone-more-list,
 .ws-phone-switcher-list {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.ui-button.ws-phone-dm {
-  display: flex;
-  width: 100%;
-  height: auto;
-  min-height: calc(var(--openbot-touch-target) + var(--openbot-space-4));
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--openbot-space-3);
-  border-radius: 0;
-  padding: var(--openbot-space-2) var(--openbot-space-4);
-  color: var(--openbot-text-secondary);
-  font-weight: var(--openbot-weight-regular);
-  text-align: start;
-}
-
-.ui-button.ws-phone-dm[data-active] {
-  background: var(--openbot-bg-control);
-}
-
-.ws-phone-dm-face {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  flex: none;
-  place-items: center;
-}
-
-.ws-phone-dm-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: var(--openbot-space-0-5);
-}
-
-.ws-phone-dm-top,
-.ws-phone-dm-bottom {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--openbot-space-2);
-}
-
-.ws-phone-dm-name {
-  min-width: 0;
-  color: var(--openbot-text-primary);
-  font-size: var(--openbot-text-lg);
-  font-weight: var(--openbot-weight-medium);
-}
-
-.ui-button.ws-phone-dm[data-unread] .ws-phone-dm-name {
-  font-weight: var(--openbot-weight-bold);
-}
-
-.ui-button.ws-phone-dm[data-muted] .ws-phone-dm-name {
-  color: var(--openbot-text-muted);
-}
-
-.ws-phone-dm-time {
-  flex: none;
-  margin-left: auto;
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-}
-
-.ws-phone-dm-preview {
-  min-width: 0;
-  flex: 1 1 auto;
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-md);
-}
-
-.ui-button.ws-phone-dm[data-unread] .ws-phone-dm-preview {
-  color: var(--openbot-text-secondary);
 }
 
 .ui-button.ws-phone-profile {

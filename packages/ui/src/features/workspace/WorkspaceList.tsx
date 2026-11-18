@@ -2,6 +2,8 @@ import type { JSX } from "@solidjs/web";
 import { Show } from "solid-js";
 import { Button } from "../../button";
 import { cx } from "../../utils";
+import { WorkspaceContextMenu } from "./WorkspaceContextMenu";
+import type { WorkspaceMenuItem } from "./workspace-types";
 
 export interface WorkspaceListProps {
   /** The accessible name of the list, when the view header does not name it. */
@@ -41,6 +43,11 @@ export interface WorkspaceListRowProps {
   selected?: boolean | undefined;
   /** The accessible name of a row that is a button, when its text alone does not say enough. */
   label?: string | undefined;
+  /**
+   * The actions of the row's thing: a right-click opens them on a computer, a long press in a sheet
+   * on a touch screen, as the sidebar rows do.
+   */
+  menu?: { items: () => readonly WorkspaceMenuItem[]; label: string } | undefined;
   class?: string | undefined;
 }
 
@@ -69,34 +76,43 @@ export function WorkspaceListRow(props: WorkspaceListRowProps): JSX.Element {
       </Show>
     </>
   );
+  const row = () => (
+    <Show
+      when={!props.actions && props.onOpen}
+      fallback={
+        <div
+          class={cx("ws-row", props.class)}
+          data-unread={props.unread ? "" : undefined}
+          data-selected={props.selected ? "" : undefined}
+        >
+          {content()}
+          <Show when={props.actions}>
+            <span class="ws-row-actions">{props.actions}</span>
+          </Show>
+        </div>
+      }
+    >
+      {(open) => (
+        <Button
+          variant="ghost"
+          class={cx("ws-row", props.class)}
+          data-unread={props.unread ? "" : undefined}
+          data-selected={props.selected ? "" : undefined}
+          aria-label={props.label}
+          onClick={() => open()()}
+        >
+          {content()}
+        </Button>
+      )}
+    </Show>
+  );
   return (
     <li class="ws-list-item">
-      <Show
-        when={!props.actions && props.onOpen}
-        fallback={
-          <div
-            class={cx("ws-row", props.class)}
-            data-unread={props.unread ? "" : undefined}
-            data-selected={props.selected ? "" : undefined}
-          >
-            {content()}
-            <Show when={props.actions}>
-              <span class="ws-row-actions">{props.actions}</span>
-            </Show>
-          </div>
-        }
-      >
-        {(open) => (
-          <Button
-            variant="ghost"
-            class={cx("ws-row", props.class)}
-            data-unread={props.unread ? "" : undefined}
-            data-selected={props.selected ? "" : undefined}
-            aria-label={props.label}
-            onClick={() => open()()}
-          >
-            {content()}
-          </Button>
+      <Show when={props.menu} fallback={row()}>
+        {(menu) => (
+          <WorkspaceContextMenu items={menu().items} label={menu().label}>
+            {row()}
+          </WorkspaceContextMenu>
         )}
       </Show>
     </li>

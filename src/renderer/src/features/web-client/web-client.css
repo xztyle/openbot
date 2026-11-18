@@ -298,7 +298,8 @@ body {
     padding-top: var(--openbot-space-2);
   }
 
-  .ws-phone-activity {
+  /* DMs and Activity: the views of a computer, filling the tab. */
+  .ws-phone-tab-view {
     display: flex;
     min-height: 0;
     flex: 1 1 auto;

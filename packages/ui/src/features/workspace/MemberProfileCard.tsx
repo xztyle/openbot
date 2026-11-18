@@ -3,7 +3,7 @@ import { For, Show } from "solid-js";
 import { Button } from "../../button";
 import { Popover } from "../../complex";
 import { Cpu, Gauge, Globe2, MessageSquare, Server, Settings, Terminal } from "../../icons";
-import { useText } from "../../text";
+import { type TextValue, useText } from "../../text";
 import { cx } from "../../utils";
 import { AiBadge, MemberAvatar, presenceLabelKey } from "./WorkspaceAvatar";
 import type { AgentComputerPart, AgentWorkStatus, WorkspaceMember } from "./workspace-types";
@@ -136,32 +136,35 @@ export function MemberProfileCard(props: MemberProfileCardProps): JSX.Element {
 }
 
 /** "Working on the level editor in #cakemaker", "Waiting for delynith" or "Idle". */
+export function agentStatusText(status: AgentWorkStatus, text: Pick<TextValue, "t" | "format">): string {
+  const { t, format } = text;
+  if (status.state === "working") {
+    return status.channelName
+      ? t("workspace.agent.workingIn", { task: status.task, channel: status.channelName })
+      : t("workspace.agent.working", { task: status.task });
+  }
+  if (status.state === "waiting" && status.usageLimit) {
+    const resetsAt = status.usageLimit.resetsAt;
+    return resetsAt
+      ? t("workspace.agent.usageLimitUntil", { time: format.date(resetsAt, { timeStyle: "short" }) })
+      : t("workspace.agent.usageLimit");
+  }
+  if (status.state === "waiting") {
+    return status.channelName
+      ? t("workspace.agent.waitingIn", { name: status.personName, channel: status.channelName })
+      : t("workspace.agent.waiting", { name: status.personName });
+  }
+  return t("workspace.agent.idle");
+}
+
+/** The agent's state as a line with a dot: what it works on, whom it waits for, or idle. */
 export function AgentStatusLine(props: { status: AgentWorkStatus; class?: string }): JSX.Element {
-  const { t, format } = useText();
-  const text = () => {
-    const status = props.status;
-    if (status.state === "working") {
-      return status.channelName
-        ? t("workspace.agent.workingIn", { task: status.task, channel: status.channelName })
-        : t("workspace.agent.working", { task: status.task });
-    }
-    if (status.state === "waiting" && status.usageLimit) {
-      const resetsAt = status.usageLimit.resetsAt;
-      return resetsAt
-        ? t("workspace.agent.usageLimitUntil", { time: format.date(resetsAt, { timeStyle: "short" }) })
-        : t("workspace.agent.usageLimit");
-    }
-    if (status.state === "waiting") {
-      return status.channelName
-        ? t("workspace.agent.waitingIn", { name: status.personName, channel: status.channelName })
-        : t("workspace.agent.waiting", { name: status.personName });
-    }
-    return t("workspace.agent.idle");
-  };
+  const text = useText();
+  const line = () => agentStatusText(props.status, text);
   return (
     <p class={cx("ws-agent-status", props.class)} data-state={props.status.state}>
       <span class="ws-agent-status-dot" aria-hidden="true" />
-      <span class="ws-truncate">{text()}</span>
+      <span class="ws-truncate">{line()}</span>
     </p>
   );
 }

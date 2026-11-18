@@ -4,7 +4,6 @@ import {
   Activity,
   ArrowLeftRight,
   Bell,
-  BellOff,
   Blocks,
   Bookmark,
   Bot,
@@ -15,20 +14,15 @@ import {
   Inbox,
   KeyRound,
   LayoutDashboard,
-  MessageSquare,
   MessageSquareText,
   MessagesSquare,
   Pencil,
   Plus,
   Search,
-  Settings,
   Workflow,
-  X,
 } from "@openbot/ui";
 import {
   type PhoneChip,
-  PhoneDirectMessages,
-  type PhoneDirectRow,
   PhoneHomeHeader,
   type PhoneMoreRow,
   PhoneMoreScreen,
@@ -38,14 +32,13 @@ import {
 } from "@openbot/ui/features/workspace/PhoneScreens";
 import { type PhoneTab, PhoneTabBar } from "@openbot/ui/features/workspace/PhoneTabBar";
 import type { WorkspaceView } from "@openbot/ui/features/workspace/WorkspaceSidebar";
-import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace-types";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, Match, Switch } from "solid-js";
+import { WorkspaceDmsView } from "../workspace/WorkspaceInboxViews";
 import { useWorkspaceMenu, WorkspaceSidebarPane } from "../workspace/WorkspaceSidebarPane";
 import { WorkspaceMentions } from "../workspace/WorkspaceView";
 import { WorkspaceViewPane } from "../workspace/WorkspaceViews";
 import { useWorkspace } from "../workspace/workspace-context";
-import { AGENT_DM_PREFIX, previewText } from "../workspace/workspace-model";
 
 /** The tabs of the phone workspace, as Slack's bottom bar: Home, DMs, Activity and More. */
 export type WebPhoneTab = "home" | "dms" | "activity" | "more";
@@ -66,7 +59,7 @@ export interface WebPhoneShellProps {
 /**
  * The workspace on a phone, as Slack's mobile app: one tab at a time over a bottom tab bar. Home is
  * the space's channels and DMs under a row of shortcuts, DMs lists the DMs with their last message,
- * Activity shows the mentions and replies, and More holds the profile, the views that the desktop
+ * Activity shows the mentions and replies (DMs and Activity are the same views as on a computer), and More holds the profile, the views that the desktop
  * keeps under More, and the server's pages. A conversation pushes over the tab with its back button;
  * the tab bar shows only on the tab level.
  */
@@ -193,55 +186,6 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
     ];
   });
 
-  /** The DMs of the space, with the last message of each that the host listed. */
-  const directRows = createMemo((): PhoneDirectRow[] =>
-    ws.sidebarDirectMessages().map((row) => {
-      const last = ws.summary(row.id)?.lastMessage;
-      if (!last) return row;
-      const text = previewText(last.text, 120);
-      const otherName = row.kind === "dm" ? row.members[0]?.name : undefined;
-      return {
-        ...row,
-        preview: last.authorName && last.authorName !== otherName ? `${last.authorName}: ${text}` : text,
-        at: Date.parse(last.at),
-      };
-    }),
-  );
-  /** A long press on a DM: open it, its agent's settings, mute it, or close it. */
-  function directMenu(id: string): WorkspaceMenuItem[] {
-    const muted = ws.isMuted(id);
-    const agentId = id.startsWith(AGENT_DM_PREFIX) ? id.slice(AGENT_DM_PREFIX.length) : null;
-    return [
-      {
-        id: "open",
-        label: t("common.open"),
-        icon: <MessageSquare aria-hidden="true" />,
-        onSelect: () => ws.openConversation(id),
-      },
-      ...(agentId
-        ? [
-            {
-              id: "agent-settings",
-              label: t("workspace.profile.settings"),
-              icon: <Settings aria-hidden="true" />,
-              onSelect: () => ws.env.openAgentSettings(agentId),
-            },
-          ]
-        : []),
-      {
-        id: "mute",
-        label: t(muted ? "workspace.sidebar.unmute" : "workspace.sidebar.mute"),
-        icon: muted ? <Bell aria-hidden="true" /> : <BellOff aria-hidden="true" />,
-        onSelect: () => ws.setMuted(id, !muted),
-      },
-      {
-        id: "close",
-        label: t("workspace.sidebar.close"),
-        icon: <X aria-hidden="true" />,
-        onSelect: () => ws.closeConversation(id),
-      },
-    ];
-  }
   /** Slack's DMs badge counts conversations, not messages. */
   const unreadDms = () =>
     ws.sidebarDirectMessages().filter((row) => !row.muted && (row.unread || (row.mentionCount ?? 0) > 0)).length;
@@ -362,17 +306,13 @@ export function WebPhoneShell(props: WebPhoneShellProps) {
             </div>
           </Match>
           <Match when={props.tab === "dms"}>
-            <PhoneDirectMessages
-              rows={directRows()}
-              rowMenu={directMenu}
-              activeId={ws.activeConversationId()}
-              onSelect={(id) => ws.openConversation(id)}
-              onCompose={() => ws.openDialog({ kind: "new-message" })}
-            />
+            <div class="ws-phone-tab-view">
+              <WorkspaceDmsView tab />
+            </div>
           </Match>
           <Match when={props.tab === "activity"}>
             <WorkspaceMentions>
-              <div class="ws-phone-activity">
+              <div class="ws-phone-tab-view">
                 <WorkspaceViewPane view="activity" />
               </div>
             </WorkspaceMentions>

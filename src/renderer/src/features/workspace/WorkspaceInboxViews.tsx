@@ -7,6 +7,7 @@ import { channelKind, channelVisibility, type WorkspaceSearchSort } from "@openb
 import { Switch as Toggle, toast } from "@openbot/ui";
 import { type DirectMessageItem, DirectMessagesView } from "@openbot/ui/features/workspace/DirectMessagesView";
 import { type LaterItem, type LaterTab, LaterView } from "@openbot/ui/features/workspace/LaterView";
+import { agentStatusText } from "@openbot/ui/features/workspace/MemberProfileCard";
 import {
   type SearchChannelItem,
   type SearchHitItem,
@@ -21,6 +22,7 @@ import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-t
 import { currentText, useText } from "@openbot/ui/text";
 import { createMemo, createSignal } from "solid-js";
 import { actionToast } from "../../action-toast";
+import { useConversationMenu } from "./WorkspaceSidebarPane";
 import { useWorkspace } from "./workspace-context";
 import {
   AGENT_DM_PREFIX,
@@ -214,19 +216,31 @@ export function WorkspaceLaterView() {
 
 // ---------------------------------------------------------------- DMs
 
-export function WorkspaceDmsView() {
+/**
+ * Slack's DMs list: a view on a computer (⌘⇧K, under More), and the DMs tab of a phone, which has
+ * no Back. A right-click or a long press on a row opens the same actions as its sidebar row.
+ */
+export function WorkspaceDmsView(props: { tab?: boolean }) {
   const ws = useWorkspace();
+  const text = useText();
+  const conversationMenu = useConversationMenu();
   const items = createMemo((): DirectMessageItem[] => {
     const rows = ws.sidebarDirectMessages().map((row) => {
-      const channel = row.id.startsWith(AGENT_DM_PREFIX) ? undefined : ws.summary(row.id);
+      const agentId = row.id.startsWith(AGENT_DM_PREFIX) ? row.id.slice(AGENT_DM_PREFIX.length) : null;
+      const channel = agentId ? undefined : ws.summary(row.id);
       const last = channel?.lastMessage;
       const fromReader = last?.author ? ws.env.isReader(last.author.id) : false;
+      // The owner's chat with an agent has no last message here: the agent's state says what it does.
+      const agent = agentId ? ws.fleet.agents().find((entry) => entry.member.id === agentId) : undefined;
+      const note =
+        agent && (agent.status.state !== "idle" || !agent.title) ? agentStatusText(agent.status, text) : agent?.title;
       return {
         id: row.id,
         kind: row.kind,
         members: row.members,
         name: row.members.map((member) => member.name).join(", "),
         preview: last ? previewText(last.text, 160) : undefined,
+        note,
         fromReader,
         author: last && !fromReader ? last.authorName : undefined,
         at: last ? Date.parse(last.at) : undefined,
@@ -241,11 +255,13 @@ export function WorkspaceDmsView() {
   return (
     <DirectMessagesView
       items={items()}
-      activeId={ws.activeConversationId()}
+      // The phone's tab is a list of its own: the conversation behind it is not "selected" there.
+      activeId={props.tab ? undefined : ws.activeConversationId()}
       loading={!ws.channels.state.listed}
       onOpen={(id) => ws.openConversation(id)}
       onNewMessage={() => ws.openDialog({ kind: "new-message" })}
-      onBack={() => ws.back()}
+      rowMenu={(id) => conversationMenu(id)}
+      onBack={props.tab ? undefined : () => ws.back()}
     />
   );
 }

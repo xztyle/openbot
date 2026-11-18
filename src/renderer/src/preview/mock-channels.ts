@@ -54,6 +54,11 @@ export interface MockChannelSeed {
   messages: ChannelMessage[];
   /** Work that agents run in the channel when the preview starts. */
   work?: MockChannelWork[];
+  /**
+   * The sequence through which the preview's person read the channel. Absent: every seeded message
+   * is read, so a story shows no unread unless it asks for it.
+   */
+  readThrough?: number;
 }
 
 /**
@@ -78,6 +83,8 @@ export function createMockChannels(
   PREVIEW_MEMBER_ID: string = PREVIEW_CHANNEL_MEMBER_ID,
   /** The visible agents of the preview, for `#general`. */
   agentIds: () => readonly string[] = () => [],
+  /** The person's read position in a thread, which the preview's thread state keeps. Absent: 0. */
+  threadReads: { position: (channelId: string, rootId: string) => number } = { position: () => 0 },
 ) {
   const channels = new Map<string, Channel>(seeds.map((seed) => [seed.channel.id, structuredClone(seed.channel)]));
   const messages = new Map<string, ChannelMessage[]>(
@@ -87,6 +94,10 @@ export function createMockChannels(
     seeds
       .filter((seed) => seed.work?.length)
       .map((seed) => [seed.channel.id, (seed.work ?? []).map((work) => structuredClone(work.task))]),
+  );
+  /** The person's read position in each channel, as the host keeps it. */
+  const reads = new Map<string, number>(
+    seeds.map((seed) => [seed.channel.id, seed.readThrough ?? seed.messages.at(-1)?.sequence ?? 0]),
   );
   const receipts = new Map<string, Channel>();
   const memories = new Map<string, ChannelMemory[]>();
@@ -106,6 +117,23 @@ export function createMockChannels(
   const topLevel = (message: ChannelMessage) =>
     (message.threadRootId === undefined || message.alsoInChannel === true) &&
     (message.deletedAt === undefined || (message.threadSummary?.replyCount ?? 0) > 0);
+  /** A message that makes its channel unread: shown in the channel, not the person's, not agent notes. */
+  const countsUnread = (message: ChannelMessage) => {
+    const itemType = message.message.itemType ?? "";
+    return (
+      topLevel(message) &&
+      message.deletedAt === undefined &&
+      !(message.author.kind === "member" && message.author.id === PREVIEW_MEMBER_ID) &&
+      message.message.status !== "streaming" &&
+      !["plan", "subagents", "channel-change", "commentary"].includes(itemType) &&
+      !itemType.startsWith(CHANNEL_ROUTING_EVENT_ITEM_TYPE_PREFIX)
+    );
+  };
+  const unreadCount = (channelId: string) => {
+    const through = reads.get(channelId) ?? 0;
+    return (messages.get(channelId) ?? []).filter((message) => message.sequence > through && countsUnread(message))
+      .length;
+  };
   const findMessage = (channelId: string, messageId: string) => {
     const message = (messages.get(channelId) ?? []).find((item) => item.id === messageId);
     if (!message || message.deletedAt) throw new Error("This message is unavailable.");
@@ -318,7 +346,7 @@ export function createMockChannels(
         const latest = (messages.get(channel.id) ?? []).at(-1);
         return {
           ...structuredClone(channel),
-          unreadCount: 0,
+          unreadCount: unreadCount(channel.id),
           activeTasks: (tasks.get(channel.id) ?? []).filter((task) => task.state === "running").length,
           lastMessage: latest
             ? {
@@ -388,6 +416,15 @@ export function createMockChannels(
         changed(general.id, general.revision);
         return structuredClone(general);
       }
+      if (input.type === "read") {
+        const channel = requireChannel(input.channelId);
+        // The position only moves forward, as on the host.
+        if (input.throughSequence > (reads.get(channel.id) ?? 0)) {
+          reads.set(channel.id, input.throughSequence);
+          changed(channel.id, channel.revision);
+        }
+        return structuredClone(channel);
+      }
       if (input.type === "create" || input.type === "open-dm") {
         const humans = [
           ...new Set([PREVIEW_MEMBER_ID, ...(input.type === "create" ? input.humanMemberIds : input.memberIds)]),
@@ -438,6 +475,7 @@ export function createMockChannels(
         };
         channels.set(created.id, structuredClone(created));
         messages.set(created.id, []);
+        reads.set(created.id, 0);
         receipts.set(input.operationId, structuredClone(created));
         changed(created.id, created.revision);
         return structuredClone(created);
@@ -642,7 +680,11 @@ export function createMockChannels(
             messageId: message.id,
             ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
             at: message.message.createdAt,
-            unread: false,
+            unread:
+              message.sequence >
+              (message.threadRootId && message.alsoInChannel !== true
+                ? threadReads.position(channel.id, message.threadRootId)
+                : (reads.get(channel.id) ?? 0)),
           };
           if (own(message)) {
             const rootId = message.threadRootId ?? (message.threadSummary?.replyCount ? message.id : undefined);
@@ -695,7 +737,12 @@ export function createMockChannels(
             replyCount: summary.replyCount,
             lastReplyAt: summary.lastReplyAt,
             participantIds: [...summary.participantIds],
-            unreadCount: 0,
+            unreadCount: all.filter(
+              (message) =>
+                message.threadRootId === rootId &&
+                !own(message) &&
+                message.sequence > threadReads.position(channel.id, rootId),
+            ).length,
           });
         }
       }

@@ -85,8 +85,10 @@ function runningTask(channelId: string, id: string, ownerAgentId: string, reques
  * `reader` is the member id the preview writes as: `local` on the desktop, `preview` on the web.
  * `working`: Chief works on the checklist in #general, and Research works in the pricing thread,
  * which holds 30 progress replies and gets one more every 2 s until someone stops it.
+ * `unread`: the reader read #general up to their own request, the last five lines of #cakemaker and
+ * nothing of the DM with Ana, so Unreads, the sidebar and Activity have unread messages.
  */
-export function seeds(reader = "local", options: { working?: boolean } = {}): MockChannelSeed[] {
+export function seeds(reader = "local", options: { working?: boolean; unread?: boolean } = {}): MockChannelSeed[] {
   READER = reader;
   const you = { kind: "member" as const, id: READER, name: "You" };
   sequences.clear();
@@ -184,10 +186,17 @@ export function seeds(reader = "local", options: { working?: boolean } = {}): Mo
     visibility: "private",
     humanMemberIds: [READER, "ana"],
   });
+  const unread = (sequence: number | undefined) =>
+    options.unread && sequence !== undefined ? { readThrough: sequence } : {};
   return [
-    { channel: general, messages: [...messages, ...replies], ...(work.length ? { work } : {}) },
-    { channel: cakemaker, messages: many },
+    {
+      channel: general,
+      messages: [...messages, ...replies],
+      ...(work.length ? { work } : {}),
+      ...unread(messages[1]?.sequence),
+    },
+    { channel: cakemaker, messages: many, ...unread(many.length - 5) },
     { channel: channel({ id: "random", name: "random", humanMemberIds: ["ana"] }), messages: [] },
-    { channel: dm, messages: [message("dm-ana", 70, ana, "Lunch at 12?")] },
+    { channel: dm, messages: [message("dm-ana", 70, ana, "Lunch at 12?")], ...unread(0) },
   ];
 }

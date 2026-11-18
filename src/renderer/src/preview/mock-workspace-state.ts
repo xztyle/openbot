@@ -151,6 +151,8 @@ export function createMockWorkspaceState(
   }
 
   return {
+    /** The person's read position in a thread, for the preview's activity. */
+    threadPosition: (channelId: string, rootId: string) => positions.get(key(channelId, rootId)) ?? 0,
     workspaceThreadStates: async (input: WorkspaceThreadStatesInput): Promise<WorkspaceThreadStates> => {
       const rootIds =
         input.rootIds ??

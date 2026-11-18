@@ -953,18 +953,21 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     };
   }
 
+  const threadReads = { position: (_channelId: string, _rootId: string) => 0 };
   const mockChannels = createMockChannels(
     emitAgentEvent,
     (agentId) => agents.find((entry) => entry.id === agentId)?.name ?? agentId,
     options.channels,
     options.channelMemberId,
     () => agents.filter((entry) => entry.hiddenAt === undefined && entry.background !== true).map((entry) => entry.id),
+    threadReads,
   );
-  const mockWorkspaceState = createMockWorkspaceState(
+  const { threadPosition, ...mockWorkspaceState } = createMockWorkspaceState(
     emitAgentEvent,
     mockChannels,
     options.channelMemberId ?? PREVIEW_CHANNEL_MEMBER_ID,
   );
+  threadReads.position = threadPosition;
   const mockSpaces = createMockSpaces(
     emitAgentEvent,
     () => agents.map((entry) => entry.id),

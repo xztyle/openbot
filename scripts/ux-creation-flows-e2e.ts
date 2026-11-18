@@ -213,6 +213,26 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await dialog.waitFor({ state: "detached", timeout: UI_WAIT_MS });
   });
 
+  // 3b. Delete the channel from its details: a confirm that Cancel keeps, then the channel goes.
+  await step(page, viewport, "Delete channel asks first, then deletes it", async () => {
+    await page
+      .getByRole("button", { name: english("workspace.header.details"), exact: true })
+      .first()
+      .click();
+    await page.getByRole("tab", { name: english("workspace.details.settings"), exact: true }).click();
+    const remove = page.getByRole("button", { name: english("workspace.details.archive"), exact: true });
+    await remove.click();
+    const confirm = page.getByRole("alertdialog", { name: english("sidebar.delete.title", { name: channelName }) });
+    await confirm.waitFor({ timeout: UI_WAIT_MS });
+    await shot(page, `${viewport}-delete-channel-confirm`);
+    await confirm.getByRole("button", { name: english("common.cancel"), exact: true }).click();
+    await confirm.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await remove.click();
+    await confirm.getByRole("button", { name: english("sidebar.channelMenu.delete"), exact: true }).click();
+    await confirm.waitFor({ state: "detached", timeout: UI_WAIT_MS });
+    await waitForPath(page, (path) => path.endsWith("/activity"), "deleted channel");
+  });
+
   // 4. New message: Cancel closes it; Start DM opens the conversation.
   await step(page, viewport, "New message: Cancel closes it, Start DM opens the DM", async () => {
     await showSidebar(page, viewport);

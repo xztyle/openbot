@@ -163,7 +163,7 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 4 | View states in Activity, Threads, Fleet, Space agents, Secrets, Between agents; Artifacts and Storage keep their own | Done |
 | 5 | Sidebar to Slack (§ 7): More row, collapsed groups keep unread rows, saved collapse | Done |
 | 6 | Activity: exact message, badge without reactions, Mark all as read of Activity only | Done |
-| 7 | Confirm Leave private channel and Remove member; agent delete: undo or confirm, not both | Open |
+| 7 | Confirm Leave private channel, Delete channel (details) and Remove member | Done; agent delete (confirm and undo) is open |
 | 8 | Settings page: visible close/Back; server rows stack on a phone; one `SettingsSaveBar`; unsaved guard on close | Open |
 | 9 | Move template install, custom provider, profile, vault, join server, OpenCode key, chat apps, saved replies to `FormDialog` | Open |
 | 10 | Spanish wording: Quitar vs Eliminar for remove; one "Leave" verb; one "Deleting…" and one "Undo" key | Open |

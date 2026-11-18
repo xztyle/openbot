@@ -157,7 +157,7 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
               label: t("workspace.details.leave"),
               icon: <LogOut aria-hidden="true" />,
               danger: true,
-              onSelect: () => void ws.leave(id),
+              onSelect: () => ws.requestLeave(id),
             },
           ]
         : []),

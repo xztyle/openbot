@@ -13,6 +13,9 @@
   Artifacts, Between agents, Storage, Secrets and Apps under More. A collapsed Channels or Direct
   messages group still shows its unread rows and the open conversation, and stays collapsed on every
   computer of the account.
+- Leaving a private channel, deleting a channel from its details and taking someone out of a channel
+  now ask first, and a failure shows in the dialog. "Archive channel" is now "Delete channel", the
+  same action and name as in the sidebar.
 
 ### Fixed
 

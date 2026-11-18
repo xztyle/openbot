@@ -215,7 +215,11 @@ export const messages = {
   "workspace.details.handsOffHint":
     "Los agentes nunca te esperan: siguen el camino recomendado y registran cada decisión en Decisiones.",
   "workspace.details.leave": "Salir del canal",
-  "workspace.details.archive": "Archivar canal",
+  "workspace.details.archive": "Eliminar canal",
+  "workspace.confirm.leaveTitle": "¿Salir de {name}?",
+  "workspace.confirm.leaveDescription": "Es un canal privado: necesitas una invitación para volver.",
+  "workspace.confirm.removeTitle": "¿Quitar a {name} de {channel}?",
+  "workspace.confirm.removeDescription": "Puedes volver a añadirlo más tarde.",
   "workspace.answerMode.mention": "Cuando lo mencionan",
   "workspace.answerMode.mentionHint": "Responde a @menciones, a las respuestas a sus mensajes y en sus hilos.",
   "workspace.answerMode.always": "Cada mensaje (inteligente)",

@@ -84,6 +84,7 @@ export function WorkspaceDialogs() {
         </Match>
       </Switch>
       <DeleteMessageDialog />
+      <ChannelConfirmDialogs />
     </>
   );
 }
@@ -464,6 +465,78 @@ function DeleteMessageDialog() {
         await ws.deleteMessage(current.channelId, current.messageId);
         ws.openDialog(null);
       }}
+    />
+  );
+}
+
+/**
+ * The confirms of a channel: leave a private channel, delete a channel, take someone out. Each
+ * shows its failure inside and stays open (docs/ux/standard.md § 6).
+ */
+function ChannelConfirmDialogs() {
+  const { t } = useText();
+  const ws = useWorkspace();
+  const [error, setError] = createSignal<string | null>(null);
+  const dialog = () => {
+    const current = ws.state.dialog;
+    return current?.kind === "leave" || current?.kind === "archive" || current?.kind === "remove-member"
+      ? current
+      : null;
+  };
+  const channelName = () => {
+    const current = dialog();
+    const channel = current ? ws.summary(current.channelId) : undefined;
+    return channel ? conversationName(ws.directory(), channel) : "";
+  };
+  const memberName = () => {
+    const current = dialog();
+    return current?.kind === "remove-member" ? memberById(ws.directory(), current.memberId).name : "";
+  };
+  const close = () => {
+    setError(null);
+    ws.openDialog(null);
+  };
+  const confirm = async () => {
+    const current = dialog();
+    if (!current) return;
+    setError(null);
+    const result =
+      current.kind === "leave"
+        ? await ws.leave(current.channelId)
+        : current.kind === "archive"
+          ? await ws.archive(current.channelId)
+          : await ws.removeMember(current.channelId, current.memberId);
+    if (result === true) close();
+    else setError(result);
+  };
+  return (
+    <ConfirmDialog
+      open={dialog() !== null}
+      tone={dialog()?.kind === "archive" ? "destructive" : "default"}
+      title={
+        dialog()?.kind === "leave"
+          ? t("workspace.confirm.leaveTitle", { name: channelName() })
+          : dialog()?.kind === "archive"
+            ? t("sidebar.delete.title", { name: channelName() })
+            : t("workspace.confirm.removeTitle", { name: memberName(), channel: channelName() })
+      }
+      description={
+        dialog()?.kind === "leave"
+          ? t("workspace.confirm.leaveDescription")
+          : dialog()?.kind === "archive"
+            ? t("sidebar.delete.channelDescription")
+            : t("workspace.confirm.removeDescription")
+      }
+      confirmLabel={
+        dialog()?.kind === "leave"
+          ? t("workspace.details.leave")
+          : dialog()?.kind === "archive"
+            ? t("sidebar.channelMenu.delete")
+            : t("common.remove")
+      }
+      error={error() ?? undefined}
+      onCancel={close}
+      onConfirm={confirm}
     />
   );
 }

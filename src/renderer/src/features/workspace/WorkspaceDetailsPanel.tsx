@@ -147,8 +147,8 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
             onRemoveMember={
               manage() && !live().archived
                 ? (memberId) => {
-                    if (ws.env.isReader(memberId)) void ws.leave(props.channelId);
-                    else void ws.removeMember(props.channelId, memberId);
+                    if (ws.env.isReader(memberId)) ws.requestLeave(props.channelId);
+                    else ws.openDialog({ kind: "remove-member", channelId: props.channelId, memberId });
                   }
                 : undefined
             }
@@ -205,11 +205,13 @@ export function WorkspaceDetailsPanel(props: { channelId: string }) {
                 : undefined
             }
             onArchive={
-              manage() && kind === "channel" && !live().archived ? () => void ws.archive(props.channelId) : undefined
+              manage() && kind === "channel" && !live().archived
+                ? () => ws.openDialog({ kind: "archive", channelId: props.channelId })
+                : undefined
             }
             onLeave={
               joined() && kind !== "dm" && humanIds(live()).length > 0
-                ? () => void ws.leave(props.channelId)
+                ? () => ws.requestLeave(props.channelId)
                 : undefined
             }
             decisions={kind === "channel" ? decisions.items() : undefined}

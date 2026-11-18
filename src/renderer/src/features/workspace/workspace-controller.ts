@@ -18,6 +18,7 @@ import {
   type ChannelSummary,
   type ChannelTypingEntry,
   channelKind,
+  channelVisibility,
   type DraftAttachment,
   GENERAL_SPACE_ID,
   isChannelAnswerMode,
@@ -86,6 +87,12 @@ export type WorkspaceDialog =
   | { kind: "edit-meta"; channelId: string; field: "topic" | "description" }
   | { kind: "invite"; channelId: string }
   | { kind: "delete-message"; channelId: string; messageId: string; threadRootId: string | null }
+  /** Confirms leaving a private channel: the reader cannot come back without an invite. */
+  | { kind: "leave"; channelId: string }
+  /** Confirms deleting a channel (it stays in Deleted channels and can be restored). */
+  | { kind: "archive"; channelId: string }
+  /** Confirms taking a person or an agent out of a channel. */
+  | { kind: "remove-member"; channelId: string; memberId: string }
   /** Makes a space (no id) or changes one. */
   | { kind: "space-edit"; spaceId: string | null }
   | { kind: "space-delete"; spaceId: string }
@@ -2023,22 +2030,44 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
   }
 
-  async function leave(channelId: string): Promise<void> {
-    if (await run({ type: "leave", operationId: crypto.randomUUID(), channelId }, "workspace.app.error.leave")) {
-      closePanel();
-      channels.close();
-      openView("activity");
+  /** Leaves a channel. A failure comes back as its message, for the confirm that asked. */
+  async function leave(channelId: string): Promise<true | string> {
+    try {
+      await command({ type: "leave", operationId: crypto.randomUUID(), channelId });
+    } catch (error) {
+      return failureText(error, "workspace.app.error.leave");
     }
+    closePanel();
+    channels.close();
+    openView("activity");
+    return true;
   }
 
-  async function archive(channelId: string): Promise<void> {
+  /**
+   * Leave from a menu: a private channel asks first, as in Slack, because the reader needs an invite
+   * to come back; a public one leaves at once, and a failure shows in a toast.
+   */
+  function requestLeave(channelId: string): void {
+    const channel = summary(channelId);
+    if (channel && channelVisibility(channel) === "private") {
+      openDialog({ kind: "leave", channelId });
+      return;
+    }
+    void leave(channelId).then((result) => {
+      if (result !== true) failureToast(new Error(result), "workspace.app.error.leave");
+    });
+  }
+
+  /** Deletes a channel; it stays in Deleted channels. A failure comes back as its message. */
+  async function archive(channelId: string): Promise<true | string> {
     try {
       await channels.remove(channelId);
-      closePanel();
-      openView("activity");
     } catch (error) {
-      failureToast(error, "workspace.app.error.archive");
+      return failureText(error, "workspace.app.error.archive");
     }
+    closePanel();
+    openView("activity");
+    return true;
   }
 
   /** Adds people and agents. The dialog shows a failure in place: it gets the message instead of `false`. */
@@ -2059,18 +2088,21 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     }
   }
 
-  async function removeMember(channelId: string, memberId: string): Promise<boolean> {
+  /** Takes a person or an agent out of a channel. A failure comes back as its message, for the confirm. */
+  async function removeMember(channelId: string, memberId: string): Promise<true | string> {
     const agent = env.agents().some((candidate) => candidate.id === memberId);
-    return run(
-      {
+    try {
+      await command({
         type: "remove",
         operationId: crypto.randomUUID(),
         channelId,
         humanMemberIds: agent ? [] : [memberId],
         agentIds: agent ? [memberId] : [],
-      },
-      "workspace.app.error.remove",
-    );
+      });
+      return true;
+    } catch (error) {
+      return failureText(error, "workspace.app.error.remove");
+    }
   }
 
   async function setMember(
@@ -2247,6 +2279,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     workspaceEmpty,
     closeHint,
     leave,
+    requestLeave,
     archive,
     invite,
     removeMember,

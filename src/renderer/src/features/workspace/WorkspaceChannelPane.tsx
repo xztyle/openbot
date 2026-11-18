@@ -297,7 +297,7 @@ export function WorkspaceChannelPane(props: { channelId: string }) {
               label: t("workspace.details.leave"),
               icon: <LogOut aria-hidden="true" />,
               danger: true,
-              onSelect: () => void ws.leave(props.channelId),
+              onSelect: () => ws.requestLeave(props.channelId),
             },
           ]
         : []),

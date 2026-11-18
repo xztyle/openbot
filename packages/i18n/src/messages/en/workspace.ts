@@ -228,7 +228,11 @@ export const messages = defineMessages("workspace", {
   "workspace.details.handsOffHint":
     "Agents never wait for you: they take the recommended path and log each decision under Decisions.",
   "workspace.details.leave": "Leave channel",
-  "workspace.details.archive": "Archive channel",
+  "workspace.details.archive": "Delete channel",
+  "workspace.confirm.leaveTitle": "Leave {name}?",
+  "workspace.confirm.leaveDescription": "It is a private channel: you need an invite to come back.",
+  "workspace.confirm.removeTitle": "Remove {name} from {channel}?",
+  "workspace.confirm.removeDescription": "They can be added again later.",
   "workspace.answerMode.mention": "When mentioned",
   "workspace.answerMode.mentionHint": "Answers @mentions, replies to it and its threads.",
   "workspace.answerMode.always": "Every message (smart)",

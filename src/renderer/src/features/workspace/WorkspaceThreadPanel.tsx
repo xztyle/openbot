@@ -190,6 +190,7 @@ export function WorkspaceThreadPanel(props: { channelId: string; rootId: string 
       <ThreadPanel
         channelName={name()}
         visibility={visibility()}
+        direct={!isChannel()}
         replyCount={replyCount()}
         onClose={() => ws.closePanel()}
         onBack={() => ws.back()}

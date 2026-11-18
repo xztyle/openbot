@@ -12,6 +12,8 @@ export interface ThreadPanelProps {
   /** The conversation of the thread, without `#`, or the names of a DM. */
   channelName: string;
   visibility?: ChannelVisibility | undefined;
+  /** The thread is in a DM or a group: the header names it without `#` or a lock. */
+  direct?: boolean | undefined;
   /** The root message, as a `MessageRow`. */
   root: JSX.Element;
   replyCount: number;
@@ -45,9 +47,11 @@ export function ThreadPanel(props: ThreadPanelProps): JSX.Element {
       <WorkspacePaneHeader
         title={t("workspace.thread.title")}
         subtitle={
-          props.visibility === "private"
-            ? t("workspace.thread.inPrivate", { name: props.channelName })
-            : t("workspace.thread.inChannel", { name: props.channelName })
+          props.direct
+            ? props.channelName
+            : props.visibility === "private"
+              ? t("workspace.thread.inPrivate", { name: props.channelName })
+              : t("workspace.thread.inChannel", { name: props.channelName })
         }
         actions={
           <Show when={props.following}>

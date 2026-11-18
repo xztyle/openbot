@@ -14,7 +14,13 @@ import type {
   RespondToBrowserTakeoverInput,
   RespondToPromptInput,
 } from "@openbot/contracts/ipc";
-import { AGENT_RUNTIME_ATTENTION_LIMIT, BROWSER_TAKEOVER_REASONS } from "@openbot/contracts/ipc";
+import {
+  AGENT_ATTENTION_ITEMS_LIMIT,
+  AGENT_ATTENTION_TEXT_LIMIT,
+  AGENT_RUNTIME_ATTENTION_LIMIT,
+  type AgentAttentionItem,
+  BROWSER_TAKEOVER_REASONS,
+} from "@openbot/contracts/ipc";
 import { type DynamicRecord, isOneOf } from "@openbot/contracts/runtime-values";
 import {
   type ConversationUiBlock,
@@ -399,6 +405,8 @@ export class AttentionRegistry {
   readonly #prompts = new Map<RequestId, PendingPrompt>();
   readonly #approvals = new Map<RequestId, PendingApproval>();
   readonly #takeovers = new Map<RequestId, PendingBrowserTakeover>();
+  /** When `attentionItems` first listed each request. */
+  readonly #listedAt = new WeakMap<PendingPrompt | PendingApproval | PendingBrowserTakeover, string>();
 
   constructor(options: AttentionRegistryOptions) {
     this.#conversation = options.conversation;
@@ -533,6 +541,73 @@ export class AttentionRegistry {
     ];
   }
 
+  /**
+   * Every request that waits for the user now, of every agent, with what is safe to show of it: the
+   * host's one list of what needs the user. A takeover counts once its card shows. Oldest first.
+   */
+  attentionItems(): AgentAttentionItem[] {
+    const now = new Date().toISOString();
+    const listedAt = (pending: PendingPrompt | PendingApproval | PendingBrowserTakeover) => {
+      let at = this.#listedAt.get(pending);
+      if (!at) {
+        at = now;
+        this.#listedAt.set(pending, at);
+      }
+      return at;
+    };
+    const tabs = new Map(this.#browser.listTabs().map((tab) => [tab.id, tab]));
+    const items: AgentAttentionItem[] = [];
+    for (const pending of this.#prompts.values()) {
+      const apiKey = pending.uiBlock?.apiKey;
+      const question = pending.questions.find((entry) => !entry.isSecret);
+      const kind = apiKey ? "api-key" : pending.uiBlock ? "form" : "question";
+      const summary = apiKey
+        ? apiKey.name
+        : pending.uiBlock
+          ? (pending.uiBlock.spec.title ?? question?.question)
+          : pending.questions.some((entry) => entry.isSecret)
+            ? undefined
+            : (question?.question ?? question?.header);
+      items.push({
+        kind,
+        requestId: pending.id,
+        agentId: pending.agentId,
+        threadId: pending.publicThreadId,
+        turnId: pending.turnId,
+        createdAt: listedAt(pending),
+        ...optionalText("summary", attentionLine(summary)),
+      });
+    }
+    for (const pending of this.#approvals.values()) {
+      const { approval } = pending;
+      items.push({
+        kind: "approval",
+        requestId: approval.requestId,
+        agentId: approval.agentId,
+        threadId: approval.threadId,
+        turnId: approval.turnId,
+        createdAt: listedAt(pending),
+      });
+    }
+    for (const pending of this.#takeovers.values()) {
+      if (!pending.surfaced) continue;
+      const { request } = pending;
+      const tab = tabs.get(request.tabId);
+      const origin = request.secret?.origin ?? tab?.url;
+      items.push({
+        kind: request.secret ? "secret" : request.reason === "sign-in-blocked" ? "sign-in" : "browser-takeover",
+        requestId: request.requestId,
+        agentId: request.agentId,
+        threadId: request.threadId,
+        turnId: request.turnId,
+        createdAt: listedAt(pending),
+        ...optionalText("summary", attentionLine(tab?.title)),
+        ...optionalText("origin", attentionLine(origin ? urlHost(origin) : undefined)),
+      });
+    }
+    return items.sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, AGENT_ATTENTION_ITEMS_LIMIT);
+  }
+
   /** Full details for one agent; the UI snapshot has a separate size budget. */
   localAttention(agentId: string) {
     return {
@@ -617,16 +692,21 @@ export class AttentionRegistry {
    * from the snapshot, so without these it showed the agent as waiting with no card to answer.
    * Questions are not here: a client reads them from the agent's page.
    */
-  attentionOverflowEvents(): AgentEvent[] {
-    if (this.#prompts.size + this.#approvals.size + this.#takeovers.size <= AGENT_RUNTIME_ATTENTION_LIMIT) return [];
-    let remaining = Math.max(0, AGENT_RUNTIME_ATTENTION_LIMIT - this.#prompts.size);
-    const approvals = [...this.#approvals.values()];
-    const approvalEvents = approvals
-      .slice(remaining)
+  attentionOverflowEvents(
+    snapshot?: Pick<RuntimeAttention, "pendingApprovals" | "pendingBrowserTakeovers">,
+  ): AgentEvent[] {
+    const sent = snapshot ?? this.runtimeAttention();
+    const key = (agentId: string, requestId: RequestId) => `${agentId}\n${String(requestId)}`;
+    const sentApprovals = new Set(sent.pendingApprovals.map((approval) => key(approval.agentId, approval.requestId)));
+    const sentTakeovers = new Set(
+      sent.pendingBrowserTakeovers.map((request) => key(request.agentId, request.requestId)),
+    );
+    // A size cut can leave out a request that fits the count, so each request is checked by its key.
+    const approvalEvents = [...this.#approvals.values()]
+      .filter(({ approval }) => !sentApprovals.has(key(approval.agentId, approval.requestId)))
       .map((pending): AgentEvent => ({ type: "approval", approval: structuredClone(pending.approval) }));
-    remaining = Math.max(0, remaining - approvals.length);
     const takeoverEvents = [...this.#takeovers.values()]
-      .slice(remaining)
+      .filter(({ request }) => !sentTakeovers.has(key(request.agentId, request.requestId)))
       .map(
         (pending): AgentEvent => ({ type: "browser-takeover-requested", request: structuredClone(pending.request) }),
       );
@@ -2010,6 +2090,29 @@ function localQuestionNeedsOpenBot(question: AgentPromptQuestion): boolean {
 }
 
 const { sync: attentionStep, rewrap: toAttentionOperationFailed } = causeHelpers(AttentionOperationFailed);
+
+/** One line of text of an attention item, redacted and cut to its bound, or undefined. */
+function attentionLine(value: string | undefined): string | undefined {
+  const line = value ? redactText(value).replace(/\s+/gu, " ").trim() : "";
+  if (!line) return undefined;
+  const characters = Array.from(line);
+  return characters.length > AGENT_ATTENTION_TEXT_LIMIT
+    ? `${characters.slice(0, AGENT_ATTENTION_TEXT_LIMIT - 1).join("")}…`
+    : line;
+}
+
+function optionalText(key: "summary" | "origin", value: string | undefined): { summary?: string; origin?: string } {
+  return value === undefined ? {} : key === "summary" ? { summary: value } : { origin: value };
+}
+
+/** The host name of a page address, or nothing for a value that is no URL. */
+function urlHost(value: string): string | undefined {
+  try {
+    return new URL(value).hostname || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 type ApprovalReply =
   | { permissions: DynamicRecord; scope: "turn" }

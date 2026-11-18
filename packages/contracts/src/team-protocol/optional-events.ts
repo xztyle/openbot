@@ -2,6 +2,7 @@ import { type AgentAccessEvent, agentAccessEvent } from "./agent-access-v1";
 import { type AgentHiddenEvent, agentHiddenEvent } from "./agent-hidden-v1";
 import { type AgentSessionSettingsEvent, agentSessionSettingsEvent } from "./agent-session-settings-v1";
 import { type AgentTasksEvent, agentTasksEvent } from "./agent-tasks-v1";
+import { type AttentionItemsEvent, attentionItemsEvent } from "./attention-items-v1";
 import { type BrowserPageStateEvent, browserPageStateEvent } from "./browser-page-state-v1";
 import { type BrowserUserControlEvent, browserUserControlEvent } from "./browser-user-control-v1";
 // Events that optional capabilities add outside the frozen base event vocabularies. The base event
@@ -22,6 +23,7 @@ import { type WorkspaceChannelEvent, workspaceChannelEvent } from "./workspace-v
 
 export type OptionalTeamEvent =
   | AgentAccessEvent
+  | AttentionItemsEvent
   | AgentHiddenEvent
   | AgentSessionSettingsEvent
   | BrowserPageStateEvent
@@ -45,6 +47,7 @@ export type OptionalTeamEvent =
 export function optionalTeamEvent(value: unknown): OptionalTeamEvent | null {
   return (
     agentAccessEvent(value) ??
+    attentionItemsEvent(value) ??
     agentHiddenEvent(value) ??
     agentSessionSettingsEvent(value) ??
     browserPageStateEvent(value) ??

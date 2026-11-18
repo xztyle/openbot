@@ -80,6 +80,11 @@ function fitRuntimeSnapshot(snapshot: AgentRuntimeSnapshot): AgentRuntimeSnapsho
     snapshot.contextStates = [];
     if (runtimeSnapshotBytes(snapshot) <= AGENT_RUNTIME_SNAPSHOT_BYTES_LIMIT) return snapshot;
   }
+  // The whole attention list also comes in its own event, `agent-attention-changed`.
+  if (snapshot.attentionItems?.length) {
+    delete snapshot.attentionItems;
+    if (runtimeSnapshotBytes(snapshot) <= AGENT_RUNTIME_SNAPSHOT_BYTES_LIMIT) return snapshot;
+  }
 
   snapshot.agents = snapshot.agents.map((agent) => ({ ...agent, preview: "", avatarUrl: null }));
   if (runtimeSnapshotBytes(snapshot) <= AGENT_RUNTIME_SNAPSHOT_BYTES_LIMIT) return snapshot;
@@ -147,6 +152,7 @@ export interface RuntimeSnapshotSources {
   attention: Pick<AttentionRegistry, "runtimeAttention">;
   usageLimits: Pick<UsageLimitGate, "limitedAgents" | "limitedModels">;
   inputEscalations?: AgentRuntimeSnapshot["inputEscalations"];
+  attentionItems?: AgentRuntimeSnapshot["attentionItems"];
 }
 
 /** The runtime view of every agent: active turns, queued work, latest messages and attention. */
@@ -160,6 +166,7 @@ export function buildRuntimeSnapshot({
   attention,
   usageLimits,
   inputEscalations,
+  attentionItems,
 }: RuntimeSnapshotSources): AgentRuntimeSnapshot {
   const runtimeAgents: AgentRuntimeSnapshot["agents"] = agents.map((agent) => ({
     id: agent.id,
@@ -220,5 +227,6 @@ export function buildRuntimeSnapshot({
     usageLimitedModels: usageLimits.limitedModels(),
     ...(contextStates ? { contextStates } : {}),
     ...(inputEscalations ? { inputEscalations } : {}),
+    ...(attentionItems ? { attentionItems } : {}),
   });
 }

@@ -15,8 +15,11 @@ import { type ChannelViewer, canSeeChannel, isChannelPerson } from "../backend/c
 
 /** A notice about a channel message, as the Activity view sorts it (`channel-activity.ts`). */
 export type WebPushChannelKind = "mention" | "dm" | "reply";
-/** A notice about an agent event. */
-export type WebPushAgentKind = "needs-input" | "needs-approval" | "finished" | "failed";
+/**
+ * A notice about an agent event. `needs-takeover` is a browser takeover or a password or code for a
+ * browser tab: the user must act, as for a question.
+ */
+export type WebPushAgentKind = "needs-input" | "needs-approval" | "needs-takeover" | "finished" | "failed";
 export type WebPushKind = WebPushChannelKind | WebPushAgentKind;
 
 /** A channel message that is older than this when the host first sees it is not news. */
@@ -61,9 +64,9 @@ export function webPushChannelKind(
   return null;
 }
 
-/** A question or an approval waits for the reader, so it counts as a mention. */
-function isRequest(kind: WebPushKind): boolean {
-  return kind === "needs-input" || kind === "needs-approval";
+/** A question, an approval or a takeover waits for the reader, so it counts as a mention. */
+export function isWebPushRequest(kind: WebPushKind): boolean {
+  return kind === "needs-input" || kind === "needs-approval" || kind === "needs-takeover";
 }
 
 /**
@@ -80,7 +83,7 @@ export function webPushAllowed(
   conversation: WorkspaceNotifyLevel | null,
 ): boolean {
   if (level === "nothing" || conversation === "nothing") return false;
-  if (conversation === "mentions") return kind === "mention" || isRequest(kind);
+  if (conversation === "mentions") return kind === "mention" || isWebPushRequest(kind);
   if (kind === "reply") return level === "all" || conversation === "all";
   return true;
 }

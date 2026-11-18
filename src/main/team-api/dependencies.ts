@@ -89,6 +89,7 @@ type TeamApiAgentMethods = Pick<
   | "getStatus"
   | "getRuntimeSnapshot"
   | "attentionOverflowEvents"
+  | "attentionItems"
   | "getUsage"
   | "getAnalytics"
   | "getHostAnalytics"

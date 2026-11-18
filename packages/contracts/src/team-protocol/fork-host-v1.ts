@@ -8,6 +8,8 @@
  * fork host built before it refuses an update that sets only that mark, so the client fails closed.
  * The `agent-input-escalations-changed` event of `input-escalations-v1.ts` came later too. A fork
  * host built before it sends no such event, so a client shows each request in its own chat only.
+ * The `agent-attention-changed` event of `attention-items-v1.ts` came later too. A fork host built
+ * before it sends no such event, so a client counts only the requests it has from other events.
  * The `connection.report` operation of `connection-report-v1.ts` came later too. A fork host built
  * before it answers with `unsupported_operation`, and the client ignores that answer.
  *

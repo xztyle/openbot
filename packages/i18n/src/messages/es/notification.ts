@@ -5,6 +5,9 @@ export const messages = {
   "notification.needsInput": "Necesita tu respuesta.",
   "notification.needsApproval": "Necesita tu aprobación.",
   "notification.needsBrowserStep": "Necesita que completes un paso en el navegador.",
+  "notification.needsPassword": "Necesita tu contraseña de {site}.",
+  "notification.needsCode": "Necesita un código de acceso de {site}.",
+  "notification.needsSignIn": "Necesita que inicies sesión en el navegador.",
   "notification.needsApprovalFor": "Necesita tu aprobación: {action}",
   "notification.finished": "Ha terminado de trabajar.",
   // A workflow step that waits for a person to approve or reject it.

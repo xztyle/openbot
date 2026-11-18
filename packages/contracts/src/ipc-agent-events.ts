@@ -15,6 +15,7 @@ import {
   isAgentApproval,
   isBrowserTakeoverRequest,
 } from "./ipc-approvals";
+import { type AgentAttentionItem, isAgentAttentionItemList } from "./ipc-attention-items";
 import { isIdentifier } from "./ipc-bounded-values";
 import type { BrowserControlState, BrowserTab } from "./ipc-browser";
 import {
@@ -179,6 +180,11 @@ export type AgentEvent =
    * where the request belongs when it arrives.
    */
   | { type: "agent-input-escalations-changed"; escalations: AgentInputEscalation[] }
+  /**
+   * The whole list of requests of every agent that wait for the user, at each change. The runtime
+   * snapshot holds only four of them.
+   */
+  | { type: "agent-attention-changed"; items: AgentAttentionItem[] }
   | { type: "approval"; approval: AgentApproval }
   | { type: "runtime-snapshot"; snapshot: AgentRuntimeSnapshot }
   | { type: "browser-changed"; tabs: BrowserTab[]; activeTabId: string | null }
@@ -388,6 +394,8 @@ export function isAgentEvent(value: unknown): value is AgentEvent {
       return Array.isArray(value.tabIds) && value.tabIds.every(isString);
     case "agent-input-escalations-changed":
       return isAgentInputEscalationList(value.escalations);
+    case "agent-attention-changed":
+      return isAgentAttentionItemList(value.items);
     case "browser-page-state-changed":
       return (
         Array.isArray(value.tabs) &&

@@ -237,8 +237,14 @@ function notificationSubject(
     return { body, agentId, threadId };
   }
   if (event.type === "browser-takeover-requested") {
-    const { agentId, threadId } = event.request;
-    return { body: translate("notification.needsBrowserStep"), agentId, threadId };
+    const { agentId, threadId, secret, reason } = event.request;
+    const site = secret ? secretSite(secret.origin) : null;
+    const body = site
+      ? translate(secret?.method === "password" ? "notification.needsPassword" : "notification.needsCode", { site })
+      : reason === "sign-in-blocked"
+        ? translate("notification.needsSignIn")
+        : translate("notification.needsBrowserStep");
+    return { body, agentId, threadId };
   }
   // Nobody watches unattended work, so its failure shows at the "needs-me" level too.
   const unattended = unattendedFailureSubject(event, translate);
@@ -277,4 +283,13 @@ function previewText(text: string): string | null {
     .slice(0, PREVIEW_LIMIT - 1)
     .join("")
     .trimEnd()}…`;
+}
+
+/** The host name of the site that asks for a password or a code, or null. */
+function secretSite(origin: string): string | null {
+  try {
+    return new URL(origin).hostname || null;
+  } catch {
+    return null;
+  }
 }

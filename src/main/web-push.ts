@@ -20,6 +20,7 @@ import { type ChannelViewer, canSeeChannel } from "../backend/channel-visibility
 import { encryptWebPushMessage, vapidAuthorization } from "./web-push-crypto";
 import {
   isWebPushChannelMessage,
+  isWebPushRequest,
   WEB_PUSH_NEW_MESSAGE_MS,
   type WebPushAgentKind,
   type WebPushKind,
@@ -122,6 +123,7 @@ export interface WebPushWorkspace {
 export function webPushKind(event: AgentEvent): WebPushAgentKind | null {
   if (event.type === "prompt") return "needs-input";
   if (event.type === "approval") return "needs-approval";
+  if (event.type === "browser-takeover-requested") return "needs-takeover";
   if (event.type === "turn-completed") return event.status === "completed" ? "finished" : "failed";
   return event.type === "error" ? "failed" : null;
 }
@@ -382,7 +384,7 @@ export class WebPushService {
    * part of a burst: each one waits for the member.
    */
   #notify(subscription: WebPushSubscription, conversation: string, notice: Notice, now: number): void {
-    if (notice.kind === "needs-input" || notice.kind === "needs-approval") {
+    if (isWebPushRequest(notice.kind)) {
       this.#send(subscription, `request:${notice.agentId}`, notice, false);
       return;
     }

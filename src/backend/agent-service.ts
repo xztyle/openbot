@@ -7,6 +7,7 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentAccessLevel,
   AgentAnalyticsInput,
+  AgentAttentionItem,
   AgentEvent,
   AgentMemory,
   AgentMemorySelectionState,
@@ -274,6 +275,17 @@ import { WorkspaceSecretsService } from "./workspace-secrets";
 
 const logger = createOpenBotLogger("agent-service");
 
+/** The events after which the list of requests that wait for the user can change. */
+const ATTENTION_LIST_EVENTS: ReadonlySet<AgentEvent["type"]> = new Set([
+  "prompt",
+  "approval",
+  "browser-takeover-requested",
+  "agent-input-resolved",
+  "browser-takeover-resolved",
+  "turn-completed",
+  "runtime-snapshot",
+]);
+
 /**
  * Only the application knows which managed CLIs it downloaded, so a caller that says nothing gets
  * none of them. Codex is left out on purpose: it is the one provider that can also ship inside the
@@ -500,6 +512,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #followUp: DelegationFollowUp;
   /** Built after the attention registry and the mailbox; an event before then has no request to escalate. */
   readonly #escalations: InputEscalations | undefined;
+  /** The last list that `agent-attention-changed` sent, as JSON. */
+  #attentionEncoded = "[]";
   readonly #boot: BootRecovery;
   readonly #deltas: DeltaBuffer;
   readonly #turn: TurnLifecycle;
@@ -1771,9 +1785,16 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return ids;
   }
 
-  /** The approvals and takeovers that the runtime snapshot's attention limit leaves out. */
-  attentionOverflowEvents(): AgentEvent[] {
-    return this.#attention.attentionOverflowEvents();
+  /** The approvals and takeovers that a runtime snapshot leaves out, by its attention limit or its size. */
+  attentionOverflowEvents(
+    snapshot?: Pick<AgentRuntimeSnapshot, "pendingApprovals" | "pendingBrowserTakeovers">,
+  ): AgentEvent[] {
+    return this.#attention.attentionOverflowEvents(snapshot);
+  }
+
+  /** Every request of every agent that waits for the user now. */
+  attentionItems(): AgentAttentionItem[] {
+    return this.#attention.attentionItems();
   }
 
   getRuntimeSnapshot(): AgentRuntimeSnapshot {
@@ -1787,6 +1808,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       attention: this.#attention,
       usageLimits: this.#usageLimits,
       inputEscalations: this.#escalations?.list() ?? [],
+      attentionItems: this.#attention.attentionItems(),
     });
   }
 
@@ -5212,10 +5234,24 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#emit({ type: "runtime-snapshot", snapshot: this.getRuntimeSnapshot() });
   }
 
+  /**
+   * Sends the whole list of requests that wait for the user after an event that can change it, when
+   * it changed. It goes past the channel and task routing, as the escalations do: it is every agent's.
+   */
+  #observeAttention(event: AgentEvent): void {
+    if (!ATTENTION_LIST_EVENTS.has(event.type)) return;
+    const items = this.#attention.attentionItems();
+    const encoded = JSON.stringify(items);
+    if (encoded === this.#attentionEncoded) return;
+    this.#attentionEncoded = encoded;
+    this.emit("event", { type: "agent-attention-changed", items });
+  }
+
   #emit(event: AgentEvent): void {
     recordAgentRestartActivity(event);
     // Before the event: a client learns who delegated a request before the request arrives.
     this.#escalations?.observe(event);
+    this.#observeAttention(event);
     // Before the channels and the tasks take theirs: the fleet follows the turns of channel threads too.
     this.workspace?.observe(event);
     if (this.channels?.event(event) || this.messaging?.event(event, this.#scope) || this.#tasks?.event(event)) return;

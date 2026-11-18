@@ -7,6 +7,7 @@ import {
   type BrowserTakeoverRequest,
   isBrowserTakeoverRequest,
 } from "./ipc-approvals";
+import { type AgentAttentionItem, isAgentAttentionItemList } from "./ipc-attention-items";
 import { isBoundedString, isIdentifier, isNullableBoundedString, isRequestId } from "./ipc-bounded-values";
 import { type AgentInputEscalation, isAgentInputEscalationList } from "./ipc-input-escalations";
 import { isBoolean, isDynamicRecord, isNumber, isOneOf } from "./runtime-values";
@@ -252,6 +253,12 @@ export interface AgentRuntimeSnapshot {
    * client gets them in the `agent-input-escalations-changed` event.
    */
   inputEscalations?: AgentInputEscalation[];
+  /**
+   * Every request of every agent that waits for the user, unlike the four of the attention lists.
+   * Absent from a released Team API snapshot, as `usageLimits` is: a Team API client gets them in
+   * the `agent-attention-changed` event.
+   */
+  attentionItems?: AgentAttentionItem[];
 }
 
 export function isAgentRuntimeSnapshot(value: unknown): value is AgentRuntimeSnapshot {
@@ -313,7 +320,8 @@ export function isAgentRuntimeSnapshot(value: unknown): value is AgentRuntimeSna
       (Array.isArray(value.usageLimitedModels) &&
         value.usageLimitedModels.length <= INPUT_LIMITS.agents &&
         value.usageLimitedModels.every(isAgentModelChoice))) &&
-    (value.inputEscalations === undefined || isAgentInputEscalationList(value.inputEscalations))
+    (value.inputEscalations === undefined || isAgentInputEscalationList(value.inputEscalations)) &&
+    (value.attentionItems === undefined || isAgentAttentionItemList(value.attentionItems))
   );
 }
 

@@ -36,6 +36,11 @@ import { AGENT_HIDDEN_CAPABILITY } from "@openbot/contracts/team-protocol/agent-
 import { AGENT_SESSION_SETTINGS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-session-settings-v1";
 import { AGENT_TASK_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-task-limit-v1";
 import { AGENT_TASKS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-tasks-v1";
+import {
+  ATTENTION_ITEMS_CAPABILITY,
+  ATTENTION_ITEMS_EVENT,
+  visibleAttentionItems,
+} from "@openbot/contracts/team-protocol/attention-items-v1";
 import { BROWSER_PAGE_STATE_CAPABILITY } from "@openbot/contracts/team-protocol/browser-page-state-v1";
 import { BROWSER_PROFILES_CAPABILITY } from "@openbot/contracts/team-protocol/browser-profiles-v1";
 import { BROWSER_USER_CONTROL_CAPABILITY } from "@openbot/contracts/team-protocol/browser-user-control-v1";
@@ -653,6 +658,25 @@ export class TeamApiServer {
   }
 
   /**
+   * The whole list of requests that wait for the user, after each runtime snapshot: the snapshot
+   * holds four of them, and a client that reconnects must learn the list again.
+   */
+  #sendAttentionItems(client: Ws.WebSocket, connection: EventClientState): void {
+    if (!connection.capabilities.has(ATTENTION_ITEMS_CAPABILITY)) return;
+    if (client.readyState !== webSockets.WebSocket.OPEN) return;
+    const blocked = this.#blockedAgentIds(this.#connectionMember(connection));
+    client.send(
+      JSON.stringify({
+        type: ATTENTION_ITEMS_EVENT,
+        items: visibleAttentionItems(
+          this.#options.agents.attentionItems(),
+          this.#escalationHiddenAgentIds(connection.capabilities, blocked),
+        ),
+      }),
+    );
+  }
+
+  /**
    * The approvals and takeovers that did not fit in the snapshot, after it, as the events that
    * announced them. A client that connects later has no other way to learn them, and showed their
    * agents as waiting with nothing to answer.
@@ -660,7 +684,7 @@ export class TeamApiServer {
   #sendAttentionOverflow(client: Ws.WebSocket, connection: EventClientState, snapshot: AgentRuntimeSnapshot): void {
     if (snapshot.attentionComplete || client.readyState !== webSockets.WebSocket.OPEN) return;
     const blocked = this.#blockedAgentIds(this.#connectionMember(connection));
-    for (const pending of this.#options.agents.attentionOverflowEvents()) {
+    for (const pending of this.#options.agents.attentionOverflowEvents(snapshot)) {
       const event = this.#eventFor(connection, pending);
       const required = eventCapability(event);
       if (required && !connection.capabilities.has(required)) continue;
@@ -1422,23 +1446,31 @@ export class TeamApiServer {
         // The list of hidden agents does not name an agent that this peer cannot see, as `/v1/hidden-agents` does.
         // An escalation names no agent that this peer cannot see either.
         outgoing = JSON.stringify(
-          optional.type === INPUT_ESCALATIONS_EVENT
+          optional.type === ATTENTION_ITEMS_EVENT
             ? {
                 type: optional.type,
-                escalations: visibleInputEscalations(
-                  optional.escalations,
+                items: visibleAttentionItems(
+                  optional.items,
                   this.#escalationHiddenAgentIds(connection.capabilities, blocked),
                 ),
               }
-            : optional.type === "hidden-agents-changed"
+            : optional.type === INPUT_ESCALATIONS_EVENT
               ? {
                   type: optional.type,
-                  ...visibleSnapshot(
-                    optional,
-                    this.hiddenAgentIds(eventProtocol(connection.capabilities), connection.capabilities, member),
+                  escalations: visibleInputEscalations(
+                    optional.escalations,
+                    this.#escalationHiddenAgentIds(connection.capabilities, blocked),
                   ),
                 }
-              : optional,
+              : optional.type === "hidden-agents-changed"
+                ? {
+                    type: optional.type,
+                    ...visibleSnapshot(
+                      optional,
+                      this.hiddenAgentIds(eventProtocol(connection.capabilities), connection.capabilities, member),
+                    ),
+                  }
+                : optional,
         );
       } else if (event.type === "conversation" && supportsRuntimeSnapshots) {
         conversationInvalidation ??=
@@ -1712,6 +1744,7 @@ export class TeamApiServer {
         connection.snapshotResponsePending = false;
         if (!error) {
           this.#sendInputEscalations(client, connection, snapshot);
+          this.#sendAttentionItems(client, connection);
           this.#sendAttentionOverflow(client, connection, snapshot);
         }
         if (error && client.readyState === webSockets.WebSocket.OPEN) {
@@ -2311,6 +2344,7 @@ function eventCapability(event: AgentEvent): TeamCurrentCapability | null {
   if (event.type === "turn-progress") return TEAM_AGENT_ACTIVITY_CAPABILITY;
   if (event.type === "runtime-snapshot") return "agent-runtime-snapshots";
   if (event.type === "agent-input-escalations-changed") return INPUT_ESCALATIONS_CAPABILITY;
+  if (event.type === "agent-attention-changed") return ATTENTION_ITEMS_CAPABILITY;
   if (event.type === "channel-message" || event.type === "channel-message-removed") return WORKSPACE_CAPABILITY;
   if (event.type === "channel-typing") return WORKSPACE_CAPABILITY;
   if (event.type === "workspace-fleet-changed") return WORKSPACE_CAPABILITY;

@@ -317,6 +317,7 @@ const fakeAgents: TeamApiAgents = {
   deleteAgent: (agentId) => Effect.sync(() => record("deleteAgent", agentId)),
   getRuntimeSnapshot: unused("getRuntimeSnapshot"),
   attentionOverflowEvents: () => [],
+  attentionItems: () => [],
   getUsage: unused("getUsage"),
   getAnalytics: unused("getAnalytics"),
   getHostAnalytics: unused("getHostAnalytics"),

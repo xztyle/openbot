@@ -1,5 +1,5 @@
 import { channelKind, channelVisibility, type DraftAttachment } from "@openbot/contracts/ipc";
-import { Button, IconButton, X } from "@openbot/ui";
+import { Button, ConfirmDialog, IconButton, X } from "@openbot/ui";
 import { AttachmentReferenceVisual } from "@openbot/ui/features/conversation/AttachmentReference";
 import { ComposerEditor } from "@openbot/ui/features/conversation/ComposerEditor";
 import type { ComposerTextFormat } from "@openbot/ui/features/conversation/composer-format";
@@ -12,7 +12,13 @@ import { deviceSendShortcut } from "../../send-shortcut-preference";
 import { PartialAttachmentImportError } from "../channels/channels-port";
 import { useWorkspace } from "./workspace-context";
 import { draftKey } from "./workspace-controller";
-import { readerJoined } from "./workspace-model";
+import { broadcastAudience, draftBroadcast, readerJoined } from "./workspace-model";
+
+/**
+ * A broadcast that would notify this many people or more asks first, as Slack does in a channel of
+ * six or more members. Agents do not count: they answer only when they are mentioned.
+ */
+const BROADCAST_CONFIRM_AUDIENCE = 5;
 
 /** The composer the reader used last. A file the desktop imports from a drop or a paste goes there. */
 let lastComposer: symbol | null = null;
@@ -55,6 +61,9 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const [focus, setFocus] = createSignal(untrack(() => props.focusRequest ?? 0));
   const [editText, setEditText] = createSignal("");
   const [textRequest, setTextRequest] = createSignal<{ id: number; text: string } | undefined>();
+  const [broadcastConfirm, setBroadcastConfirm] = createSignal<{ kind: "channel" | "here"; count: number } | null>(
+    null,
+  );
   createEffect(
     () => props.focusRequest ?? 0,
     (request) => {
@@ -198,8 +207,26 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const canSend = () =>
     !sending() && (value().trim().length > 0 || (editing() ? editedHasFiles() : attachments().length > 0));
 
-  async function submit() {
+  /** The broadcast in the draft that needs a confirmation before it goes, or null. */
+  function pendingBroadcast(): { kind: "channel" | "here"; count: number } | null {
+    const summary = ws.summary(props.channelId);
+    if (!summary || channelKind(summary) !== "channel") return null;
+    const kind = draftBroadcast(value());
+    if (!kind) return null;
+    const people = ws.env.people().map((person) => person.id);
+    const count = broadcastAudience(ws.directory(), summary, people);
+    return count >= BROADCAST_CONFIRM_AUDIENCE ? { kind, count } : null;
+  }
+
+  async function submit(broadcastConfirmed = false) {
     if (!canSend() || props.disabled) return;
+    if (!editing() && !broadcastConfirmed) {
+      const broadcast = pendingBroadcast();
+      if (broadcast) {
+        setBroadcastConfirm(broadcast);
+        return;
+      }
+    }
     setError(null);
     const current = editing();
     if (current) {
@@ -372,6 +399,26 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
             ? { channelName: props.alsoSendTo, checked: alsoSend(), onChange: setAlsoSend }
             : undefined
         }
+      />
+      <ConfirmDialog
+        open={broadcastConfirm() !== null}
+        tone="default"
+        title={t("workspace.app.composer.broadcast.title", { count: broadcastConfirm()?.count ?? 0 })}
+        description={t(
+          broadcastConfirm()?.kind === "here"
+            ? "workspace.app.composer.broadcast.here"
+            : "workspace.app.composer.broadcast.channel",
+          { channel: ws.summary(props.channelId)?.name ?? "" },
+        )}
+        confirmLabel={t("workspace.app.composer.broadcast.send")}
+        onCancel={() => {
+          setBroadcastConfirm(null);
+          setFocus((request) => request + 1);
+        }}
+        onConfirm={() => {
+          setBroadcastConfirm(null);
+          void submit(true);
+        }}
       />
     </div>
   );

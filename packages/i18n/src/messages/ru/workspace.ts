@@ -447,6 +447,17 @@ export const messages = {
   "workspace.app.composer.removeFile": "Удалить {name}",
   "workspace.app.composer.attachFailed": "Не удалось прикрепить файлы.",
   "workspace.app.composer.sendFailed": "Сообщение не отправлено. Оно осталось в поле ввода.",
+  "workspace.app.composer.broadcast.title": {
+    one: "Уведомить {count} человека?",
+    few: "Уведомить {count} человека?",
+    many: "Уведомить {count} человек?",
+    other: "Уведомить {count} человека?",
+  },
+  "workspace.app.composer.broadcast.channel":
+    "@channel отправляет уведомление каждому участнику #{channel}. Агенты не учитываются.",
+  "workspace.app.composer.broadcast.here":
+    "@here отправляет уведомление каждому участнику #{channel}, который в сети. Агенты не учитываются.",
+  "workspace.app.composer.broadcast.send": "Отправить",
   "workspace.app.composer.offline": "Сервер не подключён. Повторите попытку, когда он будет в сети.",
   "workspace.app.message.edit": "Изменить сообщение",
   "workspace.app.message.copyText": "Копировать текст",

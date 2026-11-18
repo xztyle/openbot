@@ -172,6 +172,26 @@ export function channelMembers(
   ];
 }
 
+/** `@channel`, `@everyone` or `@here` in a draft: the broadcast it sends, or null. */
+export function draftBroadcast(text: string): "channel" | "here" | null {
+  const match = /(?:^|[^\w@])@(channel|everyone|here)\b/iu.exec(text);
+  if (!match?.[1]) return null;
+  return match[1].toLowerCase() === "here" ? "here" : "channel";
+}
+
+/**
+ * How many people a broadcast in the channel notifies: its people but the reader. Agents do not
+ * count. A channel from before the workspace lists no people, so every person of the server reads it.
+ */
+export function broadcastAudience(
+  directory: WorkspaceDirectory,
+  channel: ChannelWorkspaceFields,
+  serverPeopleIds: readonly string[],
+): number {
+  const ids = humanIds(channel);
+  return (ids.length ? ids : serverPeopleIds).filter((id) => !directory.isReader(id)).length;
+}
+
 /** The other members of a DM or a group: everyone but the reader. */
 export function otherMembers(
   directory: WorkspaceDirectory,

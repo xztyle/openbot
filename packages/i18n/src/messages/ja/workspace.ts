@@ -347,6 +347,12 @@ export const messages = {
   "workspace.app.composer.removeFile": "{name} を削除",
   "workspace.app.composer.attachFailed": "ファイルを添付できませんでした。",
   "workspace.app.composer.sendFailed": "メッセージは送信されませんでした。入力欄に残っています。",
+  "workspace.app.composer.broadcast.title": { other: "{count} 人に通知しますか？" },
+  "workspace.app.composer.broadcast.channel":
+    "@channel は #{channel} のすべての人に通知します。エージェントは数に含まれません。",
+  "workspace.app.composer.broadcast.here":
+    "@here は #{channel} でオンラインのすべての人に通知します。エージェントは数に含まれません。",
+  "workspace.app.composer.broadcast.send": "送信",
   "workspace.app.composer.offline": "サーバーに接続されていません。オンラインになってからもう一度お試しください。",
   "workspace.app.message.edit": "メッセージを編集",
   "workspace.app.message.copyText": "テキストをコピー",

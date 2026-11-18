@@ -350,6 +350,15 @@ export const messages = {
   "workspace.app.composer.removeFile": "Kaldır: {name}",
   "workspace.app.composer.attachFailed": "Dosyalar eklenemedi.",
   "workspace.app.composer.sendFailed": "Mesaj gönderilmedi. Hâlâ yazma kutusunda duruyor.",
+  "workspace.app.composer.broadcast.title": {
+    one: "{count} kişiye bildirilsin mi?",
+    other: "{count} kişiye bildirilsin mi?",
+  },
+  "workspace.app.composer.broadcast.channel":
+    "@channel, #{channel} içindeki herkese bildirim gönderir. Ajanlar sayılmaz.",
+  "workspace.app.composer.broadcast.here":
+    "@here, #{channel} içinde çevrimiçi olan herkese bildirim gönderir. Ajanlar sayılmaz.",
+  "workspace.app.composer.broadcast.send": "Gönder",
   "workspace.app.composer.offline": "Sunucu bağlı değil. Çevrimiçi olduğunda tekrar deneyin.",
   "workspace.app.message.edit": "Mesajı düzenle",
   "workspace.app.message.copyText": "Metni kopyala",

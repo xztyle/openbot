@@ -5,3 +5,4 @@
 - In a workspace channel or thread on a phone, Return adds a line and only the send button sends, as in Slack. On a desktop the workspace composer uses your send-key setting.
 - On a phone, a long press on a message no longer opens two menus over each other.
 - On a phone, a long press on a workspace message opens its actions in a sheet: quick reactions, Reply in thread, Copy text, Copy link, Edit and Delete. The action bar under each message is gone.
+- In a workspace channel, a message with @channel or @here that would notify five or more people asks first. Agents do not count.

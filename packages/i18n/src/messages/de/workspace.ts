@@ -332,6 +332,15 @@ export const messages = {
   "workspace.app.composer.removeFile": "{name} entfernen",
   "workspace.app.composer.attachFailed": "Die Dateien konnten nicht angehängt werden.",
   "workspace.app.composer.sendFailed": "Die Nachricht wurde nicht gesendet. Sie steht noch im Eingabefeld.",
+  "workspace.app.composer.broadcast.title": {
+    one: "{count} Person benachrichtigen?",
+    other: "{count} Personen benachrichtigen?",
+  },
+  "workspace.app.composer.broadcast.channel":
+    "@channel benachrichtigt jede Person in #{channel}. Agenten zählen nicht mit.",
+  "workspace.app.composer.broadcast.here":
+    "@here benachrichtigt jede Person in #{channel}, die online ist. Agenten zählen nicht mit.",
+  "workspace.app.composer.broadcast.send": "Senden",
   "workspace.app.composer.offline": "Der Server ist nicht verbunden. Versuche es erneut, wenn er online ist.",
   "workspace.app.message.edit": "Nachricht bearbeiten",
   "workspace.app.message.copyText": "Text kopieren",

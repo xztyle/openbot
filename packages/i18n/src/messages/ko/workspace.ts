@@ -346,6 +346,12 @@ export const messages = {
   "workspace.app.composer.removeFile": "{name} 제거",
   "workspace.app.composer.attachFailed": "파일을 첨부하지 못했어요.",
   "workspace.app.composer.sendFailed": "메시지를 보내지 못했어요. 입력란에 그대로 있어요.",
+  "workspace.app.composer.broadcast.title": { other: "{count}명에게 알릴까요?" },
+  "workspace.app.composer.broadcast.channel":
+    "@channel은 #{channel}의 모든 사람에게 알림을 보냅니다. 에이전트는 포함되지 않습니다.",
+  "workspace.app.composer.broadcast.here":
+    "@here는 #{channel}에서 온라인인 모든 사람에게 알림을 보냅니다. 에이전트는 포함되지 않습니다.",
+  "workspace.app.composer.broadcast.send": "보내기",
   "workspace.app.composer.offline": "서버에 연결되어 있지 않아요. 온라인이 되면 다시 시도해 주세요.",
   "workspace.app.message.edit": "메시지 편집",
   "workspace.app.message.copyText": "텍스트 복사",

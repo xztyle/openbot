@@ -347,6 +347,12 @@ export const messages = defineMessages("workspace", {
   "workspace.app.composer.removeFile": "Remove {name}",
   "workspace.app.composer.attachFailed": "The files could not be attached.",
   "workspace.app.composer.sendFailed": "The message was not sent. It is still in the box.",
+  "workspace.app.composer.broadcast.title": { one: "Notify {count} person?", other: "Notify {count} people?" },
+  "workspace.app.composer.broadcast.channel":
+    "@channel sends a notification to every person in #{channel}. Agents are not counted.",
+  "workspace.app.composer.broadcast.here":
+    "@here sends a notification to every person in #{channel} who is online. Agents are not counted.",
+  "workspace.app.composer.broadcast.send": "Send",
   "workspace.app.composer.offline": "The server is not connected. Try again when it is online.",
   "workspace.app.message.edit": "Edit message",
   "workspace.app.message.copyText": "Copy text",

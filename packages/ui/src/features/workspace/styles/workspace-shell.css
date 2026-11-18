@@ -126,6 +126,11 @@
   .ws-phone-only {
     display: inline-flex;
   }
+
+  /* A pane with Back has one way out on a phone, as in Slack's app: Back, not Back and close. */
+  .ws-wide-only {
+    display: none;
+  }
 }
 
 /* Pane header ----------------------------------------------------------------------------------- */
@@ -503,8 +508,11 @@
   font-size: var(--openbot-text-sm);
 }
 
+/* The base reset gives a field its parent's text size; this field matches the Jump to field above it.
+ * A touch screen keeps its larger text, so iOS does not zoom into the field. */
 .ws-sidebar-filter {
   margin-top: var(--openbot-space-1);
+  font-size: var(--openbot-text-md);
 }
 
 .ws-sidebar-drag {

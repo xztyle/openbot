@@ -1,4 +1,4 @@
-import { channelVisibility } from "@openbot/contracts/ipc";
+import { channelKind, channelVisibility } from "@openbot/contracts/ipc";
 import { Workflow } from "@openbot/ui";
 import { type ActivityItem, ActivityView } from "@openbot/ui/features/workspace/ActivityView";
 import { ArtifactsView } from "@openbot/ui/features/workspace/ArtifactsView";
@@ -80,6 +80,12 @@ function channelName(ws: ReturnType<typeof useWorkspace>, channelId: string): st
   return channel ? conversationName(ws.directory(), channel) : undefined;
 }
 
+/** Whether a conversation is a DM or a group, which shows without `#`. */
+function isDirect(ws: ReturnType<typeof useWorkspace>, channelId: string): boolean {
+  const channel = ws.summary(channelId);
+  return channel !== undefined && channelKind(channel) !== "channel";
+}
+
 function WorkspaceActivityView() {
   const ws = useWorkspace();
   const items = createMemo((): ActivityItem[] =>
@@ -92,7 +98,8 @@ function WorkspaceActivityView() {
         id: item.id,
         kind: item.kind,
         actor,
-        channelName: channelName(ws, item.channelId),
+        // A DM shows as "Direct message", not as "in #Ana".
+        channelName: isDirect(ws, item.channelId) ? undefined : channelName(ws, item.channelId),
         preview: item.preview,
         emoji: item.emoji,
         at: Date.parse(item.at),
@@ -135,6 +142,7 @@ function WorkspaceThreadsView() {
         return {
           id: `${thread.channelId}/${thread.rootId}`,
           channelName: channelName(ws, thread.channelId) ?? "",
+          direct: isDirect(ws, thread.channelId),
           visibility: channel ? channelVisibility(channel) : "public",
           author: memberById(ws.directory(), thread.rootAuthor.id, thread.rootAuthor.name),
           text: [{ kind: "text", text: previewText(thread.rootText) }],

@@ -18,10 +18,12 @@
   gap: var(--openbot-space-2);
 }
 
+/* The name keeps its width and the topic gives way, as in Slack; a name too long for the row ends in "…". */
 .ws-channel-header-heading {
   min-width: 0;
+  max-width: 100%;
   margin: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
 }
 
 .ws-channel-header-name.ui-button {

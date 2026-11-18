@@ -42,7 +42,12 @@ export function WorkspacePaneHeader(props: WorkspacePaneHeaderProps): JSX.Elemen
         {props.actions}
         <Show when={props.onClose}>
           {(close) => (
-            <IconButton variant="ghost" label={t("common.close")} onClick={() => close()()}>
+            <IconButton
+              variant="ghost"
+              class={props.onBack ? "ws-wide-only" : undefined}
+              label={t("common.close")}
+              onClick={() => close()()}
+            >
               <X />
             </IconButton>
           )}

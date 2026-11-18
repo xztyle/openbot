@@ -1,7 +1,7 @@
 import type { JSX } from "@solidjs/web";
 import { For, Match, Show, Switch } from "solid-js";
 import { Button } from "../../button";
-import { CheckCheck, Hash, Lock, MessageSquareText } from "../../icons";
+import { CheckCheck, Hash, Lock, MessageSquare, MessageSquareText } from "../../icons";
 import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmptyState, ErrorState, LoadingState } from "../../view-state";
@@ -15,8 +15,11 @@ import type { ChannelVisibility, MessageSegment, WorkspaceMember } from "./works
 export interface ThreadListItem {
   /** The id of the root message. */
   id: string;
+  /** The channel without `#`, or the names of the others in a DM or a group. */
   channelName: string;
   visibility: ChannelVisibility;
+  /** The thread is in a DM or a group: its place shows without `#`. */
+  direct?: boolean | undefined;
   author: WorkspaceMember;
   text: readonly MessageSegment[];
   replyCount: number;
@@ -89,9 +92,14 @@ export function ThreadsView(props: ThreadsViewProps): JSX.Element {
                   onOpen={() => props.onOpen(thread().id)}
                   title={
                     <>
-                      <Show when={thread().visibility === "private"} fallback={<Hash aria-hidden="true" />}>
-                        <Lock aria-hidden="true" />
-                      </Show>
+                      <Switch fallback={<Hash aria-hidden="true" />}>
+                        <Match when={thread().direct}>
+                          <MessageSquare aria-hidden="true" />
+                        </Match>
+                        <Match when={thread().visibility === "private"}>
+                          <Lock aria-hidden="true" />
+                        </Match>
+                      </Switch>
                       {thread().channelName}
                     </>
                   }

@@ -221,9 +221,11 @@ function VisualFrame(props: ChatVisualProps) {
       }
     }
   };
+  // Heard first, in the capture phase: a dialog around the message would take Escape and close too.
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Escape" && shown() && !event.defaultPrevented) {
       event.preventDefault();
+      event.stopPropagation();
       exitFullscreen();
     }
   };
@@ -235,12 +237,12 @@ function VisualFrame(props: ChatVisualProps) {
   onSettled(() => {
     if (frame) setTheme(visualTheme(frame));
     window.addEventListener("message", onMessage);
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
     box?.addEventListener("toggle", onToggle);
     box?.addEventListener("click", onBoxClick);
     return () => {
       window.removeEventListener("message", onMessage);
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, true);
       box?.removeEventListener("toggle", onToggle);
       box?.removeEventListener("click", onBoxClick);
     };

@@ -3,7 +3,7 @@ import { attachmentReferenceIds } from "@openbot/contracts/attachment-references
 import { serializeChatTagReference } from "@openbot/contracts/chat-tag-references";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type { DraftAttachment } from "@openbot/contracts/ipc";
-import { AtSign, Badge, Blocks, createFieldListPress, Hash, Listbox, Lock, Puzzle } from "@openbot/ui";
+import { AtSign, Badge, Blocks, createFieldListPress, Hash, Listbox, Lock, overlayMount, Puzzle } from "@openbot/ui";
 import { usesTouchLayout } from "@openbot/ui/utils";
 import { Dynamic, Portal } from "@solidjs/web";
 import {
@@ -1196,7 +1196,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
         </div>
       </Show>
       <Show when={pickerOpen()}>
-        <Portal mount={pickerFrame().mount ?? document.body}>
+        <Portal mount={pickerFrame().mount ?? overlayMount(editor)}>
           <div
             class="mention-picker"
             {...pickerPress.rootProps}

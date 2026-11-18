@@ -1,4 +1,4 @@
-import { Button, ErrorReference, SettingsSection, Text } from "@openbot/ui";
+import { Button, ErrorReference, overlayMount, SettingsSection, Text } from "@openbot/ui";
 import { Portal } from "@solidjs/web";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { useText } from "../../text";
@@ -92,7 +92,7 @@ export function ProfileHeatmap(props: { days: ProfileDay[]; label: string }) {
       </div>
       <Show when={hover()}>
         {(current) => (
-          <Portal mount={root?.closest<HTMLElement>("[role=dialog]") ?? document.body}>
+          <Portal mount={overlayMount(root)}>
             <div
               class="ui-chart-tooltip profile-heat-tooltip"
               aria-hidden="true"

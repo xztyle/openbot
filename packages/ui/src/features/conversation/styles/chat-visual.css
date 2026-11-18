@@ -86,6 +86,9 @@
   -webkit-backdrop-filter: blur(4px);
   color: var(--openbot-text-primary);
   -webkit-app-region: no-drag;
+  /* The top layer paints it above a modal dialog, but it still inherits the dialog's
+     `pointer-events: none` on the body. Opened from a message in a dialog, it took no press. */
+  pointer-events: auto;
 }
 
 .chat-visual-box:popover-open::backdrop {

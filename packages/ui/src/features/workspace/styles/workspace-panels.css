@@ -723,3 +723,11 @@
 .ws-channel-header-bell[data-muted] {
   color: var(--openbot-text-muted);
 }
+
+/* "is thinking…" and the typing dots pulse; a reader who asks for less motion gets them still. */
+@media (prefers-reduced-motion: reduce) {
+  .ws-typing-agent[data-state="thinking"] .ws-typing-agent-text,
+  .ws-typing-dots > i {
+    animation: none;
+  }
+}

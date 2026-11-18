@@ -133,9 +133,13 @@ Source: `packages/ui/src/features/workspace/WorkspacePaneHeader.tsx`, `.ws-view*
 
 Decided 2026-11-18 (slack-parity.md D1, B4):
 
-- Fixed rows at the top: Threads, Activity, and, when the host serves them, Unreads, Drafts & sent and
-  Saved. Fleet stays visible (our agents tab).
-- Space agents, Artifacts, Between agents, Storage, Secrets and Apps are under one **More** row.
+- Fixed rows at the top: Unreads, Threads, Activity, Later (when the host keeps saved messages; the
+  row counts the open ones) and Fleet (our agents tab). Drafts & sent comes when drafts sync.
+- DMs, Space agents, Artifacts, Between agents, Storage, Secrets and Apps are under one **More** row.
+- The top bar of the main pane holds the message search (⌘G, `/`) and the shortcuts sheet (⌘/). A
+  phone has no top bar: the search opens from the sidebar as a full-screen view.
+- A view that gathers messages (Unreads, Later, search results) opens the exact message: its channel,
+  or its thread for a reply, scrolled to and marked.
 - Groups: Channels, Direct messages. A collapsed group still shows its unread rows, its mention rows
   and the open conversation. The collapse state is saved with the sidebar preferences.
 - Activity opens the exact message (scrolled to and highlighted); its badge does not count reactions;
@@ -194,3 +198,4 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 9 | Move template install, custom provider, vault, OpenCode key, chat apps, saved replies, more providers to `FormDialog`; join server button order; close buttons | Done; Publish agent and Join/Add server keep their own frames |
 | 10 | Spanish wording: Quitar for Remove, Eliminar for Delete, Salir de for Leave; one "Deleting…", "Removing…" and "Undo" key | Done |
 | 11 | One row component for workspace lists (`WorkspaceListRow` in Threads, Activity, Between agents, Space agents, Secrets) | Done |
+| 12 | Unreads, Later, DMs, message search (top bar), Jump to frecency, Browse filters, shortcuts sheet (slack-parity P2, P4) | Done on `stream/p24`; E2E `scripts/workspace-inbox-e2e.ts` |

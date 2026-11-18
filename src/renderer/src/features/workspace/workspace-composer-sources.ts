@@ -85,12 +85,16 @@ export function useComposerSources(channelId: () => string) {
     const summary = ws.summary(channelId());
     return summary ? channelKind(summary) !== "dm" : true;
   };
-  /** Slack's `:smile`: the emoji whose short code or name starts with the letters, in the reader's skin tone. */
-  const emojiSearch = (query: string): ComposerEmoji[] =>
+  return { people, mentionAgents, channelLinks, isChannel, emojiSearch: useEmojiSearch() };
+}
+
+/** Slack's `:smile`: the emoji whose short code or name starts with the letters, in the reader's skin tone. */
+export function useEmojiSearch(): (query: string) => ComposerEmoji[] {
+  const ws = useWorkspace();
+  return (query) =>
     searchEmoji(query, 8).map((entry) => ({
       emoji: withSkinTone(entry, ws.state.emoji.skinTone),
       name: entry.n,
       code: entry.k?.startsWith(":") ? (entry.k.slice(1).split(" ")[0] ?? entry.n) : entry.n.replaceAll(" ", "_"),
     }));
-  return { people, mentionAgents, channelLinks, isChannel, emojiSearch };
 }

@@ -57,10 +57,10 @@ import { groupedMessageIds } from "./agent-message-timeline";
 import { continuesSenderRun } from "./chat-grouping";
 import { isChatVisualAppShortcut } from "./chat-visual-shortcuts";
 import { chatVisualPageUrl } from "./chat-visual-url";
-import { useConversationRowLayout } from "./conversation-row-layout";
 import { conversationRoutinesApi, conversationRuntime } from "./conversation-runtime";
 import { useConversationViewScope } from "./conversation-scope";
 import type { ConversationProps } from "./conversation-types";
+import { useConversationWorkspaceLayout } from "./conversation-workspace-layout";
 import { agentSkillsMode } from "./installed-skills-source";
 import { MarketplaceSuggestionChatCard, marketplaceSuggestionKnown } from "./MarketplaceSuggestionChatCard";
 import { McpSignInChatCard } from "./McpSignInChatCard";
@@ -334,7 +334,7 @@ export function ConversationTimeline() {
    * The workspace's rows, in the owner's DM with an agent: faces, names, the action bar and the
    * long-press sheet of a channel instead of bubbles. A channel shown in this view keeps its own.
    */
-  const rowLayout = channel ? null : useConversationRowLayout();
+  const rowLayout = channel ? null : useConversationWorkspaceLayout();
   /** The face and the name of a row in the workspace layout. */
   const rowMember = (message: AgentMessage, layout: NonNullable<typeof rowLayout>): WorkspaceMember => {
     const sender = otherSender(message);

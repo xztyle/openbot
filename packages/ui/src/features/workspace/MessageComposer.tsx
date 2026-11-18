@@ -45,6 +45,53 @@ const FORMATS = [
   { format: "code-block", label: "workspace.composer.codeBlock", icon: SquareCode, shortcut: "⌘⌥⇧C" },
 ] as const satisfies readonly { format: ComposerFormat; label: string; icon: typeof Bold; shortcut: string }[];
 
+/** The formatting toolbar at the top of a message box. Each press applies its format to the selection. */
+export function ComposerFormatToolbar(props: {
+  onFormat: (format: ComposerFormat) => void;
+  /** The formats at the caret, to show pressed buttons. */
+  activeFormats?: readonly ComposerFormat[] | undefined;
+  disabled?: boolean | undefined;
+  class?: string | undefined;
+}): JSX.Element {
+  const { t } = useText();
+  const active = (format: ComposerFormat) => props.activeFormats?.includes(format) ?? false;
+  return (
+    <div class={cx("ws-composer-toolbar", props.class)} role="toolbar" aria-label={t("workspace.composer.formatting")}>
+      <For each={FORMATS}>
+        {(item) => (
+          <IconButton
+            variant="ghost"
+            size="icon-xs"
+            label={t(item.label)}
+            tooltip={`${t(item.label)} ${item.shortcut}`}
+            aria-pressed={active(item.format) ? "true" : "false"}
+            disabled={props.disabled}
+            onClick={() => props.onFormat(item.format)}
+          >
+            <item.icon />
+          </IconButton>
+        )}
+      </For>
+    </div>
+  );
+}
+
+/** Slack's "Aa": shows or hides the formatting toolbar. */
+export function ComposerFormatToggle(props: { shown: boolean; onChange: (shown: boolean) => void }): JSX.Element {
+  const { t } = useText();
+  return (
+    <IconButton
+      variant="ghost"
+      size="icon-xs"
+      label={t(props.shown ? "workspace.composer.hideFormatting" : "workspace.composer.showFormatting")}
+      aria-pressed={props.shown ? "true" : "false"}
+      onClick={() => props.onChange(!props.shown)}
+    >
+      <Type />
+    </IconButton>
+  );
+}
+
 export interface ComposerAlsoSend {
   channelName: string;
   checked: boolean;
@@ -108,31 +155,20 @@ export function MessageComposer(props: MessageComposerProps): JSX.Element {
     else setLocalToolbar(shown);
   };
   const [emojiOpen, setEmojiOpen] = createSignal(false);
-  const active = (format: ComposerFormat) => props.activeFormats?.includes(format) ?? false;
   return (
     <div class={cx("ws-composer", props.class)} data-disabled={props.disabled ? "" : undefined}>
       <Show when={props.notice}>
         <div class="ws-composer-notice">{props.notice}</div>
       </Show>
       <section class="ws-composer-box" aria-label={props.label}>
-        <Show when={props.onFormat && toolbar()}>
-          <div class="ws-composer-toolbar" role="toolbar" aria-label={t("workspace.composer.formatting")}>
-            <For each={FORMATS}>
-              {(item) => (
-                <IconButton
-                  variant="ghost"
-                  size="icon-xs"
-                  label={t(item.label)}
-                  tooltip={`${t(item.label)} ${item.shortcut}`}
-                  aria-pressed={active(item.format) ? "true" : "false"}
-                  disabled={props.disabled}
-                  onClick={() => props.onFormat?.(item.format)}
-                >
-                  <item.icon />
-                </IconButton>
-              )}
-            </For>
-          </div>
+        <Show when={toolbar() ? props.onFormat : undefined}>
+          {(onFormat) => (
+            <ComposerFormatToolbar
+              onFormat={onFormat()}
+              activeFormats={props.activeFormats}
+              disabled={props.disabled}
+            />
+          )}
         </Show>
         <Show when={props.attachments}>
           <div class="ws-composer-attachments">{props.attachments}</div>
@@ -155,15 +191,7 @@ export function MessageComposer(props: MessageComposerProps): JSX.Element {
               )}
             </Show>
             <Show when={props.onFormat}>
-              <IconButton
-                variant="ghost"
-                size="icon-xs"
-                label={t(toolbar() ? "workspace.composer.hideFormatting" : "workspace.composer.showFormatting")}
-                aria-pressed={toolbar() ? "true" : "false"}
-                onClick={() => setToolbar(!toolbar())}
-              >
-                <Type />
-              </IconButton>
+              <ComposerFormatToggle shown={toolbar()} onChange={setToolbar} />
             </Show>
             <Show when={props.emojiPicker}>
               {(picker) => (

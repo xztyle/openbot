@@ -2,9 +2,9 @@ import type { WorkspaceMember } from "@openbot/ui/features/workspace/workspace-t
 import type { JSX } from "@solidjs/web";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import {
-  type ConversationRowLayout,
-  ConversationRowLayoutContext,
-} from "../../src/features/conversation/conversation-row-layout";
+  type ConversationWorkspaceLayout,
+  ConversationWorkspaceLayoutContext,
+} from "../../src/features/conversation/conversation-workspace-layout";
 import * as Chat from "../Conversation.stories";
 import { STORY_AGENTS } from "../fixtures";
 
@@ -16,7 +16,7 @@ import { STORY_AGENTS } from "../fixtures";
 
 const reader: WorkspaceMember = { id: "preview-user", kind: "human", name: "Preview User", presence: "active" };
 
-const layout: ConversationRowLayout = {
+const layout: ConversationWorkspaceLayout = {
   reader: () => reader,
   member: (id, fallbackName) => {
     const agent = STORY_AGENTS.find((candidate) => candidate.id === id);
@@ -34,15 +34,21 @@ const layout: ConversationRowLayout = {
   profile: () => null,
   quickReactions: () => ["✅", "👀", "🙌"],
   emojiPicker: { recent: ["🎉", "🚀"], skinTone: 0, onSkinToneChange: () => undefined },
+  composer: {
+    toolbarShown: () => true,
+    setToolbarShown: () => undefined,
+    emojiSearch: () => [],
+    noteEmoji: () => undefined,
+  },
 };
 
 function AgentDmFrame(props: { children: JSX.Element }) {
   return (
-    <ConversationRowLayoutContext value={layout}>
+    <ConversationWorkspaceLayoutContext value={layout}>
       <section class="ws-agent-dm" style={{ height: "100vh" }}>
         <div class="ws-agent-dm-body">{props.children}</div>
       </section>
-    </ConversationRowLayoutContext>
+    </ConversationWorkspaceLayoutContext>
   );
 }
 

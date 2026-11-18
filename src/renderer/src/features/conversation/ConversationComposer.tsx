@@ -30,6 +30,8 @@ import {
   Mic,
   Plus,
   Puzzle,
+  Send,
+  SmilePlus,
 } from "@openbot/ui";
 import { fileBadge } from "@openbot/ui/features/conversation/AttachmentCards";
 import { attachmentReferenceTone } from "@openbot/ui/features/conversation/AttachmentReference";
@@ -50,6 +52,12 @@ import { ReplyQuote } from "@openbot/ui/features/conversation/ReplyQuote";
 import { SavedReplies } from "@openbot/ui/features/conversation/SavedReplies";
 import { SpeakingBar } from "@openbot/ui/features/conversation/SpeakingBar";
 import { VoiceRecordingMorph, voiceButtonLabel } from "@openbot/ui/features/conversation/VoiceRecordingMorph";
+import { EmojiPickerPopover } from "@openbot/ui/features/workspace/EmojiPicker";
+import {
+  type ComposerFormat,
+  ComposerFormatToggle,
+  ComposerFormatToolbar,
+} from "@openbot/ui/features/workspace/MessageComposer";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, createStore, For, Loading, lazy, onCleanup, Show } from "solid-js";
 import { reportErrorBanner, reportNotification } from "../../error-reports";
@@ -58,6 +66,7 @@ import { speechReading } from "../speech/speech-playback";
 import { stopSpokenReply } from "../speech/speech-replies";
 import { copyComposerSelection, readComposerCopy } from "./composer-clipboard";
 import { useConversationViewScope } from "./conversation-scope";
+import { useConversationWorkspaceLayout } from "./conversation-workspace-layout";
 import { defaultSavedReplies, readSavedReplies, SAVED_REPLIES_STORAGE_KEY, writeSavedReplies } from "./saved-replies";
 
 // Module scope: the composer remounts on navigation, and a dismissed notice must stay dismissed.
@@ -143,6 +152,18 @@ export function ConversationComposer() {
         : t("composer.placeholder.messageAgent");
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [skillPickerRequest, setSkillPickerRequest] = createSignal(0);
+  /*
+   * The owner's DM with an agent has the workspace's message box: the formatting toolbar, "Aa" and
+   * emoji, in a box that keeps two rows. The agent's own controls stay: the "+" menu, the context
+   * meter, the microphone, Stop and Send.
+   */
+  const workspaceLayout = channel ? null : useConversationWorkspaceLayout();
+  const workspaceBox = workspaceLayout?.composer;
+  const [formatRequest, setFormatRequest] = createSignal<{ id: number; format: ComposerFormat } | undefined>();
+  const [textRequest, setTextRequest] = createSignal<{ id: number; text: string } | undefined>();
+  const [emojiOpen, setEmojiOpen] = createSignal(false);
+  const applyFormat = (next: ComposerFormat) =>
+    setFormatRequest((current) => ({ id: (current?.id ?? 0) + 1, format: next }));
   let skillPickerChosen = false;
   // A pending Save keeps its exact request for retry. Block changes until retry or cancel.
   const savePending = () => Boolean(editingDeliveryId() && editingPendingSave());
@@ -358,6 +379,8 @@ export function ConversationComposer() {
     return t("composer.placeholder.connectHost");
   };
   /** Send, or Stop while the agent works and the message box is empty. */
+  /** The workspace's box sends with its paper plane, as under a channel. */
+  const sendIcon = () => (workspaceBox ? <Send aria-hidden="true" /> : <ArrowUp aria-hidden="true" />);
   const SendControl = () => (
     <Show
       when={props.activeTurnId && !editingDeliveryId() && !composerHasContent() && voicePhase() !== "recording"}
@@ -394,7 +417,7 @@ export function ConversationComposer() {
           onPointerDown={keepComposerFocusOnSendPress}
           onClick={submit}
         >
-          <Show when={submitting()} fallback={<ArrowUp aria-hidden="true" />}>
+          <Show when={submitting()} fallback={sendIcon()}>
             <LoaderCircle class="composer-spinner" aria-hidden="true" />
           </Show>
         </Button>
@@ -678,8 +701,12 @@ export function ConversationComposer() {
         </Show>
         <div
           class="composer"
+          data-layout={workspaceBox ? "workspace" : undefined}
+          data-has-content={composerHasContent() ? "" : undefined}
           data-compact={
-            currentDraft().text.includes("\n") || unreferencedDraftAttachments().length > 0 ? undefined : ""
+            workspaceBox || currentDraft().text.includes("\n") || unreferencedDraftAttachments().length > 0
+              ? undefined
+              : ""
           }
           data-has-attachments={unreferencedDraftAttachments().length > 0 ? "" : undefined}
           onPointerDown={(event) => {
@@ -691,6 +718,13 @@ export function ConversationComposer() {
             setComposerFocusRequest((current) => current + 1);
           }}
         >
+          <Show when={workspaceBox?.toolbarShown()}>
+            <ComposerFormatToolbar
+              class="composer-format-toolbar"
+              onFormat={applyFormat}
+              disabled={submitting() || voicePhase() === "transcribing" || editorLocked() || savePending()}
+            />
+          </Show>
           <Show when={unreferencedDraftAttachments().length > 0}>
             <div class="composer-attachments">
               <For each={unreferencedDraftAttachments()}>
@@ -747,6 +781,11 @@ export function ConversationComposer() {
               }}
               onSubmit={submit}
               sendShortcut={deviceSendShortcut(props.platform)}
+              formatRequest={formatRequest()}
+              formatShortcuts={Boolean(workspaceBox)}
+              codeFenceLines={Boolean(workspaceBox)}
+              textRequest={textRequest()}
+              emojiSearch={workspaceBox?.emojiSearch}
               onPickerOpenChange={setPickerOpen}
               dictation={{ text: voiceLiveText(), final: voicePhase() === "transcribing" }}
               onPasteFiles={pasteFiles}
@@ -877,6 +916,28 @@ export function ConversationComposer() {
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
+            <Show when={workspaceBox}>
+              {(box) => (
+                <div class="composer-workspace-tools">
+                  <ComposerFormatToggle shown={box().toolbarShown()} onChange={box().setToolbarShown} />
+                  <EmojiPickerPopover
+                    open={emojiOpen()}
+                    onOpenChange={setEmojiOpen}
+                    trigger={<SmilePlus aria-hidden="true" />}
+                    triggerLabel={t("workspace.composer.emoji")}
+                    triggerClass="composer-emoji"
+                    placement="top-start"
+                    onPick={(emoji) => {
+                      box().noteEmoji(emoji);
+                      setTextRequest((current) => ({ id: (current?.id ?? 0) + 1, text: emoji }));
+                    }}
+                    recent={workspaceLayout?.emojiPicker.recent}
+                    skinTone={workspaceLayout?.emojiPicker.skinTone}
+                    onSkinToneChange={workspaceLayout?.emojiPicker.onSkinToneChange}
+                  />
+                </div>
+              )}
+            </Show>
             <div class="composer-primary-actions">
               <Show when={context()?.usage}>
                 {(usage) => (

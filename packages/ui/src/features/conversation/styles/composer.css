@@ -1010,3 +1010,61 @@
   height: 100%;
   object-fit: cover;
 }
+
+/*
+ * The workspace's message box, in the owner's DM with an agent: the box of a channel, with the
+ * formatting toolbar on top, the text, and a row of tools under it. The agent's "+" menu, context
+ * meter, microphone and Stop keep their places in that row; Send takes the success colour when there
+ * is a message.
+ */
+.composer[data-layout="workspace"] {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--openbot-border-focus);
+  background: var(--openbot-bg-surface);
+  padding: 0;
+}
+
+.composer[data-layout="workspace"]:focus-within {
+  border-color: var(--openbot-text-secondary);
+  box-shadow: none;
+}
+
+.composer[data-layout="workspace"] .composer-attachments {
+  padding: var(--openbot-space-2) var(--openbot-space-3) 0;
+}
+
+.composer[data-layout="workspace"] .composer-input-label {
+  min-height: var(--openbot-control-md);
+  align-items: stretch;
+  padding: var(--openbot-space-2) var(--openbot-space-3);
+}
+
+.composer[data-layout="workspace"] .composer-editor-surface {
+  font-size: var(--openbot-text-lg);
+}
+
+.composer[data-layout="workspace"] .composer-toolbar {
+  padding: var(--openbot-space-1);
+}
+
+.composer-workspace-tools {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--openbot-space-0-5);
+}
+
+.composer[data-layout="workspace"] .voice-button:not(.voice-button-active) {
+  border-radius: var(--openbot-radius-md);
+  background: transparent;
+  color: var(--openbot-text-dim);
+}
+
+.composer[data-layout="workspace"][data-has-content] .voice-button:not(.voice-button-active):not(:disabled) {
+  background: var(--openbot-success);
+  color: var(--openbot-text-on-status);
+}

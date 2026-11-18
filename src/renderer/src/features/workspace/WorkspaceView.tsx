@@ -5,7 +5,10 @@ import { WorkspaceLayout } from "@openbot/ui/features/workspace/WorkspaceLayout"
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createMemo, Match, type ParentProps, Show, Switch } from "solid-js";
-import { type ConversationRowLayout, ConversationRowLayoutContext } from "../conversation/conversation-row-layout";
+import {
+  type ConversationWorkspaceLayout,
+  ConversationWorkspaceLayoutContext,
+} from "../conversation/conversation-workspace-layout";
 import { WorkspaceChannelPane } from "./WorkspaceChannelPane";
 import { WorkspaceDetailsPanel } from "./WorkspaceDetailsPanel";
 import { WorkspaceDialogs } from "./WorkspaceDialogs";
@@ -15,6 +18,7 @@ import { WorkspaceThreadPanel } from "./WorkspaceThreadPanel";
 import { WorkspaceTopBar } from "./WorkspaceTopBar";
 import { WorkspaceChannelArtifacts, WorkspaceViewPane } from "./WorkspaceViews";
 import { WorkspaceWelcome } from "./WorkspaceWelcome";
+import { composerToolbar, useEmojiSearch } from "./workspace-composer-sources";
 import { useWorkspace } from "./workspace-context";
 import { agentMember, agentWorking, memberById } from "./workspace-model";
 import { WorkspaceKeyboard } from "./workspace-shortcuts";
@@ -115,7 +119,8 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
   const { t } = useText();
   const workspaceMenu = useWorkspaceMenu();
   const agent = () => ws.env.agents().find((candidate) => candidate.id === props.agentId);
-  const rows: ConversationRowLayout = {
+  const toolbar = composerToolbar("main");
+  const rows: ConversationWorkspaceLayout = {
     reader: () => {
       const reader = ws.env.reader();
       if (reader.id) return memberById(ws.directory(), reader.id);
@@ -132,9 +137,15 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
     profile: (member) => <MemberProfile member={member} />,
     quickReactions: () => ws.quickReactions(),
     emojiPicker: ws.reactionPicker,
+    composer: {
+      toolbarShown: () => toolbar.shown(),
+      setToolbarShown: (shown) => toolbar.setShown(shown),
+      emojiSearch: useEmojiSearch(),
+      noteEmoji: (emoji) => ws.noteEmoji(emoji),
+    },
   };
   return (
-    <ConversationRowLayoutContext value={rows}>
+    <ConversationWorkspaceLayoutContext value={rows}>
       <WorkspaceContextMenu
         items={workspaceMenu}
         label={t("workspace.sidebar.workspaceMenu", { name: ws.env.serverName() })}
@@ -159,6 +170,6 @@ export function WorkspaceAgentFrame(props: ParentProps<{ agentId: string }>) {
           <div class="ws-agent-dm-body">{props.children}</div>
         </section>
       </WorkspaceContextMenu>
-    </ConversationRowLayoutContext>
+    </ConversationWorkspaceLayoutContext>
   );
 }

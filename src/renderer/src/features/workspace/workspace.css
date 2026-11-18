@@ -606,6 +606,12 @@
   padding-inline-start: calc(36px + var(--openbot-space-2) + var(--openbot-space-4) - var(--openbot-space-3));
 }
 
+/* The message box stands as under a channel: 16px from the edges of the pane. */
+.ws-agent-dm .conversation-panel > .composer-wrap {
+  padding-inline: var(--openbot-space-4);
+  padding-bottom: var(--openbot-space-4);
+}
+
 /* The DM header names the agent, so the chat header keeps only its controls. */
 .ws-agent-dm-body .conversation-header .conversation-heading-group {
   visibility: hidden;

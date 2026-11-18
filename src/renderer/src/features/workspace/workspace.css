@@ -327,6 +327,17 @@
   border-color: var(--openbot-warning);
 }
 
+/* A message edited in place: the box takes the width of the text, with Cancel and Save. */
+.ws-message-edit .ws-composer {
+  padding: var(--openbot-space-1) 0 0;
+}
+
+.ws-message-edit-hint {
+  margin: var(--openbot-space-1) 0 0;
+  color: var(--openbot-text-muted);
+  font-size: var(--openbot-text-sm);
+}
+
 .ws-composer-files {
   display: flex;
   flex-wrap: wrap;

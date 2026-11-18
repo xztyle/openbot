@@ -59,6 +59,11 @@ export interface MessageRowProps {
   menuItems?: readonly WorkspaceMenuItem[] | undefined;
   /** Draws the author's profile card, which the avatar and the name open. */
   profile?: (() => JSX.Element) | undefined;
+  /**
+   * An editor in place of the text, as Slack's edit in place: while it is set, the row shows it
+   * instead of the text, the content, the reactions and the thread, and has no action bar.
+   */
+  editor?: JSX.Element;
   class?: string;
 }
 
@@ -157,9 +162,16 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
               </time>
             </div>
           </Show>
+          <Show when={props.editor}>
+            <div class="ws-message-editor">{props.editor}</div>
+          </Show>
           <Show
-            when={!props.deleted}
-            fallback={<p class="ws-message-text ws-message-deleted">{t("workspace.message.deleted")}</p>}
+            when={!props.deleted && !props.editor}
+            fallback={
+              <Show when={!props.editor}>
+                <p class="ws-message-text ws-message-deleted">{t("workspace.message.deleted")}</p>
+              </Show>
+            }
           >
             <Show when={props.text?.length}>
               <p class="ws-message-text">
@@ -170,6 +182,10 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
               </p>
             </Show>
             {props.children}
+            {/* A message drawn by the content renderer has no text run: the mark goes under it. */}
+            <Show when={props.edited && !props.text?.length}>
+              <span class="ws-message-edited ws-message-edited-block">{t("workspace.message.edited")}</span>
+            </Show>
             <Show when={props.reactions?.length}>
               <ReactionBar
                 reactions={props.reactions ?? []}
@@ -184,7 +200,7 @@ export function MessageRow(props: MessageRowProps): JSX.Element {
             </Show>
           </Show>
         </div>
-        <Show when={!touch && armed() && !props.deleted}>
+        <Show when={!touch && armed() && !props.deleted && !props.editor}>
           <div class="ws-message-actions" role="toolbar" aria-label={t("workspace.message.actions")}>
             <Show when={props.onToggleReaction}>
               {(toggle) => (

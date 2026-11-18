@@ -1,9 +1,19 @@
 /**
  * Markdown formats that the workspace composer puts around the selection, as Slack's formatting
  * toolbar does. The editor holds plain text with chat tags, so a format is text: `**bold**`,
- * `_italic_`, `~~strike~~`, `` `code` ``, `[text](url)`, and list markers at the start of lines.
+ * `_italic_`, `~~strike~~`, `` `code` ``, `[text](url)`, list markers and `> ` at the start of lines,
+ * and a ```` ``` ```` fence around a code block.
  */
-export type ComposerTextFormat = "bold" | "italic" | "strike" | "code" | "link" | "bulleted-list" | "numbered-list";
+export type ComposerTextFormat =
+  | "bold"
+  | "italic"
+  | "strike"
+  | "code"
+  | "link"
+  | "bulleted-list"
+  | "numbered-list"
+  | "quote"
+  | "code-block";
 
 export interface ComposerTextRange {
   start: number;
@@ -33,6 +43,8 @@ export function applyComposerFormat(
   const start = Math.max(0, Math.min(selection.start, selection.end, value.length));
   const end = Math.min(value.length, Math.max(selection.start, selection.end));
   if (format === "bulleted-list" || format === "numbered-list") return toggleList(value, start, end, format);
+  if (format === "quote") return toggleQuote(value, start, end);
+  if (format === "code-block") return codeBlock(value, start, end);
   if (format === "link") return link(value, start, end);
   const selected = value.slice(start, end);
   if (format === "code" && selected.includes("\n")) return wrap(value, start, end, "```\n", "\n```");
@@ -99,10 +111,56 @@ function toggleList(
   };
 }
 
+/** Puts `> ` before each line of the selection, or takes it off when every line has it. */
+function toggleQuote(value: string, start: number, end: number): FormattedDraft {
+  const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+  const nextBreak = value.indexOf("\n", end > start && value[end - 1] === "\n" ? end - 1 : end);
+  const lineEnd = nextBreak < 0 ? value.length : nextBreak;
+  const lines = value.slice(lineStart, lineEnd).split("\n");
+  const quoted = lines.every((line) => line.startsWith("> ") || line === ">");
+  const block = lines.map((line) => (quoted ? line.replace(/^> ?/u, "") : `> ${line}`)).join("\n");
+  const caret = lineStart + block.length;
+  return {
+    value: value.slice(0, lineStart) + block + value.slice(lineEnd),
+    selection: start === end ? { start: caret, end: caret } : { start: lineStart, end: caret },
+  };
+}
+
+/**
+ * Puts a ```` ``` ```` fence on its own lines around the selection, or takes off the fence that is
+ * around it. With no selection, an empty block opens with the caret inside.
+ */
+function codeBlock(value: string, start: number, end: number): FormattedDraft {
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  if (before.endsWith("```\n") && after.startsWith("\n```")) {
+    const open = start - 4;
+    return {
+      value: value.slice(0, open) + value.slice(start, end) + value.slice(end + 4),
+      selection: { start: open, end: end - 4 },
+    };
+  }
+  const lead = before && !before.endsWith("\n") ? "\n" : "";
+  const trail = after && !after.startsWith("\n") ? "\n" : "";
+  const opened = `${lead}\`\`\`\n`;
+  return {
+    value: `${before}${opened}${value.slice(start, end)}\n\`\`\`${trail}${after}`,
+    selection: { start: start + opened.length, end: end + opened.length },
+  };
+}
+
+/** Whether the caret at `offset` is inside an open ```` ``` ```` block, where Enter adds a line. */
+export function insideCodeFence(value: string, offset: number): boolean {
+  const before = value.slice(0, offset);
+  return (before.match(/^```/gmu)?.length ?? 0) % 2 === 1;
+}
+
 /** The format that a key chord asks for, as Slack binds them, or null. */
 export function composerFormatShortcut(event: KeyboardEvent, macLike: boolean): ComposerTextFormat | null {
   const mod = macLike ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
-  if (!mod || event.altKey) return null;
+  if (!mod) return null;
+  // Slack: the platform key with Alt, Shift and C makes a code block.
+  if (event.altKey) return event.shiftKey && event.code === "KeyC" ? "code-block" : null;
   if (!event.shiftKey) {
     if (event.code === "KeyB") return "bold";
     if (event.code === "KeyI") return "italic";
@@ -119,6 +177,8 @@ export function composerFormatShortcut(event: KeyboardEvent, macLike: boolean): 
       return "bulleted-list";
     case "Digit7":
       return "numbered-list";
+    case "Digit9":
+      return "quote";
     default:
       return null;
   }

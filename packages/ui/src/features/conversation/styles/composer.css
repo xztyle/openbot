@@ -861,6 +861,12 @@
   height: 15px;
 }
 
+/* An emoji that `:` offers: the glyph itself, at the size of the other icons. */
+.mention-picker-emoji {
+  font-size: var(--openbot-text-xl);
+  line-height: 1;
+}
+
 .mention-picker-option > strong {
   min-width: 0;
   flex: 0 1 auto;

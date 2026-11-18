@@ -11,8 +11,10 @@ import {
   List,
   ListOrdered,
   Paperclip,
+  Quote,
   Send,
   SmilePlus,
+  SquareCode,
   Strikethrough,
   Type,
 } from "../../icons";
@@ -20,7 +22,16 @@ import { useText } from "../../text";
 import { cx } from "../../utils";
 import { EmojiPickerPopover, type EmojiPickerProps } from "./EmojiPicker";
 
-export type ComposerFormat = "bold" | "italic" | "strike" | "code" | "link" | "bulleted-list" | "numbered-list";
+export type ComposerFormat =
+  | "bold"
+  | "italic"
+  | "strike"
+  | "code"
+  | "link"
+  | "bulleted-list"
+  | "numbered-list"
+  | "quote"
+  | "code-block";
 
 const FORMATS = [
   { format: "bold", label: "workspace.composer.bold", icon: Bold, shortcut: "⌘B" },
@@ -29,7 +40,9 @@ const FORMATS = [
   { format: "link", label: "workspace.composer.link", icon: Link, shortcut: "⌘⇧U" },
   { format: "bulleted-list", label: "workspace.composer.bulletedList", icon: List, shortcut: "⌘⇧8" },
   { format: "numbered-list", label: "workspace.composer.numberedList", icon: ListOrdered, shortcut: "⌘⇧7" },
+  { format: "quote", label: "workspace.composer.quote", icon: Quote, shortcut: "⌘⇧9" },
   { format: "code", label: "workspace.composer.code", icon: Code, shortcut: "⌘⇧C" },
+  { format: "code-block", label: "workspace.composer.codeBlock", icon: SquareCode, shortcut: "⌘⌥⇧C" },
 ] as const satisfies readonly { format: ComposerFormat; label: string; icon: typeof Bold; shortcut: string }[];
 
 export interface ComposerAlsoSend {
@@ -70,6 +83,14 @@ export interface MessageComposerProps {
   extraActions?: JSX.Element;
   /** Starts with the formatting toolbar hidden, as in a thread. */
   defaultToolbarHidden?: boolean | undefined;
+  /** Whether the formatting toolbar shows, when the caller keeps the choice, such as across reloads. */
+  toolbarShown?: boolean | undefined;
+  onToolbarShownChange?: ((shown: boolean) => void) | undefined;
+  /**
+   * The box edits a message in place, as Slack's: Cancel and Save take the place of Send. Save calls
+   * `onSend`.
+   */
+  edit?: { onCancel: () => void } | undefined;
   class?: string;
 }
 
@@ -80,7 +101,12 @@ export interface MessageComposerProps {
 export function MessageComposer(props: MessageComposerProps): JSX.Element {
   const { t } = useText();
   const alsoSendId = createUniqueId();
-  const [toolbar, setToolbar] = createSignal(!props.defaultToolbarHidden);
+  const [localToolbar, setLocalToolbar] = createSignal(!props.defaultToolbarHidden);
+  const toolbar = () => props.toolbarShown ?? localToolbar();
+  const setToolbar = (shown: boolean) => {
+    if (props.onToolbarShownChange) props.onToolbarShownChange(shown);
+    else setLocalToolbar(shown);
+  };
   const [emojiOpen, setEmojiOpen] = createSignal(false);
   const active = (format: ComposerFormat) => props.activeFormats?.includes(format) ?? false;
   return (
@@ -134,7 +160,7 @@ export function MessageComposer(props: MessageComposerProps): JSX.Element {
                 size="icon-xs"
                 label={t(toolbar() ? "workspace.composer.hideFormatting" : "workspace.composer.showFormatting")}
                 aria-pressed={toolbar() ? "true" : "false"}
-                onClick={() => setToolbar((shown) => !shown)}
+                onClick={() => setToolbar(!toolbar())}
               >
                 <Type />
               </IconButton>
@@ -184,17 +210,39 @@ export function MessageComposer(props: MessageComposerProps): JSX.Element {
           </div>
           <div class="ws-composer-send-group">
             {props.extraActions}
-            <Button
-              size="xs"
-              class="ws-composer-send"
-              data-ready={props.canSend ? "" : undefined}
-              aria-label={t("workspace.composer.send")}
-              disabled={!props.canSend || props.disabled}
-              loading={props.sending}
-              onClick={() => props.onSend()}
+            <Show
+              when={props.edit}
+              fallback={
+                <Button
+                  size="xs"
+                  class="ws-composer-send"
+                  data-ready={props.canSend ? "" : undefined}
+                  aria-label={t("workspace.composer.send")}
+                  disabled={!props.canSend || props.disabled}
+                  loading={props.sending}
+                  onClick={() => props.onSend()}
+                >
+                  <Send aria-hidden="true" />
+                </Button>
+              }
             >
-              <Send aria-hidden="true" />
-            </Button>
+              {(edit) => (
+                <>
+                  <Button size="xs" variant="secondary" disabled={props.sending} onClick={() => edit().onCancel()}>
+                    {t("common.cancel")}
+                  </Button>
+                  <Button
+                    size="xs"
+                    class="ws-composer-save"
+                    disabled={!props.canSend || props.disabled}
+                    loading={props.sending}
+                    onClick={() => props.onSend()}
+                  >
+                    {t("common.save")}
+                  </Button>
+                </>
+              )}
+            </Show>
           </div>
         </div>
       </section>

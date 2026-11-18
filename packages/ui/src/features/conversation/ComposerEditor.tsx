@@ -43,9 +43,15 @@ import {
   serializeEditor,
 } from "./composer-dom";
 import { shouldRestoreComposerFocus } from "./composer-focus";
-import { applyComposerFormat, type ComposerTextFormat, composerFormatShortcut } from "./composer-format";
+import {
+  applyComposerFormat,
+  type ComposerTextFormat,
+  composerFormatShortcut,
+  insideCodeFence,
+} from "./composer-format";
 import {
   type ComposerChannel,
+  type ComposerEmoji,
   type ComposerMember,
   measurePickerFrame,
   type PickerFrame,
@@ -140,8 +146,15 @@ interface ComposerEditorProps {
   channels?: readonly ComposerChannel[] | undefined;
   /** A new id applies the format to the selection, as the formatting toolbar asks. */
   formatRequest?: { id: number; format: ComposerTextFormat } | undefined;
-  /** Binds the formatting chords: the platform key with B, I, or with Shift and X, C, U, 8, 7. */
+  /** Binds the formatting chords: the platform key with B, I, or with Shift and X, C, U, 8, 7, 9. */
   formatShortcuts?: boolean | undefined;
+  /** Enter inside an open ```` ``` ```` block adds a line, as in Slack; the platform key with Enter still sends. */
+  codeFenceLines?: boolean | undefined;
+  /**
+   * The emoji that `:` and two or more letters of a short code offer, as Slack's emoji autocomplete.
+   * Without it, `:` is plain text.
+   */
+  emojiSearch?: ((query: string) => readonly ComposerEmoji[]) | undefined;
   /**
    * The words heard so far while the user dictates. `final` is set while the recording turns into
    * the final text. See `dictationWords` for how they show.
@@ -161,8 +174,11 @@ interface MentionContext {
   query: string;
   start: number;
   end: number;
-  trigger: "@" | "$" | "#";
+  trigger: "@" | "$" | "#" | ":";
 }
+
+/** The most emoji that `:` offers at once. */
+const EMOJI_OPTION_LIMIT = 8;
 
 const DICTATION_INTERIM_WORDS = 2;
 const BROADCASTS = ["channel", "here"] as const;
@@ -268,6 +284,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
   });
   const matchingOptions = createMemo<PickerOption[]>(() => {
     const trigger = mention()?.trigger;
+    if (trigger === ":")
+      return (props.emojiSearch?.(mention()?.query ?? "") ?? [])
+        .slice(0, EMOJI_OPTION_LIMIT)
+        .map((emoji) => ({ type: "emoji" as const, emoji }));
     if (trigger === "#") return matchingChannels().map((channel) => ({ type: "channel" as const, channel }));
     /* Skills first: a skill is what the user writes with, and a server is what one of them reaches. */
     if (trigger === "$")
@@ -697,6 +717,12 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const selection = readEditorSelection(editor);
     if (!selection || selection.anchor !== selection.focus) return null;
     const beforeCaret = editorText(editor).slice(0, selection.focus);
+    // `:` and two letters of a short code offer emoji; a time such as 10:30 does not.
+    const emoji = props.emojiSearch ? beforeCaret.match(/(?:^|\s)(:)([\p{L}\p{N}_+-]{2,30})$/u) : null;
+    if (emoji?.[2]) {
+      const query = emoji[2];
+      return { query, start: beforeCaret.length - query.length - 1, end: beforeCaret.length, trigger: ":" };
+    }
     const match = props.channels
       ? beforeCaret.match(/(?:^|\s)([@$#])([^@$#\n\uFFFC]{0,60})$/u)
       : beforeCaret.match(/(?:^|\s)([@$])([^@$\n\uFFFC]{0,60})$/u);
@@ -756,11 +782,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
             ? createChannelToken(option.channel)
             : option.type === "broadcast"
               ? document.createTextNode(`@${option.broadcast}`)
-              : option.type === "skill"
-                ? createSkillToken(option.skill)
-                : option.type === "mcp"
-                  ? createMcpToken(option.server)
-                  : createAttachmentToken(option.attachment, attachmentTokenActions);
+              : option.type === "emoji"
+                ? document.createTextNode(option.emoji.emoji)
+                : option.type === "skill"
+                  ? createSkillToken(option.skill)
+                  : option.type === "mcp"
+                    ? createMcpToken(option.server)
+                    : createAttachmentToken(option.attachment, attachmentTokenActions);
     const trailingSpace = document.createTextNode(" ");
     range.insertNode(trailingSpace);
     range.insertNode(token);
@@ -883,6 +911,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
     if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return false;
     const options = matchingOptions();
     if (event.key === "Escape") {
+      // Only a picker that shows takes Escape; a word after `@` with no match leaves it to the page.
+      if (!pickerOpen()) {
+        setMention(null);
+        return false;
+      }
       event.preventDefault();
       setMention(null);
       return true;
@@ -995,6 +1028,18 @@ export function ComposerEditor(props: ComposerEditorProps) {
       return;
     }
     if (event.key === "Enter") {
+      // Inside an open code block Enter adds a line; the platform key with Enter still sends.
+      if (
+        props.codeFenceLines &&
+        editor &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        insideCodeFence(serializeEditor(editor), serializedEditorSelection(editor).start)
+      ) {
+        event.preventDefault();
+        addLineBreak();
+        return;
+      }
       if (sendShortcut !== "enter" && !isSendShortcutKey(event, sendShortcut)) {
         event.preventDefault();
         addLineBreak();
@@ -1224,7 +1269,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     ? "composer.picker.skillLabel"
                     : mention()?.trigger === "#"
                       ? "composer.picker.channelLabel"
-                      : "composer.picker.mentionLabel",
+                      : mention()?.trigger === ":"
+                        ? "composer.picker.emojiLabel"
+                        : "composer.picker.mentionLabel",
                 )}
                 options={matchingOptions()}
                 optionValue={pickerOptionKey}
@@ -1287,6 +1334,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
                       ) : option.type === "mcp" ? (
                         <span class="mention-picker-skill-icon" aria-hidden="true">
                           <Blocks />
+                        </span>
+                      ) : option.type === "emoji" ? (
+                        <span class="mention-picker-skill-icon mention-picker-emoji" aria-hidden="true">
+                          {option.emoji.emoji}
                         </span>
                       ) : (
                         <AttachmentReferenceVisual name={option.attachment.name} />

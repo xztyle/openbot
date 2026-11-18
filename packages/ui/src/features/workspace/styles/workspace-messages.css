@@ -225,6 +225,21 @@ button.ws-profile-trigger.ws-message-author:hover {
   font-size: var(--openbot-text-sm);
 }
 
+/* Under a message that the content renderer draws, the mark starts its own line. */
+.ws-message-edited.ws-message-edited-block {
+  display: block;
+  margin-left: 0;
+}
+
+.ws-message-editor {
+  min-width: 0;
+}
+
+.ws-composer-save.ui-button {
+  background: var(--openbot-success);
+  color: var(--openbot-text-on-status);
+}
+
 .ws-message-deleted {
   color: var(--openbot-text-muted);
   font-style: italic;

@@ -1,18 +1,18 @@
-import { channelKind, channelVisibility, type DraftAttachment } from "@openbot/contracts/ipc";
+import { channelKind, type DraftAttachment } from "@openbot/contracts/ipc";
 import { Button, ConfirmDialog, IconButton, X } from "@openbot/ui";
 import { AttachmentReferenceVisual } from "@openbot/ui/features/conversation/AttachmentReference";
 import { ComposerEditor } from "@openbot/ui/features/conversation/ComposerEditor";
 import type { ComposerTextFormat } from "@openbot/ui/features/conversation/composer-format";
-import type { ComposerChannel, ComposerMember } from "@openbot/ui/features/conversation/composer-picker";
 import { MessageComposer } from "@openbot/ui/features/workspace/MessageComposer";
 import { useText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, For, onCleanup, onSettled, Show, untrack } from "solid-js";
 import { usePlatform } from "../../platform";
 import { deviceSendShortcut } from "../../send-shortcut-preference";
 import { PartialAttachmentImportError } from "../channels/channels-port";
+import { composerToolbar, useComposerSources } from "./workspace-composer-sources";
 import { useWorkspace } from "./workspace-context";
 import { draftKey } from "./workspace-controller";
-import { broadcastAudience, draftBroadcast, readerJoined } from "./workspace-model";
+import { broadcastAudience, draftBroadcast } from "./workspace-model";
 
 /**
  * A broadcast that would notify this many people or more asks first, as Slack does in a channel of
@@ -40,7 +40,9 @@ export interface WorkspaceComposerProps {
 
 /**
  * The Slack message box of a conversation or a thread: formatting, mentions of people, agents,
- * `@channel` and `@here`, channel links, files, drafts per conversation, ↑ to edit the last message.
+ * `@channel` and `@here`, channel links, emoji by short code, files, drafts per conversation, ↑ to
+ * edit the last message. On a computer the edit happens in place in the message; on a phone, as in
+ * Slack's app, in this box.
  */
 export function WorkspaceComposer(props: WorkspaceComposerProps) {
   const { t, errorMessage } = useText();
@@ -71,9 +73,13 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     },
   );
 
+  /** The edit of a message in this box: only on a phone. A computer edits the message in place. */
   const editing = createMemo(() => {
     const current = ws.state.editing;
-    return current && current.channelId === props.channelId && current.threadRootId === (props.threadRootId ?? null)
+    return ws.env.phone() &&
+      current &&
+      current.channelId === props.channelId &&
+      current.threadRootId === (props.threadRootId ?? null)
       ? current
       : null;
   });
@@ -114,33 +120,8 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
     return transcript().find((entry) => entry.id === messageId);
   }
 
-  const people = createMemo((): ComposerMember[] =>
-    ws.env
-      .people()
-      .filter((person) => !ws.env.isReader(person.id))
-      .map((person) => ({ id: person.id, name: person.name, avatarUrl: person.avatarUrl })),
-  );
-  /** A mention reaches only members, so the picker offers only the agents of this conversation. */
-  const mentionAgents = createMemo(() => {
-    const summary = ws.summary(props.channelId);
-    if (!summary) return ws.env.agents();
-    const members = new Set(summary.members.map((member) => member.agentId));
-    return ws.env.agents().filter((agent) => members.has(agent.id));
-  });
-  const channelLinks = createMemo((): ComposerChannel[] =>
-    ws.channels.state.channels
-      .filter(
-        (channel) =>
-          !channel.archived &&
-          channelKind(channel) === "channel" &&
-          (channelVisibility(channel) === "public" || readerJoined(ws.directory(), channel)),
-      )
-      .map((channel) => ({ id: channel.id, name: channel.name, private: channelVisibility(channel) === "private" })),
-  );
-  const isChannel = () => {
-    const summary = ws.summary(props.channelId);
-    return summary ? channelKind(summary) !== "dm" : true;
-  };
+  const { people, mentionAgents, channelLinks, isChannel, emojiSearch } = useComposerSources(() => props.channelId);
+  const toolbar = composerToolbar(props.threadRootId ? "thread" : "main");
 
   /** `target` is the draft that asked for the files: a picker can close after the reader moved on. */
   function addFiles(files: readonly DraftAttachment[], target = key()) {
@@ -274,7 +255,8 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
   /** ↑ in an empty box edits the reader's last message, as in Slack. Escape ends an edit. */
   function keyDown(event: KeyboardEvent) {
     if (event.defaultPrevented || event.isComposing) return;
-    if (event.key === "Escape" && editing()) {
+    // Escape ends an edit: in this box on a phone, or in place on a computer.
+    if (event.key === "Escape" && (editing() || ws.state.editing)) {
       event.preventDefault();
       ws.stopEditing();
       return;
@@ -294,6 +276,9 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
       );
     if (!own) return;
     event.preventDefault();
+    // The editor of this box hears the key after this frame; it must not take the focus back from
+    // the edit that opens in the message.
+    event.stopPropagation();
     ws.startEditing(props.channelId, own.id, props.threadRootId ?? null);
   }
 
@@ -370,6 +355,8 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
               formatRequest={format()}
               textRequest={textRequest()}
               formatShortcuts
+              codeFenceLines
+              emojiSearch={emojiSearch}
               // The user's send key on a desktop. On a phone Return adds a line and only Send sends.
               sendShortcut={deviceSendShortcut(platform.appInfo()?.platform)}
               onValueChange={setValue}
@@ -379,7 +366,8 @@ export function WorkspaceComposer(props: WorkspaceComposerProps) {
           </div>
         }
         onFormat={(next) => setFormat((current) => ({ id: (current?.id ?? 0) + 1, format: next }))}
-        defaultToolbarHidden={Boolean(props.threadRootId)}
+        toolbarShown={toolbar.shown()}
+        onToolbarShownChange={toolbar.setShown}
         onAttach={editing() ? undefined : () => void attach()}
         emojiPicker={{
           onPick: (emoji) => {

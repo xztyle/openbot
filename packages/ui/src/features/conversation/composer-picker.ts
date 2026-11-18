@@ -1,5 +1,18 @@
 import type { DraftAttachment } from "@openbot/contracts/ipc";
-import { AtSign, Bot, File, Folder, Hash, Lock, Plug, type Puzzle, ShieldCheck, Store, UserRound } from "@openbot/ui";
+import {
+  AtSign,
+  Bot,
+  File,
+  Folder,
+  Hash,
+  Lock,
+  Plug,
+  type Puzzle,
+  ShieldCheck,
+  SmilePlus,
+  Store,
+  UserRound,
+} from "@openbot/ui";
 import type { ComposerAgent, ComposerMcpServer, ComposerSkill } from "../../data";
 import type { TextValue } from "../../text";
 
@@ -30,6 +43,15 @@ export interface ComposerChannel {
   private?: boolean | undefined;
 }
 
+/** An emoji that `:` and a short code offer, as Slack's `:smile`. */
+export interface ComposerEmoji {
+  emoji: string;
+  /** The English name, such as "grinning face". */
+  name: string;
+  /** The short code without colons, such as `smile`. */
+  code: string;
+}
+
 /** `@channel` and `@here` address everyone in the channel. */
 export type ComposerBroadcast = "channel" | "here";
 
@@ -41,7 +63,8 @@ export type PickerOption =
   /** `showSlug` is set when another listed skill has the same name: the slug tells them apart. */
   | { type: "skill"; skill: ComposerSkill; showSlug: boolean }
   | { type: "mcp"; server: ComposerMcpServer }
-  | { type: "attachment"; attachment: DraftAttachment };
+  | { type: "attachment"; attachment: DraftAttachment }
+  | { type: "emoji"; emoji: ComposerEmoji };
 
 export function pickerOptionKey(option: PickerOption): string {
   if (option.type === "agent") return `agent:${option.agent.id}`;
@@ -49,6 +72,7 @@ export function pickerOptionKey(option: PickerOption): string {
   if (option.type === "broadcast") return `broadcast:${option.broadcast}`;
   if (option.type === "channel") return `channel:${option.channel.id}`;
   if (option.type === "skill") return `skill:${option.skill.skillId}`;
+  if (option.type === "emoji") return `emoji:${option.emoji.code}`;
   return option.type === "mcp" ? `mcp:${option.server.id}` : `attachment:${option.attachment.id}`;
 }
 
@@ -58,6 +82,7 @@ export function pickerOptionText(option: PickerOption, t: TextValue["t"]): strin
   if (option.type === "broadcast")
     return t(option.broadcast === "here" ? "composer.picker.option.here" : "composer.picker.option.channelAll");
   if (option.type === "channel") return t("composer.picker.option.channel", { name: option.channel.name });
+  if (option.type === "emoji") return t("composer.picker.option.emoji", { name: option.emoji.name });
   if (option.type === "skill") {
     const name = option.showSlug ? `${option.skill.name} ${option.skill.slug}` : option.skill.name;
     return t("composer.picker.option.skill", { name });
@@ -72,6 +97,7 @@ export function pickerOptionName(option: PickerOption): string {
   if (option.type === "member") return option.member.name;
   if (option.type === "broadcast") return `@${option.broadcast}`;
   if (option.type === "channel") return option.channel.name;
+  if (option.type === "emoji") return `:${option.emoji.code}:`;
   if (option.type === "skill") return option.skill.name;
   return option.type === "mcp" ? option.server.name : option.attachment.name;
 }
@@ -83,6 +109,7 @@ export function pickerOptionDescription(
 ): string | undefined {
   if (option.type === "member") return option.member.description;
   if (option.type === "channel") return undefined;
+  if (option.type === "emoji") return option.emoji.name;
   if (option.type === "broadcast")
     return t?.(option.broadcast === "here" ? "composer.picker.hereHint" : "composer.picker.channelAllHint");
   if (option.type === "attachment") return format.fileSize(option.attachment.size);
@@ -117,6 +144,7 @@ export function pickerOptionBadge(option: PickerOption, t: TextValue["t"]): { la
   if (option.type === "channel")
     return { label: t("composer.picker.badge.channel"), icon: option.channel.private ? Lock : Hash };
   if (option.type === "attachment") return { label: t("composer.picker.badge.file"), icon: File };
+  if (option.type === "emoji") return { label: t("composer.picker.badge.emoji"), icon: SmilePlus };
   if (option.type === "mcp") return { label: MCP_BADGE, icon: Plug };
   switch (option.skill.origin ?? "marketplace") {
     case "local":

@@ -24,6 +24,7 @@ import type { WorkspaceMenuItem } from "@openbot/ui/features/workspace/workspace
 import { useText } from "@openbot/ui/text";
 import { createMemo, For, Show } from "solid-js";
 import { toAgentMessage } from "../../app-message-projection";
+import { WorkspaceMessageEditor } from "./WorkspaceMessageEditor";
 import { MemberProfile } from "./WorkspaceProfile";
 import { useWorkspace } from "./workspace-context";
 import {
@@ -135,6 +136,17 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
   /** Runs a mark change; a failure shows why. */
   const act = (action: () => Promise<void>) =>
     void action().catch((error: unknown) => toast.error(errorMessage(error, t("workspace.message.actionFailed"))));
+  /** Slack's edit in place, on a computer. A phone edits in the composer, as Slack's app does. */
+  const editingHere = () => {
+    const editing = ws.state.editing;
+    return (
+      !ws.env.phone() &&
+      editing?.channelId === props.channelId &&
+      editing.messageId === entry().id &&
+      // The root of a thread shows in the channel and in the panel: the edit stays where it began.
+      editing.threadRootId === threadRootId()
+    );
+  };
   const copy = (text: string, done: string) =>
     void navigator.clipboard?.writeText(text).then(
       () => toast.success(done),
@@ -267,6 +279,11 @@ export function WorkspaceMessage(props: WorkspaceMessageProps) {
         }
         menuItems={menuItems()}
         profile={() => <MemberProfile member={author()} />}
+        editor={
+          editingHere() ? (
+            <WorkspaceMessageEditor channelId={props.channelId} entry={entry()} threadRootId={threadRootId()} />
+          ) : undefined
+        }
       >
         <Show when={trail()}>
           {(steps) => (

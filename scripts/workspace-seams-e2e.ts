@@ -3,7 +3,8 @@
 // the channel says "Replied to a thread" and opens its thread; the row menu has Mark as read;
 // Activity names a DM as a DM; Unreads filters and sorts. On a phone: the DMs tab is the DMs view
 // (Jump to "DMs" opens the tab), a long press on a DM opens its actions, the bell opens a sheet, a
-// thread has Back and no close, and the search field takes the focus. It serves the web client on a
+// thread has Back and no close, the address of Activity opens its tab, and the search field takes
+// the focus. It serves the web client on a
 // mock host with unread messages (`src/renderer/stories/web-client-inbox-harness.tsx`) and drives it
 // in Chromium. No account service, host or provider is needed.
 //
@@ -115,7 +116,7 @@ async function load(page: Page, origin: string, path: string, ready: Locator): P
 
 const button = (page: Page, name: string | RegExp) =>
   page.getByRole("button", { name, exact: typeof name === "string" });
-const sidebar = (page: Page) => page.getByRole("navigation", { name: english("workspace.sidebar.label") });
+const sidebar = (page: Page) => page.getByRole("navigation", { name: english("workspace.sidebar.label"), exact: true });
 const pane = (page: Page, name: string) => page.getByRole("region", { name, exact: true }).first();
 const tab = (page: Page, key: "workspace.phone.home" | "workspace.phone.dms" | "workspace.phone.more") =>
   page
@@ -318,6 +319,25 @@ async function phone(browser: Browser, origin: string): Promise<void> {
       await thread.getByRole("button", { name: english("common.close"), exact: true }).isVisible(),
       false,
       "Back is the one way out",
+    );
+  });
+
+  await step(page, viewport, "the address of Activity opens the Activity tab", async () => {
+    await load(page, origin, "/app/general/activity", pane(page, english("workspace.view.activity")));
+    await page.waitForFunction(
+      (label) =>
+        [...document.querySelectorAll('[aria-current="page"]')].some((element) =>
+          (element.getAttribute("aria-label") ?? "").startsWith(label),
+        ),
+      english("workspace.phone.activity"),
+      { timeout: UI_WAIT_MS },
+    );
+    assert.equal(
+      await pane(page, english("workspace.view.activity"))
+        .getByRole("button", { name: english("workspace.layout.back"), exact: true })
+        .count(),
+      0,
+      "a tab has no Back",
     );
   });
 

@@ -2430,7 +2430,15 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       } else if (target?.kind === "view") {
         if (!controller.viewAvailable(target.view)) shown = false;
         else if (target.view === "agents") controller.openAgentTalk(target.agentId);
-        else controller.openView(target.view);
+        else {
+          controller.openView(target.view);
+          // A phone shows DMs and Activity as tabs of its bottom bar: the address opens the tab, not a
+          // screen over another tab. The address keeps naming the view.
+          if (phoneShell() && (target.view === "dms" || target.view === "activity")) {
+            setPhoneTab(target.view);
+            setMobilePane("workspace");
+          }
+        }
       }
     } else if (target?.kind === "channel" && channelsSupported() && channelListed(target.channelId)) {
       setMobilePane("conversation");

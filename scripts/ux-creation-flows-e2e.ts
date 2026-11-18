@@ -124,6 +124,15 @@ async function showSidebar(page: Page, viewport: ViewportName): Promise<void> {
   if (viewport !== "phone") return;
   const back = page.getByRole("button", { name: english("workspace.layout.back"), exact: true }).first();
   if (await back.isVisible()) await back.click();
+  // Back shows the tab the conversation came from; the list is the Home tab.
+  const home = page
+    .getByRole("navigation", { name: english("workspace.phone.tabs") })
+    .getByRole("button", { name: new RegExp(`^${english("workspace.phone.home")}`, "u") });
+  await home.waitFor({ timeout: UI_WAIT_MS });
+  if ((await home.getAttribute("aria-current")) !== "page") await home.click();
+  await page
+    .getByRole("navigation", { name: english("workspace.sidebar.label"), exact: true })
+    .waitFor({ timeout: UI_WAIT_MS });
 }
 
 async function waitForPath(page: Page, test: (path: string) => boolean, label: string): Promise<void> {

@@ -132,7 +132,13 @@ async function showSidebar(page: Page, viewport: ViewportName): Promise<void> {
   const sidebar = sidebarOf(page);
   if (await sidebar.isVisible()) return;
   const back = page.getByRole("button", { name: english("workspace.layout.back"), exact: true }).first();
-  await back.click();
+  if (await back.isVisible()) await back.click();
+  // Back shows the tab the conversation came from; the list is the Home tab.
+  if (!(await sidebar.isVisible()))
+    await page
+      .getByRole("navigation", { name: english("workspace.phone.tabs") })
+      .getByRole("button", { name: new RegExp(`^${english("workspace.phone.home")}`, "u") })
+      .click();
   await sidebar.waitFor({ timeout: UI_WAIT_MS });
 }
 

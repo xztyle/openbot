@@ -163,7 +163,12 @@ try {
   page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
   page.on("console", (message) => {
     // The harness has no favicon or fonts route; a missing file is not a failure of the client.
-    if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
+    // The dev server's own socket is no part of the client: a page left during a step drops it.
+    if (
+      message.type() === "error" &&
+      !message.text().startsWith("Failed to load resource") &&
+      !message.text().startsWith("[vite]")
+    )
       report.consoleErrors.push(message.text().slice(0, 1_000));
   });
 

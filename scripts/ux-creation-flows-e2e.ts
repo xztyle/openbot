@@ -137,7 +137,12 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
   const page = await context.newPage();
   page.on("pageerror", (error) => report.pageErrors.push(`${viewport}: ${error.stack ?? error.message}`));
   page.on("console", (message) => {
-    if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
+    // The dev server's own socket is no part of the client: a page left during a step drops it.
+    if (
+      message.type() === "error" &&
+      !message.text().startsWith("Failed to load resource") &&
+      !message.text().startsWith("[vite]")
+    )
       report.consoleErrors.push(`${viewport}: ${message.text().slice(0, 1_000)}`);
   });
   const suffix = viewport === "phone" ? "p" : "d";
@@ -258,8 +263,8 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await waitForPath(page, (path) => path !== before && /\/(c|dm)\//u.test(path), "new message");
   });
 
-  // 5. The sidebar as in Slack: the other views are under More; a collapsed group keeps its open row
-  // and stays collapsed after a reload.
+  // 5. The sidebar as in Slack: the other views are under More (a menu on a computer, the More tab on
+  // a phone); a collapsed group keeps its open row and stays collapsed after a reload.
   await step(page, viewport, "More opens a view that is not a top row", async () => {
     await showSidebar(page, viewport);
     const sidebar = page.getByRole("navigation", { name: english("workspace.sidebar.label") });
@@ -268,8 +273,17 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
       0,
       "Between agents is not a top row",
     );
-    await sidebar.getByRole("button", { name: english("workspace.sidebar.more"), exact: true }).click();
-    await page.getByRole("menuitem", { name: english("workspace.view.agents") }).click();
+    if (viewport === "phone") {
+      // The phone shell has no More row in the list: More is a tab of the bottom bar.
+      await page
+        .getByRole("navigation", { name: english("workspace.phone.tabs") })
+        .getByRole("button", { name: english("workspace.phone.more"), exact: true })
+        .click();
+      await page.getByRole("button", { name: english("workspace.view.agents"), exact: true }).click();
+    } else {
+      await sidebar.getByRole("button", { name: english("workspace.sidebar.more"), exact: true }).click();
+      await page.getByRole("menuitem", { name: english("workspace.view.agents") }).click();
+    }
     await page
       .getByRole("heading", { name: english("workspace.view.agents"), exact: true })
       .waitFor({ timeout: UI_WAIT_MS });
@@ -318,10 +332,21 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await waitForPath(page, (path) => path === "/app/general/activity", "settings closed");
   });
 
-  // 7. New space from the rail: the new space opens.
+  // 7. New space from the rail (a computer) or the space switcher of Home (a phone): the new space opens.
   await step(page, viewport, "New space creates the space and shows it", async () => {
-    await showSidebar(page, viewport);
-    await page.getByRole("button", { name: english("workspace.spaces.create"), exact: true }).click();
+    if (viewport === "phone") {
+      await showSidebar(page, viewport);
+      await page
+        .getByRole("navigation", { name: english("workspace.phone.tabs") })
+        .getByRole("button", { name: english("workspace.phone.home"), exact: true })
+        .click();
+      await page.getByRole("button", { name: new RegExp(`^${english("workspace.phone.switch")}`, "u") }).click();
+      await dialogNamed(page, english("workspace.phone.switch"))
+        .getByRole("button", { name: english("workspace.spaces.create"), exact: true })
+        .click();
+    } else {
+      await page.getByRole("button", { name: english("workspace.spaces.create"), exact: true }).click();
+    }
     const dialog = dialogNamed(page, english("workspace.spaces.createTitle"));
     await checkFrame(page, viewport, "new-space", dialog);
     const create = dialog.getByRole("button", { name: english("workspace.spaces.createButton"), exact: true });
@@ -331,8 +356,11 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await dialog.waitFor({ state: "detached", timeout: UI_WAIT_MS });
     // The new space shows: the address names it (its slug, or its id when the host gives no slug).
     await waitForPath(page, (path) => !path.startsWith("/app/general/"), "new space");
-    await page
-      .getByRole("button", { name: new RegExp(`^Ops ${suffix}`, "u") })
+    // A computer shows it on the rail; a phone names it at the top of Home.
+    await (viewport === "phone"
+      ? page.getByText(`Ops ${suffix}`, { exact: true })
+      : page.getByRole("button", { name: new RegExp(`^Ops ${suffix}`, "u") })
+    )
       .first()
       .waitFor({ timeout: UI_WAIT_MS });
   });

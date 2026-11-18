@@ -156,7 +156,12 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
   const page = await context.newPage();
   page.on("pageerror", (error) => report.pageErrors.push(`${viewport}: ${error.stack ?? error.message}`));
   page.on("console", (message) => {
-    if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
+    // The dev server's own socket is no part of the client: a page left during a step drops it.
+    if (
+      message.type() === "error" &&
+      !message.text().startsWith("Failed to load resource") &&
+      !message.text().startsWith("[vite]")
+    )
       report.consoleErrors.push(`${viewport}: ${message.text().slice(0, 1_000)}`);
   });
   const desktop = viewport === "desktop";

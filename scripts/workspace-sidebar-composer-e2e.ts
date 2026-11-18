@@ -238,7 +238,12 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
   const page = await context.newPage();
   page.on("pageerror", (error) => report.pageErrors.push(`${viewport}: ${error.stack ?? error.message}`));
   page.on("console", (message) => {
-    if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
+    // The dev server's own socket is no part of the client: a page left during a step drops it.
+    if (
+      message.type() === "error" &&
+      !message.text().startsWith("Failed to load resource") &&
+      !message.text().startsWith("[vite]")
+    )
       report.consoleErrors.push(`${viewport}: ${message.text().slice(0, 1_000)}`);
   });
   const sectionName = viewport === "phone" ? "Phone projects" : "Projects";
@@ -322,8 +327,13 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
   // 4. Everything stays after a reload: the browser keeps the sidebar, the host gets it again.
   await step(page, viewport, "Sections, Starred, sort and filter stay after a reload", async () => {
     await page.reload(COMMIT);
+    // The address keeps the place: Activity on a computer; on a phone the Home tab (its list) or a
+    // conversation over it.
     await page
       .getByRole("heading", { name: english("workspace.view.activity"), exact: true })
+      .or(sidebarOf(page))
+      .or(page.getByRole("button", { name: english("workspace.layout.back"), exact: true }))
+      .first()
       .waitFor({ timeout: UI_WAIT_MS });
     await showSidebar(page, viewport);
     await channelRow(sectionNamed(page, sectionName), "general").waitFor({ timeout: UI_WAIT_MS });

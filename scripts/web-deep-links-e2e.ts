@@ -152,7 +152,12 @@ try {
   page.on("pageerror", (error) => report.pageErrors.push(error.stack ?? error.message));
   page.on("console", (message) => {
     // The harness has no favicon or fonts route; a missing file is not a failure of the client.
-    if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
+    // The dev server's own socket is no part of the client: a page left during a step drops it.
+    if (
+      message.type() === "error" &&
+      !message.text().startsWith("Failed to load resource") &&
+      !message.text().startsWith("[vite]")
+    )
       report.consoleErrors.push(message.text().slice(0, 1_000));
   });
 
@@ -247,7 +252,11 @@ try {
     await page.getByRole("menuitem", { name: english("workspace.app.message.copyLink") }).click();
     const link = await page.evaluate(() => navigator.clipboard.readText());
     assert.match(link, /\/app\/s\/preview-host\/general\/c\/general\/t\/general-root\/m\/[\w-]+$/u);
+    // Let the page load before it is left: a page left while it starts drops the dev server's socket.
     await page.goto(`${origin}/app/general/activity`, COMMIT);
+    await page
+      .getByRole("heading", { name: english("workspace.view.activity"), exact: true })
+      .waitFor({ timeout: UI_WAIT_MS });
     await page.goto(link, COMMIT);
     await page
       .locator("[data-highlighted]")

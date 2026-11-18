@@ -1,8 +1,9 @@
 // Checks that the right side panel of the web client has the layout and the behavior of the desktop
 // panel (#2550). Drives the `Web/Workspace/Connected` and `App/Playground` stories of a running
 // Storybook side by side at common desktop widths: default state, the pane list, the Agent settings
-// tab and pane, Maximize and Restore, a resize, and Delete on a tab. At a phone width the web client
-// alone is checked: an open pane takes the full width under the chat header, which keeps its panel
+// tab and pane, Maximize and Restore, a resize, and Delete on a tab. Both stories open on the
+// workspace, so each step first opens the owner's DM with an agent, which is the agent's chat. At a
+// phone width the web client alone is checked: an open pane takes the full width under the chat header, which keeps its panel
 // button, and the tab row does not cover it.
 //
 // `bun scripts/web-side-panel-e2e.ts --storybook=<url> [--browser-executable=<path>]`
@@ -101,10 +102,16 @@ async function settled(page: Page): Promise<void> {
   });
 }
 
+/** The agent whose chat both clients open: the workspace opens on its welcome, not on a chat. */
+const AGENT_ROW = "Chief, AI agent";
+
 async function open(browser: Browser, client: Client, width: number): Promise<Page> {
   const page = await browser.newPage({ viewport: { width, height: HEIGHT } });
   await page.goto(`${storybook}/iframe.html?id=${STORIES[client]}&viewMode=story`);
-  await page.locator(".side-panel-toggle").first().waitFor({ timeout: 120_000 });
+  const agentRow = page.getByRole("button", { name: AGENT_ROW, exact: true });
+  await agentRow.waitFor({ timeout: 120_000 });
+  await agentRow.click();
+  await page.locator(".side-panel-toggle").first().waitFor({ timeout: 60_000 });
   return page;
 }
 

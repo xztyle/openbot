@@ -1,6 +1,8 @@
 import { TRANSLATED_LOCALES, type TranslatedLocale } from "@openbot/i18n";
 import { installPointerFocusGuard } from "@openbot/ui/pointer-focus";
+import { flush } from "solid-js";
 import type { Preview } from "storybook-solidjs-vite";
+import { renderToCanvas as solidRenderToCanvas } from "storybook-solidjs-vite/renderer/solid-next";
 import { StaticI18nProvider } from "../src/renderer/src/i18n-context";
 import "../src/renderer/src/styles.css";
 import "./preview.css";
@@ -25,6 +27,14 @@ const preview: Preview = {
     },
   },
   initialGlobals: { locale: "en", colorScheme: "dark" },
+  // The Solid renderer writes the args and the globals into stores just before it draws a story, and
+  // Solid 2 commits a store write at its next flush. The first draw read empty stores: a story with
+  // args threw on a missing prop, and the commit drew every story a second time, so a story that
+  // installs a mock `window.openbot` lost it to the cleanup of the first draw.
+  renderToCanvas: (context, canvas) => {
+    flush();
+    return solidRenderToCanvas(context, canvas);
+  },
   decorators: [
     (Story, context) => {
       document.documentElement.dataset.openbotColorScheme = context.globals.colorScheme === "light" ? "light" : "dark";

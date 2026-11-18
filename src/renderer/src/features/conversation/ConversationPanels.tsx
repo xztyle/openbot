@@ -228,6 +228,10 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
         (conversationPanelElement()?.clientWidth || window.innerWidth) - CONVERSATION_PANEL_MIN,
       ),
     );
+  // A named function, not a ternary in the prop: the compiler wraps a ternary prop in a memo, and
+  // the tabs read the value in an effect callback, where a new memo halts the reactive system. The
+  // Delete key on the last tab did that, and no control of the chat worked after it.
+  const selectedSidePanelPane = () => (activeRightPanel() === "side-panel" ? null : sidePanel().selected);
   /** Agent settings > Files. */
   const agentFiles = (server: ServerSummary | undefined, agentId: string): AgentFilesOptions | undefined => {
     // The web client shows host files in Server settings > Storage; its agent settings have no Files.
@@ -276,7 +280,7 @@ export function ConversationPanels(panelProps: { onOpenUsage?: ((trigger: HTMLBu
       <Show when={sidePanelOpen()}>
         <SidePanelHeader
           panes={sidePanel().panes}
-          selected={activeRightPanel() === "side-panel" ? null : sidePanel().selected}
+          selected={selectedSidePanelPane()}
           available={sidePanelPanes()}
           maximized={sidePanel().maximized}
           settingsLabel={channel ? t("channel.settings.title") : undefined}

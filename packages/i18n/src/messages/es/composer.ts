@@ -85,6 +85,7 @@ export const messages = {
   "composer.voice.transcribeFailed": "OpenBot no pudo transcribir esta grabación.",
   "composer.reply.toYou": "Respondiendo a tu mensaje",
   "composer.reply.toAgent": "Respondiendo al agente",
+  "composer.reply.toName": "Respondiendo a {name}",
   "composer.reply.attachment": "Archivo adjunto",
   "composer.reply.cancel": "Cancelar respuesta",
   "composer.attachment.remove": "Quitar {name}",

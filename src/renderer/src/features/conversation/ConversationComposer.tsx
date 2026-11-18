@@ -150,6 +150,12 @@ export function ConversationComposer() {
       : props.agent?.name
         ? t("composer.placeholder.message", { name: props.agent.name })
         : t("composer.placeholder.messageAgent");
+  /** "Replying to Chief" in an agent's chat; a channel keeps "Replying to Agent". */
+  const replyLabel = (message: { author: string }) => {
+    if (message.author === "you") return t("composer.reply.toYou");
+    const name = channel ? undefined : props.agent?.name;
+    return name ? t("composer.reply.toName", { name }) : t("composer.reply.toAgent");
+  };
   const [pickerOpen, setPickerOpen] = createSignal(false);
   const [skillPickerRequest, setSkillPickerRequest] = createSignal(0);
   /*
@@ -555,7 +561,7 @@ export function ConversationComposer() {
             {(message) => (
               <div class="composer-reply-preview">
                 <div>
-                  <span>{t(message().author === "you" ? "composer.reply.toYou" : "composer.reply.toAgent")}</span>
+                  <span>{replyLabel(message())}</span>
                   <ReplyQuote
                     body={message().body || t("composer.reply.attachment")}
                     agents={props.agents}

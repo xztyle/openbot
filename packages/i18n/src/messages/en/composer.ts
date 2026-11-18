@@ -82,6 +82,7 @@ export const messages = defineMessages("composer", {
   "composer.voice.transcribeFailed": "OpenBot could not transcribe this recording.",
   "composer.reply.toYou": "Replying to your message",
   "composer.reply.toAgent": "Replying to Agent",
+  "composer.reply.toName": "Replying to {name}",
   "composer.reply.attachment": "Attachment",
   "composer.reply.cancel": "Cancel reply",
   "composer.attachment.remove": "Remove {name}",

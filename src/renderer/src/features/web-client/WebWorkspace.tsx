@@ -263,6 +263,7 @@ import { webScheduleSource } from "./web-schedule";
 import { readWebServerSelection, writeWebServerSelection } from "./web-server-selection";
 import { createWebServerSettings } from "./web-server-settings";
 import { webTasksSource } from "./web-tasks";
+import { createWebTitleBadge } from "./web-title-badge";
 import { createWebUsagePort } from "./web-usage-port";
 
 const CONNECTING_STATUS: AgentStatus = {
@@ -1635,13 +1636,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       ([agentId, state]) => state.kind === "waiting" || (state.kind === "unread" && !background.has(agentId)),
     ).length;
   });
-  const baseTitle = document.title;
-  createEffect(attentionCount, (count) => {
-    document.title = count > 0 ? t("webClient.title.attention", { count, title: baseTitle }) : baseTitle;
-  });
-  onCleanup(() => {
-    document.title = baseTitle;
-  });
   const sidebarAgentMoods = createMemo(() => computeAgentAvatarMoods(sidebarActivity()));
   const browserEnabled = createMemo(
     () =>
@@ -2083,6 +2077,23 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       return workspaceController.createChannel(input);
     },
   };
+  /**
+   * The tab title and icon count what the sidebar badges count: mentions, DM messages and waiting
+   * agents of every space. A host without the workspace counts its agents that wait or have a reply.
+   */
+  createWebTitleBadge({
+    t,
+    badge: () => {
+      if (!workspaceOn()) return { count: attentionCount(), unread: false };
+      let count = 0;
+      let unread = false;
+      for (const space of ws.spaceUnread().values()) {
+        count += space.mentions;
+        unread ||= space.unread;
+      }
+      return { count, unread };
+    },
+  });
   // The browser's Back and the page rail move between the list and the conversation on a phone.
   createEffect(mobilePane, (pane) => {
     if (pane === "workspace") ws.setPhonePane("sidebar");

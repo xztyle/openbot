@@ -1,10 +1,11 @@
 import type { JSX } from "@solidjs/web";
-import { For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
+import { ActionSheet } from "../../action-sheet";
 import { Button, buttonVariants, IconButton } from "../../button";
 import { DropdownMenu } from "../../complex";
 import { Bell, BellOff, Check, ChevronLeft, Hash, Info, LayoutDashboard, Lock, MessageSquareText } from "../../icons";
 import { useText } from "../../text";
-import { cx } from "../../utils";
+import { cx, usesTouchLayout } from "../../utils";
 import { AiBadge, AvatarStack, MemberAvatar } from "./WorkspaceAvatar";
 import type { ChannelVisibility, ConversationKind, WorkspaceMember } from "./workspace-types";
 
@@ -216,6 +217,69 @@ function NotifyMenu(props: {
   const { t } = useText();
   const choice = () => props.notify ?? "default";
   const quiet = () => props.muted || choice() === "nothing";
+  const icon = () => (
+    <Show when={quiet()} fallback={<Bell aria-hidden="true" />}>
+      <BellOff aria-hidden="true" />
+    </Show>
+  );
+  // A phone gets the choices in a sheet with rows a finger can hit, as its other menus.
+  if (usesTouchLayout()) {
+    const [open, setOpen] = createSignal(false);
+    const pick = (action: () => void) => {
+      setOpen(false);
+      action();
+    };
+    return (
+      <>
+        <IconButton
+          variant="ghost"
+          class="ws-channel-header-bell"
+          data-muted={quiet() ? "" : undefined}
+          label={t("workspace.header.notifications", { name: props.name })}
+          onClick={() => setOpen(true)}
+        >
+          {icon()}
+        </IconButton>
+        <Show when={open()}>
+          <ActionSheet
+            open
+            onOpenChange={setOpen}
+            title={t("workspace.header.notifications", { name: props.name })}
+            showTitle
+            header={
+              <div class="ws-sidebar-sheet-choices">
+                <For each={NOTIFY_CHOICES}>
+                  {(item) => (
+                    <Button
+                      variant="ghost"
+                      class="ui-sheet-item ws-sidebar-sheet-choice"
+                      aria-pressed={choice() === item.value ? "true" : "false"}
+                      onClick={() => pick(() => props.onNotifyChange(item.value))}
+                    >
+                      <span class="ws-sidebar-menu-check">
+                        <Show when={choice() === item.value}>
+                          <Check aria-hidden="true" />
+                        </Show>
+                      </span>
+                      <span>{t(item.label)}</span>
+                    </Button>
+                  )}
+                </For>
+              </div>
+            }
+            items={[
+              {
+                id: "mute",
+                label: t(props.muted ? "workspace.header.unmute" : "workspace.header.mute"),
+                icon: props.muted ? <Bell aria-hidden="true" /> : <BellOff aria-hidden="true" />,
+                onSelect: () => props.onToggleMute(),
+              },
+            ]}
+          />
+        </Show>
+      </>
+    );
+  }
   return (
     <DropdownMenu.Root placement="bottom-end" gutter={4}>
       <DropdownMenu.Trigger
@@ -223,9 +287,7 @@ function NotifyMenu(props: {
         data-muted={quiet() ? "" : undefined}
         aria-label={t("workspace.header.notifications", { name: props.name })}
       >
-        <Show when={quiet()} fallback={<Bell aria-hidden="true" />}>
-          <BellOff aria-hidden="true" />
-        </Show>
+        {icon()}
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content class="ws-notify-menu">

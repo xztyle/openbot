@@ -104,20 +104,111 @@ export interface WorkspaceSidebarProps {
   rowMenu?: ((id: string, group: SidebarGroupId) => readonly WorkspaceMenuItem[]) | undefined;
   /** A filter is on: the groups show what matches, and say so when nothing does. */
   filtering?: boolean | undefined;
+  /** The groups the reader collapsed. Absent: the sidebar keeps the state itself for the session. */
+  collapsedGroups?: readonly SidebarGroupId[] | undefined;
+  onCollapsedChange?: ((group: SidebarGroupId, collapsed: boolean) => void) | undefined;
   class?: string;
 }
+
+/** The views under More: the admin and agent views that Slack keeps out of the top rows. */
+const MORE_VIEWS = [
+  "space-agents",
+  "artifacts",
+  "agents",
+  "storage",
+  "secrets",
+] as const satisfies readonly WorkspaceView[];
+type MoreView = (typeof MORE_VIEWS)[number];
 
 /** The groups of conversations in the sidebar. */
 export type SidebarGroupId = "channels" | "direct";
 
 /**
- * The Slack sidebar: workspace header, Threads, Activity, Fleet and Artifacts, then Channels and
- * Direct messages in groups that collapse. Up and Down move between rows.
+ * The Slack sidebar: workspace header, the fixed rows (Threads, Activity, Fleet) and More for the
+ * other views, then Channels and Direct messages in groups that collapse. A collapsed group still
+ * shows its unread rows and the open conversation. Up and Down move between rows.
  */
 export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
   const { t } = useText();
-  const [channelsOpen, setChannelsOpen] = createSignal(true);
-  const [directOpen, setDirectOpen] = createSignal(true);
+  const [localCollapsed, setLocalCollapsed] = createSignal<ReadonlySet<SidebarGroupId>>(new Set());
+  const collapsed = (group: SidebarGroupId) =>
+    props.collapsedGroups ? props.collapsedGroups.includes(group) : localCollapsed().has(group);
+  const toggleGroup = (group: SidebarGroupId) => {
+    const next = !collapsed(group);
+    if (props.onCollapsedChange) props.onCollapsedChange(group, next);
+    else
+      setLocalCollapsed((current) => {
+        const copy = new Set(current);
+        if (next) copy.add(group);
+        else copy.delete(group);
+        return copy;
+      });
+  };
+  // A filter shows every match, also in a collapsed group.
+  const channelsOpen = () => !collapsed("channels") || Boolean(props.filtering);
+  const directOpen = () => !collapsed("direct") || Boolean(props.filtering);
+  /** A row that a collapsed group keeps: unread and not muted, mentioned, or open. */
+  const keeps = (row: {
+    id: string;
+    unread?: boolean | undefined;
+    mentionCount?: number | undefined;
+    muted?: boolean | undefined;
+  }) => (row.unread && !row.muted) || (row.mentionCount ?? 0) > 0 || row.id === props.activeConversationId;
+  const channels = () => (channelsOpen() ? props.channels : props.channels.filter(keeps));
+  const directMessages = () => (directOpen() ? props.directMessages : props.directMessages.filter(keeps));
+  const hiddenUnread = (
+    rows: readonly {
+      id: string;
+      unread?: boolean | undefined;
+      mentionCount?: number | undefined;
+      muted?: boolean | undefined;
+    }[],
+  ) => rows.some((row) => (row.unread && !row.muted) || (row.mentionCount ?? 0) > 0);
+  const moreAvailable = (view: MoreView) =>
+    view === "space-agents"
+      ? Boolean(props.showSpaceAgents)
+      : view === "storage"
+        ? Boolean(props.showStorage)
+        : view === "secrets"
+          ? Boolean(props.showSecrets)
+          : true;
+  const MORE_ICON: Record<MoreView, () => JSX.Element> = {
+    "space-agents": () => <Bot aria-hidden="true" />,
+    artifacts: () => <LayoutDashboard aria-hidden="true" />,
+    agents: () => <ArrowLeftRight aria-hidden="true" />,
+    storage: () => <HardDrive aria-hidden="true" />,
+    secrets: () => <KeyRound aria-hidden="true" />,
+  };
+  const moreLabel = (view: MoreView) =>
+    view === "space-agents"
+      ? t("workspace.view.spaceAgents")
+      : view === "artifacts"
+        ? t("workspace.view.artifacts")
+        : view === "agents"
+          ? t("workspace.view.agents")
+          : view === "storage"
+            ? t("storageHygiene.title")
+            : t("workspace.view.secrets");
+  /** The view under More that shows now: it gets a row of its own above More while it shows. */
+  const activeMore = () => MORE_VIEWS.find((view) => view === props.activeView && moreAvailable(view));
+  const moreItems = (): WorkspaceMenuItem[] => [
+    ...MORE_VIEWS.filter(moreAvailable).map((view) => ({
+      id: view,
+      label: moreLabel(view),
+      icon: MORE_ICON[view](),
+      onSelect: () => props.onSelectView(view),
+    })),
+    ...(props.onOpenApps
+      ? [
+          {
+            id: "apps",
+            label: t("workspace.view.apps"),
+            icon: <Blocks aria-hidden="true" />,
+            onSelect: props.onOpenApps,
+          },
+        ]
+      : []),
+  ];
   return (
     <WorkspaceContextMenu
       items={() => props.workspaceMenu ?? []}
@@ -190,70 +281,43 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
               }
               onSelect={props.onSelectView}
             />
-            <Show when={props.showSpaceAgents}>
-              <QuickRow
-                view="space-agents"
-                icon={<Bot aria-hidden="true" />}
-                label={t("workspace.view.spaceAgents")}
-                active={props.activeView === "space-agents"}
-                onSelect={props.onSelectView}
-              />
-            </Show>
-            <QuickRow
-              view="artifacts"
-              icon={<LayoutDashboard aria-hidden="true" />}
-              label={t("workspace.view.artifacts")}
-              active={props.activeView === "artifacts"}
-              onSelect={props.onSelectView}
-            />
-            <QuickRow
-              view="agents"
-              icon={<ArrowLeftRight aria-hidden="true" />}
-              label={t("workspace.view.agents")}
-              active={props.activeView === "agents"}
-              onSelect={props.onSelectView}
-            />
-            <Show when={props.showStorage}>
-              <QuickRow
-                view="storage"
-                icon={<HardDrive aria-hidden="true" />}
-                label={t("storageHygiene.title")}
-                active={props.activeView === "storage"}
-                onSelect={props.onSelectView}
-              />
-            </Show>
-            <Show when={props.showSecrets}>
-              <QuickRow
-                view="secrets"
-                icon={<KeyRound aria-hidden="true" />}
-                label={t("workspace.view.secrets")}
-                active={props.activeView === "secrets"}
-                onSelect={props.onSelectView}
-              />
-            </Show>
-            <Show when={props.onOpenApps}>
-              {(open) => (
-                <Button variant="ghost" class="ws-sidebar-row" data-ws-row="" onClick={() => open()()}>
-                  <span class="ws-sidebar-row-icon">
-                    <Blocks aria-hidden="true" />
-                  </span>
-                  <span class="ws-sidebar-row-label">{t("workspace.view.apps")}</span>
-                </Button>
+            <Show when={activeMore()}>
+              {(view) => (
+                <QuickRow
+                  view={view()}
+                  icon={MORE_ICON[view()]()}
+                  label={moreLabel(view())}
+                  active
+                  onSelect={props.onSelectView}
+                />
               )}
             </Show>
+            <WorkspaceMenu
+              row
+              items={moreItems()}
+              label={t("workspace.sidebar.more")}
+              triggerClass="ws-sidebar-row ws-sidebar-more"
+              placement="right-start"
+            >
+              <span class="ws-sidebar-row-icon">
+                <Ellipsis aria-hidden="true" />
+              </span>
+              <span class="ws-sidebar-row-label">{t("workspace.sidebar.more")}</span>
+            </WorkspaceMenu>
           </div>
 
           <SidebarGroup
             label={t("workspace.sidebar.channels")}
             open={channelsOpen()}
-            onToggle={() => setChannelsOpen((open) => !open)}
+            hiddenUnread={!channelsOpen() && hiddenUnread(props.channels)}
+            onToggle={() => toggleGroup("channels")}
             onAdd={props.onAddChannel}
             addLabel={t("workspace.sidebar.addChannel")}
           >
             <Show when={props.filtering && props.channels.length === 0}>
               <p class="ws-sidebar-empty">{t("workspace.sidebar.noMatches")}</p>
             </Show>
-            <For each={props.channels} keyed={(channel) => channel.id}>
+            <For each={channels()} keyed={(channel) => channel.id}>
               {(channel) => (
                 <SidebarRow
                   id={channel().id}
@@ -263,7 +327,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                   muted={channel().muted}
                   dragHandle={props.dragHandle}
                   group="channels"
-                  order={() => props.channels.map((row) => row.id)}
+                  order={() => channels().map((row) => row.id)}
                   onReorder={props.onReorder}
                   menu={props.rowMenu}
                   label={channel().name}
@@ -282,7 +346,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 />
               )}
             </For>
-            <Show when={props.onAddChannel}>
+            <Show when={channelsOpen() && props.onAddChannel}>
               {(add) => (
                 <Button variant="ghost" class="ws-sidebar-row ws-sidebar-add" data-ws-row="" onClick={() => add()()}>
                   <span class="ws-sidebar-row-icon ws-sidebar-add-icon">
@@ -297,14 +361,15 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
           <SidebarGroup
             label={t("workspace.sidebar.directMessages")}
             open={directOpen()}
-            onToggle={() => setDirectOpen((open) => !open)}
+            hiddenUnread={!directOpen() && hiddenUnread(props.directMessages)}
+            onToggle={() => toggleGroup("direct")}
             onAdd={props.onNewMessage}
             addLabel={t("workspace.sidebar.newMessage")}
           >
             <Show when={props.filtering && props.directMessages.length === 0}>
               <p class="ws-sidebar-empty">{t("workspace.sidebar.noMatches")}</p>
             </Show>
-            <For each={props.directMessages} keyed={(dm) => dm.id}>
+            <For each={directMessages()} keyed={(dm) => dm.id}>
               {(dm) => (
                 <SidebarRow
                   id={dm().id}
@@ -314,7 +379,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                   muted={dm().muted}
                   dragHandle={props.dragHandle}
                   group="direct"
-                  order={() => props.directMessages.map((row) => row.id)}
+                  order={() => directMessages().map((row) => row.id)}
                   onReorder={props.onReorder}
                   menu={props.rowMenu}
                   label={dm()
@@ -334,7 +399,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 />
               )}
             </For>
-            <Show when={props.onAddAgent}>
+            <Show when={directOpen() && props.onAddAgent}>
               {(add) => (
                 <Button variant="ghost" class="ws-sidebar-row ws-sidebar-add" data-ws-row="" onClick={() => add()()}>
                   <span class="ws-sidebar-row-icon ws-sidebar-add-icon">
@@ -344,7 +409,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps): JSX.Element {
                 </Button>
               )}
             </Show>
-            <Show when={props.onAddTeammate}>
+            <Show when={directOpen() && props.onAddTeammate}>
               {(add) => (
                 <Button variant="ghost" class="ws-sidebar-row ws-sidebar-add" data-ws-row="" onClick={() => add()()}>
                   <span class="ws-sidebar-row-icon ws-sidebar-add-icon">
@@ -420,11 +485,14 @@ function QuickRow(props: {
 function SidebarGroup(props: {
   label: string;
   open: boolean;
+  /** Collapsed with unread rows in it: the header says so, as Slack's does. */
+  hiddenUnread?: boolean | undefined;
   onToggle: () => void;
   onAdd?: (() => void) | undefined;
   addLabel: string;
   children: JSX.Element;
 }): JSX.Element {
+  const { t } = useText();
   return (
     <section class="ws-sidebar-group" aria-label={props.label}>
       <div class="ws-sidebar-group-header">
@@ -433,12 +501,16 @@ function SidebarGroup(props: {
           class="ws-sidebar-group-toggle"
           data-ws-row=""
           aria-expanded={props.open ? "true" : "false"}
+          data-unread={props.hiddenUnread ? "" : undefined}
           onClick={() => props.onToggle()}
         >
           <Show when={props.open} fallback={<ChevronRight aria-hidden="true" />}>
             <ChevronDown aria-hidden="true" />
           </Show>
           <span>{props.label}</span>
+          <Show when={props.hiddenUnread}>
+            <span class="sr-only">{t("workspace.sidebar.groupHasUnread")}</span>
+          </Show>
         </Button>
         <Show when={props.onAdd}>
           {(add) => (
@@ -454,9 +526,7 @@ function SidebarGroup(props: {
           )}
         </Show>
       </div>
-      <Show when={props.open}>
-        <div class="ws-sidebar-group-rows">{props.children}</div>
-      </Show>
+      <div class="ws-sidebar-group-rows">{props.children}</div>
     </section>
   );
 }

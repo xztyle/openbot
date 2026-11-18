@@ -160,9 +160,9 @@ Ranked by impact. "Done" items are on `stream/uxflows`.
 | 1 | One `FormDialog` for New agent, New channel (both), New message, New space, Edit space, Add members, Edit topic/description, Browse, switcher | Done |
 | 2 | New agent opens its chat on web; Create not dead after an unknown failure | Done |
 | 3 | Command search "New channel" opens the workspace form | Done |
-| 4 | View states in every workspace view; correct No-match and Failed texts | In progress |
-| 5 | Sidebar to Slack (§ 7): More row, collapsed groups keep unread rows, saved collapse | Next |
-| 6 | Activity: exact message, badge without reactions, Mark all as read of Activity only | Next |
+| 4 | View states in Activity, Threads, Fleet, Space agents, Secrets, Between agents; Artifacts and Storage keep their own | Done |
+| 5 | Sidebar to Slack (§ 7): More row, collapsed groups keep unread rows, saved collapse | Done |
+| 6 | Activity: exact message, badge without reactions, Mark all as read of Activity only | Done |
 | 7 | Confirm Leave private channel and Remove member; agent delete: undo or confirm, not both | Open |
 | 8 | Settings page: visible close/Back; server rows stack on a phone; one `SettingsSaveBar`; unsaved guard on close | Open |
 | 9 | Move template install, custom provider, profile, vault, join server, OpenCode key, chat apps, saved replies to `FormDialog` | Open |

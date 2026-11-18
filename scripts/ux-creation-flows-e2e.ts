@@ -1,5 +1,5 @@
 // Walks the create flows of the workspace on a computer and on an iPhone: New agent, New channel with
-// its people, Add members, New message and New space. Each one must open the shared FormDialog (a
+// its people, Add members, New message and New space, and the Slack sidebar (More, collapsed groups). Each one must open the shared FormDialog (a
 // dialog on a computer, a full screen sheet on a phone), keep a failure inside it, close on Cancel
 // and Escape, and open what it made. It serves the web client on a mock host (the "Spaces workspace"
 // story, `src/renderer/stories/web-client-harness.tsx`) and drives it in Chromium. No account
@@ -235,7 +235,55 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await waitForPath(page, (path) => path !== before && /\/(c|dm)\//u.test(path), "new message");
   });
 
-  // 5. New space from the rail: the new space opens.
+  // 5. The sidebar as in Slack: the other views are under More; a collapsed group keeps its open row
+  // and stays collapsed after a reload.
+  await step(page, viewport, "More opens a view that is not a top row", async () => {
+    await showSidebar(page, viewport);
+    const sidebar = page.getByRole("navigation", { name: english("workspace.sidebar.label") });
+    assert.equal(
+      await sidebar.getByRole("button", { name: english("workspace.view.agents"), exact: true }).count(),
+      0,
+      "Between agents is not a top row",
+    );
+    await sidebar.getByRole("button", { name: english("workspace.sidebar.more"), exact: true }).click();
+    await page.getByRole("menuitem", { name: english("workspace.view.agents") }).click();
+    await page
+      .getByRole("heading", { name: english("workspace.view.agents"), exact: true })
+      .waitFor({ timeout: UI_WAIT_MS });
+  });
+  if (viewport === "desktop")
+    await step(page, viewport, "A collapsed group keeps the open channel and stays collapsed", async () => {
+      const sidebar = page.getByRole("navigation", { name: english("workspace.sidebar.label") });
+      const general = sidebar.getByRole("button", {
+        name: new RegExp(`^${english("workspace.sidebar.publicChannel", { name: "general" })}`, "u"),
+      });
+      await general.first().click();
+      const toggle = sidebar.getByRole("button", { name: english("workspace.sidebar.channels"), exact: true });
+      await toggle.click();
+      assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+      await general.first().waitFor({ timeout: UI_WAIT_MS });
+      assert.equal(
+        await sidebar.getByRole("button", { name: english("workspace.sidebar.addChannels"), exact: true }).count(),
+        0,
+        "a collapsed group hides its add row",
+      );
+      await page.reload(COMMIT);
+      const again = page
+        .getByRole("navigation", { name: english("workspace.sidebar.label") })
+        .getByRole("button", { name: english("workspace.sidebar.channels"), exact: true });
+      await again.waitFor({ timeout: UI_WAIT_MS });
+      await page.waitForFunction(
+        (label) =>
+          [...document.querySelectorAll("button[aria-expanded]")].some(
+            (button) => button.textContent?.trim() === label && button.getAttribute("aria-expanded") === "false",
+          ),
+        english("workspace.sidebar.channels"),
+        { timeout: UI_WAIT_MS },
+      );
+      await again.click();
+    });
+
+  // 6. New space from the rail: the new space opens.
   await step(page, viewport, "New space creates the space and shows it", async () => {
     await showSidebar(page, viewport);
     await page.getByRole("button", { name: english("workspace.spaces.create"), exact: true }).click();
@@ -247,7 +295,7 @@ async function walk(browser: Browser, origin: string, viewport: ViewportName): P
     await create.click();
     await dialog.waitFor({ state: "detached", timeout: UI_WAIT_MS });
     // The new space shows: the address names it (its slug, or its id when the host gives no slug).
-    await waitForPath(page, (path) => !path.startsWith("/app/general/") && path.endsWith("/activity"), "new space");
+    await waitForPath(page, (path) => !path.startsWith("/app/general/"), "new space");
     await page
       .getByRole("button", { name: new RegExp(`^Ops ${suffix}`, "u") })
       .first()

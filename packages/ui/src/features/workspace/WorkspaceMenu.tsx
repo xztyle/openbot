@@ -12,8 +12,10 @@ export interface WorkspaceMenuProps {
   /** The content of the trigger, such as an icon or a name with a chevron. */
   children: JSX.Element;
   triggerClass?: string;
-  placement?: "bottom-start" | "bottom-end" | "top-end";
+  placement?: "bottom-start" | "bottom-end" | "top-end" | "right-start";
   onOpenChange?: (open: boolean) => void;
+  /** The trigger is a sidebar row with a label, not an icon button: Up and Down reach it. */
+  row?: boolean;
 }
 
 /** A trigger and the menu of actions that it opens. */
@@ -21,8 +23,9 @@ export function WorkspaceMenu(props: WorkspaceMenuProps): JSX.Element {
   return (
     <DropdownMenu.Root placement={props.placement ?? "bottom-end"} gutter={4} onOpenChange={props.onOpenChange}>
       <DropdownMenu.Trigger
-        class={cx(buttonVariants({ variant: "ghost", size: "icon-sm" }), props.triggerClass)}
+        class={cx(buttonVariants({ variant: "ghost", size: props.row ? "default" : "icon-sm" }), props.triggerClass)}
         aria-label={props.label}
+        data-ws-row={props.row ? "" : undefined}
       >
         {props.children}
       </DropdownMenu.Trigger>

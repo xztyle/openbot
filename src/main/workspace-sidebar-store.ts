@@ -79,6 +79,7 @@ export class WorkspaceSidebarStore {
           muted: [...stored.muted],
           ...(stored.closed === undefined ? {} : { closed: [...stored.closed] }),
           ...(stored.space === undefined ? {} : { space: stored.space }),
+          ...(stored.collapsed === undefined ? {} : { collapsed: [...stored.collapsed] }),
         }
       : null;
   }

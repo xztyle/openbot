@@ -686,3 +686,9 @@
 .ws-context-trigger {
   display: contents;
 }
+
+/* A collapsed group with unread rows: its name reads as unread, as Slack's does. */
+.ws-sidebar-group-toggle[data-unread].ui-button {
+  color: var(--openbot-text-primary);
+  font-weight: var(--openbot-weight-bold);
+}

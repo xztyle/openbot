@@ -74,6 +74,8 @@ export const messages = {
   "workspace.sidebar.directMessages": "Mensajes directos",
   "workspace.sidebar.addChannel": "Añadir un canal",
   "workspace.sidebar.addChannels": "Añadir canales",
+  "workspace.sidebar.more": "Más",
+  "workspace.sidebar.groupHasUnread": "tiene mensajes sin leer",
   "workspace.sidebar.addTeammates": "Añadir compañeros",
   "workspace.sidebar.addAgent": "Nuevo agente",
   "workspace.sidebar.publicChannel": "Canal {name}",

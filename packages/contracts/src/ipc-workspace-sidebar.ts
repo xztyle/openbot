@@ -1,5 +1,5 @@
-// The reader's own workspace sidebar: the order they dragged the channel and DM rows into, and the
-// conversations they muted. The host keeps one value per member, so it follows the account to each
+// The reader's own workspace sidebar: the order they dragged the channel and DM rows into, the
+// conversations they muted, and the groups they collapsed. The host keeps one value per member, so it follows the account to each
 // computer and browser. A host that has none for the member answers null.
 
 import { isBoundedString } from "./ipc-bounded-values";
@@ -20,6 +20,11 @@ export interface WorkspaceSidebarPrefs {
   closed?: string[];
   /** The space that the reader looked at last. Absent from an older client or host: `general`. */
   space?: string;
+  /**
+   * The groups that the reader collapsed: `channels`, `direct`. A collapsed group still shows its
+   * unread rows and the open conversation. Absent from an older client or host: all open.
+   */
+  collapsed?: string[];
 }
 
 /** The value of the member on the host. Null: the host has none for them yet. */
@@ -52,6 +57,7 @@ export function decodeWorkspaceSidebarPrefs(value: unknown): WorkspaceSidebarPre
     muted: idList(value.muted, "mutes"),
     ...(value.closed === undefined ? {} : { closed: idList(value.closed, "closed conversations") }),
     ...(value.space === undefined ? {} : { space: spaceId(value.space) }),
+    ...(value.collapsed === undefined ? {} : { collapsed: idList(value.collapsed, "collapsed groups") }),
   };
 }
 

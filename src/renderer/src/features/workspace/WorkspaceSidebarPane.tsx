@@ -208,6 +208,10 @@ export function WorkspaceSidebarPane(props: { searchShortcut: string }) {
           </>
         }
         filtering={ws.state.sidebarFilter.trim().length > 0}
+        collapsedGroups={(ws.state.sidebar.collapsed ?? []).filter(
+          (group): group is SidebarGroupId => group === "channels" || group === "direct",
+        )}
+        onCollapsedChange={(group, collapsed) => ws.setGroupCollapsed(group, collapsed)}
         onReorder={(group, ids) => ws.reorderSidebar(group, ids)}
         rowMenu={rowMenu}
         activeView={view()}

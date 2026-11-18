@@ -76,6 +76,8 @@ export const messages = defineMessages("workspace", {
   "workspace.sidebar.directMessages": "Direct messages",
   "workspace.sidebar.addChannel": "Add a channel",
   "workspace.sidebar.addChannels": "Add channels",
+  "workspace.sidebar.more": "More",
+  "workspace.sidebar.groupHasUnread": "has unread messages",
   "workspace.sidebar.addTeammates": "Add teammates",
   "workspace.sidebar.addAgent": "New agent",
   "workspace.sidebar.publicChannel": "Channel {name}",

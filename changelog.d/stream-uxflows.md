@@ -9,6 +9,10 @@
   matches" than for "nothing yet". The New agent and Add secret buttons are the same in each header.
 - Activity opens the exact message, scrolled to and marked. Its badge no longer counts reactions, and
   Mark all as read marks only the conversations in the list, not every channel.
+- The workspace sidebar follows Slack: Threads, Activity and Fleet at the top, and Space agents,
+  Artifacts, Between agents, Storage, Secrets and Apps under More. A collapsed Channels or Direct
+  messages group still shows its unread rows and the open conversation, and stays collapsed on every
+  computer of the account.
 
 ### Fixed
 

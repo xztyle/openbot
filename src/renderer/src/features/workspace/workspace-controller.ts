@@ -332,6 +332,7 @@ function readSidebar(key: string): SidebarPrefs {
       muted: idList(value.muted),
       ...(Array.isArray(value.closed) ? { closed: idList(value.closed) } : {}),
       ...(typeof value.space === "string" && value.space ? { space: value.space } : {}),
+      ...(Array.isArray(value.collapsed) ? { collapsed: idList(value.collapsed) } : {}),
     };
   } catch {
     return { order: { channels: [], direct: [] }, muted: [] };
@@ -885,7 +886,9 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
       // The space is this window's own, as the open conversation is: a save of another window or
       // computer of the reader does not move it. A window that has none yet starts in the host's.
       const space = local.space ?? hosted.space;
-      const value: SidebarPrefs = { ...hosted, ...(space ? { space } : {}) };
+      // A host that predates `collapsed` drops it: the reader's choice on this computer stays.
+      const collapsed = hosted.collapsed ?? local.collapsed;
+      const value: SidebarPrefs = { ...hosted, ...(space ? { space } : {}), ...(collapsed ? { collapsed } : {}) };
       setState((draft) => {
         draft.sidebar = value;
       });
@@ -961,6 +964,14 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     if (!(state.sidebar.closed ?? []).includes(id)) return;
     setState((draft) => {
       draft.sidebar.closed = (draft.sidebar.closed ?? []).filter((item) => item !== id);
+    });
+    saveSidebar();
+  }
+  /** Collapses or opens a sidebar group. It follows the reader's account, as the order does. */
+  function setGroupCollapsed(group: "channels" | "direct", collapsed: boolean) {
+    setState((draft) => {
+      const others = (draft.sidebar.collapsed ?? []).filter((item) => item !== group);
+      draft.sidebar.collapsed = collapsed ? [...others, group] : others;
     });
     saveSidebar();
   }
@@ -2176,6 +2187,7 @@ export function createWorkspaceController(env: WorkspaceEnvironment) {
     reorderSidebar,
     moveSidebarRow,
     setMuted,
+    setGroupCollapsed,
     closeConversation,
     isMuted: (id: string) => mutedSet().has(id),
     setSidebarFilter,

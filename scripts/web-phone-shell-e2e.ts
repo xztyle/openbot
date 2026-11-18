@@ -286,11 +286,15 @@ try {
     await back(page);
     await tab(page, "workspace.phone.more").waitFor({ timeout: UI_WAIT_MS });
   });
-  await step(page, "the profile opens the settings, and Back returns to More", async () => {
+  await step(page, "the profile opens the settings, and its back button returns to More", async () => {
     await page.getByRole("button", { name: /Preview User/u }).tap();
     await page.getByRole("heading", { name: english("app.settingsPage.title") }).waitFor({ timeout: UI_WAIT_MS });
     await shot(page, "07-settings");
-    await back(page);
+    // The page's own back button, as a phone has no rail.
+    await page
+      .getByRole("button", { name: english("workspace.layout.back") })
+      .first()
+      .tap();
     await tab(page, "workspace.phone.more").waitFor({ timeout: UI_WAIT_MS });
     assert.equal(await page.getByRole("heading", { name: english("app.settingsPage.title") }).isVisible(), false);
   });

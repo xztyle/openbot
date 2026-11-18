@@ -81,7 +81,9 @@ import {
   CalendarClock,
   ChartArea,
   CheckCheck,
+  ChevronLeft,
   hasVisibleToasts,
+  IconButton,
   ListChecks,
   MessageCircle,
   MessageCircleQuestionMark,
@@ -2832,13 +2834,26 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     {(kind) => (
                       <SettingsPageFrame
                         heading={
-                          kind === "personal" ? (
-                            <h1 class="settings-page-title" tabindex={-1}>
-                              {t("app.settingsPage.title")}
-                            </h1>
-                          ) : (
-                            <Show when={server()}>{(target) => <ServerSettingsPageTitle server={target()} />}</Show>
-                          )
+                          <div class="web-settings-heading">
+                            {/* A phone has no rail: Back goes to the screen that opened the page. */}
+                            <Show when={phone()}>
+                              <IconButton
+                                variant="ghost"
+                                class="web-settings-back"
+                                label={t("workspace.layout.back")}
+                                onClick={() => window.history.back()}
+                              >
+                                <ChevronLeft />
+                              </IconButton>
+                            </Show>
+                            {kind === "personal" ? (
+                              <h1 class="settings-page-title" tabindex={-1}>
+                                {t("app.settingsPage.title")}
+                              </h1>
+                            ) : (
+                              <Show when={server()}>{(target) => <ServerSettingsPageTitle server={target()} />}</Show>
+                            )}
+                          </div>
                         }
                         onMounts={setSettingsMounts}
                         onEscape={showAgents}

@@ -595,5 +595,4 @@ export const messages = defineMessages("workspace", {
   "workspace.phone.views": "Workspace",
   "workspace.phone.server": "Server",
   "workspace.phone.help": "Help",
-  "workspace.phone.serverMenu": "Notifications and server",
 });

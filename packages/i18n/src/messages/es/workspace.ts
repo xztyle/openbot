@@ -577,5 +577,4 @@ export const messages = {
   "workspace.phone.views": "Espacio de trabajo",
   "workspace.phone.server": "Servidor",
   "workspace.phone.help": "Ayuda",
-  "workspace.phone.serverMenu": "Notificaciones y servidor",
 } as const satisfies PartialTranslation<typeof source>;

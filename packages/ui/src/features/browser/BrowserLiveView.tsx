@@ -3,10 +3,21 @@ import {
   type BrowserDesktopApi,
   type BrowserLiveViewInput,
 } from "@openbot/contracts/ipc";
-import { ErrorReference, toast } from "@openbot/ui";
+import { ErrorReference, IconButton, Input, Keyboard, Scan, toast } from "@openbot/ui";
 import { useText } from "@openbot/ui/text";
+import { clamp, usesTouchLayout } from "@openbot/ui/utils";
 import { errorReference } from "@openbot/user-errors";
-import { createEffect, createSignal, createStore, onCleanup, Show } from "solid-js";
+import {
+  type Accessor,
+  createEffect,
+  createMemo,
+  createSignal,
+  createStore,
+  onCleanup,
+  type Setter,
+  Show,
+  untrack,
+} from "solid-js";
 
 /** CDP's modifier bitmap, which is what the host dispatches the event with. */
 const ALT = 1;
@@ -34,9 +45,57 @@ interface BrowserLiveViewProps {
   active: boolean;
   /** Whether the host pastes and copies for this view. An older host closes the view on either. */
   clipboard: boolean;
+  /**
+   * False while the connection to the host is down. The view stops, says that it reconnects, and
+   * starts again when the connection is back.
+   */
+  online?: boolean | undefined;
   /** The pixel size of the frame on the canvas, so the panel can take the page's shape. */
   onFrameSize?: (size: { width: number; height: number }) => void;
 }
+
+/**
+ * A runtime has one live view: a second start ends the first stream. Each runtime remembers which
+ * view on the screen owns it, so a view that another view replaced does not stop that view's stream
+ * when it closes, and starts its own again once the other one is gone.
+ */
+const viewOwners = new WeakMap<object, { owner: Accessor<symbol | null>; setOwner: Setter<symbol | null> }>();
+function liveViewOwner(runtime: BrowserViewRuntime) {
+  let entry = viewOwners.get(runtime);
+  if (!entry) {
+    const [owner, setOwner] = createSignal<symbol | null>(null);
+    entry = { owner, setOwner };
+    viewOwners.set(runtime, entry);
+  }
+  return entry;
+}
+
+/** A stream that ends after it showed the page starts again, this many times, before the view gives up. */
+const MAX_RECONNECTS = 3;
+const RECONNECT_DELAY_MS = 1_000;
+/** A finger that moves less than this is a tap, not a scroll. */
+const TAP_SLOP_PX = 10;
+/** Two taps this close in time and place are a double click. */
+const DOUBLE_TAP_MS = 350;
+const DOUBLE_TAP_PX = 24;
+const MAX_ZOOM = 4;
+/** Keys that the on-screen keyboard sends as keys, not as text. */
+const NAMED_KEYS = new Set([
+  "Enter",
+  "Backspace",
+  "Delete",
+  "Tab",
+  "Escape",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+const NAMED_KEY_CODES: Record<string, string> = { "\n": "Enter", "\t": "Tab" };
 
 /**
  * The page on a remote host, drawn here.
@@ -45,18 +104,39 @@ interface BrowserLiveViewProps {
  * somewhere else entirely, and before this the panel showed a still image that changed when the user
  * asked for another one. The host sends frames while anyone watches, and the pointer and keys go
  * back on the same socket as a fraction of the frame the user was actually looking at.
+ *
+ * On a touch screen a tap is a click, a drag scrolls the page, and two fingers zoom the view. The
+ * keyboard button focuses a field that is not shown, so the phone raises its keyboard; the text and
+ * the keys typed there go to the page.
  */
 export default function BrowserLiveView(props: BrowserLiveViewProps) {
   const runtime = props.runtime;
   const { t, errorMessage, sourceText } = useText();
+  const me = Symbol("browser-live-view");
+  const ownership = liveViewOwner(runtime);
+  /** Another view on the screen shows this runtime's stream. */
+  const elsewhere = createMemo(() => {
+    const owner = ownership.owner();
+    return owner !== null && owner !== me;
+  });
+  /** The owner now, read outside a tracking scope. */
+  const ownerNow = () => untrack(ownership.owner);
   // `message` is null while the view connects, and otherwise text from the host or an error.
-  // `reference` is the code of a failed start.
-  const [state, setState] = createStore<{ live: boolean; message: string | null; reference: string | null }>({
+  // `reference` is the code of a failed start. `notice` shows over a page that is still on the canvas.
+  const [state, setState] = createStore<{
+    live: boolean;
+    message: string | null;
+    reference: string | null;
+    notice: string | null;
+  }>({
     live: false,
     message: null,
     reference: null,
+    notice: null,
   });
   const [canvas, setCanvas] = createSignal<HTMLCanvasElement>();
+  let root: HTMLDivElement | undefined;
+  let keys: HTMLInputElement | undefined;
   /**
    * The frame the canvas is showing, which is not the last frame to arrive. Decoding is
    * asynchronous, so while the host resizes its viewport the newest frame's shape and the drawn
@@ -75,6 +155,22 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   let queuedFrame: LiveViewFrame | undefined;
   /** Which stream the frames belong to. Another tab, or the same tab again, is a new one. */
   let stream = 0;
+  /** Whether the current stream has shown the page. Only such a stream starts again when it ends. */
+  let streamShown = false;
+  const [attempt, setAttempt] = createSignal(0);
+  let reconnects = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearReconnect = () => {
+    if (reconnectTimer !== undefined) clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+  };
+  onCleanup(clearReconnect);
+
+  /** The touch controls show on a touch screen, and once a finger has touched the page. */
+  const [touch, setTouch] = createSignal(usesTouchLayout());
+  const [keyboard, setKeyboard] = createSignal(false);
+  /** The view's own zoom on a touch screen: the page stays the same size on the host. */
+  const [zoom, setZoom] = createSignal({ scale: 1, x: 0, y: 0 });
 
   /**
    * Forget the stream that just ended, including the frame still decoding in it. That frame is a
@@ -84,6 +180,7 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
    */
   const abandonStream = () => {
     stream += 1;
+    streamShown = false;
     pendingFrame = undefined;
     queuedFrame = undefined;
     setFrame(undefined);
@@ -142,7 +239,7 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   onCleanup(() => settleCopy(null));
 
   const stopListening = runtime.onLiveViewEvent((event) => {
-    if (event.tabId !== props.tabId) return;
+    if (event.tabId !== props.tabId || untrack(elsewhere)) return;
     if (event.type === "copied") {
       settleCopy({ text: event.text });
       return;
@@ -153,11 +250,31 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
     }
     if (event.type === "stopped") {
       settleCopy(null);
+      const shown = streamShown;
       abandonStream();
-      setState(() => ({ live: false, message: sourceText(event.reason), reference: null }));
+      // A stream that showed the page and ended while the view is still open is a dropped
+      // connection, a host that restarted its screencast, or a relay that fell behind. The view
+      // keeps the last page and starts again. A tab that closed ends the request, and the view
+      // closes with it.
+      if (shown && props.active && props.online !== false && reconnects < MAX_RECONNECTS) {
+        const delay = RECONNECT_DELAY_MS * 2 ** reconnects;
+        reconnects += 1;
+        setState((draft) => {
+          draft.notice = t("browser.liveView.reconnecting");
+        });
+        clearReconnect();
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = undefined;
+          setAttempt((value) => value + 1);
+        }, delay);
+        return;
+      }
+      setState(() => ({ live: false, message: sourceText(event.reason), reference: null, notice: null }));
       return;
     }
-    if (!state.live) setState(() => ({ live: true, message: "", reference: null }));
+    streamShown = true;
+    reconnects = 0;
+    if (!state.live || state.notice) setState(() => ({ live: true, message: "", reference: null, notice: null }));
     // One frame decodes at a time, and the newest of the rest waits behind it.
     if (pendingFrame) {
       queuedFrame = event;
@@ -168,21 +285,57 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   onCleanup(stopListening);
 
   createEffect(
-    () => ({ tabId: props.tabId, active: props.active }),
-    ({ tabId, active }) => {
-      if (!active) return;
+    () => ({
+      tabId: props.tabId,
+      active: props.active,
+      online: props.online !== false,
+      blocked: elsewhere(),
+      attempt: attempt(),
+    }),
+    ({ tabId, active, online, blocked, attempt: retry }) => {
+      if (!active) {
+        clearReconnect();
+        reconnects = 0;
+        return;
+      }
+      if (blocked) {
+        abandonStream();
+        setState(() => ({ live: false, message: t("browser.liveView.elsewhere"), reference: null, notice: null }));
+        return;
+      }
+      if (!online) {
+        abandonStream();
+        clearReconnect();
+        setState((draft) => {
+          if (draft.live) draft.notice = t("browser.liveView.reconnecting");
+          else draft.message = t("browser.liveView.reconnecting");
+        });
+        return;
+      }
       abandonStream();
-      setState(() => ({ live: false, message: null, reference: null }));
-      void runtime.startLiveView(tabId).catch((error: unknown) =>
+      // A reconnect keeps the page on the canvas under its notice. A new start shows the connecting text.
+      if (retry === 0 || !state.live) setState(() => ({ live: false, message: null, reference: null, notice: null }));
+      ownership.setOwner(me);
+      void runtime.startLiveView(tabId).catch((error: unknown) => {
+        if (ownerNow() !== me) return;
         setState(() => ({
           live: false,
           message: errorMessage(error, t("browser.liveView.failed")),
           reference: errorReference(error),
-        })),
-      );
-      return () => void runtime.stopLiveView().catch(() => undefined);
+          notice: null,
+        }));
+      });
+      return () => {
+        // A view that another view replaced leaves that view's stream running.
+        if (ownerNow() !== me) return;
+        ownership.setOwner(null);
+        void runtime.stopLiveView().catch(() => undefined);
+      };
     },
   );
+  onCleanup(() => {
+    if (ownerNow() === me) ownership.setOwner(null);
+  });
 
   createEffect(
     () => ({ drawn: frame(), onFrameSize: props.onFrameSize }),
@@ -210,13 +363,13 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
    * panel and draws the frame with `object-fit: contain`, so a frame of a different shape sits
    * letterboxed inside it - a wide page in a narrow panel is a band with most of the panel above and
    * below it. A fraction of the canvas box would put every click that many bars away from the point
-   * the user aimed at.
+   * the user aimed at. The box is read after the view's zoom, so a zoomed page needs nothing more.
    *
    * Null means there is no point to send. The bars are not the page, and a point on one clamped to
    * the edge of the frame would work the first or last row of a page the user never pointed at.
    * Nothing drawn yet is the same answer: there is no frame to be a fraction of.
    */
-  const point = (event: MouseEvent): { x: number; y: number; sequence: number } | null => {
+  const point = (at: { clientX: number; clientY: number }): { x: number; y: number; sequence: number } | null => {
     const bounds = canvas()?.getBoundingClientRect();
     const size = frame();
     if (!bounds || !size || bounds.width === 0 || bounds.height === 0) return null;
@@ -224,13 +377,26 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
     const scale = Math.min(bounds.width / size.width, bounds.height / size.height);
     const width = size.width * scale;
     const height = size.height * scale;
-    const x = (event.clientX - bounds.left - (bounds.width - width) / 2) / width;
-    const y = (event.clientY - bounds.top - (bounds.height - height) / 2) / height;
+    const x = (at.clientX - bounds.left - (bounds.width - width) / 2) / width;
+    const y = (at.clientY - bounds.top - (bounds.height - height) / 2) / height;
     if (x < 0 || x > 1 || y < 0 || y > 1) return null;
     return { x, y, sequence: size.sequence };
   };
 
+  /** Page pixels for one CSS pixel on the screen, after the zoom. */
+  const pagePixelsPerScreenPixel = (): number => {
+    const bounds = canvas()?.getBoundingClientRect();
+    const size = frame();
+    if (!bounds || !size || bounds.width === 0 || bounds.height === 0) return 1;
+    return 1 / Math.min(bounds.width / size.width, bounds.height / size.height);
+  };
+
+  /** A mouse that a touch made up. The touch already sent its own input. */
+  let lastTouchAt = 0;
+  const fromTouch = () => performance.now() - lastTouchAt < 800;
+
   const pointer = (event: MouseEvent, action: "move" | "down" | "up") => {
+    if (fromTouch()) return;
     const at = point(event);
     if (!at) return;
     send({
@@ -241,6 +407,168 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
       clickCount: Math.min(Math.max(event.detail, 1), 3),
       modifiers: modifiers(event),
     });
+  };
+
+  // Touch: one finger taps or scrolls, two fingers zoom and move the view.
+  const touches = new Map<number, { x: number; y: number }>();
+  let gesture:
+    | { kind: "tap" | "scroll"; start: { x: number; y: number }; last: { x: number; y: number }; at: number }
+    | { kind: "pinch"; distance: number; scale: number; content: { x: number; y: number } }
+    | { kind: "done" }
+    | null = null;
+  let lastTap: { x: number; y: number; at: number } | null = null;
+  let scrollPending = { x: 0, y: 0, at: { clientX: 0, clientY: 0 } };
+  let scrollFrame: number | undefined;
+  onCleanup(() => {
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame);
+  });
+
+  const fingers = () => [...touches.values()];
+  const midpoint = () => {
+    const [first, second] = fingers();
+    if (!first || !second) return { x: 0, y: 0 };
+    return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+  };
+  const spread = () => {
+    const [first, second] = fingers();
+    if (!first || !second) return 1;
+    return Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
+  };
+  /** The view's own offset, kept so the zoomed page always covers the view. */
+  const clampZoom = (next: { scale: number; x: number; y: number }) => {
+    const box = root?.getBoundingClientRect();
+    const scale = clamp(next.scale, 1, MAX_ZOOM);
+    if (!box || scale === 1) return { scale: 1, x: 0, y: 0 };
+    return {
+      scale,
+      x: clamp(next.x, box.width - box.width * scale, 0),
+      y: clamp(next.y, box.height - box.height * scale, 0),
+    };
+  };
+
+  const flushScroll = () => {
+    scrollFrame = undefined;
+    const pending = scrollPending;
+    scrollPending = { x: 0, y: 0, at: pending.at };
+    if (pending.x === 0 && pending.y === 0) return;
+    const at = point(pending.at);
+    if (!at) return;
+    // CDP reads a wheel delta the way the DOM event carries it: down is positive. A finger that
+    // moves up scrolls the page down, as on the phone's own pages.
+    send({ type: "pointer", action: "wheel", ...at, button: "left", deltaX: pending.x, deltaY: pending.y });
+  };
+
+  /** Moves a zoomed view first; what the view cannot take scrolls the page. */
+  const drag = (dx: number, dy: number, at: { clientX: number; clientY: number }) => {
+    const current = zoom();
+    let restX = dx;
+    let restY = dy;
+    if (current.scale > 1) {
+      const moved = clampZoom({ scale: current.scale, x: current.x + dx, y: current.y + dy });
+      restX = dx - (moved.x - current.x);
+      restY = dy - (moved.y - current.y);
+      setZoom(moved);
+    }
+    if (restX === 0 && restY === 0) return;
+    const ratio = pagePixelsPerScreenPixel();
+    scrollPending = {
+      x: scrollPending.x - restX * ratio,
+      y: scrollPending.y - restY * ratio,
+      at,
+    };
+    if (scrollFrame === undefined) scrollFrame = requestAnimationFrame(flushScroll);
+  };
+
+  const tap = (at: { clientX: number; clientY: number }) => {
+    const target = point(at);
+    if (!target) return;
+    const now = performance.now();
+    const double =
+      lastTap !== null &&
+      now - lastTap.at < DOUBLE_TAP_MS &&
+      Math.hypot(lastTap.x - at.clientX, lastTap.y - at.clientY) < DOUBLE_TAP_PX;
+    lastTap = double ? null : { x: at.clientX, y: at.clientY, at: now };
+    const clickCount = double ? 2 : 1;
+    send({ type: "pointer", action: "move", ...target, button: "left" });
+    send({ type: "pointer", action: "down", ...target, button: "left", clickCount });
+    send({ type: "pointer", action: "up", ...target, button: "left", clickCount });
+  };
+
+  const touchDown = (event: PointerEvent) => {
+    if (event.pointerType !== "touch") return;
+    // The view takes the finger: no compatibility mouse event, no scroll or zoom of this page.
+    event.preventDefault();
+    lastTouchAt = performance.now();
+    setTouch(true);
+    canvas()?.setPointerCapture?.(event.pointerId);
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (touches.size === 1) {
+      const start = { x: event.clientX, y: event.clientY };
+      gesture = { kind: "tap", start, last: start, at: performance.now() };
+      return;
+    }
+    if (touches.size === 2) {
+      const box = root?.getBoundingClientRect();
+      const current = zoom();
+      const mid = midpoint();
+      gesture = {
+        kind: "pinch",
+        distance: spread(),
+        scale: current.scale,
+        content: {
+          x: (mid.x - (box?.left ?? 0) - current.x) / current.scale,
+          y: (mid.y - (box?.top ?? 0) - current.y) / current.scale,
+        },
+      };
+    }
+  };
+
+  const touchMove = (event: PointerEvent) => {
+    if (event.pointerType !== "touch" || !touches.has(event.pointerId)) return;
+    event.preventDefault();
+    lastTouchAt = performance.now();
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const current = gesture;
+    if (!current || current.kind === "done") return;
+    if (current.kind === "pinch") {
+      if (touches.size < 2) return;
+      const box = root?.getBoundingClientRect();
+      const scale = clamp((current.scale * spread()) / current.distance, 1, MAX_ZOOM);
+      const mid = midpoint();
+      setZoom(
+        clampZoom({
+          scale,
+          x: mid.x - (box?.left ?? 0) - current.content.x * scale,
+          y: mid.y - (box?.top ?? 0) - current.content.y * scale,
+        }),
+      );
+      return;
+    }
+    const position = { x: event.clientX, y: event.clientY };
+    if (current.kind === "tap" && Math.hypot(position.x - current.start.x, position.y - current.start.y) < TAP_SLOP_PX)
+      return;
+    const dx = position.x - current.last.x;
+    const dy = position.y - current.last.y;
+    gesture = { ...current, kind: "scroll", last: position };
+    drag(dx, dy, { clientX: position.x, clientY: position.y });
+  };
+
+  const touchUp = (event: PointerEvent, cancelled: boolean) => {
+    if (event.pointerType !== "touch" || !touches.has(event.pointerId)) return;
+    event.preventDefault();
+    lastTouchAt = performance.now();
+    touches.delete(event.pointerId);
+    const current = gesture;
+    if (touches.size > 0) {
+      // A pinch that loses a finger ends: the other finger does not start a scroll.
+      if (current?.kind === "pinch") gesture = { kind: "done" };
+      return;
+    }
+    gesture = null;
+    if (cancelled || current?.kind !== "tap") return;
+    tap({ clientX: event.clientX, clientY: event.clientY });
+    // The tap is a user gesture, so the keyboard the user opened stays up for a field they tapped.
+    if (keyboard()) keys?.focus({ preventScroll: true });
   };
 
   /**
@@ -294,6 +622,69 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
     }
   };
 
+  /** One key press, down and up, for a key the on-screen keyboard names. */
+  const pressKey = (name: string, code = name, modifierBits = 0) => {
+    if (!frame()) return;
+    send({ type: "key", action: "down", key: name, code, modifiers: modifierBits });
+    send({ type: "key", action: "up", key: name, code, modifiers: modifierBits });
+  };
+
+  /**
+   * Text from the on-screen keyboard: each character is a key press with its character, as a typed
+   * key is. A line break is Enter. A character outside one UTF-16 unit still goes as one character.
+   */
+  const typeText = (text: string) => {
+    if (!frame()) return;
+    for (const character of text) {
+      const named = NAMED_KEY_CODES[character];
+      if (named) {
+        pressKey(named);
+        continue;
+      }
+      send({ type: "key", action: "down", key: character, code: "" });
+      send({ type: "key", action: "char", key: character, code: "", text: character });
+      send({ type: "key", action: "up", key: character, code: "" });
+    }
+  };
+
+  /** Backspace that the key event already sent, so the input event of the same press does not send it again. */
+  let keyDeleted = false;
+  const keysDown = (event: KeyboardEvent) => {
+    if (event.isComposing) return;
+    // A hardware keyboard on a tablet: shortcuts go to the page as on a computer.
+    if ((event.ctrlKey || event.metaKey) && event.key.length === 1) {
+      if (clipboardLetter(event) === "v" && props.clipboard) return;
+      event.preventDefault();
+      pressKey(event.key, event.code, modifiers(event));
+      return;
+    }
+    if (!NAMED_KEYS.has(event.key)) return;
+    event.preventDefault();
+    keyDeleted = event.key === "Backspace" || event.key === "Delete";
+    pressKey(event.key, event.code || event.key, modifiers(event));
+  };
+  const keysInput = (event: InputEvent) => {
+    const element = keys;
+    if (event.isComposing || !element) return;
+    const value = element.value;
+    element.value = "";
+    if (value) {
+      typeText(value);
+      return;
+    }
+    // A keyboard that gives no key for Backspace still deletes, and says so in the input event.
+    if (event.inputType === "deleteContentBackward" && !keyDeleted) pressKey("Backspace");
+    if (event.inputType === "deleteContentForward" && !keyDeleted) pressKey("Delete");
+    keyDeleted = false;
+  };
+  const keysCompositionEnd = () => {
+    const element = keys;
+    if (!element) return;
+    const value = element.value;
+    element.value = "";
+    if (value) typeText(value);
+  };
+
   const paste = (event: ClipboardEvent) => {
     event.preventDefault();
     if (!props.clipboard) {
@@ -319,8 +710,8 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
   /**
    * Chromium sends a clipboard event to the node of the text selection, not to the focused element.
    * A click on the canvas leaves the selection where it was, such as in the chat input, so a paste
-   * would go there, or nowhere. While the canvas has the focus, the event is the page's wherever it
-   * was sent.
+   * would go there, or nowhere. While the canvas or the keyboard field has the focus, the event is
+   * the page's wherever it was sent.
    */
   createEffect(
     () => canvas(),
@@ -328,7 +719,9 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
       if (!element) return;
       const document = element.ownerDocument;
       const clipboardEvent = (event: ClipboardEvent) => {
-        if (event.target !== element && document.activeElement !== element) return;
+        const focused = document.activeElement;
+        const ours = event.target === element || focused === element || (keys !== undefined && focused === keys);
+        if (!ours) return;
         event.stopImmediatePropagation();
         if (event.type === "paste") paste(event);
         else menuCopy(event.type === "cut");
@@ -340,16 +733,29 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
     },
   );
 
+  const zoomStyle = () => {
+    const current = zoom();
+    return current.scale === 1
+      ? undefined
+      : { transform: `translate(${current.x}px, ${current.y}px) scale(${current.scale})` };
+  };
+
   return (
-    <div class="browser-live-view">
+    <div class="browser-live-view" ref={root} data-touch={touch() ? "" : undefined}>
       <canvas
         ref={setCanvas}
         tabindex="0"
         role="img"
         aria-label={t("browser.liveView.label")}
         hidden={!state.live}
+        style={zoomStyle()}
+        onPointerDown={touchDown}
+        onPointerMove={touchMove}
+        onPointerUp={(event) => touchUp(event, false)}
+        onPointerCancel={(event) => touchUp(event, true)}
         onMouseMove={(event) => pointer(event, "move")}
         onMouseDown={(event) => {
+          if (fromTouch()) return;
           canvas()?.focus();
           pointer(event, "down");
         }}
@@ -376,6 +782,61 @@ export default function BrowserLiveView(props: BrowserLiveViewProps) {
         <div class="browser-empty-state">
           <span>{state.message ?? t("browser.liveView.connecting")}</span>
           <ErrorReference reference={state.reference} />
+        </div>
+      </Show>
+      <Show when={state.live && state.notice}>
+        {(notice) => (
+          <div class="browser-live-view-notice" role="status">
+            {notice()}
+          </div>
+        )}
+      </Show>
+      {/* The phone raises its keyboard for a focused text field, so the keys come through one. */}
+      <Input
+        ref={(element: HTMLInputElement) => {
+          keys = element;
+        }}
+        class="browser-live-view-keys"
+        type="text"
+        aria-label={t("browser.liveView.keyboardInput")}
+        autocomplete="off"
+        autocapitalize="off"
+        autocorrect="off"
+        spellcheck={false}
+        enterkeyhint="enter"
+        data-cuelume-type={undefined}
+        onKeyDown={keysDown}
+        onInput={keysInput}
+        onCompositionEnd={keysCompositionEnd}
+        onFocus={() => setKeyboard(true)}
+        onBlur={() => setKeyboard(false)}
+      />
+      <Show when={touch() && state.live}>
+        <div class="browser-live-view-controls">
+          <Show when={zoom().scale > 1}>
+            <IconButton
+              variant="secondary"
+              label={t("browser.liveView.fit")}
+              onClick={() => setZoom({ scale: 1, x: 0, y: 0 })}
+            >
+              <Scan aria-hidden="true" />
+            </IconButton>
+          </Show>
+          <IconButton
+            variant={keyboard() ? "default" : "secondary"}
+            label={t("browser.liveView.keyboard")}
+            aria-pressed={keyboard() ? "true" : "false"}
+            // The field must take the focus in the press itself, or the phone keeps its keyboard down.
+            onPointerDown={(event: PointerEvent) => {
+              if (event.pointerType === "touch") event.preventDefault();
+            }}
+            onClick={() => {
+              if (keyboard()) keys?.blur();
+              else keys?.focus({ preventScroll: true });
+            }}
+          >
+            <Keyboard aria-hidden="true" />
+          </IconButton>
         </div>
       </Show>
     </div>

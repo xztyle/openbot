@@ -599,11 +599,16 @@
 }
 
 /*
- * The cards of the agent's turn (tasks, subagents, a question it asked, a visual reply) stand in the
- * text column of the rows, under the agent's name. A marker between messages stays centered.
+ * The cards of the agent's turn (tasks, subagents, a question it asked, a visual reply) and the cards
+ * that wait for the reader (an approval, a question, a browser step) stand in the text column of the
+ * rows, under the agent's name. A marker between messages stays centered.
  */
-.ws-agent-dm .virtual-chat-row > article:not(:has(> .chat-action-marker)) {
-  padding-inline-start: calc(36px + var(--openbot-space-2) + var(--openbot-space-4) - var(--openbot-space-3));
+.ws-agent-dm .virtual-chat-row > article:not(:has(> .chat-action-marker)),
+.ws-agent-dm .conversation-live > :not(.agent-activity-slot) {
+  --ws-agent-dm-indent: calc(36px + var(--openbot-space-2) + var(--openbot-space-4) - var(--openbot-space-3));
+
+  max-width: calc(100% - var(--ws-agent-dm-indent));
+  margin-inline-start: var(--ws-agent-dm-indent);
 }
 
 /* The message box stands as under a channel: 16px from the edges of the pane. */
